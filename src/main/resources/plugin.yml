@@ -1,0 +1,4 @@
+name: ARC
+version: '${project.version}'
+main: arc.arc.ARC
+api-version: 1.20

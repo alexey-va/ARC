@@ -1,0 +1,4 @@
+disable-backpacks: false
+end-protection: false
+no-explosion-worlds:
+  - "world_the_end"
