@@ -1,4 +1,9 @@
 disable-backpacks: false
 end-protection: false
+wormholes:
+  enable: true
+  period: 10
+  count: 30
+  offset: 0.5
 no-explosion-worlds:
   - "world_the_end"
