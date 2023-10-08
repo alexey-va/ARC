@@ -1,11 +1,12 @@
 package arc.arc.hooks;
 
+import arc.arc.PlayerManager;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
-public class PAPHook extends PlaceholderExpansion {
+public class PAPHook extends PlaceholderExpansion implements ArcModule {
     @Override
     public @NotNull String getIdentifier() {
         return "arc";
@@ -32,6 +33,14 @@ public class PAPHook extends PlaceholderExpansion {
             Player player1 = player.getPlayer();
             if(player1 == null || !player1.isOnline()) return "...";
             return PSHook.getRegionName(player1.getLocation());
+        } else if (params.equalsIgnoreCase("players")) {
+            StringBuilder builder = new StringBuilder("");
+            for(String s : PlayerManager.getAllPlayerNames()){
+                builder.append(s).append(", ");
+            }
+            String res = builder.toString();
+            if(res.endsWith(", ")) res = res.substring(0, res.length()-2);
+            return res;
         }
 
         return null;

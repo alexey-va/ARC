@@ -11,20 +11,18 @@ public class Config {
     public static int particleCount;
     public static double particleOffset;
     public static boolean endProtection;
+    public static String server;
+    public static boolean enablePortals;
     public static Set<String> noExpWorlds = new HashSet<>();
+    public static double boardCost;
+    public static int tldLength;
 
     public Config(){
         ARC.plugin.getConfig().options().copyDefaults(true);
         ARC.plugin.saveDefaultConfig();
         ARC.plugin.saveConfig();
 
-        blockBackpacks = ARC.plugin.getConfig().getBoolean("disable-backpacks", false);
-        endProtection = ARC.plugin.getConfig().getBoolean("end-protection", false);
-        sendWormholes = ARC.plugin.getConfig().getBoolean("wormholes.enable", false);
-        wormholePeriod = ARC.plugin.getConfig().getInt("wormholes.period", 10);
-        noExpWorlds = new HashSet<>(ARC.plugin.getConfig().getStringList("no-explosion-worlds"));
-        particleCount = ARC.plugin.getConfig().getInt("wormholes.count", 30);
-        particleOffset = ARC.plugin.getConfig().getDouble("wormholes.offset", 1.0);
+        reloadConfig();
     }
     public void reloadConfig(){
         blockBackpacks = ARC.plugin.getConfig().getBoolean("disable-backpacks", false);
@@ -34,6 +32,10 @@ public class Config {
         noExpWorlds = new HashSet<>(ARC.plugin.getConfig().getStringList("no-explosion-worlds"));
         particleCount = ARC.plugin.getConfig().getInt("wormholes.count", 30);
         particleOffset = ARC.plugin.getConfig().getDouble("wormholes.offset", 1.0);
+        server = ARC.plugin.getConfig().getString("redis.server-name", "none");
+        enablePortals = ARC.plugin.getConfig().getBoolean("enable-portals", true);
+        boardCost = ARC.plugin.getConfig().getDouble("board.board-message-cost", 1000);
+        tldLength = ARC.plugin.getConfig().getInt("board.tldr-length", 30);
     }
 
 }

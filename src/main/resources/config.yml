@@ -7,3 +7,9 @@ wormholes:
   offset: 0.5
 no-explosion-worlds:
   - "world_the_end"
+redis:
+  ip: "localhost"
+  port: 3306
+  username: "default"
+  password: ""
+  server-name: "spawn"

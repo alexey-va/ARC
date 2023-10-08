@@ -25,7 +25,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
-public class PSHook implements Listener {
+public class PSHook implements Listener, ArcModule {
 
     final NamespacedKey key1;
     private final HashSet<UUID> cooldownMessage = new HashSet<>();
@@ -41,7 +41,7 @@ public class PSHook implements Listener {
             if (location.getWorld().getName().equalsIgnoreCase("world_the_end"))
                 return ChatColor.translateAlternateColorCodes('&', "&2Ничейные");
             else
-                return ChatColor.translateAlternateColorCodes('&', "&6Земли сервера");
+                return ChatColor.translateAlternateColorCodes('&', "&6Серверная");
 
         }
         var owners = PSRegion.fromLocation(location).getOwners();
@@ -120,6 +120,7 @@ public class PSHook implements Listener {
             }.runTaskLater(ARC.plugin, 3L);
             return;
         }
+        
         new PSMenu(region, event.getPlayer()).show(event.getPlayer());
     }
 

@@ -20,7 +20,7 @@ import java.util.Set;
 
 import static arc.arc.ARC.noPermissionMessage;
 
-public class WGHook implements Listener {
+public class WGHook implements Listener, ArcModule {
 
     private static final Set<Material> whitelist = new HashSet<>() {{
         add(Material.FIRE);
@@ -45,6 +45,7 @@ public class WGHook implements Listener {
     @EventHandler(priority = EventPriority.LOWEST)
     public void onBlockBreak(BlockBreakEvent event) {
         if (!Config.endProtection) return;
+        if(!event.getBlock().getWorld().getName().equalsIgnoreCase("world_the_end")) return;
         if (region == null && !attempt) {
             try {
                 RegionContainer container = WorldGuard.getInstance().getPlatform().getRegionContainer();

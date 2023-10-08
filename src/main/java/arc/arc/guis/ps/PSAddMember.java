@@ -1,6 +1,7 @@
 package arc.arc.guis.ps;
 
 import arc.arc.ARC;
+import arc.arc.PlayerManager;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
 import com.github.stefvanschie.inventoryframework.pane.OutlinePane;
@@ -8,7 +9,6 @@ import com.github.stefvanschie.inventoryframework.pane.PaginatedPane;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
 import dev.espi.protectionstones.PSRegion;
-import mcfine.myhome.utils.RedisManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -61,7 +61,7 @@ public class PSAddMember extends ChestGui {
 
         StaticPane nav = new StaticPane(0,4,9,1);
 
-        ItemStack backItem = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
+        ItemStack backItem = new ItemStack(Material.BLUE_STAINED_GLASS_PANE);
         ItemMeta meta2 = backItem.getItemMeta();
         meta2.displayName(Component.text("Назад",NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
         meta2.setCustomModelData(11013);
@@ -72,7 +72,7 @@ public class PSAddMember extends ChestGui {
         });
         nav.addItem(backGuiItem, 0, 0);
 
-        ItemStack refreshItem = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
+        ItemStack refreshItem = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
         ItemMeta meta3 = refreshItem.getItemMeta();
         meta3.displayName(Component.text("Обновить",NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
         meta3.setCustomModelData(11010);
@@ -104,32 +104,41 @@ public class PSAddMember extends ChestGui {
 
     private void generateGuiItems(PSRegion region, Player player){
         playerItems = new HashMap<>();
-        var playerMap = new HashMap<>(RedisManager.playerUuids);
-
-        for(Player p : Bukkit.getOnlinePlayers()){
-            if(region.isMember(p.getUniqueId()) || region.isOwner(p.getUniqueId())){
-                playerMap.remove(p.getUniqueId().toString());
+        /*Set<UUID> uuids = new HashSet<>(PlayerManager.getAllPlayerUuids());
+        Set<UUID> toRemove = new HashSet<>();
+        for(UUID uuid : uuids){
+            if(region.isMember(uuid) || region.isOwner(uuid)){
+                toRemove.add(uuid);
                 continue;
             }
-            generateGuiItem(p.getUniqueId(), p, player);
+            generateGuiItem(uuid, player);
         }
 
-        for(var entry : playerMap.entrySet()){
-            UUID uuid = UUID.fromString(entry.getKey());
+        uuids.removeAll(toRemove);
+        toRemove.clear();
+
+        for(UUID uuid : uuids){
+            if(region.isMember(uuid) || region.isOwner(uuid)){
+                toRemove.add(uuid);
+                continue;
+            }
+            generateGuiItem(uuid, player);
+        }
+        */
+        for(var uuid : PlayerManager.getAllPlayerUuids()){
             if(region.isMember(uuid) || region.isOwner(uuid)) continue;
-            generateGuiItem(uuid, null, player);
+            generateGuiItem(uuid, player);
         }
 
         paginatedPane.populateWithGuiItems(playerItems.values().stream().toList());
     }
 
-    void generateGuiItem(UUID uuid,  Player player, Player inventoryHolder){
+    void generateGuiItem(UUID uuid, Player inventoryHolder){
         ItemStack item = new ItemStack(Material.PLAYER_HEAD, 1);
         SkullMeta meta = (SkullMeta) item.getItemMeta();
         OfflinePlayer offlinePlayer;
 
-        if(player != null) offlinePlayer = player;
-        else offlinePlayer = Bukkit.getOfflinePlayer(uuid);
+        offlinePlayer = Bukkit.getOfflinePlayer(uuid);
         if(offlinePlayer.getName() == null) return;
         meta.setOwningPlayer(offlinePlayer);
         meta.displayName(Component.text(offlinePlayer.getName(), NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));

@@ -63,7 +63,7 @@ public class PSMembers extends ChestGui {
 
         StaticPane nav = new StaticPane(0,4,9,1);
 
-        ItemStack backItem = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
+        ItemStack backItem = new ItemStack(Material.BLUE_STAINED_GLASS_PANE);
         ItemMeta meta2 = backItem.getItemMeta();
         meta2.displayName(Component.text("Назад",NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
         meta2.setCustomModelData(11013);
@@ -74,7 +74,7 @@ public class PSMembers extends ChestGui {
         });
         nav.addItem(backGuiItem, 0, 0);
 
-        ItemStack refreshItem = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
+        ItemStack refreshItem = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
         ItemMeta meta3 = refreshItem.getItemMeta();
         meta3.displayName(Component.text("Обновить",NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
         meta3.setCustomModelData(11010);
