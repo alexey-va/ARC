@@ -30,7 +30,7 @@ public class HuskHomesHook implements Listener, ArcModule {
             res = (((OnlineUser) event.getTimedTeleport().getTeleporter()).hasPermission("huskhomes.bypass_economy_checks"));
         } catch (Exception ignored) {
         }
-        if (event.getTimedTeleport().getType() == Teleport.Type.BACK && !res) cost = 15000;
+        if (event.getTimedTeleport().getType() == Teleport.Type.BACK && !res) cost = 10000;
         //else if(event.getTimedTeleport().getType() == Teleport.Type.TELEPORT) cost = 1000;
         if (event.getTimedTeleport().getTeleporter() instanceof OnlineUser user) {
             new Portal(user.getUuid().toString(), new MyTeleport(event.getTimedTeleport()), cost);

@@ -1,11 +1,10 @@
 package arc.arc;
 
 import arc.arc.board.BoardEntry;
-import arc.arc.board.ItemIcon;
+import arc.arc.network.MessageEvent;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
-import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
@@ -21,7 +20,7 @@ public class RedisManager extends JedisPubSub {
 
 
     private static BukkitTask reqTask = null;
-    Map<UUID, PendingRequest> pendingRequests = new HashMap<>();
+
     JedisPooled sub;
     JedisPooled pub;
     ExecutorService executorService;
@@ -87,6 +86,18 @@ public class RedisManager extends JedisPubSub {
     }
 
     public void onMessage(String channel, String message) {
+
+        String[] strings = message.split(":::");
+        String serverName = "NONE";
+        String msg = "NONE";
+        UUID uuid = null;
+        if(strings.length > 0) serverName = strings[0];
+        if(strings.length > 1) msg = strings[1];
+        if(strings.length > 2) uuid = UUID.fromString(strings[2]);
+
+        MessageEvent messageEvent = new MessageEvent(channel, msg, serverName, uuid);
+        Bukkit.getPluginManager().callEvent(messageEvent);
+
         //System.out.println("Message: " + message + " | " + channel);
         if (channel.equalsIgnoreCase("arc.player_list"))
             processPlayerList(message.split(":::")[0], message.split(":::")[1]);
@@ -207,19 +218,5 @@ public class RedisManager extends JedisPubSub {
     }
 
 
-
-    static class PendingRequest {
-        long timestamp;
-        UUID uuid;
-
-        public PendingRequest(UUID uuid) {
-            this.uuid = uuid;
-            timestamp = System.currentTimeMillis();
-        }
-
-        boolean isStale() {
-            return (System.currentTimeMillis() - timestamp > 3000);
-        }
-    }
 
 }

@@ -34,7 +34,7 @@ public class Config {
         particleOffset = ARC.plugin.getConfig().getDouble("wormholes.offset", 1.0);
         server = ARC.plugin.getConfig().getString("redis.server-name", "none");
         enablePortals = ARC.plugin.getConfig().getBoolean("enable-portals", true);
-        boardCost = ARC.plugin.getConfig().getDouble("board.board-message-cost", 1000);
+        boardCost = ARC.plugin.getConfig().getDouble("board.board-message-cost", 50000);
         tldLength = ARC.plugin.getConfig().getInt("board.tldr-length", 30);
     }
 

@@ -118,7 +118,12 @@ public class BoardGui extends ChestGui {
         )));
         addStack.setItemMeta(addMeta);
         GuiItem addItem = new GuiItem(addStack, inventoryClickEvent -> {
-            new AddBoardGui(player).show(player);
+            if(player.hasPermission("arc.board.publish")) new AddBoardGui(player).show(player);
+            else{
+                player.sendMessage(TextUtil.strip(
+                        Component.text("У вас нет на это разрешения!", NamedTextColor.RED)
+                ));
+            }
         });
         pane.addItem(addItem, 8, 0);
         this.addPane(pane);
