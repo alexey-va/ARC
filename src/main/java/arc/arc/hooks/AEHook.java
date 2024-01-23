@@ -9,7 +9,7 @@ public class AEHook implements Listener, ArcModule {
 
     @EventHandler
     public void aeApply(EnchantApplyEvent event) {
-        if (ARC.plugin.sfHook != null && ARC.plugin.sfHook.isSlimefunItem(event.getItem())) event.setCancelled(true);
+        if (ARC.hookRegistry.sfHook != null && ARC.hookRegistry.sfHook.isSlimefunItem(event.getItem())) event.setCancelled(true);
     }
 
 }

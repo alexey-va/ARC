@@ -7,6 +7,7 @@ import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.entity.Player;
 
+import java.time.temporal.TemporalUnit;
 import java.util.concurrent.TimeUnit;
 
 public class TextUtil {
@@ -15,9 +16,9 @@ public class TextUtil {
         return component.decoration(TextDecoration.ITALIC, false);
     }
 
-    public static Component parseTime(long millis){
+    public static Component parseTime(long duration, TimeUnit unit){
         String s = String.format("&a%d &eчасов",
-                TimeUnit.MILLISECONDS.toHours(millis)
+                unit.toHours(duration)
         );
         return LegacyComponentSerializer.legacyAmpersand().deserialize(s);
     }
@@ -34,6 +35,15 @@ public class TextUtil {
                 )
         );
         player.sendMessage(text);
+    }
+
+
+    public static Component noPermissions(){
+        return Component
+                .text("[", NamedTextColor.GRAY)
+                .append(Component.text("!", NamedTextColor.DARK_RED))
+                .append(Component.text("] ", NamedTextColor.GRAY))
+                .append(Component.text("У вас нет на это разрешения!", NamedTextColor.DARK_RED));
     }
 
 }

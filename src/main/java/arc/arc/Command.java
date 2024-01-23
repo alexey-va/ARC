@@ -21,15 +21,8 @@ public class Command implements CommandExecutor {
         if(strings.length==1){
             if(strings[0].equalsIgnoreCase("reload") && commandSender.hasPermission("arc.admin")){
                 ARC.plugin.reloadConfig();
-                ARC.plugin.load();
+                //ARC.plugin.load();
                 commandSender.sendMessage(Component.text("Перезагрузка успешна!", NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
-                return true;
-            }
-            if(strings[0].equalsIgnoreCase("list") && commandSender.hasPermission("arc.admin")){
-                commandSender.sendMessage("Hooks:");
-                for(ArcModule arcModule : ARC.plugin.arcModuleList){
-                    commandSender.sendMessage(arcModule.getClass().getName());
-                }
                 return true;
             }
             if(strings[0].equalsIgnoreCase("board")){
