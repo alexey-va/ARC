@@ -64,8 +64,10 @@ public class PAPIHook extends PlaceholderExpansion implements ArcModule {
             case "has":
                 return HookRegistry.partiesHook.name(player.getUniqueId()) == null ? "false" : "true";
             case "name":
+                String name = HookRegistry.partiesHook.name(player.getUniqueId());
+                if(name == null) return "";
                 return HookRegistry.partiesHook.color(player.getUniqueId())+
-                        HookRegistry.partiesHook.name(player.getUniqueId());
+                        name;
         }
         return "";
     }
