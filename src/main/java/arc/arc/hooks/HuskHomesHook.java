@@ -2,6 +2,7 @@ package arc.arc.hooks;
 
 import arc.arc.Config;
 import arc.arc.Portal;
+import arc.arc.network.ServerLocation;
 import net.william278.huskhomes.api.HuskHomesAPI;
 import net.william278.huskhomes.event.TeleportWarmupEvent;
 import net.william278.huskhomes.position.Position;
@@ -40,6 +41,24 @@ public class HuskHomesHook implements Listener, ArcModule {
 
     public void teleport(Player player, String server, double x, double y, double z, float yaw, float pitch, String world) {
         Position position = Position.at(x, y, z, yaw, pitch, World.from(world, UUID.randomUUID()), server);
+
+        try {
+            OnlineUser onlineUser = HuskHomesAPI.getInstance().adaptUser(player);
+            TimedTeleport teleport = HuskHomesAPI.getInstance().teleportBuilder()
+                    .teleporter(onlineUser)
+                    .target(position)
+                    .toTimedTeleport();
+
+            new Portal(onlineUser.getUuid().toString(), new MyTeleport(teleport));
+        } catch (TeleportationException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void teleport(Player player, ServerLocation serverLocation){
+        Position position = Position.at(serverLocation.getX(),
+                serverLocation.getY(), serverLocation.getZ(), serverLocation.getYaw(), serverLocation.getPitch(),
+                World.from(serverLocation.getWorld(), UUID.randomUUID()), serverLocation.getServer());
 
         try {
             OnlineUser onlineUser = HuskHomesAPI.getInstance().adaptUser(player);

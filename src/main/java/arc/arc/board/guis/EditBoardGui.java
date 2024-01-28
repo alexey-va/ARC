@@ -1,8 +1,8 @@
 package arc.arc.board.guis;
 
-import arc.arc.ARC;
 import arc.arc.Config;
 import arc.arc.TitleInput;
+import arc.arc.board.Board;
 import arc.arc.board.BoardEntry;
 import arc.arc.board.ItemIcon;
 import arc.arc.util.HeadUtil;
@@ -40,8 +40,8 @@ public class EditBoardGui extends ChestGui implements Inputable {
         this.setOnClose(inventoryCloseEvent -> {
             if(finalized) return;
             finalized = true;
-            if(delete) ARC.plugin.board.deleteBoard(boardEntry.uuid, true);
-            else ARC.plugin.board.saveBoard(boardEntry);
+            if(delete) Board.instance().deleteBoard(boardEntry.entryUuid, true);
+            else Board.instance().saveBoard(boardEntry);
         });
 
         StaticPane pane = new StaticPane(0, 0, 9, 2);
@@ -60,8 +60,8 @@ public class EditBoardGui extends ChestGui implements Inputable {
     private void onDelete(){
         if(finalized) return;
         finalized = true;
-        if(delete) ARC.plugin.board.deleteBoard(boardEntry.uuid, true);
-        else ARC.plugin.board.saveBoard(boardEntry);
+        if(delete) Board.instance().deleteBoard(boardEntry.entryUuid, true);
+        else Board.instance().saveBoard(boardEntry);
     }
 
     public void proceed() {
@@ -97,7 +97,7 @@ public class EditBoardGui extends ChestGui implements Inputable {
     }
 
     public void setParameter(int n, String s) {
-        if (n == 0) boardEntry.tldr = s;
+        if (n == 0) boardEntry.title = s;
         else if (n == 1) boardEntry.text = s;
     }
 
@@ -142,7 +142,7 @@ public class EditBoardGui extends ChestGui implements Inputable {
         ItemMeta meta = stack.getItemMeta();
         meta.addItemFlags(ItemFlag.HIDE_ITEM_SPECIFICS);
         meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
-        meta.displayName(TextUtil.strip(LegacyComponentSerializer.legacyAmpersand().deserialize(boardEntry.tldr)));
+        meta.displayName(TextUtil.strip(LegacyComponentSerializer.legacyAmpersand().deserialize(boardEntry.title)));
         meta.lore(List.of(TextUtil.strip(Component.text("Нажмите, чтобы поменять", NamedTextColor.GRAY))));
 
         stack.setItemMeta(meta);
@@ -164,7 +164,7 @@ public class EditBoardGui extends ChestGui implements Inputable {
 
         meta.displayName(TextUtil.strip(Component.text("Комментарий", NamedTextColor.GOLD)));
         if(boardEntry.text != null)
-            meta.lore(BoardEntry.getTextLore(boardEntry.text));
+            meta.lore(BoardEntry.textLore(boardEntry.text));
         else
             meta.lore(List.of(TextUtil.strip(Component.text("Нажмите, чтобы установить", NamedTextColor.GRAY))));
 
@@ -184,7 +184,7 @@ public class EditBoardGui extends ChestGui implements Inputable {
             ItemStack st = inventoryClickEvent.getCursor();
             if (st.getType() == Material.AIR) {
                 stack.setType(Material.PLAYER_HEAD);
-                boardEntry.icon = new ItemIcon(player.getUniqueId());
+                boardEntry.icon = ItemIcon.of(player.getUniqueId());
             } else {
                 stack.setType(st.getType());
                 ItemMeta met = st.getItemMeta();
@@ -195,7 +195,7 @@ public class EditBoardGui extends ChestGui implements Inputable {
                     model = met.getCustomModelData();
                 }
                 stack.setItemMeta(met2);
-                boardEntry.icon = new ItemIcon(st.getType(), model);
+                boardEntry.icon = ItemIcon.of(st.getType(), model);
             }
             this.update();
         });

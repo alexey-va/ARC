@@ -3,6 +3,7 @@ package arc.arc.board.guis;
 import arc.arc.ARC;
 import arc.arc.Config;
 import arc.arc.board.Board;
+import arc.arc.util.GuiUtils;
 import arc.arc.util.HeadUtil;
 import arc.arc.util.TextUtil;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
@@ -50,12 +51,13 @@ public class BoardGui extends ChestGui {
         List<GuiItem> guiItemList = new ArrayList<>();
         boolean isOp = player.hasPermission("arc.admin");
         paginatedPane.clear();
-        for (Board.CachedItem cachedItem : ARC.plugin.board.itemCache) {
+
+        for (var item : Board.instance().items()) {
             GuiItem guiItem;
 
             ItemStack stack;
-            if (player.getUniqueId().equals(cachedItem.boardEntry.playerUuid)) {
-                stack = cachedItem.stack.clone();
+            if (player.getUniqueId().equals(item.entry.playerUuid)) {
+                stack = item.stack.clone();
                 ItemMeta meta = stack.getItemMeta();
                 List<Component> lore = meta.lore();
                 if (lore == null) lore = new ArrayList<>();
@@ -65,14 +67,12 @@ public class BoardGui extends ChestGui {
                 meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
                 meta.addEnchant(Enchantment.ARROW_DAMAGE, 1, true);
                 stack.setItemMeta(meta);
-            } else stack = cachedItem.stack;
+            } else stack = item.stack;
 
             guiItem = new GuiItem(stack, inventoryClickEvent -> {
                 inventoryClickEvent.setCancelled(true);
-                if (inventoryClickEvent.isLeftClick() &&
-                        (cachedItem.boardEntry.playerUuid.equals(player.getUniqueId()) || isOp)
-                ) {
-                    new EditBoardGui(player, cachedItem.boardEntry).show(player);
+                if (inventoryClickEvent.isLeftClick() && (item.entry.playerUuid.equals(player.getUniqueId()) || isOp)) {
+                    new EditBoardGui(player, item.entry).show(player);
                 }
             });
             guiItemList.add(guiItem);
@@ -112,10 +112,7 @@ public class BoardGui extends ChestGui {
         ItemStack addStack = HeadUtil.getSkull(player.getUniqueId());
         ItemMeta addMeta = addStack.getItemMeta();
         addMeta.displayName(TextUtil.strip(Component.text("Опубликовать объявление", NamedTextColor.GREEN)));
-        addMeta.lore(List.of(TextUtil.strip(Component.text("Цена: ", NamedTextColor.GRAY)
-                .append(Component.text((int)(Config.boardCost),NamedTextColor.GREEN))
-                .append(Component.text("\uD83D\uDCB0", NamedTextColor.WHITE))
-        )));
+        addMeta.lore(List.of(TextUtil.strip(Component.text("Цена: ", NamedTextColor.GRAY).append(Component.text((int) (Config.boardCost), NamedTextColor.GREEN)).append(Component.text("\uD83D\uDCB0", NamedTextColor.WHITE)))));
         addStack.setItemMeta(addMeta);
         GuiItem addItem = new GuiItem(addStack, inventoryClickEvent -> {
             if(player.hasPermission("arc.board.publish")) new AddBoardGui(player).show(player);
@@ -141,26 +138,13 @@ public class BoardGui extends ChestGui {
 
     private void setupBackground() {
         OutlinePane pane = new OutlinePane(0, 5, 9, 1);
-        ItemStack bgItem = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
-        ItemMeta meta = bgItem.getItemMeta();
-        meta.setCustomModelData(11000);
-        meta.displayName(Component.text(" "));
-        bgItem.setItemMeta(meta);
-        pane.addItem(new GuiItem(bgItem, inventoryClickEvent -> {
-            inventoryClickEvent.setCancelled(true);
-        }));
+        pane.addItem(GuiUtils.background());
         pane.setRepeat(true);
         pane.setPriority(Pane.Priority.LOWEST);
         this.addPane(pane);
 
         OutlinePane pane2 = new OutlinePane(0, 0, 9, 5);
-        ItemStack bgItem2 = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
-        ItemMeta meta2 = bgItem2.getItemMeta();
-        meta2.displayName(Component.text(" "));
-        bgItem2.setItemMeta(meta2);
-        pane2.addItem(new GuiItem(bgItem2, inventoryClickEvent -> {
-            inventoryClickEvent.setCancelled(true);
-        }));
+        pane2.addItem(GuiUtils.background(Material.GRAY_STAINED_GLASS_PANE));
         pane2.setRepeat(true);
         pane2.setPriority(Pane.Priority.LOWEST);
         this.addPane(pane2);

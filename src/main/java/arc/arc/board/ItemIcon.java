@@ -1,6 +1,9 @@
 package arc.arc.board;
 
 import arc.arc.util.HeadUtil;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
@@ -10,19 +13,38 @@ import org.bukkit.inventory.meta.SkullMeta;
 
 import java.util.UUID;
 
+@Getter @Setter
+@NoArgsConstructor
 public class ItemIcon {
 
-    public ItemStack icon;
+    Material material;
+    UUID headUuid;
+    int modelData;
 
-    public ItemIcon(UUID uuid){
-        icon = HeadUtil.getSkull(uuid);
+    public static ItemIcon of(UUID uuid){
+        ItemIcon icon = new ItemIcon();
+        icon.setMaterial(Material.PLAYER_HEAD);
+        icon.setHeadUuid(uuid);
+        return icon;
     }
 
-    public ItemIcon(Material material, int modelData){
-        icon = new ItemStack(material);
-        ItemMeta meta = icon.getItemMeta();
-        meta.setCustomModelData(modelData);
-        icon.setItemMeta(meta);
+
+    public static ItemIcon of(Material material, int modelData){
+        ItemIcon icon = new ItemIcon();
+        icon.setMaterial(material);
+        icon.setModelData(modelData);
+        return icon;
+    }
+
+    public ItemStack stack(){
+        if(material == Material.PLAYER_HEAD) return HeadUtil.getSkull(headUuid);
+        ItemStack stack = new ItemStack(material);
+        if(modelData != 0) {
+            ItemMeta meta = stack.getItemMeta();
+            meta.setCustomModelData(modelData);
+            stack.setItemMeta(meta);
+        }
+        return stack;
     }
 
 }

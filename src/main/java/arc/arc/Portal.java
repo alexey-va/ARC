@@ -1,5 +1,6 @@
 package arc.arc;
 
+import arc.arc.hooks.HookRegistry;
 import arc.arc.hooks.HuskHomesHook;
 import com.destroystokyo.paper.ParticleBuilder;
 import net.kyori.adventure.text.Component;
@@ -165,7 +166,6 @@ public class Portal {
                                 success.set(true);
                                 //System.out.println(locations.size());
                                 //System.out.println(portal);
-                                block.getWorld().playSound(block.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1f, 1f);
                                 executeAction(player);
                                 removePortal();
                             }
@@ -197,11 +197,12 @@ public class Portal {
             new BukkitRunnable() {
                 @Override
                 public void run() {
+                    player.getWorld().playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1f, 1f);
                     player.performCommand(command);
                 }
             }.runTask(ARC.plugin);
         } else if (action == Action.TPA) {
-            if(ARC.plugin.huskHomesHook == null) return;
+            if(HookRegistry.huskHomesHook == null) return;
             new BukkitRunnable() {
                 @Override
                 public void run() {
@@ -216,7 +217,8 @@ public class Portal {
                             }
                             ARC.getEcon().withdrawPlayer(offlinePlayer, cost);
                         }
-                        ARC.plugin.huskHomesHook.teleport(teleport);
+                        player.getWorld().playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1f, 1f);
+                        HookRegistry.huskHomesHook.teleport(teleport);
                     } catch (Exception e) {
                         e.printStackTrace();
                     }

@@ -3,6 +3,7 @@ package arc.arc.board.guis;
 import arc.arc.ARC;
 import arc.arc.Config;
 import arc.arc.TitleInput;
+import arc.arc.board.Board;
 import arc.arc.board.BoardEntry;
 import arc.arc.board.ItemIcon;
 import arc.arc.util.HeadUtil;
@@ -22,6 +23,7 @@ import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -38,7 +40,7 @@ public class AddBoardGui extends ChestGui implements Inputable {
     public AddBoardGui(Player player) {
         super(2, "Создание публикации");
         this.player = player;
-        icon = new ItemIcon(player.getUniqueId());
+        icon = ItemIcon.of(player.getUniqueId());
         type = BoardEntry.Type.INFO;
         StaticPane pane = new StaticPane(0, 0, 9, 2);
         setupBackground();
@@ -147,7 +149,7 @@ public class AddBoardGui extends ChestGui implements Inputable {
             meta.lore(List.of(TextUtil.strip(Component.text("Нажмите, чтобы установить", NamedTextColor.GRAY))));
         } else {
             meta.displayName(TextUtil.strip(Component.text("Комментарий", NamedTextColor.GOLD)));
-            meta.lore(BoardEntry.getTextLore(text));
+            meta.lore(BoardEntry.textLore(text));
         }
         stack.setItemMeta(meta);
         return stack;
@@ -169,7 +171,7 @@ public class AddBoardGui extends ChestGui implements Inputable {
             ItemStack st = inventoryClickEvent.getCursor();
             if (st.getType() == Material.AIR) {
                 stack.setType(Material.PLAYER_HEAD);
-                icon = new ItemIcon(player.getUniqueId());
+                icon = ItemIcon.of(player.getUniqueId());
             } else {
                 stack.setType(st.getType());
                 ItemMeta met = st.getItemMeta();
@@ -180,7 +182,7 @@ public class AddBoardGui extends ChestGui implements Inputable {
                     model = met.getCustomModelData();
                 }
                 stack.setItemMeta(met2);
-                icon = new ItemIcon(st.getType(), model);
+                icon = ItemIcon.of(st.getType(), model);
             }
             this.update();
         });
@@ -222,8 +224,8 @@ public class AddBoardGui extends ChestGui implements Inputable {
             }
 
             if (type == null || icon == null || tldr == null) return;
-            BoardEntry boardEntry = new BoardEntry(this.type, player.getName(), player.getUniqueId(), icon, text, tldr, System.currentTimeMillis(), UUID.randomUUID());
-            ARC.plugin.board.addBoard(boardEntry);
+            BoardEntry boardEntry = new BoardEntry(this.type, player.getName(), player.getUniqueId(), icon, text, tldr, Instant.now(), Instant.now(), UUID.randomUUID());
+            Board.instance().addBoard(boardEntry);
             inventoryClickEvent.getWhoClicked().closeInventory();
         });
     }

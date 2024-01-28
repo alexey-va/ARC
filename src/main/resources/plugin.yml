@@ -2,7 +2,16 @@ name: ARC
 version: '${project.version}'
 main: arc.arc.ARC
 api-version: 1.20
+softdepend:
+  - Parties
+  - Lands
 commands:
-  myarc:
+  arc:
     description: Main command
     usage: Main command
+  mex:
+    description: Mex
+    usage: mex
+  cforward:
+    description: cforward
+    usage: cforward
