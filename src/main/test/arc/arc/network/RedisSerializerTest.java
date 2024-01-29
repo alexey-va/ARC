@@ -2,8 +2,8 @@ package arc.arc.network;
 
 import arc.arc.board.BoardEntry;
 import arc.arc.board.ItemIcon;
-import arc.arc.playerlist.PlayerData;
-import arc.arc.playerlist.PlayerList;
+import arc.arc.xserver.playerlist.PlayerData;
+import arc.arc.xserver.playerlist.PlayerList;
 import arc.arc.xserver.commands.CommandData;
 import org.bukkit.Material;
 import org.junit.jupiter.api.Test;

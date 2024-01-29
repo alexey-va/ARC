@@ -1,4 +1,4 @@
-package arc.arc.guis.ps;
+package arc.arc.hooks.ps.guis;
 
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;

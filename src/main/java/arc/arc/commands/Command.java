@@ -1,5 +1,6 @@
-package arc.arc;
+package arc.arc.commands;
 
+import arc.arc.ARC;
 import arc.arc.board.guis.BoardGui;
 import arc.arc.hooks.ArcModule;
 import net.kyori.adventure.text.Component;

@@ -2,6 +2,7 @@ package arc.arc.hooks;
 
 import arc.arc.ARC;
 import arc.arc.Config;
+import arc.arc.util.TextUtil;
 import io.github.thebusybiscuit.slimefun4.api.events.PlayerRightClickEvent;
 import io.github.thebusybiscuit.slimefun4.api.items.SlimefunItem;
 import org.bukkit.event.EventHandler;
@@ -19,9 +20,9 @@ public class SFHook implements Listener, ArcModule {
         Optional<SlimefunItem> optional = event.getSlimefunItem();
         if (optional.isPresent()) {
             SlimefunItem item = optional.get();
-            if (item.getId().contains("BACKPACK")) {
+            if (item.getId().contains("BACKPACK") && !item.getId().equalsIgnoreCase("ENDER_BACKPACK")) {
                 event.cancel();
-                ARC.noPermissionMessage(event.getPlayer());
+                event.getPlayer().sendMessage(TextUtil.noWGPermission());
             }
         }
     }

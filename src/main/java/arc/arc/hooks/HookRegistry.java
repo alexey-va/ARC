@@ -22,6 +22,7 @@ public class HookRegistry {
     public static LandsHook landsHook;
     public static HuskHomesHook huskHomesHook;
     public static PartiesHook partiesHook;
+    public static PAPIHook papiHook;
     public WGHook wgHook;
     public ShopHook shopHook;
     public SFHook sfHook;
@@ -43,7 +44,8 @@ public class HookRegistry {
 
         if (emHook != null) emHook.boot();
         if (psHook != null) psHook.boot();
-        new PAPIHook().register();
+        papiHook = new PAPIHook();
+        papiHook.register();
         if (Config.enablePortals && commandListener == null) {
             commandListener = new CommandListener();
             Bukkit.getPluginManager().registerEvents(commandListener, ARC.plugin);

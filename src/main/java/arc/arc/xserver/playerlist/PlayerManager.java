@@ -1,4 +1,4 @@
-package arc.arc.playerlist;
+package arc.arc.xserver.playerlist;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;

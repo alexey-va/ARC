@@ -1,16 +1,16 @@
 package arc.arc.hooks;
 
 import arc.arc.Config;
-import arc.arc.playerlist.PlayerManager;
+import arc.arc.xserver.playerlist.PlayerManager;
 import me.clip.placeholderapi.PlaceholderAPI;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.stream.Collectors;
-
 public class PAPIHook extends PlaceholderExpansion implements ArcModule {
+
+
     @Override
     public @NotNull String getIdentifier() {
         return "arc";

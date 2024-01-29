@@ -1,7 +1,7 @@
-package arc.arc.guis.ps;
+package arc.arc.hooks.ps.guis;
 
 import arc.arc.ARC;
-import arc.arc.playerlist.PlayerManager;
+import arc.arc.xserver.playerlist.PlayerManager;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
 import com.github.stefvanschie.inventoryframework.pane.OutlinePane;

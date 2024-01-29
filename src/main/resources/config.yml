@@ -2,11 +2,11 @@ disable-backpacks: false
 end-protection: false
 
 xserver:
-  cforward-delay: 20
+  cforward-delay: 60
 
 wormholes:
   enable: true
-  period: 10
+  period: 3
   count: 30
   offset: 0.5
 no-explosion-worlds:

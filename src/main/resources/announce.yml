@@ -1,0 +1,12 @@
+config:
+  delay: 10
+messages:
+  - message: Hello!
+    servers: spawn,survival
+    mini-message: true
+    player-specific: true
+    conditions:
+      - type: permission
+        permission: arc.test
+  - message: Hi!
+    servers: all

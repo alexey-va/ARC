@@ -1,4 +1,4 @@
-package arc.arc.playerlist;
+package arc.arc.xserver.playerlist;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

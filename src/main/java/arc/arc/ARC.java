@@ -1,22 +1,16 @@
 package arc.arc;
 
 import arc.arc.commands.CforwardCommand;
+import arc.arc.commands.Command;
 import arc.arc.commands.MexCommand;
 import arc.arc.hooks.*;
 import arc.arc.network.NetworkRegistry;
 import arc.arc.network.RedisManager;
 import arc.arc.util.CooldownManager;
 import arc.arc.util.ParticleUtil;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.format.TextDecoration;
 import net.milkbowl.vault.economy.Economy;
-import org.bukkit.entity.Player;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
-
-import java.util.Collection;
-import java.util.List;
 
 public final class ARC extends JavaPlugin {
 
@@ -29,12 +23,7 @@ public final class ARC extends JavaPlugin {
 
 
 
-    public static void noPermissionMessage(Player player) {
-        player.sendMessage(
-                Component.text("Эй! ", NamedTextColor.RED).decoration(TextDecoration.BOLD, true)
-                        .append(Component.text("Ты не можешь здесь делать это.", NamedTextColor.GRAY).decoration(TextDecoration.BOLD, false))
-        );
-    }
+
 
     public static Economy getEcon() {
         return econ;

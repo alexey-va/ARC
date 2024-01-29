@@ -1,6 +1,7 @@
 package arc.arc.hooks;
 
 import arc.arc.Config;
+import arc.arc.util.TextUtil;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
 import com.sk89q.worldguard.WorldGuard;
 import com.sk89q.worldguard.protection.managers.RegionManager;
@@ -17,8 +18,6 @@ import org.bukkit.event.block.BlockPlaceEvent;
 
 import java.util.HashSet;
 import java.util.Set;
-
-import static arc.arc.ARC.noPermissionMessage;
 
 public class WGHook implements Listener, ArcModule {
 
@@ -65,7 +64,7 @@ public class WGHook implements Listener, ArcModule {
         ) {
             if (!event.getPlayer().hasPermission("mcfine.bypass-end-protection")) {
                 event.setCancelled(true);
-                noPermissionMessage(event.getPlayer());
+                event.getPlayer().sendMessage(TextUtil.noWGPermission());
             }
         }
     }
@@ -92,7 +91,7 @@ public class WGHook implements Listener, ArcModule {
         ) {
             if (!event.getPlayer().hasPermission("mcfine.bypass-end-protection")) {
                 event.setCancelled(true);
-                noPermissionMessage(event.getPlayer());
+                event.getPlayer().sendMessage(TextUtil.noWGPermission());
             }
         }
     }

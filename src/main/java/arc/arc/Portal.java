@@ -25,7 +25,7 @@ public class Portal {
     private static final HashSet<Material> empties = new HashSet<>() {{
         add(Material.SNOW);
         add(Material.TRIPWIRE);
-        add(Material.GRASS);
+        add(Material.SHORT_GRASS);
         add(Material.TALL_GRASS);
         add(Material.ACACIA_SLAB);
         add(Material.ANDESITE_SLAB);

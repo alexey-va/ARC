@@ -1,4 +1,4 @@
-package arc.arc.guis.ps;
+package arc.arc.hooks.ps.guis;
 
 import arc.arc.ARC;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
@@ -16,9 +16,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
-import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitRunnable;
-import org.checkerframework.checker.units.qual.N;
 
 import java.util.*;
 
@@ -44,7 +42,6 @@ public class PSMembers extends ChestGui {
         bg.setRepeat(true);
         bg.setPriority(Pane.Priority.LOWEST);
         this.addPane(bg);
-        meta.getPersistentDataContainer().set(PersistentDataType.BOOLEAN);
 
         OutlinePane bg2 = new OutlinePane(0,0,9,4);
         ItemStack bgItem2 = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);

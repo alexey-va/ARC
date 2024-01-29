@@ -39,7 +39,7 @@ public class LumberListener implements Listener, ArcModule {
         add(Material.JUNGLE_LOG);
         add(Material.MANGROVE_WOOD);
         add(Material.MANGROVE_LOG);
-        add(Material.GRASS);
+        add(Material.SHORT_GRASS);
         add(Material.TALL_GRASS);
         add(Material.ACACIA_LEAVES);
         add(Material.BIRCH_LEAVES);

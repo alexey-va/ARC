@@ -1,7 +1,7 @@
 package arc.arc.hooks;
 
 import arc.arc.ARC;
-import arc.arc.guis.ps.PSMenu;
+import arc.arc.hooks.ps.guis.PSMenu;
 import com.destroystokyo.paper.ParticleBuilder;
 import com.jeff_media.customblockdata.CustomBlockData;
 import dev.espi.protectionstones.PSRegion;

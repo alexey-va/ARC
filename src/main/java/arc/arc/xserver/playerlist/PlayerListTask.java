@@ -1,4 +1,4 @@
-package arc.arc.playerlist;
+package arc.arc.xserver.playerlist;
 
 import arc.arc.ARC;
 import arc.arc.Config;

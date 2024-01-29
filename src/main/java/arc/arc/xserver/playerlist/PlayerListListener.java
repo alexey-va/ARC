@@ -1,4 +1,4 @@
-package arc.arc.playerlist;
+package arc.arc.xserver.playerlist;
 
 import arc.arc.network.ChannelListener;
 import arc.arc.network.RedisSerializer;
