@@ -1,7 +1,6 @@
 package arc.arc.hooks.lands;
 
 import arc.arc.ARC;
-import arc.arc.Config;
 import arc.arc.hooks.ArcModule;
 import arc.arc.hooks.HookRegistry;
 import me.angeschossen.lands.api.LandsIntegration;
@@ -9,7 +8,6 @@ import me.angeschossen.lands.api.land.Land;
 import me.angeschossen.lands.api.player.LandPlayer;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
-import redis.clients.jedis.JedisPooled;
 
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;

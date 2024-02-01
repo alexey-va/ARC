@@ -1,6 +1,6 @@
 package arc.arc.farm;
 
-import arc.arc.util.ParticleUtil;
+import arc.arc.util.ParticleManager;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
 import com.sk89q.worldguard.WorldGuard;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
@@ -92,7 +92,7 @@ public class Farm {
         } else {
             block.breakNaturally();
         }
-        ParticleUtil.queue(event.getPlayer(), event.getBlock().getLocation().toCenterLocation());
+        ParticleManager.queue(event.getPlayer(), event.getBlock().getLocation().toCenterLocation());
     }
 
     private void sendDenyMessage(int n, Player player) {

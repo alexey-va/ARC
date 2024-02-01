@@ -1,6 +1,6 @@
 package arc.arc.hooks;
 
-import arc.arc.Config;
+import arc.arc.configs.Config;
 import arc.arc.util.TextUtil;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
 import com.sk89q.worldguard.WorldGuard;

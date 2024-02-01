@@ -1,6 +1,10 @@
-package arc.arc;
+package arc.arc.configs;
+
+import arc.arc.ARC;
+import org.bukkit.Particle;
 
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 public class Config {
@@ -19,6 +23,8 @@ public class Config {
     public static int boardEntryLifetimeMinutes;
     public static String partyTag;
     public static long cForwardDelay;
+
+
 
     public Config(){
         ARC.plugin.getConfig().options().copyDefaults(true);

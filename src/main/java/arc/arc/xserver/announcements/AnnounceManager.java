@@ -1,6 +1,8 @@
 package arc.arc.xserver.announcements;
 
 import arc.arc.ARC;
+import arc.arc.configs.AnnouneConfig;
+import arc.arc.hooks.HookRegistry;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -15,17 +17,27 @@ public class AnnounceManager {
     Deque<AnnouncementData> recentlyUsed = new ArrayDeque<>(2);
     BukkitTask task;
     int totalWeight;
+    static int count=0;
+
+    public static AnnouncementMessager messager;
 
     private static AnnounceManager instance;
 
     private AnnounceManager(){
-        task = new BukkitRunnable().runTaskTimer(ARC.plugin, )
+        task = new BukkitRunnable() {
+            @Override
+            public void run() {
+                announceNext();
+            }
+        }.runTaskTimer(ARC.plugin, AnnouneConfig.delay*20L, AnnouneConfig.delay*20L);
     }
 
     public static AnnounceManager instance(){
         if(instance == null){
             synchronized (AnnounceManager.class){
-                if(instance == null) instance = new AnnounceManager();
+                if(instance == null){
+                    instance = new AnnounceManager();
+                }
             }
         }
         return instance;
@@ -33,13 +45,59 @@ public class AnnounceManager {
 
 
     public void announceNext(){
+        if(announcements.isEmpty()) return;
         AnnouncementData data = getRandom();
+        announce(data);
+        if(messager != null) messager.send(data);
+    }
+
+    public void clearData(){
+        announcements.clear();
+        if(task != null && !task.isCancelled()){
+            task.cancel();
+            task = new BukkitRunnable() {
+                @Override
+                public void run() {
+                    announceNext();
+                }
+            }.runTaskTimer(ARC.plugin, AnnouneConfig.delay*20L, AnnouneConfig.delay*20L);
+        }
+    }
+
+    public static void announce(AnnouncementData data){
+        if(Bukkit.getOnlinePlayers().size() < 3){
+            count++;
+            if(count<3) return;
+            else count=0;
+        }
         Bukkit.getOnlinePlayers().forEach(p -> {
-                    for(ArcCondition condition : data.arcConditions){
-                        if(!condition.test(p)) return;
-                    }
-                    p.sendMessage(data.component(p));
-                });
+            for(ArcCondition condition : data.arcConditions){
+                if(!condition.test(p)) return;
+            }
+            sendMessage(data, p);
+        });
+    }
+
+    private static void sendMessage(AnnouncementData data, Player player){
+        switch (data.type){
+            case CHAT -> player.sendMessage(data.component(player));
+            case BOSSBAR -> {
+                if(HookRegistry.cmiHook == null) {
+                    System.out.println("I cant use bossbar without cmi... sorry");
+                    return;
+                }
+                HookRegistry.cmiHook.sendBossbar("arcAnnounce", data.message,
+                        player, data.bossBarColor, data.seconds);
+            }
+            case ACTIONBAR -> {
+                if(HookRegistry.cmiHook == null) {
+                    System.out.println("I cant use actionbar without cmi... sorry");
+                    return;
+                }
+                HookRegistry.cmiHook.sendActionbar( data.message,
+                        player, data.seconds);
+            }
+        }
     }
 
     public void addAnnouncement(AnnouncementData data){
@@ -65,7 +123,7 @@ public class AnnounceManager {
     }
 
     private int queueSize(){
-        return 2;
+        return Math.min(announcements.size()-1, 3);
     }
 
 }

@@ -1,6 +1,6 @@
 package arc.arc.hooks;
 
-import arc.arc.Config;
+import arc.arc.configs.Config;
 import arc.arc.Portal;
 import arc.arc.network.ServerLocation;
 import net.william278.huskhomes.api.HuskHomesAPI;

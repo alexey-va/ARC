@@ -22,7 +22,7 @@ public class Command implements CommandExecutor {
         if(strings.length==1){
             if(strings[0].equalsIgnoreCase("reload") && commandSender.hasPermission("arc.admin")){
                 ARC.plugin.reloadConfig();
-                //ARC.plugin.load();
+                ARC.plugin.loadConfig();
                 commandSender.sendMessage(Component.text("Перезагрузка успешна!", NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
                 return true;
             }

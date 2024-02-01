@@ -1,8 +1,7 @@
 package arc.arc.hooks;
 
-import arc.arc.Config;
+import arc.arc.configs.Config;
 import arc.arc.xserver.playerlist.PlayerManager;
-import me.clip.placeholderapi.PlaceholderAPI;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;

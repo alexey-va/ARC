@@ -1,7 +1,6 @@
 package arc.arc.hooks;
 
-import arc.arc.ARC;
-import arc.arc.Config;
+import arc.arc.configs.Config;
 import arc.arc.util.TextUtil;
 import io.github.thebusybiscuit.slimefun4.api.events.PlayerRightClickEvent;
 import io.github.thebusybiscuit.slimefun4.api.items.SlimefunItem;

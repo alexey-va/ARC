@@ -1,7 +1,7 @@
 package arc.arc.farm;
 
 import arc.arc.ARC;
-import arc.arc.util.ParticleUtil;
+import arc.arc.util.ParticleManager;
 import com.jeff_media.customblockdata.CustomBlockData;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
 import com.sk89q.worldedit.math.BlockVector3;
@@ -83,8 +83,8 @@ public class Mine implements Listener {
     public Mine(String mineId) {
 
         loadConfig(mineId);
-        if(region == null){
-            System.out.print(mineId+" is invalid!");
+        if (region == null) {
+            System.out.print(mineId + " is invalid!");
             return;
         }
         computeCache(true);
@@ -151,6 +151,7 @@ public class Mine implements Listener {
 
     private void setupTasks() {
         cancel();
+
         replaceCobblestoneTask = new BukkitRunnable() {
             @Override
             public void run() {
@@ -183,7 +184,12 @@ public class Mine implements Listener {
                     if (block.getType() != baseBlock) continue;
                     if (rng.contains(i)) {
                         brokenBlocks--;
-                        block.setType(pickRandomMaterial());
+                        Material material = pickRandomMaterial();
+                        if (block.getRelative(0, -1, 0).getType() == Material.AIR) {
+                            if (material == Material.SAND) material = Material.SANDSTONE;
+                            else if (material == Material.GRAVEL) material = Material.STONE;
+                        }
+                        block.setType(material);
                     }
                     if (brokenBlocks <= 0) return;
                     i++;
@@ -206,15 +212,10 @@ public class Mine implements Listener {
             Block block = world.getBlockAt(x, y, z);
 
 
-            if (block.getType() == tempBlock && replaceCobblestone){
+            if (block.getType() == tempBlock && replaceCobblestone) {
                 block.setType(baseBlock);
-                new BukkitRunnable() {
-                    @Override
-                    public void run() {
-                        CustomBlockData blockData = new CustomBlockData(block, ARC.plugin);
-                        blockData.remove(new NamespacedKey(ARC.plugin, "t"));
-                    }
-                }.runTaskAsynchronously(ARC.plugin);
+                CustomBlockData blockData = new CustomBlockData(block, ARC.plugin);
+                blockData.remove(new NamespacedKey(ARC.plugin, "t"));
             }
 
             if ((world.getBlockAt(x + 1, y, z)).getType() == Material.AIR || (world.getBlockAt(x - 1, y, z)).getType() == Material.AIR || (world.getBlockAt(x, y + 1, z)).getType() == Material.AIR || (world.getBlockAt(x, y - 1, z)).getType() == Material.AIR || (world.getBlockAt(x, y, z + 1)).getType() == Material.AIR || (world.getBlockAt(x, y, z - 1)).getType() == Material.AIR)
@@ -257,7 +258,7 @@ public class Mine implements Listener {
 
         blockData.set(new NamespacedKey(ARC.plugin, "t"), PersistentDataType.BOOLEAN, true);
         tempBlocks.add(new TemporaryBlock(event.getBlock()));
-        ParticleUtil.queue(event.getPlayer(), event.getBlock().getLocation().toCenterLocation());
+        ParticleManager.queue(event.getPlayer(), event.getBlock().getLocation().toCenterLocation());
         return true;
     }
 

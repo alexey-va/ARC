@@ -1,7 +1,7 @@
 package arc.arc.xserver.commands;
 
 import arc.arc.ARC;
-import arc.arc.Config;
+import arc.arc.configs.Config;
 import arc.arc.network.ChannelListener;
 import arc.arc.network.RedisSerializer;
 import lombok.AllArgsConstructor;

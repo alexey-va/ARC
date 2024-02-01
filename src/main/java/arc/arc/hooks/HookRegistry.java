@@ -1,13 +1,10 @@
 package arc.arc.hooks;
 
 import arc.arc.ARC;
-import arc.arc.Config;
+import arc.arc.configs.Config;
 import arc.arc.farm.*;
 import arc.arc.hooks.lands.LandsHook;
-import arc.arc.listeners.ChatListener;
-import arc.arc.listeners.CommandListener;
-import arc.arc.listeners.JoinListener;
-import arc.arc.listeners.SpawnerListener;
+import arc.arc.listeners.*;
 import org.bukkit.Bukkit;
 
 import java.util.ArrayList;
@@ -23,6 +20,7 @@ public class HookRegistry {
     public static HuskHomesHook huskHomesHook;
     public static PartiesHook partiesHook;
     public static PAPIHook papiHook;
+    public static CMIHook cmiHook;
     public WGHook wgHook;
     public ShopHook shopHook;
     public SFHook sfHook;
@@ -34,6 +32,7 @@ public class HookRegistry {
     public MineListener mineHook;
     public FarmListener farmHook;
     public SpawnerListener spawnerListener;
+    public BlockListener blockListener;
     public Mine mine;
     public Farm farm;
     public JoinListener joinListener;
@@ -106,6 +105,12 @@ public class HookRegistry {
                 arcModuleList.add(landsHook);
             }
         }
+        if (getServer().getPluginManager().getPlugin("CMI") != null) {
+            if (getServer().getPluginManager().getPlugin("CMI").isEnabled()) {
+                cmiHook = new CMIHook();
+                arcModuleList.add(cmiHook);
+            }
+        }
         if (Bukkit.getPluginManager().isPluginEnabled("WorldGuard") && mineHook == null) {
             mineHook = new MineListener();
             arcModuleList.add(mineHook);
@@ -144,6 +149,11 @@ public class HookRegistry {
         if(joinListener == null){
             joinListener = new JoinListener();
             Bukkit.getPluginManager().registerEvents(joinListener, ARC.plugin);
+        }
+
+        if(blockListener == null){
+            blockListener = new BlockListener();
+            Bukkit.getPluginManager().registerEvents(blockListener, ARC.plugin);
         }
 
     }

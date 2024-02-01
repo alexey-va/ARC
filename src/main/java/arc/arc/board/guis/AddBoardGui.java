@@ -1,7 +1,7 @@
 package arc.arc.board.guis;
 
 import arc.arc.ARC;
-import arc.arc.Config;
+import arc.arc.configs.Config;
 import arc.arc.TitleInput;
 import arc.arc.board.Board;
 import arc.arc.board.BoardEntry;

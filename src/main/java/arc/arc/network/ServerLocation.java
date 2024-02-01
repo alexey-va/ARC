@@ -1,6 +1,6 @@
 package arc.arc.network;
 
-import arc.arc.Config;
+import arc.arc.configs.Config;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

@@ -1,11 +1,10 @@
 package arc.arc.board;
 
 import arc.arc.ARC;
-import arc.arc.Config;
+import arc.arc.configs.Config;
 import arc.arc.network.ArcSerializable;
 import arc.arc.util.TextUtil;
 import com.fasterxml.jackson.annotation.JsonInclude;
-import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
 import net.kyori.adventure.text.Component;

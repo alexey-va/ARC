@@ -1,7 +1,7 @@
 package arc.arc.hooks;
 
 import arc.arc.ARC;
-import arc.arc.Config;
+import arc.arc.configs.Config;
 import com.destroystokyo.paper.ParticleBuilder;
 import com.magmaguy.elitemobs.api.EliteExplosionEvent;
 import com.magmaguy.elitemobs.wormhole.Wormhole;
@@ -47,13 +47,13 @@ public class EMHook implements Listener, ArcModule {
                     continue;
                 }
                 double modifier = wormhole.getWormholeConfigFields().getSizeMultiplier();
-                Collection<Player> players1 = wormhole.getWormholeEntry1().getLocation().getNearbyPlayers(40);
+                Collection<Player> players1 = wormhole.getWormholeEntry1().getLocation().getWorld().getPlayers();
                 players1.removeIf(player -> !player.hasLineOfSight(wormhole.getWormholeEntry1().getLocation()));
                 particleBuilders.add(new ParticleBuilder(Particle.REDSTONE).color(wormhole.getParticleColor())
                         .receivers(players1).offset(Config.particleOffset*modifier, Config.particleOffset*modifier, Config.particleOffset*modifier)
                         .location(wormhole.getWormholeEntry1().getLocation()).count((int)(Config.particleCount*modifier*modifier)));
 
-                Collection<Player> players2 = wormhole.getWormholeEntry2().getLocation().getNearbyPlayers(40);
+                Collection<Player> players2 = wormhole.getWormholeEntry2().getLocation().getWorld().getPlayers();
                 players2.removeIf(player -> !player.hasLineOfSight(wormhole.getWormholeEntry2().getLocation()));
                 particleBuilders.add(new ParticleBuilder(Particle.REDSTONE).color(wormhole.getParticleColor())
                         .receivers(players2).offset(Config.particleOffset*modifier, Config.particleOffset*modifier, Config.particleOffset*modifier)

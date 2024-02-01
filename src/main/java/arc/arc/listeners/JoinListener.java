@@ -1,7 +1,7 @@
 package arc.arc.listeners;
 
 import arc.arc.ARC;
-import arc.arc.Config;
+import arc.arc.configs.Config;
 import arc.arc.network.NetworkRegistry;
 import arc.arc.xserver.ranks.RankData;
 import com.Zrips.CMI.CMI;
@@ -11,6 +11,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 
 public class JoinListener implements Listener {
@@ -18,6 +19,16 @@ public class JoinListener implements Listener {
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event){
+/*        new BukkitRunnable() {
+            @Override
+            public void run() {
+                shareRank(event.getPlayer());
+            }
+        }.runTaskLater(ARC.plugin, 20L);*/
+    }
+
+    @EventHandler
+    public void onPlayerLeave(PlayerQuitEvent event){
         new BukkitRunnable() {
             @Override
             public void run() {

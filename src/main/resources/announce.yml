@@ -1,12 +1,16 @@
 config:
   delay: 10
 messages:
-  - message: Hello!
+  - message: Hello %player_name% it is %server_time_mm:HH:ss%!
     servers: spawn,survival
     mini-message: true
     player-specific: true
+    cache: false
     conditions:
       - type: permission
         permission: arc.test
+    type: "bossbar"
+    color: "blue"
+    seconds: 30
   - message: Hi!
     servers: all

@@ -1,6 +1,6 @@
 package arc.arc.xserver.playerlist;
 
-import arc.arc.Config;
+import arc.arc.configs.Config;
 import arc.arc.network.ArcSerializable;
 import lombok.Data;
 import lombok.NoArgsConstructor;

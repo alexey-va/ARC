@@ -1,6 +1,8 @@
 package arc.arc.network;
 
 import arc.arc.hooks.lands.LandsMessager;
+import arc.arc.xserver.announcements.AnnounceManager;
+import arc.arc.xserver.announcements.AnnouncementMessager;
 import arc.arc.xserver.playerlist.PlayerListListener;
 import arc.arc.xserver.playerlist.PlayerListTask;
 import arc.arc.xserver.commands.CommandReceiver;
@@ -40,6 +42,10 @@ public class NetworkRegistry {
 
         rankMessager = new RankMessager(redisManager, "arc.ranks");
         redisManager.registerChannel("arc.ranks", rankMessager);
+
+        AnnouncementMessager announcementMessager = new AnnouncementMessager("arc.announcements", redisManager);
+        redisManager.registerChannel(announcementMessager.getChannel(), announcementMessager);
+        AnnounceManager.messager = announcementMessager;
 
         redisManager.init();
     }

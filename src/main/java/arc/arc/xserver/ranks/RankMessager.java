@@ -1,7 +1,7 @@
 package arc.arc.xserver.ranks;
 
 import arc.arc.ARC;
-import arc.arc.Config;
+import arc.arc.configs.Config;
 import arc.arc.network.ChannelListener;
 import arc.arc.network.RedisManager;
 import arc.arc.network.RedisSerializer;
