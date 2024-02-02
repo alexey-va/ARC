@@ -1,0 +1,14 @@
+id: easter
+treasures:
+  - type: command
+    weight: 5
+    rare: true
+    rare-message: "<bold><gold>This is rare!"
+    message: "You got command"
+    command: "money give %player_name% 1000"
+  - type: item
+    quantity: 10
+    stack:
+      v: 3700
+      type: TNT
+      amount: 16

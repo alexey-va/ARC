@@ -10,5 +10,3 @@ particles:
   extra-claimed: 0.2
   count-claimed: 15
   particle-claimed: flame
-commands:
-  easter: "money give %player_name% 10"

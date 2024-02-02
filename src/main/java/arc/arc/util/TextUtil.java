@@ -48,7 +48,7 @@ public class TextUtil {
 
     public static Component noWGPermission() {
         return strip(Component.text("Эй! ", NamedTextColor.RED).decoration(TextDecoration.BOLD, true)
-                        .append(Component.text("Ты не можешь здесь делать это.", NamedTextColor.GRAY)));
+                        .append(Component.text("Ты не можешь здесь делать это.", NamedTextColor.GRAY).decoration(TextDecoration.BOLD, false)));
     }
 
 }

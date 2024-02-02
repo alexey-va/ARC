@@ -7,12 +7,15 @@ import arc.arc.treasurechests.chests.CustomChest;
 import arc.arc.treasurechests.chests.ItemsAdderCustomChest;
 import arc.arc.treasurechests.chests.VanillaChest;
 import arc.arc.treasurechests.locationpools.LocationPool;
+import arc.arc.treasurechests.rewards.Treasure;
+import arc.arc.treasurechests.rewards.TreasurePool;
 import arc.arc.util.ParticleManager;
 import com.jeff_media.customblockdata.CustomBlockData;
 import lombok.RequiredArgsConstructor;
 import me.clip.placeholderapi.PlaceholderAPI;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
@@ -29,7 +32,8 @@ public class TreasureHunt {
     final int chests;
     final String namespaceId;
     final Type type;
-    final String id;
+    final TreasurePool treasurePool;
+
     int max;
     int left;
     Set<Location> locations;
@@ -102,9 +106,29 @@ public class TreasureHunt {
     }
 
     private void executeAction(Player player, Block block){
-        String command = TreasureHuntConfig.treasureHuntCommands.get(id);
-        command = PlaceholderAPI.setPlaceholders(player, command);
-        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
+        if(treasurePool == null){
+            System.out.println("Treasure pool is null for "+locationPool.getId()+" hunt!");
+            return;
+        }
+
+        Treasure treasure = treasurePool.random();
+        treasure.give(player);
+
+        String message = treasure.message();
+        if(message != null){
+            Component text = MiniMessage.miniMessage()
+                    .deserialize(PlaceholderAPI.setPlaceholders(player, treasure.message()));
+            player.sendMessage(text);
+        }
+
+        if(treasure.isRare() && treasure.globalMessage() != null){
+            Component text = MiniMessage.miniMessage()
+                    .deserialize(PlaceholderAPI.setPlaceholders(player, treasure.globalMessage()));
+            world.getPlayers()
+                    .stream()
+                    .filter(p -> p!=player)
+                    .forEach(p -> p.sendMessage(text));
+        }
     }
 
     public void generateLocations() {

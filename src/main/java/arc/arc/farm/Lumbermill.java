@@ -20,6 +20,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 public class Lumbermill {
@@ -63,7 +64,13 @@ public class Lumbermill {
             event.setCancelled(true);
             return true;
         }
-        if (particles) ParticleManager.queue(event.getPlayer(), event.getBlock().getLocation().toCenterLocation());
+        if (particles) ParticleManager.queue(ParticleManager.ParticleDisplay.builder()
+                .players(List.of(event.getPlayer()))
+                .extra(0.06)
+                .count(5)
+                .offsetX(0.25).offsetY(0.25).offsetZ(0.25)
+                .location(block.getLocation().toCenterLocation())
+                .build());
         return true;
     }
 

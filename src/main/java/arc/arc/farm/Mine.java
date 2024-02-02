@@ -2,6 +2,7 @@ package arc.arc.farm;
 
 import arc.arc.ARC;
 import arc.arc.configs.FarmConfig;
+import arc.arc.util.CooldownManager;
 import arc.arc.util.ParticleManager;
 import arc.arc.util.TextUtil;
 import com.jeff_media.customblockdata.CustomBlockData;
@@ -9,15 +10,18 @@ import com.sk89q.worldedit.bukkit.BukkitAdapter;
 import com.sk89q.worldedit.math.BlockVector3;
 import com.sk89q.worldedit.regions.CuboidRegion;
 import com.sk89q.worldguard.WorldGuard;
+import com.sk89q.worldguard.protection.managers.RegionManager;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import com.sk89q.worldguard.protection.regions.RegionContainer;
 import lombok.Getter;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.entity.Player;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.inventory.ItemStack;
@@ -25,6 +29,8 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
+import java.time.Duration;
+import java.time.LocalTime;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -50,8 +56,11 @@ public class Mine implements Listener {
     private Material baseBlock;
     int priority;
 
+    Map<UUID, Integer> blocksBrokenByPlayer = new HashMap<>();
+    int maxBlocks;
+
     public Mine(String mineId, Map<Material, Integer> materialMap, String regionName, String worldName,
-                Material tempBlock, int priority, Material baseBlock, String permission, boolean particles) {
+                Material tempBlock, int priority, Material baseBlock, String permission, boolean particles, int maxBlocks) {
         this.mineId = mineId;
         this.regionName = regionName;
         this.worldName = worldName;
@@ -60,6 +69,7 @@ public class Mine implements Listener {
         this.baseBlock = baseBlock;
         this.permission = permission;
         this.particles = particles;
+        this.maxBlocks = maxBlocks;
 
         int totalWeight = 0;
         for (var entry : materialMap.entrySet()) {
@@ -69,8 +79,18 @@ public class Mine implements Listener {
         }
         this.totalWeight = totalWeight;
 
-        RegionContainer regionContainer = WorldGuard.getInstance().getPlatform().getRegionContainer();
-        this.region = regionContainer.get(BukkitAdapter.adapt(world)).getRegion(regionName);
+        this.world = Bukkit.getWorld(worldName);
+        if (world == null) {
+            System.out.println(worldName + " world does not exist!");
+            return;
+        }
+
+        RegionManager regionManager = WorldGuard.getInstance().getPlatform().getRegionContainer().get(BukkitAdapter.adapt(world));
+        if (regionManager == null) {
+            System.out.println("World " + worldName + " does not have WG manager!");
+            return;
+        }
+        this.region = regionManager.getRegion(regionName);
 
         if (region == null) {
             System.out.print(mineId + " is invalid!");
@@ -162,16 +182,21 @@ public class Mine implements Listener {
 
         event.setCancelled(true);
 
-        if ((permission != null && !event.getPlayer().hasPermission(permission)) || !ores.contains(block.getType())) {
-            event.getPlayer().sendMessage(TextUtil.noWGPermission());
-            return true;
-        }
-
         CustomBlockData blockData = new CustomBlockData(event.getBlock(), ARC.plugin);
         if (blockData.has(new NamespacedKey(ARC.plugin, "t"))) {
             event.getPlayer().sendActionBar(Component.text("Этот блок еще не восстановился!", NamedTextColor.GOLD));
             return true;
         }
+
+        if ((permission != null && !event.getPlayer().hasPermission(permission)) || !ores.contains(block.getType())) {
+            event.getPlayer().sendMessage(TextUtil.noWGPermission());
+            return true;
+        }
+
+        if (reachedMax(event.getPlayer())) {
+            sendMaxReachedMessage(event.getPlayer());
+            return true;
+        } else if (block.getType() != baseBlock) incrementBlocks(event.getPlayer());
 
         Collection<ItemStack> stacks = event.getBlock().getDrops();
         stacks.forEach(stack -> event.getPlayer().getInventory().addItem(stack));
@@ -184,13 +209,56 @@ public class Mine implements Listener {
 
         blockData.set(new NamespacedKey(ARC.plugin, "t"), PersistentDataType.BOOLEAN, true);
         tempBlocks.add(new TemporaryBlock(event.getBlock()));
-        if (particles) ParticleManager.queue(event.getPlayer(), event.getBlock().getLocation().toCenterLocation());
+
+        if (particles) ParticleManager.queue(ParticleManager.ParticleDisplay.builder()
+                .players(List.of(event.getPlayer()))
+                .extra(0.06)
+                .count(5)
+                .offsetX(0.25).offsetY(0.25).offsetZ(0.25)
+                .location(block.getLocation().toCenterLocation())
+                .build());
         return true;
     }
 
     public void cancelTasks() {
         if (replaceCobblestoneTask != null && !replaceCobblestoneTask.isCancelled()) replaceCobblestoneTask.cancel();
         if (replaceCache != null && !replaceCache.isCancelled()) replaceCache.cancel();
+    }
+
+    private boolean reachedMax(Player player) {
+        return blocksBrokenByPlayer.getOrDefault(player.getUniqueId(), 0) >= maxBlocks;
+    }
+
+    private void incrementBlocks(Player player) {
+        blocksBrokenByPlayer.merge(player.getUniqueId(), 1, Integer::sum);
+        int count = blocksBrokenByPlayer.get(player.getUniqueId());
+        if (count % 16 == 0 && count != maxBlocks) {
+            Component text = Component.text("Вы добыли ", NamedTextColor.GRAY)
+                    .append(Component.text(count + "", NamedTextColor.GREEN))
+                    .append(Component.text(" из ", NamedTextColor.GRAY))
+                    .append(Component.text(maxBlocks + "", NamedTextColor.GOLD))
+                    .append(Component.text(" за этот час", NamedTextColor.GRAY));
+            player.sendActionBar(TextUtil.strip(text));
+        }
+    }
+
+    private void sendMaxReachedMessage(Player player) {
+        if (CooldownManager.cooldown(player.getUniqueId(), "farm_limit_message") > 0) return;
+        CooldownManager.addCooldown(player.getUniqueId(), "farm_limit_message", 60);
+
+        //int count = blocksBrokenByPlayer.getOrDefault(player.getUniqueId(), 0);
+        LocalTime now = LocalTime.now();
+        LocalTime reset = LocalTime.of(now.getHour() + 1, 0);
+        Duration tillReset = Duration.between(now, reset);
+        Component text = Component.text("Вы слишком разогнались!", NamedTextColor.RED)
+                .append(Component.text(" Подождите ", NamedTextColor.GRAY))
+                .append(Component.text(tillReset.toMinutes() + " минут", NamedTextColor.GREEN))
+                .append(Component.text(" до сброса лимита добычи.", NamedTextColor.GRAY));
+        player.sendMessage(TextUtil.strip(text));
+    }
+
+    public void resetLimit() {
+        blocksBrokenByPlayer.clear();
     }
 
     private static class TemporaryBlock {

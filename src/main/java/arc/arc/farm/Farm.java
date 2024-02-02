@@ -36,6 +36,9 @@ public class Farm {
 
     Map<UUID, Integer> blocksBrokenByPlayer = new HashMap<>();
 
+    private static final Set<Material> seeds = Set.of(Material.BEETROOT_SEEDS, Material.PUMPKIN_SEEDS,
+            Material.MELON_SEEDS, Material.WHEAT_SEEDS, Material.TORCHFLOWER_SEEDS);
+
     public Farm(String worldName, String regionName, boolean particles, String permission, int maxBlocks) {
         this.regionName = regionName;
         this.worldName = worldName;
@@ -68,14 +71,16 @@ public class Farm {
         event.setCancelled(true);
 
         if (!event.getPlayer().hasPermission(permission) ||
-                !FarmConfig.lumberMaterials.contains(event.getBlock().getType())) {
+                !FarmConfig.farmMaterials.contains(event.getBlock().getType())) {
             event.getPlayer().sendMessage(TextUtil.noWGPermission());
             event.setCancelled(true);
             return true;
         }
 
-        if (reachedMax(event.getPlayer())) sendMaxReachedMessage(event.getPlayer());
-        else incrementBlocks(event.getPlayer());
+        if (reachedMax(event.getPlayer())) {
+            sendMaxReachedMessage(event.getPlayer());
+            return true;
+        } else incrementBlocks(event.getPlayer());
 
         breakBlock(event.getPlayer(), block);
         return true;
@@ -93,13 +98,21 @@ public class Farm {
 
         if (ageable != null) {
             Collection<ItemStack> stacks = block.getDrops();
-            stacks.forEach(stack -> player.getInventory().addItem(stack));
+            stacks.stream()
+                    .filter(stack -> !seeds.contains(stack.getType()))
+                    .forEach(stack -> player.getInventory().addItem(stack));
             ageable.setAge(0);
             block.setBlockData(ageable);
         } else {
             block.breakNaturally();
         }
-        ParticleManager.queue(player, block.getLocation().toCenterLocation());
+        if (particles) ParticleManager.queue(ParticleManager.ParticleDisplay.builder()
+                .players(List.of(player))
+                .extra(0.06)
+                .count(5)
+                .offsetX(0.25).offsetY(0.25).offsetZ(0.25)
+                .location(block.getLocation().toCenterLocation())
+                .build());
     }
 
     private boolean reachedMax(Player player) {
@@ -108,6 +121,15 @@ public class Farm {
 
     private void incrementBlocks(Player player) {
         blocksBrokenByPlayer.merge(player.getUniqueId(), 1, Integer::sum);
+        int count = blocksBrokenByPlayer.get(player.getUniqueId());
+        if (count % 64 == 0 && count != maxBlocks) {
+            Component text = Component.text("Вы добыли ", NamedTextColor.GRAY)
+                    .append(Component.text(count + "", NamedTextColor.GREEN))
+                    .append(Component.text(" из ", NamedTextColor.GRAY))
+                    .append(Component.text(maxBlocks + "", NamedTextColor.GOLD))
+                    .append(Component.text(" за этот час", NamedTextColor.GRAY));
+            player.sendActionBar(TextUtil.strip(text));
+        }
     }
 
     private void sendMaxReachedMessage(Player player) {
@@ -120,7 +142,7 @@ public class Farm {
         Duration tillReset = Duration.between(now, reset);
         Component text = Component.text("Вы слишком разогнались!", NamedTextColor.RED)
                 .append(Component.text(" Подождите ", NamedTextColor.GRAY))
-                .append(Component.text(tillReset + " минут", NamedTextColor.GREEN))
+                .append(Component.text(tillReset.toMinutes() + " минут", NamedTextColor.GREEN))
                 .append(Component.text(" до сброса лимита добычи.", NamedTextColor.GRAY));
         player.sendMessage(TextUtil.strip(text));
     }

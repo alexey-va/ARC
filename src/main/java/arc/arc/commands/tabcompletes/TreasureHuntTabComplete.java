@@ -1,8 +1,10 @@
 package arc.arc.commands.tabcompletes;
 
+import arc.arc.treasurechests.TreasureHuntManager;
 import arc.arc.treasurechests.locationpools.LocationPool;
 import arc.arc.treasurechests.locationpools.LocationPoolManager;
 import arc.arc.configs.TreasureHuntConfig;
+import arc.arc.treasurechests.rewards.TreasurePool;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
@@ -40,7 +42,7 @@ public class TreasureHuntTabComplete implements TabCompleter {
         }
 
         if(strings.length == 5){
-            return TreasureHuntConfig.treasureHuntCommands.keySet().stream().toList();
+            return TreasureHuntManager.getTreasurePools().stream().map(TreasurePool::getId).toList();
         }
 
         return null;

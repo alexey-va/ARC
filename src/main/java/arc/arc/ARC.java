@@ -1,5 +1,7 @@
 package arc.arc;
 
+import arc.arc.commands.tabcompletes.TreasurePoolTabcomplete;
+import arc.arc.configs.LocationPoolConfig;
 import arc.arc.farm.FarmManager;
 import arc.arc.treasurechests.locationpools.LocationPoolManager;
 import arc.arc.treasurechests.TreasureHuntManager;
@@ -24,6 +26,7 @@ public final class ARC extends JavaPlugin {
     Config config;
     AnnouneConfig announeConfig;
     TreasureHuntConfig treasureHuntConfig;
+    public LocationPoolConfig locationPoolConfig;
     private static Economy econ = null;
     public static RedisManager redisManager;
     public static HookRegistry hookRegistry;
@@ -54,6 +57,7 @@ public final class ARC extends JavaPlugin {
         announeConfig = new AnnouneConfig();
 
         System.out.println("Location pool loading...");
+        locationPoolConfig = new LocationPoolConfig();
         LocationPoolManager.init();
 
         System.out.println("Loading treasure hunt config");
@@ -70,8 +74,15 @@ public final class ARC extends JavaPlugin {
     public void onDisable() {
         // Plugin shutdown logic
         hookRegistry.cleanHooks();
-        LocationPoolManager.save();
         TreasureHuntManager.stopAll();
+        if(treasureHuntConfig != null){
+            treasureHuntConfig.saveTreasurePools(true);
+            treasureHuntConfig.cancelTasks();
+        }
+        if(locationPoolConfig != null){
+            locationPoolConfig.saveLocationPools(true);
+            locationPoolConfig.cancelTasks();
+        }
     }
 
     public void load() {
@@ -106,7 +117,8 @@ public final class ARC extends JavaPlugin {
         getCommand("locpool").setTabCompleter(new LocationPoolTabComplete());
         getCommand("treasure-hunt").setExecutor(new TreasureHuntCommand());
         getCommand("treasure-hunt").setTabCompleter(new TreasureHuntTabComplete());
-        getCommand("treasure-item").setExecutor(new TreasureItemCommand());
+        getCommand("treasure-pool").setExecutor(new TreasurePoolCommand());
+        getCommand("treasure-pool").setTabCompleter(new TreasurePoolTabcomplete());
     }
 
     private boolean setupEconomy() {

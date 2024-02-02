@@ -4,6 +4,7 @@ import arc.arc.treasurechests.locationpools.LocationPool;
 import arc.arc.treasurechests.locationpools.LocationPoolManager;
 import arc.arc.treasurechests.TreasureHuntManager;
 import arc.arc.configs.TreasureHuntConfig;
+import arc.arc.treasurechests.rewards.TreasurePool;
 import arc.arc.util.TextUtil;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -28,7 +29,7 @@ public class TreasureHuntCommand implements CommandExecutor {
         String locationPoolId = strings[1];
         int chests = strings.length >= 3 ? Integer.parseInt(strings[2]) : 0;
         String namespaceId = strings.length >= 4 ? strings[3] : null;
-        String treasureHuntId = strings.length >= 5 ? strings[4] : null;
+        String treasurePoolId = strings.length >= 5 ? strings[4] : null;
 
         LocationPool locationPool = LocationPoolManager.getPool(locationPoolId);
         if (locationPool == null) {
@@ -36,17 +37,13 @@ public class TreasureHuntCommand implements CommandExecutor {
             return true;
         }
 
-        if(!TreasureHuntConfig.treasureHuntCommands.containsKey(treasureHuntId)){
-            commandSender.sendMessage("No command specified for treasure hunt: "+treasureHuntId);
-            return true;
-        }
 
         if(TreasureHuntConfig.treasureHuntAliases.containsKey(namespaceId)){
             namespaceId = TreasureHuntConfig.treasureHuntAliases.get(namespaceId);
         }
 
         if (start) {
-            TreasureHuntManager.startHunt(locationPool, chests, namespaceId, treasureHuntId);
+            TreasureHuntManager.startHunt(locationPool, chests, namespaceId, treasurePoolId);
             commandSender.sendMessage("Hunt started!");
         } else {
             TreasureHuntManager.getByLocationPool(locationPool)

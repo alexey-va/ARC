@@ -22,11 +22,13 @@ public class HookRegistry {
     public static PAPIHook papiHook;
     public static CMIHook cmiHook;
     public static FarmManager farmManager;
+    public static ItemsAdderHook itemsAdderHook;
     public WGHook wgHook;
     public ShopHook shopHook;
     public SFHook sfHook;
     public EMHook emHook;
     public AEHook aeHook;
+
 
     public ChatListener chatListener;
     public CommandListener commandListener;
@@ -92,10 +94,19 @@ public class HookRegistry {
                 cmiHook = new CMIHook();
             }
         }
+        if (getServer().getPluginManager().getPlugin("ItemsAdder") != null) {
+            if (getServer().getPluginManager().getPlugin("ItemsAdder").isEnabled()) {
+                itemsAdderHook = new ItemsAdderHook();
+            }
+        }
         if (getServer().getPluginManager().getPlugin("WorldGuard") != null) {
             if (getServer().getPluginManager().getPlugin("WorldGuard").isEnabled()) {
-                farmManager = new FarmManager();
-                farmManager.init();
+                try {
+                    farmManager = new FarmManager();
+                    farmManager.init();
+                } catch (Exception e){
+                    e.printStackTrace();
+                }
             }
         }
         if (chatListener == null) {

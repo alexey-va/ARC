@@ -21,6 +21,7 @@ public class LocationPoolConfig {
     BukkitTask saveTask;
 
     public LocationPoolConfig() {
+        loadConfig();
         startSaveTask();
     }
 
@@ -56,7 +57,7 @@ public class LocationPoolConfig {
         }
     }
 
-    public void saveConfig(boolean onlyDirty) {
+    public void saveLocationPools(boolean onlyDirty) {
         LocationPoolManager.getAll().forEach(lp -> {
             if (onlyDirty && !lp.isDirty()) return;
             Path path = creteFolder().resolve(lp.getId() + ".yml");
@@ -95,14 +96,18 @@ public class LocationPoolConfig {
     }
 
     public void startSaveTask() {
-        if (saveTask != null && !saveTask.isCancelled()) saveTask.cancel();
+        cancelTasks();
 
         saveTask = new BukkitRunnable() {
             @Override
             public void run() {
-                saveConfig(true);
+                saveLocationPools(true);
             }
         }.runTaskTimerAsynchronously(ARC.plugin, 1200L, 1200L);
+    }
+
+    public void cancelTasks(){
+        if (saveTask != null && !saveTask.isCancelled()) saveTask.cancel();
     }
 
 }

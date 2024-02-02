@@ -29,12 +29,7 @@ public class JoinListener implements Listener {
 
     @EventHandler
     public void onPlayerLeave(PlayerQuitEvent event){
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                shareRank(event.getPlayer());
-            }
-        }.runTaskLater(ARC.plugin, 20L);
+        shareRank(event.getPlayer());
     }
 
 

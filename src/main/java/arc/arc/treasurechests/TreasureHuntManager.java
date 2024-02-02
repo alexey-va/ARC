@@ -1,6 +1,9 @@
 package arc.arc.treasurechests;
 
+import arc.arc.hooks.HookRegistry;
 import arc.arc.treasurechests.locationpools.LocationPool;
+import arc.arc.treasurechests.rewards.Treasure;
+import arc.arc.treasurechests.rewards.TreasurePool;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
@@ -13,24 +16,40 @@ public class TreasureHuntManager {
 
     private static List<TreasureHunt> treasureHunts = new ArrayList<>();
     private static Map<Location, TreasureHunt> blockMap = new ConcurrentHashMap<>();
+    private static Map<String, TreasurePool> treasurePools = new ConcurrentHashMap<>();
 
     public static Optional<TreasureHunt> getByLocationPool(LocationPool locationPool){
         return treasureHunts.stream().filter(th->th.locationPool==locationPool).findAny();
     }
 
+    public static TreasurePool getTreasurePool(String id){
+        return treasurePools.get(id);
+    }
+
+    public static void addTreasurePool(TreasurePool treasurePool){
+        treasurePools.put(treasurePool.getId(), treasurePool);
+    }
 
     public static TreasureHunt getByBlock(Block block){
         return blockMap.get(block.getLocation().toCenterLocation());
     }
 
-    public static void startHunt(LocationPool locationPool, int chests, String namespaceId, String treasureHuntId){
+    public static void startHunt(LocationPool locationPool, int chests, String namespaceId, String treasurePoolId){
         getByLocationPool(locationPool)
                 .ifPresent(TreasureHuntManager::stopHunt);
         TreasureHunt treasureHunt;
 
+        TreasurePool treasurePool = getTreasurePool(treasurePoolId);
+        if(treasurePool == null){
+            System.out.println("Could not find treasure pool with id: "+treasurePoolId);
+            return;
+        }
 
-        if(namespaceId.equals("vanilla")) treasureHunt = new TreasureHunt(locationPool, chests, namespaceId, TreasureHunt.Type.VANILLA, treasureHuntId);
-        else treasureHunt = new TreasureHunt(locationPool, chests, namespaceId, TreasureHunt.Type.IA, treasureHuntId);
+        if(namespaceId.equals("vanilla")) treasureHunt = new TreasureHunt(locationPool, chests, namespaceId, TreasureHunt.Type.VANILLA, treasurePool);
+        else{
+            if(HookRegistry.itemsAdderHook == null)throw new IllegalArgumentException("ItemsAdder is not loaded!");
+            treasureHunt = new TreasureHunt(locationPool, chests, namespaceId, TreasureHunt.Type.IA,  treasurePool);
+        }
 
         treasureHunt.generateLocations();
         treasureHunt.clearChests();
@@ -63,5 +82,19 @@ public class TreasureHuntManager {
         }
         treasureHunts.clear();
         blockMap.clear();
+    }
+
+    public static Collection<TreasurePool> getTreasurePools() {
+        return treasurePools.values();
+    }
+
+    public static void addTreasure(Treasure treasure, String treasurePoolId) {
+        TreasurePool treasurePool = getTreasurePool(treasurePoolId);
+        if(treasurePool == null){
+            treasurePool = new TreasurePool(treasurePoolId);
+            treasurePool.setDirty(true);
+            treasurePools.put(treasurePoolId, treasurePool);
+        }
+        treasurePool.add(treasure);
     }
 }

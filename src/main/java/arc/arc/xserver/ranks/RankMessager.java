@@ -11,6 +11,8 @@ import com.Zrips.CMI.Modules.Ranks.CMIRank;
 import lombok.RequiredArgsConstructor;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import java.util.concurrent.CompletableFuture;
+
 @RequiredArgsConstructor
 public class RankMessager implements ChannelListener {
 
@@ -20,10 +22,10 @@ public class RankMessager implements ChannelListener {
     @Override
     public void consume(String channel, String message) {
         RankData data = RedisSerializer.fromJson(message, RankData.class);
-        //System.out.println(data);
+
         if (data.server.equals(Config.server)) return;
         CMIUser user = CMI.getInstance().getPlayerManager().getUser(data.playerUuid);
-        //System.out.println(user);
+
         if (user == null) return;
         new BukkitRunnable() {
             @Override
@@ -42,6 +44,7 @@ public class RankMessager implements ChannelListener {
     }
 
     public void send(RankData rankData) {
-        redisManager.publish(channel, RedisSerializer.toJson(rankData));
+        CompletableFuture.supplyAsync(() -> RedisSerializer.toJson(rankData))
+                        .thenAccept(json -> redisManager.publish(channel, json));
     }
 }

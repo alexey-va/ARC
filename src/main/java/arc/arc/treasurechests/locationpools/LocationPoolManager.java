@@ -19,17 +19,16 @@ public class LocationPoolManager {
     private static Map<UUID, String> editingPlayers = new HashMap<>();
 
     private static BukkitTask showTask;
-    private static LocationPoolConfig locationPoolConfig;
+
 
     private LocationPoolManager() {
     }
 
 
     public static void init() {
-        locationPoolConfig = new LocationPoolConfig();
-        locationPoolConfig.loadConfig();
         startShowTask();
     }
+
 
     public static void addPool(LocationPool locationPool){
         //System.out.println("Adding pool "+locationPool.getId());
@@ -41,9 +40,6 @@ public class LocationPoolManager {
         return new ArrayList<>(locationPools.values());
     }
 
-    public static void save() {
-        locationPoolConfig.saveConfig(true);
-    }
 
     public static void cancelEditing(UUID uuid) {
         editingPlayers.remove(uuid);
@@ -94,7 +90,6 @@ public class LocationPoolManager {
         locationPools.clear();
     }
 
-
     public static void startShowTask() {
         if (showTask != null && !showTask.isCancelled()) showTask.cancel();
 
@@ -131,7 +126,7 @@ public class LocationPoolManager {
         //System.out.println(locationPools);
         locationPools.remove(id);
         //System.out.println(locationPools);
-        locationPoolConfig.deleteFile(id);
+        ARC.plugin.locationPoolConfig.deleteFile(id);
         //System.out.println(locationPools);
         return true;
     }

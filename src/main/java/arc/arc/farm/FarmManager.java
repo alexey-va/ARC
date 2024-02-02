@@ -67,6 +67,7 @@ public class FarmManager {
                 if (currentHour != lastResetHour) {
                     lastResetHour = currentHour;
                     if (farm != null) farm.resetLimit();
+                    mines.forEach(Mine::resetLimit);
                 }
             }
         }.runTaskTimer(ARC.plugin, 0L, 60L * 20L);

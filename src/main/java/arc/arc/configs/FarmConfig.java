@@ -5,10 +5,6 @@ import arc.arc.farm.Farm;
 import arc.arc.farm.FarmManager;
 import arc.arc.farm.Lumbermill;
 import arc.arc.farm.Mine;
-import com.sk89q.worldedit.bukkit.BukkitAdapter;
-import com.sk89q.worldguard.WorldGuard;
-import com.sk89q.worldguard.protection.regions.RegionContainer;
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -30,7 +26,7 @@ public class FarmConfig {
         this.farmManager = farmManager;
 
         File file = new File(ARC.plugin.getDataFolder() + File.separator + "farms.yml");
-        ARC.plugin.saveResource("farms.yml", false);
+        if(!file.exists()) ARC.plugin.saveResource("farms.yml", false);
         YamlConfiguration configuration = YamlConfiguration.loadConfiguration(file);
 
         loadConfig(configuration);
@@ -130,6 +126,7 @@ public class FarmConfig {
                 farmMaterials.add(material);
             }
 
+            int maxBlocksPerHour = section.getInt("blocks-per-hour", 256);
             boolean particles = section.getBoolean("particles", true);
             String permission = section.getString("permission", null);
             String regionName = section.getString("region");
@@ -143,7 +140,8 @@ public class FarmConfig {
             int priority = section.getInt("priority", 1);
             Material baseBlock = Material.matchMaterial(section.getString("base-block", "stone").toUpperCase());
 
-            Mine mine = new Mine(mineId, materialMap, regionName, worldName, tempBlock, priority, baseBlock, permission, particles);
+            Mine mine = new Mine(mineId, materialMap, regionName, worldName, tempBlock,
+                    priority, baseBlock, permission, particles, maxBlocksPerHour);
             farmManager.addMine(mine);
         }
     }

@@ -6,6 +6,14 @@ softdepend:
   - Parties
   - Lands
   - CMI
+  - WorldGuard
+  - EliteMobs
+  - HuskHomes
+  - ProtectionStones
+  - Slimefun
+  - EconomyShopGUI-Premium
+  - AdvancedEnchantments
+  - ItemsAdder
 depend:
   - PlaceholderAPI
 commands:
@@ -24,6 +32,6 @@ commands:
   treasure-hunt:
     description: locpool
     usage: locpool
-  treasure-item:
+  treasure-pool:
     description: locpool
     usage: locpool
