@@ -1,5 +1,6 @@
 package arc.arc.listeners;
 
+import arc.arc.hooks.HookRegistry;
 import arc.arc.treasurechests.locationpools.LocationPoolManager;
 import arc.arc.treasurechests.TreasureHunt;
 import arc.arc.treasurechests.TreasureHuntManager;
@@ -8,6 +9,7 @@ import org.bukkit.block.Block;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 
@@ -18,9 +20,19 @@ public class BlockListener implements Listener {
         processLocationPool(event);
     }
 
+    @EventHandler(priority = EventPriority.LOW)
+    public void onBlockBreak(BlockBreakEvent event){
+        processFarmBreak(event);
+    }
+
     @EventHandler(priority = EventPriority.LOWEST)
     public void onBlockInteract(PlayerInteractEvent event){
         processTreasureHunt(event);
+    }
+
+    private void processFarmBreak(BlockBreakEvent event){
+        if(HookRegistry.farmManager == null) return;
+        HookRegistry.farmManager.processEvent(event);
     }
 
     private void processTreasureHunt(PlayerInteractEvent event){

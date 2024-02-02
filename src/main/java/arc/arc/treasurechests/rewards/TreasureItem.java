@@ -1,4 +1,4 @@
-package arc.arc.treasurechests.items;
+package arc.arc.treasurechests.rewards;
 
 import org.bukkit.inventory.ItemStack;
 

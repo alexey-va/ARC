@@ -1,0 +1,113 @@
+admin-permission: arc.farm-admin
+
+farm:
+  enable: true
+  world: sp11
+  region: farm
+  particles: true
+  permission: arc.farm
+  blocks-per-hour: 512
+  blocks:
+    - WHEAT
+    - CARROTS
+    - POTATOES
+    - BEETROOTS
+    - MELON
+    - PUMPKIN
+lumbermill:
+  enable: true
+  world: sp11
+  region: wood
+  permission: arc.lumber
+  blocks:
+    - OAK_WOOD
+    - OAK_LOG
+    - SPRUCE_WOOD
+    - SPRUCE_LOG
+    - BIRCH_WOOD
+    - BIRCH_LOG
+    - ACACIA_WOOD
+    - ACACIA_LOG
+    - DARK_OAK_WOOD
+    - DARK_OAK_LOG
+    - CHERRY_WOOD
+    - CHERRY_LOG
+    - JUNGLE_WOOD
+    - JUNGLE_LOG
+    - MANGROVE_WOOD
+    - MANGROVE_LOG
+    - SHORT_GRASS
+    - TALL_GRASS
+    - ACACIA_LEAVES
+    - BIRCH_LEAVES
+    - AZALEA_LEAVES
+    - CHERRY_LEAVES
+    - DARK_OAK_LEAVES
+    - OAK_LEAVES
+    - JUNGLE_LEAVES
+    - SPRUCE_LEAVES
+    - FLOWERING_AZALEA_LEAVES
+    - MANGROVE_LEAVES
+mines:
+  mine1:
+    enable: true
+    region: mine1
+    world: sp11
+    priority: 1
+    temp-material: cobblestone
+    permission: arc.mine1
+    blocks:
+      - stone:240
+      - coal_ore:45
+      - iron_ore:45
+      - copper_ore:15
+      - lapis_ore:3
+      - diamond_ore:3
+      - emerald_ore:6
+      - redstone_ore:15
+      - amethyst_block:5
+      - glowstone:5
+  mine2:
+    enable: true
+    region: mine2
+    world: sp11
+    priority: 2
+    temp-material: sandstone
+    base-block: sandstone
+    permission: arc.mine2
+    blocks:
+      - sandstone:250
+      - null
+  mine_hell:
+    enable: true
+    region: minehell
+    world: sp11
+    temp-material: nether_bricks
+    base-block: netherrack
+    permission: arc.mine-hell
+    priority: 2
+    blocks:
+      - netherrack:400
+      - nether_quartz_ore:75
+      - ancient_debris:1
+      - glowstone:50
+  mine_lush:
+    enable: true
+    region: minelush
+    world: sp11
+    priority: 2
+    temp-material: cobblestone
+    permission: arc.mine-lush
+    base-block: stone
+    blocks:
+      - stone:100
+      - coal_ore:45
+      - iron_ore:45
+      - copper_ore:15
+      - lapis_ore:3
+      - diamond_ore:3
+      - emerald_ore:6
+      - redstone_ore:15
+      - amethyst_block:5
+      - glowstone:5
+      - clay:10

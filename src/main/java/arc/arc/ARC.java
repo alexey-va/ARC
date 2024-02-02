@@ -1,5 +1,6 @@
 package arc.arc;
 
+import arc.arc.farm.FarmManager;
 import arc.arc.treasurechests.locationpools.LocationPoolManager;
 import arc.arc.treasurechests.TreasureHuntManager;
 import arc.arc.commands.*;
@@ -48,12 +49,21 @@ public final class ARC extends JavaPlugin {
 
     public void loadConfig(){
         config = new Config();
+
         System.out.println("Announce config loading...");
         announeConfig = new AnnouneConfig();
+
         System.out.println("Location pool loading...");
         LocationPoolManager.init();
+
         System.out.println("Loading treasure hunt config");
         treasureHuntConfig = new TreasureHuntConfig();
+
+        if(HookRegistry.farmManager != null){
+            HookRegistry.farmManager.clear();
+            HookRegistry.farmManager = new FarmManager();
+            HookRegistry.farmManager.init();
+        }
     }
 
     @Override
@@ -67,17 +77,23 @@ public final class ARC extends JavaPlugin {
     public void load() {
         System.out.println("Setting up hooks");
         hookRegistry.setupHooks();
+
         System.out.println("Registering commands");
         registerCommands();
+
         System.out.println("Setting up economy");
         setupEconomy();
+
         System.out.println("Setting up redis");
         setupRedis();
+
         System.out.println("Setting up network registry");
         networkRegistry = new NetworkRegistry(redisManager);
         networkRegistry.init();
+
         System.out.println("Setting up particle manager");
         ParticleManager.setupParticleManager();
+
         System.out.println("Setting up cooldown task");
         CooldownManager.setupTask(5);
     }

@@ -25,7 +25,7 @@ public class CooldownManager {
         uuidToRemove.forEach(uuid -> cooldownMap.remove(uuid));
     }
 
-    public static long onCooldown(UUID uuid, String id) {
+    public static long cooldown(UUID uuid, String id) {
         if (!cooldownMap.containsKey(uuid) || !cooldownMap.get(uuid).containsKey(id)) return 0;
         return cooldownMap.get(uuid).get(id).ticksLeft;
     }

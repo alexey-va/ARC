@@ -20,10 +20,10 @@ public class EMHook implements Listener, ArcModule {
     private static BukkitTask wormholeTask;
 
     public EMHook() {
-        boot();
+        init();
     }
 
-    public void boot() {
+    public void init() {
         if (Config.sendWormholes && (wormholeTask == null || wormholeTask.isCancelled())) {
             System.out.println("Setting up wormhole task!");
             wormholeTask = new BukkitRunnable() {

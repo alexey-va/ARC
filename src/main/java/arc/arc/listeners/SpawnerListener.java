@@ -20,7 +20,7 @@ public class SpawnerListener implements ArcModule, Listener {
     @EventHandler
     public void spawnerBreak(BlockBreakEvent event){
         if(event.getBlock().getType() != Material.SPAWNER) return;
-        if(CooldownManager.onCooldown(event.getPlayer().getUniqueId(), "spawner_break") > 0) return;
+        if(CooldownManager.cooldown(event.getPlayer().getUniqueId(), "spawner_break") > 0) return;
         if(event.getBlock().getState() instanceof TileState tileState){
             PersistentDataContainer container = tileState.getPersistentDataContainer();
             Set<NamespacedKey> keySet = container.getKeys();

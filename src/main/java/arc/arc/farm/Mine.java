@@ -1,7 +1,9 @@
 package arc.arc.farm;
 
 import arc.arc.ARC;
+import arc.arc.configs.FarmConfig;
 import arc.arc.util.ParticleManager;
+import arc.arc.util.TextUtil;
 import com.jeff_media.customblockdata.CustomBlockData;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
 import com.sk89q.worldedit.math.BlockVector3;
@@ -9,15 +11,13 @@ import com.sk89q.worldedit.regions.CuboidRegion;
 import com.sk89q.worldguard.WorldGuard;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import com.sk89q.worldguard.protection.regions.RegionContainer;
+import lombok.Getter;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.block.Block;
-import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.entity.Player;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.inventory.ItemStack;
@@ -26,145 +26,82 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class Mine implements Listener {
 
-    private static final Set<Material> ores = new HashSet<>() {{
-        add(Material.STONE);
-        add(Material.COBBLESTONE);
-        add(Material.COAL_ORE);
-        add(Material.GOLD_ORE);
-        add(Material.COPPER_ORE);
-        add(Material.IRON_ORE);
-        add(Material.DIAMOND_ORE);
-        add(Material.EMERALD_ORE);
-        add(Material.REDSTONE_ORE);
-        add(Material.LAPIS_ORE);
-        add(Material.NETHER_GOLD_ORE);
-        add(Material.NETHER_QUARTZ_ORE);
-        add(Material.DEEPSLATE_COAL_ORE);
-        add(Material.DEEPSLATE_DIAMOND_ORE);
-        add(Material.DEEPSLATE_COPPER_ORE);
-        add(Material.DEEPSLATE_REDSTONE_ORE);
-        add(Material.DEEPSLATE_EMERALD_ORE);
-        add(Material.DEEPSLATE_LAPIS_ORE);
-        add(Material.DEEPSLATE_IRON_ORE);
-        add(Material.DEEPSLATE_GOLD_ORE);
-        add(Material.BLACKSTONE);
-        add(Material.ANCIENT_DEBRIS);
-        add(Material.GLOWSTONE);
-        add(Material.AMETHYST_BLOCK);
-        add(Material.CLAY);
-        add(Material.GRANITE);
-        add(Material.ANDESITE);
-        add(Material.GRAVEL);
-        add(Material.SAND);
-        add(Material.SANDSTONE);
-        add(Material.SMOOTH_SANDSTONE);
-        add(Material.NETHERRACK);
-    }};
-
-    private final List<TemporaryBlock> tempBlocks = new ArrayList<>();
-    private final Map<Material, Integer> materialMap = new HashMap<>();
+    private List<TemporaryBlock> tempBlocks = new ArrayList<>();
+    private TreeMap<Integer, Material> materialMap = new TreeMap<>();
+    private Set<Material> ores = new HashSet<>();
     ProtectedRegion region;
-    Set<Block> cache;
+    List<Block> cache;
     BukkitTask replaceCobblestoneTask;
     BukkitTask replaceCache;
     int brokenBlocks = 0;
-    int totalWeight = 0;
+    int totalWeight;
     private String regionName;
     private String worldName;
+    private String permission;
+    private boolean particles;
     private World world;
+    @Getter
     private String mineId;
     private Material tempBlock;
     private Material baseBlock;
     int priority;
 
-    public Mine(String mineId) {
+    public Mine(String mineId, Map<Material, Integer> materialMap, String regionName, String worldName,
+                Material tempBlock, int priority, Material baseBlock, String permission, boolean particles) {
+        this.mineId = mineId;
+        this.regionName = regionName;
+        this.worldName = worldName;
+        this.tempBlock = tempBlock;
+        this.priority = priority;
+        this.baseBlock = baseBlock;
+        this.permission = permission;
+        this.particles = particles;
 
-        loadConfig(mineId);
+        int totalWeight = 0;
+        for (var entry : materialMap.entrySet()) {
+            totalWeight += entry.getValue();
+            this.materialMap.put(totalWeight, entry.getKey());
+            ores.add(entry.getKey());
+        }
+        this.totalWeight = totalWeight;
+
+        RegionContainer regionContainer = WorldGuard.getInstance().getPlatform().getRegionContainer();
+        this.region = regionContainer.get(BukkitAdapter.adapt(world)).getRegion(regionName);
+
         if (region == null) {
             System.out.print(mineId + " is invalid!");
             return;
         }
         computeCache(true);
         setupTasks();
-
-    }
-
-
-    private void loadConfig(String mineId) {
-        ConfigurationSection section = ARC.plugin.getConfig().getConfigurationSection("mine." + mineId);
-        if (section == null) {
-            System.out.print("Config is not set up! " + mineId);
-            return;
-        }
-
-        for (String s : section.getStringList("blocks")) {
-            String[] strings = s.split(":");
-            Material material = Material.matchMaterial(strings[0].toUpperCase());
-            int weight = Integer.parseInt(strings[1]);
-
-            totalWeight += weight;
-            materialMap.put(material, weight);
-        }
-
-        this.regionName = section.getString("region");
-        this.worldName = section.getString("world");
-        if (worldName == null || regionName == null) {
-            System.out.print(mineId + " is misconfigured");
-            return;
-        }
-
-        world = Bukkit.getWorld(worldName);
-        if (world == null) {
-            //System.out.print("World is null");
-            return;
-        }
-
-        RegionContainer regionContainer = WorldGuard.getInstance().getPlatform().getRegionContainer();
-        this.region = regionContainer.get(BukkitAdapter.adapt(world)).getRegion(regionName);
-
-        this.tempBlock = Material.matchMaterial(section.getString("temp-material", "cobblestone").toUpperCase());
-        this.priority = section.getInt("priority", 1);
-        this.baseBlock = Material.matchMaterial(section.getString("base-block", "stone").toUpperCase());
-
-        if (region == null) {
-            System.out.print("No such region");
-            return;
-        }
     }
 
     private Material pickRandomMaterial() {
-        int rng = (new Random()).nextInt(totalWeight);
-        int counter = 0;
-        Material res = Material.OBSIDIAN;
-        for (var entry : materialMap.entrySet()) {
-            counter += entry.getValue();
-            if (counter >= rng) {
-                return entry.getKey();
-            }
-            res = entry.getKey();
-        }
-        return res;
+        return materialMap.ceilingEntry((new Random()).nextInt(totalWeight)).getValue();
     }
 
     private void setupTasks() {
-        cancel();
+        cancelTasks();
 
         replaceCobblestoneTask = new BukkitRunnable() {
             @Override
             public void run() {
                 List<TemporaryBlock> toRemove = new ArrayList<>();
-                tempBlocks.stream().filter(TemporaryBlock::ifExpire).forEach(block -> {
-                    CustomBlockData blockData = new CustomBlockData(block.block, ARC.plugin);
-                    blockData.remove(new NamespacedKey(ARC.plugin, "t"));
-                    block.block.setType(baseBlock);
-                    toRemove.add(block);
-                });
+                tempBlocks.stream()
+                        .filter(TemporaryBlock::ifExpire)
+                        .forEach(block -> {
+                            CustomBlockData blockData = new CustomBlockData(block.block, ARC.plugin);
+                            blockData.remove(new NamespacedKey(ARC.plugin, "t"));
+                            block.block.setType(baseBlock);
+                            toRemove.add(block);
+                        });
                 tempBlocks.removeAll(toRemove);
             }
-        }.runTaskTimer(ARC.plugin, 20L, 10L);
+        }.runTaskTimer(ARC.plugin, 20L, 20L);
 
         replaceCache = new BukkitRunnable() {
 
@@ -173,52 +110,44 @@ public class Mine implements Listener {
                 if (brokenBlocks <= 0) return;
 
                 Set<Integer> rng = new HashSet<>();
-                rng.add((new Random()).nextInt(cache.size()));
-                rng.add((new Random()).nextInt(cache.size()));
-                rng.add((new Random()).nextInt(cache.size()));
-                rng.add((new Random()).nextInt(cache.size()));
-                rng.add((new Random()).nextInt(cache.size()));
+                for (int i = 0; i < 10; i++) rng.add(ThreadLocalRandom.current().nextInt(cache.size()));
 
-                int i = 0;
-                for (Block block : cache) {
+                for (int idx : rng) {
+                    Block block = cache.get(idx);
                     if (block.getType() != baseBlock) continue;
-                    if (rng.contains(i)) {
-                        brokenBlocks--;
-                        Material material = pickRandomMaterial();
-                        if (block.getRelative(0, -1, 0).getType() == Material.AIR) {
-                            if (material == Material.SAND) material = Material.SANDSTONE;
-                            else if (material == Material.GRAVEL) material = Material.STONE;
-                        }
-                        block.setType(material);
+                    Material material = pickRandomMaterial();
+                    if (block.getRelative(0, -1, 0).getType() == Material.AIR) {
+                        if (material == Material.SAND) material = Material.SANDSTONE;
+                        else if (material == Material.GRAVEL) material = Material.STONE;
                     }
+                    block.setType(material);
+                    brokenBlocks--;
                     if (brokenBlocks <= 0) return;
-                    i++;
                 }
             }
-        }.runTaskTimer(ARC.plugin, 22L, 10L);
+        }.runTaskTimer(ARC.plugin, 25L, 20L);
     }
 
-    public void cancel() {
-        if (replaceCobblestoneTask != null && !replaceCobblestoneTask.isCancelled()) replaceCobblestoneTask.cancel();
-        if (replaceCache != null && !replaceCache.isCancelled()) replaceCache.cancel();
-    }
-
-    private void computeCache(boolean replaceCobblestone) {
-        Set<Block> blocks = new HashSet<>();
+    private void computeCache(boolean replaceTemporaryBlock) {
+        List<Block> blocks = new ArrayList<>();
         for (BlockVector3 vector3 : new CuboidRegion(BukkitAdapter.adapt(world), region.getMinimumPoint(), region.getMaximumPoint())) {
             int x = vector3.getBlockX();
             int y = vector3.getBlockY();
             int z = vector3.getBlockZ();
             Block block = world.getBlockAt(x, y, z);
 
-
-            if (block.getType() == tempBlock && replaceCobblestone) {
+            if (block.getType() == tempBlock && replaceTemporaryBlock) {
                 block.setType(baseBlock);
                 CustomBlockData blockData = new CustomBlockData(block, ARC.plugin);
                 blockData.remove(new NamespacedKey(ARC.plugin, "t"));
             }
 
-            if ((world.getBlockAt(x + 1, y, z)).getType() == Material.AIR || (world.getBlockAt(x - 1, y, z)).getType() == Material.AIR || (world.getBlockAt(x, y + 1, z)).getType() == Material.AIR || (world.getBlockAt(x, y - 1, z)).getType() == Material.AIR || (world.getBlockAt(x, y, z + 1)).getType() == Material.AIR || (world.getBlockAt(x, y, z - 1)).getType() == Material.AIR)
+            if ((world.getBlockAt(x + 1, y, z)).getType() == Material.AIR ||
+                    (world.getBlockAt(x - 1, y, z)).getType() == Material.AIR ||
+                    (world.getBlockAt(x, y + 1, z)).getType() == Material.AIR ||
+                    (world.getBlockAt(x, y - 1, z)).getType() == Material.AIR ||
+                    (world.getBlockAt(x, y, z + 1)).getType() == Material.AIR ||
+                    (world.getBlockAt(x, y, z - 1)).getType() == Material.AIR)
                 blocks.add(block);
         }
 
@@ -229,44 +158,39 @@ public class Mine implements Listener {
         Block block = event.getBlock();
         if (block.getLocation().getWorld() != world || region == null) return false;
         if (!region.contains(event.getBlock().getX(), event.getBlock().getY(), event.getBlock().getZ())) return false;
-        if (event.getPlayer().hasPermission("arc.admin")) return true;
+        if (event.getPlayer().hasPermission(FarmConfig.adminPermission)) return true;
 
         event.setCancelled(true);
-        if (!ores.contains(block.getType())) return true;
 
-        if (!event.getPlayer().hasPermission("arc.mine")) {
-            sendDenyMessage(0, event.getPlayer());
+        if ((permission != null && !event.getPlayer().hasPermission(permission)) || !ores.contains(block.getType())) {
+            event.getPlayer().sendMessage(TextUtil.noWGPermission());
             return true;
         }
 
         CustomBlockData blockData = new CustomBlockData(event.getBlock(), ARC.plugin);
         if (blockData.has(new NamespacedKey(ARC.plugin, "t"))) {
+            event.getPlayer().sendActionBar(Component.text("Этот блок еще не восстановился!", NamedTextColor.GOLD));
             return true;
         }
 
-
         Collection<ItemStack> stacks = event.getBlock().getDrops();
-        stacks.forEach(stack -> {
-            event.getPlayer().getInventory().addItem(stack);
-        });
+        stacks.forEach(stack -> event.getPlayer().getInventory().addItem(stack));
 
-        if (block.getType() == baseBlock) event.getPlayer().giveExp(2);
-        else event.getPlayer().giveExp(5);
+        if (block.getType() == baseBlock) event.getPlayer().giveExp(1);
+        else event.getPlayer().giveExp(2);
 
         event.getBlock().setType(tempBlock);
         brokenBlocks++;
 
         blockData.set(new NamespacedKey(ARC.plugin, "t"), PersistentDataType.BOOLEAN, true);
         tempBlocks.add(new TemporaryBlock(event.getBlock()));
-        ParticleManager.queue(event.getPlayer(), event.getBlock().getLocation().toCenterLocation());
+        if (particles) ParticleManager.queue(event.getPlayer(), event.getBlock().getLocation().toCenterLocation());
         return true;
     }
 
-    private void sendDenyMessage(int n, Player player) {
-        Component text = null;
-        if (n == 0) text = Component.text("Вы не можете ломать этот блок!", NamedTextColor.RED);
-
-        if (text != null) player.sendActionBar(text);
+    public void cancelTasks() {
+        if (replaceCobblestoneTask != null && !replaceCobblestoneTask.isCancelled()) replaceCobblestoneTask.cancel();
+        if (replaceCache != null && !replaceCache.isCancelled()) replaceCache.cancel();
     }
 
     private static class TemporaryBlock {
@@ -279,7 +203,7 @@ public class Mine implements Listener {
         }
 
         public boolean ifExpire() {
-            return (System.currentTimeMillis() - timestamp > 20000);
+            return (System.currentTimeMillis() - timestamp > 60000);
         }
     }
 

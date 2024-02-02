@@ -33,7 +33,7 @@ public class PSHook implements Listener, ArcModule {
 
     public PSHook() {
         key1 = new NamespacedKey(ARC.plugin, "ps");
-        boot();
+        init();
     }
 
     public static String getRegionName(Location location) {
@@ -54,7 +54,7 @@ public class PSHook implements Listener, ArcModule {
         if (particleTask != null && !particleTask.isCancelled()) particleTask.cancel();
     }
 
-    public void boot() {
+    public void init() {
         if (particleTask == null || particleTask.isCancelled()) {
             particleTask = new BukkitRunnable() {
                 @Override

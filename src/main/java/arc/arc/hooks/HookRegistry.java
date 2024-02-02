@@ -21,105 +21,82 @@ public class HookRegistry {
     public static PartiesHook partiesHook;
     public static PAPIHook papiHook;
     public static CMIHook cmiHook;
+    public static FarmManager farmManager;
     public WGHook wgHook;
     public ShopHook shopHook;
     public SFHook sfHook;
     public EMHook emHook;
     public AEHook aeHook;
+
     public ChatListener chatListener;
-    public LumberListener lumberListener;
     public CommandListener commandListener;
-    public MineListener mineHook;
-    public FarmListener farmHook;
     public SpawnerListener spawnerListener;
     public BlockListener blockListener;
-    public Mine mine;
-    public Farm farm;
     public JoinListener joinListener;
+
     List<ArcModule> arcModuleList = new ArrayList<>();
 
     public void setupHooks() {
         registerEvents();
 
-        if (emHook != null) emHook.boot();
-        if (psHook != null) psHook.boot();
+        if (emHook != null) emHook.init();
+        if (psHook != null) psHook.init();
         papiHook = new PAPIHook();
         papiHook.register();
+
         if (Config.enablePortals && commandListener == null) {
             commandListener = new CommandListener();
             Bukkit.getPluginManager().registerEvents(commandListener, ARC.plugin);
-        }
-
-        if (mineHook != null) {
-            mineHook.setupMines();
-        }
-        if (farmHook != null) {
-            farm = new Farm();
-            farmHook.farm = farm;
-        }
-        if (lumberListener != null) {
-            lumberListener = new LumberListener();
         }
     }
 
     public void cleanHooks() {
         if (emHook != null) emHook.cancel();
         if (psHook != null) psHook.cancel();
-        if (mine != null) mine.cancel();
+        if (farmManager != null) farmManager.clear();
     }
 
     private void registerEvents() {
         if (Bukkit.getPluginManager().isPluginEnabled("ProtectionStones") && psHook == null) {
             psHook = new PSHook();
             Bukkit.getPluginManager().registerEvents(psHook, ARC.plugin);
-            arcModuleList.add(psHook);
         }
         if (Bukkit.getPluginManager().isPluginEnabled("WorldGuard") && wgHook == null) {
             wgHook = new WGHook();
-            arcModuleList.add(wgHook);
+            farmManager = new FarmManager();
             Bukkit.getPluginManager().registerEvents(wgHook, ARC.plugin);
         }
         if (Bukkit.getPluginManager().isPluginEnabled("Slimefun") && sfHook == null) {
             sfHook = new SFHook();
-            arcModuleList.add(sfHook);
             Bukkit.getPluginManager().registerEvents(sfHook, ARC.plugin);
         }
         if (Bukkit.getPluginManager().isPluginEnabled("AdvancedEnchantments") && aeHook == null) {
             aeHook = new AEHook();
-            arcModuleList.add(aeHook);
             Bukkit.getPluginManager().registerEvents(aeHook, ARC.plugin);
         }
         if (Bukkit.getPluginManager().isPluginEnabled("EliteMobs") && emHook == null) {
             emHook = new EMHook();
-            arcModuleList.add(emHook);
             Bukkit.getPluginManager().registerEvents(emHook, ARC.plugin);
         }
         if (Bukkit.getPluginManager().isPluginEnabled("HuskHomes") && huskHomesHook == null) {
             huskHomesHook = new HuskHomesHook();
-            arcModuleList.add(huskHomesHook);
             Bukkit.getPluginManager().registerEvents(huskHomesHook, ARC.plugin);
         }
         if (getServer().getPluginManager().getPlugin("Lands") != null) {
             if (getServer().getPluginManager().getPlugin("Lands").isEnabled()) {
                 landsHook = new LandsHook();
-                arcModuleList.add(landsHook);
             }
         }
         if (getServer().getPluginManager().getPlugin("CMI") != null) {
             if (getServer().getPluginManager().getPlugin("CMI").isEnabled()) {
                 cmiHook = new CMIHook();
-                arcModuleList.add(cmiHook);
             }
         }
-        if (Bukkit.getPluginManager().isPluginEnabled("WorldGuard") && mineHook == null) {
-            mineHook = new MineListener();
-            arcModuleList.add(mineHook);
-            Bukkit.getPluginManager().registerEvents(mineHook, ARC.plugin);
-        }
-        if (Bukkit.getPluginManager().isPluginEnabled("WorldGuard") && farmHook == null) {
-            farmHook = new FarmListener();
-            arcModuleList.add(farmHook);
-            Bukkit.getPluginManager().registerEvents(farmHook, ARC.plugin);
+        if (getServer().getPluginManager().getPlugin("WorldGuard") != null) {
+            if (getServer().getPluginManager().getPlugin("WorldGuard").isEnabled()) {
+                farmManager = new FarmManager();
+                farmManager.init();
+            }
         }
         if (chatListener == null) {
             chatListener = new ChatListener();
@@ -129,11 +106,7 @@ public class HookRegistry {
             spawnerListener = new SpawnerListener();
             Bukkit.getPluginManager().registerEvents(spawnerListener, ARC.plugin);
         }
-        if (Bukkit.getPluginManager().isPluginEnabled("WorldGuard") && lumberListener == null) {
-            lumberListener = new LumberListener();
-            arcModuleList.add(lumberListener);
-            Bukkit.getPluginManager().registerEvents(lumberListener, ARC.plugin);
-        }
+
         if (getServer().getPluginManager().getPlugin("Parties") != null) {
             if (getServer().getPluginManager().getPlugin("Parties").isEnabled()) {
                 partiesHook = new PartiesHook();
