@@ -6,6 +6,7 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -17,7 +18,7 @@ public class FarmManager {
     private Farm farm;
     private Lumbermill lumbermill;
     private BukkitTask clearLimitTask;
-    private int lastResetHour = 0;
+    private int lastResetDay = -1;
     private FarmConfig farmConfig;
 
     public FarmManager() {
@@ -63,9 +64,9 @@ public class FarmManager {
         clearLimitTask = new BukkitRunnable() {
             @Override
             public void run() {
-                int currentHour = LocalTime.now().getHour();
-                if (currentHour != lastResetHour) {
-                    lastResetHour = currentHour;
+                int currentDay = LocalDate.now().getDayOfMonth();
+                if (currentDay != lastResetDay) {
+                    lastResetDay = currentDay;
                     if (farm != null) farm.resetLimit();
                     mines.forEach(Mine::resetLimit);
                 }

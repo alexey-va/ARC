@@ -97,12 +97,14 @@ public class Farm {
         else player.giveExp(1);
 
         if (ageable != null) {
-            Collection<ItemStack> stacks = block.getDrops();
+            /*Collection<ItemStack> stacks = block.getDrops();
             stacks.stream()
                     .filter(stack -> !seeds.contains(stack.getType()))
-                    .forEach(stack -> player.getInventory().addItem(stack));
+                    .forEach(stack -> player.getInventory().addItem(stack));*/
+            ItemStack stack = new ItemStack(block.getType());
+            player.getInventory().addItem(stack);
             ageable.setAge(0);
-            block.setBlockData(ageable);
+            block.setBlockData(ageable, false);
         } else {
             block.breakNaturally();
         }
@@ -127,7 +129,7 @@ public class Farm {
                     .append(Component.text(count + "", NamedTextColor.GREEN))
                     .append(Component.text(" из ", NamedTextColor.GRAY))
                     .append(Component.text(maxBlocks + "", NamedTextColor.GOLD))
-                    .append(Component.text(" за этот час", NamedTextColor.GRAY));
+                    .append(Component.text(" за этот день", NamedTextColor.GRAY));
             player.sendActionBar(TextUtil.strip(text));
         }
     }
@@ -137,13 +139,11 @@ public class Farm {
         CooldownManager.addCooldown(player.getUniqueId(), "farm_limit_message", 60);
 
         //int count = blocksBrokenByPlayer.getOrDefault(player.getUniqueId(), 0);
-        LocalTime now = LocalTime.now();
-        LocalTime reset = LocalTime.of(now.getHour() + 1, 0);
-        Duration tillReset = Duration.between(now, reset);
+        //LocalTime now = LocalTime.now();
+        //LocalTime reset = LocalTime.of(now.getHour() + 1, 0);
+        //Duration tillReset = Duration.between(now, reset);
         Component text = Component.text("Вы слишком разогнались!", NamedTextColor.RED)
-                .append(Component.text(" Подождите ", NamedTextColor.GRAY))
-                .append(Component.text(tillReset.toMinutes() + " минут", NamedTextColor.GREEN))
-                .append(Component.text(" до сброса лимита добычи.", NamedTextColor.GRAY));
+                .append(Component.text(" Сброс лимита происходит в полночь.", NamedTextColor.GRAY));
         player.sendMessage(TextUtil.strip(text));
     }
 

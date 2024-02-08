@@ -66,6 +66,7 @@ public class LocPoolCommand implements CommandExecutor {
             boolean res = LocationPoolManager.delete(id);
             if (res) {
                 commandSender.sendMessage("Deleted " + id + " successfully!");
+                LocationPoolManager.cancelEditing(player.getUniqueId());
             } else {
                 commandSender.sendMessage("No such location pool " + id + "!");
             }

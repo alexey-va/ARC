@@ -3,7 +3,9 @@ package arc.arc.hooks;
 import arc.arc.ARC;
 import arc.arc.configs.Config;
 import arc.arc.farm.*;
+import arc.arc.hooks.citizens.CitizensHook;
 import arc.arc.hooks.lands.LandsHook;
+import arc.arc.hooks.viaversion.ViaVersionHook;
 import arc.arc.listeners.*;
 import org.bukkit.Bukkit;
 
@@ -23,9 +25,11 @@ public class HookRegistry {
     public static CMIHook cmiHook;
     public static FarmManager farmManager;
     public static ItemsAdderHook itemsAdderHook;
+    public static CitizensHook citizensHook;
+    public static ViaVersionHook viaVersionHook;
     public WGHook wgHook;
     public ShopHook shopHook;
-    public SFHook sfHook;
+    public static SFHook sfHook;
     public EMHook emHook;
     public AEHook aeHook;
 
@@ -94,9 +98,20 @@ public class HookRegistry {
                 cmiHook = new CMIHook();
             }
         }
+        if (getServer().getPluginManager().getPlugin("ViaVersion") != null) {
+            if (getServer().getPluginManager().getPlugin("ViaVersion").isEnabled()) {
+                viaVersionHook = new ViaVersionHook();
+            }
+        }
         if (getServer().getPluginManager().getPlugin("ItemsAdder") != null) {
             if (getServer().getPluginManager().getPlugin("ItemsAdder").isEnabled()) {
                 itemsAdderHook = new ItemsAdderHook();
+            }
+        }
+        if (getServer().getPluginManager().getPlugin("Citizens") != null) {
+            if (getServer().getPluginManager().getPlugin("Citizens").isEnabled()) {
+                citizensHook = new CitizensHook();
+                citizensHook.registerListeners();
             }
         }
         if (getServer().getPluginManager().getPlugin("WorldGuard") != null) {

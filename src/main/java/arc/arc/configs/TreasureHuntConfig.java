@@ -147,6 +147,7 @@ public class TreasureHuntConfig {
             }
         }
 
+        treasurePool.setDirty(false);
         TreasureHuntManager.addTreasurePool(treasurePool);
     }
 
@@ -158,25 +159,22 @@ public class TreasureHuntConfig {
 
     private void saveTreasurePool(TreasurePool treasurePool){
         File file = new File(ARC.plugin.getDataFolder()+File.separator+"treasures"+File.separator+treasurePool.getId()+".yml");
-        if(!file.exists()){
+
             try {
-                file.mkdirs();
-                file.createNewFile();
+                if(!file.exists()) {
+                    file.getParentFile().mkdirs();
+                    file.createNewFile();
+                }
+                YamlConfiguration configuration = YamlConfiguration.loadConfiguration(file);
+                Map<String, Object> map = treasurePool.serialize();
+                map.forEach(configuration::set);
+                System.out.println("Saving treasure "+treasurePool.getId());
+                configuration.save(file);
+                treasurePool.setDirty(false);
             } catch (IOException e) {
+                e.printStackTrace();
                 throw new RuntimeException(e);
             }
-        }
 
-        YamlConfiguration configuration = YamlConfiguration.loadConfiguration(file);
-        Map<String, Object> map = treasurePool.serialize();
-        map.forEach(configuration::set);
-
-        try {
-            configuration.save(file);
-            treasurePool.setDirty(false);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
     }
-
 }

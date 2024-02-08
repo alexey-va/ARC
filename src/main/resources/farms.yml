@@ -6,7 +6,7 @@ farm:
   region: farm
   particles: true
   permission: arc.farm
-  blocks-per-hour: 512
+  blocks-per-hour: 5120
   blocks:
     - WHEAT
     - CARROTS
@@ -56,7 +56,7 @@ mines:
     priority: 1
     temp-material: cobblestone
     permission: arc.mine1
-    blocks-per-hour: 256
+    blocks-per-hour: 2560
     blocks:
       - stone:240
       - coal_ore:45
@@ -76,10 +76,9 @@ mines:
     temp-material: sandstone
     base-block: sandstone
     permission: arc.mine2
-    blocks-per-hour: 256
+    blocks-per-hour: 2560
     blocks:
       - sandstone:250
-      - null
   mine_hell:
     enable: true
     region: minehell
@@ -88,7 +87,7 @@ mines:
     base-block: netherrack
     permission: arc.mine-hell
     priority: 2
-    blocks-per-hour: 256
+    blocks-per-hour: 2560
     blocks:
       - netherrack:400
       - nether_quartz_ore:75
@@ -102,7 +101,7 @@ mines:
     temp-material: cobblestone
     permission: arc.mine-lush
     base-block: stone
-    blocks-per-hour: 256
+    blocks-per-hour: 2560
     blocks:
       - stone:100
       - coal_ore:45

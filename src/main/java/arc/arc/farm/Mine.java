@@ -237,7 +237,7 @@ public class Mine implements Listener {
                     .append(Component.text(count + "", NamedTextColor.GREEN))
                     .append(Component.text(" из ", NamedTextColor.GRAY))
                     .append(Component.text(maxBlocks + "", NamedTextColor.GOLD))
-                    .append(Component.text(" за этот час", NamedTextColor.GRAY));
+                    .append(Component.text(" за этот день", NamedTextColor.GRAY));
             player.sendActionBar(TextUtil.strip(text));
         }
     }
@@ -247,13 +247,11 @@ public class Mine implements Listener {
         CooldownManager.addCooldown(player.getUniqueId(), "farm_limit_message", 60);
 
         //int count = blocksBrokenByPlayer.getOrDefault(player.getUniqueId(), 0);
-        LocalTime now = LocalTime.now();
-        LocalTime reset = LocalTime.of(now.getHour() + 1, 0);
-        Duration tillReset = Duration.between(now, reset);
+        //LocalTime now = LocalTime.now();
+        //LocalTime reset = LocalTime.of(now.getHour() + 1, 0);
+        //Duration tillReset = Duration.between(now, reset);
         Component text = Component.text("Вы слишком разогнались!", NamedTextColor.RED)
-                .append(Component.text(" Подождите ", NamedTextColor.GRAY))
-                .append(Component.text(tillReset.toMinutes() + " минут", NamedTextColor.GREEN))
-                .append(Component.text(" до сброса лимита добычи.", NamedTextColor.GRAY));
+                .append(Component.text(" Сброс лимита происходит в полночь.", NamedTextColor.GRAY));
         player.sendMessage(TextUtil.strip(text));
     }
 

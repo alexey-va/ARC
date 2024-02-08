@@ -6,11 +6,12 @@ import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
+import java.util.HashMap;
 import java.util.Map;
 
 public class GuiUtils {
 
-    private static Map<BgKey, GuiItem> backgrounds;
+    private static Map<BgKey, GuiItem> backgrounds = new HashMap<>();
     record BgKey(Material material, int model){};
 
     public static GuiItem background(Material material, int model){
@@ -29,11 +30,11 @@ public class GuiUtils {
     }
 
     public static GuiItem background(Material material){
-        return background(material, 0);
+        return background(material, 11000);
     }
 
     public static GuiItem background(){
-        return background(Material.GRAY_STAINED_GLASS_PANE, 0);
+        return background(Material.GRAY_STAINED_GLASS_PANE, 11000);
     }
 
 }

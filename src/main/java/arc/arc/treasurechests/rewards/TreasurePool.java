@@ -33,6 +33,7 @@ public class TreasurePool {
             Map<String, Object> map = treasure.serialize();
             treasures.add(map);
         }
+        data.put("treasures", treasures);
 
         return data;
     }

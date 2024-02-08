@@ -1,0 +1,230 @@
+package arc.arc.autobuild;
+
+import arc.arc.ARC;
+import arc.arc.hooks.HookRegistry;
+import arc.arc.util.CooldownManager;
+import arc.arc.util.TextUtil;
+import arc.arc.util.Utils;
+import com.sk89q.worldedit.math.BlockVector3;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.*;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Firework;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.meta.FireworkMeta;
+import org.bukkit.scheduler.BukkitRunnable;
+
+import java.util.HashSet;
+import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicInteger;
+
+@RequiredArgsConstructor
+@Getter
+public class ConstructionSite {
+
+    final Building building;
+    final Location centerBlock;
+    final Player player;
+    final int rotation;
+    final World world;
+    State state = State.CREATED;
+    Set<Chunk> chunks = new HashSet<>();
+    long timestamp = System.currentTimeMillis();
+
+    Display display;
+    Construction construction;
+
+    int npcId = -1;
+
+    Color[] colors = new Color[]{Color.WHITE, Color.AQUA, Color.PURPLE, Color.YELLOW, Color.MAROON, Color.GREEN, Color.TEAL,
+            Color.OLIVE, Color.FUCHSIA, Color.LIME, Color.RED, Color.ORANGE};
+
+    public void startDisplayingBorder(int seconds) {
+        if (display != null) throw new IllegalStateException("Display is not null when trying to build!");
+
+        display = new Display(this);
+        display.showBorder(seconds);
+        state = State.DISPLAYING_OUTLINE;
+    }
+
+    public void startDisplayingBorderAndDisplay(int seconds) {
+        if (display == null || state != State.DISPLAYING_OUTLINE)
+            throw new IllegalStateException("Display is null or state is not outline!");
+
+        display.showBorderAndDisplay(seconds);
+    }
+
+    public void spawnConfirmNpc(int seconds) {
+        if (construction != null) throw new IllegalStateException("Construction is not null when creating NPC!");
+        this.timestamp = System.currentTimeMillis();
+        construction = new Construction(this);
+        npcId = construction.createNpc(centerBlock, seconds);
+        state = State.CONFIRMATION;
+    }
+
+    public void startBuild() {
+        if (construction == null) throw new IllegalStateException("Construction is null when trying to build!");
+        display.stop();
+        forceloadChunks();
+        construction.startBuilding();
+        if (!player.hasPermission("arc.buildings.bypass-cooldown")) {
+            CooldownManager.addCooldown(player.getUniqueId(), "building_cooldown", 20 * 60 * 60);
+        }
+        state = State.BUILDING;
+    }
+
+    public void stopBuild() {
+        if (construction != null) {
+            construction.cancel(0);
+            state = State.CANCELLED;
+
+            cleanup(0);
+        } else {
+            throw new IllegalStateException("Stoping build when not building!");
+        }
+    }
+
+    public void stopOutlineDisplay() {
+        if (display != null && state == State.DISPLAYING_OUTLINE) {
+            display.stop();
+            state = State.CREATED;
+        } else {
+            throw new IllegalStateException("Stoping display when not displaying!");
+        }
+    }
+
+    public void stopConfirmStep() {
+        if (display != null && construction != null && state == State.CONFIRMATION) {
+            display.stop();
+            construction.destroyNpc();
+            state = State.CREATED;
+        } else {
+            throw new IllegalStateException("Stoping confirm when not confirming!");
+        }
+    }
+
+    public void calculateChunks() {
+        if (!chunks.isEmpty()) return;
+        Corners corners = getCorners();
+        for (int x = corners.corner1.getBlockX(); x < corners.corner2.getBlockX(); x++) {
+            for (int z = corners.corner1.getBlockZ(); z < corners.corner2.getBlockZ(); z++) {
+                Location location = new Location(world, x + centerBlock.getBlockX(), 1, z + centerBlock.getBlockZ());
+                Chunk chunk = location.getChunk();
+                chunks.add(chunk);
+            }
+        }
+    }
+
+    public boolean canBuild() {
+        calculateChunks();
+        if (HookRegistry.landsHook != null) {
+            for (Chunk chunk : chunks) {
+                if (!HookRegistry.landsHook.canBuild(player, chunk)) return false;
+            }
+        }
+        return true;
+    }
+
+    public void forceloadChunks() {
+        calculateChunks();
+        for (Chunk chunk : chunks) {
+            chunk.setForceLoaded(true);
+        }
+    }
+
+    public void stopForceload() {
+        chunks.stream().filter(Chunk::isForceLoaded).forEach(c -> c.setForceLoaded(false));
+    }
+
+    public void finishBuildState() {
+        construction.finishInstantly();
+        stopBuild();
+    }
+
+    public double getProgress() {
+        if (state != State.BUILDING) return 0;
+        int built = construction.pointer.get();
+        return ((double) built) / building.volume();
+    }
+
+
+    public record Corners(BlockVector3 corner1, BlockVector3 corner2) {
+    }
+
+    public boolean same(Player player, Location location, Building building) {
+        boolean res = location.toCenterLocation().equals(centerBlock.toCenterLocation()) && building == this.building &&
+                rotation == BuildingManager.rotationFromYaw(player.getYaw());
+        return res;
+    }
+
+
+    public Corners getCorners() {
+        BlockVector3 c1 = building.getCorner1(rotation);
+        BlockVector3 c2 = building.getCorner2(rotation);
+
+        BlockVector3 r1 = BlockVector3.at(Math.min(c1.getBlockX(), c2.getBlockX()),
+                Math.min(c1.getBlockY(), c2.getBlockY()),
+                Math.min(c1.getBlockZ(), c2.getBlockZ()));
+        BlockVector3 r2 = BlockVector3.at(Math.max(c1.getBlockX(), c2.getBlockX()),
+                Math.max(c1.getBlockY(), c2.getBlockY()),
+                Math.max(c1.getBlockZ(), c2.getBlockZ()));
+        return new Corners(r1, r2);
+    }
+
+
+    public void finalizeBuilding() {
+        sendFinalMessage();
+        launchFireWorks();
+        Bukkit.getScheduler().runTaskLater(ARC.plugin, construction::destroyNpc, 60);
+        state = State.DONE;
+
+        cleanup(60);
+    }
+
+    private void sendFinalMessage() {
+        player.sendMessage(TextUtil.strip(
+                Component.text("\uD83D\uDEE0 ", NamedTextColor.GRAY)
+                        .append(Component.text("Строительство завершено!", NamedTextColor.DARK_GREEN))
+        ));
+    }
+
+    private void launchFireWorks() {
+        AtomicInteger counter = new AtomicInteger(0);
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (counter.incrementAndGet() >= 5) this.cancel();
+                Firework firework = (Firework) world.spawnEntity(centerBlock, EntityType.FIREWORK);
+                FireworkEffect effect = FireworkEffect.builder()
+                        .flicker(ThreadLocalRandom.current().nextBoolean())
+                        .trail(ThreadLocalRandom.current().nextBoolean())
+                        .with(Utils.random(FireworkEffect.Type.values()))
+                        .withColor(Utils.random(colors, 3))
+                        .withFade(Utils.random(colors, 3))
+                        .build();
+
+                FireworkMeta meta = firework.getFireworkMeta();
+                meta.setPower(ThreadLocalRandom.current().nextInt(1, 3));
+                meta.addEffect(effect);
+                firework.setFireworkMeta(meta);
+                Bukkit.getScheduler().runTaskLater(ARC.plugin, firework::detonate, 20);
+            }
+        }.runTaskTimer(ARC.plugin, 0L, 10L);
+    }
+
+    public void cleanup(int destroyNpcDelaySeconds) {
+        BuildingManager.removeConstruction(player.getUniqueId());
+        stopForceload();
+        if (display != null) display.stop();
+        if (construction != null) construction.cancel(destroyNpcDelaySeconds);
+    }
+
+    public enum State {
+        CREATED, DISPLAYING_OUTLINE, CONFIRMATION, BUILDING, CANCELLED, DONE
+    }
+
+}
