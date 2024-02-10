@@ -1,5 +1,7 @@
 package arc.arc.network;
 
+import arc.arc.board.Board;
+import arc.arc.board.BoardMessager;
 import arc.arc.hooks.lands.LandsMessager;
 import arc.arc.xserver.announcements.AnnounceManager;
 import arc.arc.xserver.announcements.AnnouncementMessager;
@@ -46,6 +48,10 @@ public class NetworkRegistry {
         AnnouncementMessager announcementMessager = new AnnouncementMessager("arc.announcements", redisManager);
         redisManager.registerChannel(announcementMessager.getChannel(), announcementMessager);
         AnnounceManager.messager = announcementMessager;
+
+        BoardMessager boardMessager = new BoardMessager("arc.board_update", redisManager);
+        redisManager.registerChannel(boardMessager.channel, boardMessager);
+        Board.instance().setMessager(boardMessager);
 
         redisManager.init();
     }

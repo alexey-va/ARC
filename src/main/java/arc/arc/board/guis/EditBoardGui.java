@@ -41,7 +41,7 @@ public class EditBoardGui extends ChestGui implements Inputable {
             if(finalized) return;
             finalized = true;
             if(delete) Board.instance().deleteBoard(boardEntry.entryUuid, true);
-            else Board.instance().saveBoard(boardEntry);
+            else Board.instance().saveBoard();
         });
 
         StaticPane pane = new StaticPane(0, 0, 9, 2);
@@ -61,7 +61,7 @@ public class EditBoardGui extends ChestGui implements Inputable {
         if(finalized) return;
         finalized = true;
         if(delete) Board.instance().deleteBoard(boardEntry.entryUuid, true);
-        else Board.instance().saveBoard(boardEntry);
+        else Board.instance().saveBoard();
     }
 
     public void proceed() {
@@ -72,7 +72,7 @@ public class EditBoardGui extends ChestGui implements Inputable {
     }
 
     @Override
-    public boolean ifSatisfy(String input, int id) {
+    public boolean satisfy(String input, int id) {
         if(id == 0) return input.length() <= Config.tldLength;
         return true;
     }

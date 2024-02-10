@@ -36,6 +36,15 @@ public class BoardEntryCache {
         return item;
     }
 
+    public void refresh(BoardEntry boardEntry){
+        BoardItem item = generate(boardEntry);
+        map.put(boardEntry.entryUuid, item);
+    }
+
+    public void clear(){
+        map.clear();
+    }
+
     public void remove(UUID uuid){
         map.remove(uuid);
     }

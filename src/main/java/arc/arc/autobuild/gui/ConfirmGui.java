@@ -75,8 +75,6 @@ public class ConfirmGui extends ChestGui {
     }
 
     private boolean removeBook() {
-        ItemStack found = null;
-        int slot = -1;
         ItemStack[] stacks = player.getInventory().getContents();
         for(int i=0;i<stacks.length;i++){
             ItemStack stack = stacks[i];
@@ -84,16 +82,15 @@ public class ConfirmGui extends ChestGui {
             if(stack.getType() != Material.BOOK) continue;
             NBTItem nbtItem = new NBTItem(stack);
             if(nbtItem.getString("arc:building_key").equals(site.getBuilding().getFileName())){
-                found = stack;
-                slot = i;
-                break;
+                if(stack.getAmount() == 1){
+                    player.getInventory().setItem(i, null);
+                } else{
+                    stack.setAmount(stack.getAmount()-1);
+                }
+                return true;
             }
         }
-
-        if(found == null) return false;
-        if(found.getAmount() == 1) player.getInventory().remove(found);
-        else player.getInventory().setItem(slot, found.subtract(1));
-        return true;
+        return false;
     }
 
     private void setupBg() {

@@ -1,13 +1,21 @@
 package arc.arc.util;
 
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
+import com.github.stefvanschie.inventoryframework.gui.type.util.Gui;
+import com.github.stefvanschie.inventoryframework.pane.Pane;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.Material;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
+import java.util.function.Consumer;
+
+import static arc.arc.util.TextUtil.strip;
 
 public class GuiUtils {
 
@@ -36,5 +44,6 @@ public class GuiUtils {
     public static GuiItem background(){
         return background(Material.GRAY_STAINED_GLASS_PANE, 11000);
     }
+
 
 }

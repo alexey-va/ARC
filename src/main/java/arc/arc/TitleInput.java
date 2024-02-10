@@ -68,7 +68,7 @@ public class TitleInput {
         synchronized (activeInputs) {
             TitleInput titleInput = activeInputs.get(player);
             if (titleInput == null) return;
-            if (!titleInput.inputable.ifSatisfy(message, titleInput.id)) {
+            if (!titleInput.inputable.satisfy(message, titleInput.id)) {
                 titleInput.sendDenyMessage(message);
                 return;
             }

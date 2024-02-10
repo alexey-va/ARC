@@ -93,16 +93,14 @@ public class Farm {
             if (ageable.getAge() != ageable.getMaximumAge()) return;
         }
 
-        if (block.getType() == Material.PUMPKIN || block.getType() == Material.MELON) player.giveExp(5);
-        else player.giveExp(1);
+        //if (block.getType() == Material.PUMPKIN || block.getType() == Material.MELON) player.giveExp(5);
+        //else player.giveExp(1);
 
         if (ageable != null) {
-            /*Collection<ItemStack> stacks = block.getDrops();
-            stacks.stream()
+            player.getInventory().addItem(block.getDrops().stream()
                     .filter(stack -> !seeds.contains(stack.getType()))
-                    .forEach(stack -> player.getInventory().addItem(stack));*/
-            ItemStack stack = new ItemStack(block.getType());
-            player.getInventory().addItem(stack);
+                    .toArray(ItemStack[]::new));
+
             ageable.setAge(0);
             block.setBlockData(ageable, false);
         } else {

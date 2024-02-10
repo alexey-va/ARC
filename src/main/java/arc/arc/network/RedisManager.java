@@ -4,6 +4,7 @@ import redis.clients.jedis.JedisPooled;
 import redis.clients.jedis.JedisPubSub;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -56,6 +57,23 @@ public class RedisManager extends JedisPubSub {
     public void publish(String channel, String message) {
         //System.out.println("Publishing: "+channel+" | "+message);
         executorService.execute(() -> pub.publish(channel, message));
+    }
+
+    public void saveMap(String key, Map<String, String> map){
+        executorService.execute(() -> pub.hmset(key, map));
+    }
+
+    public void saveMapKey(String key, String mapKey, String value){
+        if(value == null) executorService.execute(() -> pub.hdel(key, mapKey));
+        else executorService.execute(() -> pub.hmset(key, Map.of(mapKey, value)));
+    }
+
+    public CompletableFuture<Map<String, String>> loadMap(String key){
+        return CompletableFuture.supplyAsync(() -> pub.hgetAll(key));
+    }
+
+    public CompletableFuture<List<String>> loadMapEntry(String key, String... mapKeys){
+        return CompletableFuture.supplyAsync(() -> pub.hmget(key, mapKeys));
     }
 
 

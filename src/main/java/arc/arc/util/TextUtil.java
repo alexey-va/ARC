@@ -4,6 +4,7 @@ import arc.arc.ARC;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.entity.Player;
 
@@ -21,6 +22,10 @@ public class TextUtil {
                 unit.toHours(duration)
         );
         return LegacyComponentSerializer.legacyAmpersand().deserialize(s);
+    }
+
+    public static Component mm(String s){
+        return MiniMessage.miniMessage().deserialize(s);
     }
 
     public static void noMoneyMessage(Player player, double need) {

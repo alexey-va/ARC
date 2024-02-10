@@ -17,6 +17,7 @@ import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
+import org.bukkit.block.data.Directional;
 import org.bukkit.block.data.type.Fence;
 import org.bukkit.block.data.type.Stairs;
 import org.bukkit.block.data.type.Wall;
@@ -159,10 +160,10 @@ public class Utils {
         Set<BlockFace> result = new HashSet<>();
 
         // Add the rotated faces
-        if(faces.contains(BlockFace.NORTH)) result.add(BlockFace.WEST);
-        if(faces.contains(BlockFace.EAST)) result.add(BlockFace.NORTH);
-        if(faces.contains(BlockFace.SOUTH)) result.add(BlockFace.EAST);
-        if(faces.contains(BlockFace.WEST)) result.add(BlockFace.SOUTH);
+        if (faces.contains(BlockFace.NORTH)) result.add(BlockFace.WEST);
+        if (faces.contains(BlockFace.EAST)) result.add(BlockFace.NORTH);
+        if (faces.contains(BlockFace.SOUTH)) result.add(BlockFace.EAST);
+        if (faces.contains(BlockFace.WEST)) result.add(BlockFace.SOUTH);
 
         //System.out.println("result:" + result);
 
@@ -177,10 +178,10 @@ public class Utils {
         Set<BlockFace> result = new HashSet<>();
 
         // Add the rotated faces
-        if(faces.contains(BlockFace.NORTH)) result.add(BlockFace.EAST);
-        if(faces.contains(BlockFace.EAST)) result.add(BlockFace.SOUTH);
-        if(faces.contains(BlockFace.SOUTH)) result.add(BlockFace.WEST);
-        if(faces.contains(BlockFace.WEST)) result.add(BlockFace.NORTH);
+        if (faces.contains(BlockFace.NORTH)) result.add(BlockFace.EAST);
+        if (faces.contains(BlockFace.EAST)) result.add(BlockFace.SOUTH);
+        if (faces.contains(BlockFace.SOUTH)) result.add(BlockFace.WEST);
+        if (faces.contains(BlockFace.WEST)) result.add(BlockFace.NORTH);
 
         //System.out.println("result:" + result);
 
@@ -224,8 +225,7 @@ public class Utils {
                 case 180 -> stairs.setFacing(rotateFacing180(stairs.getFacing()));
                 case 270 -> stairs.setFacing(rotateFacingCounterClockwise(stairs.getFacing()));
             }
-        }
-        else if(data instanceof Fence fence){
+        } else if (data instanceof Fence fence) {
             //System.out.println("Fence: "+fence.getFaces());
             switch (rotation) {
                 case 90 -> rotateFenceCounterClockwise(fence);
@@ -236,8 +236,7 @@ public class Utils {
                 case 270 -> rotateFenceClockwise(fence);
             }
             //System.out.println("Fence after: "+fence.getFaces());
-        }
-        else if(data instanceof Wall wall){
+        } else if (data instanceof Wall wall) {
             switch (rotation) {
                 case 90 -> rotateWallCounterClockwise(wall);
                 case 180 -> {
@@ -246,8 +245,13 @@ public class Utils {
                 }
                 case 270 -> rotateWallClockwise(wall);
             }
-        }
-        else {
+        } else if (data instanceof Directional directional) {
+            switch (rotation) {
+                case 90 -> directional.setFacing(rotateFacingClockwise(directional.getFacing()));
+                case 180 -> directional.setFacing(rotateFacing180(directional.getFacing()));
+                case 270 -> directional.setFacing(rotateFacingCounterClockwise(directional.getFacing()));
+            }
+        } else {
             switch (rotation) {
                 case 90 -> data.rotate(StructureRotation.COUNTERCLOCKWISE_90);
                 case 180 -> data.rotate(StructureRotation.CLOCKWISE_180);

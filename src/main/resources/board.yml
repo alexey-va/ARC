@@ -1,0 +1,54 @@
+short-name-length: 20
+
+item:
+  display: "<short_name>"
+  description-prefix: " - "
+  lore:
+    - " "
+    - " x Объявитель: <player>"
+    - " x Исчезнет через: <expire>"
+    - " x Подробности:"
+    - "<description>"
+  click-to-edit:
+    - " "
+    - " x <yellow>нажмите Shift+ПКМ чтобы редактировать"
+  click-to-rate:
+    - " "
+    - " x <yellow>нажмите ПКМ чтобы оценить"
+add-menu:
+  empty:
+    short-name:
+      display: "<green>Короткое название <gray>(макс. длина <short_name_length>)"
+      lore:
+        - "<gray>Нажмите чтобы установить"
+    description:
+      display: "<green>Комментарий"
+      lore:
+        - "<gray>Нажмите чтобы установить"
+    icon:
+      display: "<green>Иконка"
+      lore:
+        - "<gray>Перетащите чтобы установить"
+    type:
+      display: "<type>"
+      lore:
+        - "<gray>Нажмите чтобы поменять"
+  full:
+    short-name:
+      display: "<short_name>"
+      lore:
+        - "<gray>Нажмите чтобы поменять"
+    description:
+      display: "<green>Комментарий"
+      lore:
+        - "<description>"
+    icon:
+      display: "<green>Иконка"
+      lore:
+        - "<gray>Перетащите чтобы поменять"
+    type:
+      display: "<type>"
+      lore:
+        - "<green>Тип сообщения"
+        - "<gray>Нажмите чтобы поменять"
+

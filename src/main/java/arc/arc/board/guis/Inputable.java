@@ -1,6 +1,5 @@
 package arc.arc.board.guis;
 
-import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
 import net.kyori.adventure.text.Component;
 
 public interface Inputable {
@@ -9,7 +8,7 @@ public interface Inputable {
 
     public void proceed();
 
-    public boolean ifSatisfy(String input, int id);
+    public boolean satisfy(String input, int id);
 
     public Component denyMessage(String input, int id);
 

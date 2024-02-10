@@ -138,14 +138,14 @@ public class Construction {
                     !notDropMaterial.contains(currentBlock.getType())) giveDrop(currentBlock);
 
             site.world.getBlockAt(location).setBlockData(data, false);
-            if(location.getBlock() instanceof Chest chest){
+            if(location.getBlock().getState() instanceof Chest chest){
                 LootTables.SPAWN_BONUS_CHEST.getLootTable()
                         .fillInventory(
                                 chest.getInventory(),
                                 ThreadLocalRandom.current(),
                                 new LootContext.Builder(location).build()
                         );
-            } else if(location.getBlock() instanceof Barrel barrel){
+            } else if(location.getBlock().getState() instanceof Barrel barrel){
                 LootTables.SPAWN_BONUS_CHEST.getLootTable()
                         .fillInventory(
                                 barrel.getInventory(),

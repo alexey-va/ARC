@@ -1,10 +1,13 @@
 package arc.arc.board.guis;
 
 import arc.arc.ARC;
+import arc.arc.board.BoardEntry;
+import arc.arc.board.BoardItem;
+import arc.arc.configs.BoardConfig;
 import arc.arc.configs.Config;
 import arc.arc.board.Board;
 import arc.arc.util.GuiUtils;
-import arc.arc.util.HeadUtil;
+import arc.arc.util.ItemStackBuilder;
 import arc.arc.util.TextUtil;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
@@ -13,12 +16,9 @@ import com.github.stefvanschie.inventoryframework.pane.PaginatedPane;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Material;
-import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 public class BoardGui extends ChestGui {
 
@@ -38,92 +39,93 @@ public class BoardGui extends ChestGui {
         super(6, "Доска объявлений");
         this.player = player;
 
-        setupBackground();
         paginatedPane = new PaginatedPane(0, 0, 9, 5);
-        populatePane();
+        if (!this.getPanes().contains(paginatedPane)) this.addPane(paginatedPane);
+
+        fillItems();
+        setupBackground();
         setupNav();
-
-        this.addPane(paginatedPane);
-
     }
 
-    private void populatePane() {
-        List<GuiItem> guiItemList = new ArrayList<>();
-        boolean isOp = player.hasPermission("arc.admin");
+    private void fillItems() {
+        List<GuiItem> guiItemList = Board.instance().items().stream().map(this::toGuiItem).collect(Collectors.toList());
         paginatedPane.clear();
-
-        for (var item : Board.instance().items()) {
-            GuiItem guiItem;
-
-            ItemStack stack;
-            if (player.getUniqueId().equals(item.entry.playerUuid)) {
-                stack = item.stack.clone();
-                ItemMeta meta = stack.getItemMeta();
-                List<Component> lore = meta.lore();
-                if (lore == null) lore = new ArrayList<>();
-                lore.add(Component.text(" "));
-                lore.add(TextUtil.strip(Component.text("Нажмите, чтобы редактировать", NamedTextColor.GREEN)));
-                meta.lore(lore);
-                meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
-                meta.addEnchant(Enchantment.ARROW_DAMAGE, 1, true);
-                stack.setItemMeta(meta);
-            } else stack = item.stack;
-
-            guiItem = new GuiItem(stack, inventoryClickEvent -> {
-                inventoryClickEvent.setCancelled(true);
-                if (inventoryClickEvent.isLeftClick() && (item.entry.playerUuid.equals(player.getUniqueId()) || isOp)) {
-                    new EditBoardGui(player, item.entry).show(player);
-                }
-            });
-            guiItemList.add(guiItem);
-        }
         paginatedPane.populateWithGuiItems(guiItemList);
+    }
+
+    private GuiItem toGuiItem(BoardItem boardItem) {
+        ItemStack res = boardItem.stack.clone();
+        ItemMeta meta = boardItem.stack.getItemMeta();
+        if (boardItem.entry.canEdit(player)) {
+            List<Component> lore = meta.lore();
+            if (lore == null) lore = new ArrayList<>();
+            lore.addAll(BoardConfig.editBottom.stream().map(MiniMessage.miniMessage()::deserialize).toList());
+            meta.lore(lore);
+        }
+        if (boardItem.entry.canRate(player)) {
+            List<Component> lore = meta.lore();
+            if (lore == null) lore = new ArrayList<>();
+            lore.addAll(BoardConfig.rateBottom.stream().map(MiniMessage.miniMessage()::deserialize).toList());
+            meta.lore(lore);
+        }
+        res.setItemMeta(meta);
+        return new GuiItem(res, click -> {
+            click.setCancelled(true);
+            if (click.isShiftClick() && click.isLeftClick()) {
+                openEditor(boardItem.entry);
+            } else if (click.isLeftClick()) {
+                openRating(boardItem.entry);
+            }
+        });
+    }
+
+    private void openEditor(BoardEntry entry) {
+        player.sendMessage("Opening editor for " + entry.entryUuid);
+    }
+
+    private void openRating(BoardEntry entry) {
+        player.sendMessage("Opening rating for " + entry.entryUuid);
     }
 
     private void setupNav() {
         StaticPane pane = new StaticPane(0, 5, 9, 1);
-        ItemStack backItem = new ItemStack(Material.BLUE_STAINED_GLASS_PANE);
-        ItemMeta meta2 = backItem.getItemMeta();
-        meta2.displayName(Component.text("Назад", NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
-        meta2.setCustomModelData(11013);
-        backItem.setItemMeta(meta2);
-        GuiItem backGuiItem = new GuiItem(backItem, inventoryClickEvent -> {
-            inventoryClickEvent.setCancelled(true);
-            ((Player) inventoryClickEvent.getWhoClicked()).performCommand("m");
-        });
-        pane.addItem(backGuiItem, 0, 0);
-
-        ItemStack refreshItem = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
-        ItemMeta meta3 = refreshItem.getItemMeta();
-        meta3.displayName(Component.text("Обновить", NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
-        meta3.setCustomModelData(11010);
-        refreshItem.setItemMeta(meta3);
-        pane.addItem(new GuiItem(refreshItem, inventoryClickEvent -> {
-            inventoryClickEvent.setCancelled(true);
-            if (cooldownSet.contains(player.getUniqueId())) {
-                player.sendMessage(Component.text("Не так быстро!", NamedTextColor.RED).decoration(TextDecoration.ITALIC, false));
-                return;
-            }
-            tagCooldown(player);
-            populatePane();
-            this.update();
-        }), 4, 0);
-
-        ItemStack addStack = HeadUtil.getSkull(player.getUniqueId());
-        ItemMeta addMeta = addStack.getItemMeta();
-        addMeta.displayName(TextUtil.strip(Component.text("Опубликовать объявление", NamedTextColor.GREEN)));
-        addMeta.lore(List.of(TextUtil.strip(Component.text("Цена: ", NamedTextColor.GRAY).append(Component.text((int) (Config.boardCost), NamedTextColor.GREEN)).append(Component.text("\uD83D\uDCB0", NamedTextColor.WHITE)))));
-        addStack.setItemMeta(addMeta);
-        GuiItem addItem = new GuiItem(addStack, inventoryClickEvent -> {
-            if(player.hasPermission("arc.board.publish")) new AddBoardGui(player).show(player);
-            else{
-                player.sendMessage(TextUtil.strip(
-                        Component.text("У вас нет на это разрешения!", NamedTextColor.RED)
-                ));
-            }
-        });
-        pane.addItem(addItem, 8, 0);
         this.addPane(pane);
+
+        pane.addItem(new ItemStackBuilder(Material.BLUE_STAINED_GLASS_PANE)
+                .display("<gray>Назад")
+                .modelData(11013)
+                .toGuiItemBuilder()
+                .clickEvent(click -> {
+                    click.setCancelled(true);
+                    ((Player) click.getWhoClicked()).performCommand(BoardConfig.mainMenuBackCommand);
+                }).build(), 0, 0);
+
+        pane.addItem(new ItemStackBuilder(Material.BLACK_STAINED_GLASS_PANE)
+                .display("<gray>Обновить")
+                .modelData(11010)
+                .toGuiItemBuilder()
+                .clickEvent(click -> {
+                    click.setCancelled(true);
+                    if (cooldownSet.contains(player.getUniqueId())) {
+                        player.sendMessage(TextUtil.mm("<red>Не так быстро!"));
+                        return;
+                    }
+                    tagCooldown(player);
+                    fillItems();
+                    this.update();
+                }).build(), 4, 0);
+
+        pane.addItem(new ItemStackBuilder(Material.PLAYER_HEAD)
+                .skull(player.getUniqueId())
+                .display("<green>Опубликовать объявление")
+                .lore(List.of("<gray>Цена: <green>" + (Config.boardCost) + "<white>\uD83D\uDCB0"))
+                .modelData(11010)
+                .toGuiItemBuilder()
+                .clickEvent(click -> {
+                    click.setCancelled(true);
+                    if (player.hasPermission("arc.board.publish")) new AddBoardGui(player).show(player);
+                    else player.sendMessage(TextUtil.noPermissions());
+                }).build(), 8, 0);
     }
 
     private void tagCooldown(Player player) {

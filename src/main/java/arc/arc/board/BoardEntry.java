@@ -11,6 +11,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.NamespacedKey;
+import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -35,10 +36,10 @@ public class BoardEntry extends ArcSerializable {
     public ItemIcon icon;
     public UUID entryUuid;
     public UUID playerUuid;
-    public Instant timestamp;
-    public Instant lastShown;
+    public long timestamp;
+    public long lastShown;
 
-    public BoardEntry(Type type, String playerName, UUID playerUuid, ItemIcon icon, String text, String title, Instant timestamp, Instant lastShown, UUID entryUuid) {
+    public BoardEntry(Type type, String playerName, UUID playerUuid, ItemIcon icon, String text, String title, long timestamp, long lastShown, UUID entryUuid) {
         this.type = type;
         this.playerName = playerName;
         this.icon = icon;
@@ -60,6 +61,15 @@ public class BoardEntry extends ArcSerializable {
         meta.addItemFlags(ItemFlag.HIDE_ITEM_SPECIFICS, ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_DESTROYS, ItemFlag.HIDE_DYE, ItemFlag.HIDE_ARMOR_TRIM, ItemFlag.HIDE_PLACED_ON, ItemFlag.HIDE_UNBREAKABLE);
         stack.setItemMeta(meta);
         return stack;
+    }
+
+    public boolean canEdit(Player player){
+        if(player.getUniqueId() == playerUuid) return true;
+        return player.hasPermission("arc.board.admin");
+    }
+
+    public boolean canRate(Player player){
+        return player.getUniqueId() != playerUuid;
     }
 
     private List<Component> lore() {
@@ -105,17 +115,17 @@ public class BoardEntry extends ArcSerializable {
                         .append(Component.text(res, NamedTextColor.GRAY))));
             }
         }
-        if(builder.length() > 0) textComponents.add(TextUtil.strip(Component.text("> ", NamedTextColor.DARK_GRAY).append(
+        if(!builder.isEmpty()) textComponents.add(TextUtil.strip(Component.text("> ", NamedTextColor.DARK_GRAY).append(
                 Component.text(builder.toString(), NamedTextColor.GRAY))));
         return new ArrayList<>(textComponents);
     }
 
     public boolean isExpired(){
-        return Duration.between(timestamp, Instant.now()).toMinutes() > Config.boardEntryLifetimeMinutes;
+        return (System.currentTimeMillis() - timestamp)*1000 > Config.boardEntryLifetimeMinutes;
     }
 
     public long tillExpire(){
-        return Duration.between(timestamp, Instant.now()).toMinutes();
+        return 1000;
     }
 
     public enum Type {
@@ -126,7 +136,7 @@ public class BoardEntry extends ArcSerializable {
 
         public final Component name;
 
-        private Type(String s){
+        Type(String s){
             name = TextUtil.strip(LegacyComponentSerializer.legacyAmpersand().deserialize(s));
         }
     }
