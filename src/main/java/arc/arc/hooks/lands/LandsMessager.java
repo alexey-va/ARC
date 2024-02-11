@@ -45,7 +45,7 @@ public class LandsMessager implements ChannelListener {
 
 
     @Override
-    public void consume(String channel, String message) {
+    public void consume(String channel, String message, String server) {
         if(channel.equals(respChannel)) {
             if (futures.isEmpty()) return;
             LandsRequest landsRequest = RedisSerializer.fromJson(message, LandsRequest.class);

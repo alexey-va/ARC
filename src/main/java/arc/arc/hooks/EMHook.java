@@ -24,19 +24,20 @@ public class EMHook implements Listener, ArcModule {
     }
 
     public void init() {
-        if (Config.sendWormholes && (wormholeTask == null || wormholeTask.isCancelled())) {
-            System.out.println("Setting up wormhole task!");
-            wormholeTask = new BukkitRunnable() {
-                @Override
-                public void run() {
-                    try {
-                        runWormholes();
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
+        cancel();
+
+        System.out.println("Setting up wormhole task!");
+        wormholeTask = new BukkitRunnable() {
+            @Override
+            public void run() {
+                try {
+                    runWormholes();
+                } catch (Exception e) {
+                    e.printStackTrace();
                 }
-            }.runTaskTimer(ARC.plugin, 20L, Config.wormholePeriod);
-        }
+            }
+        }.runTaskTimer(ARC.plugin, 20L, Config.wormholePeriod);
+
     }
 
     private void runWormholes() {
@@ -50,15 +51,15 @@ public class EMHook implements Listener, ArcModule {
                 Collection<Player> players1 = wormhole.getWormholeEntry1().getLocation().getWorld().getPlayers();
                 players1.removeIf(player -> !player.hasLineOfSight(wormhole.getWormholeEntry1().getLocation()));
                 particleBuilders.add(new ParticleBuilder(Particle.REDSTONE).color(wormhole.getParticleColor())
-                        .receivers(players1).offset(Config.particleOffset*modifier, Config.particleOffset*modifier, Config.particleOffset*modifier)
-                        .location(wormhole.getWormholeEntry1().getLocation()).count((int)(Config.particleCount*modifier*modifier)));
+                        .receivers(players1).offset(Config.particleOffset * modifier, Config.particleOffset * modifier, Config.particleOffset * modifier)
+                        .location(wormhole.getWormholeEntry1().getLocation()).count((int) (Config.particleCount * modifier * modifier)));
 
                 Collection<Player> players2 = wormhole.getWormholeEntry2().getLocation().getWorld().getPlayers();
                 players2.removeIf(player -> !player.hasLineOfSight(wormhole.getWormholeEntry2().getLocation()));
                 particleBuilders.add(new ParticleBuilder(Particle.REDSTONE).color(wormhole.getParticleColor())
-                        .receivers(players2).offset(Config.particleOffset*modifier, Config.particleOffset*modifier, Config.particleOffset*modifier)
-                        .location(wormhole.getWormholeEntry2().getLocation()).count((int)(Config.particleCount*modifier*modifier)));
-            } catch (Exception ignored){
+                        .receivers(players2).offset(Config.particleOffset * modifier, Config.particleOffset * modifier, Config.particleOffset * modifier)
+                        .location(wormhole.getWormholeEntry2().getLocation()).count((int) (Config.particleCount * modifier * modifier)));
+            } catch (Exception ignored) {
 
             }
         }

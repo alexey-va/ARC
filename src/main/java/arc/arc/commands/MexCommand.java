@@ -18,14 +18,20 @@ public class MexCommand implements CommandExecutor {
             commandSender.sendMessage(TextUtil.noPermissions());
             return true;
         }
+        boolean notThis = false;
         StringBuilder commandBuilder = new StringBuilder();
         for(String str : strings){
+            if(str.equals("--not-this")){
+                notThis = true;
+                continue;
+            }
             commandBuilder.append(str).append(" ");
         }
         String com = commandBuilder.toString().trim();
         CommandData data = CommandData.builder()
                 .sender(CommandData.Sender.CONSOLE)
                 .everywhere(true)
+                .notOrigin(notThis)
                 .command(com)
                 .build();
         NetworkRegistry.commandSender.dispatch(data);

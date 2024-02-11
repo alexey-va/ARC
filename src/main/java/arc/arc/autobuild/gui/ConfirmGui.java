@@ -53,7 +53,13 @@ public class ConfirmGui extends ChestGui {
 
         GuiItem confirmItem = new GuiItem(confirmStack, inventoryClickEvent -> {
             inventoryClickEvent.setCancelled(true);
-            removeBook();
+            if(removeBook()) BuildingManager.confirmConstruction(player, true);
+            else{
+                player.sendMessage(TextUtil.strip(
+                        Component.text("&7\uD83D\uDEE0 ", NamedTextColor.GRAY)
+                                .append(Component.text("У вас нет книги в инвентаре!", NamedTextColor.RED))
+                ));
+            }
             BuildingManager.confirmConstruction(player, true);
             inventoryClickEvent.getWhoClicked().closeInventory();
         });
@@ -61,13 +67,7 @@ public class ConfirmGui extends ChestGui {
 
         GuiItem cancelItem = new GuiItem(cancelStack, inventoryClickEvent -> {
             inventoryClickEvent.setCancelled(true);
-            if(removeBook()) BuildingManager.confirmConstruction(player, false);
-            else{
-                player.sendMessage(TextUtil.strip(
-                        Component.text("&7\uD83D\uDEE0 ", NamedTextColor.GRAY)
-                                .append(Component.text("У вас нет книги в инвентаре!", NamedTextColor.RED))
-                ));
-            }
+            BuildingManager.confirmConstruction(player, false);
             inventoryClickEvent.getWhoClicked().closeInventory();
         });
         staticPane.addItem(cancelItem, 6, 0);

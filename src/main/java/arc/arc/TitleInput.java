@@ -13,11 +13,12 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class TitleInput {
 
-    private static final Map<Player, TitleInput> activeInputs = new HashMap<>();
-    private static BukkitTask clearTask = null;
+    private static final Map<Player, TitleInput> activeInputs = new ConcurrentHashMap<>();
+    private static BukkitTask clearTask;
 
 
     long timestamp;
@@ -33,6 +34,10 @@ public class TitleInput {
         this.id = id;
         this.timestamp = System.currentTimeMillis();
 
+        if(activeInputs.containsKey(player)){
+            System.out.println("Player" +player.getName()+" already has title input!");
+        }
+
         activeInputs.put(player, this);
         sendStartMessage();
         sendTitle();
@@ -43,42 +48,40 @@ public class TitleInput {
         clearTask = new BukkitRunnable() {
             @Override
             public void run() {
-                synchronized (activeInputs) {
-                    List<Player> toRemove = new ArrayList<>();
-                    for (var input : activeInputs.entrySet()) {
-                        if (input.getKey() == null || !input.getKey().isOnline() || input.getValue().isExpired()) {
-                            toRemove.add(input.getKey());
-                            if (input.getKey() != null && input.getKey().isOnline())
-                                input.getValue().sendTimeoutMessage();
-                        }
+                for (var input : activeInputs.entrySet()) {
+                    if (input.getKey() == null || !input.getKey().isOnline() || input.getValue().isExpired()) {
+                        activeInputs.remove(input.getKey());
+                        if (input.getKey() != null && input.getKey().isOnline())
+                            input.getValue().sendTimeoutMessage();
                     }
-                    toRemove.forEach(activeInputs::remove);
                 }
             }
         }.runTaskTimer(ARC.plugin, period, period);
     }
 
     public static boolean hasInput(Player player) {
-        synchronized (activeInputs) {
-            return activeInputs.containsKey(player);
-        }
+        return activeInputs.containsKey(player);
     }
 
     public static void processMessage(Player player, String message) {
-        synchronized (activeInputs) {
-            TitleInput titleInput = activeInputs.get(player);
-            if (titleInput == null) return;
-            if (!titleInput.inputable.satisfy(message, titleInput.id)) {
-                titleInput.sendDenyMessage(message);
-                return;
-            }
-            titleInput.inputable.setParameter(titleInput.id, message);
-            titleInput.inputable.proceed();
-            player.clearTitle();
+        TitleInput titleInput = activeInputs.get(player);
+        if (titleInput == null) return;
+        if (!titleInput.inputable.satisfy(message, titleInput.id)) {
+            titleInput.sendDenyMessage(message);
+            return;
         }
+        titleInput.inputable.setParameter(titleInput.id, message);
+        titleInput.inputable.proceed();
+        titleInput.remove();
+
+        player.clearTitle();
     }
 
-    private void sendTitle(){
+    private void remove(){
+        activeInputs.remove(this.player);
+    }
+
+    private void sendTitle() {
         player.showTitle(Title.title(
                 Component.text("Введите в чате...", NamedTextColor.GREEN),
                 Component.text(" "),
@@ -89,6 +92,7 @@ public class TitleInput {
                 )
         ));
     }
+
     public boolean isExpired() {
         return (System.currentTimeMillis() - timestamp > 120000);
     }

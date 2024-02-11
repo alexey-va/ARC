@@ -62,6 +62,9 @@ public class BuildBookCommand implements CommandExecutor {
         Component bName = LegacyComponentSerializer.legacyAmpersand().deserialize(name);
         int length = ((TextComponent) bName).content().length();
         int len2 = Math.max(0, (37 - length - 4) / 2);
+        if(length < 9) len2+=1;
+        if(length < 13) len2+=1;
+
         Component longName = strip(
                 Component.text(String.join("", Collections.nCopies(len2, " ")))
                         .append(Component.text("\uD83D\uDEE0 ", NamedTextColor.GREEN))

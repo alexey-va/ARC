@@ -20,10 +20,10 @@ public class RankMessager implements ChannelListener {
     private final String channel;
 
     @Override
-    public void consume(String channel, String message) {
+    public void consume(String channel, String message, String server) {
         RankData data = RedisSerializer.fromJson(message, RankData.class);
 
-        if (data.server.equals(Config.server)) return;
+        if (data == null || data.server.equals(Config.server)) return;
         CMIUser user = CMI.getInstance().getPlayerManager().getUser(data.playerUuid);
 
         if (user == null) return;
@@ -37,10 +37,10 @@ public class RankMessager implements ChannelListener {
                     CMIRank cmiRank = CMI.getInstance().getRankManager().getRank(data.rankName);
                     if (cmiRank == null) return;
                     user.setRank(cmiRank);
+                    System.out.println("Setting user's rank: " +user.getName()+" to "+cmiRank.getName());
                 }
             }
         }.runTask(ARC.plugin);
-
     }
 
     public void send(RankData rankData) {

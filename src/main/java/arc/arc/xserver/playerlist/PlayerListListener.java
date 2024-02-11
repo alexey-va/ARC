@@ -12,7 +12,7 @@ public class PlayerListListener implements ChannelListener {
     private final String channel;
 
     @Override
-    public void consume(String channel, String message) {
+    public void consume(String channel, String message, String server) {
         PlayerList playerList = RedisSerializer.fromJson(message, PlayerList.class);
         if(playerList == null){
             System.out.println("Message "+message+" canot be parsed!");

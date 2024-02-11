@@ -1,21 +1,71 @@
 short-name-length: 20
-
+entry-lifetime-seconds: 259200
+publish-cost: 25000
+seconds-announce: 600
+receive-permission: "arc.board-announce"
+edit-cost: 1000
+main-server: false
+create-entry-gui-name: "<dark_gray>Создать объявление"
+edit-entry-gui-name: "<dark_gray>Редактировать объявление"
+board-gui-name: "<dark_gray>Доска объявлений"
+rate-gui-name: "<dark_gray>Оценить объявление"
+main-menu-back-command: "mm"
+not-enough-money: "<dark_red>У вас недостаточно денег!"
+click-to-edit:
+  - ""
+  - "<green>Shift+ПКМ <gray>чтобы изменить"
+click-to-rate:
+  - ""
+  - "<green>ПКМ <gray>чтобы оценить"
 item:
-  display: "<short_name>"
-  description-prefix: " - "
+  display: "<dark_gray>⚠ <#92bed8><short_name>"
+  description-prefix: "<white>     - <gray>"
+  description:
+    - " <dark_gray>ℹ <white>Подробности:"
+    - "<description_text>"
   lore:
     - " "
-    - " x Объявитель: <player>"
-    - " x Исчезнет через: <expire>"
-    - " x Подробности:"
+    - " <dark_gray>⭐ <white>Объявитель: <#92bed8><player>"
+    - " <dark_gray>⌛ <white>Тип: <#ffacd5><type>"
+    - " <dark_gray>⌚ <white>Исчезнет через: <#969696><expire>"
+    - " <dark_gray>🔥 <white>Жалоб: <#fc3848><reports>"
     - "<description>"
   click-to-edit:
-    - " "
-    - " x <yellow>нажмите Shift+ПКМ чтобы редактировать"
+    -  ""
+    - " <dark_gray>✎ <gray>нажмите <green>Shift+ПКМ <gray>чтобы редактировать"
   click-to-rate:
-    - " "
-    - " x <yellow>нажмите ПКМ чтобы оценить"
+    -  ""
+    - " <dark_gray>✎ <gray>нажмите <green>ПКМ <gray>чтобы оценить"
+rate-menu:
+  up-display: "<green>Оценить положительно"
+  up-lore: []
+  down-display: "<red>Оценить отрицательно"
+  down-lore: []
+  report-display: "<dark_red>Пожаловаться"
+  report-lore: []
+  cant-rate: "<dark_red>Вы не можете оценить это объявление"
+  already-rate: "<dark_red>Вы уже поставили эту оценку"
+  already-report: "<dark_red>Вы уже пожаловались!"
+  success-rate: "<gold>Объявление оценено!"
+  success-report: "<gold>Жалоба подана!"
+board-menu:
+  publish-display: "<gray>Опубликовать объявление"
+  publish-lore: " <dark_gray>● <white>Цена: <green><cost><white>💰"
+  refresh-display: "<gray>Обновить"
+  refresh-lore: []
+  back-display: "<gray>Назад"
+  back-lore: []
 add-menu:
+  delete-display: "<red>Удалить"
+  delete-lore: []
+  confirm-delete: "<dark_red>Нажмите для потверждения"
+  edit-display: "<gray>Изменить"
+  edit-lore: "<gray>Цена: "
+  published-successfully: "<green>Ваше сообщение было опубликовано!"
+  edited-successfully: "<green>Ваше сообщение было изменено!"
+  not-completed: "<red>Остались незаполненные поля!"
+  publish-display: "<gray>Опубликовать"
+  publish-lore: []
   empty:
     short-name:
       display: "<green>Короткое название <gray>(макс. длина <short_name_length>)"
@@ -29,10 +79,6 @@ add-menu:
       display: "<green>Иконка"
       lore:
         - "<gray>Перетащите чтобы установить"
-    type:
-      display: "<type>"
-      lore:
-        - "<gray>Нажмите чтобы поменять"
   full:
     short-name:
       display: "<short_name>"

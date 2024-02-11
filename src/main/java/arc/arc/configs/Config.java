@@ -18,9 +18,6 @@ public class Config {
     public static String server;
     public static boolean enablePortals;
     public static Set<String> noExpWorlds = new HashSet<>();
-    public static double boardCost;
-    public static int tldLength;
-    public static int boardEntryLifetimeMinutes;
     public static String partyTag;
     public static long cForwardDelay;
 
@@ -43,9 +40,6 @@ public class Config {
         particleOffset = ARC.plugin.getConfig().getDouble("wormholes.offset", 1.0);
         server = ARC.plugin.getConfig().getString("redis.server-name", "none");
         enablePortals = ARC.plugin.getConfig().getBoolean("enable-portals", true);
-        boardCost = ARC.plugin.getConfig().getDouble("board.board-message-cost", 50000);
-        tldLength = ARC.plugin.getConfig().getInt("board.tldr-length", 30);
-        boardEntryLifetimeMinutes = ARC.plugin.getConfig().getInt("board.lifetime-minutes", 720);
         partyTag = ARC.plugin.getConfig().getString("party.tag", "&7[%color%%tag%&7]&r ");
         cForwardDelay = ARC.plugin.getConfig().getLong("xserver.cforward-delay", 20L);
     }

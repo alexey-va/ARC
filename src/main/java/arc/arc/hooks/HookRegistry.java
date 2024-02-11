@@ -56,6 +56,10 @@ public class HookRegistry {
         }
     }
 
+    public void reloadHooks(){
+        if(emHook != null) emHook.init();
+    }
+
     public void cleanHooks() {
         if (emHook != null) emHook.cancel();
         if (psHook != null) psHook.cancel();

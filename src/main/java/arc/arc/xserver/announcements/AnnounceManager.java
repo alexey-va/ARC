@@ -47,8 +47,7 @@ public class AnnounceManager {
     public void announceNext(){
         if(announcements.isEmpty()) return;
         AnnouncementData data = getRandom();
-        announce(data);
-        if(messager != null) messager.send(data);
+        announceGlobally(data);
     }
 
     public void clearData(){
@@ -64,12 +63,17 @@ public class AnnounceManager {
         }
     }
 
-    public static void announce(AnnouncementData data){
-        if(Bukkit.getOnlinePlayers().size() < 3){
-            count++;
-            if(count<3) return;
-            else count=0;
-        }
+    public static void announceGlobally(AnnouncementData data){
+        Bukkit.getOnlinePlayers().forEach(p -> {
+            for(ArcCondition condition : data.arcConditions){
+                if(!condition.test(p)) return;
+            }
+            sendMessage(data, p);
+        });
+        if(messager != null) messager.send(data);
+    }
+
+    public static void announceLocally(AnnouncementData data){
         Bukkit.getOnlinePlayers().forEach(p -> {
             for(ArcCondition condition : data.arcConditions){
                 if(!condition.test(p)) return;

@@ -12,6 +12,7 @@ public class HeadUtil {
 
     public static ItemStack getSkull(UUID uuid){
         ItemStack item = new ItemStack(Material.PLAYER_HEAD, 1);
+        if(uuid == null) return item;
         SkullMeta meta = (SkullMeta) item.getItemMeta();
         OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(uuid);
         meta.setOwningPlayer(offlinePlayer);

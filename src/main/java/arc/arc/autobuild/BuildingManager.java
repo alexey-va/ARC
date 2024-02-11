@@ -8,6 +8,7 @@ import arc.arc.util.TextUtil;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
@@ -159,6 +160,10 @@ public class BuildingManager {
     }
 
     public static void processPlayerClick(Player player, Location location, String buildingId) {
+        if(location.getBlock().getType() == Material.SHORT_GRASS || location.getBlock().getType() == Material.TALL_GRASS){
+            location = location.clone().add(0,-1,0);
+        }
+
         ConstructionSite site = getConstruction(player.getUniqueId());
         Building building = getBuilding(buildingId);
         if (building == null) {

@@ -13,6 +13,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 
+import java.util.Objects;
 import java.util.UUID;
 
 @Getter @Setter
@@ -22,7 +23,7 @@ public class ItemIcon extends ArcSerializable {
 
     Material material;
     UUID headUuid;
-    int modelData;
+    int modelData = 0;
 
     public static ItemIcon of(UUID uuid){
         ItemIcon icon = new ItemIcon();
@@ -39,6 +40,19 @@ public class ItemIcon extends ArcSerializable {
         return icon;
     }
 
+    public static ItemIcon of(ItemStack stack){
+        ItemIcon icon = new ItemIcon();
+        icon.setMaterial(stack.getType());
+        if(stack.getItemMeta().hasCustomModelData()) icon.setModelData(stack.getItemMeta().getCustomModelData());
+        if(stack.getType() == Material.PLAYER_HEAD){
+            SkullMeta skullMeta = (SkullMeta)stack.getItemMeta();
+            if(skullMeta.getOwningPlayer() != null) {
+                icon.setHeadUuid(skullMeta.getOwningPlayer().getUniqueId());
+            }
+        }
+        return icon;
+    }
+
     public ItemStack stack(){
         if(material == Material.PLAYER_HEAD) return HeadUtil.getSkull(headUuid);
         ItemStack stack = new ItemStack(material);
@@ -50,4 +64,21 @@ public class ItemIcon extends ArcSerializable {
         return stack;
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof ItemIcon icon)) return false;
+
+        if (modelData != icon.modelData) return false;
+        if (material != icon.material) return false;
+        return Objects.equals(headUuid, icon.headUuid);
+    }
+
+    @Override
+    public int hashCode() {
+        int result = material != null ? material.hashCode() : 0;
+        result = 31 * result + (headUuid != null ? headUuid.hashCode() : 0);
+        result = 31 * result + modelData;
+        return result;
+    }
 }

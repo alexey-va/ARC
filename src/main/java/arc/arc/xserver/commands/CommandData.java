@@ -22,6 +22,7 @@ public class CommandData extends ArcSerializable {
     String command;
     @Builder.Default
     boolean everywhere = true;
+    boolean notOrigin;
     List<String> servers = new ArrayList<>();
     UUID playerUuid;
     String playerName;

@@ -1,5 +1,6 @@
 package arc.arc.network;
 
+import arc.arc.configs.Config;
 import redis.clients.jedis.JedisPooled;
 import redis.clients.jedis.JedisPubSub;
 
@@ -17,6 +18,8 @@ public class RedisManager extends JedisPubSub {
 
     Map<String, List<ChannelListener>> channelListeners = new ConcurrentHashMap<>();
     Set<String> channelList = new HashSet<>();
+
+    private static final String SERVER_DELIMITER = "<>#<>#<>";
 
     public RedisManager(String ip, int port, String userName, String password) {
         sub = new JedisPooled(ip, port, userName, password);
@@ -36,7 +39,9 @@ public class RedisManager extends JedisPubSub {
             System.out.println("No listener for "+channel);
             return;
         }
-        channelListeners.get(channel).forEach((listener) -> listener.consume(channel, message));
+        String[] strings = message.split(SERVER_DELIMITER, 2);
+        if(strings.length == 1) channelListeners.get(channel).forEach((listener) -> listener.consume(channel, strings[0], null));
+        else channelListeners.get(channel).forEach((listener) -> listener.consume(channel, strings[1], strings[0]));
     }
 
     public void registerChannel(String channel, ChannelListener channelListener) {
@@ -56,7 +61,7 @@ public class RedisManager extends JedisPubSub {
 
     public void publish(String channel, String message) {
         //System.out.println("Publishing: "+channel+" | "+message);
-        executorService.execute(() -> pub.publish(channel, message));
+        executorService.execute(() -> pub.publish(channel, Config.server+SERVER_DELIMITER+message));
     }
 
     public void saveMap(String key, Map<String, String> map){
@@ -64,6 +69,7 @@ public class RedisManager extends JedisPubSub {
     }
 
     public void saveMapKey(String key, String mapKey, String value){
+        //System.out.println("saveMapKey: "+key+" "+mapKey+" "+value);
         if(value == null) executorService.execute(() -> pub.hdel(key, mapKey));
         else executorService.execute(() -> pub.hmset(key, Map.of(mapKey, value)));
     }

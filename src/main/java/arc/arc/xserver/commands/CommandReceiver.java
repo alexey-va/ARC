@@ -60,10 +60,11 @@ public class CommandReceiver implements ChannelListener {
     }
 
     @Override
-    public void consume(String channel, String message) {
+    public void consume(String channel, String message, String server) {
         CommandData data = RedisSerializer.fromJson(message, CommandData.class);
         if (data == null) return;
         if (!data.everywhere && !data.servers.contains(Config.server)) return;
+        if(data.notOrigin && server.equals(Config.server)) return;
         if (data.sender == CommandData.Sender.PLAYER) {
             AwaitingExecution awaitingExecution = new AwaitingExecution.AwaitingExecutionBuilder()
                     .created(System.currentTimeMillis())

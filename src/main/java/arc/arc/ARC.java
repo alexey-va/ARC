@@ -29,6 +29,7 @@ public final class ARC extends JavaPlugin {
     TreasureHuntConfig treasureHuntConfig;
     public LocationPoolConfig locationPoolConfig;
     public BuildingConfig buildingConfig;
+    public BoardConfig boardConfig;
     private static Economy econ = null;
     public static RedisManager redisManager;
     public static HookRegistry hookRegistry;
@@ -79,6 +80,9 @@ public final class ARC extends JavaPlugin {
 
         System.out.println("Loading buildings config");
         buildingConfig = new BuildingConfig();
+
+        System.out.println("Loading board config");
+        boardConfig = new BoardConfig();
 
         if (HookRegistry.farmManager != null) {
             HookRegistry.farmManager.clear();

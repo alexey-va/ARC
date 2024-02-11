@@ -3,6 +3,7 @@ package arc.arc.commands;
 import arc.arc.ARC;
 import arc.arc.board.guis.BoardGui;
 import arc.arc.hooks.ArcModule;
+import arc.arc.hooks.HookRegistry;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -23,6 +24,7 @@ public class Command implements CommandExecutor {
             if(strings[0].equalsIgnoreCase("reload") && commandSender.hasPermission("arc.admin")){
                 ARC.plugin.reloadConfig();
                 ARC.plugin.loadConfig();
+                ARC.hookRegistry.reloadHooks();
                 commandSender.sendMessage(Component.text("Перезагрузка успешна!", NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
                 return true;
             }
