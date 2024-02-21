@@ -1,8 +1,8 @@
 main-server: false
 refresh-rate: 60
 commission: 0.01
-finn-api-key: "cn7rbt9r01qplv1e8j50cn7rbt9r01qplv1e8j5g"
-poly-api-key: "l6SQGsz3pFyNn7BW6_dQdP0esDqP5Pwr"
+finn-api-key: ""
+poly-api-key: ""
 main-menu-back-command: "mm"
 currencies:
   - id: bitcoin
