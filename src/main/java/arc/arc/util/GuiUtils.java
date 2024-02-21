@@ -47,7 +47,7 @@ public class GuiUtils {
         return guiItem;
     }
 
-    public static BukkitTask temporaryChange(ItemStack stack, Component display, List<Component> lore, long ticks, Runnable callback) {
+    public static BukkitTask temporaryChange(ItemStack stack, Component display, List<Component> lore, long ticks, Runnable callback, TagResolver resolver) {
         ItemMeta meta = stack.getItemMeta();
         final Component oldDisplay = meta.displayName();
         final List<Component> oldLore = meta.lore();
@@ -66,6 +66,10 @@ public class GuiUtils {
                 callback.run();
             }
         }.runTaskLater(ARC.plugin, ticks);
+    }
+
+    public static BukkitTask temporaryChange(ItemStack stack, Component display, List<Component> lore, long ticks, Runnable callback) {
+        return temporaryChange(stack, display, lore, ticks, callback, null);
     }
 
     public static boolean cooldownCheck(GuiItem guiItem, Player player, ChestGui chestGui){

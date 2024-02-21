@@ -13,7 +13,7 @@ import org.bukkit.inventory.ItemStack;
 
 import java.util.Optional;
 
-public class SFHook implements Listener, ArcModule {
+public class SFHook implements Listener {
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void onUseBackpack(PlayerRightClickEvent event) {

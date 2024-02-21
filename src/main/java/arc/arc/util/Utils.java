@@ -22,8 +22,10 @@ import org.bukkit.block.data.type.Fence;
 import org.bukkit.block.data.type.Stairs;
 import org.bukkit.block.data.type.Wall;
 import org.bukkit.block.structure.StructureRotation;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.Vector;
 
 import java.util.*;
@@ -51,6 +53,24 @@ public class Utils {
         }
 
         return locations;
+    }
+
+    public static List<ItemStack> split(ItemStack stack, int count){
+        List<ItemStack> stacks = new ArrayList<>();
+        if(stack == null){
+            System.out.println("Stack in split is null!");
+            return stacks;
+        }
+        int maxStack = stack.getMaxStackSize();
+
+        while (count>0){
+            int qty = Math.min(count, maxStack);
+            ItemStack i = stack.asQuantity(qty);
+            stacks.add(i);
+            count-=qty;
+        }
+
+        return stacks;
     }
 
     public static List<LocationData> getLineWithCornerData(Location l1, Location l2, double density, boolean skipFirst, int cornerDistance) {
@@ -320,5 +340,21 @@ public class Utils {
     public static <K, V> Map.Entry<K, V> random(Map<K, V> skinLinks) {
         int rng = ThreadLocalRandom.current().nextInt(skinLinks.size());
         return skinLinks.entrySet().stream().skip(rng).findFirst().get();
+    }
+
+    private Map<String, Object> convertConfigToMap(ConfigurationSection section) {
+        Map<String, Object> map = new HashMap<>();
+
+        for (String key : section.getKeys(false)) {
+            if (section.isConfigurationSection(key)) {
+                // Recursively convert nested sections
+                map.put(key, convertConfigToMap(section.getConfigurationSection(key)));
+            } else {
+                // Put the values into the map
+                map.put(key, section.get(key));
+            }
+        }
+
+        return map;
     }
 }

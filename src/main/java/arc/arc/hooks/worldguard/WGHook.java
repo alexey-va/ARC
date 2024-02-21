@@ -1,4 +1,4 @@
-package arc.arc.hooks;
+package arc.arc.hooks.worldguard;
 
 import arc.arc.configs.Config;
 import arc.arc.util.TextUtil;
@@ -19,7 +19,7 @@ import org.bukkit.event.block.BlockPlaceEvent;
 import java.util.HashSet;
 import java.util.Set;
 
-public class WGHook implements Listener, ArcModule {
+public class WGHook implements Listener {
 
     private static final Set<Material> whitelist = new HashSet<>() {{
         add(Material.FIRE);

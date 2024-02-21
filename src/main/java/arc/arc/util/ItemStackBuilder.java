@@ -2,12 +2,15 @@ package arc.arc.util;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.minimessage.tag.Tag;
+import net.kyori.adventure.text.minimessage.tag.TagPattern;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.intellij.lang.annotations.Subst;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -15,6 +18,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static arc.arc.util.TextUtil.mm;
 import static arc.arc.util.TextUtil.strip;
 
 public class ItemStackBuilder {
@@ -56,6 +60,16 @@ public class ItemStackBuilder {
 
     public ItemStackBuilder tagResolver(TagResolver tagResolver) {
         this.tagResolver = tagResolver;
+        return this;
+    }
+
+    public ItemStackBuilder appendResolver(TagResolver append) {
+        tagResolver = TagResolver.resolver(tagResolver, append);
+        return this;
+    }
+
+    public ItemStackBuilder appendResolver(@TagPattern String name, String serializedString) {
+        tagResolver = TagResolver.resolver(tagResolver, TagResolver.resolver(name, Tag.inserting(mm(serializedString, true))));
         return this;
     }
 

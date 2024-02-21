@@ -5,7 +5,7 @@ import net.advancedplugins.ae.api.EnchantApplyEvent;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 
-public class AEHook implements Listener, ArcModule {
+public class AEHook implements Listener {
 
     @EventHandler
     public void aeApply(EnchantApplyEvent event) {

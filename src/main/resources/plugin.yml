@@ -45,6 +45,9 @@ commands:
   build-book:
     description: build-book
     usage: build-book
-  arc-resourcepack:
+  em-test:
+    description: build-book
+    usage: build-book
+  arc-invest:
     description: build-book
     usage: build-book

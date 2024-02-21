@@ -27,20 +27,22 @@ public class RankMessager implements ChannelListener {
         CMIUser user = CMI.getInstance().getPlayerManager().getUser(data.playerUuid);
 
         if (user == null) return;
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                CMIRank rank = user.getRank();
-                int priority = Integer.parseInt(rank.getName().substring(1));
-                if (priority >= data.priority) return;
-                if (!rank.getName().equals(data.rankName)) {
-                    CMIRank cmiRank = CMI.getInstance().getRankManager().getRank(data.rankName);
-                    if (cmiRank == null) return;
-                    user.setRank(cmiRank);
-                    System.out.println("Setting user's rank: " +user.getName()+" to "+cmiRank.getName());
+        try {
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    CMIRank rank = user.getRank();
+                    int priority = Integer.parseInt(rank.getName().substring(1));
+                    if (priority >= data.priority) return;
+                    if (!rank.getName().equals(data.rankName)) {
+                        CMIRank cmiRank = CMI.getInstance().getRankManager().getRank(data.rankName);
+                        if (cmiRank == null) return;
+                        user.setRank(cmiRank);
+                        System.out.println("Setting user's rank: " + user.getName() + " to " + cmiRank.getName());
+                    }
                 }
-            }
-        }.runTask(ARC.plugin);
+            }.runTask(ARC.plugin);
+        } catch (Exception ignored){}
     }
 
     public void send(RankData rankData) {

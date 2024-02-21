@@ -25,7 +25,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
-public class PSHook implements Listener, ArcModule {
+public class PSHook implements Listener {
 
     final NamespacedKey key1;
     private final HashSet<UUID> cooldownMessage = new HashSet<>();

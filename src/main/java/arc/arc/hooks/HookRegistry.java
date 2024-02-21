@@ -4,13 +4,14 @@ import arc.arc.ARC;
 import arc.arc.configs.Config;
 import arc.arc.farm.*;
 import arc.arc.hooks.citizens.CitizensHook;
+import arc.arc.hooks.elitemobs.EMHook;
 import arc.arc.hooks.lands.LandsHook;
 import arc.arc.hooks.viaversion.ViaVersionHook;
+import arc.arc.hooks.worldguard.WGHook;
 import arc.arc.listeners.*;
 import org.bukkit.Bukkit;
 
-import java.util.ArrayList;
-import java.util.List;
+
 
 import static org.bukkit.Bukkit.getServer;
 
@@ -27,10 +28,10 @@ public class HookRegistry {
     public static ItemsAdderHook itemsAdderHook;
     public static CitizensHook citizensHook;
     public static ViaVersionHook viaVersionHook;
-    public WGHook wgHook;
-    public ShopHook shopHook;
+    public static WGHook wgHook;
+    public static ShopHook shopHook;
     public static SFHook sfHook;
-    public EMHook emHook;
+    public static EMHook emHook;
     public AEHook aeHook;
 
 
@@ -40,12 +41,9 @@ public class HookRegistry {
     public BlockListener blockListener;
     public JoinListener joinListener;
 
-    List<ArcModule> arcModuleList = new ArrayList<>();
-
     public void setupHooks() {
         registerEvents();
 
-        if (emHook != null) emHook.init();
         if (psHook != null) psHook.init();
         papiHook = new PAPIHook();
         papiHook.register();
@@ -57,10 +55,10 @@ public class HookRegistry {
     }
 
     public void reloadHooks(){
-        if(emHook != null) emHook.init();
+        if(emHook != null) emHook.reload();
     }
 
-    public void cleanHooks() {
+    public void cancelTasks() {
         if (emHook != null) emHook.cancel();
         if (psHook != null) psHook.cancel();
         if (farmManager != null) farmManager.clear();
@@ -84,9 +82,10 @@ public class HookRegistry {
             aeHook = new AEHook();
             Bukkit.getPluginManager().registerEvents(aeHook, ARC.plugin);
         }
-        if (Bukkit.getPluginManager().isPluginEnabled("EliteMobs") && emHook == null) {
-            emHook = new EMHook();
-            Bukkit.getPluginManager().registerEvents(emHook, ARC.plugin);
+        if (getServer().getPluginManager().getPlugin("EliteMobs") != null) {
+            if (getServer().getPluginManager().getPlugin("EliteMobs").isEnabled()) {
+                emHook = new EMHook();
+            }
         }
         if (Bukkit.getPluginManager().isPluginEnabled("HuskHomes") && huskHomesHook == null) {
             huskHomesHook = new HuskHomesHook();
@@ -140,12 +139,10 @@ public class HookRegistry {
         if (getServer().getPluginManager().getPlugin("Parties") != null) {
             if (getServer().getPluginManager().getPlugin("Parties").isEnabled()) {
                 partiesHook = new PartiesHook();
-                arcModuleList.add(partiesHook);
             }
         }
         if ((Bukkit.getPluginManager().isPluginEnabled("EconomyShopGUI") || Bukkit.getPluginManager().isPluginEnabled("EconomyShopGUI-Premium")) && shopHook == null) {
             shopHook = new ShopHook();
-            arcModuleList.add(shopHook);
             Bukkit.getPluginManager().registerEvents(shopHook, ARC.plugin);
         }
 

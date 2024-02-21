@@ -2,15 +2,17 @@ package arc.arc;
 
 import arc.arc.autobuild.BuildingManager;
 import arc.arc.commands.*;
-import arc.arc.commands.tabcompletes.BuildBookTabComplete;
-import arc.arc.commands.tabcompletes.LocationPoolTabComplete;
-import arc.arc.commands.tabcompletes.TreasureHuntTabComplete;
-import arc.arc.commands.tabcompletes.TreasurePoolTabcomplete;
+import arc.arc.commands.tabcompletes.*;
 import arc.arc.configs.*;
 import arc.arc.farm.FarmManager;
 import arc.arc.hooks.HookRegistry;
+import arc.arc.invest.BusinessManager;
 import arc.arc.network.NetworkRegistry;
 import arc.arc.network.RedisManager;
+import arc.arc.stock.StockClient;
+import arc.arc.stock.StockMarket;
+import arc.arc.stock.StockMessager;
+import arc.arc.stock.StockPlayerManager;
 import arc.arc.treasurechests.TreasureHuntManager;
 import arc.arc.treasurechests.locationpools.LocationPoolManager;
 import arc.arc.util.CooldownManager;
@@ -45,14 +47,14 @@ public final class ARC extends JavaPlugin {
 
     @Override
     public void onLoad() {
-        if (!loadedPacketApi) {
-            PacketEvents.setAPI(SpigotPacketEventsBuilder.build(this));
-            PacketEvents.getAPI().getSettings().reEncodeByDefault(false)
-                    .checkForUpdates(true)
-                    .bStats(true);
-            PacketEvents.getAPI().load();
-            loadedPacketApi = true;
-        }
+/*        if (!loadedPacketApi) {
+                PacketEvents.setAPI(SpigotPacketEventsBuilder.build(this));
+                PacketEvents.getAPI().getSettings().reEncodeByDefault(false)
+                                .checkForUpdates(true)
+                                .bStats(true);
+                PacketEvents.getAPI().load();
+                loadedPacketApi = true;
+            }*/
     }
 
     @Override
@@ -84,6 +86,12 @@ public final class ARC extends JavaPlugin {
         System.out.println("Loading board config");
         boardConfig = new BoardConfig();
 
+        System.out.println("Loading invest config");
+        InvestConfig.load();
+
+        System.out.println("Loading stock config");
+        StockConfig.load();
+
         if (HookRegistry.farmManager != null) {
             HookRegistry.farmManager.clear();
             HookRegistry.farmManager = new FarmManager();
@@ -94,7 +102,7 @@ public final class ARC extends JavaPlugin {
     @Override
     public void onDisable() {
         // Plugin shutdown logic
-        hookRegistry.cleanHooks();
+        hookRegistry.cancelTasks();
         TreasureHuntManager.stopAll();
         if (treasureHuntConfig != null) {
             treasureHuntConfig.saveTreasurePools(true);
@@ -105,6 +113,9 @@ public final class ARC extends JavaPlugin {
             locationPoolConfig.cancelTasks();
         }
         BuildingManager.stopAll();
+        StockMarket.cancelTasks();
+        StockMarket.saveHistory();
+        StockClient.stopClient();
     }
 
     public void load() {
@@ -132,6 +143,14 @@ public final class ARC extends JavaPlugin {
 
         System.out.println("Setting up building cleanup task");
         BuildingManager.setupCleanupTask();
+
+        System.out.println("Setting up investments");
+        BusinessManager.load();
+
+        System.out.println("Setting up stock");
+        StockMarket.startTasks();
+        StockPlayerManager.startTasks();
+        StockPlayerManager.loadStockPlayers();
     }
 
     private void registerCommands() {
@@ -146,7 +165,9 @@ public final class ARC extends JavaPlugin {
         getCommand("treasure-pool").setTabCompleter(new TreasurePoolTabcomplete());
         getCommand("build-book").setExecutor(new BuildBookCommand());
         getCommand("build-book").setTabCompleter(new BuildBookTabComplete());
-        getCommand("arc-resourcepack").setExecutor(new ResourcePackCommand());
+        getCommand("em-test").setExecutor(new EmTestCommand());
+        getCommand("arc-invest").setExecutor(new InvestCommand());
+        getCommand("arc-invest").setTabCompleter(new InvestTabComplete());
     }
 
     private boolean setupEconomy() {

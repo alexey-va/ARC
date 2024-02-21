@@ -2,6 +2,7 @@ package arc.arc.board;
 
 import arc.arc.network.ArcSerializable;
 import arc.arc.util.HeadUtil;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -22,7 +23,9 @@ import java.util.UUID;
 public class ItemIcon extends ArcSerializable {
 
     Material material;
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     UUID headUuid;
+    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
     int modelData = 0;
 
     public static ItemIcon of(UUID uuid){
@@ -45,6 +48,7 @@ public class ItemIcon extends ArcSerializable {
         icon.setMaterial(stack.getType());
         if(stack.getItemMeta().hasCustomModelData()) icon.setModelData(stack.getItemMeta().getCustomModelData());
         if(stack.getType() == Material.PLAYER_HEAD){
+            System.out.println(stack.serialize());
             SkullMeta skullMeta = (SkullMeta)stack.getItemMeta();
             if(skullMeta.getOwningPlayer() != null) {
                 icon.setHeadUuid(skullMeta.getOwningPlayer().getUniqueId());

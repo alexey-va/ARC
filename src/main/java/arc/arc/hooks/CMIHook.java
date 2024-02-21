@@ -3,7 +3,7 @@ package arc.arc.hooks;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
-public class CMIHook implements ArcModule {
+public class CMIHook {
 
     public void sendBossbar(String bossBarName,
                             String message,

@@ -60,7 +60,7 @@ add-menu:
   delete-lore: []
   confirm-delete: "<dark_red>Нажмите для потверждения"
   edit-display: "<gray>Изменить"
-  edit-lore: "<gray>Цена: "
+  edit-lore: "<gray>Цена: <green><cost><white>💰"
   published-successfully: "<green>Ваше сообщение было опубликовано!"
   edited-successfully: "<green>Ваше сообщение было изменено!"
   not-completed: "<red>Остались незаполненные поля!"

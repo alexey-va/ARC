@@ -1,27 +1,20 @@
-package arc.arc.hooks;
+package arc.arc.hooks.elitemobs;
 
 import arc.arc.ARC;
 import arc.arc.configs.Config;
 import com.destroystokyo.paper.ParticleBuilder;
-import com.magmaguy.elitemobs.api.EliteExplosionEvent;
 import com.magmaguy.elitemobs.wormhole.Wormhole;
 import org.bukkit.Particle;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.ArrayList;
 import java.util.Collection;
 
-public class EMHook implements Listener, ArcModule {
+public class EMWormholes {
 
     private static BukkitTask wormholeTask;
-
-    public EMHook() {
-        init();
-    }
 
     public void init() {
         cancel();
@@ -39,9 +32,14 @@ public class EMHook implements Listener, ArcModule {
         }.runTaskTimer(ARC.plugin, 20L, Config.wormholePeriod);
 
     }
+    public void cancel() {
+        if (wormholeTask != null && !wormholeTask.isCancelled()) wormholeTask.cancel();
+    }
+
 
     private void runWormholes() {
         Collection<ParticleBuilder> particleBuilders = new ArrayList<>();
+        if(Wormhole.getWormholes() == null) return;
         for (Wormhole wormhole : Wormhole.getWormholes()) {
             try {
                 if (wormhole.getWormholeEntry1().getLocation() == null || wormhole.getWormholeEntry2().getLocation() == null) {
@@ -71,18 +69,6 @@ public class EMHook implements Listener, ArcModule {
                 }
             }
         }.runTaskAsynchronously(ARC.plugin);
-    }
-
-    @EventHandler
-    public void emExplosion(EliteExplosionEvent event) {
-        if (Config.noExpWorlds.isEmpty()) return;
-        if (Config.noExpWorlds.contains(event.getExplosionSourceLocation().getWorld().getName())) {
-            event.setCancelled(true);
-        }
-    }
-
-    public void cancel() {
-        if (wormholeTask != null && !wormholeTask.isCancelled()) wormholeTask.cancel();
     }
 
 }

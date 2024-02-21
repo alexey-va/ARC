@@ -150,9 +150,11 @@ public class BoardEntry extends ArcSerializable {
                 Component component = strip(LegacyComponentSerializer.legacyAmpersand().deserialize(builder.toString()));
                 if (!components.isEmpty()) {
                     List<Component> children = components.get(components.size()-1).children();
-                    Style style = children.get(children.size() - 1).style();
-                    Component pre = Component.text("", style);
-                    component = pre.append(component);
+                    if(!children.isEmpty()) {
+                        Style style = children.get(children.size() - 1).style();
+                        Component pre = Component.text("", style);
+                        component = pre.append(component);
+                    }
                 }
                 components.add(component);
                 count = 0;
@@ -210,25 +212,25 @@ public class BoardEntry extends ArcSerializable {
     }
 
     public void setText(String text) {
-        if (text.equals(this.text)) return;
+        if (Objects.equals(text, this.text)) return;
         this.text = text;
         dirty = true;
     }
 
     public void setTitle(String title) {
-        if (title.equals(this.title)) return;
+        if (Objects.equals(title, this.title)) return;
         this.title = title;
         dirty = true;
     }
 
     public void setIcon(ItemIcon icon) {
-        if (icon.equals(this.icon)) return;
+        if (Objects.equals(icon, this.icon)) return;
         this.icon = icon;
         dirty = true;
     }
 
     public void setType(Type type) {
-        if (type.equals(this.type)) return;
+        if (Objects.equals(type, this.type)) return;
         this.type = type;
         dirty = true;
     }

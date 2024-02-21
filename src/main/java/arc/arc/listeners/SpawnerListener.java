@@ -1,6 +1,5 @@
 package arc.arc.listeners;
 
-import arc.arc.hooks.ArcModule;
 import arc.arc.util.CooldownManager;
 import arc.arc.util.TextUtil;
 import net.kyori.adventure.text.Component;
@@ -15,7 +14,7 @@ import org.bukkit.persistence.PersistentDataContainer;
 
 import java.util.Set;
 
-public class SpawnerListener implements ArcModule, Listener {
+public class SpawnerListener implements Listener {
 
     @EventHandler
     public void spawnerBreak(BlockBreakEvent event){

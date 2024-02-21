@@ -1,7 +1,6 @@
 package arc.arc.hooks.lands;
 
 import arc.arc.ARC;
-import arc.arc.hooks.ArcModule;
 import arc.arc.hooks.HookRegistry;
 import me.angeschossen.lands.api.LandsIntegration;
 import me.angeschossen.lands.api.flags.type.Flags;
@@ -16,7 +15,7 @@ import org.bukkit.entity.Player;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-public class LandsHook implements ArcModule {
+public class LandsHook {
 
     LandsIntegration integration;
 

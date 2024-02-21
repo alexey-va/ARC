@@ -3,6 +3,10 @@ package arc.arc.network;
 import arc.arc.board.Board;
 import arc.arc.board.BoardMessager;
 import arc.arc.hooks.lands.LandsMessager;
+import arc.arc.stock.StockMarket;
+import arc.arc.stock.StockMessager;
+import arc.arc.stock.StockPlayerManager;
+import arc.arc.stock.StockPlayerMessager;
 import arc.arc.xserver.announcements.AnnounceManager;
 import arc.arc.xserver.announcements.AnnouncementMessager;
 import arc.arc.xserver.playerlist.PlayerListListener;
@@ -52,6 +56,14 @@ public class NetworkRegistry {
         BoardMessager boardMessager = new BoardMessager("arc.board_update", redisManager);
         redisManager.registerChannel(boardMessager.channel, boardMessager);
         Board.instance().setMessager(boardMessager);
+
+        StockMessager stockMessager = new StockMessager("arc.stock_market", redisManager);
+        redisManager.registerChannel(stockMessager.getChannel(), stockMessager);
+        StockMarket.setMessager(stockMessager);
+
+        StockPlayerMessager stockPlayerMessager = new StockPlayerMessager("arc.stock_player_updates", redisManager);
+        redisManager.registerChannel(stockPlayerMessager.getChannel(), stockPlayerMessager);
+        StockPlayerManager.setMessager(stockPlayerMessager);
 
         redisManager.init();
     }

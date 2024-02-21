@@ -18,7 +18,6 @@ import org.bukkit.scheduler.BukkitTask;
 
 public class JoinListener implements Listener {
 
-    private static BukkitTask shareRankTask;
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event){
@@ -31,12 +30,6 @@ public class JoinListener implements Listener {
     }
 
     public JoinListener(){
-        shareRankTask = new BukkitRunnable() {
-            @Override
-            public void run() {
-                Bukkit.getOnlinePlayers().forEach(JoinListener.this::shareRank);
-            }
-        }.runTaskTimer(ARC.plugin, 20L, 20L);
     }
 
     @EventHandler

@@ -7,7 +7,7 @@ import com.fasterxml.jackson.datatype.jsr310.JSR310Module;
 public class RedisSerializer {
 
 
-    public static String toJson(ArcSerializable serializable){
+    public static String toJson(Object serializable){
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JSR310Module());
         try {
@@ -18,7 +18,7 @@ public class RedisSerializer {
         }
     }
 
-    public static <T extends ArcSerializable> T fromJson(String json, Class<T> clazz){
+    public static <T> T fromJson(String json, Class<T> clazz){
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JSR310Module());
         try {

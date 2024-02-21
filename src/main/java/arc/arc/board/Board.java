@@ -55,7 +55,7 @@ public class Board {
         evictExpiredTask = new BukkitRunnable() {
             @Override
             public void run() {
-                if(!BoardConfig.mainServer) return;
+                if (!BoardConfig.mainServer) return;
                 boardMap.values().stream()
                         .filter(be -> be.tillExpire() <= 0)
                         .forEach(be -> deleteBoard(be.entryUuid, true));
@@ -65,7 +65,7 @@ public class Board {
         announceTask = new BukkitRunnable() {
             @Override
             public void run() {
-                if(BoardConfig.mainServer) announceNext();
+                if (BoardConfig.mainServer) announceNext();
             }
         }.runTaskTimer(ARC.plugin, 120L, 20L * BoardConfig.secondsAnnounce);
     }
@@ -77,7 +77,7 @@ public class Board {
                     saveBoardEntry(e.entryUuid);
 
                     AnnouncementData data = AnnouncementData.builder()
-                            .message("&7[&6"+e.playerName+"&7]&r "+e.title)
+                            .message("&7[&6" + e.playerName + "&7]&r " + e.title)
                             .minimessage(false)
                             .originServer(Config.server)
                             .seconds(10)
@@ -104,7 +104,7 @@ public class Board {
         if (boardEntry == null) return;
         boardMap.put(boardEntry.entryUuid, boardEntry);
         updateCache(boardEntry.entryUuid);
-        if(redisSync)saveBoardEntry(boardEntry.entryUuid);
+        if (redisSync) saveBoardEntry(boardEntry.entryUuid);
     }
 
 
@@ -119,7 +119,7 @@ public class Board {
     public void loadBoardEntry(UUID uuid) {
         ARC.redisManager.loadMapEntry("arc.board", uuid.toString())
                 .thenAccept(list -> {
-                    //System.out.println("Loaded "+uuid+" "+list);
+                    System.out.println("Updating "+uuid+" "+list);
                     if (list.isEmpty() || list.get(0) == null || list.get(0).equals("null")) {
                         deleteBoard(uuid, false);
                         return;
@@ -131,16 +131,16 @@ public class Board {
 
     public void saveBoardEntry(UUID uuid) {
         BoardEntry entry = boardMap.get(uuid);
-        if(entry == null){
+        if (entry == null) {
             //System.out.println("No entry with "+uuid+" found!");
             return;
         }
         //System.out.println("Saving entry "+uuid);
-        if(!entry.dirty) return;
+        if (!entry.dirty) return;
         entry.setDirty(false);
         CompletableFuture.supplyAsync(() -> RedisSerializer.toJson(entry))
-                .thenAccept(json -> ARC.redisManager.saveMapKey("arc.board", uuid.toString(), json))
-                .thenAccept((v) -> messager.sendUpdate(uuid));
+                .thenAccept(json -> ARC.redisManager.saveMapKey("arc.board", uuid.toString(), json));
+        Bukkit.getScheduler().runTaskLater(ARC.plugin, () -> messager.sendUpdate(uuid), 20L);
     }
 
     public void deleteBoard(UUID uuid, boolean redisSync) {

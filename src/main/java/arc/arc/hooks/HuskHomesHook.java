@@ -20,7 +20,7 @@ import org.bukkit.event.Listener;
 
 import java.util.UUID;
 
-public class HuskHomesHook implements Listener, ArcModule {
+public class HuskHomesHook implements Listener {
 
     @EventHandler
     public void husk(TeleportWarmupEvent event) {

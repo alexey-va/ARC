@@ -15,9 +15,14 @@ public class HeadUtil {
         if(uuid == null) return item;
         SkullMeta meta = (SkullMeta) item.getItemMeta();
         OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(uuid);
-        meta.setOwningPlayer(offlinePlayer);
-        item.setItemMeta(meta);
-        return item;
+        if(offlinePlayer.getPlayerProfile().getName() == null) return item;
+        try {
+            meta.setOwningPlayer(offlinePlayer);
+            item.setItemMeta(meta);
+            return item;
+        } catch (Exception e){
+            return item;
+        }
     }
 
 }

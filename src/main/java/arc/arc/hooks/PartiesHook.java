@@ -7,7 +7,7 @@ import com.alessiodp.parties.api.interfaces.PartyPlayer;
 
 import java.util.UUID;
 
-public class PartiesHook implements ArcModule {
+public class PartiesHook {
 
     PartiesAPI api;
 

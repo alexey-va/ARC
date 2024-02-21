@@ -36,6 +36,8 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static arc.arc.util.TextUtil.strip;
+
 public class AddBoardGui extends ChestGui implements Inputable {
 
     public String shortName = null;
@@ -256,35 +258,40 @@ public class AddBoardGui extends ChestGui implements Inputable {
                 .toGuiItemBuilder()
                 .clickEvent(click -> {
                     click.setCancelled(true);
+                    try {
+                        if (!ARC.getEcon().has(player, BoardConfig.editCost)) {
+                            notEnoughMoneyDisplay(publishItem);
+                            return;
+                        }
 
-                    if (!ARC.getEcon().has(player, BoardConfig.editCost)) {
-                        notEnoughMoneyDisplay(publishItem);
-                        return;
+                        if (shortName == null) {
+                            List<Component> lore = new ArrayList<>();
+                            if (type == null) lore.add(Component.text("Тип не установлен", NamedTextColor.GRAY));
+                            if (icon == null) lore.add(Component.text("Иконка не установлена", NamedTextColor.GRAY));
+                            if (shortName == null)
+                                lore.add(Component.text("Короткое название не установлено", NamedTextColor.GRAY));
+
+                            GuiUtils.temporaryChange(publishItem.getItem(),
+                                    Component.text("Остались незаполненные поля", NamedTextColor.RED),
+                                    lore, 60, this::update);
+
+                            update();
+                            return;
+                        }
+
+                        if (!takeMoney(BoardConfig.publishCost)) return;
+
+                        BoardEntry boardEntry = new BoardEntry(this.type, player.getName(), player.getUniqueId(), icon, description, shortName,
+                                System.currentTimeMillis(), System.currentTimeMillis(), UUID.randomUUID());
+                        Board.instance().addBoardEntry(boardEntry, true);
+                        //System.out.println("Adding board entry!");
+                        player.sendMessage(TextUtil.mm(BoardConfig.getString("add-menu.published-successfully")));
+
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        player.sendMessage(TextUtil.error());
+                        click.getWhoClicked().closeInventory();
                     }
-
-                    if (shortName == null) {
-                        List<Component> lore = new ArrayList<>();
-                        if (type == null) lore.add(Component.text("Тип не установлен", NamedTextColor.GRAY));
-                        if (icon == null) lore.add(Component.text("Иконка не установлена", NamedTextColor.GRAY));
-                        if (shortName == null)
-                            lore.add(Component.text("Короткое название не установлено", NamedTextColor.GRAY));
-
-                        GuiUtils.temporaryChange(publishItem.getItem(),
-                                Component.text("Остались незаполненные поля", NamedTextColor.RED),
-                                lore, 60, this::update);
-
-                        update();
-                        return;
-                    }
-
-                    if (!takeMoney(BoardConfig.publishCost)) return;
-
-                    BoardEntry boardEntry = new BoardEntry(this.type, player.getName(), player.getUniqueId(), icon, description, shortName,
-                            System.currentTimeMillis(), System.currentTimeMillis(), UUID.randomUUID());
-                    Board.instance().addBoardEntry(boardEntry, true);
-                    //System.out.println("Adding board entry!");
-                    player.sendMessage(TextUtil.mm(BoardConfig.getString("add-menu.published-successfully")));
-
                     new BukkitRunnable() {
                         @Override
                         public void run() {
@@ -299,42 +306,49 @@ public class AddBoardGui extends ChestGui implements Inputable {
                 .modelData(11007)
                 .display(BoardConfig.getString("add-menu.edit-display"))
                 .lore(BoardConfig.getStringList("add-menu.edit-lore"))
+                .tagResolver(TagResolver.resolver("cost",
+                        Tag.inserting(strip(Component.text(TextUtil.formatAmount(BoardConfig.editCost))))))
                 .toGuiItemBuilder()
                 .clickEvent(click -> {
                     click.setCancelled(true);
+                    try {
+                        if (!ARC.getEcon().has(player, BoardConfig.editCost)) {
+                            notEnoughMoneyDisplay(publishItem);
+                            return;
+                        }
 
-                    if (!ARC.getEcon().has(player, BoardConfig.editCost)) {
-                        notEnoughMoneyDisplay(publishItem);
-                        return;
+                        if (shortName == null) {
+                            List<Component> lore = new ArrayList<>();
+                            if (type == null) lore.add(Component.text("Тип не установлен", NamedTextColor.GRAY));
+                            if (icon == null) lore.add(Component.text("Иконка не установлена", NamedTextColor.GRAY));
+                            if (shortName == null)
+                                lore.add(Component.text("Короткое название не установлено", NamedTextColor.GRAY));
+
+                            GuiUtils.temporaryChange(publishItem.getItem(),
+                                    Component.text("Остались незаполненные поля", NamedTextColor.RED),
+                                    lore, 60, this::update);
+
+                            update();
+                            return;
+                        }
+
+                        if (!takeMoney(BoardConfig.editCost)) return;
+
+                        entry.setText(description);
+                        entry.setTitle(shortName);
+                        entry.setIcon(icon);
+                        entry.setType(type);
+
+                        Board.instance().updateCache(entry.entryUuid);
+                        Board.instance().saveBoardEntry(entry.entryUuid);
+                        player.sendMessage(TextUtil.mm(BoardConfig.getString("add-menu.edited-successfully")));
+
+                        Bukkit.getScheduler().runTaskLater(ARC.plugin, () -> new BoardGui(player).show(player), 1L);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        player.sendMessage(TextUtil.error());
+                        click.getWhoClicked().closeInventory();
                     }
-
-                    if (shortName == null) {
-                        List<Component> lore = new ArrayList<>();
-                        if (type == null) lore.add(Component.text("Тип не установлен", NamedTextColor.GRAY));
-                        if (icon == null) lore.add(Component.text("Иконка не установлена", NamedTextColor.GRAY));
-                        if (shortName == null)
-                            lore.add(Component.text("Короткое название не установлено", NamedTextColor.GRAY));
-
-                        GuiUtils.temporaryChange(publishItem.getItem(),
-                                Component.text("Остались незаполненные поля", NamedTextColor.RED),
-                                lore, 60, this::update);
-
-                        update();
-                        return;
-                    }
-
-                    if (!takeMoney(BoardConfig.editCost)) return;
-
-                    entry.setText(description);
-                    entry.setTitle(shortName);
-                    entry.setIcon(icon);
-                    entry.setType(type);
-
-                    Board.instance().updateCache(entry.entryUuid);
-                    Board.instance().saveBoardEntry(entry.entryUuid);
-                    player.sendMessage(TextUtil.mm(BoardConfig.getString("add-menu.edited-successfully")));
-
-                    Bukkit.getScheduler().runTaskLater(ARC.plugin, () -> new BoardGui(player).show(player), 1L);
                 }).build();
     }
 

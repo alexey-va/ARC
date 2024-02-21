@@ -1,0 +1,44 @@
+main-server: false
+refresh-rate: 60
+commission: 0.01
+finn-api-key: "cn7rbt9r01qplv1e8j50cn7rbt9r01qplv1e8j5g"
+poly-api-key: "l6SQGsz3pFyNn7BW6_dQdP0esDqP5Pwr"
+main-menu-back-command: "mm"
+currencies:
+  - id: bitcoin
+    display: "&6Bitcoin"
+    lore:
+      - USD/JPY
+    crypto: true
+    icon: '{"material":"PAPER"}'
+  - id: tron
+    display: "&4Tron"
+    lore:
+      - USD/JPY
+    crypto: true
+    icon: '{"material":"PAPER"}'
+  - id: ethereum
+    display: "&9Ethereum"
+    lore:
+      - USD/JPY
+    crypto: true
+    icon: '{"material":"PAPER"}'
+  - id: dogecoin
+    display: "&eDoge"
+    lore:
+      - USD/JPY
+    crypto: true
+    icon: '{"material":"PAPER"}'
+  - id: "EUR/USD"
+    display: "&eEURUSD"
+    lore:
+      - USD/JPY
+    icon: '{"material":"PAPER"}'
+  - id: "USD/JPY"
+    lore:
+      - USD/JPY
+    display: "&eUSD/JPY"
+    icon: '{"material":"PAPER"}'
+stocks:
+  - symbol: AAPL
+    name: "&6Apple"

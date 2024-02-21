@@ -7,7 +7,7 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
-public class PAPIHook extends PlaceholderExpansion implements ArcModule {
+public class PAPIHook extends PlaceholderExpansion {
 
 
     @Override
@@ -56,7 +56,7 @@ public class PAPIHook extends PlaceholderExpansion implements ArcModule {
             case "tag":
                 String s = HookRegistry.partiesHook.tag(player.getUniqueId());
                 if(s == null) return "";
-                if (s.length() != 0) return Config.partyTag
+                if (!s.isEmpty()) return Config.partyTag
                         .replace("%tag%", s)
                         .replace("%color%", HookRegistry.partiesHook.color(player.getUniqueId()));
                 else return "";
