@@ -8,6 +8,7 @@ import arc.arc.hooks.elitemobs.EMHook;
 import arc.arc.hooks.lands.LandsHook;
 import arc.arc.hooks.viaversion.ViaVersionHook;
 import arc.arc.hooks.worldguard.WGHook;
+import arc.arc.hooks.yamipa.YamipaHook;
 import arc.arc.listeners.*;
 import org.bukkit.Bukkit;
 
@@ -32,6 +33,7 @@ public class HookRegistry {
     public static ShopHook shopHook;
     public static SFHook sfHook;
     public static EMHook emHook;
+    public static YamipaHook yamipaHook;
     public AEHook aeHook;
 
 
@@ -104,6 +106,11 @@ public class HookRegistry {
         if (getServer().getPluginManager().getPlugin("ViaVersion") != null) {
             if (getServer().getPluginManager().getPlugin("ViaVersion").isEnabled()) {
                 viaVersionHook = new ViaVersionHook();
+            }
+        }
+        if (getServer().getPluginManager().getPlugin("YamipaPlugin") != null) {
+            if (getServer().getPluginManager().getPlugin("YamipaPlugin").isEnabled()) {
+                yamipaHook = new YamipaHook();
             }
         }
         if (getServer().getPluginManager().getPlugin("ItemsAdder") != null) {

@@ -72,6 +72,17 @@ public class ProfileMenu extends ChestGui {
                 .clickEvent(click -> click.setCancelled(true)).build();
         staticPane.addItem(statistic, 1, 0);
 
+
+
+        balance = new ItemStackBuilder(Material.STICK)
+                .modelData(11138)
+                .display(StockConfig.string("profile-menu.balance-display"))
+                .lore(StockConfig.stringList("profile-menu.balance-lore"))
+                .tagResolver(tagResolver)
+                .toGuiItemBuilder()
+                .clickEvent(this::acceptBalanceClick).build();
+        staticPane.addItem(balance, 3, 0);
+
         auto = new ItemStackBuilder(Material.LEVER)
                 .display(StockConfig.string("profile-menu.auto-take-display"))
                 .lore(StockConfig.stringList("profile-menu.auto-take-lore"))
@@ -83,18 +94,10 @@ public class ProfileMenu extends ChestGui {
                     auto.setItem(new ItemStackBuilder(Material.LEVER)
                             .display(StockConfig.string("profile-menu.auto-take-display"))
                             .lore(StockConfig.stringList("profile-menu.auto-take-lore"))
-                            .tagResolver(tagResolver).build());
+                            .tagResolver(stockPlayer.tagResolver()).build());
                     update();
                 }).build();
-
-        balance = new ItemStackBuilder(Material.STICK)
-                .modelData(11138)
-                .display(StockConfig.string("profile-menu.balance-display"))
-                .lore(StockConfig.stringList("profile-menu.balance-lore"))
-                .tagResolver(tagResolver)
-                .toGuiItemBuilder()
-                .clickEvent(this::acceptBalanceClick).build();
-        staticPane.addItem(balance, 3, 0);
+        staticPane.addItem(auto, 5, 0);
     }
 
     private double getNewBalance(InventoryClickEvent click) {
@@ -126,13 +129,10 @@ public class ProfileMenu extends ChestGui {
 
         // check for bankruptcy
         if (totalGains < 0 && Math.abs(totalGains) > newBalance) {
-            TagResolver resolver = TagResolver.resolver("total_gains", Tag.inserting(
-                    mm(TextUtil.formatAmount(totalGains), true)
-            ));
             GuiUtils.temporaryChange(balance.getItem(),
-                    mm(StockConfig.string("profile-menu.will-go-bankrupt-display"), resolver),
+                    mm(StockConfig.string("profile-menu.will-go-bankrupt-display")),
                     StockConfig.stringList("profile-menu.will-go-bankrupt-lore").stream()
-                            .map(s -> mm(s, resolver)).toList(),
+                            .map(TextUtil::mm).toList(),
                     100L, this::update);
             this.update();
             return;

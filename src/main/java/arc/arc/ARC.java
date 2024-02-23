@@ -87,7 +87,7 @@ public final class ARC extends JavaPlugin {
         boardConfig = new BoardConfig();
 
         System.out.println("Loading invest config");
-        InvestConfig.load();
+        //InvestConfig.load();
 
         System.out.println("Loading stock config");
         StockConfig.load();
@@ -144,8 +144,8 @@ public final class ARC extends JavaPlugin {
         System.out.println("Setting up building cleanup task");
         BuildingManager.setupCleanupTask();
 
-        System.out.println("Setting up investments");
-        BusinessManager.load();
+        //System.out.println("Setting up investments");
+        //BusinessManager.load();
 
         System.out.println("Setting up stock");
         StockMarket.startTasks();

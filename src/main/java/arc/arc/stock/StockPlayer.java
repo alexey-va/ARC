@@ -1,12 +1,15 @@
 package arc.arc.stock;
 
+import arc.arc.configs.StockConfig;
 import arc.arc.util.TextUtil;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.*;
 import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
+import org.bukkit.Bukkit;
 import org.bukkit.configuration.serialization.ConfigurationSerializable;
+import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
@@ -25,7 +28,7 @@ public class StockPlayer {
     UUID playerUuid;
     Map<String, List<Position>> positionMap = new HashMap<>();
     private double balance = 0;
-    boolean autoTake = false;
+    boolean autoTake = true;
     @JsonInclude(JsonInclude.Include.NON_DEFAULT)
     double totalGains = 0;
     @JsonInclude(JsonInclude.Include.NON_DEFAULT)
@@ -42,12 +45,14 @@ public class StockPlayer {
         dirty = true;
     }
 
+    @JsonIgnore
     public void addToBalance(double add, boolean fromPosition) {
         balance += add;
         if (fromPosition) totalGains += add;
         dirty = true;
     }
 
+    @JsonIgnore
     public double totalBalance() {
         double fromPositions = positionMap.values().stream()
                 .flatMap(list -> list.stream().map(Position::gains))
@@ -56,6 +61,7 @@ public class StockPlayer {
         return balance + fromPositions;
     }
 
+    @JsonIgnore
     public void giveDividend(String symbol) {
         if (!positionMap.containsKey(symbol)) return;
         Stock stock = StockMarket.stock(symbol);
@@ -70,22 +76,31 @@ public class StockPlayer {
         }
     }
 
+    @JsonIgnore
     public Optional<Position> find(String symbol, UUID uuid) {
         if (!positionMap.containsKey(symbol)) return Optional.empty();
         return positionMap.get(symbol).stream().filter(p -> p.positionUuid.equals(uuid)).findAny();
     }
 
-    public Position.BankruptResponse checkPosition(String symbol, double currentPrice, UUID uuid) {
-        Optional<Position> position = find(symbol, uuid);
-        if (position.isEmpty()) {
-            System.out.println("Could not find position with symbol " + symbol + " " + uuid);
-            return null;
-        }
-
-        Position pos = position.get();
-        return pos.bankrupt(currentPrice, balance);
+    @JsonIgnore
+    public boolean isBelowMaxStockAmount(Player player){
+        int currentAmount = positions().size();
+        if(currentAmount <= StockConfig.defaultStockMaxAmount) return true;
+        var entry = StockConfig.permissionMap.ceilingEntry(currentAmount+1);
+        if(entry == null) return false;
+        return player.hasPermission(entry.getValue());
     }
 
+    @JsonIgnore
+    public int maxStockAmount(Player player){
+        int max = -1;
+        for(var entry : StockConfig.permissionMap.entrySet()){
+            if(player.hasPermission(entry.getValue()) && entry.getKey() > max) max = entry.getKey();
+        }
+        return max == -1 ? StockConfig.defaultStockMaxAmount : max;
+    }
+
+    @JsonIgnore
     public TagResolver tagResolver() {
         double bal = this.getBalance();
         double total = this.totalBalance();
@@ -95,6 +110,9 @@ public class StockPlayer {
                 )))
                 .resolver(TagResolver.resolver("name", Tag.inserting(
                         mm(playerName, true)
+                )))
+                .resolver(TagResolver.resolver("position_amount", Tag.inserting(
+                        mm(positions().size()+"", true)
                 )))
                 .resolver(TagResolver.resolver("uuid", Tag.inserting(
                         mm(playerUuid.toString().split("-")[0], true)
@@ -120,6 +138,7 @@ public class StockPlayer {
                 .build();
     }
 
+    @JsonIgnore
     public Optional<Position> remove(String symbol, UUID uuid) {
         if (!positionMap.containsKey(symbol)) {
             //System.out.println("No key for symbol "+symbol);
@@ -135,6 +154,7 @@ public class StockPlayer {
         return Optional.empty();
     }
 
+    @JsonIgnore
     public void addPosition(Position position) {
         if (position == null) {
             System.out.println("Position is null!");
@@ -152,14 +172,17 @@ public class StockPlayer {
     }
 
 
+    @JsonIgnore
     public List<Position> positions(String symbol) {
         return positionMap.get(symbol);
     }
 
+    @JsonIgnore
     public List<Position> positions() {
         return positionMap.values().stream().flatMap(Collection::stream).toList();
     }
 
+    @JsonIgnore
     public double totalGains() {
         return positionMap.values().stream()
                 .flatMap(list -> list.stream().map(Position::gains))

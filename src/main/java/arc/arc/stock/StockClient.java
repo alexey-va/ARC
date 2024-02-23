@@ -36,12 +36,12 @@ public class StockClient {
 
     static Map<String, List<Double>> prices = new ConcurrentHashMap<>();
 
-    public Optional<List<Stock>> fetchCrypto(){
-        String ids = StockConfig.currencyDataMap.values().stream()
-                .filter(StockConfig.CurrencyData::crypto)
-                .map(StockConfig.CurrencyData::id)
+    public Optional<List<Stock>> fetchCrypto() {
+        String ids = StockMarket.currencyDataMap.values().stream()
+                .filter(StockMarket.CurrencyData::crypto)
+                .map(StockMarket.CurrencyData::id)
                 .collect(Collectors.joining("%2C"));
-        String url = "https://api.coingecko.com/api/v3/simple/price?ids="+ids +"&vs_currencies=usd&precision=full";
+        String url = "https://api.coingecko.com/api/v3/simple/price?ids=" + ids + "&vs_currencies=usd&precision=full";
         //System.out.println("URL: "+url);
         try {
             HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
@@ -58,10 +58,10 @@ public class StockClient {
             Map<String, Map<String, Double>> map = objectMapper.readValue(stream, mapType);
             //System.out.println("Map: "+map);
             List<Stock> stocks = new ArrayList<>();
-            for(var entry : map.entrySet()){
+            for (var entry : map.entrySet()) {
                 String name = entry.getKey();
                 double cost = entry.getValue().get("usd");
-                StockConfig.CurrencyData currencyData = StockConfig.currencyDataMap.get(name.toLowerCase());
+                StockMarket.CurrencyData currencyData = StockMarket.currencyDataMap.get(name.toLowerCase());
                 stocks.add(new Stock(name.toUpperCase(), cost, 0.0, System.currentTimeMillis(),
                         currencyData.display(), currencyData.lore(), currencyData.icon(), false, 0L));
             }
@@ -69,15 +69,15 @@ public class StockClient {
             double EURJPY = fetchAndPrintInstrumentPrice("https://ru.investing.com/currencies/eur-jpy");
             double USDRUB = fetchAndPrintInstrumentPrice("https://ru.investing.com/currencies/usd-rub");
 
-            if(EURJPY != -1){
+            if (EURJPY != -1) {
                 //System.out.println("EURUSD: "+EURUSD);
-                StockConfig.CurrencyData currencyData = StockConfig.currencyDataMap.get("EUR/JPY");
+                StockMarket.CurrencyData currencyData = StockMarket.currencyDataMap.get("EUR/JPY");
                 stocks.add(new Stock("EUR/JPY", EURJPY, 0, System.currentTimeMillis(),
                         currencyData.display(), currencyData.lore(), currencyData.icon(), false, 0L));
             }
-            if(USDRUB != -1){
+            if (USDRUB != -1) {
                 //System.out.println("USDJPY: "+USDJPY);
-                StockConfig.CurrencyData currencyData = StockConfig.currencyDataMap.get("USD/RUB");
+                StockMarket.CurrencyData currencyData = StockMarket.currencyDataMap.get("USD/RUB");
                 stocks.add(new Stock("USD/RUB", USDRUB, 0, System.currentTimeMillis(),
                         currencyData.display(), currencyData.lore(), currencyData.icon(), false, 0L));
             }
@@ -102,9 +102,9 @@ public class StockClient {
             if (divElement != null) {
                 return Double.parseDouble(divElement.text().replace(",", "."));
             } else {
-                System.out.println("Could not extract "+url);
+                System.out.println("Could not extract " + url);
                 System.out.println(document.text());
-                return  -1;
+                return -1;
             }
 
         } catch (Exception e) {
@@ -126,7 +126,7 @@ public class StockClient {
         }
     }*/
 
-    public void startWebSocket(Collection<String> symbols){
+    public void startWebSocket(Collection<String> symbols) {
         try {
             MySocket client = new MySocket();
             webSocketClient = new WebSocketClient();
@@ -145,7 +145,7 @@ public class StockClient {
                         // Send a message to the server
                         symbols.forEach(s -> {
                             try {
-                                client.getSession().getRemote().sendString("{\"type\":\"subscribe\",\"symbol\":\""+s+"\"}");
+                                client.getSession().getRemote().sendString("{\"type\":\"subscribe\",\"symbol\":\"" + s + "\"}");
                                 Thread.sleep(100);
                             } catch (Exception e) {
                                 e.printStackTrace();
@@ -159,17 +159,17 @@ public class StockClient {
                     }
                 } catch (Exception e) {
                     isClosed = true;
-                    e.printStackTrace();
+                    //e.printStackTrace();
                 }
             });
-        } catch (Exception e){
+        } catch (Exception e) {
             isClosed = true;
-            e.printStackTrace();
+            //e.printStackTrace();
         }
     }
 
-    public static void stopClient(){
-        if(webSocketClient != null && !isClosed) {
+    public static void stopClient() {
+        if (webSocketClient != null && !isClosed) {
             try {
                 webSocketClient.stop();
                 isClosed = true;
@@ -179,17 +179,17 @@ public class StockClient {
         }
     }
 
-    public Double price(String symbol){
-        if(webSocketClient == null || !webSocketClient.isRunning() || isClosed){
+    public Double price(String symbol) {
+        if (webSocketClient == null || !webSocketClient.isRunning() || isClosed) {
+            System.out.println("Websocket is closed. Starting...");
             startWebSocket(StockMarket.stocks().stream().filter(Stock::isStock).map(Stock::getSymbol).toList());
         }
-        try {
-            OptionalDouble optional = prices.remove(symbol).stream().mapToDouble(Double::doubleValue).average();
-            if (optional.isEmpty()) return null;
-            return optional.getAsDouble();
-        } catch (Exception e){
-            return null;
-        }
+        var list = prices.remove(symbol);
+        if(list == null) return null;
+        OptionalDouble optional = list.stream().mapToDouble(Double::doubleValue).average();
+        if (optional.isEmpty()) return null;
+        return optional.getAsDouble();
+
 /*        if(POLY_API_KEY == null) return 0.0;
         StringBuilder builder = new StringBuilder("https://finnhub.io/api/v1/quote?");
         builder.append("symbol=").append(symbol);
@@ -211,8 +211,8 @@ public class StockClient {
         }*/
     }
 
-    public double dividend(String symbol){
-        if(POLY_API_KEY == null) return 0;
+    public double dividend(String symbol) {
+        if (POLY_API_KEY == null) return 0;
         StringBuilder builder = new StringBuilder("https://api.polygon.io/v3/reference/dividends?");
         builder.append("ticker=").append(symbol);
         builder.append("&apiKey=").append(POLY_API_KEY);
@@ -225,7 +225,7 @@ public class StockClient {
 
             Map map = new ObjectMapper().readValue(stream, Map.class);
             //System.out.println(map);
-            return (double) ((Map<String, Object>)((List<Object>)map.get("results")).get(0)).get("cash_amount");
+            return (double) ((Map<String, Object>) ((List<Object>) map.get("results")).get(0)).get("cash_amount");
         } catch (Exception e) {
             //e.printStackTrace();
             return 0;
@@ -238,7 +238,7 @@ public class StockClient {
         @Override
         public void onWebSocketConnect(Session sess) {
             super.onWebSocketConnect(sess);
-            System.out.println("WebSocket Connected: " + sess);
+            //System.out.println("WebSocket Connected: " + sess);
             latch.countDown(); // Notify that the connection has been established
             //isClosed = false;
         }
@@ -249,8 +249,8 @@ public class StockClient {
             //System.out.println("Received message from server: " + message);
             try {
                 Map map = new ObjectMapper().readValue(message, Map.class);
-                double price = ((Number) ((Map)((List)map.get("data")).get(0)).get("p")).doubleValue();
-                String symbol = ((String) ((Map)((List)map.get("data")).get(0)).get("s"));
+                double price = ((Number) ((Map) ((List) map.get("data")).get(0)).get("p")).doubleValue();
+                String symbol = ((String) ((Map) ((List) map.get("data")).get(0)).get("s"));
                 prices.putIfAbsent(symbol, new ArrayList<>());
                 prices.get(symbol).add(price);
                 //System.out.println(price+" "+symbol+" "+Thread.currentThread().getName());
@@ -269,7 +269,7 @@ public class StockClient {
         @Override
         public void onWebSocketError(Throwable cause) {
             super.onWebSocketError(cause);
-            cause.printStackTrace();
+            //cause.printStackTrace();
         }
     }
 

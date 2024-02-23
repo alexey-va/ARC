@@ -1,10 +1,13 @@
 package arc.arc.stock;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.*;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.apache.http.cookie.SM;
+import org.bukkit.Material;
 import org.bukkit.configuration.serialization.ConfigurationSerializable;
 
 import java.text.DecimalFormat;
@@ -33,12 +36,16 @@ public class Position {
     UUID positionUuid;
     Type type;
     double amount;
+    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+    Material iconMaterial = Material.PAPER;
     double receivedDividend;
 
+    @JsonIgnore
     public double gains(double currentPrice) {
         return (type == Type.BOUGHT ? 1 : -1) * (currentPrice - startPrice) * amount * leverage;
     }
 
+    @JsonIgnore
     public double gains() {
         //System.out.println("Getting gains for " + symbol);
         double price = getStockPrice();
@@ -48,6 +55,7 @@ public class Position {
         return gains(price);
     }
 
+    @JsonIgnore
     public int marginCall(double currentPrice) {
         double gains = gains(currentPrice);
         if (gains > upperBoundMargin) return 1;
@@ -55,6 +63,7 @@ public class Position {
         return 0;
     }
 
+    @JsonIgnore
     public Stock getStock() {
         return StockMarket.stock(symbol);
     }
@@ -63,14 +72,17 @@ public class Position {
     }
 
     public record AutoClosePrices(double low, double high){}
+    @JsonIgnore
     public AutoClosePrices marginCallAtPrice(double balance, boolean isAutoTake){
         double bankruptPrice = isAutoTake ? -1 : startPrice - balance/amount/leverage;
         double lowMarginCallPrice = lowerBoundMargin > 1_000_000_000 ? -1 : startPrice - lowerBoundMargin/amount/leverage;
         double upperMarginCallPrice = upperBoundMargin > 1_000_000_000 ? -1 : startPrice + upperBoundMargin/amount/leverage;
         double low = Math.min(bankruptPrice, lowMarginCallPrice);
+        if(low < 0) low = -1;
         return new AutoClosePrices(low, upperMarginCallPrice);
     }
 
+    @JsonIgnore
     public TagResolver resolver() {
         DecimalFormat decimalFormat = new DecimalFormat();
         // Set the formatting pattern
@@ -138,6 +150,7 @@ public class Position {
                 .build();
     }
 
+    @JsonIgnore
     private double getStockPrice() {
         Stock stock = StockMarket.stock(symbol);
         if (stock == null) {
@@ -147,6 +160,7 @@ public class Position {
         return stock.price;
     }
 
+    @JsonIgnore
     public BankruptResponse bankrupt(double currentPrice, double currentBalance) {
         double gains = gains(currentPrice);
         if (gains + currentBalance >= 0) return new BankruptResponse(false, gains + currentBalance);

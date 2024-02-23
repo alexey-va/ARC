@@ -54,7 +54,8 @@ public class Mine implements Listener {
     private String mineId;
     private Material tempBlock;
     private Material baseBlock;
-    int priority;
+    @Getter
+    int priority = 0;
 
     Map<UUID, Integer> blocksBrokenByPlayer = new HashMap<>();
     int maxBlocks;

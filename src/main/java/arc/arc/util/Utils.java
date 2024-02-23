@@ -337,6 +337,23 @@ public class Utils {
         return Arrays.copyOfRange(copyArray, 0, amount);
     }
 
+    public static <T> T random(Collection<T> collection) {
+        if (collection == null || collection.isEmpty()) {
+            throw new IllegalArgumentException("Collection must not be null or empty");
+        }
+
+        if (collection instanceof List<T> list) {
+            // If the collection is a list, directly use the get method
+            int randomIndex = new Random().nextInt(list.size());
+            return list.get(randomIndex);
+        } else {
+            // If it's not a list, convert to a list and proceed as before
+            List<T> list = List.copyOf(collection);
+            int randomIndex = new Random().nextInt(list.size());
+            return list.get(randomIndex);
+        }
+    }
+
     public static <K, V> Map.Entry<K, V> random(Map<K, V> skinLinks) {
         int rng = ThreadLocalRandom.current().nextInt(skinLinks.size());
         return skinLinks.entrySet().stream().skip(rng).findFirst().get();

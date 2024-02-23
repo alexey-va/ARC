@@ -74,13 +74,13 @@ public class TextUtil {
         DecimalFormatSymbols symbols = new DecimalFormatSymbols();
         symbols.setGroupingSeparator(',');
         if(Math.abs(amount) < 0.0001) return "0";
-        if(amount < 0.1){
+        if(Math.abs(amount) < 0.1){
             return new DecimalFormat("#,##0.0##", symbols).format(amount);
         }
-        else if (amount < 1000) {
+        else if (Math.abs(amount) < 1000) {
             // Format with 1 digit after the decimal point
             return new DecimalFormat("#,##0.0", symbols).format(amount);
-        } else if (amount < 1_000_000) {
+        } else if (Math.abs(amount) < 1_000_000) {
             // Format in the format 2.2K
             return new DecimalFormat("#,##0.0K", symbols).format(amount / 1000);
         } else {

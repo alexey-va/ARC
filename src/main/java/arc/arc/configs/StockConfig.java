@@ -8,22 +8,24 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.type.MapType;
 import com.fasterxml.jackson.databind.type.TypeFactory;
 import lombok.SneakyThrows;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.World;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 public class StockConfig {
 
     public static String mainMenuBackCommand;
     public static long stockRefreshRate;
 
-    public record CurrencyData(String id, String display, List<String> lore, boolean crypto, ItemIcon icon) {
-    }
+
 
     private static YamlConfiguration config;
     private static File file;
@@ -37,8 +39,13 @@ public class StockConfig {
     public static boolean mainServer;
     public static int refreshRate;
     public static double commission;
+    public static double leveragePower;
+    public static int defaultStockMaxAmount;
+    public static Location stockMarketLocation;
+    public static double updateImagesRadius;
 
-    public static Map<String, CurrencyData> currencyDataMap = new HashMap<>();
+    public static List<Material> iconMaterials;
+    public static TreeMap<Integer, String> permissionMap = new TreeMap<>();
 
     @SneakyThrows
     public static void load() {
@@ -86,24 +93,59 @@ public class StockConfig {
     private static void loadConfig() {
         mainServer = config.getBoolean("main-server", false);
         refreshRate = config.getInt("refresh-rate", 60);
-        commission = config.getDouble("commission", 0.03);
+        commission = config.getDouble("commission", 0.01);
+        leveragePower = config.getDouble("leverage-power", 0.5);
         mainMenuBackCommand = config.getString("main-menu-back-command", "menu");
         stockRefreshRate = config.getLong("stock-refresh-rate", 5L);
+        defaultStockMaxAmount = config.getInt("default-max-stock-amount", 10);
+        String sml = config.getString("stock-market-location", null);
+        if(sml != null){
+            String[] strings = sml.split(",");
+            double x = Double.parseDouble(strings[0]);
+            double y = Double.parseDouble(strings[1]);
+            double z = Double.parseDouble(strings[2]);
+            String worldName =  strings[3];
+            World world = Bukkit.getWorld(worldName);
+            if(world == null){
+                System.out.println("Could not find world: "+worldName);
+            } else{
+                stockMarketLocation = new Location(world, x,y,z);
+            }
+        }
+        updateImagesRadius = config.getDouble("update-images-radius", 50);
+        iconMaterials = config.getStringList("icon-materials").stream()
+                .map(String::toUpperCase)
+                .map(Material::matchMaterial)
+                .collect(Collectors.toList());
+        if(iconMaterials.isEmpty()) iconMaterials.add(Material.PAPER);
+
+        for(String s : config.getStringList("max-stock-permissions")){
+            try {
+                String permission = s.split(":")[0];
+                int amount = Integer.parseInt(s.split(":")[1]);
+                if(permissionMap.containsKey(amount)){
+                    System.out.println("Permission map already has amount: "+amount);
+                    continue;
+                }
+                permissionMap.put(amount, permission);
+            } catch (Exception e){
+                e.printStackTrace();
+                System.out.println("Could not parse "+s);
+            }
+        }
 
         for (var map : config.getMapList("stocks")) {
             try {
-                StockMarket.loadFromMap(map, true);
+                StockMarket.loadStockFromMap(map);
             } catch (Exception e) {
-                System.out.println("Fail loading stock: " + map);
+                System.out.println("Error parsing " + map);
                 e.printStackTrace();
             }
         }
 
         for (var map : config.getMapList("currencies")) {
             try {
-                CurrencyData currencyData = currencyData((Map<String, Object>) map);
-                System.out.println("Parsed: "+currencyData);
-                currencyDataMap.put(currencyData.id, currencyData);
+                StockMarket.loadCurrencyFromMap(map);
             } catch (Exception e) {
                 System.out.println("Error parsing " + map);
                 e.printStackTrace();
@@ -168,16 +210,5 @@ public class StockConfig {
         }
     }
 
-    @SneakyThrows
-    private static CurrencyData currencyData(Map<String, Object> map) {
-        ItemIcon icon = ItemIcon.of(Material.PAPER, 0);
-        if (map.containsKey("icon")) icon = new ObjectMapper().readValue((String) map.get("icon"), ItemIcon.class);
-        return new CurrencyData(
-                (String) map.get("id"),
-                (String) map.getOrDefault("display", "display"),
-                (List<String>) map.getOrDefault("lore", new ArrayList<String>()),
-                (Boolean) map.getOrDefault("crypto", false),
-                icon
-        );
-    }
+
 }

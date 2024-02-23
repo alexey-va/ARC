@@ -1,9 +1,14 @@
 package arc.arc.stock;
 
 import arc.arc.ARC;
+import arc.arc.board.ItemIcon;
 import arc.arc.configs.StockConfig;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
+import lombok.SneakyThrows;
+import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -22,11 +27,32 @@ public class StockMarket {
 
     private static Map<String, Stock> stockMap = new ConcurrentHashMap<>();
     private static Map<String, List<StockHistory>> history = new ConcurrentHashMap<>();
-    static Set<String> cryptoSymbols = Set.of("BITCOIN", "DOGECOIN", "TRON", "ETHEREUM", "EUR/USD", "USD/JPY");
+    public static Map<String, CurrencyData> currencyDataMap = new HashMap<>();
 
     public static void pruneHistory(String symbol) {
         history.remove(symbol);
-        saveHistory();
+    }
+
+    public record CurrencyData(String id, String display, List<String> lore, boolean crypto, ItemIcon icon) {
+    }
+
+    @SneakyThrows
+    private static CurrencyData currencyData(Map<String, Object> map) {
+        ItemIcon icon = ItemIcon.of(Material.PAPER, 0);
+        if (map.containsKey("icon")) icon = new ObjectMapper().readValue((String) map.get("icon"), ItemIcon.class);
+        return new CurrencyData(
+                (String) (map.containsKey("id") ? map.get("id") : map.get("symbol")),
+                (String) map.getOrDefault("display", "display"),
+                (List<String>) map.getOrDefault("lore", new ArrayList<String>()),
+                (Boolean) map.getOrDefault("crypto", false),
+                icon
+        );
+    }
+
+    public static void loadCurrencyFromMap(Map<?,?> map) {
+        CurrencyData currencyData = currencyData((Map<String, Object>) map);
+        System.out.println("Parsed currency: "+currencyData.id);
+        currencyDataMap.put(currencyData.id, currencyData);
     }
 
 
@@ -63,7 +89,7 @@ public class StockMarket {
                 }
 
                 for (var entry : stockMap.entrySet()) {
-                    if (cryptoSymbols.contains(entry.getKey()) || !entry.getValue().isStock()) continue;
+                    if (!entry.getValue().isStock()) continue;
                     if (System.currentTimeMillis() - entry.getValue().lastUpdated > StockConfig.stockRefreshRate * 1000L) {
                         try {
                             Double newPrice = client.price(entry.getKey());
@@ -77,7 +103,7 @@ public class StockMarket {
                             entry.getValue().lastUpdated = System.currentTimeMillis();
                             history.putIfAbsent(entry.getKey(), new ArrayList<>());
                             history.get(entry.getKey()).add(new StockHistory(entry.getValue().price, entry.getValue().lastUpdated));
-                            System.out.println("Updated stock: " + entry.getValue().symbol + " -> " + entry.getValue().price);
+                            //System.out.println("Updated stock: " + entry.getValue().symbol + " -> " + entry.getValue().price);
 
                             StockPlayerManager.updateAllPositionsOf(entry.getValue().symbol);
                         } catch (Exception e) {
@@ -89,8 +115,8 @@ public class StockMarket {
                 }
 
                 if (stockMessager != null && change) stockMessager.send(stockMap);
-                StockConfig.saveStockCache(stockMap.values().stream().map(Stock::serialize).toList());
-                StockConfig.saveStockHistory(history);
+                //StockConfig.saveStockCache(stockMap.values().stream().map(Stock::serialize).toList());
+                //StockConfig.saveStockHistory(history);
             }
         }.runTaskTimerAsynchronously(ARC.plugin, 20L, 10 * 20L);
 
@@ -98,8 +124,9 @@ public class StockMarket {
             @Override
             public void run() {
                 saveHistory();
+                StockConfig.saveStockCache(stockMap.values().stream().map(Stock::serialize).toList());
                 String path = ARC.plugin.getDataFolder() + File.separator + "stocks" + File.separator + "plots.sh";
-                //System.out.println("Path: "+path);
+                long time = System.currentTimeMillis();
                 File file = new File(path);
                 if (file.exists()) {
                     //System.out.println(file.getPath());
@@ -116,7 +143,9 @@ public class StockMarket {
                         while ((line = bufferedReader.readLine()) != null) {
                             System.out.println(line);
                         }
-
+                        System.out.println("Plotting took: "+(System.currentTimeMillis()-time)+"ms");
+                        Bukkit.getScheduler().runTask(ARC.plugin,
+                                () -> Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "arc-invest -t:update"));
                     } catch (Exception e) {
                         e.printStackTrace();
                         throw new RuntimeException(e);
@@ -140,6 +169,7 @@ public class StockMarket {
             list.removeAll(stockHistories);
         }
         StockConfig.saveStockHistory(history);
+        System.out.println("Saving took: "+(System.currentTimeMillis()-current)+"ms");
     }
 
     public static void cancelTasks() {
@@ -152,12 +182,12 @@ public class StockMarket {
         return stockMap.get(symbol);
     }
 
-    public static void loadFromMap(Map<?, ?> map, boolean isStock) {
+    public static void loadStockFromMap(Map<?, ?> map) {
         try {
-            System.out.println("Loading: "+map);
+            System.out.println("Parsed stock: "+map.get("symbol"));
             Stock stock = Stock.deserialize((Map<String, Object>) map);
-            stock.setStock(isStock);
-            if(isStock){
+            stock.setStock(true);
+            if(true){
                 stock.setDividend(stock.price*0.03);
             }
             stockMap.put(stock.symbol, stock);
@@ -169,7 +199,7 @@ public class StockMarket {
 
     public static void loadCacheFromMap(Map<?,?> map) {
         try {
-            System.out.println("Loading from cache: "+map);
+            //System.out.println("Loading from cache: "+map);
             Stock stock = Stock.deserialize((Map<String, Object>) map);
             Stock stock1 = stockMap.get(stock.symbol);
             if(stock1 == null){
@@ -179,6 +209,9 @@ public class StockMarket {
 
             stock1.lastUpdated=stock.lastUpdated;
             stock1.price=stock.price;
+            if(stock1.isStock){
+                stock1.setDividend(stock.price*0.03);
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }

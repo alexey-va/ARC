@@ -52,7 +52,7 @@ public class GuiUtils {
         final Component oldDisplay = meta.displayName();
         final List<Component> oldLore = meta.lore();
         if (display != null) meta.displayName(strip(display));
-        if (lore != null) meta.lore(lore.stream().map(TextUtil::strip).toList());
+        if (lore != null && !lore.isEmpty()) meta.lore(lore.stream().map(TextUtil::strip).toList());
         stack.setItemMeta(meta);
         if(ticks <0) return null;
         return new BukkitRunnable() {

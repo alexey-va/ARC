@@ -2,6 +2,7 @@ package arc.arc.farm;
 
 import arc.arc.ARC;
 import arc.arc.configs.FarmConfig;
+import com.google.common.collect.Comparators;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
@@ -9,6 +10,7 @@ import org.bukkit.scheduler.BukkitTask;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 
@@ -38,6 +40,7 @@ public class FarmManager {
                             System.out.println("Loaded mine " + mine.getMineId() + " from config!");
                             mines.add(mine);
                         });
+        mines.sort(Comparator.comparingInt(Mine::getPriority).reversed());
     }
 
     public void addFarm(Farm farm) {

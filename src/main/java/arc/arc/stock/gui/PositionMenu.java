@@ -86,17 +86,18 @@ public class PositionMenu extends ChestGui {
                     click.setCancelled(true);
 
                     if (!confirm) {
-                        GuiUtils.temporaryChange(close.getItem(), mm(StockConfig.string("position-menu.close-button-display"), resolver),
+                        GuiUtils.temporaryChange(close.getItem(), mm(StockConfig.string("position-menu.close-button-confirm-display"), resolver),
                                 StockConfig.stringList("position-menu.close-button-lore").stream().map(s -> mm(s, resolver)).toList(),
                                 100L, () -> {
                                     this.confirm = false;
                                     this.update();
                                 });
                         confirm = true;
+                        update();
                         return;
                     }
 
-                    player.performCommand("arc-invest -t:close -s:" + position.getSymbol() + " -uuid:" + position.getPositionUuid()+" -reason:2");
+                    player.performCommand("arc-invest -t:close -s:" + position.getSymbol() + " -uuid:" + position.getPositionUuid()+" -reason:3");
                     new PositionSelector(player, position.getSymbol()).show(player);
                 }).build();
         return close;

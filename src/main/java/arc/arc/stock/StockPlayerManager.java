@@ -3,6 +3,7 @@ package arc.arc.stock;
 import arc.arc.ARC;
 import arc.arc.configs.StockConfig;
 import arc.arc.util.TextUtil;
+import arc.arc.util.Utils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Setter;
@@ -10,16 +11,14 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.time.LocalTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -109,6 +108,7 @@ public class StockPlayerManager {
     }
 
     private static StockPlayer createPlayer(String playerName, UUID playerUuid) {
+        System.out.println("Creating player for "+playerName);
         StockPlayer stockPlayer = new StockPlayer(playerName, playerUuid);
         playerMap.put(playerUuid, stockPlayer);
         saveStockPlayer(stockPlayer);
@@ -122,6 +122,11 @@ public class StockPlayerManager {
     }
 
     public static void buyStock(StockPlayer stockPlayer, Stock stock, double amount, int leverage, double lowerBound, double upperBound) {
+        if(stockPlayer.positions().size()>=30){
+            System.out.println("Too many positions!");
+            return;
+        }
+
         EconomyCheckResponse response = economyCheck(stockPlayer, stock, amount, leverage);
         if (!response.success()) {
             System.out.println(response);
@@ -140,6 +145,7 @@ public class StockPlayerManager {
                 .lowerBoundMargin(lowerBound)
                 .commission(response.commission())
                 .timestamp(System.currentTimeMillis())
+                .iconMaterial(Utils.random(StockConfig.iconMaterials))
                 .type(Position.Type.BOUGHT)
                 .build();
         stockPlayer.addPosition(position);
@@ -147,6 +153,11 @@ public class StockPlayerManager {
     }
 
     public static void shortStock(StockPlayer stockPlayer, Stock stock, double amount, int leverage, double lowerBound, double upperBound) {
+        if(stockPlayer.positions().size()>=30){
+            System.out.println("Too many positions!");
+            return;
+        }
+
         EconomyCheckResponse response = economyCheck(stockPlayer, stock, amount, leverage);
         if (!response.success()) {
             System.out.println(response);
@@ -165,6 +176,7 @@ public class StockPlayerManager {
                 .lowerBoundMargin(lowerBound)
                 .commission(response.commission())
                 .timestamp(System.currentTimeMillis())
+                .iconMaterial(Utils.random(StockConfig.iconMaterials))
                 .type(Position.Type.SHORTED)
                 .build();
         stockPlayer.addPosition(position);
@@ -172,6 +184,7 @@ public class StockPlayerManager {
     }
 
     public static void closePosition(StockPlayer stockPlayer, String symbol, UUID positionUuid, int reason) {
+        System.out.println("Closing position "+positionUuid+" cuz "+reason);
         Stock stock = StockMarket.stock(symbol);
         if (stock == null) {
             System.out.println("Could not find stock with symbol: " + symbol);
@@ -245,7 +258,7 @@ public class StockPlayerManager {
     }
 
     public static double commission(Stock stock, double amount, int leverage){
-        return cost(stock, amount) * StockConfig.commission * (leverage < 10 ? 1 : 1 + Math.pow(leverage, 0.6)-Math.pow(10, 0.6));
+        return cost(stock, amount) * StockConfig.commission * (leverage < 100 ? 1 : 1 + Math.pow(leverage, StockConfig.leveragePower)-Math.pow(100, StockConfig.leveragePower));
     }
 
     public static void loadStockPlayers() {
@@ -255,9 +268,10 @@ public class StockPlayerManager {
                         try {
                             StockPlayer stockPlayer = new ObjectMapper().readValue(entry.getValue(), StockPlayer.class);
                             playerMap.put(stockPlayer.playerUuid, stockPlayer);
-                            System.out.println("Loaded stock data of " + stockPlayer.playerName);
+                            System.out.println("Loaded stock data of " + stockPlayer.playerName+": "+stockPlayer);
                         } catch (JsonProcessingException e) {
                             System.out.println("Could not load stock data of " + entry.getKey());
+                            e.printStackTrace();
                         }
                     }
                 });

@@ -28,14 +28,15 @@ import org.jetbrains.annotations.NotNull;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 import static arc.arc.util.GuiUtils.cooldownCheck;
+import static arc.arc.util.TextUtil.mm;
 import static arc.arc.util.TextUtil.strip;
 
 public class SymbolSelector extends ChestGui {
     StockPlayer stockPlayer;
     Player player;
-
     GuiItem back, profile;
 
     public SymbolSelector(Player player) {
@@ -61,7 +62,7 @@ public class SymbolSelector extends ChestGui {
     private void setupNav() {
         StaticPane pane = new StaticPane(0, 2, 9, 1);
         this.addPane(pane);
-        TagResolver tagResolver = tagResolver();
+        TagResolver tagResolver = stockPlayer.tagResolver();
 
         back = new ItemStackBuilder(Material.BLUE_STAINED_GLASS_PANE)
                 .display(StockConfig.string("symbol-selector.back-display"))
@@ -88,25 +89,14 @@ public class SymbolSelector extends ChestGui {
         pane.addItem(profile, 8, 0);
     }
 
-    private TagResolver tagResolver(){
-        return TagResolver.builder()
-                .resolver(TagResolver.resolver("balance", Tag.inserting(
-                        TextUtil.mm(TextUtil.formatAmount(stockPlayer.getBalance()), true)
-                )))
-                .resolver(TagResolver.resolver("total_balance", Tag.inserting(
-                        TextUtil.mm(TextUtil.formatAmount(stockPlayer.totalBalance()), true)
-                )))
-                .resolver(TagResolver.resolver("positions_count", Tag.inserting(
-                        TextUtil.mm(stockPlayer.positions().size()+"", true)
-                )))
-                .build();
-    }
-
     private GuiItem stockItem(Stock stock){
+        List<Position> positions =  stockPlayer.positions(stock.getSymbol());
+        int size = positions == null ? 0 : positions.size();
         return new ItemStackBuilder(stock.getIcon().stack())
                 .display(stock.getDisplay())
                 .lore(stock.getLore())
                 .tagResolver(stock.tagResolver())
+                .appendResolver("positions_in_symbol", size+"")
                 .toGuiItemBuilder()
                 .clickEvent( click -> {
                     click.setCancelled(true);
