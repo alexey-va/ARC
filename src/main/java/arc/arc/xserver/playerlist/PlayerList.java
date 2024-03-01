@@ -1,7 +1,6 @@
 package arc.arc.xserver.playerlist;
 
 import arc.arc.configs.Config;
-import arc.arc.network.ArcSerializable;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -11,7 +10,7 @@ import java.util.List;
 
 @Data
 @NoArgsConstructor
-public class PlayerList extends ArcSerializable {
+public class PlayerList  {
 
     List<PlayerData> playerList = new ArrayList<>();
     String server = Config.server;

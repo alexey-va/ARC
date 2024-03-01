@@ -4,26 +4,19 @@ import arc.arc.ARC;
 import arc.arc.configs.StockConfig;
 import arc.arc.util.TextUtil;
 import arc.arc.util.Utils;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import arc.arc.xserver.announcements.AnnounceManager;
 import lombok.Setter;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.tag.Tag;
-import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.Bukkit;
-import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
-import java.time.LocalTime;
+import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static arc.arc.util.TextUtil.formatAmount;
-import static arc.arc.util.TextUtil.mm;
 
 public class StockPlayerManager {
 
@@ -41,18 +34,6 @@ public class StockPlayerManager {
                 saveStockPlayers();
             }
         }.runTaskTimerAsynchronously(ARC.plugin, 20L, 20L);
-
-        dividendTask = new BukkitRunnable() {
-            @Override
-            public void run() {
-                if(LocalTime.now().getHour() != 0) return;
-                StockMarket.stocks().stream()
-                        .filter(Stock::isStock)
-                        .filter(s ->System.currentTimeMillis() - s.lastTimeDividend >= 23*60*60*1000L)
-                        .map(Stock::getSymbol)
-                        .forEach(StockPlayerManager::giveDividend);
-            }
-        }.runTaskTimer(ARC.plugin, 100L, 20L*60);
     }
 
     public static void updateAllPositionsOf(String symbol) {
@@ -77,7 +58,7 @@ public class StockPlayerManager {
         for (Position position : positionsClone) {
             Position.BankruptResponse response = position.bankrupt(stock.price, stockPlayer.getBalance());
             if (response.bankrupt()) {
-                System.out.println("Bankrupt for "+position);
+                System.out.println("Bankrupt for " + position);
                 if (stockPlayer.isAutoTake()) {
                     boolean addedToBalanceSuccess = addToTradingBalanceFromVault(stockPlayer, response.total());
                     if (addedToBalanceSuccess) continue;
@@ -86,8 +67,8 @@ public class StockPlayerManager {
             }
 
             int marginCall = position.marginCall(stock.getPrice());
-            if(marginCall != 0){
-                System.out.println("Margin call "+marginCall+" for "+position);
+            if (marginCall != 0) {
+                System.out.println("Margin call " + marginCall + " for " + position);
                 closePosition(stockPlayer, position.getSymbol(), position.getPositionUuid(), 1);
             }
         }
@@ -95,20 +76,27 @@ public class StockPlayerManager {
 
     public static void cancelTasks() {
         if (saveTask != null && !saveTask.isCancelled()) saveTask.cancel();
-        if(dividendTask != null && !dividendTask.isCancelled()) dividendTask.cancel();
+        if (dividendTask != null && !dividendTask.isCancelled()) dividendTask.cancel();
     }
 
-    private static void giveDividend(String symbol){
+    public static void giveDividend(String symbol) {
         Stock stock = StockMarket.stock(symbol);
-        if(!stock.isStock()) return;
-        for(StockPlayer stockPlayer : playerMap.values()){
-            stockPlayer.giveDividend(symbol);
-        }
+        if (stock == null) return;
+        System.out.println("Giving dividend for "+stock.symbol+": "+ Instant.ofEpochMilli(stock.lastTimeDividend));
         stock.setLastTimeDividend(System.currentTimeMillis());
+        for (StockPlayer stockPlayer : playerMap.values()) {
+            double gave = stockPlayer.giveDividend(symbol);
+            if(gave<=0.1) continue;
+            String message = StockConfig.string("message.received-dividend")
+                    .replace("<amount>", TextUtil.formatAmount(gave))
+                    .replace("<symbol>", symbol);
+            AnnounceManager.instance().sendMessage(stockPlayer.playerUuid, message);
+        }
     }
+
 
     private static StockPlayer createPlayer(String playerName, UUID playerUuid) {
-        System.out.println("Creating player for "+playerName);
+        System.out.println("Creating player for " + playerName);
         StockPlayer stockPlayer = new StockPlayer(playerName, playerUuid);
         playerMap.put(playerUuid, stockPlayer);
         saveStockPlayer(stockPlayer);
@@ -122,7 +110,7 @@ public class StockPlayerManager {
     }
 
     public static void buyStock(StockPlayer stockPlayer, Stock stock, double amount, int leverage, double lowerBound, double upperBound) {
-        if(stockPlayer.positions().size()>=30){
+        if (stockPlayer.positions().size() >= 30) {
             System.out.println("Too many positions!");
             return;
         }
@@ -153,7 +141,7 @@ public class StockPlayerManager {
     }
 
     public static void shortStock(StockPlayer stockPlayer, Stock stock, double amount, int leverage, double lowerBound, double upperBound) {
-        if(stockPlayer.positions().size()>=30){
+        if (stockPlayer.positions().size() >= 30) {
             System.out.println("Too many positions!");
             return;
         }
@@ -184,7 +172,7 @@ public class StockPlayerManager {
     }
 
     public static void closePosition(StockPlayer stockPlayer, String symbol, UUID positionUuid, int reason) {
-        System.out.println("Closing position "+positionUuid+" cuz "+reason);
+        System.out.println("Closing position " + positionUuid + " cuz " + reason);
         Stock stock = StockMarket.stock(symbol);
         if (stock == null) {
             System.out.println("Could not find stock with symbol: " + symbol);
@@ -192,18 +180,12 @@ public class StockPlayerManager {
         }
         stockPlayer.remove(symbol, positionUuid).ifPresentOrElse(position -> {
             double gains = position.gains(stock.price);
-            stockPlayer.addToBalance(gains+position.startPrice*position.amount, true);
-            OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(stockPlayer.playerUuid);
-            if(offlinePlayer.isOnline()){
-                Player player = (Player) offlinePlayer;
-                TagResolver resolver = TagResolver.builder()
-                        .resolver(TagResolver.resolver("symbol", Tag.inserting(mm(symbol))))
-                        .resolver(TagResolver.resolver("gains", Tag.inserting(mm(formatAmount(gains - position.commission)))))
-                        .resolver(TagResolver.resolver("money_received", Tag.inserting(mm(formatAmount(gains +position.startPrice*position.amount)))))
-                        .build();
-                player.sendMessage(mm(StockConfig.string("message.closed-"+reason), resolver));
-            }
-            //System.out.println("Your total gains: " + (gains - position.commission)+" | commission: "+position.commission);
+            stockPlayer.addToBalance(gains + position.startPrice * position.amount, true);
+            String message = StockConfig.string("message.closed-" + reason)
+                    .replace("<gains>", formatAmount(gains - position.commission))
+                    .replace("<symbol>", symbol)
+                    .replace("<money_received>", formatAmount(gains + position.startPrice * position.amount));
+            AnnounceManager.instance().sendMessage(stockPlayer.playerUuid, message);
         }, () -> System.out.println("Could not find position with such id"));
 
     }
@@ -241,6 +223,7 @@ public class StockPlayerManager {
 
     public record EconomyCheckResponse(boolean success, double totalPrice, double lack, double commission) {
     }
+
     public static EconomyCheckResponse economyCheck(StockPlayer player, Stock stock, double amount, int leverage) {
         double cost = cost(stock, amount);
         double commission = commission(stock, amount, leverage);
@@ -253,77 +236,41 @@ public class StockPlayerManager {
         return new EconomyCheckResponse(true, cost + commission, 0, commission);
     }
 
-    public static double cost(Stock stock, double amount){
+    public static double cost(Stock stock, double amount) {
         return stock.price * amount;
     }
 
-    public static double commission(Stock stock, double amount, int leverage){
-        return cost(stock, amount) * StockConfig.commission * (leverage < 100 ? 1 : 1 + Math.pow(leverage, StockConfig.leveragePower)-Math.pow(100, StockConfig.leveragePower));
+    public static double commission(Stock stock, double amount, int leverage) {
+        return cost(stock, amount) * StockConfig.commission * (leverage < 100 ? 1 : 1 + Math.pow(leverage, StockConfig.leveragePower) - Math.pow(100, StockConfig.leveragePower));
     }
 
     public static void loadStockPlayers() {
-        ARC.redisManager.loadMap("arc.stock_players")
-                .thenAccept(map -> {
-                    for (var entry : map.entrySet()) {
-                        try {
-                            StockPlayer stockPlayer = new ObjectMapper().readValue(entry.getValue(), StockPlayer.class);
-                            playerMap.put(stockPlayer.playerUuid, stockPlayer);
-                            System.out.println("Loaded stock data of " + stockPlayer.playerName+": "+stockPlayer);
-                        } catch (JsonProcessingException e) {
-                            System.out.println("Could not load stock data of " + entry.getKey());
-                            e.printStackTrace();
-                        }
-                    }
-                });
+        playerMap.putAll(messager.loadAllStockPlayers());
     }
 
-    public static void loadStockPlayer(String uuid) {
-        ARC.redisManager.loadMapEntry("arc.stock_players", uuid)
-                .thenAccept(list -> {
-                    if (list == null || list.isEmpty()) {
-                        playerMap.remove(UUID.fromString(uuid));
-                        return;
-                    }
-                    String json = list.get(0);
-                    try {
-                        StockPlayer stockPlayer = new ObjectMapper().readValue(json, StockPlayer.class);
-                        playerMap.put(UUID.fromString(uuid), stockPlayer);
-                        System.out.println("Loaded player " + stockPlayer.playerName + " data!");
-                    } catch (JsonProcessingException e) {
-                        System.out.println("Could not load data2 of " + uuid);
-                        throw new RuntimeException(e);
-                    }
-                });
+    public static void loadStockPlayer(UUID uuid) {
+        messager.loadStockPlayer(uuid);
     }
 
     public static void saveStockPlayers() {
         StockPlayerManager.getAll().values().stream()
+                .filter(StockPlayer::isDirty)
                 .forEach(StockPlayerManager::saveStockPlayer);
     }
 
     public static void saveStockPlayer(StockPlayer stockPlayer) {
-        if (!stockPlayer.isDirty()) return;
-        CompletableFuture.supplyAsync(() -> {
-            try {
-                return new ObjectMapper().writeValueAsString(stockPlayer);
-            } catch (JsonProcessingException e) {
-                throw new RuntimeException(e);
-            }
-        }).thenAccept(json -> {
-            ARC.redisManager.saveMapKey("arc.stock_players", stockPlayer.playerUuid.toString(), json);
-            stockPlayer.setDirty(false);
-            new BukkitRunnable() {
-                @Override
-                public void run() {
-                    messager.send(stockPlayer.playerUuid.toString());
-                }
-            }.runTaskLaterAsynchronously(ARC.plugin, 5L);
-        });
+        messager.saveStockPlayer(stockPlayer);
     }
 
 
     public static StockPlayer getPlayer(UUID uuid) {
         return playerMap.get(uuid);
+    }
+
+    public static Optional<StockPlayer> getPlayer(String name) {
+        return playerMap.values().stream()
+                .filter(sp -> sp.playerName.equals(name))
+                .findAny();
     }
 
 

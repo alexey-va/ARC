@@ -1,12 +1,9 @@
 package arc.arc.stock;
 
-import arc.arc.board.ItemIcon;
-import arc.arc.configs.StockConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.type.MapType;
 import com.fasterxml.jackson.databind.type.TypeFactory;
 import lombok.RequiredArgsConstructor;
-import org.bukkit.Material;
 import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.api.WebSocketAdapter;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
@@ -14,10 +11,7 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
-import java.io.BufferedReader;
-import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
@@ -36,10 +30,10 @@ public class StockClient {
 
     static Map<String, List<Double>> prices = new ConcurrentHashMap<>();
 
-    public Optional<List<Stock>> fetchCrypto() {
-        String ids = StockMarket.currencyDataMap.values().stream()
-                .filter(StockMarket.CurrencyData::crypto)
-                .map(StockMarket.CurrencyData::id)
+    public Map<String, Double> cryptoPrices() {
+        String ids = StockMarket.stocks().stream()
+                .filter(stock -> stock.type == Stock.Type.CRYPTO)
+                .map(Stock::getSymbol)
                 .collect(Collectors.joining("%2C"));
         String url = "https://api.coingecko.com/api/v3/simple/price?ids=" + ids + "&vs_currencies=usd&precision=full";
         //System.out.println("URL: "+url);
@@ -54,77 +48,28 @@ public class StockClient {
                     typeFactory.constructType(String.class),
                     typeFactory.constructMapType(HashMap.class, String.class, Object.class)
             );
-
             Map<String, Map<String, Double>> map = objectMapper.readValue(stream, mapType);
-            //System.out.println("Map: "+map);
-            List<Stock> stocks = new ArrayList<>();
-            for (var entry : map.entrySet()) {
-                String name = entry.getKey();
-                double cost = entry.getValue().get("usd");
-                StockMarket.CurrencyData currencyData = StockMarket.currencyDataMap.get(name.toLowerCase());
-                stocks.add(new Stock(name.toUpperCase(), cost, 0.0, System.currentTimeMillis(),
-                        currencyData.display(), currencyData.lore(), currencyData.icon(), false, 0L));
-            }
 
-            double EURJPY = fetchAndPrintInstrumentPrice("https://ru.investing.com/currencies/eur-jpy");
-            double USDRUB = fetchAndPrintInstrumentPrice("https://ru.investing.com/currencies/usd-rub");
-
-            if (EURJPY != -1) {
-                //System.out.println("EURUSD: "+EURUSD);
-                StockMarket.CurrencyData currencyData = StockMarket.currencyDataMap.get("EUR/JPY");
-                stocks.add(new Stock("EUR/JPY", EURJPY, 0, System.currentTimeMillis(),
-                        currencyData.display(), currencyData.lore(), currencyData.icon(), false, 0L));
-            }
-            if (USDRUB != -1) {
-                //System.out.println("USDJPY: "+USDJPY);
-                StockMarket.CurrencyData currencyData = StockMarket.currencyDataMap.get("USD/RUB");
-                stocks.add(new Stock("USD/RUB", USDRUB, 0, System.currentTimeMillis(),
-                        currencyData.display(), currencyData.lore(), currencyData.icon(), false, 0L));
-            }
-
-            return Optional.of(stocks);
-
+            Map<String, Double> prices = new HashMap<>();
+            map.forEach((key, value) -> prices.put(key, value.get("usd")));
+            return prices;
         } catch (Exception e) {
             System.out.println("Could not load price for crypto!");
-            return Optional.empty();
+            return Map.of();
         }
     }
 
-    private static double fetchAndPrintInstrumentPrice(String url) {
+    private static double fetchInvesting(String url) {
         try {
-            // Fetch the HTML content from the URL
             Document document = Jsoup.connect(url).get();
-
-            // Find the <div> tag with the data-test attribute
             Element divElement = document.select("div[data-test=instrument-price-last]").first();
-
-            // Print the content of the found <div> tag
-            if (divElement != null) {
-                return Double.parseDouble(divElement.text().replace(",", "."));
-            } else {
-                System.out.println("Could not extract " + url);
-                System.out.println(document.text());
-                return -1;
-            }
-
+            return Double.parseDouble(divElement.text().replace(",", "."));
         } catch (Exception e) {
             e.printStackTrace();
             return -1;
         }
     }
 
-/*    public Optional<Stock> fetch(String symbol){
-        try {
-            double price = price(symbol);
-            double dividend = dividend(symbol);
-            long timestamp = System.currentTimeMillis();
-            return Optional.of(new Stock(symbol, price, dividend, timestamp));
-        } catch (Exception e){
-            System.out.println("Could not fetch "+symbol);
-            //e.printStackTrace();
-            return Optional.empty();
-        }
-    }*/
 
     public void startWebSocket(Collection<String> symbols) {
         try {
@@ -179,18 +124,42 @@ public class StockClient {
         }
     }
 
-    public Double price(String symbol) {
+    private Double getStockPrice(Stock stock){
         if (webSocketClient == null || !webSocketClient.isRunning() || isClosed) {
             System.out.println("Websocket is closed. Starting...");
-            startWebSocket(StockMarket.stocks().stream().filter(Stock::isStock).map(Stock::getSymbol).toList());
+            startWebSocket(StockMarket.stocks().stream()
+                    .filter(st -> st.type == Stock.Type.STOCK)
+                    .map(Stock::getSymbol)
+                    .toList());
         }
-        var list = prices.remove(symbol);
-        if(list == null) return null;
+        var list = prices.remove(stock.symbol);
+        if (list == null) return fetchFinnhub(stock.symbol);
         OptionalDouble optional = list.stream().mapToDouble(Double::doubleValue).average();
-        if (optional.isEmpty()) return null;
+        if (optional.isEmpty()) return fetchFinnhub(stock.symbol);
         return optional.getAsDouble();
+    }
 
-/*        if(POLY_API_KEY == null) return 0.0;
+    private Double getCurrencyPrice(Stock stock){
+        String url = "https://ru.investing.com/currencies/"+ stock.symbol.replace("/", "-").toLowerCase();
+        return fetchInvesting(url);
+    }
+
+    private Double getCommodityPrice(Stock stock){
+        String url = "https://ru.investing.com/commodities/"+ stock.symbol.replace("/", "-").toLowerCase();
+        return fetchInvesting(url);
+    }
+
+    public Double price(Stock stock) {
+        return switch (stock.type){
+            case STOCK -> getStockPrice(stock);
+            case CURRENCY -> getCurrencyPrice(stock);
+            case COMMODITY -> getCommodityPrice(stock);
+            default -> -1.0;
+        };
+    }
+
+    private double fetchFinnhub(String symbol) {
+        if (POLY_API_KEY == null) return -1;
         StringBuilder builder = new StringBuilder("https://finnhub.io/api/v1/quote?");
         builder.append("symbol=").append(symbol);
         builder.append("&token=").append(FINN_API_KEY);
@@ -206,9 +175,9 @@ public class StockClient {
             return (double) (map.get("c"));
         } catch (Exception e) {
             //e.printStackTrace();
-            System.out.println("Could not load price for  "+symbol);
-            throw new RuntimeException(e);
-        }*/
+            System.out.println("Could not load price for  " + symbol);
+            return -1;
+        }
     }
 
     public double dividend(String symbol) {

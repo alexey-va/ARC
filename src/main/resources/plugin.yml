@@ -22,6 +22,7 @@ softdepend:
   - ViaRewind
   - Geyser-Spigot
   - YamipaPlugin
+  - LootChest
 depend:
   - PlaceholderAPI
 commands:
@@ -50,5 +51,8 @@ commands:
     description: build-book
     usage: build-book
   arc-invest:
+    description: build-book
+    usage: build-book
+  sound-follow:
     description: build-book
     usage: build-book

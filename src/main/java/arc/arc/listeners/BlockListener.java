@@ -6,6 +6,7 @@ import arc.arc.hooks.HookRegistry;
 import arc.arc.treasurechests.locationpools.LocationPoolManager;
 import arc.arc.treasurechests.TreasureHunt;
 import arc.arc.treasurechests.TreasureHuntManager;
+import arc.arc.util.TextUtil;
 import de.tr7zw.changeme.nbtapi.NBTItem;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -42,6 +43,10 @@ public class BlockListener implements Listener {
         if(!event.hasItem()) return;
         ItemStack hand = event.getItem();
         if(hand == null || hand.getType() != Material.BOOK) return;
+        if(!event.getPlayer().hasPermission("arc.buildings.build")){
+            event.getPlayer().sendMessage(TextUtil.noPermissions());
+            return;
+        }
 
         if(!event.hasBlock() || event.getAction() != Action.RIGHT_CLICK_BLOCK){
             ConstructionSite site = BuildingManager.getConstruction(event.getPlayer().getUniqueId());

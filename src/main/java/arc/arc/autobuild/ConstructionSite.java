@@ -126,6 +126,16 @@ public class ConstructionSite {
                 if (!HookRegistry.landsHook.canBuild(player, chunk)) return false;
             }
         }
+        if (HookRegistry.wgHook != null) {
+            Corners corners = getCorners();
+            for (int x = corners.corner1.getBlockX(); x < corners.corner2.getBlockX(); x++) {
+                for (int y = corners.corner1.getBlockY(); y < corners.corner2.getBlockY(); y++) {
+                    for (int z = corners.corner1.getBlockZ(); z < corners.corner2.getBlockZ(); z++) {
+                        if(!HookRegistry.wgHook.canBuild(player, new Location(world, x,y,z))) return false;
+                    }
+                }
+            }
+        }
         return true;
     }
 

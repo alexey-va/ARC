@@ -1,19 +1,10 @@
 package arc.arc.util;
 
-import com.github.retrooper.packetevents.PacketEvents;
-import com.github.retrooper.packetevents.protocol.entity.data.EntityData;
-import com.github.retrooper.packetevents.protocol.entity.data.EntityDataType;
-import com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes;
-import com.github.retrooper.packetevents.protocol.entity.type.EntityTypes;
-import com.github.retrooper.packetevents.util.Vector3d;
-import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityMetadata;
-import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerResourcePackSend;
-import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSpawnEntity;
+
+import com.sk89q.worldedit.world.entity.EntityTypes;
 import dev.lone.itemsadder.api.ItemsAdder;
-import io.github.retrooper.packetevents.util.SpigotConversionUtil;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
@@ -23,10 +14,10 @@ import org.bukkit.block.data.type.Stairs;
 import org.bukkit.block.data.type.Wall;
 import org.bukkit.block.structure.StructureRotation;
 import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.Vector;
+import org.joml.Vector3d;
 
 import java.util.*;
 import java.util.concurrent.ExecutorService;
@@ -279,39 +270,6 @@ public class Utils {
             }
         }
         return data;
-    }
-
-    public static void sendDisplayBlock(Location location, BlockData blockData, Player player) {
-        int id = ThreadLocalRandom.current().nextInt(Integer.MIN_VALUE, Integer.MAX_VALUE);
-
-        WrapperPlayServerSpawnEntity packet = new WrapperPlayServerSpawnEntity(
-                id, Optional.of(UUID.randomUUID()), EntityTypes.BLOCK_DISPLAY, new Vector3d(location.getX(), location.getY(), location.getZ()),
-                0f, 0f, 0f, 0, Optional.empty());
-        service.execute(() -> PacketEvents.getAPI().getPlayerManager().sendPacket(player, packet));
-
-
-        List<EntityData> list = List.of(new EntityData(22, EntityDataTypes.BLOCK_STATE,
-                SpigotConversionUtil.fromBukkitBlockData(blockData).getGlobalId()));
-        WrapperPlayServerEntityMetadata metadata = new WrapperPlayServerEntityMetadata(id, list);
-        service.execute(() -> PacketEvents.getAPI().getPlayerManager().sendPacket(player, metadata));
-    }
-
-    public static void sendEntity(Location location, BlockData blockData, Player player) {
-        int id = ThreadLocalRandom.current().nextInt(Integer.MIN_VALUE, Integer.MAX_VALUE);
-        System.out.println("Spawning at " + location);
-        WrapperPlayServerSpawnEntity packet = new WrapperPlayServerSpawnEntity(
-                id, Optional.of(UUID.randomUUID()), EntityTypes.SKELETON, new Vector3d(location.getX(), location.getY(), location.getZ()),
-                0f, 0f, 0f, 0, Optional.empty()
-        );
-
-        service.execute(() -> PacketEvents.getAPI().getPlayerManager().sendPacket(player, packet));
-
-
-        List<EntityData> list = List.of(new EntityData(2, EntityDataTypes.OPTIONAL_ADV_COMPONENT,
-                Optional.of(Component.text("Lox" + id))));
-
-        WrapperPlayServerEntityMetadata metadata = new WrapperPlayServerEntityMetadata(id, list);
-        service.execute(() -> PacketEvents.getAPI().getPlayerManager().sendPacket(player, metadata));
     }
 
     public static void sendResourcePack(Player player, String url) {

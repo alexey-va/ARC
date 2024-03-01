@@ -3,17 +3,13 @@ package arc.arc.stock;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.*;
-import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
-import org.apache.http.cookie.SM;
 import org.bukkit.Material;
-import org.bukkit.configuration.serialization.ConfigurationSerializable;
 
 import java.text.DecimalFormat;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Map;
 import java.util.UUID;
 
 import static arc.arc.util.TextUtil.formatAmount;
@@ -68,6 +64,11 @@ public class Position {
         return StockMarket.stock(symbol);
     }
 
+    public double totalValue() {
+        Stock stock = getStock();
+        return gains(stock.price)*(leverage-1)+amount*stock.price;
+    }
+
     public record BankruptResponse(boolean bankrupt, double total) {
     }
 
@@ -88,11 +89,15 @@ public class Position {
         // Set the formatting pattern
         Instant timestampInstant = Instant.ofEpochMilli(this.getTimestamp());
         Duration timePassed = Duration.between(timestampInstant, Instant.now());
-        double gains = gains();
+        Stock stock = getStock();
+        double gains = gains(stock.price);
         decimalFormat.applyPattern(this.getAmount() >= 1 ? "###,###" : "0.###");
         return TagResolver.builder()
                 .resolver(TagResolver.resolver("amount", Tag.inserting(
                         mm(formatAmount(this.getAmount()), true)
+                )))
+                .resolver(TagResolver.resolver("dividend_amount", Tag.inserting(
+                        mm(formatAmount(this.getAmount()*stock.dividend), true)
                 )))
                 .resolver(TagResolver.resolver("position_gains", Tag.inserting(
                         mm(formatAmount(gains), true)

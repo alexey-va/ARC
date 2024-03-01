@@ -2,13 +2,18 @@ package arc.arc.hooks;
 
 import arc.arc.ARC;
 import arc.arc.configs.Config;
+import arc.arc.configs.LootChestsConfig;
 import arc.arc.farm.*;
 import arc.arc.hooks.citizens.CitizensHook;
 import arc.arc.hooks.elitemobs.EMHook;
 import arc.arc.hooks.lands.LandsHook;
+import arc.arc.hooks.lootchest.LootChestHook;
+import arc.arc.hooks.luckperms.LuckPermsHook;
 import arc.arc.hooks.viaversion.ViaVersionHook;
 import arc.arc.hooks.worldguard.WGHook;
 import arc.arc.hooks.yamipa.YamipaHook;
+import arc.arc.hooks.zauction.AuctionHook;
+import arc.arc.hooks.ztranslator.TranslatorHook;
 import arc.arc.listeners.*;
 import org.bukkit.Bukkit;
 
@@ -34,6 +39,10 @@ public class HookRegistry {
     public static SFHook sfHook;
     public static EMHook emHook;
     public static YamipaHook yamipaHook;
+    public static LuckPermsHook luckPermsHook;
+    public static LootChestHook lootChestHook;
+    public static AuctionHook auctionHook;
+    public static TranslatorHook translatorHook;
     public AEHook aeHook;
 
 
@@ -98,6 +107,21 @@ public class HookRegistry {
                 landsHook = new LandsHook();
             }
         }
+        if (getServer().getPluginManager().getPlugin("zAuctionHouseV3") != null) {
+            if (getServer().getPluginManager().getPlugin("zAuctionHouseV3").isEnabled()) {
+                auctionHook = new AuctionHook();
+            }
+        }
+        if (getServer().getPluginManager().getPlugin("zTranslator") != null) {
+            if (getServer().getPluginManager().getPlugin("zTranslator").isEnabled()) {
+                translatorHook = new TranslatorHook();
+            }
+        }
+        if (getServer().getPluginManager().getPlugin("LuckPerms") != null) {
+            if (getServer().getPluginManager().getPlugin("LuckPerms").isEnabled()) {
+                luckPermsHook = new LuckPermsHook();
+            }
+        }
         if (getServer().getPluginManager().getPlugin("CMI") != null) {
             if (getServer().getPluginManager().getPlugin("CMI").isEnabled()) {
                 cmiHook = new CMIHook();
@@ -106,6 +130,12 @@ public class HookRegistry {
         if (getServer().getPluginManager().getPlugin("ViaVersion") != null) {
             if (getServer().getPluginManager().getPlugin("ViaVersion").isEnabled()) {
                 viaVersionHook = new ViaVersionHook();
+            }
+        }
+        if (getServer().getPluginManager().getPlugin("LootChest") != null) {
+            if (getServer().getPluginManager().getPlugin("LootChest").isEnabled()) {
+                System.out.println("Registering LootChest hook");
+                lootChestHook = new LootChestHook();
             }
         }
         if (getServer().getPluginManager().getPlugin("YamipaPlugin") != null) {

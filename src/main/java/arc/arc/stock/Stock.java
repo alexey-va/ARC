@@ -1,6 +1,7 @@
 package arc.arc.stock;
 
 import arc.arc.board.ItemIcon;
+import arc.arc.configs.StockConfig;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -13,6 +14,8 @@ import org.bukkit.Material;
 import org.bukkit.configuration.serialization.ConfigurationSerializable;
 import org.jetbrains.annotations.NotNull;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -22,7 +25,8 @@ import static arc.arc.util.TextUtil.formatAmount;
 import static arc.arc.util.TextUtil.mm;
 
 @NoArgsConstructor
-@Setter @Getter
+@Setter
+@Getter
 @ToString
 @AllArgsConstructor
 public class Stock implements ConfigurationSerializable {
@@ -34,9 +38,11 @@ public class Stock implements ConfigurationSerializable {
     String display;
     List<String> lore;
     ItemIcon icon;
-    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
-    boolean isStock = false;
     long lastTimeDividend;
+    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+    int maxLeverage = 10000;
+    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+    Type type = Type.STOCK;
 
     public static Stock deserialize(Map<String, Object> map) {
         String jsonIcon = (String) map.get("icon");
@@ -60,8 +66,9 @@ public class Stock implements ConfigurationSerializable {
                 (String) map.getOrDefault("display", "display"),
                 result,
                 icon,
-                (Boolean) map.getOrDefault("isStock", false),
-                ((Number) map.getOrDefault("lastTimeDividend", 0)).longValue()
+                ((Number) map.getOrDefault("lastTimeDividend", 0)).longValue(),
+                ((Number) map.getOrDefault("maxLeverage", 10000)).intValue(),
+                Type.valueOf(((String) map.getOrDefault("type", "STOCK")).toUpperCase())
         );
     }
 
@@ -69,16 +76,17 @@ public class Stock implements ConfigurationSerializable {
     @Override
     public @NotNull Map<String, Object> serialize() {
         try {
-            return Map.of(
-                    "symbol", symbol,
-                    "price", price,
-                    "dividend", dividend,
-                    "lastUpdated", lastUpdated,
-                    "display", display,
-                    "lore", lore,
-                    "icon", new ObjectMapper().writeValueAsString(icon),
-                    "isStock", isStock,
-                    "lasTimeDividend", lastTimeDividend
+            return Map.ofEntries(
+                    Map.entry("symbol", symbol),
+                    Map.entry("price", price),
+                    Map.entry("dividend", dividend),
+                    Map.entry("lastUpdated", lastUpdated),
+                    Map.entry("display", display),
+                    Map.entry("lore", lore),
+                    Map.entry("icon", new ObjectMapper().writeValueAsString(icon)),
+                    Map.entry("lastTimeDividend", lastTimeDividend),
+                    Map.entry("maxLeverage", maxLeverage),
+                    Map.entry("type", type.name())
             );
         } catch (JsonProcessingException e) {
             throw new RuntimeException(e);
@@ -86,12 +94,49 @@ public class Stock implements ConfigurationSerializable {
     }
 
     public TagResolver tagResolver() {
+        int hours = (int) Duration.between(Instant.ofEpochMilli(lastTimeDividend), Instant.now()).toHours();
+        int dividendPeriodHours = (int) (StockConfig.dividendPeriod / 60L / 60L);
+        int hoursTill = dividendPeriodHours - hours;
+        double low = HistoryManager.low(symbol);
+        double high = HistoryManager.high(symbol);
+        double volatility = (high-low)/price;
+        String volatilityString;
+        if(volatility < 0.02) volatilityString = "<dark_green>Низкая";
+        else if(volatility < 0.04) volatilityString = "<green>Небольшая";
+        else if(volatility < 0.06) volatilityString = "<yellow>Значительная";
+        else if(volatility < 0.08) volatilityString = "<red>Высокая";
+        else volatilityString = "<dark_red>Импульсивная";
         return TagResolver.builder()
-                .resolver(TagResolver.resolver("price", Tag.inserting(
-                        mm(formatAmount(price), true)
+                .resolver(TagResolver.resolver("stock_price", Tag.inserting(
+                        mm(formatAmount(price, 5), true)
                 )))
-                .resolver(TagResolver.resolver("dividend", Tag.inserting(
+                .resolver(TagResolver.resolver("max_leverage", Tag.inserting(
+                        mm(formatAmount(maxLeverage), true)
+                )))
+                .resolver(TagResolver.resolver("lowest_recent_price", Tag.inserting(
+                        mm(low == 0.0 ? "<red>Нет" : formatAmount(low), true)
+                )))
+                .resolver(TagResolver.resolver("highest_recent_price", Tag.inserting(
+                        mm(high == 0.0 ? "<red>Нет" : formatAmount(high), true)
+                )))
+                .resolver(TagResolver.resolver("volatility", Tag.inserting(
+                        mm(volatilityString, true)
+                )))
+                .resolver(TagResolver.resolver("hours_since_dividend", Tag.inserting(
+                        mm(hours + "", true)
+                )))
+                .resolver(TagResolver.resolver("hours_till_dividend", Tag.inserting(
+                        mm(Math.max(0, hoursTill) + "", true)
+                )))
+                .resolver(TagResolver.resolver("dividends_period_hours", Tag.inserting(
+                        mm(dividendPeriodHours + "", true)
+                )))
+                .resolver(TagResolver.resolver("stock_dividend", Tag.inserting(
                         mm(formatAmount(dividend), true)
                 ))).build();
+    }
+
+    public enum Type {
+        STOCK, CURRENCY, CRYPTO, COMMODITY
     }
 }

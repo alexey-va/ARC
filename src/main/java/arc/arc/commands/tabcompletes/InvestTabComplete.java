@@ -1,6 +1,7 @@
 package arc.arc.commands.tabcompletes;
 
 import arc.arc.stock.*;
+import arc.arc.xserver.playerlist.PlayerManager;
 import org.apache.http.cookie.SM;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -12,6 +13,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 public class InvestTabComplete implements TabCompleter {
     @Override
@@ -21,11 +23,18 @@ public class InvestTabComplete implements TabCompleter {
         String last = strings[strings.length-1];
 
         if(last.isEmpty()){
-            return List.of("-t", "-s", "-amount", "-leverage", "-up", "-down", "-uuid");
+            return List.of("-t", "-s", "-amount", "-leverage", "-up", "-down", "-uuid", "-player");
         }
 
         if(last.startsWith("-t")){
-            return List.of("-t:buy","-t:short","-t:close","-t:add-money", "-t:withdraw-money", "-t:balance", "-t:gains", "-t:auto");
+            return Stream.of("-t:buy","-t:short","-t:close","-t:add-money", "-t:withdraw-money", "-t:balance", "-t:gains", "-t:auto",
+                    "-t:prune-history", "-t:menu", "-t:update", "-t:give-dividend")
+                    .filter(str -> str.indexOf(last)==0)
+                    .toList();
+        }
+
+        if(last.startsWith("-player")){
+            return PlayerManager.getPlayerNames().stream().toList();
         }
 
         if(last.startsWith("-s")){

@@ -1,5 +1,6 @@
 package arc.arc.stock.gui;
 
+import arc.arc.ARC;
 import arc.arc.configs.StockConfig;
 import arc.arc.stock.*;
 import arc.arc.util.GuiUtils;
@@ -15,10 +16,13 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.text.DecimalFormat;
 
@@ -26,10 +30,11 @@ import static arc.arc.util.TextUtil.*;
 
 public class PositionCreator extends ChestGui {
     StockPlayer stockPlayer;
-    Player player;
+    //Player player;
     String symbol;
     Stock stock;
     GuiItem back, amountItem, typeItem, leverageItem, createItem, upperItem, lowerItem;
+    BukkitTask amountTask;
 
 
     double amount = 1;
@@ -37,17 +42,24 @@ public class PositionCreator extends ChestGui {
     double upper = Double.MAX_VALUE, lower = Double.MAX_VALUE;
     Position.Type type = Position.Type.BOUGHT;
 
-    public PositionCreator(Player player, String symbol) {
+    public PositionCreator(StockPlayer stockPlayer, String symbol) {
         super(2, TextHolder.deserialize(TextUtil.toLegacy(StockConfig.string("position-creator.menu-title"),
                 "symbol", symbol)));
-        this.stockPlayer = StockPlayerManager.getOrCreate(player);
+        this.stockPlayer = stockPlayer;
         this.symbol = symbol;
-        this.player = player;
         stock = StockMarket.stock(symbol);
         if (stock.getPrice() < 1) leverage = 10000;
         else if (stock.getPrice() < 10) leverage = 1000;
         else if (stock.getPrice() < 100) leverage = 100;
         else if (stock.getPrice() < 1000) leverage = 10;
+        if(leverage > stock.getMaxLeverage()){
+            leverage = stock.getMaxLeverage();
+        }
+        while (leverage*amount* stock.getPrice() > StockConfig.maxLeveragedPrice){
+            if(leverage == 1) break;
+            leverage/=10;
+            if(leverage <1) leverage = 1;
+        }
 
         setupBackground();
         setupNav();
@@ -99,7 +111,7 @@ public class PositionCreator extends ChestGui {
                 .clickEvent(this::acceptLowerClick).build();
         staticPane.addItem(lowerItem, 7, 0);
 
-        boolean canHaveMore = stockPlayer.isBelowMaxStockAmount(player);
+        boolean canHaveMore = stockPlayer.isBelowMaxStockAmount();
         createItem = new ItemStackBuilder(Material.GREEN_STAINED_GLASS_PANE)
                 .display(canHaveMore ?
                         StockConfig.string("position-creator.create-display") :
@@ -155,10 +167,10 @@ public class PositionCreator extends ChestGui {
 
             if (click.isShiftClick()) {
                 if (newLeverage == 1) newLeverage = 100;
-                else newLeverage = Math.min(newLeverage + 100, 1000_000);
+                else newLeverage = Math.min(newLeverage + 100, stock.getMaxLeverage());
             } else {
                 if (newLeverage == 1) newLeverage = 10;
-                else newLeverage = Math.min(newLeverage + 10, 1000_000);
+                else newLeverage = Math.min(newLeverage + 10, stock.getMaxLeverage());
             }
         } else if (click.isRightClick()) {
             if (click.isShiftClick()) {
@@ -166,13 +178,6 @@ public class PositionCreator extends ChestGui {
             } else newLeverage = Math.max(1, newLeverage - 10);
         }
         return newLeverage;
-    }
-
-    private void updateCrateItem() {
-        createItem.setItem(new ItemStackBuilder(Material.GREEN_STAINED_GLASS_PANE)
-                .display(StockConfig.string("position-creator.create-display"))
-                .lore(StockConfig.stringList("position-creator.create-lore"))
-                .tagResolver(resolver(amount, type, leverage)).build());
     }
 
     private TagResolver resolver(double amount, Position.Type type, int leverage) {
@@ -186,6 +191,7 @@ public class PositionCreator extends ChestGui {
         Position.AutoClosePrices autoClosePrices = marginCallAtPrice(stockPlayer.getBalance());
 
         return TagResolver.builder()
+                .resolver(stock.tagResolver())
                 .resolver(TagResolver.resolver("amount", Tag.inserting(
                         strip(MiniMessage.miniMessage().deserialize(decimalFormat.format(amount)))
                 )))
@@ -203,6 +209,15 @@ public class PositionCreator extends ChestGui {
                 )))
                 .resolver(TagResolver.resolver("cost", Tag.inserting(
                         mm(formatAmount(cost), true)
+                )))
+                .resolver(TagResolver.resolver("leveraged_price", Tag.inserting(
+                        mm(formatAmount(leverage*amount*stock.getPrice()), true)
+                )))
+                .resolver(TagResolver.resolver("max_buy_price", Tag.inserting(
+                        mm(formatAmount(StockConfig.maxBuyPrice), true)
+                )))
+                .resolver(TagResolver.resolver("max_leveraged_price", Tag.inserting(
+                        mm(formatAmount(StockConfig.maxLeveragedPrice), true)
                 )))
                 .resolver(TagResolver.resolver("balance", Tag.inserting(
                         mm(balance >= (cost + commission) ? "<green>" + formatAmount(balance) :
@@ -225,10 +240,10 @@ public class PositionCreator extends ChestGui {
                                 mm(formatAmount(autoClosePrices.high()), true)
                 )))
                 .resolver(TagResolver.resolver("position_amount", Tag.inserting(
-                        mm(stockPlayer.positions().size()+"", true)
+                        mm(stockPlayer.positions().size() + "", true)
                 )))
                 .resolver(TagResolver.resolver("max_stock_amount", Tag.inserting(
-                        mm(stockPlayer.maxStockAmount(player)+"", true)
+                        mm(stockPlayer.maxStockAmount() + "", true)
                 )))
                 .build();
     }
@@ -244,7 +259,7 @@ public class PositionCreator extends ChestGui {
                 .toGuiItemBuilder()
                 .clickEvent(click -> {
                     click.setCancelled(true);
-                    new PositionSelector(player, symbol).show(player);
+                    GuiUtils.constructAndShowAsync(() -> new PositionSelector(stockPlayer, symbol), click.getWhoClicked());
                 }).build();
         pane.addItem(back, 0, 0);
     }
@@ -286,61 +301,55 @@ public class PositionCreator extends ChestGui {
 
     private void acceptAmountClick(InventoryClickEvent click) {
         click.setCancelled(true);
+        if(amountTask!=null && !amountTask.isCancelled()) amountTask.cancel();
+        double newAmount = getNewAmount(click);
+        double price = newAmount * stock.getPrice();
+        if (price > StockConfig.maxBuyPrice) {
+            amountTask = GuiUtils.temporaryChange(amountItem.getItem(),
+                    mm(StockConfig.string("position-creator.too-expensive-position")
+                            .replace("<max_buy_price>", formatAmount(StockConfig.maxBuyPrice))),
+                    null, 100L, this::update);
+            this.update();
+            return;
+        }
+        if(leverage*price > StockConfig.maxLeveragedPrice){
+            amountTask = GuiUtils.temporaryChange(amountItem.getItem(),
+                    mm(StockConfig.string("position-creator.too-much-leverage")
+                            .replace("<max_leveraged_price>", formatAmount(StockConfig.maxLeveragedPrice))),
+                    null, 100L, this::update);
+            this.update();
+            return;
+        }
+        amount = newAmount;
 
-        amount = getNewAmount(click);
-        ItemMeta meta = new ItemStackBuilder(Material.GOLD_INGOT)
-                .tagResolver(resolver(amount, type, leverage))
-                .display(StockConfig.string("position-creator.amount-display"))
-                .lore(StockConfig.stringList("position-creator.amount-lore"))
-                .build().getItemMeta();
-        amountItem.getItem().setItemMeta(meta);
-        updateCrateItem();
-        this.update();
+        updateItems();
     }
 
     private void acceptTypeClick(InventoryClickEvent click) {
         click.setCancelled(true);
         if (type == Position.Type.BOUGHT) type = Position.Type.SHORTED;
         else type = Position.Type.BOUGHT;
-        typeItem.setItem(new ItemStackBuilder(type == Position.Type.BOUGHT ? Material.LAPIS_LAZULI : Material.COAL)
-                .tagResolver(resolver(amount, type, leverage))
-                .display(StockConfig.string("position-creator.type-display"))
-                .lore(StockConfig.stringList("position-creator.type-lore"))
-                .build());
-        this.update();
+
+        updateItems();
     }
 
     private void acceptUpperClick(InventoryClickEvent click) {
+        click.setCancelled(true);
         upper = getNewUpper(click);
-
-        ItemMeta meta = new ItemStackBuilder(Material.SLIME_BLOCK)
-                .tagResolver(resolver(amount, type, leverage))
-                .display(StockConfig.string("position-creator.upper-display"))
-                .lore(StockConfig.stringList("position-creator.upper-lore"))
-                .build().getItemMeta();
-
-        upperItem.getItem().setItemMeta(meta);
-        update();
+        updateItems();
     }
 
     private void acceptLowerClick(InventoryClickEvent click) {
+        click.setCancelled(true);
         lower = getNewLower(click);
-
-        ItemMeta meta = new ItemStackBuilder(Material.HONEY_BLOCK)
-                .tagResolver(resolver(amount, type, leverage))
-                .display(StockConfig.string("position-creator.lower-display"))
-                .lore(StockConfig.stringList("position-creator.lower-lore"))
-                .build().getItemMeta();
-
-        lowerItem.getItem().setItemMeta(meta);
-        update();
+        updateItems();
     }
 
     private void acceptCreateClick(InventoryClickEvent click) {
         click.setCancelled(true);
         Stock stock = StockMarket.stock(symbol);
         if (stock == null) {
-            player.sendMessage("Stock not found! " + symbol);
+            //player.sendMessage("Stock not found! " + symbol);
             return;
         }
         StockPlayerManager.EconomyCheckResponse response = StockPlayerManager.economyCheck(stockPlayer, stock, amount, leverage);
@@ -360,29 +369,91 @@ public class PositionCreator extends ChestGui {
             }
         }
 
-        player.performCommand("arc-invest -t:" + type.command + " -s:" + symbol + " -amount:" + amount + " -leverage:" + leverage + " -up:" + upper + " -down:" + lower);
-        new PositionSelector(player, symbol).show(player);
+        ((Player) click.getWhoClicked()).performCommand("arc-invest -t:" + type.command + " -s:" + symbol + " -amount:" + amount + " -leverage:" + leverage + " -up:" + upper + " -down:" + lower);
+        new PositionSelector(stockPlayer, symbol).show(click.getWhoClicked());
+    }
+
+
+    private void acceptLeverageClick(InventoryClickEvent click) {
+        click.setCancelled(true);
+        int newLeverage = getNewLeverage(click);
+        if(newLeverage*amount*stock.getPrice() > StockConfig.maxLeveragedPrice){
+            amountTask = GuiUtils.temporaryChange(amountItem.getItem(),
+                    mm(StockConfig.string("position-creator.too-much-leverage")
+                            .replace("<max_leveraged_price>", formatAmount(StockConfig.maxLeveragedPrice))),
+                    null, 100L, this::update);
+            this.update();
+            return;
+        }
+        leverage = getNewLeverage(click);
+        updateItems();
     }
 
     Position.AutoClosePrices marginCallAtPrice(double balance) {
-        double bankruptPrice = stockPlayer.isAutoTake() ? -1 : stock.getPrice() - balance / amount / leverage;
+        double bankruptPrice = stock.getPrice() - balance / amount / leverage;
         double lowMarginCallPrice = lower > 1_000_000_000 ? -1 : stock.getPrice() - lower / amount / leverage;
         double upperMarginCallPrice = upper > 1_000_000_000 ? -1 : stock.getPrice() + upper / amount / leverage;
         double low = Math.min(bankruptPrice, lowMarginCallPrice);
         return new Position.AutoClosePrices(low, upperMarginCallPrice);
     }
 
+    private void updateItems(){
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                TagResolver resolver = resolver(amount, type, leverage);
+                // leverage
+                ItemMeta meta = new ItemStackBuilder(Material.LEVER)
+                        .tagResolver(resolver)
+                        .display(StockConfig.string("position-creator.leverage-display"))
+                        .lore(StockConfig.stringList("position-creator.leverage-lore"))
+                        .build().getItemMeta();
+                leverageItem.getItem().setItemMeta(meta);
 
-    private void acceptLeverageClick(InventoryClickEvent click) {
-        click.setCancelled(true);
-        leverage = getNewLeverage(click);
-        ItemMeta meta = new ItemStackBuilder(Material.LEVER)
-                .tagResolver(resolver(amount, type, leverage))
-                .display(StockConfig.string("position-creator.leverage-display"))
-                .lore(StockConfig.stringList("position-creator.leverage-lore"))
-                .build().getItemMeta();
+                // lower
+                meta = new ItemStackBuilder(Material.HONEY_BLOCK)
+                        .tagResolver(resolver)
+                        .display(StockConfig.string("position-creator.lower-display"))
+                        .lore(StockConfig.stringList("position-creator.lower-lore"))
+                        .build().getItemMeta();
+                lowerItem.getItem().setItemMeta(meta);
 
-        leverageItem.getItem().setItemMeta(meta);
-        update();
+                // upper
+                meta = new ItemStackBuilder(Material.SLIME_BLOCK)
+                        .tagResolver(resolver)
+                        .display(StockConfig.string("position-creator.upper-display"))
+                        .lore(StockConfig.stringList("position-creator.upper-lore"))
+                        .build().getItemMeta();
+                upperItem.getItem().setItemMeta(meta);
+
+
+                //type
+                typeItem.setItem(new ItemStackBuilder(type == Position.Type.BOUGHT ? Material.LAPIS_LAZULI : Material.COAL)
+                        .tagResolver(resolver)
+                        .display(StockConfig.string("position-creator.type-display"))
+                        .lore(StockConfig.stringList("position-creator.type-lore"))
+                        .build());
+
+                //create
+                createItem.setItem(new ItemStackBuilder(Material.GREEN_STAINED_GLASS_PANE)
+                        .display(StockConfig.string("position-creator.create-display"))
+                        .lore(StockConfig.stringList("position-creator.create-lore"))
+                        .tagResolver(resolver(amount, type, leverage)).build());
+
+                // amount
+                meta = new ItemStackBuilder(Material.GOLD_INGOT)
+                        .tagResolver(resolver)
+                        .display(StockConfig.string("position-creator.amount-display"))
+                        .lore(StockConfig.stringList("position-creator.amount-lore"))
+                        .build().getItemMeta();
+                amountItem.getItem().setItemMeta(meta);
+                new BukkitRunnable() {
+                    @Override
+                    public void run() {
+                        update();
+                    }
+                }.runTask(ARC.plugin);
+            }
+        }.runTaskAsynchronously(ARC.plugin);
     }
 }

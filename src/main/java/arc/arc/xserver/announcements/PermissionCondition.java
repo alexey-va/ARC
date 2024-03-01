@@ -1,16 +1,14 @@
 package arc.arc.xserver.announcements;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 import org.bukkit.entity.Player;
 
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class PermissionCondition extends ArcCondition {
+@EqualsAndHashCode
+public class PermissionCondition implements ArcCondition {
 
     String permission;
 

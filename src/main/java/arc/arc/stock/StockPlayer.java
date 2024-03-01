@@ -1,6 +1,7 @@
 package arc.arc.stock;
 
 import arc.arc.configs.StockConfig;
+import arc.arc.hooks.HookRegistry;
 import arc.arc.util.TextUtil;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -8,9 +9,7 @@ import lombok.*;
 import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.Bukkit;
-import org.bukkit.configuration.serialization.ConfigurationSerializable;
-import org.bukkit.entity.Player;
-import org.jetbrains.annotations.NotNull;
+import org.bukkit.OfflinePlayer;
 
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -55,25 +54,29 @@ public class StockPlayer {
     @JsonIgnore
     public double totalBalance() {
         double fromPositions = positionMap.values().stream()
-                .flatMap(list -> list.stream().map(Position::gains))
+                .flatMap(list -> list.stream().map(Position::totalValue))
                 .reduce(0.0, Double::sum);
         //System.out.println("From positions: "+fromPositions);
         return balance + fromPositions;
     }
 
     @JsonIgnore
-    public void giveDividend(String symbol) {
-        if (!positionMap.containsKey(symbol)) return;
+    public double giveDividend(String symbol) {
+        if (!positionMap.containsKey(symbol)) return 0;
+        System.out.println("Giving divedend to "+playerName);
         Stock stock = StockMarket.stock(symbol);
-        if (!stock.isStock()) return;
+        if (stock.dividend < 0.00001) return 0;
         dirty=true;
+        double gave = 0;
         for (Position position : positionMap.get(symbol)) {
             double dividend = stock.dividend * position.amount;
             if (dividend == 0) continue;
             balance += dividend;
             receivedDividend += dividend;
+            gave+=dividend;
             position.setReceivedDividend(position.getReceivedDividend()+dividend);
         }
+        return gave;
     }
 
     @JsonIgnore
@@ -83,19 +86,24 @@ public class StockPlayer {
     }
 
     @JsonIgnore
-    public boolean isBelowMaxStockAmount(Player player){
+    public boolean isBelowMaxStockAmount(){
         int currentAmount = positions().size();
         if(currentAmount <= StockConfig.defaultStockMaxAmount) return true;
         var entry = StockConfig.permissionMap.ceilingEntry(currentAmount+1);
         if(entry == null) return false;
-        return player.hasPermission(entry.getValue());
+        OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(playerUuid);
+        if(!offlinePlayer.isOnline() && HookRegistry.luckPermsHook == null) return false;
+        return HookRegistry.luckPermsHook.hasPermission(offlinePlayer, entry.getValue());
     }
 
     @JsonIgnore
-    public int maxStockAmount(Player player){
+    public int maxStockAmount(){
         int max = -1;
+        OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(playerUuid);
+        if(!offlinePlayer.isOnline() && HookRegistry.luckPermsHook == null) return -1;
         for(var entry : StockConfig.permissionMap.entrySet()){
-            if(player.hasPermission(entry.getValue()) && entry.getKey() > max) max = entry.getKey();
+            if(HookRegistry.luckPermsHook.hasPermission(offlinePlayer, entry.getValue())
+                    && entry.getKey() > max) max = entry.getKey();
         }
         return max == -1 ? StockConfig.defaultStockMaxAmount : max;
     }

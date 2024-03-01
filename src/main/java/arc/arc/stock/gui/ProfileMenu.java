@@ -15,7 +15,9 @@ import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
 import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.jetbrains.annotations.Nullable;
@@ -24,16 +26,14 @@ import static arc.arc.util.TextUtil.mm;
 
 public class ProfileMenu extends ChestGui {
     StockPlayer stockPlayer;
-    Player player;
     GuiItem back, balance, statistic, auto;
     int previous;
     String symbol;
 
-    public ProfileMenu(Player player, int previous, @Nullable String symbol) {
+    public ProfileMenu(StockPlayer stockPlayer, int previous, @Nullable String symbol) {
         super(2, TextHolder.deserialize(TextUtil.toLegacy(StockConfig.string("profile-menu.menu-title"),
-                "name", player.getName())));
-        stockPlayer = StockPlayerManager.getOrCreate(player);
-        this.player = player;
+                "name", stockPlayer.getPlayerName())));
+        this.stockPlayer = stockPlayer;
         this.previous = previous;
         this.symbol = symbol;
 
@@ -53,8 +53,16 @@ public class ProfileMenu extends ChestGui {
                 .toGuiItemBuilder()
                 .clickEvent(click -> {
                     click.setCancelled(true);
-                    if (previous == 0) new SymbolSelector(player).show(player);
-                    else if (previous == 1) new PositionSelector(player, symbol).show(player);
+                    if (previous == 0) {
+                        GuiUtils.constructAndShowAsync(
+                                () -> new SymbolSelector(stockPlayer),
+                                click.getWhoClicked());
+                    }
+                    else if (previous == 1) {
+                        GuiUtils.constructAndShowAsync(
+                                () -> new PositionSelector(stockPlayer, symbol),
+                                click.getWhoClicked());
+                    }
                 }).build();
         pane.addItem(back, 0, 0);
     }
@@ -139,7 +147,8 @@ public class ProfileMenu extends ChestGui {
         }
 
         // check for players balance
-        double playerBalance = ARC.getEcon().getBalance(player);
+        OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(stockPlayer.getPlayerUuid());
+        double playerBalance = ARC.getEcon().getBalance(offlinePlayer);
         if (diff > 0 && diff > playerBalance) {
             TagResolver resolver = TagResolver.resolver("player_balance", Tag.inserting(
                     mm(TextUtil.formatAmount(playerBalance), true)

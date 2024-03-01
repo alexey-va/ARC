@@ -10,6 +10,7 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.Material;
+import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.ItemFlag;
@@ -19,7 +20,9 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import static arc.arc.util.TextUtil.strip;
 
@@ -54,7 +57,7 @@ public class GuiUtils {
         if (display != null) meta.displayName(strip(display));
         if (lore != null && !lore.isEmpty()) meta.lore(lore.stream().map(TextUtil::strip).toList());
         stack.setItemMeta(meta);
-        if(ticks <0) return null;
+        if (ticks < 0) return null;
         return new BukkitRunnable() {
             @Override
             public void run() {
@@ -72,17 +75,37 @@ public class GuiUtils {
         return temporaryChange(stack, display, lore, ticks, callback, null);
     }
 
-    public static boolean cooldownCheck(GuiItem guiItem, Player player, ChestGui chestGui){
-        long cooldown = CooldownManager.cooldown(player.getUniqueId(), "gui_click");
-        if(cooldown > 0) {
+    public static boolean cooldownCheck(GuiItem guiItem, UUID playerUuid, ChestGui chestGui) {
+        long cooldown = CooldownManager.cooldown(playerUuid, "gui_click");
+        if (cooldown > 0) {
             temporaryChange(guiItem.getItem(),
                     strip(Component.text("Не кликайте так быстро!", NamedTextColor.RED)),
-                    null, cooldown, () -> {if (chestGui != null) chestGui.update();}
+                    null, cooldown, () -> {
+                        if (chestGui != null) chestGui.update();
+                    }
             );
             return false;
         }
-        CooldownManager.addCooldown(player.getUniqueId(), "gui_click", 10);
+        CooldownManager.addCooldown(playerUuid, "gui_click", 10);
         return true;
+    }
+
+    public static void constructAndShowAsync(Supplier<ChestGui> supplier, HumanEntity player) {
+        CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return supplier.get();
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        return null;
+                    }
+                })
+                .thenAccept(gui -> new BukkitRunnable() {
+                    @Override
+                    public void run() {
+                        if (gui == null) return;
+                        gui.show(player);
+                    }
+                }.runTask(ARC.plugin));
     }
 
     public static GuiItem background(Material material) {

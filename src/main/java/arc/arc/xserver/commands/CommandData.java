@@ -1,7 +1,6 @@
 package arc.arc.xserver.commands;
 
 
-import arc.arc.network.ArcSerializable;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -16,7 +15,7 @@ import java.util.UUID;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class CommandData extends ArcSerializable {
+public class CommandData {
 
     Sender sender;
     String command;

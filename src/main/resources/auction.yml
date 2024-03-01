@@ -1,0 +1,8 @@
+discord-categories:
+  - block
+  - potions
+  - tools
+  - weapons
+  - misc
+refresh-rate: 1200
+broadcast-items: false

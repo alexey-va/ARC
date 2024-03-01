@@ -32,19 +32,21 @@ import java.util.UUID;
 import static arc.arc.util.TextUtil.*;
 
 public class PositionMenu extends ChestGui {
-    Player player;
+    //Player player;
     StockPlayer stockPlayer;
     Position position;
 
     GuiItem back, close;
     boolean confirm = false;
+    boolean fromAllPositions;
 
-    public PositionMenu(Player player, Position position) {
+    public PositionMenu(StockPlayer stockPlayer, Position position, boolean fromAllPositions) {
         super(2, TextHolder.deserialize(TextUtil.toLegacy(StockConfig.string("position-menu.menu-title"),
                 "uuid", position.getPositionUuid().toString().split("-")[0])));
-        this.player = player;
-        this.stockPlayer = StockPlayerManager.getOrCreate(player);
+        //this.player = player;
+        this.stockPlayer = stockPlayer;
         this.position = position;
+        this.fromAllPositions= fromAllPositions;
 
         setupBackground();
         setupButtons();
@@ -71,7 +73,10 @@ public class PositionMenu extends ChestGui {
                 .toGuiItemBuilder()
                 .clickEvent(click -> {
                     click.setCancelled(true);
-                    new PositionSelector(player, position.getSymbol()).show(player);
+                    GuiUtils.constructAndShowAsync(() -> {
+                        if(fromAllPositions) return new PositionSelector(stockPlayer, null);
+                        return new PositionSelector(stockPlayer, position.getSymbol());
+                    },click.getWhoClicked());
                 }).build();
         pane.addItem(back, 0, 0);
     }
@@ -97,8 +102,8 @@ public class PositionMenu extends ChestGui {
                         return;
                     }
 
-                    player.performCommand("arc-invest -t:close -s:" + position.getSymbol() + " -uuid:" + position.getPositionUuid()+" -reason:3");
-                    new PositionSelector(player, position.getSymbol()).show(player);
+                    ((Player)click.getWhoClicked()).performCommand("arc-invest -t:close -s:" + position.getSymbol() + " -uuid:" + position.getPositionUuid()+" -reason:3");
+                    GuiUtils.constructAndShowAsync(() -> new PositionSelector(stockPlayer, position.getSymbol()), click.getWhoClicked());
                 }).build();
         return close;
     }

@@ -12,6 +12,7 @@ import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 @RequiredArgsConstructor
@@ -26,7 +27,8 @@ public class AnnouncementMessager implements ChannelListener {
     @Override
     public void consume(String channel, String message, String server) {
         AnnouncementData data = RedisSerializer.fromJson(message, AnnouncementData.class);
-        if(data == null || data.originServer.equalsIgnoreCase(Config.server)) return;
+        if(Objects.equals(server, Config.server)) return;
+        if(data == null || Config.server.equalsIgnoreCase(data.originServer)) return;
         if(!data.everywhere && !data.servers.contains(Config.server)) return;
         data = announcementDataCache.getOrDefault(data, data);
         AnnouncementData finalData = data;

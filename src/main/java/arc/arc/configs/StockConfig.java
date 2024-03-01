@@ -1,12 +1,7 @@
 package arc.arc.configs;
 
 import arc.arc.ARC;
-import arc.arc.board.ItemIcon;
 import arc.arc.stock.*;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.type.MapType;
-import com.fasterxml.jackson.databind.type.TypeFactory;
 import lombok.SneakyThrows;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -17,14 +12,17 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class StockConfig {
 
     public static String mainMenuBackCommand;
     public static long stockRefreshRate;
-
+    public static double maxBuyPrice;
+    public static double maxLeveragedPrice;
+    public static long historyLifetime;
+    public static long dividendPeriod;
+    public static double dividendPercentFromPrice;
 
 
     private static YamlConfiguration config;
@@ -37,7 +35,6 @@ public class StockConfig {
 
 
     public static boolean mainServer;
-    public static int refreshRate;
     public static double commission;
     public static double leveragePower;
     public static int defaultStockMaxAmount;
@@ -92,12 +89,17 @@ public class StockConfig {
 
     private static void loadConfig() {
         mainServer = config.getBoolean("main-server", false);
-        refreshRate = config.getInt("refresh-rate", 60);
+        //refreshRate = config.getInt("refresh-rate", 300);
         commission = config.getDouble("commission", 0.01);
         leveragePower = config.getDouble("leverage-power", 0.5);
         mainMenuBackCommand = config.getString("main-menu-back-command", "menu");
-        stockRefreshRate = config.getLong("stock-refresh-rate", 5L);
+        stockRefreshRate = config.getLong("stock-refresh-rate", 300);
         defaultStockMaxAmount = config.getInt("default-max-stock-amount", 10);
+        maxBuyPrice = config.getDouble("max-buy-price", 1_000_000);
+        maxLeveragedPrice = config.getDouble("max-leveraged-price", 10_000_000);
+        historyLifetime = config.getLong("history-lifetime", 60*60*24*3L);
+        dividendPeriod = config.getLong("dividend-period", 60*60*4L);
+        dividendPercentFromPrice = config.getDouble("dividend-percent-from-price", 0.02);
         String sml = config.getString("stock-market-location", null);
         if(sml != null){
             String[] strings = sml.split(",");
@@ -143,44 +145,18 @@ public class StockConfig {
             }
         }
 
-        for (var map : config.getMapList("currencies")) {
-            try {
-                StockMarket.loadCurrencyFromMap(map);
-            } catch (Exception e) {
-                System.out.println("Error parsing " + map);
-                e.printStackTrace();
-            }
-        }
-
         String FINN_API_KEY = config.getString("finn-api-key");
         String POLY_API_KEY = config.getString("poly-api-key");
 
         StockMarket.setClient(new StockClient(FINN_API_KEY, POLY_API_KEY));
     }
 
-    @SneakyThrows
-    public static void saveStockHistory(Map<String, List<StockMarket.StockHistory>> history) {
-        new ObjectMapper()
-                .enable(SerializationFeature.INDENT_OUTPUT)
-                .writeValue(historyFile, history);
+    public static void saveStockHistory() {
+        HistoryManager.saveToFile(historyFile);
     }
 
     public static void loadStockHistory() {
-        try {
-            ObjectMapper objectMapper = new ObjectMapper();
-
-            TypeFactory typeFactory = objectMapper.getTypeFactory();
-            MapType mapType = typeFactory.constructMapType(
-                    ConcurrentHashMap.class,
-                    typeFactory.constructType(String.class),
-                    typeFactory.constructCollectionType(List.class, StockMarket.StockHistory.class)
-            );
-
-            Map<String, List<StockMarket.StockHistory>> history = objectMapper.readValue(historyFile, mapType);
-            StockMarket.setHistory(history);
-        } catch (Exception e) {
-            saveStockHistory(new ConcurrentHashMap<>());
-        }
+        HistoryManager.loadFromFile(historyFile);
     }
 
     public static String string(String key) {

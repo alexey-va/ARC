@@ -13,7 +13,7 @@ import org.bukkit.World;
 @Builder
 @Data
 @NoArgsConstructor
-public class ServerLocation extends ArcSerializable {
+public class ServerLocation {
 
     String server, world;
     double x,y,z;

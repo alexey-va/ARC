@@ -1,15 +1,11 @@
 package arc.arc.board;
 
-import arc.arc.ARC;
 import arc.arc.configs.BoardConfig;
-import arc.arc.configs.Config;
-import arc.arc.network.ArcSerializable;
 import arc.arc.util.TextUtil;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.*;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.ComponentLike;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.Style;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -17,15 +13,11 @@ import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Material;
-import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.persistence.PersistentDataType;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
@@ -37,7 +29,7 @@ import static arc.arc.util.TextUtil.strip;
 @AllArgsConstructor
 @NoArgsConstructor
 @ToString
-public class BoardEntry extends ArcSerializable {
+public class BoardEntry {
 
     public Type type;
     public String playerName;

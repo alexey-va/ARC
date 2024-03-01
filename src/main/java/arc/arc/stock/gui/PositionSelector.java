@@ -21,9 +21,11 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitScheduler;
 import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.NotNull;
 
@@ -35,7 +37,7 @@ import static arc.arc.util.TextUtil.*;
 
 public class PositionSelector extends ChestGui {
     StockPlayer stockPlayer;
-    Player player;
+    //Player player;
     String symbol;
     List<Position> positions;
 
@@ -44,13 +46,13 @@ public class PositionSelector extends ChestGui {
     BukkitTask refreshTask;
     PaginatedPane paginatedPane;
 
-    public PositionSelector(Player player, String symbol) {
-        super(2, TextHolder.deserialize(TextUtil.toLegacy(StockConfig.string("position-selector.menu-title"),
-                "symbol", symbol)));
-        this.stockPlayer = StockPlayerManager.getOrCreate(player);
+    public PositionSelector(StockPlayer stockPlayer, String symbol) {
+        super(2, TextHolder.deserialize(TextUtil.toLegacy(StockConfig.string(
+                        symbol == null ? "position-selector.all-positions-menu-title" : "position-selector.menu-title"),
+                "symbol", symbol == null ? "null" : symbol)));
+        this.stockPlayer = stockPlayer;
         this.symbol = symbol;
-        this.player = player;
-        this.positions = stockPlayer.positions(symbol);
+        this.positions = symbol == null ? stockPlayer.positions() : stockPlayer.positions(symbol);
         setupBackground();
         setupPositions();
         setupNav();
@@ -62,10 +64,11 @@ public class PositionSelector extends ChestGui {
                     this.cancel();
                     return;
                 }
+                positions = symbol == null ? stockPlayer.positions() : stockPlayer.positions(symbol);
                 populatePositions();
-                update();
+                Bukkit.getScheduler().runTask(ARC.plugin, () -> update());
             }
-        }.runTaskTimer(ARC.plugin, 100L, 100L);
+        }.runTaskTimerAsynchronously(ARC.plugin, 100L, 100L);
         this.setOnClose(close -> cancelTasks());
     }
 
@@ -104,42 +107,46 @@ public class PositionSelector extends ChestGui {
                 .toGuiItemBuilder()
                 .clickEvent(click -> {
                     click.setCancelled(true);
-                    new SymbolSelector(player).show(player);
+                    GuiUtils.constructAndShowAsync(() -> new SymbolSelector(stockPlayer), click.getWhoClicked());
                 }).build();
         pane.addItem(back, 0, 0);
 
-        boolean canHaveMore = stockPlayer.isBelowMaxStockAmount(player) && !(positions != null && positions.size()>=9);
-        create = new ItemStackBuilder(canHaveMore ?
-                Material.GREEN_STAINED_GLASS_PANE :
-                Material.RED_STAINED_GLASS_PANE)
-                .display(canHaveMore ?
-                        StockConfig.string("position-selector.create-display") :
-                        StockConfig.string("position-selector.create-display-limit"))
-                .lore(canHaveMore ?
-                        StockConfig.stringList("position-selector.create-lore") :
-                        StockConfig.stringList("position-selector.create-lore-limit"))
-                .tagResolver(tagResolver)
-                .appendResolver("max_stock_amount", stockPlayer.maxStockAmount(player) + "")
-                //.modelData(11010)
-                .toGuiItemBuilder()
-                .clickEvent(click -> {
-                    click.setCancelled(true);
-                    if (!canHaveMore) return;
-                    if (!cooldownCheck(back, player, PositionSelector.this)) return;
-                    if (player.hasPermission("arc.stock.buy")) new PositionCreator(player, symbol).show(player);
-                    else player.sendMessage(TextUtil.noPermissions());
-                }).build();
-        pane.addItem(create, 4, 0);
+        boolean canHaveMore = stockPlayer.isBelowMaxStockAmount() && !(positions != null && positions.size() >= 9);
+        if (symbol != null) {
+            create = new ItemStackBuilder(canHaveMore ?
+                    Material.GREEN_STAINED_GLASS_PANE :
+                    Material.RED_STAINED_GLASS_PANE)
+                    .display(canHaveMore ?
+                            StockConfig.string("position-selector.create-display") :
+                            StockConfig.string("position-selector.create-display-limit"))
+                    .lore(canHaveMore ?
+                            StockConfig.stringList("position-selector.create-lore") :
+                            StockConfig.stringList("position-selector.create-lore-limit"))
+                    .tagResolver(tagResolver)
+                    .appendResolver("max_stock_amount", stockPlayer.maxStockAmount() + "")
+                    //.modelData(11010)
+                    .toGuiItemBuilder()
+                    .clickEvent(click -> {
+                        click.setCancelled(true);
+                        if (!canHaveMore) return;
+                        if (!cooldownCheck(back, click.getWhoClicked().getUniqueId(), PositionSelector.this)) return;
+                        Player player = (Player) click.getWhoClicked();
+                        if (player.hasPermission("arc.stocks.buy")) {
+                            GuiUtils.constructAndShowAsync(() -> new PositionCreator(stockPlayer, symbol), click.getWhoClicked());
+                        } else player.sendMessage(TextUtil.noPermissions());
+                    }).build();
+            pane.addItem(create, 4, 0);
+        }
 
         profile = new ItemStackBuilder(Material.PLAYER_HEAD)
-                .skull(player.getUniqueId())
+                .skull(stockPlayer.getPlayerUuid())
                 .tagResolver(tagResolver)
                 .display(StockConfig.string("position-selector.profile-display"))
                 .lore(StockConfig.stringList("position-selector.profile-lore"))
                 .toGuiItemBuilder()
                 .clickEvent(click -> {
                     click.setCancelled(true);
-                    new ProfileMenu(player, 1, symbol).show(player);
+                    GuiUtils.constructAndShowAsync(() -> new ProfileMenu(stockPlayer, 1, symbol), click.getWhoClicked());
                 }).build();
         pane.addItem(profile, 8, 0);
     }
@@ -172,7 +179,9 @@ public class PositionSelector extends ChestGui {
                 .toGuiItemBuilder()
                 .clickEvent(click -> {
                     click.setCancelled(true);
-                    new PositionMenu(player, position).show(click.getWhoClicked());
+                    GuiUtils.constructAndShowAsync(
+                            () -> new PositionMenu(stockPlayer, position, symbol == null),
+                            click.getWhoClicked());
                 }).build();
     }
 

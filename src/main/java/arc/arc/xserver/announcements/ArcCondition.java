@@ -1,6 +1,5 @@
 package arc.arc.xserver.announcements;
 
-import arc.arc.network.ArcSerializable;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import org.bukkit.entity.Player;
@@ -10,10 +9,11 @@ import org.bukkit.entity.Player;
         property = "type"
 )
 @JsonSubTypes({
-        @JsonSubTypes.Type(value = PermissionCondition.class, name = "permission")
+        @JsonSubTypes.Type(value = PermissionCondition.class, name = "permission"),
+        @JsonSubTypes.Type(value = PlayerCondition.class, name = "player")
 })
-public abstract class ArcCondition extends ArcSerializable {
+public abstract interface ArcCondition {
 
-    public abstract boolean test(Player player);
+    boolean test(Player player);
 
 }

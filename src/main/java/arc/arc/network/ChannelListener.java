@@ -1,8 +1,8 @@
 package arc.arc.network;
 
-public abstract interface ChannelListener {
+public interface ChannelListener {
 
-    public abstract void consume(String channel, String message, String originServer);
+    void consume(String channel, String message, String originServer);
 
 
 }

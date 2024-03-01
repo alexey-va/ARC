@@ -211,7 +211,6 @@ public class BuildingManager {
                             .append(Component.text("Строительство уже идет!", NamedTextColor.RED))
                     )
             );
-            return;
         }
     }
 
@@ -235,7 +234,6 @@ public class BuildingManager {
     public static void processNpcClick(Player clicker, int id) {
         ConstructionSite site = constructionSiteMap.get(clicker.getUniqueId());
         if (site == null) {
-            System.out.println("Site is null");
             return;
         }
         if (site.npcId != id) {

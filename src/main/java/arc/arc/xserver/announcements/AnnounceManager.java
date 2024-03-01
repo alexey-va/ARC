@@ -43,6 +43,13 @@ public class AnnounceManager {
         return instance;
     }
 
+    public void sendMessage(UUID playerUuid, String mmString){
+        announceGlobally(new AnnouncementData.AnnouncementDataBuilder()
+                .message(mmString)
+                .arcConditions(List.of(new PlayerCondition(playerUuid)))
+                .build());
+    }
+
 
     public void announceNext(){
         if(announcements.isEmpty()) return;

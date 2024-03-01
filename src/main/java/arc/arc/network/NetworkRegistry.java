@@ -2,11 +2,10 @@ package arc.arc.network;
 
 import arc.arc.board.Board;
 import arc.arc.board.BoardMessager;
+import arc.arc.hooks.HookRegistry;
 import arc.arc.hooks.lands.LandsMessager;
-import arc.arc.stock.StockMarket;
-import arc.arc.stock.StockMessager;
-import arc.arc.stock.StockPlayerManager;
-import arc.arc.stock.StockPlayerMessager;
+import arc.arc.hooks.zauction.AuctionMessager;
+import arc.arc.stock.*;
 import arc.arc.xserver.announcements.AnnounceManager;
 import arc.arc.xserver.announcements.AnnouncementMessager;
 import arc.arc.xserver.playerlist.PlayerListListener;
@@ -64,6 +63,17 @@ public class NetworkRegistry {
         StockPlayerMessager stockPlayerMessager = new StockPlayerMessager("arc.stock_player_updates", redisManager);
         redisManager.registerChannel(stockPlayerMessager.getChannel(), stockPlayerMessager);
         StockPlayerManager.setMessager(stockPlayerMessager);
+
+        HistoryMessager historyMessager = new HistoryMessager("arc.high_lows_update", redisManager);
+        redisManager.registerChannel(historyMessager.channel, historyMessager);
+        HistoryManager.setMessager(historyMessager);
+
+        if(HookRegistry.auctionHook != null) {
+            AuctionMessager auctionMessager = new AuctionMessager("arc.auction_items", redisManager);
+            redisManager.registerChannel(auctionMessager.channel, auctionMessager);
+            HookRegistry.auctionHook.setAuctionMessager(auctionMessager);
+        }
+
 
         redisManager.init();
     }

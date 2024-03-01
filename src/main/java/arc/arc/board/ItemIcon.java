@@ -1,15 +1,12 @@
 package arc.arc.board;
 
-import arc.arc.network.ArcSerializable;
 import arc.arc.util.HeadUtil;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
-import org.bukkit.OfflinePlayer;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
@@ -20,7 +17,7 @@ import java.util.UUID;
 @Getter @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class ItemIcon extends ArcSerializable {
+public class ItemIcon {
 
     Material material;
     @JsonInclude(JsonInclude.Include.NON_NULL)

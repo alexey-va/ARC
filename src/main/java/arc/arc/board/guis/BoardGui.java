@@ -125,7 +125,7 @@ public class BoardGui extends ChestGui {
                 .toGuiItemBuilder()
                 .clickEvent(click -> {
                     click.setCancelled(true);
-                    if (!cooldownCheck(back, player, BoardGui.this)) return;
+                    if (!cooldownCheck(back, player.getUniqueId(), BoardGui.this)) return;
                     ((Player) click.getWhoClicked()).performCommand(BoardConfig.mainMenuBackCommand);
                 }).build();
 
@@ -138,7 +138,7 @@ public class BoardGui extends ChestGui {
                 .toGuiItemBuilder()
                 .clickEvent(click -> {
                     click.setCancelled(true);
-                    if (!cooldownCheck(back, player, BoardGui.this)) return;
+                    if (!cooldownCheck(back, player.getUniqueId(), BoardGui.this)) return;
                     fillItems();
                     this.update();
                 }).build();
@@ -161,7 +161,7 @@ public class BoardGui extends ChestGui {
                         return;
                     }
 
-                    if (!cooldownCheck(back, player, BoardGui.this)) return;
+                    if (!cooldownCheck(back, player.getUniqueId(), BoardGui.this)) return;
                     if (player.hasPermission("arc.board.publish")) new AddBoardGui(player).show(player);
                     else player.sendMessage(TextUtil.noPermissions());
                 }).build();

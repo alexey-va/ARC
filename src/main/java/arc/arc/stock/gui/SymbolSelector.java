@@ -36,22 +36,23 @@ import static arc.arc.util.TextUtil.strip;
 
 public class SymbolSelector extends ChestGui {
     StockPlayer stockPlayer;
-    Player player;
-    GuiItem back, profile;
+    GuiItem back, profile, all;
 
-    public SymbolSelector(Player player) {
-        super(3,  TextHolder.deserialize(TextUtil.toLegacy(StockConfig.string("symbol-selector.menu-title"))));
-        stockPlayer = StockPlayerManager.getOrCreate(player);
-        this.player = player;
+    public SymbolSelector(StockPlayer stockPlayer) {
+        super(3, TextHolder.deserialize(TextUtil.toLegacy(StockConfig.string("symbol-selector.menu-title"))));
+        this.stockPlayer = stockPlayer;
+        //System.out.println("Symbol selector from " + Thread.currentThread().getName());
         setupBackground();
         setupStocks();
         setupNav();
     }
 
-    private void setupStocks(){
-        PaginatedPane paginatedPane = new PaginatedPane(0,0,9,2);
+    private void setupStocks() {
+        PaginatedPane paginatedPane = new PaginatedPane(0, 0, 9, 2);
         List<GuiItem> guiItemList = new ArrayList<>();
-        for(Stock stock : StockMarket.stocks().stream().sorted(Comparator.comparingInt(s -> s.isStock() ? 0 : 1)).toList()){
+        for (Stock stock : StockMarket.stocks().stream()
+                .filter(s -> s.getPrice() > 0.0)
+                .sorted(Comparator.comparingInt(s -> s.getType() == Stock.Type.STOCK ? 0 : 1)).toList()) {
             GuiItem guiItem = stockItem(stock);
             guiItemList.add(guiItem);
         }
@@ -76,31 +77,44 @@ public class SymbolSelector extends ChestGui {
                 }).build();
         pane.addItem(back, 0, 0);
 
+        all = new ItemStackBuilder(Material.GREEN_STAINED_GLASS_PANE)
+                .tagResolver(tagResolver)
+                .display(StockConfig.string("symbol-selector.all-positions-display"))
+                .lore(StockConfig.stringList("symbol-selector.all-positions-lore"))
+                .toGuiItemBuilder()
+                .clickEvent(click -> {
+                    click.setCancelled(true);
+                    GuiUtils.constructAndShowAsync(
+                            () -> new PositionSelector(stockPlayer, null),
+                            click.getWhoClicked());
+                }).build();
+        pane.addItem(all, 4, 0);
+
         profile = new ItemStackBuilder(Material.PLAYER_HEAD)
-                .skull(player.getUniqueId())
+                .skull(stockPlayer.getPlayerUuid())
                 .tagResolver(tagResolver)
                 .display(StockConfig.string("symbol-selector.profile-display"))
                 .lore(StockConfig.stringList("symbol-selector.profile-lore"))
                 .toGuiItemBuilder()
                 .clickEvent(click -> {
                     click.setCancelled(true);
-                    new ProfileMenu(player, 0, null).show(player);
+                    GuiUtils.constructAndShowAsync(() -> new ProfileMenu(stockPlayer, 0, null), click.getWhoClicked());
                 }).build();
         pane.addItem(profile, 8, 0);
     }
 
-    private GuiItem stockItem(Stock stock){
-        List<Position> positions =  stockPlayer.positions(stock.getSymbol());
+    private GuiItem stockItem(Stock stock) {
+        List<Position> positions = stockPlayer.positions(stock.getSymbol());
         int size = positions == null ? 0 : positions.size();
         return new ItemStackBuilder(stock.getIcon().stack())
                 .display(stock.getDisplay())
                 .lore(stock.getLore())
                 .tagResolver(stock.tagResolver())
-                .appendResolver("positions_in_symbol", size+"")
+                .appendResolver("positions_in_symbol", size + "")
                 .toGuiItemBuilder()
-                .clickEvent( click -> {
+                .clickEvent(click -> {
                     click.setCancelled(true);
-                    new PositionSelector(player, stock.getSymbol()).show(click.getWhoClicked());
+                    GuiUtils.constructAndShowAsync(() -> new PositionSelector(stockPlayer, stock.getSymbol()), click.getWhoClicked());
                 }).build();
     }
 

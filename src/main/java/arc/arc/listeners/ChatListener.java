@@ -15,8 +15,8 @@ public class ChatListener implements Listener {
         processTitleInput(event);
     }
 
-    private boolean processTitleInput(AsyncPlayerChatEvent event) {
-        if (!event.isAsynchronous() || !TitleInput.hasInput(event.getPlayer())) return false;
+    private void processTitleInput(AsyncPlayerChatEvent event) {
+        if (!event.isAsynchronous() || !TitleInput.hasInput(event.getPlayer())) return;
         event.setCancelled(true);
         new BukkitRunnable() {
             @Override
@@ -24,7 +24,6 @@ public class ChatListener implements Listener {
                 TitleInput.processMessage(event.getPlayer(), event.getMessage());
             }
         }.runTask(ARC.plugin);
-        return true;
     }
 
 }

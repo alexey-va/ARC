@@ -167,6 +167,7 @@ public class ItemStackBuilder {
                     .toList());
         }
         if (flags != null) meta.addItemFlags(flags.toArray(ItemFlag[]::new));
+        else meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ITEM_SPECIFICS);
 
         stack.setItemMeta(meta);
         return stack;

@@ -33,17 +33,21 @@ public class PartiesHook {
     public String tag(UUID playerUuid){
         PartyPlayer player = api.getPartyPlayer(playerUuid);
         if(player == null || !player.isInParty()) return null;
+        UUID uuid = player.getPartyId();
+        if(uuid == null) return null;
         Party party = api.getParty(player.getPartyId());
+        if(party == null) return null;
         return party.getTag();
     }
 
     public String color(UUID playerUuid){
         PartyPlayer player = api.getPartyPlayer(playerUuid);
-        if(player == null || !player.isInParty()) return null;
-        if (player.getPartyId() == null) return null;
+        if(player == null || !player.isInParty()) return "";
+        if (player.getPartyId() == null) return "";
         Party party = api.getParty(player.getPartyId());
-        if(party == null || party.getColor() == null) return null;
-        return party.getColor().getCode();
+        if(party == null || party.getColor() == null) return "";
+        String code = party.getColor().getCode();
+        return code == null ? "" : code;
     }
 
 

@@ -1,14 +1,18 @@
 package arc.arc.commands;
 
+import arc.arc.ARC;
 import arc.arc.configs.StockConfig;
 import arc.arc.hooks.HookRegistry;
 import arc.arc.stock.*;
 import arc.arc.stock.gui.PositionMenu;
 import arc.arc.stock.gui.SymbolSelector;
+import arc.arc.util.GuiUtils;
+import arc.arc.util.TextUtil;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.scheduler.BukkitRunnable;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
@@ -21,17 +25,43 @@ public class InvestCommand implements CommandExecutor {
         String type = parsedCommand.pars.get("t");
 
         if ("update".equals(type)) {
-            if(!commandSender.hasPermission("arc.stocks.update-images")) return true;
+            if (!commandSender.hasPermission("arc.stocks.update-images")) return true;
             if (HookRegistry.yamipaHook == null || StockConfig.stockMarketLocation == null) return true;
-            StockConfig.stockMarketLocation.getNearbyPlayers(StockConfig.updateImagesRadius)
-                    .forEach(p -> HookRegistry.yamipaHook.updateImages(p.getLocation(), p));
+            var list = StockConfig.stockMarketLocation.getNearbyPlayers(StockConfig.updateImagesRadius)
+                    .stream().filter(p -> !p.hasMetadata("NPC"))
+                    .toList();
+            if (list.isEmpty()) return true;
+            Player player = list.get(0);
+            HookRegistry.yamipaHook.updateImages(player.getLocation(), list);
+            return true;
+        } else if ("give-dividend".equals(type)) {
+            StockPlayerManager.giveDividend(parsedCommand.pars.get("s").toUpperCase());
+            return true;
+        } else if ("prune-history".equals(type)) {
+            if (!commandSender.hasPermission("arc.stocks.prunehistory")) return true;
+            HistoryManager.pruneHistory(parsedCommand.pars.get("s"));
             return true;
         }
 
         Player player = (Player) commandSender;
 
-        if (strings.length == 0) {
-            new SymbolSelector(player).show(player);
+        if (strings.length == 0 || "menu".equals(type)) {
+            String name = parsedCommand.pars.get("player");
+            StockPlayer stockPlayer;
+            if (name == null) {
+                stockPlayer = StockPlayerManager.getOrCreate(player);
+            } else{
+                if(!commandSender.hasPermission("arc.stocks.menu.other")){
+                    commandSender.sendMessage(TextUtil.noPermissions());
+                    return true;
+                }
+                stockPlayer = StockPlayerManager.getPlayer(name).orElse(null);
+                if(stockPlayer == null){
+                    commandSender.sendMessage("Could not find player: "+name);
+                }
+            }
+            GuiUtils.constructAndShowAsync(() -> new SymbolSelector(stockPlayer), player);
+            //new SymbolSelector(stockPlayer).show(player);
             return true;
         }
 
@@ -63,12 +93,6 @@ public class InvestCommand implements CommandExecutor {
         Stock stock = StockMarket.stock(symbol);
         if (stock == null) {
             System.out.println("Could not find stock " + symbol);
-            return true;
-        }
-
-        if (type.equals("prune-history")) {
-            if (!player.hasPermission("arc.stocks.prunehistory")) return true;
-            StockMarket.pruneHistory(symbol);
             return true;
         }
 

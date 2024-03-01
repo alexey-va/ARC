@@ -6,19 +6,15 @@ import arc.arc.commands.tabcompletes.*;
 import arc.arc.configs.*;
 import arc.arc.farm.FarmManager;
 import arc.arc.hooks.HookRegistry;
-import arc.arc.invest.BusinessManager;
 import arc.arc.network.NetworkRegistry;
 import arc.arc.network.RedisManager;
 import arc.arc.stock.StockClient;
 import arc.arc.stock.StockMarket;
-import arc.arc.stock.StockMessager;
 import arc.arc.stock.StockPlayerManager;
 import arc.arc.treasurechests.TreasureHuntManager;
 import arc.arc.treasurechests.locationpools.LocationPoolManager;
 import arc.arc.util.CooldownManager;
 import arc.arc.util.ParticleManager;
-import com.github.retrooper.packetevents.PacketEvents;
-import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -92,6 +88,9 @@ public final class ARC extends JavaPlugin {
         System.out.println("Loading stock config");
         StockConfig.load();
 
+        System.out.println("Loading auction config");
+        AuctionConfig.load();
+
         if (HookRegistry.farmManager != null) {
             HookRegistry.farmManager.clear();
             HookRegistry.farmManager = new FarmManager();
@@ -151,6 +150,9 @@ public final class ARC extends JavaPlugin {
         StockMarket.startTasks();
         StockPlayerManager.startTasks();
         StockPlayerManager.loadStockPlayers();
+
+        System.out.println("Loading lootchest config");
+        LootChestsConfig.load();
     }
 
     private void registerCommands() {
@@ -167,6 +169,7 @@ public final class ARC extends JavaPlugin {
         getCommand("build-book").setTabCompleter(new BuildBookTabComplete());
         getCommand("em-test").setExecutor(new EmTestCommand());
         getCommand("arc-invest").setExecutor(new InvestCommand());
+        getCommand("sound-follow").setExecutor(new SoundFollowCommand());
         getCommand("arc-invest").setTabCompleter(new InvestTabComplete());
     }
 
