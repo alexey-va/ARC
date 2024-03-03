@@ -22,7 +22,7 @@ public class AuctionItemDto {
     String category;
     int amount;
     int priority;
-    UUID uuid;
+    String uuid;
     boolean exist;
     List<String> lore = new ArrayList<>();
 

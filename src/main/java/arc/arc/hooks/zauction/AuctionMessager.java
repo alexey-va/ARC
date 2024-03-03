@@ -9,7 +9,7 @@ import java.util.List;
 
 @RequiredArgsConstructor
 public class AuctionMessager implements ChannelListener {
-    public final String channel;
+    public final String channel, channelAll;
     private final RedisManager redisManager;
 
     @Override

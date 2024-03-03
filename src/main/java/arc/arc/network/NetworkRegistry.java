@@ -69,8 +69,9 @@ public class NetworkRegistry {
         HistoryManager.setMessager(historyMessager);
 
         if(HookRegistry.auctionHook != null) {
-            AuctionMessager auctionMessager = new AuctionMessager("arc.auction_items", redisManager);
+            AuctionMessager auctionMessager = new AuctionMessager("arc.auction_items", "arc.auction_items_all", redisManager);
             redisManager.registerChannel(auctionMessager.channel, auctionMessager);
+            redisManager.registerChannel(auctionMessager.channelAll, auctionMessager);
             HookRegistry.auctionHook.setAuctionMessager(auctionMessager);
         }
 

@@ -63,7 +63,9 @@ public class StockClient {
         try {
             Document document = Jsoup.connect(url).get();
             Element divElement = document.select("div[data-test=instrument-price-last]").first();
-            return Double.parseDouble(divElement.text().replace(",", "."));
+            return Double.parseDouble(divElement.text()
+                    .replace(".", "")
+                    .replace(",", "."));
         } catch (Exception e) {
             e.printStackTrace();
             return -1;
@@ -124,7 +126,7 @@ public class StockClient {
         }
     }
 
-    private Double getStockPrice(Stock stock){
+    private Double getStockPrice(Stock stock) {
         if (webSocketClient == null || !webSocketClient.isRunning() || isClosed) {
             System.out.println("Websocket is closed. Starting...");
             startWebSocket(StockMarket.stocks().stream()
@@ -139,18 +141,18 @@ public class StockClient {
         return optional.getAsDouble();
     }
 
-    private Double getCurrencyPrice(Stock stock){
-        String url = "https://ru.investing.com/currencies/"+ stock.symbol.replace("/", "-").toLowerCase();
+    private Double getCurrencyPrice(Stock stock) {
+        String url = "https://ru.investing.com/currencies/" + stock.symbol.replace("/", "-").toLowerCase();
         return fetchInvesting(url);
     }
 
-    private Double getCommodityPrice(Stock stock){
-        String url = "https://ru.investing.com/commodities/"+ stock.symbol.replace("/", "-").toLowerCase();
+    private Double getCommodityPrice(Stock stock) {
+        String url = "https://ru.investing.com/commodities/" + stock.symbol.replace("/", "-").toLowerCase();
         return fetchInvesting(url);
     }
 
     public Double price(Stock stock) {
-        return switch (stock.type){
+        return switch (stock.type) {
             case STOCK -> getStockPrice(stock);
             case CURRENCY -> getCurrencyPrice(stock);
             case COMMODITY -> getCommodityPrice(stock);

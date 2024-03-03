@@ -232,11 +232,11 @@ public class PositionCreator extends ChestGui {
                                 mm(formatAmount(lower), true)
                 )))
                 .resolver(TagResolver.resolver("close_at_low", Tag.inserting(
-                        autoClosePrices.low() == -1 ? mm("<red>Нет") :
+                        autoClosePrices.low() < 0 ? mm("<red>Нет") :
                                 mm(formatAmount(autoClosePrices.low()), true)
                 )))
                 .resolver(TagResolver.resolver("close_at_high", Tag.inserting(
-                        autoClosePrices.high() == -1 ? mm("<red>Нет") :
+                        autoClosePrices.high() < 0 ? mm("<red>Нет") :
                                 mm(formatAmount(autoClosePrices.high()), true)
                 )))
                 .resolver(TagResolver.resolver("position_amount", Tag.inserting(
@@ -274,35 +274,43 @@ public class PositionCreator extends ChestGui {
 
     private double getNewAmount(InventoryClickEvent click) {
         double newAmount = amount;
+        double delta;
         if (click.isLeftClick()) {
             if (newAmount >= 1) {
                 if (click.isShiftClick()) {
-                    if (newAmount == 1) newAmount += 9;
-                    else newAmount += 10;
-                } else newAmount += 1;
+                    if (newAmount == 1) delta = 9;
+                    else delta = 10;
+                } else delta = 1;
             } else {
                 if (click.isShiftClick()) {
-                    newAmount = Math.min(1.0, newAmount + 0.1);
-                } else newAmount = Math.min(1.0, newAmount + 0.01);
+                    delta =  Math.min(1.0, newAmount + 0.1) - newAmount;
+                } else delta = Math.min(1.0, newAmount + 0.01) - newAmount;
             }
         } else if (click.isRightClick()) {
             if (newAmount > 1.0) {
                 if (click.isShiftClick()) {
-                    newAmount = Math.max(1, newAmount - 10);
-                } else newAmount = Math.max(1, newAmount - 1);
+                    delta = Math.max(1, newAmount - 10) - newAmount;
+                } else delta = Math.max(1, newAmount - 1) - newAmount;
             } else {
                 if (click.isShiftClick()) {
-                    newAmount = Math.max(0.0, newAmount - 0.1);
-                } else newAmount = Math.max(0.0, newAmount - 0.01);
+                    delta = Math.max(0.0, newAmount - 0.1) - newAmount;
+                } else delta = Math.max(0.0, newAmount - 0.01) - newAmount;
             }
-        }
-        return newAmount;
+        } else delta = 0;
+        if(newAmount > 100) delta*=10;
+        if(newAmount > 1000) delta*=10;
+        if(newAmount > 100000) delta*=10;
+        return newAmount+delta;
     }
 
     private void acceptAmountClick(InventoryClickEvent click) {
         click.setCancelled(true);
         if(amountTask!=null && !amountTask.isCancelled()) amountTask.cancel();
         double newAmount = getNewAmount(click);
+        if(newAmount <=0 ){
+            System.out.println("new amount is: "+newAmount);
+            return;
+        }
         double price = newAmount * stock.getPrice();
         if (price > StockConfig.maxBuyPrice) {
             amountTask = GuiUtils.temporaryChange(amountItem.getItem(),
@@ -391,9 +399,10 @@ public class PositionCreator extends ChestGui {
 
     Position.AutoClosePrices marginCallAtPrice(double balance) {
         double bankruptPrice = stock.getPrice() - balance / amount / leverage;
-        double lowMarginCallPrice = lower > 1_000_000_000 ? -1 : stock.getPrice() - lower / amount / leverage;
-        double upperMarginCallPrice = upper > 1_000_000_000 ? -1 : stock.getPrice() + upper / amount / leverage;
+        double lowMarginCallPrice = lower > 1_000_000_000 ? -1 : (stock.getPrice() - lower / amount / leverage);
+        double upperMarginCallPrice = upper > 1_000_000_000 ? -1 : (stock.getPrice() + upper / amount / leverage);
         double low = Math.min(bankruptPrice, lowMarginCallPrice);
+        if(low < 0) low = -1;
         return new Position.AutoClosePrices(low, upperMarginCallPrice);
     }
 

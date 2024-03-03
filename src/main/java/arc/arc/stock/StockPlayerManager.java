@@ -6,6 +6,7 @@ import arc.arc.util.TextUtil;
 import arc.arc.util.Utils;
 import arc.arc.xserver.announcements.AnnounceManager;
 import lombok.Setter;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
@@ -17,6 +18,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static arc.arc.util.TextUtil.formatAmount;
+import static arc.arc.util.TextUtil.mm;
 
 public class StockPlayerManager {
 
@@ -110,8 +112,12 @@ public class StockPlayerManager {
     }
 
     public static void buyStock(StockPlayer stockPlayer, Stock stock, double amount, int leverage, double lowerBound, double upperBound) {
-        if (stockPlayer.positions().size() >= 30) {
-            System.out.println("Too many positions!");
+        List<Position> stockPositions = stockPlayer.positions(stock.symbol);
+        boolean canHaveMore = stockPlayer.isBelowMaxStockAmount() && !(stockPositions!= null && stockPositions.size() >= 9);
+        if(!canHaveMore || stockPlayer.positions().size() >= 30) {
+            Player p = stockPlayer.player();
+            if(p == null) return;
+            p.sendMessage(mm(StockConfig.string("message.too-many-positions")));
             return;
         }
 
@@ -141,8 +147,12 @@ public class StockPlayerManager {
     }
 
     public static void shortStock(StockPlayer stockPlayer, Stock stock, double amount, int leverage, double lowerBound, double upperBound) {
-        if (stockPlayer.positions().size() >= 30) {
-            System.out.println("Too many positions!");
+        List<Position> stockPositions = stockPlayer.positions(stock.symbol);
+        boolean canHaveMore = stockPlayer.isBelowMaxStockAmount() && !(stockPositions!= null && stockPositions.size() >= 9);
+        if(!canHaveMore || stockPlayer.positions().size() >= 30) {
+            Player p = stockPlayer.player();
+            if(p == null) return;
+            p.sendMessage(mm(StockConfig.string("message.too-many-positions")));
             return;
         }
 

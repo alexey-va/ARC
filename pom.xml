@@ -366,5 +366,11 @@
             <version>1.0.0.0</version>
             <scope>provided</scope>
         </dependency>
+        <dependency>
+            <groupId>com.github.Zrips</groupId>
+            <artifactId>Jobs</artifactId>
+            <version>master-c96b24bb10-1</version> <!-- Change the LATEST to the current version of jobs -->
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
 </project>

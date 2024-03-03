@@ -1,8 +1,6 @@
 package arc.arc.hooks.zauction;
 
-import fr.maxlego08.zauctionhouse.api.event.events.AuctionPostBuyEvent;
-import fr.maxlego08.zauctionhouse.api.event.events.AuctionRemoveEvent;
-import fr.maxlego08.zauctionhouse.api.event.events.AuctionSellEvent;
+import fr.maxlego08.zauctionhouse.api.event.events.*;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 
@@ -23,4 +21,13 @@ public class AuctionListener implements Listener {
         System.out.println("Remove: "+event);
     }
 
+    @EventHandler
+    public void onRemove2(AuctionRetrieveEvent event){
+        System.out.println("Retreive: "+event);
+    }
+
+    @EventHandler
+    public void onExpire(AuctionItemExpireEvent event){
+        System.out.println("Expire: "+event);
+    }
 }

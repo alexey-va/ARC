@@ -38,14 +38,19 @@ public class StockMarket {
 
                 boolean fetchedCrypto = false;
                 for (var entry : stockMap.entrySet()) {
-                    if (System.currentTimeMillis() - entry.getValue().lastUpdated > StockConfig.stockRefreshRate * 1000L) {
-                        if (entry.getValue().type == Stock.Type.CRYPTO) {
-                            if (fetchedCrypto) continue;
-                            updates.putAll(client.cryptoPrices());
-                            fetchedCrypto = true;
-                            continue;
+                    try {
+                        if (System.currentTimeMillis() - entry.getValue().lastUpdated > StockConfig.stockRefreshRate * 1000L) {
+                            if (entry.getValue().type == Stock.Type.CRYPTO) {
+                                if (fetchedCrypto) continue;
+                                updates.putAll(client.cryptoPrices());
+                                fetchedCrypto = true;
+                                continue;
+                            }
+                            updates.put(entry.getKey(), client.price(entry.getValue()));
                         }
-                        updates.put(entry.getKey(), client.price(entry.getValue()));
+                    } catch (Exception e){
+                        System.out.println("Error fetching data for: "+entry.getKey());
+                        e.printStackTrace();
                     }
                 }
 

@@ -127,7 +127,7 @@ public class AuctionHook {
                 .priority(item.getPriority())
                 .lore(lore)
                 .exist(true)
-                .uuid(item.getUniqueId())
+                .uuid(item.getUniqueId().toString())
                 .build();
     }
 

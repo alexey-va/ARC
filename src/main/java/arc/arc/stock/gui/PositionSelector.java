@@ -128,7 +128,8 @@ public class PositionSelector extends ChestGui {
                     .toGuiItemBuilder()
                     .clickEvent(click -> {
                         click.setCancelled(true);
-                        if (!canHaveMore) return;
+                        boolean more = stockPlayer.isBelowMaxStockAmount() && !(positions != null && positions.size() >= 9);
+                        if (!more) return;
                         if (!cooldownCheck(back, click.getWhoClicked().getUniqueId(), PositionSelector.this)) return;
                         Player player = (Player) click.getWhoClicked();
                         if (player.hasPermission("arc.stocks.buy")) {

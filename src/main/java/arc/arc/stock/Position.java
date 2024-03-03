@@ -75,7 +75,7 @@ public class Position {
     public record AutoClosePrices(double low, double high){}
     @JsonIgnore
     public AutoClosePrices marginCallAtPrice(double balance, boolean isAutoTake){
-        double bankruptPrice = isAutoTake ? -1 : startPrice - balance/amount/leverage;
+        double bankruptPrice = startPrice - balance/amount/leverage;
         double lowMarginCallPrice = lowerBoundMargin > 1_000_000_000 ? -1 : startPrice - lowerBoundMargin/amount/leverage;
         double upperMarginCallPrice = upperBoundMargin > 1_000_000_000 ? -1 : startPrice + upperBoundMargin/amount/leverage;
         double low = Math.min(bankruptPrice, lowMarginCallPrice);

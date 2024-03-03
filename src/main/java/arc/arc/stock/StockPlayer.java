@@ -10,6 +10,7 @@ import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.entity.Player;
 
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -195,5 +196,11 @@ public class StockPlayer {
         return positionMap.values().stream()
                 .flatMap(list -> list.stream().map(Position::gains))
                 .reduce(0.0, Double::sum);
+    }
+    @JsonIgnore
+    public Player player() {
+        OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(playerUuid);
+        if(offlinePlayer instanceof Player p) return p;
+        return null;
     }
 }
