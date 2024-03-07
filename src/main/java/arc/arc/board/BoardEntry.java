@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit;
 
 import static arc.arc.util.TextUtil.strip;
 
-@Setter
+//@Setter
 @Getter
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @AllArgsConstructor
@@ -57,7 +57,7 @@ public class BoardEntry extends RepoData {
         this.entryUuid = entryUuid;
         this.playerUuid = playerUuid;
         this.lastShown = lastShown;
-        dirtify();
+        //dirtify();
     }
 
     public ItemStack item() {
@@ -203,35 +203,35 @@ public class BoardEntry extends RepoData {
         dirtify();
     }
 
-    public void setText(String text) {
+    public void changeText(String text) {
         if (Objects.equals(text, this.text)) return;
         this.text = text;
        // System.out.println("setting text");
         dirtify();
     }
 
-    public void setTitle(String title) {
+    public void changeTitle(String title) {
         if (Objects.equals(title, this.title)) return;
         this.title = title;
        // System.out.println("setting title");
         dirtify();
     }
 
-    public void setIcon(ItemIcon icon) {
+    public void changeIcon(ItemIcon icon) {
         if (Objects.equals(icon, this.icon)) return;
         this.icon = icon;
        // System.out.println("setting icon");
         dirtify();
     }
 
-    public void setType(Type type) {
+    public void changeType(Type type) {
         if (Objects.equals(type, this.type)) return;
         this.type = type;
        // System.out.println("setting type");
         dirtify();
     }
 
-    public void setLastShown(long lastShown) {
+    public void changeLastShown(long lastShown) {
         if (this.lastShown == lastShown) return;
         this.lastShown = lastShown;
        // System.out.println("setting last shown");

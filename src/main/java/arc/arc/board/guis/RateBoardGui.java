@@ -51,7 +51,7 @@ public class RateBoardGui extends ChestGui {
                 .toGuiItemBuilder()
                 .clickEvent(click -> {
                     click.setCancelled(true);
-                    new BoardGui(player).show(click.getWhoClicked());
+                    GuiUtils.constructAndShowAsync(() ->new BoardGui(player), click.getWhoClicked());
                 }).build();
     }
 

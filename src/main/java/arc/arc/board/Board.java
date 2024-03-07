@@ -63,7 +63,7 @@ public class Board {
     public void announceNext() {
         repo.all().stream().min(Comparator.comparingLong(BoardEntry::getLastShown))
                 .ifPresent(e -> {
-                    e.setLastShown(System.currentTimeMillis());
+                    e.changeLastShown(System.currentTimeMillis());
                     AnnouncementData data = AnnouncementData.builder()
                             .message("&7[&6" + e.playerName + "&7]&r " + e.title)
                             .minimessage(false)

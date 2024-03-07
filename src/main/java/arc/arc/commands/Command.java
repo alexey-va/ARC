@@ -2,6 +2,7 @@ package arc.arc.commands;
 
 import arc.arc.ARC;
 import arc.arc.board.guis.BoardGui;
+import arc.arc.util.GuiUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -27,7 +28,8 @@ public class Command implements CommandExecutor {
                 return true;
             }
             if(strings[0].equalsIgnoreCase("board")){
-                new BoardGui((Player) commandSender).show((Player) commandSender);
+                Player player = (Player) commandSender;
+                GuiUtils.constructAndShowAsync(() ->new BoardGui(player), player);
                 return true;
             }
         }

@@ -36,7 +36,7 @@ import static arc.arc.util.TextUtil.strip;
 
 public class AddBoardGui extends ChestGui implements Inputable {
 
-    public String shortName = null;
+    public String title = null;
     public String description = null;
     ItemIcon icon;
     BoardEntry.Type type;
@@ -68,7 +68,7 @@ public class AddBoardGui extends ChestGui implements Inputable {
         setupBackground();
 
         if (entry != null) {
-            this.shortName = entry.getTitle();
+            this.title = entry.getTitle();
             this.description = entry.getText();
             this.icon = entry.getIcon();
             this.type = entry.getType();
@@ -125,7 +125,7 @@ public class AddBoardGui extends ChestGui implements Inputable {
 
     @Override
     public void setParameter(int n, String s) {
-        if (n == 0) this.shortName = s;
+        if (n == 0) this.title = s;
         else if (n == 1) this.description = s;
     }
 
@@ -136,7 +136,7 @@ public class AddBoardGui extends ChestGui implements Inputable {
                 .toGuiItemBuilder()
                 .clickEvent(click -> {
                     click.setCancelled(true);
-                    new BoardGui(player).show(click.getWhoClicked());
+                    GuiUtils.constructAndShowAsync(() -> new BoardGui(player), click.getWhoClicked());
                 }).build();
     }
 
@@ -144,15 +144,15 @@ public class AddBoardGui extends ChestGui implements Inputable {
         ItemStackBuilder builder = new ItemStackBuilder(Material.FLOWER_BANNER_PATTERN)
                 .flags(ItemFlag.HIDE_ITEM_SPECIFICS, ItemFlag.HIDE_ATTRIBUTES)
                 .tagResolver(TagResolver.builder()
-                        .resolver(TagResolver.resolver("short_name", Tag.inserting(Component.text(shortName == null ? "Нету" : shortName))))
+                        .resolver(TagResolver.resolver("short_name", Tag.inserting(Component.text(title == null ? "Нету" : title))))
                         .resolver(TagResolver.resolver("short_name_length", Tag.inserting(Component.text(BoardConfig.shortNameLength + ""))))
                         .build());
 
-        if (shortName == null) {
+        if (title == null) {
             builder.display(BoardConfig.getString("add-menu.empty.short-name.display"))
                     .appendLore(BoardConfig.getStringList("add-menu.empty.short-name.lore"));
         } else {
-            builder.display(BoardConfig.getString("add-menu.full.short-name.display").replace("<short_name>", shortName),
+            builder.display(BoardConfig.getString("add-menu.full.short-name.display").replace("<short_name>", title),
                             ItemStackBuilder.Deserializer.LEGACY)
                     .appendLore(BoardConfig.getStringList("add-menu.full.short-name.lore"));
         }
@@ -260,11 +260,11 @@ public class AddBoardGui extends ChestGui implements Inputable {
                             return;
                         }
 
-                        if (shortName == null) {
+                        if (title == null) {
                             List<Component> lore = new ArrayList<>();
                             if (type == null) lore.add(Component.text("Тип не установлен", NamedTextColor.GRAY));
                             if (icon == null) lore.add(Component.text("Иконка не установлена", NamedTextColor.GRAY));
-                            if (shortName == null)
+                            if (title == null)
                                 lore.add(Component.text("Короткое название не установлено", NamedTextColor.GRAY));
 
                             GuiUtils.temporaryChange(publishItem.getItem(),
@@ -277,8 +277,10 @@ public class AddBoardGui extends ChestGui implements Inputable {
 
                         if (!takeMoney(BoardConfig.publishCost)) return;
 
-                        BoardEntry boardEntry = new BoardEntry(this.type, player.getName(), player.getUniqueId(), icon, description, shortName,
+                        BoardEntry boardEntry = new BoardEntry(this.type, player.getName(), player.getUniqueId(), icon, description, title,
                                 System.currentTimeMillis(), System.currentTimeMillis(), UUID.randomUUID());
+                        boardEntry.setDirty(true);
+
                         Board.instance().addBoardEntry(boardEntry);
                         //System.out.println("Adding board entry!");
                         player.sendMessage(TextUtil.mm(BoardConfig.getString("add-menu.published-successfully")));
@@ -288,12 +290,7 @@ public class AddBoardGui extends ChestGui implements Inputable {
                         player.sendMessage(TextUtil.error());
                         click.getWhoClicked().closeInventory();
                     }
-                    new BukkitRunnable() {
-                        @Override
-                        public void run() {
-                            new BoardGui(player).show(player);
-                        }
-                    }.runTaskLater(ARC.plugin, 1L);
+                    GuiUtils.constructAndShowAsync(() -> new BoardGui(player), click.getWhoClicked());
                 }).build();
     }
 
@@ -313,12 +310,11 @@ public class AddBoardGui extends ChestGui implements Inputable {
                             return;
                         }
 
-                        if (shortName == null) {
+                        if (title == null) {
                             List<Component> lore = new ArrayList<>();
                             if (type == null) lore.add(Component.text("Тип не установлен", NamedTextColor.GRAY));
                             if (icon == null) lore.add(Component.text("Иконка не установлена", NamedTextColor.GRAY));
-                            if (shortName == null)
-                                lore.add(Component.text("Короткое название не установлено", NamedTextColor.GRAY));
+                            lore.add(Component.text("Короткое название не установлено", NamedTextColor.GRAY));
 
                             GuiUtils.temporaryChange(publishItem.getItem(),
                                     Component.text("Остались незаполненные поля", NamedTextColor.RED),
@@ -330,16 +326,16 @@ public class AddBoardGui extends ChestGui implements Inputable {
 
                         if (!takeMoney(BoardConfig.editCost)) return;
 
-                        entry.setText(description);
-                        entry.setTitle(shortName);
-                        entry.setIcon(icon);
-                        entry.setType(type);
+                        entry.changeText(description);
+                        entry.changeTitle(title);
+                        entry.changeIcon(icon);
+                        entry.changeType(type);
 
                         Board.instance().updateCache(entry.entryUuid);
                         //Board.instance().saveBoardEntry(entry.entryUuid);
                         player.sendMessage(TextUtil.mm(BoardConfig.getString("add-menu.edited-successfully")));
 
-                        Bukkit.getScheduler().runTaskLater(ARC.plugin, () -> new BoardGui(player).show(player), 1L);
+                        GuiUtils.constructAndShowAsync(() ->new BoardGui(player), click.getWhoClicked());
                     } catch (Exception e) {
                         e.printStackTrace();
                         player.sendMessage(TextUtil.error());
@@ -372,7 +368,7 @@ public class AddBoardGui extends ChestGui implements Inputable {
                     if (confirmDelete) {
                         //.out.println("Deleting board entry from gui");
                         Board.instance().deleteBoardEntry(entry);
-                        new BoardGui(player).show(player);
+                        GuiUtils.constructAndShowAsync(() ->new BoardGui(player), click.getWhoClicked());
                     } else {
                         confirmDelete = true;
                         GuiUtils.temporaryChange(deleteItem.getItem(),
