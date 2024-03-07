@@ -24,6 +24,8 @@ public class StockMarket {
     private static StockClient client;
     private static Map<String, Stock> stockMap = new ConcurrentHashMap<>();
 
+    static int sinceLastGlobalShare = 100;
+
 
     public static void startTasks() {
         cancelTasks();
@@ -75,6 +77,11 @@ public class StockMarket {
                 }
 
                 if (change) saveStocks(updates.keySet());
+                if(sinceLastGlobalShare >= 100) {
+                    saveStocks();
+                    sinceLastGlobalShare = 0;
+                }
+                else sinceLastGlobalShare++;
             }
         }.runTaskTimerAsynchronously(ARC.plugin, 20L, 10 * 20L);
 
@@ -99,6 +106,14 @@ public class StockMarket {
         if (stockMessager != null) {
             service.submit(() -> stockMessager.send(stockMap.entrySet().stream()
                     .filter(e -> symbols.contains(e.getKey()))
+                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))
+            ));
+        }
+    }
+
+    public static void saveStocks() {
+        if (stockMessager != null) {
+            service.submit(() -> stockMessager.send(stockMap.entrySet().stream()
                     .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))
             ));
         }

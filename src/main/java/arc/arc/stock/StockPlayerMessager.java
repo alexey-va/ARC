@@ -10,12 +10,10 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.bukkit.scheduler.BukkitRunnable;
 
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
 
 @RequiredArgsConstructor
 public class StockPlayerMessager implements ChannelListener {
@@ -32,7 +30,7 @@ public class StockPlayerMessager implements ChannelListener {
 
     public StockPlayer loadStockPlayer(UUID uuid){
         try {
-            return redisManager.loadMapEntry("arc.stock_players", uuid.toString())
+            return redisManager.loadMapEntries("arc.stock_players", uuid.toString())
                     .thenApply(list -> {
                         if (list == null || list.isEmpty()) return null;
                         String json = list.get(0);
@@ -85,7 +83,7 @@ public class StockPlayerMessager implements ChannelListener {
                 throw new RuntimeException(e);
             }
         }).thenAccept(json -> {
-            ARC.redisManager.saveMapKey("arc.stock_players", stockPlayer.playerUuid.toString(), json);
+            ARC.redisManager.saveMapEntries("arc.stock_players", stockPlayer.playerUuid.toString(), json);
             new BukkitRunnable() {
                 @Override
                 public void run() {

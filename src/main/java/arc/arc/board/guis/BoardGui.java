@@ -52,7 +52,11 @@ public class BoardGui extends ChestGui {
     }
 
     private void fillItems() {
-        List<GuiItem> guiItemList = Board.instance().items().stream().map(this::toGuiItem).collect(Collectors.toList());
+        System.out.println("Filling items");
+        List<GuiItem> guiItemList = Board.instance().items()
+                .stream()
+                .map(this::toGuiItem)
+                .collect(Collectors.toList());
         paginatedPane.clear();
         paginatedPane.populateWithGuiItems(guiItemList);
     }

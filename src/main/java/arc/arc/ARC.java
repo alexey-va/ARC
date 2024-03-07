@@ -1,6 +1,7 @@
 package arc.arc;
 
 import arc.arc.autobuild.BuildingManager;
+import arc.arc.board.Board;
 import arc.arc.commands.*;
 import arc.arc.commands.tabcompletes.*;
 import arc.arc.configs.*;
@@ -130,6 +131,9 @@ public final class ARC extends JavaPlugin {
         System.out.println("Setting up redis");
         setupRedis();
 
+        System.out.println("Setting up board");
+        Board.instance();
+
         System.out.println("Setting up network registry");
         networkRegistry = new NetworkRegistry(redisManager);
         networkRegistry.init();
@@ -153,6 +157,8 @@ public final class ARC extends JavaPlugin {
 
         System.out.println("Loading lootchest config");
         LootChestsConfig.load();
+
+
     }
 
     private void registerCommands() {
@@ -170,6 +176,7 @@ public final class ARC extends JavaPlugin {
         getCommand("em-test").setExecutor(new EmTestCommand());
         getCommand("arc-invest").setExecutor(new InvestCommand());
         getCommand("sound-follow").setExecutor(new SoundFollowCommand());
+        getCommand("test-repo").setExecutor(new TestRedisRepoCommand());
         getCommand("arc-invest").setTabCompleter(new InvestTabComplete());
     }
 

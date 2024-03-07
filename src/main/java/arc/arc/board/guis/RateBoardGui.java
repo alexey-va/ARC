@@ -75,7 +75,7 @@ public class RateBoardGui extends ChestGui {
                     }
 
                     entry.rate(player.getName(), 1);
-                    Board.instance().saveBoardEntry(entry.entryUuid);
+                    //Board.instance().saveBoardEntry(entry.entryUuid);
                     ratedSuccessfully(upItem);
                 }).build();
     }
@@ -102,7 +102,7 @@ public class RateBoardGui extends ChestGui {
                     }
 
                     entry.rate(player.getName(), -1);
-                    Board.instance().saveBoardEntry(entry.entryUuid);
+                    //Board.instance().saveBoardEntry(entry.entryUuid);
                     ratedSuccessfully(downItem);
                 }).build();
     }
@@ -128,7 +128,7 @@ public class RateBoardGui extends ChestGui {
 
                     entry.report(player.getName());
                     Board.instance().updateCache(entry.entryUuid);
-                    Board.instance().saveBoardEntry(entry.entryUuid);
+                    //Board.instance().saveBoardEntry(entry.entryUuid);
                     reportedSuccessfully(reportItem);
                 }).build();
     }

@@ -1,6 +1,7 @@
 package arc.arc.board;
 
 import arc.arc.configs.BoardConfig;
+import arc.arc.network.repos.RepoData;
 import arc.arc.util.TextUtil;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -28,8 +29,8 @@ import static arc.arc.util.TextUtil.strip;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @AllArgsConstructor
 @NoArgsConstructor
-@ToString
-public class BoardEntry {
+@ToString(callSuper = true)
+public class BoardEntry extends RepoData {
 
     public Type type;
     public String playerName;
@@ -45,10 +46,8 @@ public class BoardEntry {
     public Set<String> negativeRatings = new HashSet<>();
     public Set<String> reports = new HashSet<>();
 
-    @JsonIgnore
-    public boolean dirty = false;
-
-    public BoardEntry(Type type, String playerName, UUID playerUuid, ItemIcon icon, String text, String title, long timestamp, long lastShown, UUID entryUuid) {
+    public BoardEntry(Type type, String playerName, UUID playerUuid, ItemIcon icon, String text, String title,
+                      long timestamp, long lastShown, UUID entryUuid) {
         this.type = type;
         this.playerName = playerName;
         this.icon = icon;
@@ -58,8 +57,7 @@ public class BoardEntry {
         this.entryUuid = entryUuid;
         this.playerUuid = playerUuid;
         this.lastShown = lastShown;
-
-        dirty = true;
+        dirtify();
     }
 
     public ItemStack item() {
@@ -195,42 +193,58 @@ public class BoardEntry {
             positiveRatings.remove(name);
             negativeRatings.add(name);
         }
-        dirty = true;
+        dirtify();
     }
 
     public void report(String name) {
         reports.add(name);
-        dirty = true;
+        dirtify();
     }
 
     public void setText(String text) {
         if (Objects.equals(text, this.text)) return;
         this.text = text;
-        dirty = true;
+        dirtify();
     }
 
     public void setTitle(String title) {
         if (Objects.equals(title, this.title)) return;
         this.title = title;
-        dirty = true;
+        dirtify();
     }
 
     public void setIcon(ItemIcon icon) {
         if (Objects.equals(icon, this.icon)) return;
         this.icon = icon;
-        dirty = true;
+        dirtify();
     }
 
     public void setType(Type type) {
         if (Objects.equals(type, this.type)) return;
         this.type = type;
-        dirty = true;
+        dirtify();
     }
 
     public void setLastShown(long lastShown) {
         if (this.lastShown == lastShown) return;
         this.lastShown = lastShown;
-        dirty = true;
+        dirtify();
+    }
+
+    private void dirtify(){
+        System.out.println("Making it dirty");
+        setDirty(true);
+        //setLastUpdated(System.currentTimeMillis());
+    }
+
+    @Override
+    public String id() {
+        return entryUuid.toString();
+    }
+
+    @Override
+    public boolean isRemove() {
+        return System.currentTimeMillis()-timestamp > BoardConfig.secondsLifetime * 1000L;
     }
 
     public enum Type {

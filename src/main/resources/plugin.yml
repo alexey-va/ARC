@@ -56,3 +56,6 @@ commands:
   sound-follow:
     description: build-book
     usage: build-book
+  test-repo:
+    description: build-book
+    usage: build-book

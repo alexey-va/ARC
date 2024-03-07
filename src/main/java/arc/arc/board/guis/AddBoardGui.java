@@ -2,8 +2,6 @@ package arc.arc.board.guis;
 
 import arc.arc.ARC;
 import arc.arc.configs.BoardConfig;
-import arc.arc.configs.BuildingConfig;
-import arc.arc.configs.Config;
 import arc.arc.TitleInput;
 import arc.arc.board.Board;
 import arc.arc.board.BoardEntry;
@@ -29,12 +27,10 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scheduler.BukkitScheduler;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static arc.arc.util.TextUtil.strip;
 
@@ -283,7 +279,7 @@ public class AddBoardGui extends ChestGui implements Inputable {
 
                         BoardEntry boardEntry = new BoardEntry(this.type, player.getName(), player.getUniqueId(), icon, description, shortName,
                                 System.currentTimeMillis(), System.currentTimeMillis(), UUID.randomUUID());
-                        Board.instance().addBoardEntry(boardEntry, true);
+                        Board.instance().addBoardEntry(boardEntry);
                         //System.out.println("Adding board entry!");
                         player.sendMessage(TextUtil.mm(BoardConfig.getString("add-menu.published-successfully")));
 
@@ -340,7 +336,7 @@ public class AddBoardGui extends ChestGui implements Inputable {
                         entry.setType(type);
 
                         Board.instance().updateCache(entry.entryUuid);
-                        Board.instance().saveBoardEntry(entry.entryUuid);
+                        //Board.instance().saveBoardEntry(entry.entryUuid);
                         player.sendMessage(TextUtil.mm(BoardConfig.getString("add-menu.edited-successfully")));
 
                         Bukkit.getScheduler().runTaskLater(ARC.plugin, () -> new BoardGui(player).show(player), 1L);
@@ -375,7 +371,7 @@ public class AddBoardGui extends ChestGui implements Inputable {
 
                     if (confirmDelete) {
                         //.out.println("Deleting board entry from gui");
-                        Board.instance().deleteBoard(entry.entryUuid, true);
+                        Board.instance().deleteBoardEntry(entry);
                         new BoardGui(player).show(player);
                     } else {
                         confirmDelete = true;

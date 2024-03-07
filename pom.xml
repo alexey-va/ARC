@@ -43,10 +43,6 @@
                             <shadedPattern>arc.arc.libs.inventoryframework</shadedPattern>
                         </relocation>
                         <relocation>
-                            <pattern>org.apache.logging.log4j</pattern>
-                            <shadedPattern>arc.arc.libs.log4j</shadedPattern>
-                        </relocation>
-                        <relocation>
                             <pattern>de.tr7zw.changeme.nbtapi</pattern>
                             <shadedPattern>arc.arc.libs.nbtapi</shadedPattern>
                         </relocation>
@@ -61,6 +57,10 @@
                         <relocation>
                             <pattern>org.jsoup</pattern>
                             <shadedPattern>arc.arc.libs.org.jsoup</shadedPattern>
+                        </relocation>
+                        <relocation>
+                            <pattern>com.google.gson</pattern>
+                            <shadedPattern>arc.arc.libs.com.google.gson</shadedPattern>
                         </relocation>
                     </relocations>
                 </configuration>
@@ -346,13 +346,11 @@
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-api</artifactId>
             <version>2.23.0</version>
-            <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-core</artifactId>
             <version>2.23.0</version>
-            <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>com.github.Maxlego08</groupId>
@@ -371,6 +369,13 @@
             <artifactId>Jobs</artifactId>
             <version>master-c96b24bb10-1</version> <!-- Change the LATEST to the current version of jobs -->
             <scope>provided</scope>
+        </dependency>
+        <!-- https://mvnrepository.com/artifact/com.google.code.gson/gson -->
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.10.1</version>
+            <scope>compile</scope>
         </dependency>
     </dependencies>
 </project>

@@ -59,8 +59,12 @@ public class Config {
         try {
             logLevel = ARC.plugin.getConfig().getString("log-level", "DEBUG");
             Level newRootLogLevel = Level.getLevel(logLevel);
-            SimpleLogger simpleLogger = (SimpleLogger) LogManager.getRootLogger();
-            simpleLogger.setLevel(newRootLogLevel);
+            System.out.println("Config log level: "+newRootLogLevel);
+            LoggerContext ctx = (LoggerContext) LogManager.getContext(false);
+            Configuration config = ctx.getConfiguration();
+            LoggerConfig loggerConfig = config.getLoggerConfig(LogManager.ROOT_LOGGER_NAME);
+            loggerConfig.setLevel(newRootLogLevel);
+            ctx.updateLoggers();
         } catch (Exception e){
             e.printStackTrace();
         }

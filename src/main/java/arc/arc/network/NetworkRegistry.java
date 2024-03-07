@@ -1,7 +1,5 @@
 package arc.arc.network;
 
-import arc.arc.board.Board;
-import arc.arc.board.BoardMessager;
 import arc.arc.hooks.HookRegistry;
 import arc.arc.hooks.lands.LandsMessager;
 import arc.arc.hooks.zauction.AuctionMessager;
@@ -52,9 +50,9 @@ public class NetworkRegistry {
         redisManager.registerChannel(announcementMessager.getChannel(), announcementMessager);
         AnnounceManager.messager = announcementMessager;
 
-        BoardMessager boardMessager = new BoardMessager("arc.board_update", redisManager);
+/*        BoardMessager boardMessager = new BoardMessager("arc.board_update", redisManager);
         redisManager.registerChannel(boardMessager.channel, boardMessager);
-        Board.instance().setMessager(boardMessager);
+        Board.instance().setMessager(boardMessager);*/
 
         StockMessager stockMessager = new StockMessager("arc.stock_market", redisManager);
         redisManager.registerChannel(stockMessager.getChannel(), stockMessager);
@@ -74,7 +72,6 @@ public class NetworkRegistry {
             redisManager.registerChannel(auctionMessager.channelAll, auctionMessager);
             HookRegistry.auctionHook.setAuctionMessager(auctionMessager);
         }
-
 
         redisManager.init();
     }
