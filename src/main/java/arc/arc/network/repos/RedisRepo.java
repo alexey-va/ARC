@@ -92,6 +92,7 @@ public class RedisRepo<T extends RepoData> {
                         try {
                             T t = (T) gson.fromJson(entry, clazz);
                             t.setDirty(false);
+                            //System.out.println("Loaded (necessary): " + t.id() + " " + t);
                             map.put(t.id(), t);
                             contextSet.add(t.id());
                             if (onUpdate != null) onUpdate.accept((BoardEntry) t);
@@ -145,6 +146,7 @@ public class RedisRepo<T extends RepoData> {
                             log.trace("Loading: " + entry);
                             T t = (T) gson.fromJson(entry.getValue(), clazz);
                             t.setDirty(false);
+                            System.out.println("Loaded (all): " + t.id() + " " + t);
                             map.put(t.id(), t);
                             contextSet.add(t.id());
                             if (onUpdate != null) onUpdate.accept((BoardEntry) t);
@@ -171,7 +173,7 @@ public class RedisRepo<T extends RepoData> {
         var arr = ts.stream().flatMap(t -> Stream.of(t.id(), gson.toJson(t))).toArray(String[]::new);
         redisManager.saveMapEntries(storageKey, arr)
                 .thenAccept((o) -> {
-                    System.out.println("Saved in storage: " + ts);
+                    //System.out.println("Saved in storage: " + ts);
                     ts.forEach(t -> announceUpdate(t.id()));
                 });
     }
@@ -196,17 +198,19 @@ public class RedisRepo<T extends RepoData> {
         }
         redisManager.loadMapEntries(storageKey, update.id)
                 .thenAccept(list -> {
-                    System.out.println("Update list: " + list);
+                    //System.out.println("Update list: " + list);
                     if (list == null || list.isEmpty() || list.get(0) == null) {
-                        System.out.println("Deleting entry!");
+                        //System.out.println("Deleting entry!");
                         deleteEntry(update.id);
                         return;
                     }
                     T t = (T) gson.fromJson(list.get(0), clazz);
                     t.dirty = false;
+                    contextSet.add(t.id());
                     map.put(t.id(), t);
-                    System.out.println("New entry to map: "+map);
+                    //System.out.println("New entry to map: "+map);
                     if (onUpdate != null) onUpdate.accept((BoardEntry) t);
+                    //System.out.println("New entry to map2: "+map);
                 });
     }
 
@@ -215,18 +219,19 @@ public class RedisRepo<T extends RepoData> {
     }
 
     void deleteEntry(String id) {
+        //System.out.println("Removing for some reason: " + id);
         map.remove(id);
     }
 
     public void createNewEntry(T t) {
-        System.out.println("Creating new entry: " + t.id());
+        //System.out.println("Creating new entry: " + t.id());
         map.put(t.id(), t);
         contextSet.add(t.id());
         saveInStorage(List.of(t));
     }
 
     public void deleteEntry(T t) {
-        System.out.println("Deleting entry: "+t.id());
+        //System.out.println("Deleting entry: "+t.id());
         deleteEntry(t.id());
         contextSet.remove(t.id());
         deleteInStorage(List.of(t));

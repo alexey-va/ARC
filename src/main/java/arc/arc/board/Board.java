@@ -84,10 +84,9 @@ public class Board {
     }
 
     public List<BoardItem> items() {
-        System.out.println("All items as of now: "+repo.all());
         return repo.all().stream()
-                .peek(i -> System.out.println("Getting cache item: "+i))
-                .map(cache::get).toList();
+                .map(cache::get)
+                .toList();
     }
 
     public void addBoardEntry(BoardEntry boardEntry) {

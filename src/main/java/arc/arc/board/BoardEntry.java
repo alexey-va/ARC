@@ -193,46 +193,53 @@ public class BoardEntry extends RepoData {
             positiveRatings.remove(name);
             negativeRatings.add(name);
         }
+       // System.out.println("Rating: " + name + " " + i);
         dirtify();
     }
 
     public void report(String name) {
         reports.add(name);
+       // System.out.println("Reporting: " + name);
         dirtify();
     }
 
     public void setText(String text) {
         if (Objects.equals(text, this.text)) return;
         this.text = text;
+       // System.out.println("setting text");
         dirtify();
     }
 
     public void setTitle(String title) {
         if (Objects.equals(title, this.title)) return;
         this.title = title;
+       // System.out.println("setting title");
         dirtify();
     }
 
     public void setIcon(ItemIcon icon) {
         if (Objects.equals(icon, this.icon)) return;
         this.icon = icon;
+       // System.out.println("setting icon");
         dirtify();
     }
 
     public void setType(Type type) {
         if (Objects.equals(type, this.type)) return;
         this.type = type;
+       // System.out.println("setting type");
         dirtify();
     }
 
     public void setLastShown(long lastShown) {
         if (this.lastShown == lastShown) return;
         this.lastShown = lastShown;
+       // System.out.println("setting last shown");
         dirtify();
     }
 
     private void dirtify(){
-        System.out.println("Making it dirty");
+       // System.out.println("Making it dirty");
         setDirty(true);
         //setLastUpdated(System.currentTimeMillis());
     }
