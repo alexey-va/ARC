@@ -1,5 +1,6 @@
 package arc.arc.util;
 
+import com.fasterxml.jackson.core.io.SerializedString;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.Tag;
@@ -7,6 +8,7 @@ import net.kyori.adventure.text.minimessage.tag.TagPattern;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Material;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -24,7 +26,13 @@ import static arc.arc.util.TextUtil.strip;
 public class ItemStackBuilder {
 
 
+    public ItemStackBuilder enchant(Enchantment enchantment, int level, boolean ignoreLevelRestriction) {
+        enchants.add(new EnchantData(enchantment, level, ignoreLevelRestriction));
+        return this;
+    }
 
+    record EnchantData(Enchantment enchantment, int level, boolean ignoreLevelRestriction) {
+    }
 
     record SerializedString(String string, Deserializer deserializer) {
         public Component deserialize(TagResolver tagResolver) {
@@ -44,22 +52,33 @@ public class ItemStackBuilder {
     int count = 1;
     int modelData = 0;
     SerializedString display;
+    List<EnchantData> enchants = new ArrayList<>();
     private Component componentDisplay;
     List<SerializedString> lore = new ArrayList<>();
     List<Component> componentLore;
     UUID skullUuid;
     List<ItemFlag> flags;
+    Deserializer globalDeserializer = Deserializer.MINI_MESSAGE;
 
     public ItemStackBuilder(Material material) {
         this.material = material;
     }
 
     public ItemStackBuilder(ItemStack stack) {
-        this(stack, null);
+        this(stack, null, Deserializer.MINI_MESSAGE);
+    }
+
+    public ItemStackBuilder(ItemStack stack, Deserializer deserializer) {
+        this(stack, null, deserializer);
     }
 
     public ItemStackBuilder tagResolver(TagResolver tagResolver) {
         this.tagResolver = tagResolver;
+        return this;
+    }
+
+    public ItemStackBuilder globalDeserializer(Deserializer deserializer) {
+        this.globalDeserializer = deserializer;
         return this;
     }
 
@@ -73,18 +92,18 @@ public class ItemStackBuilder {
         return this;
     }
 
-    public ItemStackBuilder(ItemStack stack, Material def) {
+    public ItemStackBuilder(ItemStack stack, Material def, Deserializer deserializer) {
         if (stack == null) {
             if (def != null) this.material = def;
             return;
         }
         this.material = stack.getType();
         this.count = stack.getAmount();
-        if(stack.getItemMeta().hasCustomModelData()) this.modelData = stack.getItemMeta().getCustomModelData();
-        this.display = new SerializedString(MiniMessage.miniMessage().serialize(stack.displayName()), Deserializer.MINI_MESSAGE);
+        if (stack.getItemMeta().hasCustomModelData()) this.modelData = stack.getItemMeta().getCustomModelData();
+        this.display = new SerializedString(MiniMessage.miniMessage().serialize(stack.displayName()), deserializer);
         if (stack.getItemMeta().lore() != null) this.lore = stack.getItemMeta().lore().stream()
                 .map(line -> MiniMessage.miniMessage().serialize(line))
-                .map(string -> new SerializedString(string, Deserializer.MINI_MESSAGE))
+                .map(string -> new SerializedString(string, deserializer))
                 .collect(Collectors.toList());
     }
 
@@ -159,7 +178,7 @@ public class ItemStackBuilder {
         if (componentDisplay != null) meta.displayName(strip(componentDisplay));
         else meta.displayName(strip(display.deserialize(tagResolver)));
 
-        if(componentLore != null) meta.lore(componentLore);
+        if (componentLore != null) meta.lore(componentLore);
         else {
             meta.lore(lore.stream()
                     .map(line -> line.deserialize(tagResolver))
@@ -168,6 +187,10 @@ public class ItemStackBuilder {
         }
         if (flags != null) meta.addItemFlags(flags.toArray(ItemFlag[]::new));
         else meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ITEM_SPECIFICS);
+
+        enchants.forEach(enchantData ->
+                meta.addEnchant(enchantData.enchantment, enchantData.level, enchantData.ignoreLevelRestriction)
+        );
 
         stack.setItemMeta(meta);
         return stack;

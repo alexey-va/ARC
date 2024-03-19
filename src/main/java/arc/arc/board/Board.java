@@ -2,7 +2,7 @@ package arc.arc.board;
 
 import arc.arc.ARC;
 import arc.arc.configs.BoardConfig;
-import arc.arc.configs.Config;
+import arc.arc.configs.MainConfig;
 import arc.arc.network.repos.RedisRepo;
 import arc.arc.xserver.announcements.AnnounceManager;
 import arc.arc.xserver.announcements.AnnouncementData;
@@ -39,8 +39,18 @@ public class Board {
     }
 
     private void createRepo() {
-        repo = new RedisRepo<>(true, ARC.redisManager, "arc.board", "arc.board_update", BoardEntry.class);
-        repo.setOnUpdate(entry -> updateCache(entry.entryUuid));
+        repo = RedisRepo.builder(BoardEntry.class)
+                .loadAll(true)
+                .redisManager(ARC.redisManager)
+                .storageKey("arc.board")
+                .updateChannel("arc.board_update")
+                .clazz(BoardEntry.class)
+                .onUpdate(entry -> updateCache(entry.entryUuid))
+                .id("board")
+                .backupFolder(ARC.plugin.getDataFolder().toPath().resolve("backups/board"))
+                .saveInterval(20L)
+                .saveBackups(true)
+                .build();
     }
 
     private void setupTask() {
@@ -67,7 +77,7 @@ public class Board {
                     AnnouncementData data = AnnouncementData.builder()
                             .message("&7[&6" + e.playerName + "&7]&r " + e.title)
                             .minimessage(false)
-                            .originServer(Config.server)
+                            .originServer(MainConfig.server)
                             .seconds(10)
                             .bossBarColor(e.type.color)
                             .type(AnnouncementData.Type.BOSSBAR)
@@ -91,17 +101,17 @@ public class Board {
 
     public void addBoardEntry(BoardEntry boardEntry) {
         if (boardEntry == null) return;
-        repo.createNewEntry(boardEntry);
+        repo.create(boardEntry);
         updateCache(boardEntry.entryUuid);
     }
 
     public void deleteBoardEntry(BoardEntry entry) {
-        repo.deleteEntry(entry);
+        repo.delete(entry);
         updateCache(entry.entryUuid);
     }
 
     public void updateCache(UUID uuid) {
-        BoardEntry boardEntry = repo.get(uuid.toString());
+        BoardEntry boardEntry = repo.getNow(uuid.toString());
         if (boardEntry != null) cache.refresh(boardEntry);
         else cache.remove(uuid);
     }

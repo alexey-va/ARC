@@ -1,6 +1,6 @@
 package arc.arc.hooks;
 
-import arc.arc.configs.Config;
+import arc.arc.configs.MainConfig;
 import arc.arc.util.TextUtil;
 import io.github.thebusybiscuit.slimefun4.api.events.PlayerRightClickEvent;
 import io.github.thebusybiscuit.slimefun4.api.items.SlimefunItem;
@@ -17,7 +17,7 @@ public class SFHook implements Listener {
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void onUseBackpack(PlayerRightClickEvent event) {
-        if (!Config.blockBackpacks) return;
+        if (!MainConfig.blockBackpacks) return;
         Optional<SlimefunItem> optional = event.getSlimefunItem();
         if (optional.isPresent()) {
             SlimefunItem item = optional.get();

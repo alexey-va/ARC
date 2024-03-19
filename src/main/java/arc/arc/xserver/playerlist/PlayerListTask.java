@@ -1,7 +1,7 @@
 package arc.arc.xserver.playerlist;
 
 import arc.arc.ARC;
-import arc.arc.configs.Config;
+import arc.arc.configs.MainConfig;
 import arc.arc.network.RedisManager;
 import arc.arc.network.RedisSerializer;
 import org.bukkit.Bukkit;
@@ -34,9 +34,9 @@ public class PlayerListTask {
 
     private static PlayerList getPlayerList(){
         return new PlayerList(
-                Config.server,
+                MainConfig.server,
                 Bukkit.getOnlinePlayers().stream()
-                .map(p -> new PlayerData(p.getName(), Config.server, p.getUniqueId()))
+                .map(p -> new PlayerData(p.getName(), MainConfig.server, p.getUniqueId()))
                 .collect(Collectors.toList())
         );
     }

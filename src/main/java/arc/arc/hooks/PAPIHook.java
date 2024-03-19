@@ -1,6 +1,6 @@
 package arc.arc.hooks;
 
-import arc.arc.configs.Config;
+import arc.arc.configs.MainConfig;
 import arc.arc.xserver.playerlist.PlayerManager;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import org.bukkit.OfflinePlayer;
@@ -42,6 +42,8 @@ public class PAPIHook extends PlaceholderExpansion {
             return String.join(", ", PlayerManager.getPlayerNames());
         } else if(params.split("_")[0].equals("parties")){
             return parties(player, params);
+        } else if(params.split("_")[0].equals("jobsboosts")){
+            return jobsBoosts(player, params);
         }
 
         return null;
@@ -56,7 +58,7 @@ public class PAPIHook extends PlaceholderExpansion {
             case "tag":
                 String s = HookRegistry.partiesHook.tag(player.getUniqueId());
                 if(s == null) return "";
-                if (!s.isEmpty()) return Config.partyTag
+                if (!s.isEmpty()) return MainConfig.partyTag
                         .replace("%tag%", s)
                         .replace("%color%", HookRegistry.partiesHook.color(player.getUniqueId()));
                 else return "";
@@ -67,6 +69,15 @@ public class PAPIHook extends PlaceholderExpansion {
                 if(name == null) return "";
                 return HookRegistry.partiesHook.color(player.getUniqueId())+
                         name;
+        }
+        return "";
+    }
+
+    private String jobsBoosts(OfflinePlayer player, String params){
+        if(HookRegistry.jobsHook == null) return "";
+        String[] pars = params.split("_");
+        if(pars[0].equals("has")){
+            return HookRegistry.jobsHook.hasBoost(player, pars[1]) ? "true" : "false";
         }
         return "";
     }

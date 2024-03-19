@@ -50,18 +50,6 @@ public class NetworkRegistry {
         redisManager.registerChannel(announcementMessager.getChannel(), announcementMessager);
         AnnounceManager.messager = announcementMessager;
 
-/*        BoardMessager boardMessager = new BoardMessager("arc.board_update", redisManager);
-        redisManager.registerChannel(boardMessager.channel, boardMessager);
-        Board.instance().setMessager(boardMessager);*/
-
-        StockMessager stockMessager = new StockMessager("arc.stock_market", redisManager);
-        redisManager.registerChannel(stockMessager.getChannel(), stockMessager);
-        StockMarket.setMessager(stockMessager);
-
-        StockPlayerMessager stockPlayerMessager = new StockPlayerMessager("arc.stock_player_updates", redisManager);
-        redisManager.registerChannel(stockPlayerMessager.getChannel(), stockPlayerMessager);
-        StockPlayerManager.setMessager(stockPlayerMessager);
-
         HistoryMessager historyMessager = new HistoryMessager("arc.high_lows_update", redisManager);
         redisManager.registerChannel(historyMessager.channel, historyMessager);
         HistoryManager.setMessager(historyMessager);

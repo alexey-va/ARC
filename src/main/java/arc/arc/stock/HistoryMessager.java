@@ -1,6 +1,6 @@
 package arc.arc.stock;
 
-import arc.arc.configs.Config;
+import arc.arc.configs.MainConfig;
 import arc.arc.network.ChannelListener;
 import arc.arc.network.RedisManager;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -17,7 +17,7 @@ public class HistoryMessager implements ChannelListener {
     private final RedisManager redisManager;
     @Override
     public void consume(String channel, String message, String originServer) {
-        if(Config.server.equalsIgnoreCase(originServer)) return;
+        if(MainConfig.server.equalsIgnoreCase(originServer)) return;
         var om = new ObjectMapper();
         MapType mt = om.getTypeFactory()
                 .constructMapType(ConcurrentHashMap.class, String.class, HistoryManager.HighLow.class);

@@ -2,6 +2,7 @@ package arc.arc.commands;
 
 import arc.arc.ARC;
 import arc.arc.board.guis.BoardGui;
+import arc.arc.hooks.HookRegistry;
 import arc.arc.util.GuiUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -32,6 +33,53 @@ public class Command implements CommandExecutor {
                 GuiUtils.constructAndShowAsync(() ->new BoardGui(player), player);
                 return true;
             }
+
+        }
+
+        if(strings[0].equals("emshop")){
+
+            if(HookRegistry.emHook == null){
+                commandSender.sendMessage("EMHook is not loaded!");
+                return true;
+            }
+
+            String playerName = strings[1];
+
+            if(playerName.equalsIgnoreCase("reset")){
+                HookRegistry.emHook.resetShop();
+                commandSender.sendMessage("Shop reset!");
+                return true;
+            }
+
+            Player player = ARC.plugin.getServer().getPlayer(playerName);
+            if(player == null || !player.getName().equalsIgnoreCase(playerName)){
+                commandSender.sendMessage("Игрок не найден!");
+                return true;
+            }
+
+
+            boolean isGear = strings.length > 2 && strings[2].equalsIgnoreCase("gear");
+
+            HookRegistry.emHook.openShopGui(player, isGear);
+            return true;
+        }
+
+        if(strings[0].equalsIgnoreCase("jobsboosts")){
+            if(HookRegistry.jobsHook == null){
+                commandSender.sendMessage("JobsHook is not loaded!");
+                return true;
+            }
+
+            String playerName = strings[1];
+
+            Player player = ARC.plugin.getServer().getPlayer(playerName);
+            if(player == null || !player.getName().equalsIgnoreCase(playerName)){
+                commandSender.sendMessage("Игрок не найден!");
+                return true;
+            }
+
+            HookRegistry.jobsHook.openBoostGui(player);
+            return true;
         }
 
         return false;

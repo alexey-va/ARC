@@ -54,7 +54,7 @@ public class InvestTabComplete implements TabCompleter {
 
         if(last.startsWith("-uu")){
             if(commandSender instanceof Player player){
-                StockPlayer stockPlayer = StockPlayerManager.getPlayer(player.getUniqueId());
+                StockPlayer stockPlayer = StockPlayerManager.getNow(player.getUniqueId());
                 if(stockPlayer == null) return null;
                 //System.out.println(stockPlayer.getPositionMap().values());
                 return stockPlayer.getPositionMap().values()

@@ -3,8 +3,6 @@ package arc.arc.stock.gui;
 import arc.arc.configs.StockConfig;
 import arc.arc.stock.Position;
 import arc.arc.stock.StockPlayer;
-import arc.arc.stock.StockPlayerManager;
-import arc.arc.stock.StockPlayerMessager;
 import arc.arc.util.GuiUtils;
 import arc.arc.util.ItemStackBuilder;
 import arc.arc.util.TextUtil;
@@ -14,20 +12,9 @@ import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
 import com.github.stefvanschie.inventoryframework.pane.OutlinePane;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.MiniMessage;
-import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
-import org.jetbrains.annotations.NotNull;
-
-import java.text.DecimalFormat;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.List;
-import java.util.UUID;
 
 import static arc.arc.util.TextUtil.*;
 

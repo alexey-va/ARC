@@ -1,6 +1,6 @@
 package arc.arc.hooks;
 
-import arc.arc.configs.Config;
+import arc.arc.configs.MainConfig;
 import arc.arc.Portal;
 import arc.arc.network.ServerLocation;
 import net.william278.huskhomes.api.HuskHomesAPI;
@@ -79,7 +79,7 @@ public class HuskHomesHook implements Listener {
     }
 
     public void createPortal(Player player, Location location) {
-        Position position = Position.at(HuskHomesAPI.getInstance().adaptLocation(location), Config.server);
+        Position position = Position.at(HuskHomesAPI.getInstance().adaptLocation(location), MainConfig.server);
 
         try {
             OnlineUser onlineUser = HuskHomesAPI.getInstance().adaptUser(player);

@@ -38,7 +38,7 @@ public class Lumbermill {
         RegionContainer regionContainer = WorldGuard.getInstance().getPlatform().getRegionContainer();
         this.region = regionContainer.get(BukkitAdapter.adapt(world)).getRegion(regionName);
 
-        if (region == null) System.out.print("Farm regions name is invalid!");
+        if (region == null) System.out.print("Lumber regions name is invalid!");
     }
 
     public boolean processBreakEvent(BlockBreakEvent event) {

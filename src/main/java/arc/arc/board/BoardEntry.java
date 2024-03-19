@@ -30,7 +30,7 @@ import static arc.arc.util.TextUtil.strip;
 @AllArgsConstructor
 @NoArgsConstructor
 @ToString(callSuper = true)
-public class BoardEntry extends RepoData {
+public class BoardEntry extends RepoData<BoardEntry> {
 
     public Type type;
     public String playerName;
@@ -252,6 +252,22 @@ public class BoardEntry extends RepoData {
     @Override
     public boolean isRemove() {
         return System.currentTimeMillis()-timestamp > BoardConfig.secondsLifetime * 1000L;
+    }
+
+    @Override
+    public void merge(BoardEntry other) {
+        if (other.type != null) type = other.type;
+        if (other.playerName != null) playerName = other.playerName;
+        if (other.text != null) text = other.text;
+        if (other.title != null) title = other.title;
+        if (other.icon != null) icon = other.icon;
+        if (other.entryUuid != null) entryUuid = other.entryUuid;
+        if (other.playerUuid != null) playerUuid = other.playerUuid;
+        if (other.timestamp != 0) timestamp = other.timestamp;
+        if (other.lastShown != 0) lastShown = other.lastShown;
+        if (!other.positiveRatings.isEmpty()) positiveRatings = other.positiveRatings;
+        if (!other.negativeRatings.isEmpty()) negativeRatings = other.negativeRatings;
+        if (!other.reports.isEmpty()) reports = other.reports;
     }
 
     public enum Type {

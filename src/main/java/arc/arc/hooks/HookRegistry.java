@@ -1,11 +1,11 @@
 package arc.arc.hooks;
 
 import arc.arc.ARC;
-import arc.arc.configs.Config;
-import arc.arc.configs.LootChestsConfig;
+import arc.arc.configs.MainConfig;
 import arc.arc.farm.*;
 import arc.arc.hooks.citizens.CitizensHook;
 import arc.arc.hooks.elitemobs.EMHook;
+import arc.arc.hooks.jobs.JobsHook;
 import arc.arc.hooks.lands.LandsHook;
 import arc.arc.hooks.lootchest.LootChestHook;
 import arc.arc.hooks.luckperms.LuckPermsHook;
@@ -43,6 +43,7 @@ public class HookRegistry {
     public static LootChestHook lootChestHook;
     public static AuctionHook auctionHook;
     public static TranslatorHook translatorHook;
+    public static JobsHook jobsHook;
     public AEHook aeHook;
 
 
@@ -59,7 +60,7 @@ public class HookRegistry {
         papiHook = new PAPIHook();
         papiHook.register();
 
-        if (Config.enablePortals && commandListener == null) {
+        if (MainConfig.enablePortals && commandListener == null) {
             commandListener = new CommandListener();
             Bukkit.getPluginManager().registerEvents(commandListener, ARC.plugin);
         }
@@ -105,6 +106,11 @@ public class HookRegistry {
         if (getServer().getPluginManager().getPlugin("Lands") != null) {
             if (getServer().getPluginManager().getPlugin("Lands").isEnabled()) {
                 landsHook = new LandsHook();
+            }
+        }
+        if (getServer().getPluginManager().getPlugin("Jobs") != null) {
+            if (getServer().getPluginManager().getPlugin("Jobs").isEnabled()) {
+                jobsHook = new JobsHook();
             }
         }
         if (getServer().getPluginManager().getPlugin("zAuctionHouseV3") != null) {

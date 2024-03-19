@@ -90,7 +90,7 @@ public class GuiUtils {
         return true;
     }
 
-    public static void constructAndShowAsync(Supplier<ChestGui> supplier, HumanEntity player) {
+    public static void constructAndShowAsync(Supplier<ChestGui> supplier, HumanEntity player, int delay) {
         CompletableFuture.supplyAsync(() -> {
                     try {
                         return supplier.get();
@@ -105,7 +105,11 @@ public class GuiUtils {
                         if (gui == null) return;
                         gui.show(player);
                     }
-                }.runTask(ARC.plugin));
+                }.runTaskLater(ARC.plugin, delay));
+    }
+
+    public static void constructAndShowAsync(Supplier<ChestGui> supplier, HumanEntity player) {
+        constructAndShowAsync(supplier, player, 3);
     }
 
     public static GuiItem background(Material material) {

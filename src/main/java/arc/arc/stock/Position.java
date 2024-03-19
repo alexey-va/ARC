@@ -102,6 +102,9 @@ public class Position {
                 .resolver(TagResolver.resolver("position_gains", Tag.inserting(
                         mm(formatAmount(gains), true)
                 )))
+                .resolver(TagResolver.resolver("symbol", Tag.inserting(
+                        mm(symbol, true)
+                )))
                 .resolver(TagResolver.resolver("total_position_gains", Tag.inserting(
                         mm(formatAmount(gains-commission), true)
                 )))

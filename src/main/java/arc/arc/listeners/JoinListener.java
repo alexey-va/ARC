@@ -1,20 +1,16 @@
 package arc.arc.listeners;
 
-import arc.arc.ARC;
-import arc.arc.configs.Config;
+import arc.arc.configs.MainConfig;
 import arc.arc.network.NetworkRegistry;
 import arc.arc.xserver.ranks.RankData;
 import com.Zrips.CMI.CMI;
 import com.Zrips.CMI.Containers.CMIUser;
 import com.Zrips.CMI.Modules.Ranks.CMIRank;
-import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scheduler.BukkitTask;
 
 public class JoinListener implements Listener {
 
@@ -46,7 +42,7 @@ public class JoinListener implements Listener {
             String rankName = rank.getName();
             int priority = Integer.parseInt(rankName.substring(1));
 
-            RankData rankData = new RankData(rank.getName(), player.getName(), player.getUniqueId(), priority, Config.server);
+            RankData rankData = new RankData(rank.getName(), player.getName(), player.getUniqueId(), priority, MainConfig.server);
             NetworkRegistry.rankMessager.send(rankData);
         } catch (Exception e){
             e.printStackTrace();

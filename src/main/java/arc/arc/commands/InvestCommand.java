@@ -8,6 +8,8 @@ import arc.arc.stock.gui.PositionMenu;
 import arc.arc.stock.gui.SymbolSelector;
 import arc.arc.util.GuiUtils;
 import arc.arc.util.TextUtil;
+import org.bukkit.Bukkit;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -16,6 +18,7 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 public class InvestCommand implements CommandExecutor {
     @Override
@@ -47,44 +50,45 @@ public class InvestCommand implements CommandExecutor {
 
         if (strings.length == 0 || "menu".equals(type)) {
             String name = parsedCommand.pars.get("player");
-            StockPlayer stockPlayer;
+            CompletableFuture<StockPlayer> stockPlayer;
             if (name == null) {
                 stockPlayer = StockPlayerManager.getOrCreate(player);
-            } else{
-                if(!commandSender.hasPermission("arc.stocks.menu.other")){
+            } else {
+                if (!commandSender.hasPermission("arc.stocks.menu.other")) {
                     commandSender.sendMessage(TextUtil.noPermissions());
                     return true;
                 }
-                stockPlayer = StockPlayerManager.getPlayer(name).orElse(null);
-                if(stockPlayer == null){
-                    commandSender.sendMessage("Could not find player: "+name);
+
+                OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(name);
+                if (offlinePlayer == null || offlinePlayer.getUniqueId() == null) {
+                    commandSender.sendMessage("Could not find player: " + name);
+                    return true;
                 }
+                stockPlayer = StockPlayerManager.getOrNull(offlinePlayer.getUniqueId());
             }
-            GuiUtils.constructAndShowAsync(() -> new SymbolSelector(stockPlayer), player);
-            //new SymbolSelector(stockPlayer).show(player);
+            stockPlayer.thenAccept(sp -> new SymbolSelector(sp).show(player));
             return true;
         }
 
-        StockPlayer stockPlayer = StockPlayerManager.getOrCreate(player);
+        CompletableFuture<StockPlayer> stockPlayer = StockPlayerManager.getOrCreate(player);
 
         switch (type) {
             case "add-money" -> {
                 double amount = Double.parseDouble(parsedCommand.pars.getOrDefault("amount", "1000"));
-                StockPlayerManager.addToTradingBalanceFromVault(stockPlayer, amount);
+                stockPlayer.thenAccept(sp -> Bukkit.getScheduler()
+                        .runTask(ARC.plugin, () -> StockPlayerManager.addToTradingBalanceFromVault(sp, amount))
+                );
                 return true;
             }
             case "withdraw-money" -> {
                 double amount = Double.parseDouble(parsedCommand.pars.getOrDefault("amount", "1000"));
-                StockPlayerManager.addToTradingBalanceFromVault(stockPlayer, -amount);
-                return true;
-            }
-            case "balance" -> {
-                double balance = stockPlayer.getBalance();
-                player.sendMessage(balance + " | total: " + stockPlayer.totalBalance());
+                stockPlayer.thenAccept(sp -> Bukkit.getScheduler()
+                        .runTask(ARC.plugin, () -> StockPlayerManager.addToTradingBalanceFromVault(sp, -amount))
+                );
                 return true;
             }
             case "auto" -> {
-                StockPlayerManager.switchAuto(stockPlayer);
+                stockPlayer.thenAccept(StockPlayerManager::switchAuto);
                 return true;
             }
         }
@@ -105,17 +109,23 @@ public class InvestCommand implements CommandExecutor {
 
         switch (type) {
             case "buy" -> {
-                StockPlayerManager.buyStock(stockPlayer, stock, amount, leverage, up, down);
+                stockPlayer.thenAccept(sp -> Bukkit.getScheduler().runTask(ARC.plugin,
+                        () -> StockPlayerManager.buyStock(sp, stock, amount, leverage, up, down))
+                );
                 return true;
             }
             case "short" -> {
-                StockPlayerManager.shortStock(stockPlayer, stock, amount, leverage, up, down);
+                stockPlayer.thenAccept(sp -> Bukkit.getScheduler().runTask(ARC.plugin,
+                        () -> StockPlayerManager.shortStock(sp, stock, amount, leverage, up, down))
+                );
                 return true;
             }
             case "close" -> {
                 UUID uuid = UUID.fromString(parsedCommand.pars.get("uuid"));
                 int reason = Integer.parseInt(parsedCommand.pars.getOrDefault("reason", "1"));
-                StockPlayerManager.closePosition(stockPlayer, symbol, uuid, reason);
+                stockPlayer.thenAccept(sp -> Bukkit.getScheduler().runTask(ARC.plugin,
+                        () -> StockPlayerManager.closePosition(sp, symbol, uuid, reason))
+                );
             }
         }
 

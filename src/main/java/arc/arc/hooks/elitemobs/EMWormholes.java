@@ -2,20 +2,23 @@ package arc.arc.hooks.elitemobs;
 
 import arc.arc.ARC;
 import arc.arc.configs.Config;
+import arc.arc.configs.MainConfig;
 import com.destroystokyo.paper.ParticleBuilder;
 import com.magmaguy.elitemobs.wormhole.Wormhole;
+import lombok.RequiredArgsConstructor;
 import org.bukkit.Location;
 import org.bukkit.Particle;
-import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.ArrayList;
 import java.util.Collection;
 
+@RequiredArgsConstructor
 public class EMWormholes {
 
     private static BukkitTask wormholeTask;
+    final Config config;
 
     public void init() {
         cancel();
@@ -30,7 +33,7 @@ public class EMWormholes {
                     e.printStackTrace();
                 }
             }
-        }.runTaskTimerAsynchronously(ARC.plugin, 20L, Config.wormholePeriod);
+        }.runTaskTimerAsynchronously(ARC.plugin, 20L, MainConfig.wormholePeriod);
 
     }
 
@@ -52,13 +55,13 @@ public class EMWormholes {
             double modifier = wormhole.getWormholeConfigFields().getSizeMultiplier();
             if(l1.getWorld() != null) {
                 particleBuilders.add(new ParticleBuilder(Particle.REDSTONE).color(wormhole.getParticleColor())
-                        .offset(Config.particleOffset * modifier, Config.particleOffset * modifier, Config.particleOffset * modifier)
-                        .location(l1).count((int) (Config.particleCount * modifier * modifier)));
+                        .offset(MainConfig.particleOffset * modifier, MainConfig.particleOffset * modifier, MainConfig.particleOffset * modifier)
+                        .location(l1).count((int) (MainConfig.particleCount * modifier * modifier)));
             }
             if(l2.getWorld() != null) {
                 particleBuilders.add(new ParticleBuilder(Particle.REDSTONE).color(wormhole.getParticleColor())
-                        .offset(Config.particleOffset * modifier, Config.particleOffset * modifier, Config.particleOffset * modifier)
-                        .location(l2).count((int) (Config.particleCount * modifier * modifier)));
+                        .offset(MainConfig.particleOffset * modifier, MainConfig.particleOffset * modifier, MainConfig.particleOffset * modifier)
+                        .location(l2).count((int) (MainConfig.particleCount * modifier * modifier)));
             }
         }
         for (ParticleBuilder builder : particleBuilders) {

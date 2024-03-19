@@ -1,7 +1,7 @@
 package arc.arc.xserver.commands;
 
 import arc.arc.ARC;
-import arc.arc.configs.Config;
+import arc.arc.configs.MainConfig;
 import arc.arc.network.ChannelListener;
 import arc.arc.network.RedisSerializer;
 import lombok.AllArgsConstructor;
@@ -63,8 +63,8 @@ public class CommandReceiver implements ChannelListener {
     public void consume(String channel, String message, String server) {
         CommandData data = RedisSerializer.fromJson(message, CommandData.class);
         if (data == null) return;
-        if (!data.everywhere && !data.servers.contains(Config.server)) return;
-        if(data.notOrigin && server.equals(Config.server)) return;
+        if (!data.everywhere && !data.servers.contains(MainConfig.server)) return;
+        if(data.notOrigin && server.equals(MainConfig.server)) return;
         if (data.sender == CommandData.Sender.PLAYER) {
             AwaitingExecution awaitingExecution = new AwaitingExecution.AwaitingExecutionBuilder()
                     .created(System.currentTimeMillis())
@@ -102,7 +102,7 @@ public class CommandReceiver implements ChannelListener {
             public void run() {
                 player.performCommand(command);
             }
-        }.runTaskLater(ARC.plugin, Config.cForwardDelay);
+        }.runTaskLater(ARC.plugin, MainConfig.cForwardDelay);
     }
 
 

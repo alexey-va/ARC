@@ -2,10 +2,13 @@ package arc.arc.stock;
 
 import arc.arc.ARC;
 import arc.arc.configs.StockConfig;
+import arc.arc.network.repos.RedisRepo;
 import arc.arc.util.TextUtil;
 import arc.arc.util.Utils;
 import arc.arc.xserver.announcements.AnnounceManager;
+import com.gamingmesh.jobs.commands.list.log;
 import lombok.Setter;
+import lombok.extern.log4j.Log4j2;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
@@ -15,27 +18,29 @@ import org.bukkit.scheduler.BukkitTask;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static arc.arc.util.TextUtil.formatAmount;
 import static arc.arc.util.TextUtil.mm;
 
+@Log4j2
 public class StockPlayerManager {
+    private static RedisRepo<StockPlayer> repo;
 
-    private static BukkitTask saveTask;
-    private static final Map<UUID, StockPlayer> playerMap = new ConcurrentHashMap<>();
-    @Setter
-    private static StockPlayerMessager messager;
-    static BukkitTask dividendTask;
-
-    public static void startTasks() {
-        cancelTasks();
-        saveTask = new BukkitRunnable() {
-            @Override
-            public void run() {
-                saveStockPlayers();
-            }
-        }.runTaskTimerAsynchronously(ARC.plugin, 20L, 20L);
+    public static void init() {
+        if(repo == null) {
+            repo = RedisRepo.builder(StockPlayer.class)
+                    .loadAll(true)
+                    .redisManager(ARC.redisManager)
+                    .storageKey("arc.stock_players")
+                    .updateChannel("arc.stock_players_update")
+                    .id("stock_players")
+                    .backupFolder(ARC.plugin.getDataFolder().toPath().resolve("backups/stock-players"))
+                    .saveInterval(20L)
+                    .saveBackups(true)
+                    .build();
+        }
     }
 
     public static void updateAllPositionsOf(String symbol) {
@@ -45,9 +50,8 @@ public class StockPlayerManager {
             return;
         }
 
-        playerMap.values().stream().filter(sp -> sp.positionMap.containsKey(symbol))
+        repo.all().stream().filter(sp -> sp.positionMap.containsKey(symbol))
                 .forEach(sp -> checkPosition(sp, symbol));
-
     }
 
     private static void checkPosition(StockPlayer stockPlayer, String symbol) {
@@ -76,19 +80,15 @@ public class StockPlayerManager {
         }
     }
 
-    public static void cancelTasks() {
-        if (saveTask != null && !saveTask.isCancelled()) saveTask.cancel();
-        if (dividendTask != null && !dividendTask.isCancelled()) dividendTask.cancel();
-    }
 
     public static void giveDividend(String symbol) {
         Stock stock = StockMarket.stock(symbol);
         if (stock == null) return;
-        System.out.println("Giving dividend for "+stock.symbol+": "+ Instant.ofEpochMilli(stock.lastTimeDividend));
+        System.out.println("Giving dividend for " + stock.symbol + ": " + Instant.ofEpochMilli(stock.lastTimeDividend));
         stock.setLastTimeDividend(System.currentTimeMillis());
-        for (StockPlayer stockPlayer : playerMap.values()) {
+        for (StockPlayer stockPlayer : repo.all()) {
             double gave = stockPlayer.giveDividend(symbol);
-            if(gave<=0.1) continue;
+            if (gave <= 0.1) continue;
             String message = StockConfig.string("message.received-dividend")
                     .replace("<amount>", TextUtil.formatAmount(gave))
                     .replace("<symbol>", symbol);
@@ -97,33 +97,25 @@ public class StockPlayerManager {
     }
 
 
-    private static StockPlayer createPlayer(String playerName, UUID playerUuid) {
-        System.out.println("Creating player for " + playerName);
-        StockPlayer stockPlayer = new StockPlayer(playerName, playerUuid);
-        playerMap.put(playerUuid, stockPlayer);
-        saveStockPlayer(stockPlayer);
-        return stockPlayer;
-    }
-
-    public static StockPlayer getOrCreate(Player player) {
-        StockPlayer stockPlayer = playerMap.get(player.getUniqueId());
-        if (stockPlayer != null) return stockPlayer;
-        return createPlayer(player.getName(), player.getUniqueId());
+    public static CompletableFuture<StockPlayer> getOrCreate(Player player) {
+        return repo.getOrCreate(player.getUniqueId().toString(), () ->
+                new StockPlayer(player.getName(), player.getUniqueId())
+        );
     }
 
     public static void buyStock(StockPlayer stockPlayer, Stock stock, double amount, int leverage, double lowerBound, double upperBound) {
         List<Position> stockPositions = stockPlayer.positions(stock.symbol);
-        boolean canHaveMore = stockPlayer.isBelowMaxStockAmount() && !(stockPositions!= null && stockPositions.size() >= 9);
-        if(!canHaveMore || stockPlayer.positions().size() >= 30) {
+        boolean canHaveMore = stockPlayer.isBelowMaxStockAmount() && !(stockPositions != null && stockPositions.size() >= 9);
+        if (!canHaveMore || stockPlayer.positions().size() >= 30) {
             Player p = stockPlayer.player();
-            if(p == null) return;
+            if (p == null) return;
             p.sendMessage(mm(StockConfig.string("message.too-many-positions")));
             return;
         }
 
         EconomyCheckResponse response = economyCheck(stockPlayer, stock, amount, leverage);
         if (!response.success()) {
-            System.out.println(response);
+            log.trace("Economy check failed: " + response);
             //TextUtil.noMoneyMessage(player, response.lack);
             return;
         }
@@ -143,23 +135,22 @@ public class StockPlayerManager {
                 .type(Position.Type.BOUGHT)
                 .build();
         stockPlayer.addPosition(position);
-        //player.sendMessage("Successfully added position: " + position);
+        log.trace("Successfully added position: {}", position);
     }
 
     public static void shortStock(StockPlayer stockPlayer, Stock stock, double amount, int leverage, double lowerBound, double upperBound) {
         List<Position> stockPositions = stockPlayer.positions(stock.symbol);
-        boolean canHaveMore = stockPlayer.isBelowMaxStockAmount() && !(stockPositions!= null && stockPositions.size() >= 9);
-        if(!canHaveMore || stockPlayer.positions().size() >= 30) {
+        boolean canHaveMore = stockPlayer.isBelowMaxStockAmount() && !(stockPositions != null && stockPositions.size() >= 9);
+        if (!canHaveMore || stockPlayer.positions().size() >= 30) {
             Player p = stockPlayer.player();
-            if(p == null) return;
+            if (p == null) return;
             p.sendMessage(mm(StockConfig.string("message.too-many-positions")));
             return;
         }
 
         EconomyCheckResponse response = economyCheck(stockPlayer, stock, amount, leverage);
         if (!response.success()) {
-            System.out.println(response);
-            //TextUtil.noMoneyMessage(player, response.lack);
+            log.trace("Economy check failed: " + response);
             return;
         }
 
@@ -178,57 +169,67 @@ public class StockPlayerManager {
                 .type(Position.Type.SHORTED)
                 .build();
         stockPlayer.addPosition(position);
-        //player.sendMessage("Successfully added position: " + position);
+        log.trace("Successfully added position: {}", position);
     }
 
     public static void closePosition(StockPlayer stockPlayer, String symbol, UUID positionUuid, int reason) {
-        System.out.println("Closing position " + positionUuid + " cuz " + reason);
+        log.trace("Closing position with uuid: {} of {}", positionUuid, stockPlayer.getPlayerName());
         Stock stock = StockMarket.stock(symbol);
         if (stock == null) {
-            System.out.println("Could not find stock with symbol: " + symbol);
+            log.error("Could not find stock with symbol: " + symbol);
             return;
         }
         stockPlayer.remove(symbol, positionUuid).ifPresentOrElse(position -> {
             double gains = position.gains(stock.price);
+            log.trace("Gains: {}", gains);
             stockPlayer.addToBalance(gains + position.startPrice * position.amount, true);
             String message = StockConfig.string("message.closed-" + reason)
                     .replace("<gains>", formatAmount(gains - position.commission))
                     .replace("<symbol>", symbol)
                     .replace("<money_received>", formatAmount(gains + position.startPrice * position.amount));
             AnnounceManager.instance().sendMessage(stockPlayer.playerUuid, message);
-        }, () -> System.out.println("Could not find position with such id"));
+        }, () -> log.error("Could not find position with such id {}", positionUuid));
 
     }
 
 
     public static boolean addToTradingBalanceFromVault(StockPlayer stockPlayer, double amount) {
         OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(stockPlayer.playerUuid);
+        log.trace("Adding {} to trading balance of {}", amount, stockPlayer.getPlayerName());
 
         if (amount > 0) {
             if (ARC.getEcon().withdrawPlayer(offlinePlayer, amount).transactionSuccess()) {
                 stockPlayer.addToBalance(amount, false);
-                //if (offlinePlayer.isOnline()) ((Player) offlinePlayer).sendMessage("Money added to your account!");
+                log.trace("Successfully added {} to trading balance of {}", amount, stockPlayer.getPlayerName());
                 return true;
             }
-
-            //if (offlinePlayer.isOnline()) ((Player) offlinePlayer).sendMessage("You dont have enough money!");
+            log.trace("Failed to add {} to trading balance of {}", amount, stockPlayer.getPlayerName());
         } else {
             if (stockPlayer.getBalance() < -amount) {
-                //if (offlinePlayer.isOnline()) ((Player) offlinePlayer).sendMessage("You dont have enough money!");
+                log.trace("Not enough money to take {} from trading balance of {}", amount, stockPlayer.getPlayerName());
                 return false;
             }
             if (ARC.getEcon().depositPlayer(offlinePlayer, -amount).transactionSuccess()) {
                 stockPlayer.addToBalance(amount, false);
+                log.trace("Successfully took {} from trading balance of {}", amount, stockPlayer.getPlayerName());
                 return true;
             }
         }
+        log.trace("Failed to take {} from trading balance of {}", amount, stockPlayer.getPlayerName());
         return false;
     }
 
     public static void switchAuto(StockPlayer stockPlayer) {
         stockPlayer.setAutoTake(!stockPlayer.autoTake);
-        //System.out.println("Switched to "+stockPlayer.autoTake);
-        saveStockPlayer(stockPlayer);
+        log.trace("Switched auto take for {} to {}", stockPlayer.getPlayerName(), stockPlayer.autoTake);
+    }
+
+    public static CompletableFuture<StockPlayer> getOrNull(UUID uniqueId) {
+        return repo.getOrNull(uniqueId.toString());
+    }
+
+    public static StockPlayer getNow(UUID uniqueId) {
+        return repo.getNow(uniqueId.toString());
     }
 
     public record EconomyCheckResponse(boolean success, double totalPrice, double lack, double commission) {
@@ -239,7 +240,6 @@ public class StockPlayerManager {
         double commission = commission(stock, amount, leverage);
         double balance = player.getBalance();
         if (balance < cost + commission) {
-            //if (player != null) TextUtil.noMoneyMessage(player, stock.price - balance);
             return new EconomyCheckResponse(false, cost + commission, cost + commission - balance, commission);
         }
 
@@ -254,41 +254,4 @@ public class StockPlayerManager {
         return cost(stock, amount) * StockConfig.commission * (leverage < 100 ? 1 : 1 + Math.pow(leverage, StockConfig.leveragePower) - Math.pow(100, StockConfig.leveragePower));
     }
 
-    public static void loadStockPlayers() {
-        playerMap.putAll(messager.loadAllStockPlayers());
-    }
-
-    public static void loadStockPlayer(UUID uuid) {
-        messager.loadStockPlayer(uuid);
-    }
-
-    public static void saveStockPlayers() {
-        StockPlayerManager.getAll().values().stream()
-                .filter(StockPlayer::isDirty)
-                .forEach(StockPlayerManager::saveStockPlayer);
-    }
-
-    public static void saveStockPlayer(StockPlayer stockPlayer) {
-        messager.saveStockPlayer(stockPlayer);
-    }
-
-
-    public static StockPlayer getPlayer(UUID uuid) {
-        return playerMap.get(uuid);
-    }
-
-    public static Optional<StockPlayer> getPlayer(String name) {
-        return playerMap.values().stream()
-                .filter(sp -> sp.playerName.equals(name))
-                .findAny();
-    }
-
-
-    public static Map<UUID, StockPlayer> getAll() {
-        return playerMap;
-    }
-
-    public static void setMap(Map<UUID, StockPlayer> map) {
-        playerMap.putAll(map);
-    }
 }

@@ -1,6 +1,6 @@
 package arc.arc.xserver.announcements;
 
-import arc.arc.configs.Config;
+import arc.arc.configs.MainConfig;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -43,7 +43,7 @@ public class AnnouncementData {
     @Builder.Default
     List<ArcCondition> arcConditions = new ArrayList<>();
 
-    String originServer = Config.server;
+    String originServer = MainConfig.server;
 
     @JsonIgnore
     Component cachedComponent;

@@ -23,6 +23,7 @@ softdepend:
   - Geyser-Spigot
   - YamipaPlugin
   - LootChest
+  - Jobs
 depend:
   - PlaceholderAPI
 commands:
@@ -56,6 +57,6 @@ commands:
   sound-follow:
     description: build-book
     usage: build-book
-  test-repo:
+  give-jobs-boost:
     description: build-book
     usage: build-book

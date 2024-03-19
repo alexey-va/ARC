@@ -1,11 +1,15 @@
 package arc.arc.stock;
 
 import arc.arc.ARC;
+import arc.arc.board.BoardEntry;
 import arc.arc.configs.StockConfig;
+import arc.arc.network.repos.RedisRepo;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
+import lombok.extern.log4j.Log4j2;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
+import org.jsoup.nodes.Node;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -14,18 +18,31 @@ import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
+@Log4j2
 public class StockMarket {
     private static BukkitTask updateTask, dividendTask;
-    static ExecutorService service = Executors.newSingleThreadExecutor();
-
-    @Setter
-    private static StockMessager stockMessager;
     @Setter
     private static StockClient client;
-    private static Map<String, Stock> stockMap = new ConcurrentHashMap<>();
+    //private static Map<String, Stock> stockMap = new ConcurrentHashMap<>();
 
-    static int sinceLastGlobalShare = 100;
+    private static RedisRepo<Stock> repo;
+    private static Map<String, ConfigStock> configStocks = new ConcurrentHashMap<>();
 
+    public static void init() {
+        if (repo == null) {
+            repo = RedisRepo.builder(Stock.class)
+                    .loadAll(true)
+                    .redisManager(ARC.redisManager)
+                    .storageKey("arc.stocks")
+                    .updateChannel("arc.stocks_update")
+                    .id("stocks")
+                    .backupFolder(ARC.plugin.getDataFolder().toPath().resolve("backups/stocks"))
+                    .saveInterval(20L)
+                    .build();
+        }
+
+        startTasks();
+    }
 
     public static void startTasks() {
         cancelTasks();
@@ -35,13 +52,15 @@ public class StockMarket {
             @Override
             public void run() {
                 if (!StockConfig.mainServer) return;
-                boolean change = false;
+                //log.trace("Updating stocks: "+configStocks.values());
                 Map<String, Double> updates = new HashMap<>();
 
                 boolean fetchedCrypto = false;
-                for (var entry : stockMap.entrySet()) {
+                for (var entry : configStocks.entrySet()) {
                     try {
-                        if (System.currentTimeMillis() - entry.getValue().lastUpdated > StockConfig.stockRefreshRate * 1000L) {
+                        Stock current = repo.getNow(entry.getKey());
+                        long lastUpdated = current == null ? 0 : current.lastUpdated;
+                        if (System.currentTimeMillis() - lastUpdated > StockConfig.stockRefreshRate * 1000L) {
                             if (entry.getValue().type == Stock.Type.CRYPTO) {
                                 if (fetchedCrypto) continue;
                                 updates.putAll(client.cryptoPrices());
@@ -50,38 +69,54 @@ public class StockMarket {
                             }
                             updates.put(entry.getKey(), client.price(entry.getValue()));
                         }
-                    } catch (Exception e){
-                        System.out.println("Error fetching data for: "+entry.getKey());
+                    } catch (Exception e) {
+                        log.error("Error fetching data for: " + entry.getKey());
                         e.printStackTrace();
                     }
                 }
 
+                log.trace("Fetched updates: " + updates);
+
                 for (var entry : updates.entrySet()) {
-                    String symbol = entry.getKey().toUpperCase();
-                    double price = entry.getValue();
-                    Stock stock = stockMap.get(symbol);
-                    if (stock == null) {
-                        System.out.println("Could not find stock: " + symbol + " while updating prices!");
-                        continue;
-                    }
-                    if (price < 0 || price > 1_000_000) {
-                        price = stock.price;
-                    }
-                    HistoryManager.add(symbol, price);
+                    try {
+                        String symbol = entry.getKey().toUpperCase();
+                        double price = entry.getValue();
+                        double finalPrice = price;
+                        Stock current = repo
+                                .getOrCreate(symbol, () -> configStocks.get(symbol)
+                                        .toStock(finalPrice, 0, System.currentTimeMillis(), 0))
+                                .get();
 
-                    //System.out.println(symbol + " -> " + price);
-                    stock.price = price;
-                    stock.lastUpdated = System.currentTimeMillis();
-                    StockPlayerManager.updateAllPositionsOf(symbol);
-                    change = true;
-                }
 
-                if (change) saveStocks(updates.keySet());
-                if(sinceLastGlobalShare >= 100) {
-                    saveStocks();
-                    sinceLastGlobalShare = 0;
+                        if (price < 0 || price > 1_000_000) {
+                            if (current.price < 0 || current.price > 1_000_000) {
+                                log.error("Price for " + symbol + " is invalid: " + price);
+                                continue;
+                            }
+                            price = current.price;
+                        }
+                        HistoryManager.add(symbol, price);
+
+                        current.price = price;
+                        current.lastUpdated = System.currentTimeMillis();
+                        if (current.type == Stock.Type.STOCK) {
+                            current.dividend = current.price * StockConfig.dividendPercentFromPrice;
+                            if (current.dividend > 10_000) {
+                                log.error("Dividend for " + symbol + " is invalid: " + current.dividend);
+                                current.dividend = 0;
+                            }
+                        }
+                        current.setDirty(true);
+
+                        log.trace("Updated stock: " + symbol + " to " + price);
+
+                        StockPlayerManager.updateAllPositionsOf(symbol);
+                    } catch (Exception e) {
+                        log.error("Error updating stock: " + entry.getKey());
+                        e.printStackTrace();
+                    }
+
                 }
-                else sinceLastGlobalShare++;
             }
         }.runTaskTimerAsynchronously(ARC.plugin, 20L, 10 * 20L);
 
@@ -89,34 +124,15 @@ public class StockMarket {
             @Override
             public void run() {
                 if (!StockConfig.mainServer) return;
-                Set<String> strings = new HashSet<>();
-                StockMarket.stocks().stream()
+                stocks().stream()
                         .filter(stock -> stock.dividend > 0.000001)
                         .filter(s -> System.currentTimeMillis() - s.lastTimeDividend >= 23 * 60 * 60 * 1000L)
+                        .peek(stock -> stock.lastTimeDividend = System.currentTimeMillis())
+                        .peek(stock -> stock.setDirty(true))
                         .map(Stock::getSymbol)
-                        .peek(strings::add)
                         .forEach(StockPlayerManager::giveDividend);
-
-                saveStocks(strings);
             }
         }.runTaskTimer(ARC.plugin, 100L, 20L * 60);
-    }
-
-    public static void saveStocks(Collection<String> symbols) {
-        if (stockMessager != null) {
-            service.submit(() -> stockMessager.send(stockMap.entrySet().stream()
-                    .filter(e -> symbols.contains(e.getKey()))
-                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))
-            ));
-        }
-    }
-
-    public static void saveStocks() {
-        if (stockMessager != null) {
-            service.submit(() -> stockMessager.send(stockMap.entrySet().stream()
-                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))
-            ));
-        }
     }
 
     public static void saveHistory() {
@@ -125,63 +141,41 @@ public class StockMarket {
 
     public static void cancelTasks() {
         if (updateTask != null && updateTask.isCancelled()) updateTask.cancel();
+        if (dividendTask != null && dividendTask.isCancelled()) dividendTask.cancel();
         HistoryManager.cancelTasks();
     }
 
 
     public static Stock stock(String symbol) {
-        return stockMap.get(symbol);
+        return repo.getNow(symbol);
     }
 
     public static Collection<Stock> stocks() {
-        return stockMap.values();
+        return repo.all();
     }
 
     public static void loadStockFromMap(Map<?, ?> map) {
         try {
-            System.out.println("Parsed stock: " + map.get("symbol"));
-            Stock stock = Stock.deserialize((Map<String, Object>) map);
-            if (stock.type == Stock.Type.STOCK) {
-                stock.setDividend(stock.price * StockConfig.dividendPercentFromPrice);
-                if (stock.getDividend() > 1000) stock.setDividend(0);
-            }
+            ConfigStock stock = ConfigStock.deserialize((Map<String, Object>) map);
             stock.setSymbol(stock.getSymbol().toUpperCase());
-            stockMap.put(stock.symbol, stock);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+            configStocks.put(stock.getSymbol(), stock);
 
-    }
-
-    public static void loadCacheFromMap(Map<?, ?> map) {
-        try {
-            //System.out.println("Loading from cache: "+map);
-            Stock cachedStock = Stock.deserialize((Map<String, Object>) map);
-            Stock actualStock = stockMap.get(cachedStock.symbol);
-            if (actualStock == null) {
-                System.out.println("Stock " + cachedStock + " in cache but not in config! Skipping...");
-                return;
-            }
-            actualStock.lastUpdated = cachedStock.lastUpdated;
-            actualStock.price = cachedStock.price;
-            actualStock.lastTimeDividend = cachedStock.lastTimeDividend;
-            System.out.println("Cached last dividend: "+cachedStock.lastTimeDividend);
-            if (actualStock.type == Stock.Type.STOCK) {
-                actualStock.setDividend(cachedStock.price * StockConfig.dividendPercentFromPrice);
-                if (cachedStock.getDividend() > 1000) cachedStock.setDividend(0);
-            }
+            var current = repo.getNow(stock.getSymbol());
+            if(current == null) return;
+            current.lore = stock.lore;
+            current.display = stock.display;
+            current.icon = stock.icon;
+            current.maxLeverage = stock.maxLeverage;
+            current.type = stock.type;
+            current.setDirty(true);
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    public static void setMap(Map<String, Stock> map) {
-        stockMap.putAll(map);
+
+
+    public static Collection<ConfigStock> configStocks() {
+        return configStocks.values();
     }
-
-    public static void setMessager(StockMessager messager) {
-        stockMessager = messager;
-    }
-
-
 }

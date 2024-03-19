@@ -1,6 +1,6 @@
 package arc.arc.hooks.worldguard;
 
-import arc.arc.configs.Config;
+import arc.arc.configs.MainConfig;
 import arc.arc.util.TextUtil;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
 import com.sk89q.worldguard.LocalPlayer;
@@ -49,7 +49,7 @@ public class WGHook implements Listener {
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void onBlockBreak(BlockBreakEvent event) {
-        if (!Config.endProtection) return;
+        if (!MainConfig.endProtection) return;
         if(!event.getBlock().getWorld().getName().equalsIgnoreCase("world_the_end")) return;
         if (region == null && !attempt) {
             try {
@@ -78,7 +78,7 @@ public class WGHook implements Listener {
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void onBlockPlace(BlockPlaceEvent event) {
-        if (!Config.endProtection) return;
+        if (!MainConfig.endProtection) return;
         if (region == null && !attempt) {
             try {
                 RegionContainer container = WorldGuard.getInstance().getPlatform().getRegionContainer();

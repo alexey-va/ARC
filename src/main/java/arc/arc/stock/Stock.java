@@ -2,6 +2,7 @@ package arc.arc.stock;
 
 import arc.arc.board.ItemIcon;
 import arc.arc.configs.StockConfig;
+import arc.arc.network.repos.RepoData;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -29,7 +30,7 @@ import static arc.arc.util.TextUtil.mm;
 @Getter
 @ToString
 @AllArgsConstructor
-public class Stock implements ConfigurationSerializable {
+public class Stock extends RepoData<Stock> {
 
     String symbol;
     double price;
@@ -44,7 +45,7 @@ public class Stock implements ConfigurationSerializable {
     @JsonInclude(JsonInclude.Include.NON_DEFAULT)
     Type type = Type.STOCK;
 
-    public static Stock deserialize(Map<String, Object> map) {
+/*    public static Stock deserialize(Map<String, Object> map) {
         String jsonIcon = (String) map.get("icon");
         ItemIcon icon = ItemIcon.of(Material.PAPER, 0);
         try {
@@ -91,7 +92,7 @@ public class Stock implements ConfigurationSerializable {
         } catch (JsonProcessingException e) {
             throw new RuntimeException(e);
         }
-    }
+    }*/
 
     public TagResolver tagResolver() {
         int hours = (int) Duration.between(Instant.ofEpochMilli(lastTimeDividend), Instant.now()).toHours();
@@ -134,6 +135,29 @@ public class Stock implements ConfigurationSerializable {
                 .resolver(TagResolver.resolver("stock_dividend", Tag.inserting(
                         mm(formatAmount(dividend), true)
                 ))).build();
+    }
+
+    @Override
+    public String id() {
+        return symbol;
+    }
+
+    @Override
+    public boolean isRemove() {
+        return false;
+    }
+
+    @Override
+    public void merge(Stock other) {
+        this.price = other.price;
+        this.dividend = other.dividend;
+        this.lastUpdated = other.lastUpdated;
+        this.display = other.display;
+        this.lore = other.lore;
+        this.icon = other.icon;
+        this.lastTimeDividend = other.lastTimeDividend;
+        this.maxLeverage = other.maxLeverage;
+        this.type = other.type;
     }
 
     public enum Type {

@@ -7,7 +7,7 @@ import lombok.ToString;
 
 @ToString
 @Data
-public abstract class RepoData {
+public abstract class RepoData<SELF extends RepoData<SELF>> {
 
     @Getter @Setter
     transient boolean dirty = true;
@@ -16,4 +16,5 @@ public abstract class RepoData {
 
     public abstract String id();
     public abstract boolean isRemove();
+    public abstract void merge(SELF other);
 }

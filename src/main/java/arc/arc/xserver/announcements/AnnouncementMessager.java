@@ -1,14 +1,13 @@
 package arc.arc.xserver.announcements;
 
 import arc.arc.ARC;
-import arc.arc.configs.Config;
+import arc.arc.configs.MainConfig;
 import arc.arc.network.ChannelListener;
 import arc.arc.network.RedisManager;
 import arc.arc.network.RedisSerializer;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.bukkit.Bukkit;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -27,9 +26,9 @@ public class AnnouncementMessager implements ChannelListener {
     @Override
     public void consume(String channel, String message, String server) {
         AnnouncementData data = RedisSerializer.fromJson(message, AnnouncementData.class);
-        if(Objects.equals(server, Config.server)) return;
-        if(data == null || Config.server.equalsIgnoreCase(data.originServer)) return;
-        if(!data.everywhere && !data.servers.contains(Config.server)) return;
+        if(Objects.equals(server, MainConfig.server)) return;
+        if(data == null || MainConfig.server.equalsIgnoreCase(data.originServer)) return;
+        if(!data.everywhere && !data.servers.contains(MainConfig.server)) return;
         data = announcementDataCache.getOrDefault(data, data);
         AnnouncementData finalData = data;
         Bukkit.getScheduler().runTask(ARC.plugin, () -> AnnounceManager.announceLocally(finalData));

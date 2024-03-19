@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.type.MapType;
 import com.fasterxml.jackson.databind.type.TypeFactory;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.log4j.Log4j2;
 import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.api.WebSocketAdapter;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
@@ -20,6 +21,7 @@ import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
+@Log4j2
 public class StockClient {
 
     private final String FINN_API_KEY;
@@ -31,12 +33,12 @@ public class StockClient {
     static Map<String, List<Double>> prices = new ConcurrentHashMap<>();
 
     public Map<String, Double> cryptoPrices() {
-        String ids = StockMarket.stocks().stream()
+        String ids = StockMarket.configStocks().stream()
                 .filter(stock -> stock.type == Stock.Type.CRYPTO)
-                .map(Stock::getSymbol)
+                .map(ConfigStock::getSymbol)
                 .collect(Collectors.joining("%2C"));
         String url = "https://api.coingecko.com/api/v3/simple/price?ids=" + ids + "&vs_currencies=usd&precision=full";
-        //System.out.println("URL: "+url);
+        log.trace("Fetching crypto prices from " + url);
         try {
             HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
             InputStream stream = connection.getInputStream();
@@ -52,6 +54,7 @@ public class StockClient {
 
             Map<String, Double> prices = new HashMap<>();
             map.forEach((key, value) -> prices.put(key, value.get("usd")));
+            log.trace("Fetched crypto prices: " + prices);
             return prices;
         } catch (Exception e) {
             System.out.println("Could not load price for crypto!");
@@ -126,7 +129,7 @@ public class StockClient {
         }
     }
 
-    private Double getStockPrice(Stock stock) {
+    private Double getStockPrice(ConfigStock stock) {
         if (webSocketClient == null || !webSocketClient.isRunning() || isClosed) {
             System.out.println("Websocket is closed. Starting...");
             startWebSocket(StockMarket.stocks().stream()
@@ -141,17 +144,17 @@ public class StockClient {
         return optional.getAsDouble();
     }
 
-    private Double getCurrencyPrice(Stock stock) {
+    private Double getCurrencyPrice(ConfigStock stock) {
         String url = "https://ru.investing.com/currencies/" + stock.symbol.replace("/", "-").toLowerCase();
         return fetchInvesting(url);
     }
 
-    private Double getCommodityPrice(Stock stock) {
+    private Double getCommodityPrice(ConfigStock stock) {
         String url = "https://ru.investing.com/commodities/" + stock.symbol.replace("/", "-").toLowerCase();
         return fetchInvesting(url);
     }
 
-    public Double price(Stock stock) {
+    public Double price(ConfigStock stock) {
         return switch (stock.type) {
             case STOCK -> getStockPrice(stock);
             case CURRENCY -> getCurrencyPrice(stock);

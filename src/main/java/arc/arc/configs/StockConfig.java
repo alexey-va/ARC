@@ -67,25 +67,10 @@ public class StockConfig {
         }
 
         loadConfig();
-        loadStockCache();
         loadStockHistory();
     }
 
-    public static void saveStockCache(List<Map<String, Object>> list) {
-        try {
-            cacheConfig.load(cacheFile);
-            cacheConfig.set("cache", list);
-            cacheConfig.save(cacheFile);
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException(e);
-        }
-    }
 
-    private static void loadStockCache() {
-        var list = cacheConfig.getMapList("cache");
-        list.forEach(StockMarket::loadCacheFromMap);
-    }
 
     private static void loadConfig() {
         mainServer = config.getBoolean("main-server", false);

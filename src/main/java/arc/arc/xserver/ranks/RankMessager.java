@@ -1,7 +1,7 @@
 package arc.arc.xserver.ranks;
 
 import arc.arc.ARC;
-import arc.arc.configs.Config;
+import arc.arc.configs.MainConfig;
 import arc.arc.network.ChannelListener;
 import arc.arc.network.RedisManager;
 import arc.arc.network.RedisSerializer;
@@ -23,7 +23,7 @@ public class RankMessager implements ChannelListener {
     public void consume(String channel, String message, String server) {
         RankData data = RedisSerializer.fromJson(message, RankData.class);
 
-        if (data == null || data.server.equals(Config.server)) return;
+        if (data == null || data.server.equals(MainConfig.server)) return;
         CMIUser user = CMI.getInstance().getPlayerManager().getUser(data.playerUuid);
 
         if (user == null) return;

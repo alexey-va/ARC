@@ -10,6 +10,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import lombok.extern.log4j.Log4j2;
 import org.bukkit.Bukkit;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
@@ -18,6 +19,7 @@ import java.io.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+@Log4j2
 public class HistoryManager {
 
     private static BukkitTask saveTask;
@@ -47,7 +49,6 @@ public class HistoryManager {
             public void run() {
                 if (!StockConfig.mainServer) return;
                 saveHistory();
-                StockConfig.saveStockCache(StockMarket.stocks().stream().map(Stock::serialize).toList());
                 drawPlots(true);
                 messager.send(highLows);
             }
@@ -150,6 +151,7 @@ public class HistoryManager {
             );
 
             Map<String, List<HistoryManager.StockHistory>> history = objectMapper.readValue(file, mapType);
+            log.trace("Loaded history: {}", history);
             appendHistory(history);
         } catch (Exception e) {
             history = new ConcurrentHashMap<>();

@@ -88,7 +88,7 @@ public class AnnouneConfig {
                     .type(annType)
                     .bossBarColor(color)
                     .seconds(seconds)
-                    .originServer(Config.server)
+                    .originServer(MainConfig.server)
                     .build();
 
             //System.out.println("Loaded message: "+data);

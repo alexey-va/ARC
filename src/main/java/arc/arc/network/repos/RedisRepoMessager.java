@@ -1,6 +1,6 @@
 package arc.arc.network.repos;
 
-import arc.arc.configs.Config;
+import arc.arc.configs.MainConfig;
 import arc.arc.network.ChannelListener;
 import arc.arc.network.RedisManager;
 import lombok.RequiredArgsConstructor;
@@ -14,7 +14,7 @@ public class RedisRepoMessager implements ChannelListener {
     @Override
     public void consume(String channel, String message, String originServer) {
         log.debug("Received message: {}\n{}", channel, message);
-        if(originServer.equals(Config.server)) return;
+        if(originServer.equals(MainConfig.server)) return;
         redisRepo.receiveUpdate(message);
     }
 

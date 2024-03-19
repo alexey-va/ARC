@@ -1,73 +1,208 @@
 package arc.arc.configs;
 
-import arc.arc.ARC;
-import lombok.extern.log4j.Log4j2;
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.core.LoggerContext;
-import org.apache.logging.log4j.core.config.Configuration;
-import org.apache.logging.log4j.core.config.Configurator;
-import org.apache.logging.log4j.core.config.LoggerConfig;
-import org.apache.logging.log4j.simple.SimpleLogger;
-import org.apache.logging.log4j.simple.SimpleLoggerContext;
-import org.bukkit.Particle;
+import lombok.SneakyThrows;
+import net.kyori.adventure.text.Component;
+import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.Yaml;
 
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.*;
 
-@Log4j2
+import static arc.arc.util.TextUtil.mm;
+
 public class Config {
 
-    public static boolean blockBackpacks;
-    public static boolean sendWormholes;
-    public static int wormholePeriod;
-    public static int particleCount;
-    public static double particleOffset;
-    public static boolean endProtection;
-    public static String server;
-    public static boolean enablePortals;
-    public static Set<String> noExpWorlds = new HashSet<>();
-    public static String partyTag;
-    public static long cForwardDelay;
-    public static String logLevel;
-    public static String timeFormat;
+    Map<String, Object> map;
+    private final Path folder;
+    private final String filePath;
 
 
+    @SneakyThrows
+    Config(Path folder, String filePath) {
+        this.folder = folder;
+        this.filePath = filePath;
 
-    public Config(){
-        ARC.plugin.getConfig().options().copyDefaults(true);
-        ARC.plugin.saveDefaultConfig();
-        ARC.plugin.saveConfig();
-
-        loadConfig();
+        copyDefaultConfig(filePath, folder, false);
+        load();
     }
-    public void loadConfig(){
-        blockBackpacks = ARC.plugin.getConfig().getBoolean("disable-backpacks", false);
-        endProtection = ARC.plugin.getConfig().getBoolean("end-protection", false);
-        sendWormholes = ARC.plugin.getConfig().getBoolean("wormholes.enable", false);
-        wormholePeriod = ARC.plugin.getConfig().getInt("wormholes.period", 10);
-        noExpWorlds = new HashSet<>(ARC.plugin.getConfig().getStringList("no-explosion-worlds"));
-        particleCount = ARC.plugin.getConfig().getInt("wormholes.count", 30);
-        particleOffset = ARC.plugin.getConfig().getDouble("wormholes.offset", 1.0);
-        server = ARC.plugin.getConfig().getString("redis.server-name", "none");
-        enablePortals = ARC.plugin.getConfig().getBoolean("enable-portals", true);
-        partyTag = ARC.plugin.getConfig().getString("party.tag", "&7[%color%%tag%&7]&r ");
-        cForwardDelay = ARC.plugin.getConfig().getLong("xserver.cforward-delay", 20L);
-        timeFormat = ARC.plugin.getConfig().getString("time-format", "%dд %dч %dмин");
 
+    public int integer(String path, int def) {
+        Object o = getValueForKeyPath(path);
+        if (o == null) {
+            injectDeepKey(path, def);
+            return def;
+        }
+        return ((Number) o).intValue();
+    }
+
+    public double realNumber(String path, double def) {
+        Object o = getValueForKeyPath(path);
+        if (o == null) {
+            injectDeepKey(path, def);
+            return def;
+        }
+        return ((Number) o).doubleValue();
+    }
+
+    public String string(String path, String def) {
+        Object o = getValueForKeyPath(path);
+        if (o == null) {
+            injectDeepKey(path, def);
+            return def;
+        }
         try {
-            logLevel = ARC.plugin.getConfig().getString("log-level", "DEBUG");
-            Level newRootLogLevel = Level.getLevel(logLevel);
-            System.out.println("Config log level: "+newRootLogLevel);
-            LoggerContext ctx = (LoggerContext) LogManager.getContext(false);
-            Configuration config = ctx.getConfiguration();
-            LoggerConfig loggerConfig = config.getLoggerConfig(LogManager.ROOT_LOGGER_NAME);
-            loggerConfig.setLevel(newRootLogLevel);
-            ctx.updateLoggers();
-        } catch (Exception e){
+            return (String) o;
+        } catch (Exception e) {
+            return o.toString();
+        }
+    }
+
+    public Component component(String path, String... replacement) {
+        Object o = getValueForKeyPath(path);
+        if (o == null) {
+            injectDeepKey(path, path);
+            return mm(path);
+        }
+        String s;
+        if (o instanceof String) s = (String) o;
+        else s = o.toString();
+
+        for(int i =0;i<replacement.length;i+=2){
+            if(i+1 >= replacement.length) break;
+            s=s.replace(replacement[i], replacement[i+1]);
+        }
+
+        return mm(s);
+    }
+
+    public List<Component> componentList(String path, String... replacement) {
+        Object o = getValueForKeyPath(path);
+        if (o == null) {
+            injectDeepKey(path, List.of(path));
+            return List.of(mm(path));
+        }
+
+        List<Component> list = new ArrayList<>();
+        if (o instanceof String s){
+            for(int i =0;i<replacement.length;i+=2){
+                if(i+1 >= replacement.length) break;
+                s=s.replace(replacement[i], replacement[i+1]);
+            }
+            list.add(mm(s, true));
+        } else if(o instanceof List l){
+            for (Object obj : l) {
+                if (obj instanceof String s1) {
+                    for(int i =0;i<replacement.length;i+=2){
+                        if(i+1 >= replacement.length) break;
+                        s1=s1.replace(replacement[i], replacement[i+1]);
+                    }
+                    list.add(mm(s1, true));
+                }
+            }
+        }
+        return list;
+    }
+
+    public List<String> stringList(String path) {
+        Object o = getValueForKeyPath(path);
+        if (o == null) {
+            injectDeepKey(path, new ArrayList<String>());
+            return new ArrayList<>();
+        }
+        return (List<String>) o;
+    }
+
+    private Object getValueForKeyPath(String keyPath) {
+        String[] keyParts = keyPath.split("\\.");
+
+        Map<String, Object> currentLevel = map;
+        for (int i = 0; i < keyParts.length; i++) {
+            String keyPart = keyParts[i];
+            if (currentLevel.containsKey(keyPart)) {
+                if (i == keyParts.length - 1) return currentLevel.get(keyPart);
+                if (currentLevel.get(keyPart) instanceof Map) {
+                    currentLevel = (Map<String, Object>) currentLevel.get(keyPart);
+                }
+            } else {
+                // Key not found or not a mapping; handle accordingly
+                System.out.println("Key not found: " + keyPath);
+                return null;
+            }
+        }
+
+        // Access the value at the final level
+        return currentLevel.get(keyParts[keyParts.length - 1]);
+    }
+
+    public void injectDeepKey(String keyPath, Object value) {
+        try {
+            load();
+            String[] keyParts = keyPath.split("\\.");
+
+            Map<String, Object> currentLevel = map;
+            for (int i = 0; i < keyParts.length - 1; i++) {
+                currentLevel.putIfAbsent(keyParts[i], new LinkedHashMap<>());
+                currentLevel = (Map<String, Object>) currentLevel.get(keyParts[i]);
+            }
+
+            // Inject the value at the final level
+            currentLevel.put(keyParts[keyParts.length - 1], value);
+            save();
+        } catch (Exception e) {
+            System.out.println("Could not inject key: " + keyPath + " with value: " + value);
             e.printStackTrace();
         }
     }
 
+    @SneakyThrows
+    public void load() {
+        Yaml yaml = new Yaml();
+        File configFile = folder.resolve(filePath).toFile();
+        map = yaml.load(new FileInputStream(configFile));
+        if (map == null) map = new HashMap<>();
+        System.out.println("Loaded config: " + filePath);
+    }
+
+    public void save() {
+        DumperOptions options = new DumperOptions();
+        options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
+        Yaml yaml = new Yaml(options);
+        String file = folder.resolve(filePath).toFile().getPath();
+        try (var writer = new FileWriter(file)) {
+            yaml.dump(map, writer);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    public static void copyDefaultConfig(String resource, Path folder, boolean replace) {
+        try (var stream = Config.class.getClassLoader().getResourceAsStream(resource)) {
+            Path path = folder.resolve(resource);
+            if (Files.exists(path)) {
+                if (!replace) {
+                    System.out.println(resource + " already exists! Skipping...");
+                    return;
+                }
+            }
+            Files.createDirectories(path.getParent());
+            if (stream == null) {
+                Files.createFile(path);
+            } else {
+                Files.copy(stream, path, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    public String string(String s) {
+        return string(s, s);
+    }
 }

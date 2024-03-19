@@ -2,6 +2,7 @@ package arc.arc.stock;
 
 import arc.arc.configs.StockConfig;
 import arc.arc.hooks.HookRegistry;
+import arc.arc.network.repos.RepoData;
 import arc.arc.util.TextUtil;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -22,7 +23,7 @@ import static arc.arc.util.TextUtil.mm;
 @ToString
 @Setter
 @Getter
-public class StockPlayer {
+public class StockPlayer extends RepoData<StockPlayer> {
 
     String playerName;
     UUID playerUuid;
@@ -34,26 +35,21 @@ public class StockPlayer {
     @JsonInclude(JsonInclude.Include.NON_DEFAULT)
     double receivedDividend = 0;
 
-    @JsonIgnore
-    @Setter
-    @Getter
-    boolean dirty = false;
-
     public StockPlayer(String name, UUID uuid) {
         this.playerUuid = uuid;
         this.playerName = name;
-        dirty = true;
+        setDirty(true);
     }
 
     @JsonIgnore
-    public void addToBalance(double add, boolean fromPosition) {
+    public synchronized void addToBalance(double add, boolean fromPosition) {
         balance += add;
         if (fromPosition) totalGains += add;
-        dirty = true;
+        setDirty(true);
     }
 
     @JsonIgnore
-    public double totalBalance() {
+    public synchronized double totalBalance() {
         double fromPositions = positionMap.values().stream()
                 .flatMap(list -> list.stream().map(Position::totalValue))
                 .reduce(0.0, Double::sum);
@@ -62,12 +58,14 @@ public class StockPlayer {
     }
 
     @JsonIgnore
-    public double giveDividend(String symbol) {
+    public synchronized double giveDividend(String symbol) {
         if (!positionMap.containsKey(symbol)) return 0;
         System.out.println("Giving divedend to "+playerName);
         Stock stock = StockMarket.stock(symbol);
         if (stock.dividend < 0.00001) return 0;
-        dirty=true;
+
+        setDirty(true);
+
         double gave = 0;
         for (Position position : positionMap.get(symbol)) {
             double dividend = stock.dividend * position.amount;
@@ -81,7 +79,7 @@ public class StockPlayer {
     }
 
     @JsonIgnore
-    public Optional<Position> find(String symbol, UUID uuid) {
+    public synchronized Optional<Position> find(String symbol, UUID uuid) {
         if (!positionMap.containsKey(symbol)) return Optional.empty();
         return positionMap.get(symbol).stream().filter(p -> p.positionUuid.equals(uuid)).findAny();
     }
@@ -89,7 +87,7 @@ public class StockPlayer {
     @JsonIgnore
     public boolean isBelowMaxStockAmount(){
         int currentAmount = positions().size();
-        if(currentAmount <= StockConfig.defaultStockMaxAmount) return true;
+        if(currentAmount < StockConfig.defaultStockMaxAmount) return true;
         var entry = StockConfig.permissionMap.ceilingEntry(currentAmount+1);
         if(entry == null) return false;
         OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(playerUuid);
@@ -148,14 +146,14 @@ public class StockPlayer {
     }
 
     @JsonIgnore
-    public Optional<Position> remove(String symbol, UUID uuid) {
+    public synchronized Optional<Position> remove(String symbol, UUID uuid) {
         if (!positionMap.containsKey(symbol)) {
             //System.out.println("No key for symbol "+symbol);
             return Optional.empty();
         }
         for (Position position : positionMap.get(symbol)) {
             if (position.positionUuid.equals(uuid)) {
-                dirty = true;
+                setDirty(true);
                 positionMap.get(symbol).remove(position);
                 return Optional.of(position);
             }
@@ -164,35 +162,35 @@ public class StockPlayer {
     }
 
     @JsonIgnore
-    public void addPosition(Position position) {
+    public synchronized void addPosition(Position position) {
         if (position == null) {
             System.out.println("Position is null!");
             return;
         }
-        dirty = true;
+        setDirty(true);
         positionMap.putIfAbsent(position.symbol, new CopyOnWriteArrayList<>());
         positionMap.get(position.symbol).add(position);
     }
 
     public void setAutoTake(boolean autoTake) {
         if (autoTake == this.autoTake) return;
-        dirty = true;
+        setDirty(true);
         this.autoTake = autoTake;
     }
 
 
     @JsonIgnore
-    public List<Position> positions(String symbol) {
+    public synchronized List<Position> positions(String symbol) {
         return positionMap.get(symbol);
     }
 
     @JsonIgnore
-    public List<Position> positions() {
+    public synchronized List<Position> positions() {
         return positionMap.values().stream().flatMap(Collection::stream).toList();
     }
 
     @JsonIgnore
-    public double totalGains() {
+    public synchronized double totalGains() {
         return positionMap.values().stream()
                 .flatMap(list -> list.stream().map(Position::gains))
                 .reduce(0.0, Double::sum);
@@ -202,5 +200,28 @@ public class StockPlayer {
         OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(playerUuid);
         if(offlinePlayer instanceof Player p) return p;
         return null;
+    }
+
+    @Override
+    public String id() {
+        return playerUuid.toString();
+    }
+
+    @Override
+    public boolean isRemove() {
+        return false;
+    }
+
+    @Override
+    public synchronized void merge(StockPlayer other) {
+        if (other == null) return;
+        if (other.balance != 0) balance = other.balance;
+        if (other.autoTake != autoTake) autoTake = other.autoTake;
+        if (other.totalGains != 0) totalGains = other.totalGains;
+        if (other.receivedDividend != 0) receivedDividend = other.receivedDividend;
+        if (other.positionMap != null){
+            positionMap.clear();
+            positionMap.putAll(other.positionMap);
+        }
     }
 }

@@ -16,14 +16,16 @@ import arc.arc.treasurechests.TreasureHuntManager;
 import arc.arc.treasurechests.locationpools.LocationPoolManager;
 import arc.arc.util.CooldownManager;
 import arc.arc.util.ParticleManager;
+import lombok.extern.log4j.Log4j2;
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 
+@Log4j2
 public final class ARC extends JavaPlugin {
 
     public static ARC plugin;
-    Config config;
+    MainConfig mainConfig;
     AnnouneConfig announeConfig;
     TreasureHuntConfig treasureHuntConfig;
     public LocationPoolConfig locationPoolConfig;
@@ -65,7 +67,7 @@ public final class ARC extends JavaPlugin {
     }
 
     public void loadConfig() {
-        config = new Config();
+        mainConfig = new MainConfig();
 
         System.out.println("Announce config loading...");
         announeConfig = new AnnouneConfig();
@@ -97,6 +99,8 @@ public final class ARC extends JavaPlugin {
             HookRegistry.farmManager = new FarmManager();
             HookRegistry.farmManager.init();
         }
+
+        ConfigManager.reloadAll();
     }
 
     @Override
@@ -119,6 +123,9 @@ public final class ARC extends JavaPlugin {
     }
 
     public void load() {
+        System.out.println("Setting up redis");
+        setupRedis();
+
         System.out.println("Setting up hooks");
         hookRegistry.setupHooks();
 
@@ -127,9 +134,6 @@ public final class ARC extends JavaPlugin {
 
         System.out.println("Setting up economy");
         setupEconomy();
-
-        System.out.println("Setting up redis");
-        setupRedis();
 
         System.out.println("Setting up board");
         Board.instance();
@@ -151,13 +155,16 @@ public final class ARC extends JavaPlugin {
         //BusinessManager.load();
 
         System.out.println("Setting up stock");
-        StockMarket.startTasks();
-        StockPlayerManager.startTasks();
-        StockPlayerManager.loadStockPlayers();
+        StockPlayerManager.init();
+        StockMarket.init();
 
         System.out.println("Loading lootchest config");
         LootChestsConfig.load();
 
+        if(HookRegistry.jobsHook != null){
+            log.debug("Creating jobs repo.");
+            HookRegistry.jobsHook.createRepo();
+        }
 
     }
 
@@ -173,10 +180,13 @@ public final class ARC extends JavaPlugin {
         getCommand("treasure-pool").setTabCompleter(new TreasurePoolTabcomplete());
         getCommand("build-book").setExecutor(new BuildBookCommand());
         getCommand("build-book").setTabCompleter(new BuildBookTabComplete());
-        getCommand("em-test").setExecutor(new EmTestCommand());
         getCommand("arc-invest").setExecutor(new InvestCommand());
         getCommand("sound-follow").setExecutor(new SoundFollowCommand());
-        getCommand("test-repo").setExecutor(new TestRedisRepoCommand());
+
+        GiveJobsBoostCommand giveJobsBoostCommand = new GiveJobsBoostCommand();
+        getCommand("give-jobs-boost").setExecutor(giveJobsBoostCommand);
+        getCommand("give-jobs-boost").setTabCompleter(giveJobsBoostCommand);
+
         getCommand("arc-invest").setTabCompleter(new InvestTabComplete());
     }
 

@@ -1,6 +1,6 @@
 package arc.arc.xserver.playerlist;
 
-import arc.arc.configs.Config;
+import arc.arc.configs.MainConfig;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -13,7 +13,7 @@ import java.util.List;
 public class PlayerList  {
 
     List<PlayerData> playerList = new ArrayList<>();
-    String server = Config.server;
+    String server = MainConfig.server;
     Instant lastUpdated = Instant.now();
 
     public PlayerList(String server, List<PlayerData> collect) {

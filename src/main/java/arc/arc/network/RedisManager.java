@@ -1,6 +1,6 @@
 package arc.arc.network;
 
-import arc.arc.configs.Config;
+import arc.arc.configs.MainConfig;
 import lombok.extern.log4j.Log4j2;
 import redis.clients.jedis.JedisPooled;
 import redis.clients.jedis.JedisPubSub;
@@ -40,6 +40,7 @@ public class RedisManager extends JedisPubSub {
             System.out.println("No listener for " + channel);
             return;
         }
+
         String[] strings = message.split(SERVER_DELIMITER, 2);
         if (strings.length == 1)
             channelListeners.get(channel).forEach((listener) -> listener.consume(channel, strings[0], null));
@@ -70,7 +71,7 @@ public class RedisManager extends JedisPubSub {
     }
 
     public void publish(String channel, String message) {
-        executorService.execute(() -> pub.publish(channel, Config.server + SERVER_DELIMITER + message));
+        executorService.execute(() -> pub.publish(channel, MainConfig.server + SERVER_DELIMITER + message));
     }
 
     public void saveMap(String key, Map<String, String> map) {

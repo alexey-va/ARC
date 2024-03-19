@@ -4,7 +4,6 @@ import arc.arc.ARC;
 import arc.arc.board.BoardEntry;
 import arc.arc.board.BoardItem;
 import arc.arc.configs.BoardConfig;
-import arc.arc.configs.Config;
 import arc.arc.board.Board;
 import arc.arc.util.GuiUtils;
 import arc.arc.util.ItemStackBuilder;
@@ -25,7 +24,6 @@ import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.*;
 import java.util.stream.Collectors;

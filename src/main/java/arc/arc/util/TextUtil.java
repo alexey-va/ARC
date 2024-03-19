@@ -1,20 +1,18 @@
 package arc.arc.util;
 
 import arc.arc.ARC;
-import arc.arc.configs.Config;
+import arc.arc.configs.MainConfig;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.Tag;
-import net.kyori.adventure.text.minimessage.tag.TagPattern;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.entity.Player;
 
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
-import java.time.temporal.TemporalUnit;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -51,7 +49,7 @@ public class TextUtil {
         long hours = (millis % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000);
         long minutes = (millis % (60 * 60 * 1000)) / (60 * 1000);
 
-        return String.format(Config.timeFormat, days, hours, minutes);
+        return String.format(MainConfig.timeFormat, days, hours, minutes);
     }
 
     public static Component mm(String s, boolean strip) {
