@@ -29,18 +29,17 @@ public class StockPlayerManager {
     private static RedisRepo<StockPlayer> repo;
 
     public static void init() {
-        if(repo == null) {
-            repo = RedisRepo.builder(StockPlayer.class)
-                    .loadAll(true)
-                    .redisManager(ARC.redisManager)
-                    .storageKey("arc.stock_players")
-                    .updateChannel("arc.stock_players_update")
-                    .id("stock_players")
-                    .backupFolder(ARC.plugin.getDataFolder().toPath().resolve("backups/stock-players"))
-                    .saveInterval(20L)
-                    .saveBackups(true)
-                    .build();
-        }
+        if (repo != null) repo.close();
+        repo = RedisRepo.builder(StockPlayer.class)
+                .loadAll(true)
+                .redisManager(ARC.redisManager)
+                .storageKey("arc.stock_players")
+                .updateChannel("arc.stock_players_update")
+                .id("stock_players")
+                .backupFolder(ARC.plugin.getDataFolder().toPath().resolve("backups/stock-players"))
+                .saveInterval(20L)
+                .saveBackups(true)
+                .build();
     }
 
     public static void updateAllPositionsOf(String symbol) {

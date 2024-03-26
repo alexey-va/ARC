@@ -97,19 +97,19 @@ public class Display {
         }
         ConstructionSite.Corners corners = site.getCorners();
 
-        final int minX = corners.corner1().getBlockX();
-        final int minY = corners.corner1().getBlockY();
-        final int minZ = corners.corner1().getBlockZ();
-        final int maxX = corners.corner2().getBlockX();
-        final int maxY = corners.corner2().getBlockY();
-        final int maxZ = corners.corner2().getBlockZ();
+        final int minX = corners.corner1().x();
+        final int minY = corners.corner1().y();
+        final int minZ = corners.corner1().z();
+        final int maxX = corners.corner2().x();
+        final int maxY = corners.corner2().y();
+        final int maxZ = corners.corner2().z();
 
 
         for (int y = minY; y <= maxY; y++) {
             for (int x = minX; x <= maxX; x++) {
                 for (int z = minZ; z <= maxZ; z++) {
-                    Location location = new Location(site.getWorld(), x + site.getCenterBlock().getBlockX(),
-                            y + site.getCenterBlock().getBlockY(), z + site.getCenterBlock().getBlockZ());
+                    Location location = new Location(site.getWorld(), x + site.getCenterBlock().x(),
+                            y + site.getCenterBlock().y(), z + site.getCenterBlock().z());
 
                     BlockData data = BukkitAdapter.adapt(site.getBuilding().getBlock(BlockVector3.at(x, y, z), site.getRotation()));
                     rotateBlockData(data, site.getRotation());
@@ -146,14 +146,14 @@ public class Display {
         ConstructionSite.Corners corners = site.getCorners();
 
         Location corner1 = new Location(site.getWorld(),
-                corners.corner1().getBlockX() + site.getCenterBlock().getBlockX(),
-                corners.corner1().getBlockY() + site.getCenterBlock().getBlockY(),
-                corners.corner1().getBlockZ() + site.getCenterBlock().getBlockZ());
+                corners.corner1().x() + site.getCenterBlock().x(),
+                corners.corner1().y() + site.getCenterBlock().y(),
+                corners.corner1().z() + site.getCenterBlock().z());
 
         Location corner2 = new Location(site.getWorld(),
-                corners.corner2().getBlockX() + site.getCenterBlock().getBlockX() + 1,
-                corners.corner2().getBlockY() + site.getCenterBlock().getBlockY() + 1,
-                corners.corner2().getBlockZ() + site.getCenterBlock().getBlockZ() + 1);
+                corners.corner2().x() + site.getCenterBlock().x() + 1,
+                corners.corner2().y() + site.getCenterBlock().y() + 1,
+                corners.corner2().z() + site.getCenterBlock().z() + 1);
 
         return Utils.getBorderLocationsWithCornerData(corner1, corner2, 2, 3);
     }

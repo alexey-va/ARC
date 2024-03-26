@@ -16,29 +16,18 @@ import java.util.UUID;
 
 public class Board {
 
-    //private final Map<UUID, BoardEntry> boardMap = new ConcurrentHashMap<>();
-    private final BoardEntryCache cache = new BoardEntryCache();
-    private static volatile Board board = new Board();
-    RedisRepo<BoardEntry> repo;
-    BukkitTask updateCacheTask;
-    BukkitTask announceTask;
+    private static final BoardEntryCache cache = new BoardEntryCache();
+    static RedisRepo<BoardEntry> repo;
+    static BukkitTask updateCacheTask;
+    static BukkitTask announceTask;
 
-
-    public static Board instance() {
-        if (board == null) {
-            synchronized (Board.class) {
-                if (board == null) board = new Board();
-            }
-        }
-        return board;
-    }
-
-    private Board() {
+    public static void init() {
         createRepo();
         setupTask();
     }
 
-    private void createRepo() {
+    private static void createRepo() {
+        if(repo != null) repo.close();
         repo = RedisRepo.builder(BoardEntry.class)
                 .loadAll(true)
                 .redisManager(ARC.redisManager)
@@ -53,7 +42,7 @@ public class Board {
                 .build();
     }
 
-    private void setupTask() {
+    private static void setupTask() {
         cancelTasks();
         updateCacheTask = new BukkitRunnable() {
             @Override
@@ -70,7 +59,7 @@ public class Board {
         }.runTaskTimer(ARC.plugin, 120L, 20L * BoardConfig.secondsAnnounce);
     }
 
-    public void announceNext() {
+    public static void announceNext() {
         repo.all().stream().min(Comparator.comparingLong(BoardEntry::getLastShown))
                 .ifPresent(e -> {
                     e.changeLastShown(System.currentTimeMillis());
@@ -88,35 +77,35 @@ public class Board {
                 });
     }
 
-    public void cancelTasks() {
+    public static void cancelTasks() {
         if (updateCacheTask != null && !updateCacheTask.isCancelled()) updateCacheTask.cancel();
         if (announceTask != null && !announceTask.isCancelled()) announceTask.cancel();
     }
 
-    public List<BoardItem> items() {
+    public static List<BoardItem> items() {
         return repo.all().stream()
                 .map(cache::get)
                 .toList();
     }
 
-    public void addBoardEntry(BoardEntry boardEntry) {
+    public static void addBoardEntry(BoardEntry boardEntry) {
         if (boardEntry == null) return;
         repo.create(boardEntry);
         updateCache(boardEntry.entryUuid);
     }
 
-    public void deleteBoardEntry(BoardEntry entry) {
+    public static void deleteBoardEntry(BoardEntry entry) {
         repo.delete(entry);
         updateCache(entry.entryUuid);
     }
 
-    public void updateCache(UUID uuid) {
+    public static void updateCache(UUID uuid) {
         BoardEntry boardEntry = repo.getNow(uuid.toString());
         if (boardEntry != null) cache.refresh(boardEntry);
         else cache.remove(uuid);
     }
 
-    public void updateAllCache() {
+    public static void updateAllCache() {
         cache.clear();
         repo.all().forEach(cache::refresh);
     }

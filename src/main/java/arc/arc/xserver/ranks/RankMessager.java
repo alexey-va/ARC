@@ -8,6 +8,7 @@ import arc.arc.network.RedisSerializer;
 import com.Zrips.CMI.CMI;
 import com.Zrips.CMI.Containers.CMIUser;
 import com.Zrips.CMI.Modules.Ranks.CMIRank;
+import com.google.gson.Gson;
 import lombok.RequiredArgsConstructor;
 import org.bukkit.scheduler.BukkitRunnable;
 
@@ -18,12 +19,12 @@ public class RankMessager implements ChannelListener {
 
     private final RedisManager redisManager;
     private final String channel;
+    Gson gson = new Gson();
 
     @Override
     public void consume(String channel, String message, String server) {
-        RankData data = RedisSerializer.fromJson(message, RankData.class);
-
-        if (data == null || data.server.equals(MainConfig.server)) return;
+        if (server.equals(MainConfig.server)) return;
+        RankData data = gson.fromJson(message, RankData.class);
         CMIUser user = CMI.getInstance().getPlayerManager().getUser(data.playerUuid);
 
         if (user == null) return;

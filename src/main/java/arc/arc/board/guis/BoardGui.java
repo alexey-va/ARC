@@ -51,7 +51,7 @@ public class BoardGui extends ChestGui {
 
     private void fillItems() {
         System.out.println("Filling items");
-        List<GuiItem> guiItemList = Board.instance().items()
+        List<GuiItem> guiItemList = Board.items()
                 .stream()
                 .map(this::toGuiItem)
                 .collect(Collectors.toList());

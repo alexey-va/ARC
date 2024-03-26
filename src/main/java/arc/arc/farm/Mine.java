@@ -152,9 +152,9 @@ public class Mine implements Listener {
     private void computeCache(boolean replaceTemporaryBlock) {
         List<Block> blocks = new ArrayList<>();
         for (BlockVector3 vector3 : new CuboidRegion(BukkitAdapter.adapt(world), region.getMinimumPoint(), region.getMaximumPoint())) {
-            int x = vector3.getBlockX();
-            int y = vector3.getBlockY();
-            int z = vector3.getBlockZ();
+            int x = vector3.x();
+            int y = vector3.y();
+            int z = vector3.z();
             Block block = world.getBlockAt(x, y, z);
 
             if (block.getType() == tempBlock && replaceTemporaryBlock) {

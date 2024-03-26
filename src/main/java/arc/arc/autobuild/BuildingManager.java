@@ -174,7 +174,7 @@ public class BuildingManager {
 
 
         if (site == null) createConstruction(player, location, building);
-        else if (site.same(player, location, building)) {
+        else if (site.same(player, location, building) && site.getState() == ConstructionSite.State.DISPLAYING_OUTLINE){
             startConfirmation(site);
         } else {
             if (site.getState() == ConstructionSite.State.BUILDING) {

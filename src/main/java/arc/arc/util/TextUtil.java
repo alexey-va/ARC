@@ -68,11 +68,11 @@ public class TextUtil {
         player.sendMessage(text);
     }
 
-    public static String toLegacy(String miniMessageString, String... replacers) {
+    public static String toLegacy(String miniMessageString, String... tagReplacers) {
         TagResolver.Builder builder = TagResolver.builder();
-        for (int i = 0; i < replacers.length; i += 2) {
-            if (replacers.length < i + 1) break;
-            builder.resolver(TagResolver.resolver(replacers[i], Tag.inserting(mm(replacers[1], true))));
+        for (int i = 0; i < tagReplacers.length; i += 2) {
+            if (tagReplacers.length < i + 1) break;
+            builder.resolver(TagResolver.resolver(tagReplacers[i], Tag.inserting(mm(tagReplacers[i+1], true))));
         }
         TagResolver resolver = builder.build();
 

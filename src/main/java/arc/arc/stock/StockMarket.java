@@ -29,18 +29,16 @@ public class StockMarket {
     private static Map<String, ConfigStock> configStocks = new ConcurrentHashMap<>();
 
     public static void init() {
-        if (repo == null) {
-            repo = RedisRepo.builder(Stock.class)
-                    .loadAll(true)
-                    .redisManager(ARC.redisManager)
-                    .storageKey("arc.stocks")
-                    .updateChannel("arc.stocks_update")
-                    .id("stocks")
-                    .backupFolder(ARC.plugin.getDataFolder().toPath().resolve("backups/stocks"))
-                    .saveInterval(20L)
-                    .build();
-        }
-
+        if (repo != null) repo.close();
+        repo = RedisRepo.builder(Stock.class)
+                .loadAll(true)
+                .redisManager(ARC.redisManager)
+                .storageKey("arc.stocks")
+                .updateChannel("arc.stocks_update")
+                .id("stocks")
+                .backupFolder(ARC.plugin.getDataFolder().toPath().resolve("backups/stocks"))
+                .saveInterval(20L)
+                .build();
         startTasks();
     }
 
@@ -160,8 +158,10 @@ public class StockMarket {
             stock.setSymbol(stock.getSymbol().toUpperCase());
             configStocks.put(stock.getSymbol(), stock);
 
+            if (repo == null) return;
+
             var current = repo.getNow(stock.getSymbol());
-            if(current == null) return;
+            if (current == null) return;
             current.lore = stock.lore;
             current.display = stock.display;
             current.icon = stock.icon;
@@ -172,7 +172,6 @@ public class StockMarket {
             e.printStackTrace();
         }
     }
-
 
 
     public static Collection<ConfigStock> configStocks() {

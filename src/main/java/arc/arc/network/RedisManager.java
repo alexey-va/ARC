@@ -1,6 +1,7 @@
 package arc.arc.network;
 
 import arc.arc.configs.MainConfig;
+import arc.arc.network.repos.RedisRepoMessager;
 import lombok.extern.log4j.Log4j2;
 import redis.clients.jedis.JedisPooled;
 import redis.clients.jedis.JedisPubSub;
@@ -42,9 +43,9 @@ public class RedisManager extends JedisPubSub {
         }
 
         String[] strings = message.split(SERVER_DELIMITER, 2);
-        if (strings.length == 1)
-            channelListeners.get(channel).forEach((listener) -> listener.consume(channel, strings[0], null));
-        else channelListeners.get(channel).forEach((listener) -> listener.consume(channel, strings[1], strings[0]));
+/*        if (strings.length == 1)
+            channelListeners.get(channel).forEach((listener) -> listener.consume(channel, strings[0], null));*/
+        channelListeners.get(channel).forEach((listener) -> listener.consume(channel, strings[1], strings[0]));
     }
 
     public void registerChannel(String channel, ChannelListener channelListener) {
@@ -112,4 +113,17 @@ public class RedisManager extends JedisPubSub {
     }
 
 
+    public void close() {
+        log.debug("Closing redis manager");
+        if (running != null && !running.isCancelled()) running.cancel(true);
+        sub.close();
+        pub.close();
+        executorService.shutdown();
+    }
+
+    public void unregisterChannel(String updateChannel, RedisRepoMessager messager) {
+        if (channelListeners.containsKey(updateChannel)) {
+            channelListeners.get(updateChannel).remove(messager);
+        }
+    }
 }

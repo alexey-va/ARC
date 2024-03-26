@@ -7,6 +7,7 @@ import arc.arc.network.RedisSerializer;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
+import lombok.extern.log4j.Log4j2;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -17,6 +18,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.UUID;
 
+@Log4j2
 public class CommandReceiver implements ChannelListener {
 
     private static final List<AwaitingExecution> awaitingCommands = new ArrayList<>();
@@ -62,6 +64,7 @@ public class CommandReceiver implements ChannelListener {
     @Override
     public void consume(String channel, String message, String server) {
         CommandData data = RedisSerializer.fromJson(message, CommandData.class);
+        log.debug("Received command: " + data);
         if (data == null) return;
         if (!data.everywhere && !data.servers.contains(MainConfig.server)) return;
         if(data.notOrigin && server.equals(MainConfig.server)) return;

@@ -28,12 +28,16 @@ public class PositionMenu extends ChestGui {
     boolean fromAllPositions;
 
     public PositionMenu(StockPlayer stockPlayer, Position position, boolean fromAllPositions) {
-        super(2, TextHolder.deserialize(TextUtil.toLegacy(StockConfig.string("position-menu.menu-title"),
-                "uuid", position.getPositionUuid().toString().split("-")[0])));
+        super(2, TextHolder.deserialize(TextUtil.toLegacy(
+                        StockConfig.string("position-menu.menu-title"),
+                        "uuid", position.getPositionUuid().toString().split("-")[0],
+                        "symbol", position.getSymbol()
+                )
+        ));
         //this.player = player;
         this.stockPlayer = stockPlayer;
         this.position = position;
-        this.fromAllPositions= fromAllPositions;
+        this.fromAllPositions = fromAllPositions;
 
         setupBackground();
         setupButtons();
@@ -61,9 +65,9 @@ public class PositionMenu extends ChestGui {
                 .clickEvent(click -> {
                     click.setCancelled(true);
                     GuiUtils.constructAndShowAsync(() -> {
-                        if(fromAllPositions) return new PositionSelector(stockPlayer, null);
+                        if (fromAllPositions) return new PositionSelector(stockPlayer, null);
                         return new PositionSelector(stockPlayer, position.getSymbol());
-                    },click.getWhoClicked());
+                    }, click.getWhoClicked(), 8);
                 }).build();
         pane.addItem(back, 0, 0);
     }
@@ -89,8 +93,8 @@ public class PositionMenu extends ChestGui {
                         return;
                     }
 
-                    ((Player)click.getWhoClicked()).performCommand("arc-invest -t:close -s:" + position.getSymbol() + " -uuid:" + position.getPositionUuid()+" -reason:3");
-                    GuiUtils.constructAndShowAsync(() -> new PositionSelector(stockPlayer, position.getSymbol()), click.getWhoClicked());
+                    ((Player) click.getWhoClicked()).performCommand("arc-invest -t:close -s:" + position.getSymbol() + " -uuid:" + position.getPositionUuid() + " -reason:3");
+                    new PositionSelector(stockPlayer, position.getSymbol()).show(click.getWhoClicked());
                 }).build();
         return close;
     }
@@ -106,9 +110,7 @@ public class PositionMenu extends ChestGui {
                 .appendResolver("close_at_high", autoClosePrices.high() == -1 ? "<red>Нет" :
                         formatAmount(autoClosePrices.high()))
                 .toGuiItemBuilder()
-                .clickEvent(click -> {
-                    click.setCancelled(true);
-                }).build();
+                .clickEvent(click -> click.setCancelled(true)).build();
     }
 
 

@@ -9,6 +9,7 @@ import arc.arc.hooks.jobs.JobsHook;
 import arc.arc.hooks.lands.LandsHook;
 import arc.arc.hooks.lootchest.LootChestHook;
 import arc.arc.hooks.luckperms.LuckPermsHook;
+import arc.arc.hooks.slimefun.SFHook;
 import arc.arc.hooks.viaversion.ViaVersionHook;
 import arc.arc.hooks.worldguard.WGHook;
 import arc.arc.hooks.yamipa.YamipaHook;

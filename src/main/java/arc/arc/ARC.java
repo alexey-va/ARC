@@ -12,12 +12,17 @@ import arc.arc.network.RedisManager;
 import arc.arc.stock.StockClient;
 import arc.arc.stock.StockMarket;
 import arc.arc.stock.StockPlayerManager;
+import arc.arc.sync.CMISync;
+import arc.arc.sync.EmSync;
+import arc.arc.sync.SlimefunSync;
+import arc.arc.sync.SyncManager;
 import arc.arc.treasurechests.TreasureHuntManager;
 import arc.arc.treasurechests.locationpools.LocationPoolManager;
 import arc.arc.util.CooldownManager;
 import arc.arc.util.ParticleManager;
 import lombok.extern.log4j.Log4j2;
 import net.milkbowl.vault.economy.Economy;
+import org.bukkit.entity.Item;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -68,7 +73,7 @@ public final class ARC extends JavaPlugin {
 
     public void loadConfig() {
         mainConfig = new MainConfig();
-
+        Item item;
         System.out.println("Announce config loading...");
         announeConfig = new AnnouneConfig();
 
@@ -105,7 +110,8 @@ public final class ARC extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        // Plugin shutdown logic
+        SyncManager.saveAll();
+
         hookRegistry.cancelTasks();
         TreasureHuntManager.stopAll();
         if (treasureHuntConfig != null) {
@@ -136,7 +142,7 @@ public final class ARC extends JavaPlugin {
         setupEconomy();
 
         System.out.println("Setting up board");
-        Board.instance();
+        Board.init();
 
         System.out.println("Setting up network registry");
         networkRegistry = new NetworkRegistry(redisManager);
@@ -158,14 +164,31 @@ public final class ARC extends JavaPlugin {
         StockPlayerManager.init();
         StockMarket.init();
 
-        System.out.println("Loading lootchest config");
-        LootChestsConfig.load();
-
         if(HookRegistry.jobsHook != null){
             log.debug("Creating jobs repo.");
             HookRegistry.jobsHook.createRepo();
         }
 
+        startSyncs();
+    }
+
+    private void startSyncs(){
+        if(HookRegistry.sfHook != null){
+            log.info("Starting slimefun sync.");
+            SyncManager.registerSync(SlimefunSync.class, new SlimefunSync());
+        }
+
+        if(HookRegistry.emHook != null){
+            log.info("Starting em sync.");
+            SyncManager.registerSync(EmSync.class, new EmSync());
+        }
+
+        if(HookRegistry.cmiHook != null){
+            log.info("Starting cmi sync.");
+            SyncManager.registerSync(CMISync.class, new CMISync());
+        }
+
+        SyncManager.startSaveAllTasks();
     }
 
     private void registerCommands() {
@@ -180,7 +203,7 @@ public final class ARC extends JavaPlugin {
         getCommand("treasure-pool").setTabCompleter(new TreasurePoolTabcomplete());
         getCommand("build-book").setExecutor(new BuildBookCommand());
         getCommand("build-book").setTabCompleter(new BuildBookTabComplete());
-        getCommand("arc-invest").setExecutor(new InvestCommand());
+        getCommand("arc-invest").setExecutor(new StockCommand());
         getCommand("sound-follow").setExecutor(new SoundFollowCommand());
 
         GiveJobsBoostCommand giveJobsBoostCommand = new GiveJobsBoostCommand();
@@ -204,6 +227,8 @@ public final class ARC extends JavaPlugin {
 
     private void setupRedis() {
         try {
+            if (redisManager != null) redisManager.close();
+
             redisManager = new RedisManager(getConfig().getString("redis.ip", "localhost"),
                     getConfig().getInt("redis.port", 3306), getConfig().getString("redis.username", "default"),
                     getConfig().getString("redis.password", ""));

@@ -1,5 +1,6 @@
 package arc.arc.hooks;
 
+import com.Zrips.CMI.events.CMIUserBalanceChangeEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
@@ -29,5 +30,6 @@ public class CMIHook {
                         message
         );
     }
+
 
 }

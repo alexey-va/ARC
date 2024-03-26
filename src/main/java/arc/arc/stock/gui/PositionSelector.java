@@ -46,6 +46,8 @@ public class PositionSelector extends ChestGui {
     BukkitTask refreshTask;
     PaginatedPane paginatedPane;
 
+    int rows = 2;
+
     public PositionSelector(StockPlayer stockPlayer, String symbol) {
         super(2, TextHolder.deserialize(TextUtil.toLegacy(StockConfig.string(
                         symbol == null ? "position-selector.all-positions-menu-title" : "position-selector.menu-title"),
@@ -53,6 +55,11 @@ public class PositionSelector extends ChestGui {
         this.stockPlayer = stockPlayer;
         this.symbol = symbol;
         this.positions = symbol == null ? stockPlayer.positions() : stockPlayer.positions(symbol);
+
+        if (positions == null) this.rows = 2;
+        else this.rows = Math.min(6, ((int) Math.ceil(positions.size() / 9.0)) + 1);
+        setRows(rows);
+
         setupBackground();
         setupPositions();
         setupNav();
@@ -68,7 +75,7 @@ public class PositionSelector extends ChestGui {
                 populatePositions();
                 Bukkit.getScheduler().runTask(ARC.plugin, () -> update());
             }
-        }.runTaskTimerAsynchronously(ARC.plugin, 100L, 100L);
+        }.runTaskTimerAsynchronously(ARC.plugin, 20L, 100L);
         this.setOnClose(close -> cancelTasks());
     }
 
@@ -77,7 +84,7 @@ public class PositionSelector extends ChestGui {
     }
 
     private void setupPositions() {
-        paginatedPane = new PaginatedPane(0, 0, 9, 1);
+        paginatedPane = new PaginatedPane(0, 0, 9, rows - 1);
         this.addPane(paginatedPane);
         populatePositions();
     }
@@ -95,7 +102,7 @@ public class PositionSelector extends ChestGui {
     }
 
     private void setupNav() {
-        StaticPane pane = new StaticPane(0, 1, 9, 1);
+        StaticPane pane = new StaticPane(0, this.rows - 1, 9, 1);
         this.addPane(pane);
         TagResolver tagResolver = customResolver();
 
@@ -163,6 +170,9 @@ public class PositionSelector extends ChestGui {
                 .resolver(TagResolver.resolver("positions_count", Tag.inserting(
                         mm(stockPlayer.positions().size() + "", true)
                 )))
+                .resolver(TagResolver.resolver("symbol", Tag.inserting(
+                        strip(MiniMessage.miniMessage().deserialize(symbol))
+                )))
                 .resolver(stockPlayer.tagResolver())
                 .build();
     }
@@ -187,13 +197,13 @@ public class PositionSelector extends ChestGui {
     }
 
     private void setupBackground() {
-        OutlinePane pane = new OutlinePane(0, 1, 9, 1);
+        OutlinePane pane = new OutlinePane(0, this.rows - 1, 9, 1);
         pane.addItem(GuiUtils.background());
         pane.setRepeat(true);
         pane.setPriority(Pane.Priority.LOWEST);
         this.addPane(pane);
 
-        OutlinePane pane2 = new OutlinePane(0, 0, 9, 1);
+        OutlinePane pane2 = new OutlinePane(0, 0, 9, this.rows - 1);
         pane2.addItem(GuiUtils.background(Material.LIGHT_GRAY_STAINED_GLASS_PANE));
         pane2.setRepeat(true);
         pane2.setPriority(Pane.Priority.LOWEST);

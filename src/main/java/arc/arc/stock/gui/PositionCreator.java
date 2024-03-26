@@ -198,6 +198,9 @@ public class PositionCreator extends ChestGui {
                 .resolver(TagResolver.resolver("type", Tag.inserting(
                         strip(MiniMessage.miniMessage().deserialize(type.display))
                 )))
+                .resolver(TagResolver.resolver("symbol", Tag.inserting(
+                        strip(MiniMessage.miniMessage().deserialize(symbol))
+                )))
                 .resolver(TagResolver.resolver("leverage", Tag.inserting(
                         strip(Component.text(leverage))
                 )))
@@ -447,7 +450,7 @@ public class PositionCreator extends ChestGui {
                 createItem.setItem(new ItemStackBuilder(Material.GREEN_STAINED_GLASS_PANE)
                         .display(StockConfig.string("position-creator.create-display"))
                         .lore(StockConfig.stringList("position-creator.create-lore"))
-                        .tagResolver(resolver(amount, type, leverage)).build());
+                        .tagResolver(resolver).build());
 
                 // amount
                 meta = new ItemStackBuilder(Material.GOLD_INGOT)

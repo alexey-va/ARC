@@ -10,6 +10,7 @@ import arc.arc.util.TextUtil;
 import de.tr7zw.changeme.nbtapi.NBTItem;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -19,6 +20,8 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataType;
 
 public class BlockListener implements Listener {
 
@@ -59,7 +62,6 @@ public class BlockListener implements Listener {
         Location center = event.getClickedBlock().getLocation().add(0,1,0);
         String buildingId = new NBTItem(hand).getString("arc:building_key");
         if(buildingId == null) return;
-
         BuildingManager.processPlayerClick(event.getPlayer(), center, buildingId);
     }
 

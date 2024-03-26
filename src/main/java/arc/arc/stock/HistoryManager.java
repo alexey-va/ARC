@@ -147,13 +147,15 @@ public class HistoryManager {
             MapType mapType = typeFactory.constructMapType(
                     ConcurrentHashMap.class,
                     typeFactory.constructType(String.class),
-                    typeFactory.constructCollectionType(List.class, HistoryManager.StockHistory.class)
+                    typeFactory.constructCollectionType(ArrayList.class, HistoryManager.StockHistory.class)
             );
 
             Map<String, List<HistoryManager.StockHistory>> history = objectMapper.readValue(file, mapType);
             log.trace("Loaded history: {}", history);
             appendHistory(history);
         } catch (Exception e) {
+            e.printStackTrace();
+            log.warn("Could not load history from file: " + file);
             history = new ConcurrentHashMap<>();
             StockConfig.saveStockHistory();
         }

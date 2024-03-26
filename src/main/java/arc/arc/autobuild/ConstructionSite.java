@@ -110,9 +110,9 @@ public class ConstructionSite {
     public void calculateChunks() {
         if (!chunks.isEmpty()) return;
         Corners corners = getCorners();
-        for (int x = corners.corner1.getBlockX(); x < corners.corner2.getBlockX(); x++) {
-            for (int z = corners.corner1.getBlockZ(); z < corners.corner2.getBlockZ(); z++) {
-                Location location = new Location(world, x + centerBlock.getBlockX(), 1, z + centerBlock.getBlockZ());
+        for (int x = corners.corner1.x(); x < corners.corner2.x(); x++) {
+            for (int z = corners.corner1.z(); z < corners.corner2.z(); z++) {
+                Location location = new Location(world, x + centerBlock.x(), 1, z + centerBlock.z());
                 Chunk chunk = location.getChunk();
                 chunks.add(chunk);
             }
@@ -128,9 +128,9 @@ public class ConstructionSite {
         }
         if (HookRegistry.wgHook != null) {
             Corners corners = getCorners();
-            for (int x = corners.corner1.getBlockX(); x < corners.corner2.getBlockX(); x++) {
-                for (int y = corners.corner1.getBlockY(); y < corners.corner2.getBlockY(); y++) {
-                    for (int z = corners.corner1.getBlockZ(); z < corners.corner2.getBlockZ(); z++) {
+            for (int x = corners.corner1.x(); x < corners.corner2.x(); x++) {
+                for (int y = corners.corner1.y(); y < corners.corner2.y(); y++) {
+                    for (int z = corners.corner1.z(); z < corners.corner2.z(); z++) {
                         if(!HookRegistry.wgHook.canBuild(player, new Location(world, x,y,z))) return false;
                     }
                 }
@@ -176,12 +176,12 @@ public class ConstructionSite {
         BlockVector3 c1 = building.getCorner1(rotation);
         BlockVector3 c2 = building.getCorner2(rotation);
 
-        BlockVector3 r1 = BlockVector3.at(Math.min(c1.getBlockX(), c2.getBlockX()),
-                Math.min(c1.getBlockY(), c2.getBlockY()),
-                Math.min(c1.getBlockZ(), c2.getBlockZ()));
-        BlockVector3 r2 = BlockVector3.at(Math.max(c1.getBlockX(), c2.getBlockX()),
-                Math.max(c1.getBlockY(), c2.getBlockY()),
-                Math.max(c1.getBlockZ(), c2.getBlockZ()));
+        BlockVector3 r1 = BlockVector3.at(Math.min(c1.x(), c2.x()),
+                Math.min(c1.y(), c2.y()),
+                Math.min(c1.z(), c2.z()));
+        BlockVector3 r2 = BlockVector3.at(Math.max(c1.x(), c2.x()),
+                Math.max(c1.y(), c2.y()),
+                Math.max(c1.z(), c2.z()));
         return new Corners(r1, r2);
     }
 

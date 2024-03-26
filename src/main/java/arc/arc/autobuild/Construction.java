@@ -59,12 +59,12 @@ public class Construction {
 
         ConstructionSite.Corners corners = site.getCorners();
 
-        final int minX = corners.corner1().getBlockX();
-        final int minY = corners.corner1().getBlockY();
-        final int minZ = corners.corner1().getBlockZ();
-        final int maxX = corners.corner2().getBlockX();
-        final int maxY = corners.corner2().getBlockY();
-        final int maxZ = corners.corner2().getBlockZ();
+        final int minX = corners.corner1().x();
+        final int minY = corners.corner1().y();
+        final int minZ = corners.corner1().z();
+        final int maxX = corners.corner2().x();
+        final int maxY = corners.corner2().y();
+        final int maxZ = corners.corner2().z();
 
         vectors.clear();
         for (int y = minY; y <= maxY; y++) {
@@ -122,9 +122,9 @@ public class Construction {
             BlockVector3 v = vectors.get(index);
 
             Location location = new Location(site.world,
-                    site.centerBlock.getBlockX() + v.getBlockX(),
-                    site.centerBlock.getBlockY() + v.getBlockY(),
-                    site.centerBlock.getBlockZ() + v.getBlockZ());
+                    site.centerBlock.x() + v.x(),
+                    site.centerBlock.y() + v.y(),
+                    site.centerBlock.z() + v.z());
             BlockData data = BukkitAdapter.adapt(site.building.getBlock(v, site.rotation));
             rotateBlockData( data, site.getRotation());
 

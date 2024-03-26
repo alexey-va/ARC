@@ -68,13 +68,13 @@ public class Building {
 
 
     private BlockVector3 rotate(BlockVector3 vector, int x, int z, int degs){
-        int xOffset = vector.getBlockX() - x;
-        int zOffset = vector.getBlockZ() - z;
+        int xOffset = vector.x() - x;
+        int zOffset = vector.z() - z;
 
         return switch (degs) {
-            case 90, -270 -> BlockVector3.at(x - zOffset, vector.getBlockY(), z + xOffset);
-            case 180, -180 -> BlockVector3.at(x - xOffset, vector.getBlockY(), z - zOffset);
-            case 270, -90 -> BlockVector3.at(x + zOffset, vector.getBlockY(), z - xOffset);
+            case 90, -270 -> BlockVector3.at(x - zOffset, vector.y(), z + xOffset);
+            case 180, -180 -> BlockVector3.at(x - xOffset, vector.y(), z - zOffset);
+            case 270, -90 -> BlockVector3.at(x + zOffset, vector.y(), z - xOffset);
             default -> vector;
         };
     }

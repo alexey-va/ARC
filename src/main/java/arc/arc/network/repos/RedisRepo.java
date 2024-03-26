@@ -71,6 +71,14 @@ public class RedisRepo<T extends RepoData> {
         if (backupTask != null && !backupTask.isCancelled()) backupTask.cancel();
     }
 
+    public void close() {
+        cancelTasks();
+        saveDirty().join();
+        deleteUnnecessary().join();
+        backupService.saveBackup(map);
+        redisManager.unregisterChannel(updateChannel, messager);
+    }
+
     public void startTasks() {
         cancelTasks();
         saveTask = new BukkitRunnable() {
@@ -183,6 +191,7 @@ public class RedisRepo<T extends RepoData> {
 
     CompletableFuture<Void> deleteUnnecessary() {
         List<T> toDelete = map.values().stream().filter(T::isRemove).toList();
+        if(toDelete.isEmpty()) return CompletableFuture.completedFuture(null);
         log.trace("Deleting unnecessary: {}" , toDelete);
         return toDelete.stream().map(this::delete).collect(() -> CompletableFuture.completedFuture(null), CompletableFuture::allOf, CompletableFuture::allOf);
     }

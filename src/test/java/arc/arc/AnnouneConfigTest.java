@@ -30,4 +30,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @Log4j2
 class AnnouneConfigTest {
+    @Test
+    void main() {
+        int a = 10;
+        List<Integer> list = new ArrayList<>();
+        list.toArray(new Integer[0]);
+    }
 }

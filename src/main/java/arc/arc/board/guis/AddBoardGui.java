@@ -281,7 +281,7 @@ public class AddBoardGui extends ChestGui implements Inputable {
                                 System.currentTimeMillis(), System.currentTimeMillis(), UUID.randomUUID());
                         boardEntry.setDirty(true);
 
-                        Board.instance().addBoardEntry(boardEntry);
+                        Board.addBoardEntry(boardEntry);
                         //System.out.println("Adding board entry!");
                         player.sendMessage(TextUtil.mm(BoardConfig.getString("add-menu.published-successfully")));
 
@@ -331,7 +331,7 @@ public class AddBoardGui extends ChestGui implements Inputable {
                         entry.changeIcon(icon);
                         entry.changeType(type);
 
-                        Board.instance().updateCache(entry.entryUuid);
+                        Board.updateCache(entry.entryUuid);
                         //Board.instance().saveBoardEntry(entry.entryUuid);
                         player.sendMessage(TextUtil.mm(BoardConfig.getString("add-menu.edited-successfully")));
 
@@ -367,7 +367,7 @@ public class AddBoardGui extends ChestGui implements Inputable {
 
                     if (confirmDelete) {
                         //.out.println("Deleting board entry from gui");
-                        Board.instance().deleteBoardEntry(entry);
+                        Board.deleteBoardEntry(entry);
                         GuiUtils.constructAndShowAsync(() ->new BoardGui(player), click.getWhoClicked());
                     } else {
                         confirmDelete = true;

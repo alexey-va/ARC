@@ -4,13 +4,19 @@ import arc.arc.ARC;
 import arc.arc.board.guis.BoardGui;
 import arc.arc.hooks.HookRegistry;
 import arc.arc.util.GuiUtils;
+import com.google.gson.*;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
+
+import java.lang.reflect.Type;
+import java.util.Base64;
+import java.util.Map;
 
 public class Command implements CommandExecutor {
     @Override
@@ -81,7 +87,8 @@ public class Command implements CommandExecutor {
             HookRegistry.jobsHook.openBoostGui(player);
             return true;
         }
-
         return false;
     }
+
+
 }

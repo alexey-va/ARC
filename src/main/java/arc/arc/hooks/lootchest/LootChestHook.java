@@ -1,6 +1,8 @@
 package arc.arc.hooks.lootchest;
 
 import arc.arc.ARC;
+import arc.arc.configs.Config;
+import arc.arc.configs.ConfigManager;
 import org.bukkit.Bukkit;
 
 public class LootChestHook {
@@ -8,7 +10,8 @@ public class LootChestHook {
     private static LootChestListener lootChestListener;
 
     public LootChestHook() {
-        lootChestListener = new LootChestListener();
+        Config config = ConfigManager.getOrCreate(ARC.plugin.getDataFolder().toPath().resolve("lootchests"), "bosses.yml", "lootchest_bosses");
+        lootChestListener = new LootChestListener(config);
         Bukkit.getPluginManager().registerEvents(lootChestListener, ARC.plugin);
     }
 }
