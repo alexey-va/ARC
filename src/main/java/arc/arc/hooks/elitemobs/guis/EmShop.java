@@ -54,7 +54,7 @@ public class EmShop extends ChestGui {
     }
 
     private void setupItems() {
-        PaginatedPane pane = new PaginatedPane(0, 0, 9, config.integer("shop.rows", 6) - 1, Pane.Priority.HIGHEST);
+        PaginatedPane pane = new PaginatedPane(0, 1, 9, config.integer("shop.rows", 6) - 1, Pane.Priority.HIGHEST);
         this.addPane(pane);
         ShopHolder.Shop shop = shopHolder.getShop(player);
         List<GuiItem> items = new ArrayList<>();
@@ -79,12 +79,13 @@ public class EmShop extends ChestGui {
     }
 
     TagResolver resolver() {
-        long sinceLastReset = System.currentTimeMillis() - HookRegistry.emHook.lastShopReset;
-        long resetTime = config.integer("shop.reset-ticks", 20 * 60 * 5)/20L*1000L;
+        long resetTimeTicks = config.integer("shop.reset-ticks", 20 * 60 * 5);
+        long resetTime = resetTimeTicks * 50;
+
+        long sinceLastReset = System.currentTimeMillis() - shopHolder.getShop(player).timestamp();
         int minsTillReset = (int) ((resetTime - sinceLastReset) / 1000 / 60);
-        if(minsTillReset == 0) minsTillReset = 1;
-        if (minsTillReset < 0 || minsTillReset > 60) minsTillReset = 0;
-        int x = (new Random()).nextInt(-1000,1000);
+        if (minsTillReset == 0) minsTillReset = 1;
+
         return TagResolver.builder()
                 .resolver(TagResolver.resolver("type", Tag.inserting(mm(isGear ? "Снаряжение" : "Тринкеты", true))))
                 .resolver(TagResolver.resolver("balance", Tag.inserting(mm(formatAmount(HookRegistry.emHook.balance(player)), true))))
@@ -94,7 +95,7 @@ public class EmShop extends ChestGui {
     }
 
     private void setupNav() {
-        StaticPane pane = new StaticPane(0, config.integer("shop.rows", 6) - 1, 9, 1);
+        StaticPane pane = new StaticPane(0, 0, 9, 1);
         this.addPane(pane);
 
         TagResolver resolver = resolver();
@@ -109,7 +110,7 @@ public class EmShop extends ChestGui {
                     click.setCancelled(true);
                     ((Player) click.getWhoClicked()).performCommand(config.string("shop.back-command"));
                 }).build();
-        pane.addItem(back, 0, 0);
+        //pane.addItem(back, 0, 0);
 
         change = new ItemStackBuilder(Material.GREEN_STAINED_GLASS_PANE)
                 .display(config.string("shop.change-display"))
@@ -122,7 +123,8 @@ public class EmShop extends ChestGui {
                 }).build();
         pane.addItem(change, 4, 0);
 
-        update = new ItemStackBuilder(Material.BLACK_STAINED_GLASS_PANE)
+        update = new ItemStackBuilder(Material.PAPER)
+                .modelData(31173)
                 .display(config.string("shop.update-display"))
                 .lore(config.stringList("shop.update-lore"))
                 .tagResolver(resolver)
@@ -158,9 +160,9 @@ public class EmShop extends ChestGui {
     }
 
     private void setupBackground() {
-        OutlinePane pane = new OutlinePane(0, 0, 9, config.integer("shop.rows", 6), Pane.Priority.LOWEST);
+/*        OutlinePane pane = new OutlinePane(0, 0, 9, config.integer("shop.rows", 6), Pane.Priority.LOWEST);
         pane.addItem(GuiUtils.background());
         pane.setRepeat(true);
-        this.addPane(pane);
+        this.addPane(pane);*/
     }
 }

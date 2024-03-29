@@ -114,7 +114,28 @@ public class Config {
             injectDeepKey(path, new ArrayList<String>());
             return new ArrayList<>();
         }
+        if(o instanceof String s){
+            return List.of(s);
+        }
         return (List<String>) o;
+    }
+
+    public <T> Map<String, T> map(String path){
+        Object o = getValueForKeyPath(path);
+        if (o == null) {
+            injectDeepKey(path, new LinkedHashMap<String, T>());
+            return new LinkedHashMap<>();
+        }
+        return (Map<String, T>) o;
+    }
+
+    public List<String> keys(String path){
+        Object o = getValueForKeyPath(path);
+        if (o == null) {
+            injectDeepKey(path, Map.of());
+            return new ArrayList<>();
+        }
+        return new ArrayList<>(((Map<String, Object>) o).keySet());
     }
 
     private Object getValueForKeyPath(String keyPath) {
@@ -141,6 +162,7 @@ public class Config {
 
     public void injectDeepKey(String keyPath, Object value) {
         try {
+            System.out.println("Injecting key: " + keyPath + " with value: " + value);
             load();
             String[] keyParts = keyPath.split("\\.");
 

@@ -21,6 +21,8 @@ import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @Log4j2
 public class SlimefunSync implements Sync {
@@ -28,6 +30,7 @@ public class SlimefunSync implements Sync {
     SyncRepo<SlimefunDataDTO> syncRepo;
 
     ActionCanceller actionCanceller;
+    Map<UUID, Boolean> loaded = new ConcurrentHashMap<>();
 
     public SlimefunSync() {
         this.syncRepo = SyncRepo.builder(SlimefunDataDTO.class)
@@ -56,7 +59,8 @@ public class SlimefunSync implements Sync {
             @Override
             public void run() {
                 log.trace("Calling load data SF for " + uuid);
-                syncRepo.loadAndApplyData(uuid, false);
+                syncRepo.loadAndApplyData(uuid, false)
+                        .whenComplete((data, ex) -> loaded.put(uuid, true));
             }
         }.runTaskLater(ARC.plugin, 20L);
     }
@@ -65,7 +69,9 @@ public class SlimefunSync implements Sync {
     public void playerQuit(UUID uuid) {
         Context context = new Context();
         context.put("uuid", uuid);
-        syncRepo.saveAndPersistData(context, false);
+        if (loaded.getOrDefault(uuid, false)) syncRepo.saveAndPersistData(context, false);
+        else log.warn("Player data not loaded for " + uuid + ". Skipping save");
+        loaded.remove(uuid);
     }
 
     @Override
@@ -79,7 +85,8 @@ public class SlimefunSync implements Sync {
     public void forceSave(UUID uuid) {
         Context context = new Context();
         context.put("uuid", uuid);
-        syncRepo.saveAndPersistData(context, false);
+        if (loaded.getOrDefault(uuid, false)) syncRepo.saveAndPersistData(context, false);
+        else log.warn("Player data not loaded for " + uuid+". Skipping save");
     }
 
 
@@ -90,7 +97,7 @@ public class SlimefunSync implements Sync {
             return null;
         }
         PlayerProfile playerProfile = Slimefun.getRegistry().getPlayerProfiles().get(uuid);
-        if(playerProfile == null){
+        if (playerProfile == null) {
             log.error("PlayerProfile not found for {}", uuid);
             log.error("Trying to fetch from disk");
         }
@@ -100,11 +107,9 @@ public class SlimefunSync implements Sync {
             slimefunDataDTO.setUuid(uuid);
             slimefunDataDTO.setTimestamp(System.currentTimeMillis());
             slimefunDataDTO.setServer(MainConfig.server);
-            Map<String, Boolean> researches = new HashMap<>();
 
             // Serializing researches
-            pp.getResearches().forEach(r -> researches.put(r.getKey().getNamespace() + ":" + r.getKey().getKey(), true));
-            slimefunDataDTO.setResearches(researches);
+            slimefunDataDTO.setResearches(pp.getResearches().stream().map(Research::getID).toList());
 
             // Serializing backpacks
             Map<String, SlimefunDataDTO.Backpack> backpacks = new HashMap<>();
@@ -140,16 +145,11 @@ public class SlimefunSync implements Sync {
                 log.trace("PlayerProfile not found for " + dto.uuid);
                 return;
             }
-            for (Map.Entry<String, Boolean> entry : dto.researches.entrySet()) {
-                NamespacedKey nsk = NamespacedKey.fromString(entry.getKey());
-                Optional<Research> r = Research.getResearch(nsk);
-                if (r.isEmpty()) continue;
 
-                Research research = r.get();
-                if (entry.getValue()) {
-                    pp.setResearched(research, true);
-                }
-            }
+            Set<Integer> researches = new HashSet<>(dto.researches);
+            Slimefun.getRegistry().getResearches().stream()
+                    .filter(r -> researches.contains(r.getID()) && !pp.hasUnlocked(r))
+                    .forEach(r -> pp.setResearched(r, true));
 
             for (Map.Entry<String, SlimefunDataDTO.Backpack> entry : dto.backpacks.entrySet()) {
                 int index = Integer.parseInt(entry.getKey());
@@ -195,7 +195,7 @@ public class SlimefunSync implements Sync {
         UUID uuid;
         long timestamp;
         String server;
-        Map<String, Boolean> researches;
+        List<Integer> researches;
         Map<String, Backpack> backpacks;
 
         @Override

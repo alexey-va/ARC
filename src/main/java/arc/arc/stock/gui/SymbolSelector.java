@@ -36,19 +36,21 @@ import static arc.arc.util.TextUtil.strip;
 
 public class SymbolSelector extends ChestGui {
     StockPlayer stockPlayer;
-    GuiItem back, profile, all;
+    GuiItem back, profile, all, market;
+    int rows=4;
 
     public SymbolSelector(StockPlayer stockPlayer) {
-        super(3, TextHolder.deserialize(TextUtil.toLegacy(StockConfig.string("symbol-selector.menu-title"))));
+        super(4, TextHolder.deserialize(TextUtil.toLegacy(StockConfig.string("symbol-selector.menu-title"))));
         this.stockPlayer = stockPlayer;
         //System.out.println("Symbol selector from " + Thread.currentThread().getName());
+        setRows(rows);
         setupBackground();
         setupStocks();
         setupNav();
     }
 
     private void setupStocks() {
-        PaginatedPane paginatedPane = new PaginatedPane(0, 0, 9, 2);
+        PaginatedPane paginatedPane = new PaginatedPane(0, 1, 9, rows-2);
         List<GuiItem> guiItemList = new ArrayList<>();
         for (Stock stock : StockMarket.stocks().stream()
                 .filter(s -> s.getPrice() > 0.0)
@@ -61,7 +63,7 @@ public class SymbolSelector extends ChestGui {
     }
 
     private void setupNav() {
-        StaticPane pane = new StaticPane(0, 2, 9, 1);
+        StaticPane pane = new StaticPane(0, rows-1, 9, 1);
         this.addPane(pane);
         TagResolver tagResolver = stockPlayer.tagResolver();
 
@@ -101,6 +103,21 @@ public class SymbolSelector extends ChestGui {
                     GuiUtils.constructAndShowAsync(() -> new ProfileMenu(stockPlayer, 0, null), click.getWhoClicked());
                 }).build();
         pane.addItem(profile, 8, 0);
+
+
+        StaticPane topNavigation = new StaticPane(0, 0, 9, 1);
+        this.addPane(topNavigation);
+        market = new ItemStackBuilder(Material.BELL)
+                .display(StockConfig.string("symbol-selector.market-display"))
+                .lore(StockConfig.stringList("symbol-selector.market-lore"))
+                .toGuiItemBuilder()
+                .clickEvent(click -> {
+                    click.setCancelled(true);
+                    Player p = (Player) click.getWhoClicked();
+                    p.performCommand(StockConfig.string("market-command"));
+                    p.closeInventory();
+                }).build();
+        topNavigation.addItem(market, 4, 0);
     }
 
     private GuiItem stockItem(Stock stock) {
@@ -119,16 +136,16 @@ public class SymbolSelector extends ChestGui {
     }
 
     private void setupBackground() {
-        OutlinePane pane = new OutlinePane(0, 2, 9, 1);
+        OutlinePane pane = new OutlinePane(0, 0, 9, rows );
         pane.addItem(GuiUtils.background());
         pane.setRepeat(true);
         pane.setPriority(Pane.Priority.LOWEST);
         this.addPane(pane);
 
-        OutlinePane pane2 = new OutlinePane(0, 0, 9, 2);
+        OutlinePane pane2 = new OutlinePane(0, 1, 9, 2);
         pane2.addItem(GuiUtils.background(Material.LIGHT_GRAY_STAINED_GLASS_PANE));
         pane2.setRepeat(true);
-        pane2.setPriority(Pane.Priority.LOWEST);
+        pane2.setPriority(Pane.Priority.LOW);
         this.addPane(pane2);
     }
 }

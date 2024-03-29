@@ -19,6 +19,7 @@ import arc.arc.sync.SyncManager;
 import arc.arc.treasurechests.TreasureHuntManager;
 import arc.arc.treasurechests.locationpools.LocationPoolManager;
 import arc.arc.util.CooldownManager;
+import arc.arc.util.HeadTextureCache;
 import arc.arc.util.ParticleManager;
 import lombok.extern.log4j.Log4j2;
 import net.milkbowl.vault.economy.Economy;
@@ -40,6 +41,7 @@ public final class ARC extends JavaPlugin {
     public static RedisManager redisManager;
     public static HookRegistry hookRegistry;
     public static NetworkRegistry networkRegistry;
+    public static HeadTextureCache headTextureCache;
 
 
     boolean loadedPacketApi = false;
@@ -73,7 +75,6 @@ public final class ARC extends JavaPlugin {
 
     public void loadConfig() {
         mainConfig = new MainConfig();
-        Item item;
         System.out.println("Announce config loading...");
         announeConfig = new AnnouneConfig();
 
@@ -105,6 +106,8 @@ public final class ARC extends JavaPlugin {
             HookRegistry.farmManager.init();
         }
 
+        headTextureCache = new HeadTextureCache();
+
         ConfigManager.reloadAll();
     }
 
@@ -126,6 +129,7 @@ public final class ARC extends JavaPlugin {
         StockMarket.cancelTasks();
         StockMarket.saveHistory();
         StockClient.stopClient();
+        headTextureCache.save();
     }
 
     public void load() {

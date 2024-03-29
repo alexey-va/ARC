@@ -62,7 +62,7 @@ public class BoostData extends RepoData<BoostData> {
         if (cached != null) return cached;
 
         double boost = 1.0 + boosts.stream()
-                .filter(jobsBoost -> jobsBoost.getType() == type)
+                .filter(jobsBoost -> jobsBoost.getType() == type || jobsBoost.getType() == JobsBoost.Type.ALL)
                 .filter(jobsBoost -> jobsBoost.getJobName() == null || job.getName().equalsIgnoreCase(jobsBoost.getJobName()))
                 .mapToDouble(JobsBoost::getBoost)
                 .sum();

@@ -8,7 +8,6 @@ import arc.arc.network.repos.RedisRepo;
 import arc.arc.util.GuiUtils;
 import arc.arc.util.ItemStackBuilder;
 import arc.arc.util.TextUtil;
-import com.gamingmesh.jobs.container.Boost;
 import com.gamingmesh.jobs.container.Job;
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
@@ -21,26 +20,34 @@ import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 import static arc.arc.util.TextUtil.formatAmount;
 import static arc.arc.util.TextUtil.mm;
 
-public class JobGui extends ChestGui {
+public class BoostsOfJobGui extends ChestGui {
     int rows;
     Player player;
     Config config;
     Job job;
     GuiItem back;
+    Collection<JobsBoost> boosts;
 
-    public JobGui(Job job, Player player, Config config) {
-        super(config.integer("job-menu.rows", 4),
+    public BoostsOfJobGui(Job job, Player player, Config config) {
+        super(4,
                 TextHolder.deserialize(config.string("job-menu.title", "Boosts")
                         .replace("<job>", job.getDisplayName())));
-        this.rows = config.integer("job-menu.rows", 4);
+
+        var playerData = JobsHook.getRepo().getNow(player.getUniqueId().toString());
+        if(playerData == null) boosts = new ArrayList<>();
+        else boosts = playerData.boosts(job);
+
+        this.rows = Math.max(2, Math.min(6, (int)Math.ceil(boosts.size()/9.0)));
+        setRows(rows);
+
         this.player = player;
         this.config = config;
         this.job = job;
@@ -82,6 +89,7 @@ public class JobGui extends ChestGui {
         String expire = TextUtil.formatTime(expiresIn);
         return TagResolver.builder()
                 .tag("job", Tag.inserting(mm(job.getName(), true)))
+                .tag("id", Tag.inserting(mm(jobsBoost.getId(), true)))
                 .tag("type", Tag.inserting(mm(jobsBoost.getType().getDisplay(), true)))
                 .tag("amount", Tag.inserting(mm(formatAmount(jobsBoost.getBoost() * 100, 3), true)))
                 .tag("expire", Tag.inserting(mm(expire, true)))
@@ -100,10 +108,19 @@ public class JobGui extends ChestGui {
                 .toGuiItemBuilder()
                 .clickEvent(click -> {
                     click.setCancelled(true);
-                    GuiUtils.constructAndShowAsync(() -> new BoostGui(config, player), click.getWhoClicked());
+                    GuiUtils.constructAndShowAsync(() -> new JobsListGui(config, player), click.getWhoClicked());
                 }).build();
         pane.addItem(back, 0, rows - 1);
 
+        GuiItem buy = new ItemStackBuilder(Material.GREEN_STAINED_GLASS_PANE)
+                .display(config.string("job-menu.buy-display"))
+                .lore(config.stringList("job-menu.buy-lore"))
+                .toGuiItemBuilder()
+                .clickEvent(click -> {
+                    click.setCancelled(true);
+                    GuiUtils.constructAndShowAsync(() -> new BuyBoostGui(player, job, config), click.getWhoClicked());
+                }).build();
+        pane.addItem(buy, 4, rows - 1);
     }
 
     private void setupBackground() {

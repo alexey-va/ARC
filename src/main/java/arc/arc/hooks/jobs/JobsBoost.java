@@ -22,7 +22,7 @@ public class JobsBoost {
 
     @RequiredArgsConstructor
     public enum Type {
-        MONEY("Деньги"), EXP("Опыт"), POINTS("Очки");
+        MONEY("Деньги"), EXP("Опыт"), POINTS("Очки"), ALL("Все");
         @Getter
         final String display;
     }

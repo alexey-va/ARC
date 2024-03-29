@@ -74,16 +74,16 @@ public class SyncRepo<T extends SyncData> {
         }
     }
 
-    public void loadAndApplyData(UUID uuid, boolean async) {
-        loadData(uuid).thenAccept(data -> {
+    public CompletableFuture<Void> loadAndApplyData(UUID uuid, boolean async) {
+        return loadData(uuid).thenAccept(data -> {
             log.trace("Loaded data, now applying "+async+": "+data.getClass()+" "+data.uuid());
             if (async) applyData(data);
             else Bukkit.getScheduler().runTask(ARC.plugin, () -> applyData(data));
         });
     }
 
-    public void saveAndPersistData(Context context, boolean async) {
-        produceData(context, async).thenAccept(data -> {
+    public CompletableFuture<Void> saveAndPersistData(Context context, boolean async) {
+        return produceData(context, async).thenAccept(data -> {
             log.debug("Saving data: "+data);
             if (data == null || data.trash()) return;
             saveDataPersistently(data);

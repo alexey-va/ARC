@@ -10,14 +10,7 @@ class AnnouncementDataTest {
 
     @Test
     void testAnnSer(){
-        System.out.println(RedisSerializer.toJson(AnnouncementData.builder()
-                .arcConditions(List.of(new PermissionCondition("arc.test")))
-                .message("Test message").build()));
 
-        AnnouncementData data = RedisSerializer.fromJson(RedisSerializer.toJson(AnnouncementData.builder()
-                .arcConditions(List.of(new PermissionCondition("arc.test")))
-                .message("Test message").build()), AnnouncementData.class);
-        System.out.println(data);
     }
 
     @Test

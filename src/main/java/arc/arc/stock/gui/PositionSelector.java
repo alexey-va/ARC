@@ -46,7 +46,7 @@ public class PositionSelector extends ChestGui {
     BukkitTask refreshTask;
     PaginatedPane paginatedPane;
 
-    int rows = 2;
+    int rows;
 
     public PositionSelector(StockPlayer stockPlayer, String symbol) {
         super(2, TextHolder.deserialize(TextUtil.toLegacy(StockConfig.string(
@@ -57,7 +57,7 @@ public class PositionSelector extends ChestGui {
         this.positions = symbol == null ? stockPlayer.positions() : stockPlayer.positions(symbol);
 
         if (positions == null) this.rows = 2;
-        else this.rows = Math.min(6, ((int) Math.ceil(positions.size() / 9.0)) + 1);
+        else this.rows = Math.max(2,Math.min(6, ((int) Math.ceil(positions.size() / 9.0)) + 1));
         setRows(rows);
 
         setupBackground();
@@ -171,7 +171,7 @@ public class PositionSelector extends ChestGui {
                         mm(stockPlayer.positions().size() + "", true)
                 )))
                 .resolver(TagResolver.resolver("symbol", Tag.inserting(
-                        strip(MiniMessage.miniMessage().deserialize(symbol))
+                        strip(MiniMessage.miniMessage().deserialize(symbol == null ? "символ" : symbol))
                 )))
                 .resolver(stockPlayer.tagResolver())
                 .build();

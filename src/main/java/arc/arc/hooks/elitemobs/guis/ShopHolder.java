@@ -37,6 +37,7 @@ public class ShopHolder {
     public static class Shop {
         EMHook emHook;
         Player player;
+        long timestamp;
         List<ShopItem> gear = new ArrayList<>();
         List<ShopItem> trinkets = new ArrayList<>();
 
@@ -45,12 +46,18 @@ public class ShopHolder {
             this.player = player;
             generateGear(gearSize, tier, player);
             generateTrinkets(trinketSize, tier, player);
+            timestamp = System.currentTimeMillis();
         }
 
         public void generateGear(int size, int tier, Player player) {
             gear.clear();
+
+            Random random = new Random();
+
             for (int i = 0; i < size; i++) {
-                ItemStack stack = emHook.generateDrop(tier, player, false);
+                double gauss = random.nextGaussian(tier*0.8, tier*0.15);
+                int rTier = Math.max(1, Math.min(tier+3, (int) Math.round(gauss)));
+                ItemStack stack = emHook.generateDrop(rTier, player, false);
                 double price = ItemTagger.getItemValue(stack);
                 if (price <= 0) price = ItemWorthCalculator.determineItemWorth(stack, player);
                 ShopItem item = new ShopItem(stack, price);
@@ -61,14 +68,23 @@ public class ShopHolder {
 
         public void generateTrinkets(int size, int tier, Player player) {
             trinkets.clear();
+
+            Random random = new Random();
+
             for (int i = 0; i < size; i++) {
-                ItemStack stack = emHook.generateDrop(tier, player, true);
+                double gauss = random.nextGaussian(tier*0.8, tier*0.15);
+                int rTier = Math.max(1, Math.min(tier+3, (int) Math.round(gauss)));
+                ItemStack stack = emHook.generateDrop(rTier, player, true);
                 double price = ItemTagger.getItemValue(stack);
                 if (price <= 0) price = ItemWorthCalculator.determineItemWorth(stack, player);
                 ShopItem item = new ShopItem(stack, price);
                 trinkets.add(item);
             }
             trinkets.sort(Comparator.comparingInt(o -> o.stack.getType().ordinal()));
+        }
+
+        public long timestamp() {
+            return timestamp;
         }
     }
 

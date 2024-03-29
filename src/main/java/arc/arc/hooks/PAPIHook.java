@@ -1,6 +1,7 @@
 package arc.arc.hooks;
 
 import arc.arc.configs.MainConfig;
+import arc.arc.hooks.ps.PSHook;
 import arc.arc.xserver.playerlist.PlayerManager;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import org.bukkit.OfflinePlayer;
@@ -76,8 +77,8 @@ public class PAPIHook extends PlaceholderExpansion {
     private String jobsBoosts(OfflinePlayer player, String params){
         if(HookRegistry.jobsHook == null) return "";
         String[] pars = params.split("_");
-        if(pars[0].equals("has")){
-            return HookRegistry.jobsHook.hasBoost(player, pars[1]) ? "true" : "false";
+        if(pars[1].equals("has")){
+            return HookRegistry.jobsHook.hasBoost(player, pars[2]) ? "true" : "false";
         }
         return "";
     }

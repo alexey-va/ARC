@@ -1,4 +1,4 @@
-package arc.arc.hooks;
+package arc.arc.hooks.ps;
 
 import arc.arc.ARC;
 import arc.arc.hooks.ps.guis.PSMenu;

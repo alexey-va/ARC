@@ -3,20 +3,25 @@ package arc.arc.hooks.jobs;
 import arc.arc.ARC;
 import arc.arc.configs.Config;
 import arc.arc.configs.ConfigManager;
-import arc.arc.hooks.jobs.guis.BoostGui;
+import arc.arc.hooks.jobs.guis.JobsListGui;
 import arc.arc.network.repos.RedisRepo;
-import arc.arc.network.repos.RepoData;
 import arc.arc.util.GuiUtils;
 import com.gamingmesh.jobs.Jobs;
-import com.gamingmesh.jobs.container.Boost;
+import com.gamingmesh.jobs.container.CurrencyType;
 import com.gamingmesh.jobs.container.Job;
 import lombok.*;
+import lombok.extern.log4j.Log4j2;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 
 import java.util.*;
 
+@Log4j2
 public class JobsHook {
 
     private static JobsListener jobsListener;
@@ -32,7 +37,7 @@ public class JobsHook {
         config = ConfigManager.getOrCreate(ARC.plugin.getDataFolder().toPath(), "jobs.yml", "jobs");
     }
 
-    public void createRepo(){
+    public void createRepo() {
         if (repo == null) {
             repo = RedisRepo.builder(BoostData.class)
                     .loadAll(true)
@@ -47,11 +52,41 @@ public class JobsHook {
         }
     }
 
-    public void addBoost(UUID player, String jobName, double boost, long expires, String boostId, JobsBoost.Type type) {
+    public String jobDisplayMinimessage(String jobName) {
+        Component name = LegacyComponentSerializer.legacyAmpersand().deserialize(
+                Jobs.getJob(jobName).getDisplayName().replace("§", "&")
+        ).decoration(TextDecoration.ITALIC, false);
+        return MiniMessage.miniMessage().serialize(name);
+    }
+
+    public void addBoost(UUID player, List<String> jobs, double boost, long expires, String boostId, List<JobsBoost.Type> type) {
+        boolean allJobs = jobs.stream().anyMatch(j -> j.equalsIgnoreCase("all")) || jobs.isEmpty();
+        boolean allTypes = type.contains(JobsBoost.Type.ALL) || type.isEmpty();
+
+
         repo.getOrCreate(player.toString(), () -> new BoostData(player))
-                .thenAccept(data -> data.addBoost(
-                        new JobsBoost(boost, type, jobName, expires, UUID.randomUUID(), boostId))
-                );
+                .thenAccept(data -> {
+                    List<String> jobsUpdated = new ArrayList<>();
+                    if (allJobs) jobsUpdated.add(null);
+                    else jobsUpdated.addAll(jobs);
+
+                    List<JobsBoost.Type> typeUpdated = new ArrayList<>();
+                    if (allTypes) typeUpdated.add(JobsBoost.Type.ALL);
+                    else typeUpdated.addAll(type);
+
+                    for (String jobName : jobsUpdated) {
+                        for (JobsBoost.Type t : typeUpdated) {
+                            JobsBoost jobsBoost = new JobsBoost();
+                            jobsBoost.setBoost(boost);
+                            jobsBoost.setExpires(expires);
+                            jobsBoost.setBoostUuid(player);
+                            jobsBoost.setId(boostId);
+                            jobsBoost.setType(t);
+                            jobsBoost.setJobName(jobName);
+                            data.addBoost(jobsBoost);
+                        }
+                    }
+                });
     }
 
     public List<String> getJobNames() {
@@ -59,13 +94,28 @@ public class JobsHook {
     }
 
     public void openBoostGui(Player player) {
-        GuiUtils.constructAndShowAsync(() -> new BoostGui(config, player), player);
+        GuiUtils.constructAndShowAsync(() -> new JobsListGui(config, player), player);
     }
 
     public boolean hasBoost(OfflinePlayer player, String par) {
-        return repo.getOrNull(player.getUniqueId().toString())
-                .thenApply(data -> data.findById(par) == null)
+        return !repo.getOrCreate(player.getUniqueId().toString(), () -> new BoostData(player.getUniqueId()))
+                .thenApply(data -> data == null || data.findById(par) == null)
                 .join();
     }
+
+    public double getBoost(Player player, String jobName, JobsBoost.Type type) {
+        CurrencyType currencyType = switch (type) {
+            case EXP -> CurrencyType.EXP;
+            case MONEY -> CurrencyType.MONEY;
+            case POINTS -> CurrencyType.POINTS;
+            case ALL -> null;
+        };
+        if (currencyType == null) {
+            log.error("Jobs does not have ALL currency type");
+            return 0;
+        }
+        return Jobs.getPlayerManager().getJobsPlayer(player).getBoost(jobName, currencyType);
+    }
+
 }
 

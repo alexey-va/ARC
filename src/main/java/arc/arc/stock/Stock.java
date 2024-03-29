@@ -102,11 +102,11 @@ public class Stock extends RepoData<Stock> {
         double high = HistoryManager.high(symbol);
         double volatility = (high-low)/price;
         String volatilityString;
-        if(volatility < 0.02) volatilityString = "<dark_green>Низкая";
-        else if(volatility < 0.04) volatilityString = "<green>Небольшая";
-        else if(volatility < 0.06) volatilityString = "<yellow>Значительная";
-        else if(volatility < 0.08) volatilityString = "<red>Высокая";
-        else volatilityString = "<dark_red>Импульсивная";
+        if(volatility < 0.02) volatilityString = "<dark_green>Низкие";
+        else if(volatility < 0.04) volatilityString = "<green>Небольшие";
+        else if(volatility < 0.06) volatilityString = "<yellow>Значительные";
+        else if(volatility < 0.08) volatilityString = "<red>Высокие";
+        else volatilityString = "<dark_red>Импульсивные";
         return TagResolver.builder()
                 .resolver(TagResolver.resolver("stock_price", Tag.inserting(
                         mm(formatAmount(price, 5), true)

@@ -52,13 +52,18 @@ public class MainConfig {
         timeFormat = ARC.plugin.getConfig().getString("time-format", "%dд %dч %dмин");
 
         try {
-            logLevel = ARC.plugin.getConfig().getString("log-level", "DEBUG");
+            logLevel = ARC.plugin.getConfig().getString("log-level", "INFO");
             Level newRootLogLevel = Level.getLevel(logLevel);
             System.out.println("Config log level: "+newRootLogLevel);
+
+            // Get the LoggerContext from Log4j2
             LoggerContext ctx = (LoggerContext) LogManager.getContext(false);
             Configuration config = ctx.getConfiguration();
-            LoggerConfig loggerConfig = config.getLoggerConfig(LogManager.ROOT_LOGGER_NAME);
-            loggerConfig.setLevel(newRootLogLevel);
+
+            LoggerConfig packageLoggerConfig = new LoggerConfig("arc.arc", newRootLogLevel, true);
+            packageLoggerConfig.addAppender(config.getAppender("Console"), null, null);
+            config.addLogger("arc.arc", packageLoggerConfig);
+
             ctx.updateLoggers();
         } catch (Exception e){
             e.printStackTrace();

@@ -2,23 +2,30 @@ package arc.arc.commands;
 
 import arc.arc.ARC;
 import arc.arc.board.guis.BoardGui;
+import arc.arc.configs.Config;
+import arc.arc.configs.ConfigManager;
+import arc.arc.guis.BaltopGui;
 import arc.arc.hooks.HookRegistry;
 import arc.arc.util.GuiUtils;
+import arc.arc.util.HeadUtil;
 import com.google.gson.*;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.lang.reflect.Type;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 
-public class Command implements CommandExecutor {
+public class Command implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(@NotNull CommandSender commandSender, org.bukkit.command.@NotNull Command command, @NotNull String s, @NotNull String[] strings) {
 
@@ -87,8 +94,38 @@ public class Command implements CommandExecutor {
             HookRegistry.jobsHook.openBoostGui(player);
             return true;
         }
+
+        if(strings[0].equalsIgnoreCase("baltop")){
+            Config config = ConfigManager.getOrCreate(ARC.plugin.getDataFolder().toPath(), "baltop.yml", "baltop");
+            GuiUtils.constructAndShowAsync(() -> new BaltopGui(config, (Player) commandSender), (Player) commandSender);
+            return true;
+        }
         return false;
     }
 
 
+    @Override
+    public @Nullable List<String> onTabComplete(@NotNull CommandSender commandSender, org.bukkit.command.@NotNull Command command, @NotNull String s, @NotNull String[] strings) {
+
+        if(strings.length == 1){
+            return List.of("reload", "board", "emshop", "jobsboosts", "baltop");
+        }
+
+        if(strings.length == 2){
+            if(strings[0].equalsIgnoreCase("emshop")){
+                return ARC.plugin.getServer().getOnlinePlayers().stream().map(Player::getName).toList();
+            }
+            if(strings[0].equalsIgnoreCase("jobsboosts")){
+                return ARC.plugin.getServer().getOnlinePlayers().stream().map(Player::getName).toList();
+            }
+        }
+
+        if(strings.length == 3){
+            if(strings[0].equalsIgnoreCase("emshop")){
+                return List.of("gear", "trinket");
+            }
+        }
+
+        return null;
+    }
 }

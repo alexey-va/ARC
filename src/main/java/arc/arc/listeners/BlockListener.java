@@ -61,7 +61,7 @@ public class BlockListener implements Listener {
         if(event.getClickedBlock() == null) return;
         Location center = event.getClickedBlock().getLocation().add(0,1,0);
         String buildingId = new NBTItem(hand).getString("arc:building_key");
-        if(buildingId == null) return;
+        if(buildingId == null || buildingId.isEmpty()) return;
         BuildingManager.processPlayerClick(event.getPlayer(), center, buildingId);
     }
 

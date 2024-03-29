@@ -3,12 +3,14 @@ package arc.arc.hooks;
 import arc.arc.ARC;
 import arc.arc.configs.MainConfig;
 import arc.arc.farm.*;
+import arc.arc.hooks.bank.BankHook;
 import arc.arc.hooks.citizens.CitizensHook;
 import arc.arc.hooks.elitemobs.EMHook;
 import arc.arc.hooks.jobs.JobsHook;
 import arc.arc.hooks.lands.LandsHook;
 import arc.arc.hooks.lootchest.LootChestHook;
 import arc.arc.hooks.luckperms.LuckPermsHook;
+import arc.arc.hooks.ps.PSHook;
 import arc.arc.hooks.slimefun.SFHook;
 import arc.arc.hooks.viaversion.ViaVersionHook;
 import arc.arc.hooks.worldguard.WGHook;
@@ -45,6 +47,8 @@ public class HookRegistry {
     public static AuctionHook auctionHook;
     public static TranslatorHook translatorHook;
     public static JobsHook jobsHook;
+    public static BankHook bankHook;
+    public static RedisEcoHook redisEcoHook;
     public AEHook aeHook;
 
 
@@ -117,6 +121,16 @@ public class HookRegistry {
         if (getServer().getPluginManager().getPlugin("zAuctionHouseV3") != null) {
             if (getServer().getPluginManager().getPlugin("zAuctionHouseV3").isEnabled()) {
                 auctionHook = new AuctionHook();
+            }
+        }
+        if (getServer().getPluginManager().getPlugin("Bank") != null) {
+            if (getServer().getPluginManager().getPlugin("Bank").isEnabled()) {
+                bankHook = new BankHook();
+            }
+        }
+        if (getServer().getPluginManager().getPlugin("RedisEconomy") != null) {
+            if (getServer().getPluginManager().getPlugin("RedisEconomy").isEnabled()) {
+                redisEcoHook = new RedisEcoHook();
             }
         }
         if (getServer().getPluginManager().getPlugin("zTranslator") != null) {

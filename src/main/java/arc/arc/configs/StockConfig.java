@@ -74,7 +74,6 @@ public class StockConfig {
 
     private static void loadConfig() {
         mainServer = config.getBoolean("main-server", false);
-        //refreshRate = config.getInt("refresh-rate", 300);
         commission = config.getDouble("commission", 0.01);
         leveragePower = config.getDouble("leverage-power", 0.5);
         mainMenuBackCommand = config.getString("main-menu-back-command", "menu");

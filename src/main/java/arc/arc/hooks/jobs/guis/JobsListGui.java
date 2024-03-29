@@ -1,6 +1,7 @@
 package arc.arc.hooks.jobs.guis;
 
 import arc.arc.configs.Config;
+import arc.arc.hooks.HookRegistry;
 import arc.arc.hooks.jobs.BoostData;
 import arc.arc.hooks.jobs.JobsBoost;
 import arc.arc.hooks.jobs.JobsHook;
@@ -8,7 +9,6 @@ import arc.arc.network.repos.RedisRepo;
 import arc.arc.util.GuiUtils;
 import arc.arc.util.ItemStackBuilder;
 import com.gamingmesh.jobs.Jobs;
-import com.gamingmesh.jobs.commands.list.boost;
 import com.gamingmesh.jobs.container.Job;
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
@@ -17,6 +17,7 @@ import com.github.stefvanschie.inventoryframework.pane.OutlinePane;
 import com.github.stefvanschie.inventoryframework.pane.PaginatedPane;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
+import lombok.SneakyThrows;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.tag.Tag;
@@ -33,13 +34,13 @@ import java.util.List;
 import static arc.arc.util.TextUtil.formatAmount;
 import static arc.arc.util.TextUtil.mm;
 
-public class BoostGui extends ChestGui {
+public class JobsListGui extends ChestGui {
     private final Config config;
     Player player;
     GuiItem back, global;
 
-    public BoostGui(Config config, Player player) {
-        super(config.integer("boost-menu.rows", 6), TextHolder.deserialize(config.string("boost-menu.title", "Boosts")));
+    public JobsListGui(Config config, Player player) {
+        super(3, TextHolder.deserialize(config.string("boost-menu.title", "Boosts")));
         this.player = player;
         this.config = config;
 
@@ -49,7 +50,7 @@ public class BoostGui extends ChestGui {
     }
 
     private void setupJobs() {
-        PaginatedPane pane = new PaginatedPane(0, 1, 9, config.integer("boost-menu.rows", 6) - 2);
+        PaginatedPane pane = new PaginatedPane(0, 0, 9, 2);
         this.addPane(pane);
         List<GuiItem> items = new ArrayList<>();
 
@@ -66,7 +67,7 @@ public class BoostGui extends ChestGui {
                     .toGuiItemBuilder()
                     .clickEvent(click -> {
                         click.setCancelled(true);
-                        GuiUtils.constructAndShowAsync(() -> new JobGui(job, player, config), click.getWhoClicked());
+                        GuiUtils.constructAndShowAsync(() -> new BoostsOfJobGui(job, player, config), click.getWhoClicked());
                     })
                     .build());
         }
@@ -76,17 +77,14 @@ public class BoostGui extends ChestGui {
     record CalculatedBoost(Job job, double money, double exp, double points) {
     }
 
+    @SneakyThrows
     private CalculatedBoost calculateBoosts(Job job) {
         RedisRepo<BoostData> repo = JobsHook.getRepo();
-        double boostMoney = repo.getOrNull(player.getUniqueId().toString())
-                .thenApply(data -> data.getBoost(job, JobsBoost.Type.MONEY))
-                .join() * 100 - 100;
-        double boostPoints = repo.getOrNull(player.getUniqueId().toString())
-                .thenApply(data -> data.getBoost(job, JobsBoost.Type.POINTS))
-                .join() * 100 - 100;
-        double boostExp = repo.getOrNull(player.getUniqueId().toString())
-                .thenApply(data -> data.getBoost(job, JobsBoost.Type.EXP))
-                .join() * 100 - 100;
+        var data = repo.getOrCreate(player.getUniqueId().toString(), () -> new BoostData(player.getUniqueId())).get();
+
+        double boostMoney = data.getBoost(job, JobsBoost.Type.MONEY) * 100 - 100;
+        double boostPoints = data.getBoost(job, JobsBoost.Type.POINTS)* 100 - 100;
+        double boostExp =  data.getBoost(job, JobsBoost.Type.EXP) * 100 - 100;
         return new CalculatedBoost(job, boostMoney, boostExp, boostPoints);
     }
 
@@ -94,38 +92,40 @@ public class BoostGui extends ChestGui {
         String prefixUp = config.string("boost-menu.high-prefix", "<green>+ ");
         String prefixLow = config.string("boost-menu.low-prefix", "<red>- ");
 
+        double moneyBaseBoost = HookRegistry.jobsHook.getBoost(player, job.getName(), JobsBoost.Type.MONEY);
+        double pointsBaseBoost = HookRegistry.jobsHook.getBoost(player, job.getName(), JobsBoost.Type.POINTS);
+        double expBaseBoost = HookRegistry.jobsHook.getBoost(player, job.getName(), JobsBoost.Type.EXP);
+
+        double moneyBoost = boost.money + moneyBaseBoost;
+        double pointsBoost = boost.points + pointsBaseBoost;
+        double expBoost = boost.exp + expBaseBoost;
+
         String prefixMoney = "";
-        if (boost.money > 0) prefixMoney = prefixUp;
-        else if (boost.money < 0) prefixMoney = prefixLow;
+        if (moneyBoost > 0) prefixMoney = prefixUp;
+        else if (moneyBoost < 0) prefixMoney = prefixLow;
 
         String prefixPoints = "";
-        if (boost.points > 0) prefixPoints = prefixUp;
-        else if (boost.points < 0) prefixPoints = prefixLow;
+        if (pointsBoost > 0) prefixPoints = prefixUp;
+        else if (pointsBoost < 0) prefixPoints = prefixLow;
 
         String prefixExp = "";
-        if (boost.exp > 0) prefixExp = prefixUp;
-        else if (boost.exp < 0) prefixExp = prefixLow;
+        if (expBoost > 0) prefixExp = prefixUp;
+        else if (expBoost < 0) prefixExp = prefixLow;
 
         Component name = LegacyComponentSerializer.legacyAmpersand().deserialize(job.getDisplayName().replace("§", "&"))
                 .decoration(TextDecoration.ITALIC, false);
 
         return TagResolver.builder()
-                .resolver(TagResolver.resolver("player", Tag.inserting(mm(player.getName(), true))))
-                .resolver(TagResolver.resolver("job", Tag.inserting(name)))
-                .resolver(TagResolver.resolver("money_boost", Tag.inserting(mm(
-                        prefixMoney + formatAmount(boost.money, 4),
-                        true))))
-                .resolver(TagResolver.resolver("exp_boost", Tag.inserting(mm(
-                        prefixExp + formatAmount(boost.exp, 4),
-                        true))))
-                .resolver(TagResolver.resolver("points_boost", Tag.inserting(mm(
-                        prefixPoints + formatAmount(boost.points, 4),
-                        true))))
+                .tag("player", Tag.inserting(mm(player.getName(), true)))
+                .tag("job", Tag.inserting(name))
+                .tag("money_boost", Tag.inserting(mm(prefixMoney + formatAmount(Math.abs(moneyBoost), 4), true)))
+                .tag("exp_boost", Tag.inserting(mm(prefixExp + formatAmount(Math.abs(expBoost), 4), true)))
+                .tag("points_boost", Tag.inserting(mm(prefixPoints + formatAmount(Math.abs(pointsBoost), 4), true)))
                 .build();
     }
 
     private void setupNav() {
-        StaticPane pane = new StaticPane(0, 0, 9, config.integer("boost-menu.rows", 6));
+        StaticPane pane = new StaticPane(0, 2, 9, 1);
         this.addPane(pane);
 
 
@@ -138,12 +138,21 @@ public class BoostGui extends ChestGui {
                     click.setCancelled(true);
                     ((Player) click.getWhoClicked()).performCommand(config.string("boost-menu.back-command", "menu"));
                 }).build();
-        pane.addItem(back, 0, config.integer("boost-menu.rows", 6) - 1);
+        pane.addItem(back, 0, 0);
 
+        GuiItem buy = new ItemStackBuilder(Material.GREEN_STAINED_GLASS_PANE)
+                .display(config.string("boost-menu.buy-display"))
+                .lore(config.stringList("boost-menu.buy-lore"))
+                .toGuiItemBuilder()
+                .clickEvent(click -> {
+                    click.setCancelled(true);
+                    GuiUtils.constructAndShowAsync(() -> new BuyBoostGui(player, null, config), click.getWhoClicked());
+                }).build();
+        pane.addItem(buy, 4, 0);
     }
 
     private void setupBackground() {
-        OutlinePane pane = new OutlinePane(0, 0, 9, config.integer("boost-menu.rows", 6), Pane.Priority.LOWEST);
+        OutlinePane pane = new OutlinePane(0, 0, 9, 3, Pane.Priority.LOWEST);
         pane.addItem(GuiUtils.background());
         pane.setRepeat(true);
         this.addPane(pane);

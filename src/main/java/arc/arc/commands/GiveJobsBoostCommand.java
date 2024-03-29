@@ -12,6 +12,7 @@ import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -69,7 +70,10 @@ public class GiveJobsBoostCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        HookRegistry.jobsHook.addBoost(player.getUniqueId(), jobName, boost, System.currentTimeMillis() + durationLong, id, boostType);
+        List<String> jobNames = new ArrayList<>();
+        jobNames.add(jobName);
+
+        HookRegistry.jobsHook.addBoost(player.getUniqueId(), jobNames, boost, System.currentTimeMillis() + durationLong, id, List.of(boostType));
         commandSender.sendMessage("Boost added!");
 
         return true;
