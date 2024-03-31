@@ -4,6 +4,7 @@ import arc.arc.configs.MainConfig;
 import arc.arc.hooks.HookRegistry;
 import arc.arc.network.NetworkRegistry;
 import arc.arc.sync.SyncManager;
+import arc.arc.xserver.playerlist.PlayerManager;
 import arc.arc.xserver.ranks.RankData;
 import com.Zrips.CMI.CMI;
 import com.Zrips.CMI.Containers.CMIUser;
@@ -30,10 +31,11 @@ public class JoinListener implements Listener {
     public void onPlayerLeave(PlayerQuitEvent event) {
         SyncManager.playerQuit(event.getPlayer().getUniqueId());
         shareRank(event.getPlayer());
+        invulnerable(event.getPlayer());
     }
 
     @EventHandler(ignoreCancelled = true)
-    public void onPlayerKick(PlayerKickEvent event){
+    public void onPlayerKick(PlayerKickEvent event) {
         SyncManager.playerQuit(event.getPlayer().getUniqueId());
     }
 
@@ -50,6 +52,16 @@ public class JoinListener implements Listener {
             NetworkRegistry.rankMessager.send(rankData);
         } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+
+    private void invulnerable(Player player) {
+        PlayerManager.PlayerData playerData = PlayerManager.getPlayerData(player.getUniqueId());
+        if (playerData == null || Math.abs(playerData.getJoinTime() - System.currentTimeMillis()) < 1000) {
+            int ticks;
+            if (player.hasPermission("mcfine.apply-rp")) ticks = 20 * 30;
+            else ticks = 20 * 10;
+            player.setNoDamageTicks(ticks);
         }
     }
 

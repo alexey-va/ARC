@@ -2,16 +2,14 @@ package arc.arc.hooks.jobs.guis;
 
 import arc.arc.ARC;
 import arc.arc.configs.Config;
-import arc.arc.configs.ConfigManager;
 import arc.arc.hooks.HookRegistry;
-import arc.arc.hooks.jobs.BoostData;
 import arc.arc.hooks.jobs.JobsBoost;
 import arc.arc.util.GuiUtils;
 import arc.arc.util.ItemStackBuilder;
 import com.gamingmesh.jobs.Jobs;
-import com.gamingmesh.jobs.commands.list.log;
-import com.gamingmesh.jobs.container.Boost;
+import com.gamingmesh.jobs.commands.list.boost;
 import com.gamingmesh.jobs.container.Job;
+import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
 import com.github.stefvanschie.inventoryframework.pane.OutlinePane;
@@ -19,18 +17,21 @@ import com.github.stefvanschie.inventoryframework.pane.PaginatedPane;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
 import lombok.extern.log4j.Log4j2;
-import org.bukkit.Bukkit;
+import net.kyori.adventure.text.minimessage.tag.Tag;
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.Material;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
-import org.jetbrains.annotations.NotNull;
+import org.bukkit.inventory.ItemFlag;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-import static arc.arc.util.TextUtil.formatAmount;
-import static arc.arc.util.TextUtil.mm;
+import static arc.arc.util.TextUtil.*;
 
 @Log4j2
 public class BuyBoostGui extends ChestGui {
@@ -40,8 +41,10 @@ public class BuyBoostGui extends ChestGui {
     JobsBoost.Type type = JobsBoost.Type.MONEY;
     Config config;
     int rows = 3;
+    GuiItem backItem, typeItem;
+    StaticPane pane;
 
-    List<Boost> boosts = new ArrayList<>();
+    Map<JobsBoost.Type, List<Boost>> boosts = new ConcurrentHashMap<>();
 
     record Boost(String display, List<String> lore, double price, double boostAmount, long seconds,
                  String permission, Material material, int modelData, BuyCurrency currency, String id,
@@ -50,33 +53,73 @@ public class BuyBoostGui extends ChestGui {
 
     public BuyBoostGui(Player player, Job job, Config config) {
         super(3, "");
-        setRows(rows);
+        setTitle(TextHolder.deserialize(
+                toLegacy(config.string("boostbuy-menu.title", "Магазин бустов"))
+        ));
+
         this.player = player;
         this.job = job;
         this.config = config;
 
+        for (JobsBoost.Type type : JobsBoost.Type.values()) {
+            readBoosts(type);
+        }
+        var nonEmptyTypes = Arrays.stream(JobsBoost.Type.values()).filter(t -> !boosts.get(t).isEmpty()).toList();
+        if(!nonEmptyTypes.isEmpty()) type = nonEmptyTypes.get(0);
+
+        calculateRows();
+
         setupBackground();
         setupNav();
-        setupButtons();
+        setupBoosts();
     }
 
-    private void setupButtons() {
-        PaginatedPane pane = new PaginatedPane(0, 0, 9, rows - 1);
-        this.addPane(pane);
-
-        List<GuiItem> items = generateItems();
-        pane.populateWithGuiItems(items);
+    private void calculateRows() {
+        rows = Math.min(6, Math.max(2, (int) Math.ceil(boosts.get(type).size() / 7.0) + 2));
+        setRows(rows);
     }
 
-    List<GuiItem> generateItems() {
-        boosts.clear();
+    private void setupBoosts() {
+        if (pane == null) {
+            pane = new StaticPane(1, 1, 7, rows - 2);
+
+            this.addPane(pane);
+        }
+        pane.clear();
+
+        List<GuiItem> items = new ArrayList<>();
+        List<Boost> currentBoosts = boosts.get(type);
+        if (currentBoosts != null) {
+            for (Boost boost : currentBoosts) {
+                GuiItem item = generateGuiItem(boost);
+                if (item != null) items.add(item);
+            }
+        }
+        int x = 0, y=0;
+        for(var guiItem : items){
+            if(x == 3) x++;
+            pane.addItem(guiItem, x++,y);
+            if(x == 7){
+                x = 0;
+                y++;
+            }
+        }
+    }
+
+
+    private void readBoosts(JobsBoost.Type type) {
+        boosts.computeIfPresent(type, (t, list) -> {
+            list.clear();
+            return list;
+        });
+        boosts.putIfAbsent(type, new ArrayList<>());
         for (String key : config.keys("boosts." + type.name().toLowerCase())) {
             String display = config.string("boosts." + type.name().toLowerCase() + "." + key + ".display");
             List<String> lore = config.stringList("boosts." + type.name().toLowerCase() + "." + key + ".lore");
             double price = config.realNumber("boosts." + type.name().toLowerCase() + "." + key + ".price", 1000);
             double boostAmount = config.realNumber("boosts." + type.name().toLowerCase() + "." + key + ".boost-amount", 0.1);
             long seconds = config.integer("boosts." + type.name().toLowerCase() + "." + key + ".seconds", 3600);
-            String permission = config.string("boosts." + type.name().toLowerCase() + "." + key + ".permission", null);
+            String permission = config.string("boosts." + type.name().toLowerCase() + "." + key + ".permission", "");
             Material material = Material.valueOf(config.string("boosts." + type.name().toLowerCase() + "." + key + ".material", "GOLD_INGOT").toUpperCase());
             int modelData = config.integer("boosts." + type.name().toLowerCase() + "." + key + ".model-data", 0);
             BuyCurrency currency = BuyCurrency.valueOf(config.string("boosts." + type.name().toLowerCase() + "." + key + ".currency", "MONEY").toUpperCase());
@@ -88,18 +131,11 @@ public class BuyBoostGui extends ChestGui {
                 types.add(JobsBoost.Type.valueOf(s.toUpperCase()));
             }
             Boost data = new Boost(display, lore, price, boostAmount, seconds, permission, material, modelData, currency, id, jobs, types);
-            boosts.add(data);
+            boosts.get(type).add(data);
         }
-
-        List<GuiItem> items = new ArrayList<>();
-        for (Boost boost : boosts) {
-            GuiItem item = generateGuiItem(boost);
-            if(item != null) items.add(item);
-        }
-        return items;
     }
 
-    GuiItem generateGuiItem(Boost boost){
+    GuiItem generateGuiItem(Boost boost) {
         boolean allJobs = boost.jobs().isEmpty() || boost.jobs().contains("all");
         boolean allTypes = boost.types().contains(JobsBoost.Type.ALL) || boost.types().isEmpty();
         if (job == null && !allJobs) return null;
@@ -110,27 +146,33 @@ public class BuyBoostGui extends ChestGui {
         String currencyName = config.string("currency-names." + boost.currency().name().toLowerCase(), "Money");
         boolean hasBoost = HookRegistry.jobsHook.hasBoost(player, boost.id());
 
-        if (!economyCheck.hasEnough) {
-            lore = config.stringList("boostbuy-menu.not-enough-money");
-        } else if (boost.permission() != null && !player.hasPermission(boost.permission())) {
-            lore = config.stringList("boostbuy-menu.no-permission");
-        } else if (hasBoost) {
+        if (hasBoost) {
             lore = config.stringList("boostbuy-menu.already-have-boost-lore");
+        } else if (boost.permission() != null && !boost.permission.isEmpty() && !player.hasPermission(boost.permission())) {
+            lore = config.stringList("boostbuy-menu.no-permission-lore");
+        } else if (!economyCheck.hasEnough) {
+            lore = config.stringList("boostbuy-menu.not-enough-money-lore");
         } else {
             lore = boost.lore() == null || boost.lore().isEmpty() ? config.stringList("boostbuy-menu.boost-lore") : boost.lore();
         }
 
+        double playerCurrency = getCurrency().get(boost.currency());
+        String boostAmount = boost.boostAmount() * 100 + "%";
+
         lore = lore.stream().map(s -> s
                 .replace("<price>", formatAmount(boost.price()))
-                .replace("<boost>", formatAmount(boost.boostAmount()))
+                .replace("<boost>", boostAmount)
                 .replace("<currency>", currencyName)
                 .replace("<permission>", boost.permission() != null ? boost.permission() : "Нет")
                 .replace("<time>", boost.seconds() / 60 + " минут")
                 .replace("<type>", allTypes ? "Все" : boost.types().stream().map(JobsBoost.Type::name).collect(Collectors.joining(", ")))
                 .replace("<job>", allJobs ? "Все" : boost.jobs().stream().map(HookRegistry.jobsHook::jobDisplayMinimessage).collect(Collectors.joining(", ")))
+                .replace("<player_currency>", formatAmount(playerCurrency))
                 .replace("<currency_lack>", formatAmount(economyCheck.currencyNeeded))).toList();
         final GuiItem item = new ItemStackBuilder(boost.material())
                 .display(boost.display())
+                .enchant(hasBoost ? Enchantment.ARROW_INFINITE : null, 1, true)
+                .flags(ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_ATTRIBUTES)
                 .lore(boost.lore())
                 .modelData(boost.modelData())
                 .lore(lore)
@@ -146,14 +188,14 @@ public class BuyBoostGui extends ChestGui {
                 return;
             }
 
-            if (!economyCheck.hasEnough()) {
+            EconomyCheck ec = checkEconomy(boost.currency(), boost.price());
+            if (!ec.hasEnough()) {
                 GuiUtils.temporaryChange(item.getItem(), mm(config.string("boostbuy-menu.not-enough-money"), true),
                         null, 60, this::update);
                 this.update();
                 return;
-            } else {
-                takeCurrency(boost.currency(), boost.price());
-            }
+            } else takeCurrency(boost.currency(), boost.price());
+
             HookRegistry.jobsHook.addBoost(player.getUniqueId(), boost.jobs(), boost.boostAmount(),
                     System.currentTimeMillis() + boost.seconds() * 1000L, boost.id(), boost.types());
             GuiItem newItem = generateGuiItem(boost);
@@ -163,11 +205,23 @@ public class BuyBoostGui extends ChestGui {
         return item;
     }
 
+    private Map<BuyCurrency, Double> getCurrency() {
+        return Map.of(
+                BuyCurrency.MONEY, ARC.getEcon().getBalance(player),
+                BuyCurrency.POINTS, Jobs.getPlayerManager().getJobsPlayer(player).getPointsData().getCurrentPoints(),
+                BuyCurrency.EXP, (double) player.getTotalExperience()
+        );
+    }
+
     private boolean takeCurrency(BuyCurrency currency, double price) {
         switch (currency) {
             case MONEY -> ARC.getEcon().withdrawPlayer(player, price);
-            case POINTS ->
-                    Jobs.getPlayerManager().getJobsPlayer(player).getPointsData().setPoints(Jobs.getPlayerManager().getJobsPlayer(player).getPointsData().getCurrentPoints() - price);
+            case POINTS -> Jobs.getPlayerManager()
+                    .getJobsPlayer(player)
+                    .getPointsData()
+                    .setPoints(
+                            Jobs.getPlayerManager().getJobsPlayer(player).getPointsData().getCurrentPoints() - price
+                    );
             case EXP -> player.setTotalExperience((int) (player.getTotalExperience() - price));
         }
         return true;
@@ -193,24 +247,73 @@ public class BuyBoostGui extends ChestGui {
         StaticPane pane = new StaticPane(0, 0, 9, rows);
         this.addPane(pane);
 
+        TagResolver resolver = resolver();
 
-        GuiItem back = new ItemStackBuilder(Material.BLUE_STAINED_GLASS_PANE)
+        backItem = new ItemStackBuilder(Material.BLUE_STAINED_GLASS_PANE)
                 .display(config.string("boostbuy-menu.back-display"))
                 .lore(config.stringList("boostbuy-menu.back-lore"))
+                .tagResolver(resolver)
                 .modelData(11013)
                 .toGuiItemBuilder()
                 .clickEvent(click -> {
                     click.setCancelled(true);
                     GuiUtils.constructAndShowAsync(() -> new JobsListGui(config, player), click.getWhoClicked());
                 }).build();
-        pane.addItem(back, 0, rows - 1);
+        pane.addItem(backItem, 0, rows - 1);
+
+
+
+        TypeStackData typeStackData = getTypeStackData(type);
+        typeItem = new ItemStackBuilder(typeStackData.material)
+                .modelData(typeStackData.modelData)
+                .display(config.string("boostbuy-menu.type-display"))
+                .lore(config.stringList("boostbuy-menu.type-lore"))
+                .tagResolver(resolver)
+                .toGuiItemBuilder()
+                .clickEvent(click -> {
+                    click.setCancelled(true);
+                    var nonEmptyTypes = Arrays.stream(JobsBoost.Type.values()).filter(t -> !boosts.get(t).isEmpty()).toList();
+                    if (nonEmptyTypes.size() <= 1) return;
+                    type = nonEmptyTypes.get((nonEmptyTypes.indexOf(type) + 1) % nonEmptyTypes.size());
+
+                    TypeStackData tsd = getTypeStackData(type);
+                    var stack = new ItemStackBuilder(tsd.material)
+                            .modelData(tsd.modelData)
+                            .display(config.string("boostbuy-menu.type-display"))
+                            .lore(config.stringList("boostbuy-menu.type-lore"))
+                            .tagResolver(resolver())
+                            .build();
+                    typeItem.setItem(stack);
+                    setupBoosts();
+                    this.update();
+                }).build();
+        pane.addItem(typeItem, 4, 0);
+    }
+
+    TagResolver resolver() {
+        return TagResolver.builder()
+                .tag("type", Tag.inserting(mm(config.string("tpye-names." + type.name().toLowerCase(), "Money"), true)))
+                .build();
     }
 
     private void setupBackground() {
-        OutlinePane pane = new OutlinePane(0, rows - 1, 9, 1, Pane.Priority.LOWEST);
+        OutlinePane pane = new OutlinePane(0, 0, 9, rows, Pane.Priority.LOWEST);
         pane.addItem(GuiUtils.background());
         pane.setRepeat(true);
         this.addPane(pane);
+    }
+
+    record TypeStackData(Material material, int modelData){}
+    private TypeStackData getTypeStackData(JobsBoost.Type type) {
+        Material material = Material.GOLD_INGOT;
+        int modelData = 0;
+        if (type == JobsBoost.Type.EXP) material = Material.EXPERIENCE_BOTTLE;
+        if (type == JobsBoost.Type.MONEY){
+            material = Material.STICK;
+            modelData = 11138;
+        }
+        if (type == JobsBoost.Type.POINTS) material = Material.NETHER_STAR;
+        return new TypeStackData(material, modelData);
     }
 
     enum BuyCurrency {

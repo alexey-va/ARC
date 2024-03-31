@@ -168,11 +168,6 @@ public final class ARC extends JavaPlugin {
         StockPlayerManager.init();
         StockMarket.init();
 
-        if(HookRegistry.jobsHook != null){
-            log.debug("Creating jobs repo.");
-            HookRegistry.jobsHook.createRepo();
-        }
-
         startSyncs();
     }
 

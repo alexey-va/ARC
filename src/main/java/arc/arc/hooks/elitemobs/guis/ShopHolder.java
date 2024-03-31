@@ -57,7 +57,7 @@ public class ShopHolder {
             for (int i = 0; i < size; i++) {
                 double gauss = random.nextGaussian(tier*0.8, tier*0.15);
                 int rTier = Math.max(1, Math.min(tier+3, (int) Math.round(gauss)));
-                ItemStack stack = emHook.generateDrop(rTier, player, false);
+                ItemStack stack = emHook.generateDrop(rTier, player, false, 0.2);
                 double price = ItemTagger.getItemValue(stack);
                 if (price <= 0) price = ItemWorthCalculator.determineItemWorth(stack, player);
                 ShopItem item = new ShopItem(stack, price);
@@ -74,7 +74,7 @@ public class ShopHolder {
             for (int i = 0; i < size; i++) {
                 double gauss = random.nextGaussian(tier*0.8, tier*0.15);
                 int rTier = Math.max(1, Math.min(tier+3, (int) Math.round(gauss)));
-                ItemStack stack = emHook.generateDrop(rTier, player, true);
+                ItemStack stack = emHook.generateDrop(rTier, player, true, 0.5);
                 double price = ItemTagger.getItemValue(stack);
                 if (price <= 0) price = ItemWorthCalculator.determineItemWorth(stack, player);
                 ShopItem item = new ShopItem(stack, price);

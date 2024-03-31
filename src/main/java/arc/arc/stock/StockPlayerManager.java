@@ -37,7 +37,7 @@ public class StockPlayerManager {
                 .updateChannel("arc.stock_players_update")
                 .id("stock_players")
                 .backupFolder(ARC.plugin.getDataFolder().toPath().resolve("backups/stock-players"))
-                .saveInterval(20L)
+                .saveInterval(5L)
                 .saveBackups(true)
                 .build();
     }

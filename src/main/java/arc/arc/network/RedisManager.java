@@ -1,8 +1,10 @@
 package arc.arc.network;
 
+import arc.arc.ARC;
 import arc.arc.configs.MainConfig;
 import arc.arc.network.repos.RedisRepoMessager;
 import lombok.extern.log4j.Log4j2;
+import org.bukkit.Bukkit;
 import redis.clients.jedis.JedisPooled;
 import redis.clients.jedis.JedisPubSub;
 
@@ -36,16 +38,19 @@ public class RedisManager extends JedisPubSub {
 
     @Override
     public void onMessage(String channel, String message) {
-        //log.trace("Received message: {}\n{}", channel, message);
-        if (!channelListeners.containsKey(channel)) {
-            System.out.println("No listener for " + channel);
-            return;
-        }
+        try {
+            //System.out.println("Received message: " + message + " on channel: " + channel);
+            if (!channelListeners.containsKey(channel)) {
+                System.out.println("No listener for " + channel);
+                return;
+            }
 
-        String[] strings = message.split(SERVER_DELIMITER, 2);
-/*        if (strings.length == 1)
-            channelListeners.get(channel).forEach((listener) -> listener.consume(channel, strings[0], null));*/
-        channelListeners.get(channel).forEach((listener) -> listener.consume(channel, strings[1], strings[0]));
+            String[] strings = message.split(SERVER_DELIMITER, 2);
+            channelListeners.get(channel).forEach((listener) -> listener.consume(channel, strings[1], strings[0]));
+        } catch (Exception e){
+            System.out.println("error parsing message: " + message +" on channel: " + channel);
+            e.printStackTrace();
+        }
     }
 
     public void registerChannel(String channel, ChannelListener channelListener) {
@@ -63,7 +68,12 @@ public class RedisManager extends JedisPubSub {
         log.debug("Starting new subscription");
         running = executorService.submit(() -> {
             log.info("Subscribing to: " + channelList);
-            sub.subscribe(this, channelList.toArray(String[]::new));
+            try {
+                sub.subscribe(this, channelList.toArray(String[]::new));
+            } catch (Exception e) {
+                log.error("Error subscribing", e);
+                Bukkit.getScheduler().runTaskLater(ARC.plugin, this::init, 20L);
+            }
         });
     }
 

@@ -14,10 +14,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.intellij.lang.annotations.Subst;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import static arc.arc.util.TextUtil.mm;
@@ -188,7 +185,7 @@ public class ItemStackBuilder {
         if (flags != null) meta.addItemFlags(flags.toArray(ItemFlag[]::new));
         else meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ITEM_SPECIFICS);
 
-        enchants.forEach(enchantData ->
+        enchants.stream().filter(ed -> ed.enchantment != null).forEach(enchantData ->
                 meta.addEnchant(enchantData.enchantment, enchantData.level, enchantData.ignoreLevelRestriction)
         );
 

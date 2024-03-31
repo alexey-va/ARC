@@ -83,7 +83,9 @@ public class Command implements CommandExecutor, TabCompleter {
                 return true;
             }
 
-            String playerName = strings[1];
+            String playerName;
+            if (strings.length >= 2) playerName = strings[1];
+            else playerName = commandSender.getName();
 
             Player player = ARC.plugin.getServer().getPlayer(playerName);
             if(player == null || !player.getName().equalsIgnoreCase(playerName)){

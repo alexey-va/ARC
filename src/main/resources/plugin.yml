@@ -4,7 +4,7 @@ main: arc.arc.ARC
 api-version: 1.20
 libraries:
   - com.google.code.gson:gson:2.10.1
-  - redis.clients:jedis:5.2.0-alpha2
+  - redis.clients:jedis:5.2.0-beta1
   - org.jsoup:jsoup:1.17.2
   - org.eclipse.jetty.websocket:websocket-client:9.4.54.v20240208
 softdepend:

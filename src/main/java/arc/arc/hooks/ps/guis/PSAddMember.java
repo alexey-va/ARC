@@ -104,27 +104,6 @@ public class PSAddMember extends ChestGui {
 
     private void generateGuiItems(PSRegion region, Player player){
         playerItems = new HashMap<>();
-        /*Set<UUID> uuids = new HashSet<>(PlayerManager.getAllPlayerUuids());
-        Set<UUID> toRemove = new HashSet<>();
-        for(UUID uuid : uuids){
-            if(region.isMember(uuid) || region.isOwner(uuid)){
-                toRemove.add(uuid);
-                continue;
-            }
-            generateGuiItem(uuid, player);
-        }
-
-        uuids.removeAll(toRemove);
-        toRemove.clear();
-
-        for(UUID uuid : uuids){
-            if(region.isMember(uuid) || region.isOwner(uuid)){
-                toRemove.add(uuid);
-                continue;
-            }
-            generateGuiItem(uuid, player);
-        }
-        */
         for(var uuid : PlayerManager.getAllPlayerUuids()){
             if(region.isMember(uuid) || region.isOwner(uuid)) continue;
             generateGuiItem(uuid, player);

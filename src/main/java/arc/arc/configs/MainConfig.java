@@ -4,7 +4,9 @@ import arc.arc.ARC;
 import lombok.extern.log4j.Log4j2;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.Appender;
 import org.apache.logging.log4j.core.LoggerContext;
+import org.apache.logging.log4j.core.appender.ConsoleAppender;
 import org.apache.logging.log4j.core.config.Configuration;
 import org.apache.logging.log4j.core.config.LoggerConfig;
 
@@ -54,14 +56,25 @@ public class MainConfig {
         try {
             logLevel = ARC.plugin.getConfig().getString("log-level", "INFO");
             Level newRootLogLevel = Level.getLevel(logLevel);
-            System.out.println("Config log level: "+newRootLogLevel);
+            //System.out.println("Config log level: "+newRootLogLevel);
 
             // Get the LoggerContext from Log4j2
             LoggerContext ctx = (LoggerContext) LogManager.getContext(false);
             Configuration config = ctx.getConfiguration();
 
+            ConsoleAppender consoleAppender = null;
+
+            // Iterate over all appenders to find an instance of ConsoleAppender
+            for (Appender appender : config.getAppenders().values()) {
+                System.out.println("Found appender: "+appender.getName()+" "+appender.getClass().getSimpleName());
+                if (appender instanceof ConsoleAppender) {
+                    consoleAppender = (ConsoleAppender) appender;
+                    break;
+                }
+            }
+
             LoggerConfig packageLoggerConfig = new LoggerConfig("arc.arc", newRootLogLevel, true);
-            packageLoggerConfig.addAppender(config.getAppender("Console"), null, null);
+            packageLoggerConfig.addAppender(consoleAppender, null, null);
             config.addLogger("arc.arc", packageLoggerConfig);
 
             ctx.updateLoggers();

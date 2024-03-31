@@ -35,6 +35,7 @@ public class JobsHook {
             Bukkit.getPluginManager().registerEvents(jobsListener, ARC.plugin);
         }
         config = ConfigManager.getOrCreate(ARC.plugin.getDataFolder().toPath(), "jobs.yml", "jobs");
+        createRepo();
     }
 
     public void createRepo() {

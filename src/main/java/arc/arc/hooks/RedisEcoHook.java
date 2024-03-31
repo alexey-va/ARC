@@ -20,27 +20,33 @@ public class RedisEcoHook {
         return currency.getOrderedAccounts(n)
                 .thenApply(balances -> {
                     List<Account> accounts = new ArrayList<>();
-                    for (Object tuple : balances) {
-                        try {
-                            Method getValueMethod = tuple.getClass().getMethod("getValue");
-                            Object valueResult = getValueMethod.invoke(tuple);
-                            Method getScoreMethod = tuple.getClass().getMethod("getScore");
-                            Object scoreResult = getScoreMethod.invoke(tuple);
+                    Object o = balances.get(0);
+                    try {
+                        Method getValueMethod = o.getClass().getMethod("getValue");
+                        Method getScoreMethod = o.getClass().getMethod("getScore");
+                        for (Object tuple : balances) {
+                            try {
+                                Object valueResult = getValueMethod.invoke(tuple);
+                                Object scoreResult = getScoreMethod.invoke(tuple);
 
-                            // Convert the extracted values to the types you expect
-                            String valueAsString = String.valueOf(valueResult);
-                            UUID uuid = UUID.fromString(valueAsString);
-                            String username = RedisEconomyAPI.getAPI().getUsernameFromUUIDCache(uuid);
-                            double amount = (Double) scoreResult; // Cast score result to Double, ensure this is the correct type
+                                // Convert the extracted values to the types you expect
+                                String valueAsString = String.valueOf(valueResult);
+                                UUID uuid = UUID.fromString(valueAsString);
+                                String username = RedisEconomyAPI.getAPI().getUsernameFromUUIDCache(uuid);
+                                double amount = (Double) scoreResult; // Cast score result to Double, ensure this is the correct type
 
-                            // Add the new Account object to the list
-                            accounts.add(new Account(username == null ? valueAsString + "-Unknown" : username, uuid, amount));
-                            //System.out.println("Added account: " + username + " with balance: " + amount);
-                        } catch (Exception e){
-                            e.printStackTrace();
+                                // Add the new Account object to the list
+                                accounts.add(new Account(username == null ? valueAsString + "-Unknown" : username, uuid, amount));
+                                //System.out.println("Added account: " + username + " with balance: " + amount);
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
                         }
+                        return accounts;
+                    } catch (Exception e){
+                        e.printStackTrace();
+                        return null;
                     }
-                    return accounts;
                 }).toCompletableFuture();
     }
 }

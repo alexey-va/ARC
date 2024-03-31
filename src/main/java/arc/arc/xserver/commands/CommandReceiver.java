@@ -63,11 +63,18 @@ public class CommandReceiver implements ChannelListener {
 
     @Override
     public void consume(String channel, String message, String server) {
+        System.out.println("Received command: " + channel+" "+message+" "+server);
         CommandData data = RedisSerializer.fromJson(message, CommandData.class);
-        log.debug("Received command: " + data);
+
         if (data == null) return;
-        if (!data.everywhere && !data.servers.contains(MainConfig.server)) return;
-        if(data.notOrigin && server.equals(MainConfig.server)) return;
+        if (!data.everywhere && !data.servers.contains(MainConfig.server)){
+            System.out.println("Command not for this server!");
+            return;
+        }
+        if(data.notOrigin && server.equals(MainConfig.server)){
+            System.out.println("Command not for origin server!");
+            return;
+        }
         if (data.sender == CommandData.Sender.PLAYER) {
             AwaitingExecution awaitingExecution = new AwaitingExecution.AwaitingExecutionBuilder()
                     .created(System.currentTimeMillis())
@@ -87,6 +94,7 @@ public class CommandReceiver implements ChannelListener {
             System.out.println("Received null command!");
             return;
         }
+        System.out.println("Executing command: " + command);
         new BukkitRunnable() {
             @Override
             public void run() {

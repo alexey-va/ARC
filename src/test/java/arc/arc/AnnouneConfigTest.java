@@ -1,36 +1,57 @@
 package arc.arc;
 
-import arc.arc.configs.AnnouneConfig;
-import javassist.tools.rmi.ObjectNotFoundException;
-import lombok.SneakyThrows;
 import lombok.extern.log4j.Log4j2;
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.core.LoggerContext;
-import org.apache.logging.log4j.core.config.Configuration;
-import org.apache.logging.log4j.core.config.LoggerConfig;
-import org.checkerframework.common.reflection.qual.Invoke;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.function.ThrowingSupplier;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
-import java.io.File;
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.net.http.WebSocket;
-import java.util.*;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.LinkedHashMap;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @Log4j2
 class AnnouneConfigTest {
-    @Test
-    void main() {
+
+    static LinkedHashMap<Predicate<Integer>, String> map;
+
+    @BeforeAll
+    public static void setup() {
+        map = new LinkedHashMap<>();
+        map.put(x -> x % 3 == 0, "Fizz");
+        map.put(x -> x % 5 == 0, "Buzz");
+    }
+
+    String main(int i) {
+        return map.entrySet().stream()
+                .map(entry -> entry.getKey().test(i) ? entry.getValue() : "")
+                .collect(Collectors.joining())
+                .transform(s -> s.isEmpty() ? String.valueOf(i) : s);
+    }
+
+    static final String test = """
+            0,FizzBuzz
+            1,1
+            2,2
+            3,Fizz
+            5,Buzz
+            15,FizzBuzz
+            30,FizzBuzz
+            31,31
+            32,32
+            33,Fizz
+            35,Buzz
+            45,FizzBuzz
+            46,46
+            -5,Buzz
+            -3,Fizz
+            -15,FizzBuzz
+            -30,FizzBuzz
+            """;
+    @ParameterizedTest
+    @CsvSource(textBlock = test)
+    public void test(int i, String s) {
+        assertEquals(main(i),s);
     }
 }

@@ -9,6 +9,7 @@ import arc.arc.network.repos.RedisRepo;
 import arc.arc.util.GuiUtils;
 import arc.arc.util.ItemStackBuilder;
 import com.gamingmesh.jobs.Jobs;
+import com.gamingmesh.jobs.commands.list.log;
 import com.gamingmesh.jobs.container.Job;
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
@@ -18,6 +19,7 @@ import com.github.stefvanschie.inventoryframework.pane.PaginatedPane;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
 import lombok.SneakyThrows;
+import lombok.extern.log4j.Log4j2;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.tag.Tag;
@@ -31,16 +33,18 @@ import org.bukkit.inventory.ItemFlag;
 import java.util.ArrayList;
 import java.util.List;
 
-import static arc.arc.util.TextUtil.formatAmount;
-import static arc.arc.util.TextUtil.mm;
+import static arc.arc.util.TextUtil.*;
 
+@Log4j2
 public class JobsListGui extends ChestGui {
     private final Config config;
     Player player;
     GuiItem back, global;
 
     public JobsListGui(Config config, Player player) {
-        super(3, TextHolder.deserialize(config.string("boost-menu.title", "Boosts")));
+        super(3, TextHolder.deserialize(
+                toLegacy(config.string("boost-menu.title", "Boosts"))
+        ));
         this.player = player;
         this.config = config;
 
@@ -92,9 +96,9 @@ public class JobsListGui extends ChestGui {
         String prefixUp = config.string("boost-menu.high-prefix", "<green>+ ");
         String prefixLow = config.string("boost-menu.low-prefix", "<red>- ");
 
-        double moneyBaseBoost = HookRegistry.jobsHook.getBoost(player, job.getName(), JobsBoost.Type.MONEY);
-        double pointsBaseBoost = HookRegistry.jobsHook.getBoost(player, job.getName(), JobsBoost.Type.POINTS);
-        double expBaseBoost = HookRegistry.jobsHook.getBoost(player, job.getName(), JobsBoost.Type.EXP);
+        double moneyBaseBoost = HookRegistry.jobsHook.getBoost(player, job.getName(), JobsBoost.Type.MONEY)*100;
+        double pointsBaseBoost = HookRegistry.jobsHook.getBoost(player, job.getName(), JobsBoost.Type.POINTS)*100;
+        double expBaseBoost = HookRegistry.jobsHook.getBoost(player, job.getName(), JobsBoost.Type.EXP)*100;
 
         double moneyBoost = boost.money + moneyBaseBoost;
         double pointsBoost = boost.points + pointsBaseBoost;

@@ -1,40 +1,60 @@
 package arc.arc.xserver.playerlist;
 
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+import com.magmaguy.elitemobs.playerdata.database.PlayerData;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.extern.java.Log;
+import lombok.extern.log4j.Log4j2;
+
+import java.lang.reflect.Type;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+@Log4j2
 public class PlayerManager {
 
 
-    private static final Map<String, PlayerData> playerMap = new ConcurrentHashMap<>();
-    public static Set<String> getPlayerNames() {
-        return playerMap.keySet();
-    }
+    private static final Map<UUID, PlayerData> playerMap = new ConcurrentHashMap<>();
+    private static Gson gson = new Gson();
 
+
+    public static Set<String> getPlayerNames() {
+        return playerMap.values().stream().map(PlayerData::getUsername).collect(Collectors.toSet());
+    }
 
     public static List<UUID> getAllPlayerUuids() {
-        return playerMap.values().stream().map(PlayerData::getUuid).collect(Collectors.toList());
+        return new ArrayList<>(playerMap.keySet());
     }
 
-    public static void addPlayer(PlayerData data) {
-        playerMap.put(data.getUsername(), data);
+    public static void readMessage(String json) {
+        Type type = new TypeToken<List<PlayerData>>() {
+        }.getType();
+        List<PlayerData> playerData = gson.fromJson(json, type);
+        if (playerData == null) {
+            log.error("Message " + json + " canot be parsed!");
+            return;
+        }
+        playerMap.clear();
+        Map<UUID, PlayerData> newMap = new HashMap<>();
+        for (PlayerData data : playerData) newMap.put(data.getUuid(), data);
+        playerMap.putAll(newMap);
     }
 
-    public static void addPlayers(Collection<PlayerData> data) {
-        data.forEach(PlayerManager::addPlayer);
-    }
-
-    public static void refreshServerPlayers(String server, Collection<PlayerData> data){
-        trimServerPlayers(server);
-        addPlayers(data);
-    }
-
-    public static void trimServerPlayers(String server){
-        playerMap.entrySet().removeIf(e -> e.getValue().getServer().equals(server));
+    public static PlayerData getPlayerData(UUID uniqueId) {
+        return playerMap.get(uniqueId);
     }
 
 
+    @Data
+    @AllArgsConstructor
+    public static class PlayerData {
+        String username, server;
+        UUID uuid;
+        long joinTime;
+    }
 
 
 }

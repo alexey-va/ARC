@@ -13,13 +13,13 @@ public class RedisRepoMessager implements ChannelListener {
     private final RedisManager redisManager;
     @Override
     public void consume(String channel, String message, String originServer) {
-        log.debug("Received message: {}\n{}", channel, message);
+        //log.info("Received message: {}\n{}", channel, message);
         if(originServer.equals(MainConfig.server)) return;
         redisRepo.receiveUpdate(message);
     }
 
     public void send(String channel, String message){
-        log.debug("Sending message: {}\n{}", channel, message);
+        //log.debug("Sending message: {}\n{}", channel, message);
         redisManager.publish(channel, message);
     }
 }

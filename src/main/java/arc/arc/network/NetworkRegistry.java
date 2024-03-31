@@ -6,8 +6,7 @@ import arc.arc.hooks.zauction.AuctionMessager;
 import arc.arc.stock.*;
 import arc.arc.xserver.announcements.AnnounceManager;
 import arc.arc.xserver.announcements.AnnouncementMessager;
-import arc.arc.xserver.playerlist.PlayerListListener;
-import arc.arc.xserver.playerlist.PlayerListTask;
+import arc.arc.xserver.playerlist.PlayerListMessager;
 import arc.arc.xserver.commands.CommandReceiver;
 import arc.arc.xserver.commands.CommandSender;
 import arc.arc.xserver.ranks.RankMessager;
@@ -20,19 +19,15 @@ public class NetworkRegistry {
 
     public static LandsMessager landsMessager;
 
-    PlayerListListener playerListListener;
-    PlayerListTask playerListTask;
+    PlayerListMessager playerListMessager;
     public static CommandSender commandSender;
     CommandReceiver commandReceiver;
     public static RankMessager rankMessager;
 
 
     public void init(){
-        playerListTask = new PlayerListTask(redisManager);
-        playerListTask.init();
-
-        playerListListener = new PlayerListListener("arc.player_list");
-        redisManager.registerChannel("arc.player_list", playerListListener);
+        playerListMessager = new PlayerListMessager("arc.proxy_player_list");
+        redisManager.registerChannel(playerListMessager.channel(), playerListMessager);
 
         landsMessager = new LandsMessager(redisManager, "arc.lands_req", "arc.lands_response");
         landsMessager.init();

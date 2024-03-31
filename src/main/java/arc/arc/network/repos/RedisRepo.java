@@ -56,6 +56,7 @@ public class RedisRepo<T extends RepoData> {
 
         messager = new RedisRepoMessager(this, redisManager);
         redisManager.registerChannel(updateChannel, messager);
+        redisManager.init();
         backupService = new BackupService(id, backupFolder);
 
         startTasks();
@@ -88,7 +89,7 @@ public class RedisRepo<T extends RepoData> {
                 deleteUnnecessary();
                 loadNecessary();
             }
-        }.runTaskTimerAsynchronously(ARC.plugin, 0L, 20L);
+        }.runTaskTimerAsynchronously(ARC.plugin, 0L, saveInterval);
 
         if (saveBackups)
             backupTask = new BukkitRunnable() {
@@ -240,24 +241,26 @@ public class RedisRepo<T extends RepoData> {
     }
 
     void receiveUpdate(String message) {
-        log.trace("Receiving update: " + message);
+        //System.out.println("Received update: " + message);
         Update update = gson.fromJson(message, Update.class);
         if (!loadAll && !contextSet.contains(update.id)) {
-            log.trace("Not in context: " + update.id);
+            log.info("Not in context: " + update.id);
             return;
         }
         redisManager.loadMapEntries(storageKey, update.id)
                 .thenAccept(list -> {
                     if (list == null || list.isEmpty() || list.get(0) == null) {
-                        System.out.println("Deleting entry!");
+                        //System.out.println("Deleting entry!");
                         deleteEntry(update.id);
-                        System.out.println("Map: " + map);
+                        //System.out.println("Map: " + map);
                         return;
                     }
+                    //log.info("Received: " + list.get(0));
                     T t = (T) gson.fromJson(list.get(0), clazz);
                     T current = map.get(update.id);
                     if (current != null) current.merge(t);
                     else {
+                        System.out.println("Current is null when merging!");
                         map.put(t.id(), t);
                         contextSet.add(t.id());
                     }
