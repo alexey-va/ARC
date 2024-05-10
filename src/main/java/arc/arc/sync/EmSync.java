@@ -39,7 +39,6 @@ public class EmSync implements Sync {
 
     @Override
     public void playerJoin(UUID uuid) {
-        log.debug("Player join: " + uuid);
         AtomicInteger counter = new AtomicInteger(0);
         new BukkitRunnable() {
             @Override
@@ -67,7 +66,6 @@ public class EmSync implements Sync {
 
     @Override
     public void playerQuit(UUID uuid) {
-        log.debug("Player quit: " + uuid);
         Context context = new Context();
         context.put("uuid", uuid);
         repo.saveAndPersistData(context, false);

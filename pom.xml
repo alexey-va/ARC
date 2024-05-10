@@ -37,6 +37,9 @@
                         <relocation>
                             <pattern>com.jeff_media.customblockdata</pattern>
                             <shadedPattern>arc.arc.libs.customblockdata</shadedPattern>
+                            <excludes>
+                                <exclude>META-INF/MANIFEST.MF</exclude>
+                            </excludes>
                         </relocation>
                         <relocation>
                             <pattern>com.github.stefvanschie.inventoryframework</pattern>
@@ -392,6 +395,19 @@
             <artifactId>lettuce-core</artifactId>
             <version>6.3.2.RELEASE</version>
             <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>dev.aurelium</groupId>
+            <artifactId>auraskills-api-bukkit</artifactId>
+            <version>2.0.0</version>
+            <scope>provided</scope>
+        </dependency>
+        <!-- https://mvnrepository.com/artifact/com.thedeanda/lorem -->
+        <dependency>
+            <groupId>com.thedeanda</groupId>
+            <artifactId>lorem</artifactId>
+            <version>2.2</version>
+            <scope>test</scope>
         </dependency>
 
     </dependencies>

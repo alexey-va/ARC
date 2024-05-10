@@ -34,7 +34,7 @@ public class RedisRepo<T extends RepoData> {
 
 
     @Setter
-    Consumer<BoardEntry> onUpdate;
+    Consumer<T> onUpdate;
     BackupService backupService;
     Class clazz;
     String storageKey, updateChannel, id;
@@ -44,7 +44,7 @@ public class RedisRepo<T extends RepoData> {
     boolean saveBackups;
 
     private RedisRepo(Boolean loadAll, RedisManager redisManager, String storageKey, String updateChannel, Class clazz,
-                      Consumer<BoardEntry> onUpdate, String id, Path backupFolder, Long saveInterval, Boolean saveBackups) {
+                      Consumer<T> onUpdate, String id, Path backupFolder, Long saveInterval, Boolean saveBackups) {
         this.loadAll = loadAll != null && loadAll;
         this.saveInterval = saveInterval == null ? 20L : saveInterval;
         this.redisManager = redisManager;
@@ -123,7 +123,7 @@ public class RedisRepo<T extends RepoData> {
                             t.setDirty(false);
                             map.put(t.id(), t);
                             contextSet.add(t.id());
-                            if (onUpdate != null) onUpdate.accept((BoardEntry) t);
+                            if (onUpdate != null) onUpdate.accept(t);
                         } catch (Exception e) {
                             log.debug("Could not parse: " + entry);
                             e.printStackTrace();
@@ -132,6 +132,7 @@ public class RedisRepo<T extends RepoData> {
                 });
     }
 
+    @SuppressWarnings("unchecked")
     CompletableFuture<Void> load(List<String> keys) {
         if (keys.isEmpty()) return CompletableFuture.completedFuture(null);
         log.trace("Loading all: " + keys);
@@ -150,10 +151,9 @@ public class RedisRepo<T extends RepoData> {
                             map.put(t.id(), t);
                             contextSet.add(t.id());
                             lastAttempt.remove(t.id());
-                            if (onUpdate != null) onUpdate.accept((BoardEntry) t);
+                            if (onUpdate != null) onUpdate.accept(t);
                         } catch (Exception e) {
-                            log.debug("Could not parse: " + entry);
-                            e.printStackTrace();
+                            log.debug("Could not parse: " + entry+" "+e.getMessage());
                         }
                     }
                 });
@@ -240,6 +240,7 @@ public class RedisRepo<T extends RepoData> {
         redisManager.publish(updateChannel, gson.toJson(update));
     }
 
+    @SuppressWarnings("unchecked")
     void receiveUpdate(String message) {
         //System.out.println("Received update: " + message);
         Update update = gson.fromJson(message, Update.class);
@@ -260,12 +261,12 @@ public class RedisRepo<T extends RepoData> {
                     T current = map.get(update.id);
                     if (current != null) current.merge(t);
                     else {
-                        System.out.println("Current is null when merging!");
+                        System.out.println("Current is null when merging! Update "+t);
                         map.put(t.id(), t);
                         contextSet.add(t.id());
                     }
                     t.dirty = false;
-                    if (onUpdate != null) onUpdate.accept((BoardEntry) t);
+                    if (onUpdate != null) onUpdate.accept(t);
                 });
     }
 
@@ -277,6 +278,7 @@ public class RedisRepo<T extends RepoData> {
         map.remove(id);
     }
 
+    @SuppressWarnings("unchecked")
     @NotNull
     public CompletableFuture<T> getOrCreate(@NotNull String id, @NotNull Supplier<T> supplier) {
         if (map.containsKey(id)) return CompletableFuture.completedFuture(map.get(id));
@@ -294,12 +296,15 @@ public class RedisRepo<T extends RepoData> {
                 }).orTimeout(5, TimeUnit.SECONDS);
     }
 
+    @SuppressWarnings("unchecked")
     @NotNull
     public CompletableFuture<T> getOrNull(String id) {
         if (map.containsKey(id)) return CompletableFuture.completedFuture(map.get(id));
+        if(lastAttempt.getOrDefault(id, 0L) > System.currentTimeMillis() - 1000 * 60) return CompletableFuture.completedFuture(null);
         return redisManager.loadMapEntries(storageKey, id)
                 .thenApply(list -> {
                     if (list == null || list.isEmpty() || list.get(0) == null) {
+                        lastAttempt.put(id, System.currentTimeMillis());
                         return null;
                     }
                     T t = (T) gson.fromJson(list.get(0), clazz);
@@ -343,7 +348,7 @@ public class RedisRepo<T extends RepoData> {
         private String storageKey;
         private String updateChannel;
         private Class clazz;
-        private Consumer<BoardEntry> onUpdate;
+        private Consumer<T> onUpdate;
         private String id;
         private Path backupFolder;
         private Long saveInterval;
@@ -378,7 +383,7 @@ public class RedisRepo<T extends RepoData> {
             return this;
         }
 
-        public RedisRepoBuilder<T> onUpdate(Consumer<BoardEntry> onUpdate) {
+        public RedisRepoBuilder<T> onUpdate(Consumer<T> onUpdate) {
             this.onUpdate = onUpdate;
             return this;
         }

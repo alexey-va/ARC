@@ -36,6 +36,7 @@ public class JobsListener implements Listener {
         var future = repo.getOrNull(event.getPlayer().getUniqueId().toString());
         if(future.isDone()){
             var data = future.join();
+            if(data == null) return;
             double moneyBoost = data.getBoost(event.getJob(), JobsBoost.Type.MONEY);
             double pointsBoost = data.getBoost(event.getJob(), JobsBoost.Type.POINTS);
             log.trace("Got boost data for player {}", event.getPlayer().getName());

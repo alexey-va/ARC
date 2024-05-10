@@ -1,5 +1,6 @@
 package arc.arc.listeners;
 
+import arc.arc.ARC;
 import arc.arc.configs.MainConfig;
 import arc.arc.hooks.HookRegistry;
 import arc.arc.network.NetworkRegistry;
@@ -9,6 +10,7 @@ import arc.arc.xserver.ranks.RankData;
 import com.Zrips.CMI.CMI;
 import com.Zrips.CMI.Containers.CMIUser;
 import com.Zrips.CMI.Modules.Ranks.CMIRank;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -56,11 +58,17 @@ public class JoinListener implements Listener {
     }
 
     private void invulnerable(Player player) {
+        Bukkit.getScheduler().runTaskLater(ARC.plugin, () -> {
+            if(player == null || !player.isOnline()) return;
+            if(player.hasPermission("arc.bypass-invulnerable")) return;
+            player.setInvulnerable(true);
+        }, 20*15L);
+
         PlayerManager.PlayerData playerData = PlayerManager.getPlayerData(player.getUniqueId());
         if (playerData == null || Math.abs(playerData.getJoinTime() - System.currentTimeMillis()) < 1000) {
             int ticks;
-            if (player.hasPermission("mcfine.apply-rp")) ticks = 20 * 30;
-            else ticks = 20 * 10;
+            if (player.hasPermission("mcfine.apply-rp")) ticks = 20 * 15;
+            else ticks = 20 * 5;
             player.setNoDamageTicks(ticks);
         }
     }

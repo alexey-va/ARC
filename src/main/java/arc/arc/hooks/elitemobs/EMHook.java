@@ -68,16 +68,19 @@ public class EMHook implements Listener {
 
     public ItemStack generateDrop(int tier, Player player, boolean trinket, double customChance) {
         if (customChance > 0 && Math.random() < customChance) {
-            Set<Material> gear = Set.of(
+            Set<Material> forbidden = Set.of(
                     Material.DIAMOND_SWORD, Material.DIAMOND_CHESTPLATE, Material.DIAMOND_LEGGINGS, Material.DIAMOND_BOOTS, Material.DIAMOND_HELMET,
                     Material.IRON_SWORD, Material.IRON_CHESTPLATE, Material.IRON_LEGGINGS, Material.IRON_BOOTS, Material.IRON_HELMET,
                     Material.GOLDEN_SWORD, Material.GOLDEN_CHESTPLATE, Material.GOLDEN_LEGGINGS, Material.GOLDEN_BOOTS, Material.GOLDEN_HELMET,
                     Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS, Material.LEATHER_BOOTS, Material.LEATHER_HELMET,
-                    Material.CHAINMAIL_CHESTPLATE, Material.CHAINMAIL_LEGGINGS, Material.CHAINMAIL_BOOTS, Material.CHAINMAIL_HELMET
+                    Material.CHAINMAIL_CHESTPLATE, Material.CHAINMAIL_LEGGINGS, Material.CHAINMAIL_BOOTS, Material.CHAINMAIL_HELMET,
+                    Material.NETHERITE_CHESTPLATE, Material.NETHERITE_LEGGINGS, Material.NETHERITE_BOOTS, Material.NETHERITE_HELMET,
+                    Material.GOLDEN_APPLE, Material.ENCHANTED_GOLDEN_APPLE, Material.TOTEM_OF_UNDYING
             );
+
             var list = CustomItem.getCustomItems().values().stream()
                     .filter(trinket ? ci -> ci.getScalability() == CustomItem.Scalability.SCALABLE : ci -> true)
-                    .filter(ci -> !gear.contains(ci.getCustomItemsConfigFields().getMaterial()))
+                    .filter(ci -> !forbidden.contains(ci.getCustomItemsConfigFields().getMaterial()))
                     .toList();
             CustomItem customItem = list.get((int) (Math.random() * list.size()));
             return customItem.generateItemStack(tier, player, null);

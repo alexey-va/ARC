@@ -3,6 +3,7 @@ package arc.arc.hooks;
 import arc.arc.ARC;
 import arc.arc.configs.MainConfig;
 import arc.arc.farm.*;
+import arc.arc.hooks.auraskills.AuraSkillsHook;
 import arc.arc.hooks.bank.BankHook;
 import arc.arc.hooks.citizens.CitizensHook;
 import arc.arc.hooks.elitemobs.EMHook;
@@ -18,6 +19,7 @@ import arc.arc.hooks.yamipa.YamipaHook;
 import arc.arc.hooks.zauction.AuctionHook;
 import arc.arc.hooks.ztranslator.TranslatorHook;
 import arc.arc.listeners.*;
+import dev.aurelium.auraskills.api.AuraSkillsApi;
 import org.bukkit.Bukkit;
 
 
@@ -49,6 +51,7 @@ public class HookRegistry {
     public static JobsHook jobsHook;
     public static BankHook bankHook;
     public static RedisEcoHook redisEcoHook;
+    public static AuraSkillsHook auraSkillsHook;
     public AEHook aeHook;
 
 
@@ -141,6 +144,11 @@ public class HookRegistry {
         if (getServer().getPluginManager().getPlugin("LuckPerms") != null) {
             if (getServer().getPluginManager().getPlugin("LuckPerms").isEnabled()) {
                 luckPermsHook = new LuckPermsHook();
+            }
+        }
+        if (getServer().getPluginManager().getPlugin("AuraSkills") != null) {
+            if (getServer().getPluginManager().getPlugin("AuraSkills").isEnabled()) {
+                auraSkillsHook = new AuraSkillsHook();
             }
         }
         if (getServer().getPluginManager().getPlugin("CMI") != null) {

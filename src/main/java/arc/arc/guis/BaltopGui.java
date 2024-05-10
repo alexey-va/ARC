@@ -149,9 +149,9 @@ public class BaltopGui extends ChestGui {
         if (!Bukkit.isPrimaryThread()) future.get();
         pane = new PaginatedPane(0, 0, 9, rows - 1);
         Comparator<BaltopGuiItem> comparator = switch (sort) {
-            case BALANCE -> Comparator.comparingDouble(BaltopGuiItem::balance);
-            case BANK -> Comparator.comparingDouble(BaltopGuiItem::bank);
-            default -> Comparator.comparingDouble(BaltopGuiItem::total);
+            case BALANCE -> Comparator.comparingDouble(BaltopGuiItem::balance).reversed();
+            case BANK -> Comparator.comparingDouble(BaltopGuiItem::bank).reversed();
+            default -> Comparator.comparingDouble(BaltopGuiItem::total).reversed();
         };
         pane.populateWithGuiItems(cachedItems.stream().sorted(comparator).map(BaltopGuiItem::item).toList());
         this.addPane(pane);
@@ -173,7 +173,7 @@ public class BaltopGui extends ChestGui {
                                         account.balance() + bank, bank);
                             })
                             .filter(account -> account.balance() > 0.0)
-                            .sorted(Comparator.comparingDouble(Account::balance).reversed())
+                            //.sorted(Comparator.comparing(Account::balance).reversed())
                             .map(account -> generateGuiitem(account.name(), account.uuid(), account.balance(), account.bank()))
                             .toList();
                     cachedItems.clear();

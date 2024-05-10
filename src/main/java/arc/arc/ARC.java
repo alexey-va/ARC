@@ -12,10 +12,7 @@ import arc.arc.network.RedisManager;
 import arc.arc.stock.StockClient;
 import arc.arc.stock.StockMarket;
 import arc.arc.stock.StockPlayerManager;
-import arc.arc.sync.CMISync;
-import arc.arc.sync.EmSync;
-import arc.arc.sync.SlimefunSync;
-import arc.arc.sync.SyncManager;
+import arc.arc.sync.*;
 import arc.arc.treasurechests.TreasureHuntManager;
 import arc.arc.treasurechests.locationpools.LocationPoolManager;
 import arc.arc.util.CooldownManager;
@@ -23,6 +20,7 @@ import arc.arc.util.HeadTextureCache;
 import arc.arc.util.ParticleManager;
 import lombok.extern.log4j.Log4j2;
 import net.milkbowl.vault.economy.Economy;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Item;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -50,6 +48,8 @@ public final class ARC extends JavaPlugin {
     public static Economy getEcon() {
         return econ;
     }
+
+
 
     @Override
     public void onLoad() {
@@ -173,18 +173,23 @@ public final class ARC extends JavaPlugin {
 
     private void startSyncs(){
         if(HookRegistry.sfHook != null){
-            log.info("Starting slimefun sync.");
+            info("Starting slimefun sync.");
             SyncManager.registerSync(SlimefunSync.class, new SlimefunSync());
         }
 
         if(HookRegistry.emHook != null){
-            log.info("Starting em sync.");
+            info("Starting em sync.");
             SyncManager.registerSync(EmSync.class, new EmSync());
         }
 
         if(HookRegistry.cmiHook != null){
-            log.info("Starting cmi sync.");
+            info("Starting cmi sync.");
             SyncManager.registerSync(CMISync.class, new CMISync());
+        }
+
+        if(HookRegistry.auraSkillsHook != null){
+            info("Starting aura skills sync.");
+            SyncManager.registerSync(SkillsSync.class, new SkillsSync());
         }
 
         SyncManager.startSaveAllTasks();
@@ -236,6 +241,28 @@ public final class ARC extends JavaPlugin {
             e.printStackTrace();
         }
 
+    }
+
+    public static void info(String s, Object... args) {
+        String toPrint = s;
+        for(Object arg : args) toPrint = toPrint.replaceFirst("\\{}", arg.toString());
+        Bukkit.getLogger().info(toPrint);
+    }
+
+    public static void warn(String s, Object... args) {
+        String toPrint = s;
+        for(Object arg : args){
+            toPrint = toPrint.replaceFirst("\\{}", arg.toString());
+        }
+        Bukkit.getLogger().warning(toPrint);
+    }
+
+    public static void trace(String s, Object... args) {
+        String toPrint = s;
+        for(Object arg : args){
+            toPrint = toPrint.replaceFirst("\\{}", arg.toString());
+        }
+        //Bukkit.getLogger().fine(toPrint);
     }
 
 

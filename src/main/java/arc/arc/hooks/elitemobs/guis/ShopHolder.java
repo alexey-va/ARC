@@ -7,6 +7,9 @@ import com.magmaguy.elitemobs.items.ItemWorthCalculator;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
@@ -53,14 +56,20 @@ public class ShopHolder {
             gear.clear();
 
             Random random = new Random();
+            Set<String> titles = new HashSet<>();
+            for (int i = 0; i < size*1.5; i++) {
+                double gauss = random.nextGaussian(tier * 0.8, tier * 0.15);
+                int rTier = Math.max(1, Math.min(tier + 3, (int) Math.round(gauss)));
+                ItemStack stack = emHook.generateDrop(rTier, player, false, 0.05);
+                if (stack == null) continue;
 
-            for (int i = 0; i < size; i++) {
-                double gauss = random.nextGaussian(tier*0.8, tier*0.15);
-                int rTier = Math.max(1, Math.min(tier+3, (int) Math.round(gauss)));
-                ItemStack stack = emHook.generateDrop(rTier, player, false, 0.2);
+                Component display = stack.getItemMeta().displayName();
+                String text = display == null ? "" : PlainTextComponentSerializer.plainText().serialize(display);
+                if(titles.contains(text)) continue;
+                titles.add(text);
                 double price = ItemTagger.getItemValue(stack);
                 if (price <= 0) price = ItemWorthCalculator.determineItemWorth(stack, player);
-                ShopItem item = new ShopItem(stack, price);
+                ShopItem item = new ShopItem(stack, price*2);
                 gear.add(item);
             }
             gear.sort(Comparator.comparingInt(o -> o.stack.getType().ordinal()));
@@ -70,14 +79,31 @@ public class ShopHolder {
             trinkets.clear();
 
             Random random = new Random();
+            Set<Material> food = Set.of(
+                    Material.COOKED_BEEF, Material.COOKED_CHICKEN, Material.COOKED_COD, Material.COOKED_MUTTON, Material.COOKED_PORKCHOP, Material.COOKED_RABBIT, Material.COOKED_SALMON,
+                    Material.BREAD, Material.APPLE, Material.GOLDEN_APPLE, Material.ENCHANTED_GOLDEN_APPLE, Material.CARROT, Material.GOLDEN_CARROT, Material.POTATO, Material.BAKED_POTATO
+                    );
+            Set<String> titles = new HashSet<>();
+            for (int i = 0; i < size*1.5; i++) {
+                double gauss = random.nextGaussian(tier * 0.75, tier * 0.15);
+                int rTier = Math.max(1, Math.min(tier - 5, (int) Math.round(gauss)));
+                ItemStack stack = emHook.generateDrop(rTier, player, true, 0.1);
 
-            for (int i = 0; i < size; i++) {
-                double gauss = random.nextGaussian(tier*0.8, tier*0.15);
-                int rTier = Math.max(1, Math.min(tier+3, (int) Math.round(gauss)));
-                ItemStack stack = emHook.generateDrop(rTier, player, true, 0.5);
+                if (stack == null) continue;
+
+                Component display = stack.getItemMeta().displayName();
+                String text = display == null ? "" : PlainTextComponentSerializer.plainText().serialize(display);
+                if(titles.contains(text)) continue;
+                titles.add(text);
+
                 double price = ItemTagger.getItemValue(stack);
                 if (price <= 0) price = ItemWorthCalculator.determineItemWorth(stack, player);
-                ShopItem item = new ShopItem(stack, price);
+                if(food.contains(stack.getType())){
+                    stack.setAmount(16);
+                    price*=16;
+                }
+
+                ShopItem item = new ShopItem(stack, price*2);
                 trinkets.add(item);
             }
             trinkets.sort(Comparator.comparingInt(o -> o.stack.getType().ordinal()));
