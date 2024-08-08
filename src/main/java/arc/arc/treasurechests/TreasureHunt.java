@@ -7,8 +7,8 @@ import arc.arc.treasurechests.chests.CustomChest;
 import arc.arc.treasurechests.chests.ItemsAdderCustomChest;
 import arc.arc.treasurechests.chests.VanillaChest;
 import arc.arc.treasurechests.locationpools.LocationPool;
-import arc.arc.treasurechests.rewards.Treasure;
-import arc.arc.treasurechests.rewards.TreasurePool;
+import arc.arc.generic.treasure.Treasure;
+import arc.arc.generic.treasure.TreasurePool;
 import arc.arc.util.ParticleManager;
 import com.jeff_media.customblockdata.CustomBlockData;
 import lombok.RequiredArgsConstructor;
@@ -22,12 +22,15 @@ import org.bukkit.entity.Player;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
 @RequiredArgsConstructor
 public class TreasureHunt {
 
+    private static final Logger log = LoggerFactory.getLogger(TreasureHunt.class);
     final LocationPool locationPool;
     final int chests;
     final String namespaceId;
@@ -60,7 +63,7 @@ public class TreasureHunt {
         return customChests.keySet();
     }
 
-    public void stop(){
+    public void stop() {
         clearChests();
         stopDisplayBossbar();
         stopDisplayingLocations();
@@ -100,34 +103,40 @@ public class TreasureHunt {
 
         locations.remove(block.getLocation().toCenterLocation());
         left--;
-        if(left == 0){
+        if (left == 0) {
             stop();
         }
     }
 
-    private void executeAction(Player player, Block block){
-        if(treasurePool == null){
-            System.out.println("Treasure pool is null for "+locationPool.getId()+" hunt!");
+    private void executeAction(Player player, Block block) {
+        if (treasurePool == null) {
+            System.out.println("Treasure pool is null for " + locationPool.getId() + " hunt!");
             return;
         }
 
         Treasure treasure = treasurePool.random();
         treasure.give(player);
 
-        String message = treasure.message();
-        if(message != null){
+        String message = (String) treasure.attributes().get("message");
+        if (message != null) {
             Component text = MiniMessage.miniMessage()
-                    .deserialize(PlaceholderAPI.setPlaceholders(player, treasure.message()));
+                    .deserialize(PlaceholderAPI.setPlaceholders(player, message));
             player.sendMessage(text);
         }
 
-        if(treasure.isRare() && treasure.globalMessage() != null){
-            Component text = MiniMessage.miniMessage()
-                    .deserialize(PlaceholderAPI.setPlaceholders(player, treasure.globalMessage()));
-            world.getPlayers()
-                    .stream()
-                    .filter(p -> p!=player)
-                    .forEach(p -> p.sendMessage(text));
+        Boolean announce = (Boolean) treasure.attributes().get("announce");
+        if (announce != null && announce) {
+            String globalMessage = (String) treasure.attributes().get("globalMessage");
+            if (globalMessage == null) {
+                log.error("Global message is null for {} hunt!", locationPool.getId());
+            } else {
+                Component text = MiniMessage.miniMessage()
+                        .deserialize(PlaceholderAPI.setPlaceholders(player, globalMessage));
+                world.getPlayers()
+                        .stream()
+                        .filter(p -> p != player)
+                        .forEach(p -> p.sendMessage(text));
+            }
         }
     }
 
@@ -142,7 +151,7 @@ public class TreasureHunt {
         displayTask = new BukkitRunnable() {
             @Override
             public void run() {
-                if(locations.isEmpty()) return;
+                if (locations.isEmpty()) return;
                 Collection<Player> players = world.getPlayers();
                 for (Location location : locations) {
                     ParticleManager.queue(
@@ -164,25 +173,25 @@ public class TreasureHunt {
         }.runTaskTimer(ARC.plugin, TreasureHuntConfig.particleDelay, TreasureHuntConfig.particleDelay);
     }
 
-    public void displayBossbar(){
+    public void displayBossbar() {
         List<Player> players = world.getPlayers();
-        float newProgress = ((float) left)/max;
-        if(bossBar == null){
+        float newProgress = ((float) left) / max;
+        if (bossBar == null) {
             final Component name = Component.text("Охота за сокровищами!");
             bossBar = BossBar.bossBar(name, newProgress, BossBar.Color.BLUE, BossBar.Overlay.NOTCHED_6);
-        } else if(bossBar.progress() != newProgress) bossBar.progress(newProgress);
+        } else if (bossBar.progress() != newProgress) bossBar.progress(newProgress);
 
         Iterator<Player> iterator = bossBarAudience.iterator();
-        while (iterator.hasNext()){
+        while (iterator.hasNext()) {
             Player player = iterator.next();
-            if(player.getWorld() != world){
+            if (player.getWorld() != world) {
                 player.hideBossBar(bossBar);
                 iterator.remove();
             }
         }
 
-        for(Player player : players){
-            if(!bossBarAudience.contains(player)){
+        for (Player player : players) {
+            if (!bossBarAudience.contains(player)) {
                 player.showBossBar(bossBar);
                 bossBarAudience.add(player);
             }
@@ -190,8 +199,8 @@ public class TreasureHunt {
 
     }
 
-    public void stopDisplayBossbar(){
-        for(Player player : bossBarAudience){
+    public void stopDisplayBossbar() {
+        for (Player player : bossBarAudience) {
             player.hideBossBar(bossBar);
         }
     }

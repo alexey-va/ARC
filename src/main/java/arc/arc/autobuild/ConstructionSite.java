@@ -203,27 +203,31 @@ public class ConstructionSite {
     }
 
     private void launchFireWorks() {
-        AtomicInteger counter = new AtomicInteger(0);
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                if (counter.incrementAndGet() >= 5) this.cancel();
-                Firework firework = (Firework) world.spawnEntity(centerBlock, EntityType.FIREWORK);
-                FireworkEffect effect = FireworkEffect.builder()
-                        .flicker(ThreadLocalRandom.current().nextBoolean())
-                        .trail(ThreadLocalRandom.current().nextBoolean())
-                        .with(Utils.random(FireworkEffect.Type.values()))
-                        .withColor(Utils.random(colors, 3))
-                        .withFade(Utils.random(colors, 3))
-                        .build();
+        try {
+            AtomicInteger counter = new AtomicInteger(0);
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    if (counter.incrementAndGet() >= 5) this.cancel();
+                    Firework firework = (Firework) world.spawnEntity(centerBlock, EntityType.FIREWORK);
+                    FireworkEffect effect = FireworkEffect.builder()
+                            .flicker(ThreadLocalRandom.current().nextBoolean())
+                            .trail(ThreadLocalRandom.current().nextBoolean())
+                            .with(Utils.random(FireworkEffect.Type.values()))
+                            .withColor(Utils.random(colors, 3))
+                            .withFade(Utils.random(colors, 3))
+                            .build();
 
-                FireworkMeta meta = firework.getFireworkMeta();
-                meta.setPower(ThreadLocalRandom.current().nextInt(1, 3));
-                meta.addEffect(effect);
-                firework.setFireworkMeta(meta);
-                Bukkit.getScheduler().runTaskLater(ARC.plugin, firework::detonate, 20);
-            }
-        }.runTaskTimer(ARC.plugin, 0L, 10L);
+                    FireworkMeta meta = firework.getFireworkMeta();
+                    meta.setPower(ThreadLocalRandom.current().nextInt(1, 3));
+                    meta.addEffect(effect);
+                    firework.setFireworkMeta(meta);
+                    Bukkit.getScheduler().runTaskLater(ARC.plugin, firework::detonate, 20);
+                }
+            }.runTaskTimer(ARC.plugin, 0L, 10L);
+        } catch (Exception e){
+            e.printStackTrace();
+        }
     }
 
     public void cleanup(int destroyNpcDelaySeconds) {

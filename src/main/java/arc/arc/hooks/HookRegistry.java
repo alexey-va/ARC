@@ -5,6 +5,7 @@ import arc.arc.configs.MainConfig;
 import arc.arc.farm.*;
 import arc.arc.hooks.auraskills.AuraSkillsHook;
 import arc.arc.hooks.bank.BankHook;
+import arc.arc.hooks.betterstructures.BsHook;
 import arc.arc.hooks.citizens.CitizensHook;
 import arc.arc.hooks.elitemobs.EMHook;
 import arc.arc.hooks.jobs.JobsHook;
@@ -20,12 +21,13 @@ import arc.arc.hooks.zauction.AuctionHook;
 import arc.arc.hooks.ztranslator.TranslatorHook;
 import arc.arc.listeners.*;
 import dev.aurelium.auraskills.api.AuraSkillsApi;
+import lombok.extern.slf4j.Slf4j;
 import org.bukkit.Bukkit;
-
 
 
 import static org.bukkit.Bukkit.getServer;
 
+@Slf4j
 public class HookRegistry {
 
 
@@ -52,6 +54,7 @@ public class HookRegistry {
     public static BankHook bankHook;
     public static RedisEcoHook redisEcoHook;
     public static AuraSkillsHook auraSkillsHook;
+    public static BsHook bsHook;
     public AEHook aeHook;
 
 
@@ -60,6 +63,8 @@ public class HookRegistry {
     public SpawnerListener spawnerListener;
     public BlockListener blockListener;
     public JoinListener joinListener;
+    public PickupListener pickupListener;
+    public IAEvents iaEvents;
 
     public void setupHooks() {
         registerEvents();
@@ -74,8 +79,8 @@ public class HookRegistry {
         }
     }
 
-    public void reloadHooks(){
-        if(emHook != null) emHook.reload();
+    public void reloadHooks() {
+        if (emHook != null) emHook.reload();
     }
 
     public void cancelTasks() {
@@ -188,7 +193,7 @@ public class HookRegistry {
                 try {
                     farmManager = new FarmManager();
                     farmManager.init();
-                } catch (Exception e){
+                } catch (Exception e) {
                     e.printStackTrace();
                 }
             }
@@ -207,21 +212,36 @@ public class HookRegistry {
                 partiesHook = new PartiesHook();
             }
         }
+        if (getServer().getPluginManager().getPlugin("BetterStructures") != null) {
+            if (getServer().getPluginManager().getPlugin("BetterStructures").isEnabled()) {
+                log.info("Registering BetterStructures hook");
+                bsHook = new BsHook();
+            }
+        }
         if ((Bukkit.getPluginManager().isPluginEnabled("EconomyShopGUI") || Bukkit.getPluginManager().isPluginEnabled("EconomyShopGUI-Premium")) && shopHook == null) {
             shopHook = new ShopHook();
             Bukkit.getPluginManager().registerEvents(shopHook, ARC.plugin);
         }
 
-        if(joinListener == null){
+        if (joinListener == null) {
             joinListener = new JoinListener();
             Bukkit.getPluginManager().registerEvents(joinListener, ARC.plugin);
         }
 
-        if(blockListener == null){
+        if (blockListener == null) {
             blockListener = new BlockListener();
             Bukkit.getPluginManager().registerEvents(blockListener, ARC.plugin);
         }
 
+        if (pickupListener == null) {
+            pickupListener = new PickupListener();
+            Bukkit.getPluginManager().registerEvents(pickupListener, ARC.plugin);
+        }
+
+        if (iaEvents == null) {
+            iaEvents = new IAEvents();
+            Bukkit.getPluginManager().registerEvents(iaEvents, ARC.plugin);
+        }
     }
 
 }

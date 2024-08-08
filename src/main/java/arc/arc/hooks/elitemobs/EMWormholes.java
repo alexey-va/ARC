@@ -53,13 +53,15 @@ public class EMWormholes {
             Location l2 = wormhole.getWormholeEntry2().getLocation();
 
             double modifier = wormhole.getWormholeConfigFields().getSizeMultiplier();
-            if(l1.getWorld() != null) {
-                particleBuilders.add(new ParticleBuilder(Particle.REDSTONE).color(wormhole.getParticleColor())
+            if (l1.getWorld() != null) {
+                particleBuilders.add(new ParticleBuilder(Particle.REDSTONE)
+                        .color(wormhole.getParticleColor())
                         .offset(MainConfig.particleOffset * modifier, MainConfig.particleOffset * modifier, MainConfig.particleOffset * modifier)
                         .location(l1).count((int) (MainConfig.particleCount * modifier * modifier)));
             }
-            if(l2.getWorld() != null) {
-                particleBuilders.add(new ParticleBuilder(Particle.REDSTONE).color(wormhole.getParticleColor())
+            if (l2.getWorld() != null) {
+                particleBuilders.add(new ParticleBuilder(Particle.REDSTONE)
+                        .color(wormhole.getParticleColor())
                         .offset(MainConfig.particleOffset * modifier, MainConfig.particleOffset * modifier, MainConfig.particleOffset * modifier)
                         .location(l2).count((int) (MainConfig.particleCount * modifier * modifier)));
             }

@@ -29,8 +29,8 @@ public class CommandListener implements Listener {
     public void onPlayerCommand(PlayerCommandPreprocessEvent ev) {
         String[] args = ev.getMessage().split(" ");
         pwCommand(ev, args);
-        landsSpawnCommand(ev);
-        landsCommand(ev, args);
+        //landsSpawnCommand(ev);
+        //landsCommand(ev, args);
     }
 
     private void landsCommand(PlayerCommandPreprocessEvent ev, String[] args) {
@@ -55,7 +55,7 @@ public class CommandListener implements Listener {
         }
     }
 
-    private void landsSpawnCommand(PlayerCommandPreprocessEvent event) {
+/*    private void landsSpawnCommand(PlayerCommandPreprocessEvent event) {
         if (!(event.getMessage().trim().equals("/lands spawn")
                 || event.getMessage().trim().equals("/land spawn"))) return;
         event.setCancelled(true);
@@ -80,6 +80,6 @@ public class CommandListener implements Listener {
         } else if (HookRegistry.huskHomesHook != null) {
             HookRegistry.huskHomesHook.teleport(player, serverLocation);
         }
-    }
+    }*/
 
 }

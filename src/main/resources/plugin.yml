@@ -29,6 +29,7 @@ softdepend:
   - YamipaPlugin
   - LootChest
   - Jobs
+  - BetterStructures
 depend:
   - PlaceholderAPI
 commands:
@@ -63,5 +64,14 @@ commands:
     description: build-book
     usage: build-book
   give-jobs-boost:
+    description: build-book
+    usage: build-book
+  arcstore:
+    description: build-book
+    usage: build-book
+  arctest:
+    description: build-book
+    usage: build-book
+  eliteloot:
     description: build-book
     usage: build-book

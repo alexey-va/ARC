@@ -4,7 +4,7 @@ import arc.arc.treasurechests.TreasureHuntManager;
 import arc.arc.treasurechests.locationpools.LocationPool;
 import arc.arc.treasurechests.locationpools.LocationPoolManager;
 import arc.arc.configs.TreasureHuntConfig;
-import arc.arc.treasurechests.rewards.TreasurePool;
+import arc.arc.generic.treasure.TreasurePool;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;

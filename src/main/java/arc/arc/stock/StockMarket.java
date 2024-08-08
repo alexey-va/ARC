@@ -173,6 +173,11 @@ public class StockMarket {
         }
     }
 
+    public static boolean isEnabledStock(Stock stock){
+        if(stock == null) return false;
+        return configStocks().stream().map(ConfigStock::getSymbol).collect(Collectors.toSet()).contains(stock.getSymbol());
+    }
+
 
     public static Collection<ConfigStock> configStocks() {
         return configStocks.values();

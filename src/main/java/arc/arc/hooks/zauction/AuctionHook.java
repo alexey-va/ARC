@@ -6,12 +6,9 @@ import arc.arc.hooks.HookRegistry;
 import arc.arc.util.TextUtil;
 import fr.maxlego08.zauctionhouse.api.AuctionItem;
 import fr.maxlego08.zauctionhouse.api.AuctionManager;
-import fr.maxlego08.zauctionhouse.api.ConvertManager;
-import fr.maxlego08.zauctionhouse.api.blacklist.IBlacklist;
 import fr.maxlego08.zauctionhouse.api.blacklist.IBlacklistManager;
-import fr.maxlego08.zauctionhouse.api.category.Category;
+import fr.maxlego08.zauctionhouse.api.blacklist.ItemChecker;
 import fr.maxlego08.zauctionhouse.api.category.CategoryManager;
-import fr.maxlego08.zauctionhouse.api.filter.FilterManager;
 import fr.maxlego08.zauctionhouse.api.inventory.InventoryManager;
 import fr.maxlego08.zauctionhouse.api.transaction.TransactionManager;
 import lombok.Setter;
@@ -30,7 +27,6 @@ import org.bukkit.scheduler.BukkitTask;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 @Log4j2
 public class AuctionHook {
@@ -131,15 +127,15 @@ public class AuctionHook {
                 .build();
     }
 
-    private IBlacklist emBlackList(){
-        return new IBlacklist() {
+    private ItemChecker emBlackList(){
+        return new ItemChecker() {
             @Override
             public String getName() {
-                return "soulbind";
+                return "arc:soulbind";
             }
 
             @Override
-            public boolean isBlacklist(ItemStack itemStack) {
+            public boolean checkItemStack(ItemStack itemStack) {
                 return itemStack.getItemMeta().getPersistentDataContainer()
                         .get(new NamespacedKey("elitemobs", "soulbind"),
                                 PersistentDataType.STRING) != null;

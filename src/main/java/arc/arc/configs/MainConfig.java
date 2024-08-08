@@ -31,15 +31,15 @@ public class MainConfig {
     public static String timeFormat;
 
 
-
-    public MainConfig(){
+    public MainConfig() {
         ARC.plugin.getConfig().options().copyDefaults(true);
         ARC.plugin.saveDefaultConfig();
         ARC.plugin.saveConfig();
 
         loadConfig();
     }
-    public void loadConfig(){
+
+    public void loadConfig() {
         blockBackpacks = ARC.plugin.getConfig().getBoolean("disable-backpacks", false);
         endProtection = ARC.plugin.getConfig().getBoolean("end-protection", false);
         sendWormholes = ARC.plugin.getConfig().getBoolean("wormholes.enable", false);
@@ -58,27 +58,15 @@ public class MainConfig {
             Level newRootLogLevel = Level.getLevel(logLevel);
             //System.out.println("Config log level: "+newRootLogLevel);
 
-            // Get the LoggerContext from Log4j2
+            // get logger for package arc.arc and set it level to newRootLogLevel
             LoggerContext ctx = (LoggerContext) LogManager.getContext(false);
             Configuration config = ctx.getConfiguration();
+            LoggerConfig loggerConfig = config.getLoggerConfig("arc.arc");
+            loggerConfig.setLevel(newRootLogLevel);
 
-            ConsoleAppender consoleAppender = null;
-
-            // Iterate over all appenders to find an instance of ConsoleAppender
-            for (Appender appender : config.getAppenders().values()) {
-                System.out.println("Found appender: "+appender.getName()+" "+appender.getClass().getSimpleName());
-                if (appender instanceof ConsoleAppender) {
-                    consoleAppender = (ConsoleAppender) appender;
-                    break;
-                }
-            }
-
-            LoggerConfig packageLoggerConfig = new LoggerConfig("arc.arc", newRootLogLevel, true);
-            packageLoggerConfig.addAppender(consoleAppender, null, null);
-            config.addLogger("arc.arc", packageLoggerConfig);
-
+            // update loggers
             ctx.updateLoggers();
-        } catch (Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }

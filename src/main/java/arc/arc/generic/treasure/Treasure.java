@@ -1,19 +1,12 @@
-package arc.arc.treasurechests.rewards;
+package arc.arc.generic.treasure;
 
 import org.bukkit.entity.Player;
 
 import java.util.Map;
 
 public interface Treasure {
-
     void give(Player player);
-
-    boolean isRare();
-
-    String globalMessage();
-    String message();
-
+    Map<String, Object> attributes();
     Map<String, Object> serialize();
     int weight();
-
 }

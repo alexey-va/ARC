@@ -4,8 +4,10 @@ import arc.arc.ARC;
 import arc.arc.board.BoardEntry;
 import arc.arc.network.RedisManager;
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import lombok.*;
 import lombok.extern.log4j.Log4j2;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.NotNull;
@@ -27,7 +29,10 @@ public class RedisRepo<T extends RepoData> {
     ConcurrentHashMap<String, T> map = new ConcurrentHashMap<>();
     ConcurrentHashMap<String, Long> lastAttempt = new ConcurrentHashMap<>();
     RedisRepoMessager messager;
-    Gson gson = new Gson();
+    Gson gson = new GsonBuilder()
+            .registerTypeAdapter(ItemStack.class, new ItemStackSerializer())
+            .registerTypeAdapter(ItemList.class, new ItemListSerializer())
+            .create();
     Set<String> contextSet = new ConcurrentSkipListSet<>();
     BukkitTask saveTask, backupTask;
     long lastFullRefresh;
@@ -97,7 +102,7 @@ public class RedisRepo<T extends RepoData> {
                 public void run() {
                     backupService.saveBackup(map);
                 }
-            }.runTaskTimerAsynchronously(ARC.plugin, 20L * 60, 20L * 60 * 60);
+            }.runTaskTimerAsynchronously(ARC.plugin, 20L * 60 * 60, 20L * 60 * 60);
     }
 
     public void addContext(String context) {
@@ -118,14 +123,14 @@ public class RedisRepo<T extends RepoData> {
                 .thenAccept(redisMap -> {
                     for (var entry : redisMap.entrySet()) {
                         try {
-                            log.trace("Loading: " + entry);
+                            log.trace("Loading: {}", entry);
                             T t = (T) gson.fromJson(entry.getValue(), clazz);
                             t.setDirty(false);
                             map.put(t.id(), t);
                             contextSet.add(t.id());
                             if (onUpdate != null) onUpdate.accept(t);
                         } catch (Exception e) {
-                            log.debug("Could not parse: " + entry);
+                            log.info("Could not parse: {}", entry);
                             e.printStackTrace();
                         }
                     }
@@ -135,13 +140,13 @@ public class RedisRepo<T extends RepoData> {
     @SuppressWarnings("unchecked")
     CompletableFuture<Void> load(List<String> keys) {
         if (keys.isEmpty()) return CompletableFuture.completedFuture(null);
-        log.trace("Loading all: " + keys);
+        log.trace("Loading all: {}", keys);
         return redisManager.loadMapEntries(storageKey, keys.toArray(String[]::new))
                 .thenAccept(list -> {
                     for (int i = 0; i < list.size(); i++) {
                         var entry = list.get(i);
                         if (entry == null) {
-                            log.debug("Could not find entry in storage: " + keys);
+                            log.debug("Could not find entry in storage: {}", keys);
                             lastAttempt.put(keys.get(i), System.currentTimeMillis());
                             continue;
                         }
@@ -200,7 +205,7 @@ public class RedisRepo<T extends RepoData> {
 
     CompletableFuture<Void> deleteInStorage(Collection<T> ts) {
         if (ts.isEmpty()) return CompletableFuture.completedFuture(null);
-        log.trace("Deleting in storage: " + ts);
+        log.trace("Deleting in storage: {}", ts);
         return CompletableFuture.supplyAsync(() -> ts.stream()
                         .flatMap(t -> Stream.of(t.id(), null))
                         .toArray(String[]::new))
@@ -210,7 +215,7 @@ public class RedisRepo<T extends RepoData> {
 
     CompletableFuture<Void> saveInStorage(Collection<T> ts) {
         if (ts.isEmpty()) return CompletableFuture.completedFuture(null);
-        log.trace("Saving in storage: " + ts);
+        log.trace("Saving in storage: {}", ts);
         for (T t : ts) t.dirty = false;
         return CompletableFuture.supplyAsync(() -> ts.stream()
                         .flatMap(t -> Stream.of(t.id(), gson.toJson(t)))
@@ -224,7 +229,7 @@ public class RedisRepo<T extends RepoData> {
     }
 
     void announceUpdate(String id) {
-        log.trace("Announcing update: " + id);
+        log.trace("Announcing update: {}", id);
         T t = map.get(id);
         if (t == null) {
             log.debug("Could not find " + id + " in storage while announcing update!");

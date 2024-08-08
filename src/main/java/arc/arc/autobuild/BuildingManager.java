@@ -9,7 +9,10 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.entity.BlockDisplay;
 import org.bukkit.entity.Player;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -34,6 +37,17 @@ public class BuildingManager {
     }
 
     private static BukkitTask cleanupTask;
+
+    public static void init(){
+        // find all display entities with key "db" and remove them
+        for (var world : ARC.plugin.getServer().getWorlds()) {
+            for (var entity : world.getEntitiesByClass(BlockDisplay.class)) {
+                if (entity.getPersistentDataContainer().has(new NamespacedKey(ARC.plugin, "db"), PersistentDataType.STRING)) {
+                    entity.remove();
+                }
+            }
+        }
+    }
 
     public static void setupCleanupTask() {
         cancelTasks();

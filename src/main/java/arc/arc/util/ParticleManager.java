@@ -25,17 +25,21 @@ public class ParticleManager {
     private static BukkitTask task;
 
     private static void showParticles(ParticleDisplay particleDisplay) {
-        if (particleDisplay == null) return;
-        Particle particle = particleDisplay.particle == null ?
-                particlePool.get((new Random().nextInt(0, particlePool.size()))) :
-                particleDisplay.particle;
-        new ParticleBuilder(particle)
-                .count(particleDisplay.count)
-                .location(particleDisplay.location)
-                .offset(particleDisplay.offsetX, particleDisplay.offsetY, particleDisplay.offsetZ)
-                .receivers(particleDisplay.players)
-                .extra(particleDisplay.extra)
-                .spawn();
+        try {
+            if (particleDisplay == null) return;
+            Particle particle = particleDisplay.particle == null ?
+                    particlePool.get((new Random().nextInt(0, particlePool.size()))) :
+                    particleDisplay.particle;
+            new ParticleBuilder(particle)
+                    .count(particleDisplay.count)
+                    .location(particleDisplay.location)
+                    .offset(particleDisplay.offsetX, particleDisplay.offsetY, particleDisplay.offsetZ)
+                    .receivers(particleDisplay.players)
+                    .data(particleDisplay.data)
+                    .spawn();
+        } catch (Exception e){
+            e.printStackTrace();
+        }
     }
 
     public static void setupParticleManager() {
@@ -78,7 +82,8 @@ public class ParticleManager {
         int count = 10;
         @Builder.Default
         Pattern pattern = Pattern.POINT;
-
+        @Builder.Default
+        Object data = null;
 
         public ParticleDisplay(Player player, Location location) {
             this.players = List.of(player);

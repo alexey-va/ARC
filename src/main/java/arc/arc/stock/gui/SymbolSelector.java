@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static arc.arc.util.GuiUtils.cooldownCheck;
 import static arc.arc.util.TextUtil.mm;
@@ -54,6 +55,7 @@ public class SymbolSelector extends ChestGui {
         List<GuiItem> guiItemList = new ArrayList<>();
         for (Stock stock : StockMarket.stocks().stream()
                 .filter(s -> s.getPrice() > 0.0)
+                .filter(StockMarket::isEnabledStock)
                 .sorted(Comparator.comparingInt(s -> s.getType() == Stock.Type.STOCK ? 0 : 1)).toList()) {
             GuiItem guiItem = stockItem(stock);
             guiItemList.add(guiItem);

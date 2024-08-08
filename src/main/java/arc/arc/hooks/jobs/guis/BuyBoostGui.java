@@ -171,7 +171,7 @@ public class BuyBoostGui extends ChestGui {
                 .replace("<currency_lack>", formatAmount(economyCheck.currencyNeeded))).toList();
         final GuiItem item = new ItemStackBuilder(boost.material())
                 .display(boost.display())
-                .enchant(hasBoost ? Enchantment.ARROW_INFINITE : null, 1, true)
+                .enchant(hasBoost ? Enchantment.VANISHING_CURSE : null, 1, true)
                 .flags(ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_ATTRIBUTES)
                 .lore(boost.lore())
                 .modelData(boost.modelData())

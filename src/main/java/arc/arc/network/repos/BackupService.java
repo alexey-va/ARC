@@ -5,6 +5,7 @@ import com.google.gson.GsonBuilder;
 import lombok.AllArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+import org.bukkit.inventory.ItemStack;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -18,12 +19,16 @@ public class BackupService {
 
     final String id;
     final Path folder;
-    Gson gson = new GsonBuilder().setPrettyPrinting().create();
+    Gson gson = new GsonBuilder()
+            .setPrettyPrinting()
+            .registerTypeAdapter(ItemStack.class, new ItemStackSerializer())
+            .registerTypeAdapter(ItemList.class, new ItemListSerializer())
+            .create();
 
     public void saveBackup(Map<String, ?> map) {
 
         LocalDateTime now = LocalDateTime.now();
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy_MM_dd_HH:mm:ss");
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy_MM_dd_HH_mm_ss");
         String fileName = id + "_backup_" + now.format(formatter) + ".json";
         log.info("Saving backup to {}", fileName);
         log.trace("Backup data: {}", map);
@@ -33,6 +38,7 @@ public class BackupService {
                     StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE, StandardOpenOption.CREATE);
         } catch (Exception e) {
             e.printStackTrace();
+            System.out.println(map);
         }
     }
 

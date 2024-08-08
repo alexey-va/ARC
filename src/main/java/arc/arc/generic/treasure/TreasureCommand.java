@@ -1,8 +1,10 @@
-package arc.arc.treasurechests.rewards;
+package arc.arc.generic.treasure;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import me.clip.placeholderapi.PlaceholderAPI;
-import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
@@ -10,12 +12,14 @@ import java.util.HashMap;
 import java.util.Map;
 
 @AllArgsConstructor
-public class ArcCommand implements Treasure{
+@NoArgsConstructor
+@Data
+@Builder
+public class TreasureCommand implements Treasure{
 
     String command;
-    boolean rare;
-    String rareMessage;
-    String message;
+    @Builder.Default
+    Map<String, Object> attributes = new HashMap<>();
     int weight;
 
     @Override
@@ -25,18 +29,8 @@ public class ArcCommand implements Treasure{
     }
 
     @Override
-    public boolean isRare() {
-        return rare;
-    }
-
-    @Override
-    public String globalMessage() {
-        return rareMessage;
-    }
-
-    @Override
-    public String message() {
-        return message;
+    public Map<String, Object> attributes() {
+        return attributes;
     }
 
     @Override
@@ -45,8 +39,7 @@ public class ArcCommand implements Treasure{
         map.put("type", "command");
         map.put("command", command);
         map.put("weight", weight);
-        if(rare) map.put("rare", true);
-        if(rareMessage != null) map.put("rare-message", rareMessage);
+        map.put("attributes", attributes);
         return map;
     }
 

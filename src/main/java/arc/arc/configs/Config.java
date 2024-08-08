@@ -40,6 +40,15 @@ public class Config {
         return ((Number) o).intValue();
     }
 
+    public boolean bool(String path, boolean def) {
+        Object o = getValueForKeyPath(path);
+        if (o == null) {
+            injectDeepKey(path, def);
+            return def;
+        }
+        return (boolean) o;
+    }
+
     public double realNumber(String path, double def) {
         Object o = getValueForKeyPath(path);
         if (o == null) {
@@ -127,6 +136,15 @@ public class Config {
             return new LinkedHashMap<>();
         }
         return (Map<String, T>) o;
+    }
+
+    public <T> List<T> list(String path) {
+        Object o = getValueForKeyPath(path);
+        if (o == null) {
+            injectDeepKey(path, new ArrayList<>());
+            return new ArrayList<>();
+        }
+        return (List<T>) o;
     }
 
     public List<String> keys(String path){
@@ -226,5 +244,11 @@ public class Config {
 
     public String string(String s) {
         return string(s, s);
+    }
+
+    public void addToList(String path, Object value){
+        List<Object> list = list(path);
+        list.add(value);
+        injectDeepKey(path, list);
     }
 }

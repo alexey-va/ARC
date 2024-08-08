@@ -8,6 +8,7 @@ import lombok.extern.log4j.Log4j2;
 import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.api.WebSocketAdapter;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
+import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -64,7 +65,16 @@ public class StockClient {
 
     private static double fetchInvesting(String url) {
         try {
-            Document document = Jsoup.connect(url).get();
+            Connection.Response response = Jsoup.connect(url).execute();
+            if(response.statusCode() < 200 || response.statusCode() > 299) {
+                // print reason for bad response
+                System.out.println("Response code: "+response.statusCode());
+                System.out.println(response.headers());
+                System.out.println();
+                System.out.println(response.body());
+                return -1;
+            }
+            Document document = response.parse();
             Element divElement = document.select("div[data-test=instrument-price-last]").first();
             return Double.parseDouble(divElement.text()
                     .replace(".", "")

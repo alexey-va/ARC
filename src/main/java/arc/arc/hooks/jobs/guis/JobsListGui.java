@@ -66,7 +66,7 @@ public class JobsListGui extends ChestGui {
                     .tagResolver(resolver(job, boost))
                     .flags(ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_ATTRIBUTES);
             if (boost.money != 0.0 || boost.exp != 0.0 || boost.points != 0.0)
-                item.enchant(Enchantment.LUCK, 1, true);
+                item.enchant(Enchantment.VANISHING_CURSE, 1, true);
             items.add(item
                     .toGuiItemBuilder()
                     .clickEvent(click -> {
