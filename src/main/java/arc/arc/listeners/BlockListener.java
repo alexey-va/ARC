@@ -54,13 +54,18 @@ public class BlockListener implements Listener {
     @EventHandler(priority = EventPriority.LOWEST)
     public void onBlockInteract(PlayerInteractEvent event) {
         processTreasureHunt(event);
+
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onBlockInteractHighest(PlayerInteractEvent event) {
         processBuildingEvent(event);
     }
 
     @EventHandler(priority = EventPriority.LOW)
     public void onChestClick(InventoryOpenEvent event) {
         //if (HookRegistry.bsHook == null) return;
-        log.info("Chest open event");
+        //log.info("Chest open event");
         PersonalLootManager.processChestOpen(event);
     }
 
@@ -93,9 +98,17 @@ public class BlockListener implements Listener {
         }
         if (event.getClickedBlock() == null) return;
         Location center = event.getClickedBlock().getLocation().add(0, 1, 0);
-        String buildingId = new NBTItem(hand).getString("arc:building_key");
+        NBTItem nbtItem = new NBTItem(hand);
+        String buildingId = nbtItem.getString("arc:building_key");
+
         if (buildingId == null || buildingId.isEmpty()) return;
-        BuildingManager.processPlayerClick(event.getPlayer(), center, buildingId);
+
+        String rotation = null;
+        if (nbtItem.hasKey("arc:rotation")) rotation = nbtItem.getString("arc:rotation");
+        String yOff = null;
+        if (nbtItem.hasKey("arc:y_offset")) yOff = nbtItem.getString("arc:y_offset");
+
+        BuildingManager.processPlayerClick(event.getPlayer(), center, buildingId, rotation, yOff);
     }
 
 

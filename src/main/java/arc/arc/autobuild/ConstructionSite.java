@@ -18,6 +18,7 @@ import org.bukkit.inventory.meta.FireworkMeta;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -31,6 +32,8 @@ public class ConstructionSite {
     final Player player;
     final int rotation;
     final World world;
+    final int subRotation;
+    final int yOffset;
     State state = State.CREATED;
     Set<Chunk> chunks = new HashSet<>();
     long timestamp = System.currentTimeMillis();
@@ -56,6 +59,32 @@ public class ConstructionSite {
             throw new IllegalStateException("Display is null or state is not outline!");
 
         display.showBorderAndDisplay(seconds);
+    }
+
+    public Location getCenterBlock() {
+        return centerBlock.clone().add(0, yOffset, 0);
+    }
+
+    List<Location> getCenterLocations(){
+        Location center1 = this.centerBlock.toBlockLocation().clone().add(-0.05,-1.05, -0.05);
+        Location center2 = center1.clone().add(1.1,1.1, 1.1);
+        return Utils.getBorderLocations(center1, center2, 6);
+    }
+
+    List<Utils.LocationData> getBorderLocations() {
+        ConstructionSite.Corners corners = this.getCorners();
+
+        Location corner1 = new Location(this.getWorld(),
+                corners.corner1().x() + this.getCenterBlock().x(),
+                corners.corner1().y() + this.getCenterBlock().y(),
+                corners.corner1().z() + this.getCenterBlock().z());
+
+        Location corner2 = new Location(this.getWorld(),
+                corners.corner2().x() + this.getCenterBlock().x() + 1,
+                corners.corner2().y() + this.getCenterBlock().y() + 1,
+                corners.corner2().z() + this.getCenterBlock().z() + 1);
+
+        return Utils.getBorderLocationsWithCornerData(corner1, corner2, 2, 3);
     }
 
     public void spawnConfirmNpc(int seconds) {
@@ -131,7 +160,7 @@ public class ConstructionSite {
             for (int x = corners.corner1.x(); x < corners.corner2.x(); x++) {
                 for (int y = corners.corner1.y(); y < corners.corner2.y(); y++) {
                     for (int z = corners.corner1.z(); z < corners.corner2.z(); z++) {
-                        if(!HookRegistry.wgHook.canBuild(player, new Location(world, x,y,z))) return false;
+                        if (!HookRegistry.wgHook.canBuild(player, new Location(world, x, y, z))) return false;
                     }
                 }
             }
@@ -166,15 +195,14 @@ public class ConstructionSite {
     }
 
     public boolean same(Player player, Location location, Building building) {
-        boolean res = location.toCenterLocation().equals(centerBlock.toCenterLocation()) && building == this.building &&
+        return location.toCenterLocation().equals(centerBlock.toCenterLocation()) && building == this.building &&
                 rotation == BuildingManager.rotationFromYaw(player.getYaw());
-        return res;
     }
 
 
     public Corners getCorners() {
-        BlockVector3 c1 = building.getCorner1(rotation);
-        BlockVector3 c2 = building.getCorner2(rotation);
+        BlockVector3 c1 = building.getCorner1((rotation+subRotation)%360);
+        BlockVector3 c2 = building.getCorner2((rotation+subRotation)%360);
 
         BlockVector3 r1 = BlockVector3.at(Math.min(c1.x(), c2.x()),
                 Math.min(c1.y(), c2.y()),
@@ -182,6 +210,8 @@ public class ConstructionSite {
         BlockVector3 r2 = BlockVector3.at(Math.max(c1.x(), c2.x()),
                 Math.max(c1.y(), c2.y()),
                 Math.max(c1.z(), c2.z()));
+        r1 = r1.add(0, yOffset, 0);
+        r2 = r2.add(0, yOffset, 0);
         return new Corners(r1, r2);
     }
 
@@ -209,7 +239,7 @@ public class ConstructionSite {
                 @Override
                 public void run() {
                     if (counter.incrementAndGet() >= 5) this.cancel();
-                    Firework firework = (Firework) world.spawnEntity(centerBlock, EntityType.FIREWORK);
+                    Firework firework = (Firework) world.spawnEntity(centerBlock, EntityType.FIREWORK_ROCKET);
                     FireworkEffect effect = FireworkEffect.builder()
                             .flicker(ThreadLocalRandom.current().nextBoolean())
                             .trail(ThreadLocalRandom.current().nextBoolean())
@@ -225,7 +255,7 @@ public class ConstructionSite {
                     Bukkit.getScheduler().runTaskLater(ARC.plugin, firework::detonate, 20);
                 }
             }.runTaskTimer(ARC.plugin, 0L, 10L);
-        } catch (Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }
@@ -233,7 +263,9 @@ public class ConstructionSite {
     public void cleanup(int destroyNpcDelaySeconds) {
         BuildingManager.removeConstruction(player.getUniqueId());
         stopForceload();
-        if (display != null) display.stop();
+        if (display != null){
+            display.stop();
+        }
         if (construction != null) construction.cancel(destroyNpcDelaySeconds);
     }
 

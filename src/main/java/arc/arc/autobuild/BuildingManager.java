@@ -5,6 +5,7 @@ import arc.arc.autobuild.gui.BuildingGui;
 import arc.arc.autobuild.gui.ConfirmGui;
 import arc.arc.util.CooldownManager;
 import arc.arc.util.TextUtil;
+import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Location;
@@ -18,11 +19,16 @@ import org.bukkit.scheduler.BukkitTask;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
+@Slf4j
 public class BuildingManager {
+
+    static BukkitTask cleanupTask;
 
     static Map<String, Building> buildingMap = new ConcurrentHashMap<>();
     static Map<UUID, ConstructionSite> constructionSiteMap = new HashMap<>();
+    static NamespacedKey displayKey = new NamespacedKey(ARC.plugin, "db");
 
     public static void addBuilding(Building building) {
         buildingMap.put(building.getFileName(), building);
@@ -36,17 +42,22 @@ public class BuildingManager {
         return buildingMap.values();
     }
 
-    private static BukkitTask cleanupTask;
 
-    public static void init(){
+    public static void init() {
         // find all display entities with key "db" and remove them
-        for (var world : ARC.plugin.getServer().getWorlds()) {
-            for (var entity : world.getEntitiesByClass(BlockDisplay.class)) {
-                if (entity.getPersistentDataContainer().has(new NamespacedKey(ARC.plugin, "db"), PersistentDataType.STRING)) {
-                    entity.remove();
+        cleanupTask = new BukkitRunnable() {
+            @Override
+            public void run() {
+                for (var world : ARC.plugin.getServer().getWorlds()) {
+                    for (var entity : world.getEntitiesByClass(BlockDisplay.class)) {
+                        if (entity.getPersistentDataContainer().has(displayKey)) {
+                            log.info("Removing display entity in world {}: {}", world.getName(), entity.getBlock());
+                            entity.remove();
+                        }
+                    }
                 }
             }
-        }
+        }.runTaskLater(ARC.plugin, 400L);
     }
 
     public static void setupCleanupTask() {
@@ -100,14 +111,14 @@ public class BuildingManager {
         if (cleanupTask != null && !cleanupTask.isCancelled()) cleanupTask.cancel();
     }
 
-    public static void createConstruction(Player player, Location center, Building building) {
+    public static void createConstruction(Player player, Location center, Building building, int subRotation, int yOffset) {
         long cooldown = CooldownManager.cooldown(player.getUniqueId(), "building_cooldown");
-        if(cooldown > 0){
+        if (cooldown > 0) {
             player.sendMessage(TextUtil.strip(
                             Component.text("\uD83D\uDEE0 ", NamedTextColor.GRAY)
                                     .append(Component.text("Вы уже недавно строили здание!", NamedTextColor.RED))
                                     .append(Component.text(" Подождите еще ", NamedTextColor.GRAY))
-                                    .append(Component.text(cooldown/1000/60+" минут", NamedTextColor.YELLOW))
+                                    .append(TextUtil.timeComponent(cooldown / 20L, TimeUnit.SECONDS))
                                     .append(Component.text(" перед тем как построить еще одно."))
                     )
             );
@@ -116,7 +127,7 @@ public class BuildingManager {
 
         int rotation = rotationFromYaw(player.getYaw());
         ConstructionSite site = new ConstructionSite(building, center,
-                player, rotation, center.getWorld());
+                player, rotation, center.getWorld(), subRotation, yOffset);
         boolean canBuild = site.canBuild();
         if (!canBuild) {
             site.player.sendMessage(TextUtil.strip(
@@ -173,9 +184,18 @@ public class BuildingManager {
         }
     }
 
-    public static void processPlayerClick(Player player, Location location, String buildingId) {
-        if(location.getBlock().getType() == Material.SHORT_GRASS || location.getBlock().getType() == Material.TALL_GRASS){
-            location = location.clone().add(0,-1,0);
+    public static void processPlayerClick(Player player, Location location, String buildingId, String rot, String yOff) {
+        if (location.getBlock().getType() == Material.SHORT_GRASS || location.getBlock().getType() == Material.TALL_GRASS) {
+            location = location.clone().add(0, -1, 0);
+        }
+        int yOffset = 0;
+        if (yOff != null && !yOff.isEmpty()) {
+            yOffset = Double.valueOf(yOff).intValue();
+        }
+
+        int subRotation = 0;
+        if (rot != null && !rot.isEmpty()) {
+            subRotation = Double.valueOf(rot).intValue();
         }
 
         ConstructionSite site = getConstruction(player.getUniqueId());
@@ -185,10 +205,13 @@ public class BuildingManager {
             return;
         }
 
+        if (CooldownManager.cooldown(player.getUniqueId(), "clicked_npc") > 0L) {
+            return;
+        }
 
 
-        if (site == null) createConstruction(player, location, building);
-        else if (site.same(player, location, building) && site.getState() == ConstructionSite.State.DISPLAYING_OUTLINE){
+        if (site == null) createConstruction(player, location, building, subRotation, yOffset);
+        else if (site.same(player, location, building) && site.getState() == ConstructionSite.State.DISPLAYING_OUTLINE) {
             startConfirmation(site);
         } else {
             if (site.getState() == ConstructionSite.State.BUILDING) {
@@ -200,7 +223,7 @@ public class BuildingManager {
                 if (site.state == ConstructionSite.State.DISPLAYING_OUTLINE) site.stopOutlineDisplay();
                 else if (site.state == ConstructionSite.State.CONFIRMATION) site.stopConfirmStep();
                 site.cleanup(0);
-                createConstruction(player, location, building);
+                createConstruction(player, location, building, subRotation, yOffset);
             }
         }
     }
@@ -221,8 +244,8 @@ public class BuildingManager {
 
         if (site.getState() == ConstructionSite.State.BUILDING) {
             player.sendMessage(TextUtil.strip(
-                    Component.text("\uD83D\uDEE0 ", NamedTextColor.GRAY)
-                            .append(Component.text("Строительство уже идет!", NamedTextColor.RED))
+                            Component.text("\uD83D\uDEE0 ", NamedTextColor.GRAY)
+                                    .append(Component.text("Строительство уже идет!", NamedTextColor.RED))
                     )
             );
         }
@@ -251,10 +274,10 @@ public class BuildingManager {
             return;
         }
         if (site.npcId != id) {
-            System.out.println("Чужой NPC");
             return;
         }
         if (site.state == ConstructionSite.State.CONFIRMATION) {
+            CooldownManager.addCooldown(clicker.getUniqueId(), "clicked_npc", 20L);
             ConfirmGui confirmGui = new ConfirmGui(clicker, site);
             confirmGui.show(clicker);
         } else if (site.state == ConstructionSite.State.BUILDING) {

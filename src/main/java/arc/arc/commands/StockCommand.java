@@ -5,7 +5,9 @@ import arc.arc.configs.StockConfig;
 import arc.arc.hooks.HookRegistry;
 import arc.arc.stock.*;
 import arc.arc.stock.gui.SymbolSelector;
+import arc.arc.util.GuiUtils;
 import arc.arc.util.TextUtil;
+import lombok.extern.slf4j.Slf4j;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
@@ -17,6 +19,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
+@Slf4j
 public class StockCommand implements CommandExecutor {
     @Override
     public boolean onCommand(@NotNull CommandSender commandSender, @NotNull Command command, @NotNull String s, @NotNull String[] strings) {
@@ -46,6 +49,10 @@ public class StockCommand implements CommandExecutor {
         Player player = (Player) commandSender;
 
         if (strings.length == 0 || "menu".equals(type)) {
+            if(!commandSender.hasPermission("arc.stocks.buy")) {
+                commandSender.sendMessage(TextUtil.noPermissions());
+                return true;
+            }
             String name = parsedCommand.pars.get("player");
             CompletableFuture<StockPlayer> stockPlayer;
             if (name == null) {
@@ -63,7 +70,10 @@ public class StockCommand implements CommandExecutor {
                 }
                 stockPlayer = StockPlayerManager.getOrNull(offlinePlayer.getUniqueId());
             }
-            stockPlayer.thenAccept(sp -> new SymbolSelector(sp).show(player));
+            stockPlayer.thenAccept(sp -> {
+                log.trace("Loaded STOCK data for {}", sp.getPlayerName());
+                GuiUtils.constructAndShowAsync(() -> new SymbolSelector(sp), player);
+            });
             return true;
         }
 

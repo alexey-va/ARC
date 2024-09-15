@@ -12,7 +12,7 @@ import org.bukkit.entity.Player;
         @JsonSubTypes.Type(value = PermissionCondition.class, name = "permission"),
         @JsonSubTypes.Type(value = PlayerCondition.class, name = "player")
 })
-public abstract interface ArcCondition {
+public interface ArcCondition {
 
     boolean test(Player player);
 

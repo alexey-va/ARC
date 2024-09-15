@@ -34,7 +34,7 @@ public class ChestGenerator {
             items.add(null);
         }
         spreadItems(items);
-        log.info("Generated chest for {} with {} items {}", player.getName(), items.size(), items);
+        //log.info("Generated chest for {} with {} items {}", player.getName(), items.size(), items);
         return items;
     }
 

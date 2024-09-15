@@ -7,10 +7,8 @@ import arc.arc.util.Utils;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
 import com.sk89q.worldedit.math.BlockVector3;
 import lombok.RequiredArgsConstructor;
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.NamespacedKey;
-import org.bukkit.Particle;
+import lombok.extern.slf4j.Slf4j;
+import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.BlockDisplay;
@@ -19,13 +17,14 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import static arc.arc.util.Utils.rotateBlockData;
 
+@Slf4j
 @RequiredArgsConstructor
 public class Display {
 
@@ -40,31 +39,36 @@ public class Display {
     Set<Material> transparentMats = Set.of(Material.AIR, Material.SHORT_GRASS, Material.TALL_GRASS);
 
     public void showBorder(int seconds) {
-        stop();
+        stopTask();
         displayBorder(seconds);
     }
 
     public void showBorderAndDisplay(int seconds) {
-        stop();
+        stopTask();
         displayBorder(seconds);
         placeDisplayEntities(seconds);
     }
 
-    public void stop() {
+    public void stopTask() {
         if (displayTask != null && !displayTask.isCancelled()) displayTask.cancel();
+    }
+
+    public void stop(){
+        stopTask();
         removeDisplays();
     }
 
     public void displayBorder(int seconds) {
-        if(borderLocations == null) borderLocations = getBorderLocations();
-        if(centerLocations == null) centerLocations = getCenterLocations();
+        if (borderLocations == null) borderLocations = site.getBorderLocations();
+        if (centerLocations == null) centerLocations = site.getCenterLocations();
         final AtomicInteger integer = new AtomicInteger(0);
         displayTask = new BukkitRunnable() {
             @Override
             public void run() {
                 if (integer.addAndGet(10) > seconds * 20) this.cancel();
                 for (Utils.LocationData location : borderLocations) {
-                    if (!location.corner() && site.player.getLocation().distanceSquared(location.location()) > 300) continue;
+                    if (!location.corner() && site.player.getLocation().distanceSquared(location.location()) > 300)
+                        continue;
                     ParticleManager.queue(ParticleManager.ParticleDisplay.builder()
                             .location(location.location())
                             .offsetX(location.corner() ? 0.07 : 0.0).offsetY(location.corner() ? 0.07 : 0.0).offsetZ(location.corner() ? 0.07 : 0.0)
@@ -92,8 +96,8 @@ public class Display {
     }
 
     public void placeDisplayEntities(int seconds) {
-        if(HookRegistry.viaVersionHook != null){
-            if(HookRegistry.viaVersionHook.getPlayerVersion(site.player) < 761) return;
+        if (HookRegistry.viaVersionHook != null) {
+            if (HookRegistry.viaVersionHook.getPlayerVersion(site.player) < 761) return;
         }
         ConstructionSite.Corners corners = site.getCorners();
 
@@ -111,17 +115,22 @@ public class Display {
                     Location location = new Location(site.getWorld(), x + site.getCenterBlock().x(),
                             y + site.getCenterBlock().y(), z + site.getCenterBlock().z());
 
-                    BlockData data = BukkitAdapter.adapt(site.getBuilding().getBlock(BlockVector3.at(x, y, z), site.getRotation()));
-                    rotateBlockData(data, site.getRotation());
+                    int fullRotation = site.getRotation() + site.getSubRotation();
+
+                    BlockData data = BukkitAdapter.adapt(site.getBuilding().getBlock(BlockVector3.at(x, y, z), fullRotation));
+                    rotateBlockData(data, fullRotation);
 
                     Block current = location.getBlock();
-                    if(current.getType().isSolid()){
+                    if (current.getType().isSolid()) {
                         continue;
                     }
 
-                    BlockDisplay display = site.getWorld().spawn(location, BlockDisplay.class);
-                    display.setBlock(data);
-                    display.getPersistentDataContainer().set(new NamespacedKey(ARC.plugin, "db"), PersistentDataType.STRING, site.getPlayer().getName());
+                    BlockDisplay display = site.getWorld().spawn(location, BlockDisplay.class, entity -> {
+                        entity.setBlock(data);
+                        entity.getPersistentDataContainer().set(BuildingManager.displayKey, PersistentDataType.STRING, site.getPlayer().getName());
+                    });
+
+
                     displays.add(display);
                     //Utils.sendDisplayBlock(location, data, site.player);
                 }
@@ -131,42 +140,39 @@ public class Display {
         new BukkitRunnable() {
             @Override
             public void run() {
+                log.info("Removing display due to timeout {}", seconds);
                 removeDisplays();
             }
         }.runTaskLater(ARC.plugin, seconds * 20L);
     }
 
-    List<Location> getCenterLocations(){
-        Location center1 = site.centerBlock.toBlockLocation().clone().add(-0.05,-1.05, -0.05);
-        Location center2 = center1.clone().add(1.1,1.1, 1.1);
-        return Utils.getBorderLocations(center1, center2, 6);
-    }
-
-    List<Utils.LocationData> getBorderLocations() {
-        ConstructionSite.Corners corners = site.getCorners();
-
-        Location corner1 = new Location(site.getWorld(),
-                corners.corner1().x() + site.getCenterBlock().x(),
-                corners.corner1().y() + site.getCenterBlock().y(),
-                corners.corner1().z() + site.getCenterBlock().z());
-
-        Location corner2 = new Location(site.getWorld(),
-                corners.corner2().x() + site.getCenterBlock().x() + 1,
-                corners.corner2().y() + site.getCenterBlock().y() + 1,
-                corners.corner2().z() + site.getCenterBlock().z() + 1);
-
-        return Utils.getBorderLocationsWithCornerData(corner1, corner2, 2, 3);
-    }
 
     public void removeDisplays() {
-        displays.forEach(e -> {
-            try {
-                e.remove();
-            } catch (Exception ex) {
-                ex.printStackTrace();
+        Set<Chunk> chunks =
+                displays.stream().map(BlockDisplay::getLocation).map(Location::getChunk).collect(Collectors.toSet());
+        chunks.forEach(c -> c.setForceLoaded(false));
+        AtomicInteger integer = new AtomicInteger(0);
+        log.info("Starting display removal task");
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (chunks.stream().allMatch(Chunk::isLoaded) || integer.get() > 20) {
+                    log.info("Removing displays after {} iterations", integer.get());
+                    chunks.forEach(c -> c.setForceLoaded(false));
+                    displays.forEach(e -> {
+                        try {
+                            e.remove();
+                        } catch (Exception ex) {
+                            log.error("Error removing display", ex);
+                        }
+                    });
+                    displays.clear();
+                    this.cancel();
+                } else {
+                    integer.incrementAndGet();
+                }
             }
-        });
-        displays.clear();
+        }.runTaskTimer(ARC.plugin, 0L, 10L);
     }
 
 

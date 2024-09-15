@@ -47,15 +47,15 @@ public class Construction {
 
     Set<Material> notDropMaterial = Set.of(Material.SHORT_GRASS, Material.TALL_GRASS, Material.DIRT, Material.GRASS_BLOCK);
 
-    Map<String, String> skinLinks = Map.of("&6Петрович","https://minesk.in/faca74c68a104b6987bc8c11ffebb092",
-            "&6Николаич","https://minesk.in/6666ba384aa3486b88c21fa7541fb856",
+    Map<String, String> skinLinks = Map.of("&6Петрович", "https://minesk.in/faca74c68a104b6987bc8c11ffebb092",
+            "&6Николаич", "https://minesk.in/6666ba384aa3486b88c21fa7541fb856",
             "&6Иваныч", "https://minesk.in/3ff30e8f08ae48c2abece46bbf0c09d6",
-            "&6Агадиль","https://minesk.in/e8eae58c095949de87ff9c9b5b7c17f2");
+            "&6Агадиль", "https://minesk.in/e8eae58c095949de87ff9c9b5b7c17f2");
 
     public void startBuilding() {
-        if(npcId == -1) createNpc(site.centerBlock, -1);
-        if(npcId != -1 && HookRegistry.citizensHook != null && lookClose) HookRegistry.citizensHook.lookClose(npcId);
-        if(removeNpcTask != null &&! removeNpcTask.isCancelled())removeNpcTask.cancel();
+        if (npcId == -1) createNpc(site.centerBlock, -1);
+        if (npcId != -1 && HookRegistry.citizensHook != null && lookClose) HookRegistry.citizensHook.lookClose(npcId);
+        if (removeNpcTask != null && !removeNpcTask.isCancelled()) removeNpcTask.cancel();
 
         ConstructionSite.Corners corners = site.getCorners();
 
@@ -86,24 +86,24 @@ public class Construction {
         }.runTaskTimer(ARC.plugin, 0L, BuildingConfig.cycleDuration);
     }
 
-    public void cancel(int destroyNpcDelaySeconds){
-        if(buildTask != null &&! buildTask.isCancelled())buildTask.cancel();
-        if(removeNpcTask != null &&! removeNpcTask.isCancelled())removeNpcTask.cancel();
-        Bukkit.getScheduler().runTaskLater(ARC.plugin, this::destroyNpc, destroyNpcDelaySeconds*20L);
+    public void cancel(int destroyNpcDelaySeconds) {
+        if (buildTask != null && !buildTask.isCancelled()) buildTask.cancel();
+        if (removeNpcTask != null && !removeNpcTask.isCancelled()) removeNpcTask.cancel();
+        Bukkit.getScheduler().runTaskLater(ARC.plugin, this::destroyNpc, destroyNpcDelaySeconds * 20L);
     }
 
     public int createNpc(Location location, int seconds) {
         if (HookRegistry.citizensHook == null) return -1;
         var entry = Utils.random(skinLinks);
-        npcId = HookRegistry.citizensHook.createNpc(entry.getKey(),  location.toCenterLocation());
+        npcId = HookRegistry.citizensHook.createNpc(entry.getKey(), location.toCenterLocation());
         HookRegistry.citizensHook.setSkin(npcId, entry.getValue());
-        if(seconds >0){
+        if (seconds > 0) {
             removeNpcTask = new BukkitRunnable() {
                 @Override
                 public void run() {
                     HookRegistry.citizensHook.deleteNpc(npcId);
                 }
-            }.runTaskLater(ARC.plugin, 20L*seconds);
+            }.runTaskLater(ARC.plugin, 20L * seconds);
             HookRegistry.citizensHook.lookClose(npcId);
             lookClose = true;
         }
@@ -121,31 +121,33 @@ public class Construction {
 
             BlockVector3 v = vectors.get(index);
 
+            int yOff = site.yOffset;
             Location location = new Location(site.world,
                     site.centerBlock.x() + v.x(),
-                    site.centerBlock.y() + v.y(),
+                    site.centerBlock.y() + v.y() + yOff,
                     site.centerBlock.z() + v.z());
-            BlockData data = BukkitAdapter.adapt(site.building.getBlock(v, site.rotation));
-            rotateBlockData( data, site.getRotation());
+            int fullRotation = site.rotation + site.subRotation;
+            BlockData data = BukkitAdapter.adapt(site.building.getBlock(v, fullRotation));
+            rotateBlockData(data, fullRotation);
 
             Block currentBlock = site.world.getBlockAt(location);
 
-            if(data.getMaterial() == Material.AIR && currentBlock.getType() == Material.AIR) continue;
+            if (data.getMaterial() == Material.AIR && currentBlock.getType() == Material.AIR) continue;
             if (data.equals(currentBlock.getBlockData()) || skipMaterials.contains(currentBlock.getType())) continue;
             if (HookRegistry.sfHook != null && HookRegistry.sfHook.isSlimefunBlock(currentBlock)) continue;
 
-            if(currentBlock.getType() !=  data.getMaterial() &&
+            if (currentBlock.getType() != data.getMaterial() &&
                     !notDropMaterial.contains(currentBlock.getType())) giveDrop(currentBlock);
 
             site.world.getBlockAt(location).setBlockData(data, false);
-            if(location.getBlock().getState() instanceof Chest chest){
+            if (location.getBlock().getState() instanceof Chest chest) {
                 LootTables.SPAWN_BONUS_CHEST.getLootTable()
                         .fillInventory(
                                 chest.getInventory(),
                                 ThreadLocalRandom.current(),
                                 new LootContext.Builder(location).build()
                         );
-            } else if(location.getBlock().getState() instanceof Barrel barrel){
+            } else if (location.getBlock().getState() instanceof Barrel barrel) {
                 LootTables.SPAWN_BONUS_CHEST.getLootTable()
                         .fillInventory(
                                 barrel.getInventory(),
@@ -161,7 +163,7 @@ public class Construction {
         return false;
     }
 
-    private void giveDrop(Block block){
+    private void giveDrop(Block block) {
         block.getDrops().stream()
                 .map(stack -> site.player.getInventory().addItem(stack))
                 .flatMap(map -> map.values().stream())
@@ -182,15 +184,16 @@ public class Construction {
                     .build());
         }
         if (npcId != -1) {
-            HookRegistry.citizensHook.faceNpc(npcId, location);
-            HookRegistry.citizensHook.setMainHand(npcId, new ItemStack(data.getMaterial()));
+            if (ThreadLocalRandom.current().nextDouble() > 0.8) HookRegistry.citizensHook.faceNpc(npcId, location);
+            if (data.getMaterial().isItem())
+                HookRegistry.citizensHook.setMainHand(npcId, new ItemStack(data.getMaterial()));
             HookRegistry.citizensHook.animateNpc(npcId, CitizensHook.Animation.ARM_SWING);
         }
     }
 
     public void destroyNpc() {
         if (HookRegistry.citizensHook == null || npcId == -1) return;
-        if(removeNpcTask != null &&! removeNpcTask.isCancelled())removeNpcTask.cancel();
+        if (removeNpcTask != null && !removeNpcTask.isCancelled()) removeNpcTask.cancel();
         HookRegistry.citizensHook.deleteNpc(npcId);
     }
 

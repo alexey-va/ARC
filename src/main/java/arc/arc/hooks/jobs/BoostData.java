@@ -2,13 +2,13 @@ package arc.arc.hooks.jobs;
 
 import arc.arc.network.repos.RepoData;
 import com.gamingmesh.jobs.container.Job;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import lombok.*;
 import lombok.extern.log4j.Log4j2;
 
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 @Data
 @EqualsAndHashCode(callSuper = false)
@@ -18,8 +18,11 @@ import java.util.*;
 public class BoostData extends RepoData<BoostData> {
     UUID player;
     Set<JobsBoost> boosts = new HashSet<>();
-    record Context(String jobName, JobsBoost.Type type) { }
-    transient Map<Context, Double> cachedBoosts = new HashMap<>();
+
+    record Context(String jobName, JobsBoost.Type type) {
+    }
+
+    transient Cache<Context, Double> cachedBoosts = CacheBuilder.newBuilder().expireAfterWrite(1, TimeUnit.MINUTES).build();
 
     public BoostData(UUID player) {
         this.player = player;
@@ -32,7 +35,7 @@ public class BoostData extends RepoData<BoostData> {
 
     @Override
     public boolean isRemove() {
-        return boosts.isEmpty();
+        return false;
     }
 
     @Override
@@ -42,23 +45,24 @@ public class BoostData extends RepoData<BoostData> {
         synchronized (this) {
             boosts.clear();
             boosts.addAll(other.boosts);
-            cachedBoosts.clear();
+            cachedBoosts.invalidateAll();
         }
     }
 
     private synchronized void removeExpired() {
-        if (boosts.removeIf(jobsBoost -> jobsBoost.getExpires() < System.currentTimeMillis())){
+        if (boosts.removeIf(jobsBoost -> jobsBoost.getExpires() < System.currentTimeMillis())) {
             setDirty(true);
-            cachedBoosts.clear();
+            cachedBoosts.invalidateAll();
         }
 
     }
 
+    @SneakyThrows
     public synchronized double getBoost(Job job, JobsBoost.Type type) {
         removeExpired();
 
         Context context = new Context(job.getName(), type);
-        Double cached = cachedBoosts.get(context);
+        Double cached = cachedBoosts.getIfPresent(context);
         if (cached != null) return cached;
 
         double boost = 1.0 + boosts.stream()
@@ -70,11 +74,11 @@ public class BoostData extends RepoData<BoostData> {
         return boost;
     }
 
-    public JobsBoost findById(String id){
+    public JobsBoost findById(String id) {
         return boosts.stream().filter(jobsBoost -> jobsBoost.getId().equals(id)).findFirst().orElse(null);
     }
 
-    public Collection<JobsBoost> boosts(Job job){
+    public Collection<JobsBoost> boosts(Job job) {
         return boosts.stream()
                 .filter(jobsBoost -> jobsBoost.getJobName() == null || job.getName().equalsIgnoreCase(jobsBoost.getJobName()))
                 .toList();
@@ -82,12 +86,12 @@ public class BoostData extends RepoData<BoostData> {
 
     public synchronized void addBoost(JobsBoost jobsBoost) {
         removeExpired();
-        if(findById(jobsBoost.getId()) != null){
-            log.error("Boost with id " + jobsBoost.getId() + " already exists for "+player);
+        if (findById(jobsBoost.getId()) != null) {
+            log.error("Boost with id {} already exists for {}", jobsBoost.getId(), player);
             return;
         }
         boosts.add(jobsBoost);
         setDirty(true);
-        cachedBoosts.clear();
+        cachedBoosts.invalidateAll();
     }
 }

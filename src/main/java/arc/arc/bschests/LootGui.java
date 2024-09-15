@@ -16,23 +16,27 @@ public class LootGui extends ChestGui {
     Player player;
     CustomLootData customLootData;
     StaticPane pane;
+    int rows;
 
     public LootGui(Player player, CustomLootData customLootData) {
-        super(Math.min(6, customLootData.items.size() / 9), "Лут данжа");
+        super(1, "Лут данжа");
+        rows = Math.max(1, Math.min(6, customLootData.items.size() / 9));
+        setRows(rows);
         this.player = player;
         this.customLootData = customLootData;
         fill();
     }
 
     private void fill() {
-        pane = new StaticPane(0, 0, 9, customLootData.items.size() / 9);
+        pane = new StaticPane(0, 0, 9, rows);
         for (int i = 0; i < customLootData.items.size(); i++) {
             ItemStack item = customLootData.items.get(i);
             if (item != null) {
+                int finalI = i;
                 pane.addItem(new GuiItem(item.clone(), click -> {
                     ItemStack currentItem = click.getCurrentItem();
                     if (currentItem != null) {
-                        removeItem(item);
+                        removeItem(item, finalI);
                     }
                     ItemMeta itemMeta = currentItem.getItemMeta();
                     itemMeta.getPersistentDataContainer().remove(new NamespacedKey(ARC.plugin, "if-uuid"));
@@ -57,7 +61,7 @@ public class LootGui extends ChestGui {
         });
     }
 
-    private void removeItem(ItemStack item) {
-        customLootData.removeItem(item);
+    private void removeItem(ItemStack item, int slot) {
+        customLootData.removeItem(item, slot);
     }
 }

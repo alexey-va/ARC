@@ -1,6 +1,8 @@
 package arc.arc.util;
 
 import arc.arc.ARC;
+import arc.arc.configs.Config;
+import arc.arc.configs.ConfigManager;
 import arc.arc.configs.MainConfig;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -11,9 +13,12 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.entity.Player;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
@@ -44,7 +49,7 @@ public class TextUtil {
         return MiniMessage.miniMessage().deserialize(s, resolver);
     }
 
-    public static String formatTime(long millis){
+    public static String formatTime(long millis) {
         long days = millis / (24 * 60 * 60 * 1000);
         long hours = (millis % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000);
         long minutes = (millis % (60 * 60 * 1000)) / (60 * 1000);
@@ -72,7 +77,7 @@ public class TextUtil {
         TagResolver.Builder builder = TagResolver.builder();
         for (int i = 0; i < tagReplacers.length; i += 2) {
             if (tagReplacers.length < i + 1) break;
-            builder.resolver(TagResolver.resolver(tagReplacers[i], Tag.inserting(mm(tagReplacers[i+1], true))));
+            builder.resolver(TagResolver.resolver(tagReplacers[i], Tag.inserting(mm(tagReplacers[i + 1], true))));
         }
         TagResolver resolver = builder.build();
 
@@ -116,8 +121,8 @@ public class TextUtil {
         int orderOfMagnitude = (int) Math.floor(Math.log10(Math.abs(amount)));
 
         // Calculate the number of digits before and after the decimal point
-        int digitsBeforeDecimal = Math.max(1, Math.min(precision+1, orderOfMagnitude + 1));
-        int digitsAfterDecimal = Math.max(0, precision +1 - digitsBeforeDecimal);
+        int digitsBeforeDecimal = Math.max(1, Math.min(precision + 1, orderOfMagnitude + 1));
+        int digitsAfterDecimal = Math.max(0, precision + 1 - digitsBeforeDecimal);
 
         // Construct the pattern based on the calculated digits
         StringBuilder patternBuilder = new StringBuilder("#,##0");
@@ -161,4 +166,29 @@ public class TextUtil {
         return list.get(ThreadLocalRandom.current().nextInt(list.size()));
     }
 
+    public static Component timeComponent(long l, TimeUnit timeUnit) {
+        Config config = ConfigManager.getOrCreate(ARC.plugin.getDataPath(), "config.yml", "main");
+        String format = config.string("time-format", "dd HH mm ss");
+        Map<String, String> names = Map.of(
+                "dd", config.string("days", " дней"),
+                "HH", config.string("hours", " часов"),
+                "mm", config.string("minutes", " минут"),
+                "ss", config.string("seconds", " секунд")
+        );
+        int days = (int) timeUnit.toDays(l);
+        int hours = (int) timeUnit.toHours(l) % 24;
+        int minutes = (int) timeUnit.toMinutes(l) % 60;
+        int seconds = (int) timeUnit.toSeconds(l) % 60;
+
+        String s = format;
+        if (days == 0) s = s.replace("dd", "");
+        else s = s.replace("dd", days + names.get("dd"));
+        if (hours == 0) s = s.replace("HH", "");
+        else s = s.replace("HH", hours + names.get("HH"));
+        if (minutes == 0) s = s.replace("mm", "");
+        else s = s.replace("mm", minutes + names.get("mm"));
+        if (seconds == 0) s = s.replace("ss", "");
+        else s = s.replace("ss", seconds + names.get("ss"));
+        return mm(s.trim(), true);
+    }
 }

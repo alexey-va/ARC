@@ -89,34 +89,34 @@ public class LeafChecker {
     // find all floating blobs of leaves/trunk blocks which are small and not connected to the ground
     // if from this block we can build such a blobs, return it. overwise return empy collection
     public Collection<Block> findFloatingBlobs(Block origin, Set<Block> withPlayerData, int maxBlocks, int maxTrunkBlocks,
-                                                boolean logs, Set<Block> visited) {
+                                               boolean logs, Set<Block> visited) {
         Set<Block> floatingBlobs = new HashSet<>();
         Deque<Block> queue = new ArrayDeque<>();
         queue.add(origin);
         int trunkBlocks = 0;
         while (!queue.isEmpty()) {
             Block current = queue.poll();
-            if (visited.contains(current)) continue;
-            visited.add(current);
-            if (withPlayerData.contains(current)){
-                if(logs) log.info("Block {} has player data", current);
+            //if (visited.contains(current)) continue;
+            //visited.add(current);
+            if (withPlayerData.contains(current)) {
+                if (logs) log.debug("Block {} has player data", current);
                 return Set.of();
             }
             if (!leafMaterials.contains(current.getType())) {
-                if(logs) log.info("Block {} is not a leaf", current);
+                if (logs) log.debug("Block {} is not a leaf", current);
                 if (trunkMaterials.contains(current.getType())) {
                     trunkBlocks++;
-                    if(logs) log.info("Block {} is a trunk block", current);
-                    if(logs) log.info("Total trunk blocks: {}", trunkBlocks);
+                    if (logs) log.debug("Block {} is a trunk block", current);
+                    if (logs) log.debug("Total trunk blocks: {}", trunkBlocks);
                     if (trunkBlocks > maxTrunkBlocks) return Set.of();
                 } else return Set.of();
             }
             floatingBlobs.add(current);
-            if(logs) log.info("Total floating blobs: {}", floatingBlobs.size());
+            if (logs) log.debug("Total floating blobs: {}", floatingBlobs.size());
             if (floatingBlobs.size() > maxBlocks) return Set.of();
             for (Block neighbor : getNeighbors(current, diagonalScan, 1)) {
                 if (visited.contains(neighbor)) continue;
-                if(neighbor.isPassable()) continue;
+                if (neighbor.isPassable()) continue;
                 queue.add(neighbor);
             }
         }

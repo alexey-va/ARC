@@ -21,7 +21,6 @@ public class EliteLootGui extends ChestGui {
 
     Player player;
     PaginatedPane itemPane;
-    StaticPane navPane;
 
     public EliteLootGui(Player player) {
         super(6, "EliteLoot");
@@ -44,7 +43,9 @@ public class EliteLootGui extends ChestGui {
             for (var entry : decors.entrySet()) {
                 DecorItem decorItem = entry.getValue();
                 GuiItem guiItem = new GuiItemBuilder(decorItem.toItemStack(lootType))
-                        .clickEvent(e -> e.setCancelled(true)).build();
+                        .clickEvent(e -> {
+                            e.setCancelled(true);
+                        }).build();
                 itemList.add(guiItem);
             }
         }
@@ -61,7 +62,24 @@ public class EliteLootGui extends ChestGui {
                 .toGuiItemBuilder()
                 .clickEvent(e -> {
                     e.setCancelled(true);
+                    int page = itemPane.getPage();
+                    if (page + 1 < itemPane.getPages()) itemPane.setPage(page + 1);
+                    this.update();
                 }).build();
+
+        GuiItem prevPageItem = new ItemStackBuilder(Material.ARROW)
+                .display("Previous Page")
+                .toGuiItemBuilder()
+                .clickEvent(e -> {
+                    e.setCancelled(true);
+                    int page = itemPane.getPage();
+                    if (page - 1 >= 0) itemPane.setPage(page - 1);
+                    this.update();
+                }).build();
+
+        nav.addItem(nextPageItem, 8, 0);
+        nav.addItem(prevPageItem, 0, 0);
+
         this.addPane(nav);
     }
 

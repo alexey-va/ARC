@@ -22,6 +22,7 @@ import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.LeatherArmorMeta;
 
 import java.util.*;
 
@@ -32,6 +33,7 @@ import static arc.arc.eliteloot.EliteLootManager.toLootType;
 public class EliteLootProcessor {
 
     final Config config;
+    final Set<Material> leathers = Set.of(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS, Material.LEATHER_BOOTS);
 
     public EliteLootProcessor(Config config) {
         this.config = config;
@@ -41,9 +43,15 @@ public class EliteLootProcessor {
         if (originalStack == null) return null;
         if (!EliteItemManager.isEliteMobsItem(originalStack)) return originalStack;
 
+        double replaceChance = config.realNumber("replace-chance", 0.4);
+        if (Math.random() > replaceChance) return originalStack;
+
         ItemMeta meta = originalStack.getItemMeta();
-        List<Component> trimmedLore = removeUselessEMLore(meta.lore());
-        meta.lore(trimmedLore);
+        if(config.bool("clear-lore", false)){
+            List<Component> trimmedLore = removeUselessEMLore(meta.lore());
+            meta.lore(trimmedLore);
+        }
+
         originalStack.setItemMeta(meta);
 
         LootType lootType = toLootType(originalStack);
@@ -61,6 +69,8 @@ public class EliteLootProcessor {
         if (!Set.of(LootType.HELMET, LootType.BOOTS, LootType.CHESTPLATE, LootType.LEGGINGS).contains(lootType)) {
             updatedStack = changeItemMaterial(originalStack, decorItem.getMaterial(), true);
             meta = updatedStack.getItemMeta();
+        } else if (meta instanceof LeatherArmorMeta leatherMeta) {
+            leatherMeta.setColor(decorItem.getColor());
         }
 
         if (decorItem.getModelId() == 0) meta.setCustomModelData(null);
@@ -156,27 +166,30 @@ public class EliteLootProcessor {
         if (lore == null) return new ArrayList<>();
         List<String> toSearch = config.stringList("useless-lore");
         List<Component> newLore = new ArrayList<>();
+        List<Integer> keepIndexes = new ArrayList<>();
+
+        boolean prevIsEmpty = false;
         for (int i = 0; i < lore.size(); i++) {
             String line = PlainTextComponentSerializer.plainText().serialize(lore.get(i));
-            boolean fits = false;
+            boolean remove = false;
+            boolean noLetters = containsNoLetters(line);
             for (String search : toSearch) {
                 if (line.contains(search)) {
-                    fits = true;
+                    remove = true;
                     break;
                 }
             }
-            if (!fits) {
-                newLore.add(lore.get(i));
-                continue;
+            if (containsNoLetters(line) && prevIsEmpty) {
+                remove = true;
             }
-            if (i + 1 < lore.size()) {
-                String nextLine = PlainTextComponentSerializer.plainText().serialize(lore.get(i));
-                if (containsNoLetters(nextLine)) {
-                    i += 2;
-                } else {
-                    newLore.add(lore.get(i));
-                }
+            if (!remove) {
+                keepIndexes.add(i);
             }
+            prevIsEmpty = noLetters;
+        }
+
+        for (int i : keepIndexes) {
+            newLore.add(lore.get(i));
         }
         return newLore;
     }

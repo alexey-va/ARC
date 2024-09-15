@@ -30,6 +30,7 @@ public class JobsHook {
     Config config;
 
     public JobsHook() {
+        log.info("Jobs hook enabled");
         if (jobsListener == null) {
             jobsListener = new JobsListener();
             Bukkit.getPluginManager().registerEvents(jobsListener, ARC.plugin);
@@ -47,6 +48,7 @@ public class JobsHook {
                     .updateChannel("arc.jobs_boosts_update")
                     .clazz(BoostData.class)
                     .id("jobs")
+                    .saveBackups(false)
                     .backupFolder(ARC.plugin.getDataFolder().toPath().resolve("backups/jobs"))
                     .saveInterval(10L)
                     .build();
@@ -67,6 +69,7 @@ public class JobsHook {
 
         repo.getOrCreate(player.toString(), () -> new BoostData(player))
                 .thenAccept(data -> {
+                    log.info("Adding boost for player " + player + " jobs " + jobs + " boost " + boost + " expires " + expires + " boostId " + boostId + " type " + type);
                     List<String> jobsUpdated = new ArrayList<>();
                     if (allJobs) jobsUpdated.add(null);
                     else jobsUpdated.addAll(jobs);
@@ -87,6 +90,7 @@ public class JobsHook {
                             data.addBoost(jobsBoost);
                         }
                     }
+                    log.info("Boost added for player " + player + " jobs " + jobs + " boost " + boost + " expires " + expires + " boostId " + boostId + " type " + type);
                 });
     }
 
@@ -118,5 +122,12 @@ public class JobsHook {
         return Jobs.getPlayerManager().getJobsPlayer(player).getBoost(jobName, currencyType);
     }
 
+    public void resetBoosts(Player player) {
+        repo.getOrCreate(player.getUniqueId().toString(), () -> new BoostData(player.getUniqueId()))
+                .thenAccept(bd -> {
+                    bd.setBoosts(Set.of());
+                    bd.setDirty(true);
+                });
+    }
 }
 

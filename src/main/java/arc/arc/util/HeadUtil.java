@@ -8,12 +8,8 @@ import lombok.extern.log4j.Log4j2;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
-import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.SkullMeta;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -32,13 +28,12 @@ public class HeadUtil {
         final ItemStack item = new ItemStack(Material.PLAYER_HEAD);
         String texture = fetchHead(uuid).getNow(null);
         if(texture == null || texture.isEmpty()) return item;
-        NBT.modify(item, nbt -> {
-            final ReadWriteNBT skullOwnerCompound = nbt.getOrCreateCompound("SkullOwner");
-            skullOwnerCompound.setUUID("Id", UUID.randomUUID());
-            skullOwnerCompound.getOrCreateCompound("Properties")
-                    .getCompoundList("textures")
-                    .addCompound()
-                    .setString("Value", texture);
+        NBT.modifyComponents(item, nbt -> {
+            ReadWriteNBT profileNbt = nbt.getOrCreateCompound("minecraft:profile");
+            profileNbt.setUUID("id", UUID.randomUUID());
+            ReadWriteNBT propertiesNbt = profileNbt.getCompoundList("properties").addCompound();
+            propertiesNbt.setString("name", "GrocerMC");
+            propertiesNbt.setString("value", texture);
         });
         return item;
     }

@@ -28,16 +28,19 @@ public class CustomLootData extends RepoData<CustomLootData> {
 
     @Override
     public String id() {
+        //log.info("id() called {}", (playerUuid.toString() + ":::" + chestUuid.toString()));
         return playerUuid.toString() + ":::" + chestUuid.toString();
     }
 
     @Override
     public boolean isRemove() {
-        return System.currentTimeMillis() - timestamp > TTL || items == null || (isFilled() && items.isEmpty());
+        return System.currentTimeMillis() - timestamp > TTL || items == null || (filled && items.isEmpty());
     }
 
     @Override
     public void merge(CustomLootData other) {
+        //log.info("merge() called {}", other);
+        //log.info("state before merge: {}", this);
         if (other.items != null) {
             if (items == null) {
                 items = new ItemList();
@@ -47,16 +50,42 @@ public class CustomLootData extends RepoData<CustomLootData> {
         }
     }
 
-    public void removeItem(ItemStack item) {
+    private int tryRemoveSlotItem(ItemStack item, int slot) {
+        if (items.size() <= slot) {
+            return item.getAmount();
+        }
+        ItemStack itemStack = items.get(slot);
+        if (itemStack == null) {
+            return item.getAmount();
+        }
+        if (itemStack.isSimilar(item)) {
+            int amount = itemStack.getAmount();
+            if (amount > item.getAmount()) {
+                itemStack.setAmount(amount - item.getAmount());
+                items.set(slot, itemStack);
+                return 0;
+            } else {
+                items.set(slot, null);
+                return item.getAmount() - amount;
+            }
+        }
+        return item.getAmount();
+    }
+
+    public void removeItem(ItemStack item, int slot) {
+        //setDirty(true);
+        int amountLeft = tryRemoveSlotItem(item, slot);
+        if (amountLeft == 0) {
+            setDirty(true);
+            return;
+        }
         for (int i = 0; i < items.size(); i++) {
-            ItemStack itemStack = items.get(i);
-            if (itemStack == null) continue;
-            if (itemStack.isSimilar(item) && itemStack.getAmount() == item.getAmount()) {
-                items.set(i, null);
+            amountLeft = tryRemoveSlotItem(item, i);
+            if (amountLeft == 0) {
                 setDirty(true);
                 return;
             }
         }
-        log.error("Item not found in chest: " + item);
+        log.error("Item not found in chest: {} {}", item, slot);
     }
 }

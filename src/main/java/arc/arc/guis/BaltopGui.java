@@ -3,10 +3,7 @@ package arc.arc.guis;
 import arc.arc.ARC;
 import arc.arc.configs.Config;
 import arc.arc.hooks.HookRegistry;
-import arc.arc.util.CooldownManager;
-import arc.arc.util.GuiUtils;
-import arc.arc.util.ItemStackBuilder;
-import arc.arc.util.TextUtil;
+import arc.arc.util.*;
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
@@ -202,11 +199,21 @@ public class BaltopGui extends ChestGui {
     }
 
     private void setupBackground() {
-        OutlinePane pane = new OutlinePane(0, 0, 9, rows);
+        OutlinePane pane = new OutlinePane(0, rows - 1, 9, 1);
         pane.addItem(GuiUtils.background());
         pane.setRepeat(true);
         pane.setPriority(Pane.Priority.LOWEST);
         this.addPane(pane);
+
+        OutlinePane pane2 = new OutlinePane(0, 0, 9, rows - 1);
+        pane.addItem(
+                new ItemStackBuilder(Material.GRAY_STAINED_GLASS_PANE)
+                        .display(" ")
+                        .toGuiItemBuilder().build()
+        );
+        pane2.setRepeat(true);
+        pane2.setPriority(Pane.Priority.LOWEST);
+        this.addPane(pane2);
     }
 
 

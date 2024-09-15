@@ -40,6 +40,7 @@ public class JobsListGui extends ChestGui {
     private final Config config;
     Player player;
     GuiItem back, global;
+    BoostData data;
 
     public JobsListGui(Config config, Player player) {
         super(3, TextHolder.deserialize(
@@ -47,6 +48,10 @@ public class JobsListGui extends ChestGui {
         ));
         this.player = player;
         this.config = config;
+
+
+        RedisRepo<BoostData> repo = JobsHook.getRepo();
+        data = repo.getOrCreate(player.getUniqueId().toString(), () -> new BoostData(player.getUniqueId())).join();
 
         setupBackground();
         setupNav();
@@ -72,8 +77,7 @@ public class JobsListGui extends ChestGui {
                     .clickEvent(click -> {
                         click.setCancelled(true);
                         GuiUtils.constructAndShowAsync(() -> new BoostsOfJobGui(job, player, config), click.getWhoClicked());
-                    })
-                    .build());
+                    }).build());
         }
         pane.populateWithGuiItems(items);
     }
@@ -83,9 +87,6 @@ public class JobsListGui extends ChestGui {
 
     @SneakyThrows
     private CalculatedBoost calculateBoosts(Job job) {
-        RedisRepo<BoostData> repo = JobsHook.getRepo();
-        var data = repo.getOrCreate(player.getUniqueId().toString(), () -> new BoostData(player.getUniqueId())).get();
-
         double boostMoney = data.getBoost(job, JobsBoost.Type.MONEY) * 100 - 100;
         double boostPoints = data.getBoost(job, JobsBoost.Type.POINTS)* 100 - 100;
         double boostExp =  data.getBoost(job, JobsBoost.Type.EXP) * 100 - 100;

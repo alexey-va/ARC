@@ -5,6 +5,7 @@ import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
 import com.github.stefvanschie.inventoryframework.gui.type.util.Gui;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
+import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -26,6 +27,7 @@ import java.util.function.Supplier;
 
 import static arc.arc.util.TextUtil.strip;
 
+@Slf4j
 public class GuiUtils {
 
     private static Map<BgKey, GuiItem> backgrounds = new HashMap<>();
@@ -102,7 +104,10 @@ public class GuiUtils {
                 .thenAccept(gui -> new BukkitRunnable() {
                     @Override
                     public void run() {
-                        if (gui == null) return;
+                        if (gui == null) {
+                            log.error("Gui is null {}", supplier);
+                            return;
+                        }
                         gui.show(player);
                     }
                 }.runTaskLater(ARC.plugin, delay));

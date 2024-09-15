@@ -14,6 +14,7 @@ public class PermissionCondition implements ArcCondition {
 
     @Override
     public boolean test(Player player) {
+        if (permission.startsWith("!")) return !player.hasPermission(permission.substring(1));
         return player.hasPermission(permission);
     }
 }

@@ -52,9 +52,9 @@ public class IAEvents implements Listener {
         String pathToZip = emHookConfig.string("path-to-zip", "ItemsAdder/output/generated.zip");
         Path zipPath = path.getParent().resolve(pathToZip);
         if (Files.exists(zipPath)) {
-            ARC.info("ItemsAdder pack compressed: " + zipPath);
+            //ARC.info("ItemsAdder pack compressed: " + zipPath);
         } else {
-            ARC.info("ItemsAdder pack compressed: " + zipPath + " (not found)");
+            //ARC.info("ItemsAdder pack compressed: " + zipPath + " (not found)");
             return;
         }
 
@@ -68,7 +68,7 @@ public class IAEvents implements Listener {
                 .filter(p -> p.toString().contains("ia_generated"))
                 .forEach(p -> {
                     try {
-                        ARC.info("IAEvents processing property file: " + p);
+                        //ARC.info("IAEvents processing property file: " + p);
                         replaceLineInFile(p, BOOTS, REPLACE_BOOTS);
                         replaceLineInFile(p, LEGGINGS, REPLACE_LEGGINGS);
                         replaceLineInFile(p, CHESTPLATE, REPLACE_CHESTPLATE);
@@ -83,7 +83,7 @@ public class IAEvents implements Listener {
 
     private void unzip(Path zipPath, Path destDir) throws Exception {
         URI zipUri = URI.create("jar:file:" + zipPath.toUri().getPath());
-        ARC.info("Unzipping: " + zipUri);
+        //ARC.info("Unzipping: " + zipUri);
         try (FileSystem zipFs = FileSystems.newFileSystem(zipUri, Collections.emptyMap())) {
             Path root = zipFs.getPath("/");
             Files.walk(root)
@@ -97,12 +97,12 @@ public class IAEvents implements Listener {
                         }
                     });
         }
-        ARC.info("Unzipped to: " + destDir);
+        //ARC.info("Unzipped to: " + destDir);
     }
 
     private void zip(Path sourceDir, String zipFilePath) throws Exception {
         Path zipPath = Paths.get(zipFilePath);
-        ARC.info("Zipping {} to {}", sourceDir, zipPath);
+        //ARC.info("Zipping {} to {}", sourceDir, zipPath);
         Files.deleteIfExists(zipPath);
 
         URI zipUri = URI.create("jar:file:" + zipPath.toUri().getPath());
@@ -168,10 +168,17 @@ public class IAEvents implements Listener {
             }
         }
         // if found create new file with _icon suffix
-        if (found) {
+        if (found && false) {
+
             Path newPath = Paths.get(path.toString().replace(".properties", "_icon.properties"));
             CustomStack customStack = CustomStack.getInstance(namespace+":"+id);
+
             if(customStack != null && !customStack.getTextures().isEmpty()) {
+                String texturePath = customStack.getTextures().getFirst();
+                String[] split = texturePath.split(":");
+                if(split.length == 2) {
+                    texturePath = "../../../../"+split[0]+"/textures/"+split[1];
+                }
                 String lines = """
                         nbt.itemsadder.namespace={namespace}
                         nbt.itemsadder.id={id}
@@ -183,7 +190,7 @@ public class IAEvents implements Listener {
                 lines = lines.replace("{namespace}", namespace);
                 lines = lines.replace("{id}", id);
                 lines = lines.replace("{replace_string}", replace);
-                lines = lines.replace("{texture_path}", customStack.getTextures().getFirst());
+                lines = lines.replace("{texture_path}", texturePath);
                 Files.write(newPath, lines.getBytes());
             }
 

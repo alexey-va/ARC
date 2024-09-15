@@ -5,11 +5,12 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class CooldownManager {
 
     private static BukkitTask countdownTask;
-    private static Map<UUID, Map<String, Cooldown>> cooldownMap = new HashMap<>();
+    private static Map<UUID, Map<String, Cooldown>> cooldownMap = new ConcurrentHashMap<>();
 
     private static void countdown(long step) {
         List<UUID> uuidToRemove = new ArrayList<>();
@@ -26,13 +27,23 @@ public class CooldownManager {
     }
 
     public static long cooldown(UUID uuid, String id) {
-        if (!cooldownMap.containsKey(uuid) || !cooldownMap.get(uuid).containsKey(id)) return 0;
-        return cooldownMap.get(uuid).get(id).ticksLeft;
+        Map<String, Cooldown> stringCooldownMap = cooldownMap.get(uuid);
+        if (stringCooldownMap == null) return 0;
+        Cooldown cooldown = stringCooldownMap.get(id);
+        if (cooldown == null) return 0;
+        if (cooldown.ticksLeft <= 0) {
+            stringCooldownMap.remove(id);
+            return 0;
+        }
+        return cooldown.ticksLeft;
     }
 
     public static void addCooldown(UUID uuid, String id, long ticks) {
-        if (!cooldownMap.containsKey(uuid)) cooldownMap.put(uuid, new HashMap<>());
-        cooldownMap.get(uuid).put(id, new Cooldown(true, ticks, id));
+        cooldownMap.compute(uuid, (k, v) -> {
+            if (v == null) v = new ConcurrentHashMap<>();
+            v.put(id, new Cooldown(true, ticks, id));
+            return v;
+        });
     }
 
     public static void setupTask(long period) {

@@ -139,6 +139,7 @@ public final class ARC extends JavaPlugin {
         StoreManager.saveAll();
         headTextureCache.save();
         LeafDecayManager.cancel();
+        PersonalLootManager.shutdown();
     }
 
     public void load() {
@@ -228,8 +229,12 @@ public final class ARC extends JavaPlugin {
         getCommand("treasure-hunt").setTabCompleter(new TreasureHuntTabComplete());
         getCommand("treasure-pool").setExecutor(new TreasurePoolCommand());
         getCommand("treasure-pool").setTabCompleter(new TreasurePoolTabcomplete());
-        getCommand("build-book").setExecutor(new BuildBookCommand());
-        getCommand("build-book").setTabCompleter(new BuildBookTabComplete());
+
+
+        BuildBookCommand buildBookCommand = new BuildBookCommand();
+        getCommand("build-book").setExecutor(buildBookCommand);
+        getCommand("build-book").setTabCompleter(buildBookCommand);
+
         getCommand("arc-invest").setExecutor(new StockCommand());
         getCommand("sound-follow").setExecutor(new SoundFollowCommand());
 

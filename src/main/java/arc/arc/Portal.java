@@ -3,6 +3,7 @@ package arc.arc;
 import arc.arc.hooks.HookRegistry;
 import arc.arc.hooks.HuskHomesHook;
 import com.destroystokyo.paper.ParticleBuilder;
+import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -18,6 +19,7 @@ import org.bukkit.scheduler.BukkitTask;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+@Slf4j
 public class Portal {
 
     private static final Set<Block> occupiedBlocks = new HashSet<>();
@@ -94,7 +96,7 @@ public class Portal {
         p.sendMessage(ChatColor.translateAlternateColorCodes('&', "&aНедалеко появляется портал..."));
     }
 
-    public Portal(String ownerUuid, String command){
+    public Portal(String ownerUuid, String command) {
         this.action = Action.COMMAND;
         this.ownerUuid = ownerUuid;
         this.command = command;
@@ -202,7 +204,7 @@ public class Portal {
                 }
             }.runTask(ARC.plugin);
         } else if (action == Action.TPA) {
-            if(HookRegistry.huskHomesHook == null) return;
+            if (HookRegistry.huskHomesHook == null) return;
             new BukkitRunnable() {
                 @Override
                 public void run() {
@@ -220,7 +222,7 @@ public class Portal {
                         player.getWorld().playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1f, 1f);
                         HookRegistry.huskHomesHook.teleport(teleport);
                     } catch (Exception e) {
-                        e.printStackTrace();
+                        log.error("Error while teleporting", e);
                     }
                 }
             }.runTask(ARC.plugin);
@@ -228,10 +230,12 @@ public class Portal {
     }
 
     private void placeBlocks(Set<Player> players) {
-        if (players == null || players.size() == 0) return;
+        if (players == null || players.isEmpty()) return;
         BlockData blockData = Bukkit.createBlockData(Material.END_GATEWAY);
         Map<Location, BlockData> map = Map.of(block.getRelative(0, 1, 0).getLocation(), blockData, block.getRelative(0, 2, 0).getLocation(), blockData);
         for (Player player : players) {
+            World world = player.getWorld();
+            if (world != block.getWorld()) continue;
             if (player.getLocation().distance(block.getLocation()) < 50) player.sendMultiBlockChange(map);
         }
         blockChangePlayers.addAll(players.stream().map(pl -> pl.getUniqueId().toString()).toList());

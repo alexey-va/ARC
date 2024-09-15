@@ -7,10 +7,10 @@ import lombok.ToString;
 import java.util.TreeMap;
 import java.util.concurrent.ThreadLocalRandom;
 
+@Getter
 @ToString
 public class DecorPool {
 
-    @Getter
     TreeMap<Double, DecorItem> decors = new TreeMap<>();
 
     public void add(DecorItem decorItem, double weight){
@@ -21,7 +21,7 @@ public class DecorPool {
     }
 
     public DecorItem randomItem() {
-        ARC.info(decors.toString());
+        //ARC.info(decors.toString());
         if(decors.isEmpty()) return null;
         double random = ThreadLocalRandom.current().nextDouble(0, decors.lastKey());
         return decors.ceilingEntry(random).getValue();
@@ -29,5 +29,9 @@ public class DecorPool {
 
     public boolean contains(DecorItem decorItem) {
         return decors.containsValue(decorItem);
+    }
+
+    public void remove(DecorItem decorItem) {
+        decors.values().removeIf(decorItem::equals);
     }
 }

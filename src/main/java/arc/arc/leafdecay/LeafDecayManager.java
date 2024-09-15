@@ -110,7 +110,7 @@ public class LeafDecayManager {
                     for (String worldName : worlds) {
                         World world = Bukkit.getWorld(worldName);
                         if (world == null) {
-                            log.warn("World {} not found", worldName);
+                            //log.warn("World {} not found", worldName);
                             continue;
                         }
                         pollChunksInWorld(world);
@@ -136,7 +136,7 @@ public class LeafDecayManager {
                                 ParticleManager.ParticleDisplay.builder()
                                         .players(nearbyPlayers)
                                         .location(block.getLocation().add(0.5, 0.5, 0.5))
-                                        .particle(Particle.BLOCK_DUST)
+                                        .particle(Particle.BLOCK)
                                         .count(3)
                                         .extra(0.1)
                                         .data(type.createBlockData())
@@ -198,7 +198,7 @@ public class LeafDecayManager {
     }
 
     public static void markAsPlayerPlaced(Block block) {
-        if (!leafMaterials.contains(block.getType())) return;
+        if (!leafMaterials.contains(block.getType()) && !trunkMaterials.contains(block.getType())) return;
         CustomBlockData data = new CustomBlockData(block, ARC.plugin);
         data.set(playerPlacedKey, PersistentDataType.BOOLEAN, true);
     }

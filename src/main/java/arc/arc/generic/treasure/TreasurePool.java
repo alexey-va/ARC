@@ -31,6 +31,7 @@ public class TreasurePool {
     private static BukkitTask saveTask;
 
     private TreeMap<Integer, Treasure> treasureMap = new TreeMap<>();
+    @Getter
     private int totalWeight = 0;
     @Getter
     final String id;
@@ -42,6 +43,19 @@ public class TreasurePool {
         totalWeight += treasure.weight();
         treasureMap.put(totalWeight, treasure);
         dirty = true;
+    }
+
+    public void remove(Treasure treasure) {
+        treasureMap.values().remove(treasure);
+        dirty = true;
+    }
+
+    public int size() {
+        return treasureMap.size();
+    }
+
+    public Collection<Treasure> getTreasures() {
+        return treasureMap.values();
     }
 
     public Map<String, Object> serialize() {

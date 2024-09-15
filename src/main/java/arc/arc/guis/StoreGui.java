@@ -55,6 +55,8 @@ public class StoreGui extends ChestGui {
     }
 
     private void setupListener() {
+        this.setOnTopDrag(drag -> drag.setCancelled(true));
+
         this.setOnBottomClick(click -> {
             //click.setCancelled(true);
             if (!click.isShiftClick()) {

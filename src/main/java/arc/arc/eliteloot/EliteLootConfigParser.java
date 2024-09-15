@@ -25,6 +25,7 @@ public class EliteLootConfigParser {
         return res;
     }
 
+
     public void addDecor(LootType lootType, DecorItem decorItem) {
         Map<String, Object> serializedDecor = new HashMap<>();
         serializedDecor.put("material", decorItem.getMaterial().name());

@@ -79,10 +79,6 @@ public class Store extends RepoData<Store> {
         }
         if (forbidden.stream().anyMatch(matcher -> matcher.matches(item))) {
             System.out.println("Item is forbidden");
-            for (ItemMatcher matcher : forbidden) {
-                System.out.println(matcher);
-                System.out.println(matcher.matches(item));
-            }
             return false;
         }
         try {

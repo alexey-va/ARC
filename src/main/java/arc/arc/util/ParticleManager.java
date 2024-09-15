@@ -36,8 +36,9 @@ public class ParticleManager {
                     .offset(particleDisplay.offsetX, particleDisplay.offsetY, particleDisplay.offsetZ)
                     .receivers(particleDisplay.players)
                     .data(particleDisplay.data)
+                    .extra(particleDisplay.extra)
                     .spawn();
-        } catch (Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }
@@ -47,7 +48,7 @@ public class ParticleManager {
         task = new BukkitRunnable() {
             @Override
             public void run() {
-                while(!queue.isEmpty()) showParticles(queue.poll());
+                while (!queue.isEmpty()) showParticles(queue.poll());
             }
         }.runTaskTimerAsynchronously(ARC.plugin, 20L, 1L);
     }
@@ -75,7 +76,7 @@ public class ParticleManager {
         @Builder.Default
         double offsetX = 0.3, offsetY = 0.3, offsetZ = 0.3;
         @Builder.Default
-        double extra = 0.1;
+        double extra = 0.0;
         @Builder.Default
         Particle particle = Particle.FLAME;
         @Builder.Default

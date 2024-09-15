@@ -19,18 +19,6 @@ import java.util.Map;
 
 public class ShopHook implements Listener {
 
-    @EventHandler
-    public void preTransaction(PreTransactionEvent event){
-        event.getItems().forEach(
-                (i, q) -> {
-                    System.out.println(i.getItemPath());
-                    System.out.println(q);
-                }
-        );
-        System.out.println(event.getTransactionType());
-        System.out.println(event.getPrices());
-    }
-
 
     public double cost(Material material){
         ShopItem shopItem = EconomyShopGUIHook.getShopItem(new ItemStack(material));

@@ -8,6 +8,7 @@ import arc.arc.hooks.bank.BankHook;
 import arc.arc.hooks.betterstructures.BsHook;
 import arc.arc.hooks.citizens.CitizensHook;
 import arc.arc.hooks.elitemobs.EMHook;
+import arc.arc.hooks.iris.IrisHook;
 import arc.arc.hooks.jobs.JobsHook;
 import arc.arc.hooks.lands.LandsHook;
 import arc.arc.hooks.lootchest.LootChestHook;
@@ -23,7 +24,10 @@ import arc.arc.listeners.*;
 import dev.aurelium.auraskills.api.AuraSkillsApi;
 import lombok.extern.slf4j.Slf4j;
 import org.bukkit.Bukkit;
+import org.bukkit.scheduler.BukkitRunnable;
 
+
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.bukkit.Bukkit.getServer;
 
@@ -55,6 +59,7 @@ public class HookRegistry {
     public static RedisEcoHook redisEcoHook;
     public static AuraSkillsHook auraSkillsHook;
     public static BsHook bsHook;
+    public static IrisHook irisHook;
     public AEHook aeHook;
 
 
@@ -113,83 +118,99 @@ public class HookRegistry {
             }
         }
         if (Bukkit.getPluginManager().isPluginEnabled("HuskHomes") && huskHomesHook == null) {
+            log.info("Registering HuskHomes hook");
             huskHomesHook = new HuskHomesHook();
             Bukkit.getPluginManager().registerEvents(huskHomesHook, ARC.plugin);
         }
         if (getServer().getPluginManager().getPlugin("Lands") != null) {
             if (getServer().getPluginManager().getPlugin("Lands").isEnabled()) {
+                log.info("Registering Lands hook");
                 landsHook = new LandsHook();
             }
         }
         if (getServer().getPluginManager().getPlugin("Jobs") != null) {
             if (getServer().getPluginManager().getPlugin("Jobs").isEnabled()) {
+                log.info("Registering Jobs hook");
                 jobsHook = new JobsHook();
             }
         }
         if (getServer().getPluginManager().getPlugin("zAuctionHouseV3") != null) {
             if (getServer().getPluginManager().getPlugin("zAuctionHouseV3").isEnabled()) {
+                log.info("Registering AuctionHouse hook");
                 auctionHook = new AuctionHook();
             }
         }
         if (getServer().getPluginManager().getPlugin("Bank") != null) {
             if (getServer().getPluginManager().getPlugin("Bank").isEnabled()) {
+                log.info("Registering Bank hook");
                 bankHook = new BankHook();
             }
         }
         if (getServer().getPluginManager().getPlugin("RedisEconomy") != null) {
             if (getServer().getPluginManager().getPlugin("RedisEconomy").isEnabled()) {
+                log.info("Registering RedisEconomy hook");
                 redisEcoHook = new RedisEcoHook();
             }
         }
         if (getServer().getPluginManager().getPlugin("zTranslator") != null) {
             if (getServer().getPluginManager().getPlugin("zTranslator").isEnabled()) {
+                log.info("Registering Translator hook");
                 translatorHook = new TranslatorHook();
             }
         }
         if (getServer().getPluginManager().getPlugin("LuckPerms") != null) {
             if (getServer().getPluginManager().getPlugin("LuckPerms").isEnabled()) {
+                log.info("Registering LuckPerms hook");
                 luckPermsHook = new LuckPermsHook();
             }
         }
         if (getServer().getPluginManager().getPlugin("AuraSkills") != null) {
             if (getServer().getPluginManager().getPlugin("AuraSkills").isEnabled()) {
+                log.info("Registering AuraSkills hook");
                 auraSkillsHook = new AuraSkillsHook();
             }
         }
         if (getServer().getPluginManager().getPlugin("CMI") != null) {
             if (getServer().getPluginManager().getPlugin("CMI").isEnabled()) {
+                log.info("Registering CMI hook");
                 cmiHook = new CMIHook();
             }
         }
         if (getServer().getPluginManager().getPlugin("ViaVersion") != null) {
             if (getServer().getPluginManager().getPlugin("ViaVersion").isEnabled()) {
+                log.info("Registering ViaVersion hook");
                 viaVersionHook = new ViaVersionHook();
             }
         }
         if (getServer().getPluginManager().getPlugin("LootChest") != null) {
             if (getServer().getPluginManager().getPlugin("LootChest").isEnabled()) {
+                log.info("Registering LootChest hook");
                 System.out.println("Registering LootChest hook");
                 lootChestHook = new LootChestHook();
             }
         }
         if (getServer().getPluginManager().getPlugin("YamipaPlugin") != null) {
             if (getServer().getPluginManager().getPlugin("YamipaPlugin").isEnabled()) {
+                log.info("Registering Yamipa hook");
                 yamipaHook = new YamipaHook();
             }
         }
         if (getServer().getPluginManager().getPlugin("ItemsAdder") != null) {
             if (getServer().getPluginManager().getPlugin("ItemsAdder").isEnabled()) {
+                log.info("Registering ItemsAdder hook");
                 itemsAdderHook = new ItemsAdderHook();
             }
         }
         if (getServer().getPluginManager().getPlugin("Citizens") != null) {
             if (getServer().getPluginManager().getPlugin("Citizens").isEnabled()) {
+                log.info("Registering Citizens hook");
                 citizensHook = new CitizensHook();
                 citizensHook.registerListeners();
             }
         }
         if (getServer().getPluginManager().getPlugin("WorldGuard") != null) {
             if (getServer().getPluginManager().getPlugin("WorldGuard").isEnabled()) {
+                log.info("Registering WorldGuard hook");
                 try {
                     farmManager = new FarmManager();
                     farmManager.init();
@@ -212,7 +233,12 @@ public class HookRegistry {
                 partiesHook = new PartiesHook();
             }
         }
-        if (getServer().getPluginManager().getPlugin("BetterStructures") != null) {
+        if (getServer().getPluginManager().getPlugin("Iris") != null) {
+            if (getServer().getPluginManager().getPlugin("Iris").isEnabled()) {
+                irisHook = new IrisHook();
+            }
+        }
+        if (bsHook == null && getServer().getPluginManager().getPlugin("BetterStructures") != null) {
             if (getServer().getPluginManager().getPlugin("BetterStructures").isEnabled()) {
                 log.info("Registering BetterStructures hook");
                 bsHook = new BsHook();

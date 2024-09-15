@@ -20,10 +20,10 @@ public class GaussData {
 
     public Map<String, Double> serialize() {
         Map<String, Double> map = new HashMap<>();
-        if(min != null) map.put("min", min);
-        if(max != null) map.put("max", max);
-        if(mean != null) map.put("mean", mean);
-        if(stdDev != null) map.put("stdDev", stdDev);
+        if (min != null) map.put("min", min);
+        if (max != null) map.put("max", max);
+        if (mean != null) map.put("mean", mean);
+        if (stdDev != null) map.put("stdDev", stdDev);
         return map;
     }
 
@@ -34,5 +34,9 @@ public class GaussData {
                 .mean(map.get("mean"))
                 .stdDev(map.get("stdDev"))
                 .build();
+    }
+
+    public String toString() {
+        return "min: " + min + ", max: " + max + ", mean: " + mean + ", stdDev: " + stdDev;
     }
 }

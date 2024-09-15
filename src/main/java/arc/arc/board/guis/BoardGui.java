@@ -15,6 +15,7 @@ import com.github.stefvanschie.inventoryframework.pane.OutlinePane;
 import com.github.stefvanschie.inventoryframework.pane.PaginatedPane;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
+import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -31,6 +32,7 @@ import java.util.stream.Collectors;
 import static arc.arc.util.GuiUtils.cooldownCheck;
 import static arc.arc.util.TextUtil.strip;
 
+@Slf4j
 public class BoardGui extends ChestGui {
 
     Player player;
@@ -50,7 +52,7 @@ public class BoardGui extends ChestGui {
     }
 
     private void fillItems() {
-        System.out.println("Filling items");
+        log.info("Filling items");
         List<GuiItem> guiItemList = Board.items()
                 .stream()
                 .map(this::toGuiItem)

@@ -22,30 +22,30 @@ public class ItemMatcher {
     Boolean isSfItem;
 
     public boolean matches(ItemStack stack) {
-        if (this.material != null && stack.getType() != this.material) return false;
+        if (this.material != null && stack.getType() == this.material) return true;
         if (this.nbt != null && !this.nbt.isEmpty()) {
             AtomicBoolean allMatch = new AtomicBoolean(false);
             NBT.get(stack, readableItemNBT -> {
                 allMatch.set(nbt.stream().allMatch(readableItemNBT::hasTag));
             });
-            if (!allMatch.get()) return false;
+            if (allMatch.get()) return true;
         }
         if (materialName != null) {
             String mat = stack.getType().name().toLowerCase();
-            if (!mat.matches(materialName)) return false;
+            if (mat.matches(materialName)) return true;
         }
         if (hasModelData != null && stack.getItemMeta() != null) {
-            if (stack.getItemMeta().hasCustomModelData() != hasModelData) return false;
+            if (stack.getItemMeta().hasCustomModelData() == hasModelData) return true;
         }
         if (isSfItem != null) {
             if (stack.getItemMeta() == null) {
-                if (isSfItem) return false;
+
             } else {
                 if (HookRegistry.sfHook != null &&
-                        HookRegistry.sfHook.isSlimefunItem(stack) != isSfItem) return false;
+                        HookRegistry.sfHook.isSlimefunItem(stack) == isSfItem) return true;
             }
         }
-        return true;
+        return false;
     }
 
     public static ItemMatcher of(Material material) {

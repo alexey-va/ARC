@@ -5,11 +5,12 @@ import io.papermc.paper.event.player.PrePlayerAttackEntityEvent;
 import net.citizensnpcs.api.event.NPCClickEvent;
 import net.citizensnpcs.api.event.NPCRightClickEvent;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 
 public class CitizensListener implements Listener {
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onNpcClick(NPCRightClickEvent event){
         processConstruction(event);
     }

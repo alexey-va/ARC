@@ -9,4 +9,6 @@ public interface Treasure {
     Map<String, Object> attributes();
     Map<String, Object> serialize();
     int weight();
+    void setWeight(int weight);
+    void setAttributes(Map<String, Object> attributes);
 }

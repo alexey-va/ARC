@@ -38,7 +38,7 @@ public class Board {
                 .id("board")
                 .backupFolder(ARC.plugin.getDataFolder().toPath().resolve("backups/board"))
                 .saveInterval(20L)
-                .saveBackups(true)
+                .saveBackups(false)
                 .build();
     }
 

@@ -5,6 +5,7 @@ import arc.arc.board.BoardEntry;
 import arc.arc.network.RedisManager;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.volmit.iris.util.misc.E;
 import lombok.*;
 import lombok.extern.log4j.Log4j2;
 import org.bukkit.inventory.ItemStack;
@@ -24,6 +25,8 @@ import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 @Log4j2
+@SuppressWarnings({"unchecked", "rawtypes", "unused"})
+
 public class RedisRepo<T extends RepoData> {
 
     ConcurrentHashMap<String, T> map = new ConcurrentHashMap<>();
@@ -65,7 +68,7 @@ public class RedisRepo<T extends RepoData> {
         backupService = new BackupService(id, backupFolder);
 
         startTasks();
-        log.info("Created repo: " + id);
+        log.info("Created repo: {}", id);
     }
 
     public static <T extends RepoData> RedisRepoBuilder<T> builder(Class<T> clazz) {
@@ -90,9 +93,13 @@ public class RedisRepo<T extends RepoData> {
         saveTask = new BukkitRunnable() {
             @Override
             public void run() {
-                saveDirty();
-                deleteUnnecessary();
-                loadNecessary();
+                try {
+                    saveDirty();
+                    deleteUnnecessary();
+                    loadNecessary();
+                } catch (Exception e) {
+                    log.error("Error in save task: {}", e.getMessage());
+                }
             }
         }.runTaskTimerAsynchronously(ARC.plugin, 0L, saveInterval);
 
@@ -102,7 +109,7 @@ public class RedisRepo<T extends RepoData> {
                 public void run() {
                     backupService.saveBackup(map);
                 }
-            }.runTaskTimerAsynchronously(ARC.plugin, 20L * 60 * 60, 20L * 60 * 60);
+            }.runTaskTimerAsynchronously(ARC.plugin, 20L * 60 * 60 * 3, 20L * 60 * 60 * 3);
     }
 
     public void addContext(String context) {
@@ -130,8 +137,7 @@ public class RedisRepo<T extends RepoData> {
                             contextSet.add(t.id());
                             if (onUpdate != null) onUpdate.accept(t);
                         } catch (Exception e) {
-                            log.info("Could not parse: {}", entry);
-                            e.printStackTrace();
+                            log.error("Error: {}", e.getMessage());
                         }
                     }
                 });
@@ -158,7 +164,7 @@ public class RedisRepo<T extends RepoData> {
                             lastAttempt.remove(t.id());
                             if (onUpdate != null) onUpdate.accept(t);
                         } catch (Exception e) {
-                            log.debug("Could not parse: " + entry+" "+e.getMessage());
+                            log.error("Could not parse: {} {}", entry, e.getMessage());
                         }
                     }
                 });
@@ -192,13 +198,14 @@ public class RedisRepo<T extends RepoData> {
 
     CompletableFuture<Void> saveDirty() {
         List<T> toSave = map.values().stream().filter(T::isDirty).toList();
+        log.trace("Saving dirty: {}", toSave);
         return saveInStorage(toSave);
     }
 
     CompletableFuture<Void> deleteUnnecessary() {
         List<T> toDelete = map.values().stream().filter(T::isRemove).toList();
-        if(toDelete.isEmpty()) return CompletableFuture.completedFuture(null);
-        log.trace("Deleting unnecessary: {}" , toDelete);
+        if (toDelete.isEmpty()) return CompletableFuture.completedFuture(null);
+        log.trace("Deleting unnecessary: {}", toDelete);
         return toDelete.stream().map(this::delete).collect(() -> CompletableFuture.completedFuture(null), CompletableFuture::allOf, CompletableFuture::allOf);
     }
 
@@ -214,14 +221,27 @@ public class RedisRepo<T extends RepoData> {
     }
 
     CompletableFuture<Void> saveInStorage(Collection<T> ts) {
-        if (ts.isEmpty()) return CompletableFuture.completedFuture(null);
-        log.trace("Saving in storage: {}", ts);
-        for (T t : ts) t.dirty = false;
-        return CompletableFuture.supplyAsync(() -> ts.stream()
-                        .flatMap(t -> Stream.of(t.id(), gson.toJson(t)))
-                        .toArray(String[]::new))
-                .thenCompose(arr -> redisManager.saveMapEntries(storageKey, arr))
-                .thenAccept((o) -> ts.forEach(t -> announceUpdate(t.id())));
+        try {
+            if (ts.isEmpty()) return CompletableFuture.completedFuture(null);
+            log.trace("Saving in storage: {}", ts);
+            for (T t : ts) t.dirty = false;
+            return CompletableFuture.supplyAsync(() -> {
+                        try {
+                            String[] array = ts.stream()
+                                    .flatMap(t -> Stream.of(t.id(), gson.toJson(t)))
+                                    .toArray(String[]::new);
+                            log.trace("Saving: {}", Arrays.toString(array));
+                            return array;
+                        } catch (Exception e) {
+                            log.error("Could not save: {}", ts);
+                            return new String[]{};
+                        }
+                    }).thenCompose(arr -> redisManager.saveMapEntries(storageKey, arr))
+                    .thenAccept((o) -> ts.forEach(t -> announceUpdate(t.id())));
+        } catch (Exception e) {
+            log.error("Error: {}", e.getMessage());
+            return CompletableFuture.completedFuture(null);
+        }
     }
 
     public void forceSave() {
@@ -232,7 +252,7 @@ public class RedisRepo<T extends RepoData> {
         log.trace("Announcing update: {}", id);
         T t = map.get(id);
         if (t == null) {
-            log.debug("Could not find " + id + " in storage while announcing update!");
+            log.debug("Could not find {} in storage while announcing update!", id);
             return;
         }
         Update update = new Update(id, 0);
@@ -240,7 +260,7 @@ public class RedisRepo<T extends RepoData> {
     }
 
     void announceDelete(String id) {
-        log.trace("Announcing delete: " + id);
+        log.trace("Announcing delete: {}", id);
         Update update = new Update(id, 0);
         redisManager.publish(updateChannel, gson.toJson(update));
     }
@@ -250,23 +270,23 @@ public class RedisRepo<T extends RepoData> {
         //System.out.println("Received update: " + message);
         Update update = gson.fromJson(message, Update.class);
         if (!loadAll && !contextSet.contains(update.id)) {
-            log.info("Not in context: " + update.id);
+            log.trace("Not in context: {}", update.id);
             return;
         }
         redisManager.loadMapEntries(storageKey, update.id)
                 .thenAccept(list -> {
-                    if (list == null || list.isEmpty() || list.get(0) == null) {
+                    if (list == null || list.isEmpty() || list.getFirst() == null) {
                         //System.out.println("Deleting entry!");
                         deleteEntry(update.id);
                         //System.out.println("Map: " + map);
                         return;
                     }
                     //log.info("Received: " + list.get(0));
-                    T t = (T) gson.fromJson(list.get(0), clazz);
+                    T t = (T) gson.fromJson(list.getFirst(), clazz);
                     T current = map.get(update.id);
                     if (current != null) current.merge(t);
                     else {
-                        System.out.println("Current is null when merging! Update "+t);
+                        log.debug("Current is null when merging! Update {}", t);
                         map.put(t.id(), t);
                         contextSet.add(t.id());
                     }
@@ -289,12 +309,15 @@ public class RedisRepo<T extends RepoData> {
         if (map.containsKey(id)) return CompletableFuture.completedFuture(map.get(id));
         return redisManager.loadMapEntries(storageKey, id)
                 .thenApply(list -> {
-                    if (list == null || list.isEmpty() || list.get(0) == null) {
+                    log.trace("Received: {}", list);
+                    if (list == null || list.isEmpty() || list.getFirst() == null) {
                         T t = supplier.get();
-                        create(t);
+                        log.trace("Creating: {}", t);
+                        create(t).join();
+                        log.trace("Created: {}", t);
                         return t;
                     }
-                    T t = (T) gson.fromJson(list.get(0), clazz);
+                    T t = (T) gson.fromJson(list.getFirst(), clazz);
                     map.put(t.id(), t);
                     contextSet.add(t.id());
                     return t;
@@ -305,14 +328,16 @@ public class RedisRepo<T extends RepoData> {
     @NotNull
     public CompletableFuture<T> getOrNull(String id) {
         if (map.containsKey(id)) return CompletableFuture.completedFuture(map.get(id));
-        if(lastAttempt.getOrDefault(id, 0L) > System.currentTimeMillis() - 1000 * 60) return CompletableFuture.completedFuture(null);
+        if (lastAttempt.getOrDefault(id, 0L) > System.currentTimeMillis() - 1000 * 60)
+            return CompletableFuture.completedFuture(null);
         return redisManager.loadMapEntries(storageKey, id)
                 .thenApply(list -> {
-                    if (list == null || list.isEmpty() || list.get(0) == null) {
+                    if (list == null || list.isEmpty() || list.getFirst() == null) {
                         lastAttempt.put(id, System.currentTimeMillis());
                         return null;
                     }
-                    T t = (T) gson.fromJson(list.get(0), clazz);
+                    //log.info("Received: " + list.get(0));
+                    T t = (T) gson.fromJson(list.getFirst(), clazz);
                     map.put(t.id(), t);
                     contextSet.add(t.id());
                     return t;
@@ -324,14 +349,14 @@ public class RedisRepo<T extends RepoData> {
         return map.get(string);
     }
 
-    public void create(@NotNull T t) {
+    public CompletableFuture<Void> create(@NotNull T t) {
         map.put(t.id(), t);
         contextSet.add(t.id());
-        saveInStorage(List.of(t));
+        return saveInStorage(List.of(t));
     }
 
     public CompletableFuture<Void> delete(@NotNull T t) {
-        log.trace("Deleting entry: " + t.id());
+        log.trace("Deleting entry: {}", t.id());
         deleteEntry(t.id());
         contextSet.remove(t.id());
         return deleteInStorage(List.of(t));

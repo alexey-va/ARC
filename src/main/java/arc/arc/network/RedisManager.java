@@ -47,8 +47,8 @@ public class RedisManager extends JedisPubSub {
 
             String[] strings = message.split(SERVER_DELIMITER, 2);
             channelListeners.get(channel).forEach((listener) -> listener.consume(channel, strings[1], strings[0]));
-        } catch (Exception e){
-            System.out.println("error parsing message: " + message +" on channel: " + channel);
+        } catch (Exception e) {
+            System.out.println("error parsing message: " + message + " on channel: " + channel);
             e.printStackTrace();
         }
     }
@@ -67,11 +67,11 @@ public class RedisManager extends JedisPubSub {
         }
         log.debug("Starting new subscription");
         running = executorService.submit(() -> {
-            log.info("Subscribing to: " + channelList);
+            log.debug("Subscribing to: {}", channelList);
             try {
                 sub.subscribe(this, channelList.toArray(String[]::new));
             } catch (Exception e) {
-                log.error("Error subscribing", e);
+                //log.error("Error subscribing", e);
                 Bukkit.getScheduler().runTaskLater(ARC.plugin, this::init, 20L);
             }
         });
@@ -91,25 +91,38 @@ public class RedisManager extends JedisPubSub {
     }
 
     public CompletableFuture<?> saveMapEntries(String key, String... keyValuePairs) {
-        record Pair(String key, String value) {
+        if (keyValuePairs.length == 0) {
+            log.debug("No key value pairs to save for key {}", key);
         }
-        List<Pair> pairs = new ArrayList<>();
-        for (int i = 0; i < keyValuePairs.length; i += 2) {
-            pairs.add(new Pair(keyValuePairs[i], keyValuePairs[i + 1]));
+        log.debug("Saving map key: {} \n {}", key, Arrays.toString(keyValuePairs));
+        try {
+            record Pair(String key, String value) {
+            }
+            List<Pair> pairs = new ArrayList<>();
+            for (int i = 0; i < keyValuePairs.length; i += 2) {
+                pairs.add(new Pair(keyValuePairs[i], keyValuePairs[i + 1]));
+            }
+            //log.trace("Saving map key: {} \n {}", key, pairs);
+
+            var delete = pairs.stream().filter(pair -> pair.value == null).map(Pair::key).toArray(String[]::new);
+            var update = pairs.stream()
+                    .filter(pair -> pair.value != null)
+                    .collect(Collectors.toMap(Pair::key, Pair::value));
+            log.debug("Saving map key: {} \n {}", key, update);
+            return CompletableFuture.supplyAsync(() -> {
+                try {
+                    if (delete.length > 0) pub.hdel(key, delete);
+                    if (!update.isEmpty()) pub.hmset(key, update);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    log.error("Error saving map key: {} \n {}", key, update);
+                }
+                return null;
+            }, executorService);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return CompletableFuture.completedFuture(null);
         }
-        //log.trace("Saving map key: {} \n {}", key, pairs);
-
-        var delete = pairs.stream().filter(pair -> pair.value == null).map(Pair::key).toArray(String[]::new);
-        var update = pairs.stream()
-                .filter(pair -> pair.value != null)
-                .collect(Collectors.toMap(Pair::key, Pair::value));
-
-        return CompletableFuture.supplyAsync(() -> {
-            if (delete.length > 0) pub.hdel(key, delete);
-            if (!update.isEmpty()) pub.hmset(key, update);
-            return null;
-        }, executorService);
-
     }
 
     public CompletableFuture<Map<String, String>> loadMap(String key) {
