@@ -9,7 +9,6 @@ import arc.arc.network.repos.RedisRepo;
 import arc.arc.util.GuiUtils;
 import arc.arc.util.ItemStackBuilder;
 import com.gamingmesh.jobs.Jobs;
-import com.gamingmesh.jobs.commands.list.log;
 import com.gamingmesh.jobs.container.Job;
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;

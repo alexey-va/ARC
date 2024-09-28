@@ -1,10 +1,10 @@
 package arc.arc.commands;
 
-import arc.arc.generic.treasure.TreasurePool;
-import arc.arc.treasurechests.TreasureHuntManager;
+import arc.arc.generic.treasure.Treasure;
 import arc.arc.generic.treasure.TreasureCommand;
 import arc.arc.generic.treasure.TreasureItem;
-import arc.arc.generic.treasure.Treasure;
+import arc.arc.generic.treasure.TreasurePool;
+import arc.arc.treasurechests.TreasureHuntManager;
 import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;

@@ -8,7 +8,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.bukkit.Chunk;
 import org.bukkit.block.Block;
 import org.bukkit.event.EventHandler;
-import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 
 import java.util.List;

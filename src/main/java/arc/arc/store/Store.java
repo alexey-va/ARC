@@ -2,7 +2,8 @@ package arc.arc.store;
 
 import arc.arc.network.repos.ItemList;
 import arc.arc.network.repos.RepoData;
-import lombok.*;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 

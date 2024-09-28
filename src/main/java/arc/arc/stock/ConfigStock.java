@@ -1,7 +1,6 @@
 package arc.arc.stock;
 
 import arc.arc.board.ItemIcon;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import com.google.gson.Gson;
 import lombok.AllArgsConstructor;
 import lombok.Data;

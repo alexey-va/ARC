@@ -3,7 +3,6 @@ package arc.arc.configs;
 import arc.arc.ARC;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
-import org.bukkit.Particle;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;

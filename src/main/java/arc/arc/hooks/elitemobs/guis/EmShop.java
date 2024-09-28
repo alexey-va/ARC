@@ -1,18 +1,13 @@
 package arc.arc.hooks.elitemobs.guis;
 
 import arc.arc.configs.Config;
-import arc.arc.configs.StockConfig;
 import arc.arc.hooks.HookRegistry;
-import arc.arc.stock.gui.PositionSelector;
-import arc.arc.stock.gui.ProfileMenu;
 import arc.arc.util.GuiItemBuilder;
 import arc.arc.util.GuiUtils;
 import arc.arc.util.ItemStackBuilder;
-import arc.arc.util.TextUtil;
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
-import com.github.stefvanschie.inventoryframework.pane.OutlinePane;
 import com.github.stefvanschie.inventoryframework.pane.PaginatedPane;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
@@ -28,7 +23,6 @@ import org.bukkit.inventory.meta.ItemMeta;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
 
 import static arc.arc.util.TextUtil.formatAmount;
 import static arc.arc.util.TextUtil.mm;

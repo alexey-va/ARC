@@ -1,7 +1,6 @@
 package arc.arc.treasurechests.locationpools;
 
 import arc.arc.ARC;
-import arc.arc.configs.LocationPoolConfig;
 import arc.arc.util.ParticleManager;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;

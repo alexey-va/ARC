@@ -4,9 +4,6 @@ import lombok.AllArgsConstructor;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 
-import java.util.HashMap;
-import java.util.Map;
-
 @AllArgsConstructor
 
 public class SimpleItem extends GenericItem {

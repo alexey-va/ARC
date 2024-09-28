@@ -1,10 +1,10 @@
 package arc.arc.board.guis;
 
 import arc.arc.ARC;
+import arc.arc.board.Board;
 import arc.arc.board.BoardEntry;
 import arc.arc.board.BoardItem;
 import arc.arc.configs.BoardConfig;
-import arc.arc.board.Board;
 import arc.arc.util.GuiUtils;
 import arc.arc.util.ItemStackBuilder;
 import arc.arc.util.TextUtil;
@@ -26,7 +26,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.stream.Collectors;
 
 import static arc.arc.util.GuiUtils.cooldownCheck;

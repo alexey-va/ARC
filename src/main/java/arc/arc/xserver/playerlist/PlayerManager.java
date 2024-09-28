@@ -2,10 +2,8 @@ package arc.arc.xserver.playerlist;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-import com.magmaguy.elitemobs.playerdata.database.PlayerData;
 import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.extern.java.Log;
 import lombok.extern.log4j.Log4j2;
 
 import java.lang.reflect.Type;

@@ -1,7 +1,6 @@
 package arc.arc.invest;
 
 import arc.arc.ARC;
-import arc.arc.hooks.HookRegistry;
 
 import java.io.IOException;
 import java.nio.file.Files;

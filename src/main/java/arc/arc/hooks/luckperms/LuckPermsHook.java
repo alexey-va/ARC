@@ -1,6 +1,5 @@
 package arc.arc.hooks.luckperms;
 
-import net.luckperms.api.LuckPerms;
 import net.luckperms.api.LuckPermsProvider;
 import net.luckperms.api.model.user.UserManager;
 import org.bukkit.OfflinePlayer;

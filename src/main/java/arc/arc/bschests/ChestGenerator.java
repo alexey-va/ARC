@@ -6,10 +6,8 @@ import arc.arc.generic.treasure.TreasureItem;
 import arc.arc.generic.treasure.TreasurePool;
 import arc.arc.network.repos.ItemList;
 import lombok.extern.slf4j.Slf4j;
-import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 
-import java.util.Collection;
 import java.util.Collections;
 
 @Slf4j

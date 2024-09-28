@@ -1,7 +1,6 @@
 package arc.arc.invest;
 
 import arc.arc.invest.upgrades.Upgrade;
-import org.bukkit.configuration.ConfigurationSection;
 
 import java.util.List;
 

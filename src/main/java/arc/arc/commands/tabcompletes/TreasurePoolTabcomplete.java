@@ -1,6 +1,5 @@
 package arc.arc.commands.tabcompletes;
 
-import arc.arc.treasurechests.TreasureHuntManager;
 import arc.arc.generic.treasure.TreasurePool;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -8,7 +7,6 @@ import org.bukkit.command.TabCompleter;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 

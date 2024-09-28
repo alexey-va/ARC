@@ -3,7 +3,6 @@ package arc.arc.invest;
 import arc.arc.ARC;
 import arc.arc.hooks.HookRegistry;
 import arc.arc.invest.goods.Inventory;
-import arc.arc.invest.goods.ProductionEntry;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.configuration.serialization.ConfigurationSerializable;
 import org.bukkit.inventory.ItemStack;

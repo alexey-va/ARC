@@ -1,11 +1,10 @@
 package arc.arc.stock.gui;
 
-import arc.arc.ARC;
-import arc.arc.board.guis.AddBoardGui;
-import arc.arc.board.guis.BoardGui;
 import arc.arc.configs.StockConfig;
-import arc.arc.configs.StockConfig;
-import arc.arc.stock.*;
+import arc.arc.stock.Position;
+import arc.arc.stock.Stock;
+import arc.arc.stock.StockMarket;
+import arc.arc.stock.StockPlayer;
 import arc.arc.util.GuiUtils;
 import arc.arc.util.ItemStackBuilder;
 import arc.arc.util.TextUtil;
@@ -16,24 +15,13 @@ import com.github.stefvanschie.inventoryframework.pane.OutlinePane;
 import com.github.stefvanschie.inventoryframework.pane.PaginatedPane;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.MiniMessage;
-import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
-
-import static arc.arc.util.GuiUtils.cooldownCheck;
-import static arc.arc.util.TextUtil.mm;
-import static arc.arc.util.TextUtil.strip;
 
 public class SymbolSelector extends ChestGui {
     StockPlayer stockPlayer;

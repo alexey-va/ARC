@@ -1,7 +1,6 @@
 package arc.arc.hooks.citizens;
 
 import arc.arc.autobuild.BuildingManager;
-import io.papermc.paper.event.player.PrePlayerAttackEntityEvent;
 import net.citizensnpcs.api.event.NPCClickEvent;
 import net.citizensnpcs.api.event.NPCRightClickEvent;
 import org.bukkit.event.EventHandler;

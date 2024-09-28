@@ -1,7 +1,6 @@
 package arc.arc.stock;
 
 import arc.arc.ARC;
-import arc.arc.board.BoardEntry;
 import arc.arc.configs.StockConfig;
 import arc.arc.network.repos.RedisRepo;
 import lombok.RequiredArgsConstructor;
@@ -9,12 +8,11 @@ import lombok.Setter;
 import lombok.extern.log4j.Log4j2;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
-import org.jsoup.nodes.Node;
 
-import java.util.*;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 @RequiredArgsConstructor

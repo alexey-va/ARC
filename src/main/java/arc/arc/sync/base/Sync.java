@@ -1,6 +1,5 @@
 package arc.arc.sync.base;
 
-import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 
 import java.util.UUID;

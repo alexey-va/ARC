@@ -16,7 +16,8 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 
-import static arc.arc.util.TextUtil.*;
+import static arc.arc.util.TextUtil.formatAmount;
+import static arc.arc.util.TextUtil.mm;
 
 public class PositionMenu extends ChestGui {
     //Player player;

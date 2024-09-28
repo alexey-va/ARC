@@ -6,8 +6,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.bukkit.inventory.ItemStack;
 
-import java.util.UUID;
-
 @Data
 @AllArgsConstructor
 @Builder

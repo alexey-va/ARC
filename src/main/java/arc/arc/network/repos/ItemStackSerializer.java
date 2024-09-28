@@ -1,13 +1,12 @@
 package arc.arc.network.repos;
 
-import com.google.gson.*;
+import com.google.gson.TypeAdapter;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
 import org.bukkit.inventory.ItemStack;
 import org.yaml.snakeyaml.external.biz.base64Coder.Base64Coder;
 
 import java.io.IOException;
-import java.lang.reflect.Type;
 
 public class ItemStackSerializer extends TypeAdapter<ItemStack> {
 

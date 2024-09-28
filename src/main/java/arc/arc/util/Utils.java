@@ -1,9 +1,7 @@
 package arc.arc.util;
 
 
-import com.sk89q.worldedit.world.entity.EntityTypes;
 import dev.lone.itemsadder.api.ItemsAdder;
-import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.BlockFace;
@@ -17,7 +15,6 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.Vector;
-import org.joml.Vector3d;
 
 import java.util.*;
 import java.util.concurrent.ExecutorService;

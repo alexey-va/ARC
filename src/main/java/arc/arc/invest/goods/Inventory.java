@@ -5,13 +5,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import org.bukkit.Material;
 import org.bukkit.configuration.serialization.ConfigurationSerializable;
-import org.bukkit.entity.Item;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 @RequiredArgsConstructor
 public class Inventory implements ConfigurationSerializable {

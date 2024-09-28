@@ -3,12 +3,9 @@ package arc.arc.invest;
 import arc.arc.invest.goods.ProductionEntry;
 import lombok.RequiredArgsConstructor;
 import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.configuration.serialization.ConfigurationSerializable;
 import org.bukkit.inventory.ItemStack;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
-import java.util.concurrent.ThreadLocalRandom;
 
 @RequiredArgsConstructor
 public class Production {

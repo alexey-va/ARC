@@ -1,12 +1,10 @@
 package arc.arc.hooks;
 
 import me.gypopo.economyshopgui.api.EconomyShopGUIHook;
-import me.gypopo.economyshopgui.api.events.PreTransactionEvent;
 import me.gypopo.economyshopgui.objects.ShopItem;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Damageable;
-import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.Recipe;

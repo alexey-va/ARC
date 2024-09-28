@@ -1,11 +1,11 @@
 package arc.arc.board.guis;
 
 import arc.arc.ARC;
-import arc.arc.configs.BoardConfig;
 import arc.arc.TitleInput;
 import arc.arc.board.Board;
 import arc.arc.board.BoardEntry;
 import arc.arc.board.ItemIcon;
+import arc.arc.configs.BoardConfig;
 import arc.arc.util.GuiUtils;
 import arc.arc.util.ItemStackBuilder;
 import arc.arc.util.TextUtil;
@@ -21,12 +21,10 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import net.milkbowl.vault.economy.EconomyResponse;
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.ArrayList;
 import java.util.List;

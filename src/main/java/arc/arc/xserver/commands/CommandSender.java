@@ -4,7 +4,6 @@ import arc.arc.network.RedisManager;
 import arc.arc.network.RedisSerializer;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.java.Log;
 import lombok.extern.log4j.Log4j2;
 
 @RequiredArgsConstructor

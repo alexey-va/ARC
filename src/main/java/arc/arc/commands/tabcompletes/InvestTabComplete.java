@@ -2,7 +2,6 @@ package arc.arc.commands.tabcompletes;
 
 import arc.arc.stock.*;
 import arc.arc.xserver.playerlist.PlayerManager;
-import org.apache.http.cookie.SM;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;

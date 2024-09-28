@@ -1,7 +1,6 @@
 package arc.arc.hooks.elitemobs;
 
 import arc.arc.configs.Config;
-import arc.arc.configs.MainConfig;
 import com.magmaguy.elitemobs.api.EliteExplosionEvent;
 import lombok.RequiredArgsConstructor;
 import org.bukkit.event.EventHandler;

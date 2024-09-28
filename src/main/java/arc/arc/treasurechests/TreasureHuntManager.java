@@ -1,9 +1,9 @@
 package arc.arc.treasurechests;
 
-import arc.arc.hooks.HookRegistry;
-import arc.arc.treasurechests.locationpools.LocationPool;
 import arc.arc.generic.treasure.Treasure;
 import arc.arc.generic.treasure.TreasurePool;
+import arc.arc.hooks.HookRegistry;
+import arc.arc.treasurechests.locationpools.LocationPool;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;

@@ -1,11 +1,9 @@
 package arc.arc.store;
 
 import arc.arc.ARC;
-import arc.arc.network.repos.ItemList;
 import arc.arc.network.repos.RedisRepo;
 import org.bukkit.Material;
 
-import java.util.ArrayList;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.locks.ReentrantLock;
