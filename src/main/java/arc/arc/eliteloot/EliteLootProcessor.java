@@ -1,6 +1,5 @@
 package arc.arc.eliteloot;
 
-import arc.arc.ARC;
 import arc.arc.configs.Config;
 import arc.arc.util.TextUtil;
 import com.google.common.collect.Multimap;
@@ -8,15 +7,12 @@ import com.magmaguy.elitemobs.api.utils.EliteItemManager;
 import de.tr7zw.changeme.nbtapi.NBT;
 import de.tr7zw.changeme.nbtapi.iface.ReadWriteNBT;
 import de.tr7zw.changeme.nbtapi.iface.ReadableNBT;
-import dev.lone.itemsadder.api.ItemsAdder;
 import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Material;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeModifier;
-import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
@@ -24,7 +20,9 @@ import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.LeatherArmorMeta;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
 
 import static arc.arc.eliteloot.EliteLootManager.toLootType;
 
@@ -43,7 +41,7 @@ public class EliteLootProcessor {
         if (originalStack == null) return null;
         if (!EliteItemManager.isEliteMobsItem(originalStack)) return originalStack;
 
-        double replaceChance = config.realNumber("replace-chance", 0.4);
+        double replaceChance = config.real("replace-chance", 0.4);
         if (Math.random() > replaceChance) return originalStack;
 
         ItemMeta meta = originalStack.getItemMeta();

@@ -3,20 +3,25 @@ package arc.arc.autobuild;
 import arc.arc.ARC;
 import arc.arc.autobuild.gui.BuildingGui;
 import arc.arc.autobuild.gui.ConfirmGui;
+import arc.arc.configs.Config;
+import arc.arc.configs.ConfigManager;
 import arc.arc.util.CooldownManager;
 import arc.arc.util.TextUtil;
 import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.minimessage.tag.Tag;
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.NamespacedKey;
-import org.bukkit.entity.BlockDisplay;
 import org.bukkit.entity.Player;
-import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
+import java.io.IOException;
+import java.nio.file.FileVisitOption;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -28,7 +33,7 @@ public class BuildingManager {
 
     static Map<String, Building> buildingMap = new ConcurrentHashMap<>();
     static Map<UUID, ConstructionSite> constructionSiteMap = new HashMap<>();
-    static NamespacedKey displayKey = new NamespacedKey(ARC.plugin, "db");
+    static Config config;
 
     public static void addBuilding(Building building) {
         buildingMap.put(building.getFileName(), building);
@@ -42,25 +47,30 @@ public class BuildingManager {
         return buildingMap.values();
     }
 
-
     public static void init() {
-        // find all display entities with key "db" and remove them
-        cleanupTask = new BukkitRunnable() {
-            @Override
-            public void run() {
-                for (var world : ARC.plugin.getServer().getWorlds()) {
-                    for (var entity : world.getEntitiesByClass(BlockDisplay.class)) {
-                        if (entity.getPersistentDataContainer().has(displayKey)) {
-                            log.info("Removing display entity in world {}: {}", world.getName(), entity.getBlock());
-                            entity.remove();
-                        }
-                    }
-                }
+        config = ConfigManager.of(ARC.plugin.getDataPath(), "auto-build.yml");
+        Path path = Paths.get(ARC.plugin.getDataFolder().toString(), "schematics");
+        if (!Files.exists(path)) {
+            try {
+                Files.createDirectory(path);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
             }
-        }.runTaskLater(ARC.plugin, 400L);
+        }
+        try (var stream = Files.walk(Paths.get(ARC.plugin.getDataFolder().toString(), "schematics"), 3,
+                FileVisitOption.FOLLOW_LINKS)) {
+            stream.filter(p -> !Files.isDirectory(p))
+                    .map(Path::getFileName)
+                    .map(Path::toString)
+                    .map(Building::new)
+                    .forEach(BuildingManager::addBuilding);
+        } catch (Exception e) {
+            log.error("Error while loading buildings", e);
+        }
+        setupCleanupTask();
     }
 
-    public static void setupCleanupTask() {
+    private static void setupCleanupTask() {
         cancelTasks();
         cleanupTask = new BukkitRunnable() {
             @Override
@@ -79,14 +89,12 @@ public class BuildingManager {
                         } else {
                             continue;
                         }
-                        entry.getValue().player.sendMessage(TextUtil.strip(
-                                Component.text("\uD83D\uDEE0 ", NamedTextColor.GRAY)
-                                        .append(Component.text("Строительство было отменено из-за неактивности.", NamedTextColor.GRAY))
-                        ));
+                        Component message = config.componentDef("inactivity-cancel-message", "<gray>\uD83D\uDEE0 Постройка отменена из-за неактивности.");
+                        entry.getValue().player.sendMessage(message);
                     }
                 }
             }
-        }.runTaskTimer(ARC.plugin, 20L, 20L);
+        }.runTaskTimer(ARC.plugin, 20L, config.integer("cleanup-interval", 20));
     }
 
     public static void stopAll() {
@@ -114,77 +122,61 @@ public class BuildingManager {
     public static void createConstruction(Player player, Location center, Building building, int subRotation, int yOffset) {
         long cooldown = CooldownManager.cooldown(player.getUniqueId(), "building_cooldown");
         if (cooldown > 0) {
-            player.sendMessage(TextUtil.strip(
-                            Component.text("\uD83D\uDEE0 ", NamedTextColor.GRAY)
-                                    .append(Component.text("Вы уже недавно строили здание!", NamedTextColor.RED))
-                                    .append(Component.text(" Подождите еще ", NamedTextColor.GRAY))
-                                    .append(TextUtil.timeComponent(cooldown / 20L, TimeUnit.SECONDS))
-                                    .append(Component.text(" перед тем как построить еще одно."))
-                    )
-            );
+            Component message = config.componentDef("cooldown-message",
+                    "<gray>\uD83D\uDEE0 <red>Вы не можете строить так часто. Подождите %time%.",
+                    TagResolver.builder()
+                            .tag("time", Tag.inserting(TextUtil.timeComponent(cooldown / 20L, TimeUnit.SECONDS)))
+                            .build());
+            player.sendMessage(message);
             return;
         }
 
         int rotation = rotationFromYaw(player.getYaw());
-        ConstructionSite site = new ConstructionSite(building, center,
-                player, rotation, center.getWorld(), subRotation, yOffset);
-        boolean canBuild = site.canBuild();
-        if (!canBuild) {
-            site.player.sendMessage(TextUtil.strip(
-                    Component.text("\uD83D\uDEE0 ", NamedTextColor.GRAY)
-                            .append(Component.text("Вы не можете здесь строить!", NamedTextColor.DARK_RED))
-                            .append(Component.text(" Территория пересекается с чьим то приватом.", NamedTextColor.GRAY)))
-            );
+        ConstructionSite site = new ConstructionSite(building, center, player, rotation, center.getWorld(), subRotation, yOffset);
+
+        if (!site.canBuild()) {
+            Component message = config.componentDef("cant-build-message", "<gray>\uD83D\uDEE0 <red>Вы не можете строить здесь.");
+            player.sendMessage(message);
             return;
         }
         constructionSiteMap.put(player.getUniqueId(), site);
         site.startDisplayingBorder(180);
-        site.player.sendMessage(TextUtil.strip(
-                Component.text("\uD83D\uDEE0 ", NamedTextColor.GRAY)
-                        .append(Component.text("Повторно нажмите на блок, чтобы построить.", NamedTextColor.GOLD)))
-        );
+
+        Component message = config.componentDef("start-message", "<gray>\uD83D\uDEE0 <green>Нажмите на тот же блок, чтобы подтвердить постройку");
+        player.sendMessage(message);
     }
 
     public static void startConfirmation(ConstructionSite site) {
-        site.startDisplayingBorderAndDisplay(180);
-        site.spawnConfirmNpc(180);
-        site.player.sendMessage(TextUtil.strip(
-                Component.text("\uD83D\uDEE0 ", NamedTextColor.GRAY)
-                        .append(Component.text("Потвердите строителство через NPC.", NamedTextColor.GOLD)))
-        );
+        int confirmTime = config.integer("confirm-time", 180);
+        site.startDisplayingBorderAndDisplay(confirmTime);
+        site.spawnConfirmNpc(confirmTime);
+        site.player.sendMessage(config.componentDef("confirm-message", "<gray>\uD83D\uDEE0 <green>Подтвердите постройку, нажав ПКМ на NPC"));
     }
 
     public static void startConstruction(ConstructionSite site) {
         site.startBuild();
-        site.player.sendMessage(TextUtil.strip(
-                Component.text("\uD83D\uDEE0 ", NamedTextColor.GRAY)
-                        .append(Component.text("Строительство началось!", NamedTextColor.GOLD)))
-        );
+        site.player.sendMessage(config.componentDef("start-build-message", "<gray>\uD83D\uDEE0 <green>Постройка начата"));
     }
 
     public static void cancelConstruction(ConstructionSite site) {
         if (site.getState() == ConstructionSite.State.BUILDING) {
             site.stopBuild();
-            site.player.sendMessage(TextUtil.strip(
-                    Component.text("\uD83D\uDEE0 ", NamedTextColor.GRAY)
-                            .append(Component.text("Строительство отменено!", NamedTextColor.GRAY)))
-            );
+            site.player.sendMessage(config.componentDef("cancel-build-message", "<gray>\uD83D\uDEE0 <red>Постройка отменена"));
         } else if (site.getState() == ConstructionSite.State.DISPLAYING_OUTLINE) {
             site.stopOutlineDisplay();
-            //site.player.sendMessage("Cancelled outline display");
         } else if (site.getState() == ConstructionSite.State.CONFIRMATION) {
             site.stopConfirmStep();
-            site.player.sendMessage(TextUtil.strip(
-                    Component.text("\uD83D\uDEE0 ", NamedTextColor.GRAY)
-                            .append(Component.text("Строительство отменено!", NamedTextColor.GRAY)))
-            );
+            site.player.sendMessage(config.componentDef("cancel-build-message", "<gray>\uD83D\uDEE0 <red>Постройка отменена"));
         } else if (site.getState() == ConstructionSite.State.CREATED) {
             site.cleanup(0);
-            //site.player.sendMessage("Construction site in CREATE state removed!");
         }
     }
 
     public static void processPlayerClick(Player player, Location location, String buildingId, String rot, String yOff) {
+        if (config.bool("disable-building", false)) {
+            player.sendMessage(config.componentDef("disabled-message", "<gray>\uD83D\uDEE0 <red>Постройка здесь отключена!"));
+            return;
+        }
         if (location.getBlock().getType() == Material.SHORT_GRASS || location.getBlock().getType() == Material.TALL_GRASS) {
             location = location.clone().add(0, -1, 0);
         }
@@ -201,7 +193,8 @@ public class BuildingManager {
         ConstructionSite site = getConstruction(player.getUniqueId());
         Building building = getBuilding(buildingId);
         if (building == null) {
-            System.out.println("No building with id: " + buildingId + " found!");
+            log.error("Building with id {} not found!", buildingId);
+            player.sendMessage(config.componentDef("building-not-found-message", "<gray>\uD83D\uDEE0 <red>Здание не найдено!"));
             return;
         }
 
@@ -215,10 +208,7 @@ public class BuildingManager {
             startConfirmation(site);
         } else {
             if (site.getState() == ConstructionSite.State.BUILDING) {
-                site.player.sendMessage(TextUtil.strip(
-                        Component.text("\uD83D\uDEE0 ", NamedTextColor.GRAY)
-                                .append(Component.text("Вы уже строите одно здание!", NamedTextColor.RED)))
-                );
+                site.player.sendMessage(config.componentDef("already-building-message", "<gray>\uD83D\uDEE0 <red>Вы уже строите одно здание!"));
             } else {
                 if (site.state == ConstructionSite.State.DISPLAYING_OUTLINE) site.stopOutlineDisplay();
                 else if (site.state == ConstructionSite.State.CONFIRMATION) site.stopConfirmStep();
@@ -232,22 +222,13 @@ public class BuildingManager {
     public static void confirmConstruction(Player player, boolean confirm) {
         ConstructionSite site = getConstruction(player.getUniqueId());
         if (site == null) {
-            System.out.println("Player " + player.getName() + " does not have any construction!");
+            log.info("Player {} tried to confirm construction but no site found", player.getName());
             return;
         }
 
         if (site.getState() == ConstructionSite.State.CONFIRMATION) {
             if (confirm) startConstruction(site);
             else cancelConstruction(site);
-            return;
-        }
-
-        if (site.getState() == ConstructionSite.State.BUILDING) {
-            player.sendMessage(TextUtil.strip(
-                            Component.text("\uD83D\uDEE0 ", NamedTextColor.GRAY)
-                                    .append(Component.text("Строительство уже идет!", NamedTextColor.RED))
-                    )
-            );
         }
     }
 
@@ -270,12 +251,8 @@ public class BuildingManager {
 
     public static void processNpcClick(Player clicker, int id) {
         ConstructionSite site = constructionSiteMap.get(clicker.getUniqueId());
-        if (site == null) {
-            return;
-        }
-        if (site.npcId != id) {
-            return;
-        }
+        if (site == null) return;
+        if (site.npcId != id) return;
         if (site.state == ConstructionSite.State.CONFIRMATION) {
             CooldownManager.addCooldown(clicker.getUniqueId(), "clicked_npc", 20L);
             ConfirmGui confirmGui = new ConfirmGui(clicker, site);

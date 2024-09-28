@@ -1,7 +1,13 @@
 package arc.arc.configs;
 
+import arc.arc.util.TextUtil;
 import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
+import org.bukkit.Material;
+import org.bukkit.Particle;
+import org.jetbrains.annotations.NotNull;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
@@ -15,6 +21,8 @@ import java.util.*;
 
 import static arc.arc.util.TextUtil.mm;
 
+@Slf4j
+@SuppressWarnings("unchecked")
 public class Config {
 
     Map<String, Object> map;
@@ -49,7 +57,7 @@ public class Config {
         return (boolean) o;
     }
 
-    public double realNumber(String path, double def) {
+    public double real(String path, double def) {
         Object o = getValueForKeyPath(path);
         if (o == null) {
             injectDeepKey(path, def);
@@ -75,40 +83,112 @@ public class Config {
         Object o = getValueForKeyPath(path);
         if (o == null) {
             injectDeepKey(path, path);
-            return mm(path);
+            return mm(path, true);
         }
         String s;
         if (o instanceof String) s = (String) o;
         else s = o.toString();
 
-        for(int i =0;i<replacement.length;i+=2){
-            if(i+1 >= replacement.length) break;
-            s=s.replace(replacement[i], replacement[i+1]);
+        for (int i = 0; i < replacement.length; i += 2) {
+            if (i + 1 >= replacement.length) break;
+            s = s.replace(replacement[i], replacement[i + 1]);
         }
 
-        return mm(s);
+        return mm(s, true);
+    }
+
+    public Component componentDef(String path, String def, String... replacement) {
+        Object o = getValueForKeyPath(path);
+        if (o == null) {
+            injectDeepKey(path, def);
+            return component(path, replacement);
+        }
+        String s;
+        if (o instanceof String) s = (String) o;
+        else s = o.toString();
+
+        for (int i = 0; i < replacement.length; i += 2) {
+            if (i + 1 >= replacement.length) break;
+            s = s.replace(replacement[i], replacement[i + 1]);
+        }
+
+        return mm(s, true);
+    }
+
+    public Component componentDef(String path, String def, TagResolver tagResolver) {
+        Object o = getValueForKeyPath(path);
+        if (o == null) {
+            injectDeepKey(path, def);
+            return TextUtil.strip(mm(def, tagResolver));
+        }
+        String s;
+        if (o instanceof String) s = (String) o;
+        else s = o.toString();
+
+        return TextUtil.strip(mm(s, tagResolver));
+    }
+
+    public Component component(String path, TagResolver tagResolver) {
+        Object o = getValueForKeyPath(path);
+        if (o == null) {
+            injectDeepKey(path, path);
+            return TextUtil.strip(mm(path));
+        }
+        String s;
+        if (o instanceof String) s = (String) o;
+        else s = o.toString();
+
+        return TextUtil.strip(mm(s, tagResolver));
     }
 
     public List<Component> componentList(String path, String... replacement) {
         Object o = getValueForKeyPath(path);
         if (o == null) {
             injectDeepKey(path, List.of(path));
-            return List.of(mm(path));
+            return List.of(TextUtil.strip(mm(path)));
         }
 
         List<Component> list = new ArrayList<>();
-        if (o instanceof String s){
-            for(int i =0;i<replacement.length;i+=2){
-                if(i+1 >= replacement.length) break;
-                s=s.replace(replacement[i], replacement[i+1]);
+        if (o instanceof String s) {
+            for (int i = 0; i < replacement.length; i += 2) {
+                if (i + 1 >= replacement.length) break;
+                s = s.replace(replacement[i], replacement[i + 1]);
             }
             list.add(mm(s, true));
-        } else if(o instanceof List l){
+        } else if (o instanceof List l) {
             for (Object obj : l) {
                 if (obj instanceof String s1) {
-                    for(int i =0;i<replacement.length;i+=2){
-                        if(i+1 >= replacement.length) break;
-                        s1=s1.replace(replacement[i], replacement[i+1]);
+                    for (int i = 0; i < replacement.length; i += 2) {
+                        if (i + 1 >= replacement.length) break;
+                        s1 = s1.replace(replacement[i], replacement[i + 1]);
+                    }
+                    list.add(mm(s1, true));
+                }
+            }
+        }
+        return list;
+    }
+
+    public List<Component> componentListDef(String path, List<String> def, String... replacement) {
+        Object o = getValueForKeyPath(path);
+        if (o == null) {
+            injectDeepKey(path, def);
+            return componentList(path, replacement);
+        }
+
+        List<Component> list = new ArrayList<>();
+        if (o instanceof String s) {
+            for (int i = 0; i < replacement.length; i += 2) {
+                if (i + 1 >= replacement.length) break;
+                s = s.replace(replacement[i], replacement[i + 1]);
+            }
+            list.add(mm(s, true));
+        } else if (o instanceof List l) {
+            for (Object obj : l) {
+                if (obj instanceof String s1) {
+                    for (int i = 0; i < replacement.length; i += 2) {
+                        if (i + 1 >= replacement.length) break;
+                        s1 = s1.replace(replacement[i], replacement[i + 1]);
                     }
                     list.add(mm(s1, true));
                 }
@@ -123,17 +203,38 @@ public class Config {
             injectDeepKey(path, new ArrayList<String>());
             return new ArrayList<>();
         }
-        if(o instanceof String s){
+        if (o instanceof String s) {
             return List.of(s);
         }
         return (List<String>) o;
     }
 
-    public <T> Map<String, T> map(String path){
+    public List<String> stringList(String path, List<String> def) {
+        Object o = getValueForKeyPath(path);
+        if (o == null) {
+            injectDeepKey(path, def);
+            return def;
+        }
+        if (o instanceof String s) {
+            return List.of(s);
+        }
+        return (List<String>) o;
+    }
+
+    public <T> Map<String, T> map(String path) {
         Object o = getValueForKeyPath(path);
         if (o == null) {
             injectDeepKey(path, new LinkedHashMap<String, T>());
             return new LinkedHashMap<>();
+        }
+        return (Map<String, T>) o;
+    }
+
+    public <T> Map<String, T> map(String path, Map<String, T> def) {
+        Object o = getValueForKeyPath(path);
+        if (o == null) {
+            injectDeepKey(path, def);
+            return def;
         }
         return (Map<String, T>) o;
     }
@@ -147,7 +248,16 @@ public class Config {
         return (List<T>) o;
     }
 
-    public List<String> keys(String path){
+    public <T> List<T> list(String path, List<T> def) {
+        Object o = getValueForKeyPath(path);
+        if (o == null) {
+            injectDeepKey(path, def);
+            return def;
+        }
+        return (List<T>) o;
+    }
+
+    public List<String> keys(String path) {
         Object o = getValueForKeyPath(path);
         if (o == null) {
             injectDeepKey(path, Map.of());
@@ -173,7 +283,6 @@ public class Config {
                 return null;
             }
         }
-
         // Access the value at the final level
         return currentLevel.get(keyParts[keyParts.length - 1]);
     }
@@ -216,7 +325,7 @@ public class Config {
         try (var writer = new FileWriter(file)) {
             yaml.dump(map, writer);
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("Could not save config: {}", file);
         }
     }
 
@@ -226,7 +335,7 @@ public class Config {
             Path path = folder.resolve(resource);
             if (Files.exists(path)) {
                 if (!replace) {
-                    System.out.println(resource + " already exists! Skipping...");
+                    //System.out.println(resource + " already exists! Skipping...");
                     return;
                 }
             }
@@ -237,7 +346,7 @@ public class Config {
                 Files.copy(stream, path, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("Could not copy default config: {}", resource);
         }
     }
 
@@ -246,9 +355,51 @@ public class Config {
         return string(s, s);
     }
 
-    public void addToList(String path, Object value){
+    public void addToList(String path, Object value) {
         List<Object> list = list(path);
         list.add(value);
         injectDeepKey(path, list);
+    }
+
+    public Set<Material> materialSet(String s) {
+        List<String> list = stringList(s);
+        Set<Material> materials = new HashSet<>();
+        for (String mat : list) {
+            try {
+                materials.add(Material.valueOf(mat.toUpperCase()));
+            } catch (Exception e) {
+                log.warn("Could not parse material: {}", mat);
+            }
+        }
+        return materials;
+    }
+
+    public Set<Material> materialSet(String s, Set<Material> def) {
+        List<String> list = stringList(s, def.stream().map(Enum::name).toList());
+        Set<Material> materials = new HashSet<>();
+        for (String mat : list) {
+            try {
+                materials.add(Material.valueOf(mat.toUpperCase()));
+            } catch (Exception e) {
+                log.warn("Could not parse material: {}", mat);
+            }
+        }
+        return materials;
+    }
+
+    public Particle particle(String s, Particle def) {
+        try {
+            return Particle.valueOf(string(s, def.name()).toUpperCase());
+        } catch (Exception e) {
+            return def;
+        }
+    }
+
+    public @NotNull Material material(String s, Material material) {
+        try {
+            return Material.valueOf(string(s, material.name()).toUpperCase());
+        } catch (Exception e) {
+            return material;
+        }
     }
 }

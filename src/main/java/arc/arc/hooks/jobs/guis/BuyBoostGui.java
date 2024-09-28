@@ -7,13 +7,11 @@ import arc.arc.hooks.jobs.JobsBoost;
 import arc.arc.util.GuiUtils;
 import arc.arc.util.ItemStackBuilder;
 import com.gamingmesh.jobs.Jobs;
-import com.gamingmesh.jobs.commands.list.boost;
 import com.gamingmesh.jobs.container.Job;
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
 import com.github.stefvanschie.inventoryframework.pane.OutlinePane;
-import com.github.stefvanschie.inventoryframework.pane.PaginatedPane;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
 import lombok.extern.log4j.Log4j2;
@@ -116,8 +114,8 @@ public class BuyBoostGui extends ChestGui {
         for (String key : config.keys("boosts." + type.name().toLowerCase())) {
             String display = config.string("boosts." + type.name().toLowerCase() + "." + key + ".display");
             List<String> lore = config.stringList("boosts." + type.name().toLowerCase() + "." + key + ".lore");
-            double price = config.realNumber("boosts." + type.name().toLowerCase() + "." + key + ".price", 1000);
-            double boostAmount = config.realNumber("boosts." + type.name().toLowerCase() + "." + key + ".boost-amount", 0.1);
+            double price = config.real("boosts." + type.name().toLowerCase() + "." + key + ".price", 1000);
+            double boostAmount = config.real("boosts." + type.name().toLowerCase() + "." + key + ".boost-amount", 0.1);
             long seconds = config.integer("boosts." + type.name().toLowerCase() + "." + key + ".seconds", 3600);
             String permission = config.string("boosts." + type.name().toLowerCase() + "." + key + ".permission", "");
             Material material = Material.valueOf(config.string("boosts." + type.name().toLowerCase() + "." + key + ".material", "GOLD_INGOT").toUpperCase());

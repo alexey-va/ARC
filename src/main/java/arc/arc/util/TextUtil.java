@@ -13,8 +13,6 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.entity.Player;
 
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.util.List;
@@ -55,6 +53,11 @@ public class TextUtil {
         long minutes = (millis % (60 * 60 * 1000)) / (60 * 1000);
 
         return String.format(MainConfig.timeFormat, days, hours, minutes);
+    }
+
+    public static String centerInLore(String s, int length) {
+        int spaces = (length - s.length()) / 2;
+        return " ".repeat(spaces) + s + " ".repeat(spaces);
     }
 
     public static Component mm(String s, boolean strip) {
@@ -167,7 +170,7 @@ public class TextUtil {
     }
 
     public static Component timeComponent(long l, TimeUnit timeUnit) {
-        Config config = ConfigManager.getOrCreate(ARC.plugin.getDataPath(), "config.yml", "main");
+        Config config = ConfigManager.of(ARC.plugin.getDataPath(), "config.yml");
         String format = config.string("time-format", "dd HH mm ss");
         Map<String, String> names = Map.of(
                 "dd", config.string("days", " дней"),

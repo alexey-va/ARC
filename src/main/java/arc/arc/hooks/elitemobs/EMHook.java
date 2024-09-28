@@ -6,8 +6,6 @@ import arc.arc.configs.ConfigManager;
 import arc.arc.hooks.elitemobs.guis.EmShop;
 import arc.arc.hooks.elitemobs.guis.ShopHolder;
 import arc.arc.util.GuiUtils;
-import com.Zrips.CMI.CMI;
-import com.magmaguy.elitemobs.api.utils.EliteItemManager;
 import com.magmaguy.elitemobs.economy.EconomyHandler;
 import com.magmaguy.elitemobs.items.ScalableItemConstructor;
 import com.magmaguy.elitemobs.items.customitems.CustomItem;
@@ -17,11 +15,9 @@ import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Listener;
-import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
 
-import java.util.HashSet;
 import java.util.Set;
 
 public class EMHook implements Listener {
@@ -36,7 +32,7 @@ public class EMHook implements Listener {
 
 
     public EMHook() {
-        config = ConfigManager.getOrCreate(ARC.plugin.getDataFolder().toPath(), "elitemobs.yml", "elitemobs");
+        config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "elitemobs.yml");
 
         if (emWormholes == null) {
             emWormholes = new EMWormholes(config);

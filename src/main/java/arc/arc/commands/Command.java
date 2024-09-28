@@ -8,9 +8,6 @@ import arc.arc.generic.treasure.MainTreasuresGui;
 import arc.arc.guis.BaltopGui;
 import arc.arc.hooks.HookRegistry;
 import arc.arc.util.GuiUtils;
-import arc.arc.util.HeadUtil;
-import com.google.gson.*;
-import io.netty.handler.logging.LogLevel;
 import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -24,16 +21,12 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
-import org.bukkit.event.player.PlayerFishEvent;
-import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.reflections.Reflections;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.reflect.Type;
-import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
@@ -65,7 +58,7 @@ public class Command implements CommandExecutor, TabCompleter {
 
         if (strings[0].equals("treasures") && commandSender.hasPermission("arc.admin")) {
             Player player = (Player) commandSender;
-            Config config = ConfigManager.getOrCreate(ARC.plugin.getDataFolder().toPath(), "treasures.yml", "treasures");
+            Config config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "treasures.yml");
             GuiUtils.constructAndShowAsync(() -> new MainTreasuresGui(player, config), player);
         }
 
@@ -135,7 +128,7 @@ public class Command implements CommandExecutor, TabCompleter {
         }
 
         if (strings[0].equalsIgnoreCase("baltop")) {
-            Config config = ConfigManager.getOrCreate(ARC.plugin.getDataFolder().toPath(), "baltop.yml", "baltop");
+            Config config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "baltop.yml");
             GuiUtils.constructAndShowAsync(() -> new BaltopGui(config, (Player) commandSender), (Player) commandSender);
             return true;
         }

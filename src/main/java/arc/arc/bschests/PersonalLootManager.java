@@ -64,7 +64,7 @@ public class PersonalLootManager {
     }
 
     public static void reload() {
-        config = ConfigManager.getOrCreate(ARC.plugin.getDataFolder().toPath(), "personalloot.yml", "personalloot");
+        config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "personalloot.yml");
         maxPlayers = config.integer("max-players", 5);
         inventories = config.stringList("inventories").stream()
                 .map(String::toUpperCase)

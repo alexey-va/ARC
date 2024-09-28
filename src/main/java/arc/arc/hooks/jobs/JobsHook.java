@@ -9,7 +9,8 @@ import arc.arc.util.GuiUtils;
 import com.gamingmesh.jobs.Jobs;
 import com.gamingmesh.jobs.container.CurrencyType;
 import com.gamingmesh.jobs.container.Job;
-import lombok.*;
+import lombok.AccessLevel;
+import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -19,7 +20,10 @@ import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 @Log4j2
 public class JobsHook {
@@ -35,7 +39,7 @@ public class JobsHook {
             jobsListener = new JobsListener();
             Bukkit.getPluginManager().registerEvents(jobsListener, ARC.plugin);
         }
-        config = ConfigManager.getOrCreate(ARC.plugin.getDataFolder().toPath(), "jobs.yml", "jobs");
+        config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "jobs.yml");
         createRepo();
     }
 

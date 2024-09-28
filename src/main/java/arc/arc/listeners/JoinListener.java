@@ -1,8 +1,9 @@
 package arc.arc.listeners;
 
 import arc.arc.ARC;
+import arc.arc.configs.Config;
+import arc.arc.configs.ConfigManager;
 import arc.arc.configs.MainConfig;
-import arc.arc.hooks.HookRegistry;
 import arc.arc.network.NetworkRegistry;
 import arc.arc.sync.SyncManager;
 import arc.arc.xserver.playerlist.PlayerManager;
@@ -19,10 +20,9 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ScheduledExecutorService;
-
 public class JoinListener implements Listener {
+
+    Config config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "join.yml");
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
@@ -58,19 +58,22 @@ public class JoinListener implements Listener {
     }
 
     private void invulnerable(Player player) {
-        Bukkit.getScheduler().runTaskLater(ARC.plugin, () -> {
-            if(player == null || !player.isOnline()) return;
-            if(player.hasPermission("arc.bypass-invulnerable")) return;
-            player.setInvulnerable(true);
-        }, 20*15L);
+        if (!config.bool("invulnerable.on-join", false)) return;
+        if (player == null || !player.isOnline()) return;
+        player.setInvulnerable(true);
 
+        int defaultTicks = config.integer("invulnerable.ticks", 20 * 5);
+        int resourcepackTicks = config.integer("invulnerable.resourcepack-ticks", 20 * 15);
         PlayerManager.PlayerData playerData = PlayerManager.getPlayerData(player.getUniqueId());
-        if (playerData == null || Math.abs(playerData.getJoinTime() - System.currentTimeMillis()) < 1000) {
-            int ticks;
-            if (player.hasPermission("mcfine.apply-rp")) ticks = 20 * 15;
-            else ticks = 20 * 5;
-            player.setNoDamageTicks(ticks);
-        }
+        boolean withResourcepack = player.hasPermission("mcfine.apply-rp")
+                && Math.abs(playerData.getJoinTime() - System.currentTimeMillis()) < 1000;
+
+        Bukkit.getScheduler().runTaskLater(ARC.plugin, () -> {
+            if (!player.isOnline()) return;
+            if (player.hasPermission("arc.bypass-invulnerable")) return;
+            player.setInvulnerable(false);
+        }, withResourcepack ? resourcepackTicks : defaultTicks);
+
     }
 
 }

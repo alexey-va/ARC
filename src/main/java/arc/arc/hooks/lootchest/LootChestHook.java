@@ -10,8 +10,10 @@ public class LootChestHook {
     private static LootChestListener lootChestListener;
 
     public LootChestHook() {
-        Config config = ConfigManager.getOrCreate(ARC.plugin.getDataFolder().toPath().resolve("lootchests"), "bosses.yml", "lootchest_bosses");
-        lootChestListener = new LootChestListener(config);
-        Bukkit.getPluginManager().registerEvents(lootChestListener, ARC.plugin);
+        Config config = ConfigManager.of(ARC.plugin.getDataFolder().toPath().resolve("lootchests"), "bosses.yml");
+        if (lootChestListener == null) {
+            lootChestListener = new LootChestListener(config);
+            Bukkit.getPluginManager().registerEvents(lootChestListener, ARC.plugin);
+        }
     }
 }

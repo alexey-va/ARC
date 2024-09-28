@@ -15,7 +15,6 @@ import org.bukkit.scheduler.BukkitTask;
 
 import java.nio.file.Path;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -55,7 +54,7 @@ public class LeafDecayManager {
 
     public static void reload() {
         Path path = ARC.plugin.getDataFolder().toPath();
-        config = ConfigManager.getOrCreate(path, "leafdecay.yml", "leafdecay");
+        config = ConfigManager.of(path, "leafdecay.yml");
 
         decayInterval = config.integer("decay-interval", 5);
         checkInterval = config.integer("check-interval", 20);

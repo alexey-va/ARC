@@ -1,7 +1,8 @@
 package arc.arc;
 
+import arc.arc.configs.Config;
+import arc.arc.configs.ConfigManager;
 import arc.arc.hooks.HookRegistry;
-import arc.arc.hooks.HuskHomesHook;
 import com.destroystokyo.paper.ParticleBuilder;
 import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.text.Component;
@@ -54,12 +55,13 @@ public class Portal {
     BukkitTask task;
     Set<String> blockChangePlayers = new HashSet<>();
     String ownerUuid;
-    HuskHomesHook.MyTeleport teleport;
+    PortalData portalData;
     double cost;
+    Config config = ConfigManager.of(ARC.plugin.getDataPath(), "portal.yml");
 
 
-    public Portal(String uuid, HuskHomesHook.MyTeleport teleport) {
-        this.teleport = teleport;
+    public Portal(String uuid, PortalData portalData) {
+        this.portalData = portalData;
         this.p = Bukkit.getPlayer(UUID.fromString(uuid));
         this.action = Action.TPA;
         if (p == null) {
@@ -76,11 +78,12 @@ public class Portal {
         if (portals.get(p) != null) portals.get(p).removePortal();
         portals.put(p, this);
         task = createTask();
-        p.sendMessage(ChatColor.translateAlternateColorCodes('&', "&aНедалеко появляется портал..."));
+        Component message = config.component("message");
+        p.sendMessage(message);
     }
 
-    public Portal(String uuid, HuskHomesHook.MyTeleport teleport, double cost) {
-        this.teleport = teleport;
+    public Portal(String uuid, PortalData portalData, double cost) {
+        this.portalData = portalData;
         this.cost = cost;
         this.p = Bukkit.getPlayer(UUID.fromString(uuid));
         this.action = Action.TPA;
@@ -93,7 +96,8 @@ public class Portal {
         if (portals.get(p) != null) portals.get(p).removePortal();
         portals.put(p, this);
         task = createTask();
-        p.sendMessage(ChatColor.translateAlternateColorCodes('&', "&aНедалеко появляется портал..."));
+        Component message = config.component("message");
+        p.sendMessage(message);
     }
 
     public Portal(String ownerUuid, String command) {
@@ -110,7 +114,8 @@ public class Portal {
         if (portals.get(p) != null) portals.get(p).removePortal();
         portals.put(p, this);
         task = createTask();
-        p.sendMessage(ChatColor.translateAlternateColorCodes('&', "&aНедалеко появляется портал..."));
+        Component message = config.component("message");
+        p.sendMessage(message);
     }
 
     public static boolean occupied(Block block) {
@@ -183,9 +188,9 @@ public class Portal {
     }
 
     private Player getEnteredPlayer(Collection<Player> nearby) {
-        if (p.hasPermission("myhome.portal.tp-other")) {
+        if (p.hasPermission("arc.portal.tp-other")) {
             for (Player player : nearby) {
-                if (ifInPortal(player, block.getLocation()) && player.hasPermission("myhome.portal.tp-by-other"))
+                if (ifInPortal(player, block.getLocation()) && player.hasPermission("arc.portal.tp-by-other"))
                     return player;
             }
         } else {
@@ -210,7 +215,7 @@ public class Portal {
                 public void run() {
                     try {
                         if (cost > 0) {
-                            OfflinePlayer offlinePlayer = teleport.getPlayer();
+                            OfflinePlayer offlinePlayer = portalData.getPlayer();
                             if (ARC.getEcon().getBalance(offlinePlayer) < cost) {
                                 Player p = offlinePlayer.getPlayer();
                                 if (p != null && p.isOnline())
@@ -220,7 +225,11 @@ public class Portal {
                             ARC.getEcon().withdrawPlayer(offlinePlayer, cost);
                         }
                         player.getWorld().playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 1f, 1f);
-                        HookRegistry.huskHomesHook.teleport(teleport);
+                        if (portalData.isHusk()) {
+                            HookRegistry.huskHomesHook.teleport(portalData.getMyTeleport());
+                        } else {
+                            player.teleport(portalData.getLocation());
+                        }
                     } catch (Exception e) {
                         log.error("Error while teleporting", e);
                     }
@@ -380,7 +389,8 @@ public class Portal {
     }
 
     private void noLocationMessage() {
-        p.sendMessage(Component.text("Не удалось найти место под портал!", NamedTextColor.RED));
+        Component component = config.component("no-location");
+        p.sendMessage(component);
     }
 
     private Block findPortalLocation() {

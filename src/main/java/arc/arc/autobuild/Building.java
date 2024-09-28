@@ -21,53 +21,52 @@ public class Building {
 
     Clipboard clipboard;
 
-    public void loadClipboard(){
-        File file = new File(ARC.plugin.getDataFolder()+File.separator+"schematics"+File.separator+fileName);
-        if(!file.getParentFile().exists()){
+    public void loadClipboard() {
+        File file = new File(ARC.plugin.getDataFolder() + File.separator + "schematics" + File.separator + fileName);
+        if (!file.getParentFile().exists()) {
             file.getParentFile().mkdir();
         }
 
-        if(!file.exists()){
-            System.out.println("No file with name "+fileName+" found in schematics folder!");
+        if (!file.exists()) {
+            System.out.println("No file with name " + fileName + " found in schematics folder!");
             throw new IllegalArgumentException("File does not exist");
         }
 
         ClipboardFormat format = ClipboardFormats.findByFile(file);
-        try(ClipboardReader reader = format.getReader(new FileInputStream(file))){
+        try (ClipboardReader reader = format.getReader(new FileInputStream(file))) {
             clipboard = reader.read();
-        } catch (Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
             throw new IllegalArgumentException("File does not exist", e);
         }
     }
 
-    public BaseBlock getBlock(BlockVector3 coords, int rotated){
-        if(clipboard == null) loadClipboard();
-        BlockVector3 vec = rotate(coords,0,0, -rotated);
+    public BaseBlock getBlock(BlockVector3 coords, int rotated) {
+        if (clipboard == null) loadClipboard();
+        rotated = rotated % 360;
+        BlockVector3 vec = rotate(coords, 0, 0, -rotated);
         return clipboard.getFullBlock(vec.add(clipboard.getOrigin()));
     }
 
 
-
-    public BlockVector3 getCorner1(int rotation){
-        if(clipboard == null) loadClipboard();
+    public BlockVector3 getCorner1(int rotation) {
+        if (clipboard == null) loadClipboard();
         BlockVector3 center = clipboard.getOrigin();
         return rotate(clipboard.getMinimumPoint().subtract(center), 0, 0, rotation);
     }
 
-    public BlockVector3 getCorner2(int rotation){
-        if(clipboard == null) loadClipboard();
+    public BlockVector3 getCorner2(int rotation) {
+        if (clipboard == null) loadClipboard();
         BlockVector3 center = clipboard.getOrigin();
         return rotate(clipboard.getMaximumPoint().subtract(center), 0, 0, rotation);
     }
 
-    public long volume(){
+    public long volume() {
         return clipboard.getRegion().getVolume();
     }
 
 
-
-    private BlockVector3 rotate(BlockVector3 vector, int x, int z, int degs){
+    private BlockVector3 rotate(BlockVector3 vector, int x, int z, int degs) {
         int xOffset = vector.x() - x;
         int zOffset = vector.z() - z;
 

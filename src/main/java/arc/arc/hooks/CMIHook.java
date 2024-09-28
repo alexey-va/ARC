@@ -1,6 +1,6 @@
 package arc.arc.hooks;
 
-import com.Zrips.CMI.events.CMIUserBalanceChangeEvent;
+import com.Zrips.CMI.CMI;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
@@ -32,4 +32,7 @@ public class CMIHook {
     }
 
 
+    public boolean warpExists(String arg) {
+        return CMI.getInstance().getWarpManager().getWarp(arg) != null;
+    }
 }

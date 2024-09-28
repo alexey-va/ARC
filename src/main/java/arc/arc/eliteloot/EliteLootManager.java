@@ -25,7 +25,7 @@ public class EliteLootManager {
 
     public static void init() {
         Path path = ARC.plugin.getDataFolder().toPath();
-        Config config = ConfigManager.getOrCreate(path, "elite-loot.yml", "elite-loot");
+        Config config = ConfigManager.of(path, "elite-loot.yml");
         eliteLootConfigParser = new EliteLootConfigParser(config);
         map = eliteLootConfigParser.load();
 

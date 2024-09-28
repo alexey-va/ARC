@@ -3,7 +3,8 @@ package arc.arc.autobuild.gui;
 import arc.arc.ARC;
 import arc.arc.autobuild.BuildingManager;
 import arc.arc.autobuild.ConstructionSite;
-import arc.arc.configs.BuildingConfig;
+import arc.arc.configs.Config;
+import arc.arc.configs.ConfigManager;
 import arc.arc.util.GuiUtils;
 import arc.arc.util.TextUtil;
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
@@ -14,20 +15,19 @@ import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
 import de.tr7zw.changeme.nbtapi.NBTItem;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.plugin.Plugin;
-import org.jetbrains.annotations.NotNull;
 
 public class ConfirmGui extends ChestGui {
     Player player;
     ConstructionSite site;
+    Config config = ConfigManager.of(ARC.plugin.getDataPath(), "auto-build.yml");
 
     public ConfirmGui(Player player, ConstructionSite site) {
-        super(3, TextHolder.deserialize("&8Потверждение строительства"), ARC.plugin);
+        super(3, "", ARC.plugin);
+        setTitle(TextHolder.deserialize(TextUtil.toLegacy(config.string("confirm-gui.title", "<dark_gray>Подтверждение постройки"))));
         this.player = player;
         this.site = site;
 
@@ -38,29 +38,28 @@ public class ConfirmGui extends ChestGui {
     private void setupButtons() {
         StaticPane staticPane = new StaticPane(0, 1, 9, 1);
 
-        ItemStack confirmStack = new ItemStack(Material.GREEN_STAINED_GLASS_PANE);
-        ItemStack cancelStack = new ItemStack(Material.RED_STAINED_GLASS_PANE);
+        ItemStack confirmStack = new ItemStack(config.material("confirm-gui.confirm-material", Material.PAPER));
+        ItemStack cancelStack = new ItemStack(config.material("confirm-gui.cancel-material", Material.RED_STAINED_GLASS_PANE));
 
         ItemMeta confirmMeta = confirmStack.getItemMeta();
-        confirmMeta.displayName(TextUtil.strip(Component.text("Потвердить постройку", NamedTextColor.DARK_GREEN)));
-        if (BuildingConfig.confirmModelData != 0) confirmMeta.setCustomModelData(BuildingConfig.confirmModelData);
+        confirmMeta.displayName(config.componentDef("confirm-gui.confirm", "<green>Подтвердить постройку"));
+        int confirmModelData = config.integer("confirm-gui.confirm-model-data", 0);
+        if (confirmModelData != 0) confirmMeta.setCustomModelData(confirmModelData);
         confirmStack.setItemMeta(confirmMeta);
 
         ItemMeta cancelMeta = cancelStack.getItemMeta();
-        cancelMeta.displayName(TextUtil.strip(Component.text("Отменить постройку", NamedTextColor.DARK_RED)));
-        if (BuildingConfig.cancelModelData != 0) cancelMeta.setCustomModelData(BuildingConfig.cancelModelData);
+        cancelMeta.displayName(config.componentDef("confirm-gui.cancel", "<red>Отменить постройку"));
+        int cancelModelData = config.integer("confirm-gui.cancel-model-data", 0);
+        if (cancelModelData != 0) cancelMeta.setCustomModelData(cancelModelData);
         cancelStack.setItemMeta(cancelMeta);
 
         GuiItem confirmItem = new GuiItem(confirmStack, inventoryClickEvent -> {
             inventoryClickEvent.setCancelled(true);
-            if(removeBook()) BuildingManager.confirmConstruction(player, true);
-            else{
-                player.sendMessage(TextUtil.strip(
-                        Component.text("&7\uD83D\uDEE0 ", NamedTextColor.GRAY)
-                                .append(Component.text("У вас нет книги в инвентаре!", NamedTextColor.RED))
-                ));
+            if (removeBook()) BuildingManager.confirmConstruction(player, true);
+            else {
+                Component message = config.componentDef("confirm-gui.no-book", "<gray>\uD83D\uDEE0 <red>У вас нет книги в инвентаре!");
+                player.sendMessage(message);
             }
-            BuildingManager.confirmConstruction(player, true);
             inventoryClickEvent.getWhoClicked().closeInventory();
         });
         staticPane.addItem(confirmItem, 2, 0);
@@ -76,16 +75,16 @@ public class ConfirmGui extends ChestGui {
 
     private boolean removeBook() {
         ItemStack[] stacks = player.getInventory().getContents();
-        for(int i=0;i<stacks.length;i++){
+        for (int i = 0; i < stacks.length; i++) {
             ItemStack stack = stacks[i];
-            if(stack == null) continue;
-            if(stack.getType() != Material.BOOK) continue;
+            if (stack == null) continue;
+            if (stack.getType() != Material.BOOK) continue;
             NBTItem nbtItem = new NBTItem(stack);
-            if(nbtItem.getString("arc:building_key").equals(site.getBuilding().getFileName())){
-                if(stack.getAmount() == 1){
+            if (nbtItem.getString("arc:building_key").equals(site.getBuilding().getFileName())) {
+                if (stack.getAmount() == 1) {
                     player.getInventory().setItem(i, null);
-                } else{
-                    stack.setAmount(stack.getAmount()-1);
+                } else {
+                    stack.setAmount(stack.getAmount() - 1);
                 }
                 return true;
             }

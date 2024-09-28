@@ -6,20 +6,16 @@ import arc.arc.network.repos.RedisRepo;
 import arc.arc.util.TextUtil;
 import arc.arc.util.Utils;
 import arc.arc.xserver.announcements.AnnounceManager;
-import com.gamingmesh.jobs.commands.list.log;
-import lombok.Setter;
 import lombok.extern.log4j.Log4j2;
-import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scheduler.BukkitTask;
 
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static arc.arc.util.TextUtil.formatAmount;
 import static arc.arc.util.TextUtil.mm;
@@ -91,7 +87,7 @@ public class StockPlayerManager {
             String message = StockConfig.string("message.received-dividend")
                     .replace("<amount>", TextUtil.formatAmount(gave))
                     .replace("<symbol>", symbol);
-            AnnounceManager.instance().sendMessage(stockPlayer.playerUuid, message);
+            AnnounceManager.sendMessage(stockPlayer.playerUuid, message);
         }
     }
 
@@ -186,7 +182,7 @@ public class StockPlayerManager {
                     .replace("<gains>", formatAmount(gains - position.commission))
                     .replace("<symbol>", symbol)
                     .replace("<money_received>", formatAmount(gains + position.startPrice * position.amount));
-            AnnounceManager.instance().sendMessage(stockPlayer.playerUuid, message);
+            AnnounceManager.sendMessage(stockPlayer.playerUuid, message);
         }, () -> log.error("Could not find position with such id {}", positionUuid));
 
     }

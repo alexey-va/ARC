@@ -1,15 +1,16 @@
 package arc.arc.autobuild;
 
 import arc.arc.ARC;
+import arc.arc.configs.Config;
+import arc.arc.configs.ConfigManager;
 import arc.arc.hooks.HookRegistry;
 import arc.arc.util.CooldownManager;
-import arc.arc.util.TextUtil;
 import arc.arc.util.Utils;
 import com.sk89q.worldedit.math.BlockVector3;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.*;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Firework;
@@ -23,6 +24,7 @@ import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 
+@Slf4j
 @RequiredArgsConstructor
 @Getter
 public class ConstructionSite {
@@ -40,6 +42,8 @@ public class ConstructionSite {
 
     Display display;
     Construction construction;
+
+    Config config = ConfigManager.of(ARC.plugin.getDataPath(), "auto-build.yml");
 
     int npcId = -1;
 
@@ -65,9 +69,9 @@ public class ConstructionSite {
         return centerBlock.clone().add(0, yOffset, 0);
     }
 
-    List<Location> getCenterLocations(){
-        Location center1 = this.centerBlock.toBlockLocation().clone().add(-0.05,-1.05, -0.05);
-        Location center2 = center1.clone().add(1.1,1.1, 1.1);
+    List<Location> getCenterLocations() {
+        Location center1 = this.centerBlock.toBlockLocation().clone().add(-0.05, -1.05, -0.05);
+        Location center2 = center1.clone().add(1.1, 1.1, 1.1);
         return Utils.getBorderLocations(center1, center2, 6);
     }
 
@@ -85,6 +89,10 @@ public class ConstructionSite {
                 corners.corner2().z() + this.getCenterBlock().z() + 1);
 
         return Utils.getBorderLocationsWithCornerData(corner1, corner2, 2, 3);
+    }
+
+    public int fullRotation() {
+        return (rotation + subRotation) % 360;
     }
 
     public void spawnConfirmNpc(int seconds) {
@@ -152,7 +160,10 @@ public class ConstructionSite {
         calculateChunks();
         if (HookRegistry.landsHook != null) {
             for (Chunk chunk : chunks) {
-                if (!HookRegistry.landsHook.canBuild(player, chunk)) return false;
+                if (!HookRegistry.landsHook.canBuild(player, chunk)) {
+                    log.info("Can't build in chunk: {}", chunk);
+                    return false;
+                }
             }
         }
         if (HookRegistry.wgHook != null) {
@@ -160,7 +171,10 @@ public class ConstructionSite {
             for (int x = corners.corner1.x(); x < corners.corner2.x(); x++) {
                 for (int y = corners.corner1.y(); y < corners.corner2.y(); y++) {
                     for (int z = corners.corner1.z(); z < corners.corner2.z(); z++) {
-                        if (!HookRegistry.wgHook.canBuild(player, new Location(world, x, y, z))) return false;
+                        if (!HookRegistry.wgHook.canBuild(player, new Location(world, x, y, z))) {
+                            log.info("Can't build in worldguard: {} {} {}", x, y, z);
+                            return false;
+                        }
                     }
                 }
             }
@@ -170,6 +184,7 @@ public class ConstructionSite {
 
     public void forceloadChunks() {
         calculateChunks();
+        log.info("Forceloading {} chunks", chunks.size());
         for (Chunk chunk : chunks) {
             chunk.setForceLoaded(true);
         }
@@ -201,8 +216,8 @@ public class ConstructionSite {
 
 
     public Corners getCorners() {
-        BlockVector3 c1 = building.getCorner1((rotation+subRotation)%360);
-        BlockVector3 c2 = building.getCorner2((rotation+subRotation)%360);
+        BlockVector3 c1 = building.getCorner1(fullRotation());
+        BlockVector3 c2 = building.getCorner2(fullRotation());
 
         BlockVector3 r1 = BlockVector3.at(Math.min(c1.x(), c2.x()),
                 Math.min(c1.y(), c2.y()),
@@ -226,10 +241,8 @@ public class ConstructionSite {
     }
 
     private void sendFinalMessage() {
-        player.sendMessage(TextUtil.strip(
-                Component.text("\uD83D\uDEE0 ", NamedTextColor.GRAY)
-                        .append(Component.text("Строительство завершено!", NamedTextColor.DARK_GREEN))
-        ));
+        Component message = config.componentDef("building-finished-message", "<gray>\uD83D\uDEE0 <green>Строительство завершено!");
+        player.sendMessage(message);
     }
 
     private void launchFireWorks() {
@@ -263,7 +276,7 @@ public class ConstructionSite {
     public void cleanup(int destroyNpcDelaySeconds) {
         BuildingManager.removeConstruction(player.getUniqueId());
         stopForceload();
-        if (display != null){
+        if (display != null) {
             display.stop();
         }
         if (construction != null) construction.cancel(destroyNpcDelaySeconds);

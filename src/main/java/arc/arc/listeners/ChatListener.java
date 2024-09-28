@@ -2,6 +2,7 @@ package arc.arc.listeners;
 
 import arc.arc.ARC;
 import arc.arc.TitleInput;
+import com.Zrips.CMI.events.CMIPlayerTeleportRequestEvent;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -25,5 +26,7 @@ public class ChatListener implements Listener {
             }
         }.runTask(ARC.plugin);
     }
+
+    CMIPlayerTeleportRequestEvent event;
 
 }

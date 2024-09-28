@@ -5,7 +5,6 @@ import arc.arc.configs.Config;
 import arc.arc.configs.ConfigManager;
 import dev.lone.itemsadder.api.CustomStack;
 import dev.lone.itemsadder.api.Events.ItemsAdderPackCompressedEvent;
-import dev.lone.itemsadder.api.ItemsAdder;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -48,7 +47,7 @@ public class IAEvents implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onRpCompress(ItemsAdderPackCompressedEvent event) throws Exception {
         Path path = ARC.plugin.getDataFolder().toPath();
-        Config emHookConfig = ConfigManager.getOrCreate(path, "ia-hooks.yml", "ia-hooks");
+        Config emHookConfig = ConfigManager.of(path, "ia-hooks.yml");
         String pathToZip = emHookConfig.string("path-to-zip", "ItemsAdder/output/generated.zip");
         Path zipPath = path.getParent().resolve(pathToZip);
         if (Files.exists(zipPath)) {

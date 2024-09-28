@@ -9,6 +9,7 @@ import arc.arc.sync.base.SyncRepo;
 import com.Zrips.CMI.CMI;
 import com.Zrips.CMI.Containers.CMIUser;
 import com.Zrips.CMI.Containers.PlayerMail;
+import com.Zrips.CMI.Modules.Kits.Kit;
 import com.Zrips.CMI.Modules.PlayerOptions.PlayerOption;
 import com.Zrips.CMI.Modules.Ranks.CMIRank;
 import com.google.gson.annotations.SerializedName;
@@ -21,9 +22,7 @@ import org.bukkit.ChatColor;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 
-import java.util.List;
-import java.util.Objects;
-import java.util.UUID;
+import java.util.*;
 
 @Log4j2
 public class CMISync implements Sync {
@@ -59,9 +58,10 @@ public class CMISync implements Sync {
         repo.saveAndPersistData(context, false);
     }
 
+    @SuppressWarnings("deprecation")
     public void applyData(CMIDataDTO data) {
         if (data == null) {
-            log.warn("Data is null " + key);
+            log.warn("Data is null {}", key);
             return;
         }
         if (data.server().equals(MainConfig.server)) return;
@@ -70,7 +70,7 @@ public class CMISync implements Sync {
 
         CMIUser user = CMI.getInstance().getPlayerManager().getUser(data.uuid());
         if (user == null) {
-            log.warn("User is null for " + data.uuid());
+            log.warn("User is null for {}", data.uuid());
             return;
         }
 
@@ -91,6 +91,7 @@ public class CMISync implements Sync {
         if (user.getOptionState(PlayerOption.acceptingPM) != data.pm)
             user.setOptionState(PlayerOption.acceptingPM, data.pm);
 
+
         Character glowChar = user.getGlow() == null ? null : user.getGlow().getChar();
         if (glowChar != data.glowColor) {
             if (data.glowColor != null) user.setGlow(ChatColor.getByChar(data.glowColor), true);
@@ -100,6 +101,18 @@ public class CMISync implements Sync {
         if (user.isCMIVanished() != data.vanish) {
             user.setVanished(data.vanish);
             user.updateVanishMode();
+        }
+
+        if (data.getKitUsage() != null) {
+            data.getKitUsage().forEach((kitName, usage) -> {
+                Kit kit = CMI.getInstance().getKitsManager().getKit(user.getPlayer(), kitName);
+                if (user.getKits().containsKey(kit)) {
+                    user.getKits().get(kit).setUsedTimes(usage.getUses());
+                    user.getKits().get(kit).setLastUsage(usage.getLastUse());
+                } else {
+                    user.addKit(kit, usage.getLastUse(), usage.getUses(), true);
+                }
+            });
         }
 
         if (!Objects.equals(user.getRank().getName(), data.rank) && data.rank != null) {
@@ -130,10 +143,17 @@ public class CMISync implements Sync {
             return null;
         }
 
+        Map<String, CMIDataDTO.KitUsage> kitUsageMap = new HashMap<>();
+        user.getKits().forEach((kit, usage) -> kitUsageMap.put(kit.getConfigName(), CMIDataDTO.KitUsage.builder()
+                .uses(usage.getUsedTimes())
+                .lastUse(usage.getLastUsage())
+                .build()));
+
         return CMIDataDTO.builder()
                 .timestamp(System.currentTimeMillis())
                 .server(MainConfig.server)
                 .uuid(uuid)
+                .kitUsage(kitUsageMap)
                 .prefix(user.getPrefix())
                 .suffix(user.getSuffix())
                 .rank(user.getRank() == null ? null : user.getRank().getName())
@@ -162,7 +182,7 @@ public class CMISync implements Sync {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    static class CMIDataDTO implements SyncData {
+    public static class CMIDataDTO implements SyncData {
         @SerializedName("ts")
         long timestamp;
         @SerializedName("s")
@@ -194,6 +214,8 @@ public class CMISync implements Sync {
         boolean vanish;
         @SerializedName("m")
         List<Mail> mail;
+        @SerializedName("ku")
+        Map<String, KitUsage> kitUsage;
 
         @Data
         @Builder
@@ -206,6 +228,17 @@ public class CMISync implements Sync {
             long time;
             @SerializedName("m")
             String message;
+        }
+
+        @Data
+        @Builder
+        @NoArgsConstructor
+        @AllArgsConstructor
+        static class KitUsage {
+            @SerializedName("ku")
+            int uses;
+            @SerializedName("kl")
+            long lastUse;
         }
 
         @Override

@@ -1,18 +1,18 @@
 package arc.arc.hooks;
 
 import arc.arc.ARC;
-import arc.arc.configs.MainConfig;
-import arc.arc.farm.*;
+import arc.arc.configs.Config;
+import arc.arc.configs.ConfigManager;
 import arc.arc.hooks.auraskills.AuraSkillsHook;
 import arc.arc.hooks.bank.BankHook;
 import arc.arc.hooks.betterstructures.BsHook;
 import arc.arc.hooks.citizens.CitizensHook;
 import arc.arc.hooks.elitemobs.EMHook;
-import arc.arc.hooks.iris.IrisHook;
 import arc.arc.hooks.jobs.JobsHook;
 import arc.arc.hooks.lands.LandsHook;
 import arc.arc.hooks.lootchest.LootChestHook;
 import arc.arc.hooks.luckperms.LuckPermsHook;
+import arc.arc.hooks.packetevents.PacketEventsHook;
 import arc.arc.hooks.ps.PSHook;
 import arc.arc.hooks.slimefun.SFHook;
 import arc.arc.hooks.viaversion.ViaVersionHook;
@@ -21,13 +21,8 @@ import arc.arc.hooks.yamipa.YamipaHook;
 import arc.arc.hooks.zauction.AuctionHook;
 import arc.arc.hooks.ztranslator.TranslatorHook;
 import arc.arc.listeners.*;
-import dev.aurelium.auraskills.api.AuraSkillsApi;
 import lombok.extern.slf4j.Slf4j;
 import org.bukkit.Bukkit;
-import org.bukkit.scheduler.BukkitRunnable;
-
-
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.bukkit.Bukkit.getServer;
 
@@ -41,7 +36,6 @@ public class HookRegistry {
     public static PartiesHook partiesHook;
     public static PAPIHook papiHook;
     public static CMIHook cmiHook;
-    public static FarmManager farmManager;
     public static ItemsAdderHook itemsAdderHook;
     public static CitizensHook citizensHook;
     public static ViaVersionHook viaVersionHook;
@@ -59,7 +53,8 @@ public class HookRegistry {
     public static RedisEcoHook redisEcoHook;
     public static AuraSkillsHook auraSkillsHook;
     public static BsHook bsHook;
-    public static IrisHook irisHook;
+    public static PlayerWarpsHook playerWarpsHook;
+    public static PacketEventsHook packetEventsHook;
     public AEHook aeHook;
 
 
@@ -78,8 +73,10 @@ public class HookRegistry {
         papiHook = new PAPIHook();
         papiHook.register();
 
-        if (MainConfig.enablePortals && commandListener == null) {
-            commandListener = new CommandListener();
+
+        if (commandListener == null) {
+            Config config = ConfigManager.of(ARC.plugin.getDataPath(), "portal.yml");
+            commandListener = new CommandListener(config);
             Bukkit.getPluginManager().registerEvents(commandListener, ARC.plugin);
         }
     }
@@ -91,24 +88,28 @@ public class HookRegistry {
     public void cancelTasks() {
         if (emHook != null) emHook.cancel();
         if (psHook != null) psHook.cancel();
-        if (farmManager != null) farmManager.clear();
     }
 
     private void registerEvents() {
         if (Bukkit.getPluginManager().isPluginEnabled("ProtectionStones") && psHook == null) {
+            log.info("Registering ProtectionStones hook");
             psHook = new PSHook();
             Bukkit.getPluginManager().registerEvents(psHook, ARC.plugin);
         }
-        if (Bukkit.getPluginManager().isPluginEnabled("WorldGuard") && wgHook == null) {
-            wgHook = new WGHook();
-            farmManager = new FarmManager();
-            Bukkit.getPluginManager().registerEvents(wgHook, ARC.plugin);
+        if (getServer().getPluginManager().getPlugin("WorldGuard") != null) {
+            if (getServer().getPluginManager().getPlugin("WorldGuard").isEnabled()) {
+                log.info("Registering WorldGuard hook");
+                wgHook = new WGHook();
+                Bukkit.getPluginManager().registerEvents(wgHook, ARC.plugin);
+            }
         }
         if (Bukkit.getPluginManager().isPluginEnabled("Slimefun") && sfHook == null) {
+            log.info("Registering Slimefun hook");
             sfHook = new SFHook();
             Bukkit.getPluginManager().registerEvents(sfHook, ARC.plugin);
         }
         if (Bukkit.getPluginManager().isPluginEnabled("AdvancedEnchantments") && aeHook == null) {
+            log.info("Registering AdvancedEnchantments hook");
             aeHook = new AEHook();
             Bukkit.getPluginManager().registerEvents(aeHook, ARC.plugin);
         }
@@ -174,12 +175,27 @@ public class HookRegistry {
             if (getServer().getPluginManager().getPlugin("CMI").isEnabled()) {
                 log.info("Registering CMI hook");
                 cmiHook = new CMIHook();
+                Config config = ConfigManager.of(ARC.plugin.getDataPath(), "portal.yml");
+                CMIListener cmiListener = new CMIListener(config);
+                Bukkit.getPluginManager().registerEvents(cmiListener, ARC.plugin);
             }
         }
         if (getServer().getPluginManager().getPlugin("ViaVersion") != null) {
             if (getServer().getPluginManager().getPlugin("ViaVersion").isEnabled()) {
                 log.info("Registering ViaVersion hook");
                 viaVersionHook = new ViaVersionHook();
+            }
+        }
+        if (getServer().getPluginManager().getPlugin("packetevents") != null) {
+            if (getServer().getPluginManager().getPlugin("packetevents").isEnabled()) {
+                log.info("Registering packetevents hook");
+                packetEventsHook = new PacketEventsHook();
+            }
+        }
+        if (getServer().getPluginManager().getPlugin("PlayerWarps") != null) {
+            if (getServer().getPluginManager().getPlugin("PlayerWarps").isEnabled()) {
+                log.info("Registering PlayerWarps hook");
+                playerWarpsHook = new PlayerWarpsHook();
             }
         }
         if (getServer().getPluginManager().getPlugin("LootChest") != null) {
@@ -208,17 +224,6 @@ public class HookRegistry {
                 citizensHook.registerListeners();
             }
         }
-        if (getServer().getPluginManager().getPlugin("WorldGuard") != null) {
-            if (getServer().getPluginManager().getPlugin("WorldGuard").isEnabled()) {
-                log.info("Registering WorldGuard hook");
-                try {
-                    farmManager = new FarmManager();
-                    farmManager.init();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-        }
         if (chatListener == null) {
             chatListener = new ChatListener();
             Bukkit.getPluginManager().registerEvents(chatListener, ARC.plugin);
@@ -231,11 +236,6 @@ public class HookRegistry {
         if (getServer().getPluginManager().getPlugin("Parties") != null) {
             if (getServer().getPluginManager().getPlugin("Parties").isEnabled()) {
                 partiesHook = new PartiesHook();
-            }
-        }
-        if (getServer().getPluginManager().getPlugin("Iris") != null) {
-            if (getServer().getPluginManager().getPlugin("Iris").isEnabled()) {
-                irisHook = new IrisHook();
             }
         }
         if (bsHook == null && getServer().getPluginManager().getPlugin("BetterStructures") != null) {

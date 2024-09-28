@@ -4,13 +4,17 @@ import arc.arc.autobuild.BuildingManager;
 import arc.arc.board.Board;
 import arc.arc.bschests.PersonalLootManager;
 import arc.arc.commands.*;
-import arc.arc.commands.tabcompletes.*;
+import arc.arc.commands.tabcompletes.InvestTabComplete;
+import arc.arc.commands.tabcompletes.LocationPoolTabComplete;
+import arc.arc.commands.tabcompletes.TreasureHuntTabComplete;
+import arc.arc.commands.tabcompletes.TreasurePoolTabcomplete;
 import arc.arc.configs.*;
 import arc.arc.eliteloot.EliteLootManager;
 import arc.arc.farm.FarmManager;
 import arc.arc.generic.treasure.TreasurePool;
 import arc.arc.hooks.HookRegistry;
 import arc.arc.leafdecay.LeafDecayManager;
+import arc.arc.mobspawn.MobSpawnManager;
 import arc.arc.network.NetworkRegistry;
 import arc.arc.network.RedisManager;
 import arc.arc.stock.StockClient;
@@ -26,7 +30,6 @@ import arc.arc.util.ParticleManager;
 import lombok.extern.log4j.Log4j2;
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.Bukkit;
-import org.bukkit.entity.Item;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -38,7 +41,6 @@ public final class ARC extends JavaPlugin {
     AnnouneConfig announeConfig;
     TreasureHuntConfig treasureHuntConfig;
     public LocationPoolConfig locationPoolConfig;
-    public BuildingConfig buildingConfig;
     public BoardConfig boardConfig;
     private static Economy econ = null;
     public static RedisManager redisManager;
@@ -70,14 +72,28 @@ public final class ARC extends JavaPlugin {
     @Override
     public void onEnable() {
         plugin = this;
-        System.out.println("Loading config");
-        loadConfig();
-        System.out.println("Loading hook registry");
+        log.info("Starting ARC");
+        log.info("Creating hook registry");
+
+        System.out.println("Setting up redis");
+        setupRedis();
+
+        System.out.println("Setting up network registry");
+        networkRegistry = new NetworkRegistry(redisManager);
+        networkRegistry.init();
+
         hookRegistry = new HookRegistry();
+        log.info("Setting up hooks");
+        hookRegistry.setupHooks();
+
+        log.info("Loading config");
+        loadConfig();
         load();
     }
 
     public void loadConfig() {
+        ConfigManager.reloadAll();
+
         mainConfig = new MainConfig();
         System.out.println("Announce config loading...");
         announeConfig = new AnnouneConfig();
@@ -89,14 +105,8 @@ public final class ARC extends JavaPlugin {
         System.out.println("Loading treasure hunt config");
         treasureHuntConfig = new TreasureHuntConfig();
 
-        System.out.println("Loading buildings config");
-        buildingConfig = new BuildingConfig();
-
         System.out.println("Loading board config");
         boardConfig = new BoardConfig();
-
-        System.out.println("Loading invest config");
-        //InvestConfig.load();
 
         System.out.println("Loading stock config");
         StockConfig.load();
@@ -104,15 +114,10 @@ public final class ARC extends JavaPlugin {
         System.out.println("Loading auction config");
         AuctionConfig.load();
 
-        if (HookRegistry.farmManager != null) {
-            HookRegistry.farmManager.clear();
-            HookRegistry.farmManager = new FarmManager();
-            HookRegistry.farmManager.init();
-        }
+        log.info("Starting farm manager");
+        FarmManager.init();
 
         headTextureCache = new HeadTextureCache();
-
-        ConfigManager.reloadAll();
 
         LeafDecayManager.reload();
 
@@ -143,12 +148,6 @@ public final class ARC extends JavaPlugin {
     }
 
     public void load() {
-        System.out.println("Setting up redis");
-        setupRedis();
-
-        System.out.println("Setting up hooks");
-        hookRegistry.setupHooks();
-
         System.out.println("Registering commands");
         registerCommands();
 
@@ -161,18 +160,11 @@ public final class ARC extends JavaPlugin {
         System.out.println("Initializing store manager");
         StoreManager.init();
 
-        System.out.println("Setting up network registry");
-        networkRegistry = new NetworkRegistry(redisManager);
-        networkRegistry.init();
-
         System.out.println("Setting up particle manager");
         ParticleManager.setupParticleManager();
 
         System.out.println("Setting up cooldown task");
         CooldownManager.setupTask(5);
-
-        System.out.println("Setting up building cleanup task");
-        BuildingManager.setupCleanupTask();
 
         System.out.println("Setting up stock");
         StockPlayerManager.init();
@@ -181,6 +173,7 @@ public final class ARC extends JavaPlugin {
         System.out.println("Setting up elite loot");
         EliteLootManager.init();
 
+        log.info("Starting auto build manager");
         BuildingManager.init();
 
         log.info("Starting leaf decay manager");
@@ -191,6 +184,9 @@ public final class ARC extends JavaPlugin {
 
         log.info("Starting personal loot manager");
         PersonalLootManager.init();
+
+        log.info("Starting MobSpawnManager");
+        MobSpawnManager.init();
 
         startSyncs();
     }

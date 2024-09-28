@@ -11,6 +11,7 @@ import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -31,21 +32,28 @@ public class LandsHook {
 
     public void tpSpawn(Player player) {
         LandPlayer landPlayer = integration.getLandPlayer(player.getUniqueId());
-        if(landPlayer == null) return;
+        if (landPlayer == null) return;
         Land land = landPlayer.getEditLand();
-        if(land == null) return;
+        if (land == null) return;
         Location location = land.getSpawn();
-        if(location == null) return;
-        if(HookRegistry.huskHomesHook != null) HookRegistry.huskHomesHook.createPortal(player, location);
+        if (location == null) return;
+        if (HookRegistry.huskHomesHook != null) HookRegistry.huskHomesHook.createPortal(player, location);
         else player.teleport(location);
     }
 
-    public boolean canBuild(Player player, Chunk chunk){
-        LandPlayer landPlayer =  integration.getLandPlayer(player.getUniqueId());
+    public boolean canBuild(Player player, Chunk chunk) {
+        LandPlayer landPlayer = integration.getLandPlayer(player.getUniqueId());
         LandWorld landWorld = integration.getWorld(chunk.getWorld());
-        if(landWorld == null || landPlayer == null) return false;
-        Location location = chunk.getBlock(1,1,1).getLocation();
-        return landWorld.hasRoleFlag(landPlayer, location, Flags.BLOCK_BREAK,Material.STONE,false) &&
+        if (landWorld == null) return true;
+        if (landPlayer == null) return false;
+        Location location = chunk.getBlock(1, 1, 1).getLocation();
+        return landWorld.hasRoleFlag(landPlayer, location, Flags.BLOCK_BREAK, Material.STONE, false) &&
                 landWorld.hasRoleFlag(landPlayer, location, Flags.BLOCK_PLACE, Material.STONE, false);
+    }
+
+    public boolean isClaimed(@NotNull Location location) {
+        LandWorld landWorld = integration.getWorld(location.getWorld());
+        if (landWorld == null) return false;
+        return landWorld.getArea(location) != null;
     }
 }

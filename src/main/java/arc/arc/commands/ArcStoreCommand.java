@@ -4,7 +4,6 @@ import arc.arc.ARC;
 import arc.arc.configs.Config;
 import arc.arc.configs.ConfigManager;
 import arc.arc.guis.StoreGui;
-import arc.arc.store.Store;
 import arc.arc.store.StoreManager;
 import arc.arc.util.GuiUtils;
 import arc.arc.util.TextUtil;
@@ -33,7 +32,7 @@ public class ArcStoreCommand implements CommandExecutor, TabCompleter {
         }
         String permission = "arc.store";
         Path configPath = ARC.plugin.getDataFolder().toPath().resolve("store");
-        Config config = ConfigManager.getOrCreate(configPath, "store.yml", "store");
+        Config config = ConfigManager.of(configPath, "store.yml");
 
         if (!player.hasPermission(permission)) {
             player.sendMessage(TextUtil.noPermissions());

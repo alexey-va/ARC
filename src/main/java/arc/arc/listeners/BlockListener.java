@@ -3,17 +3,16 @@ package arc.arc.listeners;
 import arc.arc.autobuild.BuildingManager;
 import arc.arc.autobuild.ConstructionSite;
 import arc.arc.bschests.PersonalLootManager;
-import arc.arc.hooks.HookRegistry;
+import arc.arc.farm.FarmManager;
 import arc.arc.leafdecay.LeafDecayManager;
-import arc.arc.treasurechests.locationpools.LocationPoolManager;
 import arc.arc.treasurechests.TreasureHunt;
 import arc.arc.treasurechests.TreasureHuntManager;
+import arc.arc.treasurechests.locationpools.LocationPoolManager;
 import arc.arc.util.TextUtil;
 import de.tr7zw.changeme.nbtapi.NBTItem;
 import lombok.extern.slf4j.Slf4j;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -24,8 +23,6 @@ import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.persistence.PersistentDataType;
 
 import java.util.Set;
 
@@ -108,13 +105,13 @@ public class BlockListener implements Listener {
         String yOff = null;
         if (nbtItem.hasKey("arc:y_offset")) yOff = nbtItem.getString("arc:y_offset");
 
+        event.setCancelled(true);
         BuildingManager.processPlayerClick(event.getPlayer(), center, buildingId, rotation, yOff);
     }
 
 
     private void processFarmBreak(BlockBreakEvent event) {
-        if (HookRegistry.farmManager == null) return;
-        HookRegistry.farmManager.processEvent(event);
+        FarmManager.processEvent(event);
     }
 
     private void processTreasureHunt(PlayerInteractEvent event) {
