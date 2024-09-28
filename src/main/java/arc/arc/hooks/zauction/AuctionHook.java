@@ -98,7 +98,7 @@ public class AuctionHook {
         if(displayComponent != null) display = PlainTextComponentSerializer.plainText().serialize(displayComponent);
         else{
             if(HookRegistry.translatorHook != null){
-                display = HookRegistry.translatorHook.translate(stack.getType());
+                display = HookRegistry.translatorHook.translate(stack);
             } else{
                 display = stack.getType().name().replace("_", "").toLowerCase();
             }

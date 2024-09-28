@@ -153,12 +153,12 @@ public class HookRegistry {
                 redisEcoHook = new RedisEcoHook();
             }
         }
-        if (getServer().getPluginManager().getPlugin("zTranslator") != null) {
-            if (getServer().getPluginManager().getPlugin("zTranslator").isEnabled()) {
-                log.info("Registering Translator hook");
-                translatorHook = new TranslatorHook();
-            }
-        }
+        //if (getServer().getPluginManager().getPlugin("zTranslator") != null) {
+        //    if (getServer().getPluginManager().getPlugin("zTranslator").isEnabled()) {
+        log.info("Registering Translator hook");
+        translatorHook = new TranslatorHook();
+        //    }
+        //}
         if (getServer().getPluginManager().getPlugin("LuckPerms") != null) {
             if (getServer().getPluginManager().getPlugin("LuckPerms").isEnabled()) {
                 log.info("Registering LuckPerms hook");
