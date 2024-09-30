@@ -27,6 +27,7 @@ import arc.arc.treasurechests.locationpools.LocationPoolManager;
 import arc.arc.util.CooldownManager;
 import arc.arc.util.HeadTextureCache;
 import arc.arc.util.ParticleManager;
+import arc.arc.xserver.announcements.AnnounceManager;
 import lombok.extern.log4j.Log4j2;
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.Bukkit;
@@ -38,7 +39,6 @@ public final class ARC extends JavaPlugin {
 
     public static ARC plugin;
     MainConfig mainConfig;
-    AnnouneConfig announeConfig;
     TreasureHuntConfig treasureHuntConfig;
     public LocationPoolConfig locationPoolConfig;
     public BoardConfig boardConfig;
@@ -95,8 +95,6 @@ public final class ARC extends JavaPlugin {
         ConfigManager.reloadAll();
 
         mainConfig = new MainConfig();
-        System.out.println("Announce config loading...");
-        announeConfig = new AnnouneConfig();
 
         System.out.println("Location pool loading...");
         locationPoolConfig = new LocationPoolConfig();
@@ -116,6 +114,9 @@ public final class ARC extends JavaPlugin {
 
         log.info("Starting farm manager");
         FarmManager.init();
+
+        log.info("Starting announce manager");
+        AnnounceManager.init();
 
         headTextureCache = new HeadTextureCache();
 

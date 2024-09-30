@@ -3,40 +3,39 @@ package arc.arc.stock;
 import arc.arc.configs.MainConfig;
 import arc.arc.network.ChannelListener;
 import arc.arc.network.RedisManager;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.type.MapType;
+import arc.arc.util.Common;
+import com.google.gson.reflect.TypeToken;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+@Slf4j
 @RequiredArgsConstructor
 public class HistoryMessager implements ChannelListener {
     public final String channel;
     private final RedisManager redisManager;
+
     @Override
     public void consume(String channel, String message, String originServer) {
-        if(MainConfig.server.equalsIgnoreCase(originServer)) return;
-        var om = new ObjectMapper();
-        MapType mt = om.getTypeFactory()
-                .constructMapType(ConcurrentHashMap.class, String.class, HistoryManager.HighLow.class);
+        if (MainConfig.server.equalsIgnoreCase(originServer)) return;
         try {
-            Map<String, HistoryManager.HighLow> highLowMap = om.readValue(message,mt);
+            TypeToken<Map<String, HistoryManager.HighLow>> typeToken = new TypeToken<>() {
+            };
+            Map<String, HistoryManager.HighLow> highLowMap = Common.gson.fromJson(message, typeToken.getType());
             HistoryManager.setHighLows(highLowMap);
-        } catch (JsonProcessingException e) {
-            e.printStackTrace();
-            System.out.println("Could not parse message: "+message);
+        } catch (Exception e) {
+            log.error("Error consuming highlows", e);
         }
     }
 
-    public void send(Map<String, HistoryManager.HighLow> highLowMap){
+    public void send(Map<String, HistoryManager.HighLow> highLowMap) {
         try {
-            String json = new ObjectMapper().writeValueAsString(highLowMap);
+            String json = Common.gson.toJson(highLowMap);
             redisManager.publish(channel, json);
-        } catch (Exception e){
-            e.printStackTrace();
-            System.out.println("Could not serialize "+highLowMap+" with jackson!");
+        } catch (Exception e) {
+            log.error("Error sending highlows", e);
         }
     }
 }

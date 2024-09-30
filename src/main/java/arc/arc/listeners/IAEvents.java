@@ -5,6 +5,7 @@ import arc.arc.configs.Config;
 import arc.arc.configs.ConfigManager;
 import dev.lone.itemsadder.api.CustomStack;
 import dev.lone.itemsadder.api.Events.ItemsAdderPackCompressedEvent;
+import lombok.extern.slf4j.Slf4j;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -13,6 +14,7 @@ import java.net.URI;
 import java.nio.file.*;
 import java.util.*;
 
+@Slf4j
 public class IAEvents implements Listener {
 
     private static final String BOOTS = "items=leather_boots";
@@ -50,58 +52,51 @@ public class IAEvents implements Listener {
         Config emHookConfig = ConfigManager.of(path, "ia-hooks.yml");
         String pathToZip = emHookConfig.string("path-to-zip", "ItemsAdder/output/generated.zip");
         Path zipPath = path.getParent().resolve(pathToZip);
-        if (Files.exists(zipPath)) {
-            //ARC.info("ItemsAdder pack compressed: " + zipPath);
-        } else {
-            //ARC.info("ItemsAdder pack compressed: " + zipPath + " (not found)");
+        if (!Files.exists(zipPath)) {
             return;
         }
 
         Path tempDir = Files.createTempDirectory("ia-hooks-temp");
-
         unzip(zipPath, tempDir);
 
-        Files.walk(tempDir)
-                //.peek(p -> ARC.info("IAEvents processing: " + p))
-                .filter(p -> p.toString().endsWith(".properties"))
-                .filter(p -> p.toString().contains("ia_generated"))
-                .forEach(p -> {
-                    try {
-                        //ARC.info("IAEvents processing property file: " + p);
-                        replaceLineInFile(p, BOOTS, REPLACE_BOOTS);
-                        replaceLineInFile(p, LEGGINGS, REPLACE_LEGGINGS);
-                        replaceLineInFile(p, CHESTPLATE, REPLACE_CHESTPLATE);
-                        replaceLineInFile(p, HELMET, REPLACE_HELMET);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                });
+        try (var walk = Files.walk(tempDir)) {
+            walk.filter(p -> p.toString().endsWith(".properties"))
+                    .filter(p -> p.toString().contains("ia_generated"))
+                    .forEach(p -> {
+                        try {
+                            replaceLineInFile(p, BOOTS, REPLACE_BOOTS);
+                            replaceLineInFile(p, LEGGINGS, REPLACE_LEGGINGS);
+                            replaceLineInFile(p, CHESTPLATE, REPLACE_CHESTPLATE);
+                            replaceLineInFile(p, HELMET, REPLACE_HELMET);
+                        } catch (Exception e) {
+                            log.error("Error processing property file: {}", p, e);
+                        }
+                    });
+        }
 
         zip(tempDir, zipPath.toString());
     }
 
     private void unzip(Path zipPath, Path destDir) throws Exception {
         URI zipUri = URI.create("jar:file:" + zipPath.toUri().getPath());
-        //ARC.info("Unzipping: " + zipUri);
         try (FileSystem zipFs = FileSystems.newFileSystem(zipUri, Collections.emptyMap())) {
             Path root = zipFs.getPath("/");
-            Files.walk(root)
-                    .forEach(p -> {
-                        try {
-                            Path dest = destDir.resolve(root.relativize(p).toString());
-                            if (Files.isDirectory(p)) Files.createDirectories(dest);
-                            else Files.copy(p, dest);
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                    });
+            try (var walk = Files.walk(root)) {
+                walk.forEach(p -> {
+                    try {
+                        Path dest = destDir.resolve(root.relativize(p).toString());
+                        if (Files.isDirectory(p)) Files.createDirectories(dest);
+                        else Files.copy(p, dest);
+                    } catch (Exception e) {
+                        log.error("Error unzipping file: {}", p, e);
+                    }
+                });
+            }
         }
-        //ARC.info("Unzipped to: " + destDir);
     }
 
     private void zip(Path sourceDir, String zipFilePath) throws Exception {
         Path zipPath = Paths.get(zipFilePath);
-        //ARC.info("Zipping {} to {}", sourceDir, zipPath);
         Files.deleteIfExists(zipPath);
 
         URI zipUri = URI.create("jar:file:" + zipPath.toUri().getPath());
@@ -109,22 +104,23 @@ public class IAEvents implements Listener {
         env.put("create", "true");
 
         try (FileSystem zipFs = FileSystems.newFileSystem(zipUri, env)) {
-            Files.walk(sourceDir)
-                    .filter(path -> !Files.isDirectory(path))
-                    .forEach(path -> {
-                        Path destPath = zipFs.getPath("/" + sourceDir.relativize(path).toString());
-                        try {
-                            Files.createDirectories(destPath.getParent());
-                            Files.copy(path, destPath, StandardCopyOption.REPLACE_EXISTING);
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                    });
+            try(var walk =Files.walk(sourceDir)) {
+                walk.filter(path -> !Files.isDirectory(path))
+                        .forEach(path -> {
+                            Path destPath = zipFs.getPath("/" + sourceDir.relativize(path).toString());
+                            try {
+                                Files.createDirectories(destPath.getParent());
+                                Files.copy(path, destPath, StandardCopyOption.REPLACE_EXISTING);
+                            } catch (Exception e) {
+                                log.error("Error zipping file: {}", path, e);
+                            }
+                        });
+            }
         }
     }
 
     private void replaceLineInFile(Path path, String target, String replace) throws Exception {
-        if(updateBaseArmor(path)) return;
+        if (updateBaseArmor(path)) return;
 
         List<String> list = Files.readAllLines(path);
         boolean found = false;
@@ -142,11 +138,11 @@ public class IAEvents implements Listener {
                 String[] split = line.split("=");
                 layer2 = split[1];
             }
-            if(line.contains("nbt.itemsadder.namespace")){
+            if (line.contains("nbt.itemsadder.namespace")) {
                 String[] split = line.split("=");
                 namespace = split[1];
             }
-            if(line.contains("nbt.itemsadder.id")){
+            if (line.contains("nbt.itemsadder.id")) {
                 String[] split = line.split("=");
                 id = split[1];
             }
@@ -170,13 +166,13 @@ public class IAEvents implements Listener {
         if (found && false) {
 
             Path newPath = Paths.get(path.toString().replace(".properties", "_icon.properties"));
-            CustomStack customStack = CustomStack.getInstance(namespace+":"+id);
+            CustomStack customStack = CustomStack.getInstance(namespace + ":" + id);
 
-            if(customStack != null && !customStack.getTextures().isEmpty()) {
+            if (customStack != null && !customStack.getTextures().isEmpty()) {
                 String texturePath = customStack.getTextures().getFirst();
                 String[] split = texturePath.split(":");
-                if(split.length == 2) {
-                    texturePath = "../../../../"+split[0]+"/textures/"+split[1];
+                if (split.length == 2) {
+                    texturePath = "../../../../" + split[0] + "/textures/" + split[1];
                 }
                 String lines = """
                         nbt.itemsadder.namespace={namespace}
@@ -215,7 +211,7 @@ public class IAEvents implements Listener {
             try {
                 Files.copy(p, parent.resolve(p.getFileName()), StandardCopyOption.REPLACE_EXISTING);
             } catch (Exception e) {
-                e.printStackTrace();
+                log.error("Error copying file: {}", p, e);
             }
         });
         String fileString = """

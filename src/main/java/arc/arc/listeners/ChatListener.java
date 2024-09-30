@@ -2,6 +2,7 @@ package arc.arc.listeners;
 
 import arc.arc.ARC;
 import arc.arc.TitleInput;
+import arc.arc.ai.GPTManager;
 import com.Zrips.CMI.events.CMIPlayerTeleportRequestEvent;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -14,6 +15,7 @@ public class ChatListener implements Listener {
     @EventHandler(priority = EventPriority.LOWEST)
     public void onPlayerChat(AsyncPlayerChatEvent event) {
         processTitleInput(event);
+        GPTManager.processMessage(event);
     }
 
     private void processTitleInput(AsyncPlayerChatEvent event) {

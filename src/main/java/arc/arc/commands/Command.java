@@ -1,6 +1,8 @@
 package arc.arc.commands;
 
 import arc.arc.ARC;
+import arc.arc.ai.Conversation;
+import arc.arc.ai.GPTManager;
 import arc.arc.board.guis.BoardGui;
 import arc.arc.configs.Config;
 import arc.arc.configs.ConfigManager;
@@ -27,8 +29,8 @@ import org.reflections.Reflections;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 public class Command implements CommandExecutor, TabCompleter {
@@ -39,6 +41,12 @@ public class Command implements CommandExecutor, TabCompleter {
             commandSender.sendMessage("No args!");
             return true;
         }
+
+        if (strings[0].equalsIgnoreCase("ai")) {
+            processAiCommand(commandSender, strings);
+            return true;
+        }
+
         if (strings.length == 1) {
             if (strings[0].equalsIgnoreCase("reload") && commandSender.hasPermission("arc.admin")) {
                 ARC.plugin.reloadConfig();
@@ -165,12 +173,85 @@ public class Command implements CommandExecutor, TabCompleter {
         return true;
     }
 
+    private void processAiCommand(CommandSender sender, String[] args) {
+        if (args.length == 1) {
+            sender.sendMessage("No args!");
+            return;
+        }
+        Player player = (Player) sender;
+        if (args[1].equalsIgnoreCase("stop")) {
+            String id = args.length > 2 ? args[2] : "all";
+            if (id.equalsIgnoreCase("all")) {
+                GPTManager.endAllConversations(player);
+                //sender.sendMessage("All GPT conversations stopped!");
+            } else {
+                GPTManager.endConversation(player, id);
+                //sender.sendMessage("GPT conversation with id " + id + " stopped!");
+            }
+        } else if (args[1].equalsIgnoreCase("start")) {
+            if (args.length < 4) {
+                sender.sendMessage("Not enough args!");
+                return;
+            }
+            StockCommand.ParsedCommand parsedCommand = parseArgs(args);
+            String archetype = parsedCommand.pars().getOrDefault("archetype", "default");
+            String id = parsedCommand.pars().getOrDefault("id", UUID.randomUUID().toString());
+            String talkerName = parsedCommand.pars().getOrDefault("name", "GPT");
+            double radius = Double.parseDouble(parsedCommand.pars().getOrDefault("radius", "50"));
+            long lifeTime = Long.parseLong(parsedCommand.pars().getOrDefault("life-time", "60000"));
+            String initialMessage = parsedCommand.pars().getOrDefault("initial-message", null);
+            String npcIdString = parsedCommand.pars().getOrDefault("npc-id", null);
+            Integer npcId = npcIdString != null ? Integer.parseInt(npcIdString) : null;
+
+            GPTManager.startConversation(player,
+                    id,
+                    archetype,
+                    talkerName,
+                    player.getLocation(),
+                    radius,
+                    lifeTime,
+                    initialMessage,
+                    npcId);
+            //sender.sendMessage("GPT conversation with id " + id + " started!");
+        }
+    }
+
+    private static StockCommand.ParsedCommand parseArgs(String[] strings) {
+        List<String> args = new ArrayList<>();
+        Map<String, String> pars = new HashMap<>();
+        for (String s : strings) {
+            if (!s.startsWith("-")) args.add(s);
+            else {
+                s = s.substring(1);
+                String[] temp = s.split(":");
+                pars.put(temp[0], temp.length == 2 ? temp[1] : null);
+            }
+        }
+        return new StockCommand.ParsedCommand(pars, args);
+    }
+
 
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender commandSender, org.bukkit.command.@NotNull Command command, @NotNull String s, @NotNull String[] strings) {
 
         if (strings.length == 1) {
-            return List.of("reload", "board", "emshop", "jobsboosts", "baltop", "treasures", "logger");
+            return List.of("reload", "board", "emshop", "jobsboosts", "baltop", "treasures", "logger", "ai");
+        }
+
+        if (strings.length > 1 && strings[0].equalsIgnoreCase("ai")) {
+            if (strings.length == 2) {
+                return List.of("start", "stop");
+            }
+            if (strings[1].equalsIgnoreCase("start")) {
+                return List.of("-archetype:default", "-id:", "-name:GPT", "-radius:50", "-life-time:60000", "-initial-message:", "-npc-id:");
+            }
+            if (strings[1].equalsIgnoreCase("stop")) {
+                List<String> conv = GPTManager.getConversations((Player) commandSender).stream()
+                        .map(Conversation::getGptId)
+                        .collect(Collectors.toList());
+                conv.add("all");
+                return conv;
+            }
         }
 
         if (strings.length == 2) {
@@ -190,6 +271,7 @@ public class Command implements CommandExecutor, TabCompleter {
                         //.map(s1 -> s.replace(".class", ""))
                         .toList();
             }
+
         }
 
         if (strings.length == 3) {

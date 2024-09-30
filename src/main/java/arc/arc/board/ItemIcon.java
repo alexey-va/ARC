@@ -1,7 +1,6 @@
 package arc.arc.board;
 
 import arc.arc.util.HeadUtil;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -20,9 +19,7 @@ import java.util.UUID;
 public class ItemIcon {
 
     Material material;
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     UUID headUuid;
-    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
     int modelData = 0;
 
     public static ItemIcon of(UUID uuid){

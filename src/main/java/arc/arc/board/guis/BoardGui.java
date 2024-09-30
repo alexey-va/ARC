@@ -147,7 +147,7 @@ public class BoardGui extends ChestGui {
                     fillItems();
                     this.update();
                 }).build();
-        pane.addItem(refresh, 4, 0);
+        //pane.addItem(refresh, 4, 0);
 
 
         publish = new ItemStackBuilder(Material.PLAYER_HEAD)

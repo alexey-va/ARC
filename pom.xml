@@ -124,6 +124,10 @@
             <id>jitpack.io</id>
             <url>https://jitpack.io</url>
         </repository>
+        <repository>
+            <id>cronapp</id>
+            <url>https://artifactory.cronapp.io/public-release/</url>
+        </repository>
     </repositories>
 
     <dependencies>
@@ -184,19 +188,6 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>com.denizenscript</groupId>
-            <artifactId>denizen</artifactId>
-            <version>1.2.8-SNAPSHOT</version>
-            <type>jar</type>
-            <scope>provided</scope>
-            <exclusions>
-                <exclusion>
-                    <groupId>*</groupId>
-                    <artifactId>*</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
             <groupId>com.github.stefvanschie.inventoryframework</groupId>
             <artifactId>IF</artifactId>
             <version>0.10.14</version>
@@ -225,18 +216,6 @@
             <artifactId>huskhomes</artifactId>
             <version>4.4.5</version>
             <scope>provided</scope>
-        </dependency>
-        <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.core/jackson-databind -->
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-            <version>2.16.1</version>
-        </dependency>
-        <!-- https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-api -->
-        <dependency>
-            <groupId>com.fasterxml.jackson.datatype</groupId>
-            <artifactId>jackson-datatype-jsr310</artifactId>
-            <version>2.16.1</version> <!-- Use the latest version available -->
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -320,10 +299,16 @@
         </dependency>
         <dependency>
             <groupId>net.citizensnpcs</groupId>
-            <artifactId>citizensapi</artifactId>
-            <version>2.0.23-SNAPSHOT</version>
-            <scope>provided</scope>
+            <artifactId>citizens-main</artifactId>
+            <version>2.0.35-SNAPSHOT</version>
             <type>jar</type>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>com.viaversion</groupId>
@@ -387,9 +372,10 @@
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
-            <version>2.10.1</version>
-            <scope>provided</scope>
+            <version>2.11.0</version>
         </dependency>
+
+
         <dependency>
             <groupId>bank</groupId>
             <artifactId>Bank</artifactId>

@@ -2,11 +2,13 @@ package arc.arc.hooks.zauction;
 
 import arc.arc.network.ChannelListener;
 import arc.arc.network.RedisManager;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import arc.arc.util.Common;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 
+@Slf4j
 @RequiredArgsConstructor
 public class AuctionMessager implements ChannelListener {
     public final String channel, channelAll;
@@ -17,11 +19,11 @@ public class AuctionMessager implements ChannelListener {
 
     }
 
-    public void send(List<AuctionItemDto> itemDtoList){
+    public void send(List<AuctionItemDto> itemDtoList) {
         try {
-            redisManager.publish(channel, new ObjectMapper().writeValueAsString(itemDtoList));
-        } catch (Exception e){
-            e.printStackTrace();
+            redisManager.publish(channel, Common.gson.toJson(itemDtoList));
+        } catch (Exception e) {
+            log.error("Error sending auction items", e);
         }
     }
 }

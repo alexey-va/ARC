@@ -1,5 +1,6 @@
 package arc.arc.ai;
 
+import java.util.Collection;
 import java.util.Deque;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedDeque;
@@ -19,6 +20,10 @@ public class ChatHistory {
 
     public void addBotMessage(String message) {
         deque.add(new Entry(message, true, System.currentTimeMillis()));
+    }
+
+    public Collection<Entry> entries() {
+        return deque;
     }
 
     public record Entry(String text, boolean isPlayer, long timestamp) {

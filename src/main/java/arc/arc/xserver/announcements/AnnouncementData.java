@@ -1,7 +1,6 @@
 package arc.arc.xserver.announcements;
 
 import arc.arc.configs.MainConfig;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -14,6 +13,7 @@ import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.OfflinePlayer;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Data
 @Builder
@@ -45,10 +45,8 @@ public class AnnouncementData {
 
     String originServer = MainConfig.server;
 
-    @JsonIgnore
-    Component cachedComponent;
-    @JsonIgnore
-    Map<UUID, Component> playerSpecificComponent = new HashMap<>();
+    transient Component cachedComponent;
+    transient Map<UUID, Component> playerSpecificComponent = new ConcurrentHashMap<>();
 
     public Component component() {
         if (cachedComponent != null) return cachedComponent;

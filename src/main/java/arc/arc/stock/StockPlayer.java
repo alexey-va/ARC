@@ -4,8 +4,6 @@ import arc.arc.configs.StockConfig;
 import arc.arc.hooks.HookRegistry;
 import arc.arc.network.repos.RepoData;
 import arc.arc.util.TextUtil;
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.*;
 import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
@@ -30,9 +28,7 @@ public class StockPlayer extends RepoData<StockPlayer> {
     Map<String, List<Position>> positionMap = new HashMap<>();
     private double balance = 0;
     boolean autoTake = true;
-    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
     double totalGains = 0;
-    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
     double receivedDividend = 0;
 
     public StockPlayer(String name, UUID uuid) {
@@ -41,14 +37,12 @@ public class StockPlayer extends RepoData<StockPlayer> {
         setDirty(true);
     }
 
-    @JsonIgnore
     public synchronized void addToBalance(double add, boolean fromPosition) {
         balance += add;
         if (fromPosition) totalGains += add;
         setDirty(true);
     }
 
-    @JsonIgnore
     public synchronized double totalBalance() {
         double fromPositions = positionMap.values().stream()
                 .flatMap(list -> list.stream().map(Position::totalValue))
@@ -57,7 +51,6 @@ public class StockPlayer extends RepoData<StockPlayer> {
         return balance + fromPositions;
     }
 
-    @JsonIgnore
     public synchronized double giveDividend(String symbol) {
         if (!positionMap.containsKey(symbol)) return 0;
         System.out.println("Giving divedend to "+playerName);
@@ -78,13 +71,11 @@ public class StockPlayer extends RepoData<StockPlayer> {
         return gave;
     }
 
-    @JsonIgnore
     public synchronized Optional<Position> find(String symbol, UUID uuid) {
         if (!positionMap.containsKey(symbol)) return Optional.empty();
         return positionMap.get(symbol).stream().filter(p -> p.positionUuid.equals(uuid)).findAny();
     }
 
-    @JsonIgnore
     public boolean isBelowMaxStockAmount(){
         int currentAmount = positions().size();
         if(currentAmount < StockConfig.defaultStockMaxAmount) return true;
@@ -95,7 +86,6 @@ public class StockPlayer extends RepoData<StockPlayer> {
         return HookRegistry.luckPermsHook.hasPermission(offlinePlayer, entry.getValue());
     }
 
-    @JsonIgnore
     public int maxStockAmount(){
         int max = -1;
         OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(playerUuid);
@@ -107,7 +97,6 @@ public class StockPlayer extends RepoData<StockPlayer> {
         return max == -1 ? StockConfig.defaultStockMaxAmount : max;
     }
 
-    @JsonIgnore
     public TagResolver tagResolver() {
         double bal = this.getBalance();
         double total = this.totalBalance();
@@ -145,7 +134,6 @@ public class StockPlayer extends RepoData<StockPlayer> {
                 .build();
     }
 
-    @JsonIgnore
     public synchronized Optional<Position> remove(String symbol, UUID uuid) {
         if (!positionMap.containsKey(symbol)) {
             //System.out.println("No key for symbol "+symbol);
@@ -161,7 +149,6 @@ public class StockPlayer extends RepoData<StockPlayer> {
         return Optional.empty();
     }
 
-    @JsonIgnore
     public synchronized void addPosition(Position position) {
         if (position == null) {
             System.out.println("Position is null!");
@@ -178,24 +165,18 @@ public class StockPlayer extends RepoData<StockPlayer> {
         this.autoTake = autoTake;
     }
 
-
-    @JsonIgnore
     public synchronized List<Position> positions(String symbol) {
         return positionMap.get(symbol);
     }
 
-    @JsonIgnore
     public synchronized List<Position> positions() {
         return positionMap.values().stream().flatMap(Collection::stream).toList();
     }
-
-    @JsonIgnore
     public synchronized double totalGains() {
         return positionMap.values().stream()
                 .flatMap(list -> list.stream().map(Position::gains))
                 .reduce(0.0, Double::sum);
     }
-    @JsonIgnore
     public Player player() {
         OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(playerUuid);
         if(offlinePlayer instanceof Player p) return p;

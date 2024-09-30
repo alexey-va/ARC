@@ -8,8 +8,8 @@ import java.util.UUID;
 @AllArgsConstructor
 @Getter @Setter
 @NoArgsConstructor
-@EqualsAndHashCode
-public class PlayerCondition implements ArcCondition{
+@EqualsAndHashCode(callSuper = false)
+public class PlayerCondition extends ArcCondition{
     UUID uuid;
     @Override
     public boolean test(Player player) {

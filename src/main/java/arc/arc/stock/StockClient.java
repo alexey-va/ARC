@@ -1,10 +1,11 @@
 package arc.arc.stock;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.type.MapType;
-import com.fasterxml.jackson.databind.type.TypeFactory;
+import arc.arc.util.Common;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+import org.eclipse.jetty.util.thread.QueuedThreadPool;
 import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.api.WebSocketAdapter;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
@@ -14,6 +15,8 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
@@ -23,6 +26,7 @@ import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
 @Log4j2
+@SuppressWarnings({"unchecked", "rawtypes"})
 public class StockClient {
 
     private final String FINN_API_KEY;
@@ -33,32 +37,31 @@ public class StockClient {
 
     static Map<String, List<Double>> prices = new ConcurrentHashMap<>();
 
+    private static final Gson gson = Common.gson;
+    private static final ExecutorService service = Executors.newSingleThreadExecutor();
+
     public Map<String, Double> cryptoPrices() {
         String ids = StockMarket.configStocks().stream()
                 .filter(stock -> stock.type == Stock.Type.CRYPTO)
                 .map(ConfigStock::getSymbol)
                 .collect(Collectors.joining("%2C"));
         String url = "https://api.coingecko.com/api/v3/simple/price?ids=" + ids + "&vs_currencies=usd&precision=full";
-        log.trace("Fetching crypto prices from " + url);
+        log.debug("Fetching crypto prices from {}", url);
         try {
-            HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+            HttpURLConnection connection = (HttpURLConnection) URI.create(url).toURL().openConnection();
             InputStream stream = connection.getInputStream();
-            ObjectMapper objectMapper = new ObjectMapper();
 
-            TypeFactory typeFactory = objectMapper.getTypeFactory();
-            MapType mapType = typeFactory.constructMapType(
-                    ConcurrentHashMap.class,
-                    typeFactory.constructType(String.class),
-                    typeFactory.constructMapType(HashMap.class, String.class, Object.class)
-            );
-            Map<String, Map<String, Double>> map = objectMapper.readValue(stream, mapType);
+            TypeToken<Map<String, Map<String, Double>>> typeToken = new TypeToken<>() {
+            };
+            Reader reader = new InputStreamReader(stream);
+            Map<String, Map<String, Double>> map = gson.fromJson(reader, typeToken);
 
             Map<String, Double> prices = new HashMap<>();
             map.forEach((key, value) -> prices.put(key, value.get("usd")));
-            log.trace("Fetched crypto prices: " + prices);
+            log.debug("Fetched crypto prices: {}", prices);
             return prices;
         } catch (Exception e) {
-            System.out.println("Could not load price for crypto!");
+            log.error("Could not load crypto prices", e);
             return Map.of();
         }
     }
@@ -66,9 +69,9 @@ public class StockClient {
     private static double fetchInvesting(String url) {
         try {
             Connection.Response response = Jsoup.connect(url).execute();
-            if(response.statusCode() < 200 || response.statusCode() > 299) {
+            if (response.statusCode() < 200 || response.statusCode() > 299) {
                 // print reason for bad response
-                System.out.println("Response code: "+response.statusCode());
+                System.out.println("Response code: " + response.statusCode());
                 System.out.println(response.headers());
                 System.out.println();
                 System.out.println(response.body());
@@ -76,11 +79,12 @@ public class StockClient {
             }
             Document document = response.parse();
             Element divElement = document.select("div[data-test=instrument-price-last]").first();
+            if (divElement == null) return -1;
             return Double.parseDouble(divElement.text()
                     .replace(".", "")
                     .replace(",", "."));
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("Could not load price from investing.com", e);
             return -1;
         }
     }
@@ -94,10 +98,11 @@ public class StockClient {
             final String SERVER_URI = "wss://ws.finnhub.io?token=cn7rbt9r01qplv1e8j50cn7rbt9r01qplv1e8j5g";
             final int TIMEOUT_SECONDS = 5;
 
+            QueuedThreadPool threadPool = new QueuedThreadPool(30, 1, 60000);
+            webSocketClient.setExecutor(threadPool);
             webSocketClient.start();
             webSocketClient.connect(client, new URI(SERVER_URI));
 
-            ExecutorService service = Executors.newSingleThreadExecutor();
             isClosed = false;
             service.submit(() -> {
                 try {
@@ -108,7 +113,7 @@ public class StockClient {
                                 client.getSession().getRemote().sendString("{\"type\":\"subscribe\",\"symbol\":\"" + s + "\"}");
                                 Thread.sleep(100);
                             } catch (Exception e) {
-                                e.printStackTrace();
+                                log.error("Could not send message to server", e);
                                 throw new RuntimeException(e);
                             }
                         });
@@ -180,17 +185,15 @@ public class StockClient {
         builder.append("&token=").append(FINN_API_KEY);
 
         try {
-            HttpURLConnection connection = (HttpURLConnection) new URL(builder.toString()).openConnection();
+            URL url = URI.create(builder.toString()).toURL();
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
             InputStream stream = connection.getInputStream();
-            //BufferedReader reader = new BufferedReader(new InputStreamReader(stream));
-            //String received = reader.readLine();
 
-            Map map = new ObjectMapper().readValue(stream, Map.class);
-            //System.out.println(map);
+            Map map = gson.fromJson(new InputStreamReader(stream), Map.class);
             return (double) (map.get("c"));
         } catch (Exception e) {
             //e.printStackTrace();
-            System.out.println("Could not load price for  " + symbol);
+            log.error("Could not load price from finnhub for {}", symbol, e);
             return -1;
         }
     }
@@ -202,14 +205,13 @@ public class StockClient {
         builder.append("&apiKey=").append(POLY_API_KEY);
 
         try {
-            HttpURLConnection connection = (HttpURLConnection) new URL(builder.toString()).openConnection();
+            URL url = URI.create(builder.toString()).toURL();
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
             InputStream stream = connection.getInputStream();
-            //BufferedReader reader = new BufferedReader(new InputStreamReader(stream));
-            //String received = reader.readLine();
 
-            Map map = new ObjectMapper().readValue(stream, Map.class);
+            Map map = gson.fromJson(new InputStreamReader(stream), Map.class);
             //System.out.println(map);
-            return (double) ((Map<String, Object>) ((List<Object>) map.get("results")).get(0)).get("cash_amount");
+            return (double) ((Map<String, Object>) ((List<Object>) map.get("results")).getFirst()).get("cash_amount");
         } catch (Exception e) {
             //e.printStackTrace();
             return 0;
@@ -232,9 +234,9 @@ public class StockClient {
             super.onWebSocketText(message);
             //System.out.println("Received message from server: " + message);
             try {
-                Map map = new ObjectMapper().readValue(message, Map.class);
-                double price = ((Number) ((Map) ((List) map.get("data")).get(0)).get("p")).doubleValue();
-                String symbol = ((String) ((Map) ((List) map.get("data")).get(0)).get("s"));
+                Map map = gson.fromJson(message, Map.class);
+                double price = ((Number) ((Map) ((List) map.get("data")).getFirst()).get("p")).doubleValue();
+                String symbol = ((String) ((Map) ((List) map.get("data")).getFirst()).get("s"));
                 prices.putIfAbsent(symbol, new ArrayList<>());
                 prices.get(symbol).add(price);
                 //System.out.println(price+" "+symbol+" "+Thread.currentThread().getName());

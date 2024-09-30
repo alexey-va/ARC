@@ -144,10 +144,16 @@ public class CMISync implements Sync {
         }
 
         Map<String, CMIDataDTO.KitUsage> kitUsageMap = new HashMap<>();
-        user.getKits().forEach((kit, usage) -> kitUsageMap.put(kit.getConfigName(), CMIDataDTO.KitUsage.builder()
-                .uses(usage.getUsedTimes())
-                .lastUse(usage.getLastUsage())
-                .build()));
+        user.getKits().forEach((kit, usage) -> {
+            if(kit == null) {
+                log.warn("Kit is null for user {}", user.getName());
+                return;
+            }
+            kitUsageMap.put(kit.getConfigName(), CMIDataDTO.KitUsage.builder()
+                    .uses(usage.getUsedTimes())
+                    .lastUse(usage.getLastUsage())
+                    .build());
+        });
 
         return CMIDataDTO.builder()
                 .timestamp(System.currentTimeMillis())

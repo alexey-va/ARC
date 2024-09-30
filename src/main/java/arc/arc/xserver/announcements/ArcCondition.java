@@ -1,19 +1,17 @@
 package arc.arc.xserver.announcements;
 
-import com.fasterxml.jackson.annotation.JsonSubTypes;
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import arc.arc.network.adapters.JsonSubtype;
+import arc.arc.network.adapters.JsonType;
 import org.bukkit.entity.Player;
 
-@JsonTypeInfo(
-        use = JsonTypeInfo.Id.NAME,
-        property = "type"
+@JsonType(
+        property = "type",
+        subtypes = {
+                @JsonSubtype(clazz = PermissionCondition.class, name = "permission"),
+                @JsonSubtype(clazz = PlayerCondition.class, name = "player")
+        }
 )
-@JsonSubTypes({
-        @JsonSubTypes.Type(value = PermissionCondition.class, name = "permission"),
-        @JsonSubTypes.Type(value = PlayerCondition.class, name = "player")
-})
-public interface ArcCondition {
+public abstract class ArcCondition {
 
-    boolean test(Player player);
-
+    abstract boolean test(Player player);
 }

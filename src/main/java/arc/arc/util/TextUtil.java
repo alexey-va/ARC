@@ -194,4 +194,34 @@ public class TextUtil {
         else s = s.replace("ss", seconds + names.get("ss"));
         return mm(s.trim(), true);
     }
+
+    private static Map<String, String> convertMap = Map.ofEntries(
+            Map.entry("<red>", "&c"),
+            Map.entry("<green>", "&a"),
+            Map.entry("<yellow>", "&e"),
+            Map.entry("<blue>", "&9"),
+            Map.entry("<gray>", "&7"),
+            Map.entry("<gold>", "&6"),
+            Map.entry("<white>", "&f"),
+            Map.entry("<black>", "&0"),
+            Map.entry("<dark_red>", "&4"),
+            Map.entry("<dark_green>", "&2"),
+            Map.entry("<dark_blue>", "&1"),
+            Map.entry("<dark_aqua>", "&3"),
+            Map.entry("<dark_purple>", "&5"),
+            Map.entry("<dark_gray>", "&8"),
+            Map.entry("<bold>", "&l"),
+            Map.entry("<italic>", "&o"),
+            Map.entry("<underline>", "&n"),
+            Map.entry("<strikethrough>", "&m"),
+            Map.entry("<obfuscated>", "&k"),
+            Map.entry("<reset>", "&r")
+    );
+
+    public static String mmToLegacy(String message) {
+        for (Map.Entry<String, String> entry : convertMap.entrySet()) {
+            message = message.replace(entry.getKey(), entry.getValue());
+        }
+        return message;
+    }
 }

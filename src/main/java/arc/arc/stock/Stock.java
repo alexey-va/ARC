@@ -3,7 +3,6 @@ package arc.arc.stock;
 import arc.arc.board.ItemIcon;
 import arc.arc.configs.StockConfig;
 import arc.arc.network.repos.RepoData;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.*;
 import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
@@ -30,9 +29,7 @@ public class Stock extends RepoData<Stock> {
     List<String> lore;
     ItemIcon icon;
     long lastTimeDividend;
-    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
     int maxLeverage = 10000;
-    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
     Type type = Type.STOCK;
 
 /*    public static Stock deserialize(Map<String, Object> map) {
@@ -90,12 +87,12 @@ public class Stock extends RepoData<Stock> {
         int hoursTill = dividendPeriodHours - hours;
         double low = HistoryManager.low(symbol);
         double high = HistoryManager.high(symbol);
-        double volatility = (high-low)/price;
+        double volatility = (high - low) / price;
         String volatilityString;
-        if(volatility < 0.02) volatilityString = "<dark_green>Низкие";
-        else if(volatility < 0.04) volatilityString = "<green>Небольшие";
-        else if(volatility < 0.06) volatilityString = "<yellow>Значительные";
-        else if(volatility < 0.08) volatilityString = "<red>Высокие";
+        if (volatility < 0.02) volatilityString = "<dark_green>Низкие";
+        else if (volatility < 0.04) volatilityString = "<green>Небольшие";
+        else if (volatility < 0.06) volatilityString = "<yellow>Значительные";
+        else if (volatility < 0.08) volatilityString = "<red>Высокие";
         else volatilityString = "<dark_red>Импульсивные";
         return TagResolver.builder()
                 .resolver(TagResolver.resolver("stock_price", Tag.inserting(

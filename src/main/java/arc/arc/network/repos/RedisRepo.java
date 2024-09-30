@@ -2,6 +2,7 @@ package arc.arc.network.repos;
 
 import arc.arc.ARC;
 import arc.arc.network.RedisManager;
+import arc.arc.util.Common;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import lombok.AllArgsConstructor;
@@ -33,10 +34,7 @@ public class RedisRepo<T extends RepoData> {
     ConcurrentHashMap<String, T> map = new ConcurrentHashMap<>();
     ConcurrentHashMap<String, Long> lastAttempt = new ConcurrentHashMap<>();
     RedisRepoMessager messager;
-    Gson gson = new GsonBuilder()
-            .registerTypeAdapter(ItemStack.class, new ItemStackSerializer())
-            .registerTypeAdapter(ItemList.class, new ItemListSerializer())
-            .create();
+    Gson gson = Common.gson;
     Set<String> contextSet = new ConcurrentSkipListSet<>();
     BukkitTask saveTask, backupTask;
     long lastFullRefresh;

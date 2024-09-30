@@ -2,10 +2,8 @@ package arc.arc.stock;
 
 import arc.arc.ARC;
 import arc.arc.configs.StockConfig;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.type.MapType;
-import com.fasterxml.jackson.databind.type.TypeFactory;
+import arc.arc.util.Common;
+import com.google.gson.reflect.TypeToken;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -16,8 +14,11 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.io.*;
+import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+
+import static java.nio.file.StandardOpenOption.*;
 
 @Log4j2
 public class HistoryManager {
@@ -25,7 +26,7 @@ public class HistoryManager {
     private static BukkitTask saveTask;
     private static final String SCRIPT_FILE = "plots.sh";
     private static Map<String, List<StockHistory>> history = new ConcurrentHashMap<>();
-    private static Map<String, HighLow> highLows = new ConcurrentHashMap<>();
+    private static final Map<String, HighLow> highLows = new ConcurrentHashMap<>();
     @Setter
     private static HistoryMessager messager;
 
@@ -37,7 +38,9 @@ public class HistoryManager {
     public record StockHistory(double cost, long timestamp) {
     }
 
-    @Data @AllArgsConstructor @NoArgsConstructor
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
     public static class HighLow {
         double high, low;
     }
@@ -141,21 +144,13 @@ public class HistoryManager {
 
     public static void loadFromFile(File file) {
         try {
-            ObjectMapper objectMapper = new ObjectMapper();
-
-            TypeFactory typeFactory = objectMapper.getTypeFactory();
-            MapType mapType = typeFactory.constructMapType(
-                    ConcurrentHashMap.class,
-                    typeFactory.constructType(String.class),
-                    typeFactory.constructCollectionType(ArrayList.class, HistoryManager.StockHistory.class)
-            );
-
-            Map<String, List<HistoryManager.StockHistory>> history = objectMapper.readValue(file, mapType);
-            log.trace("Loaded history: {}", history);
+            TypeToken<Map<String, List<HistoryManager.StockHistory>>> token = new TypeToken<>() {
+            };
+            Map<String, List<HistoryManager.StockHistory>> history = Common.gson.fromJson(new FileReader(file), token);
+            log.debug("Loaded history: {}", history);
             appendHistory(history);
         } catch (Exception e) {
-            e.printStackTrace();
-            log.warn("Could not load history from file: " + file);
+            log.error("Error loading history", e);
             history = new ConcurrentHashMap<>();
             StockConfig.saveStockHistory();
         }
@@ -163,11 +158,11 @@ public class HistoryManager {
 
     public static void saveToFile(File file) {
         try {
-            new ObjectMapper()
-                    .enable(SerializationFeature.INDENT_OUTPUT)
-                    .writeValue(file, history);
+            String json = Common.prettyGson.toJson(history);
+            //if (!Files.exists(file.toPath())) Files.createFile(file.toPath());
+            Files.write(file.toPath(), json.getBytes(), TRUNCATE_EXISTING, WRITE, CREATE);
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("Error saving history", e);
             throw new RuntimeException(e);
         }
     }

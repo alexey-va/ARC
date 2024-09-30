@@ -9,8 +9,8 @@ import org.bukkit.entity.Player;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@EqualsAndHashCode
-public class PermissionCondition implements ArcCondition {
+@EqualsAndHashCode(callSuper = false)
+public class PermissionCondition extends ArcCondition {
 
     String permission;
 

@@ -3,7 +3,6 @@ package arc.arc.board;
 import arc.arc.configs.BoardConfig;
 import arc.arc.network.repos.RepoData;
 import arc.arc.util.TextUtil;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -28,7 +27,6 @@ import static arc.arc.util.TextUtil.strip;
 
 //@Setter
 @Getter
-@JsonInclude(JsonInclude.Include.NON_NULL)
 @AllArgsConstructor
 @NoArgsConstructor
 @ToString(callSuper = true)
@@ -83,7 +81,7 @@ public class BoardEntry extends RepoData<BoardEntry> {
         meta.displayName(display);
 
         meta.lore(lore(resolver));
-        meta.addItemFlags(ItemFlag.HIDE_ITEM_SPECIFICS, ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ENCHANTS,
+        meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ENCHANTS,
                 ItemFlag.HIDE_DESTROYS, ItemFlag.HIDE_DYE, ItemFlag.HIDE_ARMOR_TRIM, ItemFlag.HIDE_PLACED_ON,
                 ItemFlag.HIDE_UNBREAKABLE);
         stack.setItemMeta(meta);
@@ -141,9 +139,9 @@ public class BoardEntry extends RepoData<BoardEntry> {
             if (count >= 40) {
                 Component component = strip(LegacyComponentSerializer.legacyAmpersand().deserialize(builder.toString()));
                 if (!components.isEmpty()) {
-                    List<Component> children = components.get(components.size()-1).children();
+                    List<Component> children = components.getLast().children();
                     if(!children.isEmpty()) {
-                        Style style = children.get(children.size() - 1).style();
+                        Style style = children.getLast().style();
                         Component pre = Component.text("", style);
                         component = pre.append(component);
                     }
@@ -156,7 +154,7 @@ public class BoardEntry extends RepoData<BoardEntry> {
         if (!builder.isEmpty()) {
             Component component = strip(LegacyComponentSerializer.legacyAmpersand().deserialize(builder.toString()));
             if (!components.isEmpty()) {
-                Style style = components.get(components.size() - 1).style();
+                Style style = components.getLast().style();
                 Component pre = Component.text("", style);
                 component = pre.append(component);
             }

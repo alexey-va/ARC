@@ -1,31 +1,16 @@
 package arc.arc.network;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JSR310Module;
+import arc.arc.util.Common;
 
 public class RedisSerializer {
 
 
-    public static String toJson(Object serializable){
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.registerModule(new JSR310Module());
-        try {
-            return mapper.writeValueAsString(serializable);
-        } catch (Exception e){
-            e.printStackTrace();
-            return null;
-        }
+    public static String toJson(Object serializable) {
+        return Common.gson.toJson(serializable);
     }
 
-    public static <T> T fromJson(String json, Class<T> clazz){
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.registerModule(new JSR310Module());
-        try {
-            return mapper.readValue(json, clazz);
-        } catch (Exception e){
-            e.printStackTrace();
-            return null;
-        }
+    public static <T> T fromJson(String json, Class<T> clazz) {
+        return Common.gson.fromJson(json, clazz);
     }
 
 }

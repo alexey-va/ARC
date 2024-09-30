@@ -3,9 +3,9 @@ package arc.arc.configs;
 import arc.arc.ARC;
 import arc.arc.treasurechests.locationpools.LocationPool;
 import arc.arc.treasurechests.locationpools.LocationPoolManager;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
+import arc.arc.util.Common;
+import com.google.gson.Gson;
+import lombok.extern.slf4j.Slf4j;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -16,9 +16,11 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.Objects;
 
+@Slf4j
 public class LocationPoolConfig {
 
     BukkitTask saveTask;
+    Gson gson = Common.prettyGson;
 
     public LocationPoolConfig() {
         loadConfig();
@@ -33,19 +35,12 @@ public class LocationPoolConfig {
                         try {
                             return Files.readString(path);
                         } catch (Exception e) {
-                            e.printStackTrace();
+                            log.error("Error reading file: {}", path.getFileName());
                             return null;
                         }
                     })
                     .filter(Objects::nonNull)
-                    .map(str -> {
-                        ObjectMapper mapper = new ObjectMapper();
-                        try {
-                            return mapper.readValue(str, LocationPool.class);
-                        } catch (JsonProcessingException e) {
-                            throw new RuntimeException(e);
-                        }
-                    })
+                    .map(str -> gson.fromJson(str, LocationPool.class))
                     .forEach(lp -> {
                         if (LocationPoolManager.getPool(lp.getId()) != null) {
                             System.out.println("Id " + lp.getId() + " is taken by more than 1 location pool!");
@@ -53,7 +48,7 @@ public class LocationPoolConfig {
                         LocationPoolManager.addPool(lp);
                     });
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("Error reading location pools", e);
         }
     }
 
@@ -61,20 +56,18 @@ public class LocationPoolConfig {
         LocationPoolManager.getAll().forEach(lp -> {
             if (onlyDirty && !lp.isDirty()) return;
             Path path = creteFolder().resolve(lp.getId() + ".yml");
-            ObjectMapper mapper = new ObjectMapper();
-            mapper.enable(SerializationFeature.INDENT_OUTPUT);
             lp.setDirty(false);
             try {
-                String json = mapper.writeValueAsString(lp);
+                String json = gson.toJson(lp);
                 Files.writeString(path, json, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
             } catch (Exception e) {
-                e.printStackTrace();
+                log.error("Error saving location pool: {}", lp.getId(), e);
             }
         });
     }
 
-    public void deleteFile(String id){
-        Path path = Paths.get(ARC.plugin.getDataFolder().toString(), "location_pools", id+".yml");
+    public void deleteFile(String id) {
+        Path path = Paths.get(ARC.plugin.getDataFolder().toString(), "location_pools", id + ".yml");
         try {
             Files.deleteIfExists(path);
         } catch (IOException e) {
@@ -106,7 +99,7 @@ public class LocationPoolConfig {
         }.runTaskTimerAsynchronously(ARC.plugin, 1200L, 1200L);
     }
 
-    public void cancelTasks(){
+    public void cancelTasks() {
         if (saveTask != null && !saveTask.isCancelled()) saveTask.cancel();
     }
 

@@ -128,7 +128,7 @@ public class Portal {
         }
     }
 
-    private static boolean isSuitable(Block block) {
+    private boolean isSuitable(Block block) {
         if (block == null) return false;
         Block blockUp = block.getRelative(0, 1, 0);
         Block blockUp2 = blockUp.getRelative(0, 1, 0);
@@ -136,7 +136,54 @@ public class Portal {
         if (occupiedBlocks.contains(block) || occupiedBlocks.contains(blockUp) || occupiedBlocks.contains(blockUp2))
             return false;
 
-        return ((block.isSolid()) || block.getType().equals(Material.WATER)) && (blockUp.isEmpty() || empties.contains(blockUp.getType())) && (blockUp2.isEmpty() || empties.contains(blockUp.getType()));
+        boolean fits = ((block.isSolid()) || block.getType().equals(Material.WATER)) && (blockUp.isEmpty() || empties.contains(blockUp.getType())) && (blockUp2.isEmpty() || empties.contains(blockUp.getType()));
+        Location playerLocation = p.getLocation().clone();
+        if (playerLocation.getY() - (int) playerLocation.getY() >= 0.9) playerLocation = playerLocation.add(0, 1, 0).toBlockLocation();
+        return fits && doesPathExists(playerLocation.toBlockLocation(), block.getLocation().clone());
+    }
+
+    private static boolean hasVSpace(Location location, int height) {
+        Block block = location.getBlock();
+        for (int i = 0; i < height; i++) {
+            if (!block.getRelative(0, i, 0).isPassable()) return false;
+        }
+        return true;
+    }
+
+    private static boolean doesPathExists(Location l1, Location l2) {
+        if(true) return true;
+        Location loc1 = l1.clone();
+        Location loc2 = l2.clone();
+        Deque<Location> queue = new ArrayDeque<>();
+        Set<Location> visited = new HashSet<>();
+        queue.add(loc1);
+        visited.add(loc1);
+        while (!queue.isEmpty() || visited.size() < 1000) {
+            Location current = queue.poll();
+            if (current == null) continue;
+            if (current.distanceSquared(loc2) <= 1) {
+                return true;
+            }
+            for (int i = -1; i <= 1; i++) {
+                for (int j = -1; j <= 1; j++) {
+                    for (int k = -1; k <= 1; k++) {
+                        if (i == 0 && j == 0 && k == 0) continue;
+                        Location newLoc = current.clone().add(i, j, k);
+                        if (j < 0 && !hasVSpace(newLoc, 3)) continue;
+                        if (hasVSpace(newLoc, 2)) continue;
+                        if (visited.contains(newLoc)) continue;
+                        Block floor = newLoc.getBlock().getRelative(0, -1, 0);
+                        Block floor2 = newLoc.getBlock().getRelative(0, -2, 0);
+                        boolean noFloor1 = floor.isPassable() || empties.contains(floor.getType());
+                        boolean noFloor2 = floor2.isPassable() || empties.contains(floor2.getType());
+                        if (noFloor1 && noFloor2) continue;
+                        visited.add(newLoc);
+                        queue.add(newLoc);
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     private BukkitTask createTask() {
@@ -251,8 +298,10 @@ public class Portal {
     }
 
     private void clearBlocks() {
-        BlockData blockData = Bukkit.createBlockData(Material.AIR);
-        Map<Location, BlockData> map = Map.of(block.getRelative(0, 1, 0).getLocation(), blockData, block.getRelative(0, 2, 0).getLocation(), blockData);
+        Map<Location, BlockData> map = Map.of(
+                block.getRelative(0, 1, 0).getLocation(), block.getRelative(0, 1, 0).getBlockData(),
+                block.getRelative(0, 2, 0).getLocation(), block.getRelative(0, 2, 0).getBlockData()
+        );
         for (String s : blockChangePlayers) {
             Player player = Bukkit.getPlayer(UUID.fromString(s));
             if (player == null) continue;
@@ -394,7 +443,7 @@ public class Portal {
     }
 
     private Block findPortalLocation() {
-        Block targetBlock = p.getTargetBlockExact(7);
+        Block targetBlock = p.getTargetBlockExact(4);
         if (targetBlock != null && !isSuitable(targetBlock)) {
             boolean found = false;
             for (int i = -1; i <= 1; i++) {

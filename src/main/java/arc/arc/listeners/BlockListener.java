@@ -29,8 +29,6 @@ import java.util.Set;
 @Slf4j
 public class BlockListener implements Listener {
 
-    private static final Set<Material> chests = Set.of(Material.CHEST, Material.TRAPPED_CHEST, Material.ENDER_CHEST, Material.BARREL);
-
     @EventHandler
     public void onBlockPlace(BlockPlaceEvent event) {
         processLocationPool(event);
