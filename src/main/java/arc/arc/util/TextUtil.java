@@ -4,6 +4,7 @@ import arc.arc.ARC;
 import arc.arc.configs.Config;
 import arc.arc.configs.ConfigManager;
 import arc.arc.configs.MainConfig;
+import com.sk89q.worldedit.util.formatting.text.serializer.plain.PlainComponentSerializer;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -223,5 +224,13 @@ public class TextUtil {
             message = message.replace(entry.getKey(), entry.getValue());
         }
         return message;
+    }
+
+    public static Component legacy(String serializedMessage) {
+        return LegacyComponentSerializer.legacyAmpersand().deserialize(serializedMessage);
+    }
+
+    public static Component plain(String serializedMessage) {
+        return Component.text(serializedMessage);
     }
 }

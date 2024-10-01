@@ -1,34 +1,53 @@
 package arc.arc.hooks;
 
+import java.util.List;
+
 import com.Zrips.CMI.CMI;
-import org.bukkit.Bukkit;
+import net.Zrips.CMILib.ActionBar.CMIActionBar;
+import net.Zrips.CMILib.Advancements.CMIAdvancement;
+import net.Zrips.CMILib.BossBar.BossBarInfo;
+import net.Zrips.CMILib.CMILib;
+import org.bukkit.Material;
+import org.bukkit.boss.BarColor;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 
 public class CMIHook {
 
     public void sendBossbar(String bossBarName,
                             String message,
                             Player player,
-                            String color,
+                            BarColor barColor,
                             int seconds) {
 
-        String command = "cmi bossbarmsg " + player.getName() + " " +
-                "-sec:" + seconds + " " +
-                "-t:0 " + message + " " +
-                "-n:" + bossBarName + " " +
-                "-c:" + color;
-        //System.out.println("Dispatching: "+command);
-        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
+        BossBarInfo info = new BossBarInfo(player, bossBarName);
+        info.setKeepForTicks(seconds * 20);
+        info.setColor(barColor);
+        info.setAuto(1);
+        info.setMakeVisible(true);
+        info.setTranslateColors(true);
+        info.setTitleOfBar(message);
+        int iters = seconds * 20;
+        info.setAdjustPerc(1.0 / iters);
+
+        CMILib.getInstance().getBossBarManager().Show(info);
     }
 
     public void sendActionbar(String message,
-                              Player player,
+                              List<Player> players,
                               int seconds) {
-        Bukkit.dispatchCommand(Bukkit.getConsoleSender(),
-                "cmi actionbarmsg " + player.getName() + " " +
-                        "-s:" + seconds + " " +
-                        message
-        );
+        CMIActionBar.send(players, message, seconds * 1000);
+    }
+
+    public void sendToast(String desc, String title, int model, Material material, Player... players) {
+        CMIAdvancement advancement = new CMIAdvancement();
+        advancement.setAnnounce(true);
+        if (model != 0) advancement.setCustomModelData(model);
+        if (material != null) advancement.setItem(ItemStack.of(material));
+        if (title != null) advancement.setTitle(title);
+        if (desc != null) advancement.setDescription(desc);
+        advancement.setHidden(false);
+        advancement.show(players);
     }
 
 

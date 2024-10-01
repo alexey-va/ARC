@@ -11,6 +11,7 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.boss.BarColor;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -37,7 +38,7 @@ public class AnnouncementData {
     @Builder.Default
     Type type = Type.CHAT;
     @Builder.Default
-    String bossBarColor = "red";
+    BarColor bossBarColor = BarColor.RED;
     @Builder.Default
     int seconds = 5;
     @Builder.Default

@@ -7,6 +7,7 @@ import arc.arc.configs.MainConfig;
 import arc.arc.hooks.HookRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.bukkit.Bukkit;
+import org.bukkit.boss.BarColor;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
@@ -63,7 +64,8 @@ public class AnnounceManager {
             AnnouncementData.Type annType = AnnouncementData.Type
                     .valueOf(((String) map.getOrDefault("type", "chat")).toUpperCase());
 
-            String color = (String) map.getOrDefault("color", "red");
+            String colorStr = (String) map.getOrDefault("color", "red");
+            BarColor color = BarColor.valueOf(colorStr.toUpperCase());
             int seconds = (Integer) map.getOrDefault("seconds", 5);
 
             List<ArcCondition> conditions = new ArrayList<>();
@@ -152,7 +154,7 @@ public class AnnounceManager {
                     return;
                 }
                 HookRegistry.cmiHook.sendActionbar(data.message,
-                        player, data.seconds);
+                        List.of(player), data.seconds);
             }
         }
     }

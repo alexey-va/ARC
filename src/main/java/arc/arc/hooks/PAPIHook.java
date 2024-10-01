@@ -3,6 +3,7 @@ package arc.arc.hooks;
 import arc.arc.configs.MainConfig;
 import arc.arc.hooks.ps.PSHook;
 import arc.arc.xserver.playerlist.PlayerManager;
+import me.clip.placeholderapi.PlaceholderAPI;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
@@ -10,6 +11,9 @@ import org.jetbrains.annotations.NotNull;
 
 public class PAPIHook extends PlaceholderExpansion {
 
+    public String parse(String str, OfflinePlayer player){
+        return PlaceholderAPI.setPlaceholders(player, str);
+    }
 
     @Override
     public @NotNull String getIdentifier() {
