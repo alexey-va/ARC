@@ -4,13 +4,11 @@ import arc.arc.ARC;
 import arc.arc.network.RedisManager;
 import arc.arc.util.Common;
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.extern.log4j.Log4j2;
-import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.NotNull;
@@ -18,10 +16,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.nio.file.Path;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentSkipListSet;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
@@ -39,7 +34,6 @@ public class RedisRepo<T extends RepoData> {
     BukkitTask saveTask, backupTask;
     long lastFullRefresh;
 
-
     @Setter
     Consumer<T> onUpdate;
     BackupService backupService;
@@ -49,6 +43,8 @@ public class RedisRepo<T extends RepoData> {
     boolean loadAll;
     long saveInterval;
     boolean saveBackups;
+
+    private static Deque<RedisRepo<?>> repos = new ConcurrentLinkedDeque<>();
 
     private RedisRepo(Boolean loadAll, RedisManager redisManager, String storageKey, String updateChannel, Class clazz,
                       Consumer<T> onUpdate, String id, Path backupFolder, Long saveInterval, Boolean saveBackups) {
@@ -62,12 +58,28 @@ public class RedisRepo<T extends RepoData> {
         this.saveBackups = saveBackups != null && saveBackups;
 
         messager = new RedisRepoMessager(this, redisManager);
-        redisManager.registerChannel(updateChannel, messager);
+        redisManager.registerChannelUnique(updateChannel, messager);
         redisManager.init();
         backupService = new BackupService(id, backupFolder);
 
         startTasks();
         log.info("Created repo: {}", id);
+
+        repos.add(this);
+    }
+
+    public static void saveAll() {
+        for (RedisRepo<?> repo : repos) {
+            repo.forceSave();
+        }
+    }
+
+    public static Map<String, Long> bytesTotal(){
+        Map<String, Long> map = new HashMap<>();
+        for (RedisRepo<?> repo : repos) {
+            map.put(repo.id, (long) repo.map.size());
+        }
+        return map;
     }
 
     public static <T extends RepoData> RedisRepoBuilder<T> builder(Class<T> clazz) {

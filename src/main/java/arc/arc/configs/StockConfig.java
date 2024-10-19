@@ -31,7 +31,6 @@ public class StockConfig {
     private static YamlConfiguration config;
     private static File file;
 
-    private static YamlConfiguration cacheConfig;
     private static File cacheFile;
 
     private static File historyFile;
@@ -61,7 +60,6 @@ public class StockConfig {
             cacheFile.getParentFile().mkdirs();
             cacheFile.createNewFile();
         }
-        cacheConfig = YamlConfiguration.loadConfiguration(cacheFile);
 
         historyFile = new File(ARC.plugin.getDataFolder() + File.separator + "stocks/history.json");
         if (!historyFile.exists()) {

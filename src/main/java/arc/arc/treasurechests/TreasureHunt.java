@@ -4,18 +4,18 @@ import arc.arc.ARC;
 import arc.arc.configs.TreasureHuntConfig;
 import arc.arc.generic.treasure.Treasure;
 import arc.arc.generic.treasure.TreasurePool;
+import arc.arc.hooks.HookRegistry;
 import arc.arc.network.ServerLocation;
 import arc.arc.treasurechests.chests.CustomChest;
 import arc.arc.treasurechests.chests.ItemsAdderCustomChest;
 import arc.arc.treasurechests.chests.VanillaChest;
 import arc.arc.treasurechests.locationpools.LocationPool;
 import arc.arc.util.ParticleManager;
+import com.destroystokyo.paper.ParticleBuilder;
 import com.jeff_media.customblockdata.CustomBlockData;
 import lombok.RequiredArgsConstructor;
-import me.clip.placeholderapi.PlaceholderAPI;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Sound;
@@ -29,6 +29,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+
+import static arc.arc.util.TextUtil.mm;
 
 @RequiredArgsConstructor
 public class TreasureHunt {
@@ -90,25 +92,19 @@ public class TreasureHunt {
         CustomChest customChest = customChests.get(block.getLocation().toCenterLocation());
 
         customChest.destroy();
-        ParticleManager.queue(ParticleManager.ParticleDisplay.builder()
-                .extra(TreasureHuntConfig.treasureHuntParticleExtraClaimed)
-                .offsetX(TreasureHuntConfig.treasureHuntParticleOffsetClaimed)
-                .offsetY(TreasureHuntConfig.treasureHuntParticleOffsetClaimed)
-                .offsetZ(TreasureHuntConfig.treasureHuntParticleOffsetClaimed)
-                .particle(TreasureHuntConfig.treasureHuntParticleClaimed)
-                .count(TreasureHuntConfig.treasureHuntParticleCountClaimed)
-                .players(block.getWorld().getPlayers())
+        ParticleManager.queue(new ParticleBuilder(TreasureHuntConfig.treasureHuntParticleClaimed)
                 .location(block.getLocation().toCenterLocation())
-                .build());
+                .count(TreasureHuntConfig.treasureHuntParticleCountClaimed)
+                .extra(TreasureHuntConfig.treasureHuntParticleExtraClaimed)
+                .offset(TreasureHuntConfig.treasureHuntParticleOffsetClaimed, TreasureHuntConfig.treasureHuntParticleOffsetClaimed, TreasureHuntConfig.treasureHuntParticleOffsetClaimed)
+                .receivers(block.getWorld().getPlayers()));
         block.getWorld().playSound(block.getLocation(), Sound.BLOCK_AMETHYST_CLUSTER_BREAK, 1.0f, 1.0f);
 
         executeAction(player, block);
 
         locations.remove(block.getLocation().toCenterLocation());
         left--;
-        if (left == 0) {
-            stop();
-        }
+        if (left == 0) stop();
     }
 
     private void executeAction(Player player, Block block) {
@@ -122,8 +118,8 @@ public class TreasureHunt {
 
         String message = (String) treasure.attributes().get("message");
         if (message != null) {
-            Component text = MiniMessage.miniMessage()
-                    .deserialize(PlaceholderAPI.setPlaceholders(player, message));
+            message = HookRegistry.papiHook == null ? message : HookRegistry.papiHook.parse(message, player);
+            Component text = mm(message);
             player.sendMessage(text);
         }
 
@@ -133,8 +129,9 @@ public class TreasureHunt {
             if (globalMessage == null) {
                 log.error("Global message is null for {} hunt!", locationPool.getId());
             } else {
-                Component text = MiniMessage.miniMessage()
-                        .deserialize(PlaceholderAPI.setPlaceholders(player, globalMessage));
+                globalMessage = HookRegistry.papiHook == null ? globalMessage :
+                        HookRegistry.papiHook.parse(globalMessage, player);
+                Component text = mm(globalMessage);
                 world.getPlayers()
                         .stream()
                         .filter(p -> p != player)
@@ -157,18 +154,14 @@ public class TreasureHunt {
                 if (locations.isEmpty()) return;
                 Collection<Player> players = world.getPlayers();
                 for (Location location : locations) {
-                    ParticleManager.queue(
-                            ParticleManager.ParticleDisplay.builder()
-                                    .extra(TreasureHuntConfig.treasureHuntParticleExtraIdle)
-                                    .offsetX(TreasureHuntConfig.treasureHuntParticleOffsetIdle)
-                                    .offsetY(TreasureHuntConfig.treasureHuntParticleOffsetIdle)
-                                    .offsetZ(TreasureHuntConfig.treasureHuntParticleOffsetIdle)
-                                    .particle(TreasureHuntConfig.treasureHuntParticleIdle)
-                                    .count(TreasureHuntConfig.treasureHuntParticleCountIdle)
-                                    .players(players)
-                                    .location(location)
-                                    .build()
-                    );
+                    ParticleManager.queue(new ParticleBuilder(TreasureHuntConfig.treasureHuntParticleIdle)
+                            .location(location)
+                            .count(TreasureHuntConfig.treasureHuntParticleCountIdle)
+                            .extra(TreasureHuntConfig.treasureHuntParticleExtraIdle)
+                            .offset(TreasureHuntConfig.treasureHuntParticleOffsetIdle,
+                                    TreasureHuntConfig.treasureHuntParticleOffsetIdle,
+                                    TreasureHuntConfig.treasureHuntParticleOffsetIdle)
+                            .receivers(players));
                 }
 
                 displayBossbar();

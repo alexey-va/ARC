@@ -1,7 +1,6 @@
 package arc.arc.network;
 
 import arc.arc.ARC;
-import arc.arc.configs.MainConfig;
 import arc.arc.network.repos.RedisRepoMessager;
 import lombok.extern.log4j.Log4j2;
 import org.bukkit.Bukkit;
@@ -26,10 +25,16 @@ public class RedisManager extends JedisPubSub {
     private static final String SERVER_DELIMITER = "<>#<>#<>";
 
     public RedisManager(String ip, int port, String userName, String password) {
+        connect(ip, port, userName, password);
+    }
+
+    public void connect(String ip, int port, String userName, String password) {
+        close();
         sub = new JedisPooled(ip, port, userName, password);
         pub = new JedisPooled(ip, port, userName, password);
-        executorService = Executors.newFixedThreadPool(10);
-        log.debug("RedisManager created");
+        executorService = Executors.newCachedThreadPool();
+        log.debug("RedisManager initialized");
+        init();
     }
 
     public void onPong(String message) {
@@ -48,14 +53,13 @@ public class RedisManager extends JedisPubSub {
             String[] strings = message.split(SERVER_DELIMITER, 2);
             channelListeners.get(channel).forEach((listener) -> listener.consume(channel, strings[1], strings[0]));
         } catch (Exception e) {
-            System.out.println("error parsing message: " + message + " on channel: " + channel);
-            e.printStackTrace();
+            log.error("Error processing message", e);
         }
     }
 
-    public void registerChannel(String channel, ChannelListener channelListener) {
-        log.debug("Registering channel: " + channel);
-        if (!channelListeners.containsKey(channel)) channelListeners.put(channel, new ArrayList<>());
+    public void registerChannelUnique(String channel, ChannelListener channelListener) {
+        channelListeners.putIfAbsent(channel, new ArrayList<>());
+        channelListeners.get(channel).clear();
         channelListeners.get(channel).add(channelListener);
         channelList.add(channel);
     }
@@ -82,7 +86,7 @@ public class RedisManager extends JedisPubSub {
     }
 
     public void publish(String channel, String message) {
-        executorService.execute(() -> pub.publish(channel, MainConfig.server + SERVER_DELIMITER + message));
+        executorService.execute(() -> pub.publish(channel, ARC.serverName + SERVER_DELIMITER + message));
     }
 
     public void saveMap(String key, Map<String, String> map) {
@@ -137,11 +141,15 @@ public class RedisManager extends JedisPubSub {
 
 
     public void close() {
-        log.debug("Closing redis manager");
-        if (running != null && !running.isCancelled()) running.cancel(true);
-        sub.close();
-        pub.close();
-        executorService.shutdown();
+        try {
+            log.debug("Closing redis manager");
+            if (running != null && !running.isCancelled()) running.cancel(true);
+            if (sub != null) sub.close();
+            if (sub != null) pub.close();
+            if (executorService != null) executorService.shutdown();
+        } catch (Exception e) {
+            log.error("Error closing redis manager", e);
+        }
     }
 
     public void unregisterChannel(String updateChannel, RedisRepoMessager messager) {

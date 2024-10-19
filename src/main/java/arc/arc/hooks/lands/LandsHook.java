@@ -30,16 +30,6 @@ public class LandsHook {
                 .exceptionally(e -> null);
     }
 
-    public void tpSpawn(Player player) {
-        LandPlayer landPlayer = integration.getLandPlayer(player.getUniqueId());
-        if (landPlayer == null) return;
-        Land land = landPlayer.getEditLand();
-        if (land == null) return;
-        Location location = land.getSpawn();
-        if (location == null) return;
-        if (HookRegistry.huskHomesHook != null) HookRegistry.huskHomesHook.createPortal(player, location);
-        else player.teleport(location);
-    }
 
     public boolean canBuild(Player player, Chunk chunk) {
         LandPlayer landPlayer = integration.getLandPlayer(player.getUniqueId());

@@ -1,9 +1,11 @@
 package arc.arc.xserver;
 
-import java.util.Collection;
+import java.util.ArrayList;
+import java.util.List;
 
 import arc.arc.hooks.HookRegistry;
 import arc.arc.util.TextUtil;
+import arc.arc.xserver.playerlist.PlayerManager;
 import com.google.gson.annotations.SerializedName;
 import lombok.Builder;
 import lombok.Data;
@@ -29,7 +31,12 @@ public class XMessage extends XAction {
     @SerializedName("st")
     SerializationType serializationType;
     @SerializedName("ca")
+    @Builder.Default
     boolean isCacheable = true;
+    @SerializedName("cond")
+    List<XCondition> conditions;
+
+
 
     @SerializedName("tm")
     Material toastMaterial;
@@ -43,14 +50,22 @@ public class XMessage extends XAction {
     @SerializedName("bc")
     BarColor barColor;
     @SerializedName("bbs")
-    int bossBarSeconds;
+    int seconds;
+
+    @SerializedName("p")
+    @Builder.Default
+    boolean personal = false;
+    @SerializedName("we")
+    @Builder.Default
+    int weight = 1;
 
     transient Component deserialized;
 
     @Override
-    protected void runInternal(Collection<Player> players) {
+    protected void runInternal() {
+        List<Player> players = filteredPlayers();
         switch (type) {
-            case CHAT -> players.forEach(p -> p.sendMessage(component()));
+            case CHAT -> players.forEach(p -> p.sendMessage(component(p)));
             case TOAST -> {
                 if (HookRegistry.cmiHook == null) {
                     log.warn("CMILIB is required for TOAST xMessage");
@@ -65,21 +80,41 @@ public class XMessage extends XAction {
                 }
                 players.forEach(p ->
                         HookRegistry.cmiHook.sendBossbar(bossBarName == null ? "xmessage" : bossBarName,
-                                serializedMessage, p, barColor, bossBarSeconds));
+                                serializedMessage, p, barColor, seconds));
             }
         }
     }
 
-    private Component component() {
-        if (deserialized != null) return deserialized;
+    List<Player> filteredPlayers() {
+        List<Player> players = new ArrayList<>();
+        List<Player> allPlayers = PlayerManager.getOnlinePlayersThreadSafe();
+        for (Player player : allPlayers) {
+            boolean fits = true;
+            if (conditions != null) {
+                for (XCondition xCondition : conditions) {
+                    if (!xCondition.test(player)) {
+                        fits = false;
+                        break;
+                    }
+                }
+            }
+            if (fits) players.add(player);
+        }
+        return players;
+    }
+
+    public Component component(Player player) {
+        if (!personal && deserialized != null) return deserialized;
         Component component;
-        if (serializationType == SerializationType.MINI_MESSAGE)
-            component = TextUtil.mm(serializedMessage);
-        else if (serializationType == SerializationType.LEGACY)
-            component = TextUtil.legacy(serializedMessage);
-        else
-            component = TextUtil.plain(serializedMessage);
-        if (isCacheable) deserialized = component;
+        String message = personal ? HookRegistry.papiHook.parse(serializedMessage, player) : serializedMessage;
+        if (serializationType == SerializationType.MINI_MESSAGE) {
+            component = TextUtil.mm(message);
+        } else if (serializationType == SerializationType.LEGACY) {
+            component = TextUtil.legacy(message);
+        } else {
+            component = TextUtil.plain(message);
+        }
+        if (isCacheable && !personal) deserialized = component;
         return component;
     }
 

@@ -1,7 +1,6 @@
 package arc.arc.sync;
 
 import arc.arc.ARC;
-import arc.arc.configs.MainConfig;
 import arc.arc.sync.base.Context;
 import arc.arc.sync.base.Sync;
 import arc.arc.sync.base.SyncData;
@@ -64,7 +63,7 @@ public class CMISync implements Sync {
             log.warn("Data is null {}", key);
             return;
         }
-        if (data.server().equals(MainConfig.server)) return;
+        if (data.server().equals(ARC.serverName)) return;
 
         OfflinePlayer offlinePlayer = ARC.plugin.getServer().getOfflinePlayer(data.uuid());
 
@@ -157,7 +156,7 @@ public class CMISync implements Sync {
 
         return CMIDataDTO.builder()
                 .timestamp(System.currentTimeMillis())
-                .server(MainConfig.server)
+                .server(ARC.serverName)
                 .uuid(uuid)
                 .kitUsage(kitUsageMap)
                 .prefix(user.getPrefix())

@@ -18,8 +18,6 @@ import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static java.nio.file.StandardOpenOption.*;
-
 @Log4j2
 public class HistoryManager {
 
@@ -50,10 +48,14 @@ public class HistoryManager {
         saveTask = new BukkitRunnable() {
             @Override
             public void run() {
-                if (!StockConfig.mainServer) return;
-                saveHistory();
-                drawPlots(true);
-                messager.send(highLows);
+                try {
+                    if (!StockConfig.mainServer) return;
+                    saveHistory();
+                    drawPlots(true);
+                    messager.send(highLows);
+                } catch (Exception e) {
+                    log.error("Error in saveTask", e);
+                }
             }
         }.runTaskTimerAsynchronously(ARC.plugin, 100L, 20L * 300);
     }
@@ -146,8 +148,8 @@ public class HistoryManager {
         try {
             TypeToken<Map<String, List<HistoryManager.StockHistory>>> token = new TypeToken<>() {
             };
-            Map<String, List<HistoryManager.StockHistory>> history = Common.gson.fromJson(new FileReader(file), token);
-            log.debug("Loaded history: {}", history);
+            Map<String, List<HistoryManager.StockHistory>> history = Common.gson.fromJson(Files.newBufferedReader(file.toPath()), token);
+            log.info("Loaded history: {}", history.values().stream().mapToInt(List::size).sum());
             appendHistory(history);
         } catch (Exception e) {
             log.error("Error loading history", e);
@@ -160,7 +162,7 @@ public class HistoryManager {
         try {
             String json = Common.prettyGson.toJson(history);
             //if (!Files.exists(file.toPath())) Files.createFile(file.toPath());
-            Files.write(file.toPath(), json.getBytes(), TRUNCATE_EXISTING, WRITE, CREATE);
+            Files.write(file.toPath(), json.getBytes());
         } catch (IOException e) {
             log.error("Error saving history", e);
             throw new RuntimeException(e);

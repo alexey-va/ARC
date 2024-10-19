@@ -1,10 +1,10 @@
 package arc.arc.generic.treasure;
 
+import arc.arc.hooks.HookRegistry;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import me.clip.placeholderapi.PlaceholderAPI;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
@@ -15,7 +15,7 @@ import java.util.Map;
 @NoArgsConstructor
 @Data
 @Builder
-public class TreasureCommand implements Treasure{
+public class TreasureCommand implements Treasure {
 
     String command;
     @Builder.Default
@@ -24,7 +24,8 @@ public class TreasureCommand implements Treasure{
 
     @Override
     public void give(Player player) {
-        String s = PlaceholderAPI.setPlaceholders(player, command);
+        String s = HookRegistry.papiHook == null ? command :
+                HookRegistry.papiHook.parse(command, player);
         Bukkit.dispatchCommand(Bukkit.getConsoleSender(), s);
     }
 

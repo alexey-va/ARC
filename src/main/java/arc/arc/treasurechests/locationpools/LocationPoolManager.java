@@ -2,6 +2,7 @@ package arc.arc.treasurechests.locationpools;
 
 import arc.arc.ARC;
 import arc.arc.util.ParticleManager;
+import com.destroystokyo.paper.ParticleBuilder;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Particle;
@@ -29,12 +30,12 @@ public class LocationPoolManager {
     }
 
 
-    public static void addPool(LocationPool locationPool){
+    public static void addPool(LocationPool locationPool) {
         //System.out.println("Adding pool "+locationPool.getId());
         locationPools.put(locationPool.getId(), locationPool);
     }
 
-    public static List<LocationPool> getAll(){
+    public static List<LocationPool> getAll() {
         //System.out.println("Getting all");
         return new ArrayList<>(locationPools.values());
     }
@@ -54,21 +55,21 @@ public class LocationPoolManager {
 
     public static void addLocation(String id, Location location) {
         LocationPool locationPool = getPool(id);
-        if(locationPool == null) locationPool = createPool(id);
+        if (locationPool == null) locationPool = createPool(id);
         locationPool.addLocation(location);
     }
 
-    public static boolean removeLocation(String id, Location location){
+    public static boolean removeLocation(String id, Location location) {
         LocationPool locationPool = getPool(id);
-        if(locationPool == null){
-            throw new IllegalArgumentException("No such pool! "+id);
+        if (locationPool == null) {
+            throw new IllegalArgumentException("No such pool! " + id);
         }
         return locationPool.removeLocation(location);
     }
 
     public static List<Location> getNearbyLocations(String id, Location location) {
         LocationPool locationPool = getPool(id);
-        if(locationPool == null)return List.of();
+        if (locationPool == null) return List.of();
         return locationPool.nearbyLocations(location);
     }
 
@@ -76,7 +77,7 @@ public class LocationPoolManager {
         return locationPools.get(id);
     }
 
-    public static LocationPool createPool(String id){
+    public static LocationPool createPool(String id) {
         LocationPool locationPool = locationPools.get(id);
         if (locationPool == null) {
             locationPool = new LocationPool(id);
@@ -105,14 +106,12 @@ public class LocationPoolManager {
                     Location location = player.getLocation();
                     List<Location> locations = getNearbyLocations(editingPlayers.get(uuid), location);
                     locations.forEach(loc ->
-                            ParticleManager.queue(ParticleManager.ParticleDisplay.builder()
+                            ParticleManager.queue(new ParticleBuilder(Particle.END_ROD)
+                                    .location(loc)
                                     .count(10)
                                     .extra(0)
-                                    .offsetX(0.1).offsetY(0.1).offsetZ(0.1)
-                                    .location(loc)
-                                    .particle(Particle.END_ROD)
-                                    .players(List.of(player))
-                                    .build())
+                                    .offset(0.1, 0.1, 0.1)
+                                    .receivers(List.of(player)))
                     );
                 }
             }
@@ -121,7 +120,7 @@ public class LocationPoolManager {
 
 
     public static boolean delete(String id) {
-        if(!locationPools.containsKey(id)) return false;
+        if (!locationPools.containsKey(id)) return false;
         //System.out.println(locationPools);
         locationPools.remove(id);
         //System.out.println(locationPools);

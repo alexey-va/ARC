@@ -1,6 +1,9 @@
 package arc.arc.util;
 
 
+import arc.arc.ARC;
+import arc.arc.configs.Config;
+import arc.arc.configs.ConfigManager;
 import dev.lone.itemsadder.api.ItemsAdder;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -16,6 +19,9 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.Vector;
 
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -43,19 +49,19 @@ public class Utils {
         return locations;
     }
 
-    public static List<ItemStack> split(ItemStack stack, int count){
+    public static List<ItemStack> split(ItemStack stack, int count) {
         List<ItemStack> stacks = new ArrayList<>();
-        if(stack == null){
+        if (stack == null) {
             System.out.println("Stack in split is null!");
             return stacks;
         }
         int maxStack = stack.getMaxStackSize();
 
-        while (count>0){
+        while (count > 0) {
             int qty = Math.min(count, maxStack);
             ItemStack i = stack.asQuantity(qty);
             stacks.add(i);
-            count-=qty;
+            count -= qty;
         }
 
         return stacks;
@@ -106,6 +112,15 @@ public class Utils {
         locations.addAll(getLine(new Location(w, maxX, minY, maxZ), new Location(w, maxX, maxY, maxZ), density, true));
         locations.addAll(getLine(new Location(w, minX, minY, maxZ), new Location(w, minX, maxY, maxZ), density, true));
         return locations;
+    }
+
+    private static Config config = ConfigManager.of(ARC.plugin.getDataPath(), "misc.yml");
+
+    public static String formatDate(long timestamp) {
+        String format = config.string("date-format", "MM-dd HH:mm:ss");
+        ZoneOffset zone = ZoneOffset.of(config.string("timezone", "+3"));
+        LocalDateTime time = LocalDateTime.ofEpochSecond(timestamp / 1000, 0, zone);
+        return time.format(DateTimeFormatter.ofPattern(format));
     }
 
     public record LocationData(Location location, boolean corner) {

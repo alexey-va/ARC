@@ -6,6 +6,8 @@ import arc.arc.configs.ConfigManager;
 import arc.arc.util.CooldownManager;
 import arc.arc.util.ParticleManager;
 import arc.arc.util.TextUtil;
+import arc.arc.util.Utils;
+import com.destroystokyo.paper.ParticleBuilder;
 import com.jeff_media.customblockdata.CustomBlockData;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
 import com.sk89q.worldedit.math.BlockVector3;
@@ -18,10 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
-import org.bukkit.Bukkit;
-import org.bukkit.Material;
-import org.bukkit.NamespacedKey;
-import org.bukkit.World;
+import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Listener;
@@ -214,15 +213,15 @@ public class Mine implements Listener {
         blockData.set(new NamespacedKey(ARC.plugin, "t"), PersistentDataType.BOOLEAN, true);
         tempBlocks.add(new TemporaryBlock(event.getBlock()));
 
-        if (particles) ParticleManager.queue(ParticleManager.ParticleDisplay.builder()
-                .players(List.of(event.getPlayer()))
-                .extra(config.real("mine-config.particle-extra", 0.06))
-                .count(config.integer("mine-config.particle-count", 5))
-                .offsetX(config.real("mine-config.particle-offset", 0.25))
-                .offsetY(config.real("mine-config.particle-offset", 0.25))
-                .offsetZ(config.real("mine-config.particle-offset", 0.25))
+        Particle randomParticle = Utils.random(new Particle[]{Particle.FLAME, Particle.END_ROD, Particle.CRIT});
+        if (particles) ParticleManager.queue(new ParticleBuilder(randomParticle)
+                .receivers(List.of(event.getPlayer()))
                 .location(block.getLocation().toCenterLocation())
-                .build());
+                .count(config.integer("mine-config.particle-count", 5))
+                .extra(config.real("mine-config.particle-extra", 0.06))
+                .offset(config.real("mine-config.particle-offset", 0.25),
+                        config.real("mine-config.particle-offset", 0.25),
+                        config.real("mine-config.particle-offset", 0.25)));
         return true;
     }
 

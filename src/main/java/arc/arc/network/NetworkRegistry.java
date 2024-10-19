@@ -10,7 +10,6 @@ import arc.arc.xserver.announcements.AnnouncementMessager;
 import arc.arc.xserver.commands.CommandReceiver;
 import arc.arc.xserver.commands.CommandSender;
 import arc.arc.xserver.playerlist.PlayerListMessager;
-import arc.arc.xserver.ranks.RankMessager;
 import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor
@@ -23,37 +22,29 @@ public class NetworkRegistry {
     PlayerListMessager playerListMessager;
     public static CommandSender commandSender;
     CommandReceiver commandReceiver;
-    public static RankMessager rankMessager;
 
 
-    public void init(){
+    public void init() {
         playerListMessager = new PlayerListMessager("arc.proxy_player_list");
-        redisManager.registerChannel(playerListMessager.channel(), playerListMessager);
+        redisManager.registerChannelUnique(playerListMessager.channel(), playerListMessager);
 
         landsMessager = new LandsMessager(redisManager, "arc.lands_req", "arc.lands_response");
         landsMessager.init();
-        redisManager.registerChannel(landsMessager.getRespChannel(), landsMessager);
-        redisManager.registerChannel(landsMessager.getReqChannel(), landsMessager);
+        redisManager.registerChannelUnique(landsMessager.getRespChannel(), landsMessager);
+        redisManager.registerChannelUnique(landsMessager.getReqChannel(), landsMessager);
 
-        commandSender = new CommandSender(redisManager,"arc.xcommands");
+        commandSender = new CommandSender(redisManager, "arc.xcommands");
         commandReceiver = new CommandReceiver("arc.xcommands");
-        redisManager.registerChannel("arc.xcommands", commandReceiver);
-
-        rankMessager = new RankMessager(redisManager, "arc.ranks");
-        redisManager.registerChannel("arc.ranks", rankMessager);
-
-        AnnouncementMessager announcementMessager = new AnnouncementMessager("arc.announcements", redisManager);
-        redisManager.registerChannel(announcementMessager.getChannel(), announcementMessager);
-        AnnounceManager.messager = announcementMessager;
+        redisManager.registerChannelUnique("arc.xcommands", commandReceiver);
 
         HistoryMessager historyMessager = new HistoryMessager("arc.high_lows_update", redisManager);
-        redisManager.registerChannel(historyMessager.channel, historyMessager);
+        redisManager.registerChannelUnique(historyMessager.channel, historyMessager);
         HistoryManager.setMessager(historyMessager);
 
-        if(HookRegistry.auctionHook != null) {
+        if (HookRegistry.auctionHook != null) {
             AuctionMessager auctionMessager = new AuctionMessager("arc.auction_items", "arc.auction_items_all", redisManager);
-            redisManager.registerChannel(auctionMessager.channel, auctionMessager);
-            redisManager.registerChannel(auctionMessager.channelAll, auctionMessager);
+            redisManager.registerChannelUnique(auctionMessager.channel, auctionMessager);
+            redisManager.registerChannelUnique(auctionMessager.channelAll, auctionMessager);
             HookRegistry.auctionHook.setAuctionMessager(auctionMessager);
         }
 

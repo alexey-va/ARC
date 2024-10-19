@@ -1,11 +1,11 @@
 package arc.arc.hooks;
 
+import arc.arc.ARC;
 import me.gypopo.economyshopgui.api.EconomyShopGUIHook;
 import me.gypopo.economyshopgui.objects.ShopItem;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Damageable;
-import org.bukkit.event.Listener;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.Recipe;
 import org.bukkit.inventory.ShapedRecipe;
@@ -15,26 +15,34 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class ShopHook implements Listener {
+public class ShopHook {
 
+    private static ShopListener shopListener;
 
-    public double cost(Material material){
+    public ShopHook() {
+        if (shopListener == null) {
+            shopListener = new ShopListener();
+            Bukkit.getPluginManager().registerEvents(shopListener, ARC.plugin);
+        }
+    }
+
+    public double cost(Material material) {
         ShopItem shopItem = EconomyShopGUIHook.getShopItem(new ItemStack(material));
         //System.out.println("Shop item: "+shopItem+" "+material);
-        if(shopItem != null && EconomyShopGUIHook.isSellAble(shopItem)){
+        if (shopItem != null && EconomyShopGUIHook.isSellAble(shopItem)) {
             return EconomyShopGUIHook.getItemSellPrice(shopItem, new ItemStack(material));
         }
 
 
         Recipe recipe = findRecipe(material);
-        if(recipe == null) return 0;
+        if (recipe == null) return 0;
         var map = getCraftingMaterials(recipe);
-        System.out.println("Ingredients of "+material+" "+map);
+        System.out.println("Ingredients of " + material + " " + map);
         double counter = 0;
-        for(var entry : map.entrySet()){
+        for (var entry : map.entrySet()) {
             Double cost = cost(entry.getKey());
-            System.out.println(entry+" "+cost);
-            counter+=cost*entry.getValue();
+            System.out.println(entry + " " + cost);
+            counter += cost * entry.getValue();
         }
         return counter;
     }
@@ -67,7 +75,7 @@ public class ShopHook implements Listener {
                     craftingMaterials.put(ingredient.getType(), craftingMaterials.getOrDefault(ingredient.getType(), 0.0) + amount);
                 }
             }
-        } else if(recipe instanceof ShapelessRecipe shapelessRecipe){
+        } else if (recipe instanceof ShapelessRecipe shapelessRecipe) {
             List<ItemStack> ingredients = shapelessRecipe.getIngredientList();
 
             for (ItemStack ingredient : ingredients) {

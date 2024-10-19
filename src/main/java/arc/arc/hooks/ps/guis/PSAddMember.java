@@ -107,7 +107,7 @@ public class PSAddMember extends ChestGui {
 
     private void generateGuiItems(PSRegion region, Player player){
         playerItems = new HashMap<>();
-        for(var uuid : PlayerManager.getAllPlayerUuids()){
+        for(var uuid : PlayerManager.getPlayerUuids()){
             if(region.isMember(uuid) || region.isOwner(uuid)) continue;
             generateGuiItem(uuid, player);
         }

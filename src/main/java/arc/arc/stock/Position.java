@@ -30,6 +30,7 @@ public class Position {
     UUID positionUuid;
     Type type;
     double amount;
+    @Builder.Default
     Material iconMaterial = Material.PAPER;
     double receivedDividend;
 

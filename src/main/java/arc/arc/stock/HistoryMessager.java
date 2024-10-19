@@ -1,6 +1,6 @@
 package arc.arc.stock;
 
-import arc.arc.configs.MainConfig;
+import arc.arc.ARC;
 import arc.arc.network.ChannelListener;
 import arc.arc.network.RedisManager;
 import arc.arc.util.Common;
@@ -9,7 +9,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -19,7 +18,7 @@ public class HistoryMessager implements ChannelListener {
 
     @Override
     public void consume(String channel, String message, String originServer) {
-        if (MainConfig.server.equalsIgnoreCase(originServer)) return;
+        if (ARC.serverName.equalsIgnoreCase(originServer)) return;
         try {
             TypeToken<Map<String, HistoryManager.HighLow>> typeToken = new TypeToken<>() {
             };

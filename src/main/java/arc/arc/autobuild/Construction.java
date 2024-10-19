@@ -7,6 +7,7 @@ import arc.arc.hooks.HookRegistry;
 import arc.arc.hooks.citizens.CitizensHook;
 import arc.arc.util.ParticleManager;
 import arc.arc.util.Utils;
+import com.destroystokyo.paper.ParticleBuilder;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
 import com.sk89q.worldedit.math.BlockVector3;
 import org.bukkit.Bukkit;
@@ -187,14 +188,14 @@ public class Construction {
         if (config.bool("construction.play-sounds", true))
             location.getWorld().playSound(location, data.getSoundGroup().getPlaceSound(), 1f, 1f);
         if (config.bool("construction.show-particles", false)) {
-            ParticleManager.queue(ParticleManager.ParticleDisplay.builder()
-                    .players(List.of(site.player))
-                    .particle(config.particle("construction.place-particle", Particle.FLAME))
-                    .extra(0.05)
+            ParticleManager.queue(new ParticleBuilder(config.particle("construction.place-particle", Particle.FLAME))
+                    .count(config.integer("construction.particle-count", 5))
                     .location(location)
-                    .offsetY(0.25).offsetX(0.25).offsetZ(0.25)
-                    .count(5)
-                    .build());
+                    .receivers(List.of(site.player))
+                    .offset(config.real("construction.particle-offset", 0.25),
+                            config.real("construction.particle-offset", 0.25),
+                            config.real("construction.particle-offset", 0.25))
+                    .extra(0.05));
         }
         if (npcId != -1) {
             if (ThreadLocalRandom.current().nextDouble() > 0.8) HookRegistry.citizensHook.faceNpc(npcId, location);

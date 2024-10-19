@@ -1,7 +1,8 @@
 package arc.arc.xserver.commands;
 
 import arc.arc.ARC;
-import arc.arc.configs.MainConfig;
+import arc.arc.configs.Config;
+import arc.arc.configs.ConfigManager;
 import arc.arc.network.ChannelListener;
 import arc.arc.network.RedisSerializer;
 import lombok.AllArgsConstructor;
@@ -25,6 +26,7 @@ public class CommandReceiver implements ChannelListener {
     private static BukkitTask commandTask;
     @Getter
     private final String channel;
+    Config config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "misc.yml");
 
     public CommandReceiver(String channel) {
         this.channel = channel;
@@ -36,7 +38,7 @@ public class CommandReceiver implements ChannelListener {
         commandTask = new BukkitRunnable() {
             @Override
             public void run() {
-                if (awaitingCommands.size() == 0) return;
+                if (awaitingCommands.isEmpty()) return;
                 Iterator<AwaitingExecution> iterator = awaitingCommands.iterator();
                 while (iterator.hasNext()) {
                     AwaitingExecution execution = iterator.next();
@@ -63,15 +65,15 @@ public class CommandReceiver implements ChannelListener {
 
     @Override
     public void consume(String channel, String message, String server) {
-        System.out.println("Received command: " + channel+" "+message+" "+server);
+        System.out.println("Received command: " + channel + " " + message + " " + server);
         CommandData data = RedisSerializer.fromJson(message, CommandData.class);
 
         if (data == null) return;
-        if (!data.everywhere && !data.servers.contains(MainConfig.server)){
+        if (!data.everywhere && !data.servers.contains(ARC.serverName)) {
             System.out.println("Command not for this server!");
             return;
         }
-        if(data.notOrigin && server.equals(MainConfig.server)){
+        if (data.notOrigin && server.equals(ARC.serverName)) {
             System.out.println("Command not for origin server!");
             return;
         }
@@ -84,13 +86,13 @@ public class CommandReceiver implements ChannelListener {
                     .command(data.getCommand())
                     .build();
             awaitingCommands.add(awaitingExecution);
-        } else{
+        } else {
             console(data.getCommand());
         }
     }
 
     private void console(String command) {
-        if(command == null){
+        if (command == null) {
             System.out.println("Received null command!");
             return;
         }
@@ -113,7 +115,7 @@ public class CommandReceiver implements ChannelListener {
             public void run() {
                 player.performCommand(command);
             }
-        }.runTaskLater(ARC.plugin, MainConfig.cForwardDelay);
+        }.runTaskLater(ARC.plugin, config.integer("xaction.command-delay-ticks", 60));
     }
 
 

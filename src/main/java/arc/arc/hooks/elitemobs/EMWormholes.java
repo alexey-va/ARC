@@ -2,38 +2,44 @@ package arc.arc.hooks.elitemobs;
 
 import arc.arc.ARC;
 import arc.arc.configs.Config;
-import arc.arc.configs.MainConfig;
+import arc.arc.configs.ConfigManager;
+import arc.arc.util.ParticleManager;
+import arc.arc.xserver.playerlist.PlayerManager;
 import com.destroystokyo.paper.ParticleBuilder;
 import com.magmaguy.elitemobs.wormhole.Wormhole;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.bukkit.Location;
 import org.bukkit.Particle;
+import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
-import java.util.ArrayList;
-import java.util.Collection;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Stream;
 
+@Slf4j
 @RequiredArgsConstructor
 public class EMWormholes {
 
     private static BukkitTask wormholeTask;
-    final Config config;
+    static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "elitemobs.yml");
 
     public void init() {
         cancel();
 
-        System.out.println("Setting up wormhole task!");
+        log.info("Starting wormhole task");
         wormholeTask = new BukkitRunnable() {
             @Override
             public void run() {
                 try {
                     runWormholes();
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    log.error("Error running wormholes", e);
                 }
             }
-        }.runTaskTimerAsynchronously(ARC.plugin, 20L, MainConfig.wormholePeriod);
+        }.runTaskTimerAsynchronously(ARC.plugin, 20L, config.integer("wormholes.period-ticks", 2));
 
     }
 
@@ -43,8 +49,8 @@ public class EMWormholes {
 
 
     private void runWormholes() {
-        Collection<ParticleBuilder> particleBuilders = new ArrayList<>();
         if (Wormhole.getWormholes() == null) return;
+        List<Player> players = PlayerManager.getOnlinePlayersThreadSafe();
         for (Wormhole wormhole : Wormhole.getWormholes()) {
             if (wormhole.getWormholeEntry1() == null || wormhole.getWormholeEntry2() == null) continue;
             if (wormhole.getWormholeEntry1().getLocation() == null || wormhole.getWormholeEntry2().getLocation() == null)
@@ -52,22 +58,22 @@ public class EMWormholes {
             Location l1 = wormhole.getWormholeEntry1().getLocation();
             Location l2 = wormhole.getWormholeEntry2().getLocation();
 
+            Particle particle = config.particle("wormholes.particle", Particle.DUST);
+            float offset = (float) config.real("wormholes.particle-offset", 1.0f);
+            double extra = config.real("wormholes.particle-extra", 0.05);
+            int count = config.integer("wormholes.particle-count", 30);
+
             double modifier = wormhole.getWormholeConfigFields().getSizeMultiplier();
-            if (l1.getWorld() != null) {
-                particleBuilders.add(new ParticleBuilder(Particle.DUST)
-                        .color(wormhole.getParticleColor())
-                        .offset(MainConfig.particleOffset * modifier, MainConfig.particleOffset * modifier, MainConfig.particleOffset * modifier)
-                        .location(l1).count((int) (MainConfig.particleCount * modifier * modifier)));
-            }
-            if (l2.getWorld() != null) {
-                particleBuilders.add(new ParticleBuilder(Particle.DUST)
-                        .color(wormhole.getParticleColor())
-                        .offset(MainConfig.particleOffset * modifier, MainConfig.particleOffset * modifier, MainConfig.particleOffset * modifier)
-                        .location(l2).count((int) (MainConfig.particleCount * modifier * modifier)));
-            }
-        }
-        for (ParticleBuilder builder : particleBuilders) {
-            builder.spawn();
+            Stream.of(l1, l2)
+                    .filter(l -> l.getWorld() != null)
+                    .forEach(l -> ParticleManager.queue(new ParticleBuilder(particle)
+                            .count(count)
+                            .location(l)
+                            .extra(extra)
+                            .offset(offset * modifier, offset * modifier, offset * modifier)
+                            .receivers(players)
+                            .color(wormhole.getParticleColor())
+                            .spawn()));
         }
     }
 

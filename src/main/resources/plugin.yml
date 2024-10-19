@@ -30,12 +30,14 @@ softdepend:
   - LootChest
   - Jobs
   - BetterStructures
-depend:
   - PlaceholderAPI
 commands:
   arc:
     description: Main command
     usage: Main command
+  x:
+    description: x
+    usage: x
   mex:
     description: Mex
     usage: mex

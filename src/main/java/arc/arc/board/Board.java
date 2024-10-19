@@ -2,11 +2,10 @@ package arc.arc.board;
 
 import arc.arc.ARC;
 import arc.arc.configs.BoardConfig;
-import arc.arc.configs.MainConfig;
 import arc.arc.network.repos.RedisRepo;
+import arc.arc.xserver.XCondition;
+import arc.arc.xserver.XMessage;
 import arc.arc.xserver.announcements.AnnounceManager;
-import arc.arc.xserver.announcements.AnnouncementData;
-import arc.arc.xserver.announcements.PermissionCondition;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -27,7 +26,7 @@ public class Board {
     }
 
     private static void createRepo() {
-        if(repo != null) repo.close();
+        if (repo != null) repo.close();
         repo = RedisRepo.builder(BoardEntry.class)
                 .loadAll(true)
                 .redisManager(ARC.redisManager)
@@ -63,17 +62,15 @@ public class Board {
         repo.all().stream().min(Comparator.comparingLong(BoardEntry::getLastShown))
                 .ifPresent(e -> {
                     e.changeLastShown(System.currentTimeMillis());
-                    AnnouncementData data = AnnouncementData.builder()
-                            .message("&7[&6" + e.playerName + "&7]&r " + e.title)
-                            .minimessage(false)
-                            .originServer(MainConfig.server)
+                    XMessage xMessage = XMessage.builder()
+                            .serializedMessage("&7[&6" + e.playerName + "&7]&r " + e.title)
+                            .serializationType(XMessage.SerializationType.LEGACY)
+                            .type(XMessage.Type.BOSS_BAR)
+                            .barColor(e.type.color)
                             .seconds(10)
-                            .bossBarColor(e.type.color)
-                            .type(AnnouncementData.Type.BOSSBAR)
-                            .everywhere(true)
-                            .arcConditions(List.of(new PermissionCondition(BoardConfig.receivePermission)))
+                            .conditions(List.of(XCondition.ofPermission(BoardConfig.receivePermission)))
                             .build();
-                    AnnounceManager.announceGlobally(data);
+                    AnnounceManager.announce(xMessage);
                 });
     }
 

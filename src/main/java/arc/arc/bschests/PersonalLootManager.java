@@ -3,7 +3,6 @@ package arc.arc.bschests;
 import arc.arc.ARC;
 import arc.arc.configs.Config;
 import arc.arc.configs.ConfigManager;
-import arc.arc.configs.MainConfig;
 import arc.arc.network.repos.ItemList;
 import arc.arc.network.repos.RedisRepo;
 import arc.arc.util.GuiUtils;
@@ -50,10 +49,10 @@ public class PersonalLootManager {
             repo = RedisRepo.builder(CustomLootData.class)
                     .saveBackups(false)
                     .saveInterval(20L)
-                    .storageKey("arc." + MainConfig.server + "-ploot")
+                    .storageKey("arc." + ARC.serverName + "-ploot")
                     .redisManager(ARC.redisManager)
-                    .updateChannel("arc." + MainConfig.server + "-ploot-update")
-                    .id(MainConfig.server + "-ploot")
+                    .updateChannel("arc." + ARC.serverName + "-ploot-update")
+                    .id(ARC.serverName + "-ploot")
                     .loadAll(true)
                     .build();
         }

@@ -4,6 +4,7 @@ import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.ItemStack;
 
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 public class GuiItemBuilder {
@@ -17,6 +18,11 @@ public class GuiItemBuilder {
 
     public GuiItemBuilder clickEvent(Consumer<InventoryClickEvent> eventConsumer) {
         this.clickEvent = eventConsumer;
+        return this;
+    }
+
+    public GuiItemBuilder clickEventWithStack(BiConsumer<InventoryClickEvent, ItemStack> eventConsumer) {
+        this.clickEvent = event -> eventConsumer.accept(event, stack);
         return this;
     }
 

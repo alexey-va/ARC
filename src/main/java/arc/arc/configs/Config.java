@@ -97,24 +97,6 @@ public class Config {
         return mm(s, true);
     }
 
-    public Component componentDef(String path, String def, String... replacement) {
-        Object o = getValueForKeyPath(path);
-        if (o == null) {
-            injectDeepKey(path, def);
-            return component(path, replacement);
-        }
-        String s;
-        if (o instanceof String) s = (String) o;
-        else s = o.toString();
-
-        for (int i = 0; i < replacement.length; i += 2) {
-            if (i + 1 >= replacement.length) break;
-            s = s.replace(replacement[i], replacement[i + 1]);
-        }
-
-        return mm(s, true);
-    }
-
     public Component componentDef(String path, String def, TagResolver tagResolver) {
         Object o = getValueForKeyPath(path);
         if (o == null) {
@@ -126,6 +108,19 @@ public class Config {
         else s = o.toString();
 
         return TextUtil.strip(mm(s, tagResolver));
+    }
+
+    public Component componentDef(String path, String def, String... replacers) {
+        Object o = getValueForKeyPath(path);
+        if (o == null) {
+            injectDeepKey(path, def);
+            return mm(def, true, replacers);
+        }
+        String s;
+        if (o instanceof String) s = (String) o;
+        else s = o.toString();
+
+        return mm(s, true, replacers);
     }
 
     public Component component(String path, TagResolver tagResolver) {
@@ -227,6 +222,15 @@ public class Config {
             injectDeepKey(path, new LinkedHashMap<String, T>());
             return new LinkedHashMap<>();
         }
+        for (Object key : ((Map<Object, Object>) o).keySet()) {
+            if (key instanceof String) continue;
+            // if key us not string replace it with string
+            String stringKey = key.toString();
+            Object value = ((Map<Object, Object>) o).get(key);
+            ((Map<Object, Object>) o).remove(key);
+            ((Map<Object, Object>) o).put(stringKey, value);
+            injectDeepKey(path, o);
+        }
         return (Map<String, T>) o;
     }
 
@@ -235,6 +239,15 @@ public class Config {
         if (o == null) {
             injectDeepKey(path, def);
             return def;
+        }
+        for (Object key : ((Map<Object, Object>) o).keySet()) {
+            if (key instanceof String) continue;
+            // if key us not string replace it with string
+            String stringKey = key.toString();
+            Object value = ((Map<Object, Object>) o).get(key);
+            ((Map<Object, Object>) o).remove(key);
+            ((Map<Object, Object>) o).put(stringKey, value);
+            injectDeepKey(path, o);
         }
         return (Map<String, T>) o;
     }
@@ -258,12 +271,9 @@ public class Config {
     }
 
     public List<String> keys(String path) {
-        Object o = getValueForKeyPath(path);
-        if (o == null) {
-            injectDeepKey(path, Map.of());
-            return new ArrayList<>();
-        }
-        return new ArrayList<>(((Map<String, Object>) o).keySet());
+        Map<String, Object> o = map(path, Map.of());
+        if (o == null) return new ArrayList<>();
+        return new ArrayList<>(o.keySet());
     }
 
     private Object getValueForKeyPath(String keyPath) {
@@ -303,8 +313,7 @@ public class Config {
             currentLevel.put(keyParts[keyParts.length - 1], value);
             save();
         } catch (Exception e) {
-            System.out.println("Could not inject key: " + keyPath + " with value: " + value);
-            e.printStackTrace();
+            log.error("Could not inject key: {}", keyPath);
         }
     }
 
@@ -361,19 +370,6 @@ public class Config {
         injectDeepKey(path, list);
     }
 
-    public Set<Material> materialSet(String s) {
-        List<String> list = stringList(s);
-        Set<Material> materials = new HashSet<>();
-        for (String mat : list) {
-            try {
-                materials.add(Material.valueOf(mat.toUpperCase()));
-            } catch (Exception e) {
-                log.warn("Could not parse material: {}", mat);
-            }
-        }
-        return materials;
-    }
-
     public Set<Material> materialSet(String s, Set<Material> def) {
         List<String> list = stringList(s, def.stream().map(Enum::name).toList());
         Set<Material> materials = new HashSet<>();
@@ -401,5 +397,9 @@ public class Config {
         } catch (Exception e) {
             return material;
         }
+    }
+
+    public boolean exists(String s) {
+        return getValueForKeyPath(s) != null;
     }
 }

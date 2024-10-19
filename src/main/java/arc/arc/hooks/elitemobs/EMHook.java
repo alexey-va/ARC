@@ -26,26 +26,25 @@ public class EMHook implements Listener {
     private static EMWormholes emWormholes;
     private static EMListener emListener;
     private static ShopHolder shopHolder;
-    Config config;
+    Config config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "elitemobs.yml");
     BukkitTask resetShopTask;
     public long lastShopReset = System.currentTimeMillis();
 
 
     public EMHook() {
-        config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "elitemobs.yml");
 
         if (emWormholes == null) {
-            emWormholes = new EMWormholes(config);
+            emWormholes = new EMWormholes();
             emWormholes.init();
         }
 
         if (emListener == null) {
-            emListener = new EMListener(config);
+            emListener = new EMListener();
             Bukkit.getPluginManager().registerEvents(emListener, ARC.plugin);
         }
 
         if (shopHolder == null) {
-            shopHolder = new ShopHolder(this, config);
+            shopHolder = new ShopHolder(this);
         }
 
         startTasks();
@@ -95,7 +94,7 @@ public class EMHook implements Listener {
     public void reload() {
         if (emWormholes != null) {
             emWormholes.cancel();
-            emWormholes = new EMWormholes(config);
+            emWormholes = new EMWormholes();
             emWormholes.init();
         }
 

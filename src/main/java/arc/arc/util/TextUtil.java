@@ -3,8 +3,6 @@ package arc.arc.util;
 import arc.arc.ARC;
 import arc.arc.configs.Config;
 import arc.arc.configs.ConfigManager;
-import arc.arc.configs.MainConfig;
-import com.sk89q.worldedit.util.formatting.text.serializer.plain.PlainComponentSerializer;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -16,10 +14,14 @@ import org.bukkit.entity.Player;
 
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class TextUtil {
 
@@ -44,17 +46,22 @@ public class TextUtil {
         return MiniMessage.miniMessage().deserialize(s);
     }
 
+    public static Component mm(String s, boolean strip, String... replacers) {
+        Map<String, String> replace = new HashMap<>();
+        for (int i = 0; i < replacers.length; i += 2) {
+            if (replacers.length < i + 1) break;
+            replace.put(replacers[i], replacers[i + 1]);
+        }
+        for (Map.Entry<String, String> entry : replace.entrySet()) {
+            s = s.replace(entry.getKey(), entry.getValue());
+        }
+        return mm(s, strip);
+    }
+
     public static Component mm(String s, TagResolver resolver) {
         return MiniMessage.miniMessage().deserialize(s, resolver);
     }
 
-    public static String formatTime(long millis) {
-        long days = millis / (24 * 60 * 60 * 1000);
-        long hours = (millis % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000);
-        long minutes = (millis % (60 * 60 * 1000)) / (60 * 1000);
-
-        return String.format(MainConfig.timeFormat, days, hours, minutes);
-    }
 
     public static String centerInLore(String s, int length) {
         int spaces = (length - s.length()) / 2;
@@ -171,6 +178,10 @@ public class TextUtil {
     }
 
     public static Component timeComponent(long l, TimeUnit timeUnit) {
+        return mm(time(l, timeUnit), true);
+    }
+
+    public static String time(long l, TimeUnit timeUnit) {
         Config config = ConfigManager.of(ARC.plugin.getDataPath(), "config.yml");
         String format = config.string("time-format", "dd HH mm ss");
         Map<String, String> names = Map.of(
@@ -193,7 +204,7 @@ public class TextUtil {
         else s = s.replace("mm", minutes + names.get("mm"));
         if (seconds == 0) s = s.replace("ss", "");
         else s = s.replace("ss", seconds + names.get("ss"));
-        return mm(s.trim(), true);
+        return s.trim();
     }
 
     private static Map<String, String> convertMap = Map.ofEntries(
@@ -232,5 +243,60 @@ public class TextUtil {
 
     public static Component plain(String serializedMessage) {
         return Component.text(serializedMessage);
+    }
+
+    public static Component playerOnly() {
+        return Component.text("Эта команда доступна только игрокам!", NamedTextColor.RED);
+    }
+
+    // Регулярное выражение для поиска тегов форматирования MiniMessage
+    private static final Pattern MINIMESSAGE_TAG_PATTERN = Pattern.compile("<[a-zA-Z_]+>");
+
+    public static List<String> splitLoreString(String input, int maxLength, int nSpaces) {
+        List<String> result = new ArrayList<>();
+        StringBuilder currentLine = new StringBuilder();
+        String currentFormat = ""; // Для сохранения текущего форматирования (цвета, жирности и т.д.)
+
+        // Строка с пробелами для добавления в начале каждой новой строки
+        String indent = " ".repeat(nSpaces);
+
+        String[] words = input.split(" ");
+
+        for (String word : words) {
+            // Проверяем, поместится ли слово на текущую строку
+            if (currentLine.length() + word.length() > maxLength) {
+                // Добавляем текущую строку в результат и переносим форматирование
+                result.add(currentLine.toString());
+                currentLine = new StringBuilder(currentFormat + indent); // Применяем последнее форматирование и добавляем отступ
+            }
+
+            // Проверка, является ли строка "пустой" без учета тегов MiniMessage
+            if (isNonEmptyWithoutTags(currentLine)) {
+                currentLine.append(" "); // Добавляем пробел перед словом, если строка не пустая
+            }
+
+            // Добавляем слово к строке
+            currentLine.append(word);
+
+            // Обновляем текущий формат, если в слове найдено форматирование MiniMessage
+            Matcher matcher = MINIMESSAGE_TAG_PATTERN.matcher(word);
+            while (matcher.find()) {
+                currentFormat = matcher.group(); // Сохраняем последнее форматирование
+            }
+        }
+
+        // Добавляем последнюю строку
+        if (!currentLine.isEmpty()) {
+            result.add(currentLine.toString());
+        }
+
+        return result;
+    }
+
+    // Метод для проверки, содержит ли строка только теги форматирования
+    private static boolean isNonEmptyWithoutTags(StringBuilder line) {
+        // Удаляем теги и проверяем, остались ли символы
+        String lineWithoutTags = line.toString().replaceAll(MINIMESSAGE_TAG_PATTERN.pattern(), "");
+        return !lineWithoutTags.trim().isEmpty();
     }
 }

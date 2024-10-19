@@ -3,170 +3,203 @@ package arc.arc.xserver.announcements;
 import arc.arc.ARC;
 import arc.arc.configs.Config;
 import arc.arc.configs.ConfigManager;
-import arc.arc.configs.MainConfig;
 import arc.arc.hooks.HookRegistry;
+import arc.arc.xserver.XActionManager;
+import arc.arc.xserver.XCondition;
+import arc.arc.xserver.XMessage;
+import arc.arc.xserver.playerlist.PlayerManager;
 import lombok.extern.slf4j.Slf4j;
-import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.boss.BarColor;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentLinkedDeque;
 
 @Slf4j
 public class AnnounceManager {
 
 
-    static TreeMap<Integer, AnnouncementData> announcements = new TreeMap<>();
-    static Deque<AnnouncementData> recentlyUsed = new ArrayDeque<>(2);
+    static Deque<XMessage> recentlyUsed = new ArrayDeque<>(2);
     static BukkitTask task;
+    static BukkitTask messageTask;
     static int totalWeight;
     static Config config;
-    public static AnnouncementMessager messager;
 
-    private static AnnounceManager instance;
+    private static final TreeMap<Integer, XMessage> announcements = new TreeMap<>();
+    private static final Deque<XMessage> queue = new ConcurrentLinkedDeque<>();
 
     public static void init() {
-        cancel();
-        announcements.clear();
-        totalWeight = 0;
-        config = ConfigManager.of(ARC.plugin.getDataPath(), "announce.yml");
-        loadConfig();
-        task = new BukkitRunnable() {
-            @Override
-            public void run() {
-                announceNext();
-            }
-        }.runTaskTimer(ARC.plugin,
-                config.integer("config.delay", 600) * 20L,
-                config.integer("config.delay", 600) * 20L);
-    }
+        try {
+            cancel();
 
-    private static void loadConfig() {
-        List<Map<String, Object>> messages = config.list("messages");
-        for (var map : messages) {
-            String message = (String) map.get("message");
-            if (message == null) {
-                log.error("Message is broken for {}", map);
-                continue;
-            }
+            announcements.clear();
+            totalWeight = 0;
+            config = ConfigManager.of(ARC.plugin.getDataPath(), "announce.yml");
+            loadXMessages();
 
-            List<String> servers = Arrays.stream(((String) map.getOrDefault("servers", "all")).split(",")).toList();
-
-            boolean miniMessage = (Boolean) map.getOrDefault("mini-message", true);
-            int weight = (Integer) map.getOrDefault("weight", 1);
-
-            boolean playerSpecific = (Boolean) map.getOrDefault("player-specific", false);
-            boolean cache = (Boolean) map.getOrDefault("cache", true);
-            boolean everywhere = servers.stream().anyMatch(s -> s.equalsIgnoreCase("all"));
-
-            AnnouncementData.Type annType = AnnouncementData.Type
-                    .valueOf(((String) map.getOrDefault("type", "chat")).toUpperCase());
-
-            String colorStr = (String) map.getOrDefault("color", "red");
-            BarColor color = BarColor.valueOf(colorStr.toUpperCase());
-            int seconds = (Integer) map.getOrDefault("seconds", 5);
-
-            List<ArcCondition> conditions = new ArrayList<>();
-            List<Map<String, Object>> conditionData = (List<Map<String, Object>>) map.getOrDefault("conditions", new ArrayList<>());
-
-            for (var condMap : conditionData) {
-                ArcCondition condition = null;
-                String type = (String) condMap.get("type");
-                switch (type) {
-                    case "permission" -> condition = new PermissionCondition((String) condMap.get("permission"));
-                    case "player" -> condition = new PlayerCondition(UUID.fromString((String) condMap.get("uuid")));
+            messageTask = new BukkitRunnable() {
+                @Override
+                public void run() {
+                    while (!queue.isEmpty()) {
+                        XMessage data = queue.poll();
+                        for (Player player : PlayerManager.getOnlinePlayersThreadSafe()) {
+                            List<XCondition> conditions = data.getConditions();
+                            boolean fits = true;
+                            if (conditions != null) {
+                                for (XCondition condition : conditions) {
+                                    if (!condition.test(player)) {
+                                        fits = false;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (fits) send(data, player);
+                        }
+                    }
                 }
-                if (condition != null) conditions.add(condition);
-            }
+            }.runTaskTimer(ARC.plugin, 0, 1L);
 
-            AnnouncementData data = AnnouncementData.builder()
-                    .arcConditions(conditions)
-                    .cache(cache)
-                    .playerSpecific(playerSpecific)
-                    .message(message)
-                    .servers(servers)
-                    .everywhere(everywhere)
-                    .minimessage(miniMessage)
-                    .weight(weight)
-                    .type(annType)
-                    .bossBarColor(color)
-                    .seconds(seconds)
-                    .originServer(MainConfig.server)
-                    .build();
-            addAnnouncement(data);
+            task = new BukkitRunnable() {
+                @Override
+                public void run() {
+                    if (announcements.isEmpty()) return;
+                    XMessage data = getRandom();
+                    announce(data);
+                }
+            }.runTaskTimer(ARC.plugin,
+                    config.integer("config.delay-seconds", 600) * 20L,
+                    config.integer("config.delay-seconds", 600) * 20L);
+        } catch (Exception e) {
+            log.error("Error initializing AnnounceManager: {}", e.getMessage());
         }
     }
 
-    public static void cancel() {
-        if (task != null && !task.isCancelled()) task.cancel();
+    private static void loadXMessages() {
+        List<String> messages = config.keys("messages");
+        for (var key : messages) {
+            var builder = XMessage.builder();
+
+            String message = config.string("messages." + key + ".message");
+            XMessage.Type type = XMessage.Type.valueOf(config.string("messages." + key + ".type", "chat").toUpperCase());
+
+            XMessage.SerializationType serializationType;
+            try {
+                serializationType = XMessage.SerializationType.valueOf(config.string("messages." + key + ".serialization-type", "mini_message").toUpperCase());
+            } catch (Exception e) {
+                log.error("Serialization type not found for message: {}", key);
+                serializationType = XMessage.SerializationType.MINI_MESSAGE;
+            }
+
+            int weight = config.integer("messages." + key + ".weight", 1);
+            boolean isCacheable = config.bool("messages." + key + ".cache", true);
+
+            if (config.exists("messages." + key + ".toast")) {
+                String toastTitle = config.string("messages." + key + ".toast.title");
+                Material toastMaterial = config.material("messages." + key + ".toast.material", Material.STONE);
+                int toastModelData = config.integer("messages." + key + ".toast.model-data", 0);
+                builder.toastMaterial(toastMaterial).toastModelData(toastModelData).toastTitle(toastTitle);
+            }
+
+            if (config.exists("messages." + key + ".bossbar")) {
+                String bossBarName = config.string("messages." + key + ".bossbar.name");
+                BarColor barColor = BarColor.valueOf(config.string("messages." + key + ".bossbar.color", "red").toUpperCase());
+                int bossBarSeconds = config.integer("messages." + key + ".bossbar.seconds", 5);
+                builder.bossBarName(bossBarName).barColor(barColor).seconds(bossBarSeconds);
+            }
+
+            boolean personal = config.bool("messages." + key + ".personal", false);
+
+            Set<String> servers = new HashSet<>(config.stringList("messages." + key + ".servers", List.of("all")));
+            List<XCondition> xConditions = new ArrayList<>();
+
+            if (!servers.contains("all")) {
+                for (var server : servers) {
+                    xConditions.add(XCondition.ofServerName(server));
+                }
+            }
+
+            if (config.exists("messages." + key + ".conditions")) {
+                List<Map<String, Object>> conditions = config.list("messages." + key + ".conditions");
+                for (var map : conditions) {
+                    String condType = (String) map.get("type");
+                    switch (condType) {
+                        case "permission" -> xConditions.add(XCondition.ofPermission((String) map.get("permission")));
+                        case "player" ->
+                                xConditions.add(XCondition.ofPlayerUuid(UUID.fromString((String) map.get("uuid"))));
+                    }
+                }
+            }
+            builder.conditions(xConditions)
+                    .personal(personal)
+                    .serializedMessage(message)
+                    .type(type)
+                    .serializationType(serializationType)
+                    .weight(weight)
+                    .isCacheable(isCacheable)
+                    .weight(weight);
+
+            addAnnouncement(builder.build());
+        }
     }
 
 
-    public static void sendMessage(UUID playerUuid, String mmString) {
-        announceGlobally(new AnnouncementData.AnnouncementDataBuilder()
-                .message(mmString)
-                .arcConditions(List.of(new PlayerCondition(playerUuid)))
+    public static void cancel() {
+        if (task != null && !task.isCancelled()) task.cancel();
+        if (messageTask != null && !messageTask.isCancelled()) messageTask.cancel();
+    }
+
+
+    public static void sendMessageGlobally(UUID playerUuid, String mmString) {
+        announce(XMessage.builder()
+                .serializedMessage(mmString)
+                .type(XMessage.Type.CHAT)
+                .serializationType(XMessage.SerializationType.MINI_MESSAGE)
+                .personal(true)
+                .conditions(List.of(XCondition.ofPlayerUuid(playerUuid)))
                 .build());
     }
 
-
-    public static void announceNext() {
-        if (announcements.isEmpty()) return;
-        AnnouncementData data = getRandom();
-        announceGlobally(data);
+    public static void announce(XMessage data) {
+        log.info("Announcing: {}", data.getSerializedMessage());
+        XActionManager.publish(data);
     }
 
-    public static void announceGlobally(AnnouncementData data) {
-        Bukkit.getOnlinePlayers().forEach(p -> {
-            for (ArcCondition condition : data.arcConditions) {
-                if (!condition.test(p)) return;
-            }
-            sendMessage(data, p);
-        });
-        if (messager != null) messager.send(data);
-    }
-
-    public static void announceLocally(AnnouncementData data) {
-        Bukkit.getOnlinePlayers().forEach(p -> {
-            for (ArcCondition condition : data.arcConditions) {
-                if (!condition.test(p)) return;
-            }
-            sendMessage(data, p);
-        });
-    }
-
-    private static void sendMessage(AnnouncementData data, Player player) {
-        switch (data.type) {
+    private static void send(XMessage data, Player player) {
+        switch (data.getType()) {
             case CHAT -> player.sendMessage(data.component(player));
-            case BOSSBAR -> {
+            case BOSS_BAR -> {
                 if (HookRegistry.cmiHook == null) {
                     log.error("I cant use bossbar without cmi... sorry");
                     return;
                 }
-                HookRegistry.cmiHook.sendBossbar("arcAnnounce", data.message,
-                        player, data.bossBarColor, data.seconds);
+                HookRegistry.cmiHook.sendBossbar("arcAnnounce",
+                        data.getSerializedMessage(),
+                        player,
+                        data.getBarColor(),
+                        data.getSeconds());
             }
-            case ACTIONBAR -> {
+            case ACTION_BAR -> {
                 if (HookRegistry.cmiHook == null) {
                     log.error("I cant use actionbar without cmi... sorry");
                     return;
                 }
-                HookRegistry.cmiHook.sendActionbar(data.message,
-                        List.of(player), data.seconds);
+                HookRegistry.cmiHook.sendActionbar(data.getSerializedMessage(), List.of(player), data.getSeconds());
             }
         }
     }
 
-    public static void addAnnouncement(AnnouncementData data) {
-        totalWeight += data.weight;
+    public static void addAnnouncement(XMessage data) {
+        totalWeight += data.getWeight();
+        log.info("Adding announcement: {}", data);
         announcements.put(totalWeight, data);
     }
 
-    private static AnnouncementData getRandom() {
+    private static XMessage getRandom() {
         int rng = new Random().nextInt(0, totalWeight + 1);
-        AnnouncementData data = announcements.ceilingEntry(rng).getValue();
+        XMessage data = announcements.ceilingEntry(rng).getValue();
         int count = 0;
         while (recentlyUsed.contains(data)) {
             if (count == 10) break;
@@ -185,4 +218,7 @@ public class AnnounceManager {
         return Math.min(announcements.size() - 1, 3);
     }
 
+    public static void queue(XMessage data) {
+        queue.offer(data);
+    }
 }

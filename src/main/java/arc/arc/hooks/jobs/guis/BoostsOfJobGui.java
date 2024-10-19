@@ -25,6 +25,7 @@ import org.bukkit.entity.Player;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import static arc.arc.util.TextUtil.*;
 
@@ -40,8 +41,8 @@ public class BoostsOfJobGui extends ChestGui {
         super(4, "");
         String jobDisplay = job.getDisplayName().replace("§", "&");
         int index = jobDisplay.indexOf("&");
-        if(index != -1){
-            jobDisplay =jobDisplay.substring(0, index+2) + "&l"+ jobDisplay.substring(index+2);
+        if (index != -1) {
+            jobDisplay = jobDisplay.substring(0, index + 2) + "&l" + jobDisplay.substring(index + 2);
         }
         setTitle(TextHolder.deserialize(
                 toLegacy(config.string("job-menu.title", "Boosts")
@@ -49,10 +50,10 @@ public class BoostsOfJobGui extends ChestGui {
         );
 
         var playerData = JobsHook.getRepo().getNow(player.getUniqueId().toString());
-        if(playerData == null) boosts = new ArrayList<>();
+        if (playerData == null) boosts = new ArrayList<>();
         else boosts = playerData.boosts(job);
 
-        this.rows = Math.max(2, Math.min(6, (int)Math.ceil(boosts.size()/9.0)));
+        this.rows = Math.max(2, Math.min(6, (int) Math.ceil(boosts.size() / 9.0)));
         setRows(rows);
 
         this.player = player;
@@ -69,18 +70,17 @@ public class BoostsOfJobGui extends ChestGui {
         this.addPane(pane);
 
 
-
         RedisRepo<BoostData> repo = JobsHook.getRepo();
         BoostData data = repo.getNow(player.getUniqueId().toString());
         if (data == null) return;
         List<GuiItem> items = new ArrayList<>();
 
-        double moneyBaseBoost = HookRegistry.jobsHook.getBoost(player, job.getName(), JobsBoost.Type.MONEY)*100;
-        double pointsBaseBoost = HookRegistry.jobsHook.getBoost(player, job.getName(), JobsBoost.Type.POINTS)*100;
-        double expBaseBoost = HookRegistry.jobsHook.getBoost(player, job.getName(), JobsBoost.Type.EXP)*100;
+        double moneyBaseBoost = HookRegistry.jobsHook.getBoost(player, job.getName(), JobsBoost.Type.MONEY) * 100;
+        double pointsBaseBoost = HookRegistry.jobsHook.getBoost(player, job.getName(), JobsBoost.Type.POINTS) * 100;
+        double expBaseBoost = HookRegistry.jobsHook.getBoost(player, job.getName(), JobsBoost.Type.EXP) * 100;
 
-        if(moneyBaseBoost > 1 || pointsBaseBoost > 1 || expBaseBoost > 1){
-            if(Math.abs(moneyBaseBoost-pointsBaseBoost) < 1.0 && Math.abs(moneyBaseBoost-expBaseBoost) < 1.0){
+        if (moneyBaseBoost > 1 || pointsBaseBoost > 1 || expBaseBoost > 1) {
+            if (Math.abs(moneyBaseBoost - pointsBaseBoost) < 1.0 && Math.abs(moneyBaseBoost - expBaseBoost) < 1.0) {
                 GuiItem all = new ItemStackBuilder(Material.DIAMOND)
                         .display(config.string("job-menu.all-base-boost-display"))
                         .lore(config.stringList("job-menu.all-base-boost-lore"))
@@ -92,8 +92,8 @@ public class BoostsOfJobGui extends ChestGui {
                         .clickEvent(click -> click.setCancelled(true))
                         .build();
                 items.add(all);
-            } else{
-                if(moneyBaseBoost > 1){
+            } else {
+                if (moneyBaseBoost > 1) {
                     GuiItem money = new ItemStackBuilder(Material.GOLD_INGOT)
                             .display(config.string("job-menu.money-base-boost-display"))
                             .lore(config.stringList("job-menu.money-base-boost-lore"))
@@ -106,7 +106,7 @@ public class BoostsOfJobGui extends ChestGui {
                             .build();
                     items.add(money);
                 }
-                if(pointsBaseBoost > 1){
+                if (pointsBaseBoost > 1) {
                     GuiItem points = new ItemStackBuilder(Material.NETHER_STAR)
                             .display(config.string("job-menu.points-base-boost-display"))
                             .lore(config.stringList("job-menu.points-base-boost-lore"))
@@ -119,7 +119,7 @@ public class BoostsOfJobGui extends ChestGui {
                             .build();
                     items.add(points);
                 }
-                if(expBaseBoost > 1){
+                if (expBaseBoost > 1) {
                     GuiItem exp = new ItemStackBuilder(Material.EXPERIENCE_BOTTLE)
                             .display(config.string("job-menu.exp-base-boost-display"))
                             .lore(config.stringList("job-menu.exp-base-boost-lore"))
@@ -153,13 +153,12 @@ public class BoostsOfJobGui extends ChestGui {
         }
 
 
-
         pane.populateWithGuiItems(items);
     }
 
     TagResolver resolver(Job job, JobsBoost jobsBoost) {
         long expiresIn = jobsBoost.expiresInMillis();
-        String expire = TextUtil.formatTime(expiresIn);
+        String expire = TextUtil.time(expiresIn, TimeUnit.MILLISECONDS);
         return TagResolver.builder()
                 .tag("job", Tag.inserting(mm(job.getName(), true)))
                 .tag("id", Tag.inserting(mm(jobsBoost.getId(), true)))

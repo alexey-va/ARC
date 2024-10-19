@@ -1,7 +1,7 @@
 package arc.arc.xserver.playerlist;
 
 import arc.arc.ARC;
-import com.google.gson.Gson;
+import arc.arc.util.Common;
 import com.google.gson.reflect.TypeToken;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -14,6 +14,7 @@ import java.lang.reflect.Type;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Log4j2
@@ -21,7 +22,7 @@ public class PlayerManager {
 
 
     private static final Map<UUID, PlayerData> playerMap = new ConcurrentHashMap<>();
-    private static Gson gson = new Gson();
+    private static final Set<String> servers = new HashSet<>();
 
     public static List<Player> getOnlinePlayersThreadSafe() {
         if (Bukkit.isPrimaryThread()) return new ArrayList<>(Bukkit.getOnlinePlayers());
@@ -29,11 +30,11 @@ public class PlayerManager {
         new BukkitRunnable() {
             @Override
             public void run() {
-                res.complete(new ArrayList<>(Bukkit.getOnlinePlayers()))
+                res.complete(new ArrayList<>(Bukkit.getOnlinePlayers()));
             }
         }.runTask(ARC.plugin);
         try {
-            return res.get(3, TimeUnit.MINUTE);
+            return res.get(3, TimeUnit.MINUTES);
         } catch (Exception e) {
             log.error("Timeout waiting for players", e);
             return List.of();
@@ -44,21 +45,28 @@ public class PlayerManager {
         return playerMap.values().stream().map(PlayerData::getUsername).collect(Collectors.toSet());
     }
 
-    public static List<UUID> getAllPlayerUuids() {
-        return new ArrayList<>(playerMap.keySet());
+    public static Set<UUID> getPlayerUuids() {
+        return playerMap.keySet();
+    }
+
+    public static Set<String> getServerNames() {
+        return servers;
     }
 
     public static void readMessage(String json) {
         Type type = new TypeToken<List<PlayerData>>() {
         }.getType();
-        List<PlayerData> playerData = gson.fromJson(json, type);
+        List<PlayerData> playerData = Common.gson.fromJson(json, type);
         if (playerData == null) {
-            log.error("Message " + json + " canot be parsed!");
+            log.error("Message {} canot be parsed!", json);
             return;
         }
         playerMap.clear();
         Map<UUID, PlayerData> newMap = new HashMap<>();
-        for (PlayerData data : playerData) newMap.put(data.getUuid(), data);
+        for (PlayerData data : playerData) {
+            servers.add(data.getServer());
+            newMap.put(data.getUuid(), data);
+        }
         playerMap.putAll(newMap);
     }
 

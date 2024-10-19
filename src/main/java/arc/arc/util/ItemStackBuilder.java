@@ -25,6 +25,7 @@ public class ItemStackBuilder {
 
 
     public ItemStackBuilder enchant(Enchantment enchantment, int level, boolean ignoreLevelRestriction) {
+        if (enchantment == null) return this;
         enchants.add(new EnchantData(enchantment, level, ignoreLevelRestriction));
         return this;
     }
@@ -163,6 +164,14 @@ public class ItemStackBuilder {
 
     public ItemStackBuilder flags(ItemFlag... flags) {
         this.flags = Arrays.stream(flags).toList();
+        return this;
+    }
+
+    public ItemStackBuilder hideAll() {
+        this.flags = List.of(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_PLACED_ON,
+                ItemFlag.HIDE_DESTROYS, ItemFlag.HIDE_DYE, ItemFlag.HIDE_UNBREAKABLE,
+                ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_PLACED_ON,
+                ItemFlag.HIDE_DESTROYS, ItemFlag.HIDE_DYE, ItemFlag.HIDE_UNBREAKABLE);
         return this;
     }
 

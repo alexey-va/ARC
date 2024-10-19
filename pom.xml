@@ -208,7 +208,7 @@
         <dependency>
             <groupId>com.github.Gypopo</groupId>
             <artifactId>EconomyShopGUI-API</artifactId>
-            <version>1.6.2</version>
+            <version>1.7.1</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -354,12 +354,6 @@
             <groupId>fr.maxlego08</groupId>
             <artifactId>zAuctionHouse</artifactId>
             <version>3.2.2.0</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.github.Maxlego08</groupId>
-            <artifactId>zTranslator</artifactId>
-            <version>1.0.0.0</version>
             <scope>provided</scope>
         </dependency>
         <dependency>

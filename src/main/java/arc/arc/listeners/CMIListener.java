@@ -12,6 +12,9 @@ import org.bukkit.event.Listener;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static arc.arc.PortalData.*;
+import static arc.arc.PortalData.ActionType.*;
+
 @Slf4j
 @RequiredArgsConstructor
 public class CMIListener implements Listener {
@@ -21,14 +24,15 @@ public class CMIListener implements Listener {
     @EventHandler
     public void onCMITp(CMIAsyncPlayerTeleportEvent event) {
         if (event.getSender().hasPermission("arc.bypass-portal")) return;
-        if(event.getType() == null || event.getTo() == null || event.getPlayer() == null) return;
-        Set<String> types = commandConfig.stringList("cmi-tp-types").stream().map(String::toLowerCase).collect(Collectors.toSet());
+        if (event.getType() == null || event.getTo() == null || event.getPlayer() == null) return;
+        Set<String> types = commandConfig.stringList("cmi-tp-types").stream()
+                .map(String::toLowerCase)
+                .collect(Collectors.toSet());
         if (!types.contains(event.getType().toString().toLowerCase())) return;
         event.setCancelled(true);
-        new Portal(event.getPlayer().getUniqueId().toString(), PortalData.builder()
-                .isHusk(false)
+        new Portal(event.getPlayer().getUniqueId(), builder()
+                .actionType(TELEPORT)
                 .location(event.getTo())
-                .player(event.getPlayer())
                 .build());
     }
 

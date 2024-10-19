@@ -1,6 +1,6 @@
 package arc.arc.sync.base;
 
-import arc.arc.configs.MainConfig;
+import arc.arc.ARC;
 import arc.arc.network.ChannelListener;
 import arc.arc.network.RedisManager;
 import lombok.RequiredArgsConstructor;
@@ -17,14 +17,14 @@ public class SyncMessager<T extends SyncData> implements ChannelListener {
 
     @Override
     public void consume(String channel, String message, String originServer) {
-        if (originServer.equals(MainConfig.server)) return;
+        if (originServer.equals(ARC.serverName)) return;
         T data = repo.gson.fromJson(message, repo.clazz);
-        log.debug("Received data from channel: " + channel + " with data: " + data);
+        log.debug("Received data from channel: {} with data: {}", channel, data);
         repo.dataApplier.accept(data);
     }
 
     public void send(T data) {
-        log.debug("Sending data to channel: " + channel);
+        log.debug("Sending data to channel: {}", channel);
         redisManager.publish(channel, repo.gson.toJson(data));
     }
 }

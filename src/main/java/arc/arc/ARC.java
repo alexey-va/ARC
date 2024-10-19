@@ -1,5 +1,6 @@
 package arc.arc;
 
+import arc.arc.audit.AuditManager;
 import arc.arc.autobuild.BuildingManager;
 import arc.arc.board.Board;
 import arc.arc.bschests.PersonalLootManager;
@@ -14,9 +15,11 @@ import arc.arc.farm.FarmManager;
 import arc.arc.generic.treasure.TreasurePool;
 import arc.arc.hooks.HookRegistry;
 import arc.arc.leafdecay.LeafDecayManager;
+import arc.arc.misc.JoinMessages;
 import arc.arc.mobspawn.MobSpawnManager;
 import arc.arc.network.NetworkRegistry;
 import arc.arc.network.RedisManager;
+import arc.arc.network.repos.RedisRepo;
 import arc.arc.stock.StockClient;
 import arc.arc.stock.StockMarket;
 import arc.arc.stock.StockPlayerManager;
@@ -27,7 +30,10 @@ import arc.arc.treasurechests.locationpools.LocationPoolManager;
 import arc.arc.util.CooldownManager;
 import arc.arc.util.HeadTextureCache;
 import arc.arc.util.ParticleManager;
+import arc.arc.xserver.PluginMessenger;
+import arc.arc.xserver.XActionManager;
 import arc.arc.xserver.announcements.AnnounceManager;
+import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.Bukkit;
@@ -38,44 +44,32 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class ARC extends JavaPlugin {
 
     public static ARC plugin;
-    MainConfig mainConfig;
+    public static String serverName;
+    public static PluginMessenger pluginMessenger;
+
     TreasureHuntConfig treasureHuntConfig;
     public LocationPoolConfig locationPoolConfig;
     public BoardConfig boardConfig;
-    private static Economy econ = null;
+    @Getter
+    private static Economy econ;
     public static RedisManager redisManager;
     public static HookRegistry hookRegistry;
     public static NetworkRegistry networkRegistry;
     public static HeadTextureCache headTextureCache;
 
 
-    boolean loadedPacketApi = false;
-
-
-    public static Economy getEcon() {
-        return econ;
-    }
-
-
     @Override
     public void onLoad() {
-/*        if (!loadedPacketApi) {
-                PacketEvents.setAPI(SpigotPacketEventsBuilder.build(this));
-                PacketEvents.getAPI().getSettings().reEncodeByDefault(false)
-                                .checkForUpdates(true)
-                                .bStats(true);
-                PacketEvents.getAPI().load();
-                loadedPacketApi = true;
-            }*/
     }
 
     @Override
     public void onEnable() {
         plugin = this;
+        if (pluginMessenger == null) pluginMessenger = new PluginMessenger();
         log.info("Starting ARC");
         log.info("Creating hook registry");
 
-        System.out.println("Setting up redis");
+        log.info("Loading redis");
         setupRedis();
 
         System.out.println("Setting up network registry");
@@ -87,14 +81,18 @@ public final class ARC extends JavaPlugin {
         hookRegistry.setupHooks();
 
         log.info("Loading config");
-        loadConfig();
+        loadConfig(true);
         load();
     }
 
-    public void loadConfig() {
+    public void loadConfig(boolean initial) {
         ConfigManager.reloadAll();
 
-        mainConfig = new MainConfig();
+        serverName = ConfigManager
+                .of(ARC.plugin.getDataPath(), "misc.yml")
+                .string("redis.server-name", "default");
+
+        if (!initial) setupRedis();
 
         System.out.println("Location pool loading...");
         locationPoolConfig = new LocationPoolConfig();
@@ -118,6 +116,9 @@ public final class ARC extends JavaPlugin {
         log.info("Starting announce manager");
         AnnounceManager.init();
 
+        log.info("Starting xaction manager");
+        XActionManager.init();
+
         headTextureCache = new HeadTextureCache();
 
         LeafDecayManager.reload();
@@ -125,11 +126,17 @@ public final class ARC extends JavaPlugin {
         TreasurePool.loadAllTreasures();
 
         PersonalLootManager.reload();
+
+        AuditManager.init();
+
+        startSyncs();
     }
 
     @Override
     public void onDisable() {
         SyncManager.saveAll();
+
+        RedisRepo.saveAll();
 
         hookRegistry.cancelTasks();
         TreasureHuntManager.stopAll();
@@ -189,26 +196,28 @@ public final class ARC extends JavaPlugin {
         log.info("Starting MobSpawnManager");
         MobSpawnManager.init();
 
-        startSyncs();
+        log.info("Starting join messages");
+        JoinMessages.init();
     }
 
     private void startSyncs() {
-        if (HookRegistry.sfHook != null) {
+        Config config = ConfigManager.of(ARC.plugin.getDataPath(), "misc.yml");
+        if (HookRegistry.sfHook != null && config.bool("sync.slimefun", true)) {
             info("Starting slimefun sync.");
             SyncManager.registerSync(SlimefunSync.class, new SlimefunSync());
         }
 
-        if (HookRegistry.emHook != null) {
+        if (HookRegistry.emHook != null && config.bool("sync.em", true)) {
             info("Starting em sync.");
             SyncManager.registerSync(EmSync.class, new EmSync());
         }
 
-        if (HookRegistry.cmiHook != null) {
+        if (HookRegistry.cmiHook != null && config.bool("sync.cmi", false)) {
             info("Starting cmi sync.");
             SyncManager.registerSync(CMISync.class, new CMISync());
         }
 
-        if (HookRegistry.auraSkillsHook != null) {
+        if (HookRegistry.auraSkillsHook != null && config.bool("sync.aura-skills", true)) {
             info("Starting aura skills sync.");
             SyncManager.registerSync(SkillsSync.class, new SkillsSync());
         }
@@ -216,6 +225,7 @@ public final class ARC extends JavaPlugin {
         SyncManager.startSaveAllTasks();
     }
 
+    @SuppressWarnings("ConstantConditions")
     private void registerCommands() {
         getCommand("arc").setExecutor(new Command());
         getCommand("mex").setExecutor(new MexCommand());
@@ -252,30 +262,39 @@ public final class ARC extends JavaPlugin {
         getCommand("eliteloot").setTabCompleter(eliteLootComand);
 
         getCommand("arc-invest").setTabCompleter(new InvestTabComplete());
+
+        XArcCommand xArcCommand = new XArcCommand();
+        getCommand("x").setExecutor(xArcCommand);
+        getCommand("x").setTabCompleter(xArcCommand);
     }
 
-    private boolean setupEconomy() {
+    private void setupEconomy() {
         if (getServer().getPluginManager().getPlugin("Vault") == null) {
-            return false;
+            return;
         }
         RegisteredServiceProvider<Economy> rsp = getServer().getServicesManager().getRegistration(Economy.class);
         if (rsp == null) {
-            return false;
+            return;
         }
         econ = rsp.getProvider();
-        return true;
     }
 
     private void setupRedis() {
         try {
-            if (redisManager != null) redisManager.close();
-
-            redisManager = new RedisManager(getConfig().getString("redis.ip", "localhost"),
-                    getConfig().getInt("redis.port", 3306), getConfig().getString("redis.username", "default"),
-                    getConfig().getString("redis.password", ""));
-            System.out.println("Redis setup.");
+            Config config = ConfigManager.of(ARC.plugin.getDataPath(), "misc.yml");
+            String ip = config.string("redis.ip", "localhost");
+            int port = config.integer("redis.port", 3306);
+            String username = config.string("redis.username", "default");
+            String password = config.string("redis.password", "");
+            if (redisManager != null) {
+                redisManager.connect(ip, port, username, password);
+                log.info("Reconnected to redis");
+            } else {
+                redisManager = new RedisManager(ip, port, username, password);
+                log.info("Connected to redis");
+            }
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("Failed to connect to redis", e);
         }
 
     }
@@ -299,7 +318,6 @@ public final class ARC extends JavaPlugin {
         for (Object arg : args) {
             toPrint = toPrint.replaceFirst("\\{}", arg == null ? "null" : arg.toString());
         }
-        //Bukkit.getLogger().fine(toPrint);
     }
 
 

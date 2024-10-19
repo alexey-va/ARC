@@ -31,8 +31,6 @@ public class GuiUtils {
     record BgKey(Material material, int model) {
     }
 
-    ;
-
     public static GuiItem background(Material material, int model) {
         GuiItem guiItem = backgrounds.get(new BgKey(material, model));
         if (guiItem != null) return guiItem;

@@ -4,6 +4,7 @@ import arc.arc.ARC;
 import arc.arc.configs.Config;
 import arc.arc.configs.ConfigManager;
 import arc.arc.util.ParticleManager;
+import com.destroystokyo.paper.ParticleBuilder;
 import com.jeff_media.customblockdata.CustomBlockData;
 import lombok.extern.slf4j.Slf4j;
 import org.bukkit.*;
@@ -131,18 +132,13 @@ public class LeafDecayManager {
                     if (playSound) block.getWorld().playSound(block.getLocation(), Sound.BLOCK_GRASS_BREAK, 1.0F, 1.0F);
                     if (playParticles) {
                         Collection<Player> nearbyPlayers = block.getWorld().getNearbyPlayers(block.getLocation(), 32);
-                        ParticleManager.queue(
-                                ParticleManager.ParticleDisplay.builder()
-                                        .players(nearbyPlayers)
-                                        .location(block.getLocation().add(0.5, 0.5, 0.5))
-                                        .particle(Particle.BLOCK)
-                                        .count(3)
-                                        .extra(0.1)
-                                        .data(type.createBlockData())
-                                        .offsetX(0.3)
-                                        .offsetY(0.3)
-                                        .offsetZ(0.3)
-                                        .build()
+                        ParticleManager.queue(new ParticleBuilder(Particle.BLOCK)
+                                .count(2)
+                                .location(block.getLocation().add(0.5, 0.5, 0.5))
+                                .extra(0.1)
+                                .data(type.createBlockData())
+                                .offset(0.3, 0.3, 0.3)
+                                .receivers(nearbyPlayers)
                         );
                     }
                 }

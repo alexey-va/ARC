@@ -6,6 +6,8 @@ import arc.arc.configs.ConfigManager;
 import arc.arc.util.CooldownManager;
 import arc.arc.util.ParticleManager;
 import arc.arc.util.TextUtil;
+import arc.arc.util.Utils;
+import com.destroystokyo.paper.ParticleBuilder;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
 import com.sk89q.worldguard.WorldGuard;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
@@ -16,6 +18,7 @@ import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.Particle;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.Ageable;
@@ -26,6 +29,7 @@ import org.bukkit.inventory.ItemStack;
 import java.util.*;
 
 import static arc.arc.util.TextUtil.mm;
+import static org.bukkit.Particle.FLAME;
 
 @Slf4j
 public class Farm {
@@ -106,15 +110,15 @@ public class Farm {
             block.breakNaturally();
         }
         if (particles) {
-            ParticleManager.queue(ParticleManager.ParticleDisplay.builder()
-                    .players(List.of(player))
-                    .extra(config.real("farm-config.particle-extra", 0.06))
-                    .count(config.integer("farm-config.particle-count", 5))
-                    .offsetX(config.real("farm-config.particle-offset", 0.25))
-                    .offsetY(config.real("farm-config.particle-offset", 0.25))
-                    .offsetZ(config.real("farm-config.particle-offset", 0.25))
+            Particle randomParticle = Utils.random(new Particle[]{Particle.FLAME, Particle.END_ROD, Particle.CRIT});
+            ParticleManager.queue(new ParticleBuilder(randomParticle)
                     .location(block.getLocation().toCenterLocation())
-                    .build());
+                    .count(config.integer("farm-config.particle-count", 5))
+                    .extra(config.real("farm-config.particle-extra", 0.06))
+                    .offset(config.real("farm-config.particle-offset", 0.25),
+                            config.real("farm-config.particle-offset", 0.25),
+                            config.real("farm-config.particle-offset", 0.25))
+                    .receivers(List.of(player)));
         }
     }
 

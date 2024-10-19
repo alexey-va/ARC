@@ -177,7 +177,7 @@ public class IAEvents implements Listener {
                 String lines = """
                         nbt.itemsadder.namespace={namespace}
                         nbt.itemsadder.id={id}
-                        type=item
+                        argType=item
                         {replace_string}
                         weight=9999
                         texture={texture_path}
@@ -215,7 +215,7 @@ public class IAEvents implements Listener {
             }
         });
         String fileString = """
-                type=armor
+                argType=armor
                 items=leather_helmet leather_chestplate leather_leggings leather_boots
                 texture.leather_layer_1_overlay=leather_layer_1_overlay.png
                 texture.leather_layer_2_overlay=leather_layer_2_overlay.png

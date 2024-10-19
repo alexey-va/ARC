@@ -3,13 +3,19 @@ package arc.arc.commands;
 import arc.arc.ARC;
 import arc.arc.ai.Conversation;
 import arc.arc.ai.GPTManager;
+import arc.arc.audit.AuditManager;
 import arc.arc.board.guis.BoardGui;
 import arc.arc.configs.Config;
 import arc.arc.configs.ConfigManager;
 import arc.arc.generic.treasure.MainTreasuresGui;
 import arc.arc.guis.BaltopGui;
 import arc.arc.hooks.HookRegistry;
+import arc.arc.misc.JoinMessageGui;
+import arc.arc.network.repos.RedisRepo;
+import arc.arc.util.CooldownManager;
 import arc.arc.util.GuiUtils;
+import arc.arc.util.TextUtil;
+import arc.arc.xserver.playerlist.PlayerManager;
 import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -47,10 +53,30 @@ public class Command implements CommandExecutor, TabCompleter {
             return true;
         }
 
+        if (strings[0].equalsIgnoreCase("joinmessage")) {
+            processJoinMessageCommand(commandSender, strings, true);
+            return true;
+        }
+
+        if (strings[0].equalsIgnoreCase("quitmessage")) {
+            processJoinMessageCommand(commandSender, strings, false);
+            return true;
+        }
+
+        if (strings[0].equalsIgnoreCase("audit")) {
+            processAuditCommand(commandSender, strings);
+            return true;
+        }
+
+        if (strings[0].equalsIgnoreCase("repo")) {
+            processRepoCommand(commandSender, strings);
+            return true;
+        }
+
         if (strings.length == 1) {
             if (strings[0].equalsIgnoreCase("reload") && commandSender.hasPermission("arc.admin")) {
                 ARC.plugin.reloadConfig();
-                ARC.plugin.loadConfig();
+                ARC.plugin.loadConfig(false);
                 ARC.hookRegistry.reloadHooks();
                 commandSender.sendMessage(Component.text("Перезагрузка успешна!", NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
                 return true;
@@ -173,12 +199,95 @@ public class Command implements CommandExecutor, TabCompleter {
         return true;
     }
 
+    private void processRepoCommand(CommandSender sender, String[] args) {
+        if (args.length == 1) {
+            sender.sendMessage("No args!");
+            return;
+        }
+        if (args[1].equalsIgnoreCase("save")) {
+            RedisRepo.saveAll();
+            sender.sendMessage("All repos saved!");
+        } else if (args[1].equalsIgnoreCase("size")) {
+            Map<String, Long> stringLongMap = RedisRepo.bytesTotal();
+            for (Map.Entry<String, Long> entry : stringLongMap.entrySet()) {
+                sender.sendMessage(entry.getKey() + " : " + entry.getValue());
+            }
+            sender.sendMessage("Total: " + stringLongMap.values().stream().mapToLong(Long::longValue).sum());
+        }
+    }
+
+    private void processAuditCommand(CommandSender sender, String[] args) {
+        Config config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "audit.yml");
+        if (!sender.hasPermission("arc.audit")) {
+            sender.sendMessage(TextUtil.noPermissions());
+            return;
+        }
+        if (args.length == 1) {
+            sender.sendMessage("No args!");
+            return;
+        }
+        String playerName = args[1];
+        if (args[1].equalsIgnoreCase("clearall")) {
+            AuditManager.clearAll();
+            sender.sendMessage(config.componentDef("messages.audit-cleared", "<gray>Аудит очищен!"));
+            return;
+        }
+        AuditManager.Filter filter = AuditManager.Filter.ALL;
+        int page = 1;
+        if (args.length >= 3) {
+            if (args[2].equalsIgnoreCase("clear")) {
+                AuditManager.clear(playerName);
+                sender.sendMessage(config.componentDef("messages.audit-cleared", "<gray>Аудит очищен для игрока %player_name%!",
+                        "%player_name%", playerName));
+                return;
+            }
+            try {
+                page = Integer.parseInt(args[2]);
+            } catch (NumberFormatException e) {
+                sender.sendMessage(config.componentDef("messages.invalid-page", "<red>Неверный формат страницы %text%!",
+                        "%text%", args[2]));
+                return;
+            }
+        }
+        if (args.length >= 4) {
+            String action = args[3];
+            if (action.equalsIgnoreCase("income")) filter = AuditManager.Filter.INCOME;
+            if (action.equalsIgnoreCase("expense")) filter = AuditManager.Filter.EXPENSE;
+            if (action.equalsIgnoreCase("shop")) filter = AuditManager.Filter.SHOP;
+            if (action.equalsIgnoreCase("job")) filter = AuditManager.Filter.JOB;
+            if (action.equalsIgnoreCase("pay")) filter = AuditManager.Filter.PAY;
+        }
+
+        AuditManager.sendAudit((Player) sender, playerName, page, filter);
+    }
+
+    private void processJoinMessageCommand(CommandSender sender, String[] args, boolean isJoin) {
+        if (!sender.hasPermission("arc.join-message-gui")) {
+            sender.sendMessage(TextUtil.noPermissions());
+            return;
+        }
+        if (!(sender instanceof Player)) {
+            sender.sendMessage(TextUtil.playerOnly());
+            return;
+        }
+        GuiUtils.constructAndShowAsync(() -> new JoinMessageGui((Player) sender, isJoin, 0), (Player) sender);
+    }
+
     private void processAiCommand(CommandSender sender, String[] args) {
         if (args.length == 1) {
             sender.sendMessage("No args!");
             return;
         }
         Player player = (Player) sender;
+        long ai = CooldownManager.cooldown(player.getUniqueId(), "ai_command");
+        if (ai > 0) {
+            Config config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "gpt.yml");
+            sender.sendMessage(config.componentDef("ai-cooldown-message", "<gray>Вы слишком разогнались, подождите немного."));
+            log.info("AI command on cooldown for player {}", player.getName());
+            return;
+        }
+        CooldownManager.addCooldown(player.getUniqueId(), "ai_command", 60);
+
         if (args[1].equalsIgnoreCase("stop")) {
             String id = args.length > 2 ? args[2] : "all";
             if (id.equalsIgnoreCase("all")) {
@@ -189,6 +298,7 @@ public class Command implements CommandExecutor, TabCompleter {
                 //sender.sendMessage("GPT conversation with id " + id + " stopped!");
             }
         } else if (args[1].equalsIgnoreCase("start")) {
+
             if (args.length < 4) {
                 sender.sendMessage("Not enough args!");
                 return;
@@ -201,7 +311,9 @@ public class Command implements CommandExecutor, TabCompleter {
             long lifeTime = Long.parseLong(parsedCommand.pars().getOrDefault("life-time", "60000"));
             String initialMessage = parsedCommand.pars().getOrDefault("initial-message", null);
             String npcIdString = parsedCommand.pars().getOrDefault("npc-id", null);
+            String endMessage = parsedCommand.pars().getOrDefault("end-message", null);
             Integer npcId = npcIdString != null ? Integer.parseInt(npcIdString) : null;
+            boolean privateConversation = parsedCommand.pars().containsKey("private");
 
             GPTManager.startConversation(player,
                     id,
@@ -211,7 +323,9 @@ public class Command implements CommandExecutor, TabCompleter {
                     radius,
                     lifeTime,
                     initialMessage,
-                    npcId);
+                    endMessage,
+                    npcId,
+                    privateConversation);
             //sender.sendMessage("GPT conversation with id " + id + " started!");
         }
     }
@@ -235,7 +349,7 @@ public class Command implements CommandExecutor, TabCompleter {
     public @Nullable List<String> onTabComplete(@NotNull CommandSender commandSender, org.bukkit.command.@NotNull Command command, @NotNull String s, @NotNull String[] strings) {
 
         if (strings.length == 1) {
-            return List.of("reload", "board", "emshop", "jobsboosts", "baltop", "treasures", "logger", "ai");
+            return List.of("reload", "joinmessage", "quitmessage", "board", "emshop", "jobsboosts", "baltop", "treasures", "logger", "ai", "audit", "repo");
         }
 
         if (strings.length > 1 && strings[0].equalsIgnoreCase("ai")) {
@@ -243,7 +357,7 @@ public class Command implements CommandExecutor, TabCompleter {
                 return List.of("start", "stop");
             }
             if (strings[1].equalsIgnoreCase("start")) {
-                return List.of("-archetype:default", "-id:", "-name:GPT", "-radius:50", "-life-time:60000", "-initial-message:", "-npc-id:");
+                return List.of("-archetype:default", "-id:", "-name:GPT", "-radius:50", "-life-time:60000", "-initial-message:", "-npc-id:", "-end-message:пока", "-private");
             }
             if (strings[1].equalsIgnoreCase("stop")) {
                 List<String> conv = GPTManager.getConversations((Player) commandSender).stream()
@@ -251,6 +365,25 @@ public class Command implements CommandExecutor, TabCompleter {
                         .collect(Collectors.toList());
                 conv.add("all");
                 return conv;
+            }
+        }
+
+        if(strings.length > 1 && strings[0].equalsIgnoreCase("repo")) {
+            return List.of("save", "size");
+        }
+
+        if (strings.length > 1 && strings[0].equalsIgnoreCase("audit")) {
+            if (strings.length == 2) {
+                List<String> list = new ArrayList<>();
+                list.add("clearall");
+                list.addAll(PlayerManager.getPlayerNames());
+                return list;
+            }
+            if (strings.length == 3) {
+                return List.of("income", "expense", "shop", "job", "pay", "clear");
+            }
+            if (strings.length == 4) {
+                return List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10");
             }
         }
 

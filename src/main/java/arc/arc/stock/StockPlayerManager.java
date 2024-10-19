@@ -1,6 +1,8 @@
 package arc.arc.stock;
 
 import arc.arc.ARC;
+import arc.arc.audit.AuditManager;
+import arc.arc.audit.Type;
 import arc.arc.configs.StockConfig;
 import arc.arc.network.repos.RedisRepo;
 import arc.arc.util.TextUtil;
@@ -84,10 +86,11 @@ public class StockPlayerManager {
         for (StockPlayer stockPlayer : repo.all()) {
             double gave = stockPlayer.giveDividend(symbol);
             if (gave <= 0.1) continue;
+            AuditManager.operation(stockPlayer.playerName, gave, Type.DIVIDEND, symbol);
             String message = StockConfig.string("message.received-dividend")
                     .replace("<amount>", TextUtil.formatAmount(gave))
                     .replace("<symbol>", symbol);
-            AnnounceManager.sendMessage(stockPlayer.playerUuid, message);
+            AnnounceManager.sendMessageGlobally(stockPlayer.playerUuid, message);
         }
     }
 
@@ -130,6 +133,9 @@ public class StockPlayerManager {
                 .type(Position.Type.BOUGHT)
                 .build();
         stockPlayer.addPosition(position);
+
+        AuditManager.operation(stockPlayer.getPlayerName(), -response.totalPrice, Type.STOCK, "Buy " + stock.symbol);
+
         log.trace("Successfully added position: {}", position);
     }
 
@@ -164,6 +170,9 @@ public class StockPlayerManager {
                 .type(Position.Type.SHORTED)
                 .build();
         stockPlayer.addPosition(position);
+
+        AuditManager.operation(stockPlayer.getPlayerName(), -response.totalPrice, Type.STOCK, "Short " + stock.symbol);
+
         log.trace("Successfully added position: {}", position);
     }
 
@@ -178,11 +187,14 @@ public class StockPlayerManager {
             double gains = position.gains(stock.price);
             log.trace("Gains: {}", gains);
             stockPlayer.addToBalance(gains + position.startPrice * position.amount, true);
+
+            AuditManager.operation(stockPlayer.getPlayerName(), gains, Type.STOCK, "Close " + symbol);
+
             String message = StockConfig.string("message.closed-" + reason)
                     .replace("<gains>", formatAmount(gains - position.commission))
                     .replace("<symbol>", symbol)
                     .replace("<money_received>", formatAmount(gains + position.startPrice * position.amount));
-            AnnounceManager.sendMessage(stockPlayer.playerUuid, message);
+            AnnounceManager.sendMessageGlobally(stockPlayer.playerUuid, message);
         }, () -> log.error("Could not find position with such id {}", positionUuid));
 
     }

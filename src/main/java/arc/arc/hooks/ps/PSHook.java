@@ -36,19 +36,7 @@ public class PSHook implements Listener {
         init();
     }
 
-    public static String getRegionName(Location location) {
-        if (PSRegion.fromLocation(location) == null) {
-            if (location.getWorld().getName().equalsIgnoreCase("world_the_end"))
-                return ChatColor.translateAlternateColorCodes('&', "&2Ничейные");
-            else
-                return ChatColor.translateAlternateColorCodes('&', "&6Серверная");
 
-        }
-        var owners = PSRegion.fromLocation(location).getOwners();
-        if (owners.size() == 0) return "...";
-        OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(owners.get(0));
-        return offlinePlayer.getName();
-    }
 
     public void cancel() {
         if (particleTask != null && !particleTask.isCancelled()) particleTask.cancel();

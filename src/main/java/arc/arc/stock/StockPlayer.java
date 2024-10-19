@@ -53,7 +53,7 @@ public class StockPlayer extends RepoData<StockPlayer> {
 
     public synchronized double giveDividend(String symbol) {
         if (!positionMap.containsKey(symbol)) return 0;
-        System.out.println("Giving divedend to "+playerName);
+        System.out.println("Giving divedend to " + playerName);
         Stock stock = StockMarket.stock(symbol);
         if (stock.dividend < 0.00001) return 0;
 
@@ -65,8 +65,8 @@ public class StockPlayer extends RepoData<StockPlayer> {
             if (dividend == 0) continue;
             balance += dividend;
             receivedDividend += dividend;
-            gave+=dividend;
-            position.setReceivedDividend(position.getReceivedDividend()+dividend);
+            gave += dividend;
+            position.setReceivedDividend(position.getReceivedDividend() + dividend);
         }
         return gave;
     }
@@ -76,22 +76,22 @@ public class StockPlayer extends RepoData<StockPlayer> {
         return positionMap.get(symbol).stream().filter(p -> p.positionUuid.equals(uuid)).findAny();
     }
 
-    public boolean isBelowMaxStockAmount(){
+    public boolean isBelowMaxStockAmount() {
         int currentAmount = positions().size();
-        if(currentAmount < StockConfig.defaultStockMaxAmount) return true;
-        var entry = StockConfig.permissionMap.ceilingEntry(currentAmount+1);
-        if(entry == null) return false;
+        if (currentAmount < StockConfig.defaultStockMaxAmount) return true;
+        var entry = StockConfig.permissionMap.ceilingEntry(currentAmount + 1);
+        if (entry == null) return false;
         OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(playerUuid);
-        if(!offlinePlayer.isOnline() && HookRegistry.luckPermsHook == null) return false;
+        if (!offlinePlayer.isOnline() && HookRegistry.luckPermsHook == null) return false;
         return HookRegistry.luckPermsHook.hasPermission(offlinePlayer, entry.getValue());
     }
 
-    public int maxStockAmount(){
+    public int maxStockAmount() {
         int max = -1;
         OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(playerUuid);
-        if(!offlinePlayer.isOnline() && HookRegistry.luckPermsHook == null) return -1;
-        for(var entry : StockConfig.permissionMap.entrySet()){
-            if(HookRegistry.luckPermsHook.hasPermission(offlinePlayer, entry.getValue())
+        if (!offlinePlayer.isOnline() && HookRegistry.luckPermsHook == null) return -1;
+        for (var entry : StockConfig.permissionMap.entrySet()) {
+            if (HookRegistry.luckPermsHook.hasPermission(offlinePlayer, entry.getValue())
                     && entry.getKey() > max) max = entry.getKey();
         }
         return max == -1 ? StockConfig.defaultStockMaxAmount : max;
@@ -108,7 +108,7 @@ public class StockPlayer extends RepoData<StockPlayer> {
                         mm(playerName, true)
                 )))
                 .resolver(TagResolver.resolver("position_amount", Tag.inserting(
-                        mm(positions().size()+"", true)
+                        mm(positions().size() + "", true)
                 )))
                 .resolver(TagResolver.resolver("uuid", Tag.inserting(
                         mm(playerUuid.toString().split("-")[0], true)
@@ -123,7 +123,7 @@ public class StockPlayer extends RepoData<StockPlayer> {
                         mm(TextUtil.formatAmount(total), true)
                 )))
                 .resolver(TagResolver.resolver("gains", Tag.inserting(
-                        mm(TextUtil.formatAmount(total-bal), true)
+                        mm(TextUtil.formatAmount(total - bal), true)
                 )))
                 .resolver(TagResolver.resolver("total_gains", Tag.inserting(
                         mm(TextUtil.formatAmount(getTotalGains()), true)
@@ -172,14 +172,16 @@ public class StockPlayer extends RepoData<StockPlayer> {
     public synchronized List<Position> positions() {
         return positionMap.values().stream().flatMap(Collection::stream).toList();
     }
+
     public synchronized double totalGains() {
         return positionMap.values().stream()
                 .flatMap(list -> list.stream().map(Position::gains))
                 .reduce(0.0, Double::sum);
     }
+
     public Player player() {
         OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(playerUuid);
-        if(offlinePlayer instanceof Player p) return p;
+        if (offlinePlayer instanceof Player p) return p;
         return null;
     }
 
@@ -200,7 +202,7 @@ public class StockPlayer extends RepoData<StockPlayer> {
         if (other.autoTake != autoTake) autoTake = other.autoTake;
         if (other.totalGains != 0) totalGains = other.totalGains;
         if (other.receivedDividend != 0) receivedDividend = other.receivedDividend;
-        if (other.positionMap != null){
+        if (other.positionMap != null) {
             positionMap.clear();
             positionMap.putAll(other.positionMap);
         }

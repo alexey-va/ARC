@@ -1,8 +1,12 @@
 package arc.arc.listeners;
 
 import arc.arc.Portal;
+import arc.arc.PortalData;
+import arc.arc.audit.AuditManager;
+import arc.arc.audit.Type;
 import arc.arc.configs.Config;
 import arc.arc.hooks.HookRegistry;
+import arc.arc.util.TextUtil;
 import arc.arc.xserver.playerlist.PlayerManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,7 +36,7 @@ public class CommandListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onPlayerPlaceBlock(BlockPlaceEvent ev) {
-        if (Portal.occupied(ev.getBlockPlaced())) ev.setCancelled(true);
+        if (Portal.isOccupied(ev.getBlockPlaced())) ev.setCancelled(true);
     }
 
 
@@ -70,6 +74,10 @@ public class CommandListener implements Listener {
     }
 
     private void moneyCommand(Player player, Cancellable ev, String[] args) {
+        if (!player.hasPermission("rediseconomy.admin")) {
+            player.sendMessage(TextUtil.noPermissions());
+            return;
+        }
         Set<String> sub = Set.of("give", "set", "take");
         if (args.length > 2 && args[0].equalsIgnoreCase("/money") && sub.contains(args[1])) {
             ev.setCancelled(true);
@@ -82,6 +90,7 @@ public class CommandListener implements Listener {
                     double money = Double.parseDouble(amount);
                     String command = "money " + args[2] + " vault " + args[1] + " " + money;
                     player.performCommand(command);
+                    AuditManager.operation(args[2], money, Type.COMMAND, player.getName());
                     log.info("Rerouted {} to {}", String.join(" ", args), command);
                 } catch (Exception e) {
                     log.error("Failed to reroute /money give command to /money <player> vault give <amount>", e);
@@ -105,6 +114,7 @@ public class CommandListener implements Listener {
                     double money = Double.parseDouble(amount);
                     String command = "money " + args[2] + " vault " + args[1] + " " + money;
                     Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
+                    AuditManager.operation(args[2], money, Type.COMMAND, "Server");
                     log.info("Rerouted {} to {}", String.join(" ", args), command);
                 } catch (Exception e) {
                     log.error("Failed to reroute /money give command to /money <player> vault give <amount>", e);
@@ -134,7 +144,10 @@ public class CommandListener implements Listener {
         if (commandConfig.bool("check-cmi-warps", true)
                 && HookRegistry.cmiHook != null
                 && !HookRegistry.cmiHook.warpExists(args[1])) return;
-        new Portal(ev.getPlayer().getUniqueId().toString(), ev.getMessage().substring(1));
+        new Portal(ev.getPlayer().getUniqueId(), PortalData.builder()
+                .actionType(PortalData.ActionType.COMMAND)
+                .command(ev.getMessage().substring(1))
+                .build());
         ev.setCancelled(true);
     }
 }

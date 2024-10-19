@@ -5,12 +5,15 @@ import arc.arc.configs.Config;
 import arc.arc.configs.ConfigManager;
 import arc.arc.util.ParticleManager;
 import arc.arc.util.TextUtil;
+import arc.arc.util.Utils;
+import com.destroystokyo.paper.ParticleBuilder;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
 import com.sk89q.worldguard.WorldGuard;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import com.sk89q.worldguard.protection.regions.RegionContainer;
 import lombok.extern.slf4j.Slf4j;
 import org.bukkit.Bukkit;
+import org.bukkit.Particle;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.event.block.BlockBreakEvent;
@@ -57,15 +60,18 @@ public class Lumbermill {
             event.setCancelled(true);
             return true;
         }
-        if (particles) ParticleManager.queue(ParticleManager.ParticleDisplay.builder()
-                .players(List.of(event.getPlayer()))
-                .extra(config.real("lumbermill-config.particle-extra", 0.06))
-                .count(config.integer("lumbermill-config.particle-count", 5))
-                .offsetY(config.real("lumbermill-config.particle-offset-y", 0.25))
-                .offsetX(config.real("lumbermill-config.particle-offset-x", 0.25))
-                .offsetZ(config.real("lumbermill-config.particle-offset-z", 0.25))
-                .location(block.getLocation().toCenterLocation())
-                .build());
+
+        if (particles) {
+            Particle randomParticle = Utils.random(new Particle[]{Particle.CRIT, Particle.FLAME, Particle.END_ROD});
+            ParticleManager.queue(new ParticleBuilder(randomParticle)
+                    .location(block.getLocation().toCenterLocation())
+                    .count(config.integer("lumbermill-config.particle-count", 5))
+                    .extra(config.real("lumbermill-config.particle-extra", 0.06))
+                    .offset(config.real("lumbermill-config.particle-offset", 0.25),
+                            config.real("lumbermill-config.particle-offset", 0.25),
+                            config.real("lumbermill-config.particle-offset", 0.25))
+                    .receivers(List.of(event.getPlayer())));
+        }
         return true;
     }
 

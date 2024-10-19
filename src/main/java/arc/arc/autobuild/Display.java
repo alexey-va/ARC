@@ -7,6 +7,7 @@ import arc.arc.hooks.HookRegistry;
 import arc.arc.hooks.packetevents.BlockDisplayReq;
 import arc.arc.util.ParticleManager;
 import arc.arc.util.Utils;
+import com.destroystokyo.paper.ParticleBuilder;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
 import com.sk89q.worldedit.math.BlockVector3;
 import lombok.RequiredArgsConstructor;
@@ -74,30 +75,26 @@ public class Display {
                 for (Utils.LocationData location : borderLocations) {
                     if (!location.corner() && site.player.getLocation().distanceSquared(location.location()) > 300)
                         continue;
-                    ParticleManager.queue(ParticleManager.ParticleDisplay.builder()
+                    ParticleManager.queue(new ParticleBuilder(particle)
                             .location(location.location())
-                            .offsetX(location.corner() ? offsetCorner : offset)
-                            .offsetY(location.corner() ? offsetCorner : offset)
-                            .offsetZ(location.corner() ? offsetCorner : offset)
-                            .count(location.corner() ? countCorner : count)
                             .extra(0.0)
-                            .particle(particle)
-                            .players(List.of(site.getPlayer()))
-                            .build());
+                            .offset(location.corner() ? offsetCorner : offset,
+                                    location.corner() ? offsetCorner : offset,
+                                    location.corner() ? offsetCorner : offset)
+                            .count(location.corner() ? countCorner : count)
+                            .receivers(List.of(site.getPlayer())));
                 }
 
                 Particle centerParticle = config.particle("display.center-particle", Particle.NAUTILUS);
                 count = config.integer("display.center-particle-count", 1);
                 for (Location location : centerLocations) {
                     if (site.player.getLocation().distanceSquared(location) > 300) continue;
-                    ParticleManager.queue(ParticleManager.ParticleDisplay.builder()
+                    ParticleManager.queue(new ParticleBuilder(centerParticle)
                             .location(location)
-                            .offsetX(0.0).offsetY(0.0).offsetZ(0.0)
-                            .count(count)
                             .extra(0.0)
-                            .particle(centerParticle)
-                            .players(List.of(site.getPlayer()))
-                            .build());
+                            .offset(0.0, 0.0, 0.0)
+                            .count(count)
+                            .receivers(List.of(site.getPlayer())));
                 }
 
             }

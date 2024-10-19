@@ -5,6 +5,7 @@ import arc.arc.configs.Config;
 import arc.arc.configs.ConfigManager;
 import arc.arc.hooks.HookRegistry;
 import arc.arc.hooks.citizens.CitizensHook;
+import arc.arc.util.CooldownManager;
 import arc.arc.util.TextUtil;
 import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.text.Component;
@@ -17,6 +18,7 @@ import org.bukkit.scheduler.BukkitTask;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListSet;
 
 @Slf4j
 public class GPTManager {
@@ -24,6 +26,7 @@ public class GPTManager {
     private static final Map<String, GPTEntity> entities = new ConcurrentHashMap<>();
     private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "gpt.yml");
     private static final Map<UUID, List<Conversation>> conversations = new ConcurrentHashMap<>();
+    private static final Set<UUID> awaitingResponse = new ConcurrentSkipListSet<>();
     private static BukkitTask cleanupTask;
 
     public static void init() {
@@ -58,50 +61,62 @@ public class GPTManager {
     }
 
     public static void processMessage(AsyncPlayerChatEvent chatEvent) {
-        List<Conversation> conv = conversations.get(chatEvent.getPlayer().getUniqueId());
-        if (conv == null) return;
-        if (conv.isEmpty()) return;
+        if (awaitingResponse.contains(chatEvent.getPlayer().getUniqueId())) {
+            return;
+        }
+        Player player = chatEvent.getPlayer();
+        String message = chatEvent.getMessage();
+        processMessage(message, player, true);
+    }
 
-        Location playerLocation = chatEvent.getPlayer().getLocation();
-        log.info("Looking for conversation for player {} at location {}", chatEvent.getPlayer().getName(), playerLocation);
+    public static CompletableFuture<Void> processMessage(String message, Player player, boolean appendCancel) {
+        List<Conversation> conv = conversations.get(player.getUniqueId());
+        if (conv == null) return CompletableFuture.completedFuture(null);
+        if (conv.isEmpty()) return CompletableFuture.completedFuture(null);
+
+        Location playerLocation = player.getLocation();
+        log.info("Looking for conversation for player {} at location {}", player.getName(), playerLocation);
         Conversation conversation;
         long now = System.currentTimeMillis();
         conversation = conv.stream()
-                .filter(c -> c.location.getWorld().getName().equals(playerLocation.getWorld().getName()) &&
-                        c.location.distance(playerLocation) < c.radius &&
-                        now - c.lastMessageTime < c.lifeTime)
+                .filter(c ->
+                        ((c.location.getWorld().getName().equals(playerLocation.getWorld().getName()) &&
+                                c.location.distance(playerLocation) < c.radius) || (c.radius < 0))
+                                && now - c.lastMessageTime < c.lifeTime)
                 .findFirst()
                 .orElse(null);
         if (conversation == null) {
-            log.info("Player {} is not in range of any conversation", chatEvent.getPlayer().getName());
-            return;
+            log.info("Player {} is not in range of any conversation", player.getName());
+            return CompletableFuture.completedFuture(null);
         }
-        log.info("Player {} is in range of conversation with entity {}", chatEvent.getPlayer().getName(), conversation.gptId);
-        String message = chatEvent.getMessage();
+        log.info("Player {} is in range of conversation with entity {}", player.getName(), conversation.gptId);
         if (message.startsWith("!")) message = message.substring(1);
-        getResponseAndSend(chatEvent.getPlayer(), message, conversation);
+        return getResponseAndSend(player, message, conversation, appendCancel);
     }
 
-    private static void getResponseAndSend(Player player, String message, Conversation conversation) {
-        getResponse(player, message, conversation.gptId, conversation.getArchetype())
+    private static CompletableFuture<Void> getResponseAndSend(Player player, String message, Conversation conversation, boolean appendCancel) {
+        awaitingResponse.add(player.getUniqueId());
+        return getResponse(player, message, conversation.gptId, conversation.getArchetype())
                 .thenAccept(response -> {
                     conversation.lastMessageTime = System.currentTimeMillis();
                     if (response.isEmpty()) {
                         log.warn("Empty response from GPT for player {}", player.getName());
+                        awaitingResponse.remove(player.getUniqueId());
                         return;
                     }
-                    Component responseMessage = formatMessage(response.get(), conversation);
+                    Component responseMessage = formatMessage(response.get(), conversation, appendCancel);
                     new BukkitRunnable() {
                         @Override
                         public void run() {
                             displayChatBubble(response.get(), conversation);
-                            if (config.bool("archetypes." + conversation.getArchetype() + ".send-to-all-in-range", true)) {
+                            if (conversation.privateConversation) {
+                                player.sendMessage(responseMessage);
+                            } else {
                                 conversation.getLocation()
                                         .getNearbyPlayers(conversation.getRadius())
                                         .forEach(p -> p.sendMessage(responseMessage));
-                            } else {
-                                player.sendMessage(responseMessage);
                             }
+                            awaitingResponse.remove(player.getUniqueId());
                         }
                     }.runTask(ARC.plugin);
                 });
@@ -122,16 +137,19 @@ public class GPTManager {
         HookRegistry.citizensHook.addChatBubble(conversation.npcId, list);
     }
 
-    private static Component formatMessage(String message, Conversation conversation) {
-        String format = config.string("message-format", "<gray><gold>%gpt_name%<gray> » <white>%message%\n" +
-                " <red><hover:show_text:'Нажмите, чтобы закончить'><click:run_command:/arc ai stop all>[Нажмите, чтобы закончить]</click></hover>");
+    private static Component formatMessage(String message, Conversation conversation, boolean appendCancel) {
+        String format = config.string("message-format", "<gray><gold>%gpt_name%<gray> » <white>%message%");
+        if (appendCancel)
+            format += config.string("cancel-appendix", "\n<red><hover:show_text:'Нажмите, чтобы закончить'><click:run_command:/arc ai stop %id%>[Нажмите, чтобы закончить разговор]</click></hover>");
         format = format.replace("%gpt_name%", conversation.getTalkerName());
         format = format.replace("%message%", message);
+        format = format.replace("%id%", conversation.gptId);
         return TextUtil.mm(format);
     }
 
     public static void startConversation(Player player, String id, String archetype, String talkerName,
-                                         Location location, double radius, long lifeTime, String initialMessage, Integer npcId) {
+                                         Location location, double radius, long lifeTime, String initialMessage,
+                                         String endMessage, Integer npcId, boolean privateConversation) {
         String playerName = player.getName();
         entities.computeIfAbsent(id, key -> new GPTEntity(config, archetype, id));
         List<Conversation> convs = conversations.computeIfAbsent(player.getUniqueId(), key -> new ArrayList<>());
@@ -149,10 +167,12 @@ public class GPTManager {
                 .lifeTime(lifeTime)
                 .talkerName(talkerName)
                 .npcId(npcId)
+                .endMessage(endMessage)
+                .privateConversation(privateConversation)
                 .build());
         log.info("Player {} started conversation with entity {}", playerName, id);
         if (initialMessage != null) {
-            getResponseAndSend(player, initialMessage, convs.getLast());
+            getResponseAndSend(player, initialMessage, convs.getLast(), false);
         }
     }
 
@@ -161,12 +181,30 @@ public class GPTManager {
         if (convs == null) {
             return;
         }
-        convs.removeIf(c -> c.gptId.equals(id));
+        Conversation conversation = null;
+        for (Conversation c : convs) {
+            if (c.gptId.equals(id)) {
+                conversation = c;
+                break;
+            }
+        }
         log.info("Player {} ended conversation with entity {}", player.getName(), id);
+        if (conversation == null) {
+            log.warn("Player {} tried to end conversation with entity {} but it was not found", player.getName(), id);
+            return;
+        }
+        if (conversation.endMessage != null) {
+            processMessage(conversation.endMessage, player, false)
+                    .thenAccept(a -> player.sendMessage(config.componentDef("end-message", "<red>Вы закончили разговор")));
+        } else {
+            player.sendMessage(config.componentDef("end-message", "<red>Вы закончили разговор"));
+        }
+        convs.remove(conversation);
     }
 
     public static void endAllConversations(Player player) {
         List<Conversation> convs = conversations.remove(player.getUniqueId());
+        player.sendMessage(config.componentDef("end-all-message", "<red>Вы закончили все разговоры"));
         if (convs == null) {
             return;
         }

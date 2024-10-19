@@ -1,7 +1,6 @@
 package arc.arc.sync.base;
 
 import arc.arc.ARC;
-import arc.arc.configs.MainConfig;
 import arc.arc.network.RedisManager;
 import com.google.gson.Gson;
 import lombok.extern.log4j.Log4j2;
@@ -58,7 +57,7 @@ public class SyncRepo<T extends SyncData> {
             return;
         }
         log.trace("Applying data: "+data.getClass()+" "+data.uuid());
-        if (data.server().equals(MainConfig.server)) return;
+        if (data.server().equals(ARC.serverName)) return;
         dataApplier.accept(data);
     }
 

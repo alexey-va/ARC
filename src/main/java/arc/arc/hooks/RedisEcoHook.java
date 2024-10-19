@@ -1,6 +1,8 @@
 package arc.arc.hooks;
 
+import arc.arc.ARC;
 import dev.unnm3d.rediseconomy.api.RedisEconomyAPI;
+import org.bukkit.Bukkit;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -11,6 +13,15 @@ import java.util.concurrent.CompletableFuture;
 public class RedisEcoHook {
 
     public record Account(String name, UUID uuid, double balance) {
+    }
+
+    private static RedisEcoListener listener;
+
+    public RedisEcoHook() {
+        if (listener == null) {
+            listener = new RedisEcoListener();
+            Bukkit.getPluginManager().registerEvents(listener, ARC.plugin);
+        }
     }
 
     public CompletableFuture<List<Account>> getTopAccounts(int n) {
@@ -43,7 +54,7 @@ public class RedisEcoHook {
                             }
                         }
                         return accounts;
-                    } catch (Exception e){
+                    } catch (Exception e) {
                         e.printStackTrace();
                         return null;
                     }

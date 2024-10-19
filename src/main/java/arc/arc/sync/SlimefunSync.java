@@ -1,7 +1,6 @@
 package arc.arc.sync;
 
 import arc.arc.ARC;
-import arc.arc.configs.MainConfig;
 import arc.arc.sync.base.*;
 import io.github.thebusybiscuit.slimefun4.api.events.PlayerRightClickEvent;
 import io.github.thebusybiscuit.slimefun4.api.items.SlimefunItem;
@@ -102,7 +101,7 @@ public class SlimefunSync implements Sync {
             SlimefunDataDTO slimefunDataDTO = new SlimefunDataDTO();
             slimefunDataDTO.setUuid(uuid);
             slimefunDataDTO.setTimestamp(System.currentTimeMillis());
-            slimefunDataDTO.setServer(MainConfig.server);
+            slimefunDataDTO.setServer(ARC.serverName);
 
             // Serializing researches
             slimefunDataDTO.setResearches(pp.getResearches().stream().map(Research::getID).toList());

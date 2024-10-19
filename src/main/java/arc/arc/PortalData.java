@@ -13,10 +13,13 @@ import org.bukkit.entity.Player;
 @AllArgsConstructor
 @NoArgsConstructor
 public class PortalData {
-
-    HuskHomesHook.MyTeleport myTeleport;
+    ActionType actionType;
+    HuskHomesHook.HuskTeleport huskTeleport;
     Location location;
-    Player player;
-    @Builder.Default
-    boolean isHusk = false;
+    String command;
+
+    public enum ActionType {
+        COMMAND, HUSK, TELEPORT
+    }
+
 }

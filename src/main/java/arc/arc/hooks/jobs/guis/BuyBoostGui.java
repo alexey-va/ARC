@@ -63,7 +63,7 @@ public class BuyBoostGui extends ChestGui {
             readBoosts(type);
         }
         var nonEmptyTypes = Arrays.stream(JobsBoost.Type.values()).filter(t -> !boosts.get(t).isEmpty()).toList();
-        if(!nonEmptyTypes.isEmpty()) type = nonEmptyTypes.get(0);
+        if (!nonEmptyTypes.isEmpty()) type = nonEmptyTypes.get(0);
 
         calculateRows();
 
@@ -93,11 +93,11 @@ public class BuyBoostGui extends ChestGui {
                 if (item != null) items.add(item);
             }
         }
-        int x = 0, y=0;
-        for(var guiItem : items){
-            if(x == 3) x++;
-            pane.addItem(guiItem, x++,y);
-            if(x == 7){
+        int x = 0, y = 0;
+        for (var guiItem : items) {
+            if (x == 3) x++;
+            pane.addItem(guiItem, x++, y);
+            if (x == 7) {
                 x = 0;
                 y++;
             }
@@ -260,7 +260,6 @@ public class BuyBoostGui extends ChestGui {
         pane.addItem(backItem, 0, rows - 1);
 
 
-
         TypeStackData typeStackData = getTypeStackData(type);
         typeItem = new ItemStackBuilder(typeStackData.material)
                 .modelData(typeStackData.modelData)
@@ -301,12 +300,14 @@ public class BuyBoostGui extends ChestGui {
         this.addPane(pane);
     }
 
-    record TypeStackData(Material material, int modelData){}
+    record TypeStackData(Material material, int modelData) {
+    }
+
     private TypeStackData getTypeStackData(JobsBoost.Type type) {
         Material material = Material.GOLD_INGOT;
         int modelData = 0;
         if (type == JobsBoost.Type.EXP) material = Material.EXPERIENCE_BOTTLE;
-        if (type == JobsBoost.Type.MONEY){
+        if (type == JobsBoost.Type.MONEY) {
             material = Material.STICK;
             modelData = 11138;
         }

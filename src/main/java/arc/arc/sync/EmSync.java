@@ -1,7 +1,6 @@
 package arc.arc.sync;
 
 import arc.arc.ARC;
-import arc.arc.configs.MainConfig;
 import arc.arc.sync.base.Context;
 import arc.arc.sync.base.Sync;
 import arc.arc.sync.base.SyncData;
@@ -133,7 +132,7 @@ public class EmSync implements Sync {
 
         return EmDataDTO.builder()
                 .timestamp(System.currentTimeMillis())
-                .server(MainConfig.server)
+                .server(ARC.serverName)
                 .uuid(uuid)
                 .currency(pd.getCurrency())
                 .level(pd.getActiveGuildLevel())

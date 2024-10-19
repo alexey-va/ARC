@@ -15,6 +15,7 @@ import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Material;
+import org.bukkit.boss.BarColor;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
@@ -24,6 +25,7 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 import static arc.arc.util.TextUtil.strip;
+import static org.bukkit.boss.BarColor.*;
 
 //@Setter
 @Getter
@@ -140,7 +142,7 @@ public class BoardEntry extends RepoData<BoardEntry> {
                 Component component = strip(LegacyComponentSerializer.legacyAmpersand().deserialize(builder.toString()));
                 if (!components.isEmpty()) {
                     List<Component> children = components.getLast().children();
-                    if(!children.isEmpty()) {
+                    if (!children.isEmpty()) {
                         Style style = children.getLast().style();
                         Component pre = Component.text("", style);
                         component = pre.append(component);
@@ -193,53 +195,53 @@ public class BoardEntry extends RepoData<BoardEntry> {
             positiveRatings.remove(name);
             negativeRatings.add(name);
         }
-       // System.out.println("Rating: " + name + " " + i);
+        // System.out.println("Rating: " + name + " " + i);
         dirtify();
     }
 
     public void report(String name) {
         reports.add(name);
-       // System.out.println("Reporting: " + name);
+        // System.out.println("Reporting: " + name);
         dirtify();
     }
 
     public void changeText(String text) {
         if (Objects.equals(text, this.text)) return;
         this.text = text;
-       // System.out.println("setting text");
+        // System.out.println("setting text");
         dirtify();
     }
 
     public void changeTitle(String title) {
         if (Objects.equals(title, this.title)) return;
         this.title = title;
-       // System.out.println("setting title");
+        // System.out.println("setting title");
         dirtify();
     }
 
     public void changeIcon(ItemIcon icon) {
         if (Objects.equals(icon, this.icon)) return;
         this.icon = icon;
-       // System.out.println("setting icon");
+        // System.out.println("setting icon");
         dirtify();
     }
 
     public void changeType(Type type) {
         if (Objects.equals(type, this.type)) return;
         this.type = type;
-       // System.out.println("setting type");
+        // System.out.println("setting type");
         dirtify();
     }
 
     public void changeLastShown(long lastShown) {
         if (this.lastShown == lastShown) return;
         this.lastShown = lastShown;
-       // System.out.println("setting last shown");
+        // System.out.println("setting last shown");
         dirtify();
     }
 
-    private void dirtify(){
-       // System.out.println("Making it dirty");
+    private void dirtify() {
+        // System.out.println("Making it dirty");
         setDirty(true);
         //setLastUpdated(System.currentTimeMillis());
     }
@@ -251,7 +253,7 @@ public class BoardEntry extends RepoData<BoardEntry> {
 
     @Override
     public boolean isRemove() {
-        return System.currentTimeMillis()-timestamp > BoardConfig.secondsLifetime * 1000L;
+        return System.currentTimeMillis() - timestamp > BoardConfig.secondsLifetime * 1000L;
     }
 
     @Override
@@ -271,16 +273,16 @@ public class BoardEntry extends RepoData<BoardEntry> {
     }
 
     public enum Type {
-        BUY("&aПокупаю", Material.GOLD_INGOT, "red"),
-        SELL("&eПродаю", Material.CHEST, "blue"),
-        LOOKING_FOR("&6Ищу человека", Material.PLAYER_HEAD, "yellow"),
-        INFO("&3Сообщаю", Material.FLOWER_BANNER_PATTERN, "white");
+        BUY("&aПокупаю", Material.GOLD_INGOT, RED),
+        SELL("&eПродаю", Material.CHEST, BLUE),
+        LOOKING_FOR("&6Ищу человека", Material.PLAYER_HEAD, YELLOW),
+        INFO("&3Сообщаю", Material.FLOWER_BANNER_PATTERN, WHITE);
 
         public final Component name;
         public final Material icon;
-        public final String color;
+        public final BarColor color;
 
-        Type(String s, Material material, String color) {
+        Type(String s, Material material, BarColor color) {
             name = strip(LegacyComponentSerializer.legacyAmpersand().deserialize(s));
             icon = material;
             this.color = color;

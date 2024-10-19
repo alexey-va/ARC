@@ -1,6 +1,6 @@
 package arc.arc.network;
 
-import arc.arc.configs.MainConfig;
+import arc.arc.ARC;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -20,7 +20,7 @@ public class ServerLocation {
     float yaw,pitch;
 
     public static ServerLocation of(Location loc) {
-        return new ServerLocation(MainConfig.server, loc.getWorld().getName(),
+        return new ServerLocation(ARC.serverName, loc.getWorld().getName(),
                 loc.getX(), loc.getY(), loc.getZ(), loc.getYaw(), loc.getPitch());
     }
 
@@ -31,7 +31,7 @@ public class ServerLocation {
     }
 
     public boolean onThisServer(){
-        return server.equals(MainConfig.server);
+        return server.equals(ARC.serverName);
     }
 
 }

@@ -43,12 +43,12 @@ public class SyncManager {
     }
 
     public static void playerJoin(UUID uuid) {
-        log.trace("Player join sync: " + uuid);
+        log.trace("Player join sync: {}", uuid);
         syncMap.values().forEach(sync -> sync.playerJoin(uuid));
     }
 
     public static void playerQuit(UUID uuid) {
-        log.trace("Player quit sync: " + uuid);
+        log.trace("Player quit sync: {}", uuid);
         syncMap.values().forEach(sync -> sync.playerQuit(uuid));
     }
 
@@ -63,7 +63,7 @@ public class SyncManager {
                 for (Player player : Bukkit.getOnlinePlayers()) {
                     Bukkit.getScheduler().runTaskLater(ARC.plugin, () -> {
                         if (player == null || !player.isOnline()) return;
-                        log.trace("Forcing save for " + player.getName() + " with sync " + sync.getClass().getSimpleName());
+                        log.trace("Forcing save for {} with sync {}", player.getName(), sync.getClass().getSimpleName());
                         sync.forceSave(player.getUniqueId());
                     }, delay);
                     delay += 1;

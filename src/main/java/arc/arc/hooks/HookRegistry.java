@@ -13,7 +13,6 @@ import arc.arc.hooks.lands.LandsHook;
 import arc.arc.hooks.lootchest.LootChestHook;
 import arc.arc.hooks.luckperms.LuckPermsHook;
 import arc.arc.hooks.packetevents.PacketEventsHook;
-import arc.arc.hooks.ps.PSHook;
 import arc.arc.hooks.slimefun.SFHook;
 import arc.arc.hooks.viaversion.ViaVersionHook;
 import arc.arc.hooks.worldguard.WGHook;
@@ -30,7 +29,6 @@ import static org.bukkit.Bukkit.getServer;
 public class HookRegistry {
 
 
-    public static PSHook psHook;
     public static LandsHook landsHook;
     public static HuskHomesHook huskHomesHook;
     public static PartiesHook partiesHook;
@@ -69,10 +67,6 @@ public class HookRegistry {
     public void setupHooks() {
         registerEvents();
 
-        if (psHook != null) psHook.init();
-        papiHook = new PAPIHook();
-        papiHook.register();
-
 
         if (commandListener == null) {
             Config config = ConfigManager.of(ARC.plugin.getDataPath(), "portal.yml");
@@ -87,14 +81,15 @@ public class HookRegistry {
 
     public void cancelTasks() {
         if (emHook != null) emHook.cancel();
-        if (psHook != null) psHook.cancel();
     }
 
     private void registerEvents() {
-        if (Bukkit.getPluginManager().isPluginEnabled("ProtectionStones") && psHook == null) {
-            log.info("Registering ProtectionStones hook");
-            psHook = new PSHook();
-            Bukkit.getPluginManager().registerEvents(psHook, ARC.plugin);
+        if (getServer().getPluginManager().getPlugin("PlaceholderAPI") != null) {
+            if (getServer().getPluginManager().getPlugin("PlaceholderAPI").isEnabled()) {
+                log.info("Registering PlaceholderAPI hook");
+                papiHook = new PAPIHook();
+                papiHook.register();
+            }
         }
         if (getServer().getPluginManager().getPlugin("WorldGuard") != null) {
             if (getServer().getPluginManager().getPlugin("WorldGuard").isEnabled()) {
@@ -153,12 +148,8 @@ public class HookRegistry {
                 redisEcoHook = new RedisEcoHook();
             }
         }
-        //if (getServer().getPluginManager().getPlugin("zTranslator") != null) {
-        //    if (getServer().getPluginManager().getPlugin("zTranslator").isEnabled()) {
         log.info("Registering Translator hook");
         translatorHook = new TranslatorHook();
-        //    }
-        //}
         if (getServer().getPluginManager().getPlugin("LuckPerms") != null) {
             if (getServer().getPluginManager().getPlugin("LuckPerms").isEnabled()) {
                 log.info("Registering LuckPerms hook");
@@ -245,8 +236,8 @@ public class HookRegistry {
             }
         }
         if ((Bukkit.getPluginManager().isPluginEnabled("EconomyShopGUI") || Bukkit.getPluginManager().isPluginEnabled("EconomyShopGUI-Premium")) && shopHook == null) {
+            log.info("Registering Shop hook");
             shopHook = new ShopHook();
-            Bukkit.getPluginManager().registerEvents(shopHook, ARC.plugin);
         }
 
         if (joinListener == null) {

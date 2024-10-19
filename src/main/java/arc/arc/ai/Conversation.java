@@ -23,5 +23,8 @@ public class Conversation {
     long lifeTime;
     String talkerName;
     Integer npcId;
+    String endMessage;
+    @Builder.Default
+    boolean privateConversation = true;
 
 }

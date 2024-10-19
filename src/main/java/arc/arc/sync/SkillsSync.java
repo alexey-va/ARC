@@ -1,7 +1,6 @@
 package arc.arc.sync;
 
 import arc.arc.ARC;
-import arc.arc.configs.MainConfig;
 import arc.arc.sync.base.Context;
 import arc.arc.sync.base.Sync;
 import arc.arc.sync.base.SyncData;
@@ -110,7 +109,7 @@ public class SkillsSync implements Sync {
                 .mana(user.getMana())
                 .uuid(uuid)
                 .timestamp(System.currentTimeMillis())
-                .server(MainConfig.server)
+                .server(ARC.serverName)
                 .build();
     }
 

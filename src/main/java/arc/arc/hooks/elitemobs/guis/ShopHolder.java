@@ -1,6 +1,8 @@
 package arc.arc.hooks.elitemobs.guis;
 
+import arc.arc.ARC;
 import arc.arc.configs.Config;
+import arc.arc.configs.ConfigManager;
 import arc.arc.hooks.elitemobs.EMHook;
 import com.magmaguy.elitemobs.items.ItemTagger;
 import com.magmaguy.elitemobs.items.ItemWorthCalculator;
@@ -19,10 +21,9 @@ import java.util.*;
 public class ShopHolder {
 
     final EMHook emHook;
-    final Config config;
+    final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "elitemobs.yml");
 
-    private Map<UUID, Shop> items = new HashMap<>();
-
+    private final Map<UUID, Shop> items = new HashMap<>();
 
     public Shop getShop(Player player) {
         int gearSize = config.integer("shop.gear-size", 36);
@@ -57,7 +58,7 @@ public class ShopHolder {
 
             Random random = new Random();
             Set<String> titles = new HashSet<>();
-            for (int i = 0; i < size*1.5; i++) {
+            for (int i = 0; i < size * 1.5; i++) {
                 double gauss = random.nextGaussian(tier * 0.8, tier * 0.15);
                 int rTier = Math.max(1, Math.min(tier + 3, (int) Math.round(gauss)));
                 ItemStack stack = emHook.generateDrop(rTier, player, false, 0.05);
@@ -65,11 +66,11 @@ public class ShopHolder {
 
                 Component display = stack.getItemMeta().displayName();
                 String text = display == null ? "" : PlainTextComponentSerializer.plainText().serialize(display);
-                if(titles.contains(text)) continue;
+                if (titles.contains(text)) continue;
                 titles.add(text);
                 double price = ItemTagger.getItemValue(stack);
                 if (price <= 0) price = ItemWorthCalculator.determineItemWorth(stack, player);
-                ShopItem item = new ShopItem(stack, price*2);
+                ShopItem item = new ShopItem(stack, price * 2);
                 gear.add(item);
             }
             gear.sort(Comparator.comparingInt(o -> o.stack.getType().ordinal()));
@@ -82,9 +83,9 @@ public class ShopHolder {
             Set<Material> food = Set.of(
                     Material.COOKED_BEEF, Material.COOKED_CHICKEN, Material.COOKED_COD, Material.COOKED_MUTTON, Material.COOKED_PORKCHOP, Material.COOKED_RABBIT, Material.COOKED_SALMON,
                     Material.BREAD, Material.APPLE, Material.GOLDEN_APPLE, Material.ENCHANTED_GOLDEN_APPLE, Material.CARROT, Material.GOLDEN_CARROT, Material.POTATO, Material.BAKED_POTATO
-                    );
+            );
             Set<String> titles = new HashSet<>();
-            for (int i = 0; i < size*1.5; i++) {
+            for (int i = 0; i < size * 1.5; i++) {
                 double gauss = random.nextGaussian(tier * 0.75, tier * 0.15);
                 int rTier = Math.max(1, Math.min(tier - 5, (int) Math.round(gauss)));
                 ItemStack stack = emHook.generateDrop(rTier, player, true, 0.1);
@@ -93,17 +94,17 @@ public class ShopHolder {
 
                 Component display = stack.getItemMeta().displayName();
                 String text = display == null ? "" : PlainTextComponentSerializer.plainText().serialize(display);
-                if(titles.contains(text)) continue;
+                if (titles.contains(text)) continue;
                 titles.add(text);
 
                 double price = ItemTagger.getItemValue(stack);
                 if (price <= 0) price = ItemWorthCalculator.determineItemWorth(stack, player);
-                if(food.contains(stack.getType())){
+                if (food.contains(stack.getType())) {
                     stack.setAmount(16);
-                    price*=16;
+                    price *= 16;
                 }
 
-                ShopItem item = new ShopItem(stack, price*2);
+                ShopItem item = new ShopItem(stack, price * 2);
                 trinkets.add(item);
             }
             trinkets.sort(Comparator.comparingInt(o -> o.stack.getType().ordinal()));
