@@ -11,6 +11,7 @@ import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.entity.Player;
+import org.jetbrains.annotations.NotNull;
 
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
@@ -253,6 +254,7 @@ public class TextUtil {
     private static final Pattern MINIMESSAGE_TAG_PATTERN = Pattern.compile("<[a-zA-Z_]+>");
 
     public static List<String> splitLoreString(String input, int maxLength, int nSpaces) {
+        if (input == null) return List.of();
         List<String> result = new ArrayList<>();
         StringBuilder currentLine = new StringBuilder();
         String currentFormat = ""; // Для сохранения текущего форматирования (цвета, жирности и т.д.)
@@ -298,5 +300,9 @@ public class TextUtil {
         // Удаляем теги и проверяем, остались ли символы
         String lineWithoutTags = line.toString().replaceAll(MINIMESSAGE_TAG_PATTERN.pattern(), "");
         return !lineWithoutTags.trim().isEmpty();
+    }
+
+    public static String toMM(@NotNull Component component) {
+        return MiniMessage.miniMessage().serialize(component);
     }
 }

@@ -7,9 +7,9 @@ import me.gypopo.economyshopgui.objects.ShopItem;
 import me.gypopo.economyshopgui.util.Transaction;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.inventory.ItemStack;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 public class ShopListener implements Listener {
@@ -26,10 +26,10 @@ public class ShopListener implements Listener {
     public void onShopSell(PostTransactionEvent event) {
         if (!sellTypes.contains(event.getTransactionType())) return;
         if (event.getTransactionResult() != Transaction.Result.SUCCESS) return;
-        ShopItem shopItem = event.getShopItem();
-        if (shopItem == null) return;
-        ItemStack item = shopItem.getShopItem();
-        if (item == null) return;
+        //ShopItem shopItem = event.getShopItem();
+        //if (shopItem == null) return;
+        //ItemStack item = shopItem.getShopItem();
+        //if (item == null) return;
         String playerName = event.getPlayer().getName();
         double amount = event.getPrice();
         String comment = comment(event.getItems());
@@ -37,6 +37,7 @@ public class ShopListener implements Listener {
     }
 
     private String comment(Map<ShopItem, Integer> map) {
+        if (map == null || map.isEmpty()) return "unknown";
         StringBuilder sb = new StringBuilder();
         for (Map.Entry<ShopItem, Integer> entry : map.entrySet()) {
             sb.append(entry.getValue()).append(" ").append(entry.getKey().getShopItem().getType()).append(", ");
@@ -51,12 +52,16 @@ public class ShopListener implements Listener {
     public void onShopBuy(PostTransactionEvent event) {
         if (!buyTypes.contains(event.getTransactionType())) return;
         if (event.getTransactionResult() != Transaction.Result.SUCCESS) return;
-        ShopItem shopItem = event.getShopItem();
-        if (shopItem == null) return;
-        ItemStack item = shopItem.getShopItem();
-        if (item == null) return;
+        //ShopItem shopItem = event.getShopItem();
+        //if (shopItem == null) return;
+        //ItemStack item = shopItem.getShopItem();
+        //if (item == null) return;
         String playerName = event.getPlayer().getName();
         double amount = event.getPrice();
-        AuditManager.operation(playerName, -amount, Type.SHOP, "Bought " + event.getShopItem().getShopItem().getType().name());
+        String appendix = Optional.ofNullable(event.getShopItem())
+                .map(ShopItem::getShopItem)
+                .map(i -> i.getType().name())
+                .orElse("unknown");
+        AuditManager.operation(playerName, -amount, Type.SHOP, "Bought " + appendix);
     }
 }

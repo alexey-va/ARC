@@ -2,10 +2,14 @@ package arc.arc.board;
 
 import arc.arc.ARC;
 import arc.arc.configs.BoardConfig;
+import arc.arc.configs.Config;
+import arc.arc.configs.ConfigManager;
 import arc.arc.network.repos.RedisRepo;
 import arc.arc.xserver.XCondition;
 import arc.arc.xserver.XMessage;
 import arc.arc.xserver.announcements.AnnounceManager;
+import lombok.extern.slf4j.Slf4j;
+import org.bukkit.boss.BarColor;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -13,12 +17,14 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 public class Board {
 
     private static final BoardEntryCache cache = new BoardEntryCache();
     static RedisRepo<BoardEntry> repo;
     static BukkitTask updateCacheTask;
     static BukkitTask announceTask;
+    private static final Config config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "board.yml");
 
     public static void init() {
         createRepo();
@@ -26,8 +32,7 @@ public class Board {
     }
 
     private static void createRepo() {
-        if (repo != null) repo.close();
-        repo = RedisRepo.builder(BoardEntry.class)
+        if (repo == null) repo = RedisRepo.builder(BoardEntry.class)
                 .loadAll(true)
                 .redisManager(ARC.redisManager)
                 .storageKey("arc.board")
@@ -55,19 +60,27 @@ public class Board {
             public void run() {
                 if (BoardConfig.mainServer) announceNext();
             }
-        }.runTaskTimer(ARC.plugin, 120L, 20L * BoardConfig.secondsAnnounce);
+        }.runTaskTimer(ARC.plugin, 120L, 20L * config.integer("seconds-announce", 600));
     }
 
     public static void announceNext() {
+        int seconds = config.integer("seconds-boss-bar", 10);
+        int keepFor = config.integer("keep-for", 10);
+        BarColor color = BarColor.valueOf(config.string("color", "YELLOW").toUpperCase());
         repo.all().stream().min(Comparator.comparingLong(BoardEntry::getLastShown))
                 .ifPresent(e -> {
+                    log.info("Announcing board entry: {}", e);
                     e.changeLastShown(System.currentTimeMillis());
                     XMessage xMessage = XMessage.builder()
                             .serializedMessage("&7[&6" + e.playerName + "&7]&r " + e.title)
                             .serializationType(XMessage.SerializationType.LEGACY)
                             .type(XMessage.Type.BOSS_BAR)
-                            .barColor(e.type.color)
-                            .seconds(10)
+                            .bossBarData(XMessage.BossBarData.builder()
+                                    .color(color)
+                                    .name("board")
+                                    .keepFor(keepFor)
+                                    .seconds(seconds)
+                                    .build())
                             .conditions(List.of(XCondition.ofPermission(BoardConfig.receivePermission)))
                             .build();
                     AnnounceManager.announce(xMessage);

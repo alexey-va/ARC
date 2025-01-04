@@ -6,13 +6,10 @@ import arc.arc.board.Board;
 import arc.arc.bschests.PersonalLootManager;
 import arc.arc.commands.*;
 import arc.arc.commands.tabcompletes.InvestTabComplete;
-import arc.arc.commands.tabcompletes.LocationPoolTabComplete;
-import arc.arc.commands.tabcompletes.TreasureHuntTabComplete;
-import arc.arc.commands.tabcompletes.TreasurePoolTabcomplete;
 import arc.arc.configs.*;
 import arc.arc.eliteloot.EliteLootManager;
 import arc.arc.farm.FarmManager;
-import arc.arc.generic.treasure.TreasurePool;
+import arc.arc.common.treasure.TreasurePool;
 import arc.arc.hooks.HookRegistry;
 import arc.arc.leafdecay.LeafDecayManager;
 import arc.arc.misc.JoinMessages;
@@ -26,7 +23,7 @@ import arc.arc.stock.StockPlayerManager;
 import arc.arc.store.StoreManager;
 import arc.arc.sync.*;
 import arc.arc.treasurechests.TreasureHuntManager;
-import arc.arc.treasurechests.locationpools.LocationPoolManager;
+import arc.arc.common.locationpools.LocationPoolManager;
 import arc.arc.util.CooldownManager;
 import arc.arc.util.HeadTextureCache;
 import arc.arc.util.ParticleManager;
@@ -37,6 +34,7 @@ import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.Bukkit;
+import org.bukkit.event.server.ServerCommandEvent;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -47,7 +45,6 @@ public final class ARC extends JavaPlugin {
     public static String serverName;
     public static PluginMessenger pluginMessenger;
 
-    TreasureHuntConfig treasureHuntConfig;
     public LocationPoolConfig locationPoolConfig;
     public BoardConfig boardConfig;
     @Getter
@@ -98,9 +95,6 @@ public final class ARC extends JavaPlugin {
         locationPoolConfig = new LocationPoolConfig();
         LocationPoolManager.init();
 
-        System.out.println("Loading treasure hunt config");
-        treasureHuntConfig = new TreasureHuntConfig();
-
         System.out.println("Loading board config");
         boardConfig = new BoardConfig();
 
@@ -123,6 +117,7 @@ public final class ARC extends JavaPlugin {
 
         LeafDecayManager.reload();
 
+        log.info("Loading treasure pools");
         TreasurePool.loadAllTreasures();
 
         PersonalLootManager.reload();
@@ -130,6 +125,11 @@ public final class ARC extends JavaPlugin {
         AuditManager.init();
 
         startSyncs();
+
+        TreasureHuntManager.loadTreasureHuntTypes();
+
+        log.info("Starting board");
+        Board.init();
     }
 
     @Override
@@ -137,6 +137,8 @@ public final class ARC extends JavaPlugin {
         SyncManager.saveAll();
 
         RedisRepo.saveAll();
+
+        TreasurePool.saveAllTreasurePools();
 
         hookRegistry.cancelTasks();
         TreasureHuntManager.stopAll();
@@ -162,8 +164,6 @@ public final class ARC extends JavaPlugin {
         System.out.println("Setting up economy");
         setupEconomy();
 
-        System.out.println("Setting up board");
-        Board.init();
 
         System.out.println("Initializing store manager");
         StoreManager.init();
@@ -228,15 +228,6 @@ public final class ARC extends JavaPlugin {
     @SuppressWarnings("ConstantConditions")
     private void registerCommands() {
         getCommand("arc").setExecutor(new Command());
-        getCommand("mex").setExecutor(new MexCommand());
-        getCommand("cforward").setExecutor(new CforwardCommand());
-        getCommand("locpool").setExecutor(new LocPoolCommand());
-        getCommand("locpool").setTabCompleter(new LocationPoolTabComplete());
-        getCommand("treasure-hunt").setExecutor(new TreasureHuntCommand());
-        getCommand("treasure-hunt").setTabCompleter(new TreasureHuntTabComplete());
-        getCommand("treasure-pool").setExecutor(new TreasurePoolCommand());
-        getCommand("treasure-pool").setTabCompleter(new TreasurePoolTabcomplete());
-
 
         BuildBookCommand buildBookCommand = new BuildBookCommand();
         getCommand("build-book").setExecutor(buildBookCommand);
@@ -318,6 +309,13 @@ public final class ARC extends JavaPlugin {
         for (Object arg : args) {
             toPrint = toPrint.replaceFirst("\\{}", arg == null ? "null" : arg.toString());
         }
+    }
+
+    public static void trySeverCommand(String command) {
+        ServerCommandEvent event = new ServerCommandEvent(Bukkit.getConsoleSender(), command);
+        Bukkit.getPluginManager().callEvent(event);
+        if (event.isCancelled()) return;
+        Bukkit.dispatchCommand(event.getSender(), event.getCommand());
     }
 
 

@@ -27,22 +27,23 @@ public class StockMarket {
     private static Map<String, ConfigStock> configStocks = new ConcurrentHashMap<>();
 
     public static void init() {
-        if (repo != null) repo.close();
-        repo = RedisRepo.builder(Stock.class)
-                .loadAll(true)
-                .redisManager(ARC.redisManager)
-                .storageKey("arc.stocks")
-                .updateChannel("arc.stocks_update")
-                .id("stocks")
-                .backupFolder(ARC.plugin.getDataFolder().toPath().resolve("backups/stocks"))
-                .saveInterval(20L)
-                .build();
+        if (repo == null) {
+            repo = RedisRepo.builder(Stock.class)
+                    .loadAll(true)
+                    .redisManager(ARC.redisManager)
+                    .storageKey("arc.stocks")
+                    .updateChannel("arc.stocks_update")
+                    .id("stocks")
+                    .backupFolder(ARC.plugin.getDataFolder().toPath().resolve("backups/stocks"))
+                    .saveInterval(20L)
+                    .build();
+        }
         startTasks();
+        HistoryManager.init();
     }
 
     public static void startTasks() {
         cancelTasks();
-        HistoryManager.startTasks();
 
         updateTask = new BukkitRunnable() {
             @Override
@@ -171,8 +172,8 @@ public class StockMarket {
         }
     }
 
-    public static boolean isEnabledStock(Stock stock){
-        if(stock == null) return false;
+    public static boolean isEnabledStock(Stock stock) {
+        if (stock == null) return false;
         return configStocks().stream().map(ConfigStock::getSymbol).collect(Collectors.toSet()).contains(stock.getSymbol());
     }
 

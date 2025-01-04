@@ -15,6 +15,7 @@ import org.bukkit.scheduler.BukkitTask;
 
 import java.io.*;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -23,10 +24,11 @@ public class HistoryManager {
 
     private static BukkitTask saveTask;
     private static final String SCRIPT_FILE = "plots.sh";
-    private static Map<String, List<StockHistory>> history = new ConcurrentHashMap<>();
+    private static final Map<String, List<StockHistory>> history = new ConcurrentHashMap<>();
     private static final Map<String, HighLow> highLows = new ConcurrentHashMap<>();
     @Setter
     private static HistoryMessager messager;
+    private static Path historyPath;
 
     public static void setHighLows(Map<String, HighLow> highLowMap) {
         highLows.clear();
@@ -41,6 +43,21 @@ public class HistoryManager {
     @NoArgsConstructor
     public static class HighLow {
         double high, low;
+    }
+
+    public static void init() {
+        historyPath = ARC.plugin.getDataFolder().toPath().resolve("stocks/history.json");
+        if (!Files.exists(historyPath)) {
+            try {
+                Files.createDirectories(historyPath.getParent());
+                Files.createFile(historyPath);
+            } catch (IOException e) {
+                log.error("Error creating history file", e);
+            }
+        }
+
+        loadFromFile();
+        startTasks();
     }
 
     public static void startTasks() {
@@ -80,7 +97,7 @@ public class HistoryManager {
                 }
                 System.out.println("Plotting took: " + (System.currentTimeMillis() - time) + "ms");
                 if (sendPackets) Bukkit.getScheduler().runTask(ARC.plugin,
-                        () -> Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "arc-invest -t:update"));
+                        () -> ARC.trySeverCommand("arc-invest -t:update"));
             } catch (Exception e) {
                 e.printStackTrace();
                 throw new RuntimeException(e);
@@ -100,20 +117,23 @@ public class HistoryManager {
     }
 
     static void saveHistory() {
+        log.info("Saving history size {}", history.values().stream().mapToInt(List::size).sum());
         evictOldHistory();
-        StockConfig.saveStockHistory();
+        saveToFile();
     }
 
     static void evictOldHistory() {
         long current = System.currentTimeMillis();
         for (var list : history.values()) {
+            //log.info("Evicting old history entries: {}", list.size());
             list.removeIf(sh -> current - sh.timestamp > 1000L * StockConfig.historyLifetime);
             Set<Long> seen = new HashSet<>();
-            List<StockHistory> stockHistories = new ArrayList<>();
+            List<StockHistory> duplicates = new ArrayList<>();
             for (var e : list) {
-                if (!seen.add(e.timestamp)) stockHistories.add(e);
+                if (!seen.add(e.timestamp)) duplicates.add(e);
             }
-            list.removeAll(stockHistories);
+            list.removeAll(duplicates);
+            //log.info("Evicted old history entries: {}", list.size());
         }
     }
 
@@ -122,11 +142,11 @@ public class HistoryManager {
     }
 
     static void add(String symbol, double price, long timestamp) {
-        history.merge(symbol, new ArrayList<>(List.of(new StockHistory(price, timestamp))),
-                (existingList, list) -> {
-                    existingList.addAll(list);
-                    return existingList;
-                });
+        history.compute(symbol, (s, list) -> {
+            if (list == null) list = new ArrayList<>();
+            list.add(new StockHistory(price, timestamp));
+            return list;
+        });
 
         highLows.merge(symbol, new HighLow(price, price),
                 (old, highLow) -> new HighLow(Math.max(old.high, highLow.high), Math.min(old.low, highLow.low)));
@@ -144,25 +164,25 @@ public class HistoryManager {
         return highLow.low;
     }
 
-    public static void loadFromFile(File file) {
+    public static void loadFromFile() {
         try {
             TypeToken<Map<String, List<HistoryManager.StockHistory>>> token = new TypeToken<>() {
             };
-            Map<String, List<HistoryManager.StockHistory>> history = Common.gson.fromJson(Files.newBufferedReader(file.toPath()), token);
+            BufferedReader bufferedReader = Files.newBufferedReader(historyPath);
+            Map<String, List<HistoryManager.StockHistory>> history = Common.gson.fromJson(bufferedReader, token);
+            bufferedReader.close();
             log.info("Loaded history: {}", history.values().stream().mapToInt(List::size).sum());
             appendHistory(history);
         } catch (Exception e) {
             log.error("Error loading history", e);
-            history = new ConcurrentHashMap<>();
-            StockConfig.saveStockHistory();
+            saveToFile();
         }
     }
 
-    public static void saveToFile(File file) {
+    public static void saveToFile() {
         try {
             String json = Common.prettyGson.toJson(history);
-            //if (!Files.exists(file.toPath())) Files.createFile(file.toPath());
-            Files.write(file.toPath(), json.getBytes());
+            Files.write(historyPath, json.getBytes());
         } catch (IOException e) {
             log.error("Error saving history", e);
             throw new RuntimeException(e);
@@ -172,9 +192,11 @@ public class HistoryManager {
     public static void appendHistory(Map<String, List<StockHistory>> history) {
         for (var entry : history.entrySet()) {
             for (var stockHistory : entry.getValue()) {
+                //log.info("Appending history: {} {} {}", entry.getKey(), stockHistory.cost, stockHistory.timestamp);
                 add(entry.getKey(), stockHistory.cost, stockHistory.timestamp);
             }
         }
+        log.info("Appended history: {}", history.values().stream().mapToInt(List::size).sum());
     }
 
 }

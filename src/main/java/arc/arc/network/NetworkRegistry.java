@@ -5,10 +5,6 @@ import arc.arc.hooks.lands.LandsMessager;
 import arc.arc.hooks.zauction.AuctionMessager;
 import arc.arc.stock.HistoryManager;
 import arc.arc.stock.HistoryMessager;
-import arc.arc.xserver.announcements.AnnounceManager;
-import arc.arc.xserver.announcements.AnnouncementMessager;
-import arc.arc.xserver.commands.CommandReceiver;
-import arc.arc.xserver.commands.CommandSender;
 import arc.arc.xserver.playerlist.PlayerListMessager;
 import lombok.RequiredArgsConstructor;
 
@@ -16,13 +12,8 @@ import lombok.RequiredArgsConstructor;
 public class NetworkRegistry {
 
     private final RedisManager redisManager;
-
     public static LandsMessager landsMessager;
-
     PlayerListMessager playerListMessager;
-    public static CommandSender commandSender;
-    CommandReceiver commandReceiver;
-
 
     public void init() {
         playerListMessager = new PlayerListMessager("arc.proxy_player_list");
@@ -32,10 +23,6 @@ public class NetworkRegistry {
         landsMessager.init();
         redisManager.registerChannelUnique(landsMessager.getRespChannel(), landsMessager);
         redisManager.registerChannelUnique(landsMessager.getReqChannel(), landsMessager);
-
-        commandSender = new CommandSender(redisManager, "arc.xcommands");
-        commandReceiver = new CommandReceiver("arc.xcommands");
-        redisManager.registerChannelUnique("arc.xcommands", commandReceiver);
 
         HistoryMessager historyMessager = new HistoryMessager("arc.high_lows_update", redisManager);
         redisManager.registerChannelUnique(historyMessager.channel, historyMessager);

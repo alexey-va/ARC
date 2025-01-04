@@ -399,6 +399,15 @@ public class Config {
         }
     }
 
+    public long longValue(String s, long def) {
+        Object o = getValueForKeyPath(s);
+        if (o == null) {
+            injectDeepKey(s, def);
+            return def;
+        }
+        return ((Number) o).longValue();
+    }
+
     public boolean exists(String s) {
         return getValueForKeyPath(s) != null;
     }

@@ -1,6 +1,7 @@
 package arc.arc;
 
 import arc.arc.board.guis.Inputable;
+import lombok.Data;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.title.Title;
@@ -12,6 +13,7 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+@Data
 public class TitleInput {
 
     private static final Map<Player, TitleInput> activeInputs = new ConcurrentHashMap<>();
@@ -31,8 +33,8 @@ public class TitleInput {
         this.id = id;
         this.timestamp = System.currentTimeMillis();
 
-        if(activeInputs.containsKey(player)){
-            System.out.println("Player" +player.getName()+" already has title input!");
+        if (activeInputs.containsKey(player)) {
+            System.out.println("Player" + player.getName() + " already has title input!");
         }
 
         activeInputs.put(player, this);
@@ -65,6 +67,8 @@ public class TitleInput {
         if (titleInput == null) return;
         if (!titleInput.inputable.satisfy(message, titleInput.id)) {
             titleInput.sendDenyMessage(message);
+            titleInput.setTimestamp(System.currentTimeMillis());
+            titleInput.sendTitle();
             return;
         }
         titleInput.inputable.setParameter(titleInput.id, message);
@@ -74,7 +78,7 @@ public class TitleInput {
         player.clearTitle();
     }
 
-    private void remove(){
+    private void remove() {
         activeInputs.remove(this.player);
     }
 

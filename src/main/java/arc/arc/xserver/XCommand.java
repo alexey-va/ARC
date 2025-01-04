@@ -9,7 +9,6 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -55,7 +54,7 @@ public class XCommand extends XAction {
             command = command.replace("%player_uuid%", playerUuid.toString());
         }
         if (sender == Sender.CONSOLE && playerName == null && playerUuid == null) {
-            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
+            ARC.trySeverCommand(command);
         } else {
             createAwaitingCommand();
         }
@@ -84,9 +83,9 @@ public class XCommand extends XAction {
                         @Override
                         public void run() {
                             if (finalPlayer.isOnline() && sender == Sender.PLAYER) {
-                                Bukkit.dispatchCommand(finalPlayer, command);
+                                finalPlayer.performCommand(command);
                             } else {
-                                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
+                                ARC.trySeverCommand(command);
                             }
                         }
                     }.runTaskLater(ARC.plugin, delay);

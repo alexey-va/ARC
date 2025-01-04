@@ -29,9 +29,6 @@ public class XArcCommand extends ArcCommand {
     private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "commands.yml");
 
     public XArcCommand() {
-        setDescription(config.componentDef("xcommand.description", "XCommand to send cross-server commands"));
-        setUsage(config.componentDef("xcommand.usage", "/x <command> -server:server -player:player"));
-        setName("x");
         setParameters(List.of(
                 Par.of("servers", ArgType.STRING, null),
                 Par.of("player", ArgType.STRING, null),

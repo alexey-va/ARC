@@ -72,14 +72,14 @@ public class CitizensHook {
 
     public void lookClose(int id) {
         try {
-            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "npc lookclose --id " + id);
+            ARC.trySeverCommand("npc lookclose --id " + id);
         } catch (Exception e) {
             log.debug("Error looking close", e);
         }
     }
 
     public void setSkin(int id, String link) {
-        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "npc skin --url " + link + " --id " + id);
+        ARC.trySeverCommand("npc skin --url " + link + " --id " + id);
     }
 
     public void deleteNpc(int id) {
@@ -96,12 +96,12 @@ public class CitizensHook {
 
     public void animateNpc(int id, Animation animation) {
         try {
-            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "npc panimate " + animation.name() + " --id " + id);
+            ARC.trySeverCommand("npc panimate " + animation.name() + " --id " + id);
         } catch (Exception e) {
             log.debug("Error animating npc", e);
         }
     }
-
+    @SuppressWarnings("deprecation")
     public void setMainHand(int id, ItemStack stack) {
         try {
             NPC npc = CitizensAPI.getNPCRegistry().getById(id);

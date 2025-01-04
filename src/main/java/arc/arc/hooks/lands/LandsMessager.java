@@ -5,7 +5,7 @@ import arc.arc.hooks.HookRegistry;
 import arc.arc.network.ChannelListener;
 import arc.arc.network.RedisManager;
 import arc.arc.network.RedisSerializer;
-import arc.arc.network.ServerLocation;
+import arc.arc.common.ServerLocation;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.bukkit.scheduler.BukkitRunnable;

@@ -1,6 +1,6 @@
 package arc.arc.hooks.lands;
 
-import arc.arc.network.ServerLocation;
+import arc.arc.common.ServerLocation;
 import lombok.*;
 
 import java.util.UUID;

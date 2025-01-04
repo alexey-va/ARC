@@ -11,21 +11,15 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.function.BiConsumer;
 
 @Data
 public abstract class ArcCommand implements CommandExecutor, TabCompleter {
 
-    ArcCommand origin;
-
-    String name;
     String permission;
-
-    Component description;
-    Component usage;
     Component noPermissionMessage;
 
-    Map<String, ArcCommand> subCommands = new HashMap<>();
+    public Map<String, BiConsumer<CommandSender, CommandContext>> subCommands = new HashMap<>();
     List<Par> parameters;
 
     public abstract boolean execute(CommandSender sender, CommandContext context);
@@ -43,35 +37,20 @@ public abstract class ArcCommand implements CommandExecutor, TabCompleter {
         }
 
         String subCommand = args.length > 0 ? args[0] : null;
-        boolean res;
-        if (subCommands.containsKey(subCommand)) {
-            ArcCommand subArcCommand = subCommands.get(subCommand);
-            String[] subArgs = new String[args.length - 1];
-            System.arraycopy(args, 1, subArgs, 0, args.length - 1);
-            res = subArcCommand.onCommand(sender, var2, var3, subArgs);
-        } else {
-            CommandContext context = CommandContext.of(args, parameters);
-            for (CommandContext.ParseError parseError : context.getParseErrorList()) {
-                sender.sendMessage(Component.text(parseError.getMessage()));
-            }
-            res = execute(sender, context);
+        CommandContext context = CommandContext.of(args, parameters);
+        for (CommandContext.ParseError parseError : context.getParseErrorList()) {
+            sender.sendMessage(Component.text(parseError.getMessage()));
         }
-        if (!res && usage != null) {
-            sender.sendMessage(usage);
+        if (subCommands.containsKey(subCommand)) {
+            subCommands.get(subCommand).accept(sender, context);
+        } else {
+            execute(sender, context);
         }
         return true;
     }
 
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender commandSender, @NotNull Command command, @NotNull String s, @NotNull String[] strings) {
-        String subCommand = strings.length > 0 ? strings[0] : null;
-        if (subCommand != null && subCommands.containsKey(subCommand)) {
-            ArcCommand subArcCommand = subCommands.get(subCommand);
-            String[] subArgs = new String[strings.length - 1];
-            System.arraycopy(strings, 1, subArgs, 0, strings.length - 1);
-            return subArcCommand.onTabComplete(commandSender, command, s, subArgs);
-        }
-
         Set<String> completes = new HashSet<>();
         String current = strings.length > 0 ? strings[strings.length - 1] : "";
         parameters.stream()
@@ -84,7 +63,7 @@ public abstract class ArcCommand implements CommandExecutor, TabCompleter {
                     }
                 });
 
-        for (ArcCommand sub : subCommands.values()) completes.add(sub.getName());
+        completes.addAll(subCommands.keySet());
         for (Par par : parameters) {
             Object defaultValue = par.getDefaultValue();
             if (defaultValue == null) defaultValue = par.getArgType().getDefaultValue();

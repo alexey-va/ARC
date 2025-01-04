@@ -1,7 +1,6 @@
 package arc.arc.configs;
 
 import arc.arc.ARC;
-import arc.arc.stock.HistoryManager;
 import arc.arc.stock.StockClient;
 import arc.arc.stock.StockMarket;
 import lombok.SneakyThrows;
@@ -31,11 +30,6 @@ public class StockConfig {
     private static YamlConfiguration config;
     private static File file;
 
-    private static File cacheFile;
-
-    private static File historyFile;
-
-
     public static boolean mainServer;
     public static double commission;
     public static double leveragePower;
@@ -55,23 +49,8 @@ public class StockConfig {
         }
         config = YamlConfiguration.loadConfiguration(file);
 
-        cacheFile = new File(ARC.plugin.getDataFolder() + File.separator + "stocks/cache.yml");
-        if (!cacheFile.exists()) {
-            cacheFile.getParentFile().mkdirs();
-            cacheFile.createNewFile();
-        }
-
-        historyFile = new File(ARC.plugin.getDataFolder() + File.separator + "stocks/history.json");
-        if (!historyFile.exists()) {
-            historyFile.getParentFile().mkdirs();
-            historyFile.createNewFile();
-        }
-
         loadConfig();
-        loadStockHistory();
     }
-
-
 
     private static void loadConfig() {
         mainServer = config.getBoolean("main-server", false);
@@ -136,13 +115,7 @@ public class StockConfig {
         StockMarket.setClient(new StockClient(FINN_API_KEY, POLY_API_KEY));
     }
 
-    public static void saveStockHistory() {
-        HistoryManager.saveToFile(historyFile);
-    }
 
-    public static void loadStockHistory() {
-        HistoryManager.loadFromFile(historyFile);
-    }
 
     public static String string(String key) {
         if (!config.contains("locale." + key)) {

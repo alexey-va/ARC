@@ -71,6 +71,14 @@ public class BoardEntry extends RepoData<BoardEntry> {
                 .resolver(TagResolver.resolver("player", Tag.inserting(Component.text(playerName == null ? "" : playerName))))
                 .resolver(TagResolver.resolver("type", Tag.inserting(type == null ? Component.empty() : type.name)))
                 .resolver(TagResolver.resolver("expire", Tag.inserting(TextUtil.parseTime(tillExpire(), TimeUnit.MILLISECONDS))))
+                .resolver(TagResolver.resolver("positive", Tag.inserting(
+                        positiveRatings.isEmpty() ? Component.text("Нет", NamedTextColor.GRAY) :
+                                Component.text(positiveRatings.size(), NamedTextColor.GREEN)
+                )))
+                .resolver(TagResolver.resolver("negative", Tag.inserting(
+                        negativeRatings.isEmpty() ? Component.text("Нет", NamedTextColor.GRAY) :
+                                Component.text(negativeRatings.size(), NamedTextColor.RED)
+                )))
                 .resolver(TagResolver.resolver("reports", Tag.inserting(
                         reports.isEmpty() ? Component.text("Нет", NamedTextColor.GREEN) :
                                 Component.text(reports.size())

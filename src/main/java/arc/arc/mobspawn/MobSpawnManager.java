@@ -105,7 +105,7 @@ public class MobSpawnManager {
             for (Map.Entry<EntityType, Integer> entry : amountMap.entrySet()) {
                 String sb = "cmi spawnmob " + entry.getKey().name() + " " + player.getName() + " q:" + entry.getValue() +
                         " sp:" + config.integer("mobspawn.cmi-spread", 30) + " -s";
-                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), sb);
+                ARC.trySeverCommand(sb);
             }
             return amount;
         }

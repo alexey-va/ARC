@@ -29,10 +29,22 @@ public class AuditData extends RepoData<AuditData> {
     private static Config config = ConfigManager.of(ARC.plugin.getDataPath(), "audit.yml");
 
     public void operation(double amount, Type type, String comment) {
-        Transaction latest = transactions.peekLast();
-        if (latest != null && latest.getType() == type && latest.getComment().equals(comment)) {
-            double newAmount = latest.getAmount() + amount;
-            latest.setAmount(newAmount);
+        Transaction latestFitting = null;
+        int count = 0;
+        for (Transaction t : transactions.reversed()) {
+            if (t.getType() == type && t.getComment().equals(comment)) {
+                latestFitting = t;
+                break;
+            }
+            count++;
+            if (count > 10) {
+                break;
+            }
+        }
+        if (latestFitting != null) {
+            double newAmount = latestFitting.getAmount() + amount;
+            latestFitting.setAmount(newAmount);
+            latestFitting.setTimestamp2(System.currentTimeMillis());
             setDirty(true);
             return;
         }

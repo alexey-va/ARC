@@ -7,7 +7,7 @@ import arc.arc.configs.ConfigManager;
 import dev.lone.itemsadder.api.ItemsAdder;
 import org.bukkit.Location;
 import org.bukkit.World;
-import org.bukkit.block.BlockFace;
+import org.bukkit.block.*;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.Directional;
 import org.bukkit.block.data.type.Fence;
@@ -16,6 +16,7 @@ import org.bukkit.block.data.type.Wall;
 import org.bukkit.block.structure.StructureRotation;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.Vector;
 
@@ -151,6 +152,44 @@ public class Utils {
         locations.addAll(getLineWithCornerData(new Location(w, maxX, minY, maxZ), new Location(w, maxX, maxY, maxZ), density, true, cornerDistance));
         locations.addAll(getLineWithCornerData(new Location(w, minX, minY, maxZ), new Location(w, minX, maxY, maxZ), density, true, cornerDistance));
         return locations;
+    }
+
+    public static List<Block> connectedChests(Block block) {
+        Set<Block> blocks = new HashSet<>();
+        BlockState state = block.getState();
+        if (state instanceof Barrel) {
+            blocks.add(block);
+        }
+        if (state instanceof DoubleChest doubleChest) {
+            Chest left = (Chest) doubleChest.getLeftSide();
+            Chest right = (Chest) doubleChest.getRightSide();
+            //log.info("Left: {} Right: {}", left, right);
+            if (left != null) blocks.add(left.getBlock());
+            if (right != null) blocks.add(right.getBlock());
+        }
+        if (state instanceof Chest) {
+            blocks.add(block);
+        }
+        return new ArrayList<>(blocks);
+    }
+
+    public static List<ItemStack> extractItems(Block block) {
+        Inventory inventory = extractInventory(block);
+        if (inventory == null) return Collections.emptyList();
+        return Arrays.stream(inventory.getContents())
+                .toList();
+    }
+
+    public static Inventory extractInventory(Block block) {
+        if (block.getState() instanceof DoubleChest doubleChest) {
+            return doubleChest.getInventory();
+        } else if (block.getState() instanceof Chest chest) {
+            return chest.getInventory();
+        } else if (block.getState() instanceof Barrel barrel) {
+            return barrel.getInventory();
+        } else {
+            return null;
+        }
     }
 
     public static BlockFace rotateFacingClockwise(BlockFace facing) {

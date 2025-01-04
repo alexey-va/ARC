@@ -3,7 +3,7 @@ package arc.arc.commands;
 import arc.arc.ARC;
 import arc.arc.configs.Config;
 import arc.arc.configs.ConfigManager;
-import arc.arc.guis.StoreGui;
+import arc.arc.misc.StoreGui;
 import arc.arc.store.StoreManager;
 import arc.arc.util.GuiUtils;
 import arc.arc.util.TextUtil;

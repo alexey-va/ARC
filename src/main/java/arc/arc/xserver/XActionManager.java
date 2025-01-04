@@ -2,10 +2,7 @@ package arc.arc.xserver;
 
 import arc.arc.ARC;
 import lombok.extern.slf4j.Slf4j;
-import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-
-import java.util.Set;
 
 @Slf4j
 public class XActionManager {
@@ -20,12 +17,12 @@ public class XActionManager {
     }
 
     public static void run(XAction action) {
-        log.info("Running action: {}", action);
+        //log.info("Running action: {}", action);
         action.run();
     }
 
     public static void publish(XAction action) {
-        log.info("Publishing action: {}", action);
+        //log.info("Publishing action: {}", action);
         messager.send(action);
     }
 

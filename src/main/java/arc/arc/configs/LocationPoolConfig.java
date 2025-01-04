@@ -1,8 +1,8 @@
 package arc.arc.configs;
 
 import arc.arc.ARC;
-import arc.arc.treasurechests.locationpools.LocationPool;
-import arc.arc.treasurechests.locationpools.LocationPoolManager;
+import arc.arc.common.locationpools.LocationPool;
+import arc.arc.common.locationpools.LocationPoolManager;
 import arc.arc.util.Common;
 import com.google.gson.Gson;
 import lombok.extern.slf4j.Slf4j;

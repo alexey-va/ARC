@@ -1,21 +1,18 @@
 package arc.arc.xserver;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import arc.arc.hooks.HookRegistry;
 import arc.arc.util.TextUtil;
 import arc.arc.xserver.playerlist.PlayerManager;
 import com.google.gson.annotations.SerializedName;
-import lombok.Builder;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.ToString;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
 import org.bukkit.boss.BarColor;
 import org.bukkit.entity.Player;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @EqualsAndHashCode(callSuper = true)
 @Data
@@ -30,36 +27,20 @@ public class XMessage extends XAction {
     String serializedMessage;
     @SerializedName("st")
     SerializationType serializationType;
-    @SerializedName("ca")
-    @Builder.Default
-    boolean isCacheable = true;
     @SerializedName("cond")
     List<XCondition> conditions;
 
-
-
-    @SerializedName("tm")
-    Material toastMaterial;
-    @SerializedName("tmd")
-    int toastModelData;
-    @SerializedName("tt")
-    String toastTitle;
+    @SerializedName("td")
+    ToastData toastData;
 
     @SerializedName("bbn")
-    String bossBarName;
-    @SerializedName("bc")
-    BarColor barColor;
-    @SerializedName("bbs")
-    int seconds;
+    BossBarData bossBarData;
 
     @SerializedName("p")
-    @Builder.Default
-    boolean personal = false;
-    @SerializedName("we")
-    @Builder.Default
-    int weight = 1;
+    AnnounceData announceData;
 
-    transient Component deserialized;
+    @SerializedName("ab")
+    ActionBarData actionBarData;
 
     @Override
     protected void runInternal() {
@@ -71,16 +52,25 @@ public class XMessage extends XAction {
                     log.warn("CMILIB is required for TOAST xMessage");
                     return;
                 }
-                HookRegistry.cmiHook.sendToast(serializedMessage, toastTitle, toastModelData, toastMaterial, players.toArray(new Player[0]));
+                if (toastData == null) {
+                    log.warn("ToastData is required for TOAST xMessage");
+                    return;
+                }
+                HookRegistry.cmiHook.sendToast(serializedMessage, toastData.title, toastData.modelData,
+                        toastData.material, players.toArray(new Player[0]));
             }
             case BOSS_BAR -> {
                 if (HookRegistry.cmiHook == null) {
                     log.warn("CMILIB is required for BOSS_BAR xMessage");
                     return;
                 }
+                if (bossBarData == null) {
+                    log.warn("BossBarData is required for BOSS_BAR xMessage");
+                    return;
+                }
                 players.forEach(p ->
-                        HookRegistry.cmiHook.sendBossbar(bossBarName == null ? "xmessage" : bossBarName,
-                                serializedMessage, p, barColor, seconds));
+                        HookRegistry.cmiHook.sendBossbar(bossBarData.name == null ? "xmessage" : bossBarData.name,
+                                serializedMessage, p, bossBarData.color, bossBarData.seconds, bossBarData.keepFor));
             }
         }
     }
@@ -104,9 +94,9 @@ public class XMessage extends XAction {
     }
 
     public Component component(Player player) {
-        if (!personal && deserialized != null) return deserialized;
         Component component;
-        String message = personal ? HookRegistry.papiHook.parse(serializedMessage, player) : serializedMessage;
+        String message = serializedMessage;
+        if(HookRegistry.papiHook != null) HookRegistry.papiHook.parse(serializedMessage, player);
         if (serializationType == SerializationType.MINI_MESSAGE) {
             component = TextUtil.mm(message);
         } else if (serializationType == SerializationType.LEGACY) {
@@ -114,7 +104,6 @@ public class XMessage extends XAction {
         } else {
             component = TextUtil.plain(message);
         }
-        if (isCacheable && !personal) deserialized = component;
         return component;
     }
 
@@ -126,6 +115,55 @@ public class XMessage extends XAction {
     public enum SerializationType {
         MINI_MESSAGE, LEGACY, PLAIN
     }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    @Builder
+    public static class BossBarData {
+        @SerializedName("n")
+        String name;
+        @SerializedName("c")
+        BarColor color;
+        @SerializedName("s")
+        int seconds;
+        @SerializedName("t")
+        int keepFor;
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    @Builder
+    public static class ToastData {
+        @SerializedName("m")
+        Material material = Material.STONE;
+        @SerializedName("md")
+        int modelData;
+        @SerializedName("t")
+        String title;
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    @Builder
+    public static class AnnounceData {
+        @SerializedName("m")
+        int weight;
+        @SerializedName("p")
+        boolean personal;
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    @Builder
+    public static class ActionBarData {
+        @SerializedName("s")
+        int seconds;
+    }
+
 
 }
 

@@ -24,6 +24,8 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
+import static arc.arc.util.Utils.*;
+
 @Slf4j
 public class PersonalLootManager {
 
@@ -186,24 +188,9 @@ public class PersonalLootManager {
         });
     }
 
-    private static List<ItemStack> extractItems(Block block) {
-        Inventory inventory = extractInventory(block);
-        if (inventory == null) return Collections.emptyList();
-        return Arrays.stream(inventory.getContents())
-                .toList();
-    }
 
-    private static Inventory extractInventory(Block block) {
-        if (block.getState() instanceof DoubleChest doubleChest) {
-            return doubleChest.getInventory();
-        } else if (block.getState() instanceof Chest chest) {
-            return chest.getInventory();
-        } else if (block.getState() instanceof Barrel barrel) {
-            return barrel.getInventory();
-        } else {
-            return null;
-        }
-    }
+
+
 
     public static void processChestGen(Block block) {
         List<Block> blocks = connectedChests(block);
@@ -223,23 +210,6 @@ public class PersonalLootManager {
     }
 
 
-    private static List<Block> connectedChests(Block block) {
-        Set<Block> blocks = new HashSet<>();
-        BlockState state = block.getState();
-        if (state instanceof Barrel) {
-            blocks.add(block);
-        }
-        if (state instanceof DoubleChest doubleChest) {
-            Chest left = (Chest) doubleChest.getLeftSide();
-            Chest right = (Chest) doubleChest.getRightSide();
-            //log.info("Left: {} Right: {}", left, right);
-            if (left != null) blocks.add(left.getBlock());
-            if (right != null) blocks.add(right.getBlock());
-        }
-        if (state instanceof Chest) {
-            blocks.add(block);
-        }
-        return blocks.stream().toList();
-    }
+
 
 }

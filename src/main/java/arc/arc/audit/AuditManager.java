@@ -132,8 +132,8 @@ public class AuditManager {
         String transactionFormat = config.string("messages.transaction-format", "<hover:<yellow>%comment%><gray>%counter%. <gray>[%date%] <white>%type% <gold>%amount%</hover>");
         String incomeFormat = config.string("messages.income-format", "<green>+%amount%");
         String expenseFormat = config.string("messages.expense-format", "<red>-%amount%");
-        String nextPage = config.string("messages.next-page", "<click:run_command:/arc audit %player_name% %filter% %next_page%><hover:show_text:'Click to view next page'><gold><");
-        String prevPage = config.string("messages.prev-page", "<click:run_command:/arc audit %player_name% %filter% %prev_page%><hover:show_text:'Click to view previous page'><gold>>");
+        String nextPage = config.string("messages.next-page", "<click:run_command:/arc audit %player_name% %filter% %next_page%><hover:show_text:'Click to view next page'><gold>>");
+        String prevPage = config.string("messages.prev-page", "<click:run_command:/arc audit %player_name% %filter% %prev_page%><hover:show_text:'Click to view previous page'><gold><");
         String footerFormat = config.string("messages.footer-format", "%prev%<gray>Page <gold>%page% <gray>of <gold>%total_pages%%next%");
         List<String> lines = new ArrayList<>();
         lines.add(headerFormat.replace("%player_name%", playerName));
@@ -147,6 +147,7 @@ public class AuditManager {
                         .replace("%date%", Utils.formatDate(transaction.getTimestamp()))
                         .replace("%type%", transaction.getType().name())
                         .replace("%amount%", amount)
+                        .replace("%date2%", Utils.formatDate(transaction.getTimestamp2()))
                         .replace("%comment%", transaction.getComment() == null ? "-" : transaction.getComment());
                 lines.add(line);
             }
@@ -158,8 +159,8 @@ public class AuditManager {
                 .replace("%prev%", page > 1 ? prevPage.replace("%player_name%", playerName).replace("%prev_page%", String.valueOf(page - 1)) : "")
                 .replace("%page%", String.valueOf(page))
                 .replace("%total_pages%", String.valueOf(totalPages))
-                .replace("%filter%", filter == null ? "ALL" : filter.name().toLowerCase())
-                .replace("%next%", page < totalPages ? nextPage.replace("%player_name%", playerName).replace("%next_page%", String.valueOf(page + 1)) : "");
+                .replace("%next%", page < totalPages ? nextPage.replace("%player_name%", playerName).replace("%next_page%", String.valueOf(page + 1)) : "")
+                .replace("%filter%", filter == null ? "ALL" : filter.name().toLowerCase());
         lines.add(footer);
         return mm(String.join("\n", lines));
     }

@@ -1,15 +1,16 @@
 package arc.arc.hooks.ztranslator;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Map;
-
 import arc.arc.ARC;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import lombok.extern.log4j.Log4j2;
+import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
 
 @Log4j2
 public class TranslatorHook {
@@ -38,6 +39,10 @@ public class TranslatorHook {
         return map.getOrDefault(stack.translationKey(), toReadableName(stack.getType().name()));
     }
 
+    public String translate(Material material) {
+        return map.getOrDefault(material.translationKey(), toReadableName(material.name()));
+    }
+
     private String toReadableName(String name) {
         StringBuilder sb = new StringBuilder();
         boolean start = true;
@@ -45,10 +50,11 @@ public class TranslatorHook {
             if (start) {
                 sb.append(Character.toUpperCase(c));
                 start = false;
-            }
-            if (c == '_') {
+            }else if (c == '_') {
                 sb.append(" ");
                 start = true;
+            } else {
+                sb.append(Character.toLowerCase(c));
             }
         }
         return sb.toString();

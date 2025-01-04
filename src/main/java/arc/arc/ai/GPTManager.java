@@ -5,7 +5,6 @@ import arc.arc.configs.Config;
 import arc.arc.configs.ConfigManager;
 import arc.arc.hooks.HookRegistry;
 import arc.arc.hooks.citizens.CitizensHook;
-import arc.arc.util.CooldownManager;
 import arc.arc.util.TextUtil;
 import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.text.Component;
@@ -28,6 +27,7 @@ public class GPTManager {
     private static final Map<UUID, List<Conversation>> conversations = new ConcurrentHashMap<>();
     private static final Set<UUID> awaitingResponse = new ConcurrentSkipListSet<>();
     private static BukkitTask cleanupTask;
+    private static GPTEntity moderatorGpt;
 
     public static void init() {
         entities.clear();
@@ -44,6 +44,8 @@ public class GPTManager {
                 });
             }
         }.runTaskTimerAsynchronously(ARC.plugin, 0, 20 * 30L);
+
+        moderatorGpt = new GPTEntity(config, "moderator", "moderator", false);
     }
 
     public static void cancel() {
@@ -53,7 +55,7 @@ public class GPTManager {
     public static CompletableFuture<Optional<String>> getResponse(Player player, String message,
                                                                   String id, String archetype) {
         String playerName = player.getName();
-        GPTEntity entity = entities.computeIfAbsent(id, key -> new GPTEntity(config, archetype, id));
+        GPTEntity entity = entities.computeIfAbsent(id, key -> new GPTEntity(config, archetype, id, true));
         if (!entity.archetype.equals(archetype)) {
             log.warn("Entity {} has different archetype {} than expected {}", id, entity.archetype, archetype);
         }
@@ -151,7 +153,7 @@ public class GPTManager {
                                          Location location, double radius, long lifeTime, String initialMessage,
                                          String endMessage, Integer npcId, boolean privateConversation) {
         String playerName = player.getName();
-        entities.computeIfAbsent(id, key -> new GPTEntity(config, archetype, id));
+        entities.computeIfAbsent(id, key -> new GPTEntity(config, archetype, id, true));
         List<Conversation> convs = conversations.computeIfAbsent(player.getUniqueId(), key -> new ArrayList<>());
         if (convs.stream().anyMatch(c -> c.gptId.equals(id))) {
             log.info("Player {} already has conversation with entity {}", playerName, id);

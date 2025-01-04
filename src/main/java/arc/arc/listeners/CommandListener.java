@@ -1,5 +1,6 @@
 package arc.arc.listeners;
 
+import arc.arc.ARC;
 import arc.arc.Portal;
 import arc.arc.PortalData;
 import arc.arc.audit.AuditManager;
@@ -10,7 +11,6 @@ import arc.arc.util.TextUtil;
 import arc.arc.xserver.playerlist.PlayerManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Cancellable;
 import org.bukkit.event.EventHandler;
@@ -49,6 +49,7 @@ public class CommandListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void onServerCommand(ServerCommandEvent serverCommandEvent) {
+        //log.info("Received command: {}", serverCommandEvent.getCommand());
         String[] args = serverCommandEvent.getCommand().split(" ");
         moneyCommandServer(serverCommandEvent, args);
     }
@@ -74,17 +75,17 @@ public class CommandListener implements Listener {
     }
 
     private void moneyCommand(Player player, Cancellable ev, String[] args) {
-        if (!player.hasPermission("rediseconomy.admin")) {
-            player.sendMessage(TextUtil.noPermissions());
-            return;
-        }
         Set<String> sub = Set.of("give", "set", "take");
         if (args.length > 2 && args[0].equalsIgnoreCase("/money") && sub.contains(args[1])) {
-            ev.setCancelled(true);
+            if (!player.hasPermission("rediseconomy.admin")) {
+                player.sendMessage(TextUtil.noPermissions());
+                return;
+            }
             // /money give/set/take <player> <amount>
             // into
             // /money <player> vault give <amount>
             if (args.length == 4) {
+                ev.setCancelled(true);
                 try {
                     String amount = args[3];
                     double money = Double.parseDouble(amount);
@@ -103,17 +104,18 @@ public class CommandListener implements Listener {
 
     private void moneyCommandServer(Cancellable ev, String[] args) {
         Set<String> sub = Set.of("give", "set", "take");
-        if (args.length > 2 && args[0].equalsIgnoreCase("/money") && sub.contains(args[1])) {
-            ev.setCancelled(true);
+        if (args.length > 2 && args[0].equalsIgnoreCase("money") && sub.contains(args[1])) {
+            //log.info("Received /money command: {}", String.join(" ", args));
             // /money give <player> <amount>
             // into
             // /money <player> vault give <amount>
             if (args.length == 4) {
+                ev.setCancelled(true);
                 try {
                     String amount = args[3];
                     double money = Double.parseDouble(amount);
                     String command = "money " + args[2] + " vault " + args[1] + " " + money;
-                    Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
+                    ARC.trySeverCommand(command);
                     AuditManager.operation(args[2], money, Type.COMMAND, "Server");
                     log.info("Rerouted {} to {}", String.join(" ", args), command);
                 } catch (Exception e) {

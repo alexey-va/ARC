@@ -94,23 +94,28 @@ public class AnnounceManager {
             }
 
             int weight = config.integer("messages." + key + ".weight", 1);
-            boolean isCacheable = config.bool("messages." + key + ".cache", true);
 
             if (config.exists("messages." + key + ".toast")) {
                 String toastTitle = config.string("messages." + key + ".toast.title");
                 Material toastMaterial = config.material("messages." + key + ".toast.material", Material.STONE);
                 int toastModelData = config.integer("messages." + key + ".toast.model-data", 0);
-                builder.toastMaterial(toastMaterial).toastModelData(toastModelData).toastTitle(toastTitle);
+                builder.toastData(XMessage.ToastData.builder()
+                        .title(toastTitle)
+                        .material(toastMaterial)
+                        .modelData(toastModelData)
+                        .build());
             }
 
             if (config.exists("messages." + key + ".bossbar")) {
                 String bossBarName = config.string("messages." + key + ".bossbar.name");
                 BarColor barColor = BarColor.valueOf(config.string("messages." + key + ".bossbar.color", "red").toUpperCase());
                 int bossBarSeconds = config.integer("messages." + key + ".bossbar.seconds", 5);
-                builder.bossBarName(bossBarName).barColor(barColor).seconds(bossBarSeconds);
+                builder.bossBarData(XMessage.BossBarData.builder()
+                        .name(bossBarName)
+                        .color(barColor)
+                        .seconds(bossBarSeconds)
+                        .build());
             }
-
-            boolean personal = config.bool("messages." + key + ".personal", false);
 
             Set<String> servers = new HashSet<>(config.stringList("messages." + key + ".servers", List.of("all")));
             List<XCondition> xConditions = new ArrayList<>();
@@ -133,13 +138,12 @@ public class AnnounceManager {
                 }
             }
             builder.conditions(xConditions)
-                    .personal(personal)
                     .serializedMessage(message)
                     .type(type)
                     .serializationType(serializationType)
-                    .weight(weight)
-                    .isCacheable(isCacheable)
-                    .weight(weight);
+                    .announceData(XMessage.AnnounceData.builder()
+                            .weight(weight)
+                            .build());
 
             addAnnouncement(builder.build());
         }
@@ -157,13 +161,11 @@ public class AnnounceManager {
                 .serializedMessage(mmString)
                 .type(XMessage.Type.CHAT)
                 .serializationType(XMessage.SerializationType.MINI_MESSAGE)
-                .personal(true)
                 .conditions(List.of(XCondition.ofPlayerUuid(playerUuid)))
                 .build());
     }
 
     public static void announce(XMessage data) {
-        log.info("Announcing: {}", data.getSerializedMessage());
         XActionManager.publish(data);
     }
 
@@ -175,25 +177,31 @@ public class AnnounceManager {
                     log.error("I cant use bossbar without cmi... sorry");
                     return;
                 }
-                HookRegistry.cmiHook.sendBossbar("arcAnnounce",
+                HookRegistry.cmiHook.sendBossbar(
+                        "arcAnnounce",
                         data.getSerializedMessage(),
                         player,
-                        data.getBarColor(),
-                        data.getSeconds());
+                        data.getBossBarData().getColor(),
+                        data.getBossBarData().getSeconds(),
+                        data.getBossBarData().getKeepFor()
+                );
             }
             case ACTION_BAR -> {
                 if (HookRegistry.cmiHook == null) {
                     log.error("I cant use actionbar without cmi... sorry");
                     return;
                 }
-                HookRegistry.cmiHook.sendActionbar(data.getSerializedMessage(), List.of(player), data.getSeconds());
+                HookRegistry.cmiHook.sendActionbar(
+                        data.getSerializedMessage(),
+                        List.of(player),
+                        data.getActionBarData().getSeconds()
+                );
             }
         }
     }
 
     public static void addAnnouncement(XMessage data) {
-        totalWeight += data.getWeight();
-        log.info("Adding announcement: {}", data);
+        totalWeight += Optional.ofNullable(data.getAnnounceData()).map(XMessage.AnnounceData::getWeight).orElse(1);
         announcements.put(totalWeight, data);
     }
 

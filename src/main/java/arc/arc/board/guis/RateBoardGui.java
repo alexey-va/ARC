@@ -20,8 +20,6 @@ public class RateBoardGui extends ChestGui {
     BoardEntry entry;
     GuiItem downItem, upItem, reportItem, backItem;
 
-
-
     public RateBoardGui(Player player, BoardEntry entry) {
         super(2, TextHolder.deserialize(BoardConfig.rateGuiName));
         setupBackground();
@@ -149,6 +147,7 @@ public class RateBoardGui extends ChestGui {
         GuiUtils.temporaryChange(guiItem.getItem(),
                 MiniMessage.miniMessage().deserialize(BoardConfig.getString("rate-menu.success-rate")),
                 null, -1L, this::update);
+        Board.updateCache(entry.entryUuid);
         update();
     }
 
@@ -163,6 +162,7 @@ public class RateBoardGui extends ChestGui {
         GuiUtils.temporaryChange(guiItem.getItem(),
                 MiniMessage.miniMessage().deserialize(BoardConfig.getString("rate-menu.success-report")),
                 null, 100L, this::update);
+        Board.updateCache(entry.entryUuid);
         update();
     }
 

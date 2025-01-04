@@ -5,16 +5,29 @@ import arc.arc.ai.Conversation;
 import arc.arc.ai.GPTManager;
 import arc.arc.audit.AuditManager;
 import arc.arc.board.guis.BoardGui;
+import arc.arc.commands.framework.ArgType;
+import arc.arc.commands.framework.CommandContext;
+import arc.arc.commands.framework.Par;
+import arc.arc.common.locationpools.LocationPool;
+import arc.arc.common.locationpools.LocationPoolManager;
+import arc.arc.common.treasure.TreasurePool;
+import arc.arc.common.treasure.gui.MainTreasuresGui;
+import arc.arc.common.treasure.gui.PoolGui;
+import arc.arc.common.treasure.impl.SubPoolTreasure;
+import arc.arc.common.treasure.impl.TreasureItem;
 import arc.arc.configs.Config;
 import arc.arc.configs.ConfigManager;
-import arc.arc.generic.treasure.MainTreasuresGui;
-import arc.arc.guis.BaltopGui;
+import arc.arc.misc.BaltopGui;
 import arc.arc.hooks.HookRegistry;
 import arc.arc.misc.JoinMessageGui;
 import arc.arc.network.repos.RedisRepo;
+import arc.arc.treasurechests.TreasureHunt;
+import arc.arc.treasurechests.TreasureHuntManager;
+import arc.arc.treasurechests.TreasureHuntType;
 import arc.arc.util.CooldownManager;
 import arc.arc.util.GuiUtils;
 import arc.arc.util.TextUtil;
+import arc.arc.util.Utils;
 import arc.arc.xserver.playerlist.PlayerManager;
 import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.text.Component;
@@ -25,10 +38,14 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.config.Configuration;
 import org.apache.logging.log4j.core.config.LoggerConfig;
+import org.bukkit.Bukkit;
+import org.bukkit.Material;
+import org.bukkit.block.Block;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.reflections.Reflections;
@@ -45,6 +62,11 @@ public class Command implements CommandExecutor, TabCompleter {
 
         if (strings.length == 0) {
             commandSender.sendMessage("No args!");
+            return true;
+        }
+
+        if (strings[0].equalsIgnoreCase("locpool")) {
+            processLocPoolCommand(commandSender, strings);
             return true;
         }
 
@@ -91,9 +113,12 @@ public class Command implements CommandExecutor, TabCompleter {
 
 
         if (strings[0].equals("treasures") && commandSender.hasPermission("arc.admin")) {
-            Player player = (Player) commandSender;
-            Config config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "treasures.yml");
-            GuiUtils.constructAndShowAsync(() -> new MainTreasuresGui(player, config), player);
+            processTreasuresCommand(commandSender, strings);
+        }
+
+        if (strings[0].equals("hunt")) {
+            processTreasureHuntCommand(commandSender, strings);
+            return true;
         }
 
         if (strings[0].equals("emshop")) {
@@ -190,13 +215,245 @@ public class Command implements CommandExecutor, TabCompleter {
                 //ctx.updateLoggers();
             } catch (Exception e) {
                 commandSender.sendMessage("Error: " + e.getMessage());
-                e.printStackTrace();
+                log.error("Error: ", e);
                 return true;
             }
         }
 
 
         return true;
+    }
+
+    public void processTreasureHuntCommand(CommandSender commandSender, String[] strings) {
+        Config config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "treasure-hunt.yml");
+        try {
+            if (!commandSender.hasPermission("arc.treasure-hunt")) {
+                commandSender.sendMessage(TextUtil.noPermissions());
+                return;
+            }
+
+            boolean start = strings[1].equals("start");
+            boolean stop = strings[1].equals("stop");
+
+
+            String locationPoolId = strings.length >= 3 ? strings[2] : null;
+            int chests = strings.length >= 4 ? Integer.parseInt(strings[3]) : 0;
+            String namespaceId = strings.length >= 5 ? strings[4] : null;
+            String treasurePoolId = strings.length >= 5 ? strings[5] : null;
+
+            LocationPool locationPool = LocationPoolManager.getPool(locationPoolId);
+
+            if (TreasureHunt.aliases().containsKey(namespaceId)) {
+                namespaceId = TreasureHunt.aliases().get(namespaceId);
+            }
+
+            if (start) {
+                if (strings.length == 3 || strings.length == 4) {
+                    TreasureHuntType treasureHuntType = TreasureHuntManager.getTreasureHuntType(locationPoolId);
+                    if (treasureHuntType == null) {
+                        commandSender.sendMessage(config.componentDef("messages.hunt-type-not-found", "<red>Тип охоты на сокровища не найден!"));
+                        return;
+                    }
+                    LocationPool locationPool1 = treasureHuntType.getLocationPool();
+                    if (locationPool1 == null) {
+                        commandSender.sendMessage(config.componentDef("messages.location-pool-not-found", "<red>Пул локаций %location_pool_id% не найден!",
+                                "%location_pool_id%", locationPoolId));
+                        return;
+                    }
+                    TreasureHuntManager.startHunt(locationPoolId, chests);
+                    return;
+                }
+                if (locationPool == null) {
+                    commandSender.sendMessage(config.componentDef("messages.location-pool-not-found", "<red>Пул локаций %location_pool_id% не найден!",
+                            "%location_pool_id%", locationPoolId));
+                    return;
+                }
+                TreasureHuntManager.startHunt(locationPool, chests, namespaceId, treasurePoolId);
+                commandSender.sendMessage(config.componentDef("messages.hunt-started", "<gray>Начата охота на сокровища!"));
+            } else if (stop) {
+                if (locationPool == null) {
+                    commandSender.sendMessage(config.componentDef("messages.location-pool-not-found", "<red>Пул локаций %location_pool_id% не найден!",
+                            "%location_pool_id%", locationPoolId));
+                    return;
+                }
+                TreasureHuntManager.getByLocationPool(locationPool)
+                        .ifPresentOrElse(th -> {
+                            TreasureHuntManager.stopHunt(th);
+                            commandSender.sendMessage(config.componentDef("messages.hunt-stopped", "<gray>Охота на сокровища остановлена!"));
+                        }, () -> commandSender.sendMessage(config.componentDef("messages.hunt-not-found", "<red>Охота на сокровища не найдена!")));
+            } else {
+                commandSender.sendMessage(config.componentDef("messages.invalid-command", "<red>Неверная команда! <gray>Синтаксис: /arc hunt start <location_pool_id> <chests> <namespace_id> <treasure_pool_id> или /arc hunt stop <location_pool_id> или /arc hunt start <type>"));
+            }
+        } catch (Exception e) {
+            commandSender.sendMessage(config.componentDef("messages.not-enough-args", "<red>Неверная команда! <gray>Синтаксис: /arc hunt start <location_pool_id> <chests> <namespace_id> <treasure_pool_id> или /arc hunt stop <location_pool_id> или /arc hunt start <type>"));
+            log.error("Error: ", e);
+        }
+    }
+
+    private void processTreasuresCommand(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("arc.treasures.admin")) {
+            sender.sendMessage(TextUtil.noPermissions());
+            return;
+        }
+        Config config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "treasures.yml");
+        Player player;
+        if (sender instanceof Player) player = (Player) sender;
+        else player = null;
+
+        if (args.length == 1) {
+
+            GuiUtils.constructAndShowAsync(() -> new MainTreasuresGui(player), player);
+            return;
+        }
+
+        if (args.length == 2) {
+            if (args[1].equalsIgnoreCase("reload")) {
+                TreasurePool.loadAllTreasures();
+                sender.sendMessage(config.componentDef("messages.reloaded", "<gray>Награды перезагружены!"));
+                return;
+            }
+            String poolId = args[1];
+            TreasurePool pool = TreasurePool.getTreasurePool(poolId);
+            if (pool == null) {
+                sender.sendMessage(config.componentDef("messages.pool-not-found", "<red>Пул %pool_id% не найден!",
+                        "%pool_id%", poolId));
+                return;
+            } else {
+                GuiUtils.constructAndShowAsync(() -> new PoolGui(player, pool), player);
+                return;
+            }
+        }
+
+        if (args.length >= 3) {
+            String poolId = args[1];
+            String action = args[2];
+            TreasurePool pool = TreasurePool.getTreasurePool(poolId);
+            if (pool == null) {
+                sender.sendMessage(config.componentDef("messages.pool-not-found-creating", "<red>Пул %pool_id% не найден! Создаем...",
+                        "%pool_id%", poolId));
+                pool = TreasurePool.getOrCreate(poolId);
+            }
+
+            if ("addhand".equalsIgnoreCase(action)) {
+                CommandContext context = CommandContext.of(args, List.of(
+                        Par.of("weight", ArgType.INTEGER, 1),
+                        Par.of("quantity", ArgType.INTEGER, 1)
+
+                ));
+                if (player == null) {
+                    sender.sendMessage("Only players can use this command!");
+                    return;
+                }
+                ItemStack item = player.getInventory().getItemInMainHand();
+                if (item.getType().isAir()) {
+                    player.sendMessage(config.componentDef("messages.no-item-in-hand", "<red>В руке нет предмета!"));
+                    return;
+                }
+                TreasureItem treasureItem = TreasureItem.builder()
+                        .stack(player.getInventory().getItemInMainHand())
+                        .quantity(context.getMap().containsKey("quantity") ? context.get("quantity") : item.getAmount())
+                        .gaussData(null)
+                        .build();
+                treasureItem.setWeight(context.get("weight"));
+                boolean add = pool.add(treasureItem);
+                if (!add) {
+                    player.sendMessage(config.componentDef("messages.item-already-added", "<red>Предмет уже добавлен в пул %pool_id%!",
+                            "%pool_id%", poolId));
+                    return;
+                } else {
+                    player.sendMessage(config.componentDef("messages.item-added", "<gray>Предмет добавлен в пул %pool_id%!",
+                            "%pool_id%", poolId));
+                    return;
+                }
+            } else if ("addchest".equalsIgnoreCase(action)) {
+                if (player == null) {
+                    sender.sendMessage("Only players can use this command!");
+                    return;
+                }
+                Block block = player.getTargetBlockExact(5);
+                if (block == null) {
+                    player.sendMessage(config.componentDef("messages.no-target-block", "<red>Не найден блок!"));
+                    return;
+                }
+                CommandContext context = CommandContext.of(args, List.of(
+                        Par.of("weight", ArgType.INTEGER, 1)
+
+                ));
+                List<Block> blocks = Utils.connectedChests(block);
+                List<ItemStack> items = blocks.stream()
+                        .flatMap(b -> Utils.extractItems(b).stream())
+                        .filter(Objects::nonNull)
+                        .filter(stack -> !stack.getType().isAir())
+                        .map(ItemStack::clone)
+                        .toList();
+                int count = 0;
+                for (var item : items) {
+                    TreasureItem treasureItem = TreasureItem.builder()
+                            .stack(item)
+                            .quantity(item.getAmount())
+                            .gaussData(null)
+                            .build();
+                    treasureItem.setWeight(context.get("weight"));
+                    boolean add = pool.add(treasureItem);
+                    if (add) {
+                        player.sendMessage(config.componentDef("messages.item-added", "<gray>Предмет %item% добавлен в пул %pool_id%!",
+                                "%pool_id%", poolId, "%item%", item.getType().name()));
+                        count++;
+                    } else {
+                        player.sendMessage(config.componentDef("messages.item-already-added", "<red>Предмет %item% уже добавлен в пул %pool_id%!",
+                                "%pool_id%", poolId, "%item%", item.getType().name()));
+                    }
+                }
+                player.sendMessage(config.componentDef("messages.items-added", "<gray>%amount% предметов добавлены в пул %pool_id%!",
+                        "%pool_id%", poolId, "%amount%", String.valueOf(count)));
+                return;
+            } else if ("addsubpool".equalsIgnoreCase(action)) {
+                String subPoolId = args[3];
+                TreasurePool subPool = TreasurePool.getTreasurePool(subPoolId);
+                if (subPool == null) {
+                    sender.sendMessage(config.componentDef("messages.pool-not-found", "<red>Пул %pool_id% не найден!",
+                            "%pool_id%", subPoolId));
+                    return;
+                }
+                CommandContext context = CommandContext.of(args, List.of(
+                        Par.of("weight", ArgType.INTEGER, 1)
+                ));
+                SubPoolTreasure subPoolTreasure = SubPoolTreasure.builder()
+                        .subPoolId(subPoolId)
+                        .build();
+                subPoolTreasure.setWeight(context.get("weight"));
+                boolean add = pool.add(subPoolTreasure);
+                if (add) {
+                    sender.sendMessage(config.componentDef("messages.subpool-added", "<gray>Сабпул %subpool_id% добавлен в пул %pool_id%!",
+                            "%pool_id%", poolId, "%subpool_id%", subPoolId));
+                } else {
+                    sender.sendMessage(config.componentDef("messages.subpool-already-added", "<red>Сабпул %subpool_id% уже добавлен в пул %pool_id%!",
+                            "%pool_id%", poolId, "%subpool_id%", subPoolId));
+                }
+                return;
+            } else if ("give".equalsIgnoreCase(action)) {
+                CommandContext context = CommandContext.of(args, List.of(
+                        Par.of("player", ArgType.STRING, null)
+                ));
+                String targetName = context.get("player");
+                Player playerExact = player;
+                if (targetName != null) playerExact = Bukkit.getPlayerExact(targetName);
+                if (playerExact == null) {
+                    player.sendMessage(config.componentDef("messages.player-not-found", "<red>Игрок %player% не найден!",
+                            "%player%", targetName));
+                    return;
+                }
+                if (pool.size() == 0) {
+                    player.sendMessage(config.componentDef("messages.pool-empty", "<red>Пул %pool_id% пуст!",
+                            "%pool_id%", poolId));
+                    return;
+                }
+                pool.random().give(playerExact);
+                sender.sendMessage(config.componentDef("messages.given", "<gray>Награда выдана игроку %player%!",
+                        "%player%", playerExact.getName()));
+                return;
+            }
+        }
     }
 
     private void processRepoCommand(CommandSender sender, String[] args) {
@@ -214,6 +471,65 @@ public class Command implements CommandExecutor, TabCompleter {
             }
             sender.sendMessage("Total: " + stringLongMap.values().stream().mapToLong(Long::longValue).sum());
         }
+    }
+
+    private void processLocPoolCommand(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("arc.locpool.admin")) {
+            sender.sendMessage(TextUtil.noPermissions());
+            return;
+        }
+        Config config = ConfigManager.of(ARC.plugin.getDataPath(), "location-pools.yml");
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(config.componentDef("messages.player-only", "<red>Только игроки могут использовать эту команду!"));
+            return;
+        }
+
+        String current = LocationPoolManager.getEditing(player.getUniqueId());
+
+        // arc locpool - list all pools
+        if (args.length == 1) {
+            player.sendMessage(config.componentDef("messages.current-pools", "<gray>Текущие пулы локаций: %pools%",
+                    "%pools%", LocationPoolManager.getAll().stream()
+                            .map(LocationPool::getId)
+                            .collect(Collectors.joining(", ", "[", "]"))));
+            return;
+        }
+
+        // arc locpool edit - cancel editing
+        if (args.length == 2 && args[1].equals("edit")) {
+            if (current == null) {
+                player.sendMessage(config.componentDef("messages.not-editing", "<gray>Вы не редактируете никакой пул локаций!"));
+                return;
+            }
+            LocationPoolManager.cancelEditing(player.getUniqueId(), false);
+            return;
+        }
+        if (args.length == 2 && args[1].equals("delete")) {
+            player.sendMessage(config.componentDef("messages.specify-pool", "<gray>Укажите пул локаций для удаления!"));
+            return;
+        }
+
+        String action = args[1];
+        String id = args[2];
+
+        if (action.equals("edit")) {
+            if (id.equals(current)) {
+                LocationPoolManager.cancelEditing(player.getUniqueId(), false);
+                return;
+            }
+            LocationPoolManager.setEditing(player.getUniqueId(), id);
+            player.getInventory().addItem(ItemStack.of(Material.GOLD_BLOCK), ItemStack.of(Material.REDSTONE_BLOCK));
+        } else if (action.equals("delete")) {
+            boolean res = LocationPoolManager.delete(id);
+            if (res) {
+                player.sendMessage(config.componentDef("messages.pool-deleted", "<gray>Пул %pool_id% удален успешно!",
+                        "%pool_id%", id));
+            } else {
+                player.sendMessage(config.componentDef("messages.pool-not-found", "<red>Пул %pool_id% не найден!",
+                        "%pool_id%", id));
+            }
+        }
+
     }
 
     private void processAuditCommand(CommandSender sender, String[] args) {
@@ -349,7 +665,7 @@ public class Command implements CommandExecutor, TabCompleter {
     public @Nullable List<String> onTabComplete(@NotNull CommandSender commandSender, org.bukkit.command.@NotNull Command command, @NotNull String s, @NotNull String[] strings) {
 
         if (strings.length == 1) {
-            return List.of("reload", "joinmessage", "quitmessage", "board", "emshop", "jobsboosts", "baltop", "treasures", "logger", "ai", "audit", "repo");
+            return List.of("reload", "joinmessage", "quitmessage", "board", "emshop", "jobsboosts", "baltop", "treasures", "logger", "ai", "audit", "repo", "hunt", "locpool");
         }
 
         if (strings.length > 1 && strings[0].equalsIgnoreCase("ai")) {
@@ -368,8 +684,17 @@ public class Command implements CommandExecutor, TabCompleter {
             }
         }
 
-        if(strings.length > 1 && strings[0].equalsIgnoreCase("repo")) {
+        if (strings.length > 1 && strings[0].equalsIgnoreCase("repo")) {
             return List.of("save", "size");
+        }
+
+        if (strings.length > 1 && strings[0].equalsIgnoreCase("locpool")) {
+            if (strings.length == 2) {
+                return List.of("edit", "delete");
+            }
+            if (strings.length == 3) {
+                return new ArrayList<>(LocationPoolManager.getAll().stream().map(LocationPool::getId).toList());
+            }
         }
 
         if (strings.length > 1 && strings[0].equalsIgnoreCase("audit")) {
@@ -387,6 +712,68 @@ public class Command implements CommandExecutor, TabCompleter {
             }
         }
 
+        if (strings.length > 1 && strings[0].equalsIgnoreCase("treasures")) {
+            if (strings.length == 2) {
+                List<String> result = new ArrayList<>();
+                result.add("reload");
+                result.addAll(TreasurePool.getTreasurePools().stream().map(TreasurePool::getId).toList());
+                return result;
+            }
+            if (strings.length == 3) {
+                return List.of("addhand", "addchest", "addsubpool", "give");
+            }
+            if (strings.length == 4) {
+                if (strings[2].equalsIgnoreCase("addsubpool")) {
+                    return TreasurePool.getTreasurePools().stream().map(TreasurePool::getId)
+                            .filter(id -> !id.equalsIgnoreCase(strings[1]))
+                            .toList();
+                }
+                if (strings[2].equalsIgnoreCase("give")) {
+                    return Bukkit.getOnlinePlayers().stream().map(Player::getName).toList();
+                }
+            }
+            Set<String> args = new HashSet<>();
+            Collections.addAll(args, strings);
+            List<String> result = new ArrayList<>();
+            if (args.contains("addhand") || args.contains("addchest") || args.contains("addsubpool")) {
+                result.add("-weight:1");
+            }
+            if (args.contains("addhand")) {
+                result.add("-quantity:1");
+            }
+            return result;
+        }
+
+        if (strings.length > 1 && strings[0].equalsIgnoreCase("hunt")) {
+
+            if (strings.length == 2) {
+                return List.of("start", "stop");
+            }
+
+            if (strings.length == 3) {
+                List<String> res = new ArrayList<>(LocationPoolManager.getAll().stream().map(LocationPool::getId).toList());
+                if (strings[1].equalsIgnoreCase("start")) res.addAll(TreasureHuntManager.getTreasureHuntTypes());
+                return res;
+            }
+
+            if (strings.length == 4) {
+                LocationPool locationPool = LocationPoolManager.getPool(strings[1]);
+                if (locationPool == null) return List.of("кол-во");
+                return List.of((locationPool.getLocations().size() + ""));
+            }
+
+            if (strings.length == 5) {
+                List<String> list = new ArrayList<>(TreasureHunt.aliases().keySet());
+                list.add("vanilla");
+                list.add("ItemsAdderId");
+                return list;
+            }
+
+            if (strings.length == 6) {
+                return TreasureHuntManager.getTreasurePools().stream().map(TreasurePool::getId).toList();
+            }
+        }
+
         if (strings.length == 2) {
             if (strings[0].equalsIgnoreCase("emshop")) {
                 return ARC.plugin.getServer().getOnlinePlayers().stream().map(Player::getName).toList();
@@ -395,7 +782,6 @@ public class Command implements CommandExecutor, TabCompleter {
                 return ARC.plugin.getServer().getOnlinePlayers().stream().map(Player::getName).toList();
             }
             if (strings[0].equalsIgnoreCase("logger")) {
-                // list all classes in arc.arc package
                 log.info("Listing all classes in arc package");
                 Reflections reflections = new Reflections("arc");
                 log.info(reflections.toString());

@@ -1,8 +1,7 @@
 package arc.arc.hooks;
 
-import java.util.List;
-
 import com.Zrips.CMI.CMI;
+import lombok.extern.slf4j.Slf4j;
 import net.Zrips.CMILib.ActionBar.CMIActionBar;
 import net.Zrips.CMILib.Advancements.CMIAdvancement;
 import net.Zrips.CMILib.BossBar.BossBarInfo;
@@ -12,23 +11,30 @@ import org.bukkit.boss.BarColor;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
+import java.util.List;
+
+@Slf4j
 public class CMIHook {
 
     public void sendBossbar(String bossBarName,
                             String message,
                             Player player,
                             BarColor barColor,
-                            int seconds) {
+                            int seconds,
+                            int keepFor) {
 
         BossBarInfo info = new BossBarInfo(player, bossBarName);
-        info.setKeepForTicks(seconds * 20);
+        info.setKeepForTicks(0);
         info.setColor(barColor);
         info.setAuto(1);
         info.setMakeVisible(true);
         info.setTranslateColors(true);
         info.setTitleOfBar(message);
+        info.setKeepForTicks(keepFor);
         int iters = seconds * 20;
         info.setAdjustPerc(1.0 / iters);
+
+        //log.info("Sending bossbar {} to player: {}", bossBarName, player.getName());
 
         CMILib.getInstance().getBossBarManager().Show(info);
     }

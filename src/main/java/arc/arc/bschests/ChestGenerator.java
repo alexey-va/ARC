@@ -1,9 +1,9 @@
 package arc.arc.bschests;
 
 import arc.arc.configs.Config;
-import arc.arc.generic.treasure.Treasure;
-import arc.arc.generic.treasure.TreasureItem;
-import arc.arc.generic.treasure.TreasurePool;
+import arc.arc.common.treasure.Treasure;
+import arc.arc.common.treasure.impl.TreasureItem;
+import arc.arc.common.treasure.TreasurePool;
 import arc.arc.network.repos.ItemList;
 import lombok.extern.slf4j.Slf4j;
 import org.bukkit.entity.Player;

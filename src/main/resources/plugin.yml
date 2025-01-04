@@ -38,12 +38,6 @@ commands:
   x:
     description: x
     usage: x
-  mex:
-    description: Mex
-    usage: mex
-  cforward:
-    description: cforward
-    usage: cforward
   locpool:
     description: locpool
     usage: locpool

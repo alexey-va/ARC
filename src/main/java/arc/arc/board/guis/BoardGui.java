@@ -53,7 +53,6 @@ public class BoardGui extends ChestGui {
     }
 
     private void fillItems() {
-        log.info("Filling items");
         List<GuiItem> guiItemList = Board.items()
                 .stream()
                 .map(this::toGuiItem)
@@ -89,7 +88,7 @@ public class BoardGui extends ChestGui {
             click.setCancelled(true);
             if (click.isShiftClick() && click.isLeftClick()) {
                 openEditor(boardItem.entry, guiItem);
-            } else if (click.isLeftClick()) {
+            } else if (click.isRightClick()) {
                 openRating(boardItem.entry, guiItem);
             }
         });
@@ -109,8 +108,8 @@ public class BoardGui extends ChestGui {
     }
 
     private void openRating(BoardEntry entry, GuiItem guiItem) {
-        if (entry.canEdit(player)) {
-            new RateBoardGui(player, entry).show(player);
+        if (!entry.canEdit(player) || player.hasPermission("arc.board.admin")) {
+            GuiUtils.constructAndShowAsync(() -> new RateBoardGui(player, entry), player);
         } else {
             GuiUtils.temporaryChange(guiItem.getItem(),
                     Component.text("Вы не можете это оценить", NamedTextColor.RED),
@@ -173,7 +172,7 @@ public class BoardGui extends ChestGui {
         pane.addItem(publish, 8, 0);
     }
 
-    private void notEnoughMoneyDisplay(GuiItem guiItem){
+    private void notEnoughMoneyDisplay(GuiItem guiItem) {
         GuiUtils.temporaryChange(guiItem.getItem(),
                 MiniMessage.miniMessage().deserialize(BoardConfig.getString("not-enough-money")),
                 null, 60L, this::update);
