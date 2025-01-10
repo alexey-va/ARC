@@ -52,7 +52,7 @@ public class BlockListener implements Listener {
         PersonalLootManager.processChestBreak(event);
     }
 
-    @EventHandler
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
     public void onBlockBreakHigh(BlockBreakEvent event) {
         //processBreakForLeaves(event);
 

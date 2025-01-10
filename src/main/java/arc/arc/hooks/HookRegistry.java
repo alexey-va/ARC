@@ -63,6 +63,8 @@ public class HookRegistry {
     public JoinListener joinListener;
     public PickupListener pickupListener;
     public IAEvents iaEvents;
+    public BetterRTPListener betterRTPListener;
+    public RespawnListener respawnListener;
 
     public void setupHooks() {
         registerEvents();
@@ -142,6 +144,7 @@ public class HookRegistry {
                 bankHook = new BankHook();
             }
         }
+
         if (getServer().getPluginManager().getPlugin("RedisEconomy") != null) {
             if (getServer().getPluginManager().getPlugin("RedisEconomy").isEnabled()) {
                 log.info("Registering RedisEconomy hook");
@@ -215,9 +218,22 @@ public class HookRegistry {
                 citizensHook.registerListeners();
             }
         }
+        if (getServer().getPluginManager().getPlugin("BetterRTP") != null) {
+            if (getServer().getPluginManager().getPlugin("BetterRTP").isEnabled()) {
+                log.info("Registering BetterRTP hook");
+                if(betterRTPListener == null) {
+                    betterRTPListener = new BetterRTPListener();
+                    Bukkit.getPluginManager().registerEvents(betterRTPListener, ARC.plugin);
+                }
+            }
+        }
         if (chatListener == null) {
             chatListener = new ChatListener();
             Bukkit.getPluginManager().registerEvents(chatListener, ARC.plugin);
+        }
+        if(respawnListener == null) {
+            respawnListener = new RespawnListener();
+            Bukkit.getPluginManager().registerEvents(respawnListener, ARC.plugin);
         }
         if (spawnerListener == null) {
             spawnerListener = new SpawnerListener();

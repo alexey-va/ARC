@@ -29,6 +29,8 @@ import arc.arc.util.GuiUtils;
 import arc.arc.util.TextUtil;
 import arc.arc.util.Utils;
 import arc.arc.xserver.playerlist.PlayerManager;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -53,10 +55,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Slf4j
 public class Command implements CommandExecutor, TabCompleter {
+
+    public static final Cache<String, Object> playersForRtp = CacheBuilder.newBuilder()
+            .expireAfterWrite(1, TimeUnit.MINUTES)
+            .build();
+
     @Override
     public boolean onCommand(@NotNull CommandSender commandSender, org.bukkit.command.@NotNull Command command, @NotNull String s, @NotNull String[] strings) {
 
@@ -92,6 +101,11 @@ public class Command implements CommandExecutor, TabCompleter {
 
         if (strings[0].equalsIgnoreCase("repo")) {
             processRepoCommand(commandSender, strings);
+            return true;
+        }
+
+        if (strings[0].equalsIgnoreCase("respawnonrtp")) {
+            processRespawnOnRtpCommand(commandSender, strings);
             return true;
         }
 
@@ -222,6 +236,19 @@ public class Command implements CommandExecutor, TabCompleter {
 
 
         return true;
+    }
+
+    public void processRespawnOnRtpCommand(CommandSender commandSender, String[] strings) {
+        if (!commandSender.hasPermission("arc.rtp-respawn")) {
+            commandSender.sendMessage(TextUtil.noPermissions());
+            return;
+        }
+        if (strings.length < 2) {
+            commandSender.sendMessage("Not enough args!");
+            return;
+        }
+        String playerName = strings[1];
+        playersForRtp.put(playerName, new Object());
     }
 
     public void processTreasureHuntCommand(CommandSender commandSender, String[] strings) {

@@ -6,6 +6,7 @@ import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.bukkit.inventory.ItemStack;
 
+import java.util.Objects;
 import java.util.UUID;
 
 @EqualsAndHashCode(callSuper = false)
@@ -87,5 +88,9 @@ public class CustomLootData extends RepoData<CustomLootData> {
             }
         }
         log.error("Item not found in chest: {} {}", item, slot);
+    }
+
+    public boolean isExhausted() {
+        return items != null && filled && items.stream().allMatch(Objects::isNull);
     }
 }

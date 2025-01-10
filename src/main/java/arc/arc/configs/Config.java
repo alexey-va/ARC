@@ -204,6 +204,18 @@ public class Config {
         return (List<String>) o;
     }
 
+    public Set<String> stringSet(String path) {
+        Object o = getValueForKeyPath(path);
+        if (o == null) {
+            injectDeepKey(path, new HashSet<String>());
+            return new HashSet<>();
+        }
+        if (o instanceof String s) {
+            return Set.of(s);
+        }
+        return new HashSet<>((List<String>) o);
+    }
+
     public List<String> stringList(String path, List<String> def) {
         Object o = getValueForKeyPath(path);
         if (o == null) {

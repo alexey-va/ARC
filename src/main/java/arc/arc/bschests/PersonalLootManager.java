@@ -11,17 +11,20 @@ import lombok.extern.slf4j.Slf4j;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
-import org.bukkit.block.*;
+import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.inventory.InventoryType;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 
-import java.util.*;
-import java.util.concurrent.CompletableFuture;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static arc.arc.util.Utils.*;
@@ -29,18 +32,16 @@ import static arc.arc.util.Utils.*;
 @Slf4j
 public class PersonalLootManager {
 
+    private static final Set<Material> chests = Set.of(Material.CHEST, Material.TRAPPED_CHEST, Material.BARREL);
+    private static final NamespacedKey key = new NamespacedKey(ARC.plugin, "ploot");
+    private static final NamespacedKey uuidKey = new NamespacedKey(ARC.plugin, "ploot_uuid");
+    private static final NamespacedKey poolKey = new NamespacedKey(ARC.plugin, "ploot_pool");
+    private static final NamespacedKey breakKey = new NamespacedKey(ARC.plugin, "ploot_break");
     private static Config config;
     private static Set<InventoryType> inventories;
-    private static Set<Material> chests = Set.of(Material.CHEST, Material.TRAPPED_CHEST, Material.BARREL);
     private static int maxPlayers;
     private static boolean useBsLoot = false;
-
-    private static NamespacedKey key = new NamespacedKey(ARC.plugin, "ploot");
-    private static NamespacedKey uuidKey = new NamespacedKey(ARC.plugin, "ploot_uuid");
-    private static NamespacedKey poolKey = new NamespacedKey(ARC.plugin, "ploot_pool");
-    private static NamespacedKey breakKey = new NamespacedKey(ARC.plugin, "ploot_break");
-    private static String SEPARATOR = ":::";
-    private static int BREAKS = 5;
+    private static final String SEPARATOR = ":::";
 
     private static RedisRepo<CustomLootData> repo;
     private static ChestGenerator chestGenerator;
@@ -81,32 +82,34 @@ public class PersonalLootManager {
         CustomBlockData data = new CustomBlockData(block, ARC.plugin);
         if (!data.has(uuidKey)) return;
         Integer breaks = data.get(breakKey, PersistentDataType.INTEGER);
-        breaks = breaks == null ? 0 : breaks;
-        breaks++;
-        if (breaks > BREAKS) {
+        breaks = breaks == null ? 1 : breaks + 1;
+        if (breaks >= config.integer("max-breaks", 3)) {
+            Inventory itemStacks = extractInventory(block);
+            itemStacks.clear();
             data.clear();
-            event.setDropItems(false);
         } else {
             data.set(breakKey, PersistentDataType.INTEGER, breaks);
             event.setCancelled(true);
             event.getPlayer().sendMessage(
-                    config.component("break-message", "%amount%", String.valueOf(BREAKS - breaks))
+                    config.componentDef("messages.break",
+                            "<red>Этот сундук нужно сломать еще <amount> раз",
+                            "<amount>", String.valueOf(config.integer("max-breaks", 3) - breaks))
             );
         }
     }
 
     public static void processChestOpen(InventoryOpenEvent event) {
         if (inventories == null || !inventories.contains(event.getInventory().getType())) {
-            //log.warn("Inventory type not in list: {}", event.getInventory().getType());
             return;
         }
         Player player = (Player) event.getPlayer();
         Location location = event.getInventory().getLocation();
         if (location == null) return;
-        //log.info("Opening inventory: {}", location);
+        log.info("Opening inventory: {}", location);
+
         Block block = event.getInventory().getLocation().getBlock();
         List<Block> blocks = connectedChests(block);
-        //log.info("Connected chests: {}", blocks);
+
         CustomBlockData data = new CustomBlockData(block, ARC.plugin);
         if (!data.has(uuidKey)) return;
         UUID chestUuid = UUID.fromString(data.get(uuidKey, PersistentDataType.STRING));
@@ -115,16 +118,21 @@ public class PersonalLootManager {
             log.warn("Player list string is null");
             return;
         }
-        String[] split = playerListString.split(SEPARATOR);
-        Set<UUID> players = Arrays.stream(split)
+
+        Set<UUID> players = Arrays.stream(playerListString.split(SEPARATOR))
                 .filter(s -> !s.isEmpty())
                 .filter(s -> s.length() == 36)
                 .map(UUID::fromString)
                 .collect(Collectors.toSet());
-        boolean isPlayerInList = players.contains(player.getUniqueId());
+
+        log.info("Chest data: uuid {} players {} thisPlayer {}", chestUuid, players, player.getName());
+        event.setCancelled(true);
+
         if (players.size() >= maxPlayers && !players.contains(player.getUniqueId())) {
-            player.sendMessage(config.component("max-players-message", "%amount%", String.valueOf(players.size())));
-            event.setCancelled(true);
+            player.sendMessage(config.componentDef("messages.max-players",
+                    "<red>Слишком много игроков уже открыли этот сундук!",
+                    "%amount%", String.valueOf(players.size())));
+            log.info("Too many players already opened this!");
             return;
         }
         players.add(player.getUniqueId());
@@ -143,53 +151,30 @@ public class PersonalLootManager {
             if (inventory != null) inventory.clear();
         }
 
-        event.setCancelled(true);
-        //log.info("Player in list: {}", isPlayerInList);
-        CompletableFuture<CustomLootData> future = isPlayerInList ?
-                repo.getOrNull(player.getUniqueId() + SEPARATOR + chestUuid) :
-                repo.getOrCreate(player.getUniqueId() + SEPARATOR + chestUuid, () -> CustomLootData.builder()
+        repo.getOrCreate(player.getUniqueId() + SEPARATOR + chestUuid, () -> CustomLootData.builder()
                         .playerUuid(player.getUniqueId())
                         .chestUuid(chestUuid)
                         .timestamp(System.currentTimeMillis())
-                        .build());
-        future.thenApply(cl -> {
-            try {
-                if (cl == null) {
-                    player.sendMessage(
-                            config.component("already-opened-message")
-                    );
-                    return null;
-                }
-                if (!cl.isFilled() && (cl.items == null || cl.items.isEmpty())) {
-                    //log.info("Generating loot for player: {}", player);
-                    ItemList generated = new ItemList();
-                    if (useBsLoot) {
-                        generated.addAll(currentItems);
-                    } else {
-                        generated = chestGenerator.generate(poolName, player, 5, 27);
+                        .build())
+                .thenApply(cl -> {
+                    if (cl == null || cl.isExhausted()) {
+                        player.sendMessage(config.componentDef("messages.already-opened", "<red>Вы уже открывали этот сундук"));
+                    } else if (!cl.isFilled() && (cl.items == null || cl.items.isEmpty())) {
+                        ItemList generated = new ItemList();
+                        if (useBsLoot) generated.addAll(currentItems);
+                        else generated = chestGenerator.generate(poolName, player, 5, 27);
+
+                        if (cl.items == null) cl.items = new ItemList();
+                        cl.items.addAll(generated);
+                        cl.setFilled(true);
+                        cl.setDirty(true);
                     }
-                    if (cl.items == null) cl.items = new ItemList();
-                    cl.items.addAll(generated);
-                    cl.setFilled(true);
-                    cl.setDirty(true);
-                }
-                return cl;
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-            return null;
-        }).thenAccept(cl -> {
-            if (cl == null) return;
-            try {
-                GuiUtils.constructAndShowAsync(() -> new LootGui(player, cl), player);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        });
+                    return cl;
+                }).thenAccept(cl -> {
+                    if (cl == null) return;
+                    GuiUtils.constructAndShowAsync(() -> new LootGui(player, cl), player);
+                });
     }
-
-
-
 
 
     public static void processChestGen(Block block) {
@@ -208,8 +193,4 @@ public class PersonalLootManager {
     private static String genTreasurePool(Block block) {
         return "generic_bs";
     }
-
-
-
-
 }
