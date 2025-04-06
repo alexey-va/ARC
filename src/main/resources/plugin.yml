@@ -1,6 +1,6 @@
 name: ARC
 version: '${project.version}'
-main: arc.arc.ARC
+main: ru.arc.ARC
 api-version: 1.20
 libraries:
   - com.google.code.gson:gson:2.10.1
@@ -31,6 +31,8 @@ softdepend:
   - Jobs
   - BetterStructures
   - PlaceholderAPI
+  - Duels
+  - BetterRTP
 commands:
   arc:
     description: Main command

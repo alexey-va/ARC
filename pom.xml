@@ -134,7 +134,7 @@
         <dependency>
             <groupId>io.papermc.paper</groupId>
             <artifactId>paper-api</artifactId>
-            <version>1.21-R0.1-SNAPSHOT</version>
+            <version>1.21.4-R0.1-SNAPSHOT</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -158,7 +158,7 @@
         <dependency>
             <groupId>com.github.Slimefun</groupId>
             <artifactId>Slimefun4</artifactId>
-            <version>RC-37</version>
+            <version>Exp-2</version>
             <scope>provided</scope>
             <!-- ... -->
         </dependency>
@@ -196,7 +196,7 @@
         <dependency>
             <groupId>com.github.stefvanschie.inventoryframework</groupId>
             <artifactId>IF</artifactId>
-            <version>0.10.14</version>
+            <version>0.10.19</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
@@ -282,7 +282,7 @@
         <dependency>
             <groupId>de.tr7zw</groupId>
             <artifactId>item-nbt-api</artifactId>
-            <version>2.13.2</version>
+            <version>2.14.1</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
@@ -412,6 +412,23 @@
             <groupId>com.github.Zrips</groupId>
             <artifactId>CMILib</artifactId>
             <version>1.4.7.4</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>pl.tkowalcz.tjahzi</groupId>
+            <artifactId>log4j2-appender-nodep</artifactId>
+            <version>0.9.17</version>
+        </dependency>
+        <dependency>
+            <groupId>duels</groupId>
+            <artifactId>Duels</artifactId>
+            <version>2.5</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.github.UlrichBR</groupId>
+            <artifactId>UClans-API</artifactId>
+            <version>8.6.0</version>
             <scope>provided</scope>
         </dependency>
 
