@@ -88,3 +88,10 @@ fabric.properties
 # Maven
 log/
 target/
+
+#gradle
+.gradle
+build/
+gradle/
+!gradle/wrapper/gradle-wrapper.properties
+.kotlin
