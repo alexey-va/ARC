@@ -2,9 +2,7 @@ package ru.arc.hooks;
 
 import com.google.gson.annotations.SerializedName;
 import com.meteordevelopments.duels.api.Duels;
-import com.meteordevelopments.duels.api.event.match.MatchEndEvent;
 import com.meteordevelopments.duels.api.user.User;
-import com.meteordevelopments.duels.arena.ArenaImpl;
 import lombok.Builder;
 import lombok.Data;
 import org.bukkit.Bukkit;
@@ -12,7 +10,6 @@ import org.bukkit.entity.Player;
 import ru.arc.ARC;
 import ru.arc.sync.base.SyncData;
 
-import java.util.Set;
 import java.util.UUID;
 
 public class DuelsHook {
@@ -24,22 +21,7 @@ public class DuelsHook {
     }
 
     public void stopDuelsIfAny(Player quitter){
-        ArenaImpl arena = (ArenaImpl) api.getArenaManager().get(quitter);
-        if(arena == null){
-            return;
-        }
-        Set<Player> players = arena.getPlayers();
-        Player otherPlayer = null;
-        for (Player player : players) {
-            if(!player.equals(quitter)){
-                otherPlayer = player;
-            }
-        }
-        if(otherPlayer == null){
-            arena.getPlayers().remove(quitter);
-            return;
-        }
-        arena.endMatch(otherPlayer.getUniqueId(), otherPlayer.getUniqueId(), MatchEndEvent.Reason.OPPONENT_DEFEAT);
+
     }
 
     public DuelsData getUserData(UUID uuid) {

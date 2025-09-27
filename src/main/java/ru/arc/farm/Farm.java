@@ -28,6 +28,7 @@ import org.bukkit.inventory.ItemStack;
 
 import java.util.*;
 
+import static ru.arc.util.Logging.error;
 import static ru.arc.util.TextUtil.mm;
 
 @Slf4j
@@ -55,14 +56,14 @@ public class Farm {
 
         world = Bukkit.getWorld(worldName);
         if (world == null) {
-            log.error("World {} not found", worldName);
+            error("World {} not found", worldName);
             return;
         }
 
         RegionContainer regionContainer = WorldGuard.getInstance().getPlatform().getRegionContainer();
         this.region = regionContainer.get(BukkitAdapter.adapt(world)).getRegion(regionName);
 
-        if (region == null) log.error("Region {} not found in world {}", regionName, worldName);
+        if (region == null) error("Region {} not found in world {}", regionName, worldName);
     }
 
     public boolean processBreakEvent(BlockBreakEvent event) {

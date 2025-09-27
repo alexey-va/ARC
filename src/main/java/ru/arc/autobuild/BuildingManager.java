@@ -27,6 +27,9 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
+
 @Slf4j
 public class BuildingManager {
 
@@ -73,7 +76,7 @@ public class BuildingManager {
                     .map(Building::new)
                     .forEach(BuildingManager::addBuilding);
         } catch (Exception e) {
-            log.error("Error while loading buildings", e);
+            error("Error while loading buildings", e);
         }
         setupCleanupTask();
 
@@ -103,7 +106,7 @@ public class BuildingManager {
         for (var site : sitesToRemove) {
             try {
                 if (System.currentTimeMillis() - site.getTimestamp() > 180000 || force) {
-                    log.info("Cleaning up construction site for player {} {}", site.player.getName(), site);
+                    info("Cleaning up construction site for player {} {}", site.player.getName(), site);
                     switch (site.state) {
                         case DISPLAYING_OUTLINE -> {
                             site.stopOutlineDisplay();
@@ -121,11 +124,11 @@ public class BuildingManager {
                             }
                         }
                         case DONE, CREATED, CANCELLED -> site.cleanup(0);
-                        case null -> log.error("Site state is null for player {}", site.player.getName());
+                        case null -> error("Site state is null for player {}", site.player.getName());
                     }
                 }
             } catch (Exception e) {
-                log.error("Error while cleaning up", e);
+                error("Error while cleaning up", e);
             }
         }
     }
@@ -214,7 +217,7 @@ public class BuildingManager {
         ConstructionSite site = getPendingConstruction(player.getUniqueId());
         Building building = getBuilding(buildingId);
         if (building == null) {
-            log.error("Building with id {} not found!", buildingId);
+            error("Building with id {} not found!", buildingId);
             player.sendMessage(config.componentDef("building-not-found-message", "<gray>\uD83D\uDEE0 <red>Здание не найдено!"));
             return;
         }
@@ -243,7 +246,7 @@ public class BuildingManager {
     public static void confirmConstruction(Player player, boolean confirm) {
         ConstructionSite site = getPendingConstruction(player.getUniqueId());
         if (site == null) {
-            log.info("Player {} tried to confirm construction but no site found", player.getName());
+            info("Player {} tried to confirm construction but no site found", player.getName());
             return;
         }
 

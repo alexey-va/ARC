@@ -11,6 +11,9 @@ import org.bukkit.OfflinePlayer;
 
 import java.util.UUID;
 
+import static ru.arc.util.Logging.debug;
+import static ru.arc.util.Logging.error;
+
 @EqualsAndHashCode(callSuper = true)
 @Data
 @ToString(callSuper = true)
@@ -29,11 +32,11 @@ public class XPay extends XAction {
     @Override
     protected void runInternal() {
         if (amount == 0) {
-            log.error("Amount is 0: {}", this);
+            error("Amount is 0: {}", this);
             return;
         }
         if (!miscConfig.bool("xaction.main-server", false)) {
-            log.debug("Main server is disabled, skipping pay action");
+            debug("Main server is disabled, skipping pay action");
             return;
         }
         OfflinePlayer player = null;
@@ -43,12 +46,12 @@ public class XPay extends XAction {
             player = Bukkit.getOfflinePlayer(playerUuid);
         }
         if (player == null) {
-            log.error("Player not found: {}", this);
+            error("Player not found: {}", this);
             return;
         }
         EconomyResponse economyResponse = ARC.getEcon().depositPlayer(player, amount);
         if (!economyResponse.transactionSuccess()) {
-            log.error("Error depositing money: {}", economyResponse.errorMessage);
+            error("Error depositing money: {}", economyResponse.errorMessage);
         }
     }
 }

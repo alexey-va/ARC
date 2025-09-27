@@ -24,6 +24,9 @@ import org.bukkit.entity.Player;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.warn;
+
 @Log4j2
 public class CMISync implements Sync {
 
@@ -63,7 +66,7 @@ public class CMISync implements Sync {
     @SuppressWarnings("deprecation")
     public void applyData(CMIDataDTO data) {
         if (data == null) {
-            log.warn("Data is null {}", key);
+            warn("Data is null {}", key);
             return;
         }
         if (data.server().equals(ARC.serverName)) return;
@@ -72,7 +75,7 @@ public class CMISync implements Sync {
 
         CMIUser user = CMI.getInstance().getPlayerManager().getUser(data.uuid());
         if (user == null) {
-            log.warn("User is null for {}", data.uuid());
+            warn("User is null for {}", data.uuid());
             return;
         }
 
@@ -135,20 +138,20 @@ public class CMISync implements Sync {
     public CMIDataDTO produceData(Context context) {
         UUID uuid = context.get("uuid");
         if (uuid == null) {
-            log.error("Could not extract uuid for cmi sync: {}", context);
+            error("Could not extract uuid for cmi sync: {}", context);
             return null;
         }
 
         CMIUser user = CMI.getInstance().getPlayerManager().getUser(uuid);
         if (user == null) {
-            log.error("Could not find user for cmi sync: {}", uuid);
+            error("Could not find user for cmi sync: {}", uuid);
             return null;
         }
 
         Map<String, CMIDataDTO.KitUsage> kitUsageMap = new HashMap<>();
         user.getKits().forEach((kit, usage) -> {
             if (kit == null) {
-                log.warn("Kit is null for user {}", user.getName());
+                warn("Kit is null for user {}", user.getName());
                 return;
             }
             kitUsageMap.put(kit.getConfigName(), CMIDataDTO.KitUsage.builder()

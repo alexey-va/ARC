@@ -19,6 +19,9 @@ import ru.arc.xserver.playerlist.PlayerManager;
 import java.util.List;
 import java.util.stream.Stream;
 
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
+
 @Slf4j
 @RequiredArgsConstructor
 public class EMWormholes {
@@ -29,7 +32,7 @@ public class EMWormholes {
     public void init() {
         cancel();
 
-        log.info("Starting wormhole task");
+        info("Starting wormhole task");
         wormholeTask = new BukkitRunnable() {
             @Override
             public void run() {
@@ -37,7 +40,7 @@ public class EMWormholes {
                     runWormholes();
                     runChests();
                 } catch (Exception e) {
-                    log.error("Error running wormholes", e);
+                    error("Error running wormholes", e);
                 }
             }
         }.runTaskTimerAsynchronously(ARC.plugin, 20L, config.integer("wormholes.period-ticks", 2));
@@ -90,12 +93,12 @@ public class EMWormholes {
                         if (sound1 == null) continue;
                         p.playSound(p.getLocation(), sound1, 1.0f, 1.0f);
                     } catch (Exception e) {
-                        log.error("Error playing sound", e);
+                        error("Error playing sound", e);
                     }
                 }
             }
         } catch (Exception e) {
-            log.error("Error running chests", e);
+            error("Error running chests", e);
         }
     }
 

@@ -11,6 +11,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
+import static ru.arc.util.Logging.error;
+
 @Slf4j
 @Data
 public abstract class Treasure {
@@ -90,7 +92,7 @@ public abstract class Treasure {
             treasure.setPool(treasurePool);
             return treasure;
         } catch (Exception e) {
-            log.error("Error while creating treasure", e);
+            error("Error while creating treasure", e);
         }
         return null;
     }

@@ -26,6 +26,8 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.CUSTOM;
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -165,7 +167,7 @@ public class ConstructionSite {
         if (HookRegistry.landsHook != null) {
             for (Chunk chunk : chunks) {
                 if (!HookRegistry.landsHook.canBuild(player, chunk)) {
-                    log.info("Can't build in chunk: {}", chunk);
+                    info("Can't build in chunk: {}", chunk);
                     return false;
                 }
             }
@@ -176,7 +178,7 @@ public class ConstructionSite {
                 for (int y = corners.corner1.y(); y < corners.corner2.y(); y++) {
                     for (int z = corners.corner1.z(); z < corners.corner2.z(); z++) {
                         if (!HookRegistry.wgHook.canBuild(player, new Location(world, x, y, z))) {
-                            log.info("Can't build in worldguard: {} {} {}", x, y, z);
+                            info("Can't build in worldguard: {} {} {}", x, y, z);
                             return false;
                         }
                     }
@@ -188,7 +190,7 @@ public class ConstructionSite {
 
     public void forceloadChunks() {
         calculateChunks();
-        log.info("Forceloading {} chunks", chunks.size());
+        info("Forceloading {} chunks", chunks.size());
         for (Chunk chunk : chunks) {
             chunk.setForceLoaded(true);
         }
@@ -277,7 +279,7 @@ public class ConstructionSite {
                 }
             }.runTaskTimer(ARC.plugin, 0L, 10L);
         } catch (Exception e) {
-            log.error("Failed to launch fireworks", e);
+            error("Failed to launch fireworks", e);
         }
     }
 

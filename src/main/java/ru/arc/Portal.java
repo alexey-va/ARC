@@ -27,6 +27,8 @@ import static org.bukkit.Material.SNOW;
 import static org.bukkit.Material.TRIPWIRE;
 import static org.bukkit.Sound.*;
 import static org.bukkit.potion.PotionEffectType.BLINDNESS;
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
 
 @Slf4j
 public class Portal {
@@ -57,7 +59,7 @@ public class Portal {
         this.portalData = portalData;
         this.player = Bukkit.getPlayer(uuid);
         if (player == null) {
-            log.error("Player is null");
+            error("Player is null");
             return;
         }
 
@@ -65,7 +67,7 @@ public class Portal {
 
         if (centerBlock == null) {
             executeAction(player);
-            log.info("Could not find suitable location for portal near {}", player.getName());
+            info("Could not find suitable location for portal near {}", player.getName());
             return;
         }
 
@@ -173,7 +175,7 @@ public class Portal {
             }.runTask(ARC.plugin);
         } else if (actionType == HUSK) {
             if (HookRegistry.huskHomesHook == null) {
-                log.error("HuskHomes hook is not active!");
+                error("HuskHomes hook is not active!");
                 return;
             }
             new BukkitRunnable() {

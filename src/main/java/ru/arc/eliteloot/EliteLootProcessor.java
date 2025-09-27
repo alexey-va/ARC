@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Set;
 
 import static ru.arc.eliteloot.EliteLootManager.toLootType;
+import static ru.arc.util.Logging.error;
 
 
 @Slf4j
@@ -107,9 +108,9 @@ public class EliteLootProcessor {
         try {
             targetMeta.setAttributeModifiers(attrs);
         } catch (Exception e) {
-            log.error("Failed to add attributes for {}", origin.getType(), e);
-            log.error("Default attributes for origin {}: {}", origin.getType(), attrs);
-            log.error("Default attributes for target {}: {}", targetMaterial, targetMaterial.getDefaultAttributeModifiers());
+            error("Failed to add attributes for {}", origin.getType(), e);
+            error("Default attributes for origin {}: {}", origin.getType(), attrs);
+            error("Default attributes for target {}: {}", targetMaterial, targetMaterial.getDefaultAttributeModifiers());
         }
 
         if (appendAttrLore) {

@@ -13,6 +13,8 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
 
+import static ru.arc.util.Logging.info;
+
 @RequiredArgsConstructor @Log4j2
 public class BackupService {
 
@@ -29,15 +31,14 @@ public class BackupService {
         LocalDateTime now = LocalDateTime.now();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy_MM_dd_HH_mm_ss");
         String fileName = id + "_backup_" + now.format(formatter) + ".json";
-        log.info("Saving backup to {}", fileName);
+        info("Saving backup to {}", fileName);
         log.trace("Backup data: {}", map);
         try {
             if (!Files.exists(folder)) Files.createDirectories(folder);
             Files.writeString(folder.resolve(fileName), gson.toJson(map),
                     StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE, StandardOpenOption.CREATE);
         } catch (Exception e) {
-            e.printStackTrace();
-            System.out.println(map);
+            log.error("Could not save backup to {}", fileName, e);
         }
     }
 

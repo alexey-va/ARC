@@ -1,5 +1,22 @@
 package ru.arc.commands;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import lombok.extern.slf4j.Slf4j;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
+import org.bukkit.Bukkit;
+import org.bukkit.Material;
+import org.bukkit.block.Block;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.reflections.Reflections;
 import ru.arc.ARC;
 import ru.arc.ai.Conversation;
 import ru.arc.ai.GPTManager;
@@ -24,39 +41,15 @@ import ru.arc.network.repos.RedisRepo;
 import ru.arc.treasurechests.TreasureHunt;
 import ru.arc.treasurechests.TreasureHuntManager;
 import ru.arc.treasurechests.TreasureHuntType;
-import ru.arc.util.CooldownManager;
-import ru.arc.util.GuiUtils;
-import ru.arc.util.TextUtil;
-import ru.arc.util.Utils;
+import ru.arc.util.*;
 import ru.arc.xserver.playerlist.PlayerManager;
-import com.google.common.cache.Cache;
-import com.google.common.cache.CacheBuilder;
-import lombok.extern.slf4j.Slf4j;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.format.TextDecoration;
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.core.LoggerContext;
-import org.apache.logging.log4j.core.config.Configuration;
-import org.apache.logging.log4j.core.config.LoggerConfig;
-import org.bukkit.Bukkit;
-import org.bukkit.Material;
-import org.bukkit.block.Block;
-import org.bukkit.command.CommandExecutor;
-import org.bukkit.command.CommandSender;
-import org.bukkit.command.TabCompleter;
-import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-import org.reflections.Reflections;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
 
 @Slf4j
 public class Command implements CommandExecutor, TabCompleter {
@@ -206,33 +199,16 @@ public class Command implements CommandExecutor, TabCompleter {
         }
 
         if (strings[0].equals("logger")) {
-            try {
-                if (strings.length < 2) {
-                    // list all loggers in arc.arc package
-                    LoggerContext ctx = (LoggerContext) LogManager.getContext(false);
-                    Configuration config = ctx.getConfiguration();
-                    for (Map.Entry<String, LoggerConfig> entry : config.getLoggers().entrySet()) {
-                        commandSender.sendMessage(entry.getKey() + " : " + entry.getValue().getLevel());
-                    }
-                    return true;
-                }
-                String prefix = strings[1];
-                Level logLevel = Level.valueOf(strings[2].toUpperCase());
-
-                Logger logger = LoggerFactory.getLogger(prefix);
-                log.info(logger.getClass().getCanonicalName());
-                //org.apache.logging.slf4j.Log4jLogger log4jLogger =
-                //log4jLogger.setLevel(logLevel);
-
-                // update loggers
-                //ctx.updateLoggers();
-            } catch (Exception e) {
-                commandSender.sendMessage("Error: " + e.getMessage());
-                log.error("Error: ", e);
-                return true;
-            }
+            Config config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "logger.yml");
+            String logLevel = strings[1];
+            Logging.Level level = Logging.Level.valueOf(logLevel.toUpperCase());
+            Logging.setLogLevel(level);
+            commandSender.sendMessage(config.componentDef(
+                    "messages.log-level-set",
+                    "<gray>Уровень логов установлен на %level%!",
+                    "%level%", level.name())
+            );
         }
-
 
         return true;
     }
@@ -287,7 +263,7 @@ public class Command implements CommandExecutor, TabCompleter {
                                 "%location_pool_id%", locationPoolId));
                         return;
                     }
-                    TreasureHuntManager.startHunt(locationPoolId, chests);
+                    TreasureHuntManager.startHunt(locationPoolId, chests, commandSender);
                     return;
                 }
                 if (locationPool == null) {
@@ -295,7 +271,7 @@ public class Command implements CommandExecutor, TabCompleter {
                             "%location_pool_id%", locationPoolId));
                     return;
                 }
-                TreasureHuntManager.startHunt(locationPool, chests, namespaceId, treasurePoolId);
+                TreasureHuntManager.startHunt(locationPool, chests, namespaceId, treasurePoolId, commandSender);
                 commandSender.sendMessage(config.componentDef("messages.hunt-started", "<gray>Начата охота на сокровища!"));
             } else if (stop) {
                 if (locationPool == null) {
@@ -313,7 +289,7 @@ public class Command implements CommandExecutor, TabCompleter {
             }
         } catch (Exception e) {
             commandSender.sendMessage(config.componentDef("messages.not-enough-args", "<red>Неверная команда! <gray>Синтаксис: /arc hunt start <location_pool_id> <chests> <namespace_id> <treasure_pool_id> или /arc hunt stop <location_pool_id> или /arc hunt start <type>"));
-            log.error("Error: ", e);
+            error("Error: ", e);
         }
     }
 
@@ -377,13 +353,13 @@ public class Command implements CommandExecutor, TabCompleter {
                     sender.sendMessage("Only players can use this command!");
                     return;
                 }
-                ItemStack item = player.getInventory().getItemInMainHand();
+                ItemStack item = player.getInventory().getItemInMainHand().clone();
                 if (item.getType().isAir()) {
                     player.sendMessage(config.componentDef("messages.no-item-in-hand", "<red>В руке нет предмета!"));
                     return;
                 }
                 TreasureItem treasureItem = TreasureItem.builder()
-                        .stack(player.getInventory().getItemInMainHand())
+                        .stack(item)
                         .minAmount(context.getMap().containsKey("quantity") ? context.get("quantity") : item.getAmount())
                         .maxAmount(context.getMap().containsKey("quantity") ? context.get("quantity") : item.getAmount())
                         .gaussData(null)
@@ -393,11 +369,10 @@ public class Command implements CommandExecutor, TabCompleter {
                 if (!add) {
                     player.sendMessage(config.componentDef("messages.item-already-added", "<red>Предмет уже добавлен в пул %pool_id%!",
                             "%pool_id%", poolId));
-                    return;
                 } else {
                     player.sendMessage(config.componentDef("messages.item-added", "<gray>Предмет добавлен в пул %pool_id%!",
-                            "%pool_id%", poolId));
-                    return;
+                            "%pool_id%", poolId,
+                            "%item%", item.getType().name()));
                 }
             } else if ("addchest".equalsIgnoreCase(action)) {
                 if (player == null) {
@@ -632,7 +607,7 @@ public class Command implements CommandExecutor, TabCompleter {
         if (ai > 0) {
             Config config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "gpt.yml");
             sender.sendMessage(config.componentDef("ai-cooldown-message", "<gray>Вы слишком разогнались, подождите немного."));
-            log.info("AI command on cooldown for player {}", player.getName());
+            info("AI command on cooldown for player {}", player.getName());
             return;
         }
         CooldownManager.addCooldown(player.getUniqueId(), "ai_command", 60);
@@ -815,9 +790,9 @@ public class Command implements CommandExecutor, TabCompleter {
                 return ARC.plugin.getServer().getOnlinePlayers().stream().map(Player::getName).toList();
             }
             if (strings[0].equalsIgnoreCase("logger")) {
-                log.info("Listing all classes in arc package");
+                info("Listing all classes in arc package");
                 Reflections reflections = new Reflections("arc");
-                log.info(reflections.toString());
+                info(reflections.toString());
                 reflections.getSubTypesOf(Object.class).forEach(System.out::println);
                 return reflections.getSubTypesOf(Object.class).stream().map(Class::getName)
                         //.map(s1 -> s.replace(".class", ""))

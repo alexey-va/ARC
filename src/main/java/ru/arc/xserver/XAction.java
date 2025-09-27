@@ -8,6 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.bukkit.Bukkit;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import static ru.arc.util.Logging.error;
+
 @JsonType(
         property = "type",
         subtypes = {
@@ -33,7 +35,7 @@ public abstract class XAction {
             if (async == null || !async) run(ticksDelay);
             else runAsync(ticksDelay);
         } catch (Exception e) {
-            log.error("Error executing action: {}", this, e);
+            error("Error executing action: {}", this, e);
         }
     }
 

@@ -18,25 +18,27 @@ import pl.tkowalcz.tjahzi.log4j2.labels.Label;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
+import static ru.arc.util.Logging.info;
+import static ru.arc.util.Logging.warn;
+
 @Slf4j
 public class Logging {
 
     public static void addLokiAppender() {
         try {
-
             Config config = ConfigManager.of(ARC.plugin.getDataPath(), "logging.yml");
             if (!config.bool("enabled", true)) {
-                log.info("Loki appender is disabled");
+                info("Loki appender is disabled");
                 return;
             }
             Label[] labels = config.map("labels", Map.of()).entrySet().stream()
                     .filter(l -> {
                         if (!Label.hasValidName(l.getKey())) {
-                            log.warn("Invalid label: {}", l);
+                            warn("Invalid label: {}", l);
                             return false;
                         }
                         if (l.getValue() == null || !(l.getValue() instanceof String)) {
-                            log.warn("Null value for label: {}", l);
+                            warn("Null value for label: {}", l);
                             return false;
                         }
                         return true;
@@ -73,9 +75,9 @@ public class Logging {
             loggerConfig.addAppender(build, Level.INFO, null);
             rootLogger.getContext().updateLoggers();
 
-            log.info("Loki appender started");
+            info("Loki appender started");
         } catch (Exception e) {
-            log.warn("Failed to add lokiAppender", e);
+            warn("Failed to add lokiAppender", e);
         }
     }
 

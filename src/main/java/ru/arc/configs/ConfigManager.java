@@ -6,6 +6,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class ConfigManager {
 
+    private static int version = 0;
+
     private static final Map<String, Config> configMap = new ConcurrentHashMap<>();
 
     public static Config get(String name) {
@@ -33,6 +35,11 @@ public class ConfigManager {
     }
 
     public static void reloadAll() {
+        version++;
         configMap.values().forEach(Config::load);
+    }
+
+    public static int getVersion() {
+        return version;
     }
 }

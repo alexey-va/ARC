@@ -163,7 +163,7 @@ public class Utils {
         if (state instanceof DoubleChest doubleChest) {
             Chest left = (Chest) doubleChest.getLeftSide();
             Chest right = (Chest) doubleChest.getRightSide();
-            //log.info("Left: {} Right: {}", left, right);
+            //info("Left: {} Right: {}", left, right);
             if (left != null) blocks.add(left.getBlock());
             if (right != null) blocks.add(right.getBlock());
         }

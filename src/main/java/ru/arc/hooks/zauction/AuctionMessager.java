@@ -8,6 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 
+import static ru.arc.util.Logging.error;
+
 @Slf4j
 @RequiredArgsConstructor
 public class AuctionMessager implements ChannelListener {
@@ -23,7 +25,7 @@ public class AuctionMessager implements ChannelListener {
         try {
             redisManager.publish(channel, Common.gson.toJson(itemDtoList));
         } catch (Exception e) {
-            log.error("Error sending auction items", e);
+            error("Error sending auction items", e);
         }
     }
 }

@@ -1,5 +1,11 @@
 package ru.arc;
 
+import lombok.Getter;
+import net.milkbowl.vault.economy.Economy;
+import org.bukkit.Bukkit;
+import org.bukkit.event.server.ServerCommandEvent;
+import org.bukkit.plugin.RegisteredServiceProvider;
+import org.bukkit.plugin.java.JavaPlugin;
 import ru.arc.audit.AuditManager;
 import ru.arc.autobuild.BuildingManager;
 import ru.arc.board.Board;
@@ -30,15 +36,10 @@ import ru.arc.util.ParticleManager;
 import ru.arc.xserver.PluginMessenger;
 import ru.arc.xserver.XActionManager;
 import ru.arc.xserver.announcements.AnnounceManager;
-import lombok.Getter;
-import lombok.extern.log4j.Log4j2;
-import net.milkbowl.vault.economy.Economy;
-import org.bukkit.Bukkit;
-import org.bukkit.event.server.ServerCommandEvent;
-import org.bukkit.plugin.RegisteredServiceProvider;
-import org.bukkit.plugin.java.JavaPlugin;
 
-@Log4j2
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
+
 public final class ARC extends JavaPlugin {
 
     public static ARC plugin;
@@ -61,36 +62,36 @@ public final class ARC extends JavaPlugin {
         try {
             Logging.addLokiAppender();
         } catch (Exception e) {
-            log.error("Error creating loki appender", e);
+            error("Error creating loki appender", e);
         }
     }
 
     @Override
     public void onEnable() {
         if (pluginMessenger == null) pluginMessenger = new PluginMessenger();
-        log.info("Starting ARC");
-        log.info("Creating hook registry");
+        info("Starting ARC");
+        info("Creating hook registry");
         try {
-            log.info("Loading redis");
+            info("Loading redis");
             setupRedis();
         } catch (Exception e) {
-            log.error("Failed to load redis", e);
+            error("Failed to load redis", e);
         }
         System.out.println("Setting up network registry");
         try {
             networkRegistry = new NetworkRegistry(redisManager);
             networkRegistry.init();
         } catch (Exception e) {
-            log.error("Failed to setup network registry", e);
+            error("Failed to setup network registry", e);
         }
         try {
             hookRegistry = new HookRegistry();
-            log.info("Setting up hooks");
+            info("Setting up hooks");
             hookRegistry.setupHooks();
         } catch (Exception e) {
-            log.error("Failed to setup hooks", e);
+            error("Failed to setup hooks", e);
         }
-        log.info("Loading config");
+        info("Loading config");
         loadConfig(true);
         load();
     }
@@ -118,20 +119,20 @@ public final class ARC extends JavaPlugin {
         System.out.println("Loading auction config");
         AuctionConfig.load();
 
-        log.info("Starting farm manager");
+        info("Starting farm manager");
         FarmManager.init();
 
-        log.info("Starting announce manager");
+        info("Starting announce manager");
         AnnounceManager.init();
 
-        log.info("Starting xaction manager");
+        info("Starting xaction manager");
         XActionManager.init();
 
         headTextureCache = new HeadTextureCache();
 
         LeafDecayManager.reload();
 
-        log.info("Loading treasure pools");
+        info("Loading treasure pools");
         TreasurePool.loadAllTreasures();
 
         PersonalLootManager.reload();
@@ -142,10 +143,10 @@ public final class ARC extends JavaPlugin {
 
         TreasureHuntManager.loadTreasureHuntTypes();
 
-        log.info("Starting board");
+        info("Starting board");
         Board.init();
 
-        log.info("Starting auto build manager");
+        info("Starting auto build manager");
         BuildingManager.init();
     }
 
@@ -197,19 +198,19 @@ public final class ARC extends JavaPlugin {
         System.out.println("Setting up elite loot");
         EliteLootManager.init();
 
-        log.info("Starting leaf decay manager");
+        info("Starting leaf decay manager");
         LeafDecayManager.init();
 
-        log.info("Starting treasure pool save task");
+        info("Starting treasure pool save task");
         TreasurePool.startSaveTask();
 
-        log.info("Starting personal loot manager");
+        info("Starting personal loot manager");
         PersonalLootManager.init();
 
-        log.info("Starting MobSpawnManager");
+        info("Starting MobSpawnManager");
         MobSpawnManager.init();
 
-        log.info("Starting join messages");
+        info("Starting join messages");
         JoinMessages.init();
     }
 
@@ -297,40 +298,19 @@ public final class ARC extends JavaPlugin {
             String password = config.string("redis.password", "");
             if (redisManager != null) {
                 redisManager.connect(ip, port, username, password);
-                log.info("Reconnected to redis");
+                info("Reconnected to redis");
             } else {
                 redisManager = new RedisManager(ip, port, username, password);
-                log.info("Connected to redis");
+                info("Connected to redis");
             }
         } catch (Exception e) {
-            log.error("Failed to connect to redis", e);
+            error("Failed to connect to redis", e);
         }
 
-    }
-
-    public static void info(String s, Object... args) {
-        String toPrint = s;
-        for (Object arg : args) toPrint = toPrint.replaceFirst("\\{}", arg == null ? "null" : arg.toString());
-        Bukkit.getLogger().info(toPrint);
-    }
-
-    public static void warn(String s, Object... args) {
-        String toPrint = s;
-        for (Object arg : args) {
-            toPrint = toPrint.replaceFirst("\\{}", arg == null ? "null" : arg.toString());
-        }
-        Bukkit.getLogger().warning(toPrint);
-    }
-
-    public static void trace(String s, Object... args) {
-        String toPrint = s;
-        for (Object arg : args) {
-            toPrint = toPrint.replaceFirst("\\{}", arg == null ? "null" : arg.toString());
-        }
     }
 
     public static void trySeverCommand(String command) {
-        log.info("Executing server command: {}", command);
+        info("Executing server command: {}", command);
         ServerCommandEvent event = new ServerCommandEvent(Bukkit.getConsoleSender(), command);
         Bukkit.getPluginManager().callEvent(event);
         if (event.isCancelled()) return;

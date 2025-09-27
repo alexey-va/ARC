@@ -19,6 +19,8 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
 
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.warn;
 import static ru.arc.util.TextUtil.mm;
 
 @Slf4j
@@ -364,7 +366,7 @@ public class Config {
             currentLevel.put(keyParts[keyParts.length - 1], value);
             save();
         } catch (Exception e) {
-            log.error("Could not inject key: {}", keyPath);
+            error("Could not inject key: {}", keyPath);
         }
     }
 
@@ -387,7 +389,7 @@ public class Config {
         try (var writer = new FileWriter(file)) {
             yaml.dump(map, writer);
         } catch (Exception e) {
-            log.error("Could not save config: {}", file);
+            error("Could not save config: {}", file);
         }
     }
 
@@ -408,7 +410,7 @@ public class Config {
                 Files.copy(stream, path, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (Exception e) {
-            log.error("Could not copy default config: {}", resource);
+            error("Could not copy default config: {}", resource);
         }
     }
 
@@ -430,7 +432,7 @@ public class Config {
             try {
                 materials.add(Material.valueOf(mat.toUpperCase()));
             } catch (Exception e) {
-                log.warn("Could not parse material: {}", mat);
+                warn("Could not parse material: {}", mat);
             }
         }
         return materials;

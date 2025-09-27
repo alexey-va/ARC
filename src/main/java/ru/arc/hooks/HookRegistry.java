@@ -26,6 +26,8 @@ import java.util.HashSet;
 import java.util.Set;
 
 import static org.bukkit.Bukkit.getServer;
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
 
 @Slf4j
 public class HookRegistry {
@@ -82,21 +84,21 @@ public class HookRegistry {
 
     private static void register(String pluginName, boolean single, Runnable runnable) {
         if (registeredHooks.contains(pluginName)) {
-            log.info("Plugin {} already registered", pluginName);
+            info("Plugin {} already registered", pluginName);
             return;
         }
         if (getServer().getPluginManager().getPlugin(pluginName) != null) {
-            log.info("Registering {} hook", pluginName);
+            info("Registering {} hook", pluginName);
             try {
                 runnable.run();
                 if (single) {
                     registeredHooks.add(pluginName);
                 }
             } catch (Throwable e) {
-                log.error("Error registering {} hook", pluginName, e);
+                error("Error registering {} hook", pluginName, e);
             }
         } else {
-            log.info("Unable to find plugin '{}'", pluginName);
+            info("Unable to find plugin '{}'", pluginName);
         }
     }
 
@@ -152,6 +154,8 @@ public class HookRegistry {
 
         register("RedisEconomy", true, () -> {
             redisEcoHook = new RedisEcoHook();
+            RedisEcoListener redisEcoListener = new RedisEcoListener();
+            Bukkit.getPluginManager().registerEvents(redisEcoListener, ARC.plugin);
         });
 
         translatorHook = new TranslatorHook();

@@ -19,6 +19,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 
+import static ru.arc.util.Logging.*;
+
 @Slf4j
 public class GPTManager {
 
@@ -39,7 +41,7 @@ public class GPTManager {
                 long now = System.currentTimeMillis();
                 conversations.forEach((uuid, convs) -> {
                     boolean removed = convs.removeIf(c -> now - c.lastMessageTime > c.lifeTime);
-                    if (removed) log.info("Removed expired conversations for player {}", uuid);
+                    if (removed) info("Removed expired conversations for player {}", uuid);
                     if (convs.isEmpty()) conversations.remove(uuid);
                 });
             }
@@ -57,7 +59,7 @@ public class GPTManager {
         String playerName = player.getName();
         GPTEntity entity = entities.computeIfAbsent(id, key -> new GPTEntity(config, archetype, id, true));
         if (!entity.archetype.equals(archetype)) {
-            log.warn("Entity {} has different archetype {} than expected {}", id, entity.archetype, archetype);
+            warn("Entity {} has different archetype {} than expected {}", id, entity.archetype, archetype);
         }
         return entity.getResponse(player.getUniqueId(), playerName, message);
     }
@@ -66,7 +68,7 @@ public class GPTManager {
         try {
             return moderatorGpt.getModerResponse(message);
         } catch (Exception e) {
-            log.error("Error getting moderation response", e);
+            error("Error getting moderation response", e);
             return CompletableFuture.completedFuture(Optional.empty());
         }
     }
@@ -86,7 +88,7 @@ public class GPTManager {
         if (conv.isEmpty()) return CompletableFuture.completedFuture(null);
 
         Location playerLocation = player.getLocation();
-        log.info("Looking for conversation for player {} at location {}", player.getName(), playerLocation);
+        info("Looking for conversation for player {} at location {}", player.getName(), playerLocation);
         Conversation conversation;
         long now = System.currentTimeMillis();
         conversation = conv.stream()
@@ -97,10 +99,10 @@ public class GPTManager {
                 .findFirst()
                 .orElse(null);
         if (conversation == null) {
-            log.info("Player {} is not in range of any conversation", player.getName());
+            info("Player {} is not in range of any conversation", player.getName());
             return CompletableFuture.completedFuture(null);
         }
-        log.info("Player {} is in range of conversation with entity {}", player.getName(), conversation.gptId);
+        info("Player {} is in range of conversation with entity {}", player.getName(), conversation.gptId);
         if (message.startsWith("!")) message = message.substring(1);
         return getResponseAndSend(player, message, conversation, appendCancel);
     }
@@ -111,7 +113,7 @@ public class GPTManager {
                 .thenAccept(response -> {
                     conversation.lastMessageTime = System.currentTimeMillis();
                     if (response.isEmpty()) {
-                        log.warn("Empty response from GPT for player {}", player.getName());
+                        warn("Empty response from GPT for player {}", player.getName());
                         awaitingResponse.remove(player.getUniqueId());
                         return;
                     }
@@ -136,7 +138,7 @@ public class GPTManager {
     private static void displayChatBubble(String message, Conversation conversation) {
         if (HookRegistry.citizensHook == null || conversation.npcId == null) return;
         if (message.length() > config.integer("max-bubble-length", 50)) {
-            log.info("Message is too long for bubble: {}", message);
+            info("Message is too long for bubble: {}", message);
             return;
         }
         String s = TextUtil.mmToLegacy(message);
@@ -165,7 +167,7 @@ public class GPTManager {
         entities.computeIfAbsent(id, key -> new GPTEntity(config, archetype, id, true));
         List<Conversation> convs = conversations.computeIfAbsent(player.getUniqueId(), key -> new ArrayList<>());
         if (convs.stream().anyMatch(c -> c.gptId.equals(id))) {
-            log.info("Player {} already has conversation with entity {}", playerName, id);
+            info("Player {} already has conversation with entity {}", playerName, id);
             return;
         }
         convs.add(Conversation.builder()
@@ -181,7 +183,7 @@ public class GPTManager {
                 .endMessage(endMessage)
                 .privateConversation(privateConversation)
                 .build());
-        log.info("Player {} started conversation with entity {}", playerName, id);
+        info("Player {} started conversation with entity {}", playerName, id);
         if (initialMessage != null) {
             getResponseAndSend(player, initialMessage, convs.getLast(), false);
         }
@@ -199,9 +201,9 @@ public class GPTManager {
                 break;
             }
         }
-        log.info("Player {} ended conversation with entity {}", player.getName(), id);
+        info("Player {} ended conversation with entity {}", player.getName(), id);
         if (conversation == null) {
-            log.warn("Player {} tried to end conversation with entity {} but it was not found", player.getName(), id);
+            warn("Player {} tried to end conversation with entity {} but it was not found", player.getName(), id);
             return;
         }
         if (conversation.endMessage != null) {
@@ -219,7 +221,7 @@ public class GPTManager {
         if (convs == null) {
             return;
         }
-        log.info("Player {} ended all conversations", player.getName());
+        info("Player {} ended all conversations", player.getName());
     }
 
 

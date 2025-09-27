@@ -1,18 +1,20 @@
 package ru.arc.xserver;
 
-import java.util.Map;
-import java.util.UUID;
-import java.util.function.Predicate;
-
+import lombok.Builder;
+import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
+import org.bukkit.entity.Player;
 import ru.arc.ARC;
 import ru.arc.configs.Config;
 import ru.arc.configs.ConfigManager;
 import ru.arc.hooks.HookRegistry;
 import ru.arc.hooks.PAPIHook;
-import lombok.Builder;
-import lombok.Data;
-import lombok.extern.slf4j.Slf4j;
-import org.bukkit.entity.Player;
+
+import java.util.Map;
+import java.util.UUID;
+import java.util.function.Predicate;
+
+import static ru.arc.util.Logging.warn;
 
 @Data
 @Builder
@@ -55,7 +57,7 @@ public class XCondition implements Predicate<Player> {
         } else if (placeholders != null && !placeholders.isEmpty()) {
             PAPIHook papiHook = HookRegistry.papiHook;
             if (papiHook == null) {
-                log.warn("PAPI hook is not active!");
+                warn("PAPI hook is not active!");
                 return false;
             }
             for (var entry : placeholders.entrySet()) {

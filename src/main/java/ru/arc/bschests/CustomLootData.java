@@ -9,6 +9,8 @@ import org.bukkit.inventory.ItemStack;
 import java.util.Objects;
 import java.util.UUID;
 
+import static ru.arc.util.Logging.error;
+
 @EqualsAndHashCode(callSuper = false)
 @Data
 @AllArgsConstructor
@@ -29,7 +31,7 @@ public class CustomLootData extends RepoData<CustomLootData> {
 
     @Override
     public String id() {
-        //log.info("id() called {}", (playerUuid.toString() + ":::" + chestUuid.toString()));
+        //info("id() called {}", (playerUuid.toString() + ":::" + chestUuid.toString()));
         return playerUuid.toString() + ":::" + chestUuid.toString();
     }
 
@@ -40,8 +42,8 @@ public class CustomLootData extends RepoData<CustomLootData> {
 
     @Override
     public void merge(CustomLootData other) {
-        //log.info("merge() called {}", other);
-        //log.info("state before merge: {}", this);
+        //info("merge() called {}", other);
+        //info("state before merge: {}", this);
         if (other.items != null) {
             if (items == null) {
                 items = new ItemList();
@@ -87,7 +89,7 @@ public class CustomLootData extends RepoData<CustomLootData> {
                 return;
             }
         }
-        log.error("Item not found in chest: {} {}", item, slot);
+        error("Item not found in chest: {} {}", item, slot);
     }
 
     public boolean isExhausted() {

@@ -25,6 +25,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
+
 @Log4j2
 public class JobsHook {
 
@@ -34,7 +37,7 @@ public class JobsHook {
     Config config;
 
     public JobsHook() {
-        log.info("Jobs hook enabled");
+        info("Jobs hook enabled");
         if (jobsListener == null) {
             jobsListener = new JobsListener();
             Bukkit.getPluginManager().registerEvents(jobsListener, ARC.plugin);
@@ -73,7 +76,7 @@ public class JobsHook {
 
         repo.getOrCreate(player.toString(), () -> new BoostData(player))
                 .thenAccept(data -> {
-                    log.info("Adding boost for player " + player + " jobs " + jobs + " boost " + boost + " expires " + expires + " boostId " + boostId + " type " + type);
+                    info("Adding boost for player " + player + " jobs " + jobs + " boost " + boost + " expires " + expires + " boostId " + boostId + " type " + type);
                     List<String> jobsUpdated = new ArrayList<>();
                     if (allJobs) jobsUpdated.add(null);
                     else jobsUpdated.addAll(jobs);
@@ -94,7 +97,7 @@ public class JobsHook {
                             data.addBoost(jobsBoost);
                         }
                     }
-                    log.info("Boost added for player " + player + " jobs " + jobs + " boost " + boost + " expires " + expires + " boostId " + boostId + " type " + type);
+                    info("Boost added for player " + player + " jobs " + jobs + " boost " + boost + " expires " + expires + " boostId " + boostId + " type " + type);
                 });
     }
 
@@ -120,7 +123,7 @@ public class JobsHook {
             case ALL -> null;
         };
         if (currencyType == null) {
-            log.error("Jobs does not have ALL currency type");
+            error("Jobs does not have ALL currency type");
             return 0;
         }
         return Jobs.getPlayerManager().getJobsPlayer(player).getBoost(jobName, currencyType);

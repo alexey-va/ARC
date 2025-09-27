@@ -12,6 +12,9 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.warn;
+
 @Log4j2
 public class TranslatorHook {
 
@@ -21,7 +24,7 @@ public class TranslatorHook {
     public TranslatorHook() {
         Path path = ARC.plugin.getDataPath().resolve("lang.json");
         if (!Files.exists(path)) {
-            log.warn("lang.json is not present in ARC folder! Disabling translating materials...");
+            warn("lang.json is not present in ARC folder! Disabling translating materials...");
             return;
         }
         try {
@@ -30,7 +33,7 @@ public class TranslatorHook {
             };
             map = gson.fromJson(s, token);
         } catch (Exception e) {
-            log.error("Error loading translations", e);
+            error("Error loading translations", e);
         }
     }
 

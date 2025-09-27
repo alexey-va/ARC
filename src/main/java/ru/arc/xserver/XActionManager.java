@@ -4,6 +4,8 @@ import ru.arc.ARC;
 import lombok.extern.slf4j.Slf4j;
 import org.bukkit.entity.Player;
 
+import static ru.arc.util.Logging.error;
+
 @Slf4j
 public class XActionManager {
 
@@ -13,7 +15,7 @@ public class XActionManager {
     public static void init() {
         messager = new XActionMessager();
         if(ARC.redisManager == null) {
-            log.error("Redis manager is not initialized. XActionManager will not work.");
+            error("Redis manager is not initialized. XActionManager will not work.");
             return;
         }
         ARC.redisManager.registerChannelUnique(XActionMessager.CHANNEL, messager);
@@ -21,12 +23,12 @@ public class XActionManager {
     }
 
     public static void run(XAction action) {
-        //log.info("Running action: {}", action);
+        //info("Running action: {}", action);
         action.run();
     }
 
     public static void publish(XAction action) {
-        //log.info("Publishing action: {}", action);
+        //info("Publishing action: {}", action);
         messager.send(action);
     }
 

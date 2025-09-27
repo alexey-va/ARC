@@ -23,6 +23,8 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import static ru.arc.PortalData.ActionType.HUSK;
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
 
 @Slf4j
 public class HuskHomesHook implements Listener {
@@ -47,7 +49,7 @@ public class HuskHomesHook implements Listener {
             Position p = event.getPosition();
             World world = Bukkit.getWorld(p.getWorld().getName());
             Location location = new Location(world, p.getX(), p.getY(), p.getZ(), p.getYaw(), p.getPitch());
-            log.info("Setting respawn location for {} {}", player.getName(), location);
+            info("Setting respawn location for {} {}", player.getName(), location);
             player.setRespawnLocation(location, true);
         }
     }
@@ -68,11 +70,11 @@ public class HuskHomesHook implements Listener {
 
     public void createDefaultHome(Player player, @NotNull Location location) {
         try {
-            log.info("Creating default home for player {} at {}", player.getName(), location);
+            info("Creating default home for player {} at {}", player.getName(), location);
             OnlineUser user = HuskHomesAPI.getInstance().adaptUser(player);
             HuskHomesAPI.getInstance().createHome(user, "home", HuskHomesAPI.getInstance().adaptPosition(location));
         } catch (Exception e) {
-            log.error("Error creating default home for player {}", player.getName(), e);
+            error("Error creating default home for player {}", player.getName(), e);
         }
     }
 

@@ -20,6 +20,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
+import static ru.arc.util.Logging.error;
+
 @AllArgsConstructor
 @Builder
 @NoArgsConstructor
@@ -28,6 +30,7 @@ import java.util.concurrent.ThreadLocalRandom;
 @EqualsAndHashCode(callSuper = true)
 public class SfTreasure extends Treasure {
 
+    @Builder.Default
     int amountMin = 1, amountMax = 1;
     String id;
 
@@ -37,7 +40,7 @@ public class SfTreasure extends Treasure {
     public void give(Player player, @NotNull GiveFlags flags) {
         ItemStack slimefunItemStack = HookRegistry.sfHook.getSlimefunItemStack(id);
         if(slimefunItemStack == null) {
-            log.error("Slimefun item with id {} not found", id);
+            error("Slimefun item with id {} not found", id);
             return;
         }
         Set<Component> names = new HashSet<>();

@@ -16,6 +16,8 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.Objects;
 
+import static ru.arc.util.Logging.error;
+
 @Slf4j
 public class LocationPoolConfig {
 
@@ -35,7 +37,7 @@ public class LocationPoolConfig {
                         try {
                             return Files.readString(path);
                         } catch (Exception e) {
-                            log.error("Error reading file: {}", path.getFileName());
+                            error("Error reading file: {}", path.getFileName());
                             return null;
                         }
                     })
@@ -48,7 +50,7 @@ public class LocationPoolConfig {
                         LocationPoolManager.addPool(lp);
                     });
         } catch (Exception e) {
-            log.error("Error reading location pools", e);
+            error("Error reading location pools", e);
         }
     }
 
@@ -61,7 +63,7 @@ public class LocationPoolConfig {
                 String json = gson.toJson(lp);
                 Files.writeString(path, json, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
             } catch (Exception e) {
-                log.error("Error saving location pool: {}", lp.getId(), e);
+                error("Error saving location pool: {}", lp.getId(), e);
             }
         });
     }

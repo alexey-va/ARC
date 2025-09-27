@@ -22,6 +22,7 @@ public class AuctionItemDto {
     int priority;
     String uuid;
     boolean exist;
+    @Builder.Default
     List<String> lore = new ArrayList<>();
 
 }

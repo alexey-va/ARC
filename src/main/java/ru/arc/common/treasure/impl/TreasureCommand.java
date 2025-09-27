@@ -13,6 +13,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static ru.arc.util.Logging.error;
+
 @Slf4j
 @EqualsAndHashCode(callSuper = true)
 @AllArgsConstructor
@@ -44,7 +46,7 @@ public class TreasureCommand extends Treasure {
     protected void setFields(Map<String, Object> map) {
         this.commands = (List<String>) map.getOrDefault("commands", List.of());
         if (this.commands.isEmpty()) {
-            log.error("Empty commands list {}", this);
+            error("Empty commands list {}", this);
         }
     }
 

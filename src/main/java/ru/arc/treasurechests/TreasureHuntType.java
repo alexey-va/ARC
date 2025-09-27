@@ -8,11 +8,14 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
+import static ru.arc.util.Logging.info;
+
 @Slf4j
 @Data
 @AllArgsConstructor
 @Builder
 public class TreasureHuntType {
+    @Builder.Default
     WeightedRandom<ChestType> entries = new WeightedRandom<>();
     String locationPoolId;
     String bossBarMessage;
@@ -34,7 +37,7 @@ public class TreasureHuntType {
     public LocationPool getLocationPool() {
         LocationPool pool = LocationPoolManager.getPool(locationPoolId);
         if (pool == null) {
-            log.info("Could not find location pool with id: {}", locationPoolId);
+            info("Could not find location pool with id: {}", locationPoolId);
             return null;
         }
         return pool;

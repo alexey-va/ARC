@@ -16,10 +16,13 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import ru.arc.treasurechests.TreasureHuntManager;
 
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+
+import static ru.arc.util.Logging.info;
 
 @Slf4j
 public class JoinListener implements Listener {
@@ -45,6 +48,7 @@ public class JoinListener implements Listener {
         if(HookRegistry.duelsHook != null) {
             HookRegistry.duelsHook.stopDuelsIfAny(event.getPlayer());
         }
+        TreasureHuntManager.onPlayerQuit(event.getPlayer());
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -57,6 +61,7 @@ public class JoinListener implements Listener {
         if(HookRegistry.duelsHook != null) {
             HookRegistry.duelsHook.stopDuelsIfAny(event.getPlayer());
         }
+        TreasureHuntManager.onPlayerQuit(event.getPlayer());
     }
 
     private void invulnerable(Player player) {
@@ -65,7 +70,7 @@ public class JoinListener implements Listener {
         if (player.hasPermission("arc.bypass-invulnerable")) return;
         player.setInvulnerable(true);
         invMap.put(player.getUniqueId(), player.getName());
-        log.info("Player {} is invulnerable", player.getName());
+        info("Player {} is invulnerable", player.getName());
 
         int ticks = config.integer("join.invulnerable-ticks", 20 * 7);
 
@@ -77,7 +82,7 @@ public class JoinListener implements Listener {
         if (!player.isOnline()) return;
         player.setInvulnerable(false);
         invMap.remove(player.getUniqueId());
-        log.info("Player {} is not invulnerable anymore", player.getName());
+        info("Player {} is not invulnerable anymore", player.getName());
     }
 
     private void fullHeal(Player player) {
@@ -88,7 +93,7 @@ public class JoinListener implements Listener {
                 if (player == null || !player.isOnline()) return;
                 double currentHealth = player.getHealth();
                 double maxHealth = player.getMaxHealth();
-                log.info("Player {} health {} maxhealth {}", player.getName(), currentHealth, maxHealth);
+                info("Player {} health {} maxhealth {}", player.getName(), currentHealth, maxHealth);
                 if (currentHealth < maxHealth) player.setHealth(maxHealth);
             }
         }.runTaskLater(ARC.plugin, config.integer("join.full-heal-delay-ticks", 10));

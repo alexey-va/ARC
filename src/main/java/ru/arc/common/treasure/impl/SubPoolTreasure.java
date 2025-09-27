@@ -11,6 +11,8 @@ import org.jetbrains.annotations.NotNull;
 import java.util.HashMap;
 import java.util.Map;
 
+import static ru.arc.util.Logging.error;
+
 @EqualsAndHashCode(callSuper = true)
 @Slf4j
 @Data
@@ -27,7 +29,7 @@ public class SubPoolTreasure extends Treasure {
         if (treasurePool != null) {
             treasurePool.random().give(player, flags);
         } else {
-            log.error("Sub pool {} not found", subPoolId);
+            error("Sub pool {} not found", subPoolId);
         }
     }
 

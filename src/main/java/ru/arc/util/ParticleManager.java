@@ -9,6 +9,8 @@ import org.bukkit.scheduler.BukkitTask;
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedDeque;
 
+import static ru.arc.util.Logging.warn;
+
 @Slf4j
 public class ParticleManager {
 
@@ -36,7 +38,7 @@ public class ParticleManager {
                     syncBuildersQueue.poll().spawn();
                     count++;
                     if (count > 200) {
-                        log.warn("Too many particles to show in one tick. Size: {}", syncBuildersQueue.size());
+                        warn("Too many particles to show in one tick. Size: {}", syncBuildersQueue.size());
                         break;
                     }
                 }
@@ -46,6 +48,6 @@ public class ParticleManager {
 
     public static void queue(ParticleBuilder builder) {
         boolean res = buildersQueue.offer(builder);
-        if (!res) log.warn("Failed to queue particle builder: {}", builder);
+        if (!res) warn("Failed to queue particle builder: {}", builder);
     }
 }

@@ -1,5 +1,6 @@
 package ru.arc.treasurechests;
 
+import org.bukkit.command.CommandSender;
 import ru.arc.ARC;
 import ru.arc.common.WeightedRandom;
 import ru.arc.common.locationpools.LocationPool;
@@ -17,6 +18,8 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 
+import static ru.arc.util.Logging.*;
+
 @Slf4j
 public class TreasureHuntManager {
 
@@ -28,7 +31,10 @@ public class TreasureHuntManager {
     private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "treasure-hunt.yml");
 
     public static Optional<TreasureHunt> getByLocationPool(LocationPool locationPool) {
-        return treasureHunts.stream().filter(th -> th.treasureHuntType.getLocationPool() == locationPool).findAny();
+        return treasureHunts.stream()
+                .peek(th -> info("Used pool: {}. New pool: {}", th.treasureHuntType.getLocationPoolId(), locationPool.getId()))
+                .filter(th -> Objects.equals(th.treasureHuntType.getLocationPoolId(), locationPool.getId()))
+                .findFirst();
     }
 
     public static List<String> getTreasureHuntTypes() {
@@ -43,14 +49,20 @@ public class TreasureHuntManager {
         return blockMap.get(block.getLocation().toCenterLocation());
     }
 
-    public static void startHunt(LocationPool locationPool, int chests, String namespaceId, String treasurePoolId) {
+    public static void startHunt(LocationPool locationPool, int chests, String namespaceId, String treasurePoolId, CommandSender player) {
+        info("Starting treasure hunt for location pool: {}", locationPool.getId());
         getByLocationPool(locationPool)
-                .ifPresent(TreasureHuntManager::stopHunt);
+                .ifPresent(hunt -> {
+                    info("Stopping existing treasure hunt for location pool: {}", locationPool.getId());
+                    player.sendMessage("Stopping existing treasure hunt for location pool: " + locationPool.getId());
+                    hunt.stop(false);
+                });
         TreasureHunt treasureHunt;
 
         TreasurePool treasurePool = TreasurePool.getTreasurePool(treasurePoolId);
         if (treasurePool == null) {
-            System.out.println("Could not find treasure pool with id: " + treasurePoolId);
+            warn("Could not find treasure pool with id: {}", treasurePoolId);
+            player.sendMessage("Could not find treasure pool with id: " + treasurePoolId);
             return;
         }
 
@@ -83,25 +95,49 @@ public class TreasureHuntManager {
         treasureHunt.generateLocations();
         treasureHunt.clearChests();
         Set<Location> blocks = treasureHunt.start();
+        if(blocks.isEmpty()) {
+            warn("No blocks found for treasure hunt in location pool: {}", locationPool.getId());
+            player.sendMessage("No blocks found for treasure hunt in location pool: " + locationPool.getId());
+            return;
+        }
         treasureHunt.displayLocations();
 
         treasureHunts.add(treasureHunt);
         blocks.forEach(loc -> blockMap.put(loc, treasureHunt));
     }
 
-    public static void startHunt(String type, int chests) {
+    public static void startHunt(String type, int chests, CommandSender player) {
         TreasureHuntType treasureHuntType = treasureHuntTypes.get(type);
         if (treasureHuntType == null) {
             System.out.println("Could not find treasure hunt type with id: " + type);
             return;
         }
+        LocationPool locationPool = treasureHuntType.getLocationPool();
+        info("Starting treasure hunt for location pool: {}", locationPool.getId());
+        getByLocationPool(locationPool)
+                .ifPresent(hunt -> {
+                    info("Stopping existing treasure hunt for location pool: {}", locationPool.getId());
+                    player.sendMessage("Stopping existing treasure hunt for location pool: " + locationPool.getId());
+                    hunt.stop(false);
+                });
+
         if (chests <= 0) {
             chests = treasureHuntType.getLocationPool().getLocations().size();
         }
         TreasureHunt treasureHunt = new TreasureHunt(chests, treasureHuntType);
         treasureHunt.generateLocations();
+        if(treasureHunt.locations.isEmpty()) {
+            warn("No blocks found for treasure hunt in location pool: {}", locationPool.getId());
+            player.sendMessage("No blocks found for treasure hunt in location pool: " + locationPool.getId());
+            return;
+        }
         treasureHunt.clearChests();
         Set<Location> blocks = treasureHunt.start();
+        if(blocks.isEmpty()) {
+            warn("No blocks found for treasure hunt in location pool: {}", locationPool.getId());
+            player.sendMessage("No blocks found for treasure hunt in location pool: " + locationPool.getId());
+            return;
+        }
         treasureHunt.displayLocations();
 
         treasureHunts.add(treasureHunt);
@@ -140,6 +176,12 @@ public class TreasureHuntManager {
         return TreasurePool.getTreasurePools();
     }
 
+    public static void onPlayerQuit(Player player) {
+        for (TreasureHunt treasureHunt : treasureHunts) {
+            treasureHunt.bossBarAudience.remove(player);
+        }
+    }
+
     public static void loadTreasureHuntTypes() {
         treasureHuntTypes.clear();
         List<String> keys = config.keys("treasure-hunt-types");
@@ -147,7 +189,7 @@ public class TreasureHuntManager {
             try {
                 String locationPoolId = config.string("treasure-hunt-types." + key + ".location-pool-id", null);
                 if (locationPoolId == null) {
-                    log.error("Missing location pool id for: {}", key);
+                    error("Missing location pool id for: {}", key);
                     continue;
                 }
                 List<String> chestTypeKeys = config.keys("treasure-hunt-types." + key + ".chest-types");
@@ -160,7 +202,7 @@ public class TreasureHuntManager {
 
                     int weight = config.integer("treasure-hunt-types." + key + ".chest-types." + chestTypeKey + ".weight", 1);
                     if (treasurePoolId == null || type == null || particlePath == null) {
-                        log.error("Missing required field for chest type: {}", chestTypeKey);
+                        error("Missing required field for chest type: {}", chestTypeKey);
                         continue;
                     }
                     ChestType chestType = ChestType.builder()
@@ -174,7 +216,7 @@ public class TreasureHuntManager {
                 }
                 LocationPool locationPool = LocationPoolManager.getPool(locationPoolId);
                 if (locationPool == null) {
-                    log.warn("Could not find location pool with id: {}", locationPoolId);
+                    warn("Could not find location pool with id: {}", locationPoolId);
                 }
                 String bossBarMessage = config.string("treasure-hunt-types." + key + ".boss-bar-message", "");
                 boolean bossBarVisible = config.bool("treasure-hunt-types." + key + ".boss-bar-visible", true);
@@ -202,10 +244,10 @@ public class TreasureHuntManager {
                         .bossBarColor(bossBarColor)
                         .bossBarOverlay(bossBarOverlay)
                         .build();
-                log.info("Loaded treasure hunt type: {}", key);
+                info("Loaded treasure hunt type: {}", key);
                 treasureHuntTypes.put(key, treasureHuntType);
             } catch (Exception e) {
-                log.error("Error loading treasure hunt type: {}", key, e);
+                error("Error loading treasure hunt type: {}", key, e);
             }
         }
 

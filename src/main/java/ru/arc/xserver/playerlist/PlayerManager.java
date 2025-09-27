@@ -17,6 +17,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static ru.arc.util.Logging.error;
+
 @Log4j2
 public class PlayerManager {
 
@@ -36,7 +38,7 @@ public class PlayerManager {
         try {
             return res.get(3, TimeUnit.MINUTES);
         } catch (Exception e) {
-            log.error("Timeout waiting for players", e);
+            error("Timeout waiting for players", e);
             return List.of();
         }
     }
@@ -58,7 +60,7 @@ public class PlayerManager {
         }.getType();
         List<PlayerData> playerData = Common.gson.fromJson(json, type);
         if (playerData == null) {
-            log.error("Message {} canot be parsed!", json);
+            error("Message {} canot be parsed!", json);
             return;
         }
         playerMap.clear();

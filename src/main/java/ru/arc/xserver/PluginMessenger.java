@@ -10,6 +10,8 @@ import org.jetbrains.annotations.NotNull;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 
+import static ru.arc.util.Logging.error;
+
 @Slf4j
 public class PluginMessenger implements PluginMessageListener {
 
@@ -33,7 +35,7 @@ public class PluginMessenger implements PluginMessageListener {
             out.writeUTF("Connect");
             out.writeUTF(server);
         } catch (Exception e) {
-            log.error("Error in sendPlayerToServer", e);
+            error("Error in sendPlayerToServer", e);
             return;
         }
         sendBungeeCord(player, bytes.toByteArray());

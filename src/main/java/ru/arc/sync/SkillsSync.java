@@ -21,6 +21,8 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static ru.arc.util.Logging.warn;
+
 public class SkillsSync implements Sync {
 
 
@@ -50,7 +52,7 @@ public class SkillsSync implements Sync {
                 SkillsUser user = AuraSkillsApi.get().getUser(uuid);
                 if (user == null) {
                     if (counter.incrementAndGet() > 20) {
-                        ARC.warn("PlayerData is null for " + uuid + " for 20 cycles. Cancelling task.");
+                        warn("PlayerData is null for " + uuid + " for 20 cycles. Cancelling task.");
                         cancel();
                     }
                     return;
@@ -94,7 +96,7 @@ public class SkillsSync implements Sync {
         Collection<Skill> skills = AuraSkillsApi.get().getGlobalRegistry().getSkills();
         SkillsUser user = AuraSkillsApi.get().getUser(uuid);
         if (user == null) {
-            ARC.warn("User with uuid {} not found while getting skill data", uuid);
+            warn("User with uuid {} not found while getting skill data", uuid);
             return null;
         }
 
@@ -117,14 +119,14 @@ public class SkillsSync implements Sync {
         UUID uuid = data.uuid;
         SkillsUser user = AuraSkillsApi.get().getUser(uuid);
         if(user == null){
-            ARC.warn("User with uuid {} not found while applying skill data", uuid);
+            warn("User with uuid {} not found while applying skill data", uuid);
             return;
         }
         for (SkillInfo skillInfo : data.skills) {
             NamespacedId id = NamespacedId.fromString(skillInfo.id);
             Skill skill = AuraSkillsApi.get().getGlobalRegistry().getSkill(id);
             if (skill == null) {
-                ARC.warn("Skill with id {} not found", skillInfo.id);
+                warn("Skill with id {} not found", skillInfo.id);
                 continue;
             }
             int skillLevel = user.getSkillLevel(skill);

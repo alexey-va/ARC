@@ -26,6 +26,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static ru.arc.util.Logging.warn;
 import static ru.arc.util.Utils.*;
 
 @Slf4j
@@ -104,7 +105,7 @@ public class PersonalLootManager {
         Player player = (Player) event.getPlayer();
         Location location = event.getInventory().getLocation();
         if (location == null) return;
-        //log.info("Opening inventory: {}", location);
+        //info("Opening inventory: {}", location);
 
         Block block = event.getInventory().getLocation().getBlock();
         List<Block> blocks = connectedChests(block);
@@ -114,7 +115,7 @@ public class PersonalLootManager {
         UUID chestUuid = UUID.fromString(data.get(uuidKey, PersistentDataType.STRING));
         String playerListString = data.get(key, PersistentDataType.STRING);
         if (playerListString == null) {
-            log.warn("Player list string is null");
+            warn("Player list string is null");
             return;
         }
 
@@ -124,14 +125,14 @@ public class PersonalLootManager {
                 .map(UUID::fromString)
                 .collect(Collectors.toSet());
 
-        //log.info("Chest data: uuid {} players {} thisPlayer {}", chestUuid, players, player.getName());
+        //info("Chest data: uuid {} players {} thisPlayer {}", chestUuid, players, player.getName());
         event.setCancelled(true);
 
         if (players.size() >= maxPlayers && !players.contains(player.getUniqueId())) {
             player.sendMessage(config.componentDef("messages.max-players",
                     "<red>Слишком много игроков уже открыли этот сундук!",
                     "%amount%", String.valueOf(players.size())));
-            //log.info("Too many players already opened this!");
+            //info("Too many players already opened this!");
             return;
         }
         players.add(player.getUniqueId());
@@ -180,7 +181,7 @@ public class PersonalLootManager {
     public static void processChestGen(Block block) {
         List<Block> blocks = connectedChests(block);
         for (Block b : blocks) {
-            //log.info("Processing chest: {}", b);
+            //info("Processing chest: {}", b);
             CustomBlockData data = new CustomBlockData(b, ARC.plugin);
             data.set(key, PersistentDataType.STRING, "");
             data.set(uuidKey, PersistentDataType.STRING, UUID.randomUUID().toString());

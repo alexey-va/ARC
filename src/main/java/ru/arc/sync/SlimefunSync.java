@@ -13,14 +13,21 @@ import org.bukkit.Material;
 import org.bukkit.event.Event;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
 import ru.arc.sync.base.*;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.warn;
+
 @Log4j2
 public class SlimefunSync implements Sync {
+
+    private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "backapacks.yml");
 
     SyncRepo<SlimefunDataDTO> syncRepo;
 
@@ -78,19 +85,19 @@ public class SlimefunSync implements Sync {
         Context context = new Context();
         context.put("uuid", uuid);
         if (loaded.getOrDefault(uuid, false)) syncRepo.saveAndPersistData(context, false);
-        else log.warn("Player data not loaded for {}. Skipping save", uuid);
+        else warn("Player data not loaded for {}. Skipping save", uuid);
     }
 
     private SlimefunDataDTO serializePlayerData(Context context) {
         UUID uuid = context.get("uuid");
         if (uuid == null) {
-            log.error("Could not extract uuid for slimefun sync: {}", context);
+            error("Could not extract uuid for slimefun sync: {}", context);
             return null;
         }
         PlayerProfile playerProfile = Slimefun.getRegistry().getPlayerProfiles().get(uuid);
         if (playerProfile == null) {
-            log.error("PlayerProfile not found for {}", uuid);
-            log.error("Trying to fetch from disk");
+            error("PlayerProfile not found for {}", uuid);
+            error("Trying to fetch from disk");
         }
         CompletableFuture<SlimefunDataDTO> future = new CompletableFuture<>();
         PlayerProfile.fromUUID(uuid, (pp) -> {
@@ -142,6 +149,7 @@ public class SlimefunSync implements Sync {
                     .filter(r -> researches.contains(r.getID()) && !pp.hasUnlocked(r))
                     .forEach(r -> pp.setResearched(r, true));
 
+            if (!config.bool("sync-backpacks", false)) return;
             for (Map.Entry<String, SlimefunDataDTO.Backpack> entry : dto.backpacks.entrySet()) {
                 int index = Integer.parseInt(entry.getKey());
                 SlimefunDataDTO.Backpack backpack = entry.getValue();
@@ -157,7 +165,7 @@ public class SlimefunSync implements Sync {
                 }
                 bp.ifPresent(b -> {
                     if (b.getId() != index) {
-                        log.error("Backpack id mismatch, expected " + index + " but got " + b.getId());
+                        error("Backpack id mismatch, expected " + index + " but got " + b.getId());
                         return;
                     }
                     if (b.getSize() != backpack.size) b.setSize(backpack.size);

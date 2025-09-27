@@ -21,6 +21,8 @@ import org.jetbrains.annotations.NotNull;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
+import static ru.arc.util.Logging.info;
+
 @Slf4j
 public class StockCommand implements CommandExecutor {
 
@@ -30,7 +32,7 @@ public class StockCommand implements CommandExecutor {
     public boolean onCommand(@NotNull CommandSender commandSender, @NotNull Command command, @NotNull String s, @NotNull String[] strings) {
 
         if(!config.bool("enabled", false)) {
-            log.info("Stocks are disabled");
+            info("Stocks are disabled");
             commandSender.sendMessage(config.componentDef("messages.disabled","<red>Здесь эта команда недоступна."));
             return true;
         }

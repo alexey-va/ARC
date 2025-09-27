@@ -20,6 +20,8 @@ import org.bukkit.event.block.BlockBreakEvent;
 
 import java.util.List;
 
+import static ru.arc.util.Logging.error;
+
 @Slf4j
 public class Lumbermill {
 
@@ -36,14 +38,14 @@ public class Lumbermill {
 
         world = Bukkit.getWorld(worldName);
         if (world == null) {
-            log.error("World {} not found", worldName);
+            error("World {} not found", worldName);
             return;
         }
 
         RegionContainer regionContainer = WorldGuard.getInstance().getPlatform().getRegionContainer();
         this.region = regionContainer.get(BukkitAdapter.adapt(world)).getRegion(regionName);
 
-        if (region == null) log.error("Region {} not found in world {}", regionName, worldName);
+        if (region == null) error("Region {} not found in world {}", regionName, worldName);
     }
 
     public boolean processBreakEvent(BlockBreakEvent event) {

@@ -1,12 +1,13 @@
 package ru.arc.network;
 
+import lombok.RequiredArgsConstructor;
+import ru.arc.ai.assistant.ToolMessanger;
 import ru.arc.hooks.HookRegistry;
 import ru.arc.hooks.lands.LandsMessager;
 import ru.arc.hooks.zauction.AuctionMessager;
 import ru.arc.stock.HistoryManager;
 import ru.arc.stock.HistoryMessager;
 import ru.arc.xserver.playerlist.PlayerListMessager;
-import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor
 public class NetworkRegistry {
@@ -34,6 +35,9 @@ public class NetworkRegistry {
             redisManager.registerChannelUnique(auctionMessager.channelAll, auctionMessager);
             HookRegistry.auctionHook.setAuctionMessager(auctionMessager);
         }
+
+        ToolMessanger toolMessanger = new ToolMessanger();
+        redisManager.registerChannelUnique(ToolMessanger.CHANNEL_REQUEST_TOOLS, toolMessanger);
 
         redisManager.init();
     }

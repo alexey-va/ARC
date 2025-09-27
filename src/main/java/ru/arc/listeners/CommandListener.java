@@ -26,6 +26,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
 import static ru.arc.util.TextUtil.mm;
 
 @Slf4j
@@ -48,7 +50,7 @@ public class CommandListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void onServerCommand(ServerCommandEvent serverCommandEvent) {
-        //log.info("Received command: {}", serverCommandEvent.getCommand());
+        //info("Received command: {}", serverCommandEvent.getCommand());
         String[] args = serverCommandEvent.getCommand().split(" ");
         moneyCommandServer(serverCommandEvent, args);
     }
@@ -91,9 +93,9 @@ public class CommandListener implements Listener {
                     String command = "money " + args[2] + " vault " + args[1] + " " + money;
                     player.performCommand(command);
                     AuditManager.operation(args[2], money, Type.COMMAND, player.getName());
-                    log.info("Rerouted {} to {}", String.join(" ", args), command);
+                    info("Rerouted {} to {}", String.join(" ", args), command);
                 } catch (Exception e) {
-                    log.error("Failed to reroute /money give command to /money <player> vault give <amount>", e);
+                    error("Failed to reroute /money give command to /money <player> vault give <amount>", e);
                 }
             } else {
                 player.sendMessage(mm("<red>Правильное использование: <gray>/money give/set/take <игрок> <сумма>"));
@@ -104,7 +106,7 @@ public class CommandListener implements Listener {
     private void moneyCommandServer(Cancellable ev, String[] args) {
         Set<String> sub = Set.of("give", "set", "take");
         if (args.length > 2 && args[0].equalsIgnoreCase("money") && sub.contains(args[1])) {
-            //log.info("Received /money command: {}", String.join(" ", args));
+            //info("Received /money command: {}", String.join(" ", args));
             // /money give <player> <amount>
             // into
             // /money <player> vault give <amount>
@@ -116,9 +118,9 @@ public class CommandListener implements Listener {
                     String command = "money " + args[2] + " vault " + args[1] + " " + money;
                     ARC.trySeverCommand(command);
                     AuditManager.operation(args[2], money, Type.COMMAND, "Server");
-                    log.info("Rerouted {} to {}", String.join(" ", args), command);
+                    info("Rerouted {} to {}", String.join(" ", args), command);
                 } catch (Exception e) {
-                    log.error("Failed to reroute /money give command to /money <player> vault give <amount>", e);
+                    error("Failed to reroute /money give command to /money <player> vault give <amount>", e);
                 }
             }
         }

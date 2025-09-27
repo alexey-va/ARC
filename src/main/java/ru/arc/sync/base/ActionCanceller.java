@@ -9,6 +9,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
 
+import static ru.arc.util.Logging.debug;
+
 @Log4j2
 public class ActionCanceller {
 
@@ -27,9 +29,9 @@ public class ActionCanceller {
         Long until = preventUntil.get(playerUuid);
         if (until != null) {
             if (until > System.currentTimeMillis()) {
-                log.debug("Prevented event " + event.getClass().getSimpleName() + " for " + playerUuid);
-                log.debug("Prevented until " + until);
-                log.debug("Current time " + System.currentTimeMillis());
+                debug("Prevented event " + event.getClass().getSimpleName() + " for " + playerUuid);
+                debug("Prevented until " + until);
+                debug("Current time " + System.currentTimeMillis());
                 var canceller = cancellers.get(event.getClass());
                 if (canceller != null){
                     canceller.accept(event);

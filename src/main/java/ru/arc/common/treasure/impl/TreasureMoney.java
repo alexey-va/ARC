@@ -22,6 +22,7 @@ import java.util.concurrent.ThreadLocalRandom;
 @EqualsAndHashCode(callSuper = true)
 public class TreasureMoney extends Treasure {
 
+    @Builder.Default
     double minAmount = 1, maxAmount = 1;
 
     private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "treasures.yml");

@@ -14,6 +14,8 @@ import org.bukkit.entity.Player;
 import java.util.ArrayList;
 import java.util.List;
 
+import static ru.arc.util.Logging.warn;
+
 @EqualsAndHashCode(callSuper = true)
 @Data
 @ToString(callSuper = true)
@@ -49,11 +51,11 @@ public class XMessage extends XAction {
             case CHAT -> players.forEach(p -> p.sendMessage(component(p)));
             case TOAST -> {
                 if (HookRegistry.cmiHook == null) {
-                    log.warn("CMILIB is required for TOAST xMessage");
+                    warn("CMILIB is required for TOAST xMessage");
                     return;
                 }
                 if (toastData == null) {
-                    log.warn("ToastData is required for TOAST xMessage");
+                    warn("ToastData is required for TOAST xMessage");
                     return;
                 }
                 HookRegistry.cmiHook.sendToast(serializedMessage, toastData.title, toastData.modelData,
@@ -61,11 +63,11 @@ public class XMessage extends XAction {
             }
             case BOSS_BAR -> {
                 if (HookRegistry.cmiHook == null) {
-                    log.warn("CMILIB is required for BOSS_BAR xMessage");
+                    warn("CMILIB is required for BOSS_BAR xMessage");
                     return;
                 }
                 if (bossBarData == null) {
-                    log.warn("BossBarData is required for BOSS_BAR xMessage");
+                    warn("BossBarData is required for BOSS_BAR xMessage");
                     return;
                 }
                 players.forEach(p ->
@@ -137,6 +139,7 @@ public class XMessage extends XAction {
     @Builder
     public static class ToastData {
         @SerializedName("m")
+        @Builder.Default
         Material material = Material.STONE;
         @SerializedName("md")
         int modelData;

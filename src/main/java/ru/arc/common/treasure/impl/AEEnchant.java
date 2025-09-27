@@ -28,7 +28,9 @@ public class AEEnchant extends Treasure {
 
     Type type;
     String itemName;
+    @Builder.Default
     List<Object> args = new ArrayList<>();
+    @Builder.Default
     int amountMin = 1, amountMax = 1;
 
     private static final Config config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "treasures.yml");

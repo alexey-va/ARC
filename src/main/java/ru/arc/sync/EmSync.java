@@ -23,6 +23,9 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static ru.arc.util.Logging.debug;
+import static ru.arc.util.Logging.warn;
+
 @Log4j2
 public class EmSync implements Sync {
 
@@ -52,7 +55,7 @@ public class EmSync implements Sync {
                 PlayerData pd = PlayerData.getPlayerData(uuid);
                 if (pd == null) {
                     if (counter.incrementAndGet() > 20) {
-                        log.warn("PlayerData is null for {} for 20 cycles. Cancelling task.", uuid);
+                        warn("PlayerData is null for {} for 20 cycles. Cancelling task.", uuid);
                         cancel();
                     }
                     return;
@@ -87,7 +90,7 @@ public class EmSync implements Sync {
         UUID uuid = data.getUuid();
         PlayerData pd = PlayerData.getPlayerData(uuid);
         if (pd == null) {
-            log.warn("PlayerData is not yet loaded for " + uuid);
+            warn("PlayerData is not yet loaded for " + uuid);
             return;
         }
 
@@ -123,11 +126,11 @@ public class EmSync implements Sync {
     }
 
     public EmDataDTO serializePlayerData(Context context) {
-        log.debug("Serializing player data " + context);
+        debug("Serializing player data " + context);
         UUID uuid = context.get("uuid");
         PlayerData pd = PlayerData.getPlayerData(uuid);
         if (pd == null) {
-            log.warn("PlayerData is null for " + uuid);
+            warn("PlayerData is null for " + uuid);
             return null;
         }
 

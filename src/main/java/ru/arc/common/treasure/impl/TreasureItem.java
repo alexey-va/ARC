@@ -19,6 +19,8 @@ import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
 import static ru.arc.util.TextUtil.mm;
 
 @AllArgsConstructor
@@ -30,6 +32,7 @@ import static ru.arc.util.TextUtil.mm;
 public class TreasureItem extends Treasure {
 
     ItemStack stack;
+    @Builder.Default
     int minAmount = 1, maxAmount = 1;
     GaussData gaussData;
 
@@ -56,7 +59,7 @@ public class TreasureItem extends Treasure {
                         .map(Player::getUniqueId)
                         .collect(Collectors.toSet());
             }
-            //log.info("Sending global message to {} players", uuids.size());
+            //info("Sending global message to {} players", uuids.size());
             sendGlobalMessage(player, amount, uuids);
         }
 
@@ -87,7 +90,7 @@ public class TreasureItem extends Treasure {
         if (globalMessage.isBlank()) return;
 
         String finalGlobalMessage = globalMessage;
-        log.info("Sending global message {}", finalGlobalMessage);
+        info("Sending global message {}", finalGlobalMessage);
         players.forEach(uuid -> AnnounceManager.sendMessageGlobally(uuid, finalGlobalMessage));
     }
 
@@ -98,6 +101,7 @@ public class TreasureItem extends Treasure {
             itemCount += config.string("messages.item-amount", "%amount% x ")
                     .replace("%amount%", String.valueOf(amount));
         }
+
         String itemName = stack.getItemMeta().hasDisplayName() ? TextUtil.toMM(stack.displayName()) :
                 (HookRegistry.translatorHook != null ? HookRegistry.translatorHook.translate(stack.getType()) : stack.getType().name());
 
@@ -124,7 +128,7 @@ public class TreasureItem extends Treasure {
             return minAmount == maxAmount ? minAmount : ThreadLocalRandom.current().nextInt(minAmount, maxAmount + 1);
         } else {
             if (gaussData.mean == null || gaussData.stdDev == null) {
-                log.error("Gauss data is missing mean or stdDev");
+                error("Gauss data is missing mean or stdDev");
                 return minAmount == maxAmount ? minAmount : ThreadLocalRandom.current().nextInt(minAmount, maxAmount + 1);
             }
             double v = ThreadLocalRandom.current().nextGaussian(gaussData.mean, gaussData.stdDev);

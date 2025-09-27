@@ -39,6 +39,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Stream;
 
+import static ru.arc.util.Logging.error;
 import static ru.arc.util.TextUtil.mm;
 import static ru.arc.util.TextUtil.strip;
 
@@ -168,7 +169,7 @@ public class AddBoardGui extends ChestGui implements Inputable {
 
     private GuiItem shortNameItem() {
         ItemStackBuilder builder = new ItemStackBuilder(Material.FLOWER_BANNER_PATTERN)
-                .flags(ItemFlag.HIDE_ITEM_SPECIFICS, ItemFlag.HIDE_ATTRIBUTES)
+                .flags(ItemFlag.HIDE_ATTRIBUTES)
                 .tagResolver(TagResolver.builder()
                         .resolver(TagResolver.resolver("short_name", Tag.inserting(Component.text(title == null ? "Нету" : title))))
                         .resolver(TagResolver.resolver("short_name_length", Tag.inserting(Component.text(BoardConfig.shortNameLength + ""))))
@@ -236,7 +237,7 @@ public class AddBoardGui extends ChestGui implements Inputable {
                         try {
                             return Stream.of(BarColor.valueOf(s.toUpperCase()));
                         } catch (IllegalArgumentException e) {
-                            log.error("Error while parsing boss bar color", e);
+                            error("Error while parsing boss bar color", e);
                             return Stream.of();
                         }
                     }).forEach(colorList::add);
@@ -361,7 +362,7 @@ public class AddBoardGui extends ChestGui implements Inputable {
 
 
                     } catch (Exception e) {
-                        log.error("Error while publishing board entry", e);
+                        error("Error while publishing board entry", e);
                         player.sendMessage(TextUtil.error());
                         click.getWhoClicked().closeInventory();
                     }

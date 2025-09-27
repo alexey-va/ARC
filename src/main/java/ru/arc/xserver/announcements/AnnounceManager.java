@@ -18,6 +18,9 @@ import org.bukkit.scheduler.BukkitTask;
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedDeque;
 
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
+
 @Slf4j
 public class AnnounceManager {
 
@@ -72,7 +75,7 @@ public class AnnounceManager {
                     config.integer("config.delay-seconds", 600) * 20L,
                     config.integer("config.delay-seconds", 600) * 20L);
         } catch (Exception e) {
-            log.error("Error initializing AnnounceManager: {}", e.getMessage());
+            error("Error initializing AnnounceManager: {}", e.getMessage());
         }
     }
 
@@ -88,7 +91,7 @@ public class AnnounceManager {
             try {
                 serializationType = XMessage.SerializationType.valueOf(config.string("messages." + key + ".serialization-type", "mini_message").toUpperCase());
             } catch (Exception e) {
-                log.error("Serialization type not found for message: {}", key);
+                error("Serialization type not found for message: {}", key);
                 serializationType = XMessage.SerializationType.MINI_MESSAGE;
             }
 
@@ -165,7 +168,7 @@ public class AnnounceManager {
     }
 
     public static void announce(XMessage data) {
-        log.info("Announcing message: {}", data);
+        info("Announcing message: {}", data);
         XActionManager.publish(data);
     }
 
@@ -174,7 +177,7 @@ public class AnnounceManager {
             case CHAT -> player.sendMessage(data.component(player));
             case BOSS_BAR -> {
                 if (HookRegistry.cmiHook == null) {
-                    log.error("I cant use bossbar without cmi... sorry");
+                    error("I cant use bossbar without cmi... sorry");
                     return;
                 }
                 HookRegistry.cmiHook.sendBossbar(
@@ -188,7 +191,7 @@ public class AnnounceManager {
             }
             case ACTION_BAR -> {
                 if (HookRegistry.cmiHook == null) {
-                    log.error("I cant use actionbar without cmi... sorry");
+                    error("I cant use actionbar without cmi... sorry");
                     return;
                 }
                 HookRegistry.cmiHook.sendActionbar(

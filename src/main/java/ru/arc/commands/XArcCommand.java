@@ -22,6 +22,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static ru.arc.util.Logging.warn;
 import static ru.arc.util.TextUtil.mm;
 
 @Slf4j
@@ -78,15 +79,15 @@ public class XArcCommand extends ArcCommand {
         boolean moveToServer = context.get("move-to-server");
         if (moveToServer) {
             if (player == null) {
-                log.warn("Cannot move player to server without specifying player {}", context);
+                warn("Cannot move player to server without specifying player {}", context);
                 return true;
             }
             if (serverList == null || serverList.isEmpty()) {
-                log.warn("Cannot move player to server without specifying server {}", context);
+                warn("Cannot move player to server without specifying server {}", context);
                 return true;
             }
             if (serverList.size() != 1) {
-                log.warn("Cannot move player to server, multiple servers specified: {}", serverList);
+                warn("Cannot move player to server, multiple servers specified: {}", serverList);
                 return true;
             }
             Player player1;
@@ -96,7 +97,7 @@ public class XArcCommand extends ArcCommand {
                 player1 = Bukkit.getPlayerExact(player);
             }
             if (player1 == null) {
-                log.warn("Cannot move player to server, player not found: {}", player);
+                warn("Cannot move player to server, player not found: {}", player);
                 return true;
             }
             XActionManager.movePlayerToServer(player1, serverList.iterator().next());

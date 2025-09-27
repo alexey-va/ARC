@@ -21,6 +21,8 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
 import static ru.arc.util.TextUtil.formatAmount;
 import static ru.arc.util.TextUtil.mm;
 
@@ -31,7 +33,7 @@ public class StockPlayerManager {
 
     public static void init() {
         if(!config.bool("enabled", false)) {
-            log.info("Stocks are disabled");
+            info("Stocks are disabled");
             return;
         }
         if (repo != null) repo.close();
@@ -187,7 +189,7 @@ public class StockPlayerManager {
         log.trace("Closing position with uuid: {} of {}", positionUuid, stockPlayer.getPlayerName());
         Stock stock = StockMarket.stock(symbol);
         if (stock == null) {
-            log.error("Could not find stock with symbol: " + symbol);
+            error("Could not find stock with symbol: " + symbol);
             return;
         }
         stockPlayer.remove(symbol, positionUuid).ifPresentOrElse(position -> {
@@ -202,7 +204,7 @@ public class StockPlayerManager {
                     .replace("<symbol>", symbol)
                     .replace("<money_received>", formatAmount(gains + position.startPrice * position.amount));
             AnnounceManager.sendMessageGlobally(stockPlayer.playerUuid, message);
-        }, () -> log.error("Could not find position with such id {}", positionUuid));
+        }, () -> error("Could not find position with such id {}", positionUuid));
 
     }
 

@@ -19,6 +19,8 @@ import org.bukkit.scheduler.BukkitTask;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static ru.arc.util.Logging.debug;
+
 @Slf4j
 public class MobSpawnManager {
 
@@ -54,7 +56,7 @@ public class MobSpawnManager {
                 boolean enabled = config.bool("mobspawn.enabled", true);
                 if (!enabled) return;
                 for (World world : Bukkit.getWorlds()) {
-                    log.debug("Checking world {}", world.getName());
+                    debug("Checking world {}", world.getName());
                     if (!worldNames.contains(world.getName())) continue;
                     boolean goodTime = world.getTime() >= startHour * 1000L || world.getTime() <= endHour * 1000L;
                     if (!goodTime) continue;
@@ -67,7 +69,7 @@ public class MobSpawnManager {
                             @Override
                             public void run() {
                                 total.addAndGet(trySpawn(player));
-                                if (finalPlayer) log.debug("Spawned {} mobs in world {}", total.get(), world.getName());
+                                if (finalPlayer) debug("Spawned {} mobs in world {}", total.get(), world.getName());
                             }
                         }.runTaskLater(ARC.plugin, count.getAndIncrement());
                     }
@@ -86,15 +88,15 @@ public class MobSpawnManager {
         List<Entity> nearbyEntities = player.getNearbyEntities(radius, radius, radius).stream()
                 .filter(entity -> mobSet.contains(entity.getType()))
                 .toList();
-        log.debug("Found {} nearby mobs for {}", nearbyEntities.size(), player.getName());
+        debug("Found {} nearby mobs for {}", nearbyEntities.size(), player.getName());
         if (nearbyEntities.size() >= threshold) return 0;
 
         int amount = Math.min(threshold - nearbyEntities.size(), config.integer("mobspawn.amount", 2));
-        log.debug("Spawning {} mobs near {}", amount, player.getName());
+        debug("Spawning {} mobs near {}", amount, player.getName());
 
         if (config.bool("mobspawn.use-cmi-command", true)) {
             if (player.getLocation().getBlock().getLightLevel() > 7) {
-                log.debug("Light level too high for mob spawn near {}", player.getName());
+                debug("Light level too high for mob spawn near {}", player.getName());
                 return 0;
             }
             Map<EntityType, Integer> amountMap = new HashMap<>();
@@ -111,7 +113,7 @@ public class MobSpawnManager {
         }
 
         Set<Location> locations = tryFindSpawnLocations(player, player.getLocation(), (int) radius, amount);
-        log.debug("Spawning {} mobs near {}", locations.size(), player.getName());
+        debug("Spawning {} mobs near {}", locations.size(), player.getName());
 
         for (Location location : locations) {
             EntityType entityType = mobMap.ceilingEntry((int) (Math.random() * weightSum)).getValue();

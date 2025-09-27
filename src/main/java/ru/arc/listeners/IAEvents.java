@@ -14,6 +14,8 @@ import java.net.URI;
 import java.nio.file.*;
 import java.util.*;
 
+import static ru.arc.util.Logging.error;
+
 @Slf4j
 public class IAEvents implements Listener {
 
@@ -69,7 +71,7 @@ public class IAEvents implements Listener {
                             replaceLineInFile(p, CHESTPLATE, REPLACE_CHESTPLATE);
                             replaceLineInFile(p, HELMET, REPLACE_HELMET);
                         } catch (Exception e) {
-                            log.error("Error processing property file: {}", p, e);
+                            error("Error processing property file: {}", p, e);
                         }
                     });
         }
@@ -88,7 +90,7 @@ public class IAEvents implements Listener {
                         if (Files.isDirectory(p)) Files.createDirectories(dest);
                         else Files.copy(p, dest);
                     } catch (Exception e) {
-                        log.error("Error unzipping file: {}", p, e);
+                        error("Error unzipping file: {}", p, e);
                     }
                 });
             }
@@ -112,7 +114,7 @@ public class IAEvents implements Listener {
                                 Files.createDirectories(destPath.getParent());
                                 Files.copy(path, destPath, StandardCopyOption.REPLACE_EXISTING);
                             } catch (Exception e) {
-                                log.error("Error zipping file: {}", path, e);
+                                error("Error zipping file: {}", path, e);
                             }
                         });
             }
@@ -211,7 +213,7 @@ public class IAEvents implements Listener {
             try {
                 Files.copy(p, parent.resolve(p.getFileName()), StandardCopyOption.REPLACE_EXISTING);
             } catch (Exception e) {
-                log.error("Error copying file: {}", p, e);
+                error("Error copying file: {}", p, e);
             }
         });
         String fileString = """

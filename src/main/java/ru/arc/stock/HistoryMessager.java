@@ -10,6 +10,8 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
 
+import static ru.arc.util.Logging.error;
+
 @Slf4j
 @RequiredArgsConstructor
 public class HistoryMessager implements ChannelListener {
@@ -25,7 +27,7 @@ public class HistoryMessager implements ChannelListener {
             Map<String, HistoryManager.HighLow> highLowMap = Common.gson.fromJson(message, typeToken.getType());
             HistoryManager.setHighLows(highLowMap);
         } catch (Exception e) {
-            log.error("Error consuming highlows", e);
+            error("Error consuming highlows", e);
         }
     }
 
@@ -34,7 +36,7 @@ public class HistoryMessager implements ChannelListener {
             String json = Common.gson.toJson(highLowMap);
             redisManager.publish(channel, json);
         } catch (Exception e) {
-            log.error("Error sending highlows", e);
+            error("Error sending highlows", e);
         }
     }
 }

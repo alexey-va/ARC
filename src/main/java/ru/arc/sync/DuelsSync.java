@@ -16,6 +16,8 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static ru.arc.util.Logging.warn;
+
 @Slf4j
 public class DuelsSync implements Sync {
 
@@ -55,12 +57,12 @@ public class DuelsSync implements Sync {
                 if (player == null || !player.isOnline()) {
                     return;
                 }
-                //log.info("Player not null and online");
+                //info("Player not null and online");
                 DuelsHook.DuelsData data = HookRegistry.duelsHook.getUserData(uuid);
-                //log.info("DuelsData for {} {}", uuid, data);
+                //info("DuelsData for {} {}", uuid, data);
                 if (data == null) {
                     if (counter.incrementAndGet() > 60) {
-                        ARC.warn("DuelsData is null for " + uuid + " for 60 cycles. Cancelling task.");
+                        warn("DuelsData is null for " + uuid + " for 60 cycles. Cancelling task.");
                         cancel();
                     }
                     return;
@@ -74,12 +76,12 @@ public class DuelsSync implements Sync {
 
     public DuelsHook.DuelsData getDuelsData(Context context) {
         DuelsHook.DuelsData data = HookRegistry.duelsHook.getUserData(context.get("uuid"));
-        //log.info("Getting DuelsData for {} {}", context.get("uuid"), data);
+        //info("Getting DuelsData for {} {}", context.get("uuid"), data);
         return data;
     }
 
     public void applyDuelsData(DuelsHook.DuelsData data) {
-        //log.info("Applying DuelsData {}", data);
+        //info("Applying DuelsData {}", data);
         HookRegistry.duelsHook.setUserData(data.getUuid(), data);
     }
 }

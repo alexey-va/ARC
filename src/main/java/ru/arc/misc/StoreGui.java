@@ -23,6 +23,8 @@ import ru.arc.util.*;
 import java.util.ArrayList;
 import java.util.List;
 
+import static ru.arc.util.Logging.info;
+
 @Slf4j
 public class StoreGui extends ChestGui {
 
@@ -60,15 +62,15 @@ public class StoreGui extends ChestGui {
         this.setOnBottomClick(click -> {
             //click.setCancelled(true);
             if (!click.isShiftClick()) {
-                log.info("B: Not shift click");
+                info("B: Not shift click");
                 return;
             }
             if (!store.hasSpace()) {
-                log.info("B: No space");
+                info("B: No space");
                 return;
             }
             if (click.getCurrentItem() == null) {
-                log.info("B: No item");
+                info("B: No item");
                 return;
             }
             click.setCancelled(true);
@@ -78,7 +80,7 @@ public class StoreGui extends ChestGui {
             boolean success = store.addItem(click.getCurrentItem().clone());
 
             if (!success) {
-                log.info("B: Not success");
+                info("B: Not success");
                 return;
             }
             click.setCurrentItem(null);
@@ -97,11 +99,11 @@ public class StoreGui extends ChestGui {
             boolean hasStoreSpace = store.hasSpace();
 
             if (hasCurrentItem) {
-                log.info("T: Current item: " + currentStoreItem.getType());
+                info("T: Current item: " + currentStoreItem.getType());
                 return;
             }
             if (!hasStoreSpace && hasCursorItem) {
-                log.info("T: No space");
+                info("T: No space");
                 return;
             }
 
@@ -117,7 +119,7 @@ public class StoreGui extends ChestGui {
 
 
             if (addedSuccess) {
-                log.info("T: Added success");
+                info("T: Added success");
                 if (currentStoreItem != null) {
                     ItemMeta itemMeta = currentStoreItem.getItemMeta();
                     itemMeta.getPersistentDataContainer().remove(new NamespacedKey(ARC.plugin, "if-uuid"));
@@ -151,9 +153,9 @@ public class StoreGui extends ChestGui {
                 .clickEvent(click -> {
                     if (click.isCancelled()) return;
                     click.setCancelled(true);
-                    log.info("Clicked on item: {}", storeItem.getType());
+                    info("Clicked on item: {}", storeItem.getType());
                     if (isOnCooldown()) {
-                        log.info("On cooldown");
+                        info("On cooldown");
                         GuiUtils.temporaryChange(guiStack,
                                 TextUtil.mm(config.string("store.cooldown-title"), true),
                                 config.stringList("store.cooldown-lore").stream()
@@ -169,7 +171,7 @@ public class StoreGui extends ChestGui {
                     boolean hasInvSpace = player.getInventory().firstEmpty() != -1;
 
                     if (!hasInvSpace) {
-                        log.info("No space");
+                        info("No space");
                         GuiUtils.temporaryChange(guiStack,
                                 TextUtil.mm(config.string("store.no-space-title"), true),
                                 config.stringList("store.no-space-lore").stream()
@@ -186,13 +188,13 @@ public class StoreGui extends ChestGui {
 
 
                     if (success) {
-                        log.info("Success removing {}", storeItem);
+                        info("Success removing {}", storeItem);
                         if (click.getCursor().getType() != Material.AIR || click.isShiftClick()) {
-                            log.info("Cursor not empty");
+                            info("Cursor not empty");
                             // if shift click add to the slot where it would normally go with shift
                             player.getInventory().addItem(storeItem);
                         } else {
-                            log.info("Cursor empty");
+                            info("Cursor empty");
                             click.setCursor(storeItem);
                         }
                     } else {

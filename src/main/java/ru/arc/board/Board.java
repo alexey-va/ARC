@@ -17,6 +17,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
+import static ru.arc.util.Logging.info;
+
 @Slf4j
 public class Board {
 
@@ -69,7 +71,7 @@ public class Board {
         BarColor defaultColor = BarColor.valueOf(config.string("color", "YELLOW").toUpperCase());
         repo.all().stream().min(Comparator.comparingLong(BoardEntry::getLastShown))
                 .ifPresent(e -> {
-                    log.info("Announcing board entry: {}", e);
+                    info("Announcing board entry: {}", e);
                     e.changeLastShown(System.currentTimeMillis());
                     XMessage xMessage = XMessage.builder()
                             .serializedMessage("&7[&6" + e.playerName + "&7]&r " + e.title)

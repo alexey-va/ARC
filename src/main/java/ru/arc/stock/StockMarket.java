@@ -17,6 +17,9 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
+
 @RequiredArgsConstructor
 @Log4j2
 public class StockMarket {
@@ -31,7 +34,7 @@ public class StockMarket {
 
     public static void init() {
         if(!config.bool("enabled", false)) {
-            log.info("Stocks are disabled");
+            info("Stocks are disabled");
             return;
         }
         if (repo == null) {
@@ -74,8 +77,7 @@ public class StockMarket {
                             updates.put(entry.getKey(), client.price(entry.getValue()));
                         }
                     } catch (Exception e) {
-                        log.error("Error fetching data for: " + entry.getKey());
-                        e.printStackTrace();
+                        error("Error fetching data for: {}", entry.getKey(), e);
                     }
                 }
 
@@ -94,7 +96,7 @@ public class StockMarket {
 
                         if (price < 0 || price > 1_000_000) {
                             if (current.price < 0 || current.price > 1_000_000) {
-                                log.error("Price for " + symbol + " is invalid: " + price);
+                                error("Price for " + symbol + " is invalid: " + price);
                                 continue;
                             }
                             price = current.price;
@@ -106,7 +108,7 @@ public class StockMarket {
                         if (current.type == Stock.Type.STOCK) {
                             current.dividend = current.price * StockConfig.dividendPercentFromPrice;
                             if (current.dividend > 10_000) {
-                                log.error("Dividend for " + symbol + " is invalid: " + current.dividend);
+                                error("Dividend for " + symbol + " is invalid: " + current.dividend);
                                 current.dividend = 0;
                             }
                         }
@@ -116,8 +118,7 @@ public class StockMarket {
 
                         StockPlayerManager.updateAllPositionsOf(symbol);
                     } catch (Exception e) {
-                        log.error("Error updating stock: " + entry.getKey());
-                        e.printStackTrace();
+                        error("Error updating stock: {}", entry.getKey(), e);
                     }
 
                 }
@@ -141,7 +142,7 @@ public class StockMarket {
 
     public static void saveHistory() {
         if(!config.bool("enabled", false)) {
-            log.info("Stocks are disabled");
+            info("Stocks are disabled");
             return;
         }
         HistoryManager.saveHistory();
@@ -149,7 +150,7 @@ public class StockMarket {
 
     public static void cancelTasks() {
         if(!config.bool("enabled", false)) {
-            log.info("Stocks are disabled");
+            info("Stocks are disabled");
             return;
         }
         if (updateTask != null && updateTask.isCancelled()) updateTask.cancel();
@@ -166,6 +167,7 @@ public class StockMarket {
         return repo.all();
     }
 
+    @SuppressWarnings("unchecked")
     public static void loadStockFromMap(Map<?, ?> map) {
         try {
             ConfigStock stock = ConfigStock.deserialize((Map<String, Object>) map);
@@ -183,7 +185,7 @@ public class StockMarket {
             current.type = stock.type;
             current.setDirty(true);
         } catch (Exception e) {
-            e.printStackTrace();
+            error("Error loading stock from map: {}", map, e);
         }
     }
 

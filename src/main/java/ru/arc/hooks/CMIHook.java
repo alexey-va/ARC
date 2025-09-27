@@ -34,7 +34,7 @@ public class CMIHook {
         int iters = seconds * 20;
         info.setAdjustPerc(1.0 / iters);
 
-        //log.info("Sending bossbar {} to player: {}", bossBarName, player.getName());
+        //info("Sending bossbar {} to player: {}", bossBarName, player.getName());
 
         CMILib.getInstance().getBossBarManager().Show(info);
     }

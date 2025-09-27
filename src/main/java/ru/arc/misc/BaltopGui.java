@@ -27,6 +27,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
+import static ru.arc.util.Logging.info;
 import static ru.arc.util.TextUtil.formatAmount;
 import static ru.arc.util.TextUtil.mm;
 
@@ -163,16 +164,16 @@ public class BaltopGui extends ChestGui {
     private CompletableFuture<Void> updateCache(Runnable callback) {
         if (HookRegistry.redisEcoHook == null) return CompletableFuture.completedFuture(null);
         if (System.currentTimeMillis() - lastUpdate <= 60000) return CompletableFuture.completedFuture(null);
-        log.info("Updating baltop cache");
+        info("Updating baltop cache");
         return HookRegistry.redisEcoHook.getTopAccounts(224)
                 .thenAccept(accounts -> {
                     record Account(String name, UUID uuid, double balance, double bank) {
                     }
                     var list = accounts.stream().map(account -> {
                                 double bank = HookRegistry.bankHook == null ? 0 :
-                                        HookRegistry.bankHook.offlineBalance(account.uuid().toString());
-                                return new Account(account.name(), account.uuid(),
-                                        account.balance() + bank, bank);
+                                        HookRegistry.bankHook.offlineBalance(account.uuid.toString());
+                                return new Account(account.name, account.uuid,
+                                        account.balance + bank, bank);
                             })
                             .filter(account -> account.balance() > 0.0)
                             //.sorted(Comparator.comparing(Account::balance).reversed())

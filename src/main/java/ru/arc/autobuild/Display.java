@@ -27,6 +27,8 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
 import static ru.arc.util.Utils.rotateBlockData;
 
 @Slf4j
@@ -61,7 +63,7 @@ public class Display {
         try {
             removeDisplays();
         } catch (Exception e) {
-            log.error(e.getMessage());
+            error(e.getMessage());
         }
     }
 
@@ -172,7 +174,7 @@ public class Display {
         new BukkitRunnable() {
             @Override
             public void run() {
-                log.info("Removing display due to timeout {}", seconds);
+                info("Removing display due to timeout {}", seconds);
                 removeDisplays();
             }
         }.runTaskLater(ARC.plugin, seconds * 20L);

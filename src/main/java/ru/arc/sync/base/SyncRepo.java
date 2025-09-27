@@ -11,6 +11,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import static ru.arc.util.Logging.*;
+
 @Log4j2
 public class SyncRepo<T extends SyncData> {
 
@@ -38,7 +40,7 @@ public class SyncRepo<T extends SyncData> {
     private CompletableFuture<Void> saveDataPersistently(T data) {
         return CompletableFuture.supplyAsync(() -> gson.toJson(data))
                 .thenAccept(json -> {
-                    log.debug("Saving json: {}", json);
+                    debug("Saving json: {}", json);
                     redisManager.saveMapEntries(key, data.uuid().toString(), json);
                 });
     }
@@ -53,7 +55,7 @@ public class SyncRepo<T extends SyncData> {
 
     private void applyData(T data) {
         if (data == null) {
-            log.warn("No data found in database {}", key);
+            warn("No data found in database {}", key);
             return;
         }
         if (data.server().equals(ARC.serverName)) return;
@@ -74,14 +76,14 @@ public class SyncRepo<T extends SyncData> {
                 if (async) applyData(data);
                 else Bukkit.getScheduler().runTask(ARC.plugin, () -> applyData(data));
             } catch (Exception e) {
-                log.error("Error loading and applying data", e);
+                error("Error loading and applying data", e);
             }
         });
     }
 
     public CompletableFuture<Void> saveAndPersistData(Context context, boolean async) {
         return produceData(context, async).thenAccept(data -> {
-            log.debug("Saving data: {}", data);
+            debug("Saving data: {}", data);
             if (data == null || data.trash()) return;
             saveDataPersistently(data);
         });

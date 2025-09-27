@@ -2,14 +2,21 @@ package ru.arc.hooks.luckperms;
 
 import lombok.extern.slf4j.Slf4j;
 import net.luckperms.api.LuckPermsProvider;
+import net.luckperms.api.model.group.Group;
 import net.luckperms.api.model.user.UserManager;
 import net.luckperms.api.node.types.MetaNode;
+import net.luckperms.api.query.Flag;
+import net.luckperms.api.query.QueryMode;
+import net.luckperms.api.query.QueryOptions;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+
+import static ru.arc.util.Logging.error;
 
 @Slf4j
 public class LuckPermsHook {
@@ -29,8 +36,26 @@ public class LuckPermsHook {
                     .checkPermission(perm)
                     .asBoolean();
         } catch (InterruptedException | ExecutionException e) {
-            log.error("Error while checking permission", e);
+            error("Error while checking permission", e);
             return false;
+        }
+    }
+
+    public List<String> getGroups(OfflinePlayer offlinePlayer) {
+        UserManager userManager = LuckPermsProvider.get().getUserManager();
+        try {
+            if (Thread.currentThread().getName().contains("main")) {
+                error("Loading groups data from main thread!!!");
+            }
+            return userManager.loadUser(offlinePlayer.getUniqueId()).get()
+                    .getInheritedGroups(QueryOptions.builder(QueryMode.NON_CONTEXTUAL)
+                            .flag(Flag.RESOLVE_INHERITANCE, true)
+                            .build()).stream()
+                    .map(Group::getName)
+                    .toList();
+        } catch (InterruptedException | ExecutionException e) {
+            error("Error while getting groups", e);
+            return List.of();
         }
     }
 

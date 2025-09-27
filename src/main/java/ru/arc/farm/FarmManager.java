@@ -13,6 +13,9 @@ import org.bukkit.scheduler.BukkitTask;
 import java.time.LocalDate;
 import java.util.*;
 
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
+
 @Slf4j
 public class FarmManager {
 
@@ -29,7 +32,7 @@ public class FarmManager {
 
     public static void init() {
         if (HookRegistry.wgHook == null) {
-            log.info("WorldGuard not found! Disabling farm features...");
+            info("WorldGuard not found! Disabling farm features...");
             return;
         }
         clear();
@@ -43,7 +46,7 @@ public class FarmManager {
         mines.stream()
                 .filter(m -> Objects.equals(m.getMineId(), mine.getMineId()))
                 .findAny()
-                .ifPresentOrElse(m -> log.error("Mine with id {} already exists!", mine.getMineId()),
+                .ifPresentOrElse(m -> error("Mine with id {} already exists!", mine.getMineId()),
                         () -> mines.add(mine));
         mines.sort(Comparator.comparingInt(Mine::getPriority).reversed());
     }
@@ -84,7 +87,7 @@ public class FarmManager {
         String prefix = "farm.";
         boolean enabled = config.bool(prefix + "enabled", true);
         if (!enabled) {
-            log.info("Farm is disabled in config! Skipping...");
+            info("Farm is disabled in config! Skipping...");
             return;
         }
 
@@ -94,7 +97,7 @@ public class FarmManager {
         String regionName = config.string(prefix + "region");
         String worldName = config.string(prefix + "world");
         if (worldName == null || regionName == null || permission == null) {
-            log.info("Farm is misconfigured! Missing world-name or region!");
+            info("Farm is misconfigured! Missing world-name or region!");
             return;
         }
 
@@ -110,7 +113,7 @@ public class FarmManager {
         String prefix = "lumbermill.";
         boolean enabled = config.bool(prefix + "enabled", true);
         if (!enabled) {
-            log.info("Lumbermill is disabled in config! Skipping...");
+            info("Lumbermill is disabled in config! Skipping...");
             return;
         }
 
@@ -119,7 +122,7 @@ public class FarmManager {
         String regionName = config.string(prefix + "region");
         String worldName = config.string(prefix + "world");
         if (worldName == null || regionName == null || permission == null) {
-            log.info("Lumbermill is misconfigured! Missing world-name or region!");
+            info("Lumbermill is misconfigured! Missing world-name or region!");
             return;
         }
 
@@ -138,7 +141,7 @@ public class FarmManager {
             String prefix = "mines." + mineId + ".";
             boolean enabled = config.bool(prefix + "enabled", true);
             if (!enabled) {
-                log.info("{} is disabled in config! Skipping...", mineId);
+                info("{} is disabled in config! Skipping...", mineId);
                 continue;
             }
 
@@ -157,7 +160,7 @@ public class FarmManager {
             String regionName = config.string(prefix + "region");
             String worldName = config.string(prefix + "world");
             if (worldName == null || regionName == null || permission == null) {
-                log.info("Mine {} is misconfigured! Missing world-name or region!", mineId);
+                info("Mine {} is misconfigured! Missing world-name or region!", mineId);
                 return;
             }
 

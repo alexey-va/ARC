@@ -10,6 +10,8 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
+import static ru.arc.util.Logging.*;
+
 @Log4j2
 public class RedisManager extends JedisPubSub {
 
@@ -33,7 +35,7 @@ public class RedisManager extends JedisPubSub {
         close();
         sub = new JedisPooled(ip, port, userName, password);
         pub = new JedisPooled(ip, port, userName, password);
-        log.debug("RedisManager initialized");
+        debug("RedisManager initialized");
         init();
     }
 
@@ -53,7 +55,7 @@ public class RedisManager extends JedisPubSub {
             String[] strings = message.split(SERVER_DELIMITER, 2);
             channelListeners.get(channel).forEach((listener) -> listener.consume(channel, strings[1], strings[0]));
         } catch (Exception e) {
-            log.error("Error processing message", e);
+            error("Error processing message", e);
         }
     }
 
@@ -66,22 +68,22 @@ public class RedisManager extends JedisPubSub {
 
     public void init() {
         if (running != null && !running.isCancelled()) {
-            log.info("Stopping old subscription");
+            info("Stopping old subscription");
             running.cancel(true);
         }
         if(scheduled != null && !scheduled.isCancelled() && !scheduled.isDone()) {
-            log.info("Subscription already scheduled");
+            info("Subscription already scheduled");
             return;
         }
         executorService = Executors.newCachedThreadPool();
-        log.info("Scheduling subscription in 1 second");
+        info("Scheduling subscription in 1 second");
         scheduled = scheduledExecutorService.schedule(() -> {
             running = executorService.submit(() -> {
-                log.info("Subscribing to: {}", channelList);
+                info("Subscribing to: {}", channelList);
                 try {
                     sub.subscribe(this, channelList.toArray(String[]::new));
                 } catch (Exception e) {
-                    log.error("Error subscribing. Rescheduling in 100 ms", e);
+                    error("Error subscribing. Rescheduling in 100 ms", e);
                     scheduledExecutorService.schedule(this::init, 100, TimeUnit.MILLISECONDS);
                 }
             });
@@ -89,7 +91,7 @@ public class RedisManager extends JedisPubSub {
     }
 
     public void onSubscribe(String channel, int subscribedChannels) {
-        log.info("Subscribed to channel: {} with {} channels total", channel, subscribedChannels);
+        info("Subscribed to channel: {} with {} channels total", channel, subscribedChannels);
     }
 
     public void publish(String channel, String message) {
@@ -102,9 +104,9 @@ public class RedisManager extends JedisPubSub {
 
     public CompletableFuture<?> saveMapEntries(String key, String... keyValuePairs) {
         if (keyValuePairs.length == 0) {
-            log.debug("No key value pairs to save for key {}", key);
+            debug("No key value pairs to save for key {}", key);
         }
-        log.debug("Saving map key: {} \n {}", key, Arrays.toString(keyValuePairs));
+        debug("Saving map key: {} \n {}", key, Arrays.toString(keyValuePairs));
         try {
             record Pair(String key, String value) {
             }
@@ -120,18 +122,18 @@ public class RedisManager extends JedisPubSub {
             var update = pairs.stream()
                     .filter(pair -> pair.value != null)
                     .collect(Collectors.toMap(Pair::key, Pair::value));
-            log.debug("Saving map key: {} \n {}", key, update);
+            debug("Saving map key: {} \n {}", key, update);
             return CompletableFuture.supplyAsync(() -> {
                 try {
                     if (delete.length > 0) pub.hdel(key, delete);
                     if (!update.isEmpty()) pub.hmset(key, update);
                 } catch (Exception e) {
-                    log.error("Error saving map key: {} \n {}", key, update, e);
+                    error("Error saving map key: {} \n {}", key, update, e);
                 }
                 return null;
             }, executorService);
         } catch (Exception e) {
-            log.error("Error saving map key: {} \n {}", key, keyValuePairs, e);
+            error("Error saving map key: {} \n {}", key, keyValuePairs, e);
             return CompletableFuture.completedFuture(null);
         }
     }
@@ -149,13 +151,13 @@ public class RedisManager extends JedisPubSub {
 
     public void close() {
         try {
-            log.info("Closing redis manager");
+            info("Closing redis manager");
             if (running != null && !running.isCancelled()) running.cancel(true);
             if (sub != null) sub.close();
             if (sub != null) pub.close();
             if (executorService != null) executorService.shutdown();
         } catch (Exception e) {
-            log.error("Error closing redis manager", e);
+            error("Error closing redis manager", e);
         }
     }
 

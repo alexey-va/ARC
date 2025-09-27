@@ -13,6 +13,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
+import static ru.arc.util.Logging.error;
+
 @Data
 @EqualsAndHashCode(callSuper = false)
 @AllArgsConstructor
@@ -90,7 +92,7 @@ public class BoostData extends RepoData<BoostData> {
     public synchronized void addBoost(JobsBoost jobsBoost) {
         removeExpired();
         if (findById(jobsBoost.getId()) != null) {
-            log.error("Boost with id {} already exists for {}", jobsBoost.getId(), player);
+            error("Boost with id {} already exists for {}", jobsBoost.getId(), player);
             return;
         }
         boosts.add(jobsBoost);

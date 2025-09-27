@@ -5,6 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
+import static ru.arc.util.Logging.info;
+
 @Slf4j
 public class WeightedRandom<T> {
     public record Pair<T>(T value, double weight) {
@@ -31,7 +33,7 @@ public class WeightedRandom<T> {
 
     public T random() {
         if (map.isEmpty()) {
-            log.info("Random called on empty WeightedRandom");
+            info("Random called on empty WeightedRandom");
             return null;
         }
         double value = ThreadLocalRandom.current().nextDouble(0, totalWeight);
@@ -40,7 +42,7 @@ public class WeightedRandom<T> {
 
     public Set<T> getNRandom(int n) {
         if (map.isEmpty()) {
-            log.info("NRandom called on empty WeightedRandom");
+            info("NRandom called on empty WeightedRandom");
             return Set.of();
         }
         Set<T> result = new HashSet<>();
@@ -52,8 +54,8 @@ public class WeightedRandom<T> {
             }
         }
         if (result.size() < n) {
-            log.info("Not enough unique values in WeightedRandom");
-            result.stream().findAny().ifPresent(a -> log.info("First value: {}", a));
+            info("Not enough unique values in WeightedRandom");
+            result.stream().findAny().ifPresent(a -> info("First value: {}", a));
         }
         return result;
     }

@@ -13,6 +13,8 @@ import org.bukkit.block.Block;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
+import static ru.arc.util.Logging.*;
+
 @Slf4j
 @ToString
 public class LeafChecker {
@@ -33,7 +35,7 @@ public class LeafChecker {
         this.leafMaterials = leafMaterials;
         this.trunkMaterials = trunkMaterials;
         loadConfig();
-        log.info("LeafChecker loaded: {}", this);
+        info("LeafChecker loaded: {}", this);
     }
 
     public void loadConfig() {
@@ -54,7 +56,7 @@ public class LeafChecker {
         Set<Location> blobVisited = new HashSet<>();
         for (int y = scanHeight; y <= maxHeight; y++) {
             if (chunk.getWorld().getMaxHeight() < y) {
-                log.warn("World height {} is less than the scan height {}. Stopping scan.", chunk.getWorld().getMaxHeight(), y);
+                warn("World height {} is less than the scan height {}. Stopping scan.", chunk.getWorld().getMaxHeight(), y);
                 break;
             }
             for (int x = 0; x < 16; x++) {
@@ -75,13 +77,13 @@ public class LeafChecker {
                         leafData.add(location);
                     }
                     if (leafData.size() > 100) {
-                        log.warn("Too many leaf blocks in chunk {}. Stopping scan.", chunk);
+                        warn("Too many leaf blocks in chunk {}. Stopping scan.", chunk);
                         return leafData;
                     }
                 }
             }
         }
-        //log.info("Found {} leaves in chunk {}", leafData.size(), chunk);
+        //info("Found {} leaves in chunk {}", leafData.size(), chunk);
         return leafData;
     }
 
@@ -92,7 +94,7 @@ public class LeafChecker {
             if (dataBlocks.contains(location)) return false;
             return isNotConnected(location);
         } catch (Exception e) {
-            log.error("Error while checking leaf decay for block {}", location, e);
+            error("Error while checking leaf decay for block {}", location, e);
             return false;
         }
     }
@@ -105,53 +107,53 @@ public class LeafChecker {
         queue.add(origin.toBlockLocation());
         int trunkBlocks = 0;
         while (!queue.isEmpty()) {
-            if (isLog) log.info("----");
-            if (isLog) log.info("Floating blobs: {}", floatingBlobs);
+            if (isLog) info("----");
+            if (isLog) info("Floating blobs: {}", floatingBlobs);
             Location current = queue.poll();
             if (visitedLocal.contains(current)) {
-                if (isLog) log.info("A Block {} already visited", current);
+                if (isLog) info("A Block {} already visited", current);
                 continue;
             }
             if (withPlayerData.contains(current)) return Set.of();
             Block block = current.getBlock();
-            if (isLog) log.info("Checking block {} {}", current, block.getType());
+            if (isLog) info("Checking block {} {}", current, block.getType());
             if (!leafMaterials.contains(block.getType())) {
-                if (isLog) log.info("Block {} is not leaf", block.getType());
+                if (isLog) info("Block {} is not leaf", block.getType());
                 if (trunkMaterials.contains(block.getType())) {
                     trunkBlocks++;
-                    if (isLog) log.info("Block {} is trunk {}", block.getType(), trunkBlocks);
+                    if (isLog) info("Block {} is trunk {}", block.getType(), trunkBlocks);
                     if (trunkBlocks > maxTrunkBlocks) return Set.of();
                 } else {
-                    if (isLog) log.info("Block {} is not trunk", block.getType());
+                    if (isLog) info("Block {} is not trunk", block.getType());
                     return Set.of();
                 }
             }
             floatingBlobs.add(current);
             if (floatingBlobs.size() > maxBlocks) {
-                if (isLog) log.info("Too many blocks in floating blob");
+                if (isLog) info("Too many blocks in floating blob");
                 return Set.of();
             }
             for (Location neighbor : getNeighbors(current, diagonalScan, 1)) {
                 Block neighborBlock = neighbor.getBlock();
                 if (floatingBlobs.contains(neighbor)) {
-                    if (isLog) log.info("Block {} already in floating blob", neighbor);
+                    if (isLog) info("Block {} already in floating blob", neighbor);
                     continue;
                 }
                 if (visited.contains(neighbor)) {
-                    if (isLog) log.info("Kill Block {} already visited", neighbor);
+                    if (isLog) info("Kill Block {} already visited", neighbor);
                     return Set.of();
                 }
                 if (neighborBlock.isPassable()) {
-                    if (isLog) log.info("Block {} is passable", neighbor);
+                    if (isLog) info("Block {} is passable", neighbor);
                     continue;
                 }
-                if (isLog) log.info("Adding block {} to queue", neighbor);
+                if (isLog) info("Adding block {} to queue", neighbor);
                 queue.add(neighbor);
                 visited.add(current);
                 visitedLocal.add(current);
             }
         }
-        if (isLog) log.info("Stats: {} {} {} {}", floatingBlobs.size(), trunkBlocks, visitedLocal.size(), visited);
+        if (isLog) info("Stats: {} {} {} {}", floatingBlobs.size(), trunkBlocks, visitedLocal.size(), visited);
         return floatingBlobs;
     }
 

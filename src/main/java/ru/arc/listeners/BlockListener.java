@@ -39,6 +39,8 @@ import ru.arc.util.TextUtil;
 import java.util.HashSet;
 import java.util.Set;
 
+import static ru.arc.util.Logging.error;
+
 @Slf4j
 public class BlockListener implements Listener {
 
@@ -73,7 +75,7 @@ public class BlockListener implements Listener {
     @EventHandler(priority = EventPriority.LOW)
     public void onChestClick(InventoryOpenEvent event) {
         //if (HookRegistry.bsHook == null) return;
-        //log.info("Chest open event");
+        //info("Chest open event");
         PersonalLootManager.processChestOpen(event);
     }
 
@@ -87,11 +89,12 @@ public class BlockListener implements Listener {
         if (hand == null) return;
         if (hand != EquipmentSlot.HAND) return;
         NBT.get(item, data -> {
+            //info("NBT data: {}", data);
             if (data.hasTag("arc:treasure_key")) {
                 String treasureKey = data.getString("arc:treasure_key");
                 TreasurePool pool = TreasurePool.getTreasurePool(treasureKey);
                 if (pool == null) {
-                    log.error("Treasure pool {} not found", treasureKey);
+                    error("Treasure pool {} not found", treasureKey);
                     return;
                 }
                 int itemAmount = item.getAmount();
@@ -110,12 +113,12 @@ public class BlockListener implements Listener {
 
     private void processPlaceBees(BlockPlaceEvent event) {
         Block block = event.getBlockPlaced();
-        if (block.getType() != Material.BEE_NEST && block.getType() != Material.BEEHIVE) return;
+        if (block.getType() != Material.BEEHIVE && block.getType() != Material.BEEHIVE) return;
         CustomBlockData cbd = new CustomBlockData(block, ARC.plugin);
         cbd.set(BEE_KEY, PersistentDataType.BOOLEAN, true);
     }
 
-    private static Config beeConfig = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "misc.yml");
+    private static final Config beeConfig = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "misc.yml");
 
     private void processBees(PlayerInteractEvent event) {
         if (!event.hasBlock()) return;
@@ -190,7 +193,6 @@ public class BlockListener implements Listener {
         if (treasureHunt == null) {
             return;
         }
-        log.info("Treasure hunt block clicked {}", treasureHunt);
         event.setCancelled(true);
         TreasureHuntManager.popChest(block, treasureHunt, event.getPlayer());
     }

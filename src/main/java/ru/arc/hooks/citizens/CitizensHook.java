@@ -19,6 +19,9 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static ru.arc.util.Logging.debug;
+import static ru.arc.util.Logging.warn;
+
 @Slf4j
 public class CitizensHook {
 
@@ -59,7 +62,7 @@ public class CitizensHook {
         try {
             NPC npc = CitizensAPI.getNPCRegistry().getById(id);
             if (npc == null) {
-                log.warn("NPC {} is null", id);
+                warn("NPC {} is null", id);
                 return;
             }
             HologramTrait trait = npc.getOrAddTrait(HologramTrait.class);
@@ -75,7 +78,7 @@ public class CitizensHook {
                 lineCache.add(new InsertedHologramLine(initialSize.getAndIncrement(), System.currentTimeMillis() + line.ticks * 50L));
             });
         } catch (Exception e) {
-            log.warn("Error adding hologram lines", e);
+            warn("Error adding hologram lines", e);
         }
     }
 
@@ -83,7 +86,7 @@ public class CitizensHook {
         try {
             ARC.trySeverCommand("npc lookclose --id " + id);
         } catch (Exception e) {
-            log.debug("Error looking close", e);
+            debug("Error looking close", e);
         }
     }
 
@@ -107,7 +110,7 @@ public class CitizensHook {
         try {
             ARC.trySeverCommand("npc panimate " + animation.name() + " --id " + id);
         } catch (Exception e) {
-            log.debug("Error animating npc", e);
+            debug("Error animating npc", e);
         }
     }
     @SuppressWarnings("deprecation")
@@ -117,7 +120,7 @@ public class CitizensHook {
             if (npc == null) return;
             npc.getTrait(Equipment.class).set(Equipment.EquipmentSlot.HAND, stack);
         } catch (Exception e) {
-            log.debug("Error setting main hand", e);
+            debug("Error setting main hand", e);
         }
     }
 

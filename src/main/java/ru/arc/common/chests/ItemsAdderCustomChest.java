@@ -1,13 +1,17 @@
 package ru.arc.common.chests;
 
-import ru.arc.ARC;
 import com.jeff_media.customblockdata.CustomBlockData;
 import dev.lone.itemsadder.api.CustomFurniture;
 import lombok.extern.slf4j.Slf4j;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
+import org.bukkit.entity.ItemFrame;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
+import ru.arc.ARC;
+
+import static ru.arc.util.Logging.error;
 
 @Slf4j
 public class ItemsAdderCustomChest extends CustomChest {
@@ -39,7 +43,7 @@ public class ItemsAdderCustomChest extends CustomChest {
 
         String s = data.get(customChest, PersistentDataType.STRING);
         if (s == null || !s.equals("ia")) {
-            log.error("Block at {} is not ItemsAdderCustomChest! Not removing!", block.getLocation());
+            error("Block at {} is not ItemsAdderCustomChest! Not removing!", block.getLocation());
             return;
         }
 
@@ -51,5 +55,21 @@ public class ItemsAdderCustomChest extends CustomChest {
             return;
         }
         furniture.remove(false);
+        tryCleanup();
+    }
+
+    private void tryCleanup() {
+        try {
+            var frames = block.getLocation().getNearbyEntitiesByType(ItemFrame.class, 1);
+            for (var frame : frames) {
+                if (frame.isVisible()) continue;
+                ItemStack item = frame.getItem();
+                if (item.getType().isAir()) continue;
+                if (!item.getItemMeta().hasCustomModelDataComponent()) continue;
+                frame.remove();
+            }
+        } catch (Exception e) {
+            error("Error cleaning up item frames", e);
+        }
     }
 }

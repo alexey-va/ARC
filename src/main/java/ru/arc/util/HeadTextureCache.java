@@ -12,6 +12,8 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static ru.arc.util.Logging.error;
+
 @Log4j2
 public class HeadTextureCache {
 
@@ -28,7 +30,7 @@ public class HeadTextureCache {
         } catch (Exception e) {
             e.printStackTrace();
             data = new Data();
-            log.error("Could not create head cache file");
+            error("Could not create head cache file");
         }
     }
 
@@ -39,8 +41,7 @@ public class HeadTextureCache {
                     StandardOpenOption.CREATE,
                     StandardOpenOption.TRUNCATE_EXISTING);
         } catch (Exception e) {
-            e.printStackTrace();
-            log.error("Could not save head cache file");
+            error("Could not save head cache", e);
         }
     }
 

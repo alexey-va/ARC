@@ -21,6 +21,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 
+import static ru.arc.util.Logging.error;
 import static ru.arc.util.TextUtil.strip;
 
 @Slf4j
@@ -91,7 +92,7 @@ public class GuiUtils {
                     try {
                         return supplier.get();
                     } catch (Exception e) {
-                        log.error("Error opening menu", e);
+                        error("Error opening menu", e);
                         return null;
                     }
                 })
@@ -99,7 +100,7 @@ public class GuiUtils {
                     @Override
                     public void run() {
                         if (gui == null) {
-                            log.error("Gui is null {}", supplier);
+                            error("Gui is null {}", supplier);
                             return;
                         }
                         gui.show(player);

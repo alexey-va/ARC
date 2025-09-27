@@ -23,6 +23,7 @@ import java.util.concurrent.ThreadLocalRandom;
 @NoArgsConstructor
 public class TreasurePotion extends Treasure {
 
+    @Builder.Default
     int minAmount = 1, maxAmount = 1;
 
     @Override

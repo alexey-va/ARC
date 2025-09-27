@@ -33,6 +33,7 @@ import org.bukkit.scheduler.BukkitTask;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
+import static ru.arc.util.Logging.error;
 import static ru.arc.util.TextUtil.mm;
 
 @Slf4j
@@ -88,13 +89,13 @@ public class Mine implements Listener {
 
         RegionManager regionManager = WorldGuard.getInstance().getPlatform().getRegionContainer().get(BukkitAdapter.adapt(world));
         if (regionManager == null) {
-            log.error("Region manager is null!");
+            error("Region manager is null!");
             return;
         }
         this.region = regionManager.getRegion(regionName);
 
         if (region == null) {
-            log.error("Region {} not found in world {}", regionName, worldName);
+            error("Region {} not found in world {}", regionName, worldName);
             return;
         }
         computeCache(true);

@@ -98,7 +98,7 @@ public class LeafDecayManager {
                     counter.set(0);
                     for (String worldName : worlds) {
                         World world = Bukkit.getWorld(worldName);
-                        //log.info("Checking world {}", world);
+                        //info("Checking world {}", world);
                         if (world == null) continue;
                         pollChunksInWorld(world);
                     }

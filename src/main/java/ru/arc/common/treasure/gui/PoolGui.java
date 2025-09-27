@@ -31,6 +31,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
 
+import static ru.arc.util.Logging.error;
+
 @Slf4j
 public class PoolGui extends ChestGui implements Inputable {
 
@@ -93,7 +95,7 @@ public class PoolGui extends ChestGui implements Inputable {
                 GuiItem item = toGuiItem(treasure);
                 guiItems.add(item);
             } catch (Exception e) {
-                log.error("Error creating gui item", e);
+                error("Error creating gui item", e);
             }
         }
         paginatedPane.populateWithGuiItems(guiItems);

@@ -6,6 +6,8 @@ import ru.arc.configs.ConfigManager;
 import lombok.extern.slf4j.Slf4j;
 import org.bukkit.Bukkit;
 
+import static ru.arc.util.Logging.error;
+
 @Slf4j
 public class LootChestHook {
 
@@ -18,7 +20,7 @@ public class LootChestHook {
                 lootChestListener = new LootChestListener(config);
                 Bukkit.getPluginManager().registerEvents(lootChestListener, ARC.plugin);
             } catch (Exception e) {
-                log.error("Error while initializing LootChestListener", e);
+                error("Error while initializing LootChestListener", e);
             }
 
         }

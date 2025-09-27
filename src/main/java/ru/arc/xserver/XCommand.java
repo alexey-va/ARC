@@ -13,6 +13,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static ru.arc.util.Logging.*;
+
 @Data
 @EqualsAndHashCode(callSuper = true)
 @ToString(callSuper = true)
@@ -27,7 +29,9 @@ public class XCommand extends XAction {
     Sender sender = Sender.CONSOLE;
     String playerName;
     UUID playerUuid;
+    @Builder.Default
     int ticksTimeout = 20 * 5;
+    @Builder.Default
     Integer ticksDelay = 40;
     Set<String> servers;
 
@@ -36,15 +40,15 @@ public class XCommand extends XAction {
     @Override
     protected void runInternal() {
         if (servers != null && !servers.contains(ARC.serverName)) {
-            log.debug("Server {} not in list of servers: {}", ARC.serverName, servers);
+            debug("Server {} not in list of servers: {}", ARC.serverName, servers);
             return;
         }
         if (command == null || sender == null || command.isEmpty()) {
-            log.error("Something wrong with xcommand: {}", this);
+            error("Something wrong with xcommand: {}", this);
             return;
         }
         if (sender == Sender.PLAYER && playerName == null && playerUuid == null) {
-            log.error("Player name or uuid must be set for player sender {}", this);
+            error("Player name or uuid must be set for player sender {}", this);
             return;
         }
         if (playerName != null) {
@@ -92,7 +96,7 @@ public class XCommand extends XAction {
                     cancel();
                 }
                 if (ticks.get() >= ticksTimeout) {
-                    log.warn("Player not found for xcommand: {}", XCommand.this);
+                    warn("Player not found for xcommand: {}", XCommand.this);
                     cancel();
                 }
             }

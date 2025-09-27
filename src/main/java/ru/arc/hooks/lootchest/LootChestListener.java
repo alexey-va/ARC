@@ -12,6 +12,9 @@ import org.bukkit.event.Listener;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
+import static ru.arc.util.Logging.debug;
+import static ru.arc.util.Logging.error;
+
 @Slf4j
 @RequiredArgsConstructor
 public class LootChestListener implements Listener {
@@ -20,17 +23,17 @@ public class LootChestListener implements Listener {
 
     @EventHandler
     public void onLootChest(LootChestSpawnEvent event) {
-        log.debug("Loot chest spawn event {}", event);
+        debug("Loot chest spawn event {}", event);
         Location location = event.getLc().getActualLocation().clone().add(0, 1, 0);
         List<String> bosses = lootChestsConfig.stringList("bosses");
         String bossFile = bosses.get(ThreadLocalRandom.current().nextInt(0, bosses.size()));
         if (bossFile == null) {
-            log.error("No bosses found in config with name {}", "bosses");
+            error("No bosses found in config with name {}", "bosses");
             return;
         }
         RegionalBossEntity regionalBossEntity = RegionalBossEntity.SpawnRegionalBoss(bossFile, location);
         if (regionalBossEntity != null) regionalBossEntity.spawn(true);
-        else log.error("Failed to spawn boss with file {}", bossFile);
+        else error("Failed to spawn boss with file {}", bossFile);
     }
 
 }

@@ -13,6 +13,8 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 
 import static ru.arc.audit.Type.PAY;
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
 
 @Slf4j
 public class RedisEcoListener implements Listener {
@@ -22,7 +24,7 @@ public class RedisEcoListener implements Listener {
     @EventHandler
     public void onTransaction(TransactionEvent event) {
         //if (!miscConfig.bool("redis.main-server", false)) return;
-        //log.info("Transaction: {}", event.getTransaction());
+        //info("Transaction: {}", event.getTransaction());
         double amount = event.getTransaction().getAmount();
         AccountID accountIdentifier = event.getTransaction().getAccountIdentifier();
         if (!accountIdentifier.isPlayer()) {
@@ -37,11 +39,11 @@ public class RedisEcoListener implements Listener {
         try {
             otherPlayer = Bukkit.getOfflinePlayer(event.getTransaction().getActor().getUUID());
         } catch (Exception e) {
-            log.error("Error getting player", e);
+            error("Error getting player", e);
         }
 
         if (offlinePlayer.getName() == null) {
-            log.info("Transaction of {} for unknown player {}", amount, accountIdentifier);
+            info("Transaction of {} for unknown player {}", amount, accountIdentifier);
             return;
         }
         if (Math.abs(amount) < 1.0) {

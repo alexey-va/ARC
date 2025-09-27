@@ -21,6 +21,9 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
+
 @Log4j2
 public class HistoryManager {
 
@@ -50,7 +53,7 @@ public class HistoryManager {
 
     public static void init() {
         if(!config.bool("enabled", false)) {
-            log.info("Stocks are disabled");
+            info("Stocks are disabled");
             return;
         }
         historyPath = ARC.plugin.getDataFolder().toPath().resolve("stocks/history.json");
@@ -59,7 +62,7 @@ public class HistoryManager {
                 Files.createDirectories(historyPath.getParent());
                 Files.createFile(historyPath);
             } catch (IOException e) {
-                log.error("Error creating history file", e);
+                error("Error creating history file", e);
             }
         }
 
@@ -78,7 +81,7 @@ public class HistoryManager {
                     drawPlots(true);
                     messager.send(highLows);
                 } catch (Exception e) {
-                    log.error("Error in saveTask", e);
+                    error("Error in saveTask", e);
                 }
             }
         }.runTaskTimerAsynchronously(ARC.plugin, 100L, 20L * 300);
@@ -125,10 +128,10 @@ public class HistoryManager {
 
     static void saveHistory() {
         if(!config.bool("enabled", false)) {
-            log.info("Stocks are disabled");
+            info("Stocks are disabled");
             return;
         }
-        log.info("Saving history size {}", history.values().stream().mapToInt(List::size).sum());
+        info("Saving history size {}", history.values().stream().mapToInt(List::size).sum());
         evictOldHistory();
         saveToFile();
     }
@@ -136,7 +139,7 @@ public class HistoryManager {
     static void evictOldHistory() {
         long current = System.currentTimeMillis();
         for (var list : history.values()) {
-            //log.info("Evicting old history entries: {}", list.size());
+            //info("Evicting old history entries: {}", list.size());
             list.removeIf(sh -> current - sh.timestamp > 1000L * StockConfig.historyLifetime);
             Set<Long> seen = new HashSet<>();
             List<StockHistory> duplicates = new ArrayList<>();
@@ -144,7 +147,7 @@ public class HistoryManager {
                 if (!seen.add(e.timestamp)) duplicates.add(e);
             }
             list.removeAll(duplicates);
-            //log.info("Evicted old history entries: {}", list.size());
+            //info("Evicted old history entries: {}", list.size());
         }
     }
 
@@ -182,10 +185,10 @@ public class HistoryManager {
             BufferedReader bufferedReader = Files.newBufferedReader(historyPath);
             Map<String, List<HistoryManager.StockHistory>> history = Common.gson.fromJson(bufferedReader, token);
             bufferedReader.close();
-            log.info("Loaded history: {}", history.values().stream().mapToInt(List::size).sum());
+            info("Loaded history: {}", history.values().stream().mapToInt(List::size).sum());
             appendHistory(history);
         } catch (Exception e) {
-            log.error("Error loading history", e);
+            error("Error loading history", e);
             saveToFile();
         }
     }
@@ -195,18 +198,18 @@ public class HistoryManager {
             String json = Common.prettyGson.toJson(history);
             Files.write(historyPath, json.getBytes());
         } catch (IOException e) {
-            log.error("Error saving history", e);
+            error("Error saving history", e);
         }
     }
 
     public static void appendHistory(Map<String, List<StockHistory>> history) {
         for (var entry : history.entrySet()) {
             for (var stockHistory : entry.getValue()) {
-                //log.info("Appending history: {} {} {}", entry.getKey(), stockHistory.cost, stockHistory.timestamp);
+                //info("Appending history: {} {} {}", entry.getKey(), stockHistory.cost, stockHistory.timestamp);
                 add(entry.getKey(), stockHistory.cost, stockHistory.timestamp);
             }
         }
-        log.info("Appended history: {}", history.values().stream().mapToInt(List::size).sum());
+        info("Appended history: {}", history.values().stream().mapToInt(List::size).sum());
     }
 
 }

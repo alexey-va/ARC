@@ -28,6 +28,9 @@ import org.bukkit.scheduler.BukkitTask;
 import java.util.ArrayList;
 import java.util.List;
 
+import static ru.arc.util.Logging.info;
+import static ru.arc.util.Logging.warn;
+
 @Log4j2
 public class AuctionHook {
 
@@ -50,9 +53,9 @@ public class AuctionHook {
 
         if(iBlacklistManager != null){
             iBlacklistManager.registerBlacklist(emBlackList());
-            log.info("Registered soulbind blacklist");
+            info("Registered soulbind blacklist");
         } else{
-            log.warn("Black list manager was not found!");
+            warn("Black list manager was not found!");
         }
 
         if(auctionListener == null){

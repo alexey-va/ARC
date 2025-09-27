@@ -22,6 +22,9 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
+
 @Slf4j
 public class JoinMessageGui extends ChestGui {
 
@@ -55,6 +58,7 @@ public class JoinMessageGui extends ChestGui {
         setupMessages();
         setupButtons();
 
+        info("Start page: {}, pages: {}", startPage, pane.getPages());
         pane.setPage(startPage);
     }
 
@@ -200,7 +204,7 @@ public class JoinMessageGui extends ChestGui {
                                 return;
                             }
                             if (HookRegistry.luckPermsHook == null) {
-                                log.error("LuckPerms hook is not available");
+                                error("LuckPerms hook is not available");
                                 return;
                             }
                             if (isCurrent) {
@@ -222,13 +226,13 @@ public class JoinMessageGui extends ChestGui {
                         }).build();
                 items.add(guiItem);
             } catch (Exception e) {
-                log.error("Error while parsing message: {}", map, e);
+                error("Error while parsing message: {}", map, e);
             } finally {
                 id++;
             }
         }
         if (!unseenMessages.isEmpty()) {
-            log.info("Player {} has unseen messages: {}", player.getName(), unseenMessages);
+            info("Player {} has unseen messages: {}", player.getName(), unseenMessages);
             if(isJoin) {
                 unseenMessages.forEach(join::removeJoinMessage);
             } else {

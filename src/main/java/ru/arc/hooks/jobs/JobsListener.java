@@ -35,7 +35,7 @@ public class JobsListener implements Listener {
     @EventHandler
     @SneakyThrows
     public void onJobsExp(JobsExpGainEvent event) {
-        //log.info("Job exp event: Player: {}, Exp: {}, Job: {}", event.getPlayer(), event.getExp(), event.getJob().getName());
+        //info("Job exp event: Player: {}, Exp: {}, Job: {}", event.getPlayer(), event.getExp(), event.getJob().getName());
         String playerName = event.getPlayer().getName();
         if (playerName == null) return;
 
@@ -60,7 +60,7 @@ public class JobsListener implements Listener {
                         hasCustomBoost = true;
                     }
                     effectiveExpBoost = baseExpBoost + boost - 1;
-                    //log.info("Effective exp boost: {}", effectiveExpBoost);
+                    //info("Effective exp boost: {}", effectiveExpBoost);
                 }
             }
         }
@@ -68,14 +68,14 @@ public class JobsListener implements Listener {
         if (!hasCustomBoost) return;
 
         double targetExp = exp * (effectiveExpBoost + 1);
-        //log.info("Target exp: {}", targetExp);
+        //info("Target exp: {}", targetExp);
 
         double preExp = targetExp / (1.0 + baseExpBoost);
-        //log.info("Pre exp: {}", preExp);
+        //info("Pre exp: {}", preExp);
 
         var previousBoostedData = map.get(playerName, ConcurrentHashMap::new);
         if (Math.abs(previousBoostedData.getOrDefault(EXP, 0.0) - exp) < 0.000001) {
-            //log.info("Skipping event for player {} data: {} {}", playerName, previousBoostedData.get(EXP), exp);
+            //info("Skipping event for player {} data: {} {}", playerName, previousBoostedData.get(EXP), exp);
             return;
         }
 
@@ -87,7 +87,7 @@ public class JobsListener implements Listener {
     @EventHandler
     @SneakyThrows
     public void onJobsPay(JobsPrePaymentEvent event) {
-        //log.info("Job payment event: Player: {}, Money: {}, Points: {}, Job: {}, Action: {}",
+        //info("Job payment event: Player: {}, Money: {}, Points: {}, Job: {}, Action: {}",
         //        event.getPlayer(), event.getAmount(), event.getPoints(), event.getJob().getName(), event.getActionInfo());
 
         String playerName = event.getPlayer().getName();
@@ -105,7 +105,7 @@ public class JobsListener implements Listener {
             basePointsBoost = HookRegistry.jobsHook.getBoost(player, event.getJob().getName(), JobsBoost.Type.POINTS);
         }
 
-        //log.info("Base money boost: {}, base points boost: {}", baseMoneyBoost, basePointsBoost);
+        //info("Base money boost: {}, base points boost: {}", baseMoneyBoost, basePointsBoost);
 
 
         double effectiveMoneyBoost = baseMoneyBoost;
@@ -130,12 +130,12 @@ public class JobsListener implements Listener {
                         hasCustomPointsBoost = true;
                     }
 
-                    //log.info("Money boost: {}, points boost: {}", moneyBoost, pointsBoost);
+                    //info("Money boost: {}, points boost: {}", moneyBoost, pointsBoost);
 
                     effectiveMoneyBoost = baseMoneyBoost + moneyBoost - 1;
                     effectivePointsBoost = basePointsBoost + pointsBoost - 1;
 
-                    //log.info("Effective money boost: {}, effective points boost: {}", effectiveMoneyBoost, effectivePointsBoost);
+                    //info("Effective money boost: {}, effective points boost: {}", effectiveMoneyBoost, effectivePointsBoost);
                 }
             }
         }
@@ -147,16 +147,16 @@ public class JobsListener implements Listener {
 
         double targetMoney = money * (effectiveMoneyBoost + 1);
         double targetPoints = points * (effectivePointsBoost + 1);
-        //log.info("Target money: {}, target points: {}", targetMoney, targetPoints);
+        //info("Target money: {}, target points: {}", targetMoney, targetPoints);
 
         double preMoney = targetMoney / (1.0 + baseMoneyBoost);
         double prePoints = targetPoints / (1.0 + basePointsBoost);
-        //log.info("Pre money: {}, pre points: {}", preMoney, prePoints);
+        //info("Pre money: {}, pre points: {}", preMoney, prePoints);
 
 
         var previousBoostedData = map.get(playerName, ConcurrentHashMap::new);
         if (hasCustomMoneyBoost && Math.abs(previousBoostedData.getOrDefault(MONEY, 0.0) - money) < 0.000001) {
-            //log.info("Skipping event for player {} data: {} {}", playerName, previousBoostedData.get(MONEY), money);
+            //info("Skipping event for player {} data: {} {}", playerName, previousBoostedData.get(MONEY), money);
         } else {
             previousBoostedData.put(MONEY, preMoney);
             event.setAmount(preMoney);
@@ -164,7 +164,7 @@ public class JobsListener implements Listener {
         }
 
         if (hasCustomPointsBoost && Math.abs(previousBoostedData.getOrDefault(POINTS, 0.0) - points) < 0.000001) {
-            //log.info("Skipping event for player {} data: {} {}", playerName, previousBoostedData.get(POINTS), points);
+            //info("Skipping event for player {} data: {} {}", playerName, previousBoostedData.get(POINTS), points);
         } else {
             previousBoostedData.put(POINTS, prePoints);
             event.setPoints(prePoints);

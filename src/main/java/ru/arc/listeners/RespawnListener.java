@@ -18,6 +18,9 @@ import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.Set;
 
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
+
 @Slf4j
 public class RespawnListener implements Listener {
 
@@ -25,14 +28,14 @@ public class RespawnListener implements Listener {
 
     @EventHandler
     public void onRespawn(PlayerRespawnEvent event) {
-        log.info("Respawning player {} reason {} location {}", event.getPlayer().getName(), event.getRespawnReason(), event.getRespawnLocation());
+        info("Respawning player {} reason {} location {}", event.getPlayer().getName(), event.getRespawnReason(), event.getRespawnLocation());
         World world = event.getPlayer().getLocation().getWorld();
-        log.info("World {}", world.getName());
+        info("World {}", world.getName());
         Set<String> interceptWorlds = config.stringSet("respawn-intercept-worlds");
         if (interceptWorlds.contains(world.getName())) {
-            log.info("Intercepting respawn for player {}", event.getPlayer().getName());
+            info("Intercepting respawn for player {}", event.getPlayer().getName());
             Location respawnLocation = event.getPlayer().getRespawnLocation();
-            log.info("Respawn location {}", respawnLocation);
+            info("Respawn location {}", respawnLocation);
             if (respawnLocation == null) return;
             event.setRespawnLocation(respawnLocation);
         }
@@ -45,12 +48,12 @@ public class RespawnListener implements Listener {
             if (e.getClickedBlock() != null && Tag.BEDS.isTagged(e.getClickedBlock().getType())) { // check if the block is a bed
                 if ((player.getWorld().getTime() < 12541 || player.getWorld().getTime() > 23458) && !player.getWorld().hasStorm()) {
                     e.setCancelled(true);
-                    log.info("Player {} tried to sleep during the day", player.getName());
+                    info("Player {} tried to sleep during the day", player.getName());
                 }
                 final Location oldRespawn = player.getRespawnLocation();
                 HookRegistry.huskHomesHook.hasHome(player)
                         .thenAccept(hasHome -> {
-                            log.info("Player {} has home {}", player.getName(), hasHome);
+                            info("Player {} has home {}", player.getName(), hasHome);
                             try {
                                 if (!hasHome) {
                                     HookRegistry.huskHomesHook.createDefaultHome(player, player.getLocation());
@@ -59,13 +62,13 @@ public class RespawnListener implements Listener {
                                     new BukkitRunnable() {
                                         @Override
                                         public void run() {
-                                            log.info("Setting respawn location for player {} to {}", player.getName(), oldRespawn);
+                                            info("Setting respawn location for player {} to {}", player.getName(), oldRespawn);
                                             player.setRespawnLocation(oldRespawn, true);
                                         }
                                     }.runTaskLater(ARC.plugin, 3L);
                                 }
                             } catch (Exception ex) {
-                                log.error("Error setting respawn location for player {}", player.getName(), ex);
+                                error("Error setting respawn location for player {}", player.getName(), ex);
                             }
                         });
 

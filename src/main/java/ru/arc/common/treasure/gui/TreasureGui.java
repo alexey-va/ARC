@@ -27,6 +27,8 @@ import org.bukkit.entity.Player;
 import java.util.*;
 import java.util.stream.Stream;
 
+import static ru.arc.util.Logging.error;
+
 @Slf4j
 public class TreasureGui extends ChestGui implements Inputable {
 
@@ -246,7 +248,7 @@ public class TreasureGui extends ChestGui implements Inputable {
                 treasureCommand.setCommands(List.of(s));
                 treasurePool.setDirty(true);
             } else {
-                log.error("Treasure is not a command");
+                error("Treasure is not a command");
             }
         } else if (n == 2) {
             if (treasure instanceof TreasureItem treasureItem) {
@@ -255,7 +257,7 @@ public class TreasureGui extends ChestGui implements Inputable {
                 treasureItem.setMaxAmount(newAmount);
                 treasurePool.setDirty(true);
             } else {
-                log.error("Treasure is not an item");
+                error("Treasure is not an item");
             }
         } else if (n == 3) {
             if (treasure instanceof TreasureItem treasureItem) {
@@ -268,7 +270,7 @@ public class TreasureGui extends ChestGui implements Inputable {
                 treasureItem.setGaussData(gaussData);
                 treasurePool.setDirty(true);
             } else {
-                log.error("Treasure is not an item");
+                error("Treasure is not an item");
             }
         } else if (n == 4) {
             if (s.isEmpty() || s.isBlank() || s.equalsIgnoreCase("нет")) treasure.message(null);

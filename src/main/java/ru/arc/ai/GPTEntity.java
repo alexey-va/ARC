@@ -15,6 +15,8 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
+import static ru.arc.util.Logging.error;
+
 @Slf4j
 public class GPTEntity {
 
@@ -39,7 +41,7 @@ public class GPTEntity {
     public CompletableFuture<Optional<ModerResponse>> getModerResponse(String message) {
         String apiKey = config.string("api-key", "none");
         if (apiKey.equals("none")) {
-            log.error("API key is not set");
+            error("API key is not set");
             return CompletableFuture.completedFuture(Optional.empty());
         }
         List<Map<String, String>> playerMessage = new ArrayList<>();
@@ -94,7 +96,7 @@ public class GPTEntity {
                         : null;
                 return Optional.of(new ModerResponse(response, comment));
             } catch (Exception e) {
-                log.error("Failed to get response from GPT", e);
+                error("Failed to get response from GPT", e);
                 return Optional.empty();
             }
         });
@@ -103,7 +105,7 @@ public class GPTEntity {
     @SneakyThrows
     public CompletableFuture<Optional<String>> getResponse(UUID playerUuid, String playerName, String message) {
         if (config.string("api-key", "none").equals("none")) {
-            log.error("API key is not set");
+            error("API key is not set");
             return CompletableFuture.completedFuture(Optional.empty());
         }
 
@@ -157,7 +159,7 @@ public class GPTEntity {
                 if (chatHistory != null) chatHistory.addBotMessage(gptResponse);
                 return Optional.of(gptResponse);
             } catch (Exception e) {
-                log.error("Failed to get response from GPT", e);
+                error("Failed to get response from GPT", e);
                 return Optional.empty();
             }
         });

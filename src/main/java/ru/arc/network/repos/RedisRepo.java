@@ -21,6 +21,8 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
+import static ru.arc.util.Logging.*;
+
 @Log4j2
 @SuppressWarnings({"unchecked", "rawtypes", "unused"})
 
@@ -58,7 +60,7 @@ public class RedisRepo<T extends RepoData> {
         this.saveBackups = saveBackups != null && saveBackups;
 
         if(redisManager == null) {
-            log.error("Redis manager is not initialized. RedisRepo will not work.");
+            error("Redis manager is not initialized. RedisRepo will not work.");
             return;
         }
         messager = new RedisRepoMessager(this, redisManager);
@@ -67,7 +69,7 @@ public class RedisRepo<T extends RepoData> {
         backupService = new BackupService(id, backupFolder);
 
         startTasks();
-        log.info("Created repo: {}", id);
+        info("Created repo: {}", id);
 
         repos.add(this);
     }
@@ -113,7 +115,7 @@ public class RedisRepo<T extends RepoData> {
                     deleteUnnecessary();
                     loadNecessary();
                 } catch (Exception e) {
-                    log.error("Error in save task: {}", e.getMessage());
+                    error("Error in save task: {}", e.getMessage());
                 }
             }
         }.runTaskTimerAsynchronously(ARC.plugin, 0L, saveInterval);
@@ -152,7 +154,7 @@ public class RedisRepo<T extends RepoData> {
                             contextSet.add(t.id());
                             if (onUpdate != null) onUpdate.accept(t);
                         } catch (Exception e) {
-                            log.error("Error: {}", e.getMessage());
+                            error("Error: {}", e.getMessage());
                         }
                     }
                 });
@@ -167,7 +169,7 @@ public class RedisRepo<T extends RepoData> {
                     for (int i = 0; i < list.size(); i++) {
                         var entry = list.get(i);
                         if (entry == null) {
-                            log.debug("Could not find entry in storage: {}", keys);
+                            debug("Could not find entry in storage: {}", keys);
                             lastAttempt.put(keys.get(i), System.currentTimeMillis());
                             continue;
                         }
@@ -179,7 +181,7 @@ public class RedisRepo<T extends RepoData> {
                             lastAttempt.remove(t.id());
                             if (onUpdate != null) onUpdate.accept(t);
                         } catch (Exception e) {
-                            log.error("Could not parse: {} {}", entry, e.getMessage());
+                            error("Could not parse: {} {}", entry, e.getMessage());
                         }
                     }
                 });
@@ -248,13 +250,13 @@ public class RedisRepo<T extends RepoData> {
                             log.trace("Saving: {}", Arrays.toString(array));
                             return array;
                         } catch (Exception e) {
-                            log.error("Could not save: {}", ts);
+                            error("Could not save: {}", ts);
                             return new String[]{};
                         }
                     }).thenCompose(arr -> redisManager.saveMapEntries(storageKey, arr))
                     .thenAccept((o) -> ts.forEach(t -> announceUpdate(t.id())));
         } catch (Exception e) {
-            log.error("Error: {}", e.getMessage());
+            error("Error: {}", e.getMessage());
             return CompletableFuture.completedFuture(null);
         }
     }
@@ -267,7 +269,7 @@ public class RedisRepo<T extends RepoData> {
         log.trace("Announcing update: {}", id);
         T t = map.get(id);
         if (t == null) {
-            log.debug("Could not find {} in storage while announcing update!", id);
+            debug("Could not find {} in storage while announcing update!", id);
             return;
         }
         Update update = new Update(id, 0);
@@ -296,12 +298,12 @@ public class RedisRepo<T extends RepoData> {
                         //System.out.println("Map: " + map);
                         return;
                     }
-                    //log.info("Received: " + list.get(0));
+                    //info("Received: " + list.get(0));
                     T t = (T) gson.fromJson(list.getFirst(), clazz);
                     T current = map.get(update.id);
                     if (current != null) current.merge(t);
                     else {
-                        log.debug("Current is null when merging! Update {}", t);
+                        debug("Current is null when merging! Update {}", t);
                         map.put(t.id(), t);
                         contextSet.add(t.id());
                     }
@@ -351,7 +353,7 @@ public class RedisRepo<T extends RepoData> {
                         lastAttempt.put(id, System.currentTimeMillis());
                         return null;
                     }
-                    //log.info("Received: " + list.get(0));
+                    //info("Received: " + list.get(0));
                     T t = (T) gson.fromJson(list.getFirst(), clazz);
                     map.put(t.id(), t);
                     contextSet.add(t.id());

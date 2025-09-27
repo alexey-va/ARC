@@ -25,9 +25,12 @@ import static ru.arc.util.TextUtil.mm;
 @Log4j2
 public class SFHook implements Listener {
 
+    private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "backpacks.yml");
+
     @EventHandler(priority = EventPriority.LOWEST)
     public void onUseBackpack(PlayerRightClickEvent event) {
         if (checkForOthersPlayersBackpackUse(event)) return;
+        if (checkForBackpack(event)) return;
         SyncManager.processEvent(event);
     }
 
@@ -66,14 +69,27 @@ public class SFHook implements Listener {
                     UUID uuid = UUID.fromString(uuidString);
                     if (uuid.equals(event.getPlayer().getUniqueId())) return false;
                     event.cancel();
-                    Config config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "backpacks.yml");
 
                     event.getPlayer().sendMessage(mm(
-                            config.string("backpacks.use-other-player", "<dark_red>Вы не можете импользовать чужие рюкзаки!")
+                            config.string("backpacks.use-other-player", "<dark_red>Вы не можете использовать чужие рюкзаки!")
                     ));
                     return true;
                 }
             }
+        }
+        return false;
+    }
+
+    public boolean checkForBackpack(PlayerRightClickEvent event) {
+        if (event.getPlayer().getInventory().getItemInMainHand().getType() == Material.AIR) return false;
+        if (!config.bool("backpack-disabled", false)) return false;
+        ItemStack item = event.getPlayer().getInventory().getItemInMainHand();
+        SlimefunItem sfItem = SlimefunItem.getByItem(item);
+        if (sfItem == null) return false;
+        if (sfItem.getId().contains("BACKPACK")) {
+            event.getPlayer().sendMessage(config.componentDef("backpacks.forbidden", "<dark_red>Вы не можете использовать рюкзак здесь!"));
+            event.cancel();
+            return true;
         }
         return false;
     }

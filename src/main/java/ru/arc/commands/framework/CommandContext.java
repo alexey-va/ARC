@@ -54,7 +54,7 @@ public class CommandContext {
 
             if (next == null || next.startsWith("-")) {
                 context.parseErrorList.add(new ParseError("Invalid argument", arg, i));
-                //log.warn("Invalid argument in: {}, at arg: {}", Arrays.toString(args), i);
+                //warn("Invalid argument in: {}, at arg: {}", Arrays.toString(args), i);
                 continue;
             }
             if (expectedMap.containsKey(arg)) {
@@ -65,12 +65,12 @@ public class CommandContext {
                     context.parseErrorList.add(
                             new ParseError("Invalid argument type. Expected " + par.getName(), arg, i)
                     );
-                    //log.warn("Invalid argument type in: {}, at arg: {}", Arrays.toString(args), i);
+                    //warn("Invalid argument type in: {}, at arg: {}", Arrays.toString(args), i);
                     context.map.put(arg, par.getDefaultValue());
                 }
             } else {
                 Object guess = guessAndCast(next);
-                //log.warn("Unknown argument in: {}, at arg: {}", Arrays.toString(args), i);
+                //warn("Unknown argument in: {}, at arg: {}", Arrays.toString(args), i);
                 context.map.put(arg, guess);
             }
             if (!withSemicolon) i++;

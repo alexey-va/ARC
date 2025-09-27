@@ -21,6 +21,8 @@ import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
+import static ru.arc.util.Logging.info;
+
 @EqualsAndHashCode(callSuper = true)
 @Data
 @AllArgsConstructor
@@ -29,7 +31,9 @@ import java.util.stream.Collectors;
 @Slf4j
 public class TreasureEnchant extends Treasure {
 
+    @Builder.Default
     int minAmount = 1, maxAmount = 1;
+    @Builder.Default
     Set<String> exclude = new HashSet<>();
 
     private static final Config config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "treasures.yml");
@@ -53,7 +57,7 @@ public class TreasureEnchant extends Treasure {
             });
             enchantNames.add(e.key().toString());
         }
-        log.info("Player {} got {} enchantments: {}", player.getName(), randomAmount, enchantNames);
+        info("Player {} got {} enchantments: {}", player.getName(), randomAmount, enchantNames);
 
         if (flags.isSendMessage()) {
             Component s = config.componentDef("messages.treasure.enchant.personal", "<dark_green>Вы получили <yellow><amount><dark_green> предметов",

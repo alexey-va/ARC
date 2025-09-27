@@ -12,7 +12,7 @@ public class BankHook {
     }
 
     public double offlineBalance(String name) {
-        //log.info("Offline bank balance of " + name + " is " + balance);
+        //info("Offline bank balance of " + name + " is " + balance);
         return BankAPI.getInstance().getMoney(name);
     }
 

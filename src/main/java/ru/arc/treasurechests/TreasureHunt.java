@@ -1,19 +1,5 @@
 package ru.arc.treasurechests;
 
-import ru.arc.ARC;
-import ru.arc.common.ServerLocation;
-import ru.arc.common.chests.CustomChest;
-import ru.arc.common.chests.ItemsAdderCustomChest;
-import ru.arc.common.chests.VanillaChest;
-import ru.arc.common.locationpools.LocationPool;
-import ru.arc.common.treasure.Treasure;
-import ru.arc.common.treasure.TreasurePool;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import ru.arc.util.ParticleManager;
-import ru.arc.util.Utils;
-import ru.arc.xserver.announcements.AnnounceManager;
-import ru.arc.xserver.playerlist.PlayerManager;
 import com.destroystokyo.paper.ParticleBuilder;
 import com.jeff_media.customblockdata.CustomBlockData;
 import lombok.RequiredArgsConstructor;
@@ -30,12 +16,29 @@ import org.bukkit.inventory.meta.FireworkMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
+import ru.arc.ARC;
+import ru.arc.common.ServerLocation;
+import ru.arc.common.chests.CustomChest;
+import ru.arc.common.chests.ItemsAdderCustomChest;
+import ru.arc.common.chests.VanillaChest;
+import ru.arc.common.locationpools.LocationPool;
+import ru.arc.common.treasure.Treasure;
+import ru.arc.common.treasure.TreasurePool;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
+import ru.arc.util.ParticleManager;
+import ru.arc.util.Utils;
+import ru.arc.xserver.announcements.AnnounceManager;
+import ru.arc.xserver.playerlist.PlayerManager;
 
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.warn;
 import static ru.arc.util.TextUtil.mm;
 
 @RequiredArgsConstructor
@@ -80,11 +83,19 @@ public class TreasureHunt {
             else if (type == Type.VANILLA) customChest = new VanillaChest(block);
             else throw new IllegalArgumentException("No such chest type: " + type);
             customChest.create();
+            if(location.getBlock().getType() == Material.AIR) {
+                warn("Unable to create chest at {}. Block type is AIR", location);
+                continue;
+            }
             customChests.put(block.getLocation().toCenterLocation(), customChest);
             customChestChestTypeMap.put(customChest, randomChestType);
         }
-        max = locations.size();
+        max = customChests.size();
         left = max;
+        if (max == 0) {
+            warn("No chests found for treasure hunt");
+            return Collections.emptySet();
+        }
         timestamp = System.currentTimeMillis();
 
         if (treasureHuntType.announceStart) {
@@ -98,7 +109,7 @@ public class TreasureHunt {
                         AnnounceManager.sendMessageGlobally(uuid, message);
                     }
                 } else {
-                    List<Player> worldPlayers = world.getPlayers();
+                    List<Player> worldPlayers = world == null ? List.of() : world.getPlayers();
                     Component component = mm(message);
                     for (Player player : worldPlayers) player.sendMessage(component);
                 }
@@ -115,7 +126,7 @@ public class TreasureHunt {
                 message = config.string("messages.default-stop-message", "<gold>Охота за сокровищами завершена!");
 
             if (!(message == null || message.isBlank())) {
-                List<Player> worldPlayers = world.getPlayers();
+                List<Player> worldPlayers = world == null ? List.of() : world.getPlayers();
                 Component component = mm(message);
                 for (Player player : worldPlayers) player.sendMessage(component);
             }
@@ -145,7 +156,7 @@ public class TreasureHunt {
                     if (customChest != null) customChest.destroy();
                 }
             } catch (Exception e) {
-                log.error("Error while clearing chest at {}", location, e);
+                error("Error while clearing chest at {}", location, e);
             }
         }
     }
@@ -178,7 +189,13 @@ public class TreasureHunt {
                 .extra(extra)
                 .offset(offset, offset, offset)
                 .receivers(block.getWorld().getPlayers()));
-        block.getWorld().playSound(block.getLocation(), Sound.valueOf(sound), 1.0f, 1.0f);
+        try {
+            Sound sound1 = Registry.SOUNDS.get(NamespacedKey.fromString(sound.toLowerCase(Locale.ROOT)));
+            block.getWorld().playSound(block.getLocation(), sound1, 1.0f, 1.0f);
+        } catch (Exception e) {
+            error("Error while playing sound {}", sound, e);
+        }
+
         if (treasureHuntType.launchFireworks) {
             block.getWorld().spawnEntity(block.getLocation().toCenterLocation().add(0, 1, 0),
                     EntityType.FIREWORK_ROCKET, CreatureSpawnEvent.SpawnReason.CUSTOM, e -> {
@@ -212,8 +229,19 @@ public class TreasureHunt {
         locations = nRandom.stream()
                 .filter(ServerLocation::isSameServer)
                 .map(ServerLocation::toLocation)
+                .filter(l -> {
+                    Block block = l.getBlock();
+                    if (block.getType() != Material.AIR) {
+                        block.setType(Material.AIR);
+                    }
+                    return true;
+                })
                 .collect(Collectors.toSet());
-        locations.stream().limit(1).map(Location::getWorld).findAny().ifPresent(w -> this.world = w);
+        locations.stream()
+                .map(Location::getWorld)
+                .filter(Objects::nonNull)
+                .findAny()
+                .ifPresent(w -> this.world = w);
     }
 
     public void displayLocations() {
@@ -238,7 +266,7 @@ public class TreasureHunt {
                 if (soundCount >= playerSoundEach) {
                     counter.set(0);
                 }
-                Collection<Player> players = world.getPlayers();
+                Collection<Player> players = world == null ? List.of() : world.getPlayers();
 
                 Map<Player, CustomChest> closestChests = new HashMap<>();
 
@@ -282,16 +310,19 @@ public class TreasureHunt {
                             String particlePath = chestType.getParticlePath();
                             int soundRadius = config.integer("idle." + particlePath + ".sound-radius", 30);
 
-                            String sound = config.string("idle." + particlePath + ".sound", "block_amethyst_cluster_hit").toUpperCase();
-                            Sound soundEnum = Sound.valueOf(sound);
-
                             double distance = player.getLocation().distance(customChest.getBlockLocation());
                             if (distance > soundRadius) continue;
 
-                            player.playSound(customChest.getBlockLocation().toCenterLocation(), soundEnum, 1.0f, 1.0f);
+                            try {
+                                String sound = config.string("idle." + particlePath + ".sound", "block_amethyst_cluster_hit").toUpperCase();
+                                Sound soundEnum = Registry.SOUNDS.get(NamespacedKey.fromString(sound.toLowerCase(Locale.ROOT)));
+                                player.playSound(customChest.getBlockLocation().toCenterLocation(), soundEnum, 1.0f, 1.0f);
+                            } catch (Exception e) {
+                                error("Error while playing sound {}", config.string("idle." + particlePath + ".sound", "block_amethyst_cluster_hit").toUpperCase(), e);
+                            }
                         }
                     } catch (Exception e) {
-                        log.error("Error while playing sound", e);
+                        error("Error while playing sound", e);
                     }
                 }
 
@@ -321,12 +352,12 @@ public class TreasureHunt {
             barColor = BossBar.Color.valueOf(color.toUpperCase());
             barOverlay = BossBar.Overlay.valueOf(overlay.toUpperCase());
         } catch (Exception e) {
-            log.error("Invalid bossbar color or overlay: {} {}", color, overlay);
+            error("Invalid bossbar color or overlay: {} {}", color, overlay);
             barColor = BossBar.Color.RED;
             barOverlay = BossBar.Overlay.NOTCHED_6;
         }
 
-        List<Player> players = world.getPlayers();
+        List<Player> players = world == null ? List.of() : world.getPlayers();
         float newProgress = ((float) left) / max;
         if (bossBar == null) {
             final Component name = mm(message);
@@ -345,8 +376,10 @@ public class TreasureHunt {
             }
         }
 
+        var viewers = StreamSupport.stream(bossBar.viewers().spliterator(), false)
+                .collect(Collectors.toSet());
         for (Player player : players) {
-            if (!bossBarAudience.contains(player)) {
+            if (!viewers.contains(player)) {
                 player.showBossBar(bossBar);
                 bossBarAudience.add(player);
             }

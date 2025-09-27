@@ -20,12 +20,14 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
+import static ru.arc.util.Logging.debug;
+
 @Slf4j
 public class PacketEventsHook {
 
 
     public List<Integer> createDisplayBlocks(final List<BlockDisplayReq> requests, Player player) {
-        log.debug("Creating display blocks for player {}", player.getName());
+        debug("Creating display blocks for player {}", player.getName());
         final List<Integer> entityIds = requests.stream()
                 .map(request -> ThreadLocalRandom.current().nextInt(Integer.MIN_VALUE, Integer.MAX_VALUE))
                 .collect(Collectors.toList());
@@ -61,7 +63,7 @@ public class PacketEventsHook {
     }
 
     public void removeDisplayBlocks(List<Integer> entityIds, Player player) {
-        log.debug("Removing display blocks for player {}", player.getName());
+        debug("Removing display blocks for player {}", player.getName());
         Bukkit.getScheduler().runTaskAsynchronously(ARC.plugin, () -> {
             var packet = new WrapperPlayServerDestroyEntities(entityIds.stream().mapToInt(i -> i).toArray());
             PacketEvents.getAPI().getPlayerManager().sendPacket(player, packet);

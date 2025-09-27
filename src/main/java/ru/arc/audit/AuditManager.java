@@ -22,6 +22,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedDeque;
 
+import static ru.arc.util.Logging.*;
 import static ru.arc.util.TextUtil.mm;
 import static java.nio.file.StandardOpenOption.*;
 
@@ -34,7 +35,7 @@ public class AuditManager {
     private static BukkitTask pruneTask;
     private static BukkitTask balanceHistoryTask;
 
-    private static Path balanceHistoryPath = ARC.plugin.getDataPath().resolve("balance-history");
+    private static final Path balanceHistoryPath = ARC.plugin.getDataPath().resolve("balance-history");
 
     public static void init() {
         cancel();
@@ -42,7 +43,7 @@ public class AuditManager {
             try {
                 Files.createDirectories(balanceHistoryPath);
             } catch (IOException e) {
-                log.error("Failed to create balance history directory", e);
+                error("Failed to create balance history directory", e);
             }
         }
         if (repo == null) {
@@ -65,7 +66,7 @@ public class AuditManager {
                 long weight = weight();
                 int count = 0;
                 while (weight > maxWeight) {
-                    log.info("Pruning audit data, weight: {}, maxAge: {}", weight, maxAge);
+                    info("Pruning audit data, weight: {}, maxAge: {}", weight, maxAge);
                     for (AuditData auditData : repo.all()) {
                         auditData.trim(maxAge);
                     }
@@ -73,7 +74,7 @@ public class AuditManager {
                     maxAge /= 2;
                     count++;
                     if (count > 10) {
-                        log.warn("Pruning audit data failed to reduce weight below maxWeight: {}", maxWeight);
+                        warn("Pruning audit data failed to reduce weight below maxWeight: {}", maxWeight);
                         break;
                     }
                 }
@@ -91,7 +92,7 @@ public class AuditManager {
                 for (String player : PlayerManager.getPlayerNames()) {
                     OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(player);
                     if (offlinePlayer.getName() == null || !offlinePlayer.getName().equalsIgnoreCase(player)) {
-                        log.error("Failed to get offline player for {}", player);
+                        error("Failed to get offline player for {}", player);
                         continue;
                     }
                     double balance = ARC.getEcon().getBalance(offlinePlayer);
@@ -102,9 +103,9 @@ public class AuditManager {
                             Files.createFile(playerPath);
                         }
                         Files.write(playerPath, (timestamp + "," + balance + "\n").getBytes(), CREATE, APPEND, WRITE);
-                        //log.info("Saved balance data for {}", player);
+                        //info("Saved balance data for {}", player);
                     } catch (IOException e) {
-                        log.error("Failed to write balance history for {}", player, e);
+                        error("Failed to write balance history for {}", player, e);
                     }
                 }
             }

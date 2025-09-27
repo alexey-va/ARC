@@ -22,6 +22,9 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
+
 @Slf4j
 @RequiredArgsConstructor
 @Data
@@ -42,13 +45,13 @@ public class TreasurePool {
     public boolean add(Treasure treasure) {
         for (Treasure t : treasureMap.values()) {
             if (t.equals(treasure)) {
-                log.error("Treasure already exists in pool {} {}", treasure, t);
+                error("Treasure already exists in pool {} {}", treasure, t);
                 return false;
             }
         }
         if (treasure instanceof SubPoolTreasure subPoolTreasure) {
             if (subPoolTreasure.getSubPoolId().equalsIgnoreCase(id)) {
-                log.error("SubPoolTreasure can't have the same id as the pool");
+                error("SubPoolTreasure can't have the same id as the pool");
                 return false;
             }
         }
@@ -99,7 +102,7 @@ public class TreasurePool {
     public static TreasurePool getOrCreate(String poolName) {
         if (pools.containsKey(poolName)) return pools.get(poolName);
 
-        log.info("getOrCreate missing treasure pool {}", poolName);
+        info("getOrCreate missing treasure pool {}", poolName);
         Path path = Paths.get(ARC.plugin.getDataFolder().toString(), "treasures", poolName + ".yml");
         File file = path.toFile();
         if (!file.getParentFile().exists()) {
@@ -111,7 +114,7 @@ public class TreasurePool {
         YamlConfiguration configuration = YamlConfiguration.loadConfiguration(file);
         TreasurePool pool = loadTreasurePool(configuration, file, poolName);
         if (pool == null) {
-            log.error("Error loading treasure pool {}", poolName);
+            error("Error loading treasure pool {}", poolName);
             throw new RuntimeException("Error loading treasure pool " + poolName);
         }
         pools.put(pool.getId(), pool);
@@ -133,6 +136,8 @@ public class TreasurePool {
     }
 
     public static void loadAllTreasures() {
+        TreasurePool.saveAllTreasurePools();
+
         File example = new File(ARC.plugin.getDataFolder() + File.separator + "treasures" + File.separator + "easter.yml");
         if (!example.exists()) {
             example.getParentFile().mkdirs();
@@ -145,11 +150,11 @@ public class TreasurePool {
                     .map(YamlConfiguration::loadConfiguration)
                     .filter(config -> {
                         if (config.getString("id") == null) {
-                            log.error("Id is not defined in treasure file!");
+                            error("Id is not defined in treasure file!");
                             return false;
                         }
                         if (pools.containsKey(config.getString("id"))) {
-                            log.error("Treasure pool with id {} already exists", config.getString("id"));
+                            error("Treasure pool with id {} already exists", config.getString("id"));
                             return false;
                         }
                         return true;
@@ -158,30 +163,30 @@ public class TreasurePool {
                     .filter(Objects::nonNull)
                     .forEach(pool -> pools.put(pool.getId(), pool));
         } catch (Exception e) {
-            log.error("Error loading treasures", e);
+            error("Error loading treasures", e);
         }
     }
 
     @SneakyThrows
     @SuppressWarnings("unchecked")
     private static TreasurePool loadTreasurePool(YamlConfiguration configuration, @Nullable File file, @Nullable String poolName) {
-        log.info("Loading treasure pool {}", poolName);
+        info("Loading treasure pool {}", poolName);
         String id = configuration.getString("id");
         if (id == null) {
-            log.info("Id is not defined in treasure file!");
+            info("Id is not defined in treasure file!");
             if (file != null && poolName != null) {
                 configuration.set("id", poolName);
                 configuration.save(file);
-                log.info("Added id to treasure file: {}", poolName);
+                info("Added id to treasure file: {}", poolName);
                 id = poolName;
             } else {
-                log.error("Cant load treasure pool without id");
+                error("Cant load treasure pool without id");
                 return null;
             }
         }
         List<Map<String, Object>> treasureList = (List<Map<String, Object>>) configuration.getList("treasures");
         if (treasureList == null) {
-            log.error("Cant load treasure pool for id {}", id);
+            error("Cant load treasure pool for id {}", id);
             if(file != null) {
                 configuration.set("treasures", List.of());
                 configuration.save(file);
@@ -206,15 +211,15 @@ public class TreasurePool {
                 Treasure treasure = Treasure.from(map, treasurePool);
                 treasurePool.add(treasure);
                 count++;
-                //log.info("Loaded treasure in pool {}: {}", id, treasure);
+                //info("Loaded treasure in pool {}: {}", id, treasure);
             } catch (Exception e) {
-                log.error("Error loading treasure in pool {}: {}", id, map, e);
-                log.error("Aborting loading of pool {}", id);
+                error("Error loading treasure in pool {}: {}", id, map, e);
+                error("Aborting loading of pool {}", id);
                 return null;
             }
         }
-        log.info("Loaded {}/{} treasures for pool {}", count, treasureList.size(), id);
-        log.info("Additional data: {} {} {}", commonMessage, commonAnnounceMessage, commonAnnounce);
+        info("Loaded {}/{} treasures for pool {}", count, treasureList.size(), id);
+        info("Additional data: {} {} {}", commonMessage, commonAnnounceMessage, commonAnnounce);
 
         treasurePool.setDirty(false);
         return treasurePool;
@@ -238,11 +243,11 @@ public class TreasurePool {
             YamlConfiguration configuration = YamlConfiguration.loadConfiguration(file);
             Map<String, Object> map = treasurePool.serialize();
             map.forEach(configuration::set);
-            log.info("Saving treasure {}", treasurePool.getId());
+            info("Saving treasure {}", treasurePool.getId());
             configuration.save(file);
             treasurePool.setDirty(false);
         } catch (IOException e) {
-            log.error("Error saving treasure pool {}", treasurePool.getId(), e);
+            error("Error saving treasure pool {}", treasurePool.getId(), e);
         }
 
     }

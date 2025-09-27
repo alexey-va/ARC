@@ -24,6 +24,9 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
+import static ru.arc.util.Logging.debug;
+import static ru.arc.util.Logging.error;
+
 @RequiredArgsConstructor
 @Log4j2
 @SuppressWarnings({"unchecked", "rawtypes"})
@@ -46,7 +49,7 @@ public class StockClient {
                 .map(ConfigStock::getSymbol)
                 .collect(Collectors.joining("%2C"));
         String url = "https://api.coingecko.com/api/v3/simple/price?ids=" + ids + "&vs_currencies=usd&precision=full";
-        log.debug("Fetching crypto prices from {}", url);
+        debug("Fetching crypto prices from {}", url);
         try {
             HttpURLConnection connection = (HttpURLConnection) URI.create(url).toURL().openConnection();
             InputStream stream = connection.getInputStream();
@@ -58,10 +61,10 @@ public class StockClient {
 
             Map<String, Double> prices = new HashMap<>();
             map.forEach((key, value) -> prices.put(key, value.get("usd")));
-            log.debug("Fetched crypto prices: {}", prices);
+            debug("Fetched crypto prices: {}", prices);
             return prices;
         } catch (Exception e) {
-            log.error("Could not load crypto prices", e);
+            error("Could not load crypto prices", e);
             return Map.of();
         }
     }
@@ -84,7 +87,7 @@ public class StockClient {
                     .replace(".", "")
                     .replace(",", "."));
         } catch (Exception e) {
-            log.error("Could not load price from investing.com", e);
+            error("Could not load price from investing.com", e);
             return -1;
         }
     }
@@ -113,7 +116,7 @@ public class StockClient {
                                 client.getSession().getRemote().sendString("{\"type\":\"subscribe\",\"symbol\":\"" + s + "\"}");
                                 Thread.sleep(100);
                             } catch (Exception e) {
-                                log.error("Could not send message to server", e);
+                                error("Could not send message to server", e);
                                 throw new RuntimeException(e);
                             }
                         });
@@ -193,7 +196,7 @@ public class StockClient {
             return (double) (map.get("c"));
         } catch (Exception e) {
             //e.printStackTrace();
-            log.error("Could not load price from finnhub for {}", symbol, e);
+            error("Could not load price from finnhub for {}", symbol, e);
             return -1;
         }
     }
