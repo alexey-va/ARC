@@ -1,3 +1,4 @@
+@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 package ru.arc.common
 
 import org.junit.jupiter.api.Assertions.assertEquals

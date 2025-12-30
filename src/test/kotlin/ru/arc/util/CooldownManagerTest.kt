@@ -1,3 +1,4 @@
+@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 package ru.arc.util
 
 import org.junit.jupiter.api.AfterEach

@@ -1,8 +1,10 @@
+@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 package ru.arc.common.locationpools
 
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.event.block.BlockPlaceEvent
+import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -181,7 +183,8 @@ class LocationPoolManagerTest : TestBase() {
             world.getBlockAt(10, 19, 30),
             item,
             player,
-            true
+            true,
+            EquipmentSlot.HAND
         )
 
         LocationPoolManager.processLocationPool(event)
@@ -219,7 +222,8 @@ class LocationPoolManagerTest : TestBase() {
             world.getBlockAt(10, 19, 30),
             item,
             player,
-            true
+            true,
+            EquipmentSlot.HAND
         )
 
         LocationPoolManager.processLocationPool(event)
