@@ -1,8 +1,5 @@
 package ru.arc.common.treasure;
 
-import ru.arc.ARC;
-import ru.arc.common.treasure.impl.SubPoolTreasure;
-import ru.arc.treasurechests.TreasureHuntManager;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
@@ -11,6 +8,9 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.NotNull;
+import ru.arc.ARC;
+import ru.arc.common.treasure.impl.SubPoolTreasure;
+import ru.arc.treasurechests.TreasureHuntManager;
 
 import javax.annotation.Nullable;
 import java.io.File;
@@ -22,8 +22,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
-import static ru.arc.util.Logging.error;
-import static ru.arc.util.Logging.info;
+import static ru.arc.util.Logging.*;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -33,7 +32,7 @@ public class TreasurePool {
     private static final Map<String, TreasurePool> pools = new ConcurrentHashMap<>();
     private static BukkitTask saveTask;
 
-    private TreeMap<Integer, Treasure> treasureMap = new TreeMap<>();
+    private final TreeMap<Integer, Treasure> treasureMap = new TreeMap<>();
     private int totalWeight = 0;
     final String id;
     String commonMessage;
@@ -42,15 +41,27 @@ public class TreasurePool {
 
     boolean dirty = false;
 
+    private static String keyOf(String s) {
+        return s == null ? null : s.toLowerCase(Locale.ROOT);
+    }
+
     public boolean add(Treasure treasure) {
+        Objects.requireNonNull(treasure, "treasure");
+        // weight validation
+        if (treasure.getWeight() <= 0) {
+            error("Treasure weight must be > 0: {}", treasure);
+            return false;
+        }
+        // duplicates check
         for (Treasure t : treasureMap.values()) {
             if (t.equals(treasure)) {
                 error("Treasure already exists in pool {} {}", treasure, t);
                 return false;
             }
         }
+        // subpool self-reference guard
         if (treasure instanceof SubPoolTreasure subPoolTreasure) {
-            if (subPoolTreasure.getSubPoolId().equalsIgnoreCase(id)) {
+            if (keyOf(subPoolTreasure.getSubPoolId()).equals(keyOf(id))) {
                 error("SubPoolTreasure can't have the same id as the pool");
                 return false;
             }
@@ -63,8 +74,11 @@ public class TreasurePool {
     }
 
     public void remove(Treasure treasure) {
-        treasureMap.values().remove(treasure);
-        dirty = true;
+        if (treasure == null) return;
+        if (treasureMap.values().remove(treasure)) {
+            regenerateWeights(); // fixes totalWeight and keys
+            dirty = true;
+        }
     }
 
     public int size() {
@@ -77,10 +91,10 @@ public class TreasurePool {
 
     public Map<String, Object> serialize() {
         Map<String, Object> data = new HashMap<>();
-
         data.put("id", id);
         data.put("common-message", commonMessage);
         data.put("common-announce-message", commonAnnounceMessage);
+        data.put("common-announce", commonAnnounce); // was missing
 
         List<Map<String, Object>> treasures = new ArrayList<>();
         for (Treasure treasure : treasureMap.values()) {
@@ -92,22 +106,26 @@ public class TreasurePool {
         return data;
     }
 
+    @Nullable
     public Treasure random() {
-        int rand = ThreadLocalRandom.current().nextInt(0, totalWeight + 1);
-        return treasureMap.ceilingEntry(rand).getValue();
+        if (treasureMap.isEmpty() || totalWeight <= 0) return null;
+        // 1..totalWeight inclusive
+        int rand = ThreadLocalRandom.current().nextInt(1, totalWeight + 1);
+        Map.Entry<Integer, Treasure> e = treasureMap.ceilingEntry(rand);
+        return e != null ? e.getValue() : null;
     }
 
     @SneakyThrows
     @NotNull
     public static TreasurePool getOrCreate(String poolName) {
-        if (pools.containsKey(poolName)) return pools.get(poolName);
+        String key = keyOf(poolName);
+        if (pools.containsKey(key)) return pools.get(key);
 
         info("getOrCreate missing treasure pool {}", poolName);
-        Path path = Paths.get(ARC.plugin.getDataFolder().toString(), "treasures", poolName + ".yml");
+        Path dir = Paths.get(ARC.plugin.getDataFolder().toString(), "treasures");
+        Files.createDirectories(dir);
+        Path path = dir.resolve(poolName + ".yml");
         File file = path.toFile();
-        if (!file.getParentFile().exists()) {
-            file.getParentFile().mkdirs();
-        }
         if (Files.notExists(path)) {
             Files.createFile(path);
         }
@@ -117,7 +135,7 @@ public class TreasurePool {
             error("Error loading treasure pool {}", poolName);
             throw new RuntimeException("Error loading treasure pool " + poolName);
         }
-        pools.put(pool.getId(), pool);
+        pools.put(keyOf(pool.getId()), pool);
         return pool;
     }
 
@@ -127,41 +145,48 @@ public class TreasurePool {
 
     public static void startSaveTask() {
         cancelSaveTask();
+        // first run in 60s, then every 60s
         saveTask = new BukkitRunnable() {
             @Override
             public void run() {
                 saveAllTreasurePools();
             }
-        }.runTaskTimer(ARC.plugin, 0, 20 * 60);
+        }.runTaskTimer(ARC.plugin, 20 * 60, 20 * 60);
     }
 
     public static void loadAllTreasures() {
+        // optional: persist dirty before reload
         TreasurePool.saveAllTreasurePools();
 
-        File example = new File(ARC.plugin.getDataFolder() + File.separator + "treasures" + File.separator + "easter.yml");
-        if (!example.exists()) {
-            example.getParentFile().mkdirs();
+        Path dir = Paths.get(ARC.plugin.getDataFolder().toString(), "treasures");
+        try {
+            Files.createDirectories(dir);
+        } catch (IOException e) {
+            error("Failed to create treasures directory", e);
         }
+
         pools.clear();
-        try (var stream = Files.walk(Paths.get(ARC.plugin.getDataFolder().toString(), "treasures"), 3)) {
+        try (var stream = Files.walk(dir, 3)) {
             stream.filter(path -> !Files.isDirectory(path))
                     .filter(path -> path.toString().endsWith(".yml"))
                     .map(Path::toFile)
                     .map(YamlConfiguration::loadConfiguration)
                     .filter(config -> {
-                        if (config.getString("id") == null) {
-                            error("Id is not defined in treasure file!");
+                        String id = config.getString("id");
+                        if (id == null) {
+                            warn("Id is not defined in treasure file, skipping");
                             return false;
                         }
-                        if (pools.containsKey(config.getString("id"))) {
-                            error("Treasure pool with id {} already exists", config.getString("id"));
+                        String k = keyOf(id);
+                        if (pools.containsKey(k)) {
+                            error("Treasure pool with id {} already exists", id);
                             return false;
                         }
                         return true;
                     })
                     .map(config -> loadTreasurePool(config, null, null))
                     .filter(Objects::nonNull)
-                    .forEach(pool -> pools.put(pool.getId(), pool));
+                    .forEach(pool -> pools.put(keyOf(pool.getId()), pool));
         } catch (Exception e) {
             error("Error loading treasures", e);
         }
@@ -184,15 +209,6 @@ public class TreasurePool {
                 return null;
             }
         }
-        List<Map<String, Object>> treasureList = (List<Map<String, Object>>) configuration.getList("treasures");
-        if (treasureList == null) {
-            error("Cant load treasure pool for id {}", id);
-            if(file != null) {
-                configuration.set("treasures", List.of());
-                configuration.save(file);
-            }
-            return new TreasurePool(id);
-        }
 
         TreasurePool treasurePool = new TreasurePool(id);
 
@@ -205,21 +221,31 @@ public class TreasurePool {
         boolean commonAnnounce = configuration.getBoolean("common-announce", false);
         treasurePool.setCommonAnnounce(commonAnnounce);
 
+        List<Map<String, Object>> treasureList = (List<Map<String, Object>>) configuration.getList("treasures");
+        if (treasureList == null) {
+            error("Cant load treasure pool for id {}", id);
+            if (file != null) {
+                configuration.set("treasures", List.of());
+                configuration.save(file);
+            }
+            // return empty pool as before
+            treasurePool.setDirty(false);
+            return treasurePool;
+        }
+
         int count = 0;
         for (var map : treasureList) {
             try {
                 Treasure treasure = Treasure.from(map, treasurePool);
-                treasurePool.add(treasure);
-                count++;
-                //info("Loaded treasure in pool {}: {}", id, treasure);
+                if (treasurePool.add(treasure)) count++;
             } catch (Exception e) {
                 error("Error loading treasure in pool {}: {}", id, map, e);
                 error("Aborting loading of pool {}", id);
                 return null;
             }
         }
-        info("Loaded {}/{} treasures for pool {}", count, treasureList.size(), id);
-        info("Additional data: {} {} {}", commonMessage, commonAnnounceMessage, commonAnnounce);
+        debug("Loaded {}/{} treasures for pool {}", count, treasureList.size(), id);
+        debug("Additional data: {} {} {}", commonMessage, commonAnnounceMessage, commonAnnounce);
 
         treasurePool.setDirty(false);
         return treasurePool;
@@ -249,11 +275,10 @@ public class TreasurePool {
         } catch (IOException e) {
             error("Error saving treasure pool {}", treasurePool.getId(), e);
         }
-
     }
 
     public static TreasurePool getTreasurePool(String id) {
-        return pools.get(id);
+        return pools.get(keyOf(id));
     }
 
     public static Collection<TreasurePool> getTreasurePools() {
@@ -262,8 +287,16 @@ public class TreasurePool {
 
     public void regenerateWeights() {
         totalWeight = 0;
+        // preserve unique treasures and valid weights
         List<Treasure> treasures = new ArrayList<>(treasureMap.values());
         treasureMap.clear();
-        treasures.forEach(this::add);
+        for (Treasure t : treasures) {
+            if (t.getWeight() > 0) {
+                totalWeight += t.getWeight();
+                treasureMap.put(totalWeight, t);
+            } else {
+                warn("Skipping treasure with non-positive weight during reindex: {}", t);
+            }
+        }
     }
 }

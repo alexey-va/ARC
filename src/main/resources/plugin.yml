@@ -52,9 +52,6 @@ commands:
   build-book:
     description: build-book
     usage: build-book
-  em-test:
-    description: build-book
-    usage: build-book
   arc-invest:
     description: build-book
     usage: build-book

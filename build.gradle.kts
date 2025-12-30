@@ -49,7 +49,9 @@ dependencies {
     implementation(libs.org.apache.logging.log4j.log4j.api)
     implementation(libs.org.apache.logging.log4j.log4j.core)
     implementation(libs.com.google.code.gson.gson)
-    implementation(libs.pl.tkowalcz.tjahzi.log4j2.appender.nodep)
+    implementation(libs.pl.tkowalcz.tjahzi.log4j2.appender.nodep) {
+        exclude(group = "org.apache.logging.log4j")
+    }
 
     // server-provided
     compileOnly(libs.io.papermc.paper.paper.api)
@@ -101,23 +103,23 @@ tasks {
     withType<Javadoc> { options.encoding = "UTF-8" }
     test { useJUnitPlatform() }
 
-    processResources {
-        // optional: mimic Maven <filtering>true>
-        filteringCharset = "UTF-8"
-        filesMatching("**/*.*") {
-            expand(project.properties)
-        }
-    }
-
     shadowJar {
         archiveClassifier.set("")
+
+        mergeServiceFiles()
+        transform(
+            com.github.jengelman.gradle.plugins.shadow.transformers.Log4j2PluginsCacheFileTransformer()
+        )
+
+        exclude("META-INF/DEPENDENCIES", "META-INF/LICENSE", "META-INF/NOTICE")
+
         relocate("com.jeff_media.customblockdata", "arc.arc.libs.customblockdata")
         relocate("com.github.stefvanschie.inventoryframework", "arc.arc.libs.inventoryframework")
         relocate("de.tr7zw.changeme.nbtapi", "arc.arc.libs.nbtapi")
+
         minimize()
     }
 
-    // make `build` produce the shaded artifact
     build {
         dependsOn(shadowJar)
     }

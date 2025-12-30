@@ -4,6 +4,7 @@ import dev.unnm3d.rediseconomy.api.RedisEconomyAPI
 import lombok.extern.slf4j.Slf4j
 import java.util.*
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CompletionStage
 
 @Slf4j
 class RedisEcoHook {
@@ -30,21 +31,56 @@ class RedisEcoHook {
     }
 
     fun getTopAccounts(n: Int): CompletableFuture<List<Account>> {
-        if (RedisEconomyAPI.getAPI() == null) return CompletableFuture.completedFuture(listOf())
-        return RedisEconomyAPI.getAPI()
-            ?.defaultCurrency
-            ?.getOrderedAccounts(n)
-            ?.thenApply { balances ->
-                balances.orEmpty()
-                    .map {
-                        val uuid = UUID.fromString(it.value)
-                        val playerName = RedisEconomyAPI.getAPI()?.getUsernameFromUUIDCache(uuid)
-                        Account(
-                            name = playerName,
-                            uuid = uuid,
-                            balance = it.score
-                        )
-                    }.toList()
-            }?.toCompletableFuture() ?: CompletableFuture.completedFuture(listOf())
+        val api = RedisEconomyAPI.getAPI() ?: return CompletableFuture.completedFuture(emptyList())
+        val currency = api.defaultCurrency
+
+        @Suppress("UNCHECKED_CAST")
+        val stage = currency.getOrderedAccounts(n) as? CompletionStage<Any?>
+            ?: return CompletableFuture.completedFuture(emptyList())
+
+        return stage.thenApply { result ->
+            val balances = result as? List<*> ?: emptyList<Any?>()
+
+            balances.mapNotNull { scored ->
+                if (scored == null) return@mapNotNull null
+
+                val clazz = scored.javaClass
+
+                // Extract `value` via reflection (field or getter)
+                val valueString: String? = runCatching {
+                    // Try public/declared field "value"
+                    clazz.getDeclaredField("value").apply { isAccessible = true }
+                        .get(scored) as? String
+                }.recoverCatching {
+                    // Try getter methods
+                    clazz.methods.firstOrNull { m ->
+                        m.parameterCount == 0 && (m.name == "getValue" || m.name == "value")
+                    }?.invoke(scored) as? String
+                }.getOrNull()
+
+                // Extract `score` via reflection (field or getter)
+                val scoreDouble: Double? = runCatching {
+                    clazz.getDeclaredField("score").apply { isAccessible = true }
+                        .get(scored) as? Number
+                }.recoverCatching {
+                    clazz.methods.firstOrNull { m ->
+                        m.parameterCount == 0 && (m.name == "getScore" || m.name == "score")
+                    }?.invoke(scored) as? Number
+                }.getOrNull()?.toDouble()
+
+                if (valueString == null || scoreDouble == null) return@mapNotNull null
+
+                val uuid = runCatching { UUID.fromString(valueString) }.getOrNull()
+                    ?: return@mapNotNull null
+
+                val playerName = RedisEconomyAPI.getAPI()?.getUsernameFromUUIDCache(uuid)
+
+                Account(
+                    name = playerName,
+                    uuid = uuid,
+                    balance = scoreDouble
+                )
+            }
+        }.toCompletableFuture()
     }
 }

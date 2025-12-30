@@ -68,6 +68,7 @@ public class EMWormholes {
                         continue;
 
                     List<String> restockTimers = entry.getValue().getCustomTreasureChestConfigFields().getRestockTimers();
+                    if(restockTimers == null) continue;
                     boolean found = false;
                     for(String s : restockTimers) {
                         String[] split = s.split(":");

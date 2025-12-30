@@ -18,9 +18,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
-import static ru.arc.util.Logging.error;
-import static ru.arc.util.Logging.warn;
+import static ru.arc.util.Logging.*;
 import static ru.arc.util.TextUtil.mm;
 
 @Slf4j
@@ -342,7 +342,7 @@ public class Config {
                 }
             } else {
                 // Key not found or not a mapping; handle accordingly
-                System.out.println("Key not found: " + keyPath);
+                debug("Key not found: " + keyPath);
                 return null;
             }
         }
@@ -352,7 +352,7 @@ public class Config {
 
     public void injectDeepKey(String keyPath, Object value) {
         try {
-            System.out.println("Injecting key: " + keyPath + " with value: " + value);
+            debug("Injecting key: " + keyPath + " with value: " + value);
             load();
             String[] keyParts = keyPath.split("\\.");
 
@@ -375,8 +375,7 @@ public class Config {
         Yaml yaml = new Yaml();
         File configFile = folder.resolve(filePath).toFile();
         map = yaml.load(new FileInputStream(configFile));
-        if (map == null) map = new HashMap<>();
-        System.out.println("Loaded config: " + filePath);
+        if (map == null) map = new ConcurrentHashMap<>();
     }
 
     public void save() {
@@ -399,7 +398,6 @@ public class Config {
             Path path = folder.resolve(resource);
             if (Files.exists(path)) {
                 if (!replace) {
-                    //System.out.println(resource + " already exists! Skipping...");
                     return;
                 }
             }

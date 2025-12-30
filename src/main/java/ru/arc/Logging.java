@@ -1,7 +1,5 @@
 package ru.arc;
 
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
@@ -14,11 +12,12 @@ import org.apache.logging.log4j.core.layout.JsonLayout;
 import pl.tkowalcz.tjahzi.log4j2.Header;
 import pl.tkowalcz.tjahzi.log4j2.LokiAppender;
 import pl.tkowalcz.tjahzi.log4j2.labels.Label;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
-import static ru.arc.util.Logging.info;
 import static ru.arc.util.Logging.warn;
 
 @Slf4j
@@ -28,7 +27,6 @@ public class Logging {
         try {
             Config config = ConfigManager.of(ARC.plugin.getDataPath(), "logging.yml");
             if (!config.bool("enabled", true)) {
-                info("Loki appender is disabled");
                 return;
             }
             Label[] labels = config.map("labels", Map.of()).entrySet().stream()
@@ -74,8 +72,6 @@ public class Logging {
             LoggerConfig loggerConfig = configuration.getLoggerConfig(LogManager.ROOT_LOGGER_NAME);
             loggerConfig.addAppender(build, Level.INFO, null);
             rootLogger.getContext().updateLoggers();
-
-            info("Loki appender started");
         } catch (Exception e) {
             warn("Failed to add lokiAppender", e);
         }

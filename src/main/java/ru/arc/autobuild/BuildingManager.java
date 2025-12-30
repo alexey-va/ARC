@@ -107,24 +107,30 @@ public class BuildingManager {
             try {
                 if (System.currentTimeMillis() - site.getTimestamp() > 180000 || force) {
                     info("Cleaning up construction site for player {} {}", site.player.getName(), site);
-                    switch (site.state) {
-                        case DISPLAYING_OUTLINE -> {
-                            site.stopOutlineDisplay();
-                            site.cleanup(0);
-                            site.player.sendMessage(message);
-                        }
-                        case CONFIRMATION -> {
-                            site.stopConfirmStep();
-                            site.cleanup(0);
-                            site.player.sendMessage(message);
-                        }
-                        case BUILDING -> {
-                            if (force) {
-                                site.finishBuildStateAndCleanup();
+                    try {
+                        switch (site.state) {
+                            case DISPLAYING_OUTLINE -> {
+                                site.stopOutlineDisplay();
+                                site.cleanup(0);
+                                site.player.sendMessage(message);
                             }
+                            case CONFIRMATION -> {
+                                site.stopConfirmStep();
+                                site.cleanup(0);
+                                site.player.sendMessage(message);
+                            }
+                            case BUILDING -> {
+                                if (force) {
+                                    site.finishBuildStateAndCleanup();
+                                }
+                            }
+                            case DONE, CREATED, CANCELLED -> site.cleanup(0);
+                            case null -> error("Site state is null for player {}", site.player.getName());
                         }
-                        case DONE, CREATED, CANCELLED -> site.cleanup(0);
-                        case null -> error("Site state is null for player {}", site.player.getName());
+                    } catch (Exception e) {
+                        error("Error while cleaning up site for player {}", site.player.getName(), e);
+                    } finally {
+                        BuildingManager.removeConstruction(site);
                     }
                 }
             } catch (Exception e) {

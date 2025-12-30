@@ -37,8 +37,7 @@ import ru.arc.xserver.PluginMessenger;
 import ru.arc.xserver.XActionManager;
 import ru.arc.xserver.announcements.AnnounceManager;
 
-import static ru.arc.util.Logging.error;
-import static ru.arc.util.Logging.info;
+import static ru.arc.util.Logging.*;
 
 public final class ARC extends JavaPlugin {
 
@@ -132,7 +131,7 @@ public final class ARC extends JavaPlugin {
 
         LeafDecayManager.reload();
 
-        info("Loading treasure pools");
+        debug("Loading treasure pools");
         TreasurePool.loadAllTreasures();
 
         PersonalLootManager.reload();

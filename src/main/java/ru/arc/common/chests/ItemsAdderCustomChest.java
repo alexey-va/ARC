@@ -11,6 +11,9 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 import ru.arc.ARC;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static ru.arc.util.Logging.error;
 
 @Slf4j
@@ -52,6 +55,7 @@ public class ItemsAdderCustomChest extends CustomChest {
         if (furniture == null) furniture = CustomFurniture.byAlreadySpawned(block);
         if (furniture == null) {
             System.out.println("No furniture at block " + block.getLocation());
+            tryCleanup();
             return;
         }
         furniture.remove(false);
@@ -60,13 +64,25 @@ public class ItemsAdderCustomChest extends CustomChest {
 
     private void tryCleanup() {
         try {
-            var frames = block.getLocation().getNearbyEntitiesByType(ItemFrame.class, 1);
+            var frames = block.getLocation().getNearbyEntitiesByType(ItemFrame.class, 1.5);
             for (var frame : frames) {
                 if (frame.isVisible()) continue;
                 ItemStack item = frame.getItem();
                 if (item.getType().isAir()) continue;
                 if (!item.getItemMeta().hasCustomModelDataComponent()) continue;
                 frame.remove();
+            }
+            List<Block> blocks = new ArrayList<>();
+            blocks.add(block);
+            blocks.add(block.getRelative(0, 1, 0));
+            blocks.add(block.getRelative(0, -1, 0));
+            blocks.add(block.getRelative(1, 0, 0));
+            blocks.add(block.getRelative(-1, 0, 0));
+            blocks.add(block.getRelative(0, 0, 1));
+            blocks.add(block.getRelative(0, 0, -1));
+            for (var b : blocks) {
+                if(b.getType() != Material.BARRIER) continue;
+                b.setType(Material.AIR);
             }
         } catch (Exception e) {
             error("Error cleaning up item frames", e);

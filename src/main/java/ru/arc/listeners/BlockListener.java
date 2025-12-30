@@ -36,10 +36,13 @@ import ru.arc.treasurechests.TreasureHunt;
 import ru.arc.treasurechests.TreasureHuntManager;
 import ru.arc.util.TextUtil;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
 
 @Slf4j
 public class BlockListener implements Listener {
@@ -63,7 +66,7 @@ public class BlockListener implements Listener {
         data.clear();
     }
 
-    @EventHandler(priority = EventPriority.LOW)
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onBlockInteract(PlayerInteractEvent event) {
         processTreasureHunt(event);
         processBuildingEvent(event);
@@ -84,7 +87,7 @@ public class BlockListener implements Listener {
     private void processTreasureItemUse(PlayerInteractEvent event) {
         ItemStack item = event.getItem();
         if (item == null || item.getType() == Material.AIR) return;
-        if(event.getAction() != Action.RIGHT_CLICK_AIR && event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
+        if (event.getAction() != Action.RIGHT_CLICK_AIR && event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
         EquipmentSlot hand = event.getHand();
         if (hand == null) return;
         if (hand != EquipmentSlot.HAND) return;
@@ -98,7 +101,7 @@ public class BlockListener implements Listener {
                     return;
                 }
                 int itemAmount = item.getAmount();
-                if (itemAmount  > 1) {
+                if (itemAmount > 1) {
                     item.setAmount(itemAmount - 1);
                 } else {
                     int heldItemSlot = event.getPlayer().getInventory().getHeldItemSlot();
@@ -189,10 +192,27 @@ public class BlockListener implements Listener {
         if (block == null) {
             return;
         }
-        TreasureHunt treasureHunt = TreasureHuntManager.getByBlock(block);
-        if (treasureHunt == null) {
-            return;
+
+        // get attched blocks to check for treasure hunt
+        List<Block> blocks = new ArrayList<>();
+        blocks.add(block);
+        blocks.add(block.getRelative(1, 0, 0));
+        blocks.add(block.getRelative(-1, 0, 0));
+        blocks.add(block.getRelative(0, 0, 1));
+        blocks.add(block.getRelative(0, 0, -1));
+        blocks.add(block.getRelative(0, 1, 0));
+        blocks.add(block.getRelative(0, -1, 0));
+
+        TreasureHunt treasureHunt = null;
+        for (Block b : blocks) {
+            treasureHunt = TreasureHuntManager.getByBlock(b);
+            if (treasureHunt != null) {
+                block = b;
+                break;
+            }
         }
+        if(treasureHunt == null) return;
+        info("Player {} found treasure hunt chest at {}", event.getPlayer().getName(), block.getLocation());
         event.setCancelled(true);
         TreasureHuntManager.popChest(block, treasureHunt, event.getPlayer());
     }

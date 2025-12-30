@@ -52,8 +52,8 @@ object Tools {
                     val timePlayed = user.totalPlayTime
                     val stringFormattedTimePlayed = String.format(
                         "%dч %dм",
-                        timePlayed / 20 / 60 / 60,
-                        timePlayed / 20 / 60 % 60
+                        timePlayed / 1000 / 60 / 60,
+                        timePlayed / 1000 / 60 % 60
                     )
                     result["name"] = user.name
                     result["isAfk"] = user.isAfk.toString()

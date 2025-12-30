@@ -7,7 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.TreeMap;
 import java.util.concurrent.ThreadLocalRandom;
 
-import static ru.arc.util.Logging.info;
+import static ru.arc.util.Logging.debug;
 
 @Slf4j
 @Getter
@@ -17,7 +17,7 @@ public class DecorPool {
     TreeMap<Double, DecorItem> decors = new TreeMap<>();
 
     public void add(DecorItem decorItem, double weight) {
-        info("Adding decor item: {} with weight: {}", decorItem.material, weight);
+        debug("Adding decor item: {} with weight: {}", decorItem.material, weight);
         if (weight == 0) return;
         double lastKey = decors.isEmpty() ? 0 : decors.lastKey();
         decors.put(lastKey + weight, decorItem);

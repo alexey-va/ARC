@@ -11,7 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static ru.arc.util.Logging.info;
+import static ru.arc.util.Logging.*;
 
 @Slf4j
 public class EliteLootConfigParser {
@@ -56,9 +56,9 @@ public class EliteLootConfigParser {
             String iaNamespace = (String) decor.get("ia-namespace");
             String iaId = (String) decor.get("ia-id");
 
-            info("Loaded decor - material: {} model: {} weight: {} red: {} green: {} blue: {}", material, modelId, weight, red, green, blue);
+            debug("Loaded decor - material: {} model: {} weight: {} red: {} green: {} blue: {}", material, modelId, weight, red, green, blue);
             if (material == null) {
-                info("Invalid material: {}. Skipping...", decor.get("material"));
+                warn("Invalid material: {}. Skipping...", decor.get("material"));
                 continue;
             }
             Color color = null;
