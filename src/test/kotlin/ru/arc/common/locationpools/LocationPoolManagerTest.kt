@@ -207,7 +207,8 @@ class LocationPoolManagerTest : TestBase() {
         LocationPoolManager.setEditing(uuid, "test-pool")
 
         val blockLocation = Location(world, 10.0, 20.0, 30.0)
-        LocationPoolManager.addLocation("test-pool", blockLocation)
+        // Use toCenterLocation() to match how processLocationPool compares locations
+        LocationPoolManager.addLocation("test-pool", blockLocation.toCenterLocation())
 
         val block = world.getBlockAt(10, 20, 30)
         block.type = Material.REDSTONE_BLOCK
