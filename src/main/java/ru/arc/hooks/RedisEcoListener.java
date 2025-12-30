@@ -1,22 +1,20 @@
 package ru.arc.hooks;
 
-import ru.arc.ARC;
-import ru.arc.audit.AuditManager;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
 import dev.unnm3d.rediseconomy.api.TransactionEvent;
 import dev.unnm3d.rediseconomy.transaction.AccountID;
-import lombok.extern.slf4j.Slf4j;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import ru.arc.ARC;
+import ru.arc.audit.AuditManager;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
 
 import static ru.arc.audit.Type.PAY;
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.info;
 
-@Slf4j
 public class RedisEcoListener implements Listener {
 
     private static Config miscConfig = ConfigManager.of(ARC.plugin.getDataPath(), "misc.yml");

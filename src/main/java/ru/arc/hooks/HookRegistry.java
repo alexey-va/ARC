@@ -1,5 +1,9 @@
 package ru.arc.hooks;
 
+import java.util.HashSet;
+import java.util.Set;
+
+import org.bukkit.Bukkit;
 import ru.arc.ARC;
 import ru.arc.hooks.auraskills.AuraSkillsHook;
 import ru.arc.hooks.bank.BankHook;
@@ -18,18 +22,20 @@ import ru.arc.hooks.worldguard.WGHook;
 import ru.arc.hooks.yamipa.YamipaHook;
 import ru.arc.hooks.zauction.AuctionHook;
 import ru.arc.hooks.ztranslator.TranslatorHook;
-import lombok.extern.slf4j.Slf4j;
-import org.bukkit.Bukkit;
-import ru.arc.listeners.*;
-
-import java.util.HashSet;
-import java.util.Set;
+import ru.arc.listeners.BlockListener;
+import ru.arc.listeners.CMIListener;
+import ru.arc.listeners.ChatListener;
+import ru.arc.listeners.CommandListener;
+import ru.arc.listeners.IAEvents;
+import ru.arc.listeners.JoinListener;
+import ru.arc.listeners.PickupListener;
+import ru.arc.listeners.RespawnListener;
+import ru.arc.listeners.SpawnerListener;
 
 import static org.bukkit.Bukkit.getServer;
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.info;
 
-@Slf4j
 public class HookRegistry {
 
     public static LandsHook landsHook;
@@ -54,7 +60,6 @@ public class HookRegistry {
     public static AuraSkillsHook auraSkillsHook;
     public static PlayerWarpsHook playerWarpsHook;
     public static PacketEventsHook packetEventsHook;
-    public static DuelsHook duelsHook;
     public static AEHook aeHook;
 
 
@@ -203,10 +208,6 @@ public class HookRegistry {
         register("Citizens", true, () -> {
             citizensHook = new CitizensHook();
             citizensHook.registerListeners();
-        });
-
-        register("Duels", true, () -> {
-            duelsHook = new DuelsHook();
         });
 
         register("BetterRTP", true, () -> {

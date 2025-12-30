@@ -1,5 +1,23 @@
 package ru.arc.xserver.announcements;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Random;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentLinkedDeque;
+
+import org.bukkit.Material;
+import org.bukkit.boss.BarColor;
+import org.bukkit.entity.Player;
+import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
 import ru.arc.ARC;
 import ru.arc.configs.Config;
 import ru.arc.configs.ConfigManager;
@@ -8,20 +26,10 @@ import ru.arc.xserver.XActionManager;
 import ru.arc.xserver.XCondition;
 import ru.arc.xserver.XMessage;
 import ru.arc.xserver.playerlist.PlayerManager;
-import lombok.extern.slf4j.Slf4j;
-import org.bukkit.Material;
-import org.bukkit.boss.BarColor;
-import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scheduler.BukkitTask;
-
-import java.util.*;
-import java.util.concurrent.ConcurrentLinkedDeque;
 
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.info;
 
-@Slf4j
 public class AnnounceManager {
 
 

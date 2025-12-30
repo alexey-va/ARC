@@ -1,25 +1,30 @@
 package ru.arc.xserver;
 
-import ru.arc.ARC;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import lombok.*;
-import lombok.extern.slf4j.Slf4j;
-import org.bukkit.Bukkit;
-import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
-
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static ru.arc.util.Logging.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
+import lombok.ToString;
+import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
+import org.bukkit.scheduler.BukkitRunnable;
+import ru.arc.ARC;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
+
+import static ru.arc.util.Logging.debug;
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.warn;
 
 @Data
 @EqualsAndHashCode(callSuper = true)
 @ToString(callSuper = true)
 @Builder
-@Slf4j
 @AllArgsConstructor
 @NoArgsConstructor
 public class XCommand extends XAction {

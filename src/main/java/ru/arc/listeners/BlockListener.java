@@ -1,9 +1,13 @@
 package ru.arc.listeners;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
 import com.jeff_media.customblockdata.CustomBlockData;
 import de.tr7zw.changeme.nbtapi.NBT;
 import de.tr7zw.changeme.nbtapi.NBTItem;
-import lombok.extern.slf4j.Slf4j;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -36,15 +40,9 @@ import ru.arc.treasurechests.TreasureHunt;
 import ru.arc.treasurechests.TreasureHuntManager;
 import ru.arc.util.TextUtil;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.info;
 
-@Slf4j
 public class BlockListener implements Listener {
 
     @EventHandler

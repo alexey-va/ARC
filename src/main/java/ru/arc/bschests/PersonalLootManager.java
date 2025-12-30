@@ -1,13 +1,12 @@
 package ru.arc.bschests;
 
-import ru.arc.ARC;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import ru.arc.network.repos.ItemList;
-import ru.arc.network.repos.RedisRepo;
-import ru.arc.util.GuiUtils;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
 import com.jeff_media.customblockdata.CustomBlockData;
-import lombok.extern.slf4j.Slf4j;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -19,17 +18,18 @@ import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
+import ru.arc.ARC;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
+import ru.arc.network.repos.ItemList;
+import ru.arc.network.repos.RedisRepo;
+import ru.arc.util.GuiUtils;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
-import java.util.stream.Collectors;
-
+import static ru.arc.util.ItemUtils.connectedChests;
+import static ru.arc.util.ItemUtils.extractInventory;
+import static ru.arc.util.ItemUtils.extractItems;
 import static ru.arc.util.Logging.warn;
-import static ru.arc.util.Utils.*;
 
-@Slf4j
 public class PersonalLootManager {
 
     private static final Set<Material> chests = Set.of(Material.CHEST, Material.TRAPPED_CHEST, Material.BARREL);

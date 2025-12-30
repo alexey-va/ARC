@@ -1,18 +1,30 @@
 package ru.arc.network;
 
-import ru.arc.ARC;
-import ru.arc.network.repos.RedisRepoMessager;
-import lombok.extern.log4j.Log4j2;
-import redis.clients.jedis.JedisPooled;
-import redis.clients.jedis.JedisPubSub;
-
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static ru.arc.util.Logging.*;
+import redis.clients.jedis.JedisPooled;
+import redis.clients.jedis.JedisPubSub;
+import ru.arc.ARC;
+import ru.arc.network.repos.RedisRepoMessager;
 
-@Log4j2
+import static ru.arc.util.Logging.debug;
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
+
 public class RedisManager extends JedisPubSub {
 
     JedisPooled sub;
@@ -139,12 +151,12 @@ public class RedisManager extends JedisPubSub {
     }
 
     public CompletableFuture<Map<String, String>> loadMap(String key) {
-        //log.trace("Loading map: {}", key);
+        //// Logging removed - was using @Slf4j
         return CompletableFuture.supplyAsync(() -> pub.hgetAll(key));
     }
 
     public CompletableFuture<List<String>> loadMapEntries(String key, String... mapKeys) {
-        //log.trace("Loading map entry: {} \n {}", key, mapKeys);
+        //// Logging removed - was using @Slf4j
         return CompletableFuture.supplyAsync(() -> pub.hmget(key, mapKeys));
     }
 

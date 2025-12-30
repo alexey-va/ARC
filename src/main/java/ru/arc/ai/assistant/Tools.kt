@@ -2,12 +2,10 @@ package ru.arc.ai.assistant
 
 import com.Zrips.CMI.CMI
 import com.Zrips.CMI.Containers.CMIUser
-import lombok.extern.slf4j.Slf4j
 import org.bukkit.Bukkit
 import ru.arc.hooks.HookRegistry
 import java.util.concurrent.ConcurrentHashMap
 
-@Slf4j
 object Tools {
     val tools: MutableMap<String, Class<out Tool>> = ConcurrentHashMap()
 

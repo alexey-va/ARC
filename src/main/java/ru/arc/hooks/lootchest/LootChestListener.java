@@ -1,21 +1,19 @@
 package ru.arc.hooks.lootchest;
 
-import ru.arc.configs.Config;
+import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
+
 import com.magmaguy.elitemobs.mobconstructor.custombosses.RegionalBossEntity;
 import fr.black_eyes.api.events.LootChestSpawnEvent;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.bukkit.Location;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-
-import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
+import ru.arc.configs.Config;
 
 import static ru.arc.util.Logging.debug;
 import static ru.arc.util.Logging.error;
 
-@Slf4j
 @RequiredArgsConstructor
 public class LootChestListener implements Listener {
 

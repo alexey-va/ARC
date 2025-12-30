@@ -1,8 +1,16 @@
 package ru.arc.common.treasure.impl;
 
-import lombok.*;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang.text.StrBuilder;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import ru.arc.ARC;
@@ -12,17 +20,10 @@ import ru.arc.common.treasure.Treasure;
 import ru.arc.configs.Config;
 import ru.arc.configs.ConfigManager;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ThreadLocalRandom;
-
 @AllArgsConstructor
 @Builder
 @NoArgsConstructor
 @Data
-@Slf4j
 @EqualsAndHashCode(callSuper = true)
 public class AEEnchant extends Treasure {
 
@@ -39,7 +40,7 @@ public class AEEnchant extends Treasure {
     public void give(Player player, @NotNull GiveFlags flags) {
         int randomAmount = amountMin == amountMax ? amountMin : ThreadLocalRandom.current().nextInt(amountMin, amountMax + 1);
         for(int i = 0; i < randomAmount; i++) {
-            StrBuilder strBuilder = new StrBuilder();
+            StringBuilder strBuilder = new StringBuilder();
             if (type == Type.ITEM) {
                 strBuilder.append("ae giveitem ")
                         .append(player.getName()).append(" ")

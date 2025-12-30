@@ -1,8 +1,10 @@
 package ru.arc.common.chests;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.jeff_media.customblockdata.CustomBlockData;
 import dev.lone.itemsadder.api.CustomFurniture;
-import lombok.extern.slf4j.Slf4j;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
@@ -11,12 +13,8 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 import ru.arc.ARC;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import static ru.arc.util.Logging.error;
 
-@Slf4j
 public class ItemsAdderCustomChest extends CustomChest {
 
     CustomFurniture furniture;

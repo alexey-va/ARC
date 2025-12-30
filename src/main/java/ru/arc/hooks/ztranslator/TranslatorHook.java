@@ -1,21 +1,19 @@
 package ru.arc.hooks.ztranslator;
 
-import ru.arc.ARC;
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
-import lombok.extern.log4j.Log4j2;
-import org.bukkit.Material;
-import org.bukkit.inventory.ItemStack;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+import org.bukkit.Material;
+import org.bukkit.inventory.ItemStack;
+import ru.arc.ARC;
+
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.warn;
 
-@Log4j2
 public class TranslatorHook {
 
     Map<String, String> map = new HashMap<>();

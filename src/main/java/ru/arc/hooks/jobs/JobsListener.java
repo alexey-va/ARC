@@ -1,27 +1,27 @@
 package ru.arc.hooks.jobs;
 
-import ru.arc.audit.AuditManager;
-import ru.arc.audit.Type;
-import ru.arc.hooks.HookRegistry;
-import ru.arc.network.repos.RedisRepo;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+
 import com.gamingmesh.jobs.api.JobsExpGainEvent;
 import com.gamingmesh.jobs.api.JobsPrePaymentEvent;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import lombok.SneakyThrows;
-import lombok.extern.log4j.Log4j2;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import ru.arc.audit.AuditManager;
+import ru.arc.audit.Type;
+import ru.arc.hooks.HookRegistry;
+import ru.arc.network.repos.RedisRepo;
 
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
-
-import static ru.arc.hooks.jobs.JobsListener.PreviousBoostType.*;
+import static ru.arc.hooks.jobs.JobsListener.PreviousBoostType.EXP;
+import static ru.arc.hooks.jobs.JobsListener.PreviousBoostType.MONEY;
+import static ru.arc.hooks.jobs.JobsListener.PreviousBoostType.POINTS;
 
 
-@Log4j2
 public class JobsListener implements Listener {
 
     enum PreviousBoostType {

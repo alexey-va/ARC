@@ -1,35 +1,39 @@
 package ru.arc.autobuild;
 
-import lombok.ToString;
-import ru.arc.ARC;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import ru.arc.hooks.HookRegistry;
-import ru.arc.util.CooldownManager;
-import ru.arc.util.Utils;
-import com.sk89q.worldedit.math.BlockVector3;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import net.kyori.adventure.text.Component;
-import org.bukkit.*;
-import org.bukkit.entity.EntityType;
-import org.bukkit.entity.Firework;
-import org.bukkit.entity.Player;
-import org.bukkit.inventory.meta.FireworkMeta;
-import org.bukkit.scheduler.BukkitRunnable;
-
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.sk89q.worldedit.math.BlockVector3;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import lombok.ToString;
+import net.kyori.adventure.text.Component;
+import org.bukkit.Bukkit;
+import org.bukkit.Chunk;
+import org.bukkit.Color;
+import org.bukkit.FireworkEffect;
+import org.bukkit.Location;
+import org.bukkit.World;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Firework;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.meta.FireworkMeta;
+import org.bukkit.scheduler.BukkitRunnable;
+import ru.arc.ARC;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
+import ru.arc.hooks.HookRegistry;
+import ru.arc.util.CooldownManager;
+import ru.arc.util.LocationUtils;
+import ru.arc.util.RandomUtils;
+
 import static org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.CUSTOM;
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.info;
 
-@Slf4j
 @RequiredArgsConstructor
 @Getter
 @ToString
@@ -49,7 +53,19 @@ public class ConstructionSite {
     Display display;
     Construction construction;
 
-    Config config = ConfigManager.of(ARC.plugin.getDataPath(), "auto-build.yml");
+    private Config config;
+
+    private Config getConfig() {
+        if (config == null) {
+            if (ARC.plugin == null) {
+                // Return a dummy config for testing
+                return ConfigManager.of(java.nio.file.Paths.get(System.getProperty("java.io.tmpdir")), "auto-build" +
+                        ".yml");
+            }
+            config = ConfigManager.of(ARC.plugin.getDataPath(), "auto-build.yml");
+        }
+        return config;
+    }
 
     int npcId = -1;
 
@@ -78,10 +94,10 @@ public class ConstructionSite {
     List<Location> getCenterLocations() {
         Location center1 = this.centerBlock.toBlockLocation().clone().add(-0.05, -1.05, -0.05);
         Location center2 = center1.clone().add(1.1, 1.1, 1.1);
-        return Utils.getBorderLocations(center1, center2, 6);
+        return LocationUtils.getBorderLocations(center1, center2, 6);
     }
 
-    List<Utils.LocationData> getBorderLocations() {
+    List<LocationUtils.LocationData> getBorderLocations() {
         ConstructionSite.Corners corners = this.getCorners();
 
         Location corner1 = new Location(this.getWorld(),
@@ -94,7 +110,7 @@ public class ConstructionSite {
                 corners.corner2().y() + this.getCenterBlock().y() + 1,
                 corners.corner2().z() + this.getCenterBlock().z() + 1);
 
-        return Utils.getBorderLocationsWithCornerData(corner1, corner2, 2, 3);
+        return LocationUtils.getBorderLocationsWithCornerData(corner1, corner2, 2, 3);
     }
 
     public int fullRotation() {
@@ -247,7 +263,8 @@ public class ConstructionSite {
     }
 
     private void sendFinalMessage() {
-        Component message = config.componentDef("building-finished-message", "<gray>\uD83D\uDEE0 <green>Строительство завершено!");
+        Component message = getConfig().componentDef("building-finished-message", "<gray>\uD83D\uDEE0 " +
+                "<green>Строительство завершено!");
         player.sendMessage(message);
     }
 
@@ -266,9 +283,9 @@ public class ConstructionSite {
                     FireworkEffect effect = FireworkEffect.builder()
                             .flicker(ThreadLocalRandom.current().nextBoolean())
                             .trail(ThreadLocalRandom.current().nextBoolean())
-                            .with(Utils.random(FireworkEffect.Type.values()))
-                            .withColor(Utils.random(colors, 3))
-                            .withFade(Utils.random(colors, 3))
+                            .with(RandomUtils.random(FireworkEffect.Type.values()))
+                            .withColor(RandomUtils.random(colors, 3))
+                            .withFade(RandomUtils.random(colors, 3))
                             .build();
 
                     FireworkMeta meta = firework.getFireworkMeta();

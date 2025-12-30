@@ -1,17 +1,15 @@
 package ru.arc.sync.base;
 
-import lombok.extern.log4j.Log4j2;
-import org.bukkit.event.Event;
-
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
 
+import org.bukkit.event.Event;
+
 import static ru.arc.util.Logging.debug;
 
-@Log4j2
 public class ActionCanceller {
 
     final Map<Class<? extends Event>, Consumer<Event>> cancellers = new ConcurrentHashMap<>();

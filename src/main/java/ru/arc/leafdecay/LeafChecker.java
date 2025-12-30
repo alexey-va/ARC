@@ -1,21 +1,29 @@
 package ru.arc.leafdecay;
 
-import org.bukkit.Location;
-import ru.arc.ARC;
-import ru.arc.configs.Config;
-import com.jeff_media.customblockdata.CustomBlockData;
-import lombok.ToString;
-import lombok.extern.slf4j.Slf4j;
-import org.bukkit.Chunk;
-import org.bukkit.Material;
-import org.bukkit.block.Block;
-
-import java.util.*;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
-import static ru.arc.util.Logging.*;
+import com.jeff_media.customblockdata.CustomBlockData;
+import lombok.ToString;
+import org.bukkit.Chunk;
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.block.Block;
+import ru.arc.ARC;
+import ru.arc.configs.Config;
 
-@Slf4j
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
+import static ru.arc.util.Logging.warn;
+
 @ToString
 public class LeafChecker {
 

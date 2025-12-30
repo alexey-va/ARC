@@ -1,22 +1,29 @@
 package ru.arc.listeners;
 
-import ru.arc.ARC;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
+import java.net.URI;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import dev.lone.itemsadder.api.CustomStack;
 import dev.lone.itemsadder.api.Events.ItemsAdderPackCompressedEvent;
-import lombok.extern.slf4j.Slf4j;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-
-import java.net.URI;
-import java.nio.file.*;
-import java.util.*;
+import ru.arc.ARC;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
 
 import static ru.arc.util.Logging.error;
 
-@Slf4j
 public class IAEvents implements Listener {
 
     private static final String BOOTS = "items=leather_boots";

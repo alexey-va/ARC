@@ -1,7 +1,15 @@
 package ru.arc.common.treasure.impl;
 
-import lombok.*;
-import lombok.extern.slf4j.Slf4j;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
@@ -15,18 +23,12 @@ import ru.arc.configs.ConfigManager;
 import ru.arc.hooks.HookRegistry;
 import ru.arc.util.TextUtil;
 
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ThreadLocalRandom;
-
 import static ru.arc.util.Logging.error;
 
 @AllArgsConstructor
 @Builder
 @NoArgsConstructor
 @Data
-@Slf4j
 @EqualsAndHashCode(callSuper = true)
 public class SfTreasure extends Treasure {
 

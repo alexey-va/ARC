@@ -1,10 +1,7 @@
 package ru.arc.listeners;
 
-import ru.arc.ARC;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import ru.arc.hooks.HookRegistry;
-import lombok.extern.slf4j.Slf4j;
+import java.util.Set;
+
 import org.bukkit.Location;
 import org.bukkit.Tag;
 import org.bukkit.World;
@@ -15,13 +12,14 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.scheduler.BukkitRunnable;
-
-import java.util.Set;
+import ru.arc.ARC;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
+import ru.arc.hooks.HookRegistry;
 
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.info;
 
-@Slf4j
 public class RespawnListener implements Listener {
 
     private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "misc.yml");

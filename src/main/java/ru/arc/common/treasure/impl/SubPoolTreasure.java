@@ -1,20 +1,22 @@
 package ru.arc.common.treasure.impl;
 
+import java.util.HashMap;
+import java.util.Map;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
+import org.bukkit.entity.Player;
+import org.jetbrains.annotations.NotNull;
 import ru.arc.common.treasure.GiveFlags;
 import ru.arc.common.treasure.Treasure;
 import ru.arc.common.treasure.TreasurePool;
-import lombok.*;
-import lombok.extern.slf4j.Slf4j;
-import org.bukkit.entity.Player;
-import org.jetbrains.annotations.NotNull;
-
-import java.util.HashMap;
-import java.util.Map;
 
 import static ru.arc.util.Logging.error;
 
 @EqualsAndHashCode(callSuper = true)
-@Slf4j
 @Data
 @Builder
 @AllArgsConstructor

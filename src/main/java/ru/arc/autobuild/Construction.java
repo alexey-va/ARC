@@ -1,12 +1,12 @@
 package ru.arc.autobuild;
 
-import ru.arc.ARC;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import ru.arc.hooks.HookRegistry;
-import ru.arc.hooks.citizens.CitizensHook;
-import ru.arc.util.ParticleManager;
-import ru.arc.util.Utils;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import com.destroystokyo.paper.ParticleBuilder;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
 import com.sk89q.worldedit.math.BlockVector3;
@@ -23,16 +23,26 @@ import org.bukkit.loot.LootContext;
 import org.bukkit.loot.LootTables;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
+import ru.arc.ARC;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
+import ru.arc.hooks.HookRegistry;
+import ru.arc.hooks.citizens.CitizensHook;
+import ru.arc.util.ParticleManager;
+import ru.arc.util.RandomUtils;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.bukkit.Material.*;
-import static ru.arc.util.Utils.rotateBlockData;
+import static org.bukkit.Material.AIR;
+import static org.bukkit.Material.BARREL;
+import static org.bukkit.Material.BEDROCK;
+import static org.bukkit.Material.CHEST;
+import static org.bukkit.Material.DIRT;
+import static org.bukkit.Material.GRASS_BLOCK;
+import static org.bukkit.Material.PLAYER_HEAD;
+import static org.bukkit.Material.PLAYER_WALL_HEAD;
+import static org.bukkit.Material.SHORT_GRASS;
+import static org.bukkit.Material.TALL_GRASS;
+import static org.bukkit.Material.TRAPPED_CHEST;
+import static ru.arc.util.BlockUtils.rotateBlockData;
 
 public class Construction {
 
@@ -53,14 +63,26 @@ public class Construction {
             "&6Иваныч", "https://minesk.in/3ff30e8f08ae48c2abece46bbf0c09d6",
             "&6Агадиль", "https://minesk.in/e8eae58c095949de87ff9c9b5b7c17f2");
 
-    Config config = ConfigManager.of(ARC.plugin.getDataPath(), "auto-build.yml");
+    private Config config;
+
+    private Config getConfig() {
+        if (config == null) {
+            if (ARC.plugin == null) {
+                // Return a dummy config for testing
+                return ConfigManager.of(java.nio.file.Paths.get(System.getProperty("java.io.tmpdir")), "auto-build" +
+                        ".yml");
+            }
+            config = ConfigManager.of(ARC.plugin.getDataPath(), "auto-build.yml");
+        }
+        return config;
+    }
 
     public Construction(ConstructionSite site) {
         this.site = site;
 
-        skins = config.map("construction.npc-skins", skins);
-        nonDrop = config.materialSet("construction.not-drop-materials", nonDrop);
-        skipMaterial = config.materialSet("construction.skip-materials", skipMaterial);
+        skins = getConfig().map("construction.npc-skins", skins);
+        nonDrop = getConfig().materialSet("construction.not-drop-materials", nonDrop);
+        skipMaterial = getConfig().materialSet("construction.skip-materials", skipMaterial);
     }
 
     public void startBuilding() {
@@ -91,12 +113,12 @@ public class Construction {
                 buildTask = new BukkitRunnable() {
                     @Override
                     public void run() {
-                        if (buildNextBlocks(config.integer("construction.blocks-per-tick", 3))) {
+                        if (buildNextBlocks(getConfig().integer("construction.blocks-per-tick", 3))) {
                             this.cancel();
                             site.finalizeBuilding();
                         }
                     }
-                }.runTaskTimer(ARC.plugin, 1L, config.integer("construction.cycle-duration-ticks", 10));
+                }.runTaskTimer(ARC.plugin, 1L, getConfig().integer("construction.cycle-duration-ticks", 10));
             }
         }.runTaskAsynchronously(ARC.plugin);
     }
@@ -109,7 +131,7 @@ public class Construction {
 
     public int createNpc(Location location, int seconds) {
         if (HookRegistry.citizensHook == null) return -1;
-        var entry = Utils.random(skins);
+        var entry = RandomUtils.random(skins);
         npcId = HookRegistry.citizensHook.createNpc(entry.getKey(), location.toCenterLocation());
 
         HookRegistry.citizensHook.addChatBubble(npcId, List.of(
@@ -190,16 +212,17 @@ public class Construction {
     }
 
     private void playEffects(Location location, BlockData data) {
-        if (config.bool("construction.play-sounds", true))
+        if (getConfig().bool("construction.play-sounds", true))
             location.getWorld().playSound(location, data.getSoundGroup().getPlaceSound(), 1f, 1f);
-        if (config.bool("construction.show-particles", false)) {
-            ParticleManager.queue(new ParticleBuilder(config.particle("construction.place-particle", Particle.FLAME))
-                    .count(config.integer("construction.particle-count", 5))
+        if (getConfig().bool("construction.show-particles", false)) {
+            ParticleManager.queue(new ParticleBuilder(getConfig().particle("construction.place-particle",
+                    Particle.FLAME))
+                    .count(getConfig().integer("construction.particle-count", 5))
                     .location(location)
                     .receivers(List.of(site.player))
-                    .offset(config.real("construction.particle-offset", 0.25),
-                            config.real("construction.particle-offset", 0.25),
-                            config.real("construction.particle-offset", 0.25))
+                    .offset(getConfig().real("construction.particle-offset", 0.25),
+                            getConfig().real("construction.particle-offset", 0.25),
+                            getConfig().real("construction.particle-offset", 0.25))
                     .extra(0.05));
         }
         if (npcId != -1) {

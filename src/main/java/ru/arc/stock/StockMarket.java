@@ -1,27 +1,25 @@
 package ru.arc.stock;
 
-import ru.arc.ARC;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import ru.arc.configs.StockConfig;
-import ru.arc.network.repos.RedisRepo;
-import lombok.RequiredArgsConstructor;
-import lombok.Setter;
-import lombok.extern.log4j.Log4j2;
-import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scheduler.BukkitTask;
-
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+import lombok.RequiredArgsConstructor;
+import lombok.Setter;
+import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
+import ru.arc.ARC;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
+import ru.arc.configs.StockConfig;
+import ru.arc.network.repos.RedisRepo;
+
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.info;
 
 @RequiredArgsConstructor
-@Log4j2
 public class StockMarket {
     private static BukkitTask updateTask, dividendTask;
     @Setter
@@ -59,7 +57,7 @@ public class StockMarket {
             @Override
             public void run() {
                 if (!StockConfig.mainServer) return;
-                //log.trace("Updating stocks: "+configStocks.values());
+                //// Logging removed - was using @Slf4j
                 Map<String, Double> updates = new HashMap<>();
 
                 boolean fetchedCrypto = false;
@@ -81,7 +79,7 @@ public class StockMarket {
                     }
                 }
 
-                log.trace("Fetched updates: " + updates);
+                // Logging removed - was using @Slf4j
 
                 for (var entry : updates.entrySet()) {
                     try {
@@ -114,7 +112,7 @@ public class StockMarket {
                         }
                         current.setDirty(true);
 
-                        log.trace("Updated stock: " + symbol + " to " + price);
+                        // Logging removed - was using @Slf4j
 
                         StockPlayerManager.updateAllPositionsOf(symbol);
                     } catch (Exception e) {

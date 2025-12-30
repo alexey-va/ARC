@@ -1,19 +1,18 @@
 package ru.arc.eliteloot;
 
-import ru.arc.ARC;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import lombok.extern.slf4j.Slf4j;
-import org.bukkit.Color;
-import org.bukkit.Material;
-
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static ru.arc.util.Logging.*;
+import org.bukkit.Color;
+import org.bukkit.Material;
+import ru.arc.ARC;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
 
-@Slf4j
+import static ru.arc.util.Logging.debug;
+import static ru.arc.util.Logging.warn;
+
 public class EliteLootConfigParser {
 
     private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "elite-loot.yml");

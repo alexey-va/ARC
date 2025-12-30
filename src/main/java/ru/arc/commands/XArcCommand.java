@@ -1,5 +1,14 @@
 package ru.arc.commands;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+import org.bukkit.Bukkit;
+import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 import ru.arc.ARC;
 import ru.arc.commands.framework.ArcCommand;
 import ru.arc.commands.framework.ArgType;
@@ -11,21 +20,10 @@ import ru.arc.util.TextUtil;
 import ru.arc.xserver.XActionManager;
 import ru.arc.xserver.XCommand;
 import ru.arc.xserver.playerlist.PlayerManager;
-import lombok.extern.slf4j.Slf4j;
-import org.bukkit.Bukkit;
-import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
-
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static ru.arc.util.Logging.warn;
 import static ru.arc.util.TextUtil.mm;
 
-@Slf4j
 public class XArcCommand extends ArcCommand {
 
     private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "commands.yml");

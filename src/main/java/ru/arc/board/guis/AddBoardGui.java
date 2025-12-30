@@ -1,12 +1,17 @@
 package ru.arc.board.guis;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Stream;
+
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
 import com.github.stefvanschie.inventoryframework.pane.OutlinePane;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
-import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -33,17 +38,10 @@ import ru.arc.util.GuiUtils;
 import ru.arc.util.ItemStackBuilder;
 import ru.arc.util.TextUtil;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.stream.Stream;
-
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.TextUtil.mm;
 import static ru.arc.util.TextUtil.strip;
 
-@Slf4j
 public class AddBoardGui extends ChestGui implements Inputable {
 
     static final Config config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "board.yml");

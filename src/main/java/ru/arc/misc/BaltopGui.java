@@ -1,12 +1,12 @@
 package ru.arc.misc;
 
-import ru.arc.ARC;
-import ru.arc.configs.Config;
-import ru.arc.hooks.HookRegistry;
-import ru.arc.util.CooldownManager;
-import ru.arc.util.GuiUtils;
-import ru.arc.util.ItemStackBuilder;
-import ru.arc.util.TextUtil;
+import java.util.Comparator;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
+
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
@@ -15,23 +15,21 @@ import com.github.stefvanschie.inventoryframework.pane.PaginatedPane;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
 import lombok.SneakyThrows;
-import lombok.extern.log4j.Log4j2;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
-
-import java.util.Comparator;
-import java.util.List;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.stream.Collectors;
+import ru.arc.ARC;
+import ru.arc.configs.Config;
+import ru.arc.hooks.HookRegistry;
+import ru.arc.util.CooldownManager;
+import ru.arc.util.GuiUtils;
+import ru.arc.util.ItemStackBuilder;
+import ru.arc.util.TextUtil;
 
 import static ru.arc.util.Logging.info;
 import static ru.arc.util.TextUtil.formatAmount;
 import static ru.arc.util.TextUtil.mm;
 
-@Log4j2
 public class BaltopGui extends ChestGui {
 
     record BaltopGuiItem(GuiItem item, double balance, double bank, double total) {

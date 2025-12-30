@@ -1,7 +1,13 @@
 package ru.arc.common.treasure.impl;
 
-import lombok.*;
-import lombok.extern.slf4j.Slf4j;
+import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import ru.arc.ARC;
@@ -11,14 +17,10 @@ import ru.arc.configs.Config;
 import ru.arc.configs.ConfigManager;
 import ru.arc.util.TextUtil;
 
-import java.util.Map;
-import java.util.concurrent.ThreadLocalRandom;
-
 @AllArgsConstructor
 @Builder
 @NoArgsConstructor
 @Data
-@Slf4j
 @EqualsAndHashCode(callSuper = true)
 public class TreasureMoney extends Treasure {
 

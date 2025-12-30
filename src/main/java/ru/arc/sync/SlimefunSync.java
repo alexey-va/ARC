@@ -1,30 +1,43 @@
 package ru.arc.sync;
 
-import ru.arc.ARC;
+import java.util.Base64;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+
 import io.github.thebusybiscuit.slimefun4.api.events.PlayerRightClickEvent;
 import io.github.thebusybiscuit.slimefun4.api.items.SlimefunItem;
 import io.github.thebusybiscuit.slimefun4.api.player.PlayerBackpack;
 import io.github.thebusybiscuit.slimefun4.api.player.PlayerProfile;
 import io.github.thebusybiscuit.slimefun4.api.researches.Research;
 import io.github.thebusybiscuit.slimefun4.implementation.Slimefun;
-import lombok.*;
-import lombok.extern.log4j.Log4j2;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.bukkit.Material;
 import org.bukkit.event.Event;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
+import ru.arc.ARC;
 import ru.arc.configs.Config;
 import ru.arc.configs.ConfigManager;
-import ru.arc.sync.base.*;
-
-import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
+import ru.arc.sync.base.ActionCanceller;
+import ru.arc.sync.base.Context;
+import ru.arc.sync.base.Sync;
+import ru.arc.sync.base.SyncData;
+import ru.arc.sync.base.SyncRepo;
 
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.warn;
 
-@Log4j2
 public class SlimefunSync implements Sync {
 
     private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "backapacks.yml");
@@ -138,9 +151,9 @@ public class SlimefunSync implements Sync {
 
     private void deserializeAndSavePlayerData(SlimefunDataDTO dto) {
         PlayerProfile.fromUUID(dto.uuid, (pp) -> {
-            log.trace("Deserializing player data for " + dto.uuid);
+            // Logging removed - was using @Slf4j
             if (pp == null) {
-                log.trace("PlayerProfile not found for " + dto.uuid);
+                // Logging removed - was using @Slf4j
                 return;
             }
 

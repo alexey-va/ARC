@@ -1,16 +1,14 @@
 package ru.arc.sync.base;
 
+import lombok.RequiredArgsConstructor;
 import ru.arc.ARC;
 import ru.arc.network.ChannelListener;
 import ru.arc.network.RedisManager;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
 
 import static ru.arc.util.Logging.debug;
 
 
 @RequiredArgsConstructor
-@Log4j2
 public class SyncMessager<T extends SyncData> implements ChannelListener {
 
     final RedisManager redisManager;

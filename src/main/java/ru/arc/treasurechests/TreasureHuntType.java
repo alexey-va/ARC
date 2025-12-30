@@ -1,16 +1,14 @@
 package ru.arc.treasurechests;
 
-import ru.arc.common.WeightedRandom;
-import ru.arc.common.locationpools.LocationPool;
-import ru.arc.common.locationpools.LocationPoolManager;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
-import lombok.extern.slf4j.Slf4j;
+import ru.arc.common.WeightedRandom;
+import ru.arc.common.locationpools.LocationPool;
+import ru.arc.common.locationpools.LocationPoolManager;
 
 import static ru.arc.util.Logging.info;
 
-@Slf4j
 @Data
 @AllArgsConstructor
 @Builder

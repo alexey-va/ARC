@@ -1,19 +1,19 @@
 package ru.arc.sync.base;
 
-import ru.arc.ARC;
-import ru.arc.network.RedisManager;
-import com.google.gson.Gson;
-import lombok.extern.log4j.Log4j2;
-import org.bukkit.Bukkit;
-
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import static ru.arc.util.Logging.*;
+import com.google.gson.Gson;
+import org.bukkit.Bukkit;
+import ru.arc.ARC;
+import ru.arc.network.RedisManager;
 
-@Log4j2
+import static ru.arc.util.Logging.debug;
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.warn;
+
 public class SyncRepo<T extends SyncData> {
 
     final Class<T> clazz;

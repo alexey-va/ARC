@@ -1,9 +1,8 @@
 package ru.arc.hooks.zauction;
 
-import ru.arc.ARC;
-import ru.arc.configs.AuctionConfig;
-import ru.arc.hooks.HookRegistry;
-import ru.arc.util.TextUtil;
+import java.util.ArrayList;
+import java.util.List;
+
 import fr.maxlego08.zauctionhouse.api.AuctionItem;
 import fr.maxlego08.zauctionhouse.api.AuctionManager;
 import fr.maxlego08.zauctionhouse.api.blacklist.IBlacklistManager;
@@ -12,7 +11,6 @@ import fr.maxlego08.zauctionhouse.api.category.CategoryManager;
 import fr.maxlego08.zauctionhouse.api.inventory.InventoryManager;
 import fr.maxlego08.zauctionhouse.api.transaction.TransactionManager;
 import lombok.Setter;
-import lombok.extern.log4j.Log4j2;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
@@ -24,14 +22,14 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
-
-import java.util.ArrayList;
-import java.util.List;
+import ru.arc.ARC;
+import ru.arc.configs.AuctionConfig;
+import ru.arc.hooks.HookRegistry;
+import ru.arc.util.TextUtil;
 
 import static ru.arc.util.Logging.info;
 import static ru.arc.util.Logging.warn;
 
-@Log4j2
 public class AuctionHook {
 
     @Setter

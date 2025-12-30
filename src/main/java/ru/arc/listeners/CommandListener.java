@@ -1,5 +1,19 @@
 package ru.arc.listeners;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import org.bukkit.entity.Player;
+import org.bukkit.event.Cancellable;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+import org.bukkit.event.server.ServerCommandEvent;
+import org.bukkit.event.server.TabCompleteEvent;
 import ru.arc.ARC;
 import ru.arc.Portal;
 import ru.arc.PortalData;
@@ -10,27 +24,11 @@ import ru.arc.configs.ConfigManager;
 import ru.arc.hooks.HookRegistry;
 import ru.arc.util.TextUtil;
 import ru.arc.xserver.playerlist.PlayerManager;
-import lombok.extern.slf4j.Slf4j;
-import org.bukkit.entity.Player;
-import org.bukkit.event.Cancellable;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
-import org.bukkit.event.Listener;
-import org.bukkit.event.block.BlockPlaceEvent;
-import org.bukkit.event.player.PlayerCommandPreprocessEvent;
-import org.bukkit.event.server.ServerCommandEvent;
-import org.bukkit.event.server.TabCompleteEvent;
-
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
 
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.info;
 import static ru.arc.util.TextUtil.mm;
 
-@Slf4j
 public class CommandListener implements Listener {
 
     final Config commandConfig = ConfigManager.of(ARC.plugin.getDataPath(), "portal.yml");

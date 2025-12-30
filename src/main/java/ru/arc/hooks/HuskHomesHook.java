@@ -1,8 +1,8 @@
 package ru.arc.hooks;
 
-import ru.arc.Portal;
-import ru.arc.PortalData;
-import lombok.extern.slf4j.Slf4j;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+
 import net.william278.huskhomes.api.HuskHomesAPI;
 import net.william278.huskhomes.event.HomeCreateEvent;
 import net.william278.huskhomes.event.TeleportWarmupEvent;
@@ -18,15 +18,13 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.jetbrains.annotations.NotNull;
-
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
+import ru.arc.Portal;
+import ru.arc.PortalData;
 
 import static ru.arc.PortalData.ActionType.HUSK;
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.info;
 
-@Slf4j
 public class HuskHomesHook implements Listener {
 
     @EventHandler

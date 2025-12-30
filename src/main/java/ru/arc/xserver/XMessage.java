@@ -1,18 +1,22 @@
 package ru.arc.xserver;
 
-import ru.arc.hooks.HookRegistry;
-import ru.arc.util.TextUtil;
-import ru.arc.xserver.playerlist.PlayerManager;
+import java.util.ArrayList;
+import java.util.List;
+
 import com.google.gson.annotations.SerializedName;
-import lombok.*;
-import lombok.extern.slf4j.Slf4j;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
+import lombok.ToString;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
 import org.bukkit.boss.BarColor;
 import org.bukkit.entity.Player;
-
-import java.util.ArrayList;
-import java.util.List;
+import ru.arc.hooks.HookRegistry;
+import ru.arc.util.TextUtil;
+import ru.arc.xserver.playerlist.PlayerManager;
 
 import static ru.arc.util.Logging.warn;
 
@@ -20,7 +24,6 @@ import static ru.arc.util.Logging.warn;
 @Data
 @ToString(callSuper = true)
 @Builder
-@Slf4j
 public class XMessage extends XAction {
 
     @SerializedName("t")

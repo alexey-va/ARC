@@ -1,12 +1,17 @@
 package ru.arc.farm;
 
-import ru.arc.ARC;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import ru.arc.util.CooldownManager;
-import ru.arc.util.ParticleManager;
-import ru.arc.util.TextUtil;
-import ru.arc.util.Utils;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+
 import com.destroystokyo.paper.ParticleBuilder;
 import com.jeff_media.customblockdata.CustomBlockData;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
@@ -16,11 +21,14 @@ import com.sk89q.worldguard.WorldGuard;
 import com.sk89q.worldguard.protection.managers.RegionManager;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
-import org.bukkit.*;
+import org.bukkit.Bukkit;
+import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.Particle;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Listener;
@@ -29,14 +37,17 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
-
-import java.util.*;
-import java.util.concurrent.ThreadLocalRandom;
+import ru.arc.ARC;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
+import ru.arc.util.CooldownManager;
+import ru.arc.util.ParticleManager;
+import ru.arc.util.RandomUtils;
+import ru.arc.util.TextUtil;
 
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.TextUtil.mm;
 
-@Slf4j
 @Getter
 public class Mine implements Listener {
 
@@ -214,7 +225,7 @@ public class Mine implements Listener {
         blockData.set(new NamespacedKey(ARC.plugin, "t"), PersistentDataType.BOOLEAN, true);
         tempBlocks.add(new TemporaryBlock(event.getBlock()));
 
-        Particle randomParticle = Utils.random(new Particle[]{Particle.FLAME, Particle.END_ROD, Particle.CRIT});
+        Particle randomParticle = RandomUtils.random(new Particle[]{Particle.FLAME, Particle.END_ROD, Particle.CRIT});
         if (particles) ParticleManager.queue(new ParticleBuilder(randomParticle)
                 .receivers(List.of(event.getPlayer()))
                 .location(block.getLocation().toCenterLocation())

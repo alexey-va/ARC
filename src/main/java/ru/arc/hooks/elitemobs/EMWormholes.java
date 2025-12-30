@@ -1,12 +1,19 @@
 package ru.arc.hooks.elitemobs;
 
+import java.util.List;
+import java.util.stream.Stream;
+
 import com.destroystokyo.paper.ParticleBuilder;
 import com.magmaguy.elitemobs.treasurechest.TreasureChest;
 import com.magmaguy.elitemobs.wormhole.Wormhole;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.key.Key;
-import org.bukkit.*;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.Particle;
+import org.bukkit.Registry;
+import org.bukkit.Sound;
+import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
@@ -16,13 +23,9 @@ import ru.arc.configs.ConfigManager;
 import ru.arc.util.ParticleManager;
 import ru.arc.xserver.playerlist.PlayerManager;
 
-import java.util.List;
-import java.util.stream.Stream;
-
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.info;
 
-@Slf4j
 @RequiredArgsConstructor
 public class EMWormholes {
 

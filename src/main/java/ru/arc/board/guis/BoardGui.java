@@ -1,13 +1,9 @@
 package ru.arc.board.guis;
 
-import ru.arc.ARC;
-import ru.arc.board.Board;
-import ru.arc.board.BoardEntry;
-import ru.arc.board.BoardItem;
-import ru.arc.configs.BoardConfig;
-import ru.arc.util.GuiUtils;
-import ru.arc.util.ItemStackBuilder;
-import ru.arc.util.TextUtil;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
@@ -15,7 +11,6 @@ import com.github.stefvanschie.inventoryframework.pane.OutlinePane;
 import com.github.stefvanschie.inventoryframework.pane.PaginatedPane;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
-import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -25,15 +20,18 @@ import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Collectors;
+import ru.arc.ARC;
+import ru.arc.board.Board;
+import ru.arc.board.BoardEntry;
+import ru.arc.board.BoardItem;
+import ru.arc.configs.BoardConfig;
+import ru.arc.util.GuiUtils;
+import ru.arc.util.ItemStackBuilder;
+import ru.arc.util.TextUtil;
 
 import static ru.arc.util.GuiUtils.cooldownCheck;
 import static ru.arc.util.TextUtil.strip;
 
-@Slf4j
 public class BoardGui extends ChestGui {
 
     Player player;

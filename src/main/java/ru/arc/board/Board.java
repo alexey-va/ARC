@@ -1,5 +1,12 @@
 package ru.arc.board;
 
+import java.util.Comparator;
+import java.util.List;
+import java.util.UUID;
+
+import org.bukkit.boss.BarColor;
+import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
 import ru.arc.ARC;
 import ru.arc.configs.BoardConfig;
 import ru.arc.configs.Config;
@@ -8,18 +15,9 @@ import ru.arc.network.repos.RedisRepo;
 import ru.arc.xserver.XCondition;
 import ru.arc.xserver.XMessage;
 import ru.arc.xserver.announcements.AnnounceManager;
-import lombok.extern.slf4j.Slf4j;
-import org.bukkit.boss.BarColor;
-import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scheduler.BukkitTask;
-
-import java.util.Comparator;
-import java.util.List;
-import java.util.UUID;
 
 import static ru.arc.util.Logging.info;
 
-@Slf4j
 public class Board {
 
     private static final BoardEntryCache cache = new BoardEntryCache();

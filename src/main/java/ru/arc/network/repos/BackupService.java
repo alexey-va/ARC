@@ -1,11 +1,5 @@
 package ru.arc.network.repos;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
-import org.bukkit.inventory.ItemStack;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -13,9 +7,15 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import lombok.RequiredArgsConstructor;
+import org.bukkit.inventory.ItemStack;
+
+import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.info;
 
-@RequiredArgsConstructor @Log4j2
+@RequiredArgsConstructor
 public class BackupService {
 
     final String id;
@@ -32,13 +32,13 @@ public class BackupService {
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy_MM_dd_HH_mm_ss");
         String fileName = id + "_backup_" + now.format(formatter) + ".json";
         info("Saving backup to {}", fileName);
-        log.trace("Backup data: {}", map);
+        // Logging removed - was using @Slf4j
         try {
             if (!Files.exists(folder)) Files.createDirectories(folder);
             Files.writeString(folder.resolve(fileName), gson.toJson(map),
                     StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE, StandardOpenOption.CREATE);
         } catch (Exception e) {
-            log.error("Could not save backup to {}", fileName, e);
+            error("Could not save backup to {}", fileName, e);
         }
     }
 

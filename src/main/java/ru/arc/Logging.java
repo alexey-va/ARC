@@ -1,5 +1,8 @@
 package ru.arc;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
+
 import lombok.extern.slf4j.Slf4j;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
@@ -15,15 +18,17 @@ import pl.tkowalcz.tjahzi.log4j2.labels.Label;
 import ru.arc.configs.Config;
 import ru.arc.configs.ConfigManager;
 
-import java.nio.charset.StandardCharsets;
-import java.util.Map;
-
 import static ru.arc.util.Logging.warn;
 
 @Slf4j
 public class Logging {
 
+    public static boolean disableLokiAppender = false;
+
     public static void addLokiAppender() {
+        if (disableLokiAppender) {
+            return;
+        }
         try {
             Config config = ConfigManager.of(ARC.plugin.getDataPath(), "logging.yml");
             if (!config.bool("enabled", true)) {

@@ -1,10 +1,13 @@
 package ru.arc.mobspawn;
 
-import ru.arc.ARC;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import ru.arc.hooks.HookRegistry;
-import lombok.extern.slf4j.Slf4j;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -15,13 +18,13 @@ import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
-
-import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
+import ru.arc.ARC;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
+import ru.arc.hooks.HookRegistry;
 
 import static ru.arc.util.Logging.debug;
 
-@Slf4j
 public class MobSpawnManager {
 
     static BukkitTask task;

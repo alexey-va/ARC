@@ -1,18 +1,16 @@
 package ru.arc.stock;
 
+import java.util.Map;
+
+import com.google.gson.reflect.TypeToken;
+import lombok.RequiredArgsConstructor;
 import ru.arc.ARC;
 import ru.arc.network.ChannelListener;
 import ru.arc.network.RedisManager;
 import ru.arc.util.Common;
-import com.google.gson.reflect.TypeToken;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.Map;
 
 import static ru.arc.util.Logging.error;
 
-@Slf4j
 @RequiredArgsConstructor
 public class HistoryMessager implements ChannelListener {
     public final String channel;

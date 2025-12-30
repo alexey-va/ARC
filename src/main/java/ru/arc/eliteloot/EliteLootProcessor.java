@@ -1,10 +1,14 @@
 package ru.arc.eliteloot;
 
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
+
 import com.google.common.collect.Multimap;
 import com.magmaguy.elitemobs.api.utils.EliteItemManager;
 import de.tr7zw.changeme.nbtapi.NBT;
 import de.tr7zw.changeme.nbtapi.iface.ReadWriteNBT;
-import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Material;
@@ -20,16 +24,10 @@ import ru.arc.configs.Config;
 import ru.arc.configs.ConfigManager;
 import ru.arc.util.TextUtil;
 
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
-
 import static ru.arc.eliteloot.EliteLootManager.toLootType;
 import static ru.arc.util.Logging.error;
 
 
-@Slf4j
 public class EliteLootProcessor {
     private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "elite-loot.yml");
     final Set<Material> leathers = Set.of(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS, Material.LEATHER_BOOTS);

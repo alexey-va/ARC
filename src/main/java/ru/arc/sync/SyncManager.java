@@ -1,22 +1,20 @@
 package ru.arc.sync;
 
-import ru.arc.ARC;
-import ru.arc.sync.base.Sync;
-import lombok.extern.log4j.Log4j2;
-import org.bukkit.Bukkit;
-import org.bukkit.entity.Player;
-import org.bukkit.event.Event;
-import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scheduler.BukkitTask;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
+import org.bukkit.event.Event;
+import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
+import ru.arc.ARC;
+import ru.arc.sync.base.Sync;
 
-@Log4j2
+
 public class SyncManager {
 
     private final static Map<Class<?>, Sync> syncMap = new ConcurrentHashMap<>();

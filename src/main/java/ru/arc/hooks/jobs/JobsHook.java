@@ -1,17 +1,15 @@
 package ru.arc.hooks.jobs;
 
-import ru.arc.ARC;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import ru.arc.hooks.jobs.guis.JobsListGui;
-import ru.arc.network.repos.RedisRepo;
-import ru.arc.util.GuiUtils;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+
 import com.gamingmesh.jobs.Jobs;
 import com.gamingmesh.jobs.container.CurrencyType;
 import com.gamingmesh.jobs.container.Job;
 import lombok.AccessLevel;
 import lombok.Getter;
-import lombok.extern.log4j.Log4j2;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -19,16 +17,16 @@ import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
+import ru.arc.ARC;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
+import ru.arc.hooks.jobs.guis.JobsListGui;
+import ru.arc.network.repos.RedisRepo;
+import ru.arc.util.GuiUtils;
 
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.info;
 
-@Log4j2
 public class JobsHook {
 
     private static JobsListener jobsListener;

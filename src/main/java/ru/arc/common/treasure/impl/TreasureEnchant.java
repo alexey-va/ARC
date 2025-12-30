@@ -1,7 +1,19 @@
 package ru.arc.common.treasure.impl;
 
-import lombok.*;
-import lombok.extern.slf4j.Slf4j;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
 import org.bukkit.Registry;
@@ -17,10 +29,6 @@ import ru.arc.common.treasure.Treasure;
 import ru.arc.configs.Config;
 import ru.arc.configs.ConfigManager;
 
-import java.util.*;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.stream.Collectors;
-
 import static ru.arc.util.Logging.info;
 
 @EqualsAndHashCode(callSuper = true)
@@ -28,7 +36,6 @@ import static ru.arc.util.Logging.info;
 @AllArgsConstructor
 @Builder
 @NoArgsConstructor
-@Slf4j
 public class TreasureEnchant extends Treasure {
 
     @Builder.Default

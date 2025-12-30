@@ -1,32 +1,30 @@
 package ru.arc.sync;
 
-import ru.arc.ARC;
-import ru.arc.sync.base.Context;
-import ru.arc.sync.base.Sync;
-import ru.arc.sync.base.SyncData;
-import ru.arc.sync.base.SyncRepo;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import com.google.gson.annotations.SerializedName;
 import com.magmaguy.elitemobs.playerdata.database.PlayerData;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.extern.log4j.Log4j2;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.scheduler.BukkitRunnable;
-
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
+import ru.arc.ARC;
+import ru.arc.sync.base.Context;
+import ru.arc.sync.base.Sync;
+import ru.arc.sync.base.SyncData;
+import ru.arc.sync.base.SyncRepo;
 
 import static ru.arc.util.Logging.debug;
 import static ru.arc.util.Logging.warn;
 
-@Log4j2
 public class EmSync implements Sync {
 
 

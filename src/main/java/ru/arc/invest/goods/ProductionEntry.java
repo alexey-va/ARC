@@ -1,15 +1,20 @@
 package ru.arc.invest.goods;
 
-import ru.arc.invest.items.GenericItem;
-import ru.arc.util.Utils;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ThreadLocalRandom;
+
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.ToString;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.inventory.ItemStack;
-
-import java.util.*;
-import java.util.concurrent.ThreadLocalRandom;
+import ru.arc.invest.items.GenericItem;
+import ru.arc.util.ItemUtils;
 
 @AllArgsConstructor
 @ToString
@@ -33,7 +38,7 @@ public class ProductionEntry {
         for(Good good : produce){
             if(ThreadLocalRandom.current().nextDouble()>good.chance) continue;
             int amount = ThreadLocalRandom.current().nextInt(good.min, good.max+1);
-            stacks.addAll(Utils.split(good.genericItem.stack(), amount));
+            stacks.addAll(ItemUtils.split(good.genericItem.stack(), amount));
         }
         return stacks;
     }
@@ -45,7 +50,7 @@ public class ProductionEntry {
         for(Good good : consumption){
             if(ThreadLocalRandom.current().nextDouble()>good.chance) continue;
             int amount = ThreadLocalRandom.current().nextInt(good.min, good.max+1);
-            stacks.addAll(Utils.split(good.genericItem.stack(), amount));
+            stacks.addAll(ItemUtils.split(good.genericItem.stack(), amount));
         }
         return stacks;
     }

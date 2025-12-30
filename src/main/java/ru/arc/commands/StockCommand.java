@@ -1,15 +1,12 @@
 package ru.arc.commands;
 
-import ru.arc.ARC;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import ru.arc.configs.StockConfig;
-import ru.arc.hooks.HookRegistry;
-import ru.arc.stock.*;
-import ru.arc.stock.gui.SymbolSelector;
-import ru.arc.util.GuiUtils;
-import ru.arc.util.TextUtil;
-import lombok.extern.slf4j.Slf4j;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
@@ -17,13 +14,22 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
-
-import java.util.*;
-import java.util.concurrent.CompletableFuture;
+import ru.arc.ARC;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
+import ru.arc.configs.StockConfig;
+import ru.arc.hooks.HookRegistry;
+import ru.arc.stock.HistoryManager;
+import ru.arc.stock.Stock;
+import ru.arc.stock.StockMarket;
+import ru.arc.stock.StockPlayer;
+import ru.arc.stock.StockPlayerManager;
+import ru.arc.stock.gui.SymbolSelector;
+import ru.arc.util.GuiUtils;
+import ru.arc.util.TextUtil;
 
 import static ru.arc.util.Logging.info;
 
-@Slf4j
 public class StockCommand implements CommandExecutor {
 
     private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "stocks/stock.yml");
@@ -84,7 +90,6 @@ public class StockCommand implements CommandExecutor {
                 stockPlayer = StockPlayerManager.getOrNull(offlinePlayer.getUniqueId());
             }
             stockPlayer.thenAccept(sp -> {
-                log.trace("Loaded STOCK data for {}", sp.getPlayerName());
                 GuiUtils.constructAndShowAsync(() -> new SymbolSelector(sp), player);
             });
             return true;

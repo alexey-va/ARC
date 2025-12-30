@@ -1,5 +1,14 @@
 package ru.arc.stock;
 
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
+import org.bukkit.Bukkit;
+import org.bukkit.OfflinePlayer;
+import org.bukkit.entity.Player;
 import ru.arc.ARC;
 import ru.arc.audit.AuditManager;
 import ru.arc.audit.Type;
@@ -7,26 +16,15 @@ import ru.arc.configs.Config;
 import ru.arc.configs.ConfigManager;
 import ru.arc.configs.StockConfig;
 import ru.arc.network.repos.RedisRepo;
+import ru.arc.util.RandomUtils;
 import ru.arc.util.TextUtil;
-import ru.arc.util.Utils;
 import ru.arc.xserver.announcements.AnnounceManager;
-import lombok.extern.log4j.Log4j2;
-import org.bukkit.Bukkit;
-import org.bukkit.OfflinePlayer;
-import org.bukkit.entity.Player;
-
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.info;
 import static ru.arc.util.TextUtil.formatAmount;
 import static ru.arc.util.TextUtil.mm;
 
-@Log4j2
 public class StockPlayerManager {
     private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "stocks/stock.yml");
     private static RedisRepo<StockPlayer> repo;
@@ -122,7 +120,7 @@ public class StockPlayerManager {
 
         EconomyCheckResponse response = economyCheck(stockPlayer, stock, amount, leverage);
         if (!response.success()) {
-            log.trace("Economy check failed: " + response);
+            // Logging removed - was using @Slf4j
             //TextUtil.noMoneyMessage(player, response.lack);
             return;
         }
@@ -138,14 +136,14 @@ public class StockPlayerManager {
                 .lowerBoundMargin(lowerBound)
                 .commission(response.commission())
                 .timestamp(System.currentTimeMillis())
-                .iconMaterial(Utils.random(StockConfig.iconMaterials))
+                .iconMaterial(RandomUtils.random(StockConfig.iconMaterials))
                 .type(Position.Type.BOUGHT)
                 .build();
         stockPlayer.addPosition(position);
 
         AuditManager.operation(stockPlayer.getPlayerName(), -response.totalPrice, Type.STOCK, "Buy " + stock.symbol);
 
-        log.trace("Successfully added position: {}", position);
+        // Logging removed - was using @Slf4j
     }
 
     public static void shortStock(StockPlayer stockPlayer, Stock stock, double amount, int leverage, double lowerBound, double upperBound) {
@@ -160,7 +158,7 @@ public class StockPlayerManager {
 
         EconomyCheckResponse response = economyCheck(stockPlayer, stock, amount, leverage);
         if (!response.success()) {
-            log.trace("Economy check failed: " + response);
+            // Logging removed - was using @Slf4j
             return;
         }
 
@@ -175,18 +173,18 @@ public class StockPlayerManager {
                 .lowerBoundMargin(lowerBound)
                 .commission(response.commission())
                 .timestamp(System.currentTimeMillis())
-                .iconMaterial(Utils.random(StockConfig.iconMaterials))
+                .iconMaterial(RandomUtils.random(StockConfig.iconMaterials))
                 .type(Position.Type.SHORTED)
                 .build();
         stockPlayer.addPosition(position);
 
         AuditManager.operation(stockPlayer.getPlayerName(), -response.totalPrice, Type.STOCK, "Short " + stock.symbol);
 
-        log.trace("Successfully added position: {}", position);
+        // Logging removed - was using @Slf4j
     }
 
     public static void closePosition(StockPlayer stockPlayer, String symbol, UUID positionUuid, int reason) {
-        log.trace("Closing position with uuid: {} of {}", positionUuid, stockPlayer.getPlayerName());
+        // Logging removed - was using @Slf4j
         Stock stock = StockMarket.stock(symbol);
         if (stock == null) {
             error("Could not find stock with symbol: " + symbol);
@@ -194,7 +192,7 @@ public class StockPlayerManager {
         }
         stockPlayer.remove(symbol, positionUuid).ifPresentOrElse(position -> {
             double gains = position.gains(stock.price);
-            log.trace("Gains: {}", gains);
+            // Logging removed - was using @Slf4j
             stockPlayer.addToBalance(gains + position.startPrice * position.amount, true);
 
             AuditManager.operation(stockPlayer.getPlayerName(), gains, Type.STOCK, "Close " + symbol);
@@ -211,33 +209,33 @@ public class StockPlayerManager {
 
     public static boolean addToTradingBalanceFromVault(StockPlayer stockPlayer, double amount) {
         OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(stockPlayer.playerUuid);
-        log.trace("Adding {} to trading balance of {}", amount, stockPlayer.getPlayerName());
+        // Logging removed - was using @Slf4j
 
         if (amount > 0) {
             if (ARC.getEcon().withdrawPlayer(offlinePlayer, amount).transactionSuccess()) {
                 stockPlayer.addToBalance(amount, false);
-                log.trace("Successfully added {} to trading balance of {}", amount, stockPlayer.getPlayerName());
+                // Logging removed - was using @Slf4j
                 return true;
             }
-            log.trace("Failed to add {} to trading balance of {}", amount, stockPlayer.getPlayerName());
+            // Logging removed - was using @Slf4j
         } else {
             if (stockPlayer.getBalance() < -amount) {
-                log.trace("Not enough money to take {} from trading balance of {}", amount, stockPlayer.getPlayerName());
+                // Logging removed - was using @Slf4j
                 return false;
             }
             if (ARC.getEcon().depositPlayer(offlinePlayer, -amount).transactionSuccess()) {
                 stockPlayer.addToBalance(amount, false);
-                log.trace("Successfully took {} from trading balance of {}", amount, stockPlayer.getPlayerName());
+                // Logging removed - was using @Slf4j
                 return true;
             }
         }
-        log.trace("Failed to take {} from trading balance of {}", amount, stockPlayer.getPlayerName());
+        // Logging removed - was using @Slf4j
         return false;
     }
 
     public static void switchAuto(StockPlayer stockPlayer) {
         stockPlayer.setAutoTake(!stockPlayer.autoTake);
-        log.trace("Switched auto take for {} to {}", stockPlayer.getPlayerName(), stockPlayer.autoTake);
+        // Logging removed - was using @Slf4j
     }
 
     public static CompletableFuture<StockPlayer> getOrNull(UUID uniqueId) {

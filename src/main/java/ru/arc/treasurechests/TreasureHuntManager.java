@@ -1,6 +1,20 @@
 package ru.arc.treasurechests;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Deque;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
+
+import org.bukkit.Location;
+import org.bukkit.block.Block;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 import ru.arc.ARC;
 import ru.arc.common.WeightedRandom;
 import ru.arc.common.locationpools.LocationPool;
@@ -9,18 +23,11 @@ import ru.arc.common.treasure.TreasurePool;
 import ru.arc.configs.Config;
 import ru.arc.configs.ConfigManager;
 import ru.arc.hooks.HookRegistry;
-import lombok.extern.slf4j.Slf4j;
-import org.bukkit.Location;
-import org.bukkit.block.Block;
-import org.bukkit.entity.Player;
 
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedDeque;
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
+import static ru.arc.util.Logging.warn;
 
-import static ru.arc.util.Logging.*;
-
-@Slf4j
 public class TreasureHuntManager {
 
 

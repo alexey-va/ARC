@@ -1,18 +1,16 @@
 package ru.arc.farm;
 
-import ru.arc.ARC;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import ru.arc.util.CooldownManager;
-import ru.arc.util.ParticleManager;
-import ru.arc.util.TextUtil;
-import ru.arc.util.Utils;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
 import com.destroystokyo.paper.ParticleBuilder;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
 import com.sk89q.worldguard.WorldGuard;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import com.sk89q.worldguard.protection.regions.RegionContainer;
-import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
@@ -25,13 +23,17 @@ import org.bukkit.block.data.Ageable;
 import org.bukkit.entity.Player;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.inventory.ItemStack;
-
-import java.util.*;
+import ru.arc.ARC;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
+import ru.arc.util.CooldownManager;
+import ru.arc.util.ParticleManager;
+import ru.arc.util.RandomUtils;
+import ru.arc.util.TextUtil;
 
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.TextUtil.mm;
 
-@Slf4j
 public class Farm {
 
     private final World world;
@@ -110,7 +112,8 @@ public class Farm {
             block.breakNaturally();
         }
         if (particles) {
-            Particle randomParticle = Utils.random(new Particle[]{Particle.FLAME, Particle.END_ROD, Particle.CRIT});
+            Particle randomParticle = RandomUtils.random(new Particle[]{Particle.FLAME, Particle.END_ROD,
+                    Particle.CRIT});
             ParticleManager.queue(new ParticleBuilder(randomParticle)
                     .location(block.getLocation().toCenterLocation())
                     .count(config.integer("farm-config.particle-count", 5))

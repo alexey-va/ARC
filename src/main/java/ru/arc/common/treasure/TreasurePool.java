@@ -1,9 +1,26 @@
 package ru.arc.common.treasure;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
+
+import javax.annotation.Nullable;
+
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
-import lombok.extern.slf4j.Slf4j;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
@@ -12,19 +29,11 @@ import ru.arc.ARC;
 import ru.arc.common.treasure.impl.SubPoolTreasure;
 import ru.arc.treasurechests.TreasureHuntManager;
 
-import javax.annotation.Nullable;
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ThreadLocalRandom;
+import static ru.arc.util.Logging.debug;
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
+import static ru.arc.util.Logging.warn;
 
-import static ru.arc.util.Logging.*;
-
-@Slf4j
 @RequiredArgsConstructor
 @Data
 public class TreasurePool {

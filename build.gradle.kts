@@ -1,6 +1,6 @@
 plugins {
     java
-    kotlin("jvm") version "2.0.20"
+    kotlin("jvm") version "2.3.0"
     id("com.gradleup.shadow") version "9.0.0"
 }
 
@@ -8,8 +8,8 @@ group = "ARC"
 version = "1.0"
 description = "ARC"
 
-java { toolchain { languageVersion.set(JavaLanguageVersion.of(21)) } }
-kotlin { jvmToolchain(21) }
+java { toolchain { languageVersion.set(JavaLanguageVersion.of(25)) } }
+kotlin { jvmToolchain(25) }
 
 repositories {
     mavenLocal()
@@ -42,7 +42,6 @@ dependencies {
     compileOnly("org.projectlombok:lombok:1.18.42")
     annotationProcessor("org.projectlombok:lombok:1.18.42")
 
-    // shaded (was <scope>compile</scope> in POM)
     implementation(libs.com.github.stefvanschie.inventoryframework.`if`)
     implementation(libs.com.jeff.media.custom.block.data)
     implementation(libs.de.tr7zw.item.nbt.api)
@@ -68,7 +67,9 @@ dependencies {
     compileOnly(libs.com.github.gypopo.economyshopgui.api)
     compileOnly(libs.net.william278.huskhomes)
     compileOnly(libs.com.github.angeschossen.landsapi)
-    compileOnly(libs.com.github.milkbowl.vaultapi)
+    compileOnly(libs.com.github.milkbowl.vaultapi) {
+        exclude(group = "org.bukkit", module = "bukkit")
+    }
     compileOnly(libs.redis.clients.jedis)
     compileOnly(libs.com.sk89q.worldguard.worldguard.bukkit)
     compileOnly(libs.com.sk89q.worldedit.worldedit.bukkit)
@@ -88,14 +89,31 @@ dependencies {
     compileOnly(libs.io.lettuce.lettuce.core)
     compileOnly(libs.dev.aurelium.auraskills.api.bukkit)
     compileOnly(libs.com.github.zrips.cmilib)
-    compileOnly(libs.com.github.dumbo.the.developer.duels.duels.api)
-    compileOnly(libs.com.github.ulrichbr.uclans.api)
+    // These are optional runtime plugins - provided by server at runtime
+    // compileOnly("com.meteordevelopments:duels-api:1.0.0")
+    // compileOnly("me.ulrich:uclans-api:1.0.0")
+    compileOnly("commons-lang:commons-lang:2.6")
 
     // tests
     testImplementation(libs.org.junit.jupiter.junit.jupiter.api)
     testImplementation(libs.org.junit.jupiter.junit.jupiter.engine)
     testImplementation(libs.org.junit.jupiter.junit.jupiter.params)
     testImplementation(libs.com.thedeanda.lorem)
+    testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v1.21:4.98.0")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+
+    // Add compileOnly dependencies to test classpath so tests can run
+    // These are server-provided at runtime, but needed for testing
+    // Use a compatible Paper API version for tests to avoid service loader issues
+    testImplementation("io.papermc.paper:paper-api:1.21.10-R0.1-SNAPSHOT") {
+        exclude(group = "org.bukkit", module = "bukkit")
+    }
+    testImplementation(libs.com.github.milkbowl.vaultapi) {
+        exclude(group = "org.bukkit", module = "bukkit")
+    }
+    testImplementation(libs.redis.clients.jedis)
+    testImplementation(libs.org.jsoup.jsoup)
+    testImplementation("commons-lang:commons-lang:2.6")
 }
 
 tasks {

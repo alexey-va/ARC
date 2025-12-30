@@ -1,6 +1,10 @@
 package ru.arc.hooks.luckperms;
 
-import lombok.extern.slf4j.Slf4j;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+
 import net.luckperms.api.LuckPermsProvider;
 import net.luckperms.api.model.group.Group;
 import net.luckperms.api.model.user.UserManager;
@@ -11,14 +15,8 @@ import net.luckperms.api.query.QueryOptions;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 
-import java.util.List;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-
 import static ru.arc.util.Logging.error;
 
-@Slf4j
 public class LuckPermsHook {
 
     public boolean hasPermission(OfflinePlayer offlinePlayer, String perm) {

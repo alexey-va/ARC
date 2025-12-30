@@ -1,7 +1,8 @@
 package ru.arc.hooks;
 
+import java.util.List;
+
 import com.Zrips.CMI.CMI;
-import lombok.extern.slf4j.Slf4j;
 import net.Zrips.CMILib.ActionBar.CMIActionBar;
 import net.Zrips.CMILib.Advancements.CMIAdvancement;
 import net.Zrips.CMILib.BossBar.BossBarInfo;
@@ -11,9 +12,6 @@ import org.bukkit.boss.BarColor;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
-import java.util.List;
-
-@Slf4j
 public class CMIHook {
 
     public void sendBossbar(String bossBarName,

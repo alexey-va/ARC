@@ -1,36 +1,51 @@
 package ru.arc;
 
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import ru.arc.hooks.HookRegistry;
-import ru.arc.util.CooldownManager;
-import ru.arc.util.ParticleManager;
-import ru.arc.xserver.playerlist.PlayerManager;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import com.destroystokyo.paper.ParticleBuilder;
-import lombok.extern.slf4j.Slf4j;
-import org.bukkit.*;
+import org.bukkit.Bukkit;
+import org.bukkit.Color;
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.Particle;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.Player;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
+import ru.arc.hooks.HookRegistry;
+import ru.arc.util.CooldownManager;
+import ru.arc.util.ParticleManager;
+import ru.arc.xserver.playerlist.PlayerManager;
 
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentSkipListSet;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static ru.arc.PortalData.ActionType.*;
 import static org.bukkit.Material.SNOW;
 import static org.bukkit.Material.TRIPWIRE;
-import static org.bukkit.Sound.*;
+import static org.bukkit.Sound.BLOCK_AMETHYST_BLOCK_CHIME;
+import static org.bukkit.Sound.BLOCK_END_PORTAL_SPAWN;
+import static org.bukkit.Sound.ENTITY_ENDERMAN_TELEPORT;
 import static org.bukkit.potion.PotionEffectType.BLINDNESS;
+import static ru.arc.PortalData.ActionType.COMMAND;
+import static ru.arc.PortalData.ActionType.HUSK;
+import static ru.arc.PortalData.ActionType.TELEPORT;
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.info;
 
-@Slf4j
 public class Portal {
 
     private static final Set<Block> occupiedBlocks = new ConcurrentSkipListSet<>(Comparator.comparingInt(Block::hashCode));

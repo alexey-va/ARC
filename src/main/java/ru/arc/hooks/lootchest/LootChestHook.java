@@ -1,14 +1,12 @@
 package ru.arc.hooks.lootchest;
 
+import org.bukkit.Bukkit;
 import ru.arc.ARC;
 import ru.arc.configs.Config;
 import ru.arc.configs.ConfigManager;
-import lombok.extern.slf4j.Slf4j;
-import org.bukkit.Bukkit;
 
 import static ru.arc.util.Logging.error;
 
-@Slf4j
 public class LootChestHook {
 
     private static LootChestListener lootChestListener;

@@ -1,12 +1,11 @@
 package ru.arc.xserver;
 
+import lombok.Data;
+import org.bukkit.Bukkit;
+import org.bukkit.scheduler.BukkitRunnable;
 import ru.arc.ARC;
 import ru.arc.network.adapters.JsonSubtype;
 import ru.arc.network.adapters.JsonType;
-import lombok.Data;
-import lombok.extern.slf4j.Slf4j;
-import org.bukkit.Bukkit;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import static ru.arc.util.Logging.error;
 
@@ -19,7 +18,6 @@ import static ru.arc.util.Logging.error;
         }
 )
 @Data
-@Slf4j
 public abstract class XAction {
 
     Long afterTimestamp;

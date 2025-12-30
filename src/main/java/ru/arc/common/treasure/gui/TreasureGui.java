@@ -1,35 +1,34 @@
 package ru.arc.common.treasure.gui;
 
-import ru.arc.ARC;
-import ru.arc.TitleInput;
-import ru.arc.board.guis.Inputable;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import ru.arc.common.treasure.Treasure;
-import ru.arc.common.treasure.TreasurePool;
-import ru.arc.common.treasure.impl.GaussData;
-import ru.arc.common.treasure.impl.TreasureCommand;
-import ru.arc.common.treasure.impl.TreasureItem;
-import ru.arc.util.GuiUtils;
-import ru.arc.util.ItemStackBuilder;
-import ru.arc.util.TextUtil;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Stream;
+
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
 import com.github.stefvanschie.inventoryframework.pane.OutlinePane;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
-import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
-
-import java.util.*;
-import java.util.stream.Stream;
+import ru.arc.ARC;
+import ru.arc.TitleInput;
+import ru.arc.board.guis.Inputable;
+import ru.arc.common.treasure.Treasure;
+import ru.arc.common.treasure.TreasurePool;
+import ru.arc.common.treasure.impl.GaussData;
+import ru.arc.common.treasure.impl.TreasureCommand;
+import ru.arc.common.treasure.impl.TreasureItem;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
+import ru.arc.util.GuiUtils;
+import ru.arc.util.ItemStackBuilder;
+import ru.arc.util.TextUtil;
 
 import static ru.arc.util.Logging.error;
 
-@Slf4j
 public class TreasureGui extends ChestGui implements Inputable {
 
     private static final int rows = 2;

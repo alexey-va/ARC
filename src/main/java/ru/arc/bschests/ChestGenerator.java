@@ -1,16 +1,14 @@
 package ru.arc.bschests;
 
-import ru.arc.configs.Config;
-import ru.arc.common.treasure.Treasure;
-import ru.arc.common.treasure.impl.TreasureItem;
-import ru.arc.common.treasure.TreasurePool;
-import ru.arc.network.repos.ItemList;
-import lombok.extern.slf4j.Slf4j;
-import org.bukkit.entity.Player;
-
 import java.util.Collections;
 
-@Slf4j
+import org.bukkit.entity.Player;
+import ru.arc.common.treasure.Treasure;
+import ru.arc.common.treasure.TreasurePool;
+import ru.arc.common.treasure.impl.TreasureItem;
+import ru.arc.configs.Config;
+import ru.arc.network.repos.ItemList;
+
 public class ChestGenerator {
 
     Config config;

@@ -1,15 +1,13 @@
 package ru.arc.eliteloot;
 
-import lombok.Getter;
-import lombok.ToString;
-import lombok.extern.slf4j.Slf4j;
-
 import java.util.TreeMap;
 import java.util.concurrent.ThreadLocalRandom;
 
+import lombok.Getter;
+import lombok.ToString;
+
 import static ru.arc.util.Logging.debug;
 
-@Slf4j
 @Getter
 @ToString
 public class DecorPool {

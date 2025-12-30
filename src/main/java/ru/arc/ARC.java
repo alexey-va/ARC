@@ -10,11 +10,24 @@ import ru.arc.audit.AuditManager;
 import ru.arc.autobuild.BuildingManager;
 import ru.arc.board.Board;
 import ru.arc.bschests.PersonalLootManager;
-import ru.arc.commands.*;
+import ru.arc.commands.ArcStoreCommand;
+import ru.arc.commands.BuildBookCommand;
+import ru.arc.commands.Command;
+import ru.arc.commands.EliteLootComand;
+import ru.arc.commands.GiveJobsBoostCommand;
+import ru.arc.commands.SoundFollowCommand;
+import ru.arc.commands.StockCommand;
+import ru.arc.commands.TestCommand;
+import ru.arc.commands.XArcCommand;
 import ru.arc.commands.tabcompletes.InvestTabComplete;
 import ru.arc.common.locationpools.LocationPoolManager;
 import ru.arc.common.treasure.TreasurePool;
-import ru.arc.configs.*;
+import ru.arc.configs.AuctionConfig;
+import ru.arc.configs.BoardConfig;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
+import ru.arc.configs.LocationPoolConfig;
+import ru.arc.configs.StockConfig;
 import ru.arc.eliteloot.EliteLootManager;
 import ru.arc.farm.FarmManager;
 import ru.arc.hooks.HookRegistry;
@@ -28,7 +41,11 @@ import ru.arc.stock.StockClient;
 import ru.arc.stock.StockMarket;
 import ru.arc.stock.StockPlayerManager;
 import ru.arc.store.StoreManager;
-import ru.arc.sync.*;
+import ru.arc.sync.CMISync;
+import ru.arc.sync.EmSync;
+import ru.arc.sync.SkillsSync;
+import ru.arc.sync.SlimefunSync;
+import ru.arc.sync.SyncManager;
 import ru.arc.treasurechests.TreasureHuntManager;
 import ru.arc.util.CooldownManager;
 import ru.arc.util.HeadTextureCache;
@@ -37,9 +54,11 @@ import ru.arc.xserver.PluginMessenger;
 import ru.arc.xserver.XActionManager;
 import ru.arc.xserver.announcements.AnnounceManager;
 
-import static ru.arc.util.Logging.*;
+import static ru.arc.util.Logging.debug;
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
 
-public final class ARC extends JavaPlugin {
+public class ARC extends JavaPlugin {
 
     public static ARC plugin;
     public static String serverName;
@@ -235,10 +254,6 @@ public final class ARC extends JavaPlugin {
             SyncManager.registerSync(SkillsSync.class, new SkillsSync());
         }
 
-        if(HookRegistry.duelsHook != null && config.bool("sync.duels", true)) {
-            info("Starting duels sync.");
-            SyncManager.registerSync(DuelsSync.class, new DuelsSync());
-        }
 
         SyncManager.startSaveAllTasks();
     }

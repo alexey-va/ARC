@@ -1,19 +1,24 @@
 package ru.arc.common.treasure;
 
-import lombok.Data;
-import lombok.extern.slf4j.Slf4j;
-import org.bukkit.entity.Player;
-import org.jetbrains.annotations.NotNull;
-import ru.arc.common.treasure.impl.*;
-
 import java.lang.reflect.Constructor;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
+import lombok.Data;
+import org.bukkit.entity.Player;
+import org.jetbrains.annotations.NotNull;
+import ru.arc.common.treasure.impl.AEEnchant;
+import ru.arc.common.treasure.impl.SfTreasure;
+import ru.arc.common.treasure.impl.SubPoolTreasure;
+import ru.arc.common.treasure.impl.TreasureCommand;
+import ru.arc.common.treasure.impl.TreasureEnchant;
+import ru.arc.common.treasure.impl.TreasureItem;
+import ru.arc.common.treasure.impl.TreasureMoney;
+import ru.arc.common.treasure.impl.TreasurePotion;
+
 import static ru.arc.util.Logging.error;
 
-@Slf4j
 @Data
 public abstract class Treasure {
 

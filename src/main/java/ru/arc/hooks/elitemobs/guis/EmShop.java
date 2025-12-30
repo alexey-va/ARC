@@ -1,17 +1,14 @@
 package ru.arc.hooks.elitemobs.guis;
 
-import ru.arc.configs.Config;
-import ru.arc.hooks.HookRegistry;
-import ru.arc.util.GuiItemBuilder;
-import ru.arc.util.GuiUtils;
-import ru.arc.util.ItemStackBuilder;
+import java.util.ArrayList;
+import java.util.List;
+
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
 import com.github.stefvanschie.inventoryframework.pane.PaginatedPane;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
-import lombok.extern.log4j.Log4j2;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
@@ -20,14 +17,15 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-
-import java.util.ArrayList;
-import java.util.List;
+import ru.arc.configs.Config;
+import ru.arc.hooks.HookRegistry;
+import ru.arc.util.GuiItemBuilder;
+import ru.arc.util.GuiUtils;
+import ru.arc.util.ItemStackBuilder;
 
 import static ru.arc.util.TextUtil.formatAmount;
 import static ru.arc.util.TextUtil.mm;
 
-@Log4j2
 public class EmShop extends ChestGui {
 
     Config config;

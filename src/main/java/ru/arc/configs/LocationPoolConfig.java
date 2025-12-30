@@ -1,14 +1,5 @@
 package ru.arc.configs;
 
-import ru.arc.ARC;
-import ru.arc.common.locationpools.LocationPool;
-import ru.arc.common.locationpools.LocationPoolManager;
-import ru.arc.util.Common;
-import com.google.gson.Gson;
-import lombok.extern.slf4j.Slf4j;
-import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scheduler.BukkitTask;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -16,9 +7,16 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.Objects;
 
+import com.google.gson.Gson;
+import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
+import ru.arc.ARC;
+import ru.arc.common.locationpools.LocationPool;
+import ru.arc.common.locationpools.LocationPoolManager;
+import ru.arc.util.Common;
+
 import static ru.arc.util.Logging.error;
 
-@Slf4j
 public class LocationPoolConfig {
 
     BukkitTask saveTask;

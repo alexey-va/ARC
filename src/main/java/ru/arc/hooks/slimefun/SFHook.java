@@ -1,13 +1,11 @@
 package ru.arc.hooks.slimefun;
 
-import ru.arc.ARC;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import ru.arc.sync.SyncManager;
+import java.util.List;
+import java.util.UUID;
+
 import io.github.thebusybiscuit.slimefun4.api.events.PlayerRightClickEvent;
 import io.github.thebusybiscuit.slimefun4.api.items.SlimefunItem;
 import io.github.thebusybiscuit.slimefun4.implementation.Slimefun;
-import lombok.extern.log4j.Log4j2;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Material;
@@ -16,13 +14,13 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.inventory.ItemStack;
-
-import java.util.List;
-import java.util.UUID;
+import ru.arc.ARC;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
+import ru.arc.sync.SyncManager;
 
 import static ru.arc.util.TextUtil.mm;
 
-@Log4j2
 public class SFHook implements Listener {
 
     private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "backpacks.yml");

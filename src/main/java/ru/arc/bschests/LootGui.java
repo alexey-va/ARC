@@ -1,16 +1,14 @@
 package ru.arc.bschests;
 
-import ru.arc.ARC;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
-import lombok.extern.slf4j.Slf4j;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import ru.arc.ARC;
 
-@Slf4j
 public class LootGui extends ChestGui {
 
     Player player;

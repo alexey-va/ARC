@@ -1,18 +1,16 @@
 package ru.arc.xserver;
 
-import ru.arc.ARC;
-import lombok.extern.slf4j.Slf4j;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.messaging.PluginMessageListener;
 import org.jetbrains.annotations.NotNull;
-
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
+import ru.arc.ARC;
 
 import static ru.arc.util.Logging.error;
 
-@Slf4j
 public class PluginMessenger implements PluginMessageListener {
 
     public PluginMessenger() {

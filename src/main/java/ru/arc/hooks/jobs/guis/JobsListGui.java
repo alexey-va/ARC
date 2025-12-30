@@ -1,13 +1,8 @@
 package ru.arc.hooks.jobs.guis;
 
-import ru.arc.configs.Config;
-import ru.arc.hooks.HookRegistry;
-import ru.arc.hooks.jobs.BoostData;
-import ru.arc.hooks.jobs.JobsBoost;
-import ru.arc.hooks.jobs.JobsHook;
-import ru.arc.network.repos.RedisRepo;
-import ru.arc.util.GuiUtils;
-import ru.arc.util.ItemStackBuilder;
+import java.util.ArrayList;
+import java.util.List;
+
 import com.gamingmesh.jobs.Jobs;
 import com.gamingmesh.jobs.container.Job;
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
@@ -18,7 +13,6 @@ import com.github.stefvanschie.inventoryframework.pane.PaginatedPane;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
 import lombok.SneakyThrows;
-import lombok.extern.log4j.Log4j2;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.tag.Tag;
@@ -28,13 +22,19 @@ import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemFlag;
+import ru.arc.configs.Config;
+import ru.arc.hooks.HookRegistry;
+import ru.arc.hooks.jobs.BoostData;
+import ru.arc.hooks.jobs.JobsBoost;
+import ru.arc.hooks.jobs.JobsHook;
+import ru.arc.network.repos.RedisRepo;
+import ru.arc.util.GuiUtils;
+import ru.arc.util.ItemStackBuilder;
 
-import java.util.ArrayList;
-import java.util.List;
+import static ru.arc.util.TextUtil.formatAmount;
+import static ru.arc.util.TextUtil.mm;
+import static ru.arc.util.TextUtil.toLegacy;
 
-import static ru.arc.util.TextUtil.*;
-
-@Log4j2
 public class JobsListGui extends ChestGui {
     private final Config config;
     Player player;

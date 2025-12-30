@@ -1,12 +1,10 @@
 package ru.arc.hooks
 
 import dev.unnm3d.rediseconomy.api.RedisEconomyAPI
-import lombok.extern.slf4j.Slf4j
-import java.util.*
+import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionStage
 
-@Slf4j
 class RedisEcoHook {
     @JvmRecord
     data class Account(@JvmField val name: String?, @JvmField val uuid: UUID?, @JvmField val balance: Double)

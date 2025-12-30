@@ -1,28 +1,26 @@
 package ru.arc.farm;
 
-import ru.arc.ARC;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import ru.arc.util.ParticleManager;
-import ru.arc.util.TextUtil;
-import ru.arc.util.Utils;
+import java.util.List;
+
 import com.destroystokyo.paper.ParticleBuilder;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
 import com.sk89q.worldguard.WorldGuard;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import com.sk89q.worldguard.protection.regions.RegionContainer;
-import lombok.extern.slf4j.Slf4j;
 import org.bukkit.Bukkit;
 import org.bukkit.Particle;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.event.block.BlockBreakEvent;
-
-import java.util.List;
+import ru.arc.ARC;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
+import ru.arc.util.ParticleManager;
+import ru.arc.util.RandomUtils;
+import ru.arc.util.TextUtil;
 
 import static ru.arc.util.Logging.error;
 
-@Slf4j
 public class Lumbermill {
 
     private final String permission;
@@ -64,7 +62,8 @@ public class Lumbermill {
         }
 
         if (particles) {
-            Particle randomParticle = Utils.random(new Particle[]{Particle.CRIT, Particle.FLAME, Particle.END_ROD});
+            Particle randomParticle = RandomUtils.random(new Particle[]{Particle.CRIT, Particle.FLAME,
+                    Particle.END_ROD});
             ParticleManager.queue(new ParticleBuilder(randomParticle)
                     .location(block.getLocation().toCenterLocation())
                     .count(config.integer("lumbermill-config.particle-count", 5))

@@ -1,19 +1,16 @@
 package ru.arc.autobuild;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import com.destroystokyo.paper.ParticleBuilder;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
-import ru.arc.ARC;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import ru.arc.hooks.HookRegistry;
-import ru.arc.hooks.packetevents.BlockDisplayReq;
-import ru.arc.util.ParticleManager;
-import ru.arc.util.Utils;
-import com.destroystokyo.paper.ParticleBuilder;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
 import com.sk89q.worldedit.math.BlockVector3;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.bukkit.Location;
 import org.bukkit.Particle;
 import org.bukkit.block.Block;
@@ -21,17 +18,18 @@ import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.type.Bed;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
+import ru.arc.ARC;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
+import ru.arc.hooks.HookRegistry;
+import ru.arc.hooks.packetevents.BlockDisplayReq;
+import ru.arc.util.LocationUtils;
+import ru.arc.util.ParticleManager;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
-
+import static ru.arc.util.BlockUtils.rotateBlockData;
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.info;
-import static ru.arc.util.Utils.rotateBlockData;
 
-@Slf4j
 @RequiredArgsConstructor
 public class Display {
 
@@ -41,11 +39,23 @@ public class Display {
     private final ConstructionSite site;
 
     private BukkitTask displayTask;
-    List<Utils.LocationData> borderLocations;
+    List<LocationUtils.LocationData> borderLocations;
     List<Location> centerLocations;
     List<Integer> entityIds = new ArrayList<>();
 
-    Config config = ConfigManager.of(ARC.plugin.getDataPath(), "auto-build.yml");
+    private Config config;
+
+    private Config getConfig() {
+        if (config == null) {
+            if (ARC.plugin == null) {
+                // Return a dummy config for testing
+                return ConfigManager.of(java.nio.file.Paths.get(System.getProperty("java.io.tmpdir")), "auto-build" +
+                        ".yml");
+            }
+            config = ConfigManager.of(ARC.plugin.getDataPath(), "auto-build.yml");
+        }
+        return config;
+    }
 
     public void showBorder(int seconds) {
         stopTask();
@@ -80,26 +90,26 @@ public class Display {
             public void run() {
                 if (integer.addAndGet(10) > seconds * 20) this.cancel();
 
-                Particle particle = config.particle("display.border-particle", Particle.FLAME);
-                int count = config.integer("display.border-particle-count", 1);
-                int countCorner = config.integer("display.border-particle-corner-count", 3);
-                double offset = config.real("display.border-particle-offset", 0.0);
-                double offsetCorner = config.real("display.border-particle-corner-offset", 0.07);
-                for (Utils.LocationData location : borderLocations) {
-                    if (!location.corner() && site.player.getLocation().distanceSquared(location.location()) > 300)
+                Particle particle = getConfig().particle("display.border-particle", Particle.FLAME);
+                int count = getConfig().integer("display.border-particle-count", 1);
+                int countCorner = getConfig().integer("display.border-particle-corner-count", 3);
+                double offset = getConfig().real("display.border-particle-offset", 0.0);
+                double offsetCorner = getConfig().real("display.border-particle-corner-offset", 0.07);
+                for (LocationUtils.LocationData location : borderLocations) {
+                    if (!location.getCorner() && site.player.getLocation().distanceSquared(location.getLocation()) > 300)
                         continue;
                     ParticleManager.queue(new ParticleBuilder(particle)
-                            .location(location.location())
+                            .location(location.getLocation())
                             .extra(0.0)
-                            .offset(location.corner() ? offsetCorner : offset,
-                                    location.corner() ? offsetCorner : offset,
-                                    location.corner() ? offsetCorner : offset)
-                            .count(location.corner() ? countCorner : count)
+                            .offset(location.getCorner() ? offsetCorner : offset,
+                                    location.getCorner() ? offsetCorner : offset,
+                                    location.getCorner() ? offsetCorner : offset)
+                            .count(location.getCorner() ? countCorner : count)
                             .receivers(List.of(site.getPlayer())));
                 }
 
-                Particle centerParticle = config.particle("display.center-particle", Particle.NAUTILUS);
-                count = config.integer("display.center-particle-count", 1);
+                Particle centerParticle = getConfig().particle("display.center-particle", Particle.NAUTILUS);
+                count = getConfig().integer("display.center-particle-count", 1);
                 for (Location location : centerLocations) {
                     if (site.player.getLocation().distanceSquared(location) > 300) continue;
                     ParticleManager.queue(new ParticleBuilder(centerParticle)
@@ -111,7 +121,7 @@ public class Display {
                 }
 
             }
-        }.runTaskTimer(ARC.plugin, 0L, config.integer("display.border-particle-interval", 5));
+        }.runTaskTimer(ARC.plugin, 0L, getConfig().integer("display.border-particle-interval", 5));
     }
 
     private void placeDisplayEntities(int seconds) {
@@ -121,10 +131,11 @@ public class Display {
         if (HookRegistry.packetEventsHook == null) return;
         ConstructionSite.Corners corners = site.getCorners();
 
-        int maxPer10Min = config.integer("display.max-per-10-min", 10);
+        int maxPer10Min = getConfig().integer("display.max-per-10-min", 10);
         Integer curShows = displayCache.getIfPresent(site.player.getUniqueId());
         if(curShows != null && curShows >= maxPer10Min) {
-            site.player.sendMessage(config.componentDef("messages.display-limit-2", "<gray>\uD83D\uDEE0 <red>Превышен лимит показа блоков. Строение не будет показано"));
+            site.player.sendMessage(getConfig().componentDef("messages.display-limit-2", "<gray>\uD83D\uDEE0 " +
+                    "<red>Превышен лимит показа блоков. Строение не будет показано"));
             return;
         }
 
@@ -136,7 +147,7 @@ public class Display {
         final int maxZ = corners.corner2().z();
 
         int totalBlockAmount = (maxX - minX + 1) * (maxY - minY + 1) * (maxZ - minZ + 1);
-        int maxBlocks = config.integer("display.max-blocks", 30_000);
+        int maxBlocks = getConfig().integer("display.max-blocks", 30_000);
 
         List<BlockDisplayReq> reqs = new ArrayList<>();
         loop:
@@ -157,7 +168,9 @@ public class Display {
                     reqs.add(new BlockDisplayReq(location, data));
                     if (reqs.size() >= maxBlocks) {
                         site.player.sendMessage(
-                                config.componentDef("messages.display-limit", "<gray>\uD83D\uDEE0 <red>Слишком много блоков в строении. Показывается лишь часть. <gray>(<amount>/<max>)",
+                                getConfig().componentDef("messages.display-limit", "<gray>\uD83D\uDEE0 <red>Слишком " +
+                                                "много блоков в строении. Показывается лишь часть. <gray>" +
+                                                "(<amount>/<max>)",
                                         "<amount>", String.valueOf(totalBlockAmount),
                                         "<max>", String.valueOf(maxBlocks))
                         );

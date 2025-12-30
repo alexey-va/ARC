@@ -1,23 +1,32 @@
 package ru.arc.common.treasure.impl;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
+import org.jetbrains.annotations.NotNull;
 import ru.arc.ARC;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
 import ru.arc.common.treasure.GiveFlags;
 import ru.arc.common.treasure.Treasure;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
 import ru.arc.hooks.HookRegistry;
 import ru.arc.util.TextUtil;
 import ru.arc.xserver.announcements.AnnounceManager;
 import ru.arc.xserver.playerlist.PlayerManager;
-import lombok.*;
-import lombok.extern.slf4j.Slf4j;
-import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
-import org.jetbrains.annotations.NotNull;
-
-import java.util.*;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.stream.Collectors;
 
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.info;
@@ -27,7 +36,6 @@ import static ru.arc.util.TextUtil.mm;
 @Builder
 @NoArgsConstructor
 @Data
-@Slf4j
 @EqualsAndHashCode(callSuper = true)
 public class TreasureItem extends Treasure {
 

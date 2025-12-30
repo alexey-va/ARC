@@ -1,13 +1,9 @@
 package ru.arc.listeners;
 
-import org.bukkit.scheduler.BukkitRunnable;
-import ru.arc.ARC;
-import ru.arc.audit.AuditManager;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import ru.arc.hooks.HookRegistry;
-import ru.arc.sync.SyncManager;
-import lombok.extern.slf4j.Slf4j;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -16,15 +12,16 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.scheduler.BukkitRunnable;
+import ru.arc.ARC;
+import ru.arc.audit.AuditManager;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
+import ru.arc.sync.SyncManager;
 import ru.arc.treasurechests.TreasureHuntManager;
-
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static ru.arc.util.Logging.info;
 
-@Slf4j
 public class JoinListener implements Listener {
 
     Config config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "misc.yml");
@@ -45,9 +42,6 @@ public class JoinListener implements Listener {
         if (invMap.containsKey(event.getPlayer().getUniqueId())) {
             stripInvulnerable(event.getPlayer());
         }
-        if(HookRegistry.duelsHook != null) {
-            HookRegistry.duelsHook.stopDuelsIfAny(event.getPlayer());
-        }
         TreasureHuntManager.onPlayerQuit(event.getPlayer());
     }
 
@@ -57,9 +51,6 @@ public class JoinListener implements Listener {
         AuditManager.leave(event.getPlayer().getName());
         if (invMap.containsKey(event.getPlayer().getUniqueId())) {
             stripInvulnerable(event.getPlayer());
-        }
-        if(HookRegistry.duelsHook != null) {
-            HookRegistry.duelsHook.stopDuelsIfAny(event.getPlayer());
         }
         TreasureHuntManager.onPlayerQuit(event.getPlayer());
     }

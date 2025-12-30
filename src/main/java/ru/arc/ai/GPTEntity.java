@@ -1,23 +1,26 @@
 package ru.arc.ai;
 
-import ru.arc.configs.Config;
-import ru.arc.util.Common;
-import com.google.common.cache.Cache;
-import com.google.common.cache.CacheBuilder;
-import lombok.SneakyThrows;
-import lombok.extern.slf4j.Slf4j;
-
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import lombok.SneakyThrows;
+import ru.arc.configs.Config;
+import ru.arc.util.Common;
+
 import static ru.arc.util.Logging.error;
 
-@Slf4j
 public class GPTEntity {
 
     Config config;

@@ -1,10 +1,12 @@
 package ru.arc.common.locationpools;
 
-import ru.arc.ARC;
-import ru.arc.common.ServerLocation;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import ru.arc.util.ParticleManager;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+
 import com.destroystokyo.paper.ParticleBuilder;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
@@ -16,13 +18,11 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
+import ru.arc.ARC;
+import ru.arc.common.ServerLocation;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
+import ru.arc.util.ParticleManager;
 
 public class LocationPoolManager {
 
@@ -33,7 +33,16 @@ public class LocationPoolManager {
             .expireAfterAccess(5, TimeUnit.MINUTES)
             .build();
 
-    private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "location-pools.yml");
+    private static Config getConfig() {
+        if (ARC.plugin == null) {
+            // Return a dummy config for testing
+            return ConfigManager.create(java.nio.file.Paths.get(System.getProperty("java.io.tmpdir")), "location" +
+                    "-pools.yml", "test-location-pools");
+        }
+        return ConfigManager.of(ARC.plugin.getDataPath(), "location-pools.yml");
+    }
+
+    private static final Config config = getConfig();
 
     private static BukkitTask showTask;
     private static BukkitTask timeoutTask;
@@ -196,7 +205,9 @@ public class LocationPoolManager {
     public static boolean delete(String id) {
         if (!locationPools.containsKey(id)) return false;
         locationPools.remove(id);
-        ARC.plugin.locationPoolConfig.deleteFile(id);
+        if (ARC.plugin != null && ARC.plugin.locationPoolConfig != null) {
+            ARC.plugin.locationPoolConfig.deleteFile(id);
+        }
         for (UUID uuid : editingPlayers.keySet()) {
             if (editingPlayers.get(uuid).equals(id)) {
                 cancelEditing(uuid, false);

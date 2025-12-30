@@ -1,19 +1,5 @@
 package ru.arc.audit;
 
-import ru.arc.ARC;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import ru.arc.network.repos.RedisRepo;
-import ru.arc.util.Utils;
-import ru.arc.xserver.playerlist.PlayerManager;
-import lombok.extern.slf4j.Slf4j;
-import net.kyori.adventure.audience.Audience;
-import net.kyori.adventure.text.Component;
-import org.bukkit.Bukkit;
-import org.bukkit.OfflinePlayer;
-import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scheduler.BukkitTask;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -22,11 +8,27 @@ import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedDeque;
 
-import static ru.arc.util.Logging.*;
-import static ru.arc.util.TextUtil.mm;
-import static java.nio.file.StandardOpenOption.*;
+import net.kyori.adventure.audience.Audience;
+import net.kyori.adventure.text.Component;
+import org.bukkit.Bukkit;
+import org.bukkit.OfflinePlayer;
+import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
+import ru.arc.ARC;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
+import ru.arc.network.repos.RedisRepo;
+import ru.arc.util.DateUtils;
+import ru.arc.xserver.playerlist.PlayerManager;
 
-@Slf4j
+import static java.nio.file.StandardOpenOption.APPEND;
+import static java.nio.file.StandardOpenOption.CREATE;
+import static java.nio.file.StandardOpenOption.WRITE;
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
+import static ru.arc.util.Logging.warn;
+import static ru.arc.util.TextUtil.mm;
+
 public class AuditManager {
 
     private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "audit.yml");
@@ -195,10 +197,10 @@ public class AuditManager {
                 String counterWithPadding = String.format("%03d", counter + 1);
                 String line = transactionFormat
                         .replace("%counter%", counterWithPadding)
-                        .replace("%date%", Utils.formatDate(transaction.getTimestamp()))
+                        .replace("%date%", DateUtils.formatDate(transaction.getTimestamp()))
                         .replace("%type%", transaction.getType().name())
                         .replace("%amount%", amount)
-                        .replace("%date2%", Utils.formatDate(transaction.getTimestamp2()))
+                        .replace("%date2%", DateUtils.formatDate(transaction.getTimestamp2()))
                         .replace("%comment%", transaction.getComment() == null ? "-" : transaction.getComment());
                 lines.add(line);
             }

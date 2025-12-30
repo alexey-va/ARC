@@ -1,11 +1,12 @@
 package ru.arc.hooks.jobs.guis;
 
-import ru.arc.ARC;
-import ru.arc.configs.Config;
-import ru.arc.hooks.HookRegistry;
-import ru.arc.hooks.jobs.JobsBoost;
-import ru.arc.util.GuiUtils;
-import ru.arc.util.ItemStackBuilder;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
+
 import com.gamingmesh.jobs.Jobs;
 import com.gamingmesh.jobs.container.Job;
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
@@ -14,24 +15,23 @@ import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
 import com.github.stefvanschie.inventoryframework.pane.OutlinePane;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
-import lombok.extern.log4j.Log4j2;
 import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemFlag;
+import ru.arc.ARC;
+import ru.arc.configs.Config;
+import ru.arc.hooks.HookRegistry;
+import ru.arc.hooks.jobs.JobsBoost;
+import ru.arc.util.GuiUtils;
+import ru.arc.util.ItemStackBuilder;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
+import static ru.arc.util.TextUtil.formatAmount;
+import static ru.arc.util.TextUtil.mm;
+import static ru.arc.util.TextUtil.toLegacy;
 
-import static ru.arc.util.TextUtil.*;
-
-@Log4j2
 public class BuyBoostGui extends ChestGui {
 
     Player player;

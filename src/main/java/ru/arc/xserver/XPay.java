@@ -1,15 +1,19 @@
 package ru.arc.xserver;
 
-import ru.arc.ARC;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import lombok.*;
-import lombok.extern.slf4j.Slf4j;
+import java.util.UUID;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
+import lombok.ToString;
 import net.milkbowl.vault.economy.EconomyResponse;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
-
-import java.util.UUID;
+import ru.arc.ARC;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
 
 import static ru.arc.util.Logging.debug;
 import static ru.arc.util.Logging.error;
@@ -17,7 +21,6 @@ import static ru.arc.util.Logging.error;
 @EqualsAndHashCode(callSuper = true)
 @Data
 @ToString(callSuper = true)
-@Slf4j
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor

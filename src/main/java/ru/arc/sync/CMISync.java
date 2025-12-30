@@ -1,10 +1,12 @@
 package ru.arc.sync;
 
-import ru.arc.ARC;
-import ru.arc.sync.base.Context;
-import ru.arc.sync.base.Sync;
-import ru.arc.sync.base.SyncData;
-import ru.arc.sync.base.SyncRepo;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
 import com.Zrips.CMI.CMI;
 import com.Zrips.CMI.Containers.CMIUser;
 import com.Zrips.CMI.Containers.PlayerMail;
@@ -16,18 +18,18 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.extern.log4j.Log4j2;
 import org.bukkit.ChatColor;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
-
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import ru.arc.ARC;
+import ru.arc.sync.base.Context;
+import ru.arc.sync.base.Sync;
+import ru.arc.sync.base.SyncData;
+import ru.arc.sync.base.SyncRepo;
 
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.warn;
 
-@Log4j2
 public class CMISync implements Sync {
 
     SyncRepo<CMIDataDTO> repo;

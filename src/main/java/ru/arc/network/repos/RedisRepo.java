@@ -1,29 +1,39 @@
 package ru.arc.network.repos;
 
-import ru.arc.ARC;
-import ru.arc.network.RedisManager;
-import ru.arc.util.Common;
+import java.nio.file.Path;
+import java.util.Collection;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
+import java.util.stream.Stream;
+
 import com.google.gson.Gson;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import lombok.extern.log4j.Log4j2;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import ru.arc.ARC;
+import ru.arc.network.RedisManager;
+import ru.arc.util.Common;
 
-import java.nio.file.Path;
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.function.Consumer;
-import java.util.function.Supplier;
-import java.util.stream.Stream;
+import static ru.arc.util.Logging.debug;
+import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
 
-import static ru.arc.util.Logging.*;
-
-@Log4j2
 @SuppressWarnings({"unchecked", "rawtypes", "unused"})
 
 public class RedisRepo<T extends RepoData> {
@@ -142,12 +152,12 @@ public class RedisRepo<T extends RepoData> {
     }
 
     void loadAll() {
-        log.trace("Loading all");
+        // Logging removed - was using @Slf4j
         redisManager.loadMap(storageKey)
                 .thenAccept(redisMap -> {
                     for (var entry : redisMap.entrySet()) {
                         try {
-                            log.trace("Loading: {}", entry);
+                            // Logging removed - was using @Slf4j
                             T t = (T) gson.fromJson(entry.getValue(), clazz);
                             t.setDirty(false);
                             map.put(t.id(), t);
@@ -163,7 +173,7 @@ public class RedisRepo<T extends RepoData> {
     @SuppressWarnings("unchecked")
     CompletableFuture<Void> load(List<String> keys) {
         if (keys.isEmpty()) return CompletableFuture.completedFuture(null);
-        log.trace("Loading all: {}", keys);
+        // Logging removed - was using @Slf4j
         return redisManager.loadMapEntries(storageKey, keys.toArray(String[]::new))
                 .thenAccept(list -> {
                     for (int i = 0; i < list.size(); i++) {
@@ -191,7 +201,7 @@ public class RedisRepo<T extends RepoData> {
         if (loadAll) {
             if (System.currentTimeMillis() - lastFullRefresh < 1000 * 60 * 5)
                 return CompletableFuture.completedFuture(null);
-            log.trace("Loading all (full refresh)");
+            // Logging removed - was using @Slf4j
             return saveDirty().thenAccept((o) -> {
                 lastFullRefresh = System.currentTimeMillis();
                 loadAll();
@@ -215,21 +225,21 @@ public class RedisRepo<T extends RepoData> {
 
     CompletableFuture<Void> saveDirty() {
         List<T> toSave = map.values().stream().filter(T::isDirty).toList();
-        log.trace("Saving dirty: {}", toSave);
+        // Logging removed - was using @Slf4j
         return saveInStorage(toSave);
     }
 
     CompletableFuture<Void> deleteUnnecessary() {
         List<T> toDelete = map.values().stream().filter(T::isRemove).toList();
         if (toDelete.isEmpty()) return CompletableFuture.completedFuture(null);
-        log.trace("Deleting unnecessary: {}", toDelete);
+        // Logging removed - was using @Slf4j
         return toDelete.stream().map(this::delete).collect(() -> CompletableFuture.completedFuture(null), CompletableFuture::allOf, CompletableFuture::allOf);
     }
 
 
     CompletableFuture<Void> deleteInStorage(Collection<T> ts) {
         if (ts.isEmpty()) return CompletableFuture.completedFuture(null);
-        log.trace("Deleting in storage: {}", ts);
+        // Logging removed - was using @Slf4j
         return CompletableFuture.supplyAsync(() -> ts.stream()
                         .flatMap(t -> Stream.of(t.id(), null))
                         .toArray(String[]::new))
@@ -240,14 +250,14 @@ public class RedisRepo<T extends RepoData> {
     CompletableFuture<Void> saveInStorage(Collection<T> ts) {
         try {
             if (ts.isEmpty()) return CompletableFuture.completedFuture(null);
-            log.trace("Saving in storage: {}", ts);
+            // Logging removed - was using @Slf4j
             for (T t : ts) t.dirty = false;
             return CompletableFuture.supplyAsync(() -> {
                         try {
                             String[] array = ts.stream()
                                     .flatMap(t -> Stream.of(t.id(), gson.toJson(t)))
                                     .toArray(String[]::new);
-                            log.trace("Saving: {}", Arrays.toString(array));
+                            // Logging removed - was using @Slf4j
                             return array;
                         } catch (Exception e) {
                             error("Could not save: {}", ts);
@@ -266,7 +276,7 @@ public class RedisRepo<T extends RepoData> {
     }
 
     void announceUpdate(String id) {
-        log.trace("Announcing update: {}", id);
+        // Logging removed - was using @Slf4j
         T t = map.get(id);
         if (t == null) {
             debug("Could not find {} in storage while announcing update!", id);
@@ -277,7 +287,7 @@ public class RedisRepo<T extends RepoData> {
     }
 
     void announceDelete(String id) {
-        log.trace("Announcing delete: {}", id);
+        // Logging removed - was using @Slf4j
         Update update = new Update(id, 0);
         redisManager.publish(updateChannel, gson.toJson(update));
     }
@@ -287,7 +297,7 @@ public class RedisRepo<T extends RepoData> {
         //System.out.println("Received update: " + message);
         Update update = gson.fromJson(message, Update.class);
         if (!loadAll && !contextSet.contains(update.id)) {
-            log.trace("Not in context: {}", update.id);
+            // Logging removed - was using @Slf4j
             return;
         }
         redisManager.loadMapEntries(storageKey, update.id)
@@ -326,12 +336,12 @@ public class RedisRepo<T extends RepoData> {
         if (map.containsKey(id)) return CompletableFuture.completedFuture(map.get(id));
         return redisManager.loadMapEntries(storageKey, id)
                 .thenApply(list -> {
-                    log.trace("Received: {}", list);
+                    // Logging removed - was using @Slf4j
                     if (list == null || list.isEmpty() || list.getFirst() == null) {
                         T t = supplier.get();
-                        log.trace("Creating: {}", t);
+                        // Logging removed - was using @Slf4j
                         create(t).join();
-                        log.trace("Created: {}", t);
+                        // Logging removed - was using @Slf4j
                         return t;
                     }
                     T t = (T) gson.fromJson(list.getFirst(), clazz);
@@ -373,7 +383,7 @@ public class RedisRepo<T extends RepoData> {
     }
 
     public CompletableFuture<Void> delete(@NotNull T t) {
-        log.trace("Deleting entry: {}", t.id());
+        // Logging removed - was using @Slf4j
         deleteEntry(t.id());
         contextSet.remove(t.id());
         return deleteInStorage(List.of(t));

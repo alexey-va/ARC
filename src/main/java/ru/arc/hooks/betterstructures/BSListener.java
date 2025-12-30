@@ -1,22 +1,20 @@
 package ru.arc.hooks.betterstructures;
 
-import ru.arc.bschests.PersonalLootManager;
-import com.magmaguy.betterstructures.api.BuildPlaceEvent;
-import com.magmaguy.betterstructures.api.ChestFillEvent;
-import com.magmaguy.betterstructures.config.generators.GeneratorConfigFields;
-import lombok.extern.slf4j.Slf4j;
-import org.bukkit.Chunk;
-import org.bukkit.block.Block;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
-
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentSkipListSet;
 
+import com.magmaguy.betterstructures.api.BuildPlaceEvent;
+import com.magmaguy.betterstructures.api.ChestFillEvent;
+import com.magmaguy.betterstructures.config.generators.GeneratorConfigFields;
+import org.bukkit.Chunk;
+import org.bukkit.block.Block;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import ru.arc.bschests.PersonalLootManager;
+
 import static com.magmaguy.betterstructures.config.generators.GeneratorConfigFields.StructureType.SURFACE;
 
-@Slf4j
 public class BSListener implements Listener {
 
     Set<ChunkCoords> genCoords = new ConcurrentSkipListSet<>();

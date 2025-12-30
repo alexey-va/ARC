@@ -1,12 +1,13 @@
 package ru.arc.misc;
 
-import ru.arc.ARC;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import ru.arc.hooks.HookRegistry;
-import ru.arc.util.GuiUtils;
-import ru.arc.util.ItemStackBuilder;
-import ru.arc.util.TextUtil;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
@@ -14,18 +15,19 @@ import com.github.stefvanschie.inventoryframework.pane.OutlinePane;
 import com.github.stefvanschie.inventoryframework.pane.PaginatedPane;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
-import lombok.extern.slf4j.Slf4j;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
-
-import java.util.*;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
+import ru.arc.ARC;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
+import ru.arc.hooks.HookRegistry;
+import ru.arc.util.GuiUtils;
+import ru.arc.util.ItemStackBuilder;
+import ru.arc.util.TextUtil;
 
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.info;
 
-@Slf4j
 public class JoinMessageGui extends ChestGui {
 
     private static final Config config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "misc.yml");

@@ -1,12 +1,36 @@
 package ru.arc.treasurechests;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
+
 import com.destroystokyo.paper.ParticleBuilder;
 import com.jeff_media.customblockdata.CustomBlockData;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
-import org.bukkit.*;
+import org.bukkit.Color;
+import org.bukkit.FireworkEffect;
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.Particle;
+import org.bukkit.Registry;
+import org.bukkit.Sound;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Firework;
@@ -27,22 +51,15 @@ import ru.arc.common.treasure.TreasurePool;
 import ru.arc.configs.Config;
 import ru.arc.configs.ConfigManager;
 import ru.arc.util.ParticleManager;
-import ru.arc.util.Utils;
+import ru.arc.util.RandomUtils;
 import ru.arc.xserver.announcements.AnnounceManager;
 import ru.arc.xserver.playerlist.PlayerManager;
-
-import java.util.*;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
 
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.warn;
 import static ru.arc.util.TextUtil.mm;
 
 @RequiredArgsConstructor
-@Log4j2
 public class TreasureHunt {
 
     final int chests;
@@ -203,9 +220,9 @@ public class TreasureHunt {
                         FireworkEffect effect = FireworkEffect.builder()
                                 .flicker(ThreadLocalRandom.current().nextBoolean())
                                 .trail(ThreadLocalRandom.current().nextBoolean())
-                                .with(Utils.random(FireworkEffect.Type.values()))
-                                .withColor(Utils.random(colors, 3))
-                                .withFade(Utils.random(colors, 3))
+                                .with(RandomUtils.random(FireworkEffect.Type.values()))
+                                .withColor(RandomUtils.random(colors, 3))
+                                .withFade(RandomUtils.random(colors, 3))
                                 .build();
 
                         FireworkMeta meta = firework.getFireworkMeta();

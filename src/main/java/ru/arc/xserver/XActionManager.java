@@ -1,12 +1,10 @@
 package ru.arc.xserver;
 
-import ru.arc.ARC;
-import lombok.extern.slf4j.Slf4j;
 import org.bukkit.entity.Player;
+import ru.arc.ARC;
 
 import static ru.arc.util.Logging.error;
 
-@Slf4j
 public class XActionManager {
 
     private static XActionMessager messager;

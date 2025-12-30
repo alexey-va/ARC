@@ -1,14 +1,15 @@
 package ru.arc.commands.framework;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.extern.slf4j.Slf4j;
 
-import java.util.*;
+import static ru.arc.commands.framework.ArgType.guessAndCast;
 
-import static ru.arc.commands.framework.ArgType.*;
-
-@Slf4j
 @Data
 public class CommandContext {
 

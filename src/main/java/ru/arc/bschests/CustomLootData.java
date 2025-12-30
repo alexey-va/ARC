@@ -1,13 +1,16 @@
 package ru.arc.bschests;
 
-import ru.arc.network.repos.ItemList;
-import ru.arc.network.repos.RepoData;
-import lombok.*;
-import lombok.extern.slf4j.Slf4j;
-import org.bukkit.inventory.ItemStack;
-
 import java.util.Objects;
 import java.util.UUID;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
+import org.bukkit.inventory.ItemStack;
+import ru.arc.network.repos.ItemList;
+import ru.arc.network.repos.RepoData;
 
 import static ru.arc.util.Logging.error;
 
@@ -16,7 +19,6 @@ import static ru.arc.util.Logging.error;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-@Slf4j
 public class CustomLootData extends RepoData<CustomLootData> {
 
     private static final long TTL = 1000 * 60 * 60 * 24 * 7; // 7 days

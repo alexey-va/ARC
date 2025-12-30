@@ -1,17 +1,20 @@
 package ru.arc.hooks.jobs;
 
-import ru.arc.network.repos.RepoData;
-import com.gamingmesh.jobs.container.Job;
-import com.google.common.cache.Cache;
-import com.google.common.cache.CacheBuilder;
-import lombok.*;
-import lombok.extern.log4j.Log4j2;
-
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+
+import com.gamingmesh.jobs.container.Job;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
+import lombok.SneakyThrows;
+import ru.arc.network.repos.RepoData;
 
 import static ru.arc.util.Logging.error;
 
@@ -19,7 +22,6 @@ import static ru.arc.util.Logging.error;
 @EqualsAndHashCode(callSuper = false)
 @AllArgsConstructor
 @NoArgsConstructor
-@Log4j2
 public class BoostData extends RepoData<BoostData> {
     UUID player;
     Set<JobsBoost> boosts = new HashSet<>();

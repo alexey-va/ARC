@@ -1,20 +1,18 @@
 package ru.arc.hooks;
 
-import ru.arc.ARC;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import ru.arc.xserver.playerlist.PlayerManager;
-import lombok.extern.slf4j.Slf4j;
+import java.util.List;
+import java.util.Map;
+
 import me.clip.placeholderapi.PlaceholderAPI;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
+import ru.arc.ARC;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
+import ru.arc.xserver.playerlist.PlayerManager;
 
-import java.util.List;
-import java.util.Map;
-
-@Slf4j
 public class PAPIHook extends PlaceholderExpansion {
 
     static Config config = ConfigManager.of(ARC.plugin.getDataPath(), "misc.yml");
