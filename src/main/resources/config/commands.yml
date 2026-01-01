@@ -1,0 +1,407 @@
+# ============================================================
+# ARC Plugin - Конфигурация команд
+# ============================================================
+# Все команды и сообщения можно настроить здесь.
+# Поддерживается формат MiniMessage для сообщений.
+# Документация: https://docs.advntr.dev/minimessage/format.html
+# ============================================================
+
+# ============================================================
+# МЕТАДАННЫЕ КОМАНД
+# ============================================================
+# Каждая команда может иметь:
+#   name: Имя команды (используется для маршрутизации)
+#   permission: Право доступа (пустое = доступно всем)
+#   description: Краткое описание
+#   usage: Синтаксис использования
+#   player-only: Только для игроков (true/false)
+#   aliases: Альтернативные имена
+# ============================================================
+
+commands:
+  # ----------------------------------------------------------
+  # Справка
+  # ----------------------------------------------------------
+  
+  help:
+    name: "help"
+    permission: ""
+    description: "Показать справку по командам"
+    usage: "/arc help [команда]"
+    player-only: false
+    aliases: [ "?", "h" ]
+
+  # ----------------------------------------------------------
+  # Администраторские команды
+  # ----------------------------------------------------------
+  
+  reload:
+    name: "reload"
+    permission: "arc.admin"
+    description: "Перезагрузить конфигурацию плагина"
+    usage: "/arc reload"
+    player-only: false
+    aliases: [ "rl" ]
+  
+  repo:
+    name: "repo"
+    permission: "arc.admin"
+    description: "Управление Redis репозиториями"
+    usage: "/arc repo [status|save|size]"
+    player-only: false
+    aliases: [ ]
+  
+  logger:
+    name: "logger"
+    permission: "arc.admin"
+    description: "Установить уровень логирования"
+    usage: "/arc logger <DEBUG|INFO|WARN|ERROR>"
+    player-only: false
+    aliases: [ "log" ]
+  
+  emshop:
+    name: "emshop"
+    permission: "arc.admin"
+    description: "Открыть магазин EliteMobs"
+    usage: "/arc emshop <player|reset> [gear|trinket]"
+    player-only: false
+    aliases: [ ]
+  
+  # ----------------------------------------------------------
+  # Управление контентом
+  # ----------------------------------------------------------
+  
+  treasures:
+    name: "treasures"
+    permission: "arc.treasures.admin"
+    description: "Управление пулами наград"
+    usage: "/arc treasures [pool_id] [действие] [аргументы...]"
+    player-only: false
+    aliases: [ "tr" ]
+  
+  hunt:
+    name: "hunt"
+    permission: "arc.treasure-hunt"
+    description: "Управление охотой на сокровища"
+    usage: "/arc hunt [status|types|start|stop|stopall]"
+    player-only: false
+    aliases: [ "th" ]
+  
+  locpool:
+    name: "locpool"
+    permission: "arc.locpool.admin"
+    description: "Управление пулами локаций"
+    usage: "/arc locpool [edit|delete] [pool_id]"
+    player-only: true
+    aliases: [ "lp" ]
+  
+  # ----------------------------------------------------------
+  # Игровые механики
+  # ----------------------------------------------------------
+  
+  audit:
+    name: "audit"
+    permission: "arc.audit"
+    description: "Просмотр и управление аудитом игроков"
+    usage: "/arc audit <player|clearall> [page] [filter]"
+    player-only: false
+    aliases: [ ]
+  
+  jobsboosts:
+    name: "jobsboosts"
+    permission: "arc.jobsboosts"
+    description: "Управление бустами работ"
+    usage: "/arc jobsboosts [player|reset <player>]"
+    player-only: false
+    aliases: [ "jb" ]
+  
+  respawnonrtp:
+    name: "respawnonrtp"
+    permission: "arc.rtp-respawn"
+    description: "Добавить игрока в список RTP-респауна"
+    usage: "/arc respawnonrtp <player>"
+    player-only: false
+    aliases: [ ]
+  
+  # ----------------------------------------------------------
+  # GUI команды
+  # ----------------------------------------------------------
+  
+  baltop:
+    name: "baltop"
+    permission: "arc.baltop"
+    description: "Открыть таблицу лидеров по балансу"
+    usage: "/arc baltop"
+    player-only: true
+    aliases: [ ]
+  
+  board:
+    name: "board"
+    permission: "arc.board"
+    description: "Открыть настройки скорборда"
+    usage: "/arc board"
+    player-only: true
+    aliases: [ ]
+  
+  joinmessage:
+    name: "joinmessage"
+    permission: "arc.join-message-gui"
+    description: "Настроить сообщение при входе"
+    usage: "/arc joinmessage"
+    player-only: true
+    aliases: [ "jmsg" ]
+  
+  quitmessage:
+    name: "quitmessage"
+    permission: "arc.join-message-gui"
+    description: "Настроить сообщение при выходе"
+    usage: "/arc quitmessage"
+    player-only: true
+    aliases: [ "qmsg" ]
+  
+  # ----------------------------------------------------------
+  # Новые команды
+  # ----------------------------------------------------------
+  
+  test:
+    name: "test"
+    permission: "arc.test"
+    description: "Команды для отладки"
+    usage: "/arc test <nbt|leaf|ploot|blockdata>"
+    player-only: true
+    aliases: [ ]
+  
+  buildbook:
+    name: "buildbook"
+    permission: "arc.command.buildbook"
+    description: "Создать книгу строительства"
+    usage: "/arc buildbook <building> <model-id> [rotation] [y-offset] [name...]"
+    player-only: true
+    aliases: [ "bb" ]
+  
+  eliteloot:
+    name: "eliteloot"
+    permission: "arc.eliteloot"
+    description: "Управление декоративным лутом"
+    usage: "/arc eliteloot <list|add> [weight]"
+    player-only: true
+    aliases: [ "el" ]
+  
+  invest:
+    name: "invest"
+    permission: "arc.invest"
+    description: "Торговля акциями"
+    usage: "/arc invest [gui|list|buy|sell|portfolio|history]"
+    player-only: true
+    aliases: [ "stocks", "stock", "биржа" ]
+  
+  store:
+    name: "store"
+    permission: "arc.store"
+    description: "Просмотр хранилища"
+    usage: "/arc store [player|dump]"
+    player-only: true
+    aliases: [ ]
+  
+  giveboost:
+    name: "giveboost"
+    permission: "arc.admin.givejobsboost"
+    description: "Выдать буст Jobs игроку"
+    usage: "/arc giveboost <player> <job|all> <boost> <type> <duration> [id]"
+    player-only: false
+    aliases: [ "gb" ]
+  
+  soundfollow:
+    name: "soundfollow"
+    permission: "arc.sound-follow"
+    description: "Проиграть звук игроку"
+    usage: "/arc soundfollow <player> <namespace:sound>"
+    player-only: false
+    aliases: [ "sf" ]
+
+# ============================================================
+# СООБЩЕНИЯ
+# ============================================================
+# Все сообщения поддерживают формат MiniMessage.
+# Плейсхолдеры: %placeholder_name%
+# 
+# Примеры MiniMessage:
+#   <red>Красный текст
+#   <gradient:gold:yellow>Градиент</gradient>
+#   <hover:show_text:'Подсказка'>Наведи</hover>
+#   <click:run_command:'/arc reload'>Кликни</click>
+# ============================================================
+
+messages:
+  # ----------------------------------------------------------
+  # Общие сообщения
+  # ----------------------------------------------------------
+  common:
+    no-permission: "<red>У вас нет прав для этой команды!"
+    player-only: "<red>Эта команда доступна только игрокам!"
+    player-not-found: "<red>Игрок <white>%player%<red> не найден!"
+    unknown-action: "<red>Неизвестное действие: <white>%action%"
+    usage: "<red>Использование: <gray>%usage%"
+    hook-not-loaded: "<red>%hook% не загружен!"
+  
+  # ----------------------------------------------------------
+  # Главная команда /arc
+  # ----------------------------------------------------------
+  arc:
+    usage: "<red>Использование: <gray>/arc <команда> [аргументы...]"
+    available: "<gray>Доступные: <white>%list%"
+    unknown-command: "<red>Неизвестная команда: <white>%command%"
+  
+  # ----------------------------------------------------------
+  # /arc reload
+  # ----------------------------------------------------------
+  reload:
+    success: "<gold>Перезагрузка успешна!"
+  
+  # ----------------------------------------------------------
+  # /arc repo
+  # ----------------------------------------------------------
+  repo:
+    saved: "<green>Все репозитории сохранены!"
+    size: "<gray>%name%: <white>%bytes% байт"
+    total: "<yellow>Итого: <white>%total% байт"
+  
+  # ----------------------------------------------------------
+  # /arc logger
+  # ----------------------------------------------------------
+  logger:
+    level-set: "<gray>Уровень логов установлен на <white>%level%<gray>!"
+    invalid-level: "<red>Неверный уровень логов: <white>%level%"
+    available-levels: "<gray>Доступные уровни: <white>%levels%"
+  
+  # ----------------------------------------------------------
+  # /arc locpool
+  # ----------------------------------------------------------
+  locpool:
+    list: "<gray>Текущие пулы локаций: <white>%pools%"
+    not-editing: "<gray>Вы не редактируете никакой пул локаций!"
+    editing-cancelled: "<gray>Редактирование пула <white>%pool_id%<gray> отменено!"
+    editing-started: "<gray>Вы начали редактировать пул <white>%pool_id%<gray>! Золотой блок = добавить, Красный блок = удалить."
+    deleted: "<gray>Пул <white>%pool_id%<gray> удален успешно!"
+    not-found: "<red>Пул <white>%pool_id%<red> не найден!"
+    specify-pool: "<gray>Укажите пул локаций!"
+  
+  # ----------------------------------------------------------
+  # /arc hunt
+  # ----------------------------------------------------------
+  hunt:
+    started: "<green>Охота на сокровища запущена!"
+    stopped: "<gray>Охота на сокровища остановлена!"
+    not-found: "<red>Охота на сокровища не найдена!"
+    type-not-found: "<red>Тип охоты на сокровища не найден!"
+    pool-not-found: "<red>Пул локаций <white>%pool_id%<red> не найден!"
+    not-enough-args: "<red>Недостаточно аргументов! <gray>Синтаксис: /arc hunt start <pool_id> <chests> <namespace> <treasure_pool>"
+    invalid-chests: "<red>Неверное количество сундуков: <white>%value%"
+    specify-pool: "<red>Укажите пул локаций для остановки!"
+    error: "<red>Ошибка выполнения команды!"
+  
+  # ----------------------------------------------------------
+  # /arc treasures
+  # ----------------------------------------------------------
+  treasures:
+    reloaded: "<green>Награды перезагружены!"
+    pool-not-found: "<red>Пул <white>%pool_id%<red> не найден!"
+    pool-creating: "<yellow>Пул <white>%pool_id%<yellow> не найден! Создаём..."
+    no-item-in-hand: "<red>В руке нет предмета!"
+    no-target-block: "<red>Не найден блок!"
+    item-added: "<green>Предмет <white>%item%<green> добавлен в пул <white>%pool_id%<green>!"
+    item-already-added: "<yellow>Предмет <white>%item%<yellow> уже добавлен в пул <white>%pool_id%<yellow>!"
+    items-added: "<green>%amount% предметов добавлены в пул <white>%pool_id%<green>!"
+    subpool-added: "<green>Сабпул <white>%subpool_id%<green> добавлен в пул <white>%pool_id%<green>!"
+    subpool-already-added: "<yellow>Сабпул <white>%subpool_id%<yellow> уже добавлен в пул <white>%pool_id%<yellow>!"
+    pool-empty: "<red>Пул <white>%pool_id%<red> пуст!"
+    given: "<green>Награда выдана игроку <white>%player%<green>!"
+  
+  # ----------------------------------------------------------
+  # /arc emshop
+  # ----------------------------------------------------------
+  emshop:
+    reset: "<green>Магазин EliteMobs сброшен!"
+  
+  # ----------------------------------------------------------
+  # /arc jobsboosts
+  # ----------------------------------------------------------
+  jobsboosts:
+    reset: "<green>Бусты сброшены для игрока: <white>%player%"
+    specify-player: "<red>Укажите имя игрока!"
+    player-not-found-or-console: "<red>Игрок не найден или вы консоль!"
+  
+  # ----------------------------------------------------------
+  # /arc audit
+  # ----------------------------------------------------------
+  audit:
+    cleared: "<green>Аудит полностью очищен!"
+    cleared-for: "<green>Аудит очищен для игрока <white>%player%<green>!"
+    invalid-page: "<red>Неверный формат страницы: <white>%text%"
+  
+  # ----------------------------------------------------------
+  # /arc respawnonrtp
+  # ----------------------------------------------------------
+  rtp:
+    added: "<green>Игрок <white>%player%<green> добавлен в список RTP-респауна!"
+  
+  # ----------------------------------------------------------
+  # /arc test
+  # ----------------------------------------------------------
+  test:
+    hello: "<gray>Hello, World!"
+    no-item: "<red>В руке нет предмета!"
+    no-block: "<red>Блок не найден!"
+    nbt-header: "<gray>NBT данные:"
+    leaf-blobs: "<gray>Плавающие блобы: <white>%count%"
+    leaf-decay: "<gray>Должен decay: <white>%value%"
+    block-info: "<gray>Блок: <white>%block%"
+    no-data: "<gray>Нет CustomBlockData"
+  
+  # ----------------------------------------------------------
+  # /arc buildbook
+  # ----------------------------------------------------------
+  buildbook:
+    not-found: "<red>Строение <white>%name%<red> не найдено!"
+    invalid-model: "<red>Неверный model-id: <white>%value%"
+  
+  # ----------------------------------------------------------
+  # /arc eliteloot
+  # ----------------------------------------------------------
+  eliteloot:
+    no-item: "<red>В руке нет предмета!"
+    not-supported: "<red>Этот предмет не поддерживается EliteLoot"
+    item-type: "<gray>Тип предмета: <white>%type%"
+    already-added: "<red>Этот предмет уже добавлен в EliteLoot"
+    added: "<green>Декор добавлен в EliteLoot!"
+  
+  # ----------------------------------------------------------
+  # /arc invest
+  # ----------------------------------------------------------
+  invest:
+    no-symbol: "<red>Укажите символ акции: -s:SYMBOL"
+    stock-not-found: "<red>Акция <white>%symbol%<red> не найдена!"
+    no-uuid: "<red>Укажите UUID позиции: -uuid:UUID"
+  
+  # ----------------------------------------------------------
+  # /arc store
+  # ----------------------------------------------------------
+  store:
+    dumped: "<gray>Содержимое хранилища выведено в консоль."
+    invalid-uuid: "<red>Неверный UUID: <white>%uuid%"
+  
+  # ----------------------------------------------------------
+  # /arc giveboost
+  # ----------------------------------------------------------
+  giveboost:
+    invalid-boost: "<red>Неверное значение буста: <white>%value%"
+    invalid-type: "<red>Неверный тип буста: <white>%value%<gray>. Доступные: %types%"
+    invalid-duration: "<red>Неверный формат длительности: <white>%value%<gray>. Используйте: 1s, 1m, 1h, 1d"
+    success: "<green>Буст добавлен игроку <white>%player%<green>!"
+  
+  # ----------------------------------------------------------
+  # /arc soundfollow
+  # ----------------------------------------------------------
+  soundfollow:
+    invalid-sound: "<red>Неверный формат звука: <white>%sound%"
+    played: "<gray>Звук <white>%sound%<gray> проигран игроку <white>%player%"

@@ -1,12 +1,12 @@
 package ru.arc.eliteloot;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 import lombok.Getter;
 import lombok.Setter;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
-
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Setter
 public class EliteLootManager {
@@ -31,6 +31,25 @@ public class EliteLootManager {
         return toLootType(stack.getType());
     }
 
+    /**
+     * Adds a new decor item to the pool and config.
+     * Helper method for Kotlin interop.
+     */
+    public static boolean addDecorItem(LootType lootType, Material material, double weight, int modelId,
+                                       org.bukkit.Color color, String iaNamespace, String iaId) {
+        DecorItem decorItem = new DecorItem(material, weight, modelId, color, iaNamespace, iaId);
+
+        DecorPool pool = map.computeIfAbsent(lootType, k -> new DecorPool());
+
+        if (pool.contains(decorItem)) {
+            return false; // Already added
+        }
+
+        eliteLootConfigParser.addDecor(lootType, decorItem);
+        pool.add(decorItem, weight);
+        return true;
+    }
+    
     public static LootType toLootType(Material material) {
         return switch (material) {
             case WOODEN_AXE, STONE_AXE, IRON_AXE, GOLDEN_AXE, DIAMOND_AXE, NETHERITE_AXE -> LootType.AXE;

@@ -112,4 +112,28 @@ public class XCommand extends XAction {
         PLAYER,
         CONSOLE
     }
+
+    /**
+     * Creates a new XCommand with the given parameters.
+     * Use this instead of the Lombok builder for Kotlin compatibility.
+     */
+    public static XCommand create(
+            String command,
+            Sender sender,
+            String playerName,
+            UUID playerUuid,
+            int ticksTimeout,
+            Integer ticksDelay,
+            Set<String> servers
+    ) {
+        XCommand xCommand = new XCommand();
+        xCommand.command = command;
+        xCommand.sender = sender != null ? sender : Sender.CONSOLE;
+        xCommand.playerName = playerName;
+        xCommand.playerUuid = playerUuid;
+        xCommand.ticksTimeout = ticksTimeout > 0 ? ticksTimeout : 100;
+        xCommand.ticksDelay = ticksDelay != null ? ticksDelay : 40;
+        xCommand.servers = servers;
+        return xCommand;
+    }
 }

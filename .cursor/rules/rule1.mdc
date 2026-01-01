@@ -1,0 +1,210 @@
+---
+alwaysApply: true
+---
+# Правила для разработки Minecraft плагинов на Java/Kotlin
+
+## Общие принципы кода
+
+1. Используй чистую архитектуру с разделением на слои: API, Core, Bukkit/Spigot
+2. Применяй Dependency Injection через конструкторы
+3. Избегай статических методов и синглтонов где возможно
+4. Создавай интерфейсы для всех сервисов и менеджеров
+5. Один класс = одна ответственность (SOLID)
+6. Предпочитай композицию наследованию
+7. Максимальная длина метода: 30 строк
+8. Максимальная сложность класса: 200 строк
+
+## ПРИОРИТЕТ: Kotlin over Java
+
+9. ВСЕГДА предлагай переписать код на Kotlin если это возможно
+10. Новые классы пиши на Kotlin по умолчанию
+11. При рефакторинге Java кода - предлагай миграцию на Kotlin
+12. Используй Kotlin фичи: data classes, sealed classes, extension functions, coroutines
+13. Не переписывай на Kotlin только если:
+    - Это часть публичного Java API для других плагинов
+    - Есть специфичные Java библиотеки без Kotlin поддержки
+14. Kotlin interop с Java должен быть seamless (@JvmStatic, @JvmOverloads где нужно)
+
+## КРИТИЧНО: Правила тестирования
+
+15. НИКОГДА не используй @Ignore/@Disabled - если тест не работает, РЕФАКТОРИ код
+16. Если что-то сложно замокать - это признак плохой архитектуры, нужен рефакторинг
+17. Код должен быть тестируемым по дизайну
+18. Используй AAA паттерн: Arrange, Act, Assert
+19. Один тест = одна проверка
+20. Имена тестов: should_ExpectedBehavior_When_Condition (Java) или `should do something when condition`(Kotlin)
+21. Минимум 80% покрытия для бизнес-логики
+22. Используй JUnit 5, Mockito/MockK, MockBukkit
+23. В Kotlin тестах используй MockK вместо Mockito
+
+## Изоляция Bukkit API
+
+24. Создавай интерфейсы-обертки для Bukkit зависимостей
+25. НЕ используй прямые вызовы Bukkit.getServer(), Bukkit.getPlayer() и т.д.
+26. Инжекти зависимости через конструкторы, а не получай их из статических методов
+27. Пример Java:
+    - ПЛОХО: Player player = Bukkit.getPlayer(uuid);
+    - ХОРОШО: private final PlayerProvider playerProvider; // инжектится в конструктор
+28. Пример Kotlin:
+    - ПЛОХО: val player = Bukkit.getPlayer(uuid)
+    - ХОРОШО: class Service(private val playerProvider: PlayerProvider)
+
+## Когда тест не работает - план действий
+
+29. ❌ НЕ добавлять @Ignore
+30. ❌ НЕ мокать всё подряд с помощью PowerMock
+31. ✅ Выделить интерфейс для тестируемости
+32. ✅ Добавить слой абстракции
+33. ✅ Упростить зависимости
+34. ✅ Разбить класс на меньшие компоненты
+35. ✅ Рассмотреть переписывание на Kotlin для лучшей тестируемости
+36. Если нужно замокать больше 3 зависимостей - это сигнал для рефакторинга
+
+## Асинхронность и потоки
+
+37. НЕ вызывай Bukkit API из async потоков
+38. Используй BukkitScheduler для синхронизации с main thread
+39. В Java используй CompletableFuture для I/O операций
+40. В Kotlin используй Coroutines с правильными dispatchers
+41. Документируй thread-safety
+42. Пример Kotlin async:
+    suspend fun loadData(uuid: UUID) = withContext(Dispatchers.IO) { repository.load(uuid) }
+
+## Обработка ошибок
+
+43. Используй checked exceptions для recoverable ошибок (Java)
+44. В Kotlin предпочитай Result<T> или Arrow Either вместо exceptions где возможно
+45. Runtime exceptions для программных ошибок
+46. Всегда логируй с контекстом: log.error("Failed for UUID: {}", uuid, exception)
+47. НЕ глотай исключения молча
+48. Используй SLF4J для логирования (или kotlin-logging обертку в Kotlin)
+
+## База данных
+
+49. Всегда используй connection pooling (HikariCP)
+50. Prepared statements для всех запросов
+51. Batch операции где возможно
+52. Все DB операции делай async (CompletableFuture в Java, suspend fun в Kotlin)
+53. В Kotlin используй Exposed или ktorm для type-safe SQL
+
+## Производительность
+
+54. Кешируй часто используемые данные
+55. Избегай работы с коллекциями в main thread
+56. Обработчики событий должны быть легковесными
+57. Тяжелую логику выноси в сервисы
+58. В Kotlin используй inline functions и sequences для оптимизации
+
+## Код-стайл Java
+
+59. Классы: PascalCase (PlayerManager)
+60. Методы/переменные: camelCase (getPlayerData)
+61. Константы: UPPER_SNAKE_CASE (MAX_PLAYERS)
+62. Все public методы и классы документируй через JavaDoc
+
+## Код-стайл Kotlin
+
+63. Используй идиоматичный Kotlin стиль
+64. val вместо var где возможно
+65. Используй data classes дляDTO
+66. Используй sealed classes для state/результатов
+67. Extension functions вместо utility классов
+68. Используй named arguments для читаемости
+69. Делегаты (by lazy, by) где уместно
+70. KDoc для документации
+
+## Конфигурация
+
+71. Валидируй все значения при загрузке
+72. Предоставляй defaults для всех опций
+73. Комментируй каждую опцию в config
+74. В Kotlin используй @Serializable data classes для конфигов
+
+## Примеры миграции Java -> Kotlin
+
+Java:
+public class EconomyService {
+    private final EconomyRepository repository;
+    
+    public EconomyService(EconomyRepository repository) {
+        this.repository = Objects.requireNonNull(repository);
+    }
+    
+    public CompletableFuture<BigDecimal> addMoney(UUID playerId, BigDecimal amount) {
+        if (amount.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Amount must be positive");
+        }
+        return repository.updateBalance(playerId, balance -> balance.add(amount));
+    }
+}
+
+Kotlin (ПРЕДПОЧТИТЕЛЬНО):
+class EconomyService(
+    private val repository: EconomyRepository
+) {
+    suspend fun addMoney(playerId: UUID, amount: BigDecimal): BigDecimal {
+        require(amount > BigDecimal.ZERO) { "Amount must be positive" }
+        return repository.updateBalance(playerId) { it + amount }
+    }
+}
+
+## Kotlin специфичные паттерны
+
+75. Используй scope functions (let, run, apply, also, with) правильно
+76. Используй when вместо множественных if-else
+77. Используй destructuring где уместно: val (x, y, z) = location
+78. Extension functions для Bukkit API: fun Player.sendColoredMessage(msg: String)
+79. Используй inline classes для type-safe примитивов (value class PlayerId(val uuid: UUID))
+80. Делегируй в интерфейсы: class MyManager(impl: SomeInterface) : SomeInterface by impl
+
+## Checklist перед коммитом
+
+- Все тесты проходят БЕЗ @Ignore
+- Нет warnings от компилятора
+- Код отформатирован (google-java-format или ktlint)
+- JavaDoc/KDoc для public API
+- Нет TODO в коде
+- 80%+ покрытие тестами для новой логики
+- Рассмотрена возможность использования Kotlin
+- В Kotlin: нет !! (not-null assertion), используй безопасные вызовы
+
+## Когда предлагать Kotlin
+
+81. Новый класс/модуль - ВСЕГДА пиши на Kotlin
+82. Рефакторинг существующего Java класса - предложи миграцию на Kotlin
+83. Класс с большим количеством boilerplate кода - мигрируй на Kotlin (data class экономит ~70% кода)
+84. Много null-checks - Kotlin null-safety поможет
+85. Сложная работа с коллекциями - Kotlin collections API мощнее
+86. Async код - coroutines проще чем CompletableFuture
+87. Builder паттерн - замени на Kotlin DSL или named arguments
+
+## Interop Java-Kotlin
+
+88. Для Java вызовов используй @JvmStatic в companion object
+89. @JvmOverloads для default параметров доступных из Java
+90. @JvmField для публичных полей без геттеров
+91. @file:JvmName для контроля имени класса utility файлов
+92. Избегай Kotlin-only фич в публичном API (inline classes, suspend fun)
+
+## Пример идеального Kotlin класса
+
+class EconomyService(
+    private val repository: EconomyRepository,
+    private val eventPublisher: EventPublisher
+) {
+    private val logger = KotlinLogging.logger {}
+    
+    /**
+     * Adds money to player balance.
+     * @throws IllegalArgumentException if amount is negative
+     */
+    suspend fun addMoney(playerId: UUID, amount: BigDecimal): Result<BigDecimal> = runCatching {
+        require(amount > BigDecimal.ZERO) { "Amount must be positive" }
+        
+        repository.updateBalance(playerId) { it + amount }
+            .also { newBalance ->
+                eventPublisher.publish(MoneyAddedEvent(playerId, amount))
+                logger.debug { "Added $amount to player $playerId, new balance: $newBalance" }
+            }
+    }
+}

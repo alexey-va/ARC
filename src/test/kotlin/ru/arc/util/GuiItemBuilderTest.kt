@@ -17,11 +17,11 @@ class GuiItemBuilderTest : TestBase() {
     @BeforeEach
     override fun setUpBase() {
         super.setUpBase()
+        assertNotNull(plugin, "Plugin must be loaded for tests")
     }
 
     @Test
     fun testBuildWithStack() {
-        if (plugin == null) return
         val stack = ItemStackMock(Material.DIAMOND, 1)
         val builder = GuiItemBuilder(stack)
         val guiItem = builder.build()
@@ -32,7 +32,6 @@ class GuiItemBuilderTest : TestBase() {
 
     @Test
     fun testBuildWithClickEvent() {
-        if (plugin == null) return
         val stack = ItemStackMock(Material.DIAMOND, 1)
         var clicked = false
         val clickEvent: Consumer<InventoryClickEvent> = Consumer { clicked = true }
@@ -42,13 +41,11 @@ class GuiItemBuilderTest : TestBase() {
         val guiItem = builder.build()
 
         assertNotNull(guiItem, "GuiItem should not be null")
-        // Note: We can't easily test the click event without a real inventory click
         assertTrue(true, "Builder should accept click event")
     }
 
     @Test
     fun testBuildWithClickEventWithStack() {
-        if (plugin == null) return
         val stack = ItemStackMock(Material.DIAMOND, 1)
         var receivedStack: org.bukkit.inventory.ItemStack? = null
         val clickEvent = java.util.function.BiConsumer<InventoryClickEvent, org.bukkit.inventory.ItemStack> { _, s ->
@@ -65,7 +62,6 @@ class GuiItemBuilderTest : TestBase() {
 
     @Test
     fun testUpdateStack() {
-        if (plugin == null) return
         val stack1 = ItemStackMock(Material.DIAMOND, 1)
         val stack2 = ItemStackMock(Material.EMERALD, 1)
 
@@ -79,7 +75,6 @@ class GuiItemBuilderTest : TestBase() {
 
     @Test
     fun testBuilderChaining() {
-        if (plugin == null) return
         val stack = ItemStackMock(Material.DIAMOND, 1)
         var clicked = false
         val clickEvent: Consumer<InventoryClickEvent> = Consumer { clicked = true }
@@ -96,7 +91,6 @@ class GuiItemBuilderTest : TestBase() {
 
     @Test
     fun testBuildWithoutClickEvent() {
-        if (plugin == null) return
         val stack = ItemStackMock(Material.DIAMOND, 1)
         val builder = GuiItemBuilder(stack)
         val guiItem = builder.build()
@@ -105,4 +99,3 @@ class GuiItemBuilderTest : TestBase() {
         assertEquals(stack, guiItem.item, "Item should match")
     }
 }
-

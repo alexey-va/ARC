@@ -29,7 +29,6 @@ class UtilsTest : TestBase() {
 
     @Test
     fun testSplitNormal() {
-        if (plugin == null) return // Skip if plugin not loaded
         val stack = ItemStackMock(Material.DIAMOND, 64)
         val result = ItemUtils.split(stack, 32)
 
@@ -39,7 +38,6 @@ class UtilsTest : TestBase() {
 
     @Test
     fun testSplitMultipleStacks() {
-        if (plugin == null) return // Skip if plugin not loaded
         val stack = ItemStackMock(Material.DIAMOND, 64)
         val result = ItemUtils.split(stack, 100)
 
@@ -50,7 +48,6 @@ class UtilsTest : TestBase() {
 
     @Test
     fun testSplitExactMaxStack() {
-        if (plugin == null) return // Skip if plugin not loaded
         val stack = ItemStackMock(Material.DIAMOND, 64)
         val result = ItemUtils.split(stack, 64)
 
@@ -60,7 +57,6 @@ class UtilsTest : TestBase() {
 
     @Test
     fun testSplitMoreThanMaxStack() {
-        if (plugin == null) return // Skip if plugin not loaded
         val stack = ItemStackMock(Material.DIAMOND, 64)
         val result = ItemUtils.split(stack, 128)
 
@@ -71,7 +67,6 @@ class UtilsTest : TestBase() {
 
     @Test
     fun testSplitZero() {
-        if (plugin == null) return // Skip if plugin not loaded
         val stack = ItemStackMock(Material.DIAMOND, 64)
         val result = ItemUtils.split(stack, 0)
 
@@ -87,7 +82,6 @@ class UtilsTest : TestBase() {
 
     @Test
     fun testSplitSmallStack() {
-        if (plugin == null) return // Skip if plugin not loaded
         val stack = ItemStackMock(Material.DIAMOND, 10)
         val result = ItemUtils.split(stack, 5)
 
@@ -97,7 +91,6 @@ class UtilsTest : TestBase() {
 
     @Test
     fun testSplitNonStackable() {
-        if (plugin == null) return // Skip if plugin not loaded
         val stack = ItemStackMock(Material.DIAMOND_SWORD, 1)
         val result = ItemUtils.split(stack, 5)
 
@@ -479,7 +472,6 @@ class UtilsTest : TestBase() {
 
     @Test
     fun testSplitPreservesMaterial() {
-        if (plugin == null) return // Skip if plugin not loaded
         val stack = ItemStackMock(Material.DIAMOND, 64)
         val result = ItemUtils.split(stack, 32)
 
@@ -490,7 +482,6 @@ class UtilsTest : TestBase() {
 
     @Test
     fun testSplitPreservesItemMeta() {
-        if (plugin == null) return // Skip if plugin not loaded
         val stack = ItemStackMock(Material.DIAMOND, 64)
         val meta = stack.itemMeta
         meta?.setDisplayName("Test Item")

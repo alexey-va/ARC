@@ -3,6 +3,7 @@ package ru.arc.util
 import com.github.stefvanschie.inventoryframework.gui.GuiItem
 import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.inventory.ItemStack
+import ru.arc.gui.GuiItems
 import java.util.function.BiConsumer
 import java.util.function.Consumer
 
@@ -26,7 +27,11 @@ class GuiItemBuilder(private var stack: ItemStack) {
     }
 
     fun build(): GuiItem {
-        return GuiItem(stack, clickEvent)
+        return if (clickEvent != null) {
+            GuiItems.create(stack, clickEvent!!)
+        } else {
+            GuiItems.create(stack)
+        }
     }
 }
 

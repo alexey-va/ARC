@@ -42,4 +42,12 @@ public class ConfigManager {
     public static int getVersion() {
         return version;
     }
+
+    /**
+     * Clears all cached configs. Used in tests to ensure clean state.
+     */
+    public static void clear() {
+        configMap.clear();
+        version = 0;
+    }
 }

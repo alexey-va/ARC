@@ -24,7 +24,6 @@ class ItemStackBuilderTest : TestBase() {
 
     @Test
     fun testBuildBasic() {
-        if (plugin == null) return
         val builder = ItemStackBuilder(Material.DIAMOND)
         val stack = builder.build()
 
@@ -35,7 +34,6 @@ class ItemStackBuilderTest : TestBase() {
 
     @Test
     fun testBuildWithCount() {
-        if (plugin == null) return
         val builder = ItemStackBuilder(Material.DIAMOND)
         // Note: count is set in constructor, need to check if there's a count method
         val stack = builder.build()
@@ -46,7 +44,6 @@ class ItemStackBuilderTest : TestBase() {
 
     @Test
     fun testBuildWithDisplay() {
-        if (plugin == null) return
         val builder = ItemStackBuilder(Material.DIAMOND)
             .display("<red>Test Item</red>")
         val stack = builder.build()
@@ -57,7 +54,6 @@ class ItemStackBuilderTest : TestBase() {
 
     @Test
     fun testBuildWithComponentDisplay() {
-        if (plugin == null) return
         val component = Component.text("Test", NamedTextColor.RED)
         val builder = ItemStackBuilder(Material.DIAMOND)
             .display(component)
@@ -69,7 +65,6 @@ class ItemStackBuilderTest : TestBase() {
 
     @Test
     fun testBuildWithLore() {
-        if (plugin == null) return
         val lore = listOf("<red>Line 1</red>", "<blue>Line 2</blue>")
         val builder = ItemStackBuilder(Material.DIAMOND)
             .lore(lore)
@@ -81,7 +76,6 @@ class ItemStackBuilderTest : TestBase() {
 
     @Test
     fun testBuildWithComponentLore() {
-        if (plugin == null) return
         val lore = listOf(
             Component.text("Line 1", NamedTextColor.RED),
             Component.text("Line 2", NamedTextColor.BLUE)
@@ -96,7 +90,6 @@ class ItemStackBuilderTest : TestBase() {
 
     @Test
     fun testBuildWithModelData() {
-        if (plugin == null) return
         val builder = ItemStackBuilder(Material.DIAMOND)
             .modelData(1000)
         val stack = builder.build()
@@ -107,7 +100,6 @@ class ItemStackBuilderTest : TestBase() {
 
     @Test
     fun testBuildWithEnchantment() {
-        if (plugin == null) return
         val builder = ItemStackBuilder(Material.DIAMOND_SWORD)
             .enchant(Enchantment.SHARPNESS, 5, true)
         val stack = builder.build()
@@ -118,7 +110,6 @@ class ItemStackBuilderTest : TestBase() {
 
     @Test
     fun testBuildWithFlags() {
-        if (plugin == null) return
         val builder = ItemStackBuilder(Material.DIAMOND)
             .flags(ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_ATTRIBUTES)
         val stack = builder.build()
@@ -129,7 +120,6 @@ class ItemStackBuilderTest : TestBase() {
 
     @Test
     fun testBuildWithHideAll() {
-        if (plugin == null) return
         val builder = ItemStackBuilder(Material.DIAMOND)
             .hideAll()
         val stack = builder.build()
@@ -140,7 +130,6 @@ class ItemStackBuilderTest : TestBase() {
 
     @Test
     fun testBuildFromItemStack() {
-        if (plugin == null) return
         val original = ItemStackMock(Material.DIAMOND, 5)
         val builder = ItemStackBuilder(original)
         val stack = builder.build()
@@ -151,7 +140,6 @@ class ItemStackBuilderTest : TestBase() {
 
     @Test
     fun testAppendLore() {
-        if (plugin == null) return
         val builder = ItemStackBuilder(Material.DIAMOND)
             .lore(listOf("Line 1"))
             .appendLore(listOf("Line 2"))
@@ -165,7 +153,6 @@ class ItemStackBuilderTest : TestBase() {
 
     @Test
     fun testAppendComponentLore() {
-        if (plugin == null) return
         val builder = ItemStackBuilder(Material.DIAMOND)
             .componentLore(listOf(Component.text("Line 1")))
             .appendComponentLore(listOf(Component.text("Line 2")))
@@ -179,7 +166,6 @@ class ItemStackBuilderTest : TestBase() {
 
     @Test
     fun testBuildWithSkull() {
-        if (plugin == null) return
         try {
             val uuid = UUID.randomUUID()
             val builder = ItemStackBuilder(Material.PLAYER_HEAD)
@@ -196,7 +182,6 @@ class ItemStackBuilderTest : TestBase() {
 
     @Test
     fun testToGuiItemBuilder() {
-        if (plugin == null) return
         val builder = ItemStackBuilder(Material.DIAMOND)
         val guiItemBuilder = builder.toGuiItemBuilder()
 
@@ -205,7 +190,6 @@ class ItemStackBuilderTest : TestBase() {
 
     @Test
     fun testBuilderChaining() {
-        if (plugin == null) return
         val builder = ItemStackBuilder(Material.DIAMOND)
             .display("<red>Test</red>")
             .lore(listOf("Lore 1", "Lore 2"))
@@ -220,7 +204,6 @@ class ItemStackBuilderTest : TestBase() {
 
     @Test
     fun testBuildWithTagResolver() {
-        if (plugin == null) return
         val resolver = net.kyori.adventure.text.minimessage.tag.resolver.TagResolver.resolver(
             "test",
             net.kyori.adventure.text.minimessage.tag.Tag.inserting(Component.text("value"))
@@ -235,7 +218,6 @@ class ItemStackBuilderTest : TestBase() {
 
     @Test
     fun testBuildWithLegacyDeserializer() {
-        if (plugin == null) return
         val builder = ItemStackBuilder(Material.DIAMOND)
             .display("&cTest", ItemStackBuilder.Deserializer.LEGACY)
         val stack = builder.build()

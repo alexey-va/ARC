@@ -1,10 +1,31 @@
 package ru.arc.util
 
+import org.apache.logging.log4j.LogManager
+import org.apache.logging.log4j.core.Logger
+import org.apache.logging.log4j.core.filter.BurstFilter
+import org.apache.logging.log4j.core.layout.JsonLayout
+import pl.tkowalcz.tjahzi.log4j2.Header
+import pl.tkowalcz.tjahzi.log4j2.LokiAppender
+import pl.tkowalcz.tjahzi.log4j2.labels.Label
 import ru.arc.ARC
 import ru.arc.configs.Config
 import ru.arc.configs.ConfigManager
+import java.nio.charset.StandardCharsets
 
 object Logging {
+
+    /**
+     * When true, suppresses INFO and DEBUG logs. Useful for tests.
+     * Set this before plugin loads to reduce console spam.
+     */
+    @JvmField
+    var quietMode = false
+
+    /**
+     * When true, skips Loki appender initialization. Set in tests.
+     */
+    @JvmField
+    var disableLokiAppender = false
 
     val config: Config by lazy {
         if (ARC.plugin == null) {
@@ -24,6 +45,7 @@ object Logging {
 
     @JvmStatic
     fun info(message: String, vararg args: Any?) {
+        if (quietMode) return
         if (getLogLevelCached() <= Level.INFO) {
             val logger = ARC.plugin?.logger ?: java.util.logging.Logger.getLogger("ARC")
             logger.log(
@@ -35,6 +57,7 @@ object Logging {
 
     @JvmStatic
     fun debug(message: String, vararg args: Any?) {
+        if (quietMode) return
         if (getLogLevelCached() <= Level.DEBUG) {
             val logger = ARC.plugin?.logger ?: java.util.logging.Logger.getLogger("ARC")
             logger.log(
@@ -46,6 +69,7 @@ object Logging {
 
     @JvmStatic
     fun error(message: String, vararg args: Any?) {
+        if (quietMode) return
         if (getLogLevelCached() <= Level.ERROR) {
             val logger = ARC.plugin?.logger ?: java.util.logging.Logger.getLogger("ARC")
             logger.log(
@@ -57,6 +81,7 @@ object Logging {
 
     @JvmStatic
     fun warn(message: String, vararg args: Any?) {
+        if (quietMode) return
         if (getLogLevelCached() <= Level.WARN) {
             val logger = ARC.plugin?.logger ?: java.util.logging.Logger.getLogger("ARC")
             logger.log(
@@ -67,6 +92,10 @@ object Logging {
     }
 
     @JvmStatic
+    fun getLogLevel(): Level {
+        return getLogLevelCached()
+    }
+    
     fun setLogLevel(level: Level) {
         cachedLogLevel = level
     }
@@ -166,7 +195,7 @@ object Logging {
             "INFO"
         }
         return try {
-            Level.valueOf(raw?.uppercase() ?: "INFO")
+            Level.valueOf(raw.uppercase())
         } catch (_: Throwable) {
             Level.INFO
         }
@@ -177,5 +206,75 @@ object Logging {
         INFO,
         WARN,
         ERROR
+    }
+
+    // ==================== Loki Appender ====================
+
+    /**
+     * Adds Loki appender to Log4j for centralized logging.
+     * Call this during plugin initialization.
+     */
+    @JvmStatic
+    fun addLokiAppender() {
+        if (disableLokiAppender) return
+
+        try {
+            val cfg = if (ARC.plugin != null) {
+                ConfigManager.of(ARC.plugin.dataPath, "logging.yml")
+            } else return
+
+            if (!cfg.bool("enabled", false)) return
+
+            val labelsMap = cfg.map<String>("labels", emptyMap())
+            val labels = labelsMap.entries
+                .filter { (key, _) ->
+                    when {
+                        !Label.hasValidName(key) -> {
+                            warn("Invalid label name: {}", key)
+                            false
+                        }
+
+                        else -> true
+                    }
+                }
+                .map { (key, value) -> Label.createLabel(key, value.toString(), null) }
+                .toTypedArray()
+
+            val headers = labels.map { Header.createHeader(it.name, it.value) }.toTypedArray()
+
+            val layout = JsonLayout.newBuilder()
+                .setCompact(true)
+                .setEventEol(true)
+                .setCharset(StandardCharsets.UTF_8)
+                .build()
+
+            val filter = BurstFilter.newBuilder()
+                .setLevel(org.apache.logging.log4j.Level.INFO)
+                .setRate(cfg.integer("rate", 20).toFloat())
+                .setMaxBurst(cfg.integer("maxBurst", 100).toLong())
+                .build()
+
+            val appender = LokiAppender.newBuilder().apply {
+                host = cfg.string("host", "localhost")
+                port = cfg.integer("port", 3100)
+                setLabels(labels)
+                setHeaders(headers)
+                name = "lokiAppender"
+                setLayout(layout)
+                setFilter(filter)
+            }.build()
+
+            appender.start()
+
+            val rootLogger = LogManager.getRootLogger() as Logger
+            val configuration = rootLogger.context.configuration
+            configuration.addAppender(appender)
+
+            val loggerConfig = configuration.getLoggerConfig(LogManager.ROOT_LOGGER_NAME)
+            loggerConfig.addAppender(appender, org.apache.logging.log4j.Level.INFO, null)
+            rootLogger.context.updateLoggers()
+        } catch (e: Exception) {
+            warn("Failed to add Loki appender: {}", e.message)
+        }
     }
 }

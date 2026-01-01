@@ -1,24 +1,39 @@
 package ru.arc.common.locationpools;
 
-import ru.arc.common.ServerLocation;
-import ru.arc.common.WeightedRandom;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.bukkit.Location;
-
-import java.util.*;
-import java.util.stream.Collectors;
+import ru.arc.common.ServerLocation;
+import ru.arc.common.WeightedRandom;
 
 @NoArgsConstructor
 @Data
 public class LocationPool {
 
-    String id;
-    WeightedRandom<ServerLocation> locations = new WeightedRandom<>();
-    transient boolean dirty = false;
+    private String id;
+    private WeightedRandom<ServerLocation> locations = new WeightedRandom<>();
+    private transient boolean dirty = false;
 
     public LocationPool(String id) {
         this.id = id;
+    }
+
+    /**
+     * Public getter for Kotlin interop (Lombok getters are not visible to Kotlin).
+     */
+    public String getId() {
+        return id;
+    }
+
+    /**
+     * Public getter for Kotlin interop (Lombok getters are not visible to Kotlin).
+     */
+    public WeightedRandom<ServerLocation> getLocations() {
+        return locations;
     }
 
     public void addLocation(Location location, double weight) {

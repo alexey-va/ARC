@@ -46,6 +46,26 @@ public class TreasureItem extends Treasure {
 
     private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "treasures.yml");
 
+    /**
+     * Creates a new TreasureItem with the given parameters.
+     * Use this instead of the Lombok builder for Kotlin compatibility.
+     */
+    public static TreasureItem create(ItemStack stack, int minAmount, int maxAmount, GaussData gaussData) {
+        TreasureItem item = new TreasureItem();
+        item.stack = stack;
+        item.minAmount = minAmount;
+        item.maxAmount = maxAmount;
+        item.gaussData = gaussData;
+        return item;
+    }
+
+    /**
+     * Creates a new TreasureItem with a single amount.
+     */
+    public static TreasureItem create(ItemStack stack, int amount) {
+        return create(stack, amount, amount, null);
+    }
+
     @Override
     public void give(Player player, @NotNull GiveFlags flags) {
         List<ItemStack> stacks = generateStacks();

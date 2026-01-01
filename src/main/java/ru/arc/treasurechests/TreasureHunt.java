@@ -415,4 +415,18 @@ public class TreasureHunt {
         if (displayTask != null && !displayTask.isCancelled()) displayTask.cancel();
     }
 
+    /**
+     * Returns the location pool for this hunt.
+     */
+    public LocationPool getLocationPool() {
+        return treasureHuntType.getLocationPool();
+    }
+
+    /**
+     * Returns the number of remaining chests in this hunt.
+     */
+    public int getRemainingChests() {
+        return left;
+    }
+
 }

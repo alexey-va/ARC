@@ -15,7 +15,7 @@ public class DecorPool {
     TreeMap<Double, DecorItem> decors = new TreeMap<>();
 
     public void add(DecorItem decorItem, double weight) {
-        debug("Adding decor item: {} with weight: {}", decorItem.material, weight);
+        debug("Adding decor item: {} with weight: {}", decorItem.getMaterial(), weight);
         if (weight == 0) return;
         double lastKey = decors.isEmpty() ? 0 : decors.lastKey();
         decors.put(lastKey + weight, decorItem);

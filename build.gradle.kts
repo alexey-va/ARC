@@ -100,6 +100,8 @@ dependencies {
     testImplementation(libs.org.junit.jupiter.junit.jupiter.params)
     testImplementation(libs.com.thedeanda.lorem)
     testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v1.21:4.98.0")
+    testImplementation("org.mockito:mockito-core:5.14.2")
+    testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
     // Add compileOnly dependencies to test classpath so tests can run
@@ -114,6 +116,19 @@ dependencies {
     testImplementation(libs.redis.clients.jedis)
     testImplementation(libs.org.jsoup.jsoup)
     testImplementation("commons-lang:commons-lang:2.6")
+    // Jackson databind needed for Log4j JsonLayout used in Logging.addLokiAppender()
+    testImplementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
+    // Log4j dependencies needed for Logging class
+    testImplementation(libs.org.apache.logging.log4j.log4j.api)
+    testImplementation(libs.org.apache.logging.log4j.log4j.core)
+    // Log4j layout template JSON needed for ThreadContextDataInjector
+    testImplementation("org.apache.logging.log4j:log4j-layout-template-json:2.24.1")
+    // Tjahzi Loki appender needed for Logging.addLokiAppender()
+    testImplementation(libs.pl.tkowalcz.tjahzi.log4j2.appender.nodep) {
+        exclude(group = "org.apache.logging.log4j")
+    }
+    // WorldEdit dependency needed for Building class tests
+    testImplementation(libs.com.sk89q.worldedit.worldedit.bukkit)
 }
 
 tasks {

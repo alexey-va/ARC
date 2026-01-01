@@ -29,6 +29,7 @@ import org.bukkit.persistence.PersistentDataType;
 import ru.arc.ARC;
 import ru.arc.autobuild.BuildingManager;
 import ru.arc.autobuild.ConstructionSite;
+import ru.arc.autobuild.ConstructionState;
 import ru.arc.bschests.PersonalLootManager;
 import ru.arc.common.locationpools.LocationPoolManager;
 import ru.arc.common.treasure.TreasurePool;
@@ -158,9 +159,9 @@ public class BlockListener implements Listener {
         }
 
         if (!event.hasBlock() || event.getAction() != Action.RIGHT_CLICK_BLOCK) {
-            ConstructionSite site = BuildingManager.getPendingConstruction(event.getPlayer().getUniqueId());
-            if (site != null && site.getState() == ConstructionSite.State.DISPLAYING_OUTLINE) {
-                BuildingManager.cancelConstruction(site);
+            ConstructionSite site = BuildingManager.INSTANCE.getPendingConstruction(event.getPlayer().getUniqueId());
+            if (site != null && site.getState() == ConstructionState.DisplayingOutline.INSTANCE) {
+                BuildingManager.INSTANCE.cancelConstruction(site);
                 return;
             }
         }
@@ -177,7 +178,7 @@ public class BlockListener implements Listener {
         if (nbtItem.hasKey("arc:y_offset")) yOff = nbtItem.getString("arc:y_offset");
 
         event.setCancelled(true);
-        BuildingManager.processPlayerClick(event.getPlayer(), center, buildingId, rotation, yOff);
+        BuildingManager.INSTANCE.processPlayerClick(event.getPlayer(), center, buildingId, rotation, yOff);
     }
 
 

@@ -1,6 +1,8 @@
 package ru.arc.eliteloot;
 
-import ru.arc.util.TextUtil;
+import java.util.ArrayList;
+import java.util.List;
+
 import de.tr7zw.changeme.nbtapi.NBT;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -13,22 +15,20 @@ import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.LeatherArmorMeta;
-
-import java.util.ArrayList;
-import java.util.List;
+import ru.arc.util.TextUtil;
 
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
 @EqualsAndHashCode
 public class DecorItem {
-    Material material;
+    private Material material;
     @EqualsAndHashCode.Exclude
-    double weight;
-    int modelId;
-    Color color;
-    String iaNamespace;
-    String iaId;
+    private double weight;
+    private int modelId;
+    private Color color;
+    private String iaNamespace;
+    private String iaId;
 
     public ItemStack toItemStack(LootType lootType){
         ItemStack itemStack = new ItemStack(material);

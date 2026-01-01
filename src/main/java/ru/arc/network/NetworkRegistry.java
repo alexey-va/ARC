@@ -1,6 +1,5 @@
 package ru.arc.network;
 
-import lombok.RequiredArgsConstructor;
 import ru.arc.ai.assistant.ToolMessanger;
 import ru.arc.hooks.HookRegistry;
 import ru.arc.hooks.lands.LandsMessager;
@@ -9,10 +8,13 @@ import ru.arc.stock.HistoryManager;
 import ru.arc.stock.HistoryMessager;
 import ru.arc.xserver.playerlist.PlayerListMessager;
 
-@RequiredArgsConstructor
 public class NetworkRegistry {
 
     private final RedisManager redisManager;
+
+    public NetworkRegistry(RedisManager redisManager) {
+        this.redisManager = redisManager;
+    }
     public static LandsMessager landsMessager;
     PlayerListMessager playerListMessager;
 

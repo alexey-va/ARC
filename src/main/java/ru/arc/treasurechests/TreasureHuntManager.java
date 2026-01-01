@@ -179,6 +179,13 @@ public class TreasureHuntManager {
         blockMap.clear();
     }
 
+    /**
+     * Returns a collection of currently active treasure hunts.
+     */
+    public static Collection<TreasureHunt> getActiveHunts() {
+        return new ArrayList<>(treasureHunts);
+    }
+
     public static Collection<TreasurePool> getTreasurePools() {
         return TreasurePool.getTreasurePools();
     }

@@ -1,11 +1,11 @@
 package ru.arc.hooks.citizens;
 
-import ru.arc.autobuild.BuildingManager;
 import net.citizensnpcs.api.event.NPCClickEvent;
 import net.citizensnpcs.api.event.NPCRightClickEvent;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import ru.arc.autobuild.BuildingManager;
 
 public class CitizensListener implements Listener {
 
@@ -16,7 +16,7 @@ public class CitizensListener implements Listener {
 
 
     private void processConstruction(NPCClickEvent event){
-        BuildingManager.processNpcClick(event.getClicker(), event.getNPC().getId());
+        BuildingManager.INSTANCE.processNpcClick(event.getClicker(), event.getNPC().getId());
     }
 
 }

@@ -11,6 +11,7 @@ import org.bukkit.inventory.ItemStack
 import org.bukkit.scheduler.BukkitRunnable
 import org.bukkit.scheduler.BukkitTask
 import ru.arc.ARC
+import ru.arc.gui.GuiItems
 import ru.arc.util.Logging.error
 import ru.arc.util.TextUtil.strip
 import java.util.UUID
@@ -23,18 +24,26 @@ object GuiUtils {
 
     data class BgKey(val material: Material, val model: Int)
 
+    /**
+     * Clears the backgrounds cache. Used in tests to reset state.
+     */
+    @JvmStatic
+    fun clearBackgrounds() {
+        backgrounds.clear()
+    }
+
     @JvmStatic
     fun background(material: Material, model: Int): GuiItem {
         val key = BgKey(material, model)
         val guiItem = backgrounds[key]
         if (guiItem != null) return guiItem
 
-        val bgItem = ItemStack(material)
+        val bgItem = ItemStackFactory.create(material)
         val meta = bgItem.itemMeta
         if (model != 0) meta?.setCustomModelData(model)
         meta?.displayName(Component.text(" "))
         bgItem.itemMeta = meta
-        val newGuiItem = GuiItem(bgItem) { it.isCancelled = true }
+        val newGuiItem = GuiItems.create(bgItem) { it.isCancelled = true }
         backgrounds[key] = newGuiItem
 
         return newGuiItem

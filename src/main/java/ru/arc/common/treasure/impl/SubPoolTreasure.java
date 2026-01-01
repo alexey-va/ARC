@@ -25,6 +25,16 @@ public class SubPoolTreasure extends Treasure {
 
     String subPoolId;
 
+    /**
+     * Creates a new SubPoolTreasure with the given subPoolId.
+     * Use this instead of the Lombok builder for Kotlin compatibility.
+     */
+    public static SubPoolTreasure create(String subPoolId) {
+        SubPoolTreasure treasure = new SubPoolTreasure();
+        treasure.subPoolId = subPoolId;
+        return treasure;
+    }
+
     @Override
     public void give(Player player, @NotNull GiveFlags flags) {
         TreasurePool treasurePool = TreasurePool.getTreasurePool(subPoolId);

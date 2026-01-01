@@ -1,333 +1,254 @@
 package ru.arc;
 
-import lombok.Getter;
+import java.util.Map;
+
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.Bukkit;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.event.server.ServerCommandEvent;
-import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
-import ru.arc.audit.AuditManager;
-import ru.arc.autobuild.BuildingManager;
-import ru.arc.board.Board;
-import ru.arc.bschests.PersonalLootManager;
-import ru.arc.commands.ArcStoreCommand;
-import ru.arc.commands.BuildBookCommand;
-import ru.arc.commands.Command;
-import ru.arc.commands.EliteLootComand;
-import ru.arc.commands.GiveJobsBoostCommand;
-import ru.arc.commands.SoundFollowCommand;
-import ru.arc.commands.StockCommand;
-import ru.arc.commands.TestCommand;
-import ru.arc.commands.XArcCommand;
-import ru.arc.commands.tabcompletes.InvestTabComplete;
-import ru.arc.common.locationpools.LocationPoolManager;
-import ru.arc.common.treasure.TreasurePool;
-import ru.arc.configs.AuctionConfig;
+import ru.arc.commands.XCommand;
+import ru.arc.commands.arc.ArcCommand;
 import ru.arc.configs.BoardConfig;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
 import ru.arc.configs.LocationPoolConfig;
-import ru.arc.configs.StockConfig;
-import ru.arc.eliteloot.EliteLootManager;
-import ru.arc.farm.FarmManager;
+import ru.arc.core.ModuleRegistry;
+import ru.arc.core.modules.*;
 import ru.arc.hooks.HookRegistry;
-import ru.arc.leafdecay.LeafDecayManager;
-import ru.arc.misc.JoinMessages;
-import ru.arc.mobspawn.MobSpawnManager;
 import ru.arc.network.NetworkRegistry;
 import ru.arc.network.RedisManager;
-import ru.arc.network.repos.RedisRepo;
-import ru.arc.stock.StockClient;
-import ru.arc.stock.StockMarket;
-import ru.arc.stock.StockPlayerManager;
-import ru.arc.store.StoreManager;
-import ru.arc.sync.CMISync;
-import ru.arc.sync.EmSync;
-import ru.arc.sync.SkillsSync;
-import ru.arc.sync.SlimefunSync;
-import ru.arc.sync.SyncManager;
-import ru.arc.treasurechests.TreasureHuntManager;
-import ru.arc.util.CooldownManager;
 import ru.arc.util.HeadTextureCache;
-import ru.arc.util.ParticleManager;
 import ru.arc.xserver.PluginMessenger;
-import ru.arc.xserver.XActionManager;
-import ru.arc.xserver.announcements.AnnounceManager;
 
-import static ru.arc.util.Logging.debug;
-import static ru.arc.util.Logging.error;
-import static ru.arc.util.Logging.info;
+import static ru.arc.util.Logging.*;
 
+/**
+ * Main plugin class for ARC.
+ * <p>
+ * This class focuses on:
+ * - Plugin lifecycle (onLoad, onEnable, onDisable)
+ * - Module registration
+ * - Command registration
+ * - Default config creation
+ * <p>
+ * All feature logic is delegated to modules in {@link ru.arc.core.modules}.
+ */
 public class ARC extends JavaPlugin {
 
+    // ==================== Static References ====================
+    
     public static ARC plugin;
     public static String serverName;
     public static PluginMessenger pluginMessenger;
-
-    public LocationPoolConfig locationPoolConfig;
-    public BoardConfig boardConfig;
-    @Getter
-    private static Economy econ;
     public static RedisManager redisManager;
     public static HookRegistry hookRegistry;
     public static NetworkRegistry networkRegistry;
     public static HeadTextureCache headTextureCache;
 
+    // ==================== Instance Fields ====================
+
+    public LocationPoolConfig locationPoolConfig;
+    public BoardConfig boardConfig;
+
+    // ==================== Lifecycle ====================
 
     @Override
     public void onLoad() {
         plugin = this;
-        try {
-            Logging.addLokiAppender();
-        } catch (Exception e) {
-            error("Error creating loki appender", e);
-        }
+        createDefaultConfigs();
+        initLogging();
     }
 
     @Override
     public void onEnable() {
-        if (pluginMessenger == null) pluginMessenger = new PluginMessenger();
-        info("Starting ARC");
-        info("Creating hook registry");
-        try {
-            info("Loading redis");
-            setupRedis();
-        } catch (Exception e) {
-            error("Failed to load redis", e);
+        info("Starting ARC plugin");
+
+        if (pluginMessenger == null) {
+            pluginMessenger = new PluginMessenger();
         }
-        System.out.println("Setting up network registry");
-        try {
-            networkRegistry = new NetworkRegistry(redisManager);
-            networkRegistry.init();
-        } catch (Exception e) {
-            error("Failed to setup network registry", e);
-        }
-        try {
-            hookRegistry = new HookRegistry();
-            info("Setting up hooks");
-            hookRegistry.setupHooks();
-        } catch (Exception e) {
-            error("Failed to setup hooks", e);
-        }
-        info("Loading config");
-        loadConfig(true);
-        load();
-    }
 
-    // reloadable
-    public void loadConfig(boolean initial) {
-        ConfigManager.reloadAll();
+        registerModules();
+        ModuleRegistry.INSTANCE.initAll();
+        registerCommands();
 
-        serverName = ConfigManager
-                .of(ARC.plugin.getDataPath(), "misc.yml")
-                .string("redis.server-name", "default");
-
-        if (!initial) setupRedis();
-
-        System.out.println("Location pool loading...");
-        locationPoolConfig = new LocationPoolConfig();
-        LocationPoolManager.init();
-
-        System.out.println("Loading board config");
-        boardConfig = new BoardConfig();
-
-        System.out.println("Loading stock config");
-        StockConfig.load();
-
-        System.out.println("Loading auction config");
-        AuctionConfig.load();
-
-        info("Starting farm manager");
-        FarmManager.init();
-
-        info("Starting announce manager");
-        AnnounceManager.init();
-
-        info("Starting xaction manager");
-        XActionManager.init();
-
-        headTextureCache = new HeadTextureCache();
-
-        LeafDecayManager.reload();
-
-        debug("Loading treasure pools");
-        TreasurePool.loadAllTreasures();
-
-        PersonalLootManager.reload();
-
-        AuditManager.init();
-
-        startSyncs();
-
-        TreasureHuntManager.loadTreasureHuntTypes();
-
-        info("Starting board");
-        Board.init();
-
-        info("Starting auto build manager");
-        BuildingManager.init();
+        info("ARC plugin enabled");
     }
 
     @Override
     public void onDisable() {
-        SyncManager.saveAll();
-
-        RedisRepo.saveAll();
-
-        TreasurePool.saveAllTreasurePools();
-
-        hookRegistry.cancelTasks();
-        TreasureHuntManager.stopAll();
-        TreasurePool.cancelSaveTask();
-        if (locationPoolConfig != null) {
-            locationPoolConfig.saveLocationPools(true);
-            locationPoolConfig.cancelTasks();
-        }
-        BuildingManager.stopAll();
-        StockMarket.cancelTasks();
-        StockMarket.saveHistory();
-        StockClient.stopClient();
-        StoreManager.saveAll();
-        headTextureCache.save();
-        LeafDecayManager.cancel();
-        PersonalLootManager.shutdown();
+        info("Stopping ARC plugin");
+        ModuleRegistry.INSTANCE.shutdownAll();
+        info("ARC plugin disabled");
     }
 
-    public void load() {
-        System.out.println("Registering commands");
-        registerCommands();
+    // ==================== Reload ====================
 
-        System.out.println("Setting up economy");
-        setupEconomy();
-
-        System.out.println("Initializing store manager");
-        StoreManager.init();
-
-        System.out.println("Setting up particle manager");
-        ParticleManager.setupParticleManager();
-
-        System.out.println("Setting up cooldown task");
-        CooldownManager.setupTask(5);
-
-        System.out.println("Setting up stock");
-        StockPlayerManager.init();
-        StockMarket.init();
-
-        System.out.println("Setting up elite loot");
-        EliteLootManager.init();
-
-        info("Starting leaf decay manager");
-        LeafDecayManager.init();
-
-        info("Starting treasure pool save task");
-        TreasurePool.startSaveTask();
-
-        info("Starting personal loot manager");
-        PersonalLootManager.init();
-
-        info("Starting MobSpawnManager");
-        MobSpawnManager.init();
-
-        info("Starting join messages");
-        JoinMessages.init();
+    /**
+     * Reload all plugin configuration and modules.
+     * Called by /arc reload command.
+     */
+    public void reload() {
+        info("Reloading ARC plugin");
+        ModuleRegistry.INSTANCE.reloadAll();
+        info("ARC plugin reloaded");
     }
 
-    private void startSyncs() {
-        Config config = ConfigManager.of(ARC.plugin.getDataPath(), "misc.yml");
-        if (HookRegistry.sfHook != null && config.bool("sync.slimefun", true)) {
-            info("Starting slimefun sync.");
-            SyncManager.registerSync(SlimefunSync.class, new SlimefunSync());
-        }
+    // ==================== Module Registration ====================
 
-        if (HookRegistry.emHook != null && config.bool("sync.em", true)) {
-            info("Starting em sync.");
-            SyncManager.registerSync(EmSync.class, new EmSync());
-        }
+    private void registerModules() {
+        debug("Registering modules...");
 
-        if (HookRegistry.cmiHook != null && config.bool("sync.cmi", false)) {
-            info("Starting cmi sync.");
-            SyncManager.registerSync(CMISync.class, new CMISync());
-        }
+        ModuleRegistry.INSTANCE.registerAll(
+                // Core infrastructure (priority 10-29)
+                RedisModule.INSTANCE,
+                NetworkModule.INSTANCE,
+                HooksModule.INSTANCE,
+                EconomyModule.INSTANCE,
 
-        if (HookRegistry.auraSkillsHook != null && config.bool("sync.aura-skills", true)) {
-            info("Starting aura skills sync.");
-            SyncManager.registerSync(SkillsSync.class, new SkillsSync());
-        }
+                // Configuration (priority 30-49)
+                ConfigModule.INSTANCE,
+                LocationPoolModule.INSTANCE,
+                BoardModule.INSTANCE,
 
+                // Core features (priority 50-69)
+                ParticleModule.INSTANCE,
+                CooldownModule.INSTANCE,
+                HeadCacheModule.INSTANCE,
+                AuditModule.INSTANCE,
 
-        SyncManager.startSaveAllTasks();
+                // Game features (priority 70-89)
+                FarmModule.INSTANCE,
+                AnnounceModule.INSTANCE,
+                XActionModule.INSTANCE,
+                StockModule.INSTANCE,
+                StoreModule.INSTANCE,
+                TreasureModule.INSTANCE,
+                EliteLootModule.INSTANCE,
+                LeafDecayModule.INSTANCE,
+                PersonalLootModule.INSTANCE,
+                MobSpawnModule.INSTANCE,
+                JoinMessagesModule.INSTANCE,
+
+                // Building system (priority 90)
+                BuildingModule.INSTANCE,
+
+                // Sync systems (priority 100)
+                SyncModule.INSTANCE
+        );
     }
 
-    @SuppressWarnings("ConstantConditions")
+    // ==================== Command Registration ====================
+
     private void registerCommands() {
-        getCommand("arc").setExecutor(new Command());
+        debug("Registering commands...");
 
-        BuildBookCommand buildBookCommand = new BuildBookCommand();
-        getCommand("build-book").setExecutor(buildBookCommand);
-        getCommand("build-book").setTabCompleter(buildBookCommand);
+        // Main /arc command with all subcommands
+        var arcCommand = ArcCommand.Companion.getINSTANCE();
+        registerCommand("arc", arcCommand, arcCommand);
 
-        getCommand("arc-invest").setExecutor(new StockCommand());
-        getCommand("sound-follow").setExecutor(new SoundFollowCommand());
-
-        var arcStoreCommand = new ArcStoreCommand();
-        getCommand("arcstore").setExecutor(arcStoreCommand);
-        getCommand("arcstore").setTabCompleter(arcStoreCommand);
-
-        GiveJobsBoostCommand giveJobsBoostCommand = new GiveJobsBoostCommand();
-        getCommand("give-jobs-boost").setExecutor(giveJobsBoostCommand);
-        getCommand("give-jobs-boost").setTabCompleter(giveJobsBoostCommand);
-
-        TestCommand testCommand = new TestCommand();
-        getCommand("arctest").setExecutor(testCommand);
-        getCommand("arctest").setTabCompleter(testCommand);
-
-        EliteLootComand eliteLootComand = new EliteLootComand();
-        getCommand("eliteloot").setExecutor(eliteLootComand);
-        getCommand("eliteloot").setTabCompleter(eliteLootComand);
-
-        getCommand("arc-invest").setTabCompleter(new InvestTabComplete());
-
-        XArcCommand xArcCommand = new XArcCommand();
-        getCommand("x").setExecutor(xArcCommand);
-        getCommand("x").setTabCompleter(xArcCommand);
+        // Standalone /x command for cross-server execution
+        registerCommand("x", ru.arc.commands.XCommand.INSTANCE, ru.arc.commands.XCommand.INSTANCE);
     }
 
-    private void setupEconomy() {
-        if (getServer().getPluginManager().getPlugin("Vault") == null) {
+    private void registerCommand(String name, CommandExecutor executor, TabCompleter completer) {
+        var command = getCommand(name);
+        if (command == null) {
+            warn("Command '{}' not found in plugin.yml (test environment?)", name);
             return;
         }
-        RegisteredServiceProvider<Economy> rsp = getServer().getServicesManager().getRegistration(Economy.class);
-        if (rsp == null) {
-            return;
+        command.setExecutor(executor);
+        if (completer != null) {
+            command.setTabCompleter(completer);
         }
-        econ = rsp.getProvider();
     }
 
-    private void setupRedis() {
+    // ==================== Configuration ====================
+
+    private void createDefaultConfigs() {
+        var dataFolder = getDataFolder();
+        debug("Creating default configs in: {}", dataFolder.getAbsolutePath());
+        dataFolder.mkdirs();
+
+        var configs = Map.ofEntries(
+                entry("logging.yml", "enabled: false\nhost: localhost\nport: 3100\nlabels: {}"),
+                entry("announce.yml", "config:\n  delay-seconds: 600\nmessages: {}"),
+                entry("board.yml", "boards: {}"),
+                entry("farms.yml", "farms: {}"),
+                entry("auction.yml", "enabled: false"),
+                entry("treasure-hunt.yml", "hunts: {}"),
+                entry("mobspawn.yml", "enabled: false\nspawns: {}"),
+                entry("portal.yml", "enabled: false\nportals: {}"),
+                entry("location-pools.yml", "pools: {}"),
+                entry("stock.yml", "enabled: false"),
+                entry("elite-loot.yml", "enabled: false\nloot: {}"),
+                entry("auto-build.yml", "enabled: true"),
+                entry("leaf-decay.yml", "enabled: false"),
+                entry("join-messages.yml", "enabled: false"),
+                entry("personal-loot.yml", "enabled: false"),
+                entry("misc.yml", "redis:\n  server-name: test-server"),
+                entry("store.yml", "enabled: false"),
+                entry("sync.yml", "enabled: false"),
+                entry("bschests.yml", "enabled: false")
+        );
+
+        for (var cfg : configs.entrySet()) {
+            createConfigIfMissing(cfg.getKey(), cfg.getValue());
+        }
+    }
+
+    private void createConfigIfMissing(String name, String defaultContent) {
+        var file = new java.io.File(getDataFolder(), name);
+        if (file.exists()) {
+            return;
+        }
+
         try {
-            Config config = ConfigManager.of(ARC.plugin.getDataPath(), "misc.yml");
-            String ip = config.string("redis.ip", "localhost");
-            int port = config.integer("redis.port", 3306);
-            String username = config.string("redis.username", "default");
-            String password = config.string("redis.password", "");
-            if (redisManager != null) {
-                redisManager.connect(ip, port, username, password);
-                info("Reconnected to redis");
-            } else {
-                redisManager = new RedisManager(ip, port, username, password);
-                info("Connected to redis");
-            }
+            saveResource(name, false);
+            debug("Saved resource: {}", name);
         } catch (Exception e) {
-            error("Failed to connect to redis", e);
+            try {
+                file.getParentFile().mkdirs();
+                java.nio.file.Files.writeString(file.toPath(), defaultContent + "\n");
+                debug("Created default config: {}", name);
+            } catch (Exception ex) {
+                error("Failed to create config: {}", name, ex);
+            }
         }
-
     }
 
+    private static Map.Entry<String, String> entry(String key, String value) {
+        return Map.entry(key, value);
+    }
+
+    private void initLogging() {
+        try {
+            ru.arc.util.Logging.addLokiAppender();
+        } catch (Exception e) {
+            error("Error creating Loki appender", e);
+        }
+    }
+
+    // ==================== Utilities ====================
+
+    /**
+     * Execute a command as console.
+     */
     public static void trySeverCommand(String command) {
         info("Executing server command: {}", command);
-        ServerCommandEvent event = new ServerCommandEvent(Bukkit.getConsoleSender(), command);
+        var event = new ServerCommandEvent(Bukkit.getConsoleSender(), command);
         Bukkit.getPluginManager().callEvent(event);
-        if (event.isCancelled()) return;
-        Bukkit.dispatchCommand(event.getSender(), event.getCommand());
+        if (!event.isCancelled()) {
+            Bukkit.dispatchCommand(event.getSender(), event.getCommand());
+        }
+    }
+
+    /**
+     * Get the Vault economy instance.
+     *
+     * @deprecated Use {@link EconomyModule#getEconomy()} instead.
+     */
+    @Deprecated
+    public static Economy getEcon() {
+        return EconomyModule.getEconomy();
     }
 }

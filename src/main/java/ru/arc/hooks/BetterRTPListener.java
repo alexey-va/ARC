@@ -1,7 +1,7 @@
 package ru.arc.hooks;
 
 import ru.arc.ARC;
-import ru.arc.commands.Command;
+import ru.arc.commands.arc.subcommands.RespawnOnRtpSubCommand;
 import ru.arc.configs.Config;
 import ru.arc.configs.ConfigManager;
 import me.SuperRonanCraft.BetterRTP.references.customEvents.RTP_TeleportPostEvent;
@@ -17,9 +17,9 @@ public class BetterRTPListener implements Listener {
     @EventHandler
     public void onBetterRTPEvent(RTP_TeleportPostEvent event) {
         Player player = event.getPlayer();
-        Object ifPresent = Command.playersForRtp.getIfPresent(player.getName());
+        Object ifPresent = RespawnOnRtpSubCommand.INSTANCE.getPlayersForRtp().getIfPresent(player.getName());
         if (ifPresent != null) {
-            Command.playersForRtp.invalidate(player.getName());
+            RespawnOnRtpSubCommand.INSTANCE.getPlayersForRtp().invalidate(player.getName());
             Location location = event.getLocation();
             player.setRespawnLocation(location, true);
             player.sendMessage(config.componentDef("rtp-respawn.set-spawn-message", "<green>Ваша точка возрождения установлена здесь! <gray>Чтобы изменить ее, используйте команду /sethome"));

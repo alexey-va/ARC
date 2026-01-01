@@ -340,8 +340,20 @@ class Config internal constructor(
             injectDeepKey(path, def)
             return def
         }
+        // Handle immutable empty maps from YAML parsing
+        if (o is Map<*, *> && o.isEmpty()) {
+            @Suppress("UNCHECKED_CAST")
+            return o as Map<String, T>
+        }
+        if (o !is MutableMap<*, *>) {
+            // Return as-is if not mutable (shouldn't happen with valid YAML, but be safe)
+            @Suppress("UNCHECKED_CAST")
+            return o as Map<String, T>
+        }
         // Collect keys to modify first to avoid ConcurrentModificationException
         val keysToReplace = mutableListOf<Any>()
+
+        @Suppress("UNCHECKED_CAST")
         val mapObj = o as MutableMap<Any, Any>
         for (key in mapObj.keys) {
             if (key !is String) {

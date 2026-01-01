@@ -4,52 +4,69 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.mockbukkit.mockbukkit.MockBukkit
 import org.mockbukkit.mockbukkit.ServerMock
+import org.mockbukkit.mockbukkit.inventory.ItemStackMock
+import ru.arc.autobuild.ClipboardLoaders
+import ru.arc.autobuild.MockClipboardLoader
+import ru.arc.gui.GuiItems
+import ru.arc.gui.MockGuiItemFactory
+import ru.arc.util.ItemStackFactory
 import java.io.File
-import java.nio.file.Files
 import java.nio.file.Path
 
 abstract class TestBase {
 
     companion object {
+        private val mockGuiItemFactory = MockGuiItemFactory()
+        private val mockClipboardLoader = MockClipboardLoader()
+        
         init {
             // Disable Loki appender in tests to avoid OOM from direct buffer allocation
-            Logging.disableLokiAppender = true
+            ru.arc.util.Logging.disableLokiAppender = true
+
+            // Reduce console spam in tests - only show warnings and errors
+            ru.arc.util.Logging.quietMode = true
+
+            // Use MockBukkit's ItemStackMock instead of real ItemStack to avoid Paper ClassLoader issues
+            ItemStackFactory.factory = { material, amount -> ItemStackMock(material, amount) }
+
+            // Use mock GuiItem factory to avoid Paper ClassLoader issues with InventoryFramework
+            GuiItems.factory = mockGuiItemFactory
+
+            // Use mock ClipboardLoader to avoid WorldEdit platform initialization issues
+            ClipboardLoaders.loader = mockClipboardLoader
         }
     }
 
     protected lateinit var server: ServerMock
-    protected var plugin: ARC? = null
+    protected lateinit var plugin: ARC
     protected lateinit var dataPath: Path
 
     @BeforeEach
     protected open fun setUpBase() {
+        // Ensure clean state before mocking
+        if (MockBukkit.isMocked()) {
+            MockBukkit.unmock()
+        }
+        ru.arc.configs.ConfigManager.clear()
+        
         server = MockBukkit.mock()
-
-        // Create a temporary directory for plugin data
-        dataPath = Files.createTempDirectory("arc-test")
 
         // Set server name first
         ARC.serverName = "test-server"
 
-        // Try to load the plugin with MockBukkit (now that ARC is not final)
-        // This might fail due to missing compileOnly dependencies, so we'll handle that
-        plugin = try {
-            MockBukkit.load(ARC::class.java).also {
-                ARC.plugin = it
-                // Create mock data files after plugin is loaded
-                createMockDataFiles(it.dataFolder)
-            }
-        } catch (e: Exception) {
-            // If loading fails due to missing dependencies, create a minimal setup
-            // We'll skip plugin-dependent tests in this case
-            ARC.plugin = null
-            null
-        }
+        // Load the plugin - must succeed for tests to run
+        plugin = MockBukkit.load(ARC::class.java)
+        ARC.plugin = plugin
+        dataPath = plugin.dataFolder.toPath()
+
+        // Copy test schematics after plugin is loaded
+        createMockDataFiles(plugin.dataFolder)
     }
 
     /**
      * Creates mock data files needed for tests.
-     * Override this method in subclasses to add additional files.
+     * Config files are created by the plugin in onLoad().
+     * This method only creates test-specific files like schematics.
      */
     protected open fun createMockDataFiles(dataFolder: File) {
         // Create schematics folder and copy test schematics
@@ -57,26 +74,22 @@ abstract class TestBase {
         schematicsDir.mkdirs()
         copyTestResource("amogus_1.schem", File(schematicsDir, "amogus_1.schem"))
 
-        // Create common config files with minimal content
-        createConfigFile(
-            dataFolder, "logging.yml", """
-            enabled: false
-            host: localhost
-            port: 3100
-            labels: {}
-        """.trimIndent()
-        )
-
-        createConfigFile(dataFolder, "announce.yml", "announcements: []")
-        createConfigFile(dataFolder, "board.yml", "boards: {}")
-        createConfigFile(dataFolder, "farms.yml", "farms: {}")
-        createConfigFile(dataFolder, "auction.yml", "enabled: false")
-        createConfigFile(dataFolder, "treasure-hunt.yml", "hunts: {}")
-
         // Create subdirectories
         File(dataFolder, "lootchests").mkdirs()
         File(dataFolder, "stocks").mkdirs()
         File(dataFolder, "treasures").mkdirs()
+
+        // Create empty lang.json to suppress warning
+        File(dataFolder, "lang.json").writeText("{}")
+
+        // Fix announce.yml if it has wrong format (Array instead of Map)
+        val announceFile = File(dataFolder, "announce.yml")
+        if (announceFile.exists()) {
+            val content = announceFile.readText()
+            if (content.contains("messages: []")) {
+                announceFile.writeText(content.replace("messages: []", "messages: {}"))
+            }
+        }
     }
 
     /**
@@ -90,8 +103,6 @@ abstract class TestBase {
 
     /**
      * Creates a mock schematic file for testing.
-     * Note: This is an empty file and won't work with WorldEdit's ClipboardFormats.
-     * For tests that need real schematics, use copyTestResource.
      */
     protected fun createMockSchematic(dataFolder: File, name: String) {
         val schematicsDir = File(dataFolder, "schematics")
@@ -117,13 +128,20 @@ abstract class TestBase {
     @AfterEach
     fun tearDownBase() {
         try {
-            plugin?.onDisable()
+            plugin.onDisable()
         } catch (e: Exception) {
             // Ignore disable errors
         }
         MockBukkit.unmock()
         ARC.plugin = null
         ARC.serverName = null
+        // Clear cached configs to ensure clean state for next test
+        ru.arc.configs.ConfigManager.clear()
+        // Clear GUI backgrounds cache (may contain test mocks)
+        ru.arc.util.GuiUtils.clearBackgrounds()
+        // Clear mock GUI factory state
+        mockGuiItemFactory.clear()
+        // Clear mock clipboard loader state
+        mockClipboardLoader.clear()
     }
 }
-

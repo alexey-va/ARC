@@ -43,15 +43,21 @@ public class TreasurePool {
 
     private final TreeMap<Integer, Treasure> treasureMap = new TreeMap<>();
     private int totalWeight = 0;
-    final String id;
-    String commonMessage;
-    String commonAnnounceMessage;
-    boolean commonAnnounce = false;
-
-    boolean dirty = false;
+    private final String id;
+    private String commonMessage;
+    private String commonAnnounceMessage;
+    private boolean commonAnnounce = false;
+    private boolean dirty = false;
 
     private static String keyOf(String s) {
         return s == null ? null : s.toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * Public getter for Kotlin interop (Lombok getters are not visible to Kotlin).
+     */
+    public String getId() {
+        return id;
     }
 
     public boolean add(Treasure treasure) {

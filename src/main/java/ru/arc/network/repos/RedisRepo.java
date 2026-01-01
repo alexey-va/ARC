@@ -251,7 +251,9 @@ public class RedisRepo<T extends RepoData> {
         try {
             if (ts.isEmpty()) return CompletableFuture.completedFuture(null);
             // Logging removed - was using @Slf4j
-            for (T t : ts) t.dirty = false;
+            for (T t : ts) {
+                t.setDirty(false);
+            }
             return CompletableFuture.supplyAsync(() -> {
                         try {
                             String[] array = ts.stream()
@@ -317,7 +319,7 @@ public class RedisRepo<T extends RepoData> {
                         map.put(t.id(), t);
                         contextSet.add(t.id());
                     }
-                    t.dirty = false;
+                    t.setDirty(false);
                     if (onUpdate != null) onUpdate.accept(t);
                 });
     }
