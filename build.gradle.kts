@@ -42,6 +42,10 @@ dependencies {
     compileOnly("org.projectlombok:lombok:1.18.42")
     annotationProcessor("org.projectlombok:lombok:1.18.42")
 
+    // Kotlin coroutines
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.10.2")
+
     implementation(libs.com.github.stefvanschie.inventoryframework.`if`)
     implementation(libs.com.jeff.media.custom.block.data)
     implementation(libs.de.tr7zw.item.nbt.api)
@@ -103,6 +107,10 @@ dependencies {
     testImplementation("org.mockito:mockito-core:5.14.2")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+    // Testcontainers for Redis integration tests
+    testImplementation("org.testcontainers:testcontainers:1.20.4")
+    testImplementation("org.testcontainers:junit-jupiter:1.20.4")
 
     // Add compileOnly dependencies to test classpath so tests can run
     // These are server-provided at runtime, but needed for testing
@@ -134,7 +142,13 @@ dependencies {
 tasks {
     withType<JavaCompile> { options.encoding = "UTF-8" }
     withType<Javadoc> { options.encoding = "UTF-8" }
-    test { useJUnitPlatform() }
+    test {
+        useJUnitPlatform()
+
+        // Add environment variables for Testcontainers with Colima
+        environment("TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE", "/var/run/docker.sock")
+        environment("DOCKER_HOST", "unix://${System.getProperty("user.home")}/.colima/default/docker.sock")
+    }
 
     shadowJar {
         archiveClassifier.set("")

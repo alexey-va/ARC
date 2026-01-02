@@ -27,7 +27,7 @@ import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import ru.arc.ARC;
-import ru.arc.network.RedisManager;
+import ru.arc.network.RedisOperations;
 import ru.arc.util.Common;
 
 import static ru.arc.util.Logging.debug;
@@ -51,14 +51,15 @@ public class RedisRepo<T extends RepoData> {
     BackupService backupService;
     Class clazz;
     String storageKey, updateChannel, id;
-    RedisManager redisManager;
+    RedisOperations redisManager;
     boolean loadAll;
     long saveInterval;
     boolean saveBackups;
 
     private static Deque<RedisRepo<?>> repos = new ConcurrentLinkedDeque<>();
 
-    private RedisRepo(Boolean loadAll, RedisManager redisManager, String storageKey, String updateChannel, Class clazz,
+    private RedisRepo(Boolean loadAll, RedisOperations redisManager, String storageKey, String updateChannel,
+                      Class clazz,
                       Consumer<T> onUpdate, String id, Path backupFolder, Long saveInterval, Boolean saveBackups) {
         this.loadAll = loadAll != null && loadAll;
         this.saveInterval = saveInterval == null ? 20L : saveInterval;
@@ -403,7 +404,7 @@ public class RedisRepo<T extends RepoData> {
 
     public static class RedisRepoBuilder<T extends RepoData> {
         private Boolean loadAll;
-        private RedisManager redisManager;
+        private RedisOperations redisManager;
         private String storageKey;
         private String updateChannel;
         private Class clazz;
@@ -422,7 +423,7 @@ public class RedisRepo<T extends RepoData> {
             return this;
         }
 
-        public RedisRepoBuilder<T> redisManager(RedisManager redisManager) {
+        public RedisRepoBuilder<T> redisManager(RedisOperations redisManager) {
             this.redisManager = redisManager;
             return this;
         }

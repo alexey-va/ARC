@@ -10,6 +10,7 @@ import ru.arc.autobuild.MockClipboardLoader
 import ru.arc.gui.GuiItems
 import ru.arc.gui.MockGuiItemFactory
 import ru.arc.util.ItemStackFactory
+import ru.arc.util.Logging
 import java.io.File
 import java.nio.file.Path
 
@@ -21,10 +22,10 @@ abstract class TestBase {
         
         init {
             // Disable Loki appender in tests to avoid OOM from direct buffer allocation
-            ru.arc.util.Logging.disableLokiAppender = true
+            Logging.disableLokiAppender = true
 
             // Reduce console spam in tests - only show warnings and errors
-            ru.arc.util.Logging.quietMode = true
+            Logging.quietMode = false
 
             // Use MockBukkit's ItemStackMock instead of real ItemStack to avoid Paper ClassLoader issues
             ItemStackFactory.factory = { material, amount -> ItemStackMock(material, amount) }
