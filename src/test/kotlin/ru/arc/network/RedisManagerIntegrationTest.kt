@@ -22,51 +22,83 @@ import java.util.concurrent.atomic.AtomicReference
 /**
  * Integration tests for RedisManager using Testcontainers.
  *
- * These tests require Docker to be running (Colima or Docker Desktop).
+ * These tests require Docker to be running:
+ * - Windows: Docker Desktop (auto-detected)
+ * - macOS/Linux: Colima or Docker Desktop (auto-detected)
  *
- * For Colima users, use the helper script (recommended):
- *   ./test-redis.sh
+ * Platform-specific setup:
  *
- * Or manually configure:
- *   docker context use colima
- *   export DOCKER_HOST="unix:///${HOME}/.colima/docker.sock"
- *   export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=${HOME}/.colima/docker.sock
- *   export TESTCONTAINERS_RYUK_DISABLED=true
- *   ./gradlew test --tests 'RedisManagerIntegrationTest'
+ * Windows (Docker Desktop):
+ *   - Install and start Docker Desktop
+ *   - Run: test-redis-windows.bat
+ *   - Or: gradlew.bat test --tests 'RedisManagerIntegrationTest'
  *
- * The test will auto-detect Colima if these env vars are not set.
+ * macOS/Linux (Colima):
+ *   - Use helper script: ./test-redis.sh
+ *   - Or manually configure:
+ *     docker context use colima
+ *     export DOCKER_HOST="unix:///${HOME}/.colima/docker.sock"
+ *     export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=${HOME}/.colima/docker.sock
+ *     export TESTCONTAINERS_RYUK_DISABLED=true
+ *     ./gradlew test --tests 'RedisManagerIntegrationTest'
+ *
+ * The test will auto-detect the Docker environment if env vars are not set.
+ * See README-TESTCONTAINERS.md for detailed setup instructions.
  */
 @Testcontainers
 class RedisManagerIntegrationTest {
 
     companion object {
         init {
-            // Auto-configure for Colima users
-            // This must run before Testcontainers initializes
-            val home = System.getProperty("user.home")
-            // Try .colima/docker.sock first (most common), then default/docker.sock
-            val colimaSocket = File(home, ".colima/docker.sock")
-            val colimaSocketAlt = File(home, ".colima/default/docker.sock")
+            // Auto-detect Docker environment (Colima for macOS/Linux, Docker Desktop for Windows)
+            val os = System.getProperty("os.name").lowercase()
+            val isWindows = os.contains("windows")
+            val isMacOrLinux = os.contains("mac") || os.contains("linux")
 
-            val socket = when {
-                colimaSocket.exists() -> colimaSocket
-                colimaSocketAlt.exists() -> colimaSocketAlt
-                else -> null
-            }
-            println()
+            if (isMacOrLinux) {
+                // Colima detection for macOS/Linux
+                val home = System.getProperty("user.home")
+                val colimaSocket = File(home, ".colima/docker.sock")
+                val colimaSocketAlt = File(home, ".colima/default/docker.sock")
 
-            if (socket != null) {
-                val socketPath = socket.absolutePath
-                if (System.getenv("DOCKER_HOST") == null) {
-                    System.setProperty("DOCKER_HOST", "unix://$socketPath")
+                val socket = when {
+                    colimaSocket.exists() -> colimaSocket
+                    colimaSocketAlt.exists() -> colimaSocketAlt
+                    else -> null
                 }
-                if (System.getenv("TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE") == null) {
-                    System.setProperty("TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE", socketPath)
+
+                if (socket != null) {
+                    val socketPath = socket.absolutePath
+                    if (System.getenv("DOCKER_HOST") == null) {
+                        System.setProperty("DOCKER_HOST", "unix://$socketPath")
+                    }
+                    if (System.getenv("TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE") == null) {
+                        System.setProperty("TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE", socketPath)
+                    }
+                    if (System.getenv("TESTCONTAINERS_RYUK_DISABLED") == null) {
+                        System.setProperty("TESTCONTAINERS_RYUK_DISABLED", "true")
+                    }
+                    println("Testcontainers: Auto-configured for Colima at $socketPath")
+                } else {
+                    println("Testcontainers: Using default Docker configuration (Docker Desktop or system Docker)")
                 }
-                if (System.getenv("TESTCONTAINERS_RYUK_DISABLED") == null) {
-                    System.setProperty("TESTCONTAINERS_RYUK_DISABLED", "true")
+            } else if (isWindows) {
+                // Docker Desktop on Windows uses named pipe: \\.\pipe\docker_engine
+                // Testcontainers should auto-detect this, but we can explicitly set it
+                val dockerHost = System.getenv("DOCKER_HOST")
+                if (dockerHost == null) {
+                    // Docker Desktop on Windows typically uses tcp://localhost:2375 or named pipe
+                    // Testcontainers will auto-detect, but we can help with Ryuk
+                    if (System.getenv("TESTCONTAINERS_RYUK_DISABLED") == null) {
+                        // Ryuk usually works fine on Windows, but can be disabled if needed
+                        // System.setProperty("TESTCONTAINERS_RYUK_DISABLED", "true")
+                    }
+                    println("Testcontainers: Using Docker Desktop on Windows (auto-detected)")
+                } else {
+                    println("Testcontainers: Using custom DOCKER_HOST: $dockerHost")
                 }
-                println("Testcontainers: Auto-configured for Colima at $socketPath")
+            } else {
+                println("Testcontainers: Using default Docker configuration")
             }
         }
 
