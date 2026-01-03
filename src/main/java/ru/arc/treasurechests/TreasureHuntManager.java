@@ -1,16 +1,5 @@
 package ru.arc.treasurechests;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Deque;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedDeque;
-
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.command.CommandSender;
@@ -24,9 +13,11 @@ import ru.arc.configs.Config;
 import ru.arc.configs.ConfigManager;
 import ru.arc.hooks.HookRegistry;
 
-import static ru.arc.util.Logging.error;
-import static ru.arc.util.Logging.info;
-import static ru.arc.util.Logging.warn;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
+
+import static ru.arc.util.Logging.*;
 
 public class TreasureHuntManager {
 
@@ -201,24 +192,16 @@ public class TreasureHuntManager {
         List<String> keys = config.keys("treasure-hunt-types");
         for (String key : keys) {
             try {
-                String locationPoolId = config.string("treasure-hunt-types." + key + ".location-pool-id", null);
-                if (locationPoolId == null) {
-                    error("Missing location pool id for: {}", key);
-                    continue;
-                }
+                String locationPoolId = config.string("treasure-hunt-types." + key + ".location-pool-id", "none");
                 List<String> chestTypeKeys = config.keys("treasure-hunt-types." + key + ".chest-types");
                 WeightedRandom<ChestType> weightedRandom = new WeightedRandom<>();
                 for (String chestTypeKey : chestTypeKeys) {
                     String type = config.string("treasure-hunt-types." + key + ".chest-types." + chestTypeKey + ".type", "VANILLA");
-                    String namespaceId = config.string("treasure-hunt-types." + key + ".chest-types." + chestTypeKey + ".ia-namespace-id", null);
-                    String treasurePoolId = config.string("treasure-hunt-types." + key + ".chest-types." + chestTypeKey + ".treasure-pool-id", null);
+                    String namespaceId = config.string("treasure-hunt-types." + key + ".chest-types." + chestTypeKey + ".ia-namespace-id", "");
+                    String treasurePoolId = config.string("treasure-hunt-types." + key + ".chest-types." + chestTypeKey + ".treasure-pool-id", "");
                     String particlePath = config.string("treasure-hunt-types." + key + ".chest-types." + chestTypeKey + ".particle-path", "default");
 
                     int weight = config.integer("treasure-hunt-types." + key + ".chest-types." + chestTypeKey + ".weight", 1);
-                    if (treasurePoolId == null || type == null || particlePath == null) {
-                        error("Missing required field for chest type: {}", chestTypeKey);
-                        continue;
-                    }
                     ChestType chestType = ChestType.builder()
                             .type(Type.valueOf(type))
                             .namespaceId(namespaceId)

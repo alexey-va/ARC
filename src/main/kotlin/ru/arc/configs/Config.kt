@@ -452,8 +452,10 @@ class Config internal constructor(
     fun load() {
         val yaml = Yaml()
         val configFile = folder.resolve(filePath).toFile()
+        val stream = FileInputStream(configFile)
         @Suppress("UNCHECKED_CAST")
-        map = (yaml.load(FileInputStream(configFile)) as? MutableMap<String, Any>) ?: ConcurrentHashMap()
+        map = (yaml.load(stream) as? MutableMap<String, Any>) ?: ConcurrentHashMap()
+        stream.close()
     }
 
     fun save() {

@@ -22,7 +22,7 @@ import java.util.Collections
 /**
  * /arc buildbook - создание книги строительства.
  *
- * Использование: /arc buildbook <building> <model-id> [rotation] [y-offset] [name...]
+ * Использование: /arc buildbook <building> <model-id> [rotation] [y-offset] [name]
  */
 object BuildBookSubCommand : SubCommand {
 

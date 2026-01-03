@@ -1,21 +1,7 @@
 package ru.arc.repository
 
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onStart
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import ru.arc.util.Logging.debug
@@ -71,13 +57,10 @@ class CachedRepository<T : Entity>(
     suspend fun init(): RepoResult<Unit> {
         info("Initializing repository: ${config.id}")
 
-        // Load all if configured
         if (config.loadAllOnStart) {
             val result = loadAll()
             if (result.isError) return result.map { }
         }
-
-        // Start background sync
         startBackgroundSync()
 
         // Start cleanup job if enabled

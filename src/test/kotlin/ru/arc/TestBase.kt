@@ -7,8 +7,10 @@ import org.mockbukkit.mockbukkit.ServerMock
 import org.mockbukkit.mockbukkit.inventory.ItemStackMock
 import ru.arc.autobuild.ClipboardLoaders
 import ru.arc.autobuild.MockClipboardLoader
+import ru.arc.configs.ConfigManager
 import ru.arc.gui.GuiItems
 import ru.arc.gui.MockGuiItemFactory
+import ru.arc.util.GuiUtils
 import ru.arc.util.ItemStackFactory
 import ru.arc.util.Logging
 import java.io.File
@@ -19,7 +21,7 @@ abstract class TestBase {
     companion object {
         private val mockGuiItemFactory = MockGuiItemFactory()
         private val mockClipboardLoader = MockClipboardLoader()
-        
+
         init {
             // Disable Loki appender in tests to avoid OOM from direct buffer allocation
             Logging.disableLokiAppender = true
@@ -48,8 +50,8 @@ abstract class TestBase {
         if (MockBukkit.isMocked()) {
             MockBukkit.unmock()
         }
-        ru.arc.configs.ConfigManager.clear()
-        
+        ConfigManager.clear()
+
         server = MockBukkit.mock()
 
         // Set server name first
@@ -137,9 +139,9 @@ abstract class TestBase {
         ARC.plugin = null
         ARC.serverName = null
         // Clear cached configs to ensure clean state for next test
-        ru.arc.configs.ConfigManager.clear()
+        ConfigManager.clear()
         // Clear GUI backgrounds cache (may contain test mocks)
-        ru.arc.util.GuiUtils.clearBackgrounds()
+        GuiUtils.clearBackgrounds()
         // Clear mock GUI factory state
         mockGuiItemFactory.clear()
         // Clear mock clipboard loader state

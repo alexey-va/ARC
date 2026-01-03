@@ -1,7 +1,9 @@
+import org.gradle.internal.os.OperatingSystem
+
 plugins {
     java
     kotlin("jvm") version "2.3.0"
-    id("com.gradleup.shadow") version "9.0.0"
+    id("com.gradleup.shadow") version "9.3.0"
 }
 
 group = "ARC"
@@ -46,15 +48,15 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.10.2")
 
+    implementation(kotlin("stdlib"))
+
     implementation(libs.com.github.stefvanschie.inventoryframework.`if`)
     implementation(libs.com.jeff.media.custom.block.data)
     implementation(libs.de.tr7zw.item.nbt.api)
     implementation(libs.org.apache.logging.log4j.log4j.api)
     implementation(libs.org.apache.logging.log4j.log4j.core)
     implementation(libs.com.google.code.gson.gson)
-    implementation(libs.pl.tkowalcz.tjahzi.log4j2.appender.nodep) {
-        exclude(group = "org.apache.logging.log4j")
-    }
+    implementation(libs.pl.tkowalcz.tjahzi.log4j2.appender.nodep)
 
     // server-provided
     compileOnly(libs.io.papermc.paper.paper.api)
@@ -109,8 +111,8 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
     // Testcontainers for Redis integration tests
-    testImplementation("org.testcontainers:testcontainers:1.20.4")
-    testImplementation("org.testcontainers:junit-jupiter:1.20.4")
+    testImplementation("org.testcontainers:testcontainers:2.0.2")
+    testImplementation("org.testcontainers:testcontainers-junit-jupiter:2.0.2")
 
     // Add compileOnly dependencies to test classpath so tests can run
     // These are server-provided at runtime, but needed for testing
@@ -145,9 +147,19 @@ tasks {
     test {
         useJUnitPlatform()
 
-        // Add environment variables for Testcontainers with Colima
-        environment("TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE", "/var/run/docker.sock")
-        environment("DOCKER_HOST", "unix://${System.getProperty("user.home")}/.colima/default/docker.sock")
+        val os = OperatingSystem.current()
+
+        if (os.isMacOsX) {
+            // Colima (macOS)
+            environment(
+                "DOCKER_HOST",
+                "unix://${System.getProperty("user.home")}/.colima/default/docker.sock"
+            )
+            environment(
+                "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE",
+                "/var/run/docker.sock"
+            )
+        }
     }
 
     shadowJar {
@@ -163,8 +175,6 @@ tasks {
         relocate("com.jeff_media.customblockdata", "arc.arc.libs.customblockdata")
         relocate("com.github.stefvanschie.inventoryframework", "arc.arc.libs.inventoryframework")
         relocate("de.tr7zw.changeme.nbtapi", "arc.arc.libs.nbtapi")
-
-        minimize()
     }
 
     build {

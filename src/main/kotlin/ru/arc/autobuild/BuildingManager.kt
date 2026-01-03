@@ -11,6 +11,7 @@ import ru.arc.hooks.HookRegistry
 import ru.arc.util.CooldownManager
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
+import java.nio.file.FileVisitOption
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.util.*
@@ -48,11 +49,12 @@ object BuildingManager {
         Files.createDirectories(schematicsPath)
 
         try {
-            Files.walk(schematicsPath, 3).use { stream ->
-                stream.filter { !it.isDirectory() }
-                    .map { Building(it.name) }
-                    .forEach { buildings[it.fileName] = it }
-            }
+            Files.walk(schematicsPath, 3, FileVisitOption.FOLLOW_LINKS)
+                .use { stream ->
+                    stream.filter { !it.isDirectory() }
+                        .map { Building(it.name) }
+                        .forEach { buildings[it.fileName] = it }
+                }
         } catch (e: Exception) {
             error("Error loading buildings", e)
         }
@@ -139,7 +141,7 @@ object BuildingManager {
 
             // Same location clicked while showing outline - advance to confirmation
             existingSite.state == ConstructionState.DisplayingOutline &&
-                existingSite.same(player, location, building) -> existingSite.startConfirmation()
+                    existingSite.same(player, location, building) -> existingSite.startConfirmation()
 
             // Already building
             existingSite.state == ConstructionState.Building -> {
