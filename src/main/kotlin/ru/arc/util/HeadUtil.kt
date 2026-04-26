@@ -25,7 +25,7 @@ object HeadUtil {
     fun getSkull(uuid: UUID): ItemStack {
         val item = ItemStack(Material.PLAYER_HEAD)
         val texture = fetchHead(uuid).getNow(null)
-        if (texture == null || texture.isEmpty()) return item
+        if (texture.isNullOrEmpty()) return item
         NBT.modifyComponents(item) { nbt ->
             val profileNbt = nbt.getOrCreateCompound("minecraft:profile")
             profileNbt.setUUID("id", UUID.randomUUID())
@@ -40,7 +40,7 @@ object HeadUtil {
     fun getSkull(name: String): ItemStack {
         val texture = fetchHead(name).getNow(null)
         val item = ItemStack(Material.PLAYER_HEAD)
-        if (texture == null || texture.isEmpty()) return item
+        if (texture.isNullOrEmpty()) return item
         NBT.modify(item) { nbt ->
             val skullOwnerCompound = nbt.getOrCreateCompound("SkullOwner")
             skullOwnerCompound.setUUID("Id", UUID.randomUUID())
@@ -57,7 +57,7 @@ object HeadUtil {
     fun fetchHead(uuid: UUID): CompletableFuture<String?> {
         val offlinePlayer = Bukkit.getOfflinePlayer(uuid)
         var name = offlinePlayer.name
-        if (name == null || name.isEmpty()) {
+        if (name.isNullOrEmpty()) {
             name = "MHF_Steve"
         }
         return fetchHead(name)

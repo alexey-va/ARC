@@ -1,4 +1,3 @@
-@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 
 package ru.arc.core
 
@@ -318,9 +317,9 @@ class ModuleRegistryTest {
                 try {
                     when (module) {
                         is TestModule -> module.init()
-                        else -> (module as? PluginModule)?.init()
+                        else -> module.init()
                     }
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     // Logged but continue
                 }
             }
@@ -331,5 +330,3 @@ class ModuleRegistryTest {
         }
     }
 }
-
-

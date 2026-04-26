@@ -1,8 +1,10 @@
 package ru.arc.repository.redis
 
 import com.google.gson.Gson
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import ru.arc.network.ChannelListener
 import ru.arc.network.RedisOperations
@@ -21,6 +23,8 @@ class RedisSyncService<T : Entity>(
     private val entityType: Type,
     private val gson: Gson = Gson()
 ) : SyncService<T> {
+    // Coroutine scope for handling async message processing
+    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     private var updateHandler: (suspend (T) -> Unit)? = null
     private var deleteHandler: (suspend (String) -> Unit)? = null
@@ -73,29 +77,28 @@ class RedisSyncService<T : Entity>(
 
     @Suppress("UNCHECKED_CAST")
     private fun processMessage(json: String) {
-        try {
-            val message = gson.fromJson(json, SyncMessage::class.java)
+        // Launch in scope instead of blocking the Redis subscription thread
+        scope.launch {
+            try {
+                val message = gson.fromJson(json, SyncMessage::class.java)
 
-            when (message.type) {
-                MessageType.UPDATE -> {
-                    val entity = gson.fromJson(message.data, entityType) as T
-                    updateHandler?.let { handler ->
-                        runBlocking {
+                when (message.type) {
+                    MessageType.UPDATE -> {
+                        val entity = gson.fromJson(message.data, entityType) as T
+                        updateHandler?.let { handler ->
                             handler(entity)
                         }
                     }
-                }
 
-                MessageType.DELETE -> {
-                    deleteHandler?.let { handler ->
-                        runBlocking {
+                    MessageType.DELETE -> {
+                        deleteHandler?.let { handler ->
                             handler(message.id)
                         }
                     }
                 }
+            } catch (e: Exception) {
+                Logging.error("Failed to process sync message: ${e.message}", e)
             }
-        } catch (e: Exception) {
-            Logging.warn("Failed to process sync message: ${e.message}")
         }
     }
 

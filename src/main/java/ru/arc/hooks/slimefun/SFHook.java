@@ -23,7 +23,7 @@ import static ru.arc.util.TextUtil.mm;
 
 public class SFHook implements Listener {
 
-    private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "backpacks.yml");
+    private static final Config config = ConfigManager.of(ARC.getInstance().getDataPath(), "backpacks.yml");
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void onUseBackpack(PlayerRightClickEvent event) {

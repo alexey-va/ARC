@@ -12,7 +12,13 @@ import ru.arc.configs.ConfigManager
 object CommandConfig {
 
     private val config: Config
-        get() = ConfigManager.of(ARC.plugin.dataFolder.toPath().resolve("config"), "commands.yml")
+        get() =
+            ConfigManager.of(
+                ARC.instance.dataFolder
+                    .toPath()
+                    .resolve("config"),
+                "commands.yml",
+            )
 
     // ==================== Command Metadata ====================
 

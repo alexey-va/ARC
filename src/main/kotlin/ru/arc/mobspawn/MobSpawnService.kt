@@ -57,7 +57,7 @@ class MobSpawnService(
 ) {
     private var task: ScheduledTask? = null
     private val mobPicker: WeightedRandom<EntityType> = config.createMobPicker()
-    private val trackedMobTypes: Set<EntityType> = config.mobWeights.keys
+    private val trackedMobTypes: Set<EntityType> = config.trackedMobTypes
 
     /**
      * Start the mob spawn task.

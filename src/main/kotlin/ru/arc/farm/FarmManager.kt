@@ -3,6 +3,7 @@ package ru.arc.farm
 import org.bukkit.event.block.BlockBreakEvent
 import ru.arc.ARC
 import ru.arc.core.BukkitTaskScheduler
+import ru.arc.core.Lifecycle
 import ru.arc.core.ScheduledTask
 import ru.arc.core.TaskScheduler
 import ru.arc.hooks.HookRegistry
@@ -22,8 +23,7 @@ class FarmService(
     private val regionFactory: FarmRegionFactory,
     private val scheduler: TaskScheduler,
     private val plugin: org.bukkit.plugin.Plugin,
-    private val messages: FarmMessages = FarmMessages()
-) {
+) : Lifecycle {
     private val zones = mutableListOf<FarmZone>()
     private var resetTask: ScheduledTask? = null
     private var lastResetDay = -1
@@ -31,7 +31,7 @@ class FarmService(
     /**
      * Initialize all zones from config.
      */
-    fun start() {
+    override fun start() {
         stop()
 
         // Create farm zones
@@ -44,7 +44,7 @@ class FarmService(
                     config = farmConfig,
                     region = region,
                     adminPermission = config.adminPermission,
-                    messages = messages
+                    messages = config.messages,
                 )
                 zones.add(farm)
                 info("Loaded farm zone '{}' in {} / {}", farmConfig.id, farmConfig.worldName, farmConfig.regionName)
@@ -61,7 +61,7 @@ class FarmService(
                     config = lumberConfig,
                     region = region,
                     adminPermission = config.adminPermission,
-                    messages = messages
+                    messages = config.messages,
                 )
                 zones.add(lumbermill)
                 info(
@@ -85,7 +85,7 @@ class FarmService(
                     adminPermission = config.adminPermission,
                     plugin = plugin,
                     scheduler = scheduler,
-                    messages = messages
+                    messages = config.messages,
                 )
                 mine.start()
                 zones.add(mine)
@@ -107,7 +107,7 @@ class FarmService(
     /**
      * Stop all zones and cleanup.
      */
-    fun stop() {
+    override fun stop() {
         resetTask?.cancel()
         resetTask = null
 
@@ -161,51 +161,26 @@ class FarmService(
 /**
  * Static facade for Java compatibility.
  */
-object FarmManager {
-
-    private var service: FarmService? = null
-
+object FarmManager : ru.arc.core.ServiceManager<FarmService>() {
     /**
-     * Initialize farm manager with default production dependencies.
+     * Create the production FarmService instance.
      */
-    @JvmStatic
-    fun init() {
+    override fun createService(): FarmService {
         if (HookRegistry.wgHook == null) {
             info("WorldGuard not found! Disabling farm features...")
-            return
+            throw IllegalStateException("WorldGuard not found")
         }
 
-        val config = FarmModuleConfig.load(ARC.plugin.dataPath)
-        val scheduler = BukkitTaskScheduler(ARC.plugin)
+        val config = FarmModuleConfig.load(ARC.instance.dataPath)
+        val scheduler = BukkitTaskScheduler(ARC.instance)
         val regionFactory = WorldGuardRegionFactory()
 
-        service = FarmService(
+        return FarmService(
             config = config,
             regionFactory = regionFactory,
             scheduler = scheduler,
-            plugin = ARC.plugin
+            plugin = ARC.instance,
         )
-
-        service?.start()
-    }
-
-    /**
-     * Initialize with custom service (for testing).
-     */
-    @JvmStatic
-    fun init(customService: FarmService) {
-        service?.stop()
-        service = customService
-        service?.start()
-    }
-
-    /**
-     * Stop and cleanup.
-     */
-    @JvmStatic
-    fun clear() {
-        service?.stop()
-        service = null
     }
 
     /**
@@ -217,16 +192,11 @@ object FarmManager {
     }
 
     /**
-     * Cancel tasks (alias for clear).
+     * Cancel tasks (alias for cancel).
      */
     @JvmStatic
     fun cancelTasks() {
-        clear()
+        cancel()
     }
-
-    /**
-     * Get the underlying service.
-     */
-    fun getService(): FarmService? = service
 }
 

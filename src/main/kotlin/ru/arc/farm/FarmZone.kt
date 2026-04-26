@@ -66,7 +66,7 @@ class CropFarm(
     private val config: FarmZoneConfig,
     private val region: FarmRegion,
     private val adminPermission: String,
-    private val messages: FarmMessages = FarmMessages(),
+    private val messages: FarmMessages,
     private val limitTracker: BlockLimitTracker = BlockLimitTracker(config.maxBlocksPerDay, 64)
 ) : FarmZone {
 
@@ -188,7 +188,7 @@ class Lumbermill(
     private val config: LumbermillConfig,
     private val region: FarmRegion,
     private val adminPermission: String,
-    private val messages: FarmMessages = FarmMessages()
+    private val messages: FarmMessages,
 ) : FarmZone {
 
     override fun processBreak(event: BlockBreakEvent): BreakResult {

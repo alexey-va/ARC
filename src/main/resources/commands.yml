@@ -1,0 +1,12 @@
+# =============================================================================
+# commands.yml (корень data folder) — настройки команды /x (кросс-сервер).
+# Сообщения и метаданные /arc лежат в config/commands.yml.
+# =============================================================================
+
+xcommand:
+  # Описание для справки / tab
+  description: XCommand to send cross-server commands
+  # Подсказка синтаксиса
+  usage: /x <command> -server:server -player:player
+  # Сообщение после успешной постановки задачи; %command% — исходная команда
+  success-message: <gold>Команда <gray>%command% <gold>успешна отправлена!

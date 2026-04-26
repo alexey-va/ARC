@@ -4,7 +4,6 @@ import com.google.gson.Gson
 import ru.arc.ARC
 import ru.arc.ai.assistant.Tools.getTool
 import ru.arc.network.ChannelListener
-import ru.arc.util.Logging
 import ru.arc.util.Logging.info
 
 class ToolMessanger : ChannelListener {
@@ -12,14 +11,14 @@ class ToolMessanger : ChannelListener {
 
     override fun consume(channel: String?, message: String?, originServer: String?) {
         val toolMessageRaw = gson.fromJson(message, ToolMessageRaw::class.java)
-        val toolClass = getTool(toolMessageRaw.toolName)
+        val toolClass = getTool(toolMessageRaw.toolName ?: return)
         val toolDto: Tool = gson.fromJson(toolMessageRaw.toolDto, toolClass)
 
         val execute = toolDto.execute()
         val toolResponse = ToolResponse(
-            uuid = toolMessageRaw.uuid,
+            uuid = toolMessageRaw.uuid ?: return,
             result = gson.toJson(execute),
-            serverName = ARC.serverName,
+            serverName = ARC.serverName ?: "",
         )
         info(
             "Tool {} executed for uuid {}: {}",
@@ -28,7 +27,7 @@ class ToolMessanger : ChannelListener {
             toolResponse
         )
 
-        ARC.redisManager.publish(CHANNEL_RESPONSE_TOOLS, gson.toJson(toolResponse))
+        ARC.redisManager!!.publish(CHANNEL_RESPONSE_TOOLS, gson.toJson(toolResponse))
     }
 
     companion object {

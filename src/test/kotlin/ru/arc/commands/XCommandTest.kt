@@ -1,9 +1,7 @@
-@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 
 package ru.arc.commands
 
 import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -218,10 +216,9 @@ class XCommandTest : TestBase() {
         fun testEmptyCompletion() {
             player.addAttachment(plugin, "arc.x", true)
 
-            val completions = XCommand.onTabComplete(player, mockCommand, "x", arrayOf(""))
+            val completions = requireNotNull(XCommand.onTabComplete(player, mockCommand, "x", arrayOf("")))
 
-            assertNotNull(completions)
-            assertTrue(completions!!.contains("-servers"))
+            assertTrue(completions.contains("-servers"))
             assertTrue(completions.contains("-player"))
             assertTrue(completions.contains("-timeout"))
             assertTrue(completions.contains("-delay"))
@@ -233,10 +230,9 @@ class XCommandTest : TestBase() {
         fun testServersCompletion() {
             player.addAttachment(plugin, "arc.x", true)
 
-            val completions = XCommand.onTabComplete(player, mockCommand, "x", arrayOf("-servers"))
+            val completions = requireNotNull(XCommand.onTabComplete(player, mockCommand, "x", arrayOf("-servers")))
 
-            assertNotNull(completions)
-            assertTrue(completions!!.any { it.startsWith("-servers:") })
+            assertTrue(completions.any { it.startsWith("-servers:") })
             assertTrue(completions.contains("-servers:all"))
         }
 
@@ -245,10 +241,9 @@ class XCommandTest : TestBase() {
         fun testTimeoutCompletion() {
             player.addAttachment(plugin, "arc.x", true)
 
-            val completions = XCommand.onTabComplete(player, mockCommand, "x", arrayOf("-timeout"))
+            val completions = requireNotNull(XCommand.onTabComplete(player, mockCommand, "x", arrayOf("-timeout")))
 
-            assertNotNull(completions)
-            assertTrue(completions!!.contains("-timeout:100"))
+            assertTrue(completions.contains("-timeout:100"))
             assertTrue(completions.contains("-timeout:200"))
         }
 
@@ -257,10 +252,9 @@ class XCommandTest : TestBase() {
         fun testDelayCompletion() {
             player.addAttachment(plugin, "arc.x", true)
 
-            val completions = XCommand.onTabComplete(player, mockCommand, "x", arrayOf("-delay"))
+            val completions = requireNotNull(XCommand.onTabComplete(player, mockCommand, "x", arrayOf("-delay")))
 
-            assertNotNull(completions)
-            assertTrue(completions!!.contains("-delay:0"))
+            assertTrue(completions.contains("-delay:0"))
             assertTrue(completions.contains("-delay:20"))
         }
 
@@ -269,10 +263,9 @@ class XCommandTest : TestBase() {
         fun testSenderCompletion() {
             player.addAttachment(plugin, "arc.x", true)
 
-            val completions = XCommand.onTabComplete(player, mockCommand, "x", arrayOf("-sender"))
+            val completions = requireNotNull(XCommand.onTabComplete(player, mockCommand, "x", arrayOf("-sender")))
 
-            assertNotNull(completions)
-            assertTrue(completions!!.contains("-sender:console"))
+            assertTrue(completions.contains("-sender:console"))
             assertTrue(completions.contains("-sender:player"))
         }
 
@@ -281,10 +274,10 @@ class XCommandTest : TestBase() {
         fun testMoveToServerCompletion() {
             player.addAttachment(plugin, "arc.x", true)
 
-            val completions = XCommand.onTabComplete(player, mockCommand, "x", arrayOf("-move-to-server"))
+            val completions =
+                requireNotNull(XCommand.onTabComplete(player, mockCommand, "x", arrayOf("-move-to-server")))
 
-            assertNotNull(completions)
-            assertTrue(completions!!.contains("-move-to-server:true"))
+            assertTrue(completions.contains("-move-to-server:true"))
             assertTrue(completions.contains("-move-to-server:false"))
         }
     }
@@ -332,5 +325,3 @@ class XCommandTest : TestBase() {
         }
     }
 }
-
-

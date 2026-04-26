@@ -1,4 +1,3 @@
-@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 package ru.arc.util
 
 import net.kyori.adventure.text.Component
@@ -223,7 +222,7 @@ class TextUtilTest : TestBase() {
         try {
             val result = TextUtil.timeComponent(3600, TimeUnit.SECONDS)
             assertNotNull(result, "Should create time component")
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Acceptable if config is not available
             assertTrue(true, "Time component might require config")
         }

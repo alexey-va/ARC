@@ -200,5 +200,3 @@ class TestRedisManager(
      */
     fun totalEntries(): Int = hashes.values.sumOf { it.size }
 }
-
-

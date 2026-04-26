@@ -24,7 +24,7 @@ import static ru.arc.util.Logging.info;
 
 public class JoinListener implements Listener {
 
-    Config config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "misc.yml");
+    Config config = ConfigManager.of(ARC.getInstance().getDataFolder().toPath(), "misc.yml");
     Map<UUID, String> invMap = new ConcurrentHashMap<>();
 
     @EventHandler
@@ -65,7 +65,7 @@ public class JoinListener implements Listener {
 
         int ticks = config.integer("join.invulnerable-ticks", 20 * 7);
 
-        Bukkit.getScheduler().runTaskLater(ARC.plugin, () -> stripInvulnerable(player), ticks);
+        Bukkit.getScheduler().runTaskLater(ARC.getInstance(), () -> stripInvulnerable(player), ticks);
     }
 
 
@@ -76,6 +76,7 @@ public class JoinListener implements Listener {
         info("Player {} is not invulnerable anymore", player.getName());
     }
 
+    @SuppressWarnings("deprecation")
     private void fullHeal(Player player) {
         new BukkitRunnable() {
             @Override
@@ -87,7 +88,7 @@ public class JoinListener implements Listener {
                 info("Player {} health {} maxhealth {}", player.getName(), currentHealth, maxHealth);
                 if (currentHealth < maxHealth) player.setHealth(maxHealth);
             }
-        }.runTaskLater(ARC.plugin, config.integer("join.full-heal-delay-ticks", 10));
+        }.runTaskLater(ARC.getInstance(), config.integer("join.full-heal-delay-ticks", 10));
     }
 
 }

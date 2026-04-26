@@ -11,7 +11,6 @@ import ru.arc.hooks.betterstructures.BSListener;
 import ru.arc.hooks.citizens.CitizensHook;
 import ru.arc.hooks.elitemobs.EMHook;
 import ru.arc.hooks.elitemobs.EMListener;
-import ru.arc.hooks.jobs.JobsHook;
 import ru.arc.hooks.lands.LandsHook;
 import ru.arc.hooks.lootchest.LootChestHook;
 import ru.arc.hooks.luckperms.LuckPermsHook;
@@ -22,6 +21,7 @@ import ru.arc.hooks.worldguard.WGHook;
 import ru.arc.hooks.yamipa.YamipaHook;
 import ru.arc.hooks.zauction.AuctionHook;
 import ru.arc.hooks.ztranslator.TranslatorHook;
+import ru.arc.jobs.JobsModule;
 import ru.arc.listeners.BlockListener;
 import ru.arc.listeners.CMIListener;
 import ru.arc.listeners.ChatListener;
@@ -46,7 +46,6 @@ public class HookRegistry {
     public static CitizensHook citizensHook;
     public static ViaVersionHook viaVersionHook;
     public static WGHook wgHook;
-    public static ShopHook shopHook;
     public static SFHook sfHook;
     public static EMHook emHook;
     public static YamipaHook yamipaHook;
@@ -54,7 +53,7 @@ public class HookRegistry {
     public static LootChestHook lootChestHook;
     public static AuctionHook auctionHook;
     public static TranslatorHook translatorHook;
-    public static JobsHook jobsHook;
+    public static boolean jobsEnabled = false;
     public static BankHook bankHook;
     public static RedisEcoHook redisEcoHook;
     public static AuraSkillsHook auraSkillsHook;
@@ -114,17 +113,17 @@ public class HookRegistry {
         });
         register("WorldGuard", true, () -> {
             wgHook = new WGHook();
-            Bukkit.getPluginManager().registerEvents(wgHook, ARC.plugin);
+            Bukkit.getPluginManager().registerEvents(wgHook, ARC.getInstance());
         });
 
         register("Slimefun", true, () -> {
             sfHook = new SFHook();
-            Bukkit.getPluginManager().registerEvents(sfHook, ARC.plugin);
+            Bukkit.getPluginManager().registerEvents(sfHook, ARC.getInstance());
         });
 
         register("AdvancedEnchantments", true, () -> {
             aeHook = new AEHook();
-            Bukkit.getPluginManager().registerEvents(aeHook, ARC.plugin);
+            Bukkit.getPluginManager().registerEvents(aeHook, ARC.getInstance());
         });
 
         register("EliteMobs", false, () -> {
@@ -132,77 +131,58 @@ public class HookRegistry {
             emHook.reload();
             if (emListener == null) {
                 emListener = new EMListener();
-                Bukkit.getPluginManager().registerEvents(emListener, ARC.plugin);
+                Bukkit.getPluginManager().registerEvents(emListener, ARC.getInstance());
             }
         });
 
         register("HuskHomes", true, () -> {
             huskHomesHook = new HuskHomesHook();
-            Bukkit.getPluginManager().registerEvents(huskHomesHook, ARC.plugin);
+            Bukkit.getPluginManager().registerEvents(huskHomesHook, ARC.getInstance());
         });
 
-        register("Lands", true, () -> {
-            landsHook = new LandsHook();
-        });
+        register("Lands", true, () -> landsHook = new LandsHook());
 
         register("Jobs", true, () -> {
-            jobsHook = new JobsHook();
+            JobsModule.init();
+            jobsEnabled = true;
         });
 
-        register("zAuctionHouseV3", true, () -> {
-            auctionHook = new AuctionHook();
-        });
+        register("zAuctionHouseV3", true, () -> auctionHook = new AuctionHook());
 
-        register("Bank", true, () -> {
-            bankHook = new BankHook();
-        });
+        register("Bank", true, () -> bankHook = new BankHook());
 
         register("RedisEconomy", true, () -> {
             redisEcoHook = new RedisEcoHook();
             RedisEcoListener redisEcoListener = new RedisEcoListener();
-            Bukkit.getPluginManager().registerEvents(redisEcoListener, ARC.plugin);
+            Bukkit.getPluginManager().registerEvents(redisEcoListener, ARC.getInstance());
         });
 
         translatorHook = new TranslatorHook();
 
-        register("LuckPerms", true, () -> {
-            luckPermsHook = new LuckPermsHook();
-        });
+        register("LuckPerms", true, () -> luckPermsHook = new LuckPermsHook());
 
-        register("AuraSkills", true, () -> {
-            auraSkillsHook = new AuraSkillsHook();
-        });
+        register("AuraSkills", true, () -> auraSkillsHook = new AuraSkillsHook());
 
         register("CMI", true, () -> {
             cmiHook = new CMIHook();
             CMIListener cmiListener = new CMIListener();
-            Bukkit.getPluginManager().registerEvents(cmiListener, ARC.plugin);
+            Bukkit.getPluginManager().registerEvents(cmiListener, ARC.getInstance());
         });
 
-        register("ViaVersion", true, () -> {
-            viaVersionHook = new ViaVersionHook();
-        });
+        register("ViaVersion", true, () -> viaVersionHook = new ViaVersionHook());
 
-        register("packetevents", true, () -> {
-            packetEventsHook = new PacketEventsHook();
-        });
+        register("packetevents", true, () -> packetEventsHook = new PacketEventsHook());
 
-        register("PlayerWarps", true, () -> {
-            playerWarpsHook = new PlayerWarpsHook();
-        });
+        register("PlayerWarps", true, () -> playerWarpsHook = new PlayerWarpsHook());
 
-        register("LootChest", true, () -> {
-            lootChestHook = new LootChestHook();
-        });
+        register("LootChest", true, () -> lootChestHook = new LootChestHook());
 
-        register("YamipaPlugin", true, () -> {
-            yamipaHook = new YamipaHook();
-        });
+        register("YamipaPlugin", true, () -> yamipaHook = new YamipaHook());
 
         register("ItemsAdder", true, () -> {
             itemsAdderHook = new ItemsAdderHook();
             iaEvents = new IAEvents();
-            Bukkit.getPluginManager().registerEvents(iaEvents, ARC.plugin);
+            Bukkit.getPluginManager().registerEvents(iaEvents, ARC.getInstance());
         });
 
         register("Citizens", true, () -> {
@@ -212,17 +192,17 @@ public class HookRegistry {
 
         register("BetterRTP", true, () -> {
             betterRTPListener = new BetterRTPListener();
-            Bukkit.getPluginManager().registerEvents(betterRTPListener, ARC.plugin);
+            Bukkit.getPluginManager().registerEvents(betterRTPListener, ARC.getInstance());
         });
 
         register("BetterStructures", true, () -> {
             bsListener = new BSListener();
-            Bukkit.getPluginManager().registerEvents(bsListener, ARC.plugin);
+            Bukkit.getPluginManager().registerEvents(bsListener, ARC.getInstance());
         });
 
         register("EconomyShopGUI-Premium", true, () -> {
             shopListener = new ShopListener();
-            Bukkit.getPluginManager().registerEvents(shopListener, ARC.plugin);
+            Bukkit.getPluginManager().registerEvents(shopListener, ARC.getInstance());
         });
 
 
@@ -231,37 +211,37 @@ public class HookRegistry {
     private void registerVanillaEvents() {
         if (chatListener == null) {
             chatListener = new ChatListener();
-            Bukkit.getPluginManager().registerEvents(chatListener, ARC.plugin);
+            Bukkit.getPluginManager().registerEvents(chatListener, ARC.getInstance());
         }
 
         if (respawnListener == null) {
             respawnListener = new RespawnListener();
-            Bukkit.getPluginManager().registerEvents(respawnListener, ARC.plugin);
+            Bukkit.getPluginManager().registerEvents(respawnListener, ARC.getInstance());
         }
 
         if (spawnerListener == null) {
             spawnerListener = new SpawnerListener();
-            Bukkit.getPluginManager().registerEvents(spawnerListener, ARC.plugin);
+            Bukkit.getPluginManager().registerEvents(spawnerListener, ARC.getInstance());
         }
 
         if (joinListener == null) {
             joinListener = new JoinListener();
-            Bukkit.getPluginManager().registerEvents(joinListener, ARC.plugin);
+            Bukkit.getPluginManager().registerEvents(joinListener, ARC.getInstance());
         }
 
         if (blockListener == null) {
             blockListener = new BlockListener();
-            Bukkit.getPluginManager().registerEvents(blockListener, ARC.plugin);
+            Bukkit.getPluginManager().registerEvents(blockListener, ARC.getInstance());
         }
 
         if (pickupListener == null) {
             pickupListener = new PickupListener();
-            Bukkit.getPluginManager().registerEvents(pickupListener, ARC.plugin);
+            Bukkit.getPluginManager().registerEvents(pickupListener, ARC.getInstance());
         }
 
         if (commandListener == null) {
             commandListener = new CommandListener();
-            Bukkit.getPluginManager().registerEvents(commandListener, ARC.plugin);
+            Bukkit.getPluginManager().registerEvents(commandListener, ARC.getInstance());
         }
     }
 

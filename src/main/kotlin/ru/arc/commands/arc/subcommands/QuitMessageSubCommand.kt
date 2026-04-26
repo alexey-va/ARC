@@ -3,8 +3,7 @@ package ru.arc.commands.arc.subcommands
 import org.bukkit.command.CommandSender
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.player
-import ru.arc.misc.JoinMessageGui
-import ru.arc.util.GuiUtils
+import ru.arc.misc.JoinMessageGuiFactory
 
 /**
  * /arc quitmessage - Open quit message customization GUI.
@@ -20,7 +19,7 @@ object QuitMessageSubCommand : SubCommand {
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
         val player = sender.player ?: return true
-        GuiUtils.constructAndShowAsync({ JoinMessageGui(player, false, 0) }, player)
+        JoinMessageGuiFactory.show(player, isJoin = false)
         return true
     }
 }

@@ -32,11 +32,11 @@ object Logging {
             // Return a dummy config for testing
             ConfigManager.create(
                 java.nio.file.Paths.get(System.getProperty("java.io.tmpdir")),
-                "logging.yml",
+                ConfigManager.bundledModuleResource("logging.yml"),
                 "test-logging"
             )
         } else {
-            ConfigManager.of(ARC.plugin.dataPath, "logging.yml")
+            ConfigManager.ofModule(ARC.instance.dataPath, "logging.yml")
         }
     }
     var configVersion = -1
@@ -220,7 +220,7 @@ object Logging {
 
         try {
             val cfg = if (ARC.plugin != null) {
-                ConfigManager.of(ARC.plugin.dataPath, "logging.yml")
+                ConfigManager.ofModule(ARC.instance.dataPath, "logging.yml")
             } else return
 
             if (!cfg.bool("enabled", false)) return
@@ -236,8 +236,7 @@ object Logging {
 
                         else -> true
                     }
-                }
-                .map { (key, value) -> Label.createLabel(key, value.toString(), null) }
+                }.map { (key, value) -> Label.createLabel(key, value, null) }
                 .toTypedArray()
 
             val headers = labels.map { Header.createHeader(it.name, it.value) }.toTypedArray()

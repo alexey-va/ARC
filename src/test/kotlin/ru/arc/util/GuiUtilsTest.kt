@@ -1,4 +1,3 @@
-@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 package ru.arc.util
 
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui
@@ -21,7 +20,6 @@ import ru.arc.gui.GuiItems
 import java.util.UUID
 
 class GuiUtilsTest : TestBase() {
-
     @BeforeEach
     override fun setUpBase() {
         super.setUpBase()
@@ -111,7 +109,7 @@ class GuiUtilsTest : TestBase() {
         val newDisplay = Component.text("New Name")
         var callbackCalled = false
 
-        val task = GuiUtils.temporaryChange(stack, newDisplay, null, 0, { callbackCalled = true })
+        GuiUtils.temporaryChange(stack, newDisplay, null, 0, { callbackCalled = true })
 
         // Run scheduler to execute the task
         server.scheduler.performTicks(1)
@@ -122,10 +120,12 @@ class GuiUtilsTest : TestBase() {
     fun testTemporaryChangeWithTagResolver() {
         val stack = ItemStackMock(Material.DIAMOND, 1)
         val newDisplay = Component.text("New Name")
-        val resolver = net.kyori.adventure.text.minimessage.tag.resolver.TagResolver.resolver(
-            "test",
-            net.kyori.adventure.text.minimessage.tag.Tag.inserting(Component.text("value"))
-        )
+        val resolver =
+            net.kyori.adventure.text.minimessage.tag.resolver.TagResolver.resolver(
+                "test",
+                net.kyori.adventure.text.minimessage.tag.Tag
+                    .inserting(Component.text("value")),
+            )
 
         val task = GuiUtils.temporaryChange(stack, newDisplay, null, 1, {}, resolver)
 
@@ -168,9 +168,10 @@ class GuiUtilsTest : TestBase() {
     @Test
     fun testConstructAndShowAsync() {
         val player = server.addPlayer()
-        val supplier = java.util.function.Supplier<ChestGui> {
-            mock<ChestGui>()
-        }
+        val supplier =
+            java.util.function.Supplier<ChestGui> {
+                mock<ChestGui>()
+            }
 
         GuiUtils.constructAndShowAsync(supplier, player, 1)
         server.scheduler.performTicks(5)
@@ -180,9 +181,10 @@ class GuiUtilsTest : TestBase() {
     @Test
     fun testConstructAndShowAsyncDefaultDelay() {
         val player = server.addPlayer()
-        val supplier = java.util.function.Supplier<ChestGui> {
-            mock<ChestGui>()
-        }
+        val supplier =
+            java.util.function.Supplier<ChestGui> {
+                mock<ChestGui>()
+            }
 
         GuiUtils.constructAndShowAsync(supplier, player)
         server.scheduler.performTicks(5)
@@ -192,9 +194,10 @@ class GuiUtilsTest : TestBase() {
     @Test
     fun testConstructAndShowAsyncWithException() {
         val player = server.addPlayer()
-        val supplier = java.util.function.Supplier<ChestGui> {
-            throw RuntimeException("Test exception")
-        }
+        val supplier =
+            java.util.function.Supplier<ChestGui> {
+                throw RuntimeException("Test exception")
+            }
 
         GuiUtils.constructAndShowAsync(supplier, player, 1)
         server.scheduler.performTicks(5)

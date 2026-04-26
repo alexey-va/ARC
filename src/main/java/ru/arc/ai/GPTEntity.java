@@ -133,7 +133,7 @@ public class GPTEntity {
                     new ChatHistory(playerUuid, config.integer("ai." + archetype + ".max-history-length", 100)));
             chatHistory.addPlayerMessage(message);
             chatHistory.entries().forEach(entry ->
-                    messages.add(Map.of("role", entry.isPlayer() ? "user" : "assistant", "content", entry.text())));
+                    messages.add(Map.of("role", entry.isPlayer() ? "user" : "assistant", "content", entry.getText())));
         } else {
             chatHistory = null;
             messages.add(Map.of("role", "user", "content", message));

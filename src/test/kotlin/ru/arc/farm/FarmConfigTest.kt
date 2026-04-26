@@ -1,4 +1,3 @@
-@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 
 package ru.arc.farm
 
@@ -22,7 +21,7 @@ class FarmConfigTest {
 
         @Test
         fun `default config has empty zones`() {
-            val config = FarmModuleConfig()
+            val config = TestFarmModuleConfig()
 
             assertTrue(config.farms.isEmpty())
             assertTrue(config.lumbermills.isEmpty())
@@ -72,11 +71,12 @@ class FarmConfigTest {
                 expPerOre = 2
             )
 
-            val config = FarmModuleConfig(
-                adminPermission = "custom.admin",
-                farms = listOf(farmConfig),
-                lumbermills = listOf(lumberConfig),
-                mines = listOf(mineConfig)
+            val config =
+                TestFarmModuleConfig(
+                    adminPermission = "custom.admin",
+                    farms = listOf(farmConfig),
+                    lumbermills = listOf(lumberConfig),
+                    mines = listOf(mineConfig)
             )
 
             assertEquals("custom.admin", config.adminPermission)
@@ -87,12 +87,15 @@ class FarmConfigTest {
 
         @Test
         fun `config with multiple farms and lumbermills`() {
-            val config = FarmModuleConfig(
-                farms = listOf(
-                    FarmZoneConfig("farm1", "world", "r1", "p1", false, 100, 1, emptySet(), emptySet()),
+            val config =
+                TestFarmModuleConfig(
+                    farms =
+                        listOf(
+                            FarmZoneConfig("farm1", "world", "r1", "p1", false, 100, 1, emptySet(), emptySet()),
                     FarmZoneConfig("farm2", "world", "r2", "p2", false, 200, 2, emptySet(), emptySet())
                 ),
-                lumbermills = listOf(
+                    lumbermills =
+                        listOf(
                     LumbermillConfig("lumber1", "world", "r3", "p3", false, 1, emptySet()),
                     LumbermillConfig("lumber2", "world", "r4", "p4", false, 2, emptySet())
                 )
@@ -243,7 +246,7 @@ class FarmConfigTest {
 
         @Test
         fun `default messages`() {
-            val messages = FarmMessages()
+            val messages = TestFarmMessages()
 
             assertNotNull(messages.noPermission)
             assertNotNull(messages.alreadyBroken)
@@ -254,7 +257,8 @@ class FarmConfigTest {
 
         @Test
         fun `custom messages`() {
-            val messages = FarmMessages(
+            val messages =
+                TestFarmMessages(
                 noPermission = "<red>Custom no permission",
                 alreadyBroken = "<yellow>Wait for respawn",
                 limitReached = "<gold>You mined enough today",

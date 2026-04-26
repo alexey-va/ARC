@@ -18,7 +18,10 @@ class HeadTextureCache {
 
     init {
         try {
-            path = ARC.plugin!!.dataFolder.toPath().resolve("head-cache.json")
+            path =
+                ARC.instance.dataFolder
+                    .toPath()
+                    .resolve("head-cache.json")
             if (!Files.exists(path)) {
                 Files.createFile(path)
             }
@@ -57,7 +60,7 @@ class HeadTextureCache {
                 return null
             }
             data.byName[name]?.string
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }

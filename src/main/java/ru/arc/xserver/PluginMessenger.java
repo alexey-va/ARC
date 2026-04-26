@@ -14,7 +14,7 @@ import static ru.arc.util.Logging.error;
 public class PluginMessenger implements PluginMessageListener {
 
     public PluginMessenger() {
-        Bukkit.getServer().getMessenger().registerOutgoingPluginChannel(ARC.plugin, "BungeeCord");
+        Bukkit.getServer().getMessenger().registerOutgoingPluginChannel(ARC.getInstance(), "BungeeCord");
     }
 
     @Override
@@ -23,7 +23,7 @@ public class PluginMessenger implements PluginMessageListener {
     }
 
     public void sendBungeeCord(Player player, byte[] bytes) {
-        player.sendPluginMessage(ARC.plugin, "BungeeCord", bytes);
+        player.sendPluginMessage(ARC.getInstance(), "BungeeCord", bytes);
     }
 
     public void sendPlayerToServer(Player player, String server) {

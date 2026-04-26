@@ -1,12 +1,5 @@
 package ru.arc.stock.gui;
 
-import ru.arc.ARC;
-import ru.arc.configs.StockConfig;
-import ru.arc.stock.StockPlayer;
-import ru.arc.stock.StockPlayerManager;
-import ru.arc.util.GuiUtils;
-import ru.arc.util.ItemStackBuilder;
-import ru.arc.util.TextUtil;
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
@@ -15,11 +8,19 @@ import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
 import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
+import net.milkbowl.vault.economy.Economy;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.jetbrains.annotations.Nullable;
+import ru.arc.configs.StockConfig;
+import ru.arc.core.modules.EconomyModule;
+import ru.arc.stock.StockPlayer;
+import ru.arc.stock.StockPlayerManager;
+import ru.arc.util.GuiUtils;
+import ru.arc.util.ItemStackBuilder;
+import ru.arc.util.TextUtil;
 
 import static ru.arc.util.TextUtil.mm;
 
@@ -97,7 +98,7 @@ public class ProfileMenu extends ChestGui {
                 .toGuiItemBuilder()
                 .clickEvent(click -> {
                     click.setCancelled(true);
-                    stockPlayer.setAutoTake(!stockPlayer.isAutoTake());
+                    stockPlayer.updateAutoTake(!stockPlayer.getAutoTake());
                     auto.setItem(new ItemStackBuilder(Material.LEVER)
                             .display(StockConfig.string("profile-menu.auto-take-display"))
                             .lore(StockConfig.stringList("profile-menu.auto-take-lore"))
@@ -132,7 +133,7 @@ public class ProfileMenu extends ChestGui {
     private void acceptBalanceClick(InventoryClickEvent click) {
         double newBalance = getNewBalance(click);
         double diff = newBalance - stockPlayer.getBalance();
-        double totalGains = stockPlayer.totalGains();
+        double totalGains = stockPlayer.totalGainsList();
 
         // check for bankruptcy
         if (totalGains < 0 && Math.abs(totalGains) > newBalance) {
@@ -147,7 +148,8 @@ public class ProfileMenu extends ChestGui {
 
         // check for players balance
         OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(stockPlayer.getPlayerUuid());
-        double playerBalance = ARC.getEcon().getBalance(offlinePlayer);
+        Economy econ = EconomyModule.getEconomy();
+        double playerBalance = econ != null ? econ.getBalance(offlinePlayer) : 0.0;
         if (diff > 0 && diff > playerBalance) {
             TagResolver resolver = TagResolver.resolver("player_balance", Tag.inserting(
                     mm(TextUtil.formatAmount(playerBalance), true)

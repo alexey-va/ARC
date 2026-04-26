@@ -6,8 +6,10 @@ import com.sk89q.worldedit.bukkit.BukkitAdapter
 import com.sk89q.worldedit.math.BlockVector3
 import org.bukkit.Location
 import org.bukkit.block.data.type.Bed
-import org.bukkit.scheduler.BukkitTask
-import ru.arc.ARC
+import ru.arc.core.ScheduledTask
+import ru.arc.core.delayed
+import ru.arc.core.repeating
+import ru.arc.core.ticks
 import ru.arc.hooks.HookRegistry
 import ru.arc.hooks.packetevents.BlockDisplayReq
 import ru.arc.util.BlockUtils.rotateBlockData
@@ -17,7 +19,6 @@ import ru.arc.util.Logging.info
 import ru.arc.util.ParticleManager
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Handles visual display of construction site boundaries.
@@ -26,12 +27,15 @@ import java.util.concurrent.atomic.AtomicInteger
  * - Particle border around the building area
  * - Block display entities for preview (if player version supports it)
  */
-class Display(private val site: ConstructionSite) {
-
+class Display(
+    private val site: ConstructionSite,
+) {
     companion object {
-        private val displayCache = CacheBuilder.newBuilder()
-            .expireAfterAccess(10, TimeUnit.MINUTES)
-            .build<UUID, Int>()
+        private val displayCache =
+            CacheBuilder
+                .newBuilder()
+                .expireAfterAccess(10, TimeUnit.MINUTES)
+                .build<UUID, Int>()
 
         /**
          * Clears the display rate limit cache.
@@ -43,7 +47,8 @@ class Display(private val site: ConstructionSite) {
         }
     }
 
-    private var displayTask: BukkitTask? = null
+    private var displayTask: ScheduledTask? = null
+    private var cleanupTask: ScheduledTask? = null
     private var borderLocations: List<LocationUtils.LocationData>? = null
     private var centerLocations: List<Location>? = null
     private var entityIds = mutableListOf<Int>()
@@ -77,17 +82,19 @@ class Display(private val site: ConstructionSite) {
         if (centerLocations == null) centerLocations = site.getCenterLocations()
 
         val interval = BuildConfig.borderParticleInterval
-        val elapsed = AtomicInteger(0)
         val maxTicks = seconds * 20
+        var elapsed = 0
 
-        displayTask = ARC.plugin.server.scheduler.runTaskTimer(ARC.plugin, Runnable {
-            if (elapsed.addAndGet(interval.toInt()) > maxTicks) {
-                displayTask?.cancel()
-                return@Runnable
+        displayTask =
+            repeating(period = interval.ticks, delay = 0.ticks) {
+                elapsed += interval.toInt()
+                if (elapsed > maxTicks) {
+                    cancel()
+                    return@repeating
+                }
+                showBorderParticles()
+                showCenterParticles()
             }
-            showBorderParticles()
-            showCenterParticles()
-        }, 0L, interval)
     }
 
     private fun showBorderParticles() {
@@ -107,10 +114,9 @@ class Display(private val site: ConstructionSite) {
                     .offset(
                         if (isCorner) BuildConfig.borderParticleCornerOffset else BuildConfig.borderParticleOffset,
                         if (isCorner) BuildConfig.borderParticleCornerOffset else BuildConfig.borderParticleOffset,
-                        if (isCorner) BuildConfig.borderParticleCornerOffset else BuildConfig.borderParticleOffset
-                    )
-                    .count(if (isCorner) BuildConfig.borderParticleCornerCount else BuildConfig.borderParticleCount)
-                    .receivers(listOf(site.player))
+                        if (isCorner) BuildConfig.borderParticleCornerOffset else BuildConfig.borderParticleOffset,
+                    ).count(if (isCorner) BuildConfig.borderParticleCornerCount else BuildConfig.borderParticleCount)
+                    .receivers(listOf(site.player)),
             )
         }
     }
@@ -129,7 +135,7 @@ class Display(private val site: ConstructionSite) {
                     .extra(0.0)
                     .offset(0.0, 0.0, 0.0)
                     .count(BuildConfig.centerParticleCount)
-                    .receivers(listOf(site.player))
+                    .receivers(listOf(site.player)),
             )
         }
     }
@@ -156,34 +162,38 @@ class Display(private val site: ConstructionSite) {
         displayCache.put(site.player.uniqueId, currentShows + requests.size)
         entityIds = packetHook.createDisplayBlocks(requests, site.player).toMutableList()
 
-        // Schedule cleanup
-        ARC.plugin.server.scheduler.runTaskLater(ARC.plugin, Runnable {
-            info("Removing display due to timeout {}", seconds)
-            removeDisplayEntities()
-        }, seconds * 20L)
+        // Schedule cleanup using Task DSL
+        cleanupTask =
+            delayed((seconds * 20).ticks) {
+                info("Removing display due to timeout {}", seconds)
+                removeDisplayEntities()
+            }
     }
 
     private fun buildDisplayRequests(): List<BlockDisplayReq> {
         val c = site.corners
         val requests = mutableListOf<BlockDisplayReq>()
 
-        val totalBlocks = (c.corner2.x() - c.corner1.x() + 1) *
+        (c.corner2.x() - c.corner1.x() + 1) *
             (c.corner2.y() - c.corner1.y() + 1) *
             (c.corner2.z() - c.corner1.z() + 1)
 
         outer@ for (y in c.corner1.y()..c.corner2.y()) {
             for (x in c.corner1.x()..c.corner2.x()) {
                 for (z in c.corner1.z()..c.corner2.z()) {
-                    val location = Location(
-                        site.world,
-                        x + site.adjustedCenter.x,
-                        y + site.adjustedCenter.y,
-                        z + site.adjustedCenter.z
-                    )
+                    val location =
+                        Location(
+                            site.world,
+                            x + site.adjustedCenter.x,
+                            y + site.adjustedCenter.y,
+                            z + site.adjustedCenter.z,
+                        )
 
-                    val blockData = BukkitAdapter.adapt(
-                        site.building.getBlock(BlockVector3.at(x, y, z), site.fullRotation)
-                    ).also { rotateBlockData(it, site.fullRotation) }
+                    val blockData =
+                        BukkitAdapter
+                            .adapt(
+                                site.building.getBlock(BlockVector3.at(x, y, z), site.fullRotation),
+                            ).also { rotateBlockData(it, site.fullRotation) }
 
                     // Skip bed feet (look weird as displays)
                     if (blockData is Bed && blockData.part == Bed.Part.FOOT) continue
@@ -210,5 +220,6 @@ class Display(private val site: ConstructionSite) {
 
     private fun stopTask() {
         displayTask?.takeIf { !it.isCancelled }?.cancel()
+        cleanupTask?.takeIf { !it.isCancelled }?.cancel()
     }
 }

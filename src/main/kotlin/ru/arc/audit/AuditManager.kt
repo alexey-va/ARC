@@ -4,6 +4,7 @@ import net.kyori.adventure.audience.Audience
 import org.bukkit.Bukkit
 import ru.arc.ARC
 import ru.arc.core.BukkitTaskScheduler
+import ru.arc.core.modules.EconomyModule
 import ru.arc.util.Logging.error
 import ru.arc.xserver.playerlist.PlayerManager
 import java.io.IOException
@@ -26,7 +27,7 @@ object AuditManager {
     private var balanceHistoryTask: ru.arc.core.ScheduledTask? = null
 
     private val balanceHistoryPath: Path by lazy {
-        ARC.plugin.dataPath.resolve("balance-history")
+        ARC.instance.dataPath.resolve("balance-history")
     }
 
     // ==================== Lifecycle ====================
@@ -36,7 +37,7 @@ object AuditManager {
      */
     @JvmStatic
     fun init() {
-        val scheduler = BukkitTaskScheduler(ARC.plugin)
+        val scheduler = BukkitTaskScheduler(ARC.instance)
         config = AuditConfig.load()
 
         service = AuditService(
@@ -89,6 +90,17 @@ object AuditManager {
         }
         balanceHistoryTask?.cancel()
         balanceHistoryTask = null
+    }
+
+    /**
+     * Shutdown the repository.
+     */
+    @JvmStatic
+    fun shutdown() {
+        cancel()
+        if (::service.isInitialized) {
+            service.shutdown()
+        }
     }
 
     // ==================== Player Context ====================
@@ -152,7 +164,7 @@ object AuditManager {
     // ==================== Balance History ====================
 
     private fun recordBalanceHistory() {
-        val economy = ARC.getEcon() ?: return
+        val economy = EconomyModule.getEconomy() ?: return
         val timestamp = System.currentTimeMillis()
 
         for (playerName in PlayerManager.getPlayerNames()) {

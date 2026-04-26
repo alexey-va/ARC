@@ -19,6 +19,7 @@ object Common {
 
     @JvmField
     val prettyGson: Gson = GsonBuilder().setPrettyPrinting()
+        .registerTypeHierarchyAdapter(XAction::class.java, PolymorphismAdapter<XAction>())
         .registerTypeAdapter(ItemStack::class.java, ItemStackSerializer())
         .registerTypeAdapter(ItemList::class.java, ItemListSerializer())
         .create()

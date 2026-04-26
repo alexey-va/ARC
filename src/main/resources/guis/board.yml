@@ -1,0 +1,31 @@
+# Board GUI Configuration
+# Main bulletin board interface
+
+board-menu:
+  # Back button
+  back-display: "<gray>« Назад"
+  back-lore: [ ]
+  back-model-data: 11013
+  
+  # Refresh button
+  refresh-display: "<gray>Обновить"
+  refresh-lore:
+    - "<gray>Нажмите для обновления списка"
+  refresh-model-data: 11010
+  
+  # Publish button
+  publish-display: "<green>Опубликовать объявление"
+  publish-lore:
+    - "<gray>Стоимость: <gold><cost>"
+    - ""
+    - "<yellow>Нажмите для создания"
+  publish-model-data: 11010
+  
+  # Error messages
+  cannot-edit: "Вы не можете это редактировать"
+  cannot-rate: "Вы не можете это оценить"
+
+# Not enough money message
+not-enough-money: "<red>Недостаточно средств!"
+
+

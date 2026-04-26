@@ -1,6 +1,8 @@
 package ru.arc.hooks.lands;
 
-import ru.arc.ARC;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
 import me.angeschossen.lands.api.LandsIntegration;
 import me.angeschossen.lands.api.flags.type.Flags;
 import me.angeschossen.lands.api.land.LandWorld;
@@ -10,16 +12,14 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
-
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
+import ru.arc.ARC;
 
 public class LandsHook {
 
     LandsIntegration integration;
 
     public LandsHook() {
-        integration = LandsIntegration.of(ARC.plugin);
+        integration = LandsIntegration.of(ARC.getInstance());
     }
 
     public CompletableFuture<Location> getSpawnLocation(UUID playerUuid) {

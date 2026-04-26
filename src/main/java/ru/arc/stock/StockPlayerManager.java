@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
+import net.milkbowl.vault.economy.Economy;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
@@ -15,7 +16,8 @@ import ru.arc.audit.Type;
 import ru.arc.configs.Config;
 import ru.arc.configs.ConfigManager;
 import ru.arc.configs.StockConfig;
-import ru.arc.network.repos.RedisRepo;
+import ru.arc.core.modules.EconomyModule;
+import ru.arc.repository.LegacyRedisRepo;
 import ru.arc.util.RandomUtils;
 import ru.arc.util.TextUtil;
 import ru.arc.xserver.announcements.AnnounceManager;
@@ -26,22 +28,24 @@ import static ru.arc.util.TextUtil.formatAmount;
 import static ru.arc.util.TextUtil.mm;
 
 public class StockPlayerManager {
-    private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "stocks/stock.yml");
-    private static RedisRepo<StockPlayer> repo;
+    private static final Config config = ConfigManager.of(ARC.getInstance().getDataPath(), "stocks/stock.yml");
+    private static LegacyRedisRepo<StockPlayer> repo;
 
     public static void init() {
         if(!config.bool("enabled", false)) {
             info("Stocks are disabled");
             return;
         }
-        if (repo != null) repo.close();
-        repo = RedisRepo.builder(StockPlayer.class)
+        if (repo != null) {
+            repo.shutdown();
+        }
+        repo = LegacyRedisRepo.builder(StockPlayer.class)
                 .loadAll(true)
                 .redisManager(ARC.redisManager)
                 .storageKey("arc.stock_players")
                 .updateChannel("arc.stock_players_update")
                 .id("stock_players")
-                .backupFolder(ARC.plugin.getDataFolder().toPath().resolve("backups/stock-players"))
+                .backupFolder(ARC.getInstance().getDataFolder().toPath().resolve("backups/stock-players"))
                 .saveInterval(5L)
                 .saveBackups(true)
                 .build();
@@ -54,7 +58,7 @@ public class StockPlayerManager {
             return;
         }
 
-        repo.all().stream().filter(sp -> sp.positionMap.containsKey(symbol))
+        repo.all().stream().filter(sp -> sp.getPositionMap().containsKey(symbol))
                 .forEach(sp -> checkPosition(sp, symbol));
     }
 
@@ -66,11 +70,11 @@ public class StockPlayerManager {
         }
         List<Position> positionsClone = new ArrayList<>(stockPlayer.positions(symbol));
         for (Position position : positionsClone) {
-            Position.BankruptResponse response = position.bankrupt(stock.price, stockPlayer.getBalance());
-            if (response.bankrupt()) {
+            Position.BankruptResponse response = position.bankrupt(stock.getPrice(), stockPlayer.getBalance());
+            if (response.getBankrupt()) {
                 System.out.println("Bankrupt for " + position);
-                if (stockPlayer.isAutoTake()) {
-                    boolean addedToBalanceSuccess = addToTradingBalanceFromVault(stockPlayer, response.total());
+                if (stockPlayer.getAutoTake()) {
+                    boolean addedToBalanceSuccess = addToTradingBalanceFromVault(stockPlayer, response.getTotal());
                     if (addedToBalanceSuccess) continue;
                 }
                 closePosition(stockPlayer, symbol, position.getPositionUuid(), 2);
@@ -88,16 +92,16 @@ public class StockPlayerManager {
     public static void giveDividend(String symbol) {
         Stock stock = StockMarket.stock(symbol);
         if (stock == null) return;
-        System.out.println("Giving dividend for " + stock.symbol + ": " + Instant.ofEpochMilli(stock.lastTimeDividend));
+        System.out.println("Giving dividend for " + stock.getSymbol() + ": " + Instant.ofEpochMilli(stock.getLastTimeDividend()));
         stock.setLastTimeDividend(System.currentTimeMillis());
         for (StockPlayer stockPlayer : repo.all()) {
             double gave = stockPlayer.giveDividend(symbol);
             if (gave <= 0.1) continue;
-            AuditManager.operation(stockPlayer.playerName, gave, Type.DIVIDEND, symbol);
+            AuditManager.operation(stockPlayer.getPlayerName(), gave, Type.DIVIDEND, symbol);
             String message = StockConfig.string("message.received-dividend")
                     .replace("<amount>", TextUtil.formatAmount(gave))
                     .replace("<symbol>", symbol);
-            AnnounceManager.sendMessageGlobally(stockPlayer.playerUuid, message);
+            AnnounceManager.sendMessageGlobally(stockPlayer.getPlayerUuid(), message);
         }
     }
 
@@ -109,7 +113,7 @@ public class StockPlayerManager {
     }
 
     public static void buyStock(StockPlayer stockPlayer, Stock stock, double amount, int leverage, double lowerBound, double upperBound) {
-        List<Position> stockPositions = stockPlayer.positions(stock.symbol);
+        List<Position> stockPositions = stockPlayer.positions(stock.getSymbol());
         boolean canHaveMore = stockPlayer.isBelowMaxStockAmount() && !(stockPositions != null && stockPositions.size() >= 9);
         if (!canHaveMore || stockPlayer.positions().size() >= 30) {
             Player p = stockPlayer.player();
@@ -126,28 +130,22 @@ public class StockPlayerManager {
         }
 
         stockPlayer.addToBalance(-response.totalPrice, true);
-        Position position = new Position.PositionBuilder()
-                .amount(amount)
-                .startPrice(stock.price)
-                .positionUuid(UUID.randomUUID())
-                .symbol(stock.getSymbol())
-                .leverage(leverage)
-                .upperBoundMargin(upperBound)
-                .lowerBoundMargin(lowerBound)
-                .commission(response.commission())
-                .timestamp(System.currentTimeMillis())
-                .iconMaterial(RandomUtils.random(StockConfig.iconMaterials))
-                .type(Position.Type.BOUGHT)
-                .build();
+        Position position = new Position(
+                stock.getSymbol(), stock.getPrice(), leverage,
+                upperBound, lowerBound, response.commission(),
+                System.currentTimeMillis(), UUID.randomUUID(),
+                Position.Type.BOUGHT, amount,
+                RandomUtils.random(StockConfig.iconMaterials), 0.0);
         stockPlayer.addPosition(position);
 
-        AuditManager.operation(stockPlayer.getPlayerName(), -response.totalPrice, Type.STOCK, "Buy " + stock.symbol);
+        AuditManager.operation(stockPlayer.getPlayerName(), -response.totalPrice, Type.STOCK,
+                "Buy " + stock.getSymbol());
 
         // Logging removed - was using @Slf4j
     }
 
     public static void shortStock(StockPlayer stockPlayer, Stock stock, double amount, int leverage, double lowerBound, double upperBound) {
-        List<Position> stockPositions = stockPlayer.positions(stock.symbol);
+        List<Position> stockPositions = stockPlayer.positions(stock.getSymbol());
         boolean canHaveMore = stockPlayer.isBelowMaxStockAmount() && !(stockPositions != null && stockPositions.size() >= 9);
         if (!canHaveMore || stockPlayer.positions().size() >= 30) {
             Player p = stockPlayer.player();
@@ -163,22 +161,16 @@ public class StockPlayerManager {
         }
 
         stockPlayer.addToBalance(-response.totalPrice, true);
-        Position position = new Position.PositionBuilder()
-                .amount(amount)
-                .startPrice(stock.price)
-                .positionUuid(UUID.randomUUID())
-                .symbol(stock.getSymbol())
-                .leverage(leverage)
-                .upperBoundMargin(upperBound)
-                .lowerBoundMargin(lowerBound)
-                .commission(response.commission())
-                .timestamp(System.currentTimeMillis())
-                .iconMaterial(RandomUtils.random(StockConfig.iconMaterials))
-                .type(Position.Type.SHORTED)
-                .build();
+        Position position = new Position(
+                stock.getSymbol(), stock.getPrice(), leverage,
+                upperBound, lowerBound, response.commission(),
+                System.currentTimeMillis(), UUID.randomUUID(),
+                Position.Type.SHORTED, amount,
+                RandomUtils.random(StockConfig.iconMaterials), 0.0);
         stockPlayer.addPosition(position);
 
-        AuditManager.operation(stockPlayer.getPlayerName(), -response.totalPrice, Type.STOCK, "Short " + stock.symbol);
+        AuditManager.operation(stockPlayer.getPlayerName(), -response.totalPrice, Type.STOCK,
+                "Short " + stock.getSymbol());
 
         // Logging removed - was using @Slf4j
     }
@@ -190,29 +182,35 @@ public class StockPlayerManager {
             error("Could not find stock with symbol: " + symbol);
             return;
         }
-        stockPlayer.remove(symbol, positionUuid).ifPresentOrElse(position -> {
-            double gains = position.gains(stock.price);
-            // Logging removed - was using @Slf4j
-            stockPlayer.addToBalance(gains + position.startPrice * position.amount, true);
+        Position position = stockPlayer.remove(symbol, positionUuid);
+        if (position != null) {
+            double gains = position.gains(stock.getPrice());
+            stockPlayer.addToBalance(gains + position.getStartPrice() * position.getAmount(), true);
 
             AuditManager.operation(stockPlayer.getPlayerName(), gains, Type.STOCK, "Close " + symbol);
 
             String message = StockConfig.string("message.closed-" + reason)
-                    .replace("<gains>", formatAmount(gains - position.commission))
+                    .replace("<gains>", formatAmount(gains - position.getCommission()))
                     .replace("<symbol>", symbol)
-                    .replace("<money_received>", formatAmount(gains + position.startPrice * position.amount));
-            AnnounceManager.sendMessageGlobally(stockPlayer.playerUuid, message);
-        }, () -> error("Could not find position with such id {}", positionUuid));
+                    .replace("<money_received>", formatAmount(gains + position.getStartPrice() * position.getAmount()));
+            AnnounceManager.sendMessageGlobally(stockPlayer.getPlayerUuid(), message);
+        } else {
+            error("Could not find position with such id {}", positionUuid);
+        }
 
     }
 
 
     public static boolean addToTradingBalanceFromVault(StockPlayer stockPlayer, double amount) {
-        OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(stockPlayer.playerUuid);
+        OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(stockPlayer.getPlayerUuid());
         // Logging removed - was using @Slf4j
 
+        Economy econ = EconomyModule.getEconomy();
+        if (econ == null) {
+            return false;
+        }
         if (amount > 0) {
-            if (ARC.getEcon().withdrawPlayer(offlinePlayer, amount).transactionSuccess()) {
+            if (econ.withdrawPlayer(offlinePlayer, amount).transactionSuccess()) {
                 stockPlayer.addToBalance(amount, false);
                 // Logging removed - was using @Slf4j
                 return true;
@@ -223,7 +221,7 @@ public class StockPlayerManager {
                 // Logging removed - was using @Slf4j
                 return false;
             }
-            if (ARC.getEcon().depositPlayer(offlinePlayer, -amount).transactionSuccess()) {
+            if (econ.depositPlayer(offlinePlayer, -amount).transactionSuccess()) {
                 stockPlayer.addToBalance(amount, false);
                 // Logging removed - was using @Slf4j
                 return true;
@@ -234,7 +232,7 @@ public class StockPlayerManager {
     }
 
     public static void switchAuto(StockPlayer stockPlayer) {
-        stockPlayer.setAutoTake(!stockPlayer.autoTake);
+        stockPlayer.updateAutoTake(!stockPlayer.getAutoTake());
         // Logging removed - was using @Slf4j
     }
 
@@ -261,7 +259,7 @@ public class StockPlayerManager {
     }
 
     public static double cost(Stock stock, double amount) {
-        return stock.price * amount;
+        return stock.getPrice() * amount;
     }
 
     public static double commission(Stock stock, double amount, int leverage) {

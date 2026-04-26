@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
@@ -17,12 +18,12 @@ import ru.arc.ARC
 import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
+import ru.arc.util.Logging.warn
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
-import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Redis manager for cross-server communication and data storage.
@@ -50,11 +51,16 @@ class RedisManager(
         private const val SERVER_DELIMITER = "<>#<>#<>"
         private const val INIT_DELAY_MS = 1000L
         private const val RECONNECT_DELAY_MS = 100L
+
+        @Suppress("unused")
         private const val SUBSCRIPTION_TIMEOUT_MS = 5000L
     }
 
     // Connection
+    @Volatile
     private var sub: JedisPooled? = null
+
+    @Volatile
     private var pub: JedisPooled? = null
 
     // Coroutine scope for async operations
@@ -73,10 +79,18 @@ class RedisManager(
             isDaemon = true
         }
     }
+
+    @Volatile
     private var isSubscribing = false
 
+    @Volatile
+    private var subscriptionActive = false
+
     // Connection state
+    @Volatile
     private var isConnected = false
+
+    @Volatile
     private var isShuttingDown = false
 
     init {
@@ -97,20 +111,25 @@ class RedisManager(
      * @throws Exception if connection fails
      */
     fun connect(ip: String, port: Int, userName: String?, password: String?) {
-        close()
-        isShuttingDown = false
-
-        // Recreate coroutine scope after close() cancelled it
-        scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-
-        // Recreate subscription executor after close() shut it down
-        subscriptionExecutor = Executors.newSingleThreadExecutor { r ->
-            Thread(r, "Redis-Subscription-${System.currentTimeMillis()}").apply {
-                isDaemon = true
-            }
-        }
+        // Store old executor to shut it down after creating new one
+        val oldExecutor = subscriptionExecutor
 
         try {
+            // Create new executor first
+            subscriptionExecutor =
+                Executors.newSingleThreadExecutor { r ->
+                    Thread(r, "Redis-Subscription-${System.currentTimeMillis()}").apply {
+                        isDaemon = true
+                    }
+                }
+
+            // Now close old connections
+            close()
+            isShuttingDown = false
+
+            // Recreate coroutine scope after close() cancelled it
+            scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
             sub = if (userName != null && password != null) {
                 JedisPooled(ip, port, userName, password)
             } else {
@@ -124,10 +143,18 @@ class RedisManager(
 
             isConnected = true
             debug("RedisManager connected to $ip:$port")
-            init()
+
+            // Shut down old executor after successful connection
+            oldExecutor.shutdownNow()
+
+            // Don't call init() here - let the caller do it when channels are registered
+            // Calling init() here is wasteful since no channels are registered yet
         } catch (e: Exception) {
             error("Failed to connect to Redis at $ip:$port", e)
             isConnected = false
+            // Restore old executor on failure
+            subscriptionExecutor.shutdownNow()
+            subscriptionExecutor = oldExecutor
             throw e
         }
     }
@@ -140,12 +167,15 @@ class RedisManager(
         debug("Redis PONG received: $message")
     }
 
-    override fun onMessage(channel: String, message: String) {
+    override fun onMessage(
+        channel: String,
+        message: String,
+    ) {
         try {
-            info("Received message on channel $channel: $message")
+            debug("Received message on channel $channel: $message")
             val listeners = channelListeners[channel]
             if (listeners.isNullOrEmpty()) {
-                debug("No listeners registered for channel: $channel")
+                warn("No listeners registered for channel: $channel")
                 return
             }
 
@@ -159,14 +189,14 @@ class RedisManager(
             val originServer = parts[0]
             val actualMessage = parts[1]
 
-            info("Parsed message - origin: $originServer, message: $actualMessage, listeners: ${listeners.size}")
+            debug("Parsed message - origin: $originServer, message: $actualMessage, listeners: ${listeners.size}")
 
             // Notify all listeners
             listeners.forEach { listener ->
                 try {
-                    info("Calling listener for channel $channel")
+                    debug("Calling listener for channel $channel")
                     listener.consume(channel, actualMessage, originServer)
-                    info("Listener called successfully")
+                    debug("Listener called successfully")
                 } catch (e: Exception) {
                     error("Error in channel listener for $channel", e)
                 }
@@ -176,8 +206,12 @@ class RedisManager(
         }
     }
 
-    override fun onSubscribe(channel: String, subscribedChannels: Int) {
-        info("Subscribed to channel: $channel (total: $subscribedChannels)")
+    override fun onSubscribe(
+        channel: String,
+        subscribedChannels: Int,
+    ) {
+        subscriptionActive = true
+        info("✓✓✓ Subscribed to channel: $channel (total: $subscribedChannels) - NOW READY TO RECEIVE MESSAGES ✓✓✓")
     }
 
     override fun onUnsubscribe(channel: String, subscribedChannels: Int) {
@@ -191,7 +225,7 @@ class RedisManager(
     override fun publish(channel: String, message: String) {
         val pubConnection = pub
         if (!isConnected || isShuttingDown || pubConnection == null) {
-            debug("Cannot publish: Redis not connected (channel: $channel)")
+            error("Cannot publish: Redis not connected (channel: $channel)")
             return
         }
 
@@ -202,7 +236,7 @@ class RedisManager(
                     withContext(Dispatchers.IO) {
                         val fullMessage = "${ARC.serverName}$SERVER_DELIMITER$message"
                         pubConnection.publish(channel, fullMessage)
-                        debug("Published message to channel: $channel")
+                        debug("Published message to channel: $channel, fullMessage: $fullMessage")
                     }
                 } catch (e: Exception) {
                     if (e is JedisConnectionException) {
@@ -230,7 +264,7 @@ class RedisManager(
                         debug("Saved map to key: $key (${map.size} entries)")
                     }
                 } catch (e: Exception) {
-                    if (e is redis.clients.jedis.exceptions.JedisConnectionException) {
+                    if (e is JedisConnectionException) {
                         isConnected = false
                     }
                     debug("Error saving map to key: $key (disconnected: ${!isConnected})", e)
@@ -279,7 +313,7 @@ class RedisManager(
                     }
                 } catch (e: Exception) {
                     // If connection fails, mark as disconnected
-                    if (e is redis.clients.jedis.exceptions.JedisConnectionException) {
+                    if (e is JedisConnectionException) {
                         isConnected = false
                     }
                     debug("Error saving map entries for key: $key (disconnected: ${!isConnected})", e)
@@ -302,7 +336,7 @@ class RedisManager(
                     try {
                         pubConnection.hgetAll(key)
                     } catch (e: Exception) {
-                        if (e is redis.clients.jedis.exceptions.JedisConnectionException) {
+                        if (e is JedisConnectionException) {
                             isConnected = false
                         }
                         debug("Error loading map from key: $key (disconnected: ${!isConnected})", e)
@@ -330,7 +364,7 @@ class RedisManager(
                     try {
                         pubConnection.hmget(key, *mapKeys)
                     } catch (e: Exception) {
-                        if (e is redis.clients.jedis.exceptions.JedisConnectionException) {
+                        if (e is JedisConnectionException) {
                             isConnected = false
                         }
                         debug("Error loading map entries from key: $key (disconnected: ${!isConnected})", e)
@@ -348,13 +382,8 @@ class RedisManager(
         }
         channelList.add(channel)
 
-        // Reinitialize subscription if already running
-        if (isSubscribing) {
-            scope.launch {
-                delay(100.milliseconds)
-                init()
-            }
-        }
+        // Don't auto-init here - let the caller explicitly call init() when ready
+        // Auto-init creates extra coroutines and race conditions with close()
     }
 
     override fun unregisterChannel(channel: String, listener: ChannelListener) {
@@ -366,95 +395,163 @@ class RedisManager(
     }
 
     override fun init() {
+        debug("[INIT] Starting init() - isShuttingDown=$isShuttingDown, isConnected=$isConnected, isSubscribing=$isSubscribing")
+
         if (isShuttingDown || !isConnected) {
-            debug("Cannot init: isShuttingDown=$isShuttingDown, isConnected=$isConnected")
+            error("[INIT] Cannot init: isShuttingDown=$isShuttingDown, isConnected=$isConnected")
             return
         }
 
-        scope.launch {
-            subscriptionMutex.withLock {
-                if (isSubscribing) {
-                    debug("Subscription already in progress")
-                    return@withLock
-                }
+        // Cancel existing subscription job before starting a new one
+        debug("[INIT] Cancelling previous subscriptionJob and thread if any")
+        subscriptionJob?.cancel()
+        subscriptionThread?.cancel(true)
 
-                if (channelList.isEmpty()) {
-                    debug("No channels to subscribe to")
-                    return@withLock
-                }
+        debug("[INIT] Launching subscription coroutine on scope")
+        subscriptionJob =
+            scope.launch {
+                debug("[INIT-COROUTINE] Coroutine started, acquiring mutex")
+                subscriptionMutex.withLock {
+                    debug("[INIT-COROUTINE] Mutex acquired")
 
-                isSubscribing = true
+                    if (isSubscribing) {
+                        error("[INIT-COROUTINE] Subscription already in progress, returning")
+                        return@withLock
+                    }
 
-                // Cancel existing subscription
-                subscriptionJob?.cancel()
-                subscriptionThread?.cancel(true)
+                    if (channelList.isEmpty()) {
+                        error("[INIT-COROUTINE] No channels to subscribe to, returning")
+                        return@withLock
+                    }
 
-                // Delay before subscribing (allows for connection stabilization)
-                delay(INIT_DELAY_MS)
+                    debug("[INIT-COROUTINE] Setting isSubscribing=true, channels=${channelList.size}")
+                    isSubscribing = true
 
-                // Verify connection is still valid
-                val subConnection = sub
-                if (subConnection == null) {
-                    error("Cannot subscribe: sub connection is null")
-                    isSubscribing = false
-                    return@withLock
-                }
+                    // Delay before subscribing (allows for connection stabilization)
+                    debug("[INIT-COROUTINE] Delaying ${INIT_DELAY_MS}ms for connection stabilization")
+                    delay(INIT_DELAY_MS)
+                    debug("[INIT-COROUTINE] Delay complete")
 
-                // Test connection with ping
-                try {
-                    val pingResult = subConnection.ping()
-                    if (pingResult != "PONG") {
-                        error("Connection ping failed: $pingResult")
+                    // Check if shutdown was initiated during the delay
+                    if (isShuttingDown || !isConnected) {
+                        error(
+                            "[INIT-COROUTINE] Shutdown detected after delay, aborting - isShuttingDown=$isShuttingDown, isConnected=$isConnected",
+                        )
                         isSubscribing = false
                         return@withLock
                     }
-                } catch (e: Exception) {
-                    error("Connection test failed before subscription", e)
-                    isSubscribing = false
-                    return@withLock
-                }
 
-                val channels = channelList.toTypedArray()
-                info("Subscribing to ${channels.size} channels: ${channels.joinToString()}")
-
-                // Use a dedicated thread for subscription since subscribe() blocks forever
-                // onSubscribe callbacks will be called on this thread
-                subscriptionThread = subscriptionExecutor.submit {
-                    try {
-                        subConnection.subscribe(this@RedisManager, *channels)
-                    } catch (e: Exception) {
-                        error("Exception in subscription thread", e)
+                    // Verify connection is still valid
+                    val subConnection = sub
+                    if (subConnection == null) {
+                        error("[INIT-COROUTINE] sub connection is null, aborting")
                         isSubscribing = false
+                        return@withLock
+                    }
 
-                        // Retry after delay
-                        Thread.sleep(RECONNECT_DELAY_MS)
-                        if (!isShuttingDown && isConnected) {
-                            scope.launch {
-                                init()
+                    // Test connection with ping
+                    debug("[INIT-COROUTINE] Testing connection with PING")
+                    try {
+                        val pingResult = subConnection.ping()
+                        debug("[INIT-COROUTINE] PING result: $pingResult")
+                        if (pingResult != "PONG") {
+                            error("[INIT-COROUTINE] Connection ping failed: $pingResult")
+                            isSubscribing = false
+                            return@withLock
+                        }
+                    } catch (e: Exception) {
+                        error("[INIT-COROUTINE] Connection test failed before subscription", e)
+                        isSubscribing = false
+                        return@withLock
+                    }
+
+                    val channels = channelList.toTypedArray()
+                    debug("[INIT-COROUTINE] Subscribing to ${channels.size} channels: ${channels.joinToString()}")
+
+                    // Ensure coroutine is still active before submitting
+                    if (!coroutineContext.isActive || isShuttingDown || !isConnected) {
+                        error(
+                            "[INIT-COROUTINE] Coroutine cancelled or connection closed - isActive=${coroutineContext.isActive}, isShuttingDown=$isShuttingDown, isConnected=$isConnected",
+                        )
+                        isSubscribing = false
+                        return@withLock
+                    }
+
+                    // Recreate executor if it was shut down
+                    if (subscriptionExecutor.isShutdown || subscriptionExecutor.isTerminated) {
+                        debug("[INIT-COROUTINE] Executor is shut down, creating new executor")
+                        subscriptionExecutor =
+                            Executors.newSingleThreadExecutor { r ->
+                                Thread(r, "Redis-Subscription-${System.currentTimeMillis()}").apply {
+                                    isDaemon = true
+                                }
+                            }
+                    }
+
+                    debug("[INIT-COROUTINE] Submitting subscription thread to executor")
+                    // Use a dedicated thread for subscription since subscribe() blocks forever
+                    subscriptionThread =
+                        subscriptionExecutor.submit {
+                            val threadName = Thread.currentThread().name
+                            debug("[SUB-THREAD $threadName] Subscription thread started")
+                            try {
+                                debug("[SUB-THREAD $threadName] Calling subConnection.subscribe() - THIS CALL BLOCKS FOREVER")
+                                subConnection.subscribe(this@RedisManager, *channels)
+                                debug("[SUB-THREAD $threadName] subscribe() call returned - SHOULD NEVER HAPPEN")
+                            } catch (e: Exception) {
+                                error("[SUB-THREAD $threadName] Exception in subscription thread", e)
+                                isSubscribing = false
+                                subscriptionActive = false
+
+                                // Retry after delay
+                                Thread.sleep(RECONNECT_DELAY_MS)
+                                if (!isShuttingDown && isConnected) {
+                                    debug("[SUB-THREAD $threadName] Retrying subscription after exception")
+                                    scope.launch {
+                                        init()
+                                    }
+                                }
                             }
                         }
-                    }
+                    debug("[INIT-COROUTINE] Subscription thread submitted, future=$subscriptionThread")
                 }
+                debug("[INIT-COROUTINE] Mutex released, coroutine completing")
             }
-        }
+        debug("[INIT] init() completed, subscriptionJob=$subscriptionJob")
     }
 
+    /**
+     * Check if subscription is fully active and ready to receive messages.
+     * Useful for tests.
+     */
+    fun isSubscriptionActive(): Boolean = subscriptionActive
+
     override fun close() {
+        debug("[CLOSE] Starting close() - isShuttingDown=$isShuttingDown")
         if (isShuttingDown) {
+            debug("[CLOSE] Already shutting down, returning")
             return
         }
 
         isShuttingDown = true
         isConnected = false
+        subscriptionActive = false
 
-        info("Closing RedisManager")
+        debug("[CLOSE] Closing RedisManager")
 
         try {
+            // Cancel coroutine scope FIRST to stop any running coroutines
+            // This prevents them from trying to use the executor after it's shut down
+            scope.cancel()
+            // Note: scope will be recreated in connect() if needed
+
             // Cancel subscription
             subscriptionJob?.cancel()
             subscriptionJob = null
             subscriptionThread?.cancel(true)
             subscriptionThread = null
+
+            // Now safe to shutdown executor since coroutines are cancelled
             subscriptionExecutor.shutdownNow()
 
             // Close connections
@@ -462,10 +559,6 @@ class RedisManager(
             pub?.close()
             sub = null
             pub = null
-
-            // Cancel coroutine scope (will be recreated on next connect)
-            scope.cancel()
-            // Note: scope will be recreated in connect() if needed
 
             // Clear state
             channelListeners.clear()
@@ -484,28 +577,28 @@ class RedisManager(
     /**
      * Check if Redis is connected.
      */
+    @Suppress("unused")
     fun isConnected(): Boolean = isConnected && !isShuttingDown
 
     /**
      * Get number of registered channels.
      */
+    @Suppress("unused")
     fun getChannelCount(): Int = channelList.size
 
     /**
      * Get list of registered channel names.
      */
+    @Suppress("unused")
     fun getChannels(): Set<String> = channelList.toSet()
 
     /**
      * Health check - ping Redis server.
      */
+    @Suppress("unused")
     suspend fun healthCheck(): Boolean = withContext(Dispatchers.IO) {
         try {
-            val pubConnection = pub
-            if (pubConnection == null) {
-                return@withContext false
-            }
-            val response = pubConnection.ping()
+            val response = pub?.ping() ?: return@withContext false
             response == "PONG"
         } catch (e: Exception) {
             error("Redis health check failed", e)

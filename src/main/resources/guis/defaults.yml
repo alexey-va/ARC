@@ -1,0 +1,65 @@
+# ===========================================
+# GUI Defaults Configuration
+# ===========================================
+# This file contains default values for GUI elements.
+# All values can be overridden in individual GUI configs.
+# ===========================================
+
+# Background settings
+background:
+  # Default background material
+  material: GRAY_STAINED_GLASS_PANE
+  # Default model data for background
+  model-data: 11000
+  # Content area background (for paginated GUIs)
+  content-material: LIGHT_GRAY_STAINED_GLASS_PANE
+  content-model-data: 0
+
+# Button defaults
+buttons:
+  # Back button
+  back:
+    material: BLUE_STAINED_GLASS_PANE
+    model-data: 11013
+    default-display: "<gray>« Назад"
+    default-command: menu
+
+  # Previous page button
+  prev:
+    material: BLUE_STAINED_GLASS_PANE
+    model-data: 11009
+    default-display: "<gray>« Предыдущая"
+
+  # Next page button
+  next:
+    material: BLUE_STAINED_GLASS_PANE
+    model-data: 11008
+    default-display: "<gray>Следующая »"
+
+  # Confirm button
+  confirm:
+    material: LIME_STAINED_GLASS_PANE
+    model-data: 0
+    default-display: "<green>Подтвердить"
+
+  # Cancel button
+  cancel:
+    material: RED_STAINED_GLASS_PANE
+    model-data: 0
+    default-display: "<red>Отмена"
+
+# Default slot positions
+slots:
+  back: 0
+  prev: 3
+  next: 5
+  confirm: 2
+  cancel: 6
+
+# Default messages
+messages:
+  cooldown: "<red>Подождите..."
+  error: "<red>Ошибка"
+  no-permission: "<red>Нет прав"
+
+

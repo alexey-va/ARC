@@ -1,8 +1,8 @@
 package ru.arc.autobuild
 
-import org.bukkit.Bukkit
-import org.bukkit.scheduler.BukkitTask
-import ru.arc.ARC
+import ru.arc.core.ScheduledTask
+import ru.arc.core.delayed
+import ru.arc.core.ticks
 import ru.arc.util.CooldownManager
 
 /**
@@ -36,18 +36,18 @@ sealed class ConstructionState {
 
     /** Showing border particles to player */
     data object DisplayingOutline : ConstructionState() {
-        private var timeoutTask: BukkitTask? = null
+        private var timeoutTask: ScheduledTask? = null
 
         override fun enter(site: ConstructionSite) {
             site.display = Display(site).also { it.showBorder(site.displaySeconds) }
 
-            // Schedule timeout
-            timeoutTask = Bukkit.getScheduler().runTaskLater(ARC.plugin, Runnable {
-                if (site.state == this) {
-                    site.player.sendMessage(BuildConfig.Messages.inactivity())
-                    site.transitionTo(Cancelled)
+            timeoutTask =
+                delayed((site.displaySeconds * 20L).ticks) {
+                    if (site.state == DisplayingOutline) {
+                        site.player.sendMessage(BuildConfig.Messages.inactivity())
+                        site.transitionTo(Cancelled)
+                    }
                 }
-            }, site.displaySeconds * 20L)
         }
 
         override fun exit(site: ConstructionSite) {
@@ -60,7 +60,7 @@ sealed class ConstructionState {
 
     /** NPC spawned, waiting for player confirmation */
     data object Confirmation : ConstructionState() {
-        private var timeoutTask: BukkitTask? = null
+        private var timeoutTask: ScheduledTask? = null
 
         override fun enter(site: ConstructionSite) {
             site.timestamp = System.currentTimeMillis()
@@ -70,13 +70,13 @@ sealed class ConstructionState {
             }
             site.player.sendMessage(BuildConfig.Messages.confirm())
 
-            // Schedule timeout
-            timeoutTask = Bukkit.getScheduler().runTaskLater(ARC.plugin, Runnable {
-                if (site.state == this) {
-                    site.player.sendMessage(BuildConfig.Messages.inactivity())
-                    site.transitionTo(Cancelled)
+            timeoutTask =
+                delayed((site.confirmSeconds * 20L).ticks) {
+                    if (site.state == Confirmation) {
+                        site.player.sendMessage(BuildConfig.Messages.inactivity())
+                        site.transitionTo(Cancelled)
+                    }
                 }
-            }, site.confirmSeconds * 20L)
         }
 
         override fun exit(site: ConstructionSite) {
@@ -109,9 +109,7 @@ sealed class ConstructionState {
         override fun enter(site: ConstructionSite) {
             site.player.sendMessage(BuildConfig.Messages.finished())
             site.launchFireworks()
-            Bukkit.getScheduler().runTaskLater(ARC.plugin, Runnable {
-                site.construction?.destroyNpc()
-            }, 60)
+            delayed(60.ticks) { site.construction?.destroyNpc() }
             site.cleanup(60)
         }
 
@@ -130,5 +128,3 @@ sealed class ConstructionState {
         override fun allowedTransitions() = emptySet<ConstructionState>()
     }
 }
-
-

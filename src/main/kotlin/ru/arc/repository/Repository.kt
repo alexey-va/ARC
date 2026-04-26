@@ -23,8 +23,12 @@ sealed class RepoResult<out T> {
     val isError: Boolean get() = this is Error
 
     fun getOrNull(): T? = (this as? Success)?.data
+
     fun getOrThrow(): T =
-        (this as? Success)?.data ?: throw (this as Error).cause ?: IllegalStateException((this as Error).message)
+        when (this) {
+            is Success -> data
+            is Error -> throw cause ?: IllegalStateException(message)
+        }
 
     inline fun <R> map(transform: (T) -> R): RepoResult<R> = when (this) {
         is Success -> Success(transform(data))
@@ -122,5 +126,3 @@ interface ContextRepository<T : Entity> : Repository<T> {
      */
     fun getContexts(): Set<String>
 }
-
-

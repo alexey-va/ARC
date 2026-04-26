@@ -57,7 +57,7 @@ public class IAEvents implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onRpCompress(ItemsAdderPackCompressedEvent event) throws Exception {
-        Path path = ARC.plugin.getDataFolder().toPath();
+        Path path = ARC.getInstance().getDataFolder().toPath();
         Config emHookConfig = ConfigManager.of(path, "ia-hooks.yml");
         String pathToZip = emHookConfig.string("path-to-zip", "ItemsAdder/output/generated.zip");
         Path zipPath = path.getParent().resolve(pathToZip);
@@ -116,7 +116,7 @@ public class IAEvents implements Listener {
             try(var walk =Files.walk(sourceDir)) {
                 walk.filter(path -> !Files.isDirectory(path))
                         .forEach(path -> {
-                            Path destPath = zipFs.getPath("/" + sourceDir.relativize(path).toString());
+                            Path destPath = zipFs.getPath("/" + sourceDir.relativize(path));
                             try {
                                 Files.createDirectories(destPath.getParent());
                                 Files.copy(path, destPath, StandardCopyOption.REPLACE_EXISTING);
@@ -172,7 +172,7 @@ public class IAEvents implements Listener {
             }
         }
         // if found create new file with _icon suffix
-        if (found && false) {
+        if (false) {
 
             Path newPath = Paths.get(path.toString().replace(".properties", "_icon.properties"));
             CustomStack customStack = CustomStack.getInstance(namespace + ":" + id);
@@ -207,7 +207,7 @@ public class IAEvents implements Listener {
 
         Path parent = path.getParent();
         List<Path> leatherTextures = new ArrayList<>();
-        Path pluginFolder = ARC.plugin.getDataFolder().toPath();
+        Path pluginFolder = ARC.getInstance().getDataFolder().toPath();
         Path iaData = pluginFolder.resolve("ia_data");
         if (!Files.exists(iaData)) {
             Files.createDirectories(iaData);

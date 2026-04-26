@@ -39,5 +39,3 @@ object ClipboardLoaders {
         loader = WorldEditClipboardLoader()
     }
 }
-
-

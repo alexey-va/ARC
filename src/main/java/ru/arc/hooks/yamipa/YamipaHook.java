@@ -1,12 +1,5 @@
 package ru.arc.hooks.yamipa;
 
-import io.josemmo.bukkit.plugin.YamipaPlugin;
-import io.josemmo.bukkit.plugin.renderer.FakeImage;
-import io.josemmo.bukkit.plugin.renderer.ImageRenderer;
-import io.josemmo.bukkit.plugin.renderer.WorldAreaId;
-import org.bukkit.Location;
-import org.bukkit.entity.Player;
-
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.HashSet;
@@ -14,8 +7,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import io.josemmo.bukkit.plugin.YamipaPlugin;
+import io.josemmo.bukkit.plugin.renderer.FakeImage;
+import io.josemmo.bukkit.plugin.renderer.ImageRenderer;
+import io.josemmo.bukkit.plugin.renderer.WorldAreaId;
+import org.bukkit.Location;
+import org.bukkit.entity.Player;
+
 public class YamipaHook {
 
+    @SuppressWarnings("unchecked")
     public void updateImages(Location location, List<Player> players){
         //System.out.println("Updating "+location+" for "+players.stream().map(Player::getName).collect(Collectors.joining()));
         if(players.isEmpty()) return;

@@ -33,5 +33,3 @@ enum class Type {
     /** Прочие операции */
     OTHER
 }
-
-

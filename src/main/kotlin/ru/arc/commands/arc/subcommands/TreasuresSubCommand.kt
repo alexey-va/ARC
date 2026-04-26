@@ -8,11 +8,11 @@ import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.player
 import ru.arc.commands.arc.tabComplete
 import ru.arc.commands.arc.tabCompletePlayers
-import ru.arc.common.treasure.TreasurePool
-import ru.arc.common.treasure.gui.MainTreasuresGui
-import ru.arc.common.treasure.gui.PoolGui
-import ru.arc.common.treasure.impl.SubPoolTreasure
-import ru.arc.common.treasure.impl.TreasureItem
+import ru.arc.treasure.core.Treasure
+import ru.arc.treasure.core.TreasurePool
+import ru.arc.treasure.core.Treasures
+import ru.arc.treasure.core.gui.MainTreasuresGui
+import ru.arc.treasure.core.gui.PoolGui
 import ru.arc.util.GuiUtils
 import ru.arc.util.ItemUtils
 
@@ -46,7 +46,7 @@ object TreasuresSubCommand : SubCommand {
         if (args.isEmpty()) {
             val player = sender.player
             if (player != null) {
-                GuiUtils.constructAndShowAsync({ MainTreasuresGui(player) }, player)
+                GuiUtils.constructAndShowAsync({ MainTreasuresGui.create(player) }, player)
             } else {
                 showList(sender)
             }
@@ -62,7 +62,7 @@ object TreasuresSubCommand : SubCommand {
             }
 
             "reload" -> {
-                TreasurePool.loadAllTreasures()
+                Treasures.reload()
                 sender.sendMessage(CommandConfig.treasuresReloaded())
                 return true
             }
@@ -72,7 +72,7 @@ object TreasuresSubCommand : SubCommand {
 
         // /arc treasures <pool_id> - открыть GUI или показать info
         if (args.size == 1) {
-            val pool = TreasurePool.getTreasurePool(poolId)
+            val pool = Treasures.getPool(poolId)
             if (pool == null) {
                 sender.sendMessage(CommandConfig.treasuresPoolNotFound(poolId))
                 sender.sendMessage(
@@ -85,7 +85,7 @@ object TreasuresSubCommand : SubCommand {
             }
             val player = sender.player
             if (player != null) {
-                GuiUtils.constructAndShowAsync({ PoolGui(player, pool) }, player)
+                GuiUtils.constructAndShowAsync({ PoolGui.create(player, pool) }, player)
             } else {
                 showPoolInfo(sender, pool, poolId)
             }
@@ -93,10 +93,11 @@ object TreasuresSubCommand : SubCommand {
         }
 
         // Получаем или создаём пул
-        val pool = TreasurePool.getTreasurePool(poolId) ?: run {
-            sender.sendMessage(CommandConfig.treasuresPoolCreating(poolId))
-            TreasurePool.getOrCreate(poolId)
-        }
+        val pool =
+            Treasures.getPool(poolId) ?: run {
+                sender.sendMessage(CommandConfig.treasuresPoolCreating(poolId))
+                Treasures.getOrCreate(poolId)
+            }
 
         // Обрабатываем действие
         when (args[1].lowercase()) {
@@ -111,7 +112,7 @@ object TreasuresSubCommand : SubCommand {
     }
 
     private fun showList(sender: CommandSender) {
-        val pools = TreasurePool.getTreasurePools()
+        val pools = Treasures.getAllPools()
 
         if (pools.isEmpty()) {
             sender.sendMessage(CommandConfig.get("treasures.no-pools", "<gray>Нет пулов наград"))
@@ -123,17 +124,19 @@ object TreasuresSubCommand : SubCommand {
                 "treasures.list-header",
                 "<gold>Пулы наград (%count%):",
                 "%count%",
-                pools.size.toString()
-            )
+                pools.size.toString(),
+            ),
         )
-        pools.sortedBy { it.getId() }.forEach { pool ->
+        pools.sortedBy { it.id }.forEach { pool ->
             sender.sendMessage(
                 CommandConfig.get(
                     "treasures.list-item",
                     "<gray>• <white>%pool_id% <gray>(%size% предметов)",
-                    "%pool_id%", pool.getId(),
-                    "%size%", pool.size().toString()
-                )
+                    "%pool_id%",
+                    pool.id,
+                    "%size%",
+                    pool.size.toString(),
+                ),
             )
         }
     }
@@ -152,8 +155,8 @@ object TreasuresSubCommand : SubCommand {
                 "treasures.info-size",
                 "<gray>Предметов: <white>%size%",
                 "%size%",
-                pool.size().toString()
-            )
+                pool.size.toString(),
+            ),
         )
         sender.sendMessage(
             CommandConfig.get(
@@ -176,15 +179,16 @@ object TreasuresSubCommand : SubCommand {
         val quantity: Int = flags["quantity"] ?: item.amount
         val weight: Int = flags["weight"] ?: 1
 
-        val treasure = TreasureItem.create(item, quantity, quantity, null).apply {
-            this.weight = weight
-        }
+        val treasure =
+            Treasure.Item(
+                stack = item,
+                min = quantity,
+                max = quantity,
+                weight = weight,
+            )
 
-        if (pool.add(treasure)) {
-            player.sendMessage(CommandConfig.treasuresItemAdded(poolId, item.type.name))
-        } else {
-            player.sendMessage(CommandConfig.treasuresItemAlreadyAdded(poolId, item.type.name))
-        }
+        Treasures.addTreasure(poolId, treasure)
+        player.sendMessage(CommandConfig.treasuresItemAdded(poolId, item.type.name))
     }
 
     private fun addFromChest(sender: CommandSender, pool: TreasurePool, poolId: String, args: Array<String>) {
@@ -207,12 +211,15 @@ object TreasuresSubCommand : SubCommand {
 
         var added = 0
         for (item in items) {
-            val treasure = TreasureItem.create(item, item.amount, item.amount, null).apply {
-                this.weight = weight
-            }
-            if (pool.add(treasure)) {
-                added++
-            }
+            val treasure =
+                Treasure.Item(
+                    stack = item,
+                    min = item.amount,
+                    max = item.amount,
+                    weight = weight,
+                )
+            Treasures.addTreasure(poolId, treasure)
+            added++
         }
 
         player.sendMessage(CommandConfig.treasuresItemsAdded(poolId, added))
@@ -225,7 +232,7 @@ object TreasuresSubCommand : SubCommand {
         }
 
         val subPoolId = args[2]
-        if (TreasurePool.getTreasurePool(subPoolId) == null) {
+        if (Treasures.getPool(subPoolId) == null) {
             sender.sendMessage(CommandConfig.treasuresPoolNotFound(subPoolId))
             return
         }
@@ -233,15 +240,14 @@ object TreasuresSubCommand : SubCommand {
         val flags = parseFlagsAsInt(args)
         val weight: Int = flags["weight"] ?: 1
 
-        val treasure = SubPoolTreasure.create(subPoolId).apply {
-            this.weight = weight
-        }
+        val treasure =
+            Treasure.SubPool(
+                poolId = subPoolId,
+                weight = weight,
+            )
 
-        if (pool.add(treasure)) {
-            sender.sendMessage(CommandConfig.treasuresSubpoolAdded(poolId, subPoolId))
-        } else {
-            sender.sendMessage(CommandConfig.treasuresSubpoolAlreadyAdded(poolId, subPoolId))
-        }
+        Treasures.addTreasure(poolId, treasure)
+        sender.sendMessage(CommandConfig.treasuresSubpoolAdded(poolId, subPoolId))
     }
 
     private fun giveReward(sender: CommandSender, pool: TreasurePool, poolId: String, args: Array<String>) {
@@ -257,12 +263,12 @@ object TreasuresSubCommand : SubCommand {
             return
         }
 
-        if (pool.size() == 0) {
+        if (pool.isEmpty()) {
             sender.sendMessage(CommandConfig.treasuresPoolEmpty(poolId))
             return
         }
 
-        pool.random()?.give(target)
+        Treasures.service.giveFromPool(poolId, target)
         sender.sendMessage(CommandConfig.treasuresGiven(target.name))
     }
 
@@ -275,8 +281,11 @@ object TreasuresSubCommand : SubCommand {
         }.toMap()
     }
 
-    override fun tabComplete(sender: CommandSender, args: Array<String>): List<String>? {
-        val pools = TreasurePool.getTreasurePools().map { it.getId() }
+    override fun tabComplete(
+        sender: CommandSender,
+        args: Array<String>,
+    ): List<String>? {
+        val pools = Treasures.getAllPools().map { it.id }
 
         return when (args.size) {
             1 -> (listOf("list", "reload") + pools).tabComplete(args[0])

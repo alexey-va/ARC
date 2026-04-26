@@ -16,7 +16,7 @@ public class CitizensListener implements Listener {
 
 
     private void processConstruction(NPCClickEvent event){
-        BuildingManager.INSTANCE.processNpcClick(event.getClicker(), event.getNPC().getId());
+        BuildingManager.processNpcClick(event.getClicker(), event.getNPC().getId());
     }
 
 }

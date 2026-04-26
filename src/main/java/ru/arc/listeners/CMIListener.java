@@ -16,21 +16,21 @@ import static ru.arc.PortalData.ActionType.TELEPORT;
 
 public class CMIListener implements Listener {
 
-    static final Config commandConfig = ConfigManager.of(ARC.plugin.getDataPath(), "portal.yml");
+    /**
+     * CMI teleport types that trigger portal effect — {@code portal.cmi-tp-types} in misc.yml.
+     */
+    static final Config commandConfig = ConfigManager.of(ARC.getInstance().getDataPath(), "misc.yml");
 
     @EventHandler
     public void onCMITp(CMIAsyncPlayerTeleportEvent event) {
         if (event.getSender().hasPermission("arc.bypass-portal")) return;
         if (event.getType() == null || event.getTo() == null || event.getPlayer() == null) return;
-        Set<String> types = commandConfig.stringList("cmi-tp-types").stream()
+        Set<String> types = commandConfig.stringList("portal.cmi-tp-types").stream()
                 .map(String::toLowerCase)
                 .collect(Collectors.toSet());
         if (!types.contains(event.getType().toString().toLowerCase())) return;
         event.setCancelled(true);
-        new Portal(event.getPlayer().getUniqueId(), PortalData.builder()
-                .actionType(TELEPORT)
-                .location(event.getTo())
-                .build());
+        new Portal(event.getPlayer().getUniqueId(), new PortalData(TELEPORT, null, event.getTo(), null));
     }
 
 }

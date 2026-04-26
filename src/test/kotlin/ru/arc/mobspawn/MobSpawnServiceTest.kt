@@ -1,4 +1,3 @@
-@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 
 package ru.arc.mobspawn
 
@@ -26,7 +25,6 @@ import ru.arc.core.TestTaskScheduler
  * Tests for MobSpawnService.
  */
 class MobSpawnServiceTest : TestBase() {
-
     private lateinit var playerMock: PlayerMock
     private lateinit var scheduler: TestTaskScheduler
     private lateinit var worldProvider: TestWorldProvider
@@ -48,24 +46,23 @@ class MobSpawnServiceTest : TestBase() {
 
     private fun createService(
         config: MobSpawnConfig = createDefaultConfig(),
-        randomValue: Double = 0.5
-    ): MobSpawnService {
-        return MobSpawnService(
+        randomValue: Double = 0.5,
+    ): MobSpawnService =
+        MobSpawnService(
             config = config,
             scheduler = scheduler,
             worldProvider = worldProvider,
             claimChecker = claimChecker,
             entitySpawner = entitySpawner,
-            random = { randomValue }
+            random = { randomValue },
         )
-    }
 
     private fun createDefaultConfig(
         enabled: Boolean = true,
         worlds: Set<String> = setOf("spawn_world"),
-        useCmiCommand: Boolean = true
-    ): MobSpawnConfig {
-        return MobSpawnConfig(
+        useCmiCommand: Boolean = true,
+    ): MobSpawnConfig =
+        TestMobSpawnConfig(
             enabled = enabled,
             worlds = worlds,
             startHour = 0,
@@ -78,18 +75,17 @@ class MobSpawnServiceTest : TestBase() {
             maxLightLevel = 7,
             useCmiCommand = useCmiCommand,
             cmiSpread = 30,
-            mobWeights = mapOf(
-                EntityType.ZOMBIE to 50,
-                EntityType.SKELETON to 30,
-                EntityType.CREEPER to 20
-            )
+            mobWeights =
+                mapOf(
+                    EntityType.ZOMBIE to 50,
+                    EntityType.SKELETON to 30,
+                    EntityType.CREEPER to 20,
+                ),
         )
-    }
 
     @Nested
     @DisplayName("Service Lifecycle")
     inner class LifecycleTests {
-
         @Test
         fun `start creates timer task when enabled`() {
             val service = createService()
@@ -115,10 +111,11 @@ class MobSpawnServiceTest : TestBase() {
 
         @Test
         fun `start does nothing with no mobs configured`() {
-            val config = MobSpawnConfig(
-                enabled = true,
-                mobWeights = emptyMap()
-            )
+            val config =
+                TestMobSpawnConfig(
+                    enabled = true,
+                    mobWeights = emptyMap(),
+                )
             val service = createService(config)
 
             service.start()
@@ -156,7 +153,6 @@ class MobSpawnServiceTest : TestBase() {
     @Nested
     @DisplayName("Mob Types")
     inner class MobTypesTests {
-
         @Test
         fun `getTrackedMobTypes returns configured mobs`() {
             val service = createService()
@@ -171,7 +167,7 @@ class MobSpawnServiceTest : TestBase() {
 
         @Test
         fun `empty config has no tracked types`() {
-            val config = MobSpawnConfig(mobWeights = emptyMap())
+            val config = TestMobSpawnConfig(mobWeights = emptyMap())
             val service = createService(config)
 
             assertTrue(service.getTrackedMobTypes().isEmpty())
@@ -181,7 +177,6 @@ class MobSpawnServiceTest : TestBase() {
     @Nested
     @DisplayName("Spawn Attempt - Skip Conditions")
     inner class SpawnSkipTests {
-
         @Test
         fun `skips spawn in mushroom fields biome`() {
             // Note: MockBukkit may not fully support biome checks
@@ -261,7 +256,6 @@ class MobSpawnServiceTest : TestBase() {
     @Nested
     @DisplayName("Count Nearby Mobs")
     inner class CountNearbyMobsTests {
-
         @Test
         fun `countNearbyMobs returns 0 with no entities`() {
             val service = createService()
@@ -271,14 +265,13 @@ class MobSpawnServiceTest : TestBase() {
             assertEquals(0, count)
         }
 
-        // Note: MockBukkit getNearbyEntities is limited, 
+        // Note: MockBukkit getNearbyEntities is limited,
         // more comprehensive tests would need integration testing
     }
 
     @Nested
     @DisplayName("CMI Command Spawning")
     inner class CmiSpawnTests {
-
         @Test
         fun `spawns via CMI when configured`() {
             val config = createDefaultConfig(useCmiCommand = true)
@@ -297,7 +290,6 @@ class MobSpawnServiceTest : TestBase() {
     @Nested
     @DisplayName("MobSpawnManager Facade")
     inner class ManagerFacadeTests {
-
         @Test
         fun `isRunning returns false initially`() {
             MobSpawnManager.cancel() // Ensure clean state
@@ -350,14 +342,13 @@ class TestWorldProvider : WorldProvider {
 class TestClaimChecker : ClaimChecker {
     val claimedLocations = mutableSetOf<Location>()
 
-    override fun isClaimed(location: Location): Boolean {
-        return claimedLocations.any {
+    override fun isClaimed(location: Location): Boolean =
+        claimedLocations.any {
             it.world == location.world &&
                 it.blockX == location.blockX &&
                 it.blockY == location.blockY &&
                 it.blockZ == location.blockZ
         }
-    }
 }
 
 /**
@@ -371,14 +362,22 @@ class TestEntitySpawner : EntitySpawner {
         val player: Player,
         val entityType: EntityType,
         val amount: Int,
-        val spread: Int
+        val spread: Int,
     )
 
-    override fun spawn(location: Location, entityType: EntityType) {
+    override fun spawn(
+        location: Location,
+        entityType: EntityType,
+    ) {
         spawnedEntities.add(location to entityType)
     }
 
-    override fun spawnViaCmi(player: Player, entityType: EntityType, amount: Int, spread: Int) {
+    override fun spawnViaCmi(
+        player: Player,
+        entityType: EntityType,
+        amount: Int,
+        spread: Int,
+    ) {
         cmiCommands.add(CmiSpawnCommand(player, entityType, amount, spread))
     }
 
@@ -387,4 +386,3 @@ class TestEntitySpawner : EntitySpawner {
         cmiCommands.clear()
     }
 }
-

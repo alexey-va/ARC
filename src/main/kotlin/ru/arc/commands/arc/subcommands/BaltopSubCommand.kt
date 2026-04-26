@@ -5,8 +5,7 @@ import ru.arc.ARC
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.player
 import ru.arc.configs.ConfigManager
-import ru.arc.misc.BaltopGui
-import ru.arc.util.GuiUtils
+import ru.arc.misc.BaltopGuiFactory
 
 /**
  * /arc baltop - Opens the balance top GUI.
@@ -22,8 +21,8 @@ object BaltopSubCommand : SubCommand {
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
         val player = sender.player ?: return true
-        val config = ConfigManager.of(ARC.plugin.dataFolder.toPath(), "baltop.yml")
-        GuiUtils.constructAndShowAsync({ BaltopGui(config, player) }, player)
+        val config = ConfigManager.of(ARC.instance.dataFolder.toPath(), "baltop.yml")
+        BaltopGuiFactory.showAsync(config, player)
         return true
     }
 }

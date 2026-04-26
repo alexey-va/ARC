@@ -1,39 +1,42 @@
 package ru.arc.util
 
 import com.destroystokyo.paper.ParticleBuilder
-import org.bukkit.scheduler.BukkitRunnable
-import org.bukkit.scheduler.BukkitTask
-import ru.arc.ARC
+import ru.arc.core.ScheduledTask
+import ru.arc.core.repeating
+import ru.arc.core.repeatingAsync
+import ru.arc.core.ticks
 import ru.arc.util.Logging.warn
 import java.util.concurrent.ConcurrentLinkedDeque
 
+/**
+ * Manages particle spawning with async and sync queues.
+ * Uses Task DSL for scheduling.
+ */
 object ParticleManager {
 
     private val buildersQueue = ConcurrentLinkedDeque<ParticleBuilder>()
     private val syncBuildersQueue = ConcurrentLinkedDeque<ParticleBuilder>()
 
-    private var task: BukkitTask? = null
-    private var syncTask: BukkitTask? = null
+    private var asyncTask: ScheduledTask? = null
+    private var syncTask: ScheduledTask? = null
 
     @JvmStatic
     fun setupParticleManager() {
-        if (task != null && !task!!.isCancelled()) {
-            task!!.cancel()
-        }
-        if (syncTask != null && !syncTask!!.isCancelled()) {
-            syncTask!!.cancel()
-        }
+        // Cancel existing tasks
+        asyncTask?.cancel()
+        syncTask?.cancel()
 
-        task = object : BukkitRunnable() {
-            override fun run() {
+        // Async particle processing (every tick)
+        asyncTask =
+            repeatingAsync(period = 1.ticks, delay = 0.ticks) {
                 while (buildersQueue.isNotEmpty()) {
                     buildersQueue.poll()?.spawn()
                 }
             }
-        }.runTaskTimerAsynchronously(ARC.plugin!!, 0L, 1L)
 
-        syncTask = object : BukkitRunnable() {
-            override fun run() {
+        // Sync particle processing with rate limiting
+        syncTask =
+            repeating(period = 1.ticks, delay = 0.ticks) {
                 var count = 0
                 while (syncBuildersQueue.isNotEmpty()) {
                     syncBuildersQueue.poll()?.spawn()
@@ -44,14 +47,25 @@ object ParticleManager {
                     }
                 }
             }
-        }.runTaskTimer(ARC.plugin!!, 0L, 1L)
+    }
+
+    @JvmStatic
+    fun stopTasks() {
+        asyncTask?.cancel()
+        syncTask?.cancel()
     }
 
     @JvmStatic
     fun queue(builder: ParticleBuilder) {
-        val res = buildersQueue.offer(builder)
-        if (!res) {
+        if (!buildersQueue.offer(builder)) {
             warn("Failed to queue particle builder: {}", builder)
+        }
+    }
+
+    @JvmStatic
+    fun queueSync(builder: ParticleBuilder) {
+        if (!syncBuildersQueue.offer(builder)) {
+            warn("Failed to queue sync particle builder: {}", builder)
         }
     }
 }

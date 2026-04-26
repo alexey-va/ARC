@@ -79,5 +79,3 @@ data class Transaction(
         }
     }
 }
-
-

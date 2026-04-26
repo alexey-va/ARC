@@ -1,4 +1,3 @@
-@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 
 package ru.arc.network.repos
 
@@ -367,7 +366,7 @@ class RedisRepoTest : TestBase() {
                 Thread {
                     try {
                         repo.create(TestRepoData("user$i", "value$i")).join()
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         errors.incrementAndGet()
                     } finally {
                         latch.countDown()
@@ -402,7 +401,7 @@ class RedisRepoTest : TestBase() {
                             // Write
                             repo.create(TestRepoData("new-user$i", "new-value$i")).join()
                         }
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         errors.incrementAndGet()
                     } finally {
                         latch.countDown()

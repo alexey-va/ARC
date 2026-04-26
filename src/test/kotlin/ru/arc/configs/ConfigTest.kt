@@ -1,10 +1,13 @@
-@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 
 package ru.arc.configs
 
 import org.bukkit.Material
 import org.bukkit.Particle
-import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions.fail
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -12,7 +15,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 class ConfigTest {
-
     @TempDir
     lateinit var tempDir: Path
 
@@ -37,7 +39,7 @@ class ConfigTest {
             """
             test:
               value: 42
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -58,7 +60,7 @@ class ConfigTest {
             """
             test:
               value: 42.5
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -72,7 +74,7 @@ class ConfigTest {
             """
             test:
               value: 9999999999
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -88,7 +90,7 @@ class ConfigTest {
               level2:
                 level3:
                   value: 123
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -104,7 +106,7 @@ class ConfigTest {
             """
             test:
               enabled: true
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -124,7 +126,7 @@ class ConfigTest {
             """
             test:
               enabled: false
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -140,7 +142,7 @@ class ConfigTest {
             """
             test:
               value: 3.14159
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -160,7 +162,7 @@ class ConfigTest {
             """
             test:
               value: 42
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -176,7 +178,7 @@ class ConfigTest {
             """
             test:
               message: "Hello World"
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -196,7 +198,7 @@ class ConfigTest {
             """
             test:
               value: 42
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -210,7 +212,7 @@ class ConfigTest {
             """
             test:
               value: "test"
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -226,7 +228,7 @@ class ConfigTest {
             """
             test:
               value: 9223372036854775807
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -251,7 +253,7 @@ class ConfigTest {
                 - item1
                 - item2
                 - item3
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -273,7 +275,7 @@ class ConfigTest {
             """
             test:
               item: "single"
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -299,7 +301,7 @@ class ConfigTest {
                 - item1
                 - item2
                 - item3
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -314,7 +316,7 @@ class ConfigTest {
             """
             test:
               item: "single"
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -339,7 +341,7 @@ class ConfigTest {
               data:
                 key1: value1
                 key2: value2
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -364,7 +366,7 @@ class ConfigTest {
               data:
                 123: value1
                 456: value2
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -391,7 +393,7 @@ class ConfigTest {
                 - 1
                 - 2
                 - 3
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -423,7 +425,7 @@ class ConfigTest {
                 key1: value1
                 key2: value2
                 key3: value3
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -446,7 +448,7 @@ class ConfigTest {
             """
             test:
               material: "DIAMOND"
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -466,7 +468,7 @@ class ConfigTest {
             """
             test:
               material: "INVALID_MATERIAL"
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -480,7 +482,7 @@ class ConfigTest {
             """
             test:
               material: "diamond"
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -499,7 +501,7 @@ class ConfigTest {
                 - DIAMOND
                 - GOLD_INGOT
                 - IRON_INGOT
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -526,7 +528,7 @@ class ConfigTest {
                 - DIAMOND
                 - INVALID_MATERIAL
                 - GOLD_INGOT
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -544,7 +546,7 @@ class ConfigTest {
             """
             test:
               particle: "FLAME"
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -564,7 +566,7 @@ class ConfigTest {
             """
             test:
               particle: "INVALID_PARTICLE"
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -580,7 +582,7 @@ class ConfigTest {
             """
             test:
               value: 42
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -599,7 +601,7 @@ class ConfigTest {
             level1:
               level2:
                 value: test
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -616,7 +618,7 @@ class ConfigTest {
             test:
               items:
                 - item1
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -644,7 +646,7 @@ class ConfigTest {
             """
             test:
               value: 42
-        """.trimIndent()
+            """.trimIndent(),
         )
 
         config.load()
@@ -700,7 +702,7 @@ class ConfigTest {
             level1:
               level2:
                 value: old
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -725,7 +727,7 @@ class ConfigTest {
         writeYaml(
             """
             value: test
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -755,7 +757,7 @@ class ConfigTest {
               data:
                 key1: null
                 key2: value2
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -773,7 +775,7 @@ class ConfigTest {
                 - string
                 - 42
                 - true
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -790,7 +792,7 @@ class ConfigTest {
                 - 1
                 - 2
                 - 3
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -811,7 +813,7 @@ class ConfigTest {
             """
             test:
               value: "not a number"
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -832,7 +834,7 @@ class ConfigTest {
             """
             test:
               value: "not a number"
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -850,7 +852,7 @@ class ConfigTest {
             """
             test:
               value: "true"
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -870,7 +872,7 @@ class ConfigTest {
             """
             test:
               message: "<green>Hello World</green>"
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -879,7 +881,7 @@ class ConfigTest {
         try {
             val result = config.component("test.message")
             assertNotNull(result, "Should return component")
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // TextUtil might not be initialized in test environment
             // This is acceptable
         }
@@ -892,7 +894,7 @@ class ConfigTest {
             """
             test:
               value: 0
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -927,7 +929,7 @@ class ConfigTest {
             """
             test:
               message: "Привет мир"
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -941,7 +943,7 @@ class ConfigTest {
             """
             test:
               large: 999999999999999999
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -955,7 +957,7 @@ class ConfigTest {
             """
             test:
               negative: -42
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -969,7 +971,7 @@ class ConfigTest {
             """
             test:
               precise: 3.141592653589793
-        """.trimIndent()
+            """.trimIndent(),
         )
         config.load()
 
@@ -982,4 +984,3 @@ class ConfigTest {
         Files.write(configFile, content.toByteArray())
     }
 }
-

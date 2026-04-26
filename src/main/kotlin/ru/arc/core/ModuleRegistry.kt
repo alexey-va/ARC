@@ -8,7 +8,6 @@ import ru.arc.util.Logging.info
  * Handles lifecycle management: initialization, reload, and shutdown.
  */
 object ModuleRegistry {
-
     private val modules = mutableListOf<PluginModule>()
     private var initialized = false
 
@@ -40,9 +39,10 @@ object ModuleRegistry {
             return
         }
 
-        val sorted = modules
-            .filter { it.enabled }
-            .sortedBy { it.priority }
+        val sorted =
+            modules
+                .filter { it.enabled }
+                .sortedBy { it.priority }
 
         info("Initializing {} modules...", sorted.size)
 
@@ -82,9 +82,10 @@ object ModuleRegistry {
      * Higher priority values are shut down first.
      */
     fun shutdownAll() {
-        val sorted = modules
-            .filter { it.enabled }
-            .sortedByDescending { it.priority }
+        val sorted =
+            modules
+                .filter { it.enabled }
+                .sortedByDescending { it.priority }
 
         info("Shutting down {} modules...", sorted.size)
 
@@ -107,4 +108,3 @@ object ModuleRegistry {
      */
     fun getModules(): List<PluginModule> = modules.toList()
 }
-

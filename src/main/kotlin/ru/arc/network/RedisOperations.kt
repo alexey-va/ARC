@@ -55,5 +55,3 @@ interface RedisOperations {
      */
     fun close()
 }
-
-

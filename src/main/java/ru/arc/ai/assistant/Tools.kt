@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION")
+
 package ru.arc.ai.assistant
 
 import com.Zrips.CMI.CMI

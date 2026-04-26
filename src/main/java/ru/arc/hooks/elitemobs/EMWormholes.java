@@ -30,7 +30,7 @@ import static ru.arc.util.Logging.info;
 public class EMWormholes {
 
     private static BukkitTask wormholeTask;
-    static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "elitemobs.yml");
+    static final Config config = ConfigManager.of(ARC.getInstance().getDataPath(), "elitemobs.yml");
 
     public void init() {
         cancel();
@@ -46,7 +46,7 @@ public class EMWormholes {
                     error("Error running wormholes", e);
                 }
             }
-        }.runTaskTimerAsynchronously(ARC.plugin, 20L, config.integer("wormholes.period-ticks", 2));
+        }.runTaskTimerAsynchronously(ARC.getInstance(), 20L, config.integer("wormholes.period-ticks", 2));
     }
 
     public void cancel() {

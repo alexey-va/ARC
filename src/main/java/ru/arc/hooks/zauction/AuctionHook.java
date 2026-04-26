@@ -42,46 +42,53 @@ public class AuctionHook {
 
     BukkitTask broadcastItemsTask;
 
-    public AuctionHook(){
+    public AuctionHook() {
         auctionManager = getProvider(AuctionManager.class);
         InventoryManager inventoryManager = getProvider(InventoryManager.class);
         categoryManager = getProvider(CategoryManager.class);
         TransactionManager transactionManager = getProvider(TransactionManager.class);
         iBlacklistManager = getProvider(IBlacklistManager.class);
 
-        if(iBlacklistManager != null){
+        if (iBlacklistManager != null) {
             iBlacklistManager.registerBlacklist(emBlackList());
             info("Registered soulbind blacklist");
-        } else{
+        } else {
             warn("Black list manager was not found!");
         }
 
-        if(auctionListener == null){
+        if (auctionListener == null) {
             auctionListener = new AuctionListener();
-            Bukkit.getPluginManager().registerEvents(auctionListener, ARC.plugin);
+            Bukkit.getPluginManager().registerEvents(auctionListener, ARC.getInstance());
         }
 
         startTasks();
     }
 
-    public void cancelTasks(){
-        if(broadcastItemsTask != null && !broadcastItemsTask.isCancelled()) broadcastItemsTask.cancel();
+    public void cancelTasks() {
+        if (broadcastItemsTask != null && !broadcastItemsTask.isCancelled()) {
+            broadcastItemsTask.cancel();
+        }
     }
 
-    public void startTasks(){
+    public void startTasks() {
         cancelTasks();
         broadcastItemsTask = new BukkitRunnable() {
             @Override
             public void run() {
-                if(!AuctionConfig.broadcastItems) return;
-                if(auctionMessager == null) return;
+                if (!AuctionConfig.broadcastItems) {
+                    return;
+                }
+                if (auctionMessager == null) {
+                    return;
+                }
                 auctionMessager.send(getAuctionItems());
             }
-        }.runTaskTimerAsynchronously(ARC.plugin, AuctionConfig.refreshRate, AuctionConfig.refreshRate);
+        }.runTaskTimerAsynchronously(ARC.getInstance(), AuctionConfig.refreshRate, AuctionConfig.refreshRate);
     }
 
-    private List<AuctionItemDto> getAuctionItems(){
-        record Pair(String category, AuctionItem item){}
+    private List<AuctionItemDto> getAuctionItems() {
+        record Pair(String category, AuctionItem item) {
+        }
         return AuctionConfig.categories.stream()
                 .flatMap(s -> categoryManager.getByName(s).stream())
                 .flatMap(c -> auctionManager.getItems(c).stream().map(i -> new Pair(c.getDisplayName(), i)))
@@ -89,46 +96,40 @@ public class AuctionHook {
                 .toList();
     }
 
-    private AuctionItemDto fromAuctionItem(String category, AuctionItem item){
-        if(item.isExpired()) return null;
+    private AuctionItemDto fromAuctionItem(String category, AuctionItem item) {
+        if (item.isExpired()) {
+            return null;
+        }
 
         ItemStack stack = item.getItemStack();
         ItemMeta meta = stack.getItemMeta();
-        TextComponent displayComponent = (TextComponent)meta.displayName();
+        TextComponent displayComponent = (TextComponent) meta.displayName();
         String display;
-        if(displayComponent != null) display = PlainTextComponentSerializer.plainText().serialize(displayComponent);
-        else{
-            if(HookRegistry.translatorHook != null){
+        if (displayComponent != null) {
+            display = PlainTextComponentSerializer.plainText().serialize(displayComponent);
+        } else {
+            if (HookRegistry.translatorHook != null) {
                 display = HookRegistry.translatorHook.translate(stack);
-            } else{
+            } else {
                 display = stack.getType().name().replace("_", "").toLowerCase();
             }
         }
 
         List<String> lore = new ArrayList<>();
         List<Component> loreComponents = meta.lore();
-        if(loreComponents != null) {
+        if (loreComponents != null) {
             lore = loreComponents.stream()
                     .map(line -> (TextComponent) line)
                     .map(TextComponent::content)
                     .toList();
         }
 
-        return new AuctionItemDto.AuctionItemDtoBuilder()
-                .display(display)
-                .seller(item.getSellerName())
-                .price(TextUtil.formatAmount(item.getPrice()))
-                .expire(item.getExpireAt())
-                .category(category)
-                .amount(item.getAmount())
-                .priority(item.getPriority())
-                .lore(lore)
-                .exist(true)
-                .uuid(item.getUniqueId().toString())
-                .build();
+        return new AuctionItemDto(display, item.getSellerName(), TextUtil.formatAmount(item.getPrice()),
+                item.getExpireAt(), category, item.getAmount(), item.getPriority(),
+                item.getUniqueId().toString(), true, lore);
     }
 
-    private ItemChecker emBlackList(){
+    private ItemChecker emBlackList() {
         return new ItemChecker() {
             @Override
             public String getName() {
@@ -146,9 +147,11 @@ public class AuctionHook {
 
 
     private <T> T getProvider(Class<T> classz) {
-        RegisteredServiceProvider<T> provider = ARC.plugin.getServer().getServicesManager().getRegistration(classz);
-        if (provider == null)
+        RegisteredServiceProvider<T> provider =
+                ARC.getInstance().getServer().getServicesManager().getRegistration(classz);
+        if (provider == null) {
             return null;
+        }
         provider.getProvider();
         return provider.getProvider();
     }

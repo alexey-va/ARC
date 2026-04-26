@@ -1,11 +1,5 @@
 package ru.arc.invest.items;
 
-import ru.arc.ARC;
-import lombok.AllArgsConstructor;
-import lombok.ToString;
-import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.inventory.ItemStack;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,11 +7,17 @@ import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 
+import lombok.AllArgsConstructor;
+import lombok.ToString;
+import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.inventory.ItemStack;
+import ru.arc.ARC;
+
 @AllArgsConstructor
 @ToString
 public class NamedItem extends GenericItem {
 
-    private static Map<String, NamedItem> namedItemMap = new HashMap<>();
+    private static final Map<String, NamedItem> namedItemMap = new HashMap<>();
 
     private ItemStack item;
     private String name;
@@ -33,8 +33,8 @@ public class NamedItem extends GenericItem {
 
     public static void load() {
         namedItemMap.clear();
-        Path path = Paths.get(ARC.plugin.getDataFolder().toString(), "investing", "items");
-        if(!Files.exists(path)){
+        Path path = Paths.get(ARC.getInstance().getDataFolder().toString(), "investing", "items");
+        if (!Files.exists(path)) {
             try {
                 Files.createDirectories(path);
             } catch (IOException e) {
@@ -48,7 +48,7 @@ public class NamedItem extends GenericItem {
                     .map(YamlConfiguration::loadConfiguration)
                     .forEach(NamedItem::readFile);
         } catch (Exception e) {
-            e.printStackTrace();
+            ARC.getInstance().getLogger().warning("Error loading named items: " + e.getMessage());
         }
 
         System.out.println("Loaded named items: " + namedItemMap);
@@ -56,7 +56,13 @@ public class NamedItem extends GenericItem {
 
     private static void readFile(YamlConfiguration configuration) {
         for (String key : configuration.getKeys(false)) {
-            namedItemMap.put(key.toLowerCase(), NamedItem.deserialize((Map<String, Object>) configuration.get(key), key));
+            Object val = configuration.get(key);
+            if (!(val instanceof Map<?, ?> rawMap)) {
+                continue;
+            }
+            @SuppressWarnings("unchecked")
+            Map<String, Object> typedMap = (Map<String, Object>) rawMap;
+            namedItemMap.put(key.toLowerCase(), NamedItem.deserialize(typedMap, key));
         }
     }
 

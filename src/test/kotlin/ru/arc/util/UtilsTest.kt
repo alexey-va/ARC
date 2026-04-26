@@ -1,4 +1,3 @@
-@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 package ru.arc.util
 
 import org.bukkit.Location
@@ -16,7 +15,6 @@ import org.mockbukkit.mockbukkit.world.WorldMock
 import ru.arc.TestBase
 
 class UtilsTest : TestBase() {
-
     private lateinit var world: WorldMock
 
     @BeforeEach
@@ -224,11 +222,12 @@ class UtilsTest : TestBase() {
 
     @Test
     fun testRandomMapEntry() {
-        val map = mapOf(
-            "key1" to "value1",
-            "key2" to "value2",
-            "key3" to "value3"
-        )
+        val map =
+            mapOf(
+                "key1" to "value1",
+                "key2" to "value2",
+                "key3" to "value3",
+            )
 
         repeat(100) {
             val result = RandomUtils.random(map)
@@ -432,7 +431,6 @@ class UtilsTest : TestBase() {
         }
 
         // Each element should appear roughly equally (within 20% variance)
-        val expected = 333
         counts.values.forEach { count ->
             assertTrue(count > 250 && count < 450, "Distribution should be roughly equal")
         }
@@ -449,7 +447,6 @@ class UtilsTest : TestBase() {
         }
 
         // Each element should appear roughly equally
-        val expected = 333
         counts.values.forEach { count ->
             assertTrue(count > 250 && count < 450, "Distribution should be roughly equal")
         }
@@ -480,6 +477,7 @@ class UtilsTest : TestBase() {
         }
     }
 
+    @Suppress("DEPRECATION")
     @Test
     fun testSplitPreservesItemMeta() {
         val stack = ItemStackMock(Material.DIAMOND, 64)
@@ -523,11 +521,12 @@ class UtilsTest : TestBase() {
 
     @Test
     fun testRandomMapEntryAllEntries() {
-        val map = mapOf(
-            "a" to 1,
-            "b" to 2,
-            "c" to 3
-        )
+        val map =
+            mapOf(
+                "a" to 1,
+                "b" to 2,
+                "c" to 3,
+            )
         val seenKeys = mutableSetOf<String>()
 
         // Try to get all entries (might take many attempts)
@@ -540,4 +539,3 @@ class UtilsTest : TestBase() {
         assertEquals(map.size, seenKeys.size, "Should eventually see all entries")
     }
 }
-

@@ -1,0 +1,1115 @@
+# =============================================================================
+# elite-loot.yml — пулы «элитного» лута по типу инструмента (см. EliteLootManager).
+# elite-loot.<tool> — список вариантов: material, ia-id/model-id, ia-namespace, weight.
+# =============================================================================
+
+elite-loot:
+  axe:
+    - material: NETHERITE_AXE
+      ia-id: set_15_sword_1
+      model-id: 11000
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: NETHERITE_AXE
+      ia-id: set_16_sword_1
+      model-id: 11001
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: GOLDEN_AXE
+      ia-id: wp_sword_2
+      model-id: 12001
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_AXE
+      ia-id: wp_sword_3
+      model-id: 12002
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: STONE_AXE
+      ia-id: wp_sword_8
+      model-id: 12007
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: GOLDEN_AXE
+      ia-id: wp_sword_9
+      model-id: 12008
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_AXE
+      ia-id: wp_sword_18
+      model-id: 12017
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: NETHERITE_AXE
+      ia-id: wp_sword_23
+      model-id: 12022
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: WOODEN_AXE
+      ia-id: wp_sword_25
+      model-id: 12024
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: STONE_AXE
+      ia-id: wp_sword_26
+      model-id: 12025
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: IRON_AXE
+      ia-id: wp_sword_30
+      model-id: 12029
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_AXE
+      ia-id: wp_sword_31
+      model-id: 12030
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: NETHERITE_AXE
+      ia-id: wp_sword_37
+      model-id: 12036
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: GOLDEN_AXE
+      ia-id: wp_sword_42
+      model-id: 12041
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: IRON_AXE
+      ia-id: wp_sword_59
+      model-id: 12058
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: GOLDEN_AXE
+      ia-id: wp_sword_60
+      model-id: 12059
+      ia-namespace: slimefun
+      weight: 1.0
+  sword:
+    - material: DIAMOND_SWORD
+      ia-id: set_1_sword
+      model-id: 11000
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: set_2_sword
+      model-id: 11001
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: set_3_sword
+      model-id: 11002
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: set_4_sword
+      model-id: 11003
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: set_5_sword
+      model-id: 11004
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: set_6_sword
+      model-id: 11005
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: set_7_sword
+      model-id: 11006
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: set_8_sword
+      model-id: 11007
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: set_9_sword
+      model-id: 11008
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: set_10_sword
+      model-id: 11009
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: NETHERITE_SWORD
+      ia-id: set_10_sword_1
+      model-id: 11001
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: set_11_sword
+      model-id: 11010
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: NETHERITE_SWORD
+      ia-id: set_11_sword_1
+      model-id: 11000
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: set_12_sword
+      model-id: 11011
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: set_13_sword
+      model-id: 11012
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: NETHERITE_SWORD
+      ia-id: set_13_sword_1
+      model-id: 11002
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: set_14_sword
+      model-id: 11013
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: NETHERITE_SWORD
+      ia-id: set_14_sword_1
+      model-id: 11003
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: IRON_SWORD
+      ia-id: set_15_sword_2
+      model-id: 11000
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: set_15_sword
+      model-id: 11014
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: set_16_sword
+      model-id: 11015
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: set_17_sword
+      model-id: 11016
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: set_18_sword
+      model-id: 11017
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_1
+      model-id: 12000
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_4
+      model-id: 12003
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_5
+      model-id: 12004
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_6
+      model-id: 12005
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: WOODEN_SWORD
+      ia-id: wp_sword_7
+      model-id: 12006
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_10
+      model-id: 12009
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_11
+      model-id: 12010
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_12
+      model-id: 12011
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_13
+      model-id: 12012
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_14
+      model-id: 12013
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_15
+      model-id: 12014
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_16
+      model-id: 12015
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_17
+      model-id: 12016
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_19
+      model-id: 12018
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_20
+      model-id: 12019
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_21
+      model-id: 12020
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_22
+      model-id: 12021
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_24
+      model-id: 12023
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_27
+      model-id: 12026
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_28
+      model-id: 12027
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_29
+      model-id: 12028
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_32
+      model-id: 12031
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_33
+      model-id: 12032
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_34
+      model-id: 12033
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_35
+      model-id: 12034
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_36
+      model-id: 12035
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: IRON_SWORD
+      ia-id: wp_sword_38
+      model-id: 12037
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: IRON_SWORD
+      ia-id: wp_sword_39
+      model-id: 12038
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: IRON_SWORD
+      ia-id: wp_sword_40
+      model-id: 12039
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: IRON_SWORD
+      ia-id: wp_sword_41
+      model-id: 12040
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: NETHERITE_SWORD
+      ia-id: wp_sword_43
+      model-id: 12042
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: NETHERITE_SWORD
+      ia-id: wp_sword_44
+      model-id: 12043
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: STONE_SWORD
+      ia-id: wp_sword_45
+      model-id: 12044
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: STONE_SWORD
+      ia-id: wp_sword_46
+      model-id: 12045
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: WOODEN_SWORD
+      ia-id: wp_sword_47
+      model-id: 12046
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: NETHERITE_SWORD
+      ia-id: wp_sword_48
+      model-id: 12047
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: NETHERITE_SWORD
+      ia-id: wp_sword_49
+      model-id: 12048
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: IRON_SWORD
+      ia-id: wp_sword_50
+      model-id: 12049
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: IRON_SWORD
+      ia-id: wp_sword_51
+      model-id: 12050
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: IRON_SWORD
+      ia-id: wp_sword_52
+      model-id: 12051
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: IRON_SWORD
+      ia-id: wp_sword_53
+      model-id: 12052
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: IRON_SWORD
+      ia-id: wp_sword_54
+      model-id: 12053
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_55
+      model-id: 12054
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: GOLDEN_SWORD
+      ia-id: wp_sword_56
+      model-id: 12055
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: IRON_SWORD
+      ia-id: wp_sword_57
+      model-id: 12056
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: DIAMOND_SWORD
+      ia-id: wp_sword_58
+      model-id: 12057
+      ia-namespace: slimefun
+      weight: 1.0
+  bow:
+    - material: BOW
+      ia-id: set_5_bow
+      model-id: 11004
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: BOW
+      ia-id: set_8_bow
+      model-id: 11007
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: BOW
+      ia-id: set_9_bow
+      model-id: 11008
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: BOW
+      ia-id: set_13_bow
+      model-id: 11012
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: BOW
+      ia-id: set_15_bow
+      model-id: 11014
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: BOW
+      ia-id: set_16_bow
+      model-id: 11015
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: BOW
+      ia-id: set_18_bow
+      model-id: 11017
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: BOW
+      ia-id: wp_bow_10
+      model-id: 12009
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: BOW
+      ia-id: wp_bow_1
+      model-id: 12000
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: BOW
+      ia-id: wp_bow_2
+      model-id: 12001
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: BOW
+      ia-id: wp_bow_3
+      model-id: 12002
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: BOW
+      ia-id: wp_bow_4
+      model-id: 12003
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: BOW
+      ia-id: wp_bow_5
+      model-id: 12004
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: BOW
+      ia-id: wp_bow_6
+      model-id: 12005
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: BOW
+      ia-id: wp_bow_7
+      model-id: 12006
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: BOW
+      ia-id: wp_bow_8
+      model-id: 12007
+      ia-namespace: slimefun
+      weight: 1.0
+    - material: BOW
+      ia-id: wp_bow_9
+      model-id: 12008
+      ia-namespace: slimefun
+      weight: 1.0
+  crossbow: [
+  ]
+  helmet:
+    - red: 194
+      green: 176
+      material: LEATHER_HELMET
+      blue: 154
+      ia-id: set_1_helmet
+      model-id: 11000
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_HELMET
+      blue: 155
+      ia-id: set_2_helmet
+      model-id: 11001
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_HELMET
+      blue: 156
+      ia-id: set_3_helmet
+      model-id: 11002
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_HELMET
+      blue: 157
+      ia-id: set_4_helmet
+      model-id: 11003
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_HELMET
+      blue: 158
+      ia-id: set_5_helmet
+      model-id: 11004
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_HELMET
+      blue: 167
+      ia-id: set_6_helmet
+      model-id: 11005
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_HELMET
+      blue: 168
+      ia-id: set_7_helmet
+      model-id: 11006
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_HELMET
+      blue: 169
+      ia-id: set_8_helmet
+      model-id: 11007
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_HELMET
+      blue: 170
+      ia-id: set_9_helmet
+      model-id: 11008
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_HELMET
+      blue: 171
+      ia-id: set_10_helmet
+      model-id: 11009
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_HELMET
+      blue: 172
+      ia-id: set_11_helmet
+      model-id: 11010
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_HELMET
+      blue: 173
+      ia-id: set_12_helmet
+      model-id: 11011
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_HELMET
+      blue: 174
+      ia-id: set_13_helmet
+      model-id: 11012
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_HELMET
+      blue: 176
+      ia-id: set_14_helmet
+      model-id: 11013
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_HELMET
+      blue: 177
+      ia-id: set_15_helmet
+      model-id: 11014
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_HELMET
+      blue: 178
+      ia-id: set_16_helmet
+      model-id: 11015
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_HELMET
+      blue: 179
+      ia-id: set_17_helmet
+      model-id: 11016
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_HELMET
+      blue: 180
+      ia-id: set_18_helmet
+      model-id: 11017
+      ia-namespace: slimefun
+      weight: 1.0
+  chestplate:
+    - red: 194
+      green: 176
+      material: LEATHER_CHESTPLATE
+      blue: 154
+      ia-id: set_1_chestplate
+      model-id: 11000
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_CHESTPLATE
+      blue: 155
+      ia-id: set_2_chestplate
+      model-id: 11001
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_CHESTPLATE
+      blue: 156
+      ia-id: set_3_chestplate
+      model-id: 11002
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_CHESTPLATE
+      blue: 157
+      ia-id: set_4_chestplate
+      model-id: 11003
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_CHESTPLATE
+      blue: 158
+      ia-id: set_5_chestplate
+      model-id: 11004
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_CHESTPLATE
+      blue: 167
+      ia-id: set_6_chestplate
+      model-id: 11005
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_CHESTPLATE
+      blue: 168
+      ia-id: set_7_chestplate
+      model-id: 11006
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_CHESTPLATE
+      blue: 169
+      ia-id: set_8_chestplate
+      model-id: 11007
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_CHESTPLATE
+      blue: 170
+      ia-id: set_9_chestplate
+      model-id: 11008
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_CHESTPLATE
+      blue: 171
+      ia-id: set_10_chestplate
+      model-id: 11009
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_CHESTPLATE
+      blue: 172
+      ia-id: set_11_chestplate
+      model-id: 11010
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_CHESTPLATE
+      blue: 173
+      ia-id: set_12_chestplate
+      model-id: 11011
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_CHESTPLATE
+      blue: 174
+      ia-id: set_13_chestplate
+      model-id: 11012
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_CHESTPLATE
+      blue: 176
+      ia-id: set_14_chestplate
+      model-id: 11013
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_CHESTPLATE
+      blue: 177
+      ia-id: set_15_chestplate
+      model-id: 11014
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_CHESTPLATE
+      blue: 178
+      ia-id: set_16_chestplate
+      model-id: 11015
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_CHESTPLATE
+      blue: 179
+      ia-id: set_17_chestplate
+      model-id: 11016
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_CHESTPLATE
+      blue: 180
+      ia-id: set_18_chestplate
+      model-id: 11017
+      ia-namespace: slimefun
+      weight: 1.0
+  leggings:
+    - red: 194
+      green: 176
+      material: LEATHER_LEGGINGS
+      blue: 154
+      ia-id: set_1_leggings
+      model-id: 11000
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_LEGGINGS
+      blue: 155
+      ia-id: set_2_leggings
+      model-id: 11001
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_LEGGINGS
+      blue: 156
+      ia-id: set_3_leggings
+      model-id: 11002
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_LEGGINGS
+      blue: 157
+      ia-id: set_4_leggings
+      model-id: 11003
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_LEGGINGS
+      blue: 158
+      ia-id: set_5_leggings
+      model-id: 11004
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_LEGGINGS
+      blue: 167
+      ia-id: set_6_leggings
+      model-id: 11005
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_LEGGINGS
+      blue: 168
+      ia-id: set_7_leggings
+      model-id: 11006
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_LEGGINGS
+      blue: 169
+      ia-id: set_8_leggings
+      model-id: 11007
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_LEGGINGS
+      blue: 170
+      ia-id: set_9_leggings
+      model-id: 11008
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_LEGGINGS
+      blue: 171
+      ia-id: set_10_leggings
+      model-id: 11009
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_LEGGINGS
+      blue: 172
+      ia-id: set_11_leggings
+      model-id: 11010
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_LEGGINGS
+      blue: 173
+      ia-id: set_12_leggings
+      model-id: 11011
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_LEGGINGS
+      blue: 174
+      ia-id: set_13_leggings
+      model-id: 11012
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_LEGGINGS
+      blue: 176
+      ia-id: set_14_leggings
+      model-id: 11013
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_LEGGINGS
+      blue: 177
+      ia-id: set_15_leggings
+      model-id: 11014
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_LEGGINGS
+      blue: 178
+      ia-id: set_16_leggings
+      model-id: 11015
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_LEGGINGS
+      blue: 179
+      ia-id: set_17_leggings
+      model-id: 11016
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_LEGGINGS
+      blue: 180
+      ia-id: set_18_leggings
+      model-id: 11017
+      ia-namespace: slimefun
+      weight: 1.0
+  boots:
+    - red: 194
+      green: 176
+      material: LEATHER_BOOTS
+      blue: 154
+      ia-id: set_1_boots
+      model-id: 11000
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_BOOTS
+      blue: 155
+      ia-id: set_2_boots
+      model-id: 11001
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_BOOTS
+      blue: 156
+      ia-id: set_3_boots
+      model-id: 11002
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_BOOTS
+      blue: 157
+      ia-id: set_4_boots
+      model-id: 11003
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_BOOTS
+      blue: 158
+      ia-id: set_5_boots
+      model-id: 11004
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_BOOTS
+      blue: 167
+      ia-id: set_6_boots
+      model-id: 11005
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_BOOTS
+      blue: 168
+      ia-id: set_7_boots
+      model-id: 11006
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_BOOTS
+      blue: 169
+      ia-id: set_8_boots
+      model-id: 11007
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_BOOTS
+      blue: 170
+      ia-id: set_9_boots
+      model-id: 11008
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_BOOTS
+      blue: 171
+      ia-id: set_10_boots
+      model-id: 11009
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_BOOTS
+      blue: 172
+      ia-id: set_11_boots
+      model-id: 11010
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_BOOTS
+      blue: 173
+      ia-id: set_12_boots
+      model-id: 11011
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_BOOTS
+      blue: 174
+      ia-id: set_13_boots
+      model-id: 11012
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_BOOTS
+      blue: 176
+      ia-id: set_14_boots
+      model-id: 11013
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_BOOTS
+      blue: 177
+      ia-id: set_15_boots
+      model-id: 11014
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_BOOTS
+      blue: 178
+      ia-id: set_16_boots
+      model-id: 11015
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_BOOTS
+      blue: 179
+      ia-id: set_17_boots
+      model-id: 11016
+      ia-namespace: slimefun
+      weight: 1.0
+    - red: 194
+      green: 176
+      material: LEATHER_BOOTS
+      blue: 180
+      ia-id: set_18_boots
+      model-id: 11017
+      ia-namespace: slimefun
+      weight: 1.0
+useless-lore:
+  - Особые Эффекты
+attribute-slot-title:
+  hand: '<gray>Когда в ведущей руке:'
+  mainhand: '<gray>Когда в ведущей руке:'
+attribute-name:
+  attribute:
+    name:
+      attack_damage: ' <dark_green>Урон: '
+      attack_speed: ' <dark_green>Скорость атаки: '
+attribute-value: <dark_green><value>
+replace-chance: 0.9
+clear-lore: true
+append-attributes: true

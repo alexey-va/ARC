@@ -20,7 +20,7 @@ public class TranslatorHook {
     Gson gson = new Gson();
 
     public TranslatorHook() {
-        Path path = ARC.plugin.getDataPath().resolve("lang.json");
+        Path path = ARC.getInstance().getDataPath().resolve("lang.json");
         if (!Files.exists(path)) {
             warn("lang.json is not present in ARC folder! Disabling translating materials...");
             return;

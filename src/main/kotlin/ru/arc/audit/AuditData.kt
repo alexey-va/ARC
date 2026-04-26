@@ -1,7 +1,9 @@
 package ru.arc.audit
 
 import com.google.gson.annotations.SerializedName
-import ru.arc.network.repos.RepoData
+import ru.arc.audit.AuditData.Companion.AGGREGATION_LOOKUP_LIMIT
+import ru.arc.repository.Entity
+import ru.arc.repository.Mergeable
 import java.util.concurrent.ConcurrentLinkedDeque
 
 /**
@@ -23,7 +25,10 @@ class AuditData(
 
     @SerializedName("c")
     var created: Long = System.currentTimeMillis()
-) : RepoData<AuditData>() {
+) : Entity,
+    Mergeable<AuditData> {
+    @Transient
+    var isDirty: Boolean = false
 
     companion object {
         /** Максимальное количество последних транзакций для поиска агрегации */
@@ -65,7 +70,7 @@ class AuditData(
             transactions.add(Transaction(type, amount, comment))
         }
 
-        setDirty(true)
+        isDirty = true
     }
 
     /**
@@ -106,7 +111,7 @@ class AuditData(
         }
 
         if (removed > 0) {
-            setDirty(true)
+            isDirty = true
         }
 
         return removed
@@ -146,17 +151,22 @@ class AuditData(
      */
     fun clear() {
         transactions.clear()
-        setDirty(true)
+        isDirty = true
     }
 
-    // ==================== RepoData Implementation ====================
-
-    override fun id(): String = name.lowercase()
-
-    override fun isRemove(): Boolean {
+    /**
+     * Check if this entry should be removed (expired and empty).
+     */
+    fun shouldRemove(): Boolean {
         val isOld = created < System.currentTimeMillis() - EMPTY_DATA_LIFETIME_MS
         return isOld && transactions.isEmpty()
     }
+
+    // ==================== Entity Implementation ====================
+
+    override fun id(): String = name.lowercase()
+
+    // ==================== Mergeable Implementation ====================
 
     override fun merge(other: AuditData) {
         transactions.clear()
@@ -195,4 +205,3 @@ enum class AuditFilter {
         }
     }
 }
-

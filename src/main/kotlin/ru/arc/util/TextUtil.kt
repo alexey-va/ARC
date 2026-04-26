@@ -89,7 +89,7 @@ object TextUtil {
                     .append(Component.text("\uD83D\uDCB0", NamedTextColor.WHITE))
             )
             player.sendMessage(text!!)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Economy not available
         }
     }
@@ -193,7 +193,7 @@ object TextUtil {
 
     @JvmStatic
     fun time(l: Long, timeUnit: TimeUnit): String {
-        val config = ConfigManager.of(ARC.plugin!!.dataPath, "config.yml")
+        val config = ConfigManager.of(ARC.instance.dataPath, "config.yml")
         val format = config.string("time-format", "dd HH mm ss")
         val names = mapOf(
             "dd" to config.string("days", " дней"),

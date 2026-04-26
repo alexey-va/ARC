@@ -54,11 +54,11 @@ object MobSpawnManager {
     fun init() {
         cancel()
 
-        val config = MobSpawnConfig.load(ARC.plugin.dataPath)
+        val config = MobSpawnConfig.load(ARC.instance.dataPath)
 
         service = MobSpawnService(
             config = config,
-            scheduler = BukkitTaskScheduler(ARC.plugin),
+            scheduler = BukkitTaskScheduler(ARC.instance),
             worldProvider = BukkitWorldProvider(),
             claimChecker = LandsClaimChecker(),
             entitySpawner = BukkitEntitySpawner()
@@ -96,5 +96,3 @@ object MobSpawnManager {
     @JvmStatic
     fun isRunning(): Boolean = service?.isRunning() ?: false
 }
-
-

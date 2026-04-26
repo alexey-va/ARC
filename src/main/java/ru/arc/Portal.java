@@ -68,7 +68,7 @@ public class Portal {
     PortalData portalData;
     BukkitTask task;
 
-    private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "misc.yml");
+    private static final Config config = ConfigManager.of(ARC.getInstance().getDataPath(), "misc.yml");
 
     public Portal(UUID uuid, PortalData portalData) {
         this.portalData = portalData;
@@ -151,10 +151,10 @@ public class Portal {
                             if (player != null && !success.getAndSet(true)) executeAction(player);
                         }
                     }
-                }.runTaskAsynchronously(ARC.plugin);
+                }.runTaskAsynchronously(ARC.getInstance());
                 phase.incrementAndGet();
             }
-        }.runTaskTimer(ARC.plugin, 1L, 1L);
+        }.runTaskTimer(ARC.getInstance(), 1L, 1L);
     }
 
     private Player getEnteredPlayer(Collection<Player> nearby) {
@@ -187,7 +187,7 @@ public class Portal {
                     player.getWorld().playSound(player.getLocation(), ENTITY_ENDERMAN_TELEPORT, 1f, 1f);
                     player.performCommand(portalData.getCommand());
                 }
-            }.runTask(ARC.plugin);
+            }.runTask(ARC.getInstance());
         } else if (actionType == HUSK) {
             if (HookRegistry.huskHomesHook == null) {
                 error("HuskHomes hook is not active!");
@@ -199,7 +199,7 @@ public class Portal {
                     player.getWorld().playSound(player.getLocation(), ENTITY_ENDERMAN_TELEPORT, 1f, 1f);
                     HookRegistry.huskHomesHook.teleport(portalData.getHuskTeleport(), player);
                 }
-            }.runTask(ARC.plugin);
+            }.runTask(ARC.getInstance());
         } else if (actionType == TELEPORT) {
             new BukkitRunnable() {
                 @Override
@@ -207,7 +207,7 @@ public class Portal {
                     player.getWorld().playSound(player.getLocation(), ENTITY_ENDERMAN_TELEPORT, 1f, 1f);
                     player.teleport(portalData.getLocation());
                 }
-            }.runTask(ARC.plugin);
+            }.runTask(ARC.getInstance());
         }
     }
 

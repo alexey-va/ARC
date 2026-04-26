@@ -1,5 +1,13 @@
 package ru.arc.invest.goods;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
@@ -7,8 +15,6 @@ import org.bukkit.Material;
 import org.bukkit.configuration.serialization.ConfigurationSerializable;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
-
-import java.util.*;
 
 @RequiredArgsConstructor
 public class Inventory implements ConfigurationSerializable {
@@ -108,7 +114,11 @@ public class Inventory implements ConfigurationSerializable {
         List<ItemStack> stacks = new ArrayList<>();
         if (items == null) return new Inventory(stacks);
         for (Object o : items) {
-            Map<String, Object> map = (Map<String, Object>) o;
+            if (!(o instanceof Map<?, ?> rawMap)) {
+                continue;
+            }
+            @SuppressWarnings("unchecked")
+            Map<String, Object> map = (Map<String, Object>) rawMap;
             ItemStack stack = ItemStack.deserialize(map);
             stacks.add(stack);
         }

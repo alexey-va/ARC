@@ -1,22 +1,22 @@
 package ru.arc.hooks.lands;
 
-import ru.arc.ARC;
-import ru.arc.hooks.HookRegistry;
-import ru.arc.network.ChannelListener;
-import ru.arc.network.RedisManager;
-import ru.arc.network.RedisSerializer;
-import ru.arc.common.ServerLocation;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scheduler.BukkitTask;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
+import ru.arc.ARC;
+import ru.arc.common.ServerLocation;
+import ru.arc.hooks.HookRegistry;
+import ru.arc.network.ChannelListener;
+import ru.arc.network.RedisManager;
+import ru.arc.network.RedisSerializer;
 
 @RequiredArgsConstructor
 public class LandsMessager implements ChannelListener {
@@ -40,7 +40,7 @@ public class LandsMessager implements ChannelListener {
                 futures.entrySet()
                         .removeIf(e -> Duration.between(e.getValue().instant(), Instant.now()).getSeconds() > 5);
             }
-        }.runTaskTimerAsynchronously(ARC.plugin, 20L, 20L);
+        }.runTaskTimerAsynchronously(ARC.getInstance(), 20L, 20L);
     }
 
 

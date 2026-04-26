@@ -52,7 +52,7 @@ public class StockClient {
 
     public Map<String, Double> cryptoPrices() {
         String ids = StockMarket.configStocks().stream()
-                .filter(stock -> stock.type == Stock.Type.CRYPTO)
+                .filter(stock -> stock.getType() == Stock.Type.CRYPTO)
                 .map(ConfigStock::getSymbol)
                 .collect(Collectors.joining("%2C"));
         String url = "https://api.coingecko.com/api/v3/simple/price?ids=" + ids + "&vs_currencies=usd&precision=full";
@@ -158,7 +158,7 @@ public class StockClient {
         if (webSocketClient == null || !webSocketClient.isRunning() || isClosed) {
             System.out.println("Websocket is closed. Starting...");
             startWebSocket(StockMarket.stocks().stream()
-                    .filter(st -> st.type == Stock.Type.STOCK)
+                    .filter(st -> st.getType() == Stock.Type.STOCK)
                     .map(Stock::getSymbol)
                     .toList());
         }

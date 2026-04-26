@@ -114,7 +114,7 @@ object CooldownManager {
     @JvmStatic
     fun setupTask(period: Long) {
         countdownTask?.cancel()
-        scheduler = BukkitTaskScheduler(ARC.plugin!!)
+        scheduler = BukkitTaskScheduler(ARC.instance)
         countdownTask = scheduler!!.runTimer(period, period) {
             countdown(period)
         }

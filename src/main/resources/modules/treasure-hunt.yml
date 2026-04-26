@@ -1,0 +1,129 @@
+# =============================================================================
+# treasure-hunt.yml — типы охот на сокровища (TreasureHuntModule / Registry).
+#
+# aliases — короткие имена → полный ItemsAdder id; в chest-types указывайте alias.
+# treasure-hunt-types.<id> — один тип охоты: пул локаций, сундуки, бар, TTL.
+# chest-types — варианты сундуков с весом; type: IA | VANILLA.
+#   ia-namespace-id — ключ из aliases; treasure-pool-id — пул наград.
+#   particle-path — суффикс для idle / claimed (см. секции ниже).
+# idle / claimed — пресеты частиц и звука для нетронутого / открытого сундука.
+# =============================================================================
+
+# Сокращения для ItemsAdder chest id (используются в ia-namespace-id)
+aliases:
+  easter: elitecreatures:easterbunny_animated_weapon_set_chest
+  pot: elitecreatures:halloween_decoration_v1_witch_pot
+  pumpkin_1: elitecreatures:halloween_decoration_v1_pumpkin_1
+  pumpkin_2: elitecreatures:halloween_decoration_v1_pumpkin_2
+  pumpkin_3: elitecreatures:halloween_decoration_v1_pumpkin_3
+  pumpkin_4: elitecreatures:halloween_decoration_v1_pumpkin_4
+  skull_in_jar: elitecreatures:halloween_decoration_v1_skull_jar
+# Зарегистрированные типы охоты (ключ = id для /arc hunt start <type>)
+treasure-hunt-types:
+  easter:
+    # Пул локаций (location_pools/*.yml), куда ставятся сундуки
+    location-pool-id: spawn
+    # Варианты сундуков на точке (ключ — произвольный слот)
+    chest-types:
+      #'1':
+      #  type: VANILLA
+      #  ia-namespace-id: easter
+      #  treasure-pool-id: easter
+      #  particle-path: halloween
+      #  weight: 1
+      '2':
+        type: IA
+        ia-namespace-id: pumpkin_1
+        treasure-pool-id: easter
+        particle-path: halloween
+        weight: 1
+      '3':
+        type: IA
+        ia-namespace-id: pumpkin_2
+        treasure-pool-id: easter
+        particle-path: halloween
+        weight: 1
+      '4':
+        type: IA
+        ia-namespace-id: pumpkin_3
+        treasure-pool-id: easter
+        particle-path: halloween
+        weight: 1
+      '5':
+        type: IA
+        ia-namespace-id: pumpkin_4
+        treasure-pool-id: easter
+        particle-path: halloween
+        weight: 1
+      '6':
+        type: IA
+        ia-namespace-id: skull_in_jar
+        treasure-pool-id: easter
+        particle-path: halloween
+        weight: 1
+    # Текст босс-бара; %left% — сколько сундуков осталось
+    boss-bar-message: <red>Идет охота за сокровищами! <gray>Осталось %left%
+    boss-bar-visible: true
+    # Время жизни охоты (секунды)
+    seconds-ttl: 3600
+    announce-stop: true
+    stop-message: <red>Охота за сокровищами на спавне закончилась!
+    announce-start: true
+    start-message: <red>Охота за сокровищами на спавне началась!
+    # Анонс на всех серверах (если Redis/широковещание включено)
+    announce-start-globally: true
+    launch-fireworks: true
+    boss-bar-color: GREEN
+    boss-bar-overlay: PROGRESS
+# Эффекты «ожидания» у неоткрытых сундуков
+idle:
+  # Тик интервала спавна частиц (общий)
+  ticks: 5
+  default:
+    particle: FLAME
+    count: 20
+    offset: 0.1
+    extra: 0.03
+  easter:
+    particle: END_ROD
+    count: 3
+    offset: 0.1
+    extra: 0.01
+  halloween:
+    particle: END_ROD
+    count: 10
+    offset: 0.2
+    extra: 0.055
+    radius: 20
+    sound-radius: 20
+    sound: block_amethyst_cluster_hit
+  # Как часто проигрывать звук каждому игроку (тики)
+  player-sound-each: 1
+# Сообщения команд / ошибок
+messages:
+  location-pool-not-found: <red>Пул локаций %location_pool_id% не найден!
+  hunt-stopped: <gray>Охота на сокровища остановлена!
+  hunt-not-found: <red>Охота на сокровища не найдена!
+  not-enough-args: '<red>Неверная команда! <gray>Синтаксис: /arc hunt start <location_pool_id>
+    <chests> <namespace_id> <treasure_pool_id> или /arc hunt stop <location_pool_id>
+    или /arc hunt start <type>'
+# Эффект после открытия сундука (ключ = particle-path из chest-type)
+claimed:
+  easter:
+    particle: END_ROD
+    count: 15
+    offset: 0.1
+    extra: 0.05
+    sound: BLOCK_AMETHYST_CLUSTER_BREAK
+  default:
+    particle: END_ROD
+    count: 15
+    offset: 0.1
+    extra: 0.05
+    sound: BLOCK_AMETHYST_CLUSTER_BREAK
+  halloween:
+    particle: END_ROD
+    count: 15
+    offset: 0.1
+    extra: 0.05
+    sound: BLOCK_AMETHYST_CLUSTER_BREAK

@@ -1,8 +1,11 @@
-@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
-
 package ru.arc.audit
 
-import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -16,9 +19,8 @@ import ru.arc.core.TestTimeProvider
  * These tests use InMemoryAuditRepository - no Redis needed!
  */
 class AuditServiceTest {
-
     private lateinit var repository: InMemoryAuditRepository
-    private lateinit var config: AuditConfig
+    private lateinit var config: TestAuditConfig
     private lateinit var scheduler: TestTaskScheduler
     private lateinit var timeProvider: TestTimeProvider
     private lateinit var service: AuditService
@@ -26,22 +28,22 @@ class AuditServiceTest {
     @BeforeEach
     fun setUp() {
         repository = InMemoryAuditRepository()
-        config = AuditConfig.default()
+        config = TestAuditConfig()
         scheduler = TestTaskScheduler()
         timeProvider = TestTimeProvider(System.currentTimeMillis())
 
-        service = AuditService(
-            repository = repository,
-            config = config,
-            scheduler = scheduler,
-            timeProvider = timeProvider
-        )
+        service =
+            AuditService(
+                repository = repository,
+                config = config,
+                scheduler = scheduler,
+                timeProvider = timeProvider,
+            )
     }
 
     @Nested
     @DisplayName("Lifecycle")
     inner class LifecycleTests {
-
         @Test
         fun `start schedules prune task`() {
             service.start()
@@ -63,7 +65,6 @@ class AuditServiceTest {
     @Nested
     @DisplayName("Player Context")
     inner class PlayerContextTests {
-
         @Test
         fun `playerJoined adds to context`() {
             service.playerJoined("Player1")
@@ -83,7 +84,6 @@ class AuditServiceTest {
     @Nested
     @DisplayName("Operations")
     inner class OperationTests {
-
         @Test
         fun `operation creates new transaction`() {
             service.operation("Player1", 100.0, Type.SHOP, "Sold item")
@@ -128,7 +128,6 @@ class AuditServiceTest {
     @Nested
     @DisplayName("Queries")
     inner class QueryTests {
-
         @Test
         fun `totalWeight returns sum of all transactions`() {
             service.operation("Player1", 10.0, Type.SHOP, "tx1")
@@ -160,7 +159,6 @@ class AuditServiceTest {
     @Nested
     @DisplayName("Clear")
     inner class ClearTests {
-
         @Test
         fun `clearPlayer clears specific player`() {
             service.operation("Player1", 100.0, Type.SHOP, "tx1")
@@ -168,8 +166,22 @@ class AuditServiceTest {
 
             service.clearPlayer("Player1")
 
-            assertEquals(0, repository.get("player1").join()?.transactions?.size ?: 0)
-            assertEquals(1, repository.get("player2").join()?.transactions?.size)
+            assertEquals(
+                0,
+                repository
+                    .get("player1")
+                    .join()
+                    ?.transactions
+                    ?.size ?: 0,
+            )
+            assertEquals(
+                1,
+                repository
+                    .get("player2")
+                    .join()
+                    ?.transactions
+                    ?.size,
+            )
         }
 
         @Test
@@ -179,15 +191,28 @@ class AuditServiceTest {
 
             service.clearAll()
 
-            assertEquals(0, repository.get("player1").join()?.transactions?.size ?: 0)
-            assertEquals(0, repository.get("player2").join()?.transactions?.size ?: 0)
+            assertEquals(
+                0,
+                repository
+                    .get("player1")
+                    .join()
+                    ?.transactions
+                    ?.size ?: 0,
+            )
+            assertEquals(
+                0,
+                repository
+                    .get("player2")
+                    .join()
+                    ?.transactions
+                    ?.size ?: 0,
+            )
         }
     }
 
     @Nested
     @DisplayName("Pruning")
     inner class PruningTests {
-
         @Test
         fun `pruneOldData trims when over weight`() {
             // Create config with very small maxTransactions so trim happens regardless of age
@@ -231,7 +256,6 @@ class AuditServiceTest {
     @Nested
     @DisplayName("Aggregation")
     inner class AggregationTests {
-
         @Test
         fun `same type and comment aggregates`() {
             service.operation("Player1", 10.0, Type.SHOP, "Buy apples")
@@ -269,7 +293,6 @@ class AuditServiceTest {
     @Nested
     @DisplayName("Statistics")
     inner class StatisticsTests {
-
         @Test
         fun `totalBalance calculates correctly`() {
             service.income("Player1", 100.0, Type.JOB, "Work")
@@ -306,7 +329,6 @@ class AuditServiceTest {
     @Nested
     @DisplayName("Filtering")
     inner class FilteringTests {
-
         @BeforeEach
         fun setUpData() {
             service.income("Player1", 100.0, Type.SHOP, "Sell")
@@ -369,4 +391,3 @@ class AuditServiceTest {
         }
     }
 }
-

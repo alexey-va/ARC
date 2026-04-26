@@ -1,20 +1,20 @@
 package ru.arc.configs;
 
-import ru.arc.ARC;
-import ru.arc.stock.StockClient;
-import ru.arc.stock.StockMarket;
+import java.io.File;
+import java.io.IOException;
+import java.util.List;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
+
 import lombok.SneakyThrows;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.configuration.file.YamlConfiguration;
-
-import java.io.File;
-import java.io.IOException;
-import java.util.List;
-import java.util.TreeMap;
-import java.util.stream.Collectors;
+import ru.arc.ARC;
+import ru.arc.stock.StockClient;
+import ru.arc.stock.StockMarket;
 
 public class StockConfig {
 
@@ -42,10 +42,10 @@ public class StockConfig {
 
     @SneakyThrows
     public static void load() {
-        file = new File(ARC.plugin.getDataFolder() + File.separator + "stocks/stock.yml");
+        file = new File(ARC.getInstance().getDataFolder() + File.separator + "stocks/stock.yml");
         if (!file.exists()) {
             file.getParentFile().mkdirs();
-            ARC.plugin.saveResource("stocks/stock.yml", false);
+            ARC.getInstance().saveResource("stocks/stock.yml", false);
         }
         config = YamlConfiguration.loadConfiguration(file);
 

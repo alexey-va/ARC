@@ -1,4 +1,3 @@
-@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 
 package ru.arc.core
 
@@ -146,5 +145,3 @@ class RepositoryTest {
         }
     }
 }
-
-

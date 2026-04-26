@@ -6,7 +6,7 @@ object RandomUtils {
 
     @JvmStatic
     fun <T> random(array: Array<T>): T {
-        if (array.size == 0) {
+        if (array.isEmpty()) {
             throw IllegalArgumentException("Array must not be empty")
         }
         return array[ThreadLocalRandom.current().nextInt(array.size)]
@@ -34,7 +34,7 @@ object RandomUtils {
 
     @JvmStatic
     fun <T> random(collection: Collection<T>?): T {
-        if (collection == null || collection.isEmpty()) {
+        if (collection.isNullOrEmpty()) {
             throw IllegalArgumentException("Collection must not be null or empty")
         }
 
@@ -50,7 +50,7 @@ object RandomUtils {
 
     @JvmStatic
     fun <K, V> random(map: Map<K, V>?): Map.Entry<K, V> {
-        if (map == null || map.isEmpty()) {
+        if (map.isNullOrEmpty()) {
             throw IllegalArgumentException("Map must not be null or empty")
         }
         val rng = ThreadLocalRandom.current().nextInt(map.size)

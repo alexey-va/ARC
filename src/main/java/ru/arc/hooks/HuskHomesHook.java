@@ -31,10 +31,7 @@ public class HuskHomesHook implements Listener {
     public void husk(TeleportWarmupEvent event) {
         event.setCancelled(true);
         if (event.getTimedTeleport().getTeleporter() instanceof BukkitUser user) {
-            new Portal(user.getUuid(), PortalData.builder()
-                    .actionType(HUSK)
-                    .huskTeleport(new HuskTeleport(event.getTimedTeleport()))
-                    .build());
+            new Portal(user.getUuid(), new PortalData(HUSK, new HuskTeleport(event.getTimedTeleport()), null, null));
         }
 
     }

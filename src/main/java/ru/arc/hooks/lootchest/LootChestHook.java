@@ -12,11 +12,12 @@ public class LootChestHook {
     private static LootChestListener lootChestListener;
 
     public LootChestHook() {
-        Config config = ConfigManager.of(ARC.plugin.getDataFolder().toPath().resolve("lootchests"), "bosses.yml");
+        Config config = ConfigManager.of(ARC.getInstance().getDataFolder().toPath().resolve("lootchests"), "bosses" +
+                ".yml");
         if (lootChestListener == null) {
             try {
                 lootChestListener = new LootChestListener(config);
-                Bukkit.getPluginManager().registerEvents(lootChestListener, ARC.plugin);
+                Bukkit.getPluginManager().registerEvents(lootChestListener, ARC.getInstance());
             } catch (Exception e) {
                 error("Error while initializing LootChestListener", e);
             }

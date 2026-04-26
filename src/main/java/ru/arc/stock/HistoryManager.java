@@ -40,7 +40,7 @@ public class HistoryManager {
     @Setter
     private static HistoryMessager messager;
     private static Path historyPath;
-    private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "stocks/stock.yml");
+    private static final Config config = ConfigManager.of(ARC.getInstance().getDataPath(), "stocks/stock.yml");
 
     public static void setHighLows(Map<String, HighLow> highLowMap) {
         highLows.clear();
@@ -62,7 +62,7 @@ public class HistoryManager {
             info("Stocks are disabled");
             return;
         }
-        historyPath = ARC.plugin.getDataFolder().toPath().resolve("stocks/history.json");
+        historyPath = ARC.getInstance().getDataFolder().toPath().resolve("stocks/history.json");
         if (!Files.exists(historyPath)) {
             try {
                 Files.createDirectories(historyPath.getParent());
@@ -90,11 +90,11 @@ public class HistoryManager {
                     error("Error in saveTask", e);
                 }
             }
-        }.runTaskTimerAsynchronously(ARC.plugin, 100L, 20L * 300);
+        }.runTaskTimerAsynchronously(ARC.getInstance(), 100L, 20L * 300);
     }
 
     static void drawPlots(boolean sendPackets) {
-        String path = ARC.plugin.getDataFolder() + File.separator + "stocks" + File.separator + SCRIPT_FILE;
+        String path = ARC.getInstance().getDataFolder() + File.separator + "stocks" + File.separator + SCRIPT_FILE;
         long time = System.currentTimeMillis();
         File file = new File(path);
         if (file.exists()) {
@@ -112,7 +112,7 @@ public class HistoryManager {
                     System.out.println(line);
                 }
                 System.out.println("Plotting took: " + (System.currentTimeMillis() - time) + "ms");
-                if (sendPackets) Bukkit.getScheduler().runTask(ARC.plugin,
+                if (sendPackets) Bukkit.getScheduler().runTask(ARC.getInstance(),
                         () -> ARC.trySeverCommand("arc-invest -t:update"));
             } catch (Exception e) {
                 e.printStackTrace();

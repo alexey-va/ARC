@@ -3,10 +3,12 @@ package ru.arc.autobuild
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.entity.Player
-import org.bukkit.scheduler.BukkitTask
 import ru.arc.ARC
 import ru.arc.autobuild.gui.BuildingGui
-import ru.arc.autobuild.gui.ConfirmGui
+import ru.arc.autobuild.gui.ConfirmGuiFactory
+import ru.arc.core.ScheduledTask
+import ru.arc.core.repeating
+import ru.arc.core.ticks
 import ru.arc.hooks.HookRegistry
 import ru.arc.util.CooldownManager
 import ru.arc.util.Logging.error
@@ -14,7 +16,7 @@ import ru.arc.util.Logging.info
 import java.nio.file.FileVisitOption
 import java.nio.file.Files
 import java.nio.file.Paths
-import java.util.*
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.io.path.isDirectory
 import kotlin.io.path.name
@@ -33,7 +35,7 @@ object BuildingManager {
     private val buildings = ConcurrentHashMap<String, Building>()
     private val pendingSites = ConcurrentHashMap<UUID, ConstructionSite>()
     private val activeSites = ConcurrentHashMap<UUID, MutableList<ConstructionSite>>()
-    private var cleanupTask: BukkitTask? = null
+    private var cleanupTask: ScheduledTask? = null
 
     // ==================== Initialization ====================
 
@@ -45,7 +47,7 @@ object BuildingManager {
     }
 
     private fun loadBuildings() {
-        val schematicsPath = Paths.get(ARC.plugin.dataFolder.toString(), "schematics")
+        val schematicsPath = Paths.get(ARC.instance.dataFolder.toString(), "schematics")
         Files.createDirectories(schematicsPath)
 
         try {
@@ -171,7 +173,10 @@ object BuildingManager {
         CooldownManager.addCooldown(clicker.uniqueId, "clicked_npc", 20L)
 
         when (site.state) {
-            ConstructionState.Confirmation -> ConfirmGui(clicker, site).show(clicker)
+            ConstructionState.Confirmation -> {
+                ConfirmGuiFactory.create(clicker, site).show(clicker)
+            }
+
             ConstructionState.Building -> BuildingGui(clicker, site).show(clicker)
             else -> {}
         }
@@ -232,9 +237,13 @@ object BuildingManager {
 
     private fun startCleanupTask() {
         cleanupTask?.cancel()
-        cleanupTask = ARC.plugin.server.scheduler.runTaskTimer(ARC.plugin, Runnable {
-            cleanup(force = false)
-        }, 20L, BuildConfig.cleanupIntervalTicks)
+        cleanupTask =
+            repeating(
+                period = BuildConfig.cleanupIntervalTicks.ticks,
+                delay = 20.ticks,
+            ) {
+                cleanup(force = false)
+            }
     }
 
     private fun cleanup(force: Boolean) {

@@ -1,17 +1,14 @@
-@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 
 package ru.arc.network
 
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertNotNull
-import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.mock
 import redis.clients.jedis.JedisPooled
 import ru.arc.ARC
-import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
@@ -41,7 +38,7 @@ class RedisManagerUnitTest {
     fun teardown() {
         try {
             redisManager.close()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Ignore cleanup errors in unit tests
         }
     }
@@ -97,8 +94,6 @@ class RedisManagerUnitTest {
         val future = redisManager.saveMapEntries("test:key", "field", "value")
 
         assertNotNull(future)
-        // CompletableFuture is always returned
-        assertTrue(future is CompletableFuture<*>)
     }
 
     @Test
@@ -106,8 +101,6 @@ class RedisManagerUnitTest {
         val future = redisManager.loadMap("test:key")
 
         assertNotNull(future)
-        // CompletableFuture is always returned
-        assertTrue(future is CompletableFuture<*>)
     }
 
     @Test
@@ -115,8 +108,6 @@ class RedisManagerUnitTest {
         val future = redisManager.loadMapEntries("test:key", "field1", "field2")
 
         assertNotNull(future)
-        // CompletableFuture is always returned
-        assertTrue(future is CompletableFuture<*>)
     }
 
     @Test

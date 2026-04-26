@@ -5,8 +5,8 @@ import ru.arc.commands.arc.CommandConfig
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.tabComplete
 import ru.arc.common.locationpools.LocationPoolManager
-import ru.arc.treasurechests.TreasureHunt
 import ru.arc.treasurechests.TreasureHuntManager
+import ru.arc.treasurechests.TreasureHuntRegistry
 import ru.arc.util.Logging.error
 
 /**
@@ -14,19 +14,21 @@ import ru.arc.util.Logging.error
  *
  * Использование:
  * - types - показать доступные типы охот
- * - start <type> [chests] - запустить по типу
+ * - start <type> chests - запустить по типу
  * - start <pool> <chests> <namespace> <treasure_pool> - полная форма
  * - stop <pool> - остановить охоту
  */
 object HuntSubCommand : SubCommand {
-
     override val configKey = "hunt"
     override val defaultName = "hunt"
     override val defaultPermission = "arc.treasure-hunt"
     override val defaultDescription = "Управление охотой на сокровища"
     override val defaultUsage = "/arc hunt [types|start|stop]"
 
-    override fun execute(sender: CommandSender, args: Array<String>): Boolean {
+    override fun execute(
+        sender: CommandSender,
+        args: Array<String>,
+    ): Boolean {
         // Без аргументов - показать статус
         if (args.isEmpty()) {
             showStatus(sender)
@@ -35,10 +37,22 @@ object HuntSubCommand : SubCommand {
 
         try {
             when (args[0].lowercase()) {
-                "types" -> showTypes(sender)
-                "status" -> showStatus(sender)
-                "start" -> handleStart(sender, args)
-                "stop" -> handleStop(sender, args)
+                "types" -> {
+                    showTypes(sender)
+                }
+
+                "status" -> {
+                    showStatus(sender)
+                }
+
+                "start" -> {
+                    handleStart(sender, args)
+                }
+
+                "stop" -> {
+                    handleStop(sender, args)
+                }
+
                 "stopall" -> {
                     TreasureHuntManager.stopAll()
                     sender.sendMessage(CommandConfig.get("hunt.all-stopped", "<gray>Все охоты остановлены!"))
@@ -74,17 +88,20 @@ object HuntSubCommand : SubCommand {
                 CommandConfig.get(
                     "hunt.active-count",
                     "<gray>Активных охот: <white>%count%",
-                    "%count%", activeHunts.size.toString()
-                )
+                    "%count%",
+                    activeHunts.size.toString(),
+                ),
             )
             activeHunts.forEach { hunt ->
                 sender.sendMessage(
                     CommandConfig.get(
                         "hunt.active-item",
                         "<gray>• <white>%pool% <gray>- <yellow>%chests%<gray> сундуков",
-                        "%pool%", hunt.locationPool.id,
-                        "%chests%", hunt.remainingChests.toString()
-                    )
+                        "%pool%",
+                        hunt.config.locationPoolId,
+                        "%chests%",
+                        hunt.remainingChests.toString(),
+                    ),
                 )
             }
         }
@@ -93,8 +110,9 @@ object HuntSubCommand : SubCommand {
             CommandConfig.get(
                 "hunt.types-count",
                 "<gray>Доступных типов: <white>%count%",
-                "%count%", types.size.toString()
-            )
+                "%count%",
+                types.size.toString(),
+            ),
         )
         sender.sendMessage(CommandConfig.get("hunt.commands-hint", "<gray>Команды: <white>types, start, stop, stopall"))
     }
@@ -110,24 +128,30 @@ object HuntSubCommand : SubCommand {
         sender.sendMessage(CommandConfig.get("hunt.types-header", "<gold>Доступные типы охот:"))
         types.forEach { typeId ->
             val type = TreasureHuntManager.getTreasureHuntType(typeId)
-            val poolName = type?.locationPool?.id ?: "?"
+            val poolName = type?.locationPoolId ?: "?"
             sender.sendMessage(
                 CommandConfig.get(
                     "hunt.type-item",
                     "<gray>• <white>%type% <gray>(пул: %pool%)",
-                    "%type%", typeId,
-                    "%pool%", poolName
-                )
+                    "%type%",
+                    typeId,
+                    "%pool%",
+                    poolName,
+                ),
             )
         }
         sender.sendMessage(CommandConfig.get("hunt.start-hint", "<gray>Запуск: <white>/arc hunt <тип> [сундуков]"))
     }
 
-    private fun handleStart(sender: CommandSender, args: Array<String>) {
-        val identifier = args.getOrNull(1) ?: run {
-            showTypes(sender)
-            return
-        }
+    private fun handleStart(
+        sender: CommandSender,
+        args: Array<String>,
+    ) {
+        val identifier =
+            args.getOrNull(1) ?: run {
+                showTypes(sender)
+                return
+            }
 
         val huntType = TreasureHuntManager.getTreasureHuntType(identifier)
         if (huntType != null) {
@@ -137,11 +161,19 @@ object HuntSubCommand : SubCommand {
         }
     }
 
-    private fun startByType(sender: CommandSender, typeId: String, args: Array<String>) {
-        val huntType = TreasureHuntManager.getTreasureHuntType(typeId)!!
+    private fun startByType(
+        sender: CommandSender,
+        typeId: String,
+        args: Array<String>,
+    ) {
+        val huntType =
+            TreasureHuntManager.getTreasureHuntType(typeId) ?: run {
+                sender.sendMessage(CommandConfig.huntTypeNotFound())
+                return
+            }
 
-        if (huntType.locationPool == null) {
-            sender.sendMessage(CommandConfig.huntPoolNotFound(typeId))
+        if (huntType.getLocationPool() == null) {
+            sender.sendMessage(CommandConfig.huntPoolNotFound(huntType.locationPoolId))
             return
         }
 
@@ -149,69 +181,131 @@ object HuntSubCommand : SubCommand {
         TreasureHuntManager.startHunt(typeId, chestsOverride, sender)
     }
 
-    private fun startFull(sender: CommandSender, poolId: String, args: Array<String>) {
+    private fun startFull(
+        sender: CommandSender,
+        poolId: String,
+        args: Array<String>,
+    ) {
         if (args.size < 5) {
             sender.sendMessage(CommandConfig.huntNotEnoughArgs())
             return
         }
 
-        val pool = LocationPoolManager.getPool(poolId) ?: run {
-            sender.sendMessage(CommandConfig.huntPoolNotFound(poolId))
-            return
-        }
+        val pool =
+            LocationPoolManager.getPool(poolId) ?: run {
+                sender.sendMessage(CommandConfig.huntPoolNotFound(poolId))
+                return
+            }
 
-        val chests = args[2].toIntOrNull()?.takeIf { it > 0 } ?: run {
-            sender.sendMessage(CommandConfig.huntInvalidChests(args[2]))
-            return
-        }
+        val chests =
+            args[2].toIntOrNull()?.takeIf { it > 0 } ?: run {
+                sender.sendMessage(CommandConfig.huntInvalidChests(args[2]))
+                return
+            }
 
-        val namespace = TreasureHunt.aliases()[args[3]] ?: args[3]
+        val namespace = TreasureHuntRegistry.getAliases()[args[3]] ?: args[3]
         val treasurePoolId = args[4]
 
         TreasureHuntManager.startHunt(pool, chests, namespace, treasurePoolId, sender)
         sender.sendMessage(CommandConfig.huntStarted())
     }
 
-    private fun handleStop(sender: CommandSender, args: Array<String>) {
-        val poolId = args.getOrNull(1) ?: run {
-            sender.sendMessage(CommandConfig.huntSpecifyPool())
-            return
-        }
+    private fun handleStop(
+        sender: CommandSender,
+        args: Array<String>,
+    ) {
+        val poolId =
+            args.getOrNull(1) ?: run {
+                sender.sendMessage(CommandConfig.huntSpecifyPool())
+                return
+            }
 
-        val pool = LocationPoolManager.getPool(poolId) ?: run {
-            sender.sendMessage(CommandConfig.huntPoolNotFound(poolId))
-            return
-        }
+        val pool =
+            LocationPoolManager.getPool(poolId) ?: run {
+                sender.sendMessage(CommandConfig.huntPoolNotFound(poolId))
+                return
+            }
 
         TreasureHuntManager.getByLocationPool(pool).ifPresentOrElse(
             { hunt ->
                 TreasureHuntManager.stopHunt(hunt)
                 sender.sendMessage(CommandConfig.huntStopped())
             },
-            { sender.sendMessage(CommandConfig.huntNotFound()) }
+            { sender.sendMessage(CommandConfig.huntNotFound()) },
         )
     }
 
-    override fun tabComplete(sender: CommandSender, args: Array<String>): List<String>? {
+    override fun tabComplete(
+        sender: CommandSender,
+        args: Array<String>,
+    ): List<String>? {
         val allPools = LocationPoolManager.getAll().map { it.id }
         val huntTypes = TreasureHuntManager.getTreasureHuntTypes()
-        val namespaces = TreasureHunt.aliases().keys + listOf("vanilla", "ItemsAdderId")
-        val treasurePools = TreasureHuntManager.getTreasurePools().map { it.getId() }
+        val namespaces = TreasureHuntRegistry.getAliases().keys + listOf("vanilla", "ItemsAdderId")
+        val treasurePools = TreasureHuntManager.getTreasurePools().map { it.id }
 
         return when (args.size) {
             // Приоритет: status, types, start, stop, stopall, затем типы охот
-            1 -> (listOf("status", "types", "start", "stop", "stopall") + huntTypes).tabComplete(args[0])
-            2 -> when (args[0].lowercase()) {
-                // Сначала типы (чаще используются), потом пулы
-                "start" -> (huntTypes + allPools).tabComplete(args[1])
-                "stop" -> allPools.tabComplete(args[1])
-                else -> null
+            1 -> {
+                (listOf("status", "types", "start", "stop", "stopall") + huntTypes).tabComplete(args[0])
             }
 
-            3 -> listOf(LocationPoolManager.getPool(args[1])?.locations?.size()?.toString() ?: "10")
-            4 -> namespaces.toList().tabComplete(args[3])
-            5 -> treasurePools.tabComplete(args[4])
-            else -> null
+            2 -> {
+                when (args[0].lowercase()) {
+                    // Сначала типы (чаще используются), потом пулы
+                    "start" -> {
+                        (huntTypes + allPools).tabComplete(args[1])
+                    }
+
+                    "stop" -> {
+                        allPools.tabComplete(args[1])
+                    }
+
+                    else -> {
+                        if (TreasureHuntManager.getTreasureHuntType(args[0]) != null) {
+                            listOf("5", "10", "15", "20").tabComplete(args[1])
+                        } else {
+                            null
+                        }
+                    }
+                }
+            }
+
+            3 -> {
+                when {
+                    args[0].equals("start", ignoreCase = true) -> {
+                        listOf(LocationPoolManager.getPool(args[1])?.size?.toString() ?: "10")
+                    }
+
+                    TreasureHuntManager.getTreasureHuntType(args[0]) != null -> {
+                        listOf("5", "10", "15", "20").tabComplete(args.getOrElse(2) { "" })
+                    }
+
+                    else -> {
+                        null
+                    }
+                }
+            }
+
+            4 -> {
+                if (args[0].equals("start", ignoreCase = true)) {
+                    namespaces.toList().tabComplete(args[3])
+                } else {
+                    null
+                }
+            }
+
+            5 -> {
+                if (args[0].equals("start", ignoreCase = true)) {
+                    treasurePools.tabComplete(args[4])
+                } else {
+                    null
+                }
+            }
+
+            else -> {
+                null
+            }
         }
     }
 }

@@ -1,8 +1,10 @@
-@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 
 package ru.arc.autobuild
 
-import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertSame
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import ru.arc.TestBase
@@ -12,7 +14,6 @@ import ru.arc.TestBase
  * Pure utility tests are in BuildingManagerUtilTest.
  */
 class BuildingManagerTest : TestBase() {
-
     @BeforeEach
     override fun setUpBase() {
         super.setUpBase()
@@ -22,7 +23,6 @@ class BuildingManagerTest : TestBase() {
 
     @Test
     fun testAddBuilding() {
-
         val building = Building("test.schem")
         BuildingManager.addBuilding(building)
 
@@ -31,7 +31,6 @@ class BuildingManagerTest : TestBase() {
 
     @Test
     fun testGetBuildingNotFound() {
-
         val result = BuildingManager.getBuilding("nonexistent.schem")
 
         assertNull(result, "Should return null for non-existent building")
@@ -39,7 +38,6 @@ class BuildingManagerTest : TestBase() {
 
     @Test
     fun testGetBuildings() {
-
         val initialCount = BuildingManager.getBuildings().size
 
         val building1 = Building("testgb1.schem")
@@ -60,7 +58,6 @@ class BuildingManagerTest : TestBase() {
 
     @Test
     fun testAddBuildingOverwrite() {
-
         val building1 = Building("testow.schem")
         val building2 = Building("testow.schem")
 
@@ -76,7 +73,6 @@ class BuildingManagerTest : TestBase() {
 
     @Test
     fun testGetPendingConstructionNotFound() {
-
         val result = BuildingManager.getPendingConstruction(java.util.UUID.randomUUID())
 
         assertNull(result, "Should return null when no pending construction")

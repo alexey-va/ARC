@@ -9,6 +9,7 @@ import ru.arc.commands.arc.onlinePlayerNames
 import ru.arc.commands.arc.tabComplete
 import ru.arc.commands.arc.tabCompletePlayers
 import ru.arc.hooks.HookRegistry
+import ru.arc.jobs.JobsModule
 
 /**
  * /arc jobsboosts - управление бустами работ.
@@ -27,8 +28,8 @@ object JobsboostsSubCommand : SubCommand {
     override val defaultUsage = "/arc jobsboosts [player|reset <player>]"
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
-        val jobsHook = HookRegistry.jobsHook ?: run {
-            sender.sendMessage(CommandConfig.hookNotLoaded("JobsHook"))
+        if (!HookRegistry.jobsEnabled) {
+            sender.sendMessage(CommandConfig.hookNotLoaded("Jobs"))
             return true
         }
 
@@ -46,14 +47,14 @@ object JobsboostsSubCommand : SubCommand {
 
             val player = getOnlinePlayer(sender, playerName) ?: return true
 
-            jobsHook.resetBoosts(player)
+            JobsModule.resetBoosts(player)
             sender.sendMessage(CommandConfig.jobsboostsReset(player.name))
             return true
         }
 
         // Определяем целевого игрока
         val target: Player? = args.getOrNull(0)?.let {
-            ARC.plugin.server.getPlayer(it)
+            ARC.instance.server.getPlayer(it)
         } ?: (sender as? Player)
 
         if (target == null) {
@@ -61,7 +62,7 @@ object JobsboostsSubCommand : SubCommand {
             return true
         }
 
-        jobsHook.openBoostGui(target)
+        JobsModule.openBoostGui(target)
         return true
     }
 

@@ -13,7 +13,7 @@ object DateUtils {
 
     private fun getConfig(): Config? {
         if (config == null && ARC.plugin != null) {
-            config = ConfigManager.of(ARC.plugin!!.dataPath, "misc.yml")
+            config = ConfigManager.of(ARC.instance.dataPath, "misc.yml")
         }
         return config
     }

@@ -32,7 +32,7 @@ class Building(val fileName: String) {
 
     private val schematicFile: File
         get() {
-            val folder = File(ARC.plugin.dataFolder, "schematics").also { it.mkdirs() }
+            val folder = File(ARC.instance.dataFolder, "schematics").also { it.mkdirs() }
             return File(folder, fileName)
         }
 

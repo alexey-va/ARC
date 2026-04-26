@@ -1,18 +1,18 @@
 package ru.arc.hooks;
 
-import ru.arc.ARC;
-import ru.arc.commands.arc.subcommands.RespawnOnRtpSubCommand;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
 import me.SuperRonanCraft.BetterRTP.references.customEvents.RTP_TeleportPostEvent;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import ru.arc.ARC;
+import ru.arc.commands.arc.subcommands.RespawnOnRtpSubCommand;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
 
 public class BetterRTPListener implements Listener {
 
-    Config config = ConfigManager.of(ARC.plugin.getDataPath(), "misc.yml");
+    Config config = ConfigManager.of(ARC.getInstance().getDataPath(), "misc.yml");
 
     @EventHandler
     public void onBetterRTPEvent(RTP_TeleportPostEvent event) {

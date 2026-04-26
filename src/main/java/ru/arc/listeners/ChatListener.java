@@ -1,15 +1,16 @@
 package ru.arc.listeners;
 
-import ru.arc.ARC;
-import ru.arc.TitleInput;
-import ru.arc.ai.GPTManager;
 import com.Zrips.CMI.events.CMIPlayerTeleportRequestEvent;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.scheduler.BukkitRunnable;
+import ru.arc.ARC;
+import ru.arc.TitleInput;
+import ru.arc.ai.GPTManager;
 
+@SuppressWarnings("deprecation")
 public class ChatListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -26,7 +27,7 @@ public class ChatListener implements Listener {
             public void run() {
                 TitleInput.processMessage(event.getPlayer(), event.getMessage());
             }
-        }.runTask(ARC.plugin);
+        }.runTask(ARC.getInstance());
     }
 
     CMIPlayerTeleportRequestEvent event;

@@ -1,12 +1,8 @@
 package ru.arc.stock.gui;
 
-import ru.arc.ARC;
-import ru.arc.configs.StockConfig;
-import ru.arc.stock.Position;
-import ru.arc.stock.StockPlayer;
-import ru.arc.util.GuiUtils;
-import ru.arc.util.ItemStackBuilder;
-import ru.arc.util.TextUtil;
+import java.util.ArrayList;
+import java.util.List;
+
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
@@ -22,12 +18,18 @@ import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
-
-import java.util.ArrayList;
-import java.util.List;
+import ru.arc.ARC;
+import ru.arc.configs.StockConfig;
+import ru.arc.stock.Position;
+import ru.arc.stock.StockPlayer;
+import ru.arc.util.GuiUtils;
+import ru.arc.util.ItemStackBuilder;
+import ru.arc.util.TextUtil;
 
 import static ru.arc.util.GuiUtils.cooldownCheck;
-import static ru.arc.util.TextUtil.*;
+import static ru.arc.util.TextUtil.formatAmount;
+import static ru.arc.util.TextUtil.mm;
+import static ru.arc.util.TextUtil.strip;
 
 public class PositionSelector extends ChestGui {
     StockPlayer stockPlayer;
@@ -67,9 +69,9 @@ public class PositionSelector extends ChestGui {
                 }
                 positions = symbol == null ? stockPlayer.positions() : stockPlayer.positions(symbol);
                 populatePositions();
-                Bukkit.getScheduler().runTask(ARC.plugin, () -> update());
+                Bukkit.getScheduler().runTask(ARC.getInstance(), () -> update());
             }
-        }.runTaskTimerAsynchronously(ARC.plugin, 20L, 100L);
+        }.runTaskTimerAsynchronously(ARC.getInstance(), 20L, 100L);
         this.setOnClose(close -> cancelTasks());
     }
 
@@ -172,15 +174,16 @@ public class PositionSelector extends ChestGui {
     }
 
     private GuiItem positionItem(Position position) {
-        Position.AutoClosePrices autoClosePrices = position.marginCallAtPrice(stockPlayer.getBalance(), stockPlayer.isAutoTake());
+        Position.AutoClosePrices autoClosePrices = position.marginCallAtPrice(stockPlayer.getBalance(),
+                stockPlayer.getAutoTake());
         return new ItemStackBuilder(position.getIconMaterial())
                 .display(StockConfig.string("position-selector.position-display"))
                 .lore(StockConfig.stringList("position-selector.position-lore"))
                 .tagResolver(position.resolver())
-                .appendResolver("close_at_low", autoClosePrices.low() == -1 ? "<red>Нет" :
-                        formatAmount(autoClosePrices.low()))
-                .appendResolver("close_at_high", autoClosePrices.high() == -1 ? "<red>Нет" :
-                        formatAmount(autoClosePrices.high()))
+                .appendResolver("close_at_low", autoClosePrices.getLow() == -1 ? "<red>Нет" :
+                        formatAmount(autoClosePrices.getLow()))
+                .appendResolver("close_at_high", autoClosePrices.getHigh() == -1 ? "<red>Нет" :
+                        formatAmount(autoClosePrices.getHigh()))
                 .toGuiItemBuilder()
                 .clickEvent(click -> {
                     click.setCancelled(true);

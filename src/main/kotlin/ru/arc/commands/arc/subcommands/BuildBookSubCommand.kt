@@ -9,12 +9,12 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.Material
 import org.bukkit.command.CommandSender
-import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
-import ru.arc.autobuild.Building
 import ru.arc.autobuild.BuildingManager
-import ru.arc.commands.arc.*
+import ru.arc.commands.arc.CommandConfig
+import ru.arc.commands.arc.SubCommand
+import ru.arc.commands.arc.tabComplete
 import ru.arc.configs.ConfigManager
 import ru.arc.util.TextUtil.strip
 import java.util.Collections
@@ -33,7 +33,7 @@ object BuildBookSubCommand : SubCommand {
     override val defaultUsage = "/arc buildbook <building> <model-id> [rotation] [y-offset] [name...]"
     override val defaultPlayerOnly = true
 
-    private val config get() = ConfigManager.of(ARC.plugin.dataPath, "auto-build.yml")
+    private val config get() = ConfigManager.ofModule(ARC.instance.dataPath, "auto-build.yml")
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
         val player = requirePlayer(sender) ?: return true
@@ -78,6 +78,8 @@ object BuildBookSubCommand : SubCommand {
 
         // Создаём предмет
         val stack = ItemStack(Material.BOOK)
+
+        @Suppress("DEPRECATION")
         val nbtItem = NBTItem(stack)
         nbtItem.setString("arc:building_key", fileName)
 
@@ -91,6 +93,7 @@ object BuildBookSubCommand : SubCommand {
             nbtItem.setString("arc:y_offset", args[3])
         }
 
+        @Suppress("DEPRECATION")
         nbtItem.applyNBT(stack)
 
         // Настраиваем мету
@@ -126,6 +129,7 @@ object BuildBookSubCommand : SubCommand {
 
         meta.displayName(display)
         meta.lore(lore)
+        @Suppress("DEPRECATION")
         if (modelId != 0) meta.setCustomModelData(modelId)
         stack.itemMeta = meta
 
@@ -144,7 +148,7 @@ object BuildBookSubCommand : SubCommand {
 
     private fun createLongName(name: String): Component {
         val bName = LegacyComponentSerializer.legacyAmpersand().deserialize(name)
-        val length = (bName as? net.kyori.adventure.text.TextComponent)?.content()?.length ?: name.length
+        val length = bName.content().length
         var len2 = maxOf(0, (37 - length - 4) / 2)
         if (length < 9) len2 += 1
         if (length < 13) len2 += 1

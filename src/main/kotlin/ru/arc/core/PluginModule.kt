@@ -39,5 +39,3 @@ interface PluginModule {
      */
     fun shutdown()
 }
-
-

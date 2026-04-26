@@ -18,6 +18,13 @@ public class EliteLootManager {
     @Getter
     private static Map<LootType, DecorPool> map = new ConcurrentHashMap<>();
 
+    /**
+     * Get the loot type to decor pool map.
+     * Explicit getter for Kotlin interop (Lombok getters not visible at compile time).
+     */
+    public static Map<LootType, DecorPool> getLootMap() {
+        return map;
+    }
 
     public static void init() {
         eliteLootConfigParser = new EliteLootConfigParser();

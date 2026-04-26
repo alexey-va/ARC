@@ -44,10 +44,11 @@ object EmshopSubCommand : SubCommand {
         }
 
         // /arc emshop <player> [gear|trinket]
-        val player = ARC.plugin.server.getPlayer(firstArg) ?: run {
-            sender.sendMessage(CommandConfig.playerNotFound(firstArg))
-            return true
-        }
+        val player =
+            ARC.instance.server.getPlayer(firstArg) ?: run {
+                sender.sendMessage(CommandConfig.playerNotFound(firstArg))
+                return true
+            }
 
         val isGear = args.getOrNull(1)?.lowercase() != "trinket"
         emHook.openShopGui(player, isGear)

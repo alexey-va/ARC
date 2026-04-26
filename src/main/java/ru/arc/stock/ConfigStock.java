@@ -1,12 +1,16 @@
 package ru.arc.stock;
 
-import ru.arc.board.ItemIcon;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
 import com.google.gson.Gson;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import org.bukkit.Material;
-
-import java.util.*;
+import ru.arc.board.ItemIcon;
 
 @Data
 @AllArgsConstructor
@@ -40,16 +44,12 @@ public class ConfigStock {
         ItemIcon icon = ItemIcon.of(Material.PAPER, 0);
         if(o instanceof String str){
             icon = new Gson().fromJson(str, ItemIcon.class);
-        } else if(o instanceof Map iconMap){
-            if(iconMap != null){
-                String uuidString = (String) iconMap.getOrDefault("headUuid", null);
-                UUID uuid = uuidString == null || uuidString.length() < 36  ? null : UUID.fromString(uuidString);
-                icon = new ItemIcon(
-                        Material.valueOf(((String) iconMap.getOrDefault("material", "PAPER")).toUpperCase()),
-                        uuid,
-                        ((Number) iconMap.getOrDefault("data", 0)).intValue()
-                );
-            }
+        } else if (o instanceof Map<?, ?> iconMap) {
+            String uuidString = iconMap.get("headUuid") instanceof String s ? s : null;
+            UUID uuid = uuidString == null || uuidString.length() < 36 ? null : UUID.fromString(uuidString);
+            String materialStr = iconMap.get("material") instanceof String ms ? ms : "PAPER";
+            int data = iconMap.get("data") instanceof Number n ? n.intValue() : 0;
+            icon = new ItemIcon(Material.valueOf(materialStr.toUpperCase()), uuid, data);
         }
 
 
@@ -57,8 +57,15 @@ public class ConfigStock {
 
         Object l = map.getOrDefault("lore", List.of("lore"));
         List<String> lore = new ArrayList<>();
-        if (l instanceof String s) lore.add(s);
-        else if (l instanceof Collection<?> list) lore.addAll((Collection<? extends String>) list);
+        if (l instanceof String s) {
+            lore.add(s);
+        } else if (l instanceof Collection<?> list) {
+            for (Object item : list) {
+                if (item instanceof String str) {
+                    lore.add(str);
+                }
+            }
+        }
 
         return new ConfigStock(
                 (String) map.get("symbol"),

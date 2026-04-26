@@ -1,4 +1,3 @@
-@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 
 package ru.arc.core.modules
 
@@ -249,14 +248,6 @@ class CoreModulesTest : TestBase() {
         )
 
         @Test
-        @DisplayName("All modules implement PluginModule")
-        fun testAllImplementPluginModule() {
-            allModules.forEach { module ->
-                assertTrue(module is PluginModule, "${module.name} should implement PluginModule")
-            }
-        }
-
-        @Test
         @DisplayName("All modules have non-empty names")
         fun testAllHaveNames() {
             allModules.forEach { module ->
@@ -308,5 +299,3 @@ class CoreModulesTest : TestBase() {
         assertEquals(24, allModules.size, "Should have 24 modules")
     }
 }
-
-

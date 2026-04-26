@@ -29,7 +29,7 @@ public class PacketEventsHook {
         final List<Integer> entityIds = requests.stream()
                 .map(request -> ThreadLocalRandom.current().nextInt(Integer.MIN_VALUE, Integer.MAX_VALUE))
                 .collect(Collectors.toList());
-        Bukkit.getScheduler().runTaskAsynchronously(ARC.plugin, () -> {
+        Bukkit.getScheduler().runTaskAsynchronously(ARC.getInstance(), () -> {
             int i = 0;
             for (BlockDisplayReq request : requests) {
                 int entityId = entityIds.get(i++);
@@ -62,7 +62,7 @@ public class PacketEventsHook {
 
     public void removeDisplayBlocks(List<Integer> entityIds, Player player) {
         debug("Removing display blocks for player {}", player.getName());
-        Bukkit.getScheduler().runTaskAsynchronously(ARC.plugin, () -> {
+        Bukkit.getScheduler().runTaskAsynchronously(ARC.getInstance(), () -> {
             var packet = new WrapperPlayServerDestroyEntities(entityIds.stream().mapToInt(i -> i).toArray());
             PacketEvents.getAPI().getPlayerManager().sendPacket(player, packet);
         });

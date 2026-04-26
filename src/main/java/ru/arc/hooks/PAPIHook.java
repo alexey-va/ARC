@@ -11,11 +11,12 @@ import org.jetbrains.annotations.NotNull;
 import ru.arc.ARC;
 import ru.arc.configs.Config;
 import ru.arc.configs.ConfigManager;
+import ru.arc.jobs.JobsModule;
 import ru.arc.xserver.playerlist.PlayerManager;
 
 public class PAPIHook extends PlaceholderExpansion {
 
-    static Config config = ConfigManager.of(ARC.plugin.getDataPath(), "misc.yml");
+    static Config config = ConfigManager.of(ARC.getInstance().getDataPath(), "misc.yml");
 
     public String parse(String str, OfflinePlayer player) {
         return PlaceholderAPI.setPlaceholders(player, str);
@@ -73,10 +74,12 @@ public class PAPIHook extends PlaceholderExpansion {
 
 
     private String jobsBoosts(OfflinePlayer player, String params) {
-        if (HookRegistry.jobsHook == null) return "";
+        if (!HookRegistry.jobsEnabled) {
+            return "";
+        }
         String[] pars = params.split("_");
         if (pars[1].equals("has")) {
-            return HookRegistry.jobsHook.hasBoost(player, pars[2]) ? "true" : "false";
+            return JobsModule.hasBoost(player, pars[2]) ? "true" : "false";
         }
         return "";
     }

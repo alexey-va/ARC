@@ -1,7 +1,6 @@
 package ru.arc.autobuild
 
 import com.sk89q.worldedit.math.BlockVector3
-import org.bukkit.Bukkit
 import org.bukkit.Chunk
 import org.bukkit.Color
 import org.bukkit.FireworkEffect
@@ -11,7 +10,9 @@ import org.bukkit.entity.EntityType
 import org.bukkit.entity.Firework
 import org.bukkit.entity.Player
 import org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.CUSTOM
-import ru.arc.ARC
+import ru.arc.core.delayed
+import ru.arc.core.repeat
+import ru.arc.core.ticks
 import ru.arc.hooks.HookRegistry
 import ru.arc.hooks.worldguard.WGHook
 import ru.arc.util.LocationUtils
@@ -269,19 +270,12 @@ class ConstructionSite(
         return LocationUtils.getBorderLocationsWithCornerData(corner1, corner2, 2, 3)
     }
 
-    /** Launches celebratory fireworks */
+    /** Launches celebratory fireworks using Task DSL */
     internal fun launchFireworks() {
         try {
-            val maxFireworks = 5
-            var count = 0
-            lateinit var task: org.bukkit.scheduler.BukkitTask
-            task = Bukkit.getScheduler().runTaskTimer(ARC.plugin, Runnable {
-                if (++count > maxFireworks) {
-                    task.cancel()
-                    return@Runnable
-                }
+            repeat(times = 5, period = 10.ticks, delay = 0.ticks) {
                 spawnFirework()
-            }, 0L, 10L)
+            }
         } catch (e: Exception) {
             error("Failed to launch fireworks", e)
         }
@@ -312,7 +306,7 @@ class ConstructionSite(
             addEffect(effect)
         }
 
-        Bukkit.getScheduler().runTaskLater(ARC.plugin, Runnable { firework.detonate() }, 20)
+        delayed(20.ticks) { firework.detonate() }
     }
 
     /** Cleans up all resources */

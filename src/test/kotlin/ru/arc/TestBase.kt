@@ -45,7 +45,7 @@ abstract class TestBase {
     protected lateinit var dataPath: Path
 
     @BeforeEach
-    protected open fun setUpBase() {
+    open fun setUpBase() {
         // Ensure clean state before mocking
         if (MockBukkit.isMocked()) {
             MockBukkit.unmock()
@@ -86,7 +86,7 @@ abstract class TestBase {
         File(dataFolder, "lang.json").writeText("{}")
 
         // Fix announce.yml if it has wrong format (Array instead of Map)
-        val announceFile = File(dataFolder, "announce.yml")
+        val announceFile = ConfigManager.moduleYamlPath(dataFolder.toPath(), "announce.yml").toFile()
         if (announceFile.exists()) {
             val content = announceFile.readText()
             if (content.contains("messages: []")) {
@@ -132,7 +132,7 @@ abstract class TestBase {
     fun tearDownBase() {
         try {
             plugin.onDisable()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Ignore disable errors
         }
         MockBukkit.unmock()

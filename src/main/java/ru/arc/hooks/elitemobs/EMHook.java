@@ -1,11 +1,7 @@
 package ru.arc.hooks.elitemobs;
 
-import ru.arc.ARC;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import ru.arc.hooks.elitemobs.guis.EmShop;
-import ru.arc.hooks.elitemobs.guis.ShopHolder;
-import ru.arc.util.GuiUtils;
+import java.util.Set;
+
 import com.magmaguy.elitemobs.economy.EconomyHandler;
 import com.magmaguy.elitemobs.items.ScalableItemConstructor;
 import com.magmaguy.elitemobs.items.customitems.CustomItem;
@@ -17,15 +13,19 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.Listener;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
-
-import java.util.Set;
+import ru.arc.ARC;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
+import ru.arc.hooks.elitemobs.guis.EmShop;
+import ru.arc.hooks.elitemobs.guis.ShopHolder;
+import ru.arc.util.GuiUtils;
 
 public class EMHook implements Listener {
 
 
     private static EMWormholes emWormholes;
     private static ShopHolder shopHolder;
-    Config config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "elitemobs.yml");
+    Config config = ConfigManager.of(ARC.getInstance().getDataFolder().toPath(), "elitemobs.yml");
     BukkitTask resetShopTask;
     public long lastShopReset = System.currentTimeMillis();
 
@@ -51,7 +51,8 @@ public class EMHook implements Listener {
     private void startTasks() {
         cancelTasks();
         long resetTime = config.integer("shop.reset-ticks", 20 * 60 * 5);
-        resetShopTask = Bukkit.getScheduler().runTaskTimer(ARC.plugin, () -> shopHolder.deleteAll(), resetTime, resetTime);
+        resetShopTask = Bukkit.getScheduler().runTaskTimer(ARC.getInstance(), () -> shopHolder.deleteAll(), resetTime
+                , resetTime);
     }
 
 

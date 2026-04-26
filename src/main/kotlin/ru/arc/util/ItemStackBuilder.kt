@@ -67,11 +67,9 @@ class ItemStackBuilder private constructor() {
         }
         this.material = stack.type
         this.count = stack.amount
-        if (stack.itemMeta?.hasCustomModelData() == true) {
-            this.modelData = stack.itemMeta!!.customModelData
-        }
+        this.modelData = stack.itemMeta?.customModelDataOrNull ?: 0
         this.display = SerializedString(
-            MiniMessage.miniMessage().serialize(stack.displayName() ?: Component.empty()),
+            MiniMessage.miniMessage().serialize(stack.displayName()),
             deserializer
         )
         if (stack.itemMeta?.lore() != null) {
@@ -151,14 +149,13 @@ class ItemStackBuilder private constructor() {
 
     fun appendComponentLore(lore: List<Component>?): ItemStackBuilder {
         if (this.componentLore == null) this.componentLore = mutableListOf()
-        if (lore == null || lore.isEmpty()) return this
+        if (lore.isNullOrEmpty()) return this
         this.componentLore!!.addAll(lore)
         return this
     }
 
     fun appendLore(lore: List<String>, deserializer: Deserializer): ItemStackBuilder {
-        if (this.lore == null) this.lore = mutableListOf()
-        this.lore!!.addAll(
+        this.lore.addAll(
             lore.stream()
                 .map { s -> SerializedString(s, deserializer) }
                 .toList()
@@ -187,7 +184,6 @@ class ItemStackBuilder private constructor() {
     }
 
     fun enchant(enchantment: Enchantment, level: Int, ignoreLevelRestriction: Boolean): ItemStackBuilder {
-        if (enchantment == null) return this
         enchants.add(EnchantData(enchantment, level, ignoreLevelRestriction))
         return this
     }
@@ -199,6 +195,7 @@ class ItemStackBuilder private constructor() {
             HeadUtil.getSkull(skullUuid!!)
         }
         val meta: ItemMeta = stack.itemMeta ?: return stack
+        @Suppress("DEPRECATION")
         if (modelData != 0) meta.setCustomModelData(modelData)
 
         if (componentDisplay != null) {
@@ -224,7 +221,6 @@ class ItemStackBuilder private constructor() {
         }
 
         enchants.stream()
-            .filter { ed -> ed.enchantment != null }
             .forEach { enchantData ->
                 meta.addEnchant(
                     enchantData.enchantment,

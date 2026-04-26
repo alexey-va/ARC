@@ -1,0 +1,77 @@
+# =============================================================================
+# auto-build.yml — автопостройка по книге (BuildingManager): лимиты, частицы, NPC, материалы.
+# construction — скорость постройки, звуки, списки пропускаемых блоков, скины NPC.
+# =============================================================================
+
+# Тик интервала очистки «зависших» построек
+cleanup-interval: 20
+build-book:
+  display-name: '     <gray>🛠 <gold>Книга строительства <gray>🛠'
+  lore:
+    - ' '
+    - '      <gray>Эта книга позволяет вам'
+    - '    <gray>возвести готовое строение    '
+    - ' '
+    - <long_name>
+    - ' '
+    - '        <gray>Нажмите <green>ПКМ <gray>по земле'
+  received: <green>Вы получили книгу для <building>
+disable-building: true
+cant-build-message: <dark_gray>🛠 <red>Вы не можете строить здесь.
+disabled-message: <gray>🛠 <red>Постройка здесь отключена!
+display:
+  border-particle-interval: 5
+  border-particle: FLAME
+  border-particle-count: 1
+  border-particle-corner-count: 3
+  border-particle-offset: 0.0
+  border-particle-corner-offset: 0.07
+  center-particle: NAUTILUS
+  center-particle-count: 1
+  max-blocks: 20000
+  max-per-10-min: 10000000
+start-message: <gray>🛠 <green>Нажмите на тот же блок, чтобы подтвердить постройку
+confirm-time: 180
+construction:
+  npc-skins:
+    '&6Агадиль': https://minesk.in/e8eae58c095949de87ff9c9b5b7c17f2
+    '&6Николаич': https://minesk.in/6666ba384aa3486b88c21fa7541fb856
+    '&6Иваныч': https://minesk.in/3ff30e8f08ae48c2abece46bbf0c09d6
+    '&6Петрович': https://minesk.in/faca74c68a104b6987bc8c11ffebb092
+  not-drop-materials:
+    - GRASS_BLOCK
+    - SHORT_GRASS
+    - TALL_GRASS
+    - DIRT
+  skip-materials:
+    - TRAPPED_CHEST
+    - BARREL
+    - PLAYER_HEAD
+    - CHEST
+    - PLAYER_WALL_HEAD
+  cycle-duration-ticks: 10
+  blocks-per-tick: 3
+  play-sounds: true
+  show-particles: false
+confirm-message: <gray>🛠 <green>Подтвердите постройку, нажав ПКМ на NPC
+confirm-gui:
+  title: <dark_gray>Подтверждение постройки
+  confirm-material: PAPER
+  cancel-material: RED_STAINED_GLASS_PANE
+  confirm: <green>Подтвердить постройку
+  confirm-model-data: 0
+  cancel: <red>Отменить постройку
+  cancel-model-data: 0
+start-build-message: <gray>🛠 <green>Постройка начата
+already-building-message: <gray>🛠 <red>Вы уже строите одно здание!
+building-gui:
+  confirm-material: PAPER
+  cancel-material: RED_STAINED_GLASS_PANE
+  cancel-name: <red>Отменить постройку
+  cancel-model-data: 0
+  fast-finish-material: BLAZE_POWDER
+inactivity-cancel-message: <gray>🛠 Постройка отменена из-за неактивности.
+messages:
+  display-limit: <red>Слишком много блоков в строении. Показывается лишь <amount>/<max>
+  display-limit-2: <gray>🛠 <red>Превышен лимит показа блоков. Строение не будет показано
+cancel-build-message: <gray>🛠 <red>Постройка отменена

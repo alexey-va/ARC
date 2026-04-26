@@ -1,4 +1,3 @@
-@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 
 package ru.arc.network
 
@@ -8,7 +7,6 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 
 /**
@@ -33,7 +31,7 @@ class RedisManagerBehaviorTest {
     fun teardown() {
         try {
             redisManager.close()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Ignore
         }
     }
@@ -75,8 +73,6 @@ class RedisManagerBehaviorTest {
         )
 
         assertNotNull(future)
-        // Future is returned (may fail if Redis not available, but that's OK for unit test)
-        assertTrue(future is CompletableFuture<*>)
     }
 
     @Test

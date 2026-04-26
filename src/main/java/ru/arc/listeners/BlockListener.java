@@ -30,14 +30,15 @@ import ru.arc.ARC;
 import ru.arc.autobuild.BuildingManager;
 import ru.arc.autobuild.ConstructionSite;
 import ru.arc.autobuild.ConstructionState;
-import ru.arc.bschests.PersonalLootManager;
+import ru.arc.bschests.PersonalLootModule;
 import ru.arc.common.locationpools.LocationPoolManager;
-import ru.arc.common.treasure.TreasurePool;
 import ru.arc.configs.Config;
 import ru.arc.configs.ConfigManager;
 import ru.arc.farm.FarmManager;
 import ru.arc.leafdecay.LeafDecayManager;
-import ru.arc.treasurechests.TreasureHunt;
+import ru.arc.treasure.core.TreasurePool;
+import ru.arc.treasure.core.Treasures;
+import ru.arc.treasurechests.ActiveHunt;
 import ru.arc.treasurechests.TreasureHuntManager;
 import ru.arc.util.TextUtil;
 
@@ -53,17 +54,8 @@ public class BlockListener implements Listener {
         processPlaceBees(event);
     }
 
-    @EventHandler(priority = EventPriority.LOW)
-    public void onBlockBreakLow(BlockBreakEvent event) {
-        processFarmBreak(event);
-        PersonalLootManager.processChestBreak(event);
-    }
-
-    @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
-    public void onBlockBreakHigh(BlockBreakEvent event) {
-        CustomBlockData data = new CustomBlockData(event.getBlock(), ARC.plugin);
-        data.clear();
-    }
+    private static final NamespacedKey BEE_KEY = new NamespacedKey(ARC.getInstance(), "bee");
+    private static final Config beeConfig = ConfigManager.of(ARC.getInstance().getDataFolder().toPath(), "misc.yml");
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void onBlockInteract(PlayerInteractEvent event) {
@@ -73,15 +65,24 @@ public class BlockListener implements Listener {
         processTreasureItemUse(event);
     }
 
+    @EventHandler(priority = EventPriority.LOW)
+    public void onBlockBreakLow(BlockBreakEvent event) {
+        processFarmBreak(event);
+        PersonalLootModule.processChestBreak(event);
+    }
+
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
+    public void onBlockBreakHigh(BlockBreakEvent event) {
+        CustomBlockData data = new CustomBlockData(event.getBlock(), ARC.getInstance());
+        data.clear();
+    }
 
     @EventHandler(priority = EventPriority.LOW)
     public void onChestClick(InventoryOpenEvent event) {
         //if (HookRegistry.bsHook == null) return;
         //info("Chest open event");
-        PersonalLootManager.processChestOpen(event);
+        PersonalLootModule.processChestOpen(event);
     }
-
-    private static final NamespacedKey BEE_KEY = new NamespacedKey(ARC.plugin, "bee");
 
     private void processTreasureItemUse(PlayerInteractEvent event) {
         ItemStack item = event.getItem();
@@ -94,7 +95,7 @@ public class BlockListener implements Listener {
             //info("NBT data: {}", data);
             if (data.hasTag("arc:treasure_key")) {
                 String treasureKey = data.getString("arc:treasure_key");
-                TreasurePool pool = TreasurePool.getTreasurePool(treasureKey);
+                TreasurePool pool = Treasures.INSTANCE.getPool(treasureKey);
                 if (pool == null) {
                     error("Treasure pool {} not found", treasureKey);
                     return;
@@ -106,7 +107,10 @@ public class BlockListener implements Listener {
                     int heldItemSlot = event.getPlayer().getInventory().getHeldItemSlot();
                     event.getPlayer().getInventory().setItem(heldItemSlot, null);
                 }
-                pool.random().give(event.getPlayer());
+                var treasure = pool.random();
+                if (treasure != null) {
+                    Treasures.INSTANCE.getService().give(treasure, event.getPlayer());
+                }
                 event.getPlayer().playSound(event.getPlayer().getLocation(), "ui.loom.take_result", 1, 1);
                 event.setCancelled(true);
             }
@@ -116,18 +120,18 @@ public class BlockListener implements Listener {
     private void processPlaceBees(BlockPlaceEvent event) {
         Block block = event.getBlockPlaced();
         if (block.getType() != Material.BEEHIVE && block.getType() != Material.BEEHIVE) return;
-        CustomBlockData cbd = new CustomBlockData(block, ARC.plugin);
+        CustomBlockData cbd = new CustomBlockData(block, ARC.getInstance());
         cbd.set(BEE_KEY, PersistentDataType.BOOLEAN, true);
     }
-
-    private static final Config beeConfig = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "misc.yml");
 
     private void processBees(PlayerInteractEvent event) {
         if (!event.hasBlock()) return;
         Block block = event.getClickedBlock();
         if (block == null) return;
         if (block.getType() != Material.BEE_NEST && block.getType() != Material.BEEHIVE) return;
-        if (CustomBlockData.hasCustomBlockData(block, ARC.plugin)) return;
+        if (CustomBlockData.hasCustomBlockData(block, ARC.getInstance())) {
+            return;
+        }
         if (!beeConfig.bool("bees.enabled", false)) return;
         World world = block.getWorld();
         Set<String> worlds = new HashSet<>(beeConfig.stringList("bees.worlds"));
@@ -138,7 +142,7 @@ public class BlockListener implements Listener {
                 block.getWorld().spawn(beehive.getLocation().add(0.5, 1, 0.5), Bee.class, beehive::addEntity);
             }
             beehive.update();
-            CustomBlockData cbd = new CustomBlockData(block, ARC.plugin);
+            CustomBlockData cbd = new CustomBlockData(block, ARC.getInstance());
             cbd.set(BEE_KEY, PersistentDataType.BOOLEAN, true);
         }
     }
@@ -149,6 +153,7 @@ public class BlockListener implements Listener {
         LeafDecayManager.markAsPlayerPlaced(event.getBlock());
     }
 
+    @SuppressWarnings("deprecation")
     private void processBuildingEvent(PlayerInteractEvent event) {
         if (!event.hasItem()) return;
         ItemStack hand = event.getItem();
@@ -159,9 +164,9 @@ public class BlockListener implements Listener {
         }
 
         if (!event.hasBlock() || event.getAction() != Action.RIGHT_CLICK_BLOCK) {
-            ConstructionSite site = BuildingManager.INSTANCE.getPendingConstruction(event.getPlayer().getUniqueId());
+            ConstructionSite site = BuildingManager.getPendingConstruction(event.getPlayer().getUniqueId());
             if (site != null && site.getState() == ConstructionState.DisplayingOutline.INSTANCE) {
-                BuildingManager.INSTANCE.cancelConstruction(site);
+                BuildingManager.cancelConstruction(site);
                 return;
             }
         }
@@ -178,7 +183,7 @@ public class BlockListener implements Listener {
         if (nbtItem.hasKey("arc:y_offset")) yOff = nbtItem.getString("arc:y_offset");
 
         event.setCancelled(true);
-        BuildingManager.INSTANCE.processPlayerClick(event.getPlayer(), center, buildingId, rotation, yOff);
+        BuildingManager.processPlayerClick(event.getPlayer(), center, buildingId, rotation, yOff);
     }
 
 
@@ -202,7 +207,7 @@ public class BlockListener implements Listener {
         blocks.add(block.getRelative(0, 1, 0));
         blocks.add(block.getRelative(0, -1, 0));
 
-        TreasureHunt treasureHunt = null;
+        ActiveHunt treasureHunt = null;
         for (Block b : blocks) {
             treasureHunt = TreasureHuntManager.getByBlock(b);
             if (treasureHunt != null) {

@@ -40,12 +40,11 @@ class Mine(
     private val adminPermission: String,
     private val plugin: Plugin,
     private val scheduler: TaskScheduler,
-    private val messages: FarmMessages = FarmMessages(),
+    private val messages: FarmMessages,
     private val limitTracker: BlockLimitTracker = BlockLimitTracker(config.maxBlocksPerDay, 16),
     private val orePicker: WeightedRandom<Material> = createOrePicker(config.oreWeights),
-    timeProvider: () -> Long = { System.currentTimeMillis() }
+    timeProvider: () -> Long = { System.currentTimeMillis() },
 ) : FarmZone {
-
     companion object {
         private fun createOrePicker(oreWeights: Map<Material, Int>): WeightedRandom<Material> {
             val picker = WeightedRandom<Material>()
@@ -70,13 +69,15 @@ class Mine(
     fun start() {
         computeBlockCache(replaceTemp = true)
 
-        regenerateTask = scheduler.runTimer(20L, config.replaceTime) {
-            processExpiredBlocks()
-        }
+        regenerateTask =
+            scheduler.runTimer(20L, config.replaceTime) {
+                processExpiredBlocks()
+            }
 
-        respawnTask = scheduler.runTimer(25L, config.replaceTime) {
-            respawnOres()
-        }
+        respawnTask =
+            scheduler.runTimer(25L, config.replaceTime) {
+                respawnOres()
+            }
     }
 
     /**
@@ -134,7 +135,10 @@ class Mine(
         return BreakResult.Cancelled
     }
 
-    private fun mineBlock(player: Player, block: Block) {
+    private fun mineBlock(
+        player: Player,
+        block: Block,
+    ) {
         // Give drops
         block.drops.forEach { player.inventory.addItem(it) }
 
@@ -143,7 +147,7 @@ class Mine(
         player.giveExp(exp)
 
         // Replace with temp block
-        block.setType(config.tempBlock)
+        block.type = config.tempBlock
         brokenBlocks++
 
         // Mark as temp
@@ -162,7 +166,7 @@ class Mine(
         for (block in expired) {
             val blockData = CustomBlockData(block, plugin)
             blockData.remove(tempBlockKey)
-            block.setType(config.baseBlock)
+            block.type = config.baseBlock
         }
     }
 
@@ -172,9 +176,10 @@ class Mine(
         val cache = blockCache ?: return
         if (cache.isEmpty()) return
 
-        val indicesToCheck = (0 until config.replaceBatch)
-            .map { ThreadLocalRandom.current().nextInt(cache.size) }
-            .toSet()
+        val indicesToCheck =
+            (0 until config.replaceBatch)
+                .map { ThreadLocalRandom.current().nextInt(cache.size) }
+                .toSet()
 
         for (idx in indicesToCheck) {
             val block = cache[idx]
@@ -185,14 +190,15 @@ class Mine(
             // Don't spawn falling blocks over air
             val below = block.getRelative(0, -1, 0)
             if (below.type == Material.AIR) {
-                material = when (material) {
-                    Material.SAND -> Material.SANDSTONE
-                    Material.GRAVEL -> Material.STONE
-                    else -> material
-                }
+                material =
+                    when (material) {
+                        Material.SAND -> Material.SANDSTONE
+                        Material.GRAVEL -> Material.STONE
+                        else -> material
+                    }
             }
 
-            block.setType(material)
+            block.type = material
             brokenBlocks--
 
             if (brokenBlocks <= 0) return
@@ -205,7 +211,7 @@ class Mine(
         for (block in region.getBlocks()) {
             // Replace temp blocks on startup
             if (replaceTemp && block.type == config.tempBlock) {
-                block.setType(config.baseBlock)
+                block.type = config.baseBlock
                 CustomBlockData(block, plugin).remove(tempBlockKey)
             }
 
@@ -218,16 +224,18 @@ class Mine(
         blockCache = blocks
     }
 
-    private fun isAdjacentToAir(block: Block): Boolean {
-        return block.getRelative(1, 0, 0).type == Material.AIR ||
+    private fun isAdjacentToAir(block: Block): Boolean =
+        block.getRelative(1, 0, 0).type == Material.AIR ||
             block.getRelative(-1, 0, 0).type == Material.AIR ||
             block.getRelative(0, 1, 0).type == Material.AIR ||
             block.getRelative(0, -1, 0).type == Material.AIR ||
             block.getRelative(0, 0, 1).type == Material.AIR ||
             block.getRelative(0, 0, -1).type == Material.AIR
-    }
 
-    private fun spawnParticles(player: Player, block: Block) {
+    private fun spawnParticles(
+        player: Player,
+        block: Block,
+    ) {
         val particle = RandomUtils.random(arrayOf(Particle.FLAME, Particle.END_ROD, Particle.CRIT))
         ParticleManager.queue(
             ParticleBuilder(particle)
@@ -235,7 +243,7 @@ class Mine(
                 .location(block.location.toCenterLocation())
                 .count(5)
                 .extra(0.06)
-                .offset(0.25, 0.25, 0.25)
+                .offset(0.25, 0.25, 0.25),
         )
     }
 
@@ -247,13 +255,15 @@ class Mine(
 
     private fun sendProgressMessage(player: Player) {
         val count = limitTracker.getBlockCount(player.uniqueId)
-        val text = mm(
-            messages.progress,
-            TagResolver.builder()
-                .tag("count", Tag.inserting(mm(count.toString())))
-                .tag("max", Tag.inserting(mm(config.maxBlocksPerDay.toString())))
-                .build()
-        )
+        val text =
+            mm(
+                messages.progress,
+                TagResolver
+                    .builder()
+                    .tag("count", Tag.inserting(mm(count.toString())))
+                    .tag("max", Tag.inserting(mm(config.maxBlocksPerDay.toString())))
+                    .build(),
+            )
         player.sendActionBar(text)
     }
 
@@ -265,4 +275,3 @@ class Mine(
         stop()
     }
 }
-

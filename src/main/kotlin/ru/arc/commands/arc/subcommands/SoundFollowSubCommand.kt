@@ -77,5 +77,3 @@ object SoundFollowSubCommand : SubCommand {
         }
     }
 }
-
-

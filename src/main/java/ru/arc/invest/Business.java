@@ -1,20 +1,20 @@
 package ru.arc.invest;
 
-import ru.arc.ARC;
-import ru.arc.hooks.HookRegistry;
-import ru.arc.invest.goods.Inventory;
-import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.configuration.serialization.ConfigurationSerializable;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.scheduler.BukkitRunnable;
-import org.jetbrains.annotations.NotNull;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.configuration.serialization.ConfigurationSerializable;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.scheduler.BukkitRunnable;
+import org.jetbrains.annotations.NotNull;
+import ru.arc.ARC;
+import ru.arc.hooks.HookRegistry;
+import ru.arc.invest.goods.Inventory;
 
 public class Business implements ConfigurationSerializable {
 
@@ -38,9 +38,12 @@ public class Business implements ConfigurationSerializable {
     }
 
     public void load(){
-        invFile = new File(ARC.plugin.getDataFolder()+File.separator+"investing"+File.separator+"inventories"+File.separator+id+".yml");
-        file = new File(ARC.plugin.getDataFolder()+File.separator+"investing"+File.separator+"businesses"+File.separator+id+".yml");
-        coreFile = new File(ARC.plugin.getDataFolder()+File.separator+"investing"+File.separator+"cores"+File.separator+id+".yml");
+        invFile = new File(ARC.getInstance().getDataFolder() + File.separator + "investing" + File.separator +
+                "inventories" + File.separator + id + ".yml");
+        file = new File(ARC.getInstance().getDataFolder() + File.separator + "investing" + File.separator +
+                "businesses" + File.separator + id + ".yml");
+        coreFile = new File(ARC.getInstance().getDataFolder() + File.separator + "investing" + File.separator +
+                "cores" + File.separator + id + ".yml");
         loadInventory();
         loadProduction();
         loadRegion();
@@ -158,7 +161,7 @@ public class Business implements ConfigurationSerializable {
 
                 inventory.setInUse(false);
             }
-        }.runTaskAsynchronously(ARC.plugin);
+        }.runTaskAsynchronously(ARC.getInstance());
     }
 
     public void addItem(ItemStack stack){

@@ -1,14 +1,14 @@
-@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 
 package ru.arc.audit
 
-import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import ru.arc.TestBase
-import java.util.concurrent.ConcurrentLinkedDeque
 
 /**
  * Тесты для модуля аудита экономики.
@@ -276,7 +276,7 @@ class AuditModuleTest : TestBase() {
         @Test
         @DisplayName("operation() устанавливает dirty flag")
         fun testOperationSetsDirty() {
-            auditData.setDirty(false)
+            auditData.isDirty = false
             auditData.operation(100.0, Type.SHOP, "Тест")
 
             assertTrue(auditData.isDirty)
@@ -312,28 +312,28 @@ class AuditModuleTest : TestBase() {
         }
 
         @Test
-        @DisplayName("isRemove() возвращает false для новых данных")
+        @DisplayName("shouldRemove() возвращает false для новых данных")
         fun testIsRemoveForNewData() {
-            assertFalse(auditData.isRemove)
+            assertFalse(auditData.shouldRemove())
         }
 
         @Test
-        @DisplayName("isRemove() возвращает false если есть транзакции")
+        @DisplayName("shouldRemove() возвращает false если есть транзакции")
         fun testIsRemoveWithTransactions() {
             // Устанавливаем старую дату создания
             auditData.created = System.currentTimeMillis() - 1000L * 60 * 60 * 24 * 31 // 31 день
             auditData.operation(100.0, Type.SHOP, "Тест")
 
-            assertFalse(auditData.isRemove)
+            assertFalse(auditData.shouldRemove())
         }
 
         @Test
-        @DisplayName("isRemove() возвращает true для старых пустых данных")
+        @DisplayName("shouldRemove() возвращает true для старых пустых данных")
         fun testIsRemoveForOldEmptyData() {
             // Устанавливаем старую дату создания (>30 дней)
             auditData.created = System.currentTimeMillis() - 1000L * 60 * 60 * 24 * 31
 
-            assertTrue(auditData.isRemove)
+            assertTrue(auditData.shouldRemove())
         }
 
         @Test

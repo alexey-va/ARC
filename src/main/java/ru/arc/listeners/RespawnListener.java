@@ -22,7 +22,7 @@ import static ru.arc.util.Logging.info;
 
 public class RespawnListener implements Listener {
 
-    private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "misc.yml");
+    private static final Config config = ConfigManager.of(ARC.getInstance().getDataPath(), "misc.yml");
 
     @EventHandler
     public void onRespawn(PlayerRespawnEvent event) {
@@ -63,7 +63,7 @@ public class RespawnListener implements Listener {
                                             info("Setting respawn location for player {} to {}", player.getName(), oldRespawn);
                                             player.setRespawnLocation(oldRespawn, true);
                                         }
-                                    }.runTaskLater(ARC.plugin, 3L);
+                                    }.runTaskLater(ARC.getInstance(), 3L);
                                 }
                             } catch (Exception ex) {
                                 error("Error setting respawn location for player {}", player.getName(), ex);

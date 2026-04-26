@@ -1,0 +1,184 @@
+# ===========================================
+# Jobs Boost Shop GUI Configuration
+# ===========================================
+# Configuration for the boost purchase GUI.
+# Players can buy temporary boosts for their jobs.
+# ===========================================
+
+# GUI Title (supports <job> placeholder)
+title: "<dark_gray>Магазин бустов"
+
+# Currency display names
+currency-names:
+  money: "Монеты"
+  points: "Очки работ"
+  exp: "Опыт"
+
+# Boost type display names
+type-names:
+  money: "💰 Деньги"
+  exp: "✨ Опыт"
+  points: "⭐ Очки"
+  all: "🌟 Все"
+
+# ===========================================
+# Navigation Buttons
+# ===========================================
+boostbuy-menu:
+  # Back button - returns to jobs list
+  back-display: "<gray>« Назад"
+  back-lore:
+    - ""
+    - "<dark_gray>Вернуться к списку профессий"
+  
+  # Type switcher button
+  type-display: "<gold>Тип буста: <yellow><type>"
+  type-lore:
+    - ""
+    - "<gray>Нажмите для смены типа"
+  
+  # Boost item default lore (used if boost has no custom lore)
+  boost-lore:
+    - ""
+    - "<gray>Бонус: <green>+<boost>"
+    - "<gray>Длительность: <white><time>"
+    - "<gray>Профессии: <white><job>"
+    - "<gray>Типы: <white><type>"
+    - ""
+    - "<gray>Цена: <gold><price> <currency>"
+    - "<gray>У вас: <white><player_currency> <currency>"
+    - ""
+    - "<yellow>Нажмите для покупки"
+  
+  # When player already has this boost
+  already-have-boost-display: "<red>У вас уже есть этот буст!"
+  already-have-boost-lore:
+    - ""
+    - "<red>Вы уже приобрели этот буст"
+    - "<gray>Дождитесь окончания действия"
+  
+  # When player doesn't have enough currency
+  not-enough-money: "<red>Недостаточно средств!"
+  not-enough-money-lore:
+    - ""
+    - "<red>Недостаточно <currency>!"
+    - "<gray>Нужно ещё: <white><currency_lack>"
+  
+  # When player doesn't have permission
+  no-permission-lore:
+    - ""
+    - "<red>Требуется разрешение:"
+    - "<gray><permission>"
+
+# ===========================================
+# Available Boosts
+# ===========================================
+# Structure: boosts.<type>.<boost-id>
+# 
+# Each boost has:
+#   display: Display name
+#   lore: Custom lore (optional, uses default if empty)
+#   price: Cost to purchase
+#   boost-amount: Boost multiplier (0.1 = +10%)
+#   seconds: Duration in seconds
+#   permission: Required permission (optional)
+#   material: Item material
+#   model-data: Custom model data
+#   currency: MONEY, POINTS, or EXP
+#   id: Unique identifier
+#   jobs: List of job names or ["all"]
+#   types: List of boost types [MONEY, EXP, POINTS] or ["ALL"]
+# ===========================================
+
+boosts:
+  # Money boosts
+  money:
+    small:
+      display: "<gold>Малый буст денег"
+      lore: [ ]
+      price: 5000
+      boost-amount: 0.1
+      seconds: 3600
+      permission: ""
+      material: GOLD_NUGGET
+      model-data: 0
+      currency: MONEY
+      id: "money_boost_small"
+      jobs: [ "all" ]
+      types: [ "MONEY" ]
+    
+    medium:
+      display: "<gold>Средний буст денег"
+      lore: [ ]
+      price: 15000
+      boost-amount: 0.25
+      seconds: 3600
+      permission: ""
+      material: GOLD_INGOT
+      model-data: 0
+      currency: MONEY
+      id: "money_boost_medium"
+      jobs: [ "all" ]
+      types: [ "MONEY" ]
+    
+    large:
+      display: "<gold>Большой буст денег"
+      lore: [ ]
+      price: 50000
+      boost-amount: 0.5
+      seconds: 3600
+      permission: "arc.boost.large"
+      material: GOLD_BLOCK
+      model-data: 0
+      currency: MONEY
+      id: "money_boost_large"
+      jobs: [ "all" ]
+      types: [ "MONEY" ]
+  
+  # Experience boosts
+  exp:
+    small:
+      display: "<aqua>Малый буст опыта"
+      lore: [ ]
+      price: 100
+      boost-amount: 0.1
+      seconds: 1800
+      permission: ""
+      material: EXPERIENCE_BOTTLE
+      model-data: 0
+      currency: POINTS
+      id: "exp_boost_small"
+      jobs: [ "all" ]
+      types: [ "EXP" ]
+    
+    medium:
+      display: "<aqua>Средний буст опыта"
+      lore: [ ]
+      price: 300
+      boost-amount: 0.25
+      seconds: 1800
+      permission: ""
+      material: EXPERIENCE_BOTTLE
+      model-data: 0
+      currency: POINTS
+      id: "exp_boost_medium"
+      jobs: [ "all" ]
+      types: [ "EXP" ]
+  
+  # Points boosts
+  points:
+    small:
+      display: "<light_purple>Малый буст очков"
+      lore: [ ]
+      price: 500
+      boost-amount: 0.1
+      seconds: 3600
+      permission: ""
+      material: NETHER_STAR
+      model-data: 0
+      currency: EXP
+      id: "points_boost_small"
+      jobs: [ "all" ]
+      types: [ "POINTS" ]
+
+

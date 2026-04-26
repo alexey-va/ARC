@@ -1,4 +1,3 @@
-@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 
 package ru.arc.util
 
@@ -182,7 +181,6 @@ class CooldownManagerTest {
             val provider = CooldownManager.asProvider()
 
             assertNotNull(provider)
-            assertTrue(provider is CooldownProvider)
         }
     }
 }

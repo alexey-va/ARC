@@ -1,11 +1,5 @@
 package ru.arc.stock.gui;
 
-import ru.arc.configs.StockConfig;
-import ru.arc.stock.Position;
-import ru.arc.stock.StockPlayer;
-import ru.arc.util.GuiUtils;
-import ru.arc.util.ItemStackBuilder;
-import ru.arc.util.TextUtil;
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
@@ -15,6 +9,12 @@ import com.github.stefvanschie.inventoryframework.pane.StaticPane;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
+import ru.arc.configs.StockConfig;
+import ru.arc.stock.Position;
+import ru.arc.stock.StockPlayer;
+import ru.arc.util.GuiUtils;
+import ru.arc.util.ItemStackBuilder;
+import ru.arc.util.TextUtil;
 
 import static ru.arc.util.TextUtil.formatAmount;
 import static ru.arc.util.TextUtil.mm;
@@ -101,15 +101,16 @@ public class PositionMenu extends ChestGui {
     }
 
     private GuiItem infoItem(TagResolver resolver) {
-        Position.AutoClosePrices autoClosePrices = position.marginCallAtPrice(stockPlayer.getBalance(), stockPlayer.isAutoTake());
+        Position.AutoClosePrices autoClosePrices = position.marginCallAtPrice(stockPlayer.getBalance(),
+                stockPlayer.getAutoTake());
         return new ItemStackBuilder(Material.BLUE_STAINED_GLASS_PANE)
                 .display(StockConfig.string("position-menu.info-button-display"))
                 .lore(StockConfig.stringList("position-menu.info-button-lore"))
                 .tagResolver(resolver)
-                .appendResolver("close_at_low", autoClosePrices.low() == -1 ? "<red>Нет" :
-                        formatAmount(autoClosePrices.low()))
-                .appendResolver("close_at_high", autoClosePrices.high() == -1 ? "<red>Нет" :
-                        formatAmount(autoClosePrices.high()))
+                .appendResolver("close_at_low", autoClosePrices.getLow() == -1 ? "<red>Нет" :
+                        formatAmount(autoClosePrices.getLow()))
+                .appendResolver("close_at_high", autoClosePrices.getHigh() == -1 ? "<red>Нет" :
+                        formatAmount(autoClosePrices.getHigh()))
                 .toGuiItemBuilder()
                 .clickEvent(click -> click.setCancelled(true)).build();
     }

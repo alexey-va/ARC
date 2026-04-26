@@ -20,7 +20,9 @@ public class ActionCanceller {
     }
 
     public <T extends Event> void registerCanceller(Class<T> clazz, Consumer<T> canceller) {
-        cancellers.put(clazz, (Consumer<Event>) canceller);
+        @SuppressWarnings("unchecked")
+        Consumer<Event> cast = (Consumer<Event>) canceller;
+        cancellers.put(clazz, cast);
     }
 
     public boolean checkAndCancel(UUID playerUuid, Event event) {

@@ -1,4 +1,3 @@
-@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 package ru.arc.util
 
 import net.kyori.adventure.text.Component
@@ -95,7 +94,7 @@ class ItemStackBuilderTest : TestBase() {
         val stack = builder.build()
 
         assertNotNull(stack, "Stack should not be null")
-        assertEquals(1000, stack.itemMeta?.customModelData, "Model data should match")
+        assertEquals(1000, stack.customModelDataOrZero, "Model data should match")
     }
 
     @Test
@@ -174,7 +173,7 @@ class ItemStackBuilderTest : TestBase() {
 
             assertNotNull(stack, "Stack should not be null")
             assertEquals(Material.PLAYER_HEAD, stack.type, "Should be player head")
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // HeadUtil might not be available in test environment
             assertTrue(true, "Skull building might require external dependencies")
         }

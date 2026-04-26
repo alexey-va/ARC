@@ -1,9 +1,10 @@
-@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 
 package ru.arc.network
 
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.testcontainers.containers.GenericContainer
@@ -45,7 +46,6 @@ import java.util.concurrent.atomic.AtomicReference
  */
 @Testcontainers
 class RedisManagerIntegrationTest {
-
     companion object {
         init {
             // Auto-detect Docker environment (Colima for macOS/Linux, Docker Desktop for Windows)
@@ -59,11 +59,12 @@ class RedisManagerIntegrationTest {
                 val colimaSocket = File(home, ".colima/docker.sock")
                 val colimaSocketAlt = File(home, ".colima/default/docker.sock")
 
-                val socket = when {
-                    colimaSocket.exists() -> colimaSocket
-                    colimaSocketAlt.exists() -> colimaSocketAlt
-                    else -> null
-                }
+                val socket =
+                    when {
+                        colimaSocket.exists() -> colimaSocket
+                        colimaSocketAlt.exists() -> colimaSocketAlt
+                        else -> null
+                    }
 
                 if (socket != null) {
                     val socketPath = socket.absolutePath
@@ -102,12 +103,13 @@ class RedisManagerIntegrationTest {
 
         @Container
         @JvmStatic
-        val redisContainer: GenericContainer<*> = GenericContainer(
-            DockerImageName.parse("redis:7-alpine")
-        ).apply {
-            withExposedPorts(6379)
-            withReuse(true) // Reuse container across test runs
-        }
+        val redisContainer: GenericContainer<*> =
+            GenericContainer(
+                DockerImageName.parse("redis:7-alpine"),
+            ).apply {
+                withExposedPorts(6379)
+                withReuse(true) // Reuse container across test runs
+            }
     }
 
     private lateinit var redisManager: RedisManager
@@ -121,8 +123,10 @@ class RedisManagerIntegrationTest {
 
         redisManager = RedisManager(host, port, null, null)
 
-        // Wait for connection to be ready
-        Thread.sleep(500)
+        // Wait longer for connection and any background initialization to complete
+        // The constructor calls connect() which calls init(), we need to ensure
+        // that init() completes (or returns early due to empty channels) before proceeding
+        Thread.sleep(1500)
     }
 
     @AfterEach
@@ -132,11 +136,12 @@ class RedisManagerIntegrationTest {
 
     @Test
     fun `saveMap and loadMap work correctly`() {
-        val map = mapOf(
-            "field1" to "value1",
-            "field2" to "value2",
-            "field3" to "value3"
-        )
+        val map =
+            mapOf(
+                "field1" to "value1",
+                "field2" to "value2",
+                "field3" to "value3",
+            )
 
         // saveMap is now async but doesn't return a future, so we wait a bit
         redisManager.saveMap("test:map", map)
@@ -149,11 +154,14 @@ class RedisManagerIntegrationTest {
 
     @Test
     fun `saveMapEntries saves and deletes correctly`() {
-        redisManager.saveMapEntries(
-            "test:entries",
-            "key1", "value1",
-            "key2", "value2"
-        ).get(2, TimeUnit.SECONDS)
+        redisManager
+            .saveMapEntries(
+                "test:entries",
+                "key1",
+                "value1",
+                "key2",
+                "value2",
+            ).get(2, TimeUnit.SECONDS)
 
         var loaded = redisManager.loadMap("test:entries").get(2, TimeUnit.SECONDS)
         assertEquals("value1", loaded["key1"])
@@ -172,25 +180,50 @@ class RedisManagerIntegrationTest {
         val received = AtomicReference<String>()
         val receivedOrigin = AtomicReference<String>()
         val latch = CountDownLatch(1)
+        CountDownLatch(1)
 
-        val listener = ChannelListener { channel, message, originServer ->
-            received.set(message)
-            receivedOrigin.set(originServer)
-            latch.countDown()
-        }
+        // Register a channel listener
+        val listener =
+            ChannelListener { channel, message, originServer ->
+                received.set(message)
+                receivedOrigin.set(originServer)
+                latch.countDown()
+            }
 
         redisManager.registerChannelUnique("test:pubsub", listener)
+
+        // Start subscription
         redisManager.init()
 
-        // Wait for subscription to start:
-        // - INIT_DELAY_MS (1000ms) delay in init()
-        // - Plus time for thread submission and subscribe() call
-        // - onSubscribe is called synchronously during subscribe()
-        Thread.sleep(1500)
+        // Wait for subscription to be fully active (onSubscribe callback has been called)
+        // Check every 100ms for up to 10 seconds
+        var waitTime = 0
+        val maxWait = 10000 // 10 seconds
+        println("Waiting for subscription to become active...")
+        while (!redisManager.isSubscriptionActive() && waitTime < maxWait) {
+            Thread.sleep(100)
+            waitTime += 100
+            if (waitTime % 1000 == 0) {
+                println("Still waiting... ${waitTime}ms elapsed")
+            }
+        }
+
+        if (!redisManager.isSubscriptionActive()) {
+            org.junit.jupiter.api.Assertions
+                .fail<Unit>("Subscription did not become active after ${waitTime}ms")
+        }
+
+        println("Subscription is active! Took ${waitTime}ms")
+
+        // Give a bit more time for subscription to be fully ready
+        Thread.sleep(500)
 
         // Publish message
+        println("Publishing message...")
         redisManager.publish("test:pubsub", "test message")
-        Thread.sleep(100) // Give publish time to complete
+
+        // Give time for publish to complete and message to propagate
+        Thread.sleep(500)
 
         // Wait for message to be received
         val receivedMessage = latch.await(5, TimeUnit.SECONDS)
@@ -202,12 +235,14 @@ class RedisManagerIntegrationTest {
 
     @Test
     fun `concurrent operations are safe`() {
-        val futures = (1..50).map { i ->
-            redisManager.saveMapEntries(
-                "test:concurrent",
-                "key$i", "value$i"
-            )
-        }
+        val futures =
+            (1..50).map { i ->
+                redisManager.saveMapEntries(
+                    "test:concurrent",
+                    "key$i",
+                    "value$i",
+                )
+            }
 
         CompletableFuture.allOf(*futures.toTypedArray()).get(5, TimeUnit.SECONDS)
 
@@ -215,4 +250,3 @@ class RedisManagerIntegrationTest {
         assertEquals(50, loaded.size)
     }
 }
-

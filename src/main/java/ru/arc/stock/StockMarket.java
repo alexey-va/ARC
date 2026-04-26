@@ -14,7 +14,7 @@ import ru.arc.ARC;
 import ru.arc.configs.Config;
 import ru.arc.configs.ConfigManager;
 import ru.arc.configs.StockConfig;
-import ru.arc.network.repos.RedisRepo;
+import ru.arc.repository.LegacyRedisRepo;
 
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.info;
@@ -26,9 +26,9 @@ public class StockMarket {
     private static StockClient client;
     //private static Map<String, Stock> stockMap = new ConcurrentHashMap<>();
 
-    private static RedisRepo<Stock> repo;
-    private static Map<String, ConfigStock> configStocks = new ConcurrentHashMap<>();
-    private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "stocks/stock.yml");
+    private static final Map<String, ConfigStock> configStocks = new ConcurrentHashMap<>();
+    private static final Config config = ConfigManager.of(ARC.getInstance().getDataPath(), "stocks/stock.yml");
+    private static LegacyRedisRepo<Stock> repo;
 
     public static void init() {
         if(!config.bool("enabled", false)) {
@@ -36,13 +36,13 @@ public class StockMarket {
             return;
         }
         if (repo == null) {
-            repo = RedisRepo.builder(Stock.class)
+            repo = LegacyRedisRepo.builder(Stock.class)
                     .loadAll(true)
                     .redisManager(ARC.redisManager)
                     .storageKey("arc.stocks")
                     .updateChannel("arc.stocks_update")
                     .id("stocks")
-                    .backupFolder(ARC.plugin.getDataFolder().toPath().resolve("backups/stocks"))
+                    .backupFolder(ARC.getInstance().getDataFolder().toPath().resolve("backups/stocks"))
                     .saveInterval(20L)
                     .build();
         }
@@ -64,7 +64,7 @@ public class StockMarket {
                 for (var entry : configStocks.entrySet()) {
                     try {
                         Stock current = repo.getNow(entry.getKey());
-                        long lastUpdated = current == null ? 0 : current.lastUpdated;
+                        long lastUpdated = current == null ? 0 : current.getLastUpdated();
                         if (System.currentTimeMillis() - lastUpdated > StockConfig.stockRefreshRate * 1000L) {
                             if (entry.getValue().type == Stock.Type.CRYPTO) {
                                 if (fetchedCrypto) continue;
@@ -93,21 +93,21 @@ public class StockMarket {
 
 
                         if (price < 0 || price > 1_000_000) {
-                            if (current.price < 0 || current.price > 1_000_000) {
+                            if (current.getPrice() < 0 || current.getPrice() > 1_000_000) {
                                 error("Price for " + symbol + " is invalid: " + price);
                                 continue;
                             }
-                            price = current.price;
+                            price = current.getPrice();
                         }
                         HistoryManager.add(symbol, price);
 
-                        current.price = price;
-                        current.lastUpdated = System.currentTimeMillis();
-                        if (current.type == Stock.Type.STOCK) {
-                            current.dividend = current.price * StockConfig.dividendPercentFromPrice;
-                            if (current.dividend > 10_000) {
-                                error("Dividend for " + symbol + " is invalid: " + current.dividend);
-                                current.dividend = 0;
+                        current.setPrice(price);
+                        current.setLastUpdated(System.currentTimeMillis());
+                        if (current.getType() == Stock.Type.STOCK) {
+                            current.setDividend(current.getPrice() * StockConfig.dividendPercentFromPrice);
+                            if (current.getDividend() > 10_000) {
+                                error("Dividend for " + symbol + " is invalid: " + current.getDividend());
+                                current.setDividend(0);
                             }
                         }
                         current.setDirty(true);
@@ -121,21 +121,21 @@ public class StockMarket {
 
                 }
             }
-        }.runTaskTimerAsynchronously(ARC.plugin, 20L, 10 * 20L);
+        }.runTaskTimerAsynchronously(ARC.getInstance(), 20L, 10 * 20L);
 
         dividendTask = new BukkitRunnable() {
             @Override
             public void run() {
                 if (!StockConfig.mainServer) return;
                 stocks().stream()
-                        .filter(stock -> stock.dividend > 0.000001)
-                        .filter(s -> System.currentTimeMillis() - s.lastTimeDividend >= 23 * 60 * 60 * 1000L)
-                        .peek(stock -> stock.lastTimeDividend = System.currentTimeMillis())
+                        .filter(stock -> stock.getDividend() > 0.000001)
+                        .filter(s -> System.currentTimeMillis() - s.getLastTimeDividend() >= 23 * 60 * 60 * 1000L)
+                        .peek(stock -> stock.setLastTimeDividend(System.currentTimeMillis()))
                         .peek(stock -> stock.setDirty(true))
                         .map(Stock::getSymbol)
                         .forEach(StockPlayerManager::giveDividend);
             }
-        }.runTaskTimer(ARC.plugin, 100L, 20L * 60);
+        }.runTaskTimer(ARC.getInstance(), 100L, 20L * 60);
     }
 
     public static void saveHistory() {
@@ -176,11 +176,11 @@ public class StockMarket {
 
             var current = repo.getNow(stock.getSymbol());
             if (current == null) return;
-            current.lore = stock.lore;
-            current.display = stock.display;
-            current.icon = stock.icon;
-            current.maxLeverage = stock.maxLeverage;
-            current.type = stock.type;
+            current.setLore(stock.getLore());
+            current.setDisplay(stock.getDisplay());
+            current.setIcon(stock.getIcon());
+            current.setMaxLeverage(stock.getMaxLeverage());
+            current.setType(stock.getType());
             current.setDirty(true);
         } catch (Exception e) {
             error("Error loading stock from map: {}", map, e);

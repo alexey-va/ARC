@@ -11,7 +11,7 @@ import org.bukkit.Chunk;
 import org.bukkit.block.Block;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import ru.arc.bschests.PersonalLootManager;
+import ru.arc.bschests.PersonalLootModule;
 
 import static com.magmaguy.betterstructures.config.generators.GeneratorConfigFields.StructureType.SURFACE;
 
@@ -23,7 +23,7 @@ public class BSListener implements Listener {
     @EventHandler
     public void onChestFill(ChestFillEvent event) {
         Block block = event.getContainer().getBlock();
-        PersonalLootManager.processChestGen(block);
+        PersonalLootModule.processChestGen(block);
     }
 
 

@@ -1,4 +1,3 @@
-@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 package ru.arc.configs
 
 import org.junit.jupiter.api.Assertions.assertNotNull

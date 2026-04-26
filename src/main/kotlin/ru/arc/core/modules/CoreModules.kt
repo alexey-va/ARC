@@ -4,10 +4,8 @@ import net.milkbowl.vault.economy.Economy
 import org.bukkit.plugin.RegisteredServiceProvider
 import ru.arc.ARC
 import ru.arc.audit.AuditManager
-import ru.arc.board.Board
-import ru.arc.bschests.PersonalLootManager
+import ru.arc.board.BoardManager
 import ru.arc.common.locationpools.LocationPoolManager
-import ru.arc.common.treasure.TreasurePool
 import ru.arc.configs.AuctionConfig
 import ru.arc.configs.BoardConfig
 import ru.arc.configs.Config
@@ -19,27 +17,28 @@ import ru.arc.eliteloot.EliteLootManager
 import ru.arc.farm.FarmManager
 import ru.arc.hooks.HookRegistry
 import ru.arc.leafdecay.LeafDecayManager
-import ru.arc.misc.JoinMessages
+import ru.arc.misc.JoinMessagesManager
 import ru.arc.mobspawn.MobSpawnManager
 import ru.arc.network.NetworkRegistry
 import ru.arc.network.RedisManager
-import ru.arc.network.repos.RedisRepo
 import ru.arc.stock.StockClient
 import ru.arc.stock.StockMarket
 import ru.arc.stock.StockPlayerManager
-import ru.arc.store.StoreManager
 import ru.arc.sync.CMISync
 import ru.arc.sync.EmSync
 import ru.arc.sync.SkillsSync
 import ru.arc.sync.SlimefunSync
 import ru.arc.sync.SyncManager
+import ru.arc.treasure.core.Treasures
 import ru.arc.treasurechests.TreasureHuntManager
+import ru.arc.treasurechests.TreasureHuntRegistry
 import ru.arc.util.CooldownManager
 import ru.arc.util.HeadTextureCache
 import ru.arc.util.Logging.info
 import ru.arc.util.ParticleManager
 import ru.arc.xserver.XActionManager
 import ru.arc.xserver.announcements.AnnounceManager
+import ru.arc.bschests.PersonalLootModule as PersonalLoot
 
 // ==================== Priority 10: Core Infrastructure ====================
 
@@ -51,14 +50,14 @@ object RedisModule : PluginModule {
     override val priority = 10
 
     override fun init() {
-        val config = ConfigManager.of(ARC.plugin.dataPath, "misc.yml")
+        val config = ConfigManager.of(ARC.instance.dataPath, "misc.yml")
         val ip = config.string("redis.ip", "localhost")
         val port = config.integer("redis.port", 3306)
         val username = config.string("redis.username", "default")
         val password = config.string("redis.password", "")
 
         if (ARC.redisManager != null) {
-            ARC.redisManager.connect(ip, port, username, password)
+            ARC.redisManager!!.connect(ip, port, username, password)
             info("Reconnected to Redis")
         } else {
             ARC.redisManager = RedisManager(ip, port, username, password)
@@ -69,7 +68,7 @@ object RedisModule : PluginModule {
     override fun reload() = init()
 
     override fun shutdown() {
-        RedisRepo.saveAll()
+        // Shutdown handled by individual modules
     }
 }
 
@@ -82,8 +81,8 @@ object NetworkModule : PluginModule {
 
     override fun init() {
         if (ARC.redisManager == null) return
-        ARC.networkRegistry = NetworkRegistry(ARC.redisManager)
-        ARC.networkRegistry.init()
+        ARC.networkRegistry = NetworkRegistry(ARC.redisManager!!)
+        ARC.networkRegistry!!.init()
     }
 
     override fun shutdown() {}
@@ -98,11 +97,11 @@ object HooksModule : PluginModule {
 
     override fun init() {
         ARC.hookRegistry = HookRegistry()
-        ARC.hookRegistry.setupHooks()
+        ARC.hookRegistry!!.setupHooks()
     }
 
     override fun shutdown() {
-        ARC.hookRegistry.cancelTasks()
+        ARC.hookRegistry!!.cancelTasks()
     }
 }
 
@@ -119,9 +118,11 @@ object EconomyModule : PluginModule {
     fun getEconomy(): Economy? = economy
 
     override fun init() {
-        ARC.plugin.server.pluginManager.getPlugin("Vault") ?: return
+        ARC.instance.server.pluginManager
+            .getPlugin("Vault") ?: return
         val rsp: RegisteredServiceProvider<Economy>? =
-            ARC.plugin.server.servicesManager.getRegistration(Economy::class.java)
+            ARC.instance.server.servicesManager
+                .getRegistration(Economy::class.java)
         economy = rsp?.provider
     }
 
@@ -139,12 +140,14 @@ object ConfigModule : PluginModule {
 
     override fun init() {
         ConfigManager.reloadAll()
-        ARC.serverName = ConfigManager
-            .of(ARC.plugin.dataPath, "misc.yml")
-            .string("redis.server-name", "default")
+        ARC.serverName =
+            ConfigManager
+                .of(ARC.instance.dataPath, "misc.yml")
+                .string("redis.server-name", "default")
     }
 
     override fun reload() = init()
+
     override fun shutdown() {}
 }
 
@@ -156,13 +159,13 @@ object LocationPoolModule : PluginModule {
     override val priority = 35
 
     override fun init() {
-        ARC.plugin.locationPoolConfig = LocationPoolConfig()
+        ARC.instance.locationPoolConfig = LocationPoolConfig()
         LocationPoolManager.init()
     }
 
     override fun shutdown() {
-        ARC.plugin.locationPoolConfig?.saveLocationPools(true)
-        ARC.plugin.locationPoolConfig?.cancelTasks()
+        ARC.instance.locationPoolConfig?.saveLocationPools(true)
+        ARC.instance.locationPoolConfig?.cancelTasks()
     }
 }
 
@@ -174,11 +177,13 @@ object BoardModule : PluginModule {
     override val priority = 40
 
     override fun init() {
-        ARC.plugin.boardConfig = BoardConfig()
-        Board.init()
+        ARC.instance.boardConfig = BoardConfig()
+        BoardManager.init()
     }
 
-    override fun shutdown() {}
+    override fun shutdown() {
+        BoardManager.shutdown()
+    }
 }
 
 // ==================== Priority 50-70: Core Features ====================
@@ -238,7 +243,9 @@ object AuditModule : PluginModule {
         AuditManager.init()
     }
 
-    override fun shutdown() {}
+    override fun shutdown() {
+        AuditManager.shutdown()
+    }
 }
 
 // ==================== Priority 70-90: Game Features ====================
@@ -314,11 +321,13 @@ object StoreModule : PluginModule {
     override val priority = 76
 
     override fun init() {
-        StoreManager.init()
+        ru.arc.store.StoreManager
+            .init()
     }
 
     override fun shutdown() {
-        StoreManager.saveAll()
+        ru.arc.store.StoreManager
+            .shutdown()
     }
 }
 
@@ -330,15 +339,18 @@ object TreasureModule : PluginModule {
     override val priority = 77
 
     override fun init() {
-        TreasurePool.loadAllTreasures()
-        TreasurePool.startSaveTask()
+        Treasures.init()
+        TreasureHuntRegistry.init()
+    }
+
+    override fun reload() {
+        Treasures.reload()
         TreasureHuntManager.loadTreasureHuntTypes()
     }
 
     override fun shutdown() {
         TreasureHuntManager.stopAll()
-        TreasurePool.cancelSaveTask()
-        TreasurePool.saveAllTreasurePools()
+        Treasures.shutdown()
     }
 }
 
@@ -385,16 +397,16 @@ object PersonalLootModule : PluginModule {
     override val priority = 80
 
     override fun init() {
-        PersonalLootManager.reload()
-        PersonalLootManager.init()
+        PersonalLoot.reload()
+        PersonalLoot.init()
     }
 
     override fun reload() {
-        PersonalLootManager.reload()
+        PersonalLoot.reload()
     }
 
     override fun shutdown() {
-        PersonalLootManager.shutdown()
+        PersonalLoot.shutdown()
     }
 }
 
@@ -420,10 +432,12 @@ object JoinMessagesModule : PluginModule {
     override val priority = 82
 
     override fun init() {
-        JoinMessages.init()
+        JoinMessagesManager.init()
     }
 
-    override fun shutdown() {}
+    override fun shutdown() {
+        JoinMessagesManager.shutdown()
+    }
 }
 
 // ==================== Priority 90: Building System ====================
@@ -436,11 +450,13 @@ object BuildingModule : PluginModule {
     override val priority = 90
 
     override fun init() {
-        ru.arc.autobuild.BuildingManager.init()
+        ru.arc.autobuild.BuildingManager
+            .init()
     }
 
     override fun shutdown() {
-        ru.arc.autobuild.BuildingManager.stopAll()
+        ru.arc.autobuild.BuildingManager
+            .stopAll()
     }
 }
 
@@ -454,7 +470,7 @@ object SyncModule : PluginModule {
     override val priority = 100
 
     override fun init() {
-        val config: Config = ConfigManager.of(ARC.plugin.dataPath, "misc.yml")
+        val config: Config = ConfigManager.of(ARC.instance.dataPath, "misc.yml")
 
         if (HookRegistry.sfHook != null && config.bool("sync.slimefun", true)) {
             info("Starting slimefun sync")
@@ -483,4 +499,3 @@ object SyncModule : PluginModule {
         SyncManager.saveAll()
     }
 }
-

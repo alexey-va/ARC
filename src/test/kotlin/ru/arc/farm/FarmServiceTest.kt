@@ -1,4 +1,3 @@
-@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 
 package ru.arc.farm
 
@@ -21,7 +20,6 @@ import ru.arc.core.TestTaskScheduler
  * Tests for FarmService and FarmZone implementations.
  */
 class FarmServiceTest : TestBase() {
-
     private lateinit var playerMock: PlayerMock
     private lateinit var scheduler: TestTaskScheduler
     private lateinit var regionFactory: TestRegionFactory
@@ -31,22 +29,23 @@ class FarmServiceTest : TestBase() {
         super.setUpBase()
         playerMock = server.addPlayer("FarmTester")
         scheduler = TestTaskScheduler()
-        regionFactory = TestRegionFactory { worldName ->
-            server.worlds.find { it.name == worldName }
-        }
+        regionFactory =
+            TestRegionFactory { worldName ->
+                server.worlds.find { it.name == worldName }
+            }
     }
 
     @Nested
     @DisplayName("FarmService Lifecycle")
     inner class FarmServiceLifecycleTests {
-
         @Test
         fun `start initializes zones from config`() {
-            val config = FarmModuleConfig(
-                farms = listOf(createFarmConfig("farm1")),
-                lumbermills = listOf(createLumbermillConfig("lumber1")),
-                mines = listOf(createMineConfig("mine1", priority = 1))
-            )
+            val config =
+                TestFarmModuleConfig(
+                    farms = listOf(createFarmConfig("farm1")),
+                    lumbermills = listOf(createLumbermillConfig("lumber1")),
+                    mines = listOf(createMineConfig("mine1", priority = 1)),
+                )
             registerTestRegions()
 
             val service = createService(config)
@@ -60,9 +59,10 @@ class FarmServiceTest : TestBase() {
 
         @Test
         fun `stop clears all zones`() {
-            val config = FarmModuleConfig(
-                farms = listOf(createFarmConfig("farm1"))
-            )
+            val config =
+                TestFarmModuleConfig(
+                    farms = listOf(createFarmConfig("farm1")),
+                )
             registerTestRegions()
 
             val service = createService(config)
@@ -75,13 +75,15 @@ class FarmServiceTest : TestBase() {
 
         @Test
         fun `zones are sorted by priority`() {
-            val config = FarmModuleConfig(
-                mines = listOf(
-                    createMineConfig("low", priority = 1),
-                    createMineConfig("high", priority = 10),
-                    createMineConfig("medium", priority = 5)
+            val config =
+                TestFarmModuleConfig(
+                    mines =
+                        listOf(
+                            createMineConfig("low", priority = 1),
+                            createMineConfig("high", priority = 10),
+                            createMineConfig("medium", priority = 5),
+                        ),
                 )
-            )
             registerTestRegions()
 
             val service = createService(config)
@@ -95,9 +97,10 @@ class FarmServiceTest : TestBase() {
 
         @Test
         fun `resetAllLimits resets all zone limits`() {
-            val config = FarmModuleConfig(
-                farms = listOf(createFarmConfig("farm1"))
-            )
+            val config =
+                TestFarmModuleConfig(
+                    farms = listOf(createFarmConfig("farm1")),
+                )
             registerTestRegions()
 
             val service = createService(config)
@@ -109,12 +112,14 @@ class FarmServiceTest : TestBase() {
 
         @Test
         fun `multiple farms can be loaded`() {
-            val config = FarmModuleConfig(
-                farms = listOf(
-                    createFarmConfig("farm1"),
-                    createFarmConfig("farm2")
+            val config =
+                TestFarmModuleConfig(
+                    farms =
+                        listOf(
+                            createFarmConfig("farm1"),
+                            createFarmConfig("farm2"),
+                        ),
                 )
-            )
             registerTestRegions()
 
             val service = createService(config)
@@ -127,12 +132,14 @@ class FarmServiceTest : TestBase() {
 
         @Test
         fun `multiple lumbermills can be loaded`() {
-            val config = FarmModuleConfig(
-                lumbermills = listOf(
-                    createLumbermillConfig("lumber1"),
-                    createLumbermillConfig("lumber2")
+            val config =
+                TestFarmModuleConfig(
+                    lumbermills =
+                        listOf(
+                            createLumbermillConfig("lumber1"),
+                            createLumbermillConfig("lumber2"),
+                        ),
                 )
-            )
             registerTestRegions()
 
             val service = createService(config)
@@ -147,7 +154,6 @@ class FarmServiceTest : TestBase() {
     @Nested
     @DisplayName("CropFarm Zone")
     inner class CropFarmZoneTests {
-
         private lateinit var farm: CropFarm
         private lateinit var world: World
         private val limitTracker = BlockLimitTracker(100, 10)
@@ -157,32 +163,35 @@ class FarmServiceTest : TestBase() {
             world = server.addSimpleWorld("farm_world")
             regionFactory.registerRegion("farm_region", RegionBounds(0, 60, 0, 10, 70, 10))
 
-            val config = FarmZoneConfig(
-                id = "test_farm",
-                worldName = "farm_world",
-                regionName = "farm_region",
-                permission = "farm.use",
-                particles = false,
-                maxBlocksPerDay = 100,
-                priority = 0,
-                blocks = setOf(Material.WHEAT, Material.CARROTS, Material.POTATOES),
-                seeds = setOf(Material.WHEAT_SEEDS)
-            )
+            val config =
+                FarmZoneConfig(
+                    id = "test_farm",
+                    worldName = "farm_world",
+                    regionName = "farm_region",
+                    permission = "farm.use",
+                    particles = false,
+                    maxBlocksPerDay = 100,
+                    priority = 0,
+                    blocks = setOf(Material.WHEAT, Material.CARROTS, Material.POTATOES),
+                    seeds = setOf(Material.WHEAT_SEEDS),
+                )
 
-            farm = CropFarm(
-                id = "test_farm",
-                priority = 0,
-                config = config,
-                region = regionFactory.create("farm_world", "farm_region"),
-                adminPermission = "arc.farm-admin",
-                limitTracker = limitTracker
-            )
+            farm =
+                CropFarm(
+                    id = "test_farm",
+                    priority = 0,
+                    config = config,
+                    region = regionFactory.create("farm_world", "farm_region"),
+                    adminPermission = "arc.farm-admin",
+                    messages = TestFarmMessages(),
+                    limitTracker = limitTracker,
+                )
         }
 
         @Test
         fun `returns NotHandled for block outside region`() {
             val block = world.getBlockAt(100, 65, 100) // Outside region
-            block.setType(Material.WHEAT)
+            block.type = Material.WHEAT
 
             val event = BlockBreakEvent(block, playerMock)
             val result = farm.processBreak(event)
@@ -192,10 +201,10 @@ class FarmServiceTest : TestBase() {
 
         @Test
         fun `admin bypasses all checks`() {
-            playerMock.addAttachment(plugin!!, "arc.farm-admin", true)
+            playerMock.addAttachment(plugin, "arc.farm-admin", true)
 
             val block = world.getBlockAt(5, 65, 5) // Inside region
-            block.setType(Material.WHEAT)
+            block.type = Material.WHEAT
 
             val event = BlockBreakEvent(block, playerMock)
             val result = farm.processBreak(event)
@@ -207,7 +216,7 @@ class FarmServiceTest : TestBase() {
         @Test
         fun `denies access without permission`() {
             val block = world.getBlockAt(5, 65, 5)
-            block.setType(Material.WHEAT)
+            block.type = Material.WHEAT
 
             val event = BlockBreakEvent(block, playerMock)
             val result = farm.processBreak(event)
@@ -218,10 +227,10 @@ class FarmServiceTest : TestBase() {
 
         @Test
         fun `denies access for non-farm material`() {
-            playerMock.addAttachment(plugin!!, "farm.use", true)
+            playerMock.addAttachment(plugin, "farm.use", true)
 
             val block = world.getBlockAt(5, 65, 5)
-            block.setType(Material.STONE) // Not a farm block
+            block.type = Material.STONE // Not a farm block
 
             val event = BlockBreakEvent(block, playerMock)
             val result = farm.processBreak(event)
@@ -231,7 +240,7 @@ class FarmServiceTest : TestBase() {
 
         @Test
         fun `respects daily limit`() {
-            playerMock.addAttachment(plugin!!, "farm.use", true)
+            playerMock.addAttachment(plugin, "farm.use", true)
 
             // Fill up the limit
             repeat(100) {
@@ -239,7 +248,7 @@ class FarmServiceTest : TestBase() {
             }
 
             val block = world.getBlockAt(5, 65, 5)
-            block.setType(Material.WHEAT)
+            block.type = Material.WHEAT
 
             val event = BlockBreakEvent(block, playerMock)
             val result = farm.processBreak(event)
@@ -262,7 +271,6 @@ class FarmServiceTest : TestBase() {
     @Nested
     @DisplayName("Lumbermill Zone")
     inner class LumbermillZoneTests {
-
         private lateinit var lumbermill: Lumbermill
         private lateinit var world: World
 
@@ -271,31 +279,34 @@ class FarmServiceTest : TestBase() {
             world = server.addSimpleWorld("lumber_world")
             regionFactory.registerRegion("lumber_region", RegionBounds(0, 60, 0, 10, 80, 10))
 
-            val config = LumbermillConfig(
-                id = "test_lumber",
-                worldName = "lumber_world",
-                regionName = "lumber_region",
-                permission = "lumber.use",
-                particles = false,
-                priority = 0,
-                blocks = setOf(Material.OAK_LOG, Material.BIRCH_LOG, Material.SPRUCE_LOG)
-            )
+            val config =
+                LumbermillConfig(
+                    id = "test_lumber",
+                    worldName = "lumber_world",
+                    regionName = "lumber_region",
+                    permission = "lumber.use",
+                    particles = false,
+                    priority = 0,
+                    blocks = setOf(Material.OAK_LOG, Material.BIRCH_LOG, Material.SPRUCE_LOG),
+                )
 
-            lumbermill = Lumbermill(
-                id = "test_lumber",
-                priority = 0,
-                config = config,
-                region = regionFactory.create("lumber_world", "lumber_region"),
-                adminPermission = "arc.farm-admin"
-            )
+            lumbermill =
+                Lumbermill(
+                    id = "test_lumber",
+                    priority = 0,
+                    config = config,
+                    region = regionFactory.create("lumber_world", "lumber_region"),
+                    adminPermission = "arc.farm-admin",
+                    messages = TestFarmMessages(),
+                )
         }
 
         @Test
         fun `allows breaking logs with permission`() {
-            playerMock.addAttachment(plugin!!, "lumber.use", true)
+            playerMock.addAttachment(plugin, "lumber.use", true)
 
             val block = world.getBlockAt(5, 65, 5)
-            block.setType(Material.OAK_LOG)
+            block.type = Material.OAK_LOG
 
             val event = BlockBreakEvent(block, playerMock)
             val result = lumbermill.processBreak(event)
@@ -306,10 +317,10 @@ class FarmServiceTest : TestBase() {
 
         @Test
         fun `denies non-log materials`() {
-            playerMock.addAttachment(plugin!!, "lumber.use", true)
+            playerMock.addAttachment(plugin, "lumber.use", true)
 
             val block = world.getBlockAt(5, 65, 5)
-            block.setType(Material.STONE)
+            block.type = Material.STONE
 
             val event = BlockBreakEvent(block, playerMock)
             val result = lumbermill.processBreak(event)
@@ -327,14 +338,14 @@ class FarmServiceTest : TestBase() {
     @Nested
     @DisplayName("FarmService Event Routing")
     inner class FarmServiceEventRoutingTests {
-
         @Test
         fun `routes event to first matching zone`() {
             registerTestRegions()
-            val config = FarmModuleConfig(
-                farms = listOf(createFarmConfig("farm1")),
-                lumbermills = listOf(createLumbermillConfig("lumber1"))
-            )
+            val config =
+                TestFarmModuleConfig(
+                    farms = listOf(createFarmConfig("farm1")),
+                    lumbermills = listOf(createLumbermillConfig("lumber1")),
+                )
 
             val service = createService(config)
             service.start()
@@ -342,7 +353,7 @@ class FarmServiceTest : TestBase() {
             // Use the world created by createFarmConfig()
             val world = server.getWorld("farm_world")!!
             val block = world.getBlockAt(5, 65, 5)
-            block.setType(Material.WHEAT)
+            block.type = Material.WHEAT
 
             val event = BlockBreakEvent(block, playerMock)
             service.processEvent(event)
@@ -353,9 +364,10 @@ class FarmServiceTest : TestBase() {
 
         @Test
         fun `ignores events not in any zone`() {
-            val config = FarmModuleConfig(
-                farms = listOf(createFarmConfig("farm1"))
-            )
+            val config =
+                TestFarmModuleConfig(
+                    farms = listOf(createFarmConfig("farm1")),
+                )
             registerTestRegions()
 
             val service = createService(config)
@@ -376,7 +388,6 @@ class FarmServiceTest : TestBase() {
     @Nested
     @DisplayName("RegionBounds")
     inner class RegionBoundsExtendedTests {
-
         @Test
         fun `negative coordinates work correctly`() {
             val bounds = RegionBounds(-10, 0, -10, 10, 100, 10)
@@ -398,14 +409,13 @@ class FarmServiceTest : TestBase() {
 
     // Helper methods
 
-    private fun createService(config: FarmModuleConfig): FarmService {
-        return FarmService(
+    private fun createService(config: FarmModuleConfig): FarmService =
+        FarmService(
             config = config,
             regionFactory = regionFactory,
             scheduler = scheduler,
-            plugin = plugin!!
+            plugin = plugin,
         )
-    }
 
     private fun registerTestRegions() {
         regionFactory.registerRegion("farm_region", RegionBounds(0, 60, 0, 10, 70, 10))
@@ -427,7 +437,7 @@ class FarmServiceTest : TestBase() {
             maxBlocksPerDay = 256,
             priority = 0,
             blocks = setOf(Material.WHEAT, Material.CARROTS),
-            seeds = setOf(Material.WHEAT_SEEDS)
+            seeds = setOf(Material.WHEAT_SEEDS),
         )
     }
 
@@ -442,11 +452,14 @@ class FarmServiceTest : TestBase() {
             permission = "lumber.use",
             particles = false,
             priority = 0,
-            blocks = setOf(Material.OAK_LOG, Material.BIRCH_LOG)
+            blocks = setOf(Material.OAK_LOG, Material.BIRCH_LOG),
         )
     }
 
-    private fun createMineConfig(id: String, priority: Int = 1): MineConfig {
+    private fun createMineConfig(
+        id: String,
+        priority: Int = 1,
+    ): MineConfig {
         server.addSimpleWorld("mine_world")
         return MineConfig(
             id = id,
@@ -456,20 +469,20 @@ class FarmServiceTest : TestBase() {
             particles = false,
             maxBlocksPerDay = 256,
             priority = priority,
-            oreWeights = mapOf(
-                Material.COAL_ORE to 50,
-                Material.IRON_ORE to 30,
-                Material.GOLD_ORE to 15,
-                Material.DIAMOND_ORE to 5
-            ),
+            oreWeights =
+                mapOf(
+                    Material.COAL_ORE to 50,
+                    Material.IRON_ORE to 30,
+                    Material.GOLD_ORE to 15,
+                    Material.DIAMOND_ORE to 5,
+                ),
             tempBlock = Material.BEDROCK,
             baseBlock = Material.STONE,
             expireTimeMs = 60000L,
             replaceTime = 20L,
             replaceBatch = 10,
             expPerBase = 1,
-            expPerOre = 2
+            expPerOre = 2,
         )
     }
 }
-

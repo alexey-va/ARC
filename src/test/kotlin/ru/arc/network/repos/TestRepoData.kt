@@ -12,7 +12,7 @@ class TestRepoData(
 
     override fun id(): String = _id
 
-    override fun isRemove(): Boolean = _remove
+    override val isRemove: Boolean get() = _remove
 
     fun markForRemoval() {
         _remove = true
@@ -50,5 +50,3 @@ class TestRepoData(
 
     override fun toString(): String = "TestRepoData(id=$_id, value=$value, counter=$counter, remove=$_remove)"
 }
-
-

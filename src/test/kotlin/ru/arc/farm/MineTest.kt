@@ -1,4 +1,3 @@
-@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 
 package ru.arc.farm
 
@@ -21,7 +20,6 @@ import ru.arc.core.TestTaskScheduler
  * Tests for Mine zone functionality.
  */
 class MineTest : TestBase() {
-
     private lateinit var playerMock: PlayerMock
     private lateinit var scheduler: TestTaskScheduler
     private lateinit var regionFactory: TestRegionFactory
@@ -45,9 +43,10 @@ class MineTest : TestBase() {
         scheduler = TestTaskScheduler()
         currentTime = 0L
 
-        regionFactory = TestRegionFactory { worldName ->
-            server.worlds.find { it.name == worldName }
-        }
+        regionFactory =
+            TestRegionFactory { worldName ->
+                server.worlds.find { it.name == worldName }
+            }
 
         world = server.addSimpleWorld("mine_world")
         // Use Y >= 64 to avoid MockBukkit min height issues
@@ -55,53 +54,56 @@ class MineTest : TestBase() {
 
         limitTracker = BlockLimitTracker(100, 16)
 
-        val config = MineConfig(
-            id = "test_mine",
-            worldName = "mine_world",
-            regionName = "mine_region",
-            permission = "mine.use",
-            particles = false,
-            maxBlocksPerDay = 100,
-            priority = 1,
-            oreWeights = mapOf(
-                Material.COAL_ORE to 50,
-                Material.IRON_ORE to 30,
-                Material.GOLD_ORE to 15,
-                Material.DIAMOND_ORE to 5
-            ),
-            tempBlock = Material.BEDROCK,
-            baseBlock = Material.STONE,
-            expireTimeMs = 60000L,
-            replaceTime = 20L,
-            replaceBatch = 10,
-            expPerBase = 1,
-            expPerOre = 2
-        )
+        val config =
+            MineConfig(
+                id = "test_mine",
+                worldName = "mine_world",
+                regionName = "mine_region",
+                permission = "mine.use",
+                particles = false,
+                maxBlocksPerDay = 100,
+                priority = 1,
+                oreWeights =
+                    mapOf(
+                        Material.COAL_ORE to 50,
+                        Material.IRON_ORE to 30,
+                        Material.GOLD_ORE to 15,
+                        Material.DIAMOND_ORE to 5,
+                    ),
+                tempBlock = Material.BEDROCK,
+                baseBlock = Material.STONE,
+                expireTimeMs = 60000L,
+                replaceTime = 20L,
+                replaceBatch = 10,
+                expPerBase = 1,
+                expPerOre = 2,
+            )
 
         val orePicker = createOrePicker(config.oreWeights)
 
-        mine = Mine(
-            id = "test_mine",
-            priority = 1,
-            config = config,
-            region = regionFactory.create("mine_world", "mine_region"),
-            adminPermission = "arc.farm-admin",
-            plugin = plugin!!,
-            scheduler = scheduler,
-            limitTracker = limitTracker,
-            orePicker = orePicker,
-            timeProvider = { currentTime }
-        )
+        mine =
+            Mine(
+                id = "test_mine",
+                priority = 1,
+                config = config,
+                region = regionFactory.create("mine_world", "mine_region"),
+                adminPermission = "arc.farm-admin",
+                plugin = plugin,
+                scheduler = scheduler,
+                messages = TestFarmMessages(),
+                limitTracker = limitTracker,
+                orePicker = orePicker,
+                timeProvider = { currentTime },
+            )
     }
 
     @Nested
     @DisplayName("Mine Basic Operations")
     inner class MineBasicTests {
-
         @Test
         fun `returns NotHandled for block outside region`() {
             val block = world.getBlockAt(100, 70, 100)
-            block.setType(Material.COAL_ORE)
+            block.type = Material.COAL_ORE
 
             val event = BlockBreakEvent(block, playerMock)
             val result = mine.processBreak(event)
@@ -111,10 +113,10 @@ class MineTest : TestBase() {
 
         @Test
         fun `admin bypasses all checks`() {
-            playerMock.addAttachment(plugin!!, "arc.farm-admin", true)
+            playerMock.addAttachment(plugin, "arc.farm-admin", true)
 
             val block = world.getBlockAt(10, 70, 10)
-            block.setType(Material.COAL_ORE)
+            block.type = Material.COAL_ORE
 
             val event = BlockBreakEvent(block, playerMock)
             val result = mine.processBreak(event)
@@ -126,7 +128,7 @@ class MineTest : TestBase() {
         @Test
         fun `denies access without permission`() {
             val block = world.getBlockAt(10, 70, 10)
-            block.setType(Material.COAL_ORE)
+            block.type = Material.COAL_ORE
 
             val event = BlockBreakEvent(block, playerMock)
             val result = mine.processBreak(event)
@@ -137,10 +139,10 @@ class MineTest : TestBase() {
 
         @Test
         fun `denies non-ore materials`() {
-            playerMock.addAttachment(plugin!!, "mine.use", true)
+            playerMock.addAttachment(plugin, "mine.use", true)
 
             val block = world.getBlockAt(10, 70, 10)
-            block.setType(Material.DIRT) // Not an ore
+            block.type = Material.DIRT // Not an ore
 
             val event = BlockBreakEvent(block, playerMock)
             val result = mine.processBreak(event)
@@ -152,10 +154,9 @@ class MineTest : TestBase() {
     @Nested
     @DisplayName("Mine Limit Tracking")
     inner class MineLimitTests {
-
         @Test
         fun `respects daily limit`() {
-            playerMock.addAttachment(plugin!!, "mine.use", true)
+            playerMock.addAttachment(plugin, "mine.use", true)
 
             // Fill up the limit
             repeat(100) {
@@ -163,7 +164,7 @@ class MineTest : TestBase() {
             }
 
             val block = world.getBlockAt(10, 70, 10)
-            block.setType(Material.COAL_ORE)
+            block.type = Material.COAL_ORE
 
             val event = BlockBreakEvent(block, playerMock)
             val result = mine.processBreak(event)
@@ -173,7 +174,7 @@ class MineTest : TestBase() {
 
         @Test
         fun `base block does not count towards limit`() {
-            playerMock.addAttachment(plugin!!, "mine.use", true)
+            playerMock.addAttachment(plugin, "mine.use", true)
 
             val initialCount = limitTracker.getBlockCount(playerMock.uniqueId)
 
@@ -199,7 +200,6 @@ class MineTest : TestBase() {
     @Nested
     @DisplayName("Mine Lifecycle")
     inner class MineLifecycleTests {
-
         @Test
         fun `start creates scheduled tasks`() {
             mine.start()
@@ -229,37 +229,44 @@ class MineTest : TestBase() {
     @Nested
     @DisplayName("WeightedRandom in Mine Context")
     inner class MineOrePickerTests {
-
         @Test
         fun `ore picker has correct items`() {
-            val picker = createOrePicker(
-                mapOf(
-                    Material.COAL_ORE to 50,
-                    Material.IRON_ORE to 30,
-                    Material.GOLD_ORE to 15,
-                    Material.DIAMOND_ORE to 5
+            val picker =
+                createOrePicker(
+                    mapOf(
+                        Material.COAL_ORE to 50,
+                        Material.IRON_ORE to 30,
+                        Material.GOLD_ORE to 15,
+                        Material.DIAMOND_ORE to 5,
+                    ),
                 )
-            )
 
             assertEquals(4, picker.size())
         }
 
         @Test
         fun `diamond is rarer than coal`() {
-            val picker = createOrePicker(
-                mapOf(
-                    Material.COAL_ORE to 50,
-                    Material.DIAMOND_ORE to 5
+            val picker =
+                createOrePicker(
+                    mapOf(
+                        Material.COAL_ORE to 50,
+                        Material.DIAMOND_ORE to 5,
+                    ),
                 )
-            )
 
             var coalCount = 0
             var diamondCount = 0
 
             repeat(1000) {
                 when (picker.random()) {
-                    Material.COAL_ORE -> coalCount++
-                    Material.DIAMOND_ORE -> diamondCount++
+                    Material.COAL_ORE -> {
+                        coalCount++
+                    }
+
+                    Material.DIAMOND_ORE -> {
+                        diamondCount++
+                    }
+
                     else -> {}
                 }
             }
@@ -272,13 +279,13 @@ class MineTest : TestBase() {
     @Nested
     @DisplayName("Temporary Block Tracker in Mine Context")
     inner class MineBlockTrackerTests {
-
         @Test
         fun `blocks expire after configured time`() {
-            val tracker = TemporaryBlockTracker<String>(
-                expireTimeMs = 60000L,
-                timeProvider = { currentTime }
-            )
+            val tracker =
+                TemporaryBlockTracker<String>(
+                    expireTimeMs = 60000L,
+                    timeProvider = { currentTime },
+                )
 
             tracker.add("block1")
             currentTime = 30000L
@@ -295,10 +302,11 @@ class MineTest : TestBase() {
 
         @Test
         fun `multiple blocks with different add times`() {
-            val tracker = TemporaryBlockTracker<String>(
-                expireTimeMs = 60000L,
-                timeProvider = { currentTime }
-            )
+            val tracker =
+                TemporaryBlockTracker<String>(
+                    expireTimeMs = 60000L,
+                    timeProvider = { currentTime },
+                )
 
             tracker.add("early")
             currentTime = 30000L
@@ -318,4 +326,3 @@ class MineTest : TestBase() {
         }
     }
 }
-

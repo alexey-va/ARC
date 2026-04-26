@@ -56,7 +56,7 @@ public class RedisRepo<T extends RepoData> {
     long saveInterval;
     boolean saveBackups;
 
-    private static Deque<RedisRepo<?>> repos = new ConcurrentLinkedDeque<>();
+    private static final Deque<RedisRepo<?>> repos = new ConcurrentLinkedDeque<>();
 
     private RedisRepo(Boolean loadAll, RedisOperations redisManager, String storageKey, String updateChannel,
                       Class clazz,
@@ -129,7 +129,7 @@ public class RedisRepo<T extends RepoData> {
                     error("Error in save task: {}", e.getMessage());
                 }
             }
-        }.runTaskTimerAsynchronously(ARC.plugin, 0L, saveInterval);
+        }.runTaskTimerAsynchronously(ARC.getInstance(), 0L, saveInterval);
 
         if (saveBackups)
             backupTask = new BukkitRunnable() {
@@ -137,7 +137,7 @@ public class RedisRepo<T extends RepoData> {
                 public void run() {
                     backupService.saveBackup(map);
                 }
-            }.runTaskTimerAsynchronously(ARC.plugin, 20L * 60 * 60 * 3, 20L * 60 * 60 * 3);
+            }.runTaskTimerAsynchronously(ARC.getInstance(), 20L * 60 * 60 * 3, 20L * 60 * 60 * 3);
     }
 
     public void addContext(String context) {

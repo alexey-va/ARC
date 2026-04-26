@@ -31,10 +31,14 @@ import ru.arc.xserver.XCommand as XServerCommand
  * Пример: /x -servers:survival -player:Steve give %player% diamond 64
  */
 object XCommand : CommandExecutor, TabCompleter {
+    private val config get() = ConfigManager.of(ARC.instance.dataPath, "commands.yml")
 
-    private val config get() = ConfigManager.of(ARC.plugin.dataPath, "commands.yml")
-
-    override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<String>): Boolean {
+    override fun onCommand(
+        sender: CommandSender,
+        command: Command,
+        label: String,
+        args: Array<String>,
+    ): Boolean {
         if (!sender.hasPermission("arc.x")) {
             sender.sendMessage(TextUtil.noPermissions())
             return true
@@ -51,33 +55,36 @@ object XCommand : CommandExecutor, TabCompleter {
 
         // Parse parameters
         val serversStr = params["servers"]
-        val serverList: Set<String>? = if (serversStr == null || serversStr.equals("all", ignoreCase = true)) {
-            null // null means all servers
-        } else {
-            serversStr.split(",").toSet()
-        }
+        val serverList: Set<String>? =
+            if (serversStr == null || serversStr.equals("all", ignoreCase = true)) {
+                null // null means all servers
+            } else {
+                serversStr.split(",").toSet()
+            }
 
         val playerName = params["player"]
         val timeout = params["timeout"]?.toIntOrNull() ?: 100
         val uuid = params["uuid"]?.let { UUID.fromString(it) }
         val delay = params["delay"]?.toIntOrNull() ?: 0
-        val senderType = params["sender"]?.uppercase()?.let {
-            try {
-                XServerCommand.Sender.valueOf(it)
-            } catch (e: Exception) {
-                XServerCommand.Sender.CONSOLE
-            }
-        } ?: XServerCommand.Sender.CONSOLE
+        val senderType =
+            params["sender"]?.uppercase()?.let {
+                try {
+                    XServerCommand.Sender.valueOf(it)
+                } catch (_: Exception) {
+                    XServerCommand.Sender.CONSOLE
+                }
+            } ?: XServerCommand.Sender.CONSOLE
 
-        val xCommand = XServerCommand.create(
-            commandStr,
-            senderType,
-            playerName,
-            uuid,
-            timeout,
-            delay,
-            serverList
-        )
+        val xCommand =
+            XServerCommand.create(
+                commandStr,
+                senderType,
+                playerName,
+                uuid,
+                timeout,
+                delay,
+                serverList,
+            )
 
         XActionManager.publish(xCommand)
 
@@ -88,7 +95,7 @@ object XCommand : CommandExecutor, TabCompleter {
                 warn("Cannot move player to server without specifying player")
                 return true
             }
-            if (serverList == null || serverList.isEmpty()) {
+            if (serverList.isNullOrEmpty()) {
                 warn("Cannot move player to server without specifying server")
                 return true
             }
@@ -106,13 +113,15 @@ object XCommand : CommandExecutor, TabCompleter {
         }
 
         val message =
-            config.string("xcommand.success-message", "<gold>Команда <gray>%command% <gold>успешна отправлена!")
+            config
+                .string("xcommand.success-message", "<gold>Команда <gray>%command% <gold>успешна отправлена!")
                 .replace("%command%", commandStr)
         sender.sendMessage(TextUtil.mm(message))
 
         return true
     }
 
+    @Suppress("DuplicatedCode")
     private fun parseParams(args: Array<String>): Map<String, String> {
         val params = mutableMapOf<String, String>()
         for (arg in args) {
@@ -130,23 +139,25 @@ object XCommand : CommandExecutor, TabCompleter {
         sender: CommandSender,
         command: Command,
         alias: String,
-        args: Array<String>
-    ): List<String>? {
+        args: Array<String>,
+    ): List<String> {
         val last = args.lastOrNull() ?: ""
         val suggestions = mutableListOf<String>()
 
         when {
-            last.isEmpty() -> suggestions.addAll(
-                listOf(
-                    "-servers",
-                    "-player",
-                    "-timeout",
-                    "-uuid",
-                    "-move-to-server",
-                    "-delay",
-                    "-sender"
+            last.isEmpty() -> {
+                suggestions.addAll(
+                    listOf(
+                        "-servers",
+                        "-player",
+                        "-timeout",
+                        "-uuid",
+                        "-move-to-server",
+                        "-delay",
+                        "-sender",
+                    ),
                 )
-            )
+            }
 
             last.startsWith("-servers") -> {
                 suggestions.add("-servers:all")
@@ -161,19 +172,28 @@ object XCommand : CommandExecutor, TabCompleter {
                 PlayerManager.getPlayerUuids().forEach { suggestions.add("-uuid:$it") }
             }
 
-            last.startsWith("-timeout") -> suggestions.addAll(listOf("-timeout:100", "-timeout:200", "-timeout:500"))
-            last.startsWith("-move-to-server") -> suggestions.addAll(
-                listOf(
-                    "-move-to-server:true",
-                    "-move-to-server:false"
-                )
-            )
+            last.startsWith("-timeout") -> {
+                suggestions.addAll(listOf("-timeout:100", "-timeout:200", "-timeout:500"))
+            }
 
-            last.startsWith("-delay") -> suggestions.addAll(listOf("-delay:0", "-delay:20", "-delay:60"))
-            last.startsWith("-sender") -> suggestions.addAll(listOf("-sender:console", "-sender:player"))
+            last.startsWith("-move-to-server") -> {
+                suggestions.addAll(
+                    listOf(
+                        "-move-to-server:true",
+                        "-move-to-server:false",
+                    ),
+                )
+            }
+
+            last.startsWith("-delay") -> {
+                suggestions.addAll(listOf("-delay:0", "-delay:20", "-delay:60"))
+            }
+
+            last.startsWith("-sender") -> {
+                suggestions.addAll(listOf("-sender:console", "-sender:player"))
+            }
         }
 
         return suggestions.filter { it.startsWith(last, ignoreCase = true) }.sorted()
     }
 }
-

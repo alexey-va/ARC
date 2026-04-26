@@ -14,6 +14,14 @@ public class DecorPool {
 
     TreeMap<Double, DecorItem> decors = new TreeMap<>();
 
+    /**
+     * Get the decor items map.
+     * Explicit getter for Kotlin interop (Lombok getters not visible at compile time).
+     */
+    public TreeMap<Double, DecorItem> getDecorItems() {
+        return decors;
+    }
+
     public void add(DecorItem decorItem, double weight) {
         debug("Adding decor item: {} with weight: {}", decorItem.getMaterial(), weight);
         if (weight == 0) return;

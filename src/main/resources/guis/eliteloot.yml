@@ -1,0 +1,52 @@
+# ===========================================
+# Elite Loot GUI Configuration
+# ===========================================
+# Configuration for the elite loot display GUI.
+# Shows all available decorative loot items.
+# ===========================================
+
+# GUI Title
+title: "<dark_gray>Elite Loot"
+
+# Number of rows (content rows = rows - 1 for navigation)
+rows: 6
+
+# Navigation buttons
+navigation:
+  # Previous page button
+  prev:
+    name: "<gray>« Предыдущая страница"
+    lore:
+      - ""
+      - "<dark_gray>Нажмите для перехода"
+    slot: 0
+  
+  # Next page button
+  next:
+    name: "<gray>Следующая страница »"
+    lore:
+      - ""
+      - "<dark_gray>Нажмите для перехода"
+    slot: 8
+  
+  # Back button
+  back:
+    name: "<gray>« Назад"
+    lore:
+      - ""
+      - "<dark_gray>Вернуться в меню"
+    slot: 4
+    command: "menu"
+
+# Item display settings
+items:
+  # Additional lore added to each item
+  lore-footer:
+    - ""
+    - "<dark_gray>Декоративный предмет"
+
+# Messages
+messages:
+  no-items: "<red>Нет доступных предметов"
+
+

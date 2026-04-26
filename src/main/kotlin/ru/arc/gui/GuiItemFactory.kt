@@ -61,5 +61,3 @@ object GuiItems {
         factory = DefaultGuiItemFactory()
     }
 }
-
-

@@ -56,5 +56,3 @@ class TestTimeProvider(private var currentTime: Long = 0L) : TimeProvider {
         currentTime += ticks * 50
     }
 }
-
-

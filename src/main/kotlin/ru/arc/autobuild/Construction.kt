@@ -3,7 +3,6 @@ package ru.arc.autobuild
 import com.destroystokyo.paper.ParticleBuilder
 import com.sk89q.worldedit.bukkit.BukkitAdapter
 import com.sk89q.worldedit.math.BlockVector3
-import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.block.Barrel
@@ -11,8 +10,11 @@ import org.bukkit.block.Chest
 import org.bukkit.inventory.ItemStack
 import org.bukkit.loot.LootContext
 import org.bukkit.loot.LootTables
-import org.bukkit.scheduler.BukkitTask
-import ru.arc.ARC
+import ru.arc.core.ScheduledTask
+import ru.arc.core.async
+import ru.arc.core.delayed
+import ru.arc.core.repeating
+import ru.arc.core.ticks
 import ru.arc.hooks.HookRegistry
 import ru.arc.hooks.citizens.CitizensHook
 import ru.arc.util.BlockUtils.rotateBlockData
@@ -27,9 +29,8 @@ import java.util.concurrent.atomic.AtomicInteger
  * Creates an NPC worker and places blocks over time with effects.
  */
 class Construction(private val site: ConstructionSite) {
-
-    private var buildTask: BukkitTask? = null
-    private var removeNpcTask: BukkitTask? = null
+    private var buildTask: ScheduledTask? = null
+    private var removeNpcTask: ScheduledTask? = null
     private var blocks = mutableListOf<BlockVector3>()
 
     val pointer = AtomicInteger(-1)
@@ -54,9 +55,10 @@ class Construction(private val site: ConstructionSite) {
         citizens.setSkin(npcId, skinUrl)
 
         if (seconds > 0) {
-            removeNpcTask = Bukkit.getScheduler().runTaskLater(ARC.plugin, Runnable {
-                citizens.deleteNpc(npcId)
-            }, 20L * seconds)
+            removeNpcTask =
+                delayed((20L * seconds).ticks) {
+                    citizens.deleteNpc(npcId)
+                }
             citizens.lookClose(npcId)
             lookClose = true
         }
@@ -78,15 +80,16 @@ class Construction(private val site: ConstructionSite) {
         removeNpcTask?.takeIf { !it.isCancelled }?.cancel()
 
         // Prepare blocks async, then build sync
-        Bukkit.getScheduler().runTaskAsynchronously(ARC.plugin, Runnable {
+        async {
             prepareBlockList()
-            buildTask = Bukkit.getScheduler().runTaskTimer(ARC.plugin, Runnable {
-                if (placeNextBlocks(BuildConfig.blocksPerTick)) {
-                    buildTask?.cancel()
-                    site.complete()
+            buildTask =
+                repeating(period = BuildConfig.cycleDurationTicks.ticks, delay = 1.ticks) {
+                    if (placeNextBlocks(BuildConfig.blocksPerTick)) {
+                        cancel()
+                        site.complete()
+                    }
                 }
-            }, 1L, BuildConfig.cycleDurationTicks)
-        })
+        }
     }
 
     private fun prepareBlockList() {
@@ -227,7 +230,7 @@ class Construction(private val site: ConstructionSite) {
     fun cancel(destroyNpcDelaySeconds: Int) {
         buildTask?.takeIf { !it.isCancelled }?.cancel()
         removeNpcTask?.takeIf { !it.isCancelled }?.cancel()
-        Bukkit.getScheduler().runTaskLater(ARC.plugin, Runnable { destroyNpc() }, destroyNpcDelaySeconds * 20L)
+        delayed((destroyNpcDelaySeconds * 20L).ticks) { destroyNpc() }
     }
 
     fun finishInstantly() {

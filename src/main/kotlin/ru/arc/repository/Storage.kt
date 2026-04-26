@@ -99,5 +99,3 @@ interface SyncService<T : Entity> {
      */
     fun stop()
 }
-
-

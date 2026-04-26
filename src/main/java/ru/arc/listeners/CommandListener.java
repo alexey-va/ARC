@@ -31,7 +31,10 @@ import static ru.arc.util.TextUtil.mm;
 
 public class CommandListener implements Listener {
 
-    final Config commandConfig = ConfigManager.of(ARC.plugin.getDataPath(), "portal.yml");
+    /**
+     * Warp / portal command interception — same {@code portal.*} keys as {@link ru.arc.Portal} (misc.yml).
+     */
+    final Config commandConfig = ConfigManager.of(ARC.getInstance().getDataPath(), "misc.yml");
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onPlayerPlaceBlock(BlockPlaceEvent ev) {
@@ -127,11 +130,13 @@ public class CommandListener implements Listener {
 
     private void warpCommand(PlayerCommandPreprocessEvent ev, String[] args) {
         if (ev.getPlayer().hasPermission("arc.bypass-portal")) return;
-        if (!commandConfig.bool("command-portals", true)) return;
+        if (!commandConfig.bool("portal.command-portals", true)) {
+            return;
+        }
         if (args.length < 2) return;
 
-        Set<String> excludedSubCommands = new HashSet<>(commandConfig.stringList("excluded-sub-commands"));
-        Set<String> aliases = new HashSet<>(commandConfig.stringList("aliases"));
+        Set<String> excludedSubCommands = new HashSet<>(commandConfig.stringList("portal.excluded-sub-commands"));
+        Set<String> aliases = new HashSet<>(commandConfig.stringList("portal.aliases"));
         String mainCommand = args[0].substring(1);
 
         boolean isCmiWarp = "/cmi".equals(args[0]) && "warp".equals(args[1]);
@@ -140,18 +145,17 @@ public class CommandListener implements Listener {
         if (excludedSubCommands.contains(args[1])) return;
 
         boolean warpExists = false;
-        boolean ifCheck = commandConfig.bool("check-player-warps", true) || commandConfig.bool("check-cmi-warps", true);
-        if (commandConfig.bool("check-player-warps", true) && HookRegistry.playerWarpsHook != null) {
+        boolean ifCheck = commandConfig.bool("portal.check-player-warps", true) || commandConfig.bool("portal" +
+                ".check-cmi-warps", true);
+        if (commandConfig.bool("portal.check-player-warps", true) && HookRegistry.playerWarpsHook != null) {
             warpExists |= HookRegistry.playerWarpsHook.warpExists(args[1], ev.getPlayer());
         }
-        if (commandConfig.bool("check-cmi-warps", true) && HookRegistry.cmiHook != null) {
+        if (commandConfig.bool("portal.check-cmi-warps", true) && HookRegistry.cmiHook != null) {
             warpExists |= HookRegistry.cmiHook.warpExists(args[1]);
         }
         if (ifCheck && !warpExists) return;
-        new Portal(ev.getPlayer().getUniqueId(), PortalData.builder()
-                .actionType(PortalData.ActionType.COMMAND)
-                .command(ev.getMessage().substring(1))
-                .build());
+        new Portal(ev.getPlayer().getUniqueId(), new PortalData(PortalData.ActionType.COMMAND, null, null,
+                ev.getMessage().substring(1)));
         ev.setCancelled(true);
     }
 }

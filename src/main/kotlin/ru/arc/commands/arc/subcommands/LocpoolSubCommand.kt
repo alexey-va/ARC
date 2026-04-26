@@ -78,7 +78,7 @@ object LocpoolSubCommand : SubCommand {
 
         if (currentPool != null) {
             val pool = LocationPoolManager.getPool(currentPool)
-            val size = pool?.locations?.size() ?: 0
+            val size = pool?.size ?: 0
             player.sendMessage(
                 CommandConfig.get(
                     "locpool.currently-editing",
@@ -125,8 +125,9 @@ object LocpoolSubCommand : SubCommand {
                     "locpool.list-item",
                     "<gray>• <white>%pool_id% <gray>(%size% локаций)",
                     "%pool_id%", pool.id,
-                    "%size%", pool.locations.size().toString()
-                )
+                    "%size%",
+                    pool.size.toString(),
+                ),
             )
         }
     }

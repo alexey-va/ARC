@@ -29,13 +29,17 @@ import static ru.arc.util.Logging.error;
 
 
 public class EliteLootProcessor {
-    private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "elite-loot.yml");
+    private static final Config config = ConfigManager.ofModule(ARC.getInstance().getDataFolder().toPath(), "elite" +
+            "-loot.yml");
     final Set<Material> leathers = Set.of(Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS, Material.LEATHER_BOOTS);
 
+    @SuppressWarnings("deprecation")
     public ItemStack processEliteLoot(ItemStack originalStack) {
         if (originalStack == null) return null;
         if (!EliteItemManager.isEliteMobsItem(originalStack)) return originalStack;
-        if(originalStack.getItemMeta().hasCustomModelData()) return originalStack;
+        if (originalStack.getItemMeta().hasCustomModelData()) {
+            return originalStack;
+        }
 
         double replaceChance = config.real("replace-chance", 0.4);
         if (Math.random() > replaceChance) return originalStack;

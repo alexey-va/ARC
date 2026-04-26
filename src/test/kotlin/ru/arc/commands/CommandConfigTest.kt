@@ -1,8 +1,6 @@
-@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 
 package ru.arc.commands
 
-import net.kyori.adventure.text.Component
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
@@ -36,7 +34,6 @@ class CommandConfigTest : TestBase() {
             val result = CommandConfig.get("test.key", "<gray>Default message")
 
             assertNotNull(result)
-            assertTrue(result is Component)
         }
 
         @Test
@@ -534,5 +531,3 @@ class CommandConfigTest : TestBase() {
         }
     }
 }
-
-

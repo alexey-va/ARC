@@ -4,13 +4,13 @@ import net.kyori.adventure.text.Component;
 
 public interface Inputable {
 
-    public void setParameter(int n, String s);
+    void setParameter(int n, String s);
 
-    public void proceed();
+    void proceed();
 
-    public boolean satisfy(String input, int id);
+    boolean satisfy(String input, int id);
 
-    public Component denyMessage(String input, int id);
+    Component denyMessage(String input, int id);
 
-    public Component startMessage(int id);
+    Component startMessage(int id);
 }

@@ -1,11 +1,7 @@
 package ru.arc.stock.gui;
 
-import ru.arc.ARC;
-import ru.arc.configs.StockConfig;
-import ru.arc.stock.*;
-import ru.arc.util.GuiUtils;
-import ru.arc.util.ItemStackBuilder;
-import ru.arc.util.TextUtil;
+import java.text.DecimalFormat;
+
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
@@ -21,11 +17,21 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scheduler.BukkitTask;
+import ru.arc.ARC;
+import ru.arc.configs.StockConfig;
+import ru.arc.core.ScheduledTask;
+import ru.arc.stock.Position;
+import ru.arc.stock.Stock;
+import ru.arc.stock.StockMarket;
+import ru.arc.stock.StockPlayer;
+import ru.arc.stock.StockPlayerManager;
+import ru.arc.util.GuiUtils;
+import ru.arc.util.ItemStackBuilder;
+import ru.arc.util.TextUtil;
 
-import java.text.DecimalFormat;
-
-import static ru.arc.util.TextUtil.*;
+import static ru.arc.util.TextUtil.formatAmount;
+import static ru.arc.util.TextUtil.mm;
+import static ru.arc.util.TextUtil.strip;
 
 public class PositionCreator extends ChestGui {
     StockPlayer stockPlayer;
@@ -33,7 +39,7 @@ public class PositionCreator extends ChestGui {
     String symbol;
     Stock stock;
     GuiItem back, amountItem, typeItem, leverageItem, createItem, upperItem, lowerItem;
-    BukkitTask amountTask;
+    ScheduledTask amountTask;
 
 
     double amount = 1;
@@ -195,7 +201,7 @@ public class PositionCreator extends ChestGui {
                         strip(MiniMessage.miniMessage().deserialize(decimalFormat.format(amount)))
                 )))
                 .resolver(TagResolver.resolver("type", Tag.inserting(
-                        strip(MiniMessage.miniMessage().deserialize(type.display))
+                        strip(MiniMessage.miniMessage().deserialize(type.getDisplay()))
                 )))
                 .resolver(TagResolver.resolver("symbol", Tag.inserting(
                         strip(MiniMessage.miniMessage().deserialize(symbol))
@@ -234,12 +240,12 @@ public class PositionCreator extends ChestGui {
                                 mm(formatAmount(lower), true)
                 )))
                 .resolver(TagResolver.resolver("close_at_low", Tag.inserting(
-                        autoClosePrices.low() < 0 ? mm("<red>Нет") :
-                                mm(formatAmount(autoClosePrices.low()), true)
+                        autoClosePrices.getLow() < 0 ? mm("<red>Нет") :
+                                mm(formatAmount(autoClosePrices.getLow()), true)
                 )))
                 .resolver(TagResolver.resolver("close_at_high", Tag.inserting(
-                        autoClosePrices.high() < 0 ? mm("<red>Нет") :
-                                mm(formatAmount(autoClosePrices.high()), true)
+                        autoClosePrices.getHigh() < 0 ? mm("<red>Нет") :
+                                mm(formatAmount(autoClosePrices.getHigh()), true)
                 )))
                 .resolver(TagResolver.resolver("position_amount", Tag.inserting(
                         mm(stockPlayer.positions().size() + "", true)
@@ -365,7 +371,7 @@ public class PositionCreator extends ChestGui {
         StockPlayerManager.EconomyCheckResponse response = StockPlayerManager.economyCheck(stockPlayer, stock, amount, leverage);
         if (!response.success()) {
             boolean success = false;
-            if (stockPlayer.isAutoTake()) {
+            if (stockPlayer.getAutoTake()) {
                 success = StockPlayerManager.addToTradingBalanceFromVault(stockPlayer, response.lack());
             }
             if (!success) {
@@ -379,7 +385,8 @@ public class PositionCreator extends ChestGui {
             }
         }
 
-        ((Player) click.getWhoClicked()).performCommand("arc-invest -t:" + type.command + " -s:" + symbol + " -amount:" + amount + " -leverage:" + leverage + " -up:" + upper + " -down:" + lower);
+        ((Player) click.getWhoClicked()).performCommand("arc-invest -t:" + type.getCommand() + " -s:" + symbol + " " +
+                "-amount:" + amount + " -leverage:" + leverage + " -up:" + upper + " -down:" + lower);
         new PositionSelector(stockPlayer, symbol).show(click.getWhoClicked());
     }
 
@@ -463,8 +470,8 @@ public class PositionCreator extends ChestGui {
                     public void run() {
                         update();
                     }
-                }.runTask(ARC.plugin);
+                }.runTask(ARC.getInstance());
             }
-        }.runTaskAsynchronously(ARC.plugin);
+        }.runTaskAsynchronously(ARC.getInstance());
     }
 }

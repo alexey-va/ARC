@@ -17,7 +17,7 @@ import static ru.arc.util.Logging.info;
 
 public class RedisEcoListener implements Listener {
 
-    private static Config miscConfig = ConfigManager.of(ARC.plugin.getDataPath(), "misc.yml");
+    private static final Config miscConfig = ConfigManager.of(ARC.getInstance().getDataPath(), "misc.yml");
 
     @EventHandler
     public void onTransaction(TransactionEvent event) {

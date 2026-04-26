@@ -1,0 +1,40 @@
+# ===========================================
+# Personal Loot GUI Configuration
+# ===========================================
+# Configuration for personal dungeon chest loot.
+# Players see their unique loot when opening marked chests.
+# ===========================================
+
+# GUI Title
+title: "<dark_gray>Лут данжа"
+
+# Messages shown to players
+messages:
+  # When player tries to take item but inventory is full
+  inventory-full: "<red>Ваш инвентарь полон!"
+  
+  # When all items have been taken
+  empty-chest: "<gray>Вы забрали всю добычу"
+  
+  # When loot has already been claimed
+  already-opened: "<red>Вы уже открывали этот сундук"
+  
+  # When too many players opened the chest
+  max-players: "<red>Слишком много игроков уже открыли этот сундук!"
+  
+  # When breaking a personal loot chest
+  break: "<red>Этот сундук нужно сломать еще <amount> раз"
+
+# Item tooltips
+item:
+  # Lore added when hovering over items
+  take-hint:
+    - ""
+    - "<gray>Нажмите чтобы забрать"
+  
+  # Lore for taken item slot
+  taken:
+    - ""
+    - "<dark_gray>✓ Забрано"
+
+

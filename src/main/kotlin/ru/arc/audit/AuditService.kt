@@ -50,6 +50,14 @@ class AuditService(
         pruneTask = null
     }
 
+    /**
+     * Shutdown the repository and cleanup.
+     */
+    fun shutdown() {
+        stop()
+        repository.shutdown()
+    }
+
     // ==================== Player Context ====================
 
     /**

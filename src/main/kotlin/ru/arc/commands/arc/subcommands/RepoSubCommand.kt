@@ -59,7 +59,7 @@ object RepoSubCommand : SubCommand {
                 }
                 sender.sendMessage(CommandConfig.repoTotal(sizes.values.sum()))
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             sender.sendMessage(CommandConfig.repoTotal(0))
         }
     }

@@ -5,7 +5,7 @@ import de.tr7zw.changeme.nbtapi.NBT
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 import ru.arc.ARC
-import ru.arc.bschests.PersonalLootManager
+import ru.arc.bschests.PersonalLootModule
 import ru.arc.commands.arc.CommandConfig
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.tabComplete
@@ -109,7 +109,7 @@ object TestSubCommand : SubCommand {
                 targetBlock.toString()
             )
         )
-        PersonalLootManager.processChestGen(targetBlock)
+        PersonalLootModule.processChestGen(targetBlock)
     }
 
     private fun showBlockData(player: Player) {
@@ -127,7 +127,7 @@ object TestSubCommand : SubCommand {
             )
         )
 
-        val data = CustomBlockData(targetBlock, ARC.plugin)
+        val data = CustomBlockData(targetBlock, ARC.instance)
         if (data.keys.isEmpty()) {
             player.sendMessage(CommandConfig.get("test.no-data", "<gray>Нет CustomBlockData"))
             return

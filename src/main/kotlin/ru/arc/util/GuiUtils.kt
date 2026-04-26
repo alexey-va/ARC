@@ -8,14 +8,14 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.bukkit.Material
 import org.bukkit.entity.HumanEntity
 import org.bukkit.inventory.ItemStack
-import org.bukkit.scheduler.BukkitRunnable
-import org.bukkit.scheduler.BukkitTask
-import ru.arc.ARC
+import ru.arc.core.ScheduledTask
+import ru.arc.core.async
+import ru.arc.core.delayed
+import ru.arc.core.ticks
 import ru.arc.gui.GuiItems
 import ru.arc.util.Logging.error
 import ru.arc.util.TextUtil.strip
 import java.util.UUID
-import java.util.concurrent.CompletableFuture
 import java.util.function.Supplier
 
 object GuiUtils {
@@ -40,6 +40,7 @@ object GuiUtils {
 
         val bgItem = ItemStackFactory.create(material)
         val meta = bgItem.itemMeta
+        @Suppress("DEPRECATION")
         if (model != 0) meta?.setCustomModelData(model)
         meta?.displayName(Component.text(" "))
         bgItem.itemMeta = meta
@@ -49,6 +50,10 @@ object GuiUtils {
         return newGuiItem
     }
 
+    /**
+     * Temporarily change an item's display and lore, then restore after delay.
+     * Uses Task DSL for scheduling.
+     */
     @JvmStatic
     fun temporaryChange(
         stack: ItemStack,
@@ -56,30 +61,31 @@ object GuiUtils {
         lore: List<Component>?,
         ticks: Long,
         callback: Runnable,
-        resolver: TagResolver?
-    ): BukkitTask? {
+        resolver: TagResolver?,
+    ): ScheduledTask? {
         val meta = stack.itemMeta
         val oldDisplay = meta?.displayName()
         val oldLore = meta?.lore()
+
         if (display != null) meta?.displayName(strip(display))
         if (lore != null && lore.isNotEmpty()) {
             meta?.lore(lore.map { strip(it)!! })
         }
         stack.itemMeta = meta
+
         if (ticks < 0) return null
-        return object : BukkitRunnable() {
-            override fun run() {
-                val meta1 = stack.itemMeta
-                meta1?.displayName(strip(oldDisplay))
-                if (oldLore != null) {
-                    meta1?.lore(oldLore.map { strip(it)!! })
-                } else {
-                    meta1?.lore(null)
-                }
-                stack.itemMeta = meta1
-                callback.run()
+
+        return delayed(ticks.ticks) {
+            val meta1 = stack.itemMeta
+            meta1?.displayName(strip(oldDisplay))
+            if (oldLore != null) {
+                meta1?.lore(oldLore.map { strip(it)!! })
+            } else {
+                meta1?.lore(null)
             }
-        }.runTaskLater(ARC.plugin!!, ticks)
+            stack.itemMeta = meta1
+            callback.run()
+        }
     }
 
     @JvmStatic
@@ -88,10 +94,8 @@ object GuiUtils {
         display: Component?,
         lore: List<Component>?,
         ticks: Long,
-        callback: Runnable
-    ): BukkitTask? {
-        return temporaryChange(stack, display, lore, ticks, callback, null)
-    }
+        callback: Runnable,
+    ): ScheduledTask? = temporaryChange(stack, display, lore, ticks, callback, null)
 
     @JvmStatic
     fun cooldownCheck(guiItem: GuiItem, playerUuid: UUID, chestGui: ChestGui?): Boolean {
@@ -102,9 +106,7 @@ object GuiUtils {
                 strip(Component.text("Не кликайте так быстро!", NamedTextColor.RED)),
                 null,
                 cooldown,
-                Runnable {
-                    chestGui?.update()
-                }
+                Runnable { chestGui?.update() },
             )
             return false
         }
@@ -112,25 +114,28 @@ object GuiUtils {
         return true
     }
 
+    /**
+     * Construct a GUI async and show to player after delay.
+     * Uses Task DSL for scheduling.
+     */
     @JvmStatic
     fun constructAndShowAsync(supplier: Supplier<ChestGui>, player: HumanEntity, delay: Int) {
-        CompletableFuture.supplyAsync {
-            try {
-                supplier.get()
-            } catch (e: Exception) {
-                error("Error opening menu", e)
-                null
-            }
-        }.thenAccept { gui ->
-            object : BukkitRunnable() {
-                override fun run() {
-                    if (gui == null) {
-                        error("Gui is null $supplier")
-                        return
-                    }
-                    gui.show(player)
+        async {
+            val gui =
+                try {
+                    supplier.get()
+                } catch (e: Exception) {
+                    error("Error opening menu", e)
+                    null
                 }
-            }.runTaskLater(ARC.plugin!!, delay.toLong())
+
+            delayed(delay.ticks) {
+                if (gui == null) {
+                    error("Gui is null $supplier")
+                    return@delayed
+                }
+                gui.show(player)
+            }
         }
     }
 

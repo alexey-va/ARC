@@ -17,6 +17,7 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
+import net.milkbowl.vault.economy.Economy;
 import net.milkbowl.vault.economy.EconomyResponse;
 import org.bukkit.Material;
 import org.bukkit.boss.BarColor;
@@ -28,12 +29,14 @@ import ru.arc.TitleInput;
 import ru.arc.ai.GPTManager;
 import ru.arc.ai.ModerResponse;
 import ru.arc.ai.ModerationResponse;
-import ru.arc.board.Board;
-import ru.arc.board.BoardEntry;
+import ru.arc.board.BoardEntryData;
+import ru.arc.board.BoardEntryType;
+import ru.arc.board.BoardManager;
 import ru.arc.board.ItemIcon;
 import ru.arc.configs.BoardConfig;
 import ru.arc.configs.Config;
 import ru.arc.configs.ConfigManager;
+import ru.arc.core.modules.EconomyModule;
 import ru.arc.util.GuiUtils;
 import ru.arc.util.ItemStackBuilder;
 import ru.arc.util.TextUtil;
@@ -44,7 +47,7 @@ import static ru.arc.util.TextUtil.strip;
 
 public class AddBoardGui extends ChestGui implements Inputable {
 
-    static final Config config = ConfigManager.of(ARC.plugin.getDataFolder().toPath(), "board.yml");
+    static final Config config = ConfigManager.ofModule(ARC.getInstance().getDataFolder().toPath(), "board.yml");
     static final Map<String, String> defaultBossBarColors = Map.of(
             "blue", "<blue>Синий</blue>",
             "red", "<red>Красный</red>",
@@ -58,9 +61,9 @@ public class AddBoardGui extends ChestGui implements Inputable {
     public String title = null;
     public String description = null;
     ItemIcon icon;
-    BoardEntry.Type type;
+    BoardEntryType type;
     BarColor color;
-    BoardEntry entry;
+    BoardEntryData entry;
 
 
     Player player;
@@ -77,12 +80,12 @@ public class AddBoardGui extends ChestGui implements Inputable {
         this(player, null);
     }
 
-    public AddBoardGui(Player player, BoardEntry entry) {
+    public AddBoardGui(Player player, BoardEntryData entry) {
         super(2, TextHolder.deserialize(entry == null ? BoardConfig.createEntryGuiName : BoardConfig.editEntryGuiName));
 
         this.player = player;
         icon = ItemIcon.of(player.getUniqueId());
-        type = BoardEntry.Type.INFO;
+        type = BoardEntryType.INFO;
         color = BarColor.YELLOW;
         this.entry = entry;
 
@@ -161,7 +164,8 @@ public class AddBoardGui extends ChestGui implements Inputable {
                 .toGuiItemBuilder()
                 .clickEvent(click -> {
                     click.setCancelled(true);
-                    GuiUtils.constructAndShowAsync(() -> new BoardGui(player), click.getWhoClicked());
+                    GuiUtils.constructAndShowAsync(() -> BoardGuiFactory.createForPlayer(player),
+                            click.getWhoClicked());
                 }).build();
     }
 
@@ -201,7 +205,7 @@ public class AddBoardGui extends ChestGui implements Inputable {
             List<Component> lore = new ArrayList<>();
             for (String s : BoardConfig.getStringList("add-menu.full.description.lore")) {
                 if (s.contains("<description>")) {
-                    lore.addAll(BoardEntry.description(TagResolver.standard(), description));
+                    lore.addAll(BoardEntryData.description(TagResolver.standard(), description));
                     continue;
                 }
                 lore.add(MiniMessage.miniMessage().deserialize(s));
@@ -283,17 +287,22 @@ public class AddBoardGui extends ChestGui implements Inputable {
     }
 
     private GuiItem typeItem() {
-        return new ItemStackBuilder(type.icon)
-                .tagResolver(TagResolver.resolver("type", Tag.inserting(type.name)))
+        return new ItemStackBuilder(type.getIcon())
+                .tagResolver(TagResolver.resolver("type", Tag.inserting(type.getDisplayName())))
                 .display(BoardConfig.getString("add-menu.full.type.display"))
                 .lore(BoardConfig.getStringList("add-menu.full.type.lore"))
                 .toGuiItemBuilder()
                 .clickEvent(click -> {
                     click.setCancelled(true);
-                    if (type == BoardEntry.Type.BUY) type = BoardEntry.Type.INFO;
-                    else if (type == BoardEntry.Type.INFO) type = BoardEntry.Type.LOOKING_FOR;
-                    else if (type == BoardEntry.Type.LOOKING_FOR) type = BoardEntry.Type.SELL;
-                    else if (type == BoardEntry.Type.SELL) type = BoardEntry.Type.BUY;
+                    if (type == BoardEntryType.BUY) {
+                        type = BoardEntryType.INFO;
+                    } else if (type == BoardEntryType.INFO) {
+                        type = BoardEntryType.LOOKING_FOR;
+                    } else if (type == BoardEntryType.LOOKING_FOR) {
+                        type = BoardEntryType.SELL;
+                    } else if (type == BoardEntryType.SELL) {
+                        type = BoardEntryType.BUY;
+                    }
 
                     updateType();
                 }).build();
@@ -314,7 +323,8 @@ public class AddBoardGui extends ChestGui implements Inputable {
                 .clickEvent(click -> {
                     click.setCancelled(true);
                     try {
-                        if (!ARC.getEcon().has(player, BoardConfig.editCost)) {
+                        Economy _econ = EconomyModule.getEconomy();
+                        if (_econ == null || !_econ.has(player, BoardConfig.editCost)) {
                             notEnoughMoneyDisplay(publishItem);
                             return;
                         }
@@ -350,11 +360,23 @@ public class AddBoardGui extends ChestGui implements Inputable {
                                         return;
                                     }
 
-                                    BoardEntry boardEntry = new BoardEntry(this.type, player.getName(), player.getUniqueId(), icon, description, title, color,
-                                            System.currentTimeMillis(), System.currentTimeMillis(), UUID.randomUUID());
-                                    boardEntry.setDirty(true);
+                                    BoardEntryData boardEntry = new BoardEntryData(
+                                            UUID.randomUUID(),
+                                            player.getUniqueId(),
+                                            player.getName(),
+                                            this.type,
+                                            description == null ? "" : description,
+                                            title,
+                                            icon,
+                                            color,
+                                            System.currentTimeMillis(),
+                                            System.currentTimeMillis(),
+                                            java.util.concurrent.ConcurrentHashMap.newKeySet(),
+                                            java.util.concurrent.ConcurrentHashMap.newKeySet(),
+                                            java.util.concurrent.ConcurrentHashMap.newKeySet()
+                                    );
 
-                                    Board.addBoardEntry(boardEntry);
+                                    BoardManager.addEntry(boardEntry);
                                     player.sendMessage(TextUtil.mm(BoardConfig.getString("add-menu.published-successfully")));
                                 });
 
@@ -364,7 +386,8 @@ public class AddBoardGui extends ChestGui implements Inputable {
                         player.sendMessage(TextUtil.error());
                         click.getWhoClicked().closeInventory();
                     }
-                    GuiUtils.constructAndShowAsync(() -> new BoardGui(player), click.getWhoClicked());
+                    GuiUtils.constructAndShowAsync(() -> BoardGuiFactory.createForPlayer(player),
+                            click.getWhoClicked());
                 }).build();
     }
 
@@ -379,7 +402,8 @@ public class AddBoardGui extends ChestGui implements Inputable {
                 .clickEvent(click -> {
                     click.setCancelled(true);
                     try {
-                        if (!ARC.getEcon().has(player, BoardConfig.editCost)) {
+                        Economy _econ = EconomyModule.getEconomy();
+                        if (_econ == null || !_econ.has(player, BoardConfig.editCost)) {
                             notEnoughMoneyDisplay(publishItem);
                             return;
                         }
@@ -419,11 +443,11 @@ public class AddBoardGui extends ChestGui implements Inputable {
                                     entry.changeType(type);
                                     entry.changeColor(color);
 
-                                    Board.updateCache(entry.entryUuid);
-                                    //Board.instance().saveBoardEntry(entry.entryUuid);
+                                    BoardManager.saveEntry(entry);
                                     player.sendMessage(TextUtil.mm(BoardConfig.getString("add-menu.edited-successfully")));
 
-                                    GuiUtils.constructAndShowAsync(() -> new BoardGui(player), click.getWhoClicked());
+                                    GuiUtils.constructAndShowAsync(() -> BoardGuiFactory.createForPlayer(player),
+                                            click.getWhoClicked());
                                 });
 
 
@@ -436,7 +460,11 @@ public class AddBoardGui extends ChestGui implements Inputable {
     }
 
     private boolean takeMoney(double cost) {
-        EconomyResponse response = ARC.getEcon().withdrawPlayer(player, cost);
+        Economy econ = EconomyModule.getEconomy();
+        if (econ == null) {
+            return false;
+        }
+        EconomyResponse response = econ.withdrawPlayer(player, cost);
         return response.transactionSuccess();
     }
 
@@ -458,8 +486,9 @@ public class AddBoardGui extends ChestGui implements Inputable {
 
                     if (confirmDelete) {
                         //.out.println("Deleting board entry from gui");
-                        Board.deleteBoardEntry(entry);
-                        GuiUtils.constructAndShowAsync(() -> new BoardGui(player), click.getWhoClicked());
+                        BoardManager.deleteEntry(entry);
+                        GuiUtils.constructAndShowAsync(() -> BoardGuiFactory.createForPlayer(player),
+                                click.getWhoClicked());
                     } else {
                         confirmDelete = true;
                         GuiUtils.temporaryChange(deleteItem.getItem(),

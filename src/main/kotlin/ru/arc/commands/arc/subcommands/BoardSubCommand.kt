@@ -1,7 +1,7 @@
 package ru.arc.commands.arc.subcommands
 
 import org.bukkit.command.CommandSender
-import ru.arc.board.guis.BoardGui
+import ru.arc.board.guis.BoardGuiFactory
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.player
 import ru.arc.util.GuiUtils
@@ -20,7 +20,7 @@ object BoardSubCommand : SubCommand {
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
         val player = sender.player ?: return true
-        GuiUtils.constructAndShowAsync({ BoardGui(player) }, player)
+        GuiUtils.constructAndShowAsync({ BoardGuiFactory.create(player) }, player)
         return true
     }
 }

@@ -40,7 +40,7 @@ import static ru.arc.util.Logging.warn;
 
 public class SlimefunSync implements Sync {
 
-    private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "backapacks.yml");
+    private static final Config config = ConfigManager.of(ARC.getInstance().getDataPath(), "backapacks.yml");
 
     SyncRepo<SlimefunDataDTO> syncRepo;
 
@@ -76,7 +76,7 @@ public class SlimefunSync implements Sync {
                 syncRepo.loadAndApplyData(uuid, false)
                         .whenComplete((data, ex) -> loaded.put(uuid, true));
             }
-        }.runTaskLater(ARC.plugin, 20L);
+        }.runTaskLater(ARC.getInstance(), 20L);
     }
 
     @Override
@@ -101,6 +101,7 @@ public class SlimefunSync implements Sync {
         else warn("Player data not loaded for {}. Skipping save", uuid);
     }
 
+    @SuppressWarnings("deprecation")
     private SlimefunDataDTO serializePlayerData(Context context) {
         UUID uuid = context.get("uuid");
         if (uuid == null) {
@@ -149,6 +150,7 @@ public class SlimefunSync implements Sync {
         return future.join();
     }
 
+    @SuppressWarnings("deprecation")
     private void deserializeAndSavePlayerData(SlimefunDataDTO dto) {
         PlayerProfile.fromUUID(dto.uuid, (pp) -> {
             // Logging removed - was using @Slf4j

@@ -10,5 +10,5 @@ public interface SyncData {
 
     default boolean trash(){
         return false;
-    };
+    }
 }

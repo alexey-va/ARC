@@ -1,4 +1,3 @@
-@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 package ru.arc.common
 
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -10,7 +9,6 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
 class WeightedRandomTest {
-
     private lateinit var weightedRandom: WeightedRandom<String>
 
     @BeforeEach
@@ -181,7 +179,6 @@ class WeightedRandomTest {
         }
 
         // All items should appear roughly equally (within 20% variance)
-        val expected = 200
         counts.values.forEach { count ->
             assertTrue(count > 150 && count < 250, "Equal weights should distribute roughly evenly")
         }
@@ -602,9 +599,9 @@ class WeightedRandomTest {
     @Test
     fun testWeightedDistributionPrecise() {
         // Total weight = 100
-        weightedRandom.add("item1", 50.0)  // 50%
-        weightedRandom.add("item2", 30.0)  // 30%
-        weightedRandom.add("item3", 20.0)  // 20%
+        weightedRandom.add("item1", 50.0) // 50%
+        weightedRandom.add("item2", 30.0) // 30%
+        weightedRandom.add("item3", 20.0) // 20%
 
         var item1Count = 0
         var item2Count = 0
@@ -631,9 +628,9 @@ class WeightedRandomTest {
     @Test
     fun testCumulativeWeightBehavior() {
         // TreeMap uses cumulative weights, test boundary behavior
-        weightedRandom.add("item1", 10.0)  // Range: 0-10
-        weightedRandom.add("item2", 20.0)  // Range: 10-30
-        weightedRandom.add("item3", 30.0)  // Range: 30-60
+        weightedRandom.add("item1", 10.0) // Range: 0-10
+        weightedRandom.add("item2", 20.0) // Range: 10-30
+        weightedRandom.add("item3", 30.0) // Range: 30-60
 
         // Test many times to ensure all ranges are hit
         val results = mutableSetOf<String>()
@@ -767,9 +764,8 @@ class WeightedRandomTest {
 
         // Should still work correctly
         repeat(100) {
-            val result = weightedRandom.random()
-            assertNotNull(result, "Should still return values")
-            assertTrue(result!!.startsWith("item"), "Should return valid item")
+            val result = requireNotNull(weightedRandom.random()) { "Should still return values" }
+            assertTrue(result.startsWith("item"), "Should return valid item")
         }
     }
 
@@ -831,15 +827,17 @@ class WeightedRandomTest {
 
     @Test
     fun testWithCustomObject() {
-        data class TestObj(val id: String, val value: Int)
+        data class TestObj(
+            val id: String,
+            val value: Int,
+        )
 
         val objRandom = WeightedRandom<TestObj>()
         objRandom.add(TestObj("a", 1), 10.0)
         objRandom.add(TestObj("b", 2), 20.0)
 
-        val result = objRandom.random()
-        assertNotNull(result, "Should work with custom objects")
-        assertTrue(result!!.id in setOf("a", "b"), "Should return one of added objects")
+        val result = requireNotNull(objRandom.random()) { "Should work with custom objects" }
+        assertTrue(result.id in setOf("a", "b"), "Should return one of added objects")
     }
 
     @Test

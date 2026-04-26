@@ -1,9 +1,15 @@
 package ru.arc.hooks.elitemobs.guis;
 
-import ru.arc.ARC;
-import ru.arc.configs.Config;
-import ru.arc.configs.ConfigManager;
-import ru.arc.hooks.elitemobs.EMHook;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.Set;
+import java.util.UUID;
+
 import com.magmaguy.elitemobs.items.ItemTagger;
 import com.magmaguy.elitemobs.items.ItemWorthCalculator;
 import lombok.AllArgsConstructor;
@@ -14,14 +20,16 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
-
-import java.util.*;
+import ru.arc.ARC;
+import ru.arc.configs.Config;
+import ru.arc.configs.ConfigManager;
+import ru.arc.hooks.elitemobs.EMHook;
 
 @RequiredArgsConstructor
 public class ShopHolder {
 
     final EMHook emHook;
-    final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "elitemobs.yml");
+    final Config config = ConfigManager.of(ARC.getInstance().getDataPath(), "elitemobs.yml");
 
     private final Map<UUID, Shop> items = new HashMap<>();
 

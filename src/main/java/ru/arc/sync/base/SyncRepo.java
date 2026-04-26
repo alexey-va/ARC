@@ -74,7 +74,9 @@ public class SyncRepo<T extends SyncData> {
         return loadData(uuid).thenAccept(data -> {
             try {
                 if (async) applyData(data);
-                else Bukkit.getScheduler().runTask(ARC.plugin, () -> applyData(data));
+                else {
+                    Bukkit.getScheduler().runTask(ARC.getInstance(), () -> applyData(data));
+                }
             } catch (Exception e) {
                 error("Error loading and applying data", e);
             }

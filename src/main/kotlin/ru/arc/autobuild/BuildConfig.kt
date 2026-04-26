@@ -7,6 +7,7 @@ import org.bukkit.Particle
 import ru.arc.ARC
 import ru.arc.configs.Config
 import ru.arc.configs.ConfigManager
+import ru.arc.configs.ConfigSection
 import ru.arc.util.TextUtil
 import java.nio.file.Paths
 import java.util.concurrent.TimeUnit
@@ -19,7 +20,7 @@ object BuildConfig {
 
     private val config: Config
         get() = if (ARC.plugin != null) {
-            ConfigManager.of(ARC.plugin.dataPath, "auto-build.yml")
+            ConfigManager.ofModule(ARC.instance.dataPath, "auto-build.yml")
         } else {
             ConfigManager.of(Paths.get(System.getProperty("java.io.tmpdir")), "auto-build.yml")
         }
@@ -32,71 +33,73 @@ object BuildConfig {
 
     // ==================== Construction Settings ====================
 
-    val blocksPerTick: Int get() = config.integer("construction.blocks-per-tick", 3)
-    val cycleDurationTicks: Long get() = config.integer("construction.cycle-duration-ticks", 10).toLong()
-    val playSounds: Boolean get() = config.bool("construction.play-sounds", true)
-    val showParticles: Boolean get() = config.bool("construction.show-particles", false)
-    val placeParticle: Particle get() = config.particle("construction.place-particle", Particle.FLAME)
-    val particleCount: Int get() = config.integer("construction.particle-count", 5)
-    val particleOffset: Double get() = config.real("construction.particle-offset", 0.25)
+    private val construction: ConfigSection get() = config.section("construction")
 
-    val npcSkins: Map<String, String> get() = config.map("construction.npc-skins", defaultNpcSkins)
+    val blocksPerTick: Int get() = construction.int("blocks-per-tick", 3)
+    val cycleDurationTicks: Long get() = construction.int("cycle-duration-ticks", 10).toLong()
+    val playSounds: Boolean get() = construction.boolean("play-sounds", true)
+    val showParticles: Boolean get() = construction.boolean("show-particles", false)
+    val placeParticle: Particle get() = construction.particle("place-particle", Particle.FLAME)
+    val particleCount: Int get() = construction.int("particle-count", 5)
+    val particleOffset: Double get() = construction.double("particle-offset", 0.25)
+
+    val npcSkins: Map<String, String> get() = construction.map("npc-skins", defaultNpcSkins)
 
     val skipMaterials: Set<Material>
-        get() = config.materialSet(
-            "construction.skip-materials", setOf(
-                Material.CHEST, Material.BARREL, Material.TRAPPED_CHEST,
-                Material.PLAYER_HEAD, Material.PLAYER_WALL_HEAD, Material.BEDROCK
+        get() =
+            construction.materialSet(
+                "skip-materials",
+                setOf(
+                    Material.CHEST,
+                    Material.BARREL,
+                    Material.TRAPPED_CHEST,
+                    Material.PLAYER_HEAD, Material.PLAYER_WALL_HEAD, Material.BEDROCK
             )
         )
 
     val nonDropMaterials: Set<Material>
-        get() = config.materialSet(
-            "construction.not-drop-materials", setOf(
-                Material.SHORT_GRASS, Material.TALL_GRASS, Material.DIRT, Material.GRASS_BLOCK
+        get() =
+            construction.materialSet(
+                "not-drop-materials",
+                setOf(
+                    Material.SHORT_GRASS, Material.TALL_GRASS, Material.DIRT, Material.GRASS_BLOCK
             )
         )
 
     // ==================== Display Settings ====================
 
-    val borderParticleInterval: Long get() = config.integer("display.border-particle-interval", 5).toLong()
-    val borderParticle: Particle get() = config.particle("display.border-particle", Particle.FLAME)
-    val borderParticleCount: Int get() = config.integer("display.border-particle-count", 1)
-    val borderParticleCornerCount: Int get() = config.integer("display.border-particle-corner-count", 3)
-    val borderParticleOffset: Double get() = config.real("display.border-particle-offset", 0.0)
-    val borderParticleCornerOffset: Double get() = config.real("display.border-particle-corner-offset", 0.07)
-    val centerParticle: Particle get() = config.particle("display.center-particle", Particle.NAUTILUS)
-    val centerParticleCount: Int get() = config.integer("display.center-particle-count", 1)
-    val maxDisplayBlocks: Int get() = config.integer("display.max-blocks", 30_000)
-    val maxDisplaysPer10Min: Int get() = config.integer("display.max-per-10-min", 10)
+    private val display: ConfigSection get() = config.section("display")
+
+    val borderParticleInterval: Long get() = display.int("border-particle-interval", 5).toLong()
+    val borderParticle: Particle get() = display.particle("border-particle", Particle.FLAME)
+    val borderParticleCount: Int get() = display.int("border-particle-count", 1)
+    val borderParticleCornerCount: Int get() = display.int("border-particle-corner-count", 3)
+    val borderParticleOffset: Double get() = display.double("border-particle-offset", 0.0)
+    val borderParticleCornerOffset: Double get() = display.double("border-particle-corner-offset", 0.07)
+    val centerParticle: Particle get() = display.particle("center-particle", Particle.NAUTILUS)
+    val centerParticleCount: Int get() = display.int("center-particle-count", 1)
+    val maxDisplayBlocks: Int get() = display.int("max-blocks", 30_000)
+    val maxDisplaysPer10Min: Int get() = display.int("max-per-10-min", 10)
 
     // ==================== GUI Settings ====================
 
     object ConfirmGui {
-        val title: String get() = config.string("confirm-gui.title", "<dark_gray>Подтверждение постройки")
-        val confirmMaterial: Material get() = config.material("confirm-gui.confirm-material", Material.PAPER)
-        val cancelMaterial: Material
-            get() = config.material(
-                "confirm-gui.cancel-material",
-                Material.RED_STAINED_GLASS_PANE
-            )
-        val confirmModelData: Int get() = config.integer("confirm-gui.confirm-model-data", 0)
-        val cancelModelData: Int get() = config.integer("confirm-gui.cancel-model-data", 0)
+        private val section: ConfigSection get() = config.section("confirm-gui")
+
+        val title: String get() = section.string("title", "<dark_gray>Подтверждение постройки")
+        val confirmMaterial: Material get() = section.material("confirm-material", Material.PAPER)
+        val cancelMaterial: Material get() = section.material("cancel-material", Material.RED_STAINED_GLASS_PANE)
+        val confirmModelData: Int get() = section.int("confirm-model-data", 0)
+        val cancelModelData: Int get() = section.int("cancel-model-data", 0)
     }
 
     object BuildingGui {
-        val confirmMaterial: Material get() = config.material("building-gui.confirm-material", Material.PAPER)
-        val cancelMaterial: Material
-            get() = config.material(
-                "building-gui.cancel-material",
-                Material.RED_STAINED_GLASS_PANE
-            )
-        val fastFinishMaterial: Material
-            get() = config.material(
-                "building-gui.fast-finish-material",
-                Material.BLAZE_POWDER
-            )
-        val cancelModelData: Int get() = config.integer("building-gui.cancel-model-data", 0)
+        private val section: ConfigSection get() = config.section("building-gui")
+
+        val confirmMaterial: Material get() = section.material("confirm-material", Material.PAPER)
+        val cancelMaterial: Material get() = section.material("cancel-material", Material.RED_STAINED_GLASS_PANE)
+        val fastFinishMaterial: Material get() = section.material("fast-finish-material", Material.BLAZE_POWDER)
+        val cancelModelData: Int get() = section.int("cancel-model-data", 0)
     }
 
     // ==================== Messages ====================
@@ -137,6 +140,7 @@ object BuildConfig {
         )
 
         fun notYourNpc() = config.componentDef("not-your-npc", "<gray>\uD83D\uDEE0 <red>Этот NPC не принадлежит вам!")
+
         fun noBook() =
             config.componentDef("confirm-gui.no-book", "<gray>\uD83D\uDEE0 <red>У вас нет книги в инвентаре!")
 

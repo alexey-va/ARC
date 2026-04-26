@@ -28,7 +28,7 @@ public class CitizensHook {
     public void registerListeners() {
         if (listener != null) return;
         listener = new CitizensListener();
-        Bukkit.getPluginManager().registerEvents(listener, ARC.plugin);
+        Bukkit.getPluginManager().registerEvents(listener, ARC.getInstance());
     }
 
     public int createNpc(String name, Location location) {

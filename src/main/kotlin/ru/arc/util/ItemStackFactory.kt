@@ -39,5 +39,3 @@ object ItemStackFactory {
         factory = { material, amount -> ItemStack(material, amount) }
     }
 }
-
-

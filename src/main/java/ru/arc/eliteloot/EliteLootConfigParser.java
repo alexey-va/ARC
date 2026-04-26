@@ -15,7 +15,8 @@ import static ru.arc.util.Logging.warn;
 
 public class EliteLootConfigParser {
 
-    private static final Config config = ConfigManager.of(ARC.plugin.getDataPath(), "elite-loot.yml");
+    private static final Config config = ConfigManager.ofModule(ARC.getInstance().getDataFolder().toPath(), "elite" +
+            "-loot.yml");
 
     public Map<LootType, DecorPool> load() {
         Map<LootType, DecorPool> res = new HashMap<>();

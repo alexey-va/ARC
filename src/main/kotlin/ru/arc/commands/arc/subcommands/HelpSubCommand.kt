@@ -175,5 +175,3 @@ object HelpSubCommand : SubCommand {
         }
     }
 }
-
-

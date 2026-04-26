@@ -8,9 +8,10 @@ import org.bukkit.inventory.meta.LeatherArmorMeta
 import ru.arc.commands.arc.CommandConfig
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.tabComplete
-import ru.arc.eliteloot.EliteLootGui
+import ru.arc.eliteloot.EliteLootGuiFactory
 import ru.arc.eliteloot.EliteLootManager
 import ru.arc.util.GuiUtils
+import ru.arc.util.customModelDataOrNull
 
 /**
  * /arc eliteloot - управление декоративным лутом.
@@ -46,7 +47,7 @@ object EliteLootSubCommand : SubCommand {
     }
 
     private fun openList(player: Player) {
-        GuiUtils.constructAndShowAsync({ EliteLootGui(player) }, player)
+        GuiUtils.constructAndShowAsync({ EliteLootGuiFactory.create(player) }, player)
     }
 
     private fun addFromHand(player: Player, args: Array<String>) {
@@ -77,7 +78,7 @@ object EliteLootSubCommand : SubCommand {
         )
 
         val weight = args.getOrNull(1)?.toDoubleOrNull() ?: 1.0
-        val modelId = if (hand.itemMeta?.hasCustomModelData() == true) hand.itemMeta.customModelData else 0
+        val modelId = hand.itemMeta?.customModelDataOrNull ?: 0
 
         var iaNamespace: String? = null
         var iaId: String? = null

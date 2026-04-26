@@ -1,0 +1,182 @@
+# =============================================================================
+# announce.yml — ротация объявлений в чат (AnnounceModule).
+# config.delay-seconds — пауза между циклами выбора сообщения.
+# messages.<id> — одно объявление: type, weight, conditions, servers (all|…).
+# =============================================================================
+
+config:
+  # Интервал между показами (секунды)
+  delay-seconds: 1800
+messages:
+  '1':
+    message: '<dark_gray>● <gray>Варп с данжами: <gold>/ag'
+    servers: all
+    player-specific: false
+    cache: true
+    conditions:
+      - type: permission
+        permission: mcfine.chat-notify
+    type: chat
+    serialization-type: mini_message
+    weight: 1
+    personal: false
+  '3':
+    message: '<dark_gray>● <gray>Приватить землю можно <green>блоками<gray>
+      из: <gold>/kit start'
+    servers: all
+    player-specific: false
+    cache: true
+    conditions:
+      - type: permission
+        permission: mcfine.chat-notify
+    type: chat
+    serialization-type: mini_message
+    weight: 1
+    personal: false
+  '4':
+    message: '<dark_gray>● <gray>Меню квестов: <gold>/quest'
+    servers: all
+    player-specific: false
+    cache: true
+    conditions:
+      - type: permission
+        permission: mcfine.chat-notify
+    type: chat
+    serialization-type: mini_message
+    weight: 1
+    personal: false
+  '6':
+    message: '<dark_gray>● <gray>Меню маунтов: <gold>/mounts'
+    servers: survival
+    player-specific: false
+    cache: true
+    conditions:
+      - type: permission
+        permission: mcfine.chat-notify
+    type: chat
+    serialization-type: mini_message
+    weight: 1
+    personal: false
+  '7':
+    message: '<dark_gray>● <gray>Наш дискорд: <gold>/discord'
+    servers: survival
+    player-specific: false
+    cache: true
+    conditions:
+      - type: permission
+        permission: mcfine.chat-notify
+    type: chat
+    serialization-type: mini_message
+    weight: 1
+    personal: false
+  '8':
+    message: '<dark_gray>● <gray>Если застряли, пишите: <gold>/stuck'
+    servers: all
+    player-specific: false
+    cache: true
+    conditions:
+      - type: permission
+        permission: mcfine.chat-notify
+    type: chat
+    serialization-type: mini_message
+    weight: 1
+    personal: false
+  '9':
+    message: '<dark_gray>● <gray>Гайды по серверу: <gold>/help'
+    servers: all
+    player-specific: false
+    cache: true
+    conditions:
+      - type: permission
+        permission: mcfine.chat-notify
+    type: chat
+    serialization-type: mini_message
+    weight: 1
+    personal: false
+  '10':
+    message: '<dark_gray>● <gray>Меню сервера: <gold>/m'
+    servers: all
+    player-specific: false
+    cache: true
+    conditions:
+      - type: permission
+        permission: mcfine.chat-notify
+    type: chat
+    serialization-type: mini_message
+    weight: 1
+    personal: false
+  '11':
+    message: '<dark_gray>● <gray>Общая ферма: <gold>/farm'
+    servers: all
+    player-specific: false
+    cache: true
+    conditions:
+      - type: permission
+        permission: mcfine.chat-notify
+    type: chat
+    serialization-type: mini_message
+    weight: 1
+    personal: false
+  '12':
+    message: '<dark_gray>● <gray>Общая шахта: <gold>/mine'
+    servers: all
+    player-specific: false
+    cache: true
+    conditions:
+      - type: permission
+        permission: mcfine.chat-notify
+    type: chat
+    serialization-type: mini_message
+    weight: 1
+    personal: false
+  '13':
+    message: '<dark_gray>● <gray>Варп в <dark_aqua>энд<gray>: <dark_aqua>/warp end'
+    servers: all
+    player-specific: false
+    cache: true
+    conditions:
+      - type: permission
+        permission: mcfine.chat-notify
+    type: chat
+    serialization-type: mini_message
+    weight: 3
+    personal: false
+  '14':
+    message: '<dark_gray>● <gray>Чтобы создать новое поселение пишите: <gold>/lands create <gray>[имя]'
+    servers: all
+    player-specific: false
+    cache: true
+    conditions:
+      - type: permission
+        permission: mcfine.chat-notify
+    type: chat
+    serialization-type: mini_message
+    weight: 30
+    personal: false
+
+  #'13':
+  #  message: '<dark_gray>● <gray>Бесплатный VIP: <gold>/free'
+  #  servers: all
+  #  player-specific: false
+  #  cache: true
+  #  conditions:
+  #  - type: permission
+  #    permission: mcfine.chat-notify
+  #  - type: permission
+  #    permission: '!group.vip'
+  #  type: chat
+  #  serialization-type: mini_message
+  #  weight: 1
+  #  personal: false
+  '2':
+    message: '<dark_gray>● <gray>Добавить игрока в приват: <gold>/trust <white><имя>'
+    servers: all
+    player-specific: false
+    cache: true
+    conditions:
+      - type: permission
+        permission: mcfine.chat-notify
+    type: chat
+    serialization-type: mini_message
+    weight: 1
+    personal: false

@@ -4,6 +4,7 @@ plugins {
     java
     kotlin("jvm") version "2.3.0"
     id("com.gradleup.shadow") version "9.3.0"
+    jacoco
 }
 
 group = "ARC"
@@ -28,6 +29,7 @@ repositories {
     maven("https://jitpack.io")
     maven("https://artifactory.cronapp.io/public-release/")
     maven("https://mvn-repo.arim.space/lesser-gpl3/")
+    maven("https://repo.magmaguy.com/releases")
     mavenCentral()
 }
 
@@ -49,6 +51,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.10.2")
 
     implementation(kotlin("stdlib"))
+    implementation("org.snakeyaml:snakeyaml-engine:3.0.1")
 
     implementation(libs.com.github.stefvanschie.inventoryframework.`if`)
     implementation(libs.com.jeff.media.custom.block.data)
@@ -110,6 +113,15 @@ dependencies {
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+
+    // Kotest
+    testImplementation("io.kotest:kotest-runner-junit5:6.0.7")
+    testImplementation("io.kotest:kotest-assertions-core:6.0.7")
+    testImplementation("io.kotest:kotest-property:6.0.7")
+
+    // MockK
+    testImplementation("io.mockk:mockk:1.14.7")
+
     // Testcontainers for Redis integration tests
     testImplementation("org.testcontainers:testcontainers:2.0.2")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter:2.0.2")
@@ -142,7 +154,10 @@ dependencies {
 }
 
 tasks {
-    withType<JavaCompile> { options.encoding = "UTF-8" }
+    withType<JavaCompile> {
+        options.encoding = "UTF-8"
+        options.compilerArgs.addAll(listOf("-Xlint:deprecation", "-Xlint:unchecked"))
+    }
     withType<Javadoc> { options.encoding = "UTF-8" }
     test {
         useJUnitPlatform()
@@ -153,11 +168,11 @@ tasks {
             // Colima (macOS)
             environment(
                 "DOCKER_HOST",
-                "unix://${System.getProperty("user.home")}/.colima/default/docker.sock"
+                "unix://${System.getProperty("user.home")}/.colima/default/docker.sock",
             )
             environment(
                 "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE",
-                "/var/run/docker.sock"
+                "/var/run/docker.sock",
             )
         }
     }
@@ -167,7 +182,8 @@ tasks {
 
         mergeServiceFiles()
         transform(
-            com.github.jengelman.gradle.plugins.shadow.transformers.Log4j2PluginsCacheFileTransformer()
+            com.github.jengelman.gradle.plugins.shadow.transformers
+                .Log4j2PluginsCacheFileTransformer(),
         )
 
         exclude("META-INF/DEPENDENCIES", "META-INF/LICENSE", "META-INF/NOTICE")
@@ -179,5 +195,39 @@ tasks {
 
     build {
         dependsOn(shadowJar)
+    }
+
+    jacocoTestReport {
+        dependsOn(test)
+        reports {
+            xml.required.set(true)
+            html.required.set(true)
+            csv.required.set(false)
+        }
+
+        classDirectories.setFrom(
+            files(
+                classDirectories.files.map {
+                    fileTree(it) {
+                        exclude(
+                            "**/ARC.class",
+                            "**/test/**",
+                            "**/*Test*.class",
+                            "**/*Mock*.class",
+                        )
+                    }
+                },
+            ),
+        )
+    }
+
+    jacocoTestCoverageVerification {
+        violationRules {
+            rule {
+                limit {
+                    minimum = "0.70".toBigDecimal()
+                }
+            }
+        }
     }
 }

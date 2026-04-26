@@ -1,493 +1,1163 @@
 package ru.arc.configs
 
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.TextColor
+import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.bukkit.Material
+import org.bukkit.NamespacedKey
 import org.bukkit.Particle
-import org.jetbrains.annotations.NotNull
-import org.yaml.snakeyaml.DumperOptions
-import org.yaml.snakeyaml.Yaml
+import org.bukkit.Registry
+import org.bukkit.Sound
+import org.snakeyaml.engine.v2.api.DumpSettings
+import org.snakeyaml.engine.v2.api.LoadSettings
+import org.snakeyaml.engine.v2.api.StreamDataWriter
+import org.snakeyaml.engine.v2.api.lowlevel.Compose
+import org.snakeyaml.engine.v2.api.lowlevel.Serialize
+import org.snakeyaml.engine.v2.comments.CommentLine
+import org.snakeyaml.engine.v2.comments.CommentType
+import org.snakeyaml.engine.v2.common.FlowStyle
+import org.snakeyaml.engine.v2.common.ScalarStyle
+import org.snakeyaml.engine.v2.emitter.Emitter
+import org.snakeyaml.engine.v2.exceptions.Mark
+import org.snakeyaml.engine.v2.nodes.MappingNode
+import org.snakeyaml.engine.v2.nodes.Node
+import org.snakeyaml.engine.v2.nodes.NodeTuple
+import org.snakeyaml.engine.v2.nodes.ScalarNode
+import org.snakeyaml.engine.v2.nodes.SequenceNode
+import org.snakeyaml.engine.v2.nodes.Tag
 import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
-import ru.arc.util.TextUtil.mm
-import java.io.FileInputStream
-import java.io.FileWriter
+import java.io.StringWriter
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.time.Duration
+import java.util.Optional
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.read
+import kotlin.concurrent.write
 
+/**
+ * Configuration system using SnakeYAML Engine v2 with full comment preservation.
+ *
+ * Drop-in replacement for the old SnakeYAML v1 based Config with the same API surface.
+ * Comments in YAML files survive save/reload cycles.
+ *
+ * Designed to mirror ru.arccore.Config so that when ARCCore becomes a dependency
+ * the migration reduces to removing this file and updating imports.
+ * ARC-specific Bukkit accessors (material, particle, sound, etc.) sit below
+ * the ARCCore-compatible API and will eventually move to extension functions.
+ */
 @Suppress("UNCHECKED_CAST")
-class Config internal constructor(
+open class Config(
     private val folder: Path,
-    private val filePath: String
+    private val filePath: String,
 ) {
-    var map: MutableMap<String, Any> = ConcurrentHashMap()
+    val dataFolder get() = folder.toFile()
+
+    // ── SnakeYAML Engine v2 internals ──────────────────────────────────────
+
+    private var rootNode: MappingNode
+
+    /** Per-path comment registry, flushed to nodes on [save]. */
+    private val comments = ConcurrentHashMap<String, String>()
+
+    private val nodeLock = ReentrantReadWriteLock()
+
+    @Volatile
+    var version: Int = 0
+        private set
+
+    private val loadSettings =
+        LoadSettings
+            .builder()
+            .setParseComments(true)
+            .build()
+    private val dumpSettings =
+        DumpSettings
+            .builder()
+            .setDefaultFlowStyle(FlowStyle.BLOCK)
+            .setIndent(2)
+            .setDumpComments(true)
+            .build()
 
     init {
+        Files.createDirectories(folder)
+        // Copy the bundled default resource to disk if missing — same as old behaviour.
+        // In production ARC.createDefaultConfigs() has already done this; in tests this
+        // ensures the bundled YAML is present in the temp directory before first load.
         copyDefaultConfig(filePath, folder, false)
-        load()
+        rootNode = loadNode()
     }
 
-    fun integer(path: String, def: Int): Int {
-        val o = getValueForKeyPath(path)
-        if (o == null) {
-            injectDeepKey(path, def)
-            return def
-        }
-        if (o is Number) {
-            return o.toInt()
-        }
-        // Try to parse as string
-        return try {
-            o.toString().toInt()
-        } catch (e: NumberFormatException) {
-            warn("Could not parse integer from path: {} (value: {}), using default: {}", path, o, def)
-            injectDeepKey(path, def)
-            def
-        }
+    // ── Comment API ────────────────────────────────────────────────────────
+
+    fun setComment(
+        path: String,
+        comment: String,
+    ) {
+        comments[path] = comment
     }
 
-    fun bool(path: String, def: Boolean): Boolean {
-        val o = getValueForKeyPath(path)
-        if (o == null) {
-            injectDeepKey(path, def)
-            return def
+    // ── Setters ────────────────────────────────────────────────────────────
+
+    fun setInt(
+        path: String,
+        value: Int,
+        comment: String? = null,
+    ) {
+        comment?.let { setComment(path, it) }
+        setValue(path, value)
+    }
+
+    fun setBoolean(
+        path: String,
+        value: Boolean,
+        comment: String? = null,
+    ) {
+        comment?.let { setComment(path, it) }
+        setValue(path, value)
+    }
+
+    fun setString(
+        path: String,
+        value: String,
+        comment: String? = null,
+    ) {
+        comment?.let { setComment(path, it) }
+        setValue(path, value)
+    }
+
+    fun setStringList(
+        path: String,
+        value: List<String>,
+        comment: String? = null,
+    ) {
+        comment?.let { setComment(path, it) }
+        setValue(path, value)
+    }
+
+    fun setDouble(
+        path: String,
+        value: Double,
+        comment: String? = null,
+    ) {
+        comment?.let { setComment(path, it) }
+        setValue(path, value)
+    }
+
+    fun setLong(
+        path: String,
+        value: Long,
+        comment: String? = null,
+    ) {
+        comment?.let { setComment(path, it) }
+        setValue(path, value)
+    }
+
+    // ── Scalar accessors ───────────────────────────────────────────────────
+
+    @JvmOverloads
+    fun int(
+        path: String,
+        default: Int = 0,
+        comment: String? = null,
+    ): Int {
+        comment?.let { setComment(path, it) }
+        val value = getValue(path)
+        if (value == null) {
+            setValue(path, default)
+            return default
         }
-        if (o is Boolean) {
-            return o
-        }
-        // Try to parse as string
-        if (o is String) {
-            val s = o.trim().lowercase()
-            if (s == "true" || s == "1" || s == "yes") {
-                return true
+        return when (value) {
+            is Number -> {
+                value.toInt()
             }
-            if (s == "false" || s == "0" || s == "no") {
-                return false
-            }
-        }
-        warn("Could not parse boolean from path: {} (value: {}), using default: {}", path, o, def)
-        injectDeepKey(path, def)
-        return def
-    }
 
-    fun real(path: String, def: Double): Double {
-        val o = getValueForKeyPath(path)
-        if (o == null) {
-            injectDeepKey(path, def)
-            return def
-        }
-        if (o is Number) {
-            return o.toDouble()
-        }
-        // Try to parse as string
-        return try {
-            o.toString().toDouble()
-        } catch (e: NumberFormatException) {
-            warn("Could not parse double from path: {} (value: {}), using default: {}", path, o, def)
-            injectDeepKey(path, def)
-            def
-        }
-    }
-
-    fun string(path: String, def: String): String {
-        val o = getValueForKeyPath(path)
-        if (o == null) {
-            injectDeepKey(path, def)
-            return def
-        }
-        return try {
-            o as? String ?: o.toString()
-        } catch (e: Exception) {
-            o.toString()
-        }
-    }
-
-    fun component(path: String, vararg replacement: String): Component {
-        val o = getValueForKeyPath(path)
-        if (o == null) {
-            injectDeepKey(path, path)
-            return mm(path, true)
-        }
-        val s: String = if (o is String) o else o.toString()
-
-        var result = s
-        for (i in replacement.indices step 2) {
-            if (i + 1 >= replacement.size) break
-            result = result.replace(replacement[i], replacement[i + 1], ignoreCase = false)
-        }
-
-        return mm(result, true)
-    }
-
-    fun componentDef(path: String, def: String, tagResolver: TagResolver): Component {
-        val o = getValueForKeyPath(path)
-        if (o == null) {
-            injectDeepKey(path, def)
-            return TextUtil.strip(mm(def, tagResolver))!!
-        }
-        val s = if (o is String) o else o.toString()
-        return TextUtil.strip(mm(s, tagResolver))!!
-    }
-
-    fun componentDef(path: String, def: String, vararg replacers: String): Component {
-        val o = getValueForKeyPath(path)
-        if (o == null) {
-            injectDeepKey(path, def)
-            return mm(def, true, *replacers)
-        }
-        val s = if (o is String) o else o.toString()
-        return mm(s, true, *replacers)
-    }
-
-    fun component(path: String, tagResolver: TagResolver): Component {
-        val o = getValueForKeyPath(path)
-        if (o == null) {
-            injectDeepKey(path, path)
-            return TextUtil.strip(mm(path))!!
-        }
-        val s = if (o is String) o else o.toString()
-        return TextUtil.strip(mm(s, tagResolver))!!
-    }
-
-    fun componentList(path: String, vararg replacement: String): List<Component> {
-        val o = getValueForKeyPath(path)
-        if (o == null) {
-            injectDeepKey(path, listOf(path))
-            return listOf(TextUtil.strip(mm(path))!!)
-        }
-
-        val list = mutableListOf<Component>()
-        when (o) {
             is String -> {
-                var s: String = o
-                for (i in replacement.indices step 2) {
-                    if (i + 1 >= replacement.size) break
-                    s = s.replace(replacement[i], replacement[i + 1], ignoreCase = false)
+                value.toIntOrNull() ?: run {
+                    warn("Could not parse int from '{}' ({}), using default", path, value)
+                    default
                 }
-                list.add(mm(s, true))
             }
 
-            is List<*> -> {
-                for (obj in o) {
-                    if (obj is String) {
-                        var s1: String = obj
-                        for (i in replacement.indices step 2) {
-                            if (i + 1 >= replacement.size) break
-                            s1 = s1.replace(replacement[i], replacement[i + 1], ignoreCase = false)
-                        }
-                        list.add(mm(s1, true))
+            else -> {
+                default
+            }
+        }
+    }
+
+    @JvmOverloads
+    fun long(
+        path: String,
+        default: Long = 0L,
+        comment: String? = null,
+    ): Long {
+        comment?.let { setComment(path, it) }
+        val value = getValue(path)
+        if (value == null) {
+            setValue(path, default)
+            return default
+        }
+        return when (value) {
+            is Number -> {
+                value.toLong()
+            }
+
+            is String -> {
+                value.toLongOrNull() ?: run {
+                    warn("Could not parse long from '{}' ({}), using default", path, value)
+                    default
+                }
+            }
+
+            else -> {
+                default
+            }
+        }
+    }
+
+    @JvmOverloads
+    fun double(
+        path: String,
+        default: Double = 0.0,
+        comment: String? = null,
+    ): Double {
+        comment?.let { setComment(path, it) }
+        val value = getValue(path)
+        if (value == null) {
+            setValue(path, default)
+            return default
+        }
+        return when (value) {
+            is Number -> {
+                value.toDouble()
+            }
+
+            is String -> {
+                value.toDoubleOrNull() ?: run {
+                    warn("Could not parse double from '{}' ({}), using default", path, value)
+                    default
+                }
+            }
+
+            else -> {
+                default
+            }
+        }
+    }
+
+    @JvmOverloads
+    fun boolean(
+        path: String,
+        default: Boolean = false,
+        comment: String? = null,
+    ): Boolean {
+        comment?.let { setComment(path, it) }
+        val value = getValue(path)
+        if (value == null) {
+            setValue(path, default)
+            return default
+        }
+        return when (value) {
+            is Boolean -> {
+                value
+            }
+
+            is Number -> {
+                value.toInt() == 1
+            }
+
+            is String -> {
+                when (value.trim().lowercase()) {
+                    "true", "1", "yes" -> true
+                    "false", "0", "no" -> false
+                    else -> default
+                }
+            }
+
+            else -> {
+                default
+            }
+        }
+    }
+
+    @JvmOverloads
+    fun string(
+        path: String,
+        default: String = "",
+        comment: String? = null,
+    ): String {
+        comment?.let { setComment(path, it) }
+        val value = getValue(path)
+        if (value == null) {
+            setValue(path, default)
+            return default
+        }
+        return value.toString()
+    }
+
+    // ── Nullable accessors ─────────────────────────────────────────────────
+
+    fun intOrNull(path: String): Int? =
+        getValue(path)?.let {
+            when (it) {
+                is Number -> it.toInt()
+                is String -> it.toIntOrNull()
+                else -> null
+            }
+        }
+
+    fun longOrNull(path: String): Long? =
+        getValue(path)?.let {
+            when (it) {
+                is Number -> it.toLong()
+                is String -> it.toLongOrNull()
+                else -> null
+            }
+        }
+
+    fun doubleOrNull(path: String): Double? =
+        getValue(path)?.let {
+            when (it) {
+                is Number -> it.toDouble()
+                is String -> it.toDoubleOrNull()
+                else -> null
+            }
+        }
+
+    fun booleanOrNull(path: String): Boolean? =
+        getValue(path)?.let {
+            when (it) {
+                is Boolean -> {
+                    it
+                }
+
+                is Number -> {
+                    it.toInt() == 1
+                }
+
+                is String -> {
+                    when (it.trim().lowercase()) {
+                        "true", "1", "yes" -> true
+                        "false", "0", "no" -> false
+                        else -> null
                     }
                 }
-            }
-        }
-        return list
-    }
 
-    fun componentList(path: String, tagResolver: TagResolver): List<Component> {
-        val o = getValueForKeyPath(path)
-        if (o == null) {
-            injectDeepKey(path, listOf(path))
-            return listOf(TextUtil.strip(mm(path, tagResolver))!!)
-        }
-
-        val list = mutableListOf<Component>()
-        when (o) {
-            is String -> {
-                list.add(TextUtil.strip(mm(o, tagResolver))!!)
-            }
-
-            is List<*> -> {
-                for (obj in o) {
-                    if (obj is String) {
-                        list.add(TextUtil.strip(mm(obj, tagResolver))!!)
-                    }
+                else -> {
+                    null
                 }
             }
         }
-        return list
-    }
 
-    fun componentListDef(path: String, def: List<String>, vararg replacement: String): List<Component> {
-        val o = getValueForKeyPath(path)
-        if (o == null) {
-            injectDeepKey(path, def)
-            return componentList(path, *replacement)
-        }
+    fun stringOrNull(path: String): String? = getValue(path)?.toString()
 
-        val list = mutableListOf<Component>()
-        when (o) {
-            is String -> {
-                var s: String = o
-                for (i in replacement.indices step 2) {
-                    if (i + 1 >= replacement.size) break
-                    s = s.replace(replacement[i], replacement[i + 1], ignoreCase = false)
-                }
-                list.add(mm(s, true))
+    // ── List accessors ─────────────────────────────────────────────────────
+
+    @JvmOverloads
+    fun stringList(
+        path: String,
+        default: List<String> = emptyList(),
+    ): List<String> {
+        val value =
+            getValue(path) ?: run {
+                setValue(path, default)
+                return default
             }
-
-            is List<*> -> {
-                for (obj in o) {
-                    if (obj is String) {
-                        var s1: String = obj
-                        for (i in replacement.indices step 2) {
-                            if (i + 1 >= replacement.size) break
-                            s1 = s1.replace(replacement[i], replacement[i + 1], ignoreCase = false)
-                        }
-                        list.add(mm(s1, true))
-                    }
-                }
-            }
+        return when (value) {
+            is List<*> -> value.mapNotNull { it?.toString() }
+            else -> listOf(value.toString())
         }
-        return list
     }
 
-    fun componentListDef(path: String, def: List<String>, tagResolver: TagResolver): List<Component> {
-        val o = getValueForKeyPath(path)
-        if (o == null) {
-            injectDeepKey(path, def)
-            return componentList(path, tagResolver)
+    fun stringListOrNull(path: String): List<String>? {
+        val value = getValue(path) ?: return null
+        return when (value) {
+            is List<*> -> value.mapNotNull { it?.toString() }
+            else -> listOf(value.toString())
         }
-
-        val list = mutableListOf<Component>()
-        when (o) {
-            is String -> {
-                list.add(TextUtil.strip(mm(o, tagResolver))!!)
-            }
-
-            is List<*> -> {
-                for (obj in o) {
-                    if (obj is String) {
-                        list.add(TextUtil.strip(mm(obj, tagResolver))!!)
-                    }
-                }
-            }
-        }
-        return list
     }
 
-    fun stringList(path: String): List<String> {
-        val o = getValueForKeyPath(path)
-        if (o == null) {
-            injectDeepKey(path, ArrayList<String>())
-            return ArrayList()
-        }
-        if (o is String) {
-            return listOf(o)
-        }
-        return o as List<String>
-    }
-
-    fun stringSet(path: String): Set<String> {
-        val o = getValueForKeyPath(path)
-        if (o == null) {
-            injectDeepKey(path, ArrayList<Any>())
-            return HashSet()
-        }
-        if (o is String) {
-            return setOf(o)
-        }
-        return HashSet(o as Collection<String>)
-    }
-
-    fun stringList(path: String, def: List<String>): List<String> {
-        val o = getValueForKeyPath(path)
-        if (o == null) {
-            injectDeepKey(path, def)
-            return def
-        }
-        if (o is String) {
-            return listOf(o)
-        }
-        return o as List<String>
-    }
-
-    fun <T> map(path: String): Map<String, T> {
-        val o = getValueForKeyPath(path)
-        if (o == null) {
-            injectDeepKey(path, LinkedHashMap<String, T>())
-            return LinkedHashMap()
-        }
-        // Collect keys to modify first to avoid ConcurrentModificationException
-        val keysToReplace = mutableListOf<Any>()
-        val mapObj = o as MutableMap<Any, Any>
-        for (key in mapObj.keys) {
-            if (key !is String) {
-                keysToReplace.add(key)
-            }
-        }
-        // Now modify the map
-        var modified = false
-        for (key in keysToReplace) {
-            val stringKey = key.toString()
-            val value = mapObj[key] ?: continue
-            mapObj.remove(key)
-            mapObj[stringKey] = value
-            modified = true
-        }
-        if (modified) {
-            injectDeepKey(path, o)
-        }
-        return o as Map<String, T>
-    }
-
-    fun <T> map(path: String, def: Map<String, T>): Map<String, T> {
-        val o = getValueForKeyPath(path)
-        if (o == null) {
-            injectDeepKey(path, def)
-            return def
-        }
-        // Handle immutable empty maps from YAML parsing
-        if (o is Map<*, *> && o.isEmpty()) {
-            @Suppress("UNCHECKED_CAST")
-            return o as Map<String, T>
-        }
-        if (o !is MutableMap<*, *>) {
-            // Return as-is if not mutable (shouldn't happen with valid YAML, but be safe)
-            @Suppress("UNCHECKED_CAST")
-            return o as Map<String, T>
-        }
-        // Collect keys to modify first to avoid ConcurrentModificationException
-        val keysToReplace = mutableListOf<Any>()
-
-        @Suppress("UNCHECKED_CAST")
-        val mapObj = o as MutableMap<Any, Any>
-        for (key in mapObj.keys) {
-            if (key !is String) {
-                keysToReplace.add(key)
-            }
-        }
-        // Now modify the map
-        var modified = false
-        for (key in keysToReplace) {
-            val stringKey = key.toString()
-            val value = mapObj[key] ?: continue
-            mapObj.remove(key)
-            mapObj[stringKey] = value
-            modified = true
-        }
-        if (modified) {
-            injectDeepKey(path, o)
-        }
-        return o as Map<String, T>
-    }
+    fun stringSet(path: String): Set<String> = stringList(path).toSet()
 
     fun <T> list(path: String): MutableList<T> {
-        val o = getValueForKeyPath(path)
-        if (o == null) {
-            injectDeepKey(path, ArrayList<Any>())
-            return ArrayList()
+        val value =
+            getValue(path) ?: run {
+                setValue(path, emptyList<Any>())
+                return mutableListOf()
+            }
+        return (value as List<T>).toMutableList()
+    }
+
+    fun <T> list(
+        path: String,
+        default: List<T>,
+    ): MutableList<T> {
+        val value =
+            getValue(path) ?: run {
+                setValue(path, default)
+                return default.toMutableList()
+            }
+        return (value as List<T>).toMutableList()
+    }
+
+    // ── Map / structural accessors ─────────────────────────────────────────
+
+    fun <T> map(path: String): Map<String, T> {
+        val value =
+            getValue(path) ?: run {
+                setValue(path, emptyMap<String, T>())
+                return emptyMap()
+            }
+        return value as Map<String, T>
+    }
+
+    fun <T> map(
+        path: String,
+        default: Map<String, T>,
+    ): Map<String, T> {
+        val value = getValue(path) ?: return default
+        if (value is Map<*, *> && value.isEmpty()) return value as Map<String, T>
+        return value as? Map<String, T> ?: default
+    }
+
+    fun keys(path: String): Set<String> {
+        val value = getValue(path) ?: return emptySet()
+        return when (value) {
+            is Map<*, *> -> value.keys.mapNotNull { it?.toString() }.toSet()
+            else -> emptySet()
         }
-        return (o as List<T>).toMutableList()
     }
 
-    fun <T> list(path: String, def: List<T>): MutableList<T> {
-        val o = getValueForKeyPath(path)
-        if (o == null) {
-            injectDeepKey(path, def)
-            return def.toMutableList()
+    fun exists(path: String): Boolean = getValue(path) != null
+
+    fun section(prefix: String) = ConfigSection(this, prefix)
+
+    // ── Duration ───────────────────────────────────────────────────────────
+
+    fun durationOrNull(path: String): Duration? {
+        val value = stringOrNull(path) ?: return null
+        return parseDuration(value)
+    }
+
+    fun duration(
+        path: String,
+        default: Duration,
+    ): Duration = durationOrNull(path) ?: default
+
+    fun durationMillis(
+        path: String,
+        default: Long,
+    ): Long = durationOrNull(path)?.toMillis() ?: default
+
+    fun durationSeconds(
+        path: String,
+        default: Long,
+    ): Long = durationOrNull(path)?.toSeconds() ?: default
+
+    fun durationTicks(
+        path: String,
+        default: Long,
+    ): Long = durationOrNull(path)?.toMillis()?.div(50) ?: default
+
+    // ── Color ──────────────────────────────────────────────────────────────
+
+    fun colorOrNull(path: String): TextColor? {
+        val hex = stringOrNull(path)?.removePrefix("#") ?: return null
+        return runCatching { TextColor.fromHexString("#$hex") }.getOrNull()
+    }
+
+    fun color(
+        path: String,
+        default: TextColor,
+    ): TextColor = colorOrNull(path) ?: default
+
+    // ── Enum ───────────────────────────────────────────────────────────────
+
+    inline fun <reified E : Enum<E>> enumOrNull(path: String): E? {
+        val name = stringOrNull(path) ?: return null
+        return runCatching { enumValueOf<E>(name.uppercase()) }.getOrNull()
+    }
+
+    inline fun <reified E : Enum<E>> enum(
+        path: String,
+        default: E,
+    ): E = enumOrNull<E>(path) ?: default
+
+    inline fun <reified E : Enum<E>> enumSet(
+        path: String,
+        default: Set<E> = emptySet(),
+    ): Set<E> {
+        val list = stringListOrNull(path) ?: return default
+        return list
+            .mapNotNull { runCatching { enumValueOf<E>(it.uppercase()) }.getOrNull() }
+            .toSet()
+            .ifEmpty { default }
+    }
+
+    // ── Component (Adventure / MiniMessage) ───────────────────────────────
+
+    /**
+     * Get a Component using the TagResolver DSL — always requires a default.
+     * Auto-injects the default and a tag comment when the key is missing.
+     */
+    fun component(
+        path: String,
+        default: String,
+        tags: TagResolverBuilder.() -> Unit = {},
+    ): Component {
+        val builder = TagResolverBuilder().apply(tags)
+        val value = stringOrNull(path)
+        if (value == null) {
+            val tagNames = builder.getTagNames()
+            if (tagNames.isNotEmpty()) setComment(path, "Available tags: " + tagNames.joinToString(", ") { "<$it>" })
+            setValue(path, default)
+            return MiniMessage.miniMessage().deserialize(default, builder.build())
         }
-        return (o as List<T>).toMutableList()
+        return MiniMessage.miniMessage().deserialize(value, builder.build())
     }
 
-    fun keys(path: String): List<String> {
-        val o = map<Any>(path, emptyMap())
-        if (o == null) return ArrayList()
-        return ArrayList(o.keys)
+    fun componentOrNull(
+        path: String,
+        tags: TagResolverBuilder.() -> Unit = {},
+    ): Component? {
+        val value = stringOrNull(path) ?: return null
+        val resolver = TagResolverBuilder().apply(tags).build()
+        return MiniMessage.miniMessage().deserialize(value, resolver)
     }
 
-    private fun getValueForKeyPath(keyPath: String): Any? {
-        val keyParts = keyPath.split("\\.".toRegex())
+    fun componentList(
+        path: String,
+        tags: TagResolverBuilder.() -> Unit = {},
+    ): List<Component> {
+        val resolver = TagResolverBuilder().apply(tags).build()
+        val list =
+            stringListOrNull(path) ?: run {
+                setValue(path, emptyList<String>())
+                return emptyList()
+            }
+        return list.map { MiniMessage.miniMessage().deserialize(it, resolver) }
+    }
 
-        var currentLevel = map
-        for (i in keyParts.indices) {
-            val keyPart = keyParts[i]
-            if (currentLevel.containsKey(keyPart)) {
-                if (i == keyParts.size - 1) {
-                    return currentLevel[keyPart]
-                }
-                val nextLevel = currentLevel[keyPart]
-                if (nextLevel is Map<*, *>) {
-                    @Suppress("UNCHECKED_CAST")
-                    currentLevel = nextLevel as MutableMap<String, Any>
-                } else {
-                    // Intermediate key exists but is not a map
-                    debug("Key path interrupted at: $keyPath (part: $keyPart)")
-                    return null
-                }
+    fun componentList(
+        path: String,
+        tagResolver: TagResolver,
+    ): List<Component> {
+        val list =
+            stringListOrNull(path) ?: run {
+                setValue(path, emptyList<String>())
+                return emptyList()
+            }
+        return list.map { TextUtil.strip(TextUtil.mm(it, tagResolver))!! }
+    }
+
+    /**
+     * Legacy component accessor with TagResolver — no default required (falls back to path key).
+     * Prefer [component] with an explicit default for new code.
+     */
+    fun component(
+        path: String,
+        tagResolver: TagResolver,
+    ): Component {
+        val value =
+            stringOrNull(path) ?: run {
+                setValue(path, path)
+                return TextUtil.strip(TextUtil.mm(path))!!
+            }
+        return TextUtil.strip(TextUtil.mm(value, tagResolver))!!
+    }
+
+    // ── componentDef — kept for backward compat, prefer component() ────────
+
+    /**
+     * @deprecated Use [component] with an explicit default instead.
+     */
+    fun componentDef(
+        path: String,
+        def: String,
+        vararg replacers: String,
+    ): Component =
+        component(path, def) {}.let { c ->
+            if (replacers.isEmpty()) {
+                c
             } else {
-                // Key not found or not a mapping; handle accordingly
-                debug("Key not found: $keyPath")
-                return null
+                val str = stringOrNull(path) ?: def
+                var result = str
+                for (i in replacers.indices step 2) {
+                    if (i + 1 < replacers.size) result = result.replace(replacers[i], replacers[i + 1])
+                }
+                TextUtil.mm(result, true)
             }
         }
-        // This line should never be reached, but kept for safety
-        return null
+
+    /**
+     * @deprecated Use [component] with an explicit default instead.
+     */
+    fun componentDef(
+        path: String,
+        def: String,
+        tagResolver: TagResolver,
+    ): Component {
+        val value =
+            stringOrNull(path) ?: run {
+                setValue(path, def)
+                return TextUtil.strip(TextUtil.mm(def, tagResolver))!!
+            }
+        return TextUtil.strip(TextUtil.mm(value, tagResolver))!!
     }
 
-    fun injectDeepKey(keyPath: String, value: Any) {
+    fun componentListDef(
+        path: String,
+        def: List<String>,
+        vararg replacers: String,
+    ): List<Component> {
+        if (getValue(path) == null) setValue(path, def)
+        return componentList(path)
+    }
+
+    fun componentListDef(
+        path: String,
+        def: List<String>,
+        tagResolver: TagResolver,
+    ): List<Component> {
+        if (getValue(path) == null) setValue(path, def)
+        return componentList(path, tagResolver)
+    }
+
+    // ── Property delegates (hot-reload) ────────────────────────────────────
+
+    fun intProp(
+        path: String,
+        default: Int = 0,
+    ) = ConfigProperty { int(path, default) }
+
+    fun longProp(
+        path: String,
+        default: Long = 0L,
+    ) = ConfigProperty { long(path, default) }
+
+    fun doubleProp(
+        path: String,
+        default: Double = 0.0,
+    ) = ConfigProperty { double(path, default) }
+
+    fun booleanProp(
+        path: String,
+        default: Boolean = false,
+    ) = ConfigProperty { boolean(path, default) }
+
+    fun stringProp(
+        path: String,
+        default: String = "",
+    ) = ConfigProperty { string(path, default) }
+
+    fun stringListProp(
+        path: String,
+        default: List<String> = emptyList(),
+    ) = ConfigProperty { stringList(path, default) }
+
+    fun durationProp(
+        path: String,
+        default: Duration,
+    ) = ConfigProperty { duration(path, default) }
+
+    fun colorProp(
+        path: String,
+        default: TextColor,
+    ) = ConfigProperty { color(path, default) }
+
+    inline fun <reified E : Enum<E>> enumProp(
+        path: String,
+        default: E,
+    ) = ConfigProperty { enum(path, default) }
+
+    fun componentProp(
+        path: String,
+        default: String,
+        tags: TagResolverBuilder.() -> Unit = {},
+    ) = ConfigProperty { component(path, default, tags) }
+
+    fun intPropOrNull(path: String) = ConfigProperty { intOrNull(path) }
+
+    fun longPropOrNull(path: String) = ConfigProperty { longOrNull(path) }
+
+    fun doublePropOrNull(path: String) = ConfigProperty { doubleOrNull(path) }
+
+    fun booleanPropOrNull(path: String) = ConfigProperty { booleanOrNull(path) }
+
+    fun stringPropOrNull(path: String) = ConfigProperty { stringOrNull(path) }
+
+    fun colorPropOrNull(path: String) = ConfigProperty { colorOrNull(path) }
+
+    inline fun <reified E : Enum<E>> enumPropOrNull(path: String) = ConfigProperty { enumOrNull<E>(path) }
+
+    fun componentPropOrNull(
+        path: String,
+        tags: TagResolverBuilder.() -> Unit = {},
+    ) = ConfigProperty { componentOrNull(path, tags) }
+
+    // ── Cached values ──────────────────────────────────────────────────────
+
+    fun <T> cached(parser: Config.() -> T): CachedConfigValue<T> = CachedConfigValue(this, parser)
+
+    // ── Validation helpers ─────────────────────────────────────────────────
+
+    fun intInRange(
+        path: String,
+        default: Int,
+        range: IntRange,
+    ): Int = int(path, default).coerceIn(range)
+
+    fun doubleInRange(
+        path: String,
+        default: Double,
+        min: Double,
+        max: Double,
+    ): Double = double(path, default).coerceIn(min, max)
+
+    fun stringMatching(
+        path: String,
+        default: String,
+        pattern: Regex,
+    ): String {
+        val value = string(path, default)
+        return if (pattern.matches(value)) value else default
+    }
+
+    // ── Bukkit-specific accessors ──────────────────────────────────────────
+    // These extend the ARCCore-compatible base above.
+    // When ARC eventually depends on ARCCore, these move to extension functions.
+
+    fun materialOrNull(path: String): Material? {
+        val name = stringOrNull(path) ?: return null
+        return runCatching { Material.valueOf(name.uppercase()) }.getOrNull()
+    }
+
+    fun material(
+        path: String,
+        default: Material,
+    ): Material = materialOrNull(path) ?: default
+
+    fun particleOrNull(path: String): Particle? {
+        val name = stringOrNull(path) ?: return null
+        return runCatching { Particle.valueOf(name.uppercase()) }.getOrNull()
+    }
+
+    fun particle(
+        path: String,
+        default: Particle,
+    ): Particle = particleOrNull(path) ?: default
+
+    fun soundOrNull(path: String): Sound? {
+        val name = stringOrNull(path) ?: return null
+        val key =
+            NamespacedKey.fromString(name.lowercase())
+                ?: NamespacedKey.minecraft(name.lowercase().replace("_", "."))
+        return Registry.SOUNDS.get(key)
+    }
+
+    fun sound(
+        path: String,
+        default: Sound,
+    ): Sound = soundOrNull(path) ?: default
+
+    fun materialSet(
+        path: String,
+        default: Set<Material> = emptySet(),
+    ): Set<Material> {
+        val list = stringListOrNull(path) ?: return default
+        return list
+            .mapNotNull { name ->
+                runCatching { Material.valueOf(name.uppercase()) }
+                    .onFailure { warn("Could not parse material: {}", name) }
+                    .getOrNull()
+            }.toSet()
+            .ifEmpty { default }
+    }
+
+    fun materials(
+        path: String,
+        default: Set<Material> = emptySet(),
+    ): Set<Material> = materialSet(path, default)
+
+    // ── Mutable list helper ────────────────────────────────────────────────
+
+    fun addToList(
+        path: String,
+        value: Any,
+    ) {
+        val current = list<Any>(path)
+        current.add(value)
+        setValue(path, current)
+        save()
+    }
+
+    // ── Legacy name aliases (keep existing callers compiling) ──────────────
+
+    @JvmOverloads
+    fun integer(
+        path: String,
+        default: Int = 0,
+    ): Int = int(path, default)
+
+    @JvmOverloads
+    fun bool(
+        path: String,
+        default: Boolean = false,
+    ): Boolean = boolean(path, default)
+
+    @JvmOverloads
+    fun real(
+        path: String,
+        default: Double = 0.0,
+    ): Double = double(path, default)
+
+    @JvmOverloads
+    fun longValue(
+        path: String,
+        default: Long = 0L,
+    ): Long = long(path, default)
+
+    // ── Java vararg compat — old component(path, tag, value, ...) style ───
+    // Java callers that haven't been migrated to the DSL API yet use these.
+
+    /**
+     * Java-callable: resolves the component, applying [replacements] as alternating tag/value pairs.
+     * Falls back to the path key itself if the config entry is missing.
+     */
+    fun component(
+        path: String,
+        vararg replacements: String,
+    ): Component {
+        val raw =
+            stringOrNull(path) ?: run {
+                setValue(path, path)
+                path
+            }
+        var result = raw
+        var i = 0
+        while (i + 1 < replacements.size) {
+            result = result.replace(replacements[i], replacements[i + 1])
+            i += 2
+        }
+        return TextUtil.mm(result, true)
+    }
+
+    fun componentList(
+        path: String,
+        vararg replacements: String,
+    ): List<Component> {
+        val list =
+            stringListOrNull(path) ?: run {
+                setValue(path, emptyList<String>())
+                return emptyList()
+            }
+        return list.map { raw ->
+            var result = raw
+            var i = 0
+            while (i + 1 < replacements.size) {
+                result = result.replace(replacements[i], replacements[i + 1])
+                i += 2
+            }
+            TextUtil.mm(result, true)
+        }
+    }
+
+    // ── Public injectDeepKey (for test compatibility) ──────────────────────
+
+    fun injectDeepKey(
+        path: String,
+        value: Any,
+    ) {
+        debug("Injecting key: {} with value: {}", path, value)
+        setValue(path, value)
+        save()
+    }
+
+    // ── Load / Save / Reload ───────────────────────────────────────────────
+
+    open fun reload(): Unit =
+        nodeLock.write {
+            rootNode = loadNode()
+            version++
+        }
+
+    open fun save() {
+        // applyComments mutates node metadata, so it needs the write lock.
+        // Serialization is read-only and also runs under the write lock here
+        // (downgrading would require a lock exchange which ReentrantReadWriteLock doesn't support).
+        val yaml =
+            nodeLock.write {
+                try {
+                    applyComments(rootNode, "")
+                    val writer = StringWriter()
+                    val streamWriter =
+                        object : StreamDataWriter {
+                            override fun write(str: String) = writer.write(str)
+
+                            override fun write(
+                                str: String,
+                                off: Int,
+                                len: Int,
+                            ) = writer.write(str, off, len)
+
+                            override fun flush() = writer.flush()
+                        }
+                    val emitter = Emitter(dumpSettings, streamWriter)
+                    val serialize = Serialize(dumpSettings)
+                    for (event in serialize.serializeOne(rootNode)) emitter.emit(event)
+                    writer.toString()
+                } catch (e: Exception) {
+                    error("Could not serialize config: {}", filePath, e)
+                    return@save
+                }
+            }
         try {
-            debug("Injecting key: $keyPath with value: $value")
-            load()
-            val keyParts = keyPath.split("\\.".toRegex())
+            folder.resolve(filePath).toFile().writeText(yaml)
+        } catch (e: Exception) {
+            error("Could not write config file: {}", filePath, e)
+        }
+    }
 
-            var currentLevel = map
-            for (i in 0 until keyParts.size - 1) {
-                currentLevel.putIfAbsent(keyParts[i], LinkedHashMap<String, Any>())
-                @Suppress("UNCHECKED_CAST")
-                currentLevel = currentLevel[keyParts[i]] as MutableMap<String, Any>
+    /** Load (or reload) from disk. Called from [reload] and init. */
+    fun load() = reload()
+
+    // ── Internal node-tree helpers ─────────────────────────────────────────
+
+    private fun loadNode(): MappingNode {
+        return try {
+            val file = folder.resolve(filePath)
+            if (!Files.exists(file)) return createMappingNode(mutableListOf())
+            val content = file.toFile().readText()
+            if (content.isBlank()) return createMappingNode(mutableListOf())
+            val node = Compose(loadSettings).composeString(content).orElse(null)
+            if (node is MappingNode) node else createMappingNode(mutableListOf())
+        } catch (e: Exception) {
+            error("Could not load config: {}", filePath, e)
+            createMappingNode(mutableListOf())
+        }
+    }
+
+    private fun getValue(keyPath: String): Any? =
+        nodeLock.read {
+            val parts = keyPath.split(".")
+            var current: Node? = rootNode
+            for (part in parts) {
+                current =
+                    (current as? MappingNode)
+                        ?.value
+                        ?.find { (it.keyNode as? ScalarNode)?.value == part }
+                        ?.valueNode
+                if (current == null) return@read null
+            }
+            when (val node = current) {
+                is ScalarNode -> parseScalarValue(node)
+                is MappingNode -> convertNodeToMap(node)
+                is SequenceNode -> convertNodeToList(node)
+                else -> null
+            }
+        }
+
+    private fun setValue(
+        keyPath: String,
+        value: Any,
+    ) = nodeLock.write {
+        val parts = keyPath.split(".")
+        var current = rootNode
+        for (i in 0 until parts.size - 1) {
+            val part = parts[i]
+            val existing = current.value.find { (it.keyNode as? ScalarNode)?.value == part }
+            current =
+                if (existing != null && existing.valueNode is MappingNode) {
+                    existing.valueNode as MappingNode
+                } else {
+                    val newMapping = createMappingNode(mutableListOf())
+                    val newTuples = current.value.filter { (it.keyNode as? ScalarNode)?.value != part }.toMutableList()
+                    newTuples.add(NodeTuple(createScalarNode(part), newMapping))
+                    current.value.clear()
+                    current.value.addAll(newTuples)
+                    newMapping
+                }
+        }
+        val finalKey = parts.last()
+        val newTuples = current.value.filter { (it.keyNode as? ScalarNode)?.value != finalKey }.toMutableList()
+        newTuples.add(NodeTuple(createScalarNode(finalKey), createNodeForValue(value)))
+        current.value.clear()
+        current.value.addAll(newTuples)
+    }
+
+    private fun applyComments(
+        node: MappingNode,
+        prefix: String,
+    ) {
+        for (tuple in node.value) {
+            val keyNode = tuple.keyNode as? ScalarNode ?: continue
+            val fullPath = if (prefix.isEmpty()) keyNode.value else "$prefix.${keyNode.value}"
+            comments[fullPath]?.let { comment ->
+                keyNode.blockComments =
+                    listOf(
+                        CommentLine(Optional.empty<Mark>(), Optional.empty<Mark>(), " $comment", CommentType.BLOCK),
+                    )
+            }
+            if (tuple.valueNode is MappingNode) applyComments(tuple.valueNode as MappingNode, fullPath)
+        }
+    }
+
+    private fun createScalarNode(value: String) = ScalarNode(Tag.STR, value, ScalarStyle.PLAIN)
+
+    private fun createMappingNode(tuples: MutableList<NodeTuple>) = MappingNode(Tag.MAP, tuples, FlowStyle.BLOCK)
+
+    private fun createNodeForValue(value: Any): Node =
+        when (value) {
+            is String -> {
+                ScalarNode(Tag.STR, value, ScalarStyle.PLAIN)
             }
 
-            // Inject the value at the final level
-            currentLevel[keyParts[keyParts.size - 1]] = value
-            save()
-        } catch (e: Exception) {
-            error("Could not inject key: {}", keyPath)
-        }
-    }
-
-    fun load() {
-        val yaml = Yaml()
-        val configFile = folder.resolve(filePath).toFile()
-        val stream = FileInputStream(configFile)
-        @Suppress("UNCHECKED_CAST")
-        map = (yaml.load(stream) as? MutableMap<String, Any>) ?: ConcurrentHashMap()
-        stream.close()
-    }
-
-    fun save() {
-        val options = DumperOptions().apply {
-            defaultFlowStyle = DumperOptions.FlowStyle.BLOCK
-            isPrettyFlow = true
-            isAllowUnicode = true
-        }
-        val yaml = Yaml(options)
-        val file = folder.resolve(filePath).toFile().path
-        try {
-            FileWriter(file).use { writer ->
-                yaml.dump(map, writer)
+            is Int -> {
+                ScalarNode(Tag.INT, value.toString(), ScalarStyle.PLAIN)
             }
-        } catch (e: Exception) {
-            error("Could not save config: {}", file)
+
+            is Long -> {
+                ScalarNode(Tag.INT, value.toString(), ScalarStyle.PLAIN)
+            }
+
+            is Double -> {
+                ScalarNode(Tag.FLOAT, value.toString(), ScalarStyle.PLAIN)
+            }
+
+            is Float -> {
+                ScalarNode(Tag.FLOAT, value.toString(), ScalarStyle.PLAIN)
+            }
+
+            is Boolean -> {
+                ScalarNode(Tag.BOOL, value.toString(), ScalarStyle.PLAIN)
+            }
+
+            is Map<*, *> -> {
+                createMappingNode(
+                    value.entries
+                        .mapNotNull { (k, v) ->
+                            if (k != null && v != null) {
+                                NodeTuple(
+                                    createScalarNode(k.toString()),
+                                    createNodeForValue(v),
+                                )
+                            } else {
+                                null
+                            }
+                        }.toMutableList(),
+                )
+            }
+
+            is List<*> -> {
+                SequenceNode(
+                    Tag.SEQ,
+                    value.mapNotNull { if (it != null) createNodeForValue(it) else null },
+                    FlowStyle.BLOCK,
+                )
+            }
+
+            else -> {
+                ScalarNode(Tag.STR, value.toString(), ScalarStyle.PLAIN)
+            }
         }
-    }
+
+    private fun parseScalarValue(node: ScalarNode): Any? =
+        when (node.tag) {
+            Tag.INT -> {
+                node.value.toLongOrNull() ?: node.value.toIntOrNull() ?: node.value
+            }
+
+            Tag.FLOAT -> {
+                node.value.toDoubleOrNull() ?: node.value
+            }
+
+            Tag.BOOL -> {
+                val strict = node.value.toBooleanStrictOrNull()
+                strict ?: (node.value.lowercase() == "yes")
+            }
+
+            else -> {
+                node.value
+            }
+        }
+
+    private fun convertNodeToMap(node: MappingNode): Map<String, Any?> =
+        buildMap {
+            for (tuple in node.value) {
+                val key = (tuple.keyNode as? ScalarNode)?.value ?: continue
+                put(
+                    key,
+                    when (val v = tuple.valueNode) {
+                        is ScalarNode -> parseScalarValue(v)
+                        is MappingNode -> convertNodeToMap(v)
+                        is SequenceNode -> convertNodeToList(v)
+                        else -> null
+                    },
+                )
+            }
+        }
+
+    private fun convertNodeToList(node: SequenceNode): List<Any?> =
+        node.value.map { v ->
+            when (v) {
+                is ScalarNode -> parseScalarValue(v)
+                is MappingNode -> convertNodeToMap(v)
+                is SequenceNode -> convertNodeToList(v)
+                else -> null
+            }
+        }
+
+    // For compatibility with old code that accessed config.map directly
+    val map: Map<String, Any?> get() = nodeLock.read { convertNodeToMap(rootNode) }
+
+    // ── Companion ──────────────────────────────────────────────────────────
 
     companion object {
-        fun copyDefaultConfig(resource: String, folder: Path, replace: Boolean) {
+        private val DURATION_PATTERN = Regex("""(\d+)\s*(ms|s|sec|m|min|h|hour|d|day)?""", RegexOption.IGNORE_CASE)
+
+        fun parseDuration(value: String): Duration? {
+            var total = Duration.ZERO
+            var found = false
+            DURATION_PATTERN.findAll(value.trim()).forEach { match ->
+                found = true
+                val amount = match.groupValues[1].toLongOrNull() ?: return@forEach
+                total =
+                    total.plus(
+                        when (match.groupValues[2].lowercase()) {
+                            "", "ms" -> Duration.ofMillis(amount)
+                            "s", "sec" -> Duration.ofSeconds(amount)
+                            "m", "min" -> Duration.ofMinutes(amount)
+                            "h", "hour" -> Duration.ofHours(amount)
+                            "d", "day" -> Duration.ofDays(amount)
+                            else -> Duration.ofMillis(amount)
+                        },
+                    )
+            }
+            return if (found) total else null
+        }
+
+        /**
+         * Copy a bundled resource from the classpath to [folder] if it doesn't already exist.
+         * Kept for call sites that relied on the old Config.init auto-copy behavior.
+         */
+        fun copyDefaultConfig(
+            resource: String,
+            folder: Path,
+            replace: Boolean,
+        ) {
             try {
+                val path = folder.resolve(resource)
+                if (Files.exists(path) && !replace) return
                 Config::class.java.classLoader.getResourceAsStream(resource).use { stream ->
-                    val path = folder.resolve(resource)
-                    if (Files.exists(path)) {
-                        if (!replace) {
-                            return
-                        }
-                    }
                     Files.createDirectories(path.parent)
                     if (stream == null) {
-                        Files.createFile(path)
+                        if (!Files.exists(path)) Files.createFile(path)
                     } else {
                         Files.copy(stream, path, StandardCopyOption.REPLACE_EXISTING)
                     }
@@ -497,67 +1167,39 @@ class Config internal constructor(
             }
         }
     }
-
-    fun string(s: String): String {
-        return string(s, s)
-    }
-
-    fun addToList(path: String, value: Any) {
-        val list = list<Any>(path)
-        (list as MutableList<Any>).add(value)
-        injectDeepKey(path, list)
-    }
-
-    fun materialSet(s: String, def: Set<Material>): Set<Material> {
-        val list = stringList(s, def.map { it.name })
-        val materials = HashSet<Material>()
-        for (mat in list) {
-            try {
-                materials.add(Material.valueOf(mat.uppercase()))
-            } catch (e: Exception) {
-                warn("Could not parse material: {}", mat)
-            }
-        }
-        return materials
-    }
-
-    fun particle(s: String, def: Particle): Particle {
-        return try {
-            Particle.valueOf(string(s, def.name).uppercase())
-        } catch (e: Exception) {
-            def
-        }
-    }
-
-    fun material(s: String, material: Material): @NotNull Material {
-        return try {
-            Material.valueOf(string(s, material.name).uppercase())
-        } catch (e: Exception) {
-            material
-        }
-    }
-
-    fun longValue(s: String, def: Long): Long {
-        val o = getValueForKeyPath(s)
-        if (o == null) {
-            injectDeepKey(s, def)
-            return def
-        }
-        if (o is Number) {
-            return o.toLong()
-        }
-        // Try to parse as string
-        return try {
-            o.toString().toLong()
-        } catch (e: NumberFormatException) {
-            warn("Could not parse long from path: {} (value: {}), using default: {}", s, o, def)
-            injectDeepKey(s, def)
-            def
-        }
-    }
-
-    fun exists(s: String): Boolean {
-        return getValueForKeyPath(s) != null
-    }
 }
 
+// ── CachedConfigValue ──────────────────────────────────────────────────────────
+
+/**
+ * Caches a parsed config value and re-parses only when [Config.version] increments (on reload).
+ */
+class CachedConfigValue<T>(
+    private val config: Config,
+    private val parser: Config.() -> T,
+) {
+    @Volatile
+    private var cachedValue: T? = null
+
+    @Volatile
+    private var cachedVersion: Int = -1
+
+    fun get(): T {
+        val cv = config.version
+        if (cachedVersion == cv && cachedValue != null) return cachedValue!!
+        return synchronized(this) {
+            if (cachedVersion == cv && cachedValue != null) {
+                cachedValue!!
+            } else {
+                config.parser().also {
+                    cachedValue = it
+                    cachedVersion = cv
+                }
+            }
+        }
+    }
+
+    fun invalidate() {
+        cachedVersion = -1
+    }
+}

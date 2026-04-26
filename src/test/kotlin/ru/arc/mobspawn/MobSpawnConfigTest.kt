@@ -1,4 +1,3 @@
-@file:Suppress("OVERLOAD_RESOLUTION_AMBIGUITY")
 
 package ru.arc.mobspawn
 
@@ -23,7 +22,7 @@ class MobSpawnConfigTest {
 
         @Test
         fun `default config has sensible defaults`() {
-            val config = MobSpawnConfig()
+            val config = TestMobSpawnConfig()
 
             assertTrue(config.enabled)
             assertTrue(config.worlds.isEmpty())
@@ -37,7 +36,7 @@ class MobSpawnConfigTest {
             assertEquals(7, config.maxLightLevel)
             assertTrue(config.useCmiCommand)
             assertEquals(30, config.cmiSpread)
-            assertTrue(config.mobWeights.isEmpty())
+            assertTrue(config.trackedMobTypes.isEmpty())
         }
     }
 
@@ -47,7 +46,7 @@ class MobSpawnConfigTest {
 
         @Test
         fun `isSpawnTime returns true during night`() {
-            val config = MobSpawnConfig(startHour = 13, endHour = 0)
+            val config = TestMobSpawnConfig(startHour = 13, endHour = 0)
 
             // Night time: 13000-24000 ticks (13:00 - 0:00 in Minecraft time)
             assertTrue(config.isSpawnTime(13000L))
@@ -58,7 +57,7 @@ class MobSpawnConfigTest {
 
         @Test
         fun `isSpawnTime returns false during day`() {
-            val config = MobSpawnConfig(startHour = 13, endHour = 0)
+            val config = TestMobSpawnConfig(startHour = 13, endHour = 0)
 
             // Day time: 1000-12999 ticks
             assertFalse(config.isSpawnTime(1000L))
@@ -68,7 +67,7 @@ class MobSpawnConfigTest {
 
         @Test
         fun `isSpawnTime handles midnight correctly`() {
-            val config = MobSpawnConfig(startHour = 18, endHour = 6)
+            val config = TestMobSpawnConfig(startHour = 18, endHour = 6)
 
             // Should spawn from 18:00 to 06:00
             assertTrue(config.isSpawnTime(18000L))
@@ -79,7 +78,7 @@ class MobSpawnConfigTest {
 
         @Test
         fun `isSpawnTime works for day range`() {
-            val config = MobSpawnConfig(startHour = 6, endHour = 18)
+            val config = TestMobSpawnConfig(startHour = 6, endHour = 18)
 
             // Day range: 6000-18000 ticks
             assertTrue(config.isSpawnTime(6000L))
@@ -96,7 +95,7 @@ class MobSpawnConfigTest {
 
         @Test
         fun `createMobPicker returns empty picker for no mobs`() {
-            val config = MobSpawnConfig()
+            val config = TestMobSpawnConfig()
             val picker = config.createMobPicker()
 
             assertEquals(0, picker.size())
@@ -105,10 +104,12 @@ class MobSpawnConfigTest {
 
         @Test
         fun `createMobPicker contains all configured mobs`() {
-            val config = MobSpawnConfig(
-                mobWeights = mapOf(
-                    EntityType.ZOMBIE to 50,
-                    EntityType.SKELETON to 30,
+            val config =
+                TestMobSpawnConfig(
+                    mobWeights =
+                        mapOf(
+                            EntityType.ZOMBIE to 50,
+                            EntityType.SKELETON to 30,
                     EntityType.CREEPER to 20
                 )
             )
@@ -125,8 +126,10 @@ class MobSpawnConfigTest {
 
         @Test
         fun `createMobPicker respects weights roughly`() {
-            val config = MobSpawnConfig(
-                mobWeights = mapOf(
+            val config =
+                TestMobSpawnConfig(
+                    mobWeights =
+                        mapOf(
                     EntityType.ZOMBIE to 90,
                     EntityType.WITHER to 10
                 )
@@ -157,8 +160,9 @@ class MobSpawnConfigTest {
 
         @Test
         fun `config with custom values`() {
-            val config = MobSpawnConfig(
-                enabled = false,
+            val config =
+                TestMobSpawnConfig(
+                    enabled = false,
                 worlds = setOf("world", "world_nether"),
                 startHour = 18,
                 endHour = 6,
@@ -185,9 +189,7 @@ class MobSpawnConfigTest {
             assertEquals(5, config.maxLightLevel)
             assertFalse(config.useCmiCommand)
             assertEquals(50, config.cmiSpread)
-            assertEquals(1, config.mobWeights.size)
+            assertEquals(1, config.trackedMobTypes.size)
         }
     }
 }
-
-
