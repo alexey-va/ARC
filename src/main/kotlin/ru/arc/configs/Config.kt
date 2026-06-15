@@ -935,7 +935,8 @@ open class Config(
             if (!Files.exists(file)) return createMappingNode(mutableListOf())
             val content = file.toFile().readText()
             if (content.isBlank()) return createMappingNode(mutableListOf())
-            val node = Compose(loadSettings).composeString(content).orElse(null)
+            val parseContent = prepareYamlContentForParsing(content)
+            val node = Compose(loadSettings).composeString(parseContent).orElse(null)
             if (node is MappingNode) node else createMappingNode(mutableListOf())
         } catch (e: Exception) {
             error("Could not load config: {}", filePath, e)
@@ -1168,6 +1169,56 @@ open class Config(
         }
     }
 }
+
+/**
+ * Prepares YAML text for SnakeYAML Engine parsing.
+ *
+ * - Normalizes MiniMessage hex shorthand `<#RRGGBB>` → `<color:#RRGGBB>` (parser bug after UTF-8 text).
+ * - Appends a space when content ends with an unpaired UTF-16 high surrogate (truncated emoji).
+ */
+internal fun prepareYamlContentForParsing(content: String): String {
+    if (content.isEmpty()) return content
+    var normalized = MINIMESSAGE_HEX_SHORTHAND.replace(content) { match ->
+        "<color:#${match.groupValues[1]}>"
+    }
+    normalized = sanitizeUnpairedSurrogates(normalized)
+    if (Character.isHighSurrogate(normalized.last())) {
+        normalized += ' '
+    }
+    return normalized
+}
+
+/** Drops lone UTF-16 surrogates so SnakeYAML Engine does not crash on truncated emoji. */
+internal fun sanitizeUnpairedSurrogates(content: String): String {
+    if (content.isEmpty()) return content
+    val out = StringBuilder(content.length)
+    var i = 0
+    while (i < content.length) {
+        val ch = content[i]
+        when {
+            Character.isHighSurrogate(ch) -> {
+                if (i + 1 < content.length && Character.isLowSurrogate(content[i + 1])) {
+                    out.append(ch).append(content[i + 1])
+                    i += 2
+                } else {
+                    out.append(' ')
+                    i++
+                }
+            }
+            Character.isLowSurrogate(ch) -> {
+                out.append(' ')
+                i++
+            }
+            else -> {
+                out.append(ch)
+                i++
+            }
+        }
+    }
+    return out.toString()
+}
+
+private val MINIMESSAGE_HEX_SHORTHAND = Regex("""<#([0-9A-Fa-f]{6})>""")
 
 // ── CachedConfigValue ──────────────────────────────────────────────────────────
 

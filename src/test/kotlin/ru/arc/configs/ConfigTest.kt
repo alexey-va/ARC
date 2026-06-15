@@ -979,6 +979,33 @@ class ConfigTest {
         assertEquals(3.141592653589793, result, 0.000000000000001, "Should preserve decimal precision")
     }
 
+    @Test
+    fun testLoadYamlEndingWithUnpairedHighSurrogate() {
+        val truncatedEmoji = "key: value\nnote: done\n" + "\uD83D"
+        Files.write(configFile, truncatedEmoji.toByteArray(Charsets.UTF_8))
+        config.load()
+        assertEquals("value", config.string("key", ""), "Should parse YAML even when file ends with high surrogate")
+    }
+
+    @Test
+    fun testSanitizeUnpairedSurrogatesInMiddle() {
+        val broken = "key: " + "\uD83D" + "value"
+        val sanitized = sanitizeUnpairedSurrogates(broken)
+        assertEquals("key:  value", sanitized, "Lone high surrogate should become a space")
+    }
+
+    @Test
+    fun testLoadBundledStockConfigWithEmoji() {
+        val resource = Config::class.java.classLoader.getResourceAsStream("stocks/stock.yml")
+        assertNotNull(resource, "Bundled stocks/stock.yml must exist")
+        resource.use { Files.copy(it, tempDir.resolve("stock.yml"), java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
+        val stockConfig = ConfigManager.create(tempDir, "stock.yml", "stock.yml")
+        assertTrue(stockConfig.bool("main-server", false), "Stock config should load with emoji lore lines")
+        val stocks = stockConfig.list<Map<String, Any>>("stocks")
+        assertFalse(stocks.isEmpty(), "Stock list should not be empty")
+        assertEquals("AAPL", stocks[0]["symbol"]?.toString())
+    }
+
     // Helper method to write YAML to file
     private fun writeYaml(content: String) {
         Files.write(configFile, content.toByteArray())

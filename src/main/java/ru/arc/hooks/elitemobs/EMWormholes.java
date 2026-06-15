@@ -1,6 +1,9 @@
 package ru.arc.hooks.elitemobs;
 
+import java.util.ArrayList;
+import java.util.ConcurrentModificationException;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 
 import com.destroystokyo.paper.ParticleBuilder;
@@ -55,8 +58,12 @@ public class EMWormholes {
 
     private void runChests() {
         List<Player> players = PlayerManager.getOnlinePlayersThreadSafe();
+        var chests = TreasureChest.getTreasureChestHashMap();
+        if (chests == null || chests.isEmpty()) return;
+
+        List<Map.Entry<Location, TreasureChest>> entries = snapshotEntries(chests);
         try {
-            for (var entry : TreasureChest.getTreasureChestHashMap().entrySet()) {
+            for (var entry : entries) {
                 Location location = entry.getKey();
                 if (location == null) continue;
                 String worldName = entry.getValue().getWorldName();
@@ -107,9 +114,10 @@ public class EMWormholes {
     }
 
     private void runWormholes() {
-        if (Wormhole.getWormholes() == null) return;
+        var wormholes = Wormhole.getWormholes();
+        if (wormholes == null || wormholes.isEmpty()) return;
         List<Player> players = PlayerManager.getOnlinePlayersThreadSafe();
-        for (Wormhole wormhole : Wormhole.getWormholes()) {
+        for (Wormhole wormhole : snapshot(wormholes)) {
             if (wormhole.getWormholeEntry1() == null || wormhole.getWormholeEntry2() == null) continue;
             if (wormhole.getWormholeEntry1().getLocation() == null || wormhole.getWormholeEntry2().getLocation() == null)
                 continue;
@@ -133,6 +141,29 @@ public class EMWormholes {
                             .color(wormhole.getParticleColor())
                             .spawn()));
         }
+    }
+
+    /** Copy iterable defensively — EliteMobs maps mutate on the main thread while this task runs async. */
+    private static <T> List<T> snapshot(Iterable<T> source) {
+        List<T> copy = new ArrayList<>();
+        try {
+            for (T item : source) {
+                copy.add(item);
+            }
+        } catch (ConcurrentModificationException ignored) {
+            // Skip this tick if EliteMobs updated the map mid-copy.
+        }
+        return copy;
+    }
+
+    private static <K, V> List<Map.Entry<K, V>> snapshotEntries(Map<K, V> map) {
+        List<Map.Entry<K, V>> copy = new ArrayList<>();
+        try {
+            copy.addAll(map.entrySet());
+        } catch (ConcurrentModificationException ignored) {
+            // Skip this tick.
+        }
+        return copy;
     }
 
 }
