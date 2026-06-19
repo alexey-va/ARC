@@ -108,20 +108,24 @@ object Logging {
         return cachedQuietSources
     }
 
+    private fun shouldSkipQuietDebugStackFrame(className: String): Boolean =
+        className.startsWith("ru.arc.util.Logging") ||
+            className.startsWith("java.lang.Thread") ||
+            className.startsWith("jdk.internal") ||
+            className.startsWith("java.util.concurrent") ||
+            className.startsWith("kotlinx.coroutines") ||
+            className.startsWith("kotlin.coroutines") ||
+            className.startsWith("sun.reflect") ||
+            className.startsWith("java.lang.reflect")
+
     private fun isQuietDebugCaller(): Boolean {
         val sources = quietDebugSources()
         if (sources.isEmpty()) return false
-        for (frame in Thread.currentThread().stackTrace) {
-            val className = frame.className
-            if (className.startsWith("ru.arc.util.Logging") ||
-                className.startsWith("java.lang.Thread") ||
-                className.startsWith("jdk.internal")
-            ) {
-                continue
-            }
-            return matchesQuietSource(className, sources)
-        }
-        return false
+        return Thread.currentThread().stackTrace
+            .asSequence()
+            .map { it.className }
+            .filterNot { shouldSkipQuietDebugStackFrame(it) }
+            .any { matchesQuietSource(it, sources) }
     }
 
     private fun plainForBuffer(text: String): String = text.replace(Regex("</?[^>]+>"), "")

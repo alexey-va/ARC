@@ -97,5 +97,5 @@ gradle/
 !gradle/wrapper/gradle-wrapper.properties
 .kotlin
 
-ARC
+/ARC
 deploy.properties
