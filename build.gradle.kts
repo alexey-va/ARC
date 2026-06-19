@@ -59,6 +59,8 @@ dependencies {
     implementation(libs.de.tr7zw.item.nbt.api)
     implementation(libs.org.apache.logging.log4j.log4j.api)
     implementation(libs.org.apache.logging.log4j.log4j.core)
+    implementation("org.apache.logging.log4j:log4j-layout-template-json:2.23.0")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
     implementation(libs.com.google.code.gson.gson)
     implementation(libs.pl.tkowalcz.tjahzi.log4j2.appender.nodep)
 

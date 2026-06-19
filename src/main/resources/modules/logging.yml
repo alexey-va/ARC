@@ -23,3 +23,6 @@ debug-quiet-sources:
   - ru.arc.sync
   - ru.arc.repository
 # Минимальный уровень, уходящий в Loki (INFO, WARN, …)
+loki-level: INFO
+# Формат строки в Loki: json (Log4j JsonTemplateLayout, парсится в Grafana через | json) | pattern
+loki-format: json

@@ -19,6 +19,7 @@ import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
+import ru.arc.util.Logging.withContext
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
@@ -169,6 +170,15 @@ class RedisManager(
         channel: String,
         message: String,
     ) {
+        withContext(module = "redis", action = "receive") {
+            onMessageInternal(channel, message)
+        }
+    }
+
+    private fun onMessageInternal(
+        channel: String,
+        message: String,
+    ) {
         try {
             val listeners = channelListeners[channel]
             if (listeners.isNullOrEmpty()) {
@@ -212,6 +222,12 @@ class RedisManager(
     // =========================================================================
 
     override fun publish(channel: String, message: String) {
+        withContext(module = "redis", action = "publish") {
+            publishInternal(channel, message)
+        }
+    }
+
+    private fun publishInternal(channel: String, message: String) {
         val pubConnection = pub
         if (!isConnected || isShuttingDown || pubConnection == null) {
             error("Cannot publish: Redis not connected (channel: $channel)")

@@ -5,7 +5,7 @@ import ru.arc.ARC;
 
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.info;
-import static ru.arc.util.Logging.warn;
+import static ru.arc.util.Logging.withContext;
 
 public class XActionManager {
 
@@ -24,8 +24,10 @@ public class XActionManager {
     }
 
     public static void run(XAction action) {
-        info("[XAction] Running action on this server: {}", action);
-        action.run();
+        withContext("xaction", null, "run", () -> {
+            info("[XAction] Running action on this server: {}", action);
+            action.run();
+        });
     }
 
     public static void publish(XAction action) {
@@ -33,8 +35,10 @@ public class XActionManager {
             error("[XAction] Cannot publish — messager is null (Redis not initialized?)");
             return;
         }
-        info("[XAction] Publishing action: {}", action);
-        messager.send(action);
+        withContext("xaction", null, "publish", () -> {
+            info("[XAction] Publishing action: {}", action);
+            messager.send(action);
+        });
     }
 
 

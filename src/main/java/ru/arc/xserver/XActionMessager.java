@@ -8,6 +8,7 @@ import java.util.concurrent.CompletableFuture;
 
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.info;
+import static ru.arc.util.Logging.withContext;
 
 public class XActionMessager implements ChannelListener {
 
@@ -15,6 +16,10 @@ public class XActionMessager implements ChannelListener {
 
     @Override
     public void consume(String channel, String message, String originServer) {
+        withContext("xaction", null, "receive", () -> consumeInternal(channel, message, originServer));
+    }
+
+    private void consumeInternal(String channel, String message, String originServer) {
         info("[XAction] Received message on channel '{}' from server '{}': {}", channel, originServer, message);
         XAction action;
         try {
@@ -32,6 +37,10 @@ public class XActionMessager implements ChannelListener {
     }
 
     public void send(XAction action) {
+        sendInternal(action);
+    }
+
+    private void sendInternal(XAction action) {
         CompletableFuture.supplyAsync(() -> {
             String json = Common.gson.toJson(action);
             info("[XAction] Serialized for publish: {}", json);

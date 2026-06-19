@@ -27,6 +27,7 @@ import ru.arc.repository.Entity
 import ru.arc.repository.Mergeable
 import ru.arc.repository.redisRepo
 import ru.arc.util.TextUtil
+import ru.arc.util.Logging.withContext
 import ru.arc.xserver.XCondition
 import ru.arc.xserver.XMessage
 import ru.arc.xserver.announcements.AnnounceManager
@@ -646,19 +647,23 @@ object BoardManager {
             runCatching { BarColor.valueOf(config.string("color", "YELLOW").uppercase()) }
                 .getOrDefault(BarColor.YELLOW)
             val finalColor = entry.color
-            XMessage(
-                type = XMessage.Type.BOSS_BAR,
-                serializedMessage = "&7[&6${entry.playerName}&7]&r ${entry.title}",
-                serializationType = XMessage.SerializationType.LEGACY,
-                bossBarData =
-                    XMessage.BossBarData(
-                        color = finalColor,
-                        name = "board",
-                        keepFor = config.integer("keep-for", 10),
-                        seconds = config.integer("seconds-boss-bar", 10),
-                    ),
-                conditions = listOf(XCondition.ofPermission(BoardConfig.receivePermission)),
-            ).also { AnnounceManager.announce(it) }
+            val message =
+                XMessage(
+                    type = XMessage.Type.BOSS_BAR,
+                    serializedMessage = "&7[&6${entry.playerName}&7]&r ${entry.title}",
+                    serializationType = XMessage.SerializationType.LEGACY,
+                    bossBarData =
+                        XMessage.BossBarData(
+                            color = finalColor,
+                            name = "board",
+                            keepFor = config.integer("keep-for", 10),
+                            seconds = config.integer("seconds-boss-bar", 10),
+                        ),
+                    conditions = listOf(XCondition.ofPermission(BoardConfig.receivePermission)),
+                )
+            withContext(module = "board", player = entry.playerName, action = "announce") {
+                AnnounceManager.announce(message)
+            }
         }
     }
 
