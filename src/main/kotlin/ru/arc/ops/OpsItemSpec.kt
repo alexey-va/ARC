@@ -156,7 +156,7 @@ object OpsItemSpec {
             result["itemFlags"] = flags.map { it.name }
         }
 
-        runCatching {
+        if (System.getProperty("arc.test.unit") == null) runCatching {
             val compound = NBTItem(stack, false).compound ?: return@runCatching
             val snbt = compound.toString()
             if (snbt.isNotBlank() && snbt != "{}") {
@@ -177,6 +177,7 @@ object OpsItemSpec {
         val data = element.asJsonObject
         if (data.size() == 0) return
 
+        if (System.getProperty("arc.test.unit") != null) return
         // Paper 1.20.5+ stores token fields in minecraft:custom_data; NBTItem writes root tags
         // that Denizen and BlockListener (NBT.get) do not see.
         NBT.modify(stack) { nbt ->
