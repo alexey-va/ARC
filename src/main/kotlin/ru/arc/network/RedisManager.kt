@@ -440,10 +440,15 @@ class RedisManager(
                     try {
                         subConnection.subscribe(this@RedisManager, *channels)
                     } catch (e: Exception) {
-                        error("Redis subscription thread exception", e)
                         isSubscribing = false
                         subscriptionActive = false
 
+                        if (isShuttingDown) {
+                            debug("Redis subscription closed during shutdown")
+                            return@submit
+                        }
+
+                        error("Redis subscription thread exception", e)
                         Thread.sleep(RECONNECT_DELAY_MS)
                         if (!isShuttingDown && isConnected) {
                             scope.launch { init() }
