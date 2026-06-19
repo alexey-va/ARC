@@ -1,0 +1,14 @@
+---
+description: McFine ops — MCP user-mcserver first, не SSH
+alwaysApply: true
+---
+
+# McFine ops — MCP first
+
+Онлайн, сообщения игрокам, деплой, консоль, права — **MCP `user-mcserver`** (`arc_ops_*`, `mc_deploy`), не `user-ssh`.
+
+Полное правило и таблица tools: [`mcserver/.cursor/rules/mcp-first.mdc`](../../mcserver/.cursor/rules/mcp-first.mdc).
+
+Кросс-серверные сообщения (как board): **`arc_ops_broadcast`**. Локально на одном инстансе: **`arc_ops_message`**.
+
+Логи: **Grafana Loki** (`user-grafana`), см. `mcserver/.cursor/rules/grafana-logs.mdc`.

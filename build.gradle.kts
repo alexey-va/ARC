@@ -180,6 +180,7 @@ tasks {
     withType<Javadoc> { options.encoding = "UTF-8" }
     test {
         useJUnitPlatform()
+        systemProperty("arc.test.unit", "true")
     }
 
     register<Test>("integrationTest") {

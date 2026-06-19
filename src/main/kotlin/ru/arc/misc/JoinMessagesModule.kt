@@ -51,6 +51,7 @@ object JoinMessagesManager {
     @JvmStatic
     fun init() {
         if (initialized) return
+        if (ru.arc.ARC.redisManager == null) return
 
         repo =
             redisRepo<JoinMessagesData>(

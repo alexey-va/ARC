@@ -190,6 +190,7 @@ object StoreManager {
     @JvmStatic
     fun init() {
         if (initialized) return
+        if (ru.arc.ARC.redisManager == null) return
 
         repo =
             redisRepo<StoreData>(

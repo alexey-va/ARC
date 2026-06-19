@@ -16,6 +16,7 @@ object OpsHttpModule : PluginModule {
     private var server: OpsHttpServer? = null
 
     override fun init() {
+        if (System.getProperty("arc.test.unit") != null) return
         OpsHttpConfig.reload()
         val cfg = OpsHttpConfig.current()
         if (!cfg.enabled) {

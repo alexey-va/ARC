@@ -294,6 +294,7 @@ object JobsModule {
     @JvmStatic
     fun init() {
         if (initialized) return
+        if (ru.arc.ARC.redisManager == null) return
 
         info("Jobs hook enabled")
 

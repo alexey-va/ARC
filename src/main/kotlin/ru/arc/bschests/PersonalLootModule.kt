@@ -146,6 +146,7 @@ object PersonalLootModule {
     @JvmStatic
     fun init() {
         if (initialized) return
+        if (ru.arc.ARC.redisManager == null) return
 
         key = NamespacedKey(ARC.instance, "ploot")
         uuidKey = NamespacedKey(ARC.instance, "ploot_uuid")

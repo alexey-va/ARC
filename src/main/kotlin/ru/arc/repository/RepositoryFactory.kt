@@ -43,15 +43,18 @@ inline fun <reified T : Entity> redisRepo(
         .apply(configure)
         .build()
 
+    val redis = ARC.redisManager
+        ?: error("Redis is not available — cannot create redisRepo for '$id' (redis.enabled=false?)")
+
     val storage = RedisStorage<T>(
-        redis = ARC.redisManager!!,
+        redis = redis,
         storageKey = storageKey,
         entityType = entityType,
         gson = Common.gson
     )
 
     val syncService = RedisSyncService<T>(
-        redis = ARC.redisManager!!,
+        redis = redis,
         channel = updateChannel,
         entityType = entityType,
         gson = Common.gson

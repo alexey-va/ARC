@@ -306,6 +306,7 @@ object StockModule : PluginModule {
     override val priority = 75
 
     override fun init() {
+        if (ARC.redisManager == null) return
         StockConfig.load()
         AuctionConfig.load()
         StockPlayerManager.init()
