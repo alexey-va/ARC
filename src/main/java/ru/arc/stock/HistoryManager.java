@@ -191,6 +191,11 @@ public class HistoryManager {
             BufferedReader bufferedReader = Files.newBufferedReader(historyPath);
             Map<String, List<HistoryManager.StockHistory>> history = Common.gson.fromJson(bufferedReader, token);
             bufferedReader.close();
+            if (history == null) {
+                info("History file empty, starting fresh");
+                saveToFile();
+                return;
+            }
             info("Loaded history: {}", history.values().stream().mapToInt(List::size).sum());
             appendHistory(history);
         } catch (Exception e) {

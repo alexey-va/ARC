@@ -1,7 +1,9 @@
 package ru.arc.sync
 
 import com.google.gson.Gson
+import io.kotest.core.annotation.Tags
 import io.kotest.core.spec.style.FreeSpec
+import org.junit.jupiter.api.Tag
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -17,12 +19,14 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
-class CMISyncTest :
-    FreeSpec({
+@Tag("integration")
+@Tags("integration")
+class CMISyncTest : FreeSpec() {
 
-        val redis = startRedis()
-        lateinit var redisManager: RedisManager
+    private val redis: GenericContainer<*> by lazy { startRedis() }
+    private lateinit var redisManager: RedisManager
 
+    init {
         beforeSpec {
             ARC.serverName = "server-cmi-a"
             redisManager = RedisManager(redis.host, redis.getMappedPort(6379), null, null)
@@ -240,7 +244,8 @@ class CMISyncTest :
                 received.get() shouldBe null
             }
         }
-    }) {
+    }
+
     companion object {
         private val sharedRedis: GenericContainer<*> by lazy {
             configureTestcontainers()

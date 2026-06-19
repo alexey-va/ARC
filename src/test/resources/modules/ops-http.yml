@@ -1,0 +1,2 @@
+# Test override: OpsHttp server disabled so unit tests don't bind to a port.
+enabled: false

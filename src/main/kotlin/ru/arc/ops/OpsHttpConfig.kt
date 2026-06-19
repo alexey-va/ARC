@@ -36,6 +36,15 @@ open class OpsHttpConfig(private val config: Config) {
     open val runAsEnabled: Boolean
         get() = config.bool("run-as-enabled", false)
 
+    open val itemsReadEnabled: Boolean
+        get() = config.bool("items-read-enabled", true)
+
+    open val itemsGiveEnabled: Boolean
+        get() = config.bool("items-give-enabled", false)
+
+    open val itemsGiveMaxStack: Int
+        get() = config.integer("items-give-max-stack", 64).coerceIn(1, 6400)
+
     open val errorBufferSize: Int
         get() = config.integer("error-buffer-size", 200).coerceIn(50, 2000)
 
@@ -69,12 +78,16 @@ class TestOpsHttpConfig(
     override val effectsEnabled: Boolean = true,
     override val reloadEnabled: Boolean = true,
     override val runAsEnabled: Boolean = false,
+    override val itemsReadEnabled: Boolean = true,
+    override val itemsGiveEnabled: Boolean = true,
+    override val itemsGiveMaxStack: Int = 64,
     override val errorBufferSize: Int = 100,
 ) : OpsHttpConfig(EmptyConfig) {
     fun copy(
         consoleEnabled: Boolean = this.consoleEnabled,
         messagesEnabled: Boolean = this.messagesEnabled,
         runAsEnabled: Boolean = this.runAsEnabled,
+        itemsGiveEnabled: Boolean = this.itemsGiveEnabled,
     ): TestOpsHttpConfig =
         TestOpsHttpConfig(
             enabled = enabled,
@@ -86,6 +99,9 @@ class TestOpsHttpConfig(
             effectsEnabled = effectsEnabled,
             reloadEnabled = reloadEnabled,
             runAsEnabled = runAsEnabled,
+            itemsReadEnabled = itemsReadEnabled,
+            itemsGiveEnabled = itemsGiveEnabled,
+            itemsGiveMaxStack = itemsGiveMaxStack,
             errorBufferSize = errorBufferSize,
         )
 }

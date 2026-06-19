@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.jeff_media.customblockdata.CustomBlockData;
 import de.tr7zw.changeme.nbtapi.NBT;
@@ -47,6 +49,9 @@ import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.info;
 
 public class BlockListener implements Listener {
+
+    private static final ConcurrentHashMap<UUID, Long> TREASURE_USE_COOLDOWN = new ConcurrentHashMap<>();
+    private static final long TREASURE_USE_COOLDOWN_MS = 500L;
 
     @EventHandler
     public void onBlockPlace(BlockPlaceEvent event) {
@@ -92,35 +97,52 @@ public class BlockListener implements Listener {
         EquipmentSlot hand = event.getHand();
         if (hand == null) return;
         if (hand != EquipmentSlot.HAND) return;
+
+        UUID playerId = event.getPlayer().getUniqueId();
+        long now = System.currentTimeMillis();
+        Long lastUse = TREASURE_USE_COOLDOWN.get(playerId);
+        if (lastUse != null && now - lastUse < TREASURE_USE_COOLDOWN_MS) {
+            event.setCancelled(true);
+            return;
+        }
+
         NBT.get(item, data -> {
-            //info("NBT data: {}", data);
-            if (data.hasTag("arc:treasure_key")) {
-                String treasureKey = data.getString("arc:treasure_key");
-                TreasurePool pool = Treasures.INSTANCE.getPool(treasureKey);
-                if (pool == null) {
-                    debug("[treasure] pool {} not found for player {}", treasureKey, event.getPlayer().getName());
-                    error("Treasure pool {} not found", treasureKey);
-                    return;
-                }
-                if (pool.isEmpty()) {
-                    debug("[treasure] pool {} is empty for player {}", treasureKey, event.getPlayer().getName());
-                    error("Treasure pool {} is empty", treasureKey);
-                    return;
-                }
-                int itemAmount = item.getAmount();
-                if (itemAmount > 1) {
-                    item.setAmount(itemAmount - 1);
-                } else {
-                    int heldItemSlot = event.getPlayer().getInventory().getHeldItemSlot();
-                    event.getPlayer().getInventory().setItem(heldItemSlot, null);
-                }
-                var treasure = pool.random();
-                if (treasure != null) {
-                    Treasures.INSTANCE.getService().give(treasure, event.getPlayer());
-                }
-                event.getPlayer().playSound(event.getPlayer().getLocation(), "ui.loom.take_result", 1, 1);
-                event.setCancelled(true);
+            if (!data.hasTag("arc:treasure_key")) {
+                return;
             }
+
+            String treasureKey = data.getString("arc:treasure_key");
+            TreasurePool pool = Treasures.INSTANCE.getPool(treasureKey);
+            if (pool == null) {
+                debug("[treasure] pool {} not found for player {}", treasureKey, event.getPlayer().getName());
+                error("Treasure pool {} not found", treasureKey);
+                return;
+            }
+            if (pool.isEmpty()) {
+                debug("[treasure] pool {} is empty for player {}", treasureKey, event.getPlayer().getName());
+                error("Treasure pool {} is empty", treasureKey);
+                return;
+            }
+
+            ItemStack handItem = event.getPlayer().getInventory().getItemInMainHand();
+            if (handItem.getType() == Material.AIR || handItem.getAmount() < 1) {
+                return;
+            }
+
+            TREASURE_USE_COOLDOWN.put(playerId, now);
+            event.setCancelled(true);
+
+            if (handItem.getAmount() > 1) {
+                handItem.setAmount(handItem.getAmount() - 1);
+            } else {
+                event.getPlayer().getInventory().setItemInMainHand(null);
+            }
+
+            var treasure = pool.random();
+            if (treasure != null) {
+                Treasures.INSTANCE.getService().give(treasure, event.getPlayer());
+            }
+            event.getPlayer().playSound(event.getPlayer().getLocation(), "ui.loom.take_result", 1, 1);
         });
     }
 

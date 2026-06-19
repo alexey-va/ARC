@@ -16,8 +16,11 @@ bind-port: 25823
 # POST /ops/console — произвольные команды консоли (осторожно)
 console-enabled: false
 
-# POST /ops/message — broadcast / player / ops (MiniMessage)
+# POST /ops/message — broadcast / player / ops на ЭТОМ инстансе (MiniMessage)
 messages-enabled: true
+
+# POST /ops/broadcast — кросс-сервер через XAction/Redis (как board announce)
+# Один POST на spawn → все серверы в сети. servers: all | spawn | survival | spawn,survival
 
 # POST /ops/effect — title / actionbar / sound онлайн-игроку
 effects-enabled: true
@@ -27,6 +30,17 @@ reload-enabled: true
 
 # POST /ops/run-as — выполнить команду от имени онлайн-игрока (осторожно)
 run-as-enabled: false
+
+# GET /ops/player/{name}/inventory — инвентарь онлайн-игрока (слоты 0-40)
+# GET /ops/player/{name}/item?slot= | ?hand=true — один слот / предмет в руке
+items-read-enabled: true
+
+# POST /ops/player/{name}/give — выдать предмет по JSON ItemSpec
+# POST /ops/item/preview — собрать ItemSpec без выдачи
+# GET  /ops/item/cmi-blob/preset/{name}?amount=1 — CMI !!binary blob (Paper serializeAsBytes + gzip)
+# POST /ops/item/cmi-blob — ItemSpec JSON, или {"preset":"sf_lootbox"}, или {"presets":["sf_lootbox",…]}
+items-give-enabled: false
+items-give-max-stack: 64
 
 # Сколько WARN/ERROR держать в памяти для GET /ops/errors
 error-buffer-size: 200

@@ -93,6 +93,12 @@ commands:
     name: giveboost
     aliases: [ ]
     permission: arc.admin.givejobsboost
+  give:
+    name: give
+    aliases: [ ]
+    permission: arc.give
+    player-only: false
+    usage: /arc give <player|list> <preset> [amount]
   soundfollow:
     name: soundfollow
     aliases: [sound-follow]
@@ -111,3 +117,7 @@ messages:
   treasures:
     list-header: '<gold>Пулы наград (%count%):'
     list-item: <gray>• <white>%pool_id% <gray>(%size% предметов)
+  give:
+    unknown-preset: '<red>Неизвестный пресет: <white>%preset%<gray>. Список: <white>/arc give list'
+    hint: '<gray>Примеры: sf_lootbox, ae_lootbox, enchant_token, money_bag, lootbox_bundle'
+    success: '<green>Выдано <white>%count%<green> предмет(ов) пресета <white>%preset%<green> игроку <white>%player%'

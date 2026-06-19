@@ -1,7 +1,9 @@
 package ru.arc.sync
 
 import com.google.gson.Gson
+import io.kotest.core.annotation.Tags
 import io.kotest.core.spec.style.FreeSpec
+import org.junit.jupiter.api.Tag
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
@@ -18,12 +20,14 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
-class SkillsSyncTest :
-    FreeSpec({
+@Tag("integration")
+@Tags("integration")
+class SkillsSyncTest : FreeSpec() {
 
-        val redis = startRedis()
-        lateinit var redisManager: RedisManager
+    private val redis: GenericContainer<*> by lazy { startRedis() }
+    private lateinit var redisManager: RedisManager
 
+    init {
         beforeSpec {
             ARC.serverName = "server-skills-a"
             redisManager = RedisManager(redis.host, redis.getMappedPort(6379), null, null)
@@ -267,7 +271,8 @@ class SkillsSyncTest :
                     ?.level shouldBe 100
             }
         }
-    }) {
+    }
+
     companion object {
         private val sharedRedis: GenericContainer<*> by lazy {
             configureTestcontainers()

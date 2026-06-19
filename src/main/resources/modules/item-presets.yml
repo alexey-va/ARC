@@ -1,0 +1,160 @@
+# =============================================================================
+# item-presets.yml — пресеты для /arc give и MCP arc_ops_give_preset.
+#
+# presets.<id> — ItemSpec (material, display, lore, customModelData, customData, itemsadder, …)
+#   description — подсказка в /arc give list (не часть ItemSpec)
+# bundles.<id> — набор preset + amount (amount: amount = масштаб от аргумента команды)
+# =============================================================================
+
+presets:
+  gui_background:
+    description: Фон GUI (серая панель, CMD 11000)
+    itemsadder: arc:background
+  gui_back:
+    description: Кнопка «Назад» (CMD 11013)
+    itemsadder: arc:left_gray
+  gui_cancel:
+    description: Кнопка отмены
+    itemsadder: arc:cancel
+  gui_confirm:
+    description: Кнопка подтверждения
+    itemsadder: arc:confirm_gray
+  gui_money_icon:
+    description: Иконка баланса / мешок монет (CMD 11138)
+    itemsadder: iageneric:bag_of_coins
+    display: <gold>Монеты
+  gold_coin:
+    description: Монета IA (CMD 11137)
+    itemsadder: iageneric:gold_coin
+  bag_of_coins:
+    description: Мешок монет IA (CMD 11138)
+    itemsadder: iageneric:bag_of_coins
+  golden_apple:
+    description: Золотое яблоко
+    material: GOLDEN_APPLE
+  enchanted_golden_apple:
+    description: Зачарованное золотое яблоко
+    material: ENCHANTED_GOLDEN_APPLE
+  totem:
+    description: Тотем бессмертия
+    material: TOTEM_OF_UNDYING
+  ender_pearl:
+    description: 16 жемчугов эндера
+    material: ENDER_PEARL
+    amount: 16
+  sf_lootbox:
+    description: Лутбокс Slimefun — готовый, один ПКМ
+    material: IRON_INGOT
+    customModelData: 73026
+    display: <green>Лутбокс слаймфана
+    lore:
+      - <gray>Нажмите ПКМ для использования
+    customData:
+      slimefun_token: 1
+      "arc:treasure_key": sf
+  ae_lootbox:
+    description: Шкатулка элитных чар AE
+    material: IRON_INGOT
+    customModelData: 12033
+    display: <yellow>Токен элитных чар
+    lore:
+      - <gray>Нажмите ПКМ для использования
+    customData:
+      ae_token: "true"
+      "arc:treasure_key": ae
+  enchant_token:
+    description: Токен зачарования (vanilla book pool)
+    material: IRON_INGOT
+    customModelData: 12013
+    display: <yellow>Токен зачарования
+    lore:
+      - <gray>Нажмите <gold>ПКМ<gray> для использования
+    customData:
+      enchant_token: "true"
+      "arc:treasure_key": vanillaenchant
+  potion_token:
+    description: Токен зелья
+    material: IRON_INGOT
+    customModelData: 12032
+    display: <yellow>Токен зелья
+    lore:
+      - <gray>Нажмите <gold>ПКМ<gray> для использования
+    customData:
+      potion_token: "true"
+      "arc:treasure_key": vanillapotion
+  money_handful:
+    description: Горсть монет (tier 1)
+    material: STICK
+    customModelData: 11135
+    display: <gray>Горсть монет
+    lore:
+      - <gray>Нажмите <gold>ПКМ<gray> для использования
+    customData:
+      "arc:treasure_key": smallmoney
+      money_token_mean: 2000
+      money_token_sigma: 500
+      money_token_minimum: 500
+  money_pile:
+    description: Кучка монет (tier 2)
+    material: STICK
+    customModelData: 11136
+    display: <white>Кучка монет
+    lore:
+      - <gray>Нажмите <gold>ПКМ<gray> для использования
+    customData:
+      "arc:treasure_key": mediummoney
+      money_token_mean: 6500
+      money_token_sigma: 2000
+      money_token_minimum: 3000
+  money_heap:
+    description: Куча монет (tier 3)
+    material: STICK
+    customModelData: 11137
+    display: <yellow>Куча монет
+    lore:
+      - <gray>Нажмите <gold>ПКМ<gray> для использования
+    customData:
+      "arc:treasure_key": bigmoney
+      money_token_mean: 10000
+      money_token_sigma: 3000
+      money_token_minimum: 5000
+  money_bag:
+    description: Мешок монет (tier 4)
+    material: STICK
+    customModelData: 11138
+    display: <red>Мешок монет
+    lore:
+      - <gray>Нажмите <gold>ПКМ<gray> для использования
+    customData:
+      "arc:treasure_key": hugemoney
+      money_token_mean: 15000
+      money_token_sigma: 5000
+      money_token_minimum: 7500
+
+bundles:
+  lootbox_bundle:
+    description: SF×2, AE×1, enchant×1, potion×1, money tier 4
+    items:
+      - preset: sf_lootbox
+        amount: 2
+      - preset: ae_lootbox
+        amount: 1
+      - preset: enchant_token
+        amount: 1
+      - preset: potion_token
+        amount: 1
+      - preset: money_bag
+        amount: 1
+  lootbox_bundle_large:
+    description: SF×N, AE×2, enchant×2, potion×2, money tier 4
+    items:
+      - preset: sf_lootbox
+        amount: amount
+      - preset: ae_lootbox
+        amount: 2
+      - preset: enchant_token
+        amount: 2
+      - preset: potion_token
+        amount: 2
+      - preset: money_bag
+        amount: 1

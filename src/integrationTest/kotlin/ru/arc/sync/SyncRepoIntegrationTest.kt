@@ -1,7 +1,9 @@
 package ru.arc.sync
 
 import com.google.gson.Gson
+import io.kotest.core.annotation.Tags
 import io.kotest.core.spec.style.FreeSpec
+import org.junit.jupiter.api.Tag
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import org.testcontainers.containers.GenericContainer
@@ -22,22 +24,23 @@ import java.util.concurrent.atomic.AtomicReference
  *
  * Requires Docker (Colima or Docker Desktop).
  */
-class SyncRepoIntegrationTest : FreeSpec({
+@Tag("integration")
+@Tags("integration")
+class SyncRepoIntegrationTest : FreeSpec() {
 
-    val redis = startRedis()
-    lateinit var redisManager: RedisManager
+    private val redis: GenericContainer<*> by lazy { startRedis() }
+    private lateinit var redisManager: RedisManager
 
-    beforeSpec {
-        ARC.serverName = "server-A"
-        val host = redis.host
-        val port = redis.getMappedPort(6379)
-        redisManager = RedisManager(host, port, null, null)
-        Thread.sleep(500)
-    }
+    init {
+        beforeSpec {
+            ARC.serverName = "server-A"
+            redisManager = RedisManager(redis.host, redis.getMappedPort(6379), null, null)
+            Thread.sleep(500)
+        }
 
-    afterSpec {
-        redisManager.close()
-    }
+        afterSpec {
+            redisManager.close()
+        }
 
     "SyncRepo" - {
 
@@ -135,7 +138,8 @@ class SyncRepoIntegrationTest : FreeSpec({
             back.value shouldBe dto.value
         }
     }
-}) {
+    }
+
     companion object {
         private val sharedRedis: GenericContainer<*> by lazy {
             configureTestcontainers()

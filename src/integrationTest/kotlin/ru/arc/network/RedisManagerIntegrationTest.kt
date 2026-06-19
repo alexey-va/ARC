@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.testcontainers.containers.GenericContainer
+import org.junit.jupiter.api.Tag
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.utility.DockerImageName
@@ -44,6 +45,7 @@ import java.util.concurrent.atomic.AtomicReference
  * The test will auto-detect the Docker environment if env vars are not set.
  * See README-TESTCONTAINERS.md for detailed setup instructions.
  */
+@Tag("integration")
 @Testcontainers
 class RedisManagerIntegrationTest {
     companion object {

@@ -27,6 +27,7 @@ import ru.arc.repository.Entity
 import ru.arc.repository.Mergeable
 import ru.arc.repository.redisRepo
 import ru.arc.util.TextUtil
+import ru.arc.util.Logging
 import ru.arc.util.Logging.withContext
 import ru.arc.xserver.XCondition
 import ru.arc.xserver.XMessage
@@ -555,6 +556,10 @@ object BoardManager {
     @JvmStatic
     fun init() {
         if (initialized) return
+        if (ARC.redisManager == null) {
+            Logging.info("Redis not available — Board feature disabled")
+            return
+        }
 
         repo =
             redisRepo<BoardEntryData>(

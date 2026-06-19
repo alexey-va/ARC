@@ -12,7 +12,11 @@ import ru.arc.util.playSoundSelf
 import ru.arc.util.sendActionBarMM
 import ru.arc.util.sendMM
 import ru.arc.util.showTitleMM
+import ru.arc.xserver.XActionManager
+import ru.arc.xserver.XCondition
+import ru.arc.xserver.XMessage
 import ru.arc.xserver.playerlist.PlayerManager
+import org.bukkit.boss.BarColor
 import java.io.File
 import java.nio.file.Path
 import java.util.concurrent.CountDownLatch
@@ -357,6 +361,80 @@ object OpsHttpHandlers {
                 else -> throw IllegalArgumentException("Unknown channel: $channel")
             }
         }
+
+    fun publishBroadcast(body: com.google.gson.JsonObject): Map<String, Any?> =
+        OpsBukkitSync.call {
+            val text = body.get("text")?.asString ?: body.get("message")?.asString
+            require(!text.isNullOrBlank()) { "text required" }
+
+            val typeName = body.get("type")?.asString?.uppercase()?.replace('-', '_') ?: "CHAT"
+            val type =
+                runCatching { XMessage.Type.valueOf(typeName) }
+                    .getOrElse { throw IllegalArgumentException("Unknown type: $typeName (chat, boss_bar, action_bar, toast)") }
+
+            val conditions = mutableListOf<XCondition>()
+            body.get("permission")?.asString?.takeIf { it.isNotBlank() }?.let {
+                conditions.add(XCondition.ofPermission(it))
+            }
+            body.get("player")?.asString?.takeIf { it.isNotBlank() }?.let {
+                conditions.add(XCondition.ofPlayerName(it))
+            }
+            parseServerConditions(body.get("servers"))?.let { conditions.addAll(it) }
+
+            val bossBarData =
+                body.get("bossbar")?.asJsonObject?.let { bb ->
+                    XMessage.BossBarData(
+                        name = bb.get("name")?.asString ?: "arc-broadcast",
+                        color =
+                            runCatching {
+                                BarColor.valueOf(bb.get("color")?.asString?.uppercase() ?: "BLUE")
+                            }.getOrElse { BarColor.BLUE },
+                        seconds = bb.get("seconds")?.asInt ?: 10,
+                        keepFor = bb.get("keep-for")?.asInt ?: bb.get("keepFor")?.asInt ?: 0,
+                    )
+                }
+
+            val actionBarData =
+                body.get("actionbar")?.asJsonObject?.let { ab ->
+                    XMessage.ActionBarData(seconds = ab.get("seconds")?.asInt ?: 5)
+                }
+
+            val message =
+                XMessage(
+                    type = type,
+                    serializedMessage = text,
+                    serializationType = XMessage.SerializationType.MINI_MESSAGE,
+                    conditions = conditions.ifEmpty { null },
+                    bossBarData = bossBarData,
+                    actionBarData = actionBarData,
+                )
+
+            XActionManager.publish(message)
+            mapOf(
+                "published" to true,
+                "channel" to "arc.xactions",
+                "type" to type.name.lowercase(),
+                "origin" to (ARC.serverName ?: "unknown"),
+                "conditions" to conditions.size,
+            )
+        }
+
+    private fun parseServerConditions(element: com.google.gson.JsonElement?): List<XCondition>? {
+        if (element == null || element.isJsonNull) return null
+        val names =
+            when {
+                element.isJsonArray ->
+                    element.asJsonArray.mapNotNull { entry ->
+                        if (entry.isJsonNull) null else entry.asString.trim()
+                    }.filter { it.isNotEmpty() }
+                element.isJsonPrimitive ->
+                    element.asString.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+                else -> emptyList()
+            }
+        val filtered = names.filterNot { it.equals("all", ignoreCase = true) }
+        if (filtered.isEmpty()) return null
+        return filtered.map { XCondition.ofServerName(it) }
+    }
 
     fun applyEffect(body: JsonObject): Map<String, Any?> =
         OpsBukkitSync.call {

@@ -41,6 +41,7 @@ class ArcCommand : CommandExecutor, TabCompleter {
             InvestSubCommand,
             StoreSubCommand,
             GiveBoostSubCommand,
+            GiveSubCommand,
             SoundFollowSubCommand
         )
     }

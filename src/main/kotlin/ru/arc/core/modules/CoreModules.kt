@@ -51,6 +51,12 @@ object RedisModule : PluginModule {
 
     override fun init() {
         val config = ConfigManager.of(ARC.instance.dataPath, "misc.yml")
+
+        if (!config.bool("redis.enabled", true)) {
+            info("Redis disabled — skipping connection (redis.enabled=false)")
+            return
+        }
+
         val ip = config.string("redis.ip", "localhost")
         val port = config.integer("redis.port", 3306)
         val username = config.string("redis.username", "default")

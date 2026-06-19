@@ -15,6 +15,12 @@ description = "ARC"
 java { toolchain { languageVersion.set(JavaLanguageVersion.of(25)) } }
 kotlin { jvmToolchain(25) }
 
+val integrationTestSourceSet = sourceSets.create("integrationTest") {
+    kotlin.srcDir("src/integrationTest/kotlin")
+    compileClasspath += sourceSets.main.get().output + sourceSets.test.get().output
+    runtimeClasspath += sourceSets.main.get().output + sourceSets.test.get().output
+}
+
 repositories {
     mavenLocal()
     maven("https://repo.papermc.io/repository/maven-public/")
@@ -123,9 +129,12 @@ dependencies {
     // MockK
     testImplementation("io.mockk:mockk:1.14.7")
 
-    // Testcontainers for Redis integration tests
-    testImplementation("org.testcontainers:testcontainers:2.0.2")
-    testImplementation("org.testcontainers:testcontainers-junit-jupiter:2.0.2")
+    // Testcontainers — integration tests source set
+    "integrationTestImplementation"("org.testcontainers:testcontainers:2.0.2")
+    "integrationTestImplementation"("org.testcontainers:testcontainers-junit-jupiter:2.0.2")
+    // Integration tests reuse all test dependencies (Kotest, MockK, Paper API, etc.)
+    "integrationTestImplementation"(sourceSets.test.get().output)
+    configurations["integrationTestImplementation"].extendsFrom(configurations["testImplementation"])
 
     // Add compileOnly dependencies to test classpath so tests can run
     // These are server-provided at runtime, but needed for testing
@@ -171,11 +180,18 @@ tasks {
     withType<Javadoc> { options.encoding = "UTF-8" }
     test {
         useJUnitPlatform()
+    }
+
+    register<Test>("integrationTest") {
+        description = "Runs Redis/Testcontainers integration tests (requires Docker)."
+        group = "verification"
+
+        testClassesDirs = integrationTestSourceSet.output.classesDirs
+        classpath = integrationTestSourceSet.runtimeClasspath
+        useJUnitPlatform()
 
         val os = OperatingSystem.current()
-
         if (os.isMacOsX) {
-            // Colima (macOS)
             environment(
                 "DOCKER_HOST",
                 "unix://${System.getProperty("user.home")}/.colima/default/docker.sock",
@@ -185,6 +201,8 @@ tasks {
                 "/var/run/docker.sock",
             )
         }
+
+        shouldRunAfter("test")
     }
 
     shadowJar {

@@ -9,6 +9,21 @@ features including treasure hunts, auto-building system, stock market simulation
 farms/mines, and more. It's a monolithic core plugin designed for a personal server with heavy Redis integration for
 cross-server functionality.
 
+## McFine runtime (mcserver repo)
+
+This repo is **ARC source code**. Runtime configs and deploy live in **`~/mcserver`** (arserver-plugins).
+
+| Doc | Purpose |
+|-----|---------|
+| `mcserver/TASKS.md` | Current tasks / progress (read after chat reset) |
+| `mcserver/AGENTS.md` | Server mirror architecture |
+| `mcserver/classic/plugins/CMI/AGENTS.md` | CMI kits workflow |
+| `mcserver/classic/plugins/ARC/AGENTS.md` | Runtime ARC configs, ops-http |
+| `src/main/kotlin/ru/arc/ops/AGENTS.md` | Ops HTTP + **CmiItemCodec** (this repo) |
+
+Deploy code: `cd mcserver && ./scripts/mc arc classic` (shadowJar ~12 MiB).  
+CMI kit blobs: `GET /ops/item/cmi-blob/preset/{name}` — Paper `serializeAsBytes()` + gzip.
+
 ## CRITICAL: Development Philosophy
 
 **ALWAYS prioritize these principles when working on this codebase:**

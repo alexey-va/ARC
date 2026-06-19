@@ -2,6 +2,7 @@ package ru.arc.xserver
 
 import com.google.gson.annotations.SerializedName
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Material
 import org.bukkit.boss.BarColor
 import org.bukkit.entity.Player
@@ -24,7 +25,12 @@ class XMessage(
     override fun runInternal() {
         val players = filteredPlayers()
         when (type) {
-            Type.CHAT -> players.forEach { it.sendMessage(component(it)) }
+            Type.CHAT ->
+                players.forEach { player ->
+                    if (hasVisibleContent(player)) {
+                        player.sendMessage(component(player))
+                    }
+                }
             Type.TOAST -> {
                 val cmi = HookRegistry.cmiHook ?: run { warn("CMILIB is required for TOAST xMessage"); return }
                 val td = toastData ?: run { warn("ToastData is required for TOAST xMessage"); return }
@@ -34,6 +40,7 @@ class XMessage(
                 val cmi = HookRegistry.cmiHook ?: run { warn("CMILIB is required for BOSS_BAR xMessage"); return }
                 val bbd = bossBarData ?: run { warn("BossBarData is required for BOSS_BAR xMessage"); return }
                 players.forEach { p ->
+                    if (!hasVisibleContent(p)) return@forEach
                     cmi.sendBossbar(bbd.name ?: "xmessage", serializedMessage, p, bbd.color, bbd.seconds, bbd.keepFor)
                 }
             }
@@ -47,13 +54,35 @@ class XMessage(
         }
     }
 
+    fun resolvedMessage(player: Player): String {
+        var message = serializedMessage ?: return ""
+        HookRegistry.papiHook?.parse(message, player)?.let { parsed -> message = parsed }
+        return message
+    }
+
+    fun hasVisibleContent(player: Player): Boolean {
+        if (resolvedMessage(player).trim().isEmpty()) return false
+        val plain = PlainTextComponentSerializer.plainText().serialize(component(player))
+        return plain.isNotBlank()
+    }
+
     fun component(player: Player): Component {
-        val message = serializedMessage ?: ""
-        HookRegistry.papiHook?.parse(message, player)
+        val message = resolvedMessage(player)
         return when (serializationType) {
             SerializationType.MINI_MESSAGE -> TextUtil.mm(message)
             SerializationType.LEGACY -> TextUtil.legacy(message)
             else -> TextUtil.plain(message)
+        }
+    }
+
+    fun logSummary(): String {
+        val typeName = type?.name ?: "UNKNOWN"
+        val text = serializedMessage?.replace('\n', ' ')?.trim()?.take(160) ?: "<empty>"
+        val weight = announceData?.weight?.takeIf { it > 0 }
+        return if (weight != null) {
+            "type=$typeName weight=$weight text=\"$text\""
+        } else {
+            "type=$typeName text=\"$text\""
         }
     }
 

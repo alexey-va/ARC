@@ -21,8 +21,7 @@ messages:
     weight: 1
     personal: false
   '3':
-    message: '<dark_gray>● <gray>Приватить землю можно <green>блоками<gray>
-      из: <gold>/kit start'
+    message: '<dark_gray>● <gray>Приватить землю можно <green>блоками<gray> из: <gold>/kit start'
     servers: all
     player-specific: false
     cache: true

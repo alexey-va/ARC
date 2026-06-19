@@ -14,7 +14,8 @@ import ru.arc.xserver.XCondition
 import ru.arc.xserver.XMessage
 import ru.arc.xserver.playerlist.PlayerManager
 import ru.arc.util.Logging.error
-import ru.arc.util.Logging.info
+import ru.arc.util.Logging
+import ru.arc.util.Logging.warn
 import java.util.ArrayDeque
 import java.util.Random
 import java.util.TreeMap
@@ -64,6 +65,10 @@ object AnnounceManager {
         val keys = config.keys("messages")
         for (key in keys) {
             val message = config.string("messages.$key.message")
+            if (message.isBlank()) {
+                warn("Skipping announce message '{}': empty text", key)
+                continue
+            }
             val type = XMessage.Type.valueOf(config.string("messages.$key.type", "chat").uppercase())
             val serializationType = runCatching {
                 XMessage.SerializationType.valueOf(config.string("messages.$key.serialization-type", "mini_message").uppercase())
@@ -136,16 +141,20 @@ object AnnounceManager {
 
     @JvmStatic
     fun announce(data: XMessage) {
-        info("Announcing message: {}", data)
+        Logging.info("Announcing: {}", data.logSummary())
         XActionManager.publish(data)
     }
 
     private fun send(data: XMessage, player: Player) {
         when (data.type) {
-            XMessage.Type.CHAT -> player.sendMessage(data.component(player))
+            XMessage.Type.CHAT -> {
+                if (!data.hasVisibleContent(player)) return
+                player.sendMessage(data.component(player))
+            }
             XMessage.Type.BOSS_BAR -> {
                 val cmi = HookRegistry.cmiHook ?: run { error("I cant use bossbar without cmi... sorry"); return }
                 val bbd = data.bossBarData ?: return
+                if (!data.hasVisibleContent(player)) return
                 cmi.sendBossbar("arcAnnounce", data.serializedMessage, player, bbd.color, bbd.seconds, bbd.keepFor)
             }
             XMessage.Type.ACTION_BAR -> {

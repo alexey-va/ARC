@@ -40,8 +40,14 @@ object AuditManager {
         val scheduler = BukkitTaskScheduler(ARC.instance)
         config = AuditConfig.load()
 
+        val repository: AuditRepository = if (ARC.redisManager != null) {
+            RedisAuditRepository.create()
+        } else {
+            InMemoryAuditRepository()
+        }
+
         service = AuditService(
-            repository = RedisAuditRepository.create(),
+            repository = repository,
             config = config,
             scheduler = scheduler
         )

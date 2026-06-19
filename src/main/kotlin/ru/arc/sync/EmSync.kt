@@ -17,6 +17,14 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 class EmSync : Sync {
+
+    companion object {
+        private const val PLAYER_DATA_POLL_DELAY_TICKS = 5L
+        private const val PLAYER_DATA_POLL_PERIOD_TICKS = 5L
+        /** 60 × 5 ticks ≈ 15 s — EliteMobs async DB load can be slow on join. */
+        private const val MAX_PLAYER_DATA_WAIT_CYCLES = 60
+    }
+
     private val repo: SyncRepo<EmDataDTO> =
         SyncRepo
             .builder(EmDataDTO::class.java)
@@ -38,8 +46,13 @@ class EmSync : Sync {
                 }
                 val pd = PlayerData.getPlayerData(uuid)
                 if (pd == null) {
-                    if (counter.incrementAndGet() > 20) {
-                        Logging.warn("PlayerData is null for {} for 20 cycles. Cancelling task.", uuid)
+                    if (counter.incrementAndGet() > MAX_PLAYER_DATA_WAIT_CYCLES) {
+                        Logging.warn(
+                            "PlayerData is null for {} after {} cycles (~{}s). Cancelling EM sync task.",
+                            uuid,
+                            MAX_PLAYER_DATA_WAIT_CYCLES,
+                            MAX_PLAYER_DATA_WAIT_CYCLES * PLAYER_DATA_POLL_PERIOD_TICKS / 20,
+                        )
                         cancel()
                     }
                     return
@@ -48,7 +61,7 @@ class EmSync : Sync {
                 loaded[uuid] = true
                 cancel()
             }
-        }.runTaskTimer(ARC.instance, 5L, 5L)
+        }.runTaskTimer(ARC.instance, PLAYER_DATA_POLL_DELAY_TICKS, PLAYER_DATA_POLL_PERIOD_TICKS)
     }
 
     override fun playerQuit(uuid: UUID) {

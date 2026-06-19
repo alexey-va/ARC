@@ -1,7 +1,9 @@
 package ru.arc.sync
 
 import com.google.gson.Gson
+import io.kotest.core.annotation.Tags
 import io.kotest.core.spec.style.FreeSpec
+import org.junit.jupiter.api.Tag
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -17,17 +19,17 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
-class EmSyncTest :
-    FreeSpec({
+@Tag("integration")
+@Tags("integration")
+class EmSyncTest : FreeSpec() {
 
-        val redis = startRedis()
-        lateinit var redisManager: RedisManager
+    private val redis: GenericContainer<*> by lazy { startRedis() }
+    private lateinit var redisManager: RedisManager
 
+    init {
         beforeSpec {
             ARC.serverName = "server-em-a"
-            val host = redis.host
-            val port = redis.getMappedPort(6379)
-            redisManager = RedisManager(host, port, null, null)
+            redisManager = RedisManager(redis.host, redis.getMappedPort(6379), null, null)
             Thread.sleep(500)
         }
 
@@ -252,7 +254,8 @@ class EmSyncTest :
                 received.get()?.skillXP?.toList() shouldBe expectedXP.toList()
             }
         }
-    }) {
+    }
+
     companion object {
         private val sharedRedis: GenericContainer<*> by lazy {
             configureTestcontainers()
