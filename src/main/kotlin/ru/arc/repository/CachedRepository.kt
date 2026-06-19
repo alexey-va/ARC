@@ -287,6 +287,26 @@ class CachedRepository<T : Entity>(
     }
 
     /**
+     * Synchronous cache read — returns entity if already in cache, null otherwise.
+     * Does not trigger storage load. Use for hot-path reads where cache is guaranteed warm.
+     */
+    fun getNow(id: String): T? = cache.get(id)
+
+    /**
+     * Synchronous read of all cached entities.
+     */
+    fun allNow(): List<T> = cache.all().toList()
+
+    /**
+     * Mark entity as dirty so the background save job persists it.
+     * Equivalent to calling save() without coroutine overhead.
+     */
+    fun markDirty(entity: T) {
+        cache.put(entity)
+        updateAccessTime(entity.id())
+    }
+
+    /**
      * Get cache statistics.
      */
     fun getStats(): CacheStats = CacheStats(

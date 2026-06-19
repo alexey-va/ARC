@@ -369,10 +369,10 @@ public class PositionCreator extends ChestGui {
             return;
         }
         StockPlayerManager.EconomyCheckResponse response = StockPlayerManager.economyCheck(stockPlayer, stock, amount, leverage);
-        if (!response.success()) {
+        if (!response.getSuccess()) {
             boolean success = false;
             if (stockPlayer.getAutoTake()) {
-                success = StockPlayerManager.addToTradingBalanceFromVault(stockPlayer, response.lack());
+                success = StockPlayerManager.addToTradingBalanceFromVault(stockPlayer, response.getLack());
             }
             if (!success) {
                 GuiUtils.temporaryChange(createItem.getItem(),

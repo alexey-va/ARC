@@ -1,5 +1,9 @@
 package ru.arc.commands.arc.subcommands
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import org.bukkit.Bukkit
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
@@ -43,6 +47,7 @@ object InvestSubCommand : SubCommand {
     override val defaultUsage = "/arc invest [-t:menu|buy|short|close|add-money|withdraw-money|auto] [-s:SYMBOL] [-amount:N] [-leverage:N] [-up:N] [-down:N]"
     override val defaultPlayerOnly = false // Console can do admin actions
 
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val config get() = ConfigManager.of(ARC.instance.dataPath, "stocks/stock.yml")
 
     override fun execute(
@@ -96,18 +101,18 @@ object InvestSubCommand : SubCommand {
         // Default: open menu
         if (args.isEmpty() || type == "menu") {
             val targetName = params["player"]
-            val stockPlayerFuture =
-                if (targetName == null) {
-                    StockPlayerManager.getOrCreate(player)
-                } else {
-                    if (!sender.hasPermission("arc.stocks.menu.other")) {
-                        sender.sendMessage(CommandConfig.noPermission())
-                        return true
-                    }
-                    val offlinePlayer = Bukkit.getOfflinePlayer(targetName)
-                    StockPlayerManager.getOrNull(offlinePlayer.uniqueId)
+            if (targetName == null) {
+                scope.launch {
+                    val sp = StockPlayerManager.getOrCreate(player)
+                    GuiUtils.constructAndShowAsync({ SymbolSelector(sp) }, player)
                 }
-            stockPlayerFuture.thenAccept { sp ->
+            } else {
+                if (!sender.hasPermission("arc.stocks.menu.other")) {
+                    sender.sendMessage(CommandConfig.noPermission())
+                    return true
+                }
+                val offlinePlayer = Bukkit.getOfflinePlayer(targetName)
+                val sp = StockPlayerManager.getNow(offlinePlayer.uniqueId)
                 if (sp != null) {
                     GuiUtils.constructAndShowAsync({ SymbolSelector(sp) }, player)
                 }
@@ -115,12 +120,11 @@ object InvestSubCommand : SubCommand {
             return true
         }
 
-        val stockPlayerFuture = StockPlayerManager.getOrCreate(player)
-
         when (type) {
             "add-money" -> {
                 val amount = params["amount"]?.toDoubleOrNull() ?: 1000.0
-                stockPlayerFuture.thenAccept { sp ->
+                scope.launch {
+                    val sp = StockPlayerManager.getOrCreate(player)
                     runInMainThread { StockPlayerManager.addToTradingBalanceFromVault(sp, amount) }
                 }
                 return true
@@ -128,14 +132,18 @@ object InvestSubCommand : SubCommand {
 
             "withdraw-money" -> {
                 val amount = params["amount"]?.toDoubleOrNull() ?: 1000.0
-                stockPlayerFuture.thenAccept { sp ->
+                scope.launch {
+                    val sp = StockPlayerManager.getOrCreate(player)
                     runInMainThread { StockPlayerManager.addToTradingBalanceFromVault(sp, -amount) }
                 }
                 return true
             }
 
             "auto" -> {
-                stockPlayerFuture.thenAccept { StockPlayerManager.switchAuto(it) }
+                scope.launch {
+                    val sp = StockPlayerManager.getOrCreate(player)
+                    StockPlayerManager.switchAuto(sp)
+                }
                 return true
             }
         }
@@ -165,13 +173,15 @@ object InvestSubCommand : SubCommand {
 
         when (type) {
             "buy" -> {
-                stockPlayerFuture.thenAccept { sp ->
+                scope.launch {
+                    val sp = StockPlayerManager.getOrCreate(player)
                     runInMainThread { StockPlayerManager.buyStock(sp, stock, amount, leverage, up, down) }
                 }
             }
 
             "short" -> {
-                stockPlayerFuture.thenAccept { sp ->
+                scope.launch {
+                    val sp = StockPlayerManager.getOrCreate(player)
                     runInMainThread { StockPlayerManager.shortStock(sp, stock, amount, leverage, up, down) }
                 }
             }
@@ -183,7 +193,8 @@ object InvestSubCommand : SubCommand {
                         return true
                     }
                 val reason = params["reason"]?.toIntOrNull() ?: 1
-                stockPlayerFuture.thenAccept { sp ->
+                scope.launch {
+                    val sp = StockPlayerManager.getOrCreate(player)
                     runInMainThread { StockPlayerManager.closePosition(sp, symbol, uuid, reason) }
                 }
             }

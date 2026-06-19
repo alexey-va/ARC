@@ -4,7 +4,7 @@ import net.kyori.adventure.text.minimessage.tag.Tag
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import ru.arc.board.ItemIcon
 import ru.arc.configs.StockConfig
-import ru.arc.network.repos.RepoData
+import ru.arc.repository.Entity
 import java.time.Duration
 import java.time.Instant
 
@@ -22,7 +22,7 @@ class Stock(
     var lastTimeDividend: Long = 0L,
     var maxLeverage: Int = 10000,
     var type: Type = Type.STOCK,
-) : RepoData<Stock>() {
+) : Entity {
 
     fun tagResolver(): TagResolver {
         val hours = Duration.between(Instant.ofEpochMilli(lastTimeDividend), Instant.now()).toHours().toInt()
@@ -54,20 +54,6 @@ class Stock(
     }
 
     override fun id(): String = symbol
-
-    override val isRemove: Boolean = false
-
-    override fun merge(other: Stock) {
-        price = other.price
-        dividend = other.dividend
-        lastUpdated = other.lastUpdated
-        display = other.display
-        lore = other.lore
-        icon = other.icon
-        lastTimeDividend = other.lastTimeDividend
-        maxLeverage = other.maxLeverage
-        type = other.type
-    }
 
     enum class Type {
         STOCK, CURRENCY, CRYPTO, COMMODITY

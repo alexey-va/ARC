@@ -21,8 +21,21 @@ import ru.arc.misc.JoinMessagesManager
 import ru.arc.mobspawn.MobSpawnManager
 import ru.arc.network.NetworkRegistry
 import ru.arc.network.RedisManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import ru.arc.core.ScheduledTask
+import ru.arc.core.repeating
+import ru.arc.core.ticks
+import ru.arc.repository.redisRepo
+import ru.arc.stock.HistoryManager
+import ru.arc.stock.Stock
 import ru.arc.stock.StockClient
 import ru.arc.stock.StockMarket
+import ru.arc.stock.StockPlayer
 import ru.arc.stock.StockPlayerManager
 import ru.arc.sync.CMISync
 import ru.arc.sync.EmSync
@@ -305,18 +318,59 @@ object StockModule : PluginModule {
     override val name = "Stock"
     override val priority = 75
 
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val config by lazy { ConfigManager.of(ARC.instance.dataPath, "stocks/stock.yml") }
+    private var updateTask: ScheduledTask? = null
+    private var dividendTask: ScheduledTask? = null
+
     override fun init() {
         if (ARC.redisManager == null) return
+        if (!config.bool("enabled", false)) {
+            ru.arc.util.Logging.info("Stocks are disabled")
+            return
+        }
+
         StockConfig.load()
         AuctionConfig.load()
-        StockPlayerManager.init()
-        StockMarket.init()
+
+        StockMarket.stockRepo = redisRepo<Stock>(
+            id = "stocks",
+            storageKey = "arc.stocks",
+            updateChannel = "arc.stocks_update",
+            scope = scope,
+        ) {
+            loadAllOnStart(true)
+            saveInterval(kotlin.time.Duration.parse("1s"))
+        }
+
+        StockPlayerManager.playerRepo = redisRepo<StockPlayer>(
+            id = "stock_players",
+            storageKey = "arc.stock_players",
+            updateChannel = "arc.stock_players_update",
+            scope = scope,
+        ) {
+            loadAllOnStart(true)
+            saveInterval(kotlin.time.Duration.parse("250ms"))
+        }
+
+        HistoryManager.init()
+
+        updateTask = repeating(200.ticks, delay = 20.ticks) {
+            scope.launch { StockMarket.updateStocks() }
+        }
+        dividendTask = repeating(20.ticks, delay = 100.ticks) {
+            StockMarket.payDividends()
+        }
     }
 
     override fun shutdown() {
-        StockMarket.cancelTasks()
+        updateTask?.let { if (!it.isCancelled) it.cancel() }
+        dividendTask?.let { if (!it.isCancelled) it.cancel() }
         StockMarket.saveHistory()
+        runBlocking { StockMarket.stockRepo.shutdown() }
+        runBlocking { StockPlayerManager.playerRepo.shutdown() }
         StockClient.stopClient()
+        scope.cancel()
     }
 }
 

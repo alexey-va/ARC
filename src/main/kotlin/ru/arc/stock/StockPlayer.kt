@@ -7,7 +7,7 @@ import org.bukkit.OfflinePlayer
 import org.bukkit.entity.Player
 import ru.arc.configs.StockConfig
 import ru.arc.hooks.HookRegistry
-import ru.arc.network.repos.RepoData
+import ru.arc.repository.Entity
 import ru.arc.util.TextUtil
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
@@ -20,14 +20,7 @@ class StockPlayer(
     var autoTake: Boolean = true,
     var totalGains: Double = 0.0,
     var receivedDividend: Double = 0.0,
-) : RepoData<StockPlayer>() {
-
-    constructor(name: String, uuid: UUID) : this(
-        playerName = name,
-        playerUuid = uuid,
-    ) {
-        isDirty = true
-    }
+) : Entity {
 
     fun getBalance(): Double = balance
 
@@ -39,7 +32,6 @@ class StockPlayer(
     fun addToBalance(add: Double, fromPosition: Boolean) {
         balance += add
         if (fromPosition) totalGains += add
-        isDirty = true
     }
 
     @Synchronized
@@ -54,10 +46,9 @@ class StockPlayer(
     fun giveDividend(symbol: String): Double {
         if (!positionMap.containsKey(symbol)) return 0.0
         println("Giving dividend to $playerName")
-        val stock = StockMarket.stock(symbol)
+        val stock = StockMarket.stock(symbol) ?: return 0.0
         if (stock.dividend < 0.00001) return 0.0
 
-        isDirty = true
         var gave = 0.0
         for (position in positionMap[symbol]!!) {
             val dividend = stock.dividend * position.amount
@@ -119,7 +110,6 @@ class StockPlayer(
         while (iter.hasNext()) {
             val position = iter.next()
             if (position.positionUuid == uuid) {
-                isDirty = true
                 iter.remove()
                 return position
             }
@@ -129,13 +119,11 @@ class StockPlayer(
 
     @Synchronized
     fun addPosition(position: Position) {
-        isDirty = true
         positionMap.getOrPut(position.symbol) { CopyOnWriteArrayList() }.add(position)
     }
 
     fun updateAutoTake(newValue: Boolean) {
         if (newValue == autoTake) return
-        isDirty = true
         autoTake = newValue
     }
 
@@ -156,16 +144,4 @@ class StockPlayer(
     }
 
     override fun id(): String = playerUuid.toString()
-
-    override val isRemove: Boolean = false
-
-    @Synchronized
-    override fun merge(other: StockPlayer) {
-        if (other.balance != 0.0) balance = other.balance
-        if (other.autoTake != autoTake) autoTake = other.autoTake
-        if (other.totalGains != 0.0) totalGains = other.totalGains
-        if (other.receivedDividend != 0.0) receivedDividend = other.receivedDividend
-        positionMap.clear()
-        positionMap.putAll(other.positionMap)
-    }
 }
