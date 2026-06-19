@@ -16,6 +16,7 @@ import ru.arc.configs.ConfigManager;
 import ru.arc.configs.StockConfig;
 import ru.arc.repository.LegacyRedisRepo;
 
+import static ru.arc.util.Logging.debug;
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.info;
 
@@ -184,6 +185,7 @@ public class StockMarket {
             current.setDirty(true);
         } catch (Exception e) {
             error("Error loading stock from map: {}", map, e);
+            debug("[stock] failed to deserialize stock entry keys={}", map != null ? map.keySet() : null);
         }
     }
 

@@ -15,6 +15,7 @@ import ru.arc.hooks.lands.LandsHook;
 import ru.arc.hooks.lootchest.LootChestHook;
 import ru.arc.hooks.luckperms.LuckPermsHook;
 import ru.arc.hooks.packetevents.PacketEventsHook;
+import ru.arc.hooks.slimefun.BackpackBlockListener;
 import ru.arc.hooks.slimefun.SFHook;
 import ru.arc.hooks.viaversion.ViaVersionHook;
 import ru.arc.hooks.worldguard.WGHook;
@@ -33,6 +34,7 @@ import ru.arc.listeners.RespawnListener;
 import ru.arc.listeners.SpawnerListener;
 
 import static org.bukkit.Bukkit.getServer;
+import static ru.arc.util.Logging.debug;
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.info;
 
@@ -100,10 +102,22 @@ public class HookRegistry {
                 }
             } catch (Throwable e) {
                 error("Error registering {} hook", pluginName, e);
+                debug("Hook {} registration failed: {}", pluginName, e.getMessage());
             }
         } else {
-            info("Unable to find plugin '{}'", pluginName);
+            debug("Plugin {} not installed — hook skipped", pluginName);
         }
+    }
+
+    /** Registers a hook when any of the given plugin names is present (V3/V4 rename, etc.). */
+    private static void registerFirstAvailable(boolean single, Runnable runnable, String... pluginNames) {
+        for (String pluginName : pluginNames) {
+            if (getServer().getPluginManager().getPlugin(pluginName) != null) {
+                register(pluginName, single, runnable);
+                return;
+            }
+        }
+        info("Unable to find plugin '{}'", String.join("' or '", pluginNames));
     }
 
     private void registerHooks() {
@@ -119,6 +133,7 @@ public class HookRegistry {
         register("Slimefun", true, () -> {
             sfHook = new SFHook();
             Bukkit.getPluginManager().registerEvents(sfHook, ARC.getInstance());
+            Bukkit.getPluginManager().registerEvents(BackpackBlockListener.INSTANCE, ARC.getInstance());
         });
 
         register("AdvancedEnchantments", true, () -> {
@@ -147,7 +162,7 @@ public class HookRegistry {
             jobsEnabled = true;
         });
 
-        register("zAuctionHouseV3", true, () -> auctionHook = new AuctionHook());
+        registerFirstAvailable(true, () -> auctionHook = new AuctionHook(), "zAuctionHouse", "zAuctionHouseV3");
 
         register("Bank", true, () -> bankHook = new BankHook());
 

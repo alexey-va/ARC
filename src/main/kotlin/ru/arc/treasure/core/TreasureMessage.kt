@@ -173,9 +173,19 @@ data class TreasureMessage(
         context.text?.let { text.replace("%text%", it) }
             ?: text
                 .replace("%player%", context.player.name)
-                .replace("%amount%", context.amount?.toString() ?: "")
+                .replace("%amount%", formatAmount(context.amount))
                 .replace("%item%", context.itemName ?: "")
                 .replace("%pool%", context.poolId ?: "")
+
+    private fun formatAmount(amount: Number?): String {
+        if (amount == null) return ""
+        val value = amount.toDouble()
+        return if (value == value.toLong().toDouble()) {
+            value.toLong().toString()
+        } else {
+            "%.2f".format(value)
+        }
+    }
 
     /**
      * Serializes to a map for YAML storage.

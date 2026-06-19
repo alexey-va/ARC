@@ -10,6 +10,7 @@ import com.github.stefvanschie.inventoryframework.pane.OutlinePane;
 import com.github.stefvanschie.inventoryframework.pane.PaginatedPane;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
+import com.github.stefvanschie.inventoryframework.pane.util.Slot;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
@@ -80,8 +81,8 @@ public class PositionSelector extends ChestGui {
     }
 
     private void setupPositions() {
-        paginatedPane = new PaginatedPane(0, 0, 9, rows - 1);
-        this.addPane(paginatedPane);
+        paginatedPane = new PaginatedPane(9, rows - 1);
+        this.addPane(Slot.fromXY(0, 0), paginatedPane);
         populatePositions();
     }
 
@@ -98,8 +99,8 @@ public class PositionSelector extends ChestGui {
     }
 
     private void setupNav() {
-        StaticPane pane = new StaticPane(0, this.rows - 1, 9, 1);
-        this.addPane(pane);
+        StaticPane pane = new StaticPane(9, 1);
+        this.addPane(Slot.fromXY(0, this.rows - 1), pane);
         TagResolver tagResolver = customResolver();
 
         back = new ItemStackBuilder(Material.BLUE_STAINED_GLASS_PANE)
@@ -194,16 +195,14 @@ public class PositionSelector extends ChestGui {
     }
 
     private void setupBackground() {
-        OutlinePane pane = new OutlinePane(0, this.rows - 1, 9, 1);
+        OutlinePane pane = new OutlinePane(9, 1, Pane.Priority.LOWEST);
         pane.addItem(GuiUtils.background());
         pane.setRepeat(true);
-        pane.setPriority(Pane.Priority.LOWEST);
-        this.addPane(pane);
+        this.addPane(Slot.fromXY(0, this.rows - 1), pane);
 
-        OutlinePane pane2 = new OutlinePane(0, 0, 9, this.rows - 1);
+        OutlinePane pane2 = new OutlinePane(9, this.rows - 1, Pane.Priority.LOWEST);
         pane2.addItem(GuiUtils.background(Material.LIGHT_GRAY_STAINED_GLASS_PANE));
         pane2.setRepeat(true);
-        pane2.setPriority(Pane.Priority.LOWEST);
-        this.addPane(pane2);
+        this.addPane(Slot.fromXY(0, 0), pane2);
     }
 }

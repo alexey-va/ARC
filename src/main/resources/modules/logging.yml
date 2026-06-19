@@ -15,5 +15,11 @@ rate: 20
 maxBurst: 10
 # Включить удалённый аппендер
 enabled: false
-# Минимальный уровень, уходящий в Loki (INFO, WARN, …)
+# Уровень консольных логов ARC (DEBUG|INFO|WARN|ERROR). /arc logger — без рестарта.
 level: INFO
+# Не выводить DEBUG, если вызов из класса с префиксом пакета (sync, repository, …).
+# Пустой список = не фильтровать. Reload: /arc reload или правка + reload logging module.
+debug-quiet-sources:
+  - ru.arc.sync
+  - ru.arc.repository
+# Минимальный уровень, уходящий в Loki (INFO, WARN, …)

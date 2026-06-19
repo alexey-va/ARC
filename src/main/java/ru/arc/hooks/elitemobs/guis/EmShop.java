@@ -9,6 +9,7 @@ import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
 import com.github.stefvanschie.inventoryframework.pane.PaginatedPane;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
+import com.github.stefvanschie.inventoryframework.pane.util.Slot;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
@@ -46,8 +47,8 @@ public class EmShop extends ChestGui {
     }
 
     private void setupItems() {
-        PaginatedPane pane = new PaginatedPane(0, 1, 9, config.integer("shop.rows", 6) - 1, Pane.Priority.HIGHEST);
-        this.addPane(pane);
+        PaginatedPane pane = new PaginatedPane(9, config.integer("shop.rows", 6) - 1, Pane.Priority.HIGHEST);
+        this.addPane(Slot.fromXY(0, 1), pane);
         ShopHolder.Shop shop = shopHolder.getShop(player);
         List<GuiItem> items = new ArrayList<>();
 
@@ -87,8 +88,8 @@ public class EmShop extends ChestGui {
     }
 
     private void setupNav() {
-        StaticPane pane = new StaticPane(0, 0, 9, 1);
-        this.addPane(pane);
+        StaticPane pane = new StaticPane(9, 1);
+        this.addPane(Slot.fromXY(0, 0), pane);
 
         TagResolver resolver = resolver();
 

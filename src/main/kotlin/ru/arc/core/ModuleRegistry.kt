@@ -1,7 +1,11 @@
 package ru.arc.core
 
+import ru.arc.util.Logging
+import ru.arc.util.Logging.consoleLog
 import ru.arc.util.Logging.error
-import ru.arc.util.Logging.info
+import ru.arc.util.Logging.escapeMM
+
+private const val SEP = "<dark_gray>" + "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄" + "</dark_gray>"
 
 /**
  * Central registry for all plugin modules.
@@ -11,9 +15,6 @@ object ModuleRegistry {
     private val modules = mutableListOf<PluginModule>()
     private var initialized = false
 
-    /**
-     * Register a module. Must be called before init().
-     */
     fun register(module: PluginModule) {
         if (initialized) {
             error("Cannot register module '{}' after initialization", module.name)
@@ -22,89 +23,93 @@ object ModuleRegistry {
         modules.add(module)
     }
 
-    /**
-     * Register multiple modules at once.
-     */
     fun registerAll(vararg modulesToRegister: PluginModule) {
         modulesToRegister.forEach { register(it) }
     }
 
-    /**
-     * Initialize all registered modules in priority order.
-     * Lower priority values are initialized first.
-     */
     fun initAll() {
         if (initialized) {
             error("ModuleRegistry already initialized")
             return
         }
 
-        val sorted =
-            modules
-                .filter { it.enabled }
-                .sortedBy { it.priority }
+        val sorted = modules.filter { it.enabled }.sortedBy { it.priority }
 
-        info("Initializing {} modules...", sorted.size)
+        consoleLog(SEP)
+        consoleLog("  <bold><white>Initializing <aqua>${sorted.size}</aqua> modules</white></bold>")
+        consoleLog(SEP)
 
-        for (module in sorted) {
+        data class Result(val name: String, val ms: Long, val error: Exception?)
+
+        val startAll = System.currentTimeMillis()
+        val results = sorted.map { module ->
+            val start = System.currentTimeMillis()
             try {
-                info("  → {}", module.name)
                 module.init()
+                Result(module.name, System.currentTimeMillis() - start, null)
             } catch (e: Exception) {
-                error("Failed to initialize module '{}'", module.name, e)
+                Result(module.name, System.currentTimeMillis() - start, e)
             }
         }
+        val totalMs = System.currentTimeMillis() - startAll
+
+        val nameWidth = results.maxOf { it.name.length }.coerceAtLeast(12)
+        for (r in results) {
+            val name = "<aqua>${escapeMM(r.name.padEnd(nameWidth))}</aqua>"
+            when {
+                r.error != null -> {
+                    val msg = escapeMM(r.error.message ?: r.error::class.simpleName ?: "error")
+                    consoleLog("  <red>✗  $name  $msg</red>")
+                    Logging.error("Module '${r.name}' failed to initialize", r.error)
+                }
+                r.ms >= 200 -> consoleLog("  <yellow>✔  $name  ${r.ms}ms  ⚠</yellow>")
+                r.ms >= 50  -> consoleLog("  <green>✔</green>  $name  <yellow>${r.ms}ms</yellow>")
+                else        -> consoleLog("  <green>✔</green>  $name  <dark_gray>${r.ms}ms</dark_gray>")
+            }
+        }
+
+        val failed = results.count { it.error != null }
+        val ok = results.size - failed
+
+        consoleLog(SEP)
+        if (failed == 0) {
+            consoleLog("  <bold><green>✔  All $ok modules ready</green></bold>  <dark_gray>(${totalMs}ms total)</dark_gray>")
+        } else {
+            consoleLog("  <bold><green>✔  $ok ok</green>  <red>$failed failed</red></bold>  <dark_gray>(${totalMs}ms)</dark_gray>")
+        }
+        consoleLog(SEP)
 
         initialized = true
-        info("All modules initialized")
     }
 
-    /**
-     * Reload all modules.
-     */
     fun reloadAll() {
-        info("Reloading {} modules...", modules.size)
-
+        consoleLog("<aqua>↻  Reloading ${modules.size} modules...</aqua>")
         for (module in modules.filter { it.enabled }) {
             try {
-                info("  ↻ {}", module.name)
                 module.reload()
+                consoleLog("  <green>↻  ${escapeMM(module.name)}</green>")
             } catch (e: Exception) {
-                error("Failed to reload module '{}'", module.name, e)
+                error("  ✗  ${module.name}", e)
             }
         }
-
-        info("All modules reloaded")
+        consoleLog("<green>↻  Reload complete</green>")
     }
 
-    /**
-     * Shutdown all modules in reverse priority order.
-     * Higher priority values are shut down first.
-     */
     fun shutdownAll() {
-        val sorted =
-            modules
-                .filter { it.enabled }
-                .sortedByDescending { it.priority }
-
-        info("Shutting down {} modules...", sorted.size)
-
+        val sorted = modules.filter { it.enabled }.sortedByDescending { it.priority }
+        consoleLog("<dark_gray>  Shutting down ${sorted.size} modules...</dark_gray>")
         for (module in sorted) {
             try {
-                info("  ✕ {}", module.name)
                 module.shutdown()
+                consoleLog("  <dark_gray>✕  ${escapeMM(module.name)}</dark_gray>")
             } catch (e: Exception) {
                 error("Failed to shutdown module '{}'", module.name, e)
             }
         }
-
         modules.clear()
         initialized = false
-        info("All modules shut down")
+        consoleLog("<dark_gray>  Shutdown complete</dark_gray>")
     }
 
-    /**
-     * Get all registered modules.
-     */
     fun getModules(): List<PluginModule> = modules.toList()
 }

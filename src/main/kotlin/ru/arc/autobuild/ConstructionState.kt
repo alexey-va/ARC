@@ -4,6 +4,7 @@ import ru.arc.core.ScheduledTask
 import ru.arc.core.delayed
 import ru.arc.core.ticks
 import ru.arc.util.CooldownManager
+import ru.arc.util.Logging.debug
 
 /**
  * State Pattern implementation for construction site lifecycle.
@@ -44,6 +45,11 @@ sealed class ConstructionState {
             timeoutTask =
                 delayed((site.displaySeconds * 20L).ticks) {
                     if (site.state == DisplayingOutline) {
+                        debug(
+                            "[autobuild] outline timeout for {} building={}",
+                            site.player.name,
+                            site.building.fileName,
+                        )
                         site.player.sendMessage(BuildConfig.Messages.inactivity())
                         site.transitionTo(Cancelled)
                     }
@@ -73,6 +79,12 @@ sealed class ConstructionState {
             timeoutTask =
                 delayed((site.confirmSeconds * 20L).ticks) {
                     if (site.state == Confirmation) {
+                        debug(
+                            "[autobuild] confirmation timeout for {} building={} npcId={}",
+                            site.player.name,
+                            site.building.fileName,
+                            site.npcId,
+                        )
                         site.player.sendMessage(BuildConfig.Messages.inactivity())
                         site.transitionTo(Cancelled)
                     }

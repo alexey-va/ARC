@@ -12,7 +12,6 @@ import ru.arc.network.RedisManager;
 
 import static ru.arc.util.Logging.debug;
 import static ru.arc.util.Logging.error;
-import static ru.arc.util.Logging.warn;
 
 public class SyncRepo<T extends SyncData> {
 
@@ -55,7 +54,7 @@ public class SyncRepo<T extends SyncData> {
 
     private void applyData(T data) {
         if (data == null) {
-            warn("No data found in database {}", key);
+            debug("No data found in database {} (first visit or not yet saved)", key);
             return;
         }
         if (data.server().equals(ARC.serverName)) return;

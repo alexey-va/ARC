@@ -29,7 +29,7 @@ object Treasures : PluginModule {
     override fun init() {
         info("Initializing treasure module...")
 
-        dataDir = File(ARC.instance.dataFolder, "treasures/pools")
+        dataDir = File(ARC.instance.dataFolder, "treasures")
         dataDir.mkdirs()
 
         _manager = TreasureManager()
@@ -41,7 +41,7 @@ object Treasures : PluginModule {
 
         _manager.loadFrom(dataDir)
 
-        info("Treasure module initialized with ${_manager.allPools.size} pools")
+        info("Treasure module initialized: ${_manager.allPools.size} pool(s) loaded from '${dataDir.absolutePath}'")
     }
 
     override fun reload() {

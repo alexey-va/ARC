@@ -19,7 +19,7 @@ object RespawnOnRtpSubCommand : SubCommand {
     override val configKey = "respawnonrtp"
     override val defaultName = "respawnonrtp"
     override val defaultPermission = "arc.rtp-respawn"
-    override val defaultDescription = "Добавить игрока в список RTP-респауна"
+    override val defaultDescription = "Отметить игрока для телепортации RTP при следующем респауне (действует 1 мин)"
     override val defaultUsage = "/arc respawnonrtp <player>"
 
     /** Кеш игроков для RTP при респауне (истекает через 1 минуту) */

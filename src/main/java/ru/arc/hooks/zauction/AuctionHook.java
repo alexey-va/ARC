@@ -3,22 +3,19 @@ package ru.arc.hooks.zauction;
 import java.util.ArrayList;
 import java.util.List;
 
-import fr.maxlego08.zauctionhouse.api.AuctionItem;
 import fr.maxlego08.zauctionhouse.api.AuctionManager;
-import fr.maxlego08.zauctionhouse.api.blacklist.IBlacklistManager;
-import fr.maxlego08.zauctionhouse.api.blacklist.ItemChecker;
+import fr.maxlego08.zauctionhouse.api.AuctionPlugin;
 import fr.maxlego08.zauctionhouse.api.category.CategoryManager;
-import fr.maxlego08.zauctionhouse.api.inventory.InventoryManager;
-import fr.maxlego08.zauctionhouse.api.transaction.TransactionManager;
+import fr.maxlego08.zauctionhouse.api.item.Item;
+import fr.maxlego08.zauctionhouse.api.item.StorageType;
 import lombok.Setter;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
-import org.bukkit.NamespacedKey;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
@@ -28,7 +25,6 @@ import ru.arc.hooks.HookRegistry;
 import ru.arc.util.TextUtil;
 
 import static ru.arc.util.Logging.info;
-import static ru.arc.util.Logging.warn;
 
 public class AuctionHook {
 
@@ -36,24 +32,17 @@ public class AuctionHook {
     AuctionMessager auctionMessager;
     CategoryManager categoryManager;
     AuctionManager auctionManager;
-    IBlacklistManager iBlacklistManager;
 
     AuctionListener auctionListener = null;
 
     BukkitTask broadcastItemsTask;
 
     public AuctionHook() {
-        auctionManager = getProvider(AuctionManager.class);
-        InventoryManager inventoryManager = getProvider(InventoryManager.class);
-        categoryManager = getProvider(CategoryManager.class);
-        TransactionManager transactionManager = getProvider(TransactionManager.class);
-        iBlacklistManager = getProvider(IBlacklistManager.class);
+        resolveApi();
 
-        if (iBlacklistManager != null) {
-            iBlacklistManager.registerBlacklist(emBlackList());
-            info("Registered soulbind blacklist");
-        } else {
-            warn("Black list manager was not found!");
+        if (auctionManager == null || categoryManager == null) {
+            info("zAuctionHouse API providers not available yet");
+            return;
         }
 
         if (auctionListener == null) {
@@ -62,6 +51,7 @@ public class AuctionHook {
         }
 
         startTasks();
+        info("zAuctionHouse hook initialized");
     }
 
     public void cancelTasks() {
@@ -72,6 +62,9 @@ public class AuctionHook {
 
     public void startTasks() {
         cancelTasks();
+        if (auctionManager == null) {
+            return;
+        }
         broadcastItemsTask = new BukkitRunnable() {
             @Override
             public void run() {
@@ -87,64 +80,89 @@ public class AuctionHook {
     }
 
     private List<AuctionItemDto> getAuctionItems() {
-        record Pair(String category, AuctionItem item) {
-        }
-        return AuctionConfig.categories.stream()
-                .flatMap(s -> categoryManager.getByName(s).stream())
-                .flatMap(c -> auctionManager.getItems(c).stream().map(i -> new Pair(c.getDisplayName(), i)))
-                .map(pair -> fromAuctionItem(pair.category, pair.item))
+        return auctionManager.getItems(StorageType.LISTED).stream()
+                .filter(item -> !item.isExpired())
+                .filter(this::matchesConfiguredCategory)
+                .map(item -> fromAuctionItem(resolveCategory(item), item))
+                .filter(java.util.Objects::nonNull)
                 .toList();
     }
 
-    private AuctionItemDto fromAuctionItem(String category, AuctionItem item) {
+    private boolean matchesConfiguredCategory(Item item) {
+        return AuctionConfig.categories.stream().anyMatch(item::hasCategory);
+    }
+
+    private String resolveCategory(Item item) {
+        return AuctionConfig.categories.stream()
+                .filter(item::hasCategory)
+                .findFirst()
+                .orElse("misc");
+    }
+
+    private AuctionItemDto fromAuctionItem(String category, Item item) {
         if (item.isExpired()) {
             return null;
         }
 
-        ItemStack stack = item.getItemStack();
-        ItemMeta meta = stack.getItemMeta();
-        TextComponent displayComponent = (TextComponent) meta.displayName();
-        String display;
-        if (displayComponent != null) {
-            display = PlainTextComponentSerializer.plainText().serialize(displayComponent);
-        } else {
-            if (HookRegistry.translatorHook != null) {
-                display = HookRegistry.translatorHook.translate(stack);
-            } else {
-                display = stack.getType().name().replace("_", "").toLowerCase();
+        String display = item.getItemDisplay();
+        if (display == null || display.isBlank()) {
+            ItemStack stack = item.buildItemStack(null);
+            ItemMeta meta = stack.getItemMeta();
+            if (meta != null && meta.hasDisplayName()) {
+                Component name = meta.displayName();
+                if (name instanceof TextComponent textComponent) {
+                    display = PlainTextComponentSerializer.plainText().serialize(textComponent);
+                }
+            }
+            if (display == null || display.isBlank()) {
+                if (HookRegistry.translatorHook != null) {
+                    display = HookRegistry.translatorHook.translate(stack);
+                } else {
+                    display = stack.getType().name().replace("_", "").toLowerCase();
+                }
             }
         }
 
         List<String> lore = new ArrayList<>();
-        List<Component> loreComponents = meta.lore();
-        if (loreComponents != null) {
-            lore = loreComponents.stream()
-                    .map(line -> (TextComponent) line)
-                    .map(TextComponent::content)
-                    .toList();
+        ItemStack stack = item.buildItemStack(null);
+        ItemMeta meta = stack.getItemMeta();
+        if (meta != null) {
+            List<Component> loreComponents = meta.lore();
+            if (loreComponents != null) {
+                lore = loreComponents.stream()
+                        .filter(TextComponent.class::isInstance)
+                        .map(line -> ((TextComponent) line).content())
+                        .toList();
+            }
         }
 
-        return new AuctionItemDto(display, item.getSellerName(), TextUtil.formatAmount(item.getPrice()),
-                item.getExpireAt(), category, item.getAmount(), item.getPriority(),
-                item.getUniqueId().toString(), true, lore);
+        return new AuctionItemDto(
+                display,
+                item.getSellerName(),
+                TextUtil.formatAmount(item.getPrice().doubleValue()),
+                item.getExpiredAt().getTime(),
+                category,
+                item.getAmount(),
+                0,
+                String.valueOf(item.getId()),
+                true,
+                lore
+        );
     }
 
-    private ItemChecker emBlackList() {
-        return new ItemChecker() {
-            @Override
-            public String getName() {
-                return "arc:soulbind";
-            }
-
-            @Override
-            public boolean checkItemStack(ItemStack itemStack) {
-                return itemStack.getItemMeta().getPersistentDataContainer()
-                        .get(new NamespacedKey("elitemobs", "soulbind"),
-                                PersistentDataType.STRING) != null;
-            }
-        };
+    private void resolveApi() {
+        Plugin plugin = Bukkit.getPluginManager().getPlugin("zAuctionHouse");
+        if (plugin == null) {
+            plugin = Bukkit.getPluginManager().getPlugin("zAuctionHouseV3");
+        }
+        if (plugin instanceof AuctionPlugin auctionPlugin) {
+            auctionManager = auctionPlugin.getAuctionManager();
+            categoryManager = auctionPlugin.getCategoryManager();
+            return;
+        }
+        auctionManager = getProvider(AuctionManager.class);
+        categoryManager = getProvider(CategoryManager.class);
     }
-
 
     private <T> T getProvider(Class<T> classz) {
         RegisteredServiceProvider<T> provider =
@@ -152,7 +170,6 @@ public class AuctionHook {
         if (provider == null) {
             return null;
         }
-        provider.getProvider();
         return provider.getProvider();
     }
 

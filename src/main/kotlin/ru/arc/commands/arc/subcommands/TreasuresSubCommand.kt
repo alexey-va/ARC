@@ -36,8 +36,8 @@ object TreasuresSubCommand : SubCommand {
     override val configKey = "treasures"
     override val defaultName = "treasures"
     override val defaultPermission = "arc.treasures.admin"
-    override val defaultDescription = "Управление пулами наград"
-    override val defaultUsage = "/arc treasures [list|reload|<pool_id>]"
+    override val defaultDescription = "Управление пулами наград: просмотр, создание, добавление предметов, выдача"
+    override val defaultUsage = "/arc treasures [list|reload|<pool> [add|addhand|addchest|addsubpool <subpool>|give [player]|info] [-weight:N] [-quantity:N]]"
 
     private val actions = listOf("add", "addhand", "addchest", "addsubpool", "give", "info")
 

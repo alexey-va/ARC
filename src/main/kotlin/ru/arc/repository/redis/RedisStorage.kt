@@ -24,9 +24,21 @@ class RedisStorage<T : Entity>(
     @Suppress("UNCHECKED_CAST")
     override suspend fun load(id: String): RepoResult<T?> = withContext(Dispatchers.IO) {
         RepoResult.runCatching {
+            Logging.debug("[RedisStorage:{}] load({})", storageKey, id)
             val values = redis.loadMapEntries(storageKey, id).await()
-            val json = values.getOrNull(0) ?: return@runCatching null
-            gson.fromJson(json, entityType) as T?
+            val json = values.getOrNull(0)
+            if (json == null) {
+                Logging.debug("[RedisStorage:{}] no data for {}", storageKey, id)
+                return@runCatching null
+            }
+            Logging.debug("[RedisStorage:{}] raw JSON for {}: {}", storageKey, id,
+                if (json.length > 200) json.take(200) + "…" else json)
+            try {
+                gson.fromJson(json, entityType) as T?
+            } catch (e: Exception) {
+                Logging.warn("[RedisStorage:{}] deserialization failed for {}: {}", storageKey, id, e.message)
+                throw e
+            }
         }
     }
 
@@ -74,6 +86,7 @@ class RedisStorage<T : Entity>(
     override suspend fun save(entity: T): RepoResult<Unit> = withContext(Dispatchers.IO) {
         RepoResult.runCatching {
             val json = gson.toJson(entity)
+            Logging.debug("[RedisStorage:{}] save({}) json size={}", storageKey, entity.id(), json.length)
             redis.saveMapEntries(storageKey, entity.id(), json).await()
             Unit
         }

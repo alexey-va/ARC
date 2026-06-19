@@ -8,6 +8,9 @@ import lombok.Setter;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 
+import static ru.arc.util.Logging.info;
+import static ru.arc.util.Logging.warn;
+
 @Setter
 public class EliteLootManager {
 
@@ -30,6 +33,13 @@ public class EliteLootManager {
         eliteLootConfigParser = new EliteLootConfigParser();
         map = eliteLootConfigParser.load();
         eliteLootProcessor = new EliteLootProcessor();
+        int totalItems = map.values().stream().mapToInt(p -> p.getDecorItems().size()).sum();
+        info("EliteLoot loaded {} loot types, {} total decor items", map.size(), totalItems);
+        map.forEach((type, pool) -> {
+            int count = pool.getDecorItems().size();
+            if (count > 0) info("  {} → {} items", type.name(), count);
+            else warn("  {} → empty pool!", type.name());
+        });
     }
 
 

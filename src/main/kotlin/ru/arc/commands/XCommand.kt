@@ -7,6 +7,7 @@ import org.bukkit.command.CommandSender
 import org.bukkit.command.TabCompleter
 import ru.arc.ARC
 import ru.arc.configs.ConfigManager
+import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
 import ru.arc.xserver.XActionManager
@@ -86,6 +87,8 @@ object XCommand : CommandExecutor, TabCompleter {
                 serverList,
             )
 
+        info("[/x] Dispatching XCommand: command='{}', sender={}, player={}, uuid={}, servers={}, timeout={}, delay={}",
+            commandStr, senderType, playerName, uuid, serverList, timeout, delay)
         XActionManager.publish(xCommand)
 
         // Handle move-to-server

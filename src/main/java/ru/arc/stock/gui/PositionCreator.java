@@ -8,6 +8,7 @@ import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
 import com.github.stefvanschie.inventoryframework.pane.OutlinePane;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
+import com.github.stefvanschie.inventoryframework.pane.util.Slot;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.Tag;
@@ -73,7 +74,7 @@ public class PositionCreator extends ChestGui {
 
 
     private void setupButtons() {
-        StaticPane staticPane = new StaticPane(0, 0, 9, 1);
+        StaticPane staticPane = new StaticPane(9, 1);
 
         var resolver = resolver(amount, type, leverage);
         amountItem = new ItemStackBuilder(Material.GOLD_INGOT)
@@ -129,7 +130,7 @@ public class PositionCreator extends ChestGui {
                 .clickEvent(!canHaveMore ? c -> c.setCancelled(true) : this::acceptCreateClick).build();
         staticPane.addItem(createItem, 8, 0);
 
-        this.addPane(staticPane);
+        this.addPane(Slot.fromXY(0, 0), staticPane);
     }
 
     private double getNewUpper(InventoryClickEvent click) {
@@ -257,8 +258,8 @@ public class PositionCreator extends ChestGui {
     }
 
     private void setupNav() {
-        StaticPane pane = new StaticPane(0, 1, 9, 1);
-        this.addPane(pane);
+        StaticPane pane = new StaticPane(9, 1);
+        this.addPane(Slot.fromXY(0, 1), pane);
 
         back = new ItemStackBuilder(Material.BLUE_STAINED_GLASS_PANE)
                 .display(StockConfig.string("position-creator.back-display"))
@@ -273,11 +274,10 @@ public class PositionCreator extends ChestGui {
     }
 
     private void setupBackground() {
-        OutlinePane pane = new OutlinePane(0, 0, 9, 2);
+        OutlinePane pane = new OutlinePane(9, 2, Pane.Priority.LOWEST);
         pane.addItem(GuiUtils.background());
         pane.setRepeat(true);
-        pane.setPriority(Pane.Priority.LOWEST);
-        this.addPane(pane);
+        this.addPane(Slot.fromXY(0, 0), pane);
     }
 
     private double getNewAmount(InventoryClickEvent click) {

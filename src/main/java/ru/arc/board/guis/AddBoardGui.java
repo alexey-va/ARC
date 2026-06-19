@@ -12,6 +12,7 @@ import com.github.stefvanschie.inventoryframework.gui.type.ChestGui;
 import com.github.stefvanschie.inventoryframework.pane.OutlinePane;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
+import com.github.stefvanschie.inventoryframework.pane.util.Slot;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -89,7 +90,7 @@ public class AddBoardGui extends ChestGui implements Inputable {
         color = BarColor.YELLOW;
         this.entry = entry;
 
-        StaticPane pane = new StaticPane(0, 0, 9, 2);
+        StaticPane pane = new StaticPane(9, 2);
         setupBackground();
 
         if (entry != null) {
@@ -121,7 +122,7 @@ public class AddBoardGui extends ChestGui implements Inputable {
         if (deleteItem != null) pane.addItem(deleteItem, 4, 1);
         pane.addItem(backItem(), 0, 1);
 
-        this.addPane(pane);
+        this.addPane(Slot.fromXY(0, 0), pane);
     }
 
     public void proceed() {
@@ -503,10 +504,9 @@ public class AddBoardGui extends ChestGui implements Inputable {
     }
 
     private void setupBackground() {
-        OutlinePane pane = new OutlinePane(0, 0, 9, 2);
+        OutlinePane pane = new OutlinePane(9, 2, Pane.Priority.LOWEST);
         pane.addItem(GuiUtils.background());
         pane.setRepeat(true);
-        pane.setPriority(Pane.Priority.LOWEST);
-        this.addPane(pane);
+        this.addPane(Slot.fromXY(0, 0), pane);
     }
 }

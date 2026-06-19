@@ -147,10 +147,17 @@ object BuildConfig {
         fun confirmButton() = config.componentDef("confirm-gui.confirm", "<green>Подтвердить постройку")
         fun cancelButton() = config.componentDef("confirm-gui.cancel", "<red>Отменить постройку")
         fun cancelBuildButton() = config.componentDef("building-gui.cancel-name", "<red>Отменить постройку")
+        fun cancelConfirmButton() =
+            config.componentDef("building-gui.cancel-confirm", "<yellow>Нажмите ещё раз для подтверждения")
+        fun cancelConfirmHint() =
+            config.componentDef(
+                "building-gui.cancel-hint",
+                "<gray>\uD83D\uDEE0 <yellow>Нажмите «Отменить» ещё раз для подтверждения",
+            )
         fun cancelLore() = config.componentListDef(
             "building-gui.cancel-lore", listOf(
-                "<gray>Вы уверены, что хотите отменить строительство?",
-                "<gray>Вы не вернете книгу"
+                "<red>Книга не вернётся!",
+                "<gray>Нажмите ещё раз для отмены",
             )
         )
 

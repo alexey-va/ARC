@@ -1,15 +1,17 @@
 package ru.arc.util
 
+import net.kyori.adventure.text.minimessage.MiniMessage
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.core.Logger
 import org.apache.logging.log4j.core.filter.BurstFilter
-import org.apache.logging.log4j.core.layout.JsonLayout
-import pl.tkowalcz.tjahzi.log4j2.Header
+import org.apache.logging.log4j.core.layout.PatternLayout
+import org.bukkit.Bukkit
 import pl.tkowalcz.tjahzi.log4j2.LokiAppender
 import pl.tkowalcz.tjahzi.log4j2.labels.Label
 import ru.arc.ARC
 import ru.arc.configs.Config
 import ru.arc.configs.ConfigManager
+import ru.arc.ops.OpsLogBuffer
 import java.nio.charset.StandardCharsets
 
 object Logging {
@@ -42,16 +44,35 @@ object Logging {
     var configVersion = -1
     var initializing = false
     var cachedLogLevel = Level.INFO
+    private var quietSourcesConfigVersion = -1
+    private var cachedQuietSources: Set<String> = emptySet()
+
+    private val mm = MiniMessage.miniMessage()
+
+    /** Escape user-supplied text so it isn't parsed as MiniMessage tags. */
+    fun escapeMM(s: String): String = s.replace("\\", "\\\\").replace("<", "\\<")
+
+    /**
+     * Send a MiniMessage-formatted string to the server console.
+     * Paper's ConsoleSender renders Adventure components with ANSI colors.
+     * Falls back to a plain JUL logger if Bukkit is not available (unit tests).
+     */
+    @JvmStatic
+    fun consoleLog(miniMessage: String) {
+        try {
+            val component = mm.deserialize(miniMessage)
+            Bukkit.getConsoleSender().sendMessage(component)
+        } catch (_: Exception) {
+            val plain = miniMessage.replace(Regex("</?[^>]+>"), "")
+            java.util.logging.Logger.getLogger("ARC").info(plain)
+        }
+    }
 
     @JvmStatic
     fun info(message: String, vararg args: Any?) {
         if (quietMode) return
         if (getLogLevelCached() <= Level.INFO) {
-            val logger = ARC.plugin?.logger ?: java.util.logging.Logger.getLogger("ARC")
-            logger.log(
-                java.util.logging.Level.INFO,
-                format(message, *args)
-            )
+            consoleLog("<dark_gray>[ARC]</dark_gray> ${format(message, *args)}")
         }
     }
 
@@ -59,23 +80,62 @@ object Logging {
     fun debug(message: String, vararg args: Any?) {
         if (quietMode) return
         if (getLogLevelCached() <= Level.DEBUG) {
-            val logger = ARC.plugin?.logger ?: java.util.logging.Logger.getLogger("ARC")
-            logger.log(
-                java.util.logging.Level.FINE,
-                format(message, *args)
-            )
+            if (isQuietDebugCaller()) return
+            consoleLog("<dark_gray>[ARC] [DEBUG]</dark_gray> <gray>${format(message, *args)}</gray>")
         }
     }
+
+    /** True if the direct DEBUG caller matches any [quietDebugSources] prefix. */
+    internal fun matchesQuietSource(className: String, sources: Collection<String>): Boolean {
+        if (sources.isEmpty()) return false
+        return sources.any { prefix ->
+            val p = prefix.trim()
+            p.isNotEmpty() && (className == p || className.startsWith("$p."))
+        }
+    }
+
+    internal fun quietDebugSources(): Set<String> {
+        val version = ConfigManager.getVersion()
+        if (version != quietSourcesConfigVersion) {
+            cachedQuietSources =
+                runCatching { config.stringList("debug-quiet-sources") }
+                    .getOrElse { emptyList() }
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .toSet()
+            quietSourcesConfigVersion = version
+        }
+        return cachedQuietSources
+    }
+
+    private fun isQuietDebugCaller(): Boolean {
+        val sources = quietDebugSources()
+        if (sources.isEmpty()) return false
+        for (frame in Thread.currentThread().stackTrace) {
+            val className = frame.className
+            if (className.startsWith("ru.arc.util.Logging") ||
+                className.startsWith("java.lang.Thread") ||
+                className.startsWith("jdk.internal")
+            ) {
+                continue
+            }
+            return matchesQuietSource(className, sources)
+        }
+        return false
+    }
+
+    private fun plainForBuffer(text: String): String = text.replace(Regex("</?[^>]+>"), "")
 
     @JvmStatic
     fun error(message: String, vararg args: Any?) {
         if (quietMode) return
         if (getLogLevelCached() <= Level.ERROR) {
-            val logger = ARC.plugin?.logger ?: java.util.logging.Logger.getLogger("ARC")
-            logger.log(
-                java.util.logging.Level.SEVERE,
-                format(message, *args)
-            )
+            val text = format(message, *args)
+            OpsLogBuffer.append("ERROR", plainForBuffer(text))
+            consoleLog("<dark_gray>[ARC]</dark_gray> <red><bold>[ERROR]</bold></red> $text")
+            // Also log to JUL SEVERE so stack traces appear in server log files
+            val julLogger = ARC.plugin?.logger ?: java.util.logging.Logger.getLogger("ARC")
+            julLogger.log(java.util.logging.Level.SEVERE, text)
         }
     }
 
@@ -83,11 +143,9 @@ object Logging {
     fun warn(message: String, vararg args: Any?) {
         if (quietMode) return
         if (getLogLevelCached() <= Level.WARN) {
-            val logger = ARC.plugin?.logger ?: java.util.logging.Logger.getLogger("ARC")
-            logger.log(
-                java.util.logging.Level.WARNING,
-                format(message, *args)
-            )
+            val text = format(message, *args)
+            OpsLogBuffer.append("WARN", plainForBuffer(text))
+            consoleLog("<dark_gray>[ARC]</dark_gray> <yellow><bold>[WARN]</bold></yellow> $text")
         }
     }
 
@@ -146,7 +204,9 @@ object Logging {
         is DoubleArray -> v.joinToString(prefix = "[", postfix = "]")
         is CharArray -> v.joinToString(prefix = "[", postfix = "]")
         is Array<*> -> v.contentDeepToString()
-        is Iterable<*> -> v.joinToString(prefix = "[", postfix = "]") { render(it) }
+        // Use Collection (not Iterable) to avoid cycling on types like Path that implement
+        // Iterable<Path> — each single-component Path's iterator yields itself infinitely.
+        is Collection<*> -> v.joinToString(prefix = "[", postfix = "]") { render(it) }
         is Map<*, *> -> v.entries.joinToString(prefix = "{", postfix = "}") { "${render(it.key)}=${render(it.value)}" }
         else -> if (v.javaClass.isArray) reflectArray(v) else v.toString()
     }
@@ -239,12 +299,9 @@ object Logging {
                 }.map { (key, value) -> Label.createLabel(key, value, null) }
                 .toTypedArray()
 
-            val headers = labels.map { Header.createHeader(it.name, it.value) }.toTypedArray()
-
-            val layout = JsonLayout.newBuilder()
-                .setCompact(true)
-                .setEventEol(true)
-                .setCharset(StandardCharsets.UTF_8)
+            val layout = PatternLayout.newBuilder()
+                .withPattern("%d{ISO8601} [%t] %-5level %logger{36} - %msg%n")
+                .withCharset(StandardCharsets.UTF_8)
                 .build()
 
             val filter = BurstFilter.newBuilder()
@@ -257,7 +314,8 @@ object Logging {
                 host = cfg.string("host", "localhost")
                 port = cfg.integer("port", 3100)
                 setLabels(labels)
-                setHeaders(headers)
+                setHeaders(arrayOf())
+                setMetadata(arrayOf())
                 name = "lokiAppender"
                 setLayout(layout)
                 setFilter(filter)
@@ -272,8 +330,8 @@ object Logging {
             val loggerConfig = configuration.getLoggerConfig(LogManager.ROOT_LOGGER_NAME)
             loggerConfig.addAppender(appender, org.apache.logging.log4j.Level.INFO, null)
             rootLogger.context.updateLoggers()
-        } catch (e: Exception) {
-            warn("Failed to add Loki appender: {}", e.message)
+        } catch (e: Throwable) {
+            warn("Failed to add Loki appender: {}", e)
         }
     }
 }

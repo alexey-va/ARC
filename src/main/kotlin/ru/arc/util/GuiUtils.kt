@@ -115,27 +115,21 @@ object GuiUtils {
     }
 
     /**
-     * Construct a GUI async and show to player after delay.
-     * Uses Task DSL for scheduling.
+     * Construct and show a GUI on the main server thread after an optional delay.
+     * ChestGui construction requires the main thread (Bukkit API restriction),
+     * so this always runs the supplier synchronously on the main thread.
      */
     @JvmStatic
     fun constructAndShowAsync(supplier: Supplier<ChestGui>, player: HumanEntity, delay: Int) {
-        async {
+        delayed(delay.ticks) {
             val gui =
                 try {
                     supplier.get()
                 } catch (e: Exception) {
-                    error("Error opening menu", e)
-                    null
-                }
-
-            delayed(delay.ticks) {
-                if (gui == null) {
-                    error("Gui is null $supplier")
+                    error("Error constructing GUI", e)
                     return@delayed
                 }
-                gui.show(player)
-            }
+            gui.show(player)
         }
     }
 

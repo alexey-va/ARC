@@ -249,6 +249,33 @@ object PoolGui {
                         }
                     }
                 }
+
+                is Treasure.Ae -> {
+                    itemStack(Material.ENCHANTED_BOOK) {
+                        display("<gold>${treasure.displayName}")
+                        lore {
+                            +"<gray>Вес: <white>${treasure.weight}"
+                            if (treasure.args.isNotEmpty()) {
+                                +"<gray>Аргументов: <white>${treasure.args.size}"
+                            }
+                            +""
+                            +"<yellow>ЛКМ - редактировать"
+                            +"<red>ПКМ - удалить"
+                        }
+                    }
+                }
+
+                is Treasure.Slimefun -> {
+                    itemStack(Material.IRON_INGOT) {
+                        display("<green>${treasure.displayName}")
+                        lore {
+                            +"<gray>Вес: <white>${treasure.weight}"
+                            +""
+                            +"<yellow>ЛКМ - редактировать"
+                            +"<red>ПКМ - удалить"
+                        }
+                    }
+                }
             }
         return com.github.stefvanschie.inventoryframework.gui
             .GuiItem(stack) { onClick(it) }

@@ -1,0 +1,32 @@
+# =============================================================================
+# ops-http.yml — локальный HTTP API для ops / MCP (только с секретным токеном).
+#
+# Слушает bind-host:bind-port (по умолчанию 127.0.0.1 — только с Gercena через SSH/curl).
+# Заголовок: Authorization: Bearer <token>  или  X-ARC-Ops-Token: <token>
+# =============================================================================
+
+enabled: true
+
+# Сгенерируй свой секрет и не коммить в git на проде.
+token: "CHANGE_ME_generate_a_long_random_secret"
+
+bind-host: "127.0.0.1"
+bind-port: 25823
+
+# POST /ops/console — произвольные команды консоли (осторожно)
+console-enabled: false
+
+# POST /ops/message — broadcast / player / ops (MiniMessage)
+messages-enabled: true
+
+# POST /ops/effect — title / actionbar / sound онлайн-игроку
+effects-enabled: true
+
+# POST /ops/reload — только arc или denizen (не minecraft reload!)
+reload-enabled: true
+
+# POST /ops/run-as — выполнить команду от имени онлайн-игрока (осторожно)
+run-as-enabled: false
+
+# Сколько WARN/ERROR держать в памяти для GET /ops/errors
+error-buffer-size: 200

@@ -80,7 +80,7 @@ public class SFHook implements Listener {
 
     public boolean checkForBackpack(PlayerRightClickEvent event) {
         if (event.getPlayer().getInventory().getItemInMainHand().getType() == Material.AIR) return false;
-        if (!config.bool("backpack-disabled", false)) return false;
+        if (!isBackpackDisabled()) return false;
         ItemStack item = event.getPlayer().getInventory().getItemInMainHand();
         SlimefunItem sfItem = SlimefunItem.getByItem(item);
         if (sfItem == null) return false;
@@ -90,6 +90,12 @@ public class SFHook implements Listener {
             return true;
         }
         return false;
+    }
+
+    /** Disabled on main-server (classic/spawn hub); enabled on survival and other nodes. */
+    private static boolean isBackpackDisabled() {
+        Config misc = ConfigManager.of(ARC.getInstance().getDataPath(), "misc.yml");
+        return misc.bool("redis.main-server", false);
     }
 
 }

@@ -20,10 +20,41 @@ public class EliteLootConfigParser {
 
     public Map<LootType, DecorPool> load() {
         Map<LootType, DecorPool> res = new HashMap<>();
+        debug("Loading elite loot config for {} loot types", LootType.values().length);
         for (LootType lootType : LootType.values()) {
-            res.put(lootType, parseDecorPool(lootType));
+            DecorPool pool = parseDecorPool(lootType);
+            res.put(lootType, pool);
+            debug("Loaded loot type {} with {} items", lootType, pool.getDecorItems().size());
         }
+        applyCrossbowFallback(res);
         return res;
+    }
+
+    private void applyCrossbowFallback(Map<LootType, DecorPool> pools) {
+        DecorPool crossbowPool = pools.get(LootType.CROSSBOW);
+        if (crossbowPool == null || !crossbowPool.getDecorItems().isEmpty()) {
+            return;
+        }
+        DecorPool bowPool = pools.get(LootType.BOW);
+        if (bowPool == null || bowPool.getDecorItems().isEmpty()) {
+            return;
+        }
+        DecorPool fallback = new DecorPool();
+        for (DecorItem bowItem : bowPool.getDecorItems().values()) {
+            fallback.add(
+                    new DecorItem(
+                            Material.CROSSBOW,
+                            bowItem.getWeight(),
+                            bowItem.getModelId(),
+                            bowItem.getColor(),
+                            bowItem.getIaNamespace(),
+                            bowItem.getIaId()
+                    ),
+                    bowItem.getWeight()
+            );
+        }
+        pools.put(LootType.CROSSBOW, fallback);
+        debug("Crossbow pool empty — reusing {} bow decor entries as crossbow", fallback.getDecorItems().size());
     }
 
 
@@ -48,15 +79,14 @@ public class EliteLootConfigParser {
         if (decors == null || decors.isEmpty()) return pool;
         for (Map<String, Object> decor : decors) {
             Material material = Material.matchMaterial(decor.get("material").toString().toUpperCase());
-            int modelId = (Integer) decor.getOrDefault("model-id", 0);
-            double weight = (Double) decor.getOrDefault("weight", 1);
-            Integer red = (Integer) decor.get("red");
-            Integer green = (Integer) decor.get("green");
-            Integer blue = (Integer) decor.get("blue");
+            int modelId = decor.containsKey("model-id") ? ((Number) decor.get("model-id")).intValue() : 0;
+            double weight = decor.containsKey("weight") ? ((Number) decor.get("weight")).doubleValue() : 1.0;
+            Integer red = decor.containsKey("red") ? ((Number) decor.get("red")).intValue() : null;
+            Integer green = decor.containsKey("green") ? ((Number) decor.get("green")).intValue() : null;
+            Integer blue = decor.containsKey("blue") ? ((Number) decor.get("blue")).intValue() : null;
             String iaNamespace = (String) decor.get("ia-namespace");
             String iaId = (String) decor.get("ia-id");
 
-            debug("Loaded decor - material: {} model: {} weight: {} red: {} green: {} blue: {}", material, modelId, weight, red, green, blue);
             if (material == null) {
                 warn("Invalid material: {}. Skipping...", decor.get("material"));
                 continue;

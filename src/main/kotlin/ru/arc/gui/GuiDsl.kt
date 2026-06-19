@@ -9,6 +9,7 @@ import com.github.stefvanschie.inventoryframework.pane.OutlinePane
 import com.github.stefvanschie.inventoryframework.pane.PaginatedPane
 import com.github.stefvanschie.inventoryframework.pane.Pane
 import com.github.stefvanschie.inventoryframework.pane.StaticPane
+import com.github.stefvanschie.inventoryframework.pane.util.Slot
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.minimessage.tag.Tag
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
@@ -151,7 +152,7 @@ class GuiBuilder(
     val player: Player?,
     val config: Config?,
 ) {
-    private val gui = ChestGui(rows, TextHolder.deserialize(TextUtil.toLegacy(title)))
+    val gui = ChestGui(rows, TextHolder.deserialize(TextUtil.toLegacy(title)))
     private var paginatedPane: PaginatedPane? = null
     private var navBar: NavBarBuilder? = null
     private val buildCallbacks = mutableListOf<(ChestGui) -> Unit>()
@@ -173,13 +174,11 @@ class GuiBuilder(
         startRow: Int = 0,
         endRow: Int = rows,
     ) {
-        val pane =
-            OutlinePane(0, startRow, 9, endRow - startRow).apply {
-                addItem(GuiUtils.background(material, modelData))
-                setRepeat(true)
-                priority = Pane.Priority.LOWEST
-            }
-        gui.addPane(pane)
+        val pane = OutlinePane(9, endRow - startRow, Pane.Priority.LOWEST).apply {
+            addItem(GuiUtils.background(material, modelData))
+            setRepeat(true)
+        }
+        gui.addPane(Slot.fromXY(0, startRow), pane)
     }
 
     /**
@@ -209,9 +208,9 @@ class GuiBuilder(
         rowRange: IntRange = 0 until (rows - 1),
         block: PaginationBuilder.() -> Unit,
     ) {
-        val pane = PaginatedPane(0, rowRange.first, 9, rowRange.last - rowRange.first + 1)
+        val pane = PaginatedPane(9, rowRange.last - rowRange.first + 1)
         paginatedPane = pane
-        gui.addPane(pane)
+        gui.addPane(Slot.fromXY(0, rowRange.first), pane)
 
         val builder = PaginationBuilder(pane, this)
         builder.block()
@@ -228,8 +227,8 @@ class GuiBuilder(
         height: Int = 1,
         block: StaticPaneBuilder.() -> Unit,
     ) {
-        val pane = StaticPane(x, y, width, height)
-        gui.addPane(pane)
+        val pane = StaticPane(width, height)
+        gui.addPane(Slot.fromXY(x, y), pane)
 
         val builder = StaticPaneBuilder(pane, this)
         builder.block()
@@ -242,8 +241,8 @@ class GuiBuilder(
         row: Int = rows - 1,
         block: NavBarBuilder.() -> Unit,
     ) {
-        val pane = StaticPane(0, row, 9, 1)
-        gui.addPane(pane)
+        val pane = StaticPane(9, 1)
+        gui.addPane(Slot.fromXY(0, row), pane)
 
         val builder = NavBarBuilder(pane, this, paginatedPane)
         navBar = builder
@@ -494,6 +493,7 @@ class NavBarBuilder(
             stack.toGuiItem {
                 if (paginatedPane.page > 0) {
                     paginatedPane.page = paginatedPane.page - 1
+                    guiBuilder.gui.update()
                 }
             }
 
@@ -525,6 +525,7 @@ class NavBarBuilder(
             stack.toGuiItem {
                 if (paginatedPane.page < paginatedPane.pages - 1) {
                     paginatedPane.page = paginatedPane.page + 1
+                    guiBuilder.gui.update()
                 }
             }
 

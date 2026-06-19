@@ -283,6 +283,72 @@ sealed class Treasure {
         }
     }
 
+    /**
+     * AdvancedEnchantments loot — runs `ae giveitem` / `ae giverandombook` via console.
+     */
+    data class Ae(
+        val kind: AeKind,
+        val itemName: String? = null,
+        val amount: Int = 1,
+        val args: List<AeArg> = emptyList(),
+        override val weight: Int = 1,
+        override val messages: List<TreasureMessage> = emptyList(),
+        override val id: String = UUID.randomUUID().toString(),
+    ) : Treasure() {
+        override val type: String = "ae"
+        override val displayName: String
+            get() =
+                when (kind) {
+                    AeKind.ITEM -> "AE: ${itemName ?: "?"}"
+                    AeKind.RANDOM_BOOK -> "AE: random book"
+                }
+        override val displayMaterial: Material get() = Material.ENCHANTED_BOOK
+
+        override fun toMap(): Map<String, Any?> =
+            treasureMap {
+                put("kind", kind.name.lowercase())
+                itemName?.let { put("name", it) }
+                if (amount != 1) put("amount", amount)
+                if (args.isNotEmpty()) put("args", AeArg.toMapList(args))
+            }
+
+        override fun newId(): Ae = copy(id = UUID.randomUUID().toString())
+
+        override fun withMessages(messages: List<TreasureMessage>): Ae = copy(messages = messages)
+
+        override fun withWeight(weight: Int): Ae = copy(weight = weight)
+    }
+
+    /**
+     * Slimefun item — runs `sf give <player> <item-id> [amount]`.
+     */
+    data class Slimefun(
+        val itemId: String,
+        val min: Int = 1,
+        val max: Int = 1,
+        override val weight: Int = 1,
+        override val messages: List<TreasureMessage> = emptyList(),
+        override val id: String = UUID.randomUUID().toString(),
+    ) : Treasure() {
+        override val type: String = "slimefun"
+        override val displayName: String get() = "SF: $itemId (${formatRange(min, max)})"
+        override val displayMaterial: Material get() = Material.IRON_INGOT
+
+        val rolledAmount: Int get() = if (min == max) min else ThreadLocalRandom.current().nextInt(min, max + 1)
+
+        override fun toMap(): Map<String, Any?> =
+            treasureMap {
+                put("item-id", itemId)
+                put("amount", formatRange(min, max))
+            }
+
+        override fun newId(): Slimefun = copy(id = UUID.randomUUID().toString())
+
+        override fun withMessages(messages: List<TreasureMessage>): Slimefun = copy(messages = messages)
+
+        override fun withWeight(weight: Int): Slimefun = copy(weight = weight)
+    }
+
     // ==================== Serialization Helpers ====================
 
     /**
@@ -366,6 +432,28 @@ sealed class Treasure {
                 "potion" -> {
                     val (min, max) = parseAmountInt(map["amount"])
                     Potion(min, max, weight, legacyMessages, id)
+                }
+
+                "ae" -> {
+                    val kind =
+                        when ((map["kind"] as? String)?.lowercase()) {
+                            "book", "random_book", "randombook" -> AeKind.RANDOM_BOOK
+                            else -> AeKind.ITEM
+                        }
+                    val itemName = map["name"] as? String
+                    val amount = (map["amount"] as? Number)?.toInt() ?: 1
+                    val args = AeArg.parseList(map["args"])
+                    Ae(kind, itemName, amount, args, weight, legacyMessages, id)
+                }
+
+                "slimefun" -> {
+                    val itemId =
+                        map["item-id"] as? String
+                            ?: map["itemId"] as? String
+                            ?: map["item"] as? String
+                            ?: return null
+                    val (min, max) = parseAmountInt(map["amount"])
+                    Slimefun(itemId, min, max, weight, legacyMessages, id)
                 }
 
                 else -> {

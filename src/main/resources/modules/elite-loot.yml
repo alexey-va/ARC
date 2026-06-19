@@ -1110,6 +1110,8 @@ attribute-name:
       attack_damage: ' <dark_green>Урон: '
       attack_speed: ' <dark_green>Скорость атаки: '
 attribute-value: <dark_green><value>
+# Жёстко отключить замену скинов/материала/IA (игнорирует replace-chance)
+replace-skins: true
 replace-chance: 0.9
 clear-lore: true
 append-attributes: true

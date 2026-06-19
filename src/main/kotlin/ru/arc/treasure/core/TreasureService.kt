@@ -57,6 +57,8 @@ class TreasureService(
                 is Treasure.SubPool -> giveSubPool(treasure, player, config)
                 is Treasure.Enchant -> giveEnchant(treasure, player)
                 is Treasure.Potion -> givePotion(treasure, player)
+                is Treasure.Ae -> giveAe(treasure, player)
+                is Treasure.Slimefun -> giveSlimefun(treasure, player)
             }
 
         // Send messages on success
@@ -92,6 +94,8 @@ class TreasureService(
                 is Treasure.SubPool -> giveSubPool(treasure, player, config)
                 is Treasure.Enchant -> giveEnchant(treasure, player)
                 is Treasure.Potion -> givePotion(treasure, player)
+                is Treasure.Ae -> giveAe(treasure, player)
+                is Treasure.Slimefun -> giveSlimefun(treasure, player)
             }
 
         // Send messages on success
@@ -206,6 +210,23 @@ class TreasureService(
         return GiveResult.Success(treasure)
     }
 
+    private fun giveAe(
+        treasure: Treasure.Ae,
+        player: Player,
+    ): GiveResult {
+        val command = AeLoot.buildCommand(player.name, treasure)
+        return giveCommand(Treasure.Command(listOf(command)), player)
+    }
+
+    private fun giveSlimefun(
+        treasure: Treasure.Slimefun,
+        player: Player,
+    ): GiveResult {
+        val amount = treasure.rolledAmount
+        val command = "sf give ${player.name} ${treasure.itemId} $amount"
+        return giveCommand(Treasure.Command(listOf(command)), player)
+    }
+
     // ==================== Messaging ====================
 
     private fun sendMessages(
@@ -215,14 +236,29 @@ class TreasureService(
     ) {
         val context = buildMessageContext(treasure, player, pool?.id)
 
-        // Send treasure-specific messages first
-        if (treasure.messages.isNotEmpty()) {
-            treasure.messages.forEach { it.send(context) }
-        } else if (pool != null && pool.messages.isNotEmpty()) {
-            // Fallback to pool messages if treasure has none
-            pool.messages.forEach { it.send(context) }
+        when {
+            treasure.messages.isNotEmpty() -> {
+                treasure.messages.forEach { it.send(context) }
+            }
+
+            pool != null && pool.messages.isNotEmpty() -> {
+                pool.messages.forEach { it.send(context) }
+            }
+
+            else -> {
+                defaultMessageFor(treasure)?.send(context)
+            }
         }
     }
+
+    private fun defaultMessageFor(treasure: Treasure): TreasureMessage? =
+        when (treasure) {
+            is Treasure.Money -> TreasureMessage.chat(TreasureConfig.DefaultMessages.moneyReceived)
+            is Treasure.Item -> TreasureMessage.chat(TreasureConfig.DefaultMessages.itemReceived)
+            is Treasure.Enchant -> TreasureMessage.chat(TreasureConfig.DefaultMessages.enchantReceived)
+            is Treasure.Potion -> TreasureMessage.chat(TreasureConfig.DefaultMessages.potionReceived)
+            else -> null
+        }
 
     private fun buildMessageContext(
         treasure: Treasure,

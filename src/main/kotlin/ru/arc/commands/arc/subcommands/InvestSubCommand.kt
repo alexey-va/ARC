@@ -39,8 +39,8 @@ object InvestSubCommand : SubCommand {
     override val configKey = "invest"
     override val defaultName = "invest"
     override val defaultPermission = "arc.stocks.buy"
-    override val defaultDescription = "Торговля акциями"
-    override val defaultUsage = "/arc invest [-t:action] [-s:symbol] [-amount:N] ..."
+    override val defaultDescription = "Торговля акциями: открыть меню или выполнить действие через флаги"
+    override val defaultUsage = "/arc invest [-t:menu|buy|short|close|add-money|withdraw-money|auto] [-s:SYMBOL] [-amount:N] [-leverage:N] [-up:N] [-down:N]"
     override val defaultPlayerOnly = false // Console can do admin actions
 
     private val config get() = ConfigManager.of(ARC.instance.dataPath, "stocks/stock.yml")

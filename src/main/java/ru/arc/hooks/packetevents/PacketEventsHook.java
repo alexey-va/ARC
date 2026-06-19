@@ -25,11 +25,17 @@ public class PacketEventsHook {
 
 
     public List<Integer> createDisplayBlocks(final List<BlockDisplayReq> requests, Player player) {
+        if (requests.isEmpty()) {
+            return List.of();
+        }
         debug("Creating display blocks for player {}", player.getName());
         final List<Integer> entityIds = requests.stream()
                 .map(request -> ThreadLocalRandom.current().nextInt(Integer.MIN_VALUE, Integer.MAX_VALUE))
                 .collect(Collectors.toList());
-        Bukkit.getScheduler().runTaskAsynchronously(ARC.getInstance(), () -> {
+        runOnMainThread(() -> {
+            if (!player.isOnline()) {
+                return;
+            }
             int i = 0;
             for (BlockDisplayReq request : requests) {
                 int entityId = entityIds.get(i++);
@@ -61,11 +67,25 @@ public class PacketEventsHook {
     }
 
     public void removeDisplayBlocks(List<Integer> entityIds, Player player) {
-        debug("Removing display blocks for player {}", player.getName());
-        Bukkit.getScheduler().runTaskAsynchronously(ARC.getInstance(), () -> {
+        if (entityIds == null || entityIds.isEmpty()) {
+            return;
+        }
+        debug("Removing {} display blocks for player {}", entityIds.size(), player.getName());
+        runOnMainThread(() -> {
+            if (!player.isOnline()) {
+                return;
+            }
             var packet = new WrapperPlayServerDestroyEntities(entityIds.stream().mapToInt(i -> i).toArray());
             PacketEvents.getAPI().getPlayerManager().sendPacket(player, packet);
         });
+    }
+
+    private void runOnMainThread(Runnable action) {
+        if (Bukkit.isPrimaryThread()) {
+            action.run();
+        } else {
+            Bukkit.getScheduler().runTask(ARC.getInstance(), action);
+        }
     }
 
 }

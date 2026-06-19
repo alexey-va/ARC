@@ -8,6 +8,7 @@ import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import io.mockk.verify
+import net.kyori.adventure.text.Component
 import net.milkbowl.vault.economy.Economy
 import org.bukkit.Bukkit
 import org.bukkit.Material
@@ -15,6 +16,7 @@ import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.PlayerInventory
 import ru.arc.KotestTestBase
+import ru.arc.util.TextUtil
 
 @Suppress("USELESS_CAST")
 class TreasureServiceTest :
@@ -147,6 +149,22 @@ class TreasureServiceTest :
 
                 result.shouldBeInstanceOf<GiveResult.Failure>()
                 (result as GiveResult.Failure).reason shouldBe "Economy not available"
+            }
+
+            it("should send default money message when treasure has no messages") {
+                mockkStatic(TextUtil::class)
+                every { TextUtil.mm(any<String>()) } answers {
+                    Component.text(firstArg<String>())
+                }
+
+                val treasure = Treasure.Money(min = 100.0, max = 100.0)
+
+                service.give(treasure, mockPlayer)
+
+                verify { TextUtil.mm("<dark_green>Вы получили <yellow>100<dark_green> монет") }
+                verify { mockPlayer.sendMessage(any<Component>()) }
+
+                unmockkStatic(TextUtil::class)
             }
         }
 

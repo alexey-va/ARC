@@ -25,8 +25,8 @@ object EliteLootSubCommand : SubCommand {
     override val configKey = "eliteloot"
     override val defaultName = "eliteloot"
     override val defaultPermission = "arc.eliteloot"
-    override val defaultDescription = "Управление декоративным лутом"
-    override val defaultUsage = "/arc eliteloot <list|add> [weight]"
+    override val defaultDescription = "Просмотр и добавление декоративного лута EliteMobs из предмета в руке"
+    override val defaultUsage = "/arc eliteloot [list|add [weight]]"
     override val defaultPlayerOnly = true
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {

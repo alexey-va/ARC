@@ -23,6 +23,7 @@ import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * A cached repository that combines local cache with remote storage.
@@ -65,11 +66,24 @@ class CachedRepository<T : Entity>(
     // Lock for atomic operations
     private val mutex = Mutex()
 
+    companion object {
+        private val registry = CopyOnWriteArrayList<CachedRepository<*>>()
+
+        @JvmStatic
+        fun allStats(): List<CacheStats> = registry.map { it.getStats() }
+
+        internal fun register(repo: CachedRepository<*>) {
+            registry.removeIf { it.config.id == repo.config.id }
+            registry.add(repo)
+        }
+    }
+
     /**
      * Initialize the repository.
      */
     suspend fun init(): RepoResult<Unit> {
         info("Initializing repository: ${config.id}")
+        register(this)
 
         if (config.loadAllOnStart) {
             val result = loadAll()
@@ -124,18 +138,27 @@ class CachedRepository<T : Entity>(
     override suspend fun getOrCreate(id: String, factory: () -> T): RepoResult<T> {
         // Check cache
         cache.get(id)?.let {
+            debug("[{}] getOrCreate: cache hit for {}", config.id, id)
             updateAccessTime(id)
             return RepoResult.success(it)
         }
+        debug("[{}] getOrCreate: cache miss for {}, loading from storage", config.id, id)
 
         // Try loading
         val loaded = loadFromStorage(id)
         @Suppress("UNCHECKED_CAST")
-        if (loaded.isError) return loaded as RepoResult<T>
+        if (loaded.isError) {
+            debug("[{}] getOrCreate: storage error for {}: {}", config.id, id, (loaded as RepoResult.Error).message)
+            return loaded as RepoResult<T>
+        }
 
-        loaded.getOrNull()?.let { return RepoResult.success(it) }
+        loaded.getOrNull()?.let {
+            debug("[{}] getOrCreate: loaded existing entity {} from storage", config.id, id)
+            return RepoResult.success(it)
+        }
 
         // Create new
+        debug("[{}] getOrCreate: no entity found for {}, creating new", config.id, id)
         val entity = factory()
         val saveResult = save(entity)
         return saveResult.map { entity }
@@ -295,13 +318,15 @@ class CachedRepository<T : Entity>(
         // Check if already loading - wait for existing load
         val existingDeferred = loadingDeferreds[id]
         if (existingDeferred != null) {
-            // Another coroutine is already loading this - wait for it
+            debug("[{}] loadFromStorage: waiting for in-progress load of {}", config.id, id)
             return existingDeferred.await()
         }
 
         // Check load cooldown
         val lastAttempt = loadAttempts[id]
         if (lastAttempt != null && System.currentTimeMillis() - lastAttempt < loadCooldown) {
+            val remaining = loadCooldown - (System.currentTimeMillis() - lastAttempt)
+            debug("[{}] loadFromStorage: skipping {} — on cooldown for {}ms more", config.id, id, remaining)
             return RepoResult.success(null)
         }
 
@@ -311,29 +336,31 @@ class CachedRepository<T : Entity>(
 
         try {
             loadAttempts[id] = System.currentTimeMillis()
+            debug("[{}] loadFromStorage: fetching {} from Redis (key={})", config.id, id, config.storageKey)
 
             val result = withRetry { storage.load(id) }
 
             if (result.isSuccess) {
                 val entity = result.getOrNull()
-
-                // Store in cache if loaded
-                entity?.let {
-                    cache.put(it)
-                    cache.markClean(it.id())
-                    updateAccessTime(it.id())
-                    entityUpdates.tryEmit(it.id() to it)
+                if (entity != null) {
+                    debug("[{}] loadFromStorage: loaded {} successfully", config.id, id)
+                    cache.put(entity)
+                    cache.markClean(entity.id())
+                    updateAccessTime(entity.id())
+                    entityUpdates.tryEmit(entity.id() to entity)
                     updateAllFlow()
+                } else {
+                    debug("[{}] loadFromStorage: {} not found in Redis (null)", config.id, id)
                 }
+            } else {
+                debug("[{}] loadFromStorage: storage error for {}: {}", config.id, id, (result as RepoResult.Error).message)
             }
 
-            // Complete the deferred with the result
             deferred.complete(result)
-
             return result
         } catch (e: Exception) {
-            // Exception during load
             val errorResult = RepoResult.error("Failed to load $id: ${e.message}", e)
+            debug("[{}] loadFromStorage: exception loading {}: {}", config.id, id, e.message)
             deferred.complete(errorResult)
             return errorResult
         } finally {

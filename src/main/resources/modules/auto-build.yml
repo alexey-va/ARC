@@ -16,7 +16,8 @@ build-book:
     - ' '
     - '        <gray>Нажмите <green>ПКМ <gray>по земле'
   received: <green>Вы получили книгу для <building>
-disable-building: true
+# На classic (спавн/данжи): true. На survival: false.
+disable-building: false
 cant-build-message: <dark_gray>🛠 <red>Вы не можете строить здесь.
 disabled-message: <gray>🛠 <red>Постройка здесь отключена!
 display:
@@ -68,6 +69,11 @@ building-gui:
   confirm-material: PAPER
   cancel-material: RED_STAINED_GLASS_PANE
   cancel-name: <red>Отменить постройку
+  cancel-confirm: <yellow>Нажмите ещё раз для подтверждения
+  cancel-hint: <gray>🛠 <yellow>Нажмите «Отменить» ещё раз для подтверждения
+  cancel-lore:
+    - <red>Книга не вернётся!
+    - <gray>Нажмите ещё раз для отмены
   cancel-model-data: 0
   fast-finish-material: BLAZE_POWDER
 inactivity-cancel-message: <gray>🛠 Постройка отменена из-за неактивности.

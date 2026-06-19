@@ -7,6 +7,7 @@ import com.github.stefvanschie.inventoryframework.pane.OutlinePane
 import com.github.stefvanschie.inventoryframework.pane.PaginatedPane
 import com.github.stefvanschie.inventoryframework.pane.Pane
 import com.github.stefvanschie.inventoryframework.pane.StaticPane
+import com.github.stefvanschie.inventoryframework.pane.util.Slot
 import net.kyori.adventure.text.minimessage.tag.Tag
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.bukkit.Material
@@ -80,13 +81,11 @@ abstract class ConfigGui(
         material: Material = GuiDefaults.Background.material,
         modelData: Int = GuiDefaults.Background.modelData,
     ) {
-        val pane =
-            OutlinePane(0, 0, 9, rowCount).apply {
-                addItem(GuiUtils.background(material, modelData))
-                setRepeat(true)
-                priority = Pane.Priority.LOWEST
-            }
-        addPane(pane)
+        val pane = OutlinePane(9, rowCount, Pane.Priority.LOWEST).apply {
+            addItem(GuiUtils.background(material, modelData))
+            setRepeat(true)
+        }
+        addPane(Slot.fromXY(0, 0), pane)
     }
 
     /**
@@ -96,13 +95,11 @@ abstract class ConfigGui(
         material: Material = GuiDefaults.Background.contentMaterial,
         modelData: Int = GuiDefaults.Background.contentModelData,
     ) {
-        val pane =
-            OutlinePane(0, 0, 9, rowCount - 1).apply {
-                addItem(GuiUtils.background(material, modelData))
-                setRepeat(true)
-                priority = Pane.Priority.LOWEST
-            }
-        addPane(pane)
+        val pane = OutlinePane(9, rowCount - 1, Pane.Priority.LOWEST).apply {
+            addItem(GuiUtils.background(material, modelData))
+            setRepeat(true)
+        }
+        addPane(Slot.fromXY(0, 0), pane)
     }
 
     /**
@@ -112,13 +109,11 @@ abstract class ConfigGui(
         material: Material = GuiDefaults.Background.material,
         modelData: Int = GuiDefaults.Background.modelData,
     ) {
-        val pane =
-            OutlinePane(0, rowCount - 1, 9, 1).apply {
-                addItem(GuiUtils.background(material, modelData))
-                setRepeat(true)
-                priority = Pane.Priority.LOWEST
-            }
-        addPane(pane)
+        val pane = OutlinePane(9, 1, Pane.Priority.LOWEST).apply {
+            addItem(GuiUtils.background(material, modelData))
+            setRepeat(true)
+        }
+        addPane(Slot.fromXY(0, rowCount - 1), pane)
     }
 
     // ==================== Pagination ====================
@@ -130,9 +125,9 @@ abstract class ConfigGui(
         rowRange: IntRange = 0 until (rowCount - 1),
         block: (PaginatedPane) -> Unit,
     ) {
-        val pane = PaginatedPane(0, rowRange.first, 9, rowRange.last - rowRange.first + 1)
+        val pane = PaginatedPane(9, rowRange.last - rowRange.first + 1)
         paginatedPane = pane
-        addPane(pane)
+        addPane(Slot.fromXY(0, rowRange.first), pane)
         block(pane)
     }
 
@@ -142,8 +137,8 @@ abstract class ConfigGui(
      * Create navigation bar at bottom row.
      */
     protected fun navBar(block: (StaticPane) -> Unit) {
-        val pane = StaticPane(0, rowCount - 1, 9, 1)
-        addPane(pane)
+        val pane = StaticPane(9, 1)
+        addPane(Slot.fromXY(0, rowCount - 1), pane)
         block(pane)
     }
 

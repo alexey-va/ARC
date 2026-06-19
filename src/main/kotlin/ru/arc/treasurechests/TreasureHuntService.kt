@@ -111,12 +111,14 @@ class TreasureHuntService(
         val huntConfig = config.huntTypes[typeId]
         if (huntConfig == null) {
             warn("Hunt type not found: $typeId")
+            debug("[treasure-hunt] unknown hunt type: {}", typeId)
             return null
         }
 
         val locationPool = huntConfig.getLocationPool()
         if (locationPool == null) {
             warn("Location pool not found: ${huntConfig.locationPoolId}")
+            debug("[treasure-hunt] hunt type {} references missing pool {}", typeId, huntConfig.locationPoolId)
             return null
         }
 
@@ -149,6 +151,7 @@ class TreasureHuntService(
         val locationPool = huntConfig.getLocationPool()
         if (locationPool == null) {
             warn("Location pool not found: ${huntConfig.locationPoolId}")
+            debug("[treasure-hunt] internal start missing pool {} for hunt {}", huntConfig.locationPoolId, huntConfig.id)
             return null
         }
 
@@ -169,6 +172,7 @@ class TreasureHuntService(
 
         if (locations.isEmpty()) {
             warn("No valid locations in pool: ${locationPool.id}")
+            debug("[treasure-hunt] pool {} returned 0 locations (requested {})", locationPool.id, chestCount)
             return null
         }
 
@@ -176,6 +180,7 @@ class TreasureHuntService(
         val world = locations.firstOrNull()?.world
         if (world == null) {
             warn("Could not determine world for hunt")
+            debug("[treasure-hunt] pool {} had {} locations but no world", locationPool.id, locations.size)
             return null
         }
 
@@ -199,12 +204,14 @@ class TreasureHuntService(
                     placedChests[block.location.toCenterLocation()] = PlacedChest(chest, chestType)
                 } else if (!created) {
                     warn("Failed to create chest at $location")
+                    debug("[treasure-hunt] chestSpawner returned created=false at {}", location)
                 }
             }
         }
 
         if (placedChests.isEmpty()) {
             warn("No chests were placed")
+            debug("[treasure-hunt] hunt {} placed 0/{} chests in pool {}", huntConfig.id, locations.size, locationPool.id)
             return null
         }
 

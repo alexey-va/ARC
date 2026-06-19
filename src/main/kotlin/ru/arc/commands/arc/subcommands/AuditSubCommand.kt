@@ -19,8 +19,8 @@ object AuditSubCommand : SubCommand {
     override val configKey = "audit"
     override val defaultName = "audit"
     override val defaultPermission = "arc.audit"
-    override val defaultDescription = "Просмотр и управление аудитом игроков"
-    override val defaultUsage = "/arc audit <player|clearall> [page] [filter]"
+    override val defaultDescription = "Просмотр аудита транзакций игрока с фильтрацией по типу"
+    override val defaultUsage = "/arc audit <player> [page] [filter] | <player> clear | clearall"
 
     private val filters = AuditFilter.entries.map { it.name.lowercase() }
 

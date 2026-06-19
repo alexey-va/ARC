@@ -41,32 +41,32 @@ commands:
     description: x
     usage: x
   locpool:
-    description: locpool
-    usage: locpool
+    description: Edit location pools
+    usage: /locpool [pool]
   treasure-hunt:
-    description: locpool
-    usage: locpool
+    description: Treasure hunt admin
+    usage: /treasure-hunt [status|types|start|stop]
   treasure-pool:
-    description: locpool
-    usage: locpool
+    description: Treasure reward pools
+    usage: /treasure-pool [pool] [action]
   build-book:
-    description: build-book
-    usage: build-book
+    description: Give auto-build book
+    usage: /build-book <building> <model-id> [rotation] [y-offset] [name...]
   arc-invest:
-    description: build-book
-    usage: build-book
+    description: Stock market GUI
+    usage: /arc-invest [gui|buy|sell|portfolio]
   sound-follow:
-    description: build-book
-    usage: build-book
+    description: Play follow sound for player
+    usage: /sound-follow <player> <namespace:sound>
   give-jobs-boost:
-    description: build-book
-    usage: build-book
+    description: Give Jobs Reborn boost
+    usage: /give-jobs-boost <player> <job|all> <multiplier> <type> <duration>
   arcstore:
-    description: build-book
-    usage: build-book
+    description: Open player store
+    usage: /arcstore [player]
   arctest:
-    description: build-book
-    usage: build-book
+    description: ARC dev test commands
+    usage: /arctest <action>
   eliteloot:
-    description: build-book
-    usage: build-book
+    description: Elite loot admin
+    usage: /eliteloot [list|add]

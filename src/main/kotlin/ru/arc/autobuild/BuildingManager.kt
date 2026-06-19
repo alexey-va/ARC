@@ -11,6 +11,7 @@ import ru.arc.core.repeating
 import ru.arc.core.ticks
 import ru.arc.hooks.HookRegistry
 import ru.arc.util.CooldownManager
+import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import java.nio.file.FileVisitOption
@@ -57,6 +58,7 @@ object BuildingManager {
                         .map { Building(it.name) }
                         .forEach { buildings[it.fileName] = it }
                 }
+            debug("[autobuild] Loaded {} schematics from {}", buildings.size, schematicsPath)
         } catch (e: Exception) {
             error("Error loading buildings", e)
         }
@@ -114,6 +116,15 @@ object BuildingManager {
      */
     @JvmStatic
     fun processPlayerClick(player: Player, rawLocation: Location, buildingId: String, rot: String?, yOff: String?) {
+        debug(
+            "[autobuild] processPlayerClick player={} loc={} building={} rot={} yOff={} disabled={}",
+            player.name,
+            rawLocation,
+            buildingId,
+            rot,
+            yOff,
+            BuildConfig.isDisabled,
+        )
         if (BuildConfig.isDisabled && !player.hasPermission("arc.admin")) {
             player.sendMessage(BuildConfig.Messages.disabled())
             return
@@ -128,7 +139,7 @@ object BuildingManager {
         val subRotation = rot?.toDoubleOrNull()?.toInt() ?: 0
 
         val building = getBuilding(buildingId) ?: run {
-            error("Building with id {} not found!", buildingId)
+            error("Building with id {} not found for player {} at {}", buildingId, player.name, location)
             player.sendMessage(BuildConfig.Messages.notFound())
             return
         }
@@ -163,7 +174,17 @@ object BuildingManager {
      */
     @JvmStatic
     fun processNpcClick(clicker: Player, npcId: Int) {
-        val site = findByNpcId(npcId) ?: return
+        val site = findByNpcId(npcId) ?: run {
+            debug("[autobuild] processNpcClick: no site for npcId={} clicker={}", npcId, clicker.name)
+            return
+        }
+        debug(
+            "[autobuild] processNpcClick player={} npcId={} siteState={} owner={}",
+            clicker.name,
+            npcId,
+            site.state,
+            site.player.name,
+        )
 
         if (site.player.uniqueId != clicker.uniqueId && !clicker.hasPermission("arc.admin")) {
             clicker.sendMessage(BuildConfig.Messages.notYourNpc())
@@ -201,12 +222,28 @@ object BuildingManager {
         val site = ConstructionSite(building, center, player, rotation, world, subRotation, yOffset)
 
         if (!site.canBuild() && !player.hasPermission("arc.admin")) {
+            debug(
+                "[autobuild] canBuild denied for {} at {} building={}",
+                player.name,
+                center,
+                building.fileName,
+            )
             player.sendMessage(BuildConfig.Messages.cantBuild())
             return
         }
 
         pendingSites[player.uniqueId] = site
         site.startDisplayingBorder()
+        debug(
+            "[autobuild] createConstruction player={} building={} center={} rotation={} subRotation={} yOffset={} volume={}",
+            player.name,
+            building.fileName,
+            center,
+            rotation,
+            subRotation,
+            yOffset,
+            building.volume,
+        )
         player.sendMessage(BuildConfig.Messages.startOutline())
     }
 

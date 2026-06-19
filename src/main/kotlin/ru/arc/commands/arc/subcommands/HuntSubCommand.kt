@@ -22,8 +22,8 @@ object HuntSubCommand : SubCommand {
     override val configKey = "hunt"
     override val defaultName = "hunt"
     override val defaultPermission = "arc.treasure-hunt"
-    override val defaultDescription = "Управление охотой на сокровища"
-    override val defaultUsage = "/arc hunt [types|start|stop]"
+    override val defaultDescription = "Управление охотой на сокровища (запуск, остановка, статус)"
+    override val defaultUsage = "/arc hunt [status|types|stopall|<type> [кол-во]|start <type|pool> [chests] [ns] [treasure]|stop <pool>]"
 
     override fun execute(
         sender: CommandSender,

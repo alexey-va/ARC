@@ -16,7 +16,7 @@ object ReloadSubCommand : SubCommand {
     override val configKey = "reload"
     override val defaultName = "reload"
     override val defaultPermission = "arc.admin"
-    override val defaultDescription = "Перезагрузить конфигурацию плагина"
+    override val defaultDescription = "Перезагрузить конфигурацию всех модулей плагина"
     override val defaultUsage = "/arc reload"
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {

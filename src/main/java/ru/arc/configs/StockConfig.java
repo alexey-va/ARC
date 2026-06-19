@@ -16,6 +16,9 @@ import ru.arc.ARC;
 import ru.arc.stock.StockClient;
 import ru.arc.stock.StockMarket;
 
+import static ru.arc.util.Logging.info;
+import static ru.arc.util.Logging.warn;
+
 public class StockConfig {
 
     public static String mainMenuBackCommand;
@@ -53,6 +56,12 @@ public class StockConfig {
     }
 
     private static void loadConfig() {
+        if (!config.getBoolean("enabled", false)) {
+            stockMarketLocation = null;
+            info("Stocks disabled, skipping stock market location and definitions");
+            return;
+        }
+
         mainServer = config.getBoolean("main-server", false);
         commission = config.getDouble("commission", 0.01);
         leveragePower = config.getDouble("leverage-power", 0.5);
@@ -72,10 +81,11 @@ public class StockConfig {
             double z = Double.parseDouble(strings[2]);
             String worldName =  strings[3];
             World world = Bukkit.getWorld(worldName);
-            if(world == null){
-                System.out.println("Could not find world: "+worldName);
-            } else{
-                stockMarketLocation = new Location(world, x,y,z);
+            if (world == null) {
+                stockMarketLocation = null;
+                warn("Stock market world not found: {} (check stock-market-location)", worldName);
+            } else {
+                stockMarketLocation = new Location(world, x, y, z);
             }
         }
         updateImagesRadius = config.getDouble("update-images-radius", 50);

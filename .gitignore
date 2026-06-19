@@ -92,8 +92,10 @@ target/
 #gradle
 .gradle
 build/
+bin/
 gradle/
 !gradle/wrapper/gradle-wrapper.properties
 .kotlin
 
 ARC
+deploy.properties

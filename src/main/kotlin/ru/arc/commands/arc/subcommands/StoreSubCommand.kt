@@ -8,6 +8,7 @@ import ru.arc.commands.arc.tabComplete
 import ru.arc.misc.StoreGuiFactory
 import ru.arc.store.StoreManager
 import ru.arc.util.GuiUtils
+import ru.arc.util.Logging
 import ru.arc.xserver.playerlist.PlayerManager
 
 /**
@@ -23,8 +24,8 @@ object StoreSubCommand : SubCommand {
     override val configKey = "store"
     override val defaultName = "store"
     override val defaultPermission = "arc.store"
-    override val defaultDescription = "Просмотр хранилища"
-    override val defaultUsage = "/arc store [player|dump]"
+    override val defaultDescription = "Открыть GUI хранилища предметов (своё или другого игрока)"
+    override val defaultUsage = "/arc store [<player>|<uuid>|dump]"
     override val defaultPlayerOnly = true
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
@@ -80,9 +81,17 @@ object StoreSubCommand : SubCommand {
         }
 
         // Открываем GUI
-        StoreManager.getStoreAsync(uuid).thenAccept { store ->
-            GuiUtils.constructAndShowAsync({ StoreGuiFactory.create(player, store) }, player, 0)
-        }
+        StoreManager.getStoreAsync(uuid)
+            .thenAccept { store ->
+                GuiUtils.constructAndShowAsync({ StoreGuiFactory.create(player, store) }, player, 0)
+            }
+            .exceptionally { e ->
+                Logging.error("[Store] Failed to load store for {}: {}", uuid, e.cause ?: e)
+                sender.sendMessage(
+                    CommandConfig.get("store.error", "<red>Failed to load store. Check console for details.")
+                )
+                null
+            }
 
         return true
     }

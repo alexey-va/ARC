@@ -40,8 +40,7 @@ public class NetworkRegistry {
 
         ToolMessanger toolMessanger = new ToolMessanger();
         redisManager.registerChannelUnique(ToolMessanger.CHANNEL_REQUEST_TOOLS, toolMessanger);
-
-        redisManager.init();
+        // init() is called once globally after all modules register their channels
     }
 
 }

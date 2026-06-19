@@ -1,4 +1,5 @@
 import org.gradle.internal.os.OperatingSystem
+import java.util.Properties
 
 plugins {
     java
@@ -154,6 +155,15 @@ dependencies {
 }
 
 tasks {
+    processResources {
+        filesMatching("plugin.yml") {
+            expand(
+                "version" to project.version,
+                "project" to mapOf("version" to project.version),
+            )
+        }
+    }
+
     withType<JavaCompile> {
         options.encoding = "UTF-8"
         options.compilerArgs.addAll(listOf("-Xlint:deprecation", "-Xlint:unchecked"))
@@ -228,6 +238,42 @@ tasks {
                     minimum = "0.70".toBigDecimal()
                 }
             }
+        }
+    }
+
+    register("publishPlugin") {
+        group = "publishing"
+        description = "Upload shadow JAR to remote server and run update script via SSH"
+        dependsOn(shadowJar)
+
+        doLast {
+            val deployFile = rootProject.file("deploy.properties")
+            require(deployFile.exists()) {
+                "deploy.properties not found. Create it with SERVER_IP=<ip> and SERVER_USER=<user>"
+            }
+
+            val props = Properties().apply { deployFile.inputStream().use(::load) }
+            val serverIp = requireNotNull(props.getProperty("SERVER_IP")?.trim()) {
+                "SERVER_IP is missing in deploy.properties"
+            }
+            val serverUser = props.getProperty("SERVER_USER")?.trim() ?: "root"
+
+            val jarFile = shadowJar.get().archiveFile.get().asFile
+            val remotePath = "$serverUser@$serverIp:~/McFine/update/"
+
+            fun run(vararg cmd: String) {
+                val code = ProcessBuilder(*cmd)
+                    .inheritIO()
+                    .start()
+                    .waitFor()
+                check(code == 0) { "Command failed (exit $code): ${cmd.joinToString(" ")}" }
+            }
+
+            println("Uploading ${jarFile.name} → $remotePath")
+            run("scp", jarFile.absolutePath, remotePath)
+
+            println("Running ./update.sh on $serverIp")
+            run("ssh", "$serverUser@$serverIp", "cd ~/McFine && ./update.sh")
         }
     }
 }

@@ -20,8 +20,8 @@ object EmshopSubCommand : SubCommand {
     override val configKey = "emshop"
     override val defaultName = "emshop"
     override val defaultPermission = "arc.admin"
-    override val defaultDescription = "Открыть магазин EliteMobs"
-    override val defaultUsage = "/arc emshop <player|reset> [gear|trinket]"
+    override val defaultDescription = "Открыть магазин EliteMobs игроку или сбросить ассортимент"
+    override val defaultUsage = "/arc emshop <player> [gear|trinket] | reset"
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
         val emHook = HookRegistry.emHook ?: run {

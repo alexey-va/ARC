@@ -4,6 +4,7 @@ import com.sk89q.worldedit.extent.clipboard.Clipboard
 import com.sk89q.worldedit.math.BlockVector3
 import com.sk89q.worldedit.world.block.BaseBlock
 import ru.arc.ARC
+import ru.arc.util.Logging.debug
 import java.io.File
 
 /**
@@ -27,7 +28,15 @@ class Building(val fileName: String) {
      */
     fun loadClipboard(): Clipboard {
         val file = schematicFile
-        return ClipboardLoaders.load(file).also { _clipboard = it }
+        return try {
+            ClipboardLoaders.load(file).also { loaded ->
+                _clipboard = loaded
+                debug("[autobuild] Loaded schematic {} (volume={})", fileName, loaded.region.volume)
+            }
+        } catch (e: Exception) {
+            debug("[autobuild] Failed to load schematic {} from {}: {}", fileName, file.path, e.message)
+            throw e
+        }
     }
 
     private val schematicFile: File

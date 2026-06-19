@@ -16,8 +16,8 @@ object LoggerSubCommand : SubCommand {
     override val configKey = "logger"
     override val defaultName = "logger"
     override val defaultPermission = "arc.admin"
-    override val defaultDescription = "Установить уровень логирования"
-    override val defaultUsage = "/arc logger <DEBUG|INFO|WARN|ERROR>"
+    override val defaultDescription = "Изменить уровень логирования плагина в рантайме (без перезагрузки)"
+    override val defaultUsage = "/arc logger [DEBUG|INFO|WARN|ERROR]  — без аргументов показывает текущий уровень"
 
     private val levels = Logging.Level.entries.map { it.name }
 

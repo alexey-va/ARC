@@ -936,6 +936,9 @@ open class Config(
             val content = file.toFile().readText()
             if (content.isBlank()) return createMappingNode(mutableListOf())
             val parseContent = prepareYamlContentForParsing(content)
+            if (parseContent != content) {
+                debug("Sanitized YAML before parse: {} ({} -> {} chars)", filePath, content.length, parseContent.length)
+            }
             val node = Compose(loadSettings).composeString(parseContent).orElse(null)
             if (node is MappingNode) node else createMappingNode(mutableListOf())
         } catch (e: Exception) {

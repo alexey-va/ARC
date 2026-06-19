@@ -95,8 +95,9 @@ commands:
     permission: arc.admin.givejobsboost
   soundfollow:
     name: soundfollow
-    aliases: [ ]
+    aliases: [sound-follow]
     permission: arc.sound-follow
+    usage: /arc soundfollow <player> <namespace:sound>
 messages:
   common:
     usage: '<red>Использование: <gray>%usage%'

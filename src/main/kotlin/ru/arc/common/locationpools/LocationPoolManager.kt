@@ -22,6 +22,7 @@ object LocationPoolManager {
      */
     @JvmStatic
     fun init() {
+        LocationPoolEditor.init()
         LocationPoolEditor.startShowTask()
         LocationPoolEditor.startTimeoutTask()
     }

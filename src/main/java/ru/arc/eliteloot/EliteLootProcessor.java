@@ -25,6 +25,7 @@ import ru.arc.configs.ConfigManager;
 import ru.arc.util.TextUtil;
 
 import static ru.arc.eliteloot.EliteLootManager.toLootType;
+import static ru.arc.util.Logging.debug;
 import static ru.arc.util.Logging.error;
 
 
@@ -37,6 +38,9 @@ public class EliteLootProcessor {
     public ItemStack processEliteLoot(ItemStack originalStack) {
         if (originalStack == null) return null;
         if (!EliteItemManager.isEliteMobsItem(originalStack)) return originalStack;
+        if (!config.bool("replace-skins", true)) {
+            return originalStack;
+        }
         if (originalStack.getItemMeta().hasCustomModelData()) {
             return originalStack;
         }
@@ -53,12 +57,27 @@ public class EliteLootProcessor {
         originalStack.setItemMeta(meta);
 
         LootType lootType = toLootType(originalStack);
-        if (lootType == null) return originalStack;
+        if (lootType == null) {
+            debug("Elite loot: no LootType for elite item {}", originalStack.getType());
+            return originalStack;
+        }
         DecorPool decorPool = EliteLootManager.getMap().get(lootType);
-        if (decorPool == null) return originalStack;
+        if (decorPool == null) {
+            debug("Elite loot: no decor pool for type {}", lootType);
+            return originalStack;
+        }
 
         DecorItem decorItem = decorPool.randomItem();
         if (decorItem == null) return originalStack;
+
+        debug(
+                "Replacing elite loot skin: type={} -> material={} modelId={} ia={}:{}",
+                lootType,
+                decorItem.getMaterial(),
+                decorItem.getModelId(),
+                decorItem.getIaNamespace(),
+                decorItem.getIaId()
+        );
 
         ItemStack updatedStack = originalStack;
         if (!Set.of(LootType.HELMET, LootType.BOOTS, LootType.CHESTPLATE, LootType.LEGGINGS).contains(lootType)) {

@@ -15,6 +15,7 @@ import ru.arc.gui.onBottomClick
 import ru.arc.gui.onTopClick
 import ru.arc.gui.onTopDrag
 import ru.arc.store.StoreData
+import ru.arc.store.StoreManager
 import ru.arc.util.CooldownManager
 import ru.arc.util.GuiUtils
 import ru.arc.util.Logging.info
@@ -160,6 +161,7 @@ object StoreGuiFactory {
 
             if (success) {
                 info("Success removing {}", storeItem)
+                StoreManager.saveLater(store)
                 if (click.cursor.type != Material.AIR || click.isShiftClick) {
                     info("Cursor not empty")
                     player.inventory.addItem(storeItem)
@@ -214,6 +216,7 @@ object StoreGuiFactory {
         }
 
         click.currentItem = null
+        StoreManager.saveLater(store)
         refresh()
     }
 
@@ -249,6 +252,7 @@ object StoreGuiFactory {
 
         if (addedSuccess) {
             info("T: Added success")
+            StoreManager.saveLater(store)
             currentStoreItem?.let { item ->
                 item.editMeta { meta ->
                     meta.persistentDataContainer.remove(NamespacedKey(ARC.instance, "if-uuid"))

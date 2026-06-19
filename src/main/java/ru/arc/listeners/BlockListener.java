@@ -42,6 +42,7 @@ import ru.arc.treasurechests.ActiveHunt;
 import ru.arc.treasurechests.TreasureHuntManager;
 import ru.arc.util.TextUtil;
 
+import static ru.arc.util.Logging.debug;
 import static ru.arc.util.Logging.error;
 import static ru.arc.util.Logging.info;
 
@@ -97,7 +98,13 @@ public class BlockListener implements Listener {
                 String treasureKey = data.getString("arc:treasure_key");
                 TreasurePool pool = Treasures.INSTANCE.getPool(treasureKey);
                 if (pool == null) {
+                    debug("[treasure] pool {} not found for player {}", treasureKey, event.getPlayer().getName());
                     error("Treasure pool {} not found", treasureKey);
+                    return;
+                }
+                if (pool.isEmpty()) {
+                    debug("[treasure] pool {} is empty for player {}", treasureKey, event.getPlayer().getName());
+                    error("Treasure pool {} is empty", treasureKey);
                     return;
                 }
                 int itemAmount = item.getAmount();

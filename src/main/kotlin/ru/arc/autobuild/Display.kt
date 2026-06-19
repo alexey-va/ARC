@@ -14,6 +14,7 @@ import ru.arc.hooks.HookRegistry
 import ru.arc.hooks.packetevents.BlockDisplayReq
 import ru.arc.util.BlockUtils.rotateBlockData
 import ru.arc.util.LocationUtils
+import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import ru.arc.util.ParticleManager
@@ -49,6 +50,7 @@ class Display(
 
     private var displayTask: ScheduledTask? = null
     private var cleanupTask: ScheduledTask? = null
+    private var spawnTask: ScheduledTask? = null
     private var borderLocations: List<LocationUtils.LocationData>? = null
     private var centerLocations: List<Location>? = null
     private var entityIds = mutableListOf<Int>()
@@ -67,12 +69,9 @@ class Display(
     }
 
     fun stop() {
+        spawnTask?.cancel()
+        spawnTask = null
         stopTask()
-        try {
-            removeDisplayEntities()
-        } catch (e: Exception) {
-            error(e.message ?: "Unknown error")
-        }
     }
 
     // ==================== Border Particles ====================
@@ -153,6 +152,12 @@ class Display(
         // Rate limiting
         val currentShows = displayCache.getIfPresent(site.player.uniqueId) ?: 0
         if (currentShows >= BuildConfig.maxDisplaysPer10Min) {
+            debug(
+                "[autobuild] display rate limit player={} shows={} max={}",
+                site.player.name,
+                currentShows,
+                BuildConfig.maxDisplaysPer10Min,
+            )
             site.player.sendMessage(BuildConfig.Messages.displayRateLimit())
             return
         }
@@ -160,13 +165,18 @@ class Display(
         val requests = buildDisplayRequests()
 
         displayCache.put(site.player.uniqueId, currentShows + requests.size)
-        entityIds = packetHook.createDisplayBlocks(requests, site.player).toMutableList()
 
-        // Schedule cleanup using Task DSL
-        cleanupTask =
-            delayed((seconds * 20).ticks) {
-                info("Removing display due to timeout {}", seconds)
-                removeDisplayEntities()
+        spawnTask?.cancel()
+        spawnTask =
+            delayed(0.ticks) {
+                spawnTask = null
+                if (!site.player.isOnline) return@delayed
+                entityIds = packetHook.createDisplayBlocks(requests, site.player).toMutableList()
+                cleanupTask =
+                    delayed((seconds * 20).ticks) {
+                        info("Removing display due to timeout {}", seconds)
+                        removeDisplayEntities()
+                    }
             }
     }
 
@@ -204,6 +214,12 @@ class Display(
                     requests.add(BlockDisplayReq(location, blockData))
 
                     if (requests.size >= BuildConfig.maxDisplayBlocks) {
+                        debug(
+                            "[autobuild] display block cap player={} building={} max={}",
+                            site.player.name,
+                            site.building.fileName,
+                            BuildConfig.maxDisplayBlocks,
+                        )
                         site.player.sendMessage(BuildConfig.Messages.displayLimit())
                         break@outer
                     }
@@ -215,11 +231,21 @@ class Display(
     }
 
     private fun removeDisplayEntities() {
-        HookRegistry.packetEventsHook?.removeDisplayBlocks(entityIds, site.player)
+        if (entityIds.isEmpty()) return
+        try {
+            val ids = entityIds.toList()
+            entityIds.clear()
+            HookRegistry.packetEventsHook?.removeDisplayBlocks(ids, site.player)
+        } catch (e: Exception) {
+            error(e.message ?: "Unknown error")
+        }
     }
 
     private fun stopTask() {
         displayTask?.takeIf { !it.isCancelled }?.cancel()
+        displayTask = null
         cleanupTask?.takeIf { !it.isCancelled }?.cancel()
+        cleanupTask = null
+        removeDisplayEntities()
     }
 }

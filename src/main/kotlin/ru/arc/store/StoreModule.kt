@@ -12,6 +12,7 @@ import ru.arc.repository.CachedRepository
 import ru.arc.repository.Entity
 import ru.arc.repository.Mergeable
 import ru.arc.repository.redisRepo
+import ru.arc.util.Logging
 import java.util.UUID
 import java.util.concurrent.locks.Lock
 import java.util.concurrent.locks.ReentrantLock
@@ -214,14 +215,18 @@ object StoreManager {
      * Get a player's store.
      */
     suspend fun getStore(playerUuid: UUID): StoreData {
+        Logging.debug("[Store] getStore({})", playerUuid)
         val store =
             repo
                 .getOrCreate(playerUuid.toString()) {
+                    Logging.debug("[Store] creating new empty StoreData for {}", playerUuid)
                     StoreData(playerUuid)
                 }.getOrThrow()
 
+        Logging.debug("[Store] raw itemList size={} for {}", store.itemList.size, playerUuid)
         store.itemList.removeIf { it == null || it.type == Material.AIR }
         store.size = 9
+        Logging.debug("[Store] final itemList size={} for {}", store.itemList.size, playerUuid)
 
         return store
     }
@@ -262,6 +267,15 @@ object StoreManager {
      */
     suspend fun save(store: StoreData) {
         repo.save(store)
+    }
+
+    /**
+     * Schedule a store save from any thread (fire-and-forget).
+     * Marks the entity dirty so the background sync picks it up.
+     */
+    @JvmStatic
+    fun saveLater(store: StoreData) {
+        scope.launch { save(store) }
     }
 
     /**

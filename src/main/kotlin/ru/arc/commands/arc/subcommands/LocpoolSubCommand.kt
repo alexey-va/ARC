@@ -24,8 +24,8 @@ object LocpoolSubCommand : SubCommand {
     override val configKey = "locpool"
     override val defaultName = "locpool"
     override val defaultPermission = "arc.locpool.admin"
-    override val defaultDescription = "Управление пулами локаций"
-    override val defaultUsage = "/arc locpool [list|delete|<pool_id>]"
+    override val defaultDescription = "Редактирование пулов локаций: добавление/удаление точек кликом на блок"
+    override val defaultUsage = "/arc locpool [list|delete <pool>|<pool>]  — <pool> переключает режим редактирования"
     override val defaultPlayerOnly = true
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {

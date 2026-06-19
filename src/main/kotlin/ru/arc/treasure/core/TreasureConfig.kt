@@ -11,7 +11,7 @@ object TreasureConfig {
         Config(
             ARC.instance.dataFolder
                 .toPath()
-                .resolve("treasures/config.yml"),
+                .resolve("treasures"),
             "treasures/config.yml",
         )
     }

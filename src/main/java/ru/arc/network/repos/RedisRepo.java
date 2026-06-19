@@ -76,7 +76,7 @@ public class RedisRepo<T extends RepoData> {
         }
         messager = new RedisRepoMessager(this, redisManager);
         redisManager.registerChannelUnique(updateChannel, messager);
-        redisManager.init();
+        // init() is called once globally after all modules register their channels
         backupService = new BackupService(id, backupFolder);
 
         startTasks();
@@ -97,6 +97,34 @@ public class RedisRepo<T extends RepoData> {
             map.put(repo.id, (long) repo.map.size());
         }
         return map;
+    }
+
+    public record RepoStats(
+        String id,
+        String storageKey,
+        String updateChannel,
+        int entries,
+        int dirtyCount,
+        int contextCount,
+        boolean loadAll,
+        boolean saveBackups,
+        long lastFullRefresh,
+        long saveIntervalTicks
+    ) {}
+
+    public static List<RepoStats> allStats() {
+        return repos.stream().map(r -> new RepoStats(
+            r.id,
+            r.storageKey,
+            r.updateChannel,
+            r.map.size(),
+            (int) r.map.values().stream().filter(RepoData::isDirty).count(),
+            r.contextSet.size(),
+            r.loadAll,
+            r.saveBackups,
+            r.lastFullRefresh,
+            r.saveInterval
+        )).toList();
     }
 
     public static <T extends RepoData> RedisRepoBuilder<T> builder(Class<T> clazz) {

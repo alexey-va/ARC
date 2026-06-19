@@ -1,6 +1,7 @@
 package ru.arc.treasure.core
 
 import org.bukkit.configuration.file.YamlConfiguration
+import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
@@ -118,26 +119,58 @@ class TreasureManager {
         pools.clear()
 
         if (!directory.exists()) {
+            info("Treasure directory does not exist, creating: ${directory.absolutePath}")
             directory.mkdirs()
             return
         }
 
-        directory.listFiles { file -> file.extension == "yml" }?.forEach { file ->
+        val files = directory.listFiles { file -> file.extension == "yml" && file.name != "config.yml" }
+            ?: emptyArray()
+
+        info("Scanning treasure directory '${directory.name}': found ${files.size} yml file(s)")
+
+        if (files.isEmpty()) {
+            warn("No treasure pool files found in ${directory.absolutePath}")
+            return
+        }
+
+        var loaded = 0
+        var failed = 0
+        for (file in files) {
             try {
                 val yaml = YamlConfiguration.loadConfiguration(file)
                 val map = yaml.getValues(false)
-                val pool = TreasurePool.fromMap(map)
 
+                if (map.isEmpty()) {
+                    warn("  Empty or unparseable pool file: ${file.name} — skipping")
+                    debug("[treasure] empty pool file: {}", file.absolutePath)
+                    failed++
+                    continue
+                }
+
+                val filenameId = file.nameWithoutExtension
+
+                // Use filename as id fallback if not present in file
+                val mapWithId = if (map.containsKey("id")) map else map + ("id" to filenameId)
+
+                val pool = TreasurePool.fromMap(mapWithId)
                 if (pool != null) {
                     pools[pool.id] = pool
-                    info("Loaded treasure pool: ${pool.id} with ${pool.size} treasures")
+                    info("  Loaded pool '${pool.id}' — ${pool.size} treasure(s)")
+                    loaded++
                 } else {
-                    warn("Failed to parse pool file: ${file.name}")
+                    warn("  Failed to parse pool file: ${file.name} (keys: ${map.keys})")
+                    debug("[treasure] parse failed for {} keys={}", file.name, map.keys)
+                    failed++
                 }
             } catch (e: Exception) {
-                error("Error loading pool file: ${file.name}", e)
+                error("  Error loading pool file: ${file.name}", e)
+                debug("[treasure] exception loading {}: {}", file.name, e.message)
+                failed++
             }
         }
+
+        info("Treasure pools: $loaded loaded, $failed failed (total scanned: ${files.size})")
     }
 
     /**

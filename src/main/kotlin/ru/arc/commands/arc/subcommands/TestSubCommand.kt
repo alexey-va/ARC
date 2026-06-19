@@ -25,7 +25,7 @@ object TestSubCommand : SubCommand {
     override val configKey = "test"
     override val defaultName = "test"
     override val defaultPermission = "arc.test"
-    override val defaultDescription = "Команды для отладки"
+    override val defaultDescription = "Отладочные инструменты: NBT предмета, decay листьев, персональный лут, CustomBlockData"
     override val defaultUsage = "/arc test <nbt|leaf|ploot|blockdata>"
     override val defaultPlayerOnly = true
 

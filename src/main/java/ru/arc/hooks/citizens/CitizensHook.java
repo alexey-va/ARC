@@ -32,10 +32,15 @@ public class CitizensHook {
     }
 
     public int createNpc(String name, Location location) {
-        NPC npc = CitizensAPI.getNPCRegistry().createNPC(EntityType.PLAYER, name);
-        //npc.setName(name);
-        npc.spawn(location);
-        return npc.getId();
+        try {
+            NPC npc = CitizensAPI.getNPCRegistry().createNPC(EntityType.PLAYER, name);
+            npc.spawn(location);
+            debug("[autobuild] Created NPC id={} name={} at {}", npc.getId(), name, location);
+            return npc.getId();
+        } catch (Exception e) {
+            warn("Failed to create NPC {} at {}", name, location, e);
+            return -1;
+        }
     }
 
     public void deleteWithNames(Set<String> npcNames) {

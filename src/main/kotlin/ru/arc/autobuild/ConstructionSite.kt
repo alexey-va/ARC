@@ -16,8 +16,9 @@ import ru.arc.core.ticks
 import ru.arc.hooks.HookRegistry
 import ru.arc.hooks.worldguard.WGHook
 import ru.arc.util.LocationUtils
+import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
-import ru.arc.util.Logging.info
+import ru.arc.util.Logging.warn
 import ru.arc.util.RandomUtils
 import java.util.concurrent.ThreadLocalRandom
 
@@ -52,11 +53,24 @@ class ConstructionSite(
      */
     fun transitionTo(newState: ConstructionState): Boolean {
         if (!state.canTransitionTo(newState)) {
-            error("Invalid transition from {} to {}", state, newState)
+            warn(
+                "[autobuild] Invalid transition {} -> {} for player {} building {}",
+                state,
+                newState,
+                player.name,
+                building.fileName,
+            )
             return false
         }
 
-        info("ConstructionSite transition: {} -> {}", state::class.simpleName, newState::class.simpleName)
+        debug(
+            "[autobuild] transition {} -> {} player={} building={} center={}",
+            state,
+            newState,
+            player.name,
+            building.fileName,
+            centerBlock,
+        )
         state.exit(this)
         state = newState
         state.enter(this)
@@ -143,7 +157,13 @@ class ConstructionSite(
         HookRegistry.landsHook?.let { lands ->
             for (chunk in chunks) {
                 if (!lands.canBuild(player, chunk)) {
-                    info("Can't build in chunk: {}", chunk)
+                    warn(
+                        "[autobuild] Lands denied build for {} in chunk {} building {}",
+                        player.name,
+                        chunk,
+                        building.fileName,
+                    )
+                    debug("[autobuild] Lands denied chunk={} world={}", chunk, world.name)
                     return false
                 }
             }
@@ -206,7 +226,15 @@ class ConstructionSite(
         for ((x, y, z) in checkPoints) {
             val loc = Location(world, centerBlock.x + x, centerBlock.y + y, centerBlock.z + z)
             if (!wg.canBuild(player, loc)) {
-                info("Can't build in worldguard: {} {} {}", loc.blockX, loc.blockY, loc.blockZ)
+                warn(
+                    "[autobuild] WorldGuard denied build for {} at {} {} {} building {}",
+                    player.name,
+                    loc.blockX,
+                    loc.blockY,
+                    loc.blockZ,
+                    building.fileName,
+                )
+                debug("[autobuild] WorldGuard denied loc={} rotation={}", loc, fullRotation)
                 return false
             }
         }
@@ -229,7 +257,7 @@ class ConstructionSite(
 
     internal fun forceloadChunks() {
         calculateChunks()
-        info("Forceloading {} chunks", chunks.size)
+        debug("[autobuild] Forceloading {} chunks for player={} building={}", chunks.size, player.name, building.fileName)
         chunks.forEach { it.isForceLoaded = true }
     }
 

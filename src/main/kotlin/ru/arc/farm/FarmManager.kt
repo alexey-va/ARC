@@ -7,6 +7,7 @@ import ru.arc.core.Lifecycle
 import ru.arc.core.ScheduledTask
 import ru.arc.core.TaskScheduler
 import ru.arc.hooks.HookRegistry
+import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.info
 import java.time.LocalDate
 
@@ -48,6 +49,13 @@ class FarmService(
                 )
                 zones.add(farm)
                 info("Loaded farm zone '{}' in {} / {}", farmConfig.id, farmConfig.worldName, farmConfig.regionName)
+            } else {
+                debug(
+                    "[farm] Skipping farm '{}' — region '{}' not found in world '{}'",
+                    farmConfig.id,
+                    farmConfig.regionName,
+                    farmConfig.worldName,
+                )
             }
         }
 
@@ -70,6 +78,13 @@ class FarmService(
                     lumberConfig.worldName,
                     lumberConfig.regionName
                 )
+            } else {
+                debug(
+                    "[farm] Skipping lumbermill '{}' — region '{}' not found in world '{}'",
+                    lumberConfig.id,
+                    lumberConfig.regionName,
+                    lumberConfig.worldName,
+                )
             }
         }
 
@@ -90,6 +105,13 @@ class FarmService(
                 mine.start()
                 zones.add(mine)
                 info("Loaded mine zone '{}' in {} / {}", mineConfig.id, mineConfig.worldName, mineConfig.regionName)
+            } else {
+                debug(
+                    "[farm] Skipping mine '{}' — region '{}' not found in world '{}'",
+                    mineConfig.id,
+                    mineConfig.regionName,
+                    mineConfig.worldName,
+                )
             }
         }
 
@@ -163,14 +185,17 @@ class FarmService(
  */
 object FarmManager : ru.arc.core.ServiceManager<FarmService>() {
     /**
-     * Create the production FarmService instance.
+     * Skip initialization silently when WorldGuard is absent.
      */
-    override fun createService(): FarmService {
+    override fun init() {
         if (HookRegistry.wgHook == null) {
-            info("WorldGuard not found! Disabling farm features...")
-            throw IllegalStateException("WorldGuard not found")
+            info("WorldGuard not found — farm features disabled")
+            return
         }
+        super.init()
+    }
 
+    override fun createService(): FarmService {
         val config = FarmModuleConfig.load(ARC.instance.dataPath)
         val scheduler = BukkitTaskScheduler(ARC.instance)
         val regionFactory = WorldGuardRegionFactory()

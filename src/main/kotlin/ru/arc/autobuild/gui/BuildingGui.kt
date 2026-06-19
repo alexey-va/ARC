@@ -5,6 +5,7 @@ import com.github.stefvanschie.inventoryframework.gui.type.ChestGui
 import com.github.stefvanschie.inventoryframework.pane.OutlinePane
 import com.github.stefvanschie.inventoryframework.pane.Pane
 import com.github.stefvanschie.inventoryframework.pane.StaticPane
+import com.github.stefvanschie.inventoryframework.pane.util.Slot
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.entity.HumanEntity
@@ -44,16 +45,15 @@ class BuildingGui(
     }
 
     private fun setupBackground() {
-        val pane = OutlinePane(0, 0, 9, 3).apply {
+        val pane = OutlinePane(9, 3, Pane.Priority.LOWEST).apply {
             addItem(GuiUtils.background())
             setRepeat(true)
-            priority = Pane.Priority.LOWEST
         }
-        addPane(pane)
+        addPane(Slot.fromXY(0, 0), pane)
     }
 
     private fun setupButtons() {
-        val pane = StaticPane(0, 1, 9, 1)
+        val pane = StaticPane(9, 1)
 
         // Progress indicator
         val percentage = (site.progress * 100).toInt()
@@ -91,24 +91,26 @@ class BuildingGui(
 
         pane.addItem(
             cancelStack.toGuiItem { event ->
+                event.isCancelled = true
                 if (youSure) {
                     renameTask?.takeIf { !it.isCancelled }?.cancel()
                     BuildingManager.cancelConstruction(site)
-                event.whoClicked.closeInventory()
-            } else {
-                youSure = true
-                cancelStack.editMeta { meta ->
-                    meta.displayName(BuildConfig.Messages.cancelBuildButton())
-                    meta.lore(BuildConfig.Messages.cancelLore())
-                }
+                    event.whoClicked.closeInventory()
+                } else {
+                    youSure = true
+                    player.sendMessage(BuildConfig.Messages.cancelConfirmHint())
+                    cancelStack.editMeta { meta ->
+                        meta.displayName(BuildConfig.Messages.cancelConfirmButton())
+                        meta.lore(BuildConfig.Messages.cancelLore())
+                    }
 
-                    // Reset confirmation after 5 seconds
                     renameTask =
                         delayed((5 * 20).ticks) {
+                            youSure = false
                             cancelStack.editMeta { meta ->
                                 meta.displayName(BuildConfig.Messages.cancelBuildButton())
+                                meta.lore(null)
                             }
-                            youSure = false
                             update()
                         }
 
@@ -135,7 +137,7 @@ class BuildingGui(
             )
         }
 
-        addPane(pane)
+        addPane(Slot.fromXY(0, 1), pane)
     }
 }
 

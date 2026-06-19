@@ -18,6 +18,8 @@ import ru.arc.core.ticks
 import ru.arc.hooks.HookRegistry
 import ru.arc.hooks.citizens.CitizensHook
 import ru.arc.util.BlockUtils.rotateBlockData
+import ru.arc.util.Logging.debug
+import ru.arc.util.Logging.error
 import ru.arc.util.ParticleManager
 import ru.arc.util.RandomUtils
 import java.util.concurrent.ThreadLocalRandom
@@ -42,7 +44,10 @@ class Construction(private val site: ConstructionSite) {
     // ==================== NPC ====================
 
     fun createNpc(location: Location, seconds: Int): Int {
-        val citizens = HookRegistry.citizensHook ?: return -1
+        val citizens = HookRegistry.citizensHook ?: run {
+            debug("[autobuild] createNpc skipped: Citizens hook missing for player={}", site.player.name)
+            return -1
+        }
 
         val (name, skinUrl) = RandomUtils.random(BuildConfig.npcSkins)
         npcId = citizens.createNpc(name, location.toCenterLocation())
@@ -81,14 +86,25 @@ class Construction(private val site: ConstructionSite) {
 
         // Prepare blocks async, then build sync
         async {
-            prepareBlockList()
-            buildTask =
-                repeating(period = BuildConfig.cycleDurationTicks.ticks, delay = 1.ticks) {
-                    if (placeNextBlocks(BuildConfig.blocksPerTick)) {
-                        cancel()
-                        site.complete()
+            try {
+                prepareBlockList()
+                debug(
+                    "[autobuild] startBuilding player={} building={} blocks={} npcId={}",
+                    site.player.name,
+                    site.building.fileName,
+                    blocks.size,
+                    npcId,
+                )
+                buildTask =
+                    repeating(period = BuildConfig.cycleDurationTicks.ticks, delay = 1.ticks) {
+                        if (placeNextBlocks(BuildConfig.blocksPerTick)) {
+                            cancel()
+                            site.complete()
+                        }
                     }
-                }
+            } catch (e: Exception) {
+                error("[autobuild] startBuilding failed for player={}", site.player.name, e)
+            }
         }
     }
 

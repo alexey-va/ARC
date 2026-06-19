@@ -4,6 +4,8 @@ import org.bukkit.entity.Player;
 import ru.arc.ARC;
 
 import static ru.arc.util.Logging.error;
+import static ru.arc.util.Logging.info;
+import static ru.arc.util.Logging.warn;
 
 public class XActionManager {
 
@@ -17,16 +19,21 @@ public class XActionManager {
             return;
         }
         ARC.redisManager.registerChannelUnique(XActionMessager.CHANNEL, messager);
-        ARC.redisManager.init();
+        // init() is called once globally after all modules register their channels
+        info("XActionManager registered channel: {}", XActionMessager.CHANNEL);
     }
 
     public static void run(XAction action) {
-        //info("Running action: {}", action);
+        info("[XAction] Running action on this server: {}", action);
         action.run();
     }
 
     public static void publish(XAction action) {
-        //info("Publishing action: {}", action);
+        if (messager == null) {
+            error("[XAction] Cannot publish — messager is null (Redis not initialized?)");
+            return;
+        }
+        info("[XAction] Publishing action: {}", action);
         messager.send(action);
     }
 

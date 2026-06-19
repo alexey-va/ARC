@@ -15,6 +15,7 @@ import com.github.stefvanschie.inventoryframework.pane.OutlinePane;
 import com.github.stefvanschie.inventoryframework.pane.PaginatedPane;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.pane.StaticPane;
+import com.github.stefvanschie.inventoryframework.pane.util.Slot;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -39,7 +40,7 @@ public class SymbolSelector extends ChestGui {
     }
 
     private void setupStocks() {
-        PaginatedPane paginatedPane = new PaginatedPane(0, 1, 9, rows-2);
+        PaginatedPane paginatedPane = new PaginatedPane(9, rows - 2);
         List<GuiItem> guiItemList = new ArrayList<>();
         for (Stock stock : StockMarket.stocks().stream()
                 .filter(s -> s.getPrice() > 0.0)
@@ -49,12 +50,12 @@ public class SymbolSelector extends ChestGui {
             guiItemList.add(guiItem);
         }
         paginatedPane.populateWithGuiItems(guiItemList);
-        this.addPane(paginatedPane);
+        this.addPane(Slot.fromXY(0, 1), paginatedPane);
     }
 
     private void setupNav() {
-        StaticPane pane = new StaticPane(0, rows-1, 9, 1);
-        this.addPane(pane);
+        StaticPane pane = new StaticPane(9, 1);
+        this.addPane(Slot.fromXY(0, rows - 1), pane);
         TagResolver tagResolver = stockPlayer.tagResolver();
 
         back = new ItemStackBuilder(Material.BLUE_STAINED_GLASS_PANE)
@@ -95,8 +96,8 @@ public class SymbolSelector extends ChestGui {
         pane.addItem(profile, 8, 0);
 
 
-        StaticPane topNavigation = new StaticPane(0, 0, 9, 1);
-        this.addPane(topNavigation);
+        StaticPane topNavigation = new StaticPane(9, 1);
+        this.addPane(Slot.fromXY(0, 0), topNavigation);
         market = new ItemStackBuilder(Material.BELL)
                 .display(StockConfig.string("symbol-selector.market-display"))
                 .lore(StockConfig.stringList("symbol-selector.market-lore"))
@@ -126,16 +127,14 @@ public class SymbolSelector extends ChestGui {
     }
 
     private void setupBackground() {
-        OutlinePane pane = new OutlinePane(0, 0, 9, rows );
+        OutlinePane pane = new OutlinePane(9, rows, Pane.Priority.LOWEST);
         pane.addItem(GuiUtils.background());
         pane.setRepeat(true);
-        pane.setPriority(Pane.Priority.LOWEST);
-        this.addPane(pane);
+        this.addPane(Slot.fromXY(0, 0), pane);
 
-        OutlinePane pane2 = new OutlinePane(0, 1, 9, 2);
+        OutlinePane pane2 = new OutlinePane(9, 2, Pane.Priority.LOW);
         pane2.addItem(GuiUtils.background(Material.LIGHT_GRAY_STAINED_GLASS_PANE));
         pane2.setRepeat(true);
-        pane2.setPriority(Pane.Priority.LOW);
-        this.addPane(pane2);
+        this.addPane(Slot.fromXY(0, 1), pane2);
     }
 }
