@@ -33,12 +33,5 @@
   "action": {
     "$resolver": "mdc",
     "key": "action"
-  },
-  "exception": {
-    "$resolver": "exception",
-    "field": "stackTrace",
-    "stackTrace": {
-      "stringified": true
-    }
   }
 }
