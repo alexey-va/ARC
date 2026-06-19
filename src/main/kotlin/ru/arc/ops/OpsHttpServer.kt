@@ -107,6 +107,30 @@ class OpsHttpServer(
             method == "GET" && segments.size == 2 && segments[0] == "player" ->
                 handlePlayer(exchange, segments[1])
 
+            method == "GET" && segments.size == 3 && segments[0] == "player" && segments[2] == "inventory" ->
+                handlePlayerInventory(exchange, cfg, segments[1])
+
+            method == "GET" && segments.size == 3 && segments[0] == "player" && segments[2] == "item" ->
+                handlePlayerItem(exchange, cfg, segments[1], query)
+
+            method == "GET" && segments.size == 4 && segments[0] == "player" && segments[2] == "item" && segments[3] == "cmi-blob" ->
+                handlePlayerItemCmiBlob(exchange, cfg, segments[1], query)
+
+            method == "POST" && segments.size == 3 && segments[0] == "player" && segments[2] == "give" ->
+                handlePlayerGive(exchange, cfg, segments[1])
+
+            method == "POST" && segments == listOf("item", "preview") ->
+                handleItemPreview(exchange, cfg)
+
+            method == "POST" && segments == listOf("item", "cmi-blob") ->
+                handleItemCmiBlob(exchange, cfg)
+
+            method == "GET" && segments.size == 3 && segments[0] == "item" && segments[1] == "cmi-blob" && segments[2] == "presets" ->
+                handleItemCmiBlobPresets(exchange, cfg)
+
+            method == "GET" && segments.size == 4 && segments[0] == "item" && segments[1] == "cmi-blob" && segments[2] == "preset" ->
+                handleItemCmiBlobPreset(exchange, cfg, segments[3], query)
+
             method == "GET" && segments == listOf("placeholder") ->
                 handlePlaceholder(exchange, query)
 
@@ -157,8 +181,14 @@ class OpsHttpServer(
             method == "POST" && segments == listOf("message") ->
                 handleMessage(exchange, cfg)
 
+            method == "POST" && segments == listOf("broadcast") ->
+                handleBroadcast(exchange, cfg)
+
             method == "POST" && segments == listOf("effect") ->
                 handleEffect(exchange, cfg)
+
+            method == "POST" && segments == listOf("kits", "validate") ->
+                handleKitsValidate(exchange, cfg)
 
             method == "POST" && segments == listOf("reload") ->
                 handleReload(exchange, cfg)
@@ -242,6 +272,164 @@ class OpsHttpServer(
         }
     }
 
+    private fun handlePlayerInventory(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        rawName: String,
+    ) {
+        if (!cfg.itemsReadEnabled) {
+            val (code, body) = OpsJson.error(403, "Item read endpoints disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        val name = URLDecoder.decode(rawName, StandardCharsets.UTF_8)
+        try {
+            respondOk(exchange, OpsItemHandlers.playerInventory(name))
+        } catch (e: IllegalArgumentException) {
+            val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, json)
+        }
+    }
+
+    private fun handlePlayerItem(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        rawName: String,
+        query: Map<String, String>,
+    ) {
+        if (!cfg.itemsReadEnabled) {
+            val (code, body) = OpsJson.error(403, "Item read endpoints disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        val name = URLDecoder.decode(rawName, StandardCharsets.UTF_8)
+        val hand = query["hand"]?.equals("true", ignoreCase = true) == true
+        val slot = query["slot"]?.toIntOrNull()
+        try {
+            respondOk(exchange, OpsItemHandlers.playerItem(name, slot, hand))
+        } catch (e: IllegalArgumentException) {
+            val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, json)
+        }
+    }
+
+    private fun handlePlayerGive(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        rawName: String,
+    ) {
+        if (!cfg.itemsGiveEnabled) {
+            val (code, body) = OpsJson.error(403, "Item give endpoint disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        val name = URLDecoder.decode(rawName, StandardCharsets.UTF_8)
+        val body = parseJsonBody(exchange) ?: return
+        try {
+            respondOk(exchange, OpsItemHandlers.giveItem(name, body, cfg.itemsGiveMaxStack))
+        } catch (e: IllegalArgumentException) {
+            val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, json)
+        }
+    }
+
+    private fun handleItemPreview(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+    ) {
+        if (!cfg.itemsReadEnabled) {
+            val (code, body) = OpsJson.error(403, "Item preview disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        val body = parseJsonBody(exchange) ?: return
+        try {
+            respondOk(exchange, OpsItemHandlers.previewItem(body))
+        } catch (e: IllegalArgumentException) {
+            val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, json)
+        }
+    }
+
+    private fun handleItemCmiBlob(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+    ) {
+        if (!cfg.itemsReadEnabled) {
+            val (code, body) = OpsJson.error(403, "Item cmi-blob disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        val body = parseJsonBody(exchange) ?: return
+        try {
+            val presets = body.get("presets")?.takeIf { it.isJsonArray }
+            if (presets != null) {
+                val names =
+                    presets.asJsonArray.mapNotNull { element ->
+                        if (element.isJsonNull) null else element.asString.trim().takeIf { it.isNotEmpty() }
+                    }
+                if (names.isEmpty()) {
+                    val (code, json) = OpsJson.error(400, "JSON presets array must not be empty")
+                    respond(exchange, code, json)
+                    return
+                }
+                respondOk(exchange, OpsItemHandlers.cmiBlobBatch(names))
+                return
+            }
+
+            val preset = body.get("preset")?.takeIf { !it.isJsonNull }?.asString?.trim()
+            if (!preset.isNullOrEmpty()) {
+                val amount = body.get("amount")?.takeIf { !it.isJsonNull }?.asInt ?: 1
+                respondOk(exchange, OpsItemHandlers.cmiBlobFromPreset(preset, amount))
+                return
+            }
+
+            respondOk(exchange, OpsItemHandlers.cmiBlobFromSpec(body))
+        } catch (e: IllegalArgumentException) {
+            val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, json)
+        }
+    }
+
+    private fun handleItemCmiBlobPreset(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        rawPreset: String,
+        query: Map<String, String>,
+    ) {
+        if (!cfg.itemsReadEnabled) {
+            val (code, body) = OpsJson.error(403, "Item cmi-blob disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        val preset = URLDecoder.decode(rawPreset, StandardCharsets.UTF_8)
+        val amount = query["amount"]?.toIntOrNull()?.coerceIn(1, 64) ?: 1
+        try {
+            respondOk(exchange, OpsItemHandlers.cmiBlobFromPreset(preset, amount))
+        } catch (e: IllegalArgumentException) {
+            val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, json)
+        }
+    }
+
+    private fun handleItemCmiBlobPresets(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+    ) {
+        if (!cfg.itemsReadEnabled) {
+            val (code, body) = OpsJson.error(403, "Item cmi-blob disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        respondOk(
+            exchange,
+            mapOf(
+                "presets" to ItemPresets.allNames(),
+                "hint" to "GET /ops/item/cmi-blob/preset/{name} or POST /ops/item/cmi-blob {\"preset\":\"sf_lootbox\"}",
+            ),
+        )
+    }
+
     private fun handlePermission(
         exchange: HttpExchange,
         query: Map<String, String>,
@@ -306,6 +494,27 @@ class OpsHttpServer(
         }
     }
 
+    private fun handleBroadcast(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+    ) {
+        if (!cfg.messagesEnabled) {
+            val (code, body) = OpsJson.error(403, "Broadcast endpoint disabled (messages-enabled=false)")
+            respond(exchange, code, body)
+            return
+        }
+        val body = parseJsonBody(exchange) ?: return
+        try {
+            respondOk(exchange, OpsHttpHandlers.publishBroadcast(body))
+        } catch (e: IllegalArgumentException) {
+            val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, json)
+        } catch (e: IllegalStateException) {
+            val (code, json) = OpsJson.error(503, e.message ?: "XAction unavailable")
+            respond(exchange, code, json)
+        }
+    }
+
     private fun handleEffect(
         exchange: HttpExchange,
         cfg: OpsHttpConfig,
@@ -346,6 +555,54 @@ class OpsHttpServer(
             val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
             respond(exchange, code, json)
         }
+    }
+
+    private fun handlePlayerItemCmiBlob(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        rawName: String,
+        query: Map<String, String>,
+    ) {
+        if (!cfg.itemsReadEnabled) {
+            val (code, body) = OpsJson.error(403, "Item read endpoints disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        val name = URLDecoder.decode(rawName, StandardCharsets.UTF_8)
+        val amount = query["amount"]?.toIntOrNull()?.coerceIn(1, 64) ?: 1
+        try {
+            respondOk(exchange, OpsItemHandlers.handCmiBlob(name, amount))
+        } catch (e: IllegalArgumentException) {
+            val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, json)
+        }
+    }
+
+    private fun handleKitsValidate(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+    ) {
+        if (!cfg.itemsReadEnabled) {
+            val (code, body) = OpsJson.error(403, "Item read endpoints disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        val body = parseJsonBody(exchange) ?: return
+        val presetsEl = body.get("presets")
+        if (presetsEl == null || !presetsEl.isJsonArray) {
+            val (code, json) = OpsJson.error(400, "JSON body required: {\"presets\":[\"sf_lootbox\",...]}")
+            respond(exchange, code, json)
+            return
+        }
+        val names = presetsEl.asJsonArray.mapNotNull { el ->
+            if (el.isJsonNull) null else el.asString.trim().takeIf { it.isNotEmpty() }
+        }
+        if (names.isEmpty()) {
+            val (code, json) = OpsJson.error(400, "presets array must not be empty")
+            respond(exchange, code, json)
+            return
+        }
+        respondOk(exchange, OpsItemHandlers.validatePresets(names))
     }
 
     private fun parseJsonBody(exchange: HttpExchange): com.google.gson.JsonObject? {
@@ -411,6 +668,8 @@ class OpsHttpServer(
             )
         if (cfg.messagesEnabled) {
             routes += "POST /ops/message {\"channel\":\"broadcast|player|ops\",\"text\":\"...\"}"
+            routes +=
+                "POST /ops/broadcast {\"text\":\"...\",\"type\":\"chat|boss_bar|action_bar\",\"servers\":\"spawn,survival|all\",\"permission\":\"...\"}"
         }
         if (cfg.effectsEnabled) {
             routes += "POST /ops/effect {\"player\":\"\",\"type\":\"title|actionbar|sound\"}"
@@ -423,6 +682,19 @@ class OpsHttpServer(
         }
         if (cfg.runAsEnabled) {
             routes += "POST /ops/run-as {\"player\":\"...\",\"command\":\"...\"}"
+        }
+        if (cfg.itemsReadEnabled) {
+            routes += "GET /ops/player/{name}/inventory"
+            routes += "GET /ops/player/{name}/item?slot= | ?hand=true"
+            routes += "GET /ops/player/{name}/item/cmi-blob?amount=1"
+            routes += "POST /ops/item/preview {ItemSpec JSON}"
+            routes += "GET /ops/item/cmi-blob/presets"
+            routes += "GET /ops/item/cmi-blob/preset/{name}?amount=1"
+            routes += "POST /ops/item/cmi-blob {ItemSpec|preset|presets[]}"
+            routes += "POST /ops/kits/validate {\"presets\":[\"sf_lootbox\",...]}"
+        }
+        if (cfg.itemsGiveEnabled) {
+            routes += "POST /ops/player/{name}/give {\"item\":{ItemSpec},\"slot\":-1,\"dropOverflow\":true}"
         }
         return mapOf("routes" to routes, "auth" to "Bearer token or X-ARC-Ops-Token header")
     }
