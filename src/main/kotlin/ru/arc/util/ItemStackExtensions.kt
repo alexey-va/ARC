@@ -211,9 +211,3 @@ fun ItemStack?.isNotNullOrAir(): Boolean = !isNullOrAir()
  * }
  * ```
  */
-@Deprecated("Use itemStack() from ItemStackDsl.kt", ReplaceWith("itemStack(material)"))
-inline fun simpleItemStack(
-    material: Material,
-    amount: Int = 1,
-    block: ItemStack.() -> Unit = {},
-): ItemStack = ItemStack(material, amount).apply(block)

@@ -160,28 +160,6 @@ class ItemStackExtensionsTest :
             }
         }
 
-        @Suppress("DEPRECATION")
-        describe("simpleItemStack factory") {
-
-            it("should create ItemStack with DSL") {
-                val stack =
-                    simpleItemStack(Material.DIAMOND_SWORD) {
-                        withDisplayName("<gold>Test Sword")
-                        withAmount(1)
-                    }
-
-                stack.type shouldBe Material.DIAMOND_SWORD
-                stack.displayNamePlain shouldBe "Test Sword"
-            }
-
-            it("should create ItemStack with custom amount") {
-                val stack = simpleItemStack(Material.DIAMOND, 64)
-
-                stack.type shouldBe Material.DIAMOND
-                stack.amount shouldBe 64
-            }
-        }
-
         describe("copy extension") {
 
             it("should create a copy with modifications") {

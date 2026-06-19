@@ -127,18 +127,6 @@ class LocationPool(
         _dirty = false
     }
 
-    /**
-     * Legacy метод для обратной совместимости с Java кодом.
-     */
-    @Deprecated("Use internal API", level = DeprecationLevel.WARNING)
-    fun getLocations(): WeightedRandom<ServerLocation> = _locations
-
-    /**
-     * Legacy метод для обратной совместимости.
-     */
-    @Deprecated("Use getRandomLocations", ReplaceWith("getRandomLocations(n)"))
-    fun getNRandom(n: Int): Set<ServerLocation> = getRandomLocations(n)
-
     override fun toString(): String = "LocationPool(id='$id', size=$size)"
 
     override fun equals(other: Any?): Boolean {

@@ -203,20 +203,4 @@ object AuditManager {
 
     // ==================== Legacy Compatibility ====================
 
-    /**
-     * For backward compatibility with old Filter enum.
-     * @deprecated Use [AuditFilter] directly
-     */
-    @Deprecated("Use AuditFilter directly", ReplaceWith("AuditFilter"))
-    enum class Filter {
-        INCOME, EXPENSE, ALL, SHOP, JOB, PAY;
-
-        fun toAuditFilter(): AuditFilter = AuditFilter.valueOf(name)
-    }
-
-    @JvmStatic
-    @Suppress("DEPRECATION")
-    fun sendAudit(audience: Audience, playerName: String, page: Int, filter: Filter) {
-        sendAudit(audience, playerName, page, filter.toAuditFilter())
-    }
 }

@@ -277,12 +277,5 @@ open class ARC : JavaPlugin() {
             }
         }
 
-        /**
-         * Get the Vault economy instance.
-         * @deprecated Use [EconomyModule.getEconomy] instead.
-         */
-        @Deprecated("Use EconomyModule.getEconomy() instead")
-        @JvmStatic
-        fun getEcon(): Economy = EconomyModule.getEconomy()!!
     }
 }
