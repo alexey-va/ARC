@@ -38,10 +38,7 @@ public class SyncRepo<T extends SyncData> {
 
     private CompletableFuture<Void> saveDataPersistently(T data) {
         return CompletableFuture.supplyAsync(() -> gson.toJson(data))
-                .thenAccept(json -> {
-                    debug("Saving json: {}", json);
-                    redisManager.saveMapEntries(key, data.uuid().toString(), json);
-                });
+                .thenAccept(json -> redisManager.saveMapEntries(key, data.uuid().toString(), json));
     }
 
     private CompletableFuture<T> loadData(UUID uuid) {
@@ -84,7 +81,6 @@ public class SyncRepo<T extends SyncData> {
 
     public CompletableFuture<Void> saveAndPersistData(Context context, boolean async) {
         return produceData(context, async).thenAccept(data -> {
-            debug("Saving data: {}", data);
             if (data == null || data.trash()) return;
             saveDataPersistently(data);
         });
