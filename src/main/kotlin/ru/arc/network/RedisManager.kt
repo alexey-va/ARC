@@ -3,11 +3,12 @@ package ru.arc.network
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.future.asCompletableFuture
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -52,9 +53,6 @@ class RedisManager(
         private const val SERVER_DELIMITER = "<>#<>#<>"
         private const val INIT_DELAY_MS = 1000L
         private const val RECONNECT_DELAY_MS = 100L
-
-        @Suppress("unused")
-        private const val SUBSCRIPTION_TIMEOUT_MS = 5000L
     }
 
     // Connection
@@ -234,40 +232,29 @@ class RedisManager(
             return
         }
 
-        // Use CompletableFuture for consistency and to ensure completion
-        CompletableFuture.runAsync({
-            runBlocking {
-                try {
-                    withContext(Dispatchers.IO) {
-                        val fullMessage = "${ARC.serverName}$SERVER_DELIMITER$message"
-                        pubConnection.publish(channel, fullMessage)
-                    }
-                } catch (e: Exception) {
-                    if (e is JedisConnectionException) {
-                        isConnected = false
-                    }
-                    error("Error publishing to channel $channel", e)
-                }
+        scope.launch(Dispatchers.IO) {
+            try {
+                val fullMessage = "${ARC.serverName}$SERVER_DELIMITER$message"
+                pubConnection.publish(channel, fullMessage)
+            } catch (e: Exception) {
+                if (e is JedisConnectionException) isConnected = false
+                error("Error publishing to channel $channel", e)
             }
-        }, java.util.concurrent.ForkJoinPool.commonPool())
+        }
     }
 
     override fun saveMap(key: String, map: Map<String, String>) {
         val pubConnection = pub
         if (!isConnected || isShuttingDown || pubConnection == null) return
 
-        CompletableFuture.runAsync({
-            runBlocking {
-                try {
-                    withContext(Dispatchers.IO) {
-                        pubConnection.hmset(key, map)
-                    }
-                } catch (e: Exception) {
-                    if (e is JedisConnectionException) isConnected = false
-                    error("Error saving map to key: $key", e)
-                }
+        scope.launch(Dispatchers.IO) {
+            try {
+                pubConnection.hmset(key, map)
+            } catch (e: Exception) {
+                if (e is JedisConnectionException) isConnected = false
+                error("Error saving map to key: $key", e)
             }
-        }, java.util.concurrent.ForkJoinPool.commonPool())
+        }
     }
 
     override fun saveMapEntries(key: String, vararg keyValuePairs: String?): CompletableFuture<*> {
@@ -278,28 +265,25 @@ class RedisManager(
             return CompletableFuture.completedFuture(null)
         }
 
-        return CompletableFuture.supplyAsync({
-            runBlocking {
-                try {
-                    val pairs = mutableListOf<Pair<String, String?>>()
+        return scope.async(Dispatchers.IO) {
+            try {
+                val pairs = buildList {
                     for (i in keyValuePairs.indices step 2) {
                         val k = keyValuePairs[i] ?: continue
                         val v = if (i + 1 < keyValuePairs.size) keyValuePairs[i + 1] else null
-                        pairs.add(k to v)
+                        add(k to v)
                     }
-                    val toDelete = pairs.filter { it.second == null }.map { it.first }.toTypedArray()
-                    val toUpdate = pairs.filter { it.second != null }.associate { it.first to it.second!! }
-
-                    withContext(Dispatchers.IO) {
-                        if (toDelete.isNotEmpty()) pubConnection.hdel(key, *toDelete)
-                        if (toUpdate.isNotEmpty()) pubConnection.hmset(key, toUpdate)
-                    }
-                } catch (e: Exception) {
-                    if (e is JedisConnectionException) isConnected = false
-                    error("Error saving map entries for key: $key", e)
                 }
+                val toDelete = pairs.filter { it.second == null }.map { it.first }.toTypedArray()
+                val toUpdate = pairs.filter { it.second != null }.associate { it.first to it.second!! }
+
+                if (toDelete.isNotEmpty()) pubConnection.hdel(key, *toDelete)
+                if (toUpdate.isNotEmpty()) pubConnection.hmset(key, toUpdate)
+            } catch (e: Exception) {
+                if (e is JedisConnectionException) isConnected = false
+                error("Error saving map entries for key: $key", e)
             }
-        }, java.util.concurrent.ForkJoinPool.commonPool())
+        }.asCompletableFuture()
     }
 
     override fun loadMap(key: String): CompletableFuture<Map<String, String>> {
@@ -308,19 +292,15 @@ class RedisManager(
             return CompletableFuture.completedFuture(emptyMap())
         }
 
-        return CompletableFuture.supplyAsync({
-            runBlocking {
-                withContext(Dispatchers.IO) {
-                    try {
-                        pubConnection.hgetAll(key)
-                    } catch (e: Exception) {
-                        if (e is JedisConnectionException) isConnected = false
-                        error("Error loading map from key: $key", e)
-                        emptyMap()
-                    }
-                }
+        return scope.async(Dispatchers.IO) {
+            try {
+                pubConnection.hgetAll(key)
+            } catch (e: Exception) {
+                if (e is JedisConnectionException) isConnected = false
+                error("Error loading map from key: $key", e)
+                emptyMap()
             }
-        }, java.util.concurrent.ForkJoinPool.commonPool())
+        }.asCompletableFuture()
     }
 
     override fun loadMapEntries(key: String, vararg mapKeys: String): CompletableFuture<List<String?>> {
@@ -331,19 +311,15 @@ class RedisManager(
             return CompletableFuture.completedFuture(List(mapKeys.size) { null })
         }
 
-        return CompletableFuture.supplyAsync({
-            runBlocking {
-                withContext(Dispatchers.IO) {
-                    try {
-                        pubConnection.hmget(key, *mapKeys)
-                    } catch (e: Exception) {
-                        if (e is JedisConnectionException) isConnected = false
-                        error("Error loading map entries from key: $key", e)
-                        List(mapKeys.size) { null }
-                    }
-                }
+        return scope.async(Dispatchers.IO) {
+            try {
+                pubConnection.hmget(key, *mapKeys)
+            } catch (e: Exception) {
+                if (e is JedisConnectionException) isConnected = false
+                error("Error loading map entries from key: $key", e)
+                List(mapKeys.size) { null }
             }
-        }, java.util.concurrent.ForkJoinPool.commonPool())
+        }.asCompletableFuture()
     }
 
     override fun registerChannelUnique(channel: String, listener: ChannelListener) {
@@ -378,7 +354,7 @@ class RedisManager(
             try {
                 unsubscribe()
             } catch (_: Exception) {}
-            Thread.sleep(50)
+            Thread.sleep(50) // brief pause for subscribe() to return after unsubscribe
         }
         subscriptionJob?.cancel()
         subscriptionThread?.cancel(true)
