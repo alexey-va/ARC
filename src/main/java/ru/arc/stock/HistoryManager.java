@@ -137,6 +137,10 @@ public class HistoryManager {
             info("Stocks are disabled");
             return;
         }
+        if (historyPath == null) {
+            info("Stocks not initialized, skipping history save");
+            return;
+        }
         info("Saving history size {}", history.values().stream().mapToInt(List::size).sum());
         evictOldHistory();
         saveToFile();
@@ -205,6 +209,7 @@ public class HistoryManager {
     }
 
     public static void saveToFile() {
+        if (historyPath == null) return;
         try {
             String json = Common.prettyGson.toJson(history);
             Files.write(historyPath, json.getBytes());
