@@ -32,7 +32,7 @@ class LoggingStructuredTest : FreeSpec({
     }
 
     "buildLokiLayout" - {
-        "should emit JSON with core fields" {
+        "should emit JSON with core fields and MDC contextMap" {
             val context = LogManager.getContext(false) as LoggerContext
             val layout = Logging.buildLokiLayout(EmptyConfig, context.configuration)
             val contextData = ContextDataFactory.createContextData()
@@ -45,16 +45,13 @@ class LoggingStructuredTest : FreeSpec({
                     .setMessage(SimpleMessage("hello structured"))
                     .setContextData(contextData)
                     .build()
-            try {
-                val line = layout.toSerializable(event)
-                line shouldContain "\"level\":\"INFO\""
-                line shouldContain "\"logger\":\"ru.arc.test.Sample\""
-                line shouldContain "\"message\":\"hello structured\""
-                line shouldContain "\"module\":\"xaction\""
-                line shouldContain "\"action\":\"publish\""
-            } finally {
-                // no-op
-            }
+            val line = layout.toSerializable(event)
+            line shouldContain "\"level\":\"INFO\""
+            line shouldContain "\"logger\":\"ru.arc.test.Sample\""
+            line shouldContain "\"message\":\"hello structured\""
+            line shouldContain "\"contextMap\":{"
+            line shouldContain "\"module\":\"xaction\""
+            line shouldContain "\"action\":\"publish\""
         }
     }
 

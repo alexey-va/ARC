@@ -23,4 +23,6 @@ alwaysApply: true
 
 Если код или ресурсы менялись — **в конце задачи** commit + push без напоминания пользователя.
 
+Проверка на проде (логи, XAction, ошибки) — **Grafana Loki** через MCP `user-grafana` (`query_loki_logs`), не SSH grep. См. `mcserver/.cursor/rules/grafana-logs.mdc` и `mcserver/AGENTS.md` → «Логи».
+
 Приватный репозиторий: секреты в module-конфигах допустимы, если так принято в проекте.

@@ -6,7 +6,6 @@ import org.apache.logging.log4j.ThreadContext
 import org.apache.logging.log4j.core.Logger
 import org.apache.logging.log4j.core.filter.BurstFilter
 import org.apache.logging.log4j.core.layout.PatternLayout
-import org.apache.logging.log4j.layout.template.json.JsonTemplateLayout
 import org.bukkit.Bukkit
 import pl.tkowalcz.tjahzi.log4j2.LokiAppender
 import pl.tkowalcz.tjahzi.log4j2.labels.Label
@@ -19,7 +18,6 @@ import java.nio.charset.StandardCharsets
 object Logging {
 
     private const val LOKI_LOGGER_PREFIX = "ru.arc"
-    private const val LOKI_JSON_TEMPLATE = "log4j2-loki-template.json"
 
     /**
      * When true, suppresses INFO and DEBUG logs. Useful for tests.
@@ -428,16 +426,7 @@ object Logging {
                 .build()
         }
 
-        val template =
-            Logging::class.java.classLoader
-                .getResourceAsStream(LOKI_JSON_TEMPLATE)
-                ?.bufferedReader(StandardCharsets.UTF_8)
-                ?.readText()
-                ?: throw IllegalStateException("Missing bundled resource: $LOKI_JSON_TEMPLATE")
-        return JsonTemplateLayout.newBuilder()
-            .setConfiguration(configuration)
-            .setEventTemplate(template)
-            .build()
+        return ArcJsonLayout.create(configuration)
     }
 
     internal fun resolveLokiLevel(cfg: Config): org.apache.logging.log4j.Level {
