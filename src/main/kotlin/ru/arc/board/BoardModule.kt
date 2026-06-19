@@ -82,12 +82,14 @@ data class BoardEntryData(
     /**
      * Check if this entry has expired.
      */
-    fun isExpired(): Boolean = System.currentTimeMillis() - timestamp > BoardConfig.secondsLifetime * 1000L
+    fun isExpired(nowMillis: Long = System.currentTimeMillis()): Boolean =
+        nowMillis - timestamp > BoardConfig.secondsLifetime * 1000L
 
     /**
      * Get remaining time until expiration.
      */
-    fun tillExpire(): Long = BoardConfig.secondsLifetime * 1000L + timestamp - System.currentTimeMillis()
+    fun tillExpire(nowMillis: Long = System.currentTimeMillis()): Long =
+        BoardConfig.secondsLifetime * 1000L + timestamp - nowMillis
 
     /**
      * Create an ItemStack representation of this entry.
@@ -529,6 +531,12 @@ class BoardEntryCache {
 }
 
 /**
+ * Pick the next live entry to announce (oldest lastShown). Expired entries are ignored.
+ */
+internal fun selectNextAnnounceEntry(entries: Collection<BoardEntryData>): BoardEntryData? =
+    entries.filter { !it.isExpired() }.minByOrNull { it.lastShown }
+
+/**
  * Manager for the board system.
  */
 object BoardManager {
@@ -539,6 +547,7 @@ object BoardManager {
     private val cache = BoardEntryCache()
     private var updateCacheJob: kotlinx.coroutines.Job? = null
     private var announceJob: kotlinx.coroutines.Job? = null
+    private var purgeJob: kotlinx.coroutines.Job? = null
 
     private val config: Config get() = ConfigManager.ofModule(ARC.instance.dataFolder.toPath(), "board.yml")
 
@@ -587,9 +596,18 @@ object BoardManager {
                 delay(6_000) // Initial delay
                 while (isActive) {
                     if (BoardConfig.mainServer) {
+                        purgeExpiredEntries()
                         announceNext()
                     }
                     delay(interval)
+                }
+            }
+
+        purgeJob =
+            scope.launch {
+                while (isActive) {
+                    delay(300_000)
+                    purgeExpiredEntries()
                 }
             }
     }
@@ -597,6 +615,20 @@ object BoardManager {
     private fun cancelTasks() {
         updateCacheJob?.cancel()
         announceJob?.cancel()
+        purgeJob?.cancel()
+    }
+
+    /**
+     * Remove expired entries from Redis and local cache.
+     */
+    suspend fun purgeExpiredEntries(): Int {
+        val all = repo.all().getOrNull() ?: return 0
+        val expired = all.filter { it.isExpired() }
+        expired.forEach { entry ->
+            repo.delete(entry.id())
+            cache.remove(entry.entryUuid)
+        }
+        return expired.size
     }
 
     /**
@@ -606,7 +638,7 @@ object BoardManager {
     fun announceNext() {
         scope.launch {
             val entries = repo.all().getOrNull() ?: return@launch
-            val entry = entries.minByOrNull { it.lastShown } ?: return@launch
+            val entry = selectNextAnnounceEntry(entries) ?: return@launch
 
             entry.changeLastShown(System.currentTimeMillis())
             repo.save(entry)
@@ -716,7 +748,8 @@ object BoardManager {
     fun updateAllCache() {
         cache.clear()
         scope.launch {
-            repo.all().getOrNull()?.forEach { cache.refresh(it) }
+            purgeExpiredEntries()
+            repo.all().getOrNull()?.filter { !it.isExpired() }?.forEach { cache.refresh(it) }
         }
     }
 }
