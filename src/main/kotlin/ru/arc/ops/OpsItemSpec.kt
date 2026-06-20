@@ -11,6 +11,8 @@ import org.bukkit.Registry
 import org.bukkit.enchantments.Enchantment
 import org.bukkit.inventory.ItemFlag
 import org.bukkit.inventory.ItemStack
+import ru.arc.util.ConfigItemSpec
+import ru.arc.util.applySpec
 import ru.arc.util.customModelDataOrNull
 import ru.arc.util.itemStack
 
@@ -64,8 +66,11 @@ object OpsItemSpec {
     fun build(json: JsonObject): ItemStack {
         val itemsAdderId = json.stringOrNull("itemsadder") ?: json.stringOrNull("ia")
         val mapped = itemsAdderId?.let { knownItemsAdder[it.lowercase()] }
+        val itemFields = ConfigItemSpec.fromJsonFields(json.toItemFieldMap())
 
-        val materialName = json.stringOrNull("material") ?: mapped?.first?.name
+        val materialName = itemFields.material?.name
+            ?: json.stringOrNull("material")
+            ?: mapped?.first?.name
             ?: throw IllegalArgumentException("material or itemsadder required")
 
         val material =
@@ -74,13 +79,14 @@ object OpsItemSpec {
 
         val amount = json.get("amount")?.takeIf { !it.isJsonNull }?.asInt?.coerceAtLeast(1) ?: 1
         val modelData =
-            json.get("customModelData")?.takeIf { !it.isJsonNull }?.asInt
+            itemFields.modelData
+                ?: json.get("customModelData")?.takeIf { !it.isJsonNull }?.asInt
                 ?: json.get("modelData")?.takeIf { !it.isJsonNull }?.asInt
                 ?: mapped?.second
                 ?: 0
 
-        val display = json.stringOrNull("display")
-        val lore = json.stringList("lore")
+        val display = itemFields.display ?: json.stringOrNull("display")
+        val lore = itemFields.lore ?: json.stringList("lore")
         val unbreakable = json.get("unbreakable")?.takeIf { !it.isJsonNull }?.asBoolean == true
         val glowing = json.get("glowing")?.takeIf { !it.isJsonNull }?.asBoolean == true
         val enchants = parseEnchants(json.get("enchants"))
@@ -88,13 +94,15 @@ object OpsItemSpec {
 
         val stack =
             itemStack(material, amount) {
-                if (modelData != 0) {
-                    modelData(modelData)
-                }
-                display?.let { display(it) }
-                if (lore.isNotEmpty()) {
-                    lore(lore)
-                }
+                applySpec(
+                    ConfigItemSpec(
+                        material = null,
+                        display = display,
+                        lore = lore,
+                        modelData = modelData.takeIf { it != 0 },
+                    ),
+                    applyMaterial = false,
+                )
                 enchants.forEach { (enchant, level) ->
                     enchant(enchant, level)
                 }
@@ -301,4 +309,14 @@ object OpsItemSpec {
 
     private fun JsonElement.asStringOrNull(): String? =
         if (isJsonNull) null else asString
+
+    private fun JsonObject.toItemFieldMap(): Map<String, Any> {
+        val map = linkedMapOf<String, Any>()
+        stringOrNull("material")?.let { map["material"] = it }
+        stringOrNull("display")?.let { map["display"] = it }
+        stringList("lore").takeIf { it.isNotEmpty() }?.let { map["lore"] = it }
+        (get("customModelData")?.takeIf { !it.isJsonNull }?.asInt
+            ?: get("modelData")?.takeIf { !it.isJsonNull }?.asInt)?.let { map["customModelData"] = it }
+        return map
+    }
 }

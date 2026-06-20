@@ -16,8 +16,8 @@ import org.bukkit.event.inventory.InventoryClickEvent
 import ru.arc.configs.Config
 import ru.arc.util.GuiUtils
 import ru.arc.util.TextUtil
-import ru.arc.util.itemStack
-import ru.arc.util.toGuiItem
+import ru.arc.util.fromConfig
+import ru.arc.util.guiItem
 
 /**
  * Base class for config-driven GUIs.
@@ -150,18 +150,17 @@ abstract class ConfigGui(
         material: Material = GuiDefaults.BackButton.material,
         modelData: Int = GuiDefaults.BackButton.modelData,
         command: String? = null,
-    ): GuiItem {
-        val stack =
-            itemStack(material) {
-                if (modelData != 0) modelData(modelData)
-                display(config.string("$configPrefix.$key-display", GuiDefaults.BackButton.defaultDisplay))
-                lore(config.stringList("$configPrefix.$key-lore"))
+    ): GuiItem =
+        guiItem(material) {
+            if (modelData != 0) modelData(modelData)
+            display(GuiDefaults.BackButton.defaultDisplay)
+            lore(emptyList())
+            fromConfig(config, "$configPrefix.$key")
+            onClick {
+                val cmd = command ?: config.string("$configPrefix.$key-command", GuiDefaults.BackButton.defaultCommand)
+                (it.whoClicked as? Player)?.performCommand(cmd)
             }
-        return stack.toGuiItem {
-            val cmd = command ?: config.string("$configPrefix.$key-command", GuiDefaults.BackButton.defaultCommand)
-            (it.whoClicked as? Player)?.performCommand(cmd)
         }
-    }
 
     /**
      * Create a previous page button.
@@ -170,22 +169,21 @@ abstract class ConfigGui(
         key: String = "previous",
         material: Material = GuiDefaults.PrevButton.material,
         modelData: Int = GuiDefaults.PrevButton.modelData,
-    ): GuiItem {
-        val stack =
-            itemStack(material) {
-                if (modelData != 0) modelData(modelData)
-                display(config.string("$configPrefix.$key.name", GuiDefaults.PrevButton.defaultDisplay))
-                lore(config.stringList("$configPrefix.$key.lore"))
-            }
-        return stack.toGuiItem {
-            paginatedPane?.let { pane ->
-                if (pane.page > 0) {
-                    pane.page = pane.page - 1
-                    update()
+    ): GuiItem =
+        guiItem(material) {
+            if (modelData != 0) modelData(modelData)
+            display(GuiDefaults.PrevButton.defaultDisplay)
+            lore(emptyList())
+            fromConfig(config, "$configPrefix.$key")
+            onClick {
+                paginatedPane?.let { pane ->
+                    if (pane.page > 0) {
+                        pane.page = pane.page - 1
+                        update()
+                    }
                 }
             }
         }
-    }
 
     /**
      * Create a next page button.
@@ -194,22 +192,21 @@ abstract class ConfigGui(
         key: String = "next",
         material: Material = GuiDefaults.NextButton.material,
         modelData: Int = GuiDefaults.NextButton.modelData,
-    ): GuiItem {
-        val stack =
-            itemStack(material) {
-                if (modelData != 0) modelData(modelData)
-                display(config.string("$configPrefix.$key.name", GuiDefaults.NextButton.defaultDisplay))
-                lore(config.stringList("$configPrefix.$key.lore"))
-            }
-        return stack.toGuiItem {
-            paginatedPane?.let { pane ->
-                if (pane.page < pane.pages - 1) {
-                    pane.page = pane.page + 1
-                    update()
+    ): GuiItem =
+        guiItem(material) {
+            if (modelData != 0) modelData(modelData)
+            display(GuiDefaults.NextButton.defaultDisplay)
+            lore(emptyList())
+            fromConfig(config, "$configPrefix.$key")
+            onClick {
+                paginatedPane?.let { pane ->
+                    if (pane.page < pane.pages - 1) {
+                        pane.page = pane.page + 1
+                        update()
+                    }
                 }
             }
         }
-    }
 
     // ==================== Item Builders ====================
 
@@ -222,16 +219,14 @@ abstract class ConfigGui(
         modelData: Int = 0,
         tagResolver: TagResolver = TagResolver.standard(),
         onClick: ((InventoryClickEvent) -> Unit)? = null,
-    ): GuiItem {
-        val stack =
-            itemStack(material) {
-                if (modelData != 0) modelData(modelData)
-                display(config.string("$configPrefix.$key.display", config.string("$configPrefix.$key.name", key)))
-                lore(config.stringList("$configPrefix.$key.lore"))
-                tagResolver(tagResolver)
-            }
-        return stack.toGuiItem { onClick?.invoke(it) }
-    }
+    ): GuiItem =
+        guiItem(material) {
+            if (modelData != 0) modelData(modelData)
+            display(config.string("$configPrefix.$key.display", config.string("$configPrefix.$key.name", key)))
+            lore(config.stringList("$configPrefix.$key.lore"))
+            tagResolver(tagResolver)
+            onClick?.let { handler -> onClick { handler(it) } }
+        }
 
     /**
      * Build tag resolver with common placeholders.
@@ -345,16 +340,18 @@ object QuickGui {
                 // Confirm button
                 item(GuiDefaults.Slots.confirm) {
                     material(GuiDefaults.ConfirmButton.material)
-                    displayFromConfig("$configPrefix.confirm.display")
-                    loreFromConfig("$configPrefix.confirm.lore")
+                    display(GuiDefaults.ConfirmButton.defaultDisplay)
+                    lore(emptyList())
+                    fromConfig(config, "$configPrefix.confirm")
                     onClick { onConfirm() }
                 }
 
                 // Cancel button
                 item(GuiDefaults.Slots.cancel) {
                     material(GuiDefaults.CancelButton.material)
-                    displayFromConfig("$configPrefix.cancel.display")
-                    loreFromConfig("$configPrefix.cancel.lore")
+                    display(GuiDefaults.CancelButton.defaultDisplay)
+                    lore(emptyList())
+                    fromConfig(config, "$configPrefix.cancel")
                     onClick { onCancel() }
                 }
             }

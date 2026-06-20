@@ -3,6 +3,7 @@ package ru.arc.gui
 import org.bukkit.Material
 import ru.arc.configs.Config
 import ru.arc.configs.ConfigManager
+import ru.arc.util.ConfigItemSpec
 import java.nio.file.Path
 
 /**
@@ -43,42 +44,32 @@ object GuiDefaults {
     object Background {
         val material: Material
             get() =
-                parseMaterial(
-                    config?.string("background.material"),
-                    Material.GRAY_STAINED_GLASS_PANE,
-                )
+                itemSpec("background")?.material
+                    ?: Material.GRAY_STAINED_GLASS_PANE
 
         val modelData: Int
-            get() = config?.integer("background.model-data", 11000) ?: 11000
+            get() = itemSpec("background")?.modelData ?: 11000
 
         val contentMaterial: Material
             get() =
-                parseMaterial(
-                    config?.string("background.content-material"),
-                    Material.LIGHT_GRAY_STAINED_GLASS_PANE,
-                )
+                itemSpec("background.content")?.material
+                    ?: Material.LIGHT_GRAY_STAINED_GLASS_PANE
 
         val contentModelData: Int
-            get() = config?.integer("background.content-model-data", 0) ?: 0
+            get() = itemSpec("background.content")?.modelData ?: 0
     }
 
     // ==================== Back Button ====================
 
     object BackButton {
         val material: Material
-            get() =
-                parseMaterial(
-                    config?.string("buttons.back.material"),
-                    Material.BLUE_STAINED_GLASS_PANE,
-                )
+            get() = buttonSpec("back")?.material ?: Material.BLUE_STAINED_GLASS_PANE
 
         val modelData: Int
-            get() = config?.integer("buttons.back.model-data", 11013) ?: 11013
+            get() = buttonSpec("back")?.modelData ?: 11013
 
         val defaultDisplay: String
-            get() =
-                config?.string("buttons.back.default-display", "<gray>« Назад")
-                    ?: "<gray>« Назад"
+            get() = buttonSpec("back")?.display ?: "<gray>« Назад"
 
         val defaultCommand: String
             get() = config?.string("buttons.back.default-command", "menu") ?: "menu"
@@ -88,76 +79,52 @@ object GuiDefaults {
 
     object PrevButton {
         val material: Material
-            get() =
-                parseMaterial(
-                    config?.string("buttons.prev.material"),
-                    Material.BLUE_STAINED_GLASS_PANE,
-                )
+            get() = buttonSpec("prev")?.material ?: Material.BLUE_STAINED_GLASS_PANE
 
         val modelData: Int
-            get() = config?.integer("buttons.prev.model-data", 11009) ?: 11009
+            get() = buttonSpec("prev")?.modelData ?: 11009
 
         val defaultDisplay: String
-            get() =
-                config?.string("buttons.prev.default-display", "<gray>« Предыдущая")
-                    ?: "<gray>« Предыдущая"
+            get() = buttonSpec("prev")?.display ?: "<gray>« Предыдущая"
     }
 
     // ==================== Next Page Button ====================
 
     object NextButton {
         val material: Material
-            get() =
-                parseMaterial(
-                    config?.string("buttons.next.material"),
-                    Material.BLUE_STAINED_GLASS_PANE,
-                )
+            get() = buttonSpec("next")?.material ?: Material.BLUE_STAINED_GLASS_PANE
 
         val modelData: Int
-            get() = config?.integer("buttons.next.model-data", 11008) ?: 11008
+            get() = buttonSpec("next")?.modelData ?: 11008
 
         val defaultDisplay: String
-            get() =
-                config?.string("buttons.next.default-display", "<gray>Следующая »")
-                    ?: "<gray>Следующая »"
+            get() = buttonSpec("next")?.display ?: "<gray>Следующая »"
     }
 
     // ==================== Confirm Button ====================
 
     object ConfirmButton {
         val material: Material
-            get() =
-                parseMaterial(
-                    config?.string("buttons.confirm.material"),
-                    Material.LIME_STAINED_GLASS_PANE,
-                )
+            get() = buttonSpec("confirm")?.material ?: Material.LIME_STAINED_GLASS_PANE
 
         val modelData: Int
-            get() = config?.integer("buttons.confirm.model-data", 0) ?: 0
+            get() = buttonSpec("confirm")?.modelData ?: 0
 
         val defaultDisplay: String
-            get() =
-                config?.string("buttons.confirm.default-display", "<green>Подтвердить")
-                    ?: "<green>Подтвердить"
+            get() = buttonSpec("confirm")?.display ?: "<green>Подтвердить"
     }
 
     // ==================== Cancel Button ====================
 
     object CancelButton {
         val material: Material
-            get() =
-                parseMaterial(
-                    config?.string("buttons.cancel.material"),
-                    Material.RED_STAINED_GLASS_PANE,
-                )
+            get() = buttonSpec("cancel")?.material ?: Material.RED_STAINED_GLASS_PANE
 
         val modelData: Int
-            get() = config?.integer("buttons.cancel.model-data", 0) ?: 0
+            get() = buttonSpec("cancel")?.modelData ?: 0
 
         val defaultDisplay: String
-            get() =
-                config?.string("buttons.cancel.default-display", "<red>Отмена")
-                    ?: "<red>Отмена"
+            get() = buttonSpec("cancel")?.display ?: "<red>Отмена"
     }
 
     // ==================== Slots ====================
@@ -200,15 +167,8 @@ object GuiDefaults {
 
     // ==================== Helper ====================
 
-    private fun parseMaterial(
-        name: String?,
-        default: Material,
-    ): Material {
-        if (name.isNullOrBlank()) return default
-        return try {
-            Material.valueOf(name.uppercase())
-        } catch (e: IllegalArgumentException) {
-            default
-        }
-    }
+    private fun itemSpec(path: String): ConfigItemSpec? =
+        config?.let { ConfigItemSpec.readFromConfig(it, path) }
+
+    private fun buttonSpec(name: String): ConfigItemSpec? = itemSpec("buttons.$name")
 }

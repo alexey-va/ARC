@@ -12,6 +12,7 @@ import ru.arc.treasure.core.TreasurePool
 import ru.arc.treasure.core.Treasures
 import ru.arc.util.GuiUtils
 import ru.arc.util.TextUtil
+import ru.arc.util.fromConfig
 
 /**
  * Main GUI showing all treasure pools.
@@ -21,11 +22,13 @@ object MainTreasuresGui {
 
     fun create(player: Player): ChestGui {
         val pools = Treasures.getAllPools().sortedBy { it.id }
+        val cfg = TreasureConfig.config()
 
         return gui(
             title = TreasureConfig.Gui.mainTitle,
             rows = ROWS,
             player = player,
+            config = cfg,
         ) {
             navBackground()
 
@@ -34,6 +37,7 @@ object MainTreasuresGui {
                     material(Material.CHEST)
                     display("<yellow>${pool.id}")
                     lore(buildPoolLore(pool))
+                    fromConfig(cfg, "gui.main.pool-item")
                     onClick {
                         GuiUtils.constructAndShowAsync({ PoolGui.create(player, pool) }, player)
                     }
@@ -42,7 +46,7 @@ object MainTreasuresGui {
 
             navBar {
                 back(
-                    configKey = "main.back",
+                    configKey = "gui.main.back",
                     command = TreasureConfig.Gui.mainBackCommand,
                 )
 
@@ -53,6 +57,7 @@ object MainTreasuresGui {
                     material(Material.LIME_DYE)
                     display(TreasureConfig.Gui.mainCreatePool)
                     lore(TreasureConfig.Gui.mainCreatePoolLore)
+                    fromConfig(cfg, "gui.main.create-pool")
                     onClick {
                         TitleInput(player, CreatePoolInput(player), 0)
                         player.closeInventory()

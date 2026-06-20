@@ -20,9 +20,12 @@ import org.bukkit.inventory.ItemStack
 import ru.arc.configs.Config
 import ru.arc.util.GuiUtils
 import ru.arc.util.TextUtil
+import ru.arc.util.applyItemFromConfig
+import ru.arc.util.ItemConfigTarget
+import ru.arc.util.fromConfig
+import ru.arc.util.guiItem
 import ru.arc.util.itemStack
 import ru.arc.util.skullItem
-import ru.arc.util.toGuiItem
 
 /**
  * DSL for building GUIs declaratively.
@@ -423,21 +426,18 @@ class NavBarBuilder(
         material: Material = GuiDefaults.BackButton.material,
         modelData: Int = GuiDefaults.BackButton.modelData,
     ) {
-        val displayKey = "$configKey-display"
-        val loreKey = "$configKey-lore"
         val commandKey = "$configKey-command"
 
-        val stack =
-            itemStack(material) {
-                if (modelData != 0) modelData(modelData)
-                display(config?.string(displayKey) ?: GuiDefaults.BackButton.defaultDisplay)
-                lore(config?.stringList(loreKey) ?: emptyList())
-            }
-
         val item =
-            stack.toGuiItem { click ->
-                val cmd = command ?: config?.string(commandKey) ?: GuiDefaults.BackButton.defaultCommand
-                (click.whoClicked as? Player)?.performCommand(cmd)
+            guiItem(material) {
+                if (modelData != 0) modelData(modelData)
+                display(GuiDefaults.BackButton.defaultDisplay)
+                lore(emptyList())
+                config?.let { fromConfig(it, configKey) }
+                onClick { click ->
+                    val cmd = command ?: config?.string(commandKey) ?: GuiDefaults.BackButton.defaultCommand
+                    (click.whoClicked as? Player)?.performCommand(cmd)
+                }
             }
 
         pane.addItem(item, slot, 0)
@@ -453,17 +453,14 @@ class NavBarBuilder(
         modelData: Int = GuiDefaults.BackButton.modelData,
         action: () -> Unit,
     ) {
-        val displayKey = "$configKey-display"
-        val loreKey = "$configKey-lore"
-
-        val stack =
-            itemStack(material) {
+        val item =
+            guiItem(material) {
                 if (modelData != 0) modelData(modelData)
-                display(config?.string(displayKey) ?: GuiDefaults.BackButton.defaultDisplay)
-                lore(config?.stringList(loreKey) ?: emptyList())
+                display(GuiDefaults.BackButton.defaultDisplay)
+                lore(emptyList())
+                config?.let { fromConfig(it, configKey) }
+                onClick { action() }
             }
-
-        val item = stack.toGuiItem { action() }
 
         pane.addItem(item, slot, 0)
     }
@@ -479,21 +476,17 @@ class NavBarBuilder(
     ) {
         if (paginatedPane == null) return
 
-        val displayKey = "$configKey.name"
-        val loreKey = "$configKey.lore"
-
-        val stack =
-            itemStack(material) {
-                if (modelData != 0) modelData(modelData)
-                display(config?.string(displayKey) ?: GuiDefaults.PrevButton.defaultDisplay)
-                lore(config?.stringList(loreKey) ?: emptyList())
-            }
-
         val item =
-            stack.toGuiItem {
-                if (paginatedPane.page > 0) {
-                    paginatedPane.page = paginatedPane.page - 1
-                    guiBuilder.gui.update()
+            guiItem(material) {
+                if (modelData != 0) modelData(modelData)
+                display(GuiDefaults.PrevButton.defaultDisplay)
+                lore(emptyList())
+                config?.let { fromConfig(it, configKey) }
+                onClick {
+                    if (paginatedPane.page > 0) {
+                        paginatedPane.page = paginatedPane.page - 1
+                        guiBuilder.gui.update()
+                    }
                 }
             }
 
@@ -511,21 +504,17 @@ class NavBarBuilder(
     ) {
         if (paginatedPane == null) return
 
-        val displayKey = "$configKey.name"
-        val loreKey = "$configKey.lore"
-
-        val stack =
-            itemStack(material) {
-                if (modelData != 0) modelData(modelData)
-                display(config?.string(displayKey) ?: GuiDefaults.NextButton.defaultDisplay)
-                lore(config?.stringList(loreKey) ?: emptyList())
-            }
-
         val item =
-            stack.toGuiItem {
-                if (paginatedPane.page < paginatedPane.pages - 1) {
-                    paginatedPane.page = paginatedPane.page + 1
-                    guiBuilder.gui.update()
+            guiItem(material) {
+                if (modelData != 0) modelData(modelData)
+                display(GuiDefaults.NextButton.defaultDisplay)
+                lore(emptyList())
+                config?.let { fromConfig(it, configKey) }
+                onClick {
+                    if (paginatedPane.page < paginatedPane.pages - 1) {
+                        paginatedPane.page = paginatedPane.page + 1
+                        guiBuilder.gui.update()
+                    }
                 }
             }
 
@@ -574,6 +563,7 @@ class ItemBuilder private constructor(
     private var loreComponents: List<Component>? = null
     private var skullUuid: java.util.UUID? = null
     private val tagResolvers = mutableListOf<TagResolver>()
+    private val registeredTagNames = mutableSetOf<String>()
     private var clickHandler: ((InventoryClickEvent) -> Unit)? = null
     private var cancelClick: Boolean = true
     private var itemStack: ItemStack? = null
@@ -614,16 +604,6 @@ class ItemBuilder private constructor(
         this.displayComponent = component
     }
 
-    /**
-     * Set display from config key.
-     */
-    fun displayFromConfig(
-        key: String,
-        default: String = "",
-    ) {
-        this.display = config?.string(key, default) ?: default
-    }
-
     fun lore(lines: List<String>) {
         this.lore = lines
     }
@@ -634,13 +614,6 @@ class ItemBuilder private constructor(
 
     fun loreComponents(components: List<Component>) {
         this.loreComponents = components
-    }
-
-    /**
-     * Set lore from config key.
-     */
-    fun loreFromConfig(key: String) {
-        this.lore = config?.stringList(key) ?: emptyList()
     }
 
     fun skull(uuid: java.util.UUID) {
@@ -655,6 +628,7 @@ class ItemBuilder private constructor(
         name: String,
         value: String,
     ) {
+        registeredTagNames.add(name)
         tagResolvers.add(TagResolver.resolver(name, Tag.inserting(TextUtil.mm(value, true))))
     }
 
@@ -665,6 +639,7 @@ class ItemBuilder private constructor(
         name: String,
         value: Component,
     ) {
+        registeredTagNames.add(name)
         tagResolvers.add(TagResolver.resolver(name, Tag.inserting(value)))
     }
 
@@ -739,6 +714,16 @@ class ItemBuilder private constructor(
     }
 
     /**
+     * Override fields from config when keys exist; code defaults set earlier are kept as fallback.
+     */
+    fun fromConfig(
+        config: Config,
+        path: String,
+    ) {
+        applyItemFromConfig(config, path, GuiItemConfigTarget(this))
+    }
+
+    /**
      * Multi-action click handler builder.
      */
     @GuiDslMarker
@@ -786,6 +771,27 @@ class ItemBuilder private constructor(
                 }
             }
     }
+
+    internal fun peekDisplayDefault(): String? =
+        when {
+            display != null -> display
+            displayComponent != null -> displayComponent?.let { net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().serialize(it) }
+            else -> null
+        }
+
+    internal fun peekLoreDefault(): List<String>? =
+        when {
+            lore.isNotEmpty() -> lore
+            loreComponents != null && loreComponents!!.isNotEmpty() ->
+                loreComponents!!.map { net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().serialize(it) }
+            else -> null
+        }
+
+    internal fun peekModelDataDefault(): Int? = modelData.takeIf { it != 0 }
+
+    internal fun peekMaterialDefault(): Material = material
+
+    internal fun peekRegisteredTagNames(): Set<String> = registeredTagNames.toSet()
 
     fun build(): GuiItem {
         val stack =
@@ -866,6 +872,36 @@ class ItemBuilder private constructor(
     }
 }
 
+private class GuiItemConfigTarget(
+    private val builder: ItemBuilder,
+) : ItemConfigTarget {
+    override fun peekDisplay(): String? = builder.peekDisplayDefault()
+
+    override fun peekLore(): List<String>? = builder.peekLoreDefault()
+
+    override fun peekModelData(): Int? = builder.peekModelDataDefault()
+
+    override fun peekMaterial(): Material? = builder.peekMaterialDefault()
+
+    override fun peekRegisteredTags(): Collection<String> = builder.peekRegisteredTagNames()
+
+    override fun applyDisplay(text: String) {
+        builder.display(text)
+    }
+
+    override fun applyLore(lines: List<String>) {
+        builder.lore(lines)
+    }
+
+    override fun applyModelData(data: Int) {
+        builder.modelData(data)
+    }
+
+    override fun applyMaterial(material: Material) {
+        builder.material(material)
+    }
+}
+
 // ==================== Extension Functions ====================
 
 /**
@@ -896,16 +932,13 @@ fun guiItem(
     loreLines: List<String> = emptyList(),
     modelDataValue: Int = 0,
     onClick: ((InventoryClickEvent) -> Unit)? = null,
-): GuiItem {
-    val stack =
-        itemStack(material) {
-            display(displayName)
-            lore(loreLines)
-            if (modelDataValue != 0) modelData(modelDataValue)
-        }
-
-    return stack.toGuiItem(onClick)
-}
+): GuiItem =
+    ru.arc.util.guiItem(material) {
+        display(displayName)
+        lore(loreLines)
+        if (modelDataValue != 0) modelData(modelDataValue)
+        onClick?.let { handler -> onClick { handler(it) } }
+    }
 
 /**
  * Quick builder for config-driven item.
@@ -917,14 +950,12 @@ fun guiItem(
     modelDataValue: Int = 0,
     tagResolver: TagResolver = TagResolver.standard(),
     onClick: ((InventoryClickEvent) -> Unit)? = null,
-): GuiItem {
-    val stack =
-        itemStack(material) {
-            display(config.string("$keyPrefix.display", "$keyPrefix.name"))
-            lore(config.stringList("$keyPrefix.lore"))
-            tagResolver(tagResolver)
-            if (modelDataValue != 0) modelData(modelDataValue)
-        }
-
-    return stack.toGuiItem(onClick)
-}
+): GuiItem =
+    ru.arc.util.guiItem(material) {
+        display(config.string("$keyPrefix.display", config.string("$keyPrefix.name", keyPrefix)))
+        lore(config.stringList("$keyPrefix.lore"))
+        tagResolver(tagResolver)
+        if (modelDataValue != 0) modelData(modelDataValue)
+        fromConfig(config, keyPrefix)
+        onClick?.let { handler -> onClick { handler(it) } }
+    }

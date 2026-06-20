@@ -52,17 +52,19 @@ fun JobBoostGui(
             // Base boosts (server-wide or permission-based)
             items(baseBoosts) {
                 material(it.material)
-                displayFromConfig(it.displayKey)
-                loreFromConfig(it.loreKey)
+                display("Все <green>+<boost>%")
+                lore(listOf("<gray>Буст от привелегий"))
                 tagResolver(createBaseBoostResolver(job, it.boost))
+                fromConfig(config, it.configPath)
             }
 
             // Individual player boosts
             items(boosts) {
                 material(getMaterialForBoostType(it.type))
-                displayFromConfig("job-menu.boost-display")
-                loreFromConfig("job-menu.boost-lore")
+                display("<gold><type> <green>+<amount>%")
+                lore(listOf("<gray>Истечет через: <expire>", "<gray>ID: <id>"))
                 tagResolver(createBoostResolver(job, it))
+                fromConfig(config, "job-menu.boost")
             }
         }
 
@@ -74,8 +76,9 @@ fun JobBoostGui(
 
             button(4) {
                 material(Material.GREEN_STAINED_GLASS_PANE)
-                displayFromConfig("job-menu.buy-display")
-                loreFromConfig("job-menu.buy-lore")
+                display("<green>Купить буст")
+                lore(emptyList())
+                fromConfig(config, "job-menu.buy")
                 onClick {
                     GuiUtils.constructAndShowAsync({ BuyBoostGuiFactory.create(player, job, config) }, player)
                 }
@@ -89,8 +92,7 @@ fun JobBoostGui(
  */
 private data class BaseBoostInfo(
     val material: Material,
-    val displayKey: String,
-    val loreKey: String,
+    val configPath: String,
     val boost: Double,
 )
 
@@ -117,8 +119,7 @@ private fun getBaseBoosts(
         return listOf(
             BaseBoostInfo(
                 Material.DIAMOND,
-                "job-menu.all-base-boost-display",
-                "job-menu.all-base-boost-lore",
+                "job-menu.all-base-boost",
                 moneyBaseBoost,
             ),
         )
@@ -130,8 +131,7 @@ private fun getBaseBoosts(
             add(
                 BaseBoostInfo(
                     Material.GOLD_INGOT,
-                    "job-menu.money-base-boost-display",
-                    "job-menu.money-base-boost-lore",
+                    "job-menu.money-base-boost",
                     moneyBaseBoost,
                 ),
             )
@@ -140,8 +140,7 @@ private fun getBaseBoosts(
             add(
                 BaseBoostInfo(
                     Material.NETHER_STAR,
-                    "job-menu.points-base-boost-display",
-                    "job-menu.points-base-boost-lore",
+                    "job-menu.points-base-boost",
                     pointsBaseBoost,
                 ),
             )
@@ -150,8 +149,7 @@ private fun getBaseBoosts(
             add(
                 BaseBoostInfo(
                     Material.EXPERIENCE_BOTTLE,
-                    "job-menu.exp-base-boost-display",
-                    "job-menu.exp-base-boost-lore",
+                    "job-menu.exp-base-boost",
                     expBaseBoost,
                 ),
             )

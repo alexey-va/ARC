@@ -15,6 +15,7 @@ import ru.arc.treasure.core.TreasurePool
 import ru.arc.treasure.core.Treasures
 import ru.arc.util.GuiUtils
 import ru.arc.util.TextUtil
+import ru.arc.util.fromConfig
 import ru.arc.util.itemStack
 
 /**
@@ -31,6 +32,7 @@ object PoolGui {
             title = TreasureConfig.Gui.poolTitle.replace("%pool%", pool.id),
             rows = ROWS,
             player = player,
+            config = TreasureConfig.config(),
         ) {
             navBackground()
 
@@ -80,6 +82,7 @@ object PoolGui {
                             add("<red>ПКМ - очистить все")
                         },
                     )
+                    fromConfig(TreasureConfig.config(), "gui.pool.messages")
                     onClick { event ->
                         if (event.isRightClick) {
                             val updated = pool.clearMessages()
@@ -97,6 +100,7 @@ object PoolGui {
                     material(Material.DIAMOND)
                     display(TreasureConfig.Gui.poolAddItem)
                     lore(listOf("<gray>ЛКМ - добавить предмет в руке"))
+                    fromConfig(TreasureConfig.config(), "gui.pool.add-item")
                     onClick {
                         val itemInHand = player.inventory.itemInMainHand
                         if (itemInHand.type != Material.AIR) {
@@ -112,6 +116,7 @@ object PoolGui {
                     material(Material.GOLD_INGOT)
                     display(TreasureConfig.Gui.poolAddMoney)
                     lore(listOf("<gray>ЛКМ - добавить деньги"))
+                    fromConfig(TreasureConfig.config(), "gui.pool.add-money")
                     onClick {
                         TitleInput(player, AddMoneyInput(player, pool.id), 0)
                         player.closeInventory()
@@ -123,6 +128,7 @@ object PoolGui {
                     material(Material.COMMAND_BLOCK)
                     display(TreasureConfig.Gui.poolAddCommand)
                     lore(listOf("<gray>ЛКМ - добавить команду"))
+                    fromConfig(TreasureConfig.config(), "gui.pool.add-command")
                     onClick {
                         TitleInput(player, AddCommandInput(player, pool.id), 0)
                         player.closeInventory()
@@ -134,6 +140,7 @@ object PoolGui {
                     material(Material.BARRIER)
                     display(TreasureConfig.Gui.poolDelete)
                     lore(listOf(TreasureConfig.Gui.poolDeleteConfirm))
+                    fromConfig(TreasureConfig.config(), "gui.pool.delete")
                     onClick { event ->
                         if (event.click == ClickType.SHIFT_LEFT || event.click == ClickType.SHIFT_RIGHT) {
                             Treasures.delete(pool.id)

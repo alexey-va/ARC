@@ -19,7 +19,7 @@ import ru.arc.store.StoreManager
 import ru.arc.util.CooldownManager
 import ru.arc.util.GuiUtils
 import ru.arc.util.Logging.info
-import ru.arc.util.TextUtil
+import ru.arc.util.itemComponents
 import kotlin.math.ceil
 import kotlin.math.min
 
@@ -78,13 +78,10 @@ object StoreGuiFactory {
             }
 
             navBar {
-                val cfg = this@StoreGuiFactory.config // Capture factory config
-                back(
-                    configKey = "store.back",
-                    modelData = cfg.integer("store.back-model-data", 11013),
-                ) {
+                val storeConfig = this@StoreGuiFactory.config
+                back(configKey = "store.back") {
                     player.closeInventory()
-                    player.performCommand(cfg.string("store.back-command"))
+                    player.performCommand(storeConfig.string("store.back-command"))
                 }
             }
         }
@@ -124,12 +121,8 @@ object StoreGuiFactory {
             // Check cooldown
             if (isOnCooldown(player)) {
                 info("On cooldown")
-                GuiUtils.temporaryChange(
-                    guiStack,
-                    config.component("store.cooldown-title", "<red>Подождите..."),
-                    config.componentList("store.cooldown-lore"),
-                    20L,
-                ) {}
+                val (display, lore) = config.itemComponents("store.cooldown")
+                GuiUtils.temporaryChange(guiStack, display, lore, 20L) {}
                 return@create
             }
 
@@ -139,12 +132,8 @@ object StoreGuiFactory {
             val hasInvSpace = player.inventory.firstEmpty() != -1
             if (!hasInvSpace) {
                 info("No space")
-                GuiUtils.temporaryChange(
-                    guiStack,
-                    config.component("store.no-space-title", "<red>Нет места в инвентаре"),
-                    config.componentList("store.no-space-lore"),
-                    60L,
-                ) {}
+                val (display, lore) = config.itemComponents("store.no-space")
+                GuiUtils.temporaryChange(guiStack, display, lore, 60L) {}
                 return@create
             }
 
@@ -171,12 +160,8 @@ object StoreGuiFactory {
                     click.setCursor(storeItem)
                 }
             } else {
-                GuiUtils.temporaryChange(
-                    guiStack,
-                    config.component("store.item-is-gone-display", "<red>Предмет уже забрали"),
-                    config.componentList("store.item-is-gone-lore"),
-                    60L,
-                ) {}
+                val (display, lore) = config.itemComponents("store.item-is-gone")
+                GuiUtils.temporaryChange(guiStack, display, lore, 60L) {}
             }
 
             // Rebuild GUI

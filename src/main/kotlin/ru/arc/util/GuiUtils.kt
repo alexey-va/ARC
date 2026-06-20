@@ -12,7 +12,6 @@ import ru.arc.core.ScheduledTask
 import ru.arc.core.async
 import ru.arc.core.delayed
 import ru.arc.core.ticks
-import ru.arc.gui.GuiItems
 import ru.arc.util.Logging.error
 import ru.arc.util.TextUtil.strip
 import java.util.UUID
@@ -35,19 +34,13 @@ object GuiUtils {
     @JvmStatic
     fun background(material: Material, model: Int): GuiItem {
         val key = BgKey(material, model)
-        val guiItem = backgrounds[key]
-        if (guiItem != null) return guiItem
-
-        val bgItem = ItemStackFactory.create(material)
-        val meta = bgItem.itemMeta
-        @Suppress("DEPRECATION")
-        if (model != 0) meta?.setCustomModelData(model)
-        meta?.displayName(Component.text(" "))
-        bgItem.itemMeta = meta
-        val newGuiItem = GuiItems.create(bgItem) { it.isCancelled = true }
-        backgrounds[key] = newGuiItem
-
-        return newGuiItem
+        return backgrounds.getOrPut(key) {
+            guiItem(material) {
+                display(" ")
+                if (model != 0) modelData(model)
+                onClick { it.isCancelled = true }
+            }
+        }
     }
 
     /**

@@ -1,6 +1,7 @@
 package ru.arc.autobuild.gui
 
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder
+import com.github.stefvanschie.inventoryframework.gui.GuiItem
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui
 import com.github.stefvanschie.inventoryframework.pane.OutlinePane
 import com.github.stefvanschie.inventoryframework.pane.Pane
@@ -8,6 +9,7 @@ import com.github.stefvanschie.inventoryframework.pane.StaticPane
 import com.github.stefvanschie.inventoryframework.pane.util.Slot
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
+import org.bukkit.Material
 import org.bukkit.entity.HumanEntity
 import org.bukkit.entity.Player
 import ru.arc.ARC
@@ -21,8 +23,10 @@ import ru.arc.core.repeating
 import ru.arc.core.ticks
 import ru.arc.util.GuiUtils
 import ru.arc.util.TextUtil
-import ru.arc.util.itemStack
-import ru.arc.util.toGuiItem
+import ru.arc.util.fromConfig
+import ru.arc.util.guiItem
+import ru.arc.util.itemComponents
+import ru.arc.util.itemLore
 
 /**
  * GUI shown during active construction.
@@ -54,13 +58,14 @@ class BuildingGui(
 
     private fun setupButtons() {
         val pane = StaticPane(9, 1)
+        val buildConfig = BuildConfig.config()
 
         // Progress indicator
         val percentage = (site.progress * 100).toInt()
-        val progressStack =
-            itemStack(BuildConfig.BuildingGui.confirmMaterial) {
-                display("<gold>Прогресс строительства")
+        val progressItem =
+            guiItem(Material.PAPER) {
                 lore("<gray>> $percentage%")
+                fromConfig(buildConfig, "building-gui.progress")
             }
 
         // Auto-update progress using Task DSL
@@ -71,66 +76,66 @@ class BuildingGui(
                     viewers.forEach(HumanEntity::closeInventory)
                     return@repeating
                 }
-                progressStack.editMeta { meta ->
+                progressItem.item.editMeta { meta ->
                     val newPercentage = (site.progress * 100).toInt()
                     meta.lore(listOf(TextUtil.strip(Component.text("> $newPercentage%", NamedTextColor.GRAY))))
                 }
                 update()
             }
 
-        pane.addItem(progressStack.toGuiItem(), 2, 0)
+        pane.addItem(progressItem, 2, 0)
 
         // Cancel button with confirmation
-        val cancelStack =
-            itemStack(BuildConfig.BuildingGui.cancelMaterial) {
-                display(BuildConfig.Messages.cancelBuildButton())
-                if (BuildConfig.BuildingGui.cancelModelData != 0) {
-                    modelData(BuildConfig.BuildingGui.cancelModelData)
+        lateinit var cancelItem: GuiItem
+        cancelItem =
+            guiItem(Material.RED_STAINED_GLASS_PANE) {
+                fromConfig(buildConfig, "building-gui.cancel")
+                onClick { event ->
+                    event.isCancelled = true
+                    if (youSure) {
+                        renameTask?.takeIf { !it.isCancelled }?.cancel()
+                        BuildingManager.cancelConstruction(site)
+                        event.whoClicked.closeInventory()
+                    } else {
+                        youSure = true
+                        player.sendMessage(BuildConfig.Messages.cancelConfirmHint())
+                        val (confirmDisplay, _) = buildConfig.itemComponents("building-gui.cancel-confirm")
+                        val cancelLore =
+                            buildConfig.itemLore("building-gui.cancel").map {
+                                TextUtil.strip(TextUtil.mm(it))
+                            }
+                        cancelItem.item.editMeta { meta ->
+                            confirmDisplay?.let { meta.displayName(TextUtil.strip(it)) }
+                            meta.lore(cancelLore.filterNotNull())
+                        }
+
+                        renameTask =
+                            delayed((5 * 20).ticks) {
+                                youSure = false
+                                val (normalDisplay, _) = buildConfig.itemComponents("building-gui.cancel")
+                                cancelItem.item.editMeta { meta ->
+                                    normalDisplay?.let { meta.displayName(TextUtil.strip(it)) }
+                                    meta.lore(null)
+                                }
+                                update()
+                            }
+
+                        update()
+                    }
                 }
             }
 
-        pane.addItem(
-            cancelStack.toGuiItem { event ->
-                event.isCancelled = true
-                if (youSure) {
-                    renameTask?.takeIf { !it.isCancelled }?.cancel()
-                    BuildingManager.cancelConstruction(site)
-                    event.whoClicked.closeInventory()
-                } else {
-                    youSure = true
-                    player.sendMessage(BuildConfig.Messages.cancelConfirmHint())
-                    cancelStack.editMeta { meta ->
-                        meta.displayName(BuildConfig.Messages.cancelConfirmButton())
-                        meta.lore(BuildConfig.Messages.cancelLore())
-                    }
-
-                    renameTask =
-                        delayed((5 * 20).ticks) {
-                            youSure = false
-                            cancelStack.editMeta { meta ->
-                                meta.displayName(BuildConfig.Messages.cancelBuildButton())
-                                meta.lore(null)
-                            }
-                            update()
-                        }
-
-                    update()
-                }
-            },
-            6,
-            0,
-        )
+        pane.addItem(cancelItem, 6, 0)
 
         // Fast finish (admin only)
         if (player.hasPermission("arc.build.fast")) {
-            val fastStack =
-                itemStack(BuildConfig.BuildingGui.fastFinishMaterial) {
-                    display("<green>Мгновенно завершить")
-                }
             pane.addItem(
-                fastStack.toGuiItem { event ->
-                    site.finishInstantly()
-                    event.whoClicked.closeInventory()
+                guiItem(Material.BLAZE_POWDER) {
+                    fromConfig(buildConfig, "building-gui.fast-finish")
+                    onClick { event ->
+                        site.finishInstantly()
+                        event.whoClicked.closeInventory()
+                    }
                 },
                 4,
                 0,
@@ -140,4 +145,3 @@ class BuildingGui(
         addPane(Slot.fromXY(0, 1), pane)
     }
 }
-

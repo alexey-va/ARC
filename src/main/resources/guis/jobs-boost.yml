@@ -26,19 +26,22 @@ type-names:
 # ===========================================
 boostbuy-menu:
   # Back button - returns to jobs list
-  back-display: "<gray>« Назад"
-  back-lore:
+  back:
+    display: "<gray>« Назад"
+    lore:
     - ""
     - "<dark_gray>Вернуться к списку профессий"
-  
+
   # Type switcher button
-  type-display: "<gold>Тип буста: <yellow><type>"
-  type-lore:
+  type:
+    display: "<gold>Тип буста: <yellow><type>"
+    lore:
     - ""
     - "<gray>Нажмите для смены типа"
-  
+
   # Boost item default lore (used if boost has no custom lore)
-  boost-lore:
+  boost:
+    lore:
     - ""
     - "<gray>Бонус: <green>+<boost>"
     - "<gray>Длительность: <white><time>"
@@ -49,23 +52,26 @@ boostbuy-menu:
     - "<gray>У вас: <white><player_currency> <currency>"
     - ""
     - "<yellow>Нажмите для покупки"
-  
+
   # When player already has this boost
-  already-have-boost-display: "<red>У вас уже есть этот буст!"
-  already-have-boost-lore:
+  already-have-boost:
+    display: "<red>У вас уже есть этот буст!"
+    lore:
     - ""
     - "<red>Вы уже приобрели этот буст"
     - "<gray>Дождитесь окончания действия"
-  
+
   # When player doesn't have enough currency
-  not-enough-money: "<red>Недостаточно средств!"
-  not-enough-money-lore:
+  not-enough-money:
+    display: "<red>Недостаточно средств!"
+    lore:
     - ""
     - "<red>Недостаточно <currency>!"
     - "<gray>Нужно ещё: <white><currency_lack>"
-  
+
   # When player doesn't have permission
-  no-permission-lore:
+  no-permission:
+    lore:
     - ""
     - "<red>Требуется разрешение:"
     - "<gray><permission>"
@@ -95,7 +101,7 @@ boosts:
   money:
     small:
       display: "<gold>Малый буст денег"
-      lore: [ ]
+      lore: []
       price: 5000
       boost-amount: 0.1
       seconds: 3600
@@ -104,12 +110,11 @@ boosts:
       model-data: 0
       currency: MONEY
       id: "money_boost_small"
-      jobs: [ "all" ]
-      types: [ "MONEY" ]
-    
+      jobs: ["all"]
+      types: ["MONEY"]
     medium:
       display: "<gold>Средний буст денег"
-      lore: [ ]
+      lore: []
       price: 15000
       boost-amount: 0.25
       seconds: 3600
@@ -118,12 +123,11 @@ boosts:
       model-data: 0
       currency: MONEY
       id: "money_boost_medium"
-      jobs: [ "all" ]
-      types: [ "MONEY" ]
-    
+      jobs: ["all"]
+      types: ["MONEY"]
     large:
       display: "<gold>Большой буст денег"
-      lore: [ ]
+      lore: []
       price: 50000
       boost-amount: 0.5
       seconds: 3600
@@ -132,14 +136,13 @@ boosts:
       model-data: 0
       currency: MONEY
       id: "money_boost_large"
-      jobs: [ "all" ]
-      types: [ "MONEY" ]
-  
+      jobs: ["all"]
+      types: ["MONEY"]
   # Experience boosts
   exp:
     small:
       display: "<aqua>Малый буст опыта"
-      lore: [ ]
+      lore: []
       price: 100
       boost-amount: 0.1
       seconds: 1800
@@ -148,12 +151,11 @@ boosts:
       model-data: 0
       currency: POINTS
       id: "exp_boost_small"
-      jobs: [ "all" ]
-      types: [ "EXP" ]
-    
+      jobs: ["all"]
+      types: ["EXP"]
     medium:
       display: "<aqua>Средний буст опыта"
-      lore: [ ]
+      lore: []
       price: 300
       boost-amount: 0.25
       seconds: 1800
@@ -162,14 +164,13 @@ boosts:
       model-data: 0
       currency: POINTS
       id: "exp_boost_medium"
-      jobs: [ "all" ]
-      types: [ "EXP" ]
-  
+      jobs: ["all"]
+      types: ["EXP"]
   # Points boosts
   points:
     small:
       display: "<light_purple>Малый буст очков"
-      lore: [ ]
+      lore: []
       price: 500
       boost-amount: 0.1
       seconds: 3600
@@ -178,7 +179,7 @@ boosts:
       model-data: 0
       currency: EXP
       id: "points_boost_small"
-      jobs: [ "all" ]
-      types: [ "POINTS" ]
+      jobs: ["all"]
+      types: ["POINTS"]
 
 

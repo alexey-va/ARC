@@ -5,6 +5,8 @@ import org.bukkit.Location
 import org.bukkit.Material
 import ru.arc.stock.StockClient
 import ru.arc.stock.StockMarket
+import ru.arc.util.ItemStackDslBuilder
+import ru.arc.util.fromConfig
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import java.util.TreeMap
@@ -159,4 +161,8 @@ object StockConfig {
                 }
             }
         }
+
+    /** Loaded stock YAML — use [ru.arc.util.fromConfig] with paths under `locale.*`. */
+    @JvmStatic
+    fun config(): Config = config
 }

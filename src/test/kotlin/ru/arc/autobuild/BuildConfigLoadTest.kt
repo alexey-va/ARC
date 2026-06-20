@@ -6,6 +6,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import ru.arc.KotestTestBase
 import ru.arc.autobuild.BuildConfig
+import ru.arc.util.ConfigItemSpec
 
 /**
  * Verifies that [BuildConfig] reads values from the bundled `modules/auto-build.yml`.
@@ -56,15 +57,17 @@ class BuildConfigLoadTest : KotestTestBase({
         }
 
         it("confirm-gui cancel material is RED_STAINED_GLASS_PANE") {
-            BuildConfig.ConfirmGui.cancelMaterial shouldBe Material.RED_STAINED_GLASS_PANE
+            ConfigItemSpec.readFromConfig(BuildConfig.config(), "confirm-gui.cancel")?.material shouldBe
+                Material.RED_STAINED_GLASS_PANE
         }
 
         it("confirm-gui confirm material is PAPER") {
-            BuildConfig.ConfirmGui.confirmMaterial shouldBe Material.PAPER
+            ConfigItemSpec.readFromConfig(BuildConfig.config(), "confirm-gui.confirm")?.material shouldBe Material.PAPER
         }
 
         it("building-gui fast finish material is BLAZE_POWDER") {
-            BuildConfig.BuildingGui.fastFinishMaterial shouldBe Material.BLAZE_POWDER
+            ConfigItemSpec.readFromConfig(BuildConfig.config(), "building-gui.fast-finish")?.material shouldBe
+                Material.BLAZE_POWDER
         }
 
         it("npc skins map is non-empty") {

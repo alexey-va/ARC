@@ -13,13 +13,16 @@ import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.event.inventory.InventoryClickEvent
 import ru.arc.configs.StockConfig
+import ru.arc.util.fromConfig
 import ru.arc.core.modules.EconomyModule
 import ru.arc.stock.StockPlayer
 import ru.arc.stock.StockPlayerManager
 import ru.arc.util.GuiUtils
-import ru.arc.util.ItemStackBuilder
 import ru.arc.util.TextUtil
 import ru.arc.util.TextUtil.mm
+import ru.arc.util.guiItem
+import ru.arc.util.itemComponents
+import ru.arc.util.itemStack
 import kotlin.math.max
 
 class ProfileMenu(
@@ -50,19 +53,17 @@ class ProfileMenu(
         val pane = StaticPane(9, 1)
         this.addPane(Slot.fromXY(0, 1), pane)
 
-        back = ItemStackBuilder(Material.BLUE_STAINED_GLASS_PANE)
-            .display(StockConfig.string("profile-menu.back-display"))
-            .lore(StockConfig.stringList("profile-menu.back-lore"))
-            .modelData(11013)
-            .toGuiItemBuilder()
-            .clickEvent { click ->
+        back = guiItem(Material.BLUE_STAINED_GLASS_PANE) {
+            onClick { click ->
                 click.isCancelled = true
                 if (previous == 0) {
                     GuiUtils.constructAndShowAsync({ SymbolSelector(stockPlayer) }, click.whoClicked)
                 } else if (previous == 1) {
                     GuiUtils.constructAndShowAsync({ PositionSelector(stockPlayer, symbol) }, click.whoClicked)
                 }
-            }.build()
+            }
+            fromConfig(StockConfig.config(), "locale.profile-menu.back")
+        }
         pane.addItem(back, 0, 0)
     }
 
@@ -71,41 +72,65 @@ class ProfileMenu(
         this.addPane(Slot.fromXY(0, 0), staticPane)
         val tagResolver = stockPlayer.tagResolver()
 
-        statistic = ItemStackBuilder(Material.PAPER)
-            .display(StockConfig.string("profile-menu.statistic-display"))
-            .lore(StockConfig.stringList("profile-menu.statistic-lore"))
-            .tagResolver(tagResolver)
-            .toGuiItemBuilder()
-            .clickEvent { click -> click.isCancelled = true }.build()
+        statistic = guiItem(Material.PAPER) {
+            onClick { click -> click.isCancelled = true }
+            display("<yellow>Статистика")
+            lore(listOf(
+                "<gray>Текущая прибыль: <gains><white>💰",
+                "<gray>Общая прибыль: <total_gains><white>💰",
+                "<gray>Получено дивидендов: <received_dividends><white>💰",
+                "<gray>Количество позиций: <position_count>",
+            ))
+            tagResolver(tagResolver)
+            fromConfig(StockConfig.config(), "locale.profile-menu.statistic")
+        }
         staticPane.addItem(statistic, 1, 0)
 
-        balance = ItemStackBuilder(Material.STICK)
-            .modelData(11138)
-            .display(StockConfig.string("profile-menu.balance-display"))
-            .lore(StockConfig.stringList("profile-menu.balance-lore"))
-            .tagResolver(tagResolver)
-            .toGuiItemBuilder()
-            .clickEvent(::acceptBalanceClick).build()
+        balance = guiItem(Material.STICK) {
+            onClick(::acceptBalanceClick)
+            display("<gold>Баланс")
+            lore(listOf(
+                "<gray>Баланс: <balance><white>💰",
+                "<gray>Суммарный баланс: <total_balance><white>💰",
+            ))
+            tagResolver(tagResolver)
+            fromConfig(StockConfig.config(), "locale.profile-menu.balance")
+        }
         staticPane.addItem(balance, 3, 0)
 
-        auto = ItemStackBuilder(Material.LEVER)
-            .display(StockConfig.string("profile-menu.auto-take-display"))
-            .lore(StockConfig.stringList("profile-menu.auto-take-lore"))
-            .tagResolver(tagResolver)
-            .toGuiItemBuilder()
-            .clickEvent { click ->
+        auto = guiItem(Material.LEVER) {
+            onClick { click ->
                 click.isCancelled = true
                 stockPlayer.updateAutoTake(!stockPlayer.autoTake)
-                auto.setItem(
-                    ItemStackBuilder(Material.LEVER)
-                        .display(StockConfig.string("profile-menu.auto-take-display"))
-                        .lore(StockConfig.stringList("profile-menu.auto-take-lore"))
-                        .tagResolver(stockPlayer.tagResolver()).build()
-                )
+                auto.setItem(buildAutoTakeItem())
                 update()
-            }.build()
+            }
+            display("<green>Автоматически пополнять счет")
+            lore(listOf("<gray>Включено: <auto_take>"))
+            tagResolver(tagResolver)
+            fromConfig(StockConfig.config(), "locale.profile-menu.auto-take")
+        }
         staticPane.addItem(auto, 5, 0)
     }
+
+    private fun buildAutoTakeItem() =
+        itemStack(Material.LEVER) {
+            display("<green>Автоматически пополнять счет")
+            lore(listOf("<gray>Включено: <auto_take>"))
+            tagResolver(stockPlayer.tagResolver())
+            fromConfig(StockConfig.config(), "locale.profile-menu.auto-take")
+        }
+
+    private fun buildBalanceItem() =
+        itemStack(Material.STICK) {
+            display("<gold>Баланс")
+            lore(listOf(
+                "<gray>Баланс: <balance><white>💰",
+                "<gray>Суммарный баланс: <total_balance><white>💰",
+            ))
+            tagResolver(stockPlayer.tagResolver())
+            fromConfig(StockConfig.config(), "locale.profile-menu.balance")
+        }
 
     private fun getNewBalance(click: InventoryClickEvent): Double {
         var newBalance = stockPlayer.getBalance()
@@ -130,12 +155,9 @@ class ProfileMenu(
         val totalGains = stockPlayer.totalGainsList()
 
         if (totalGains < 0 && Math.abs(totalGains) > newBalance) {
-            GuiUtils.temporaryChange(
-                balance.item,
-                mm(StockConfig.string("profile-menu.will-go-bankrupt-display")),
-                StockConfig.stringList("profile-menu.will-go-bankrupt-lore").map { TextUtil.mm(it) },
-                100L, ::update
-            )
+            val stockConfig = StockConfig.config()
+            val (display, lore) = stockConfig.itemComponents("locale.profile-menu.will-go-bankrupt")
+            GuiUtils.temporaryChange(balance.item, display, lore, 100L, ::update)
             this.update()
             return
         }
@@ -147,24 +169,15 @@ class ProfileMenu(
             val resolver = TagResolver.resolver("player_balance", Tag.inserting(
                 mm(TextUtil.formatAmount(playerBalance), true)
             ))
-            GuiUtils.temporaryChange(
-                balance.item,
-                mm(StockConfig.string("profile-menu.not-enough-money-display"), resolver),
-                StockConfig.stringList("profile-menu.not-enough-money-lore").map { mm(it, resolver) },
-                100L, ::update
-            )
+            val stockConfig = StockConfig.config()
+            val (display, lore) = stockConfig.itemComponents("locale.profile-menu.not-enough-money", resolver)
+            GuiUtils.temporaryChange(balance.item, display, lore, 100L, ::update)
             this.update()
             return
         }
 
         StockPlayerManager.addToTradingBalanceFromVault(stockPlayer, diff)
-        balance.setItem(
-            ItemStackBuilder(Material.STICK)
-                .modelData(11138)
-                .display(StockConfig.string("profile-menu.balance-display"))
-                .lore(StockConfig.stringList("profile-menu.balance-lore"))
-                .tagResolver(stockPlayer.tagResolver()).build()
-        )
+        balance.setItem(buildBalanceItem())
         this.update()
     }
 }

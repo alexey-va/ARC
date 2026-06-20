@@ -1,0 +1,40 @@
+shop:
+  reset-ticks: 6000
+  rows: 6
+  title: '&8Магазин EliteMobs'
+  gear-size: 45
+  trinket-size: 45
+  remove-last-lore: 0
+  item-price:
+    lore:
+      - '<gray>Цена: <green><price>'
+      - ' '
+  change:
+    display: <gold>Сменить тип товаров
+    lore:
+      - '<gray>Текущий тип: <green><type>'
+  update:
+    display: <gold>Обновление ассортимента
+    lore:
+      - '<gray>Обновление через: <green><update_minutes> минут'
+    customModelData: 31173
+  not-enough-money:
+    display: <dark_red>Недостаточно денег
+    lore:
+      - '<gray>Нужно: <cost>'
+      - '<gray>У вас: <balance>'
+  not-enough-space: <red>Нет места в инвентаре
+wormholes:
+  period-ticks: 5
+  particle: DUST
+  particle-offset: 0.5
+  particle-extra: 0.02
+  particle-count: 20
+chests:
+  particle-distance: 20
+  particle: END_ROD
+  particle-count: 3
+  particle-offset: 0.5
+  particle-extra: 0.05
+  distance: 20.0
+  sound: ambient.basalt_deltas.additions

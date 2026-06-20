@@ -17,6 +17,12 @@ import kotlin.reflect.KProperty
 @DslMarker
 annotation class TagBuilderMarker
 
+/** Block comment for editable MiniMessage placeholders (used by [Config.component] and item inject). */
+fun formatAvailableTagsComment(tagNames: Collection<String>): String? {
+    if (tagNames.isEmpty()) return null
+    return "Available tags: " + tagNames.sorted().joinToString(", ") { "<$it>" }
+}
+
 /**
  * Builder for creating TagResolver instances with a fluent API.
  *

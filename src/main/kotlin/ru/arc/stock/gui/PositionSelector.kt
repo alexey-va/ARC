@@ -18,15 +18,17 @@ import org.bukkit.entity.Player
 import org.bukkit.scheduler.BukkitTask
 import ru.arc.ARC
 import ru.arc.configs.StockConfig
+import ru.arc.util.fromConfig
 import ru.arc.stock.Position
 import ru.arc.stock.StockPlayer
 import ru.arc.util.GuiUtils
 import ru.arc.util.GuiUtils.cooldownCheck
-import ru.arc.util.ItemStackBuilder
 import ru.arc.util.TextUtil
 import ru.arc.util.TextUtil.formatAmount
 import ru.arc.util.TextUtil.mm
 import ru.arc.util.TextUtil.strip
+import ru.arc.util.guiItem
+import ru.arc.util.guiSkull
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
@@ -93,49 +95,84 @@ class PositionSelector(
         this.addPane(Slot.fromXY(0, rows - 1), pane)
         val tagResolver = customResolver()
 
-        back = ItemStackBuilder(Material.BLUE_STAINED_GLASS_PANE)
-            .display(StockConfig.string("position-selector.back-display"))
-            .lore(StockConfig.stringList("position-selector.back-lore"))
-            .tagResolver(tagResolver)
-            .modelData(11013)
-            .toGuiItemBuilder()
-            .clickEvent { click ->
+        back = guiItem(Material.BLUE_STAINED_GLASS_PANE) {
+            onClick { click ->
                 click.isCancelled = true
                 GuiUtils.constructAndShowAsync({ SymbolSelector(stockPlayer) }, click.whoClicked)
-            }.build()
+            }
+            display("<gray>Назад")
+            lore(emptyList())
+            tagResolver(tagResolver)
+            modelData(11013)
+            fromConfig(StockConfig.config(), "locale.position-selector.back")
+        }
         pane.addItem(back, 0, 0)
 
         val canHaveMore = stockPlayer.isBelowMaxStockAmount() && !(positions != null && positions!!.size >= 9)
         if (symbol != null) {
-            create = ItemStackBuilder(if (canHaveMore) Material.GREEN_STAINED_GLASS_PANE else Material.RED_STAINED_GLASS_PANE)
-                .display(if (canHaveMore) StockConfig.string("position-selector.create-display") else StockConfig.string("position-selector.create-display-limit"))
-                .lore(if (canHaveMore) StockConfig.stringList("position-selector.create-lore") else StockConfig.stringList("position-selector.create-lore-limit"))
-                .tagResolver(tagResolver)
-                .appendResolver("max_stock_amount", stockPlayer.maxStockAmount().toString())
-                .toGuiItemBuilder()
-                .clickEvent { click ->
+            create = guiItem(
+                if (canHaveMore) Material.GREEN_STAINED_GLASS_PANE else Material.RED_STAINED_GLASS_PANE,
+            ) {
+                onClick { click ->
                     click.isCancelled = true
                     val more = stockPlayer.isBelowMaxStockAmount() && !(positions != null && positions!!.size >= 9)
-                    if (!more) return@clickEvent
-                    if (!cooldownCheck(back, click.whoClicked.uniqueId, this)) return@clickEvent
+                    if (!more) return@onClick
+                    if (!cooldownCheck(back, click.whoClicked.uniqueId, this@PositionSelector)) return@onClick
                     val player = click.whoClicked as Player
                     if (player.hasPermission("arc.stocks.buy")) {
                         GuiUtils.constructAndShowAsync({ PositionCreator(stockPlayer, symbol) }, click.whoClicked)
                     } else player.sendMessage(TextUtil.noPermissions())
-                }.build()
+                }
+                if (canHaveMore) {
+                    display("              <gold>Купить")
+                    lore(listOf(
+                        "             <gray><strikethrough>             ",
+                        "",
+                        "      <white>💼 У вас позиций: <position_count>",
+                        "      <white>🛑 Ваш лимит: <max_stock_amount>",
+                        "",
+                        "   <#8c8c8c>• <#92bed8>Нажмите <#e6fff3>чтобы открыть <#8c8c8c>•  ",
+                        "",
+                    ))
+                    tagResolver(tagResolver)
+                    tag("max_stock_amount", stockPlayer.maxStockAmount().toString())
+                    fromConfig(StockConfig.config(), "locale.position-selector.create")
+                } else {
+                    display(" <red>Вы достигли лимита активов ")
+                    lore(listOf(
+                        "            <gray><strikethrough>               ",
+                        "",
+                        "    <white>💼 У вас позиций: <#4CAF50><position_amount>",
+                        "    <white>🛑 Ваш лимит: <#E91E63><max_stock_amount>",
+                        "    <white>🛑 Максимум в <yellow><symbol><white>: <#E91E63>9",
+                        "",
+                    ))
+                    tagResolver(tagResolver)
+                    tag("max_stock_amount", stockPlayer.maxStockAmount().toString())
+                    fromConfig(StockConfig.config(), "locale.position-selector.create-limit")
+                }
+            }
             pane.addItem(create, 4, 0)
         }
 
-        profile = ItemStackBuilder(Material.PLAYER_HEAD)
-            .skull(stockPlayer.playerUuid)
-            .tagResolver(tagResolver)
-            .display(StockConfig.string("position-selector.profile-display"))
-            .lore(StockConfig.stringList("position-selector.profile-lore"))
-            .toGuiItemBuilder()
-            .clickEvent { click ->
+        profile = guiSkull(stockPlayer.playerUuid) {
+            onClick { click ->
                 click.isCancelled = true
                 GuiUtils.constructAndShowAsync({ ProfileMenu(stockPlayer, 1, symbol) }, click.whoClicked)
-            }.build()
+            }
+            tagResolver(tagResolver)
+            display("              <gold>Профиль")
+            lore(listOf(
+                "             <gray><strikethrough>             ",
+                "",
+                "      <white>₪ Ваш баланс: <#2196F3><balance><white>💰  ",
+                "      <white>💼 Всего позиций: <#4CAF50><position_count>",
+                "",
+                "   <#8c8c8c>• <#92bed8>Нажмите <#e6fff3>чтобы пополнить <#8c8c8c>•  ",
+                "",
+            ))
+            fromConfig(StockConfig.config(), "locale.position-selector.profile")
+        }
         pane.addItem(profile, 8, 0)
     }
 
@@ -149,20 +186,49 @@ class PositionSelector(
 
     private fun positionItem(position: Position): GuiItem {
         val autoClosePrices = position.marginCallAtPrice(stockPlayer.getBalance(), stockPlayer.autoTake)
-        return ItemStackBuilder(position.iconMaterial)
-            .display(StockConfig.string("position-selector.position-display"))
-            .lore(StockConfig.stringList("position-selector.position-lore"))
-            .tagResolver(position.resolver())
-            .appendResolver("close_at_low", if (autoClosePrices.low == -1.0) "<red>Нет" else formatAmount(autoClosePrices.low))
-            .appendResolver("close_at_high", if (autoClosePrices.high == -1.0) "<red>Нет" else formatAmount(autoClosePrices.high))
-            .toGuiItemBuilder()
-            .clickEvent { click ->
+        return guiItem(position.iconMaterial) {
+            onClick { click ->
                 click.isCancelled = true
                 GuiUtils.constructAndShowAsync(
                     { PositionMenu(stockPlayer, position, symbol == null) },
                     click.whoClicked
                 )
-            }.build()
+            }
+            display("                    <dark_gray>💼 <gold><uuid> <dark_gray>💼")
+            lore(listOf(
+                "                     <gray><strikethrough>               ",
+                "",
+                "  <white>🔍 Символ: <gold><symbol>  ",
+                "  <white>۞ Текущая прибыль: <#4CAF50><position_gains><white>💰  ",
+                "  <white>🔥 Комиссия при покупке: <#4CAF50><commission><white>💰  ",
+                "  <white>📈 Общая прибыль без дивидендов: <#4CAF50><total_position_gains><white>💰  ",
+                "  <white>💸 Получено дивидендов: <#FF9800><received_dividend><white>💰  ",
+                "  <white>🔄 Дивиденды за цикл: <#FF9800><dividend_amount><white>💰  ",
+                "  <white>₪ Общая прибыль с дивидендами: <#FF9800><total_gains_with_dividends><white>💰  ",
+                "",
+                "  <white>📄 Тип: <#E91E63><type>  ",
+                "  <white>🔢 Количество: <#E91E63><amount>  ",
+                "  <white>📈 Верхняя граница маржи: <#E91E63><upper><white>💰  ",
+                "  <white>📉 Нижняя граница маржи: <#E91E63><lower><white>💰  ",
+                "  <white>🛑 Авто закроется при падении до: <#E91E63><close_at_low><white>💰  ",
+                "  <white>🛑 Авто закроется при росте до: <#E91E63><close_at_high><white>💰  ",
+                "",
+                "  <white>🏁 Начальная цена: <#E91E63><starting_price><white>💰  ",
+                "  <white>🛒 Цена покупки: <#E91E63><buy_price><white>💰  ",
+                "  <white>🔍 Текущая цена актива: <#E91E63><stock_price><white>💰  ",
+                "  <white>⚖ Рычаг: <#E91E63><leverage>  ",
+                "  <white>💹 Стоимость с учетом рычага: <#E91E63><leveraged_price><white>💰  ",
+                "  <white> ",
+                "  <white>⌛ Куплено часов назад: <#E91E63><hours_since_bought>  ",
+                "",
+                "           <#8c8c8c>• <#92bed8>Нажмите <#e6fff3>чтобы закрыть <#8c8c8c>•  ",
+                "",
+            ))
+            tagResolver(position.resolver())
+            tag("close_at_low", if (autoClosePrices.low == -1.0) "<red>Нет" else formatAmount(autoClosePrices.low))
+            tag("close_at_high", if (autoClosePrices.high == -1.0) "<red>Нет" else formatAmount(autoClosePrices.high))
+            fromConfig(StockConfig.config(), "locale.position-selector.position")
+        }
     }
 
     private fun setupBackground() {

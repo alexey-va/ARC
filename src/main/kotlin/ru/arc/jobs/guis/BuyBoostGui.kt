@@ -18,8 +18,9 @@ import ru.arc.jobs.JobsModule
 import ru.arc.util.GuiUtils
 import ru.arc.util.TextUtil
 import ru.arc.util.TextUtil.formatAmount
-import ru.arc.util.itemStack
-import ru.arc.util.toGuiItem
+import ru.arc.util.guiItem
+import ru.arc.util.itemComponents
+import ru.arc.util.itemLore
 
 /**
  * Factory for creating BuyBoostGui.
@@ -91,9 +92,10 @@ object BuyBoostGuiFactory {
                 button(0) {
                     material(Material.BLUE_STAINED_GLASS_PANE)
                     modelData(11013)
-                    displayFromConfig("boostbuy-menu.back-display")
-                    loreFromConfig("boostbuy-menu.back-lore")
+                    display("<gray>« Назад")
+                    lore(emptyList())
                     tagResolver(typeResolver)
+                    fromConfig(config, "boostbuy-menu.back")
                     onClick {
                         GuiUtils.constructAndShowAsync({ createJobsListGui(config, player) }, it.whoClicked)
                     }
@@ -106,9 +108,10 @@ object BuyBoostGuiFactory {
                     val typeData = getTypeStackData(activeType)
                     material(typeData.material)
                     modelData(typeData.modelData)
-                    displayFromConfig("boostbuy-menu.type-display")
-                    loreFromConfig("boostbuy-menu.type-lore")
+                    display("<gold>Тип буста: <yellow><type>")
+                    lore(listOf("", "<gray>Нажмите для смены типа"))
                     tagResolver(typeResolver)
+                    fromConfig(config, "boostbuy-menu.type")
                     onClick {
                         val nextType = getNextType(activeType, nonEmptyTypes)
                         GuiUtils.constructAndShowAsync({ create(player, job, config, nextType) }, player)
@@ -191,21 +194,14 @@ object BuyBoostGuiFactory {
 
         val lore =
             when {
-                hasBoost -> {
-                    config.stringList("boostbuy-menu.already-have-boost-lore")
-                }
+                hasBoost -> config.itemLore("boostbuy-menu.already-have-boost")
 
-                boost.permission.isNotEmpty() && !player.hasPermission(boost.permission) -> {
-                    config.stringList("boostbuy-menu.no-permission-lore")
-                }
+                boost.permission.isNotEmpty() && !player.hasPermission(boost.permission) ->
+                    config.itemLore("boostbuy-menu.no-permission")
 
-                !economyCheck.hasEnough -> {
-                    config.stringList("boostbuy-menu.not-enough-money-lore")
-                }
+                !economyCheck.hasEnough -> config.itemLore("boostbuy-menu.not-enough-money")
 
-                else -> {
-                    boost.lore.ifEmpty { config.stringList("boostbuy-menu.boost-lore") }
-                }
+                else -> boost.lore.ifEmpty { config.itemLore("boostbuy-menu.boost") }
             }
 
         val playerCurrency = getCurrency(player, boost.currency)
@@ -213,71 +209,58 @@ object BuyBoostGuiFactory {
         val typeStr = if (allTypes) "Все" else boost.types.joinToString(", ") { it.name }
         val jobStr = if (allJobs) "Все" else boost.jobs.joinToString(", ") { JobsModule.jobDisplayMinimessage(it) }
 
-        val stack =
-            itemStack(boost.material) {
-                display(boost.display)
-                modelData(boost.modelData)
+        return guiItem(boost.material) {
+            display(boost.display)
+            modelData(boost.modelData)
 
-                tags {
-                    "price" to formatAmount(boost.price)
-                    "boost" to boostAmountStr
-                    "currency" to currencyName
-                    "permission" to boost.permission.ifEmpty { "Нет" }
-                    "time" to "${boost.seconds / 60} минут"
-                    "type" to typeStr
-                    "job" to jobStr
-                    "player_currency" to formatAmount(playerCurrency)
-                    "currency_lack" to formatAmount(economyCheck.currencyNeeded)
+            tags {
+                "price" to formatAmount(boost.price)
+                "boost" to boostAmountStr
+                "currency" to currencyName
+                "permission" to boost.permission.ifEmpty { "Нет" }
+                "time" to "${boost.seconds / 60} минут"
+                "type" to typeStr
+                "job" to jobStr
+                "player_currency" to formatAmount(playerCurrency)
+                "currency_lack" to formatAmount(economyCheck.currencyNeeded)
+            }
+
+            lore(lore)
+            flags(ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_ATTRIBUTES)
+
+            if (hasBoost) {
+                enchantUnsafe(Enchantment.VANISHING_CURSE, 1)
+            }
+
+            onClick { click ->
+                click.isCancelled = true
+
+                if (JobsModule.hasBoost(player, boost.id)) {
+                    val (display, _) = config.itemComponents("boostbuy-menu.already-have-boost")
+                    GuiUtils.temporaryChange(click.currentItem!!, display, null, 60) {}
+                    return@onClick
                 }
 
-                lore(lore)
-                flags(ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_ATTRIBUTES)
-
-                if (hasBoost) {
-                    enchantUnsafe(Enchantment.VANISHING_CURSE, 1)
+                val ec = checkEconomy(player, boost.currency, boost.price)
+                if (!ec.hasEnough) {
+                    val (display, _) = config.itemComponents("boostbuy-menu.not-enough-money")
+                    GuiUtils.temporaryChange(click.currentItem!!, display, null, 60) {}
+                    return@onClick
                 }
+
+                takeCurrency(player, boost.currency, boost.price)
+
+                JobsModule.addBoost(
+                    player.uniqueId,
+                    boost.jobs,
+                    boost.boostAmount,
+                    System.currentTimeMillis() + boost.seconds * 1000L,
+                    boost.id,
+                    boost.types,
+                )
+
+                onPurchase()
             }
-
-        return stack.toGuiItem { click ->
-            click.isCancelled = true
-
-            // Check if already has boost
-            if (JobsModule.hasBoost(player, boost.id)) {
-                GuiUtils.temporaryChange(
-                    click.currentItem!!,
-                    TextUtil.mm(config.string("boostbuy-menu.already-have-boost-display"), true),
-                    null,
-                    60,
-                ) {}
-                return@toGuiItem
-            }
-
-            // Check economy
-            val ec = checkEconomy(player, boost.currency, boost.price)
-            if (!ec.hasEnough) {
-                GuiUtils.temporaryChange(
-                    click.currentItem!!,
-                    TextUtil.mm(config.string("boostbuy-menu.not-enough-money"), true),
-                    null,
-                    60,
-                ) {}
-                return@toGuiItem
-            }
-
-            // Purchase
-            takeCurrency(player, boost.currency, boost.price)
-
-            JobsModule.addBoost(
-                player.uniqueId,
-                boost.jobs,
-                boost.boostAmount,
-                System.currentTimeMillis() + boost.seconds * 1000L,
-                boost.id,
-                boost.types,
-            )
-
-            // Refresh GUI
-            onPurchase()
         }
     }
 

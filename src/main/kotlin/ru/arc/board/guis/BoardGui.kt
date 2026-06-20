@@ -54,9 +54,10 @@ object BoardGuiFactory {
                 // Back button
                 button(0) {
                     material(Material.BLUE_STAINED_GLASS_PANE)
-                    display(cfg.string("board-menu.back-display", "<gray>« Назад"))
-                    lore(cfg.stringList("board-menu.back-lore"))
-                    modelData(cfg.integer("board-menu.back-model-data", 11013))
+                    display("<gray>« Назад")
+                    lore(emptyList())
+                    modelData(11013)
+                    fromConfig(cfg, "board-menu.back")
 
                     onClick { event ->
                         val clicker = event.whoClicked as Player
@@ -67,10 +68,17 @@ object BoardGuiFactory {
                 // Publish button (player skull)
                 button(8) {
                     skull(player.uniqueId)
-                    display(cfg.string("board-menu.publish-display", "<green>Опубликовать"))
-                    lore(cfg.stringList("board-menu.publish-lore"))
+                    display("<green>Опубликовать объявление")
+                    lore(
+                        listOf(
+                            "<gray>Стоимость: <gold><cost>",
+                            "",
+                            "<yellow>Нажмите для создания",
+                        ),
+                    )
                     tag("cost", formatAmount(BoardConfig.publishCost))
-                    modelData(cfg.integer("board-menu.publish-model-data", 11010))
+                    modelData(11010)
+                    fromConfig(cfg, "board-menu.publish")
 
                     onClick { event ->
                         val clicker = event.whoClicked as Player

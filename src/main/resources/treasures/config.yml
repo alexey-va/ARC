@@ -1,0 +1,92 @@
+# Treasure admin GUI — nested item blocks for fromConfig(config, "gui....")
+
+gui:
+  main:
+    title: <dark_gray>Пулы наград
+    back-command: menu
+    back:
+      display: <red>Назад
+      lore: []
+    create-pool:
+      display: <green>Создать пул
+      lore: []
+    create-pool-start: <green>Введите ID нового пула!
+    create-pool-deny: <red>Пул с таким ID уже существует
+    pool-item:
+      lore:
+        - '<gray>Предметов: <white>%size%'
+        - '<gray>Общий вес: <white>%weight%'
+  pool:
+    title: <dark_gray>%pool%
+    messages:
+      display: <yellow>Сообщения пула
+    add-item:
+      display: <green>Добавить предмет
+      lore:
+        - <gray>ЛКМ - добавить предмет в руке
+    add-money:
+      display: <gold>Добавить деньги
+      lore:
+        - <gray>ЛКМ - добавить деньги
+    add-command:
+      display: <aqua>Добавить команду
+      lore:
+        - <gray>ЛКМ - добавить команду
+    delete:
+      display: <red>Удалить пул
+      lore:
+        - <red>Shift+Click для подтверждения
+  treasure:
+    title: <dark_gray>Редактирование
+    weight:
+      display: <yellow>Вес: <white>%weight%
+      lore:
+        - <gray>ЛКМ - изменить вес
+    amount:
+      display: <yellow>Количество: <white>%min%-%max%
+      lore:
+        - <gray>ЛКМ - изменить количество
+    messages:
+      display: <yellow>Сообщения
+    delete:
+      display: <red>Удалить
+      lore:
+        - <gray>ЛКМ - удалить
+
+input:
+  weight: <green>Введите вес (число)
+  weight-invalid: <red>Вес должен быть числом
+  amount: <green>Введите количество (число или мин-макс)
+  amount-invalid: <red>Неверный формат количества
+  message: <green>Введите текст сообщения
+  message-invalid: <red>Неверное сообщение
+  command: <green>Введите команду
+  command-invalid: <red>Неверная команда
+  money-amount: <green>Введите сумму (число или мин-макс)
+  money-amount-invalid: <red>Неверный формат суммы
+
+defaults:
+  item-received: <green>Вы получили: <yellow>%item% x%amount%
+  money-received: <dark_green>Вы получили <yellow>%amount%<dark_green> монет
+  enchant-received: <light_purple>Вы получили зачарованную книгу!
+  potion-received: <dark_purple>Вы получили зелье!
+  global-announce: <gold>%player% <yellow>получил награду!
+
+messages:
+  pool-created: <green>Пул создан: <yellow>%pool%
+  pool-deleted: <red>Пул удален: <yellow>%pool%
+  treasure-added: <green>Награда добавлена
+  treasure-removed: <red>Награда удалена
+  treasure-updated: <yellow>Награда обновлена
+
+message-types:
+  chat: Чат
+  action-bar: Экшн бар
+  boss-bar: Босс бар
+  title: Заголовок
+
+message-targets:
+  player: Игроку
+  server: Серверу
+  global: Всем серверам
+  nearby: Ближайшим

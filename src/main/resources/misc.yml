@@ -52,36 +52,36 @@ portal:
   command-portals: true
   # Подкоманды, которые не открывают портал
   excluded-sub-commands:
-    - about
-    - addwarps
-    - amount
-    - ban
-    - category
-    - desc
-    - favourite
-    - icon
-    - list
-    - open
-    - rate
-    - reload
-    - set
-    - setowner
-    - remove
-    - removeall
-    - rename
-    - reset
+  - about
+  - addwarps
+  - amount
+  - ban
+  - category
+  - desc
+  - favourite
+  - icon
+  - list
+  - open
+  - rate
+  - reload
+  - set
+  - setowner
+  - remove
+  - removeall
+  - rename
+  - reset
   # Алиасы команд, считающихся «варпами»
   aliases:
-    - pw
-    - warp
+  - pw
+  - warp
   # Проверять ли варпы PlayerWarps / CMI перед порталом
   check-player-warps: true
   check-cmi-warps: false
   # Типы CMI-телепортов, при которых показывается портальный эффект (CMIListener)
   cmi-tp-types:
-    - home
-    - warmup
-    - spawn
+  - home
+  - warmup
+  - spawn
   # Сообщение при появлении портала (MiniMessage)
   message: <dark_green>Недалеко появляется портал...
   # Дистанция отображения частиц
@@ -110,8 +110,7 @@ portal:
   radius-initial: 3
   radius-secondary: 6
   tp-other-disabled:
-    message: <red>Этот игрок не разрешил другим игрокам телепортироваться через его
-      порталы!
+    message: <red>Этот игрок не разрешил другим игрокам телепортироваться через его порталы!
   tp-by-other-disabled:
     message: <red>Вы не можете телепортироваться через порталы других игроков!
 # --- Пасека (если используется связанная фича) ---
@@ -135,93 +134,76 @@ join-message-gui:
   rows: 6
   title: '&8Сообщения при входе'
   messages:
-    - message: <green>%player_name%<gray> выполз из своей пещеры
-    - message: <red>%player_name%<gray> вернулся, потому что реальная жизнь — это для
-        слабаков
-    - message: <yellow>%player_name%<gray> появился, и теперь будет всех ебать
-    - message: <dark_aqua>%player_name%<gray> пришел, чтобы в очередной раз накосячить
-    - message: <light_purple>%player_name%<gray> как обычно — зашел с голой жопой
-    - message: <dark_red>%player_name%<gray> прибыл и готов на всё, лишь бы не работать
-    - message: <blue>%player_name%<gray> снова тут, как будто бездельничать — это его
-        работа
-    - message: <green>%player_name%<gray> вернулся, надеясь, что его тут хоть кто-то
-        ждал
-    - message: <gold>%player_name%<gray> зашел, чтобы проверить, не упал ли сервер без
-        него
-    - message: <dark_purple>%player_name%<gray> вернулся и будет снова тупить
-    - message: <gray>%player_name%<gray> снова здесь, как будто ему больше нечем заняться
-    - message: <red>%player_name%<gray> вошел в игру, как бы это не кончилось катастрофой
-    - message: <dark_aqua>%player_name%<gray> зашел в надежде, что его не убьют в первую
-        минуту
-    - message: <dark_green>%player_name%<gray> опять тут, как будто в жизни у него всё
-        нормально
-    - message: <dark_gray>%player_name%<gray> прибыл на сервер, чтобы очередной раз
-        обосраться
-    - message: <light_purple>%player_name%<gray> пришел, потому что где-то еще хуже
-    - message: <dark_red>%player_name%<gray> снова в деле, жди беды
-    - message: <green>%player_name%<gray> залетел как долбоёб и готов умирать
-    - message: <yellow>%player_name%<gray> пришел на сервер, как на работу — с болью
-        и страданиями
-    - message: <gold>%player_name%<gray> снова тут, хотя мог бы делать что-то полезное
-    - message: <green>%player_name% <gray>зашел - руина на месте
-    - message: <dark_green>%player_name%<gray> вернулся, чтобы снова всех заебать
-    - message: <yellow>%player_name%<gray> пришел, чтобы умереть раз 50
-    - message: <dark_red>%player_name%<gray> пришел и снова будет тупить
-    - message: <blue>%player_name%<gray> снова тут, как будто кто-то его ждал
-    - message: <light_purple>%player_name%<gray> вернулся, но надолго ли?
-    - message: <gold>%player_name%<gray> пришел, чтобы застроить все говном
-    - message: <red>%player_name%<gray> появился, и сервер уже не тот
-    - message: <dark_aqua>%player_name%<gray> вернулся с отпуска, жаль серверу
-    - message: <gray>%player_name%<gray> снова тут, и это плохие новости
-    - message: <dark_purple>%player_name%<gray> появился, как будто что-то важное происходит
-    - message: <green>%player_name%<gray> залетел, как на последний день
-    - message: <dark_gray>%player_name%<gray> вошел в игру, и пиздец как всё изменится
-    - message: <red>%player_name%<gray> вернулся, но сейчас точно что-то сломает
-    - message: <yellow>%player_name%<gray> прибежал как ветер, но ненадолго
-    - message: <blue>%player_name%<gray> снова тут, чтобы умереть самым тупым способом
-    - message: <gold>%player_name%<gray> ворвался как гром среди ясного неба
-    - message: <dark_green>%player_name%<gray> снова тут, и все начинают напрягаться
-    - message: <light_purple>%player_name%<gray> залетел, как будто ему больше негде
-        быть
-    - message: <red>%player_name%<gray> появился, и сервер начал гореть
-    - message: <dark_aqua>%player_name%<gray> вернулся, но точно на беду
-    - message: <dark_green>%player_name%<gray> пришел и жопой чувствует беду
-    - message: <blue>%player_name%<gray> снова тут, чтобы сломать не только блоки, но
-        и сервер
-    - message: <dark_purple>%player_name%<gray> появился и уже на грани отключки
-    - message: <light_purple>%player_name%<gray> пришел, как будто это его последний
-        шанс на жизнь
-    - message: <dark_aqua>%player_name%<gray> влетел, как пьяный крипер на скорости
-    - message: <gold>%player_name%<gray> вернулся, как проклятие на 100 лет
-    - message: <red>%player_name%<gray> зашел на сервер, и сервер пожалел об этом
-    - message: <green>%player_name%<gray> снова тут, как будто мы этого ждали
-    - message: <yellow>%player_name%<gray> появился, как таракан после ядерного взрыва
-    - message: <dark_red>%player_name%<gray> вернулся, чтобы навести полный хаос
-    - message: <light_purple>%player_name%<gray> снова тут, и никто не знает, зачем
-    - message: <blue>%player_name%<gray> залетел, как НЛО на район
-    - message: <dark_green>%player_name%<gray> пришел, и сейчас начнется жесть
-    - message: <gold>%player_name%<gray> ворвался, как будто ему всё можно
-    - message: <dark_purple>%player_name%<gray> появился, и сервер готов к концу света
-    - message: <dark_aqua>%player_name%<gray> вернулся, как баг, который никак не фиксят
-    - message: <gray>%player_name%<gray> пришел, как гость на вечеринку, которой никто
-        не ждал
-    - message: <dark_red>%player_name%<gray> ворвался, как последняя капля терпения
-  default-lore:
-    - <white>%prefix%%message%
-  forbidden-lore:
-    - <red>Это вам пока недоступно!
-  current-lore:
-    - <green>Это ваше текущее сообщение
-  selected-material: ENDER_PEARL
-  back-button: BLUE_STAINED_GLASS_PANE
-  back-button-model-data: 11013
-  back-button-display: <gold>Назад
-  back-button-lore:
+  - message: <green>%player_name%<gray> выполз из своей пещеры
+  - message: <red>%player_name%<gray> вернулся, потому что реальная жизнь — это для слабаков
+  - message: <yellow>%player_name%<gray> появился, и теперь будет всех ебать
+  - message: <dark_aqua>%player_name%<gray> пришел, чтобы в очередной раз накосячить
+  - message: <light_purple>%player_name%<gray> как обычно — зашел с голой жопой
+  - message: <dark_red>%player_name%<gray> прибыл и готов на всё, лишь бы не работать
+  - message: <blue>%player_name%<gray> снова тут, как будто бездельничать — это его работа
+  - message: <green>%player_name%<gray> вернулся, надеясь, что его тут хоть кто-то ждал
+  - message: <gold>%player_name%<gray> зашел, чтобы проверить, не упал ли сервер без него
+  - message: <dark_purple>%player_name%<gray> вернулся и будет снова тупить
+  - message: <gray>%player_name%<gray> снова здесь, как будто ему больше нечем заняться
+  - message: <red>%player_name%<gray> вошел в игру, как бы это не кончилось катастрофой
+  - message: <dark_aqua>%player_name%<gray> зашел в надежде, что его не убьют в первую минуту
+  - message: <dark_green>%player_name%<gray> опять тут, как будто в жизни у него всё нормально
+  - message: <dark_gray>%player_name%<gray> прибыл на сервер, чтобы очередной раз обосраться
+  - message: <light_purple>%player_name%<gray> пришел, потому что где-то еще хуже
+  - message: <dark_red>%player_name%<gray> снова в деле, жди беды
+  - message: <green>%player_name%<gray> залетел как долбоёб и готов умирать
+  - message: <yellow>%player_name%<gray> пришел на сервер, как на работу — с болью и страданиями
+  - message: <gold>%player_name%<gray> снова тут, хотя мог бы делать что-то полезное
+  - message: <green>%player_name% <gray>зашел - руина на месте
+  - message: <dark_green>%player_name%<gray> вернулся, чтобы снова всех заебать
+  - message: <yellow>%player_name%<gray> пришел, чтобы умереть раз 50
+  - message: <dark_red>%player_name%<gray> пришел и снова будет тупить
+  - message: <blue>%player_name%<gray> снова тут, как будто кто-то его ждал
+  - message: <light_purple>%player_name%<gray> вернулся, но надолго ли?
+  - message: <gold>%player_name%<gray> пришел, чтобы застроить все говном
+  - message: <red>%player_name%<gray> появился, и сервер уже не тот
+  - message: <dark_aqua>%player_name%<gray> вернулся с отпуска, жаль серверу
+  - message: <gray>%player_name%<gray> снова тут, и это плохие новости
+  - message: <dark_purple>%player_name%<gray> появился, как будто что-то важное происходит
+  - message: <green>%player_name%<gray> залетел, как на последний день
+  - message: <dark_gray>%player_name%<gray> вошел в игру, и пиздец как всё изменится
+  - message: <red>%player_name%<gray> вернулся, но сейчас точно что-то сломает
+  - message: <yellow>%player_name%<gray> прибежал как ветер, но ненадолго
+  - message: <blue>%player_name%<gray> снова тут, чтобы умереть самым тупым способом
+  - message: <gold>%player_name%<gray> ворвался как гром среди ясного неба
+  - message: <dark_green>%player_name%<gray> снова тут, и все начинают напрягаться
+  - message: <light_purple>%player_name%<gray> залетел, как будто ему больше негде быть
+  - message: <red>%player_name%<gray> появился, и сервер начал гореть
+  - message: <dark_aqua>%player_name%<gray> вернулся, но точно на беду
+  - message: <dark_green>%player_name%<gray> пришел и жопой чувствует беду
+  - message: <blue>%player_name%<gray> снова тут, чтобы сломать не только блоки, но и сервер
+  - message: <dark_purple>%player_name%<gray> появился и уже на грани отключки
+  - message: <light_purple>%player_name%<gray> пришел, как будто это его последний шанс на жизнь
+  - message: <dark_aqua>%player_name%<gray> влетел, как пьяный крипер на скорости
+  - message: <gold>%player_name%<gray> вернулся, как проклятие на 100 лет
+  - message: <red>%player_name%<gray> зашел на сервер, и сервер пожалел об этом
+  - message: <green>%player_name%<gray> снова тут, как будто мы этого ждали
+  - message: <yellow>%player_name%<gray> появился, как таракан после ядерного взрыва
+  - message: <dark_red>%player_name%<gray> вернулся, чтобы навести полный хаос
+  - message: <light_purple>%player_name%<gray> снова тут, и никто не знает, зачем
+  - message: <blue>%player_name%<gray> залетел, как НЛО на район
+  - message: <dark_green>%player_name%<gray> пришел, и сейчас начнется жесть
+  - message: <gold>%player_name%<gray> ворвался, как будто ему всё можно
+  - message: <dark_purple>%player_name%<gray> появился, и сервер готов к концу света
+  - message: <dark_aqua>%player_name%<gray> вернулся, как баг, который никак не фиксят
+  - message: <gray>%player_name%<gray> пришел, как гость на вечеринку, которой никто не ждал
+  - message: <dark_red>%player_name%<gray> ворвался, как последняя капля терпения
+  back-button:
+    material: BLUE_STAINED_GLASS_PANE
+    display: <gold>Назад
+    lore:
     - <gray>Вернуться в главное меню
-  switch-button: LIME_STAINED_GLASS_PANE
-  switch-button-model-data: 0
-  switch-button-display: <gold>Выбрать сообщения при <red>выходе
-  switch-button-lore: [ ]
+    customModelData: 11013
+  switch-button:
+    material: LIME_STAINED_GLASS_PANE
+    display: <gold>Выбрать сообщения при <red>выходе
+    lore: []
+    customModelData: 0
   default-display-name: <gold>Сообщение %id%
   common-rank: <green>Для всех
   show-all: true
@@ -229,86 +211,18 @@ join-message-gui:
   prefix: '<dark_green>❖ '
   max-len: 80
   spaces-padding: 3
-  next-button: BLUE_STAINED_GLASS_PANE
-  next-button-model-data: 11008
-  next-button-display: <gold>Далее
-  next-button-lore:
+  next-button:
+    material: BLUE_STAINED_GLASS_PANE
+    display: <gold>Далее
+    lore:
     - <gray>Перейти к следующей странице
-  prev-button: BLUE_STAINED_GLASS_PANE
-  prev-button-model-data: 11009
-  prev-button-display: <gold>Назад
-  prev-button-lore:
+    customModelData: 11008
+  prev-button:
+    material: BLUE_STAINED_GLASS_PANE
+    display: <gold>Назад
+    lore:
     - <gray>Перейти к предыдущей странице
-  current-temp-display: <dark_red>Это ваше текущее сообщение!
-# --- GUI выбора сообщения при выходе ---
-leave-message-gui:
-  title: '&8Сообщения при выходе'
-  messages:
-    - message: <green>%player_name%<gray> съебался в туман
-    - message: <yellow>%player_name%<gray> испарился, потому что реальная жизнь зовет...
-        или нет
-    - message: <dark_aqua>%player_name%<gray> свалил, оставив после себя одни проблемы
-    - message: <dark_purple>%player_name%<gray> ушел, потому что тут хрен делать
-    - message: <gold>%player_name%<gray> исчез, как последний шанс на победу
-    - message: <dark_aqua>%player_name%<gray> свалил, потому что всё это задолбало
-    - message: <dark_red>%player_name%<gray> свалил, оставив все на остальных дебилов
-    - message: <gray>%player_name%<gray> вышел, потому что не выдержал накала тупости
-    - message: <dark_purple>%player_name%<gray> слился, как крыса
-    - message: <blue>%player_name%<gray> ушел, потому что кто-то в реале орет "Убери
-        мусор!"
-    - message: <light_purple>%player_name%<gray> исчез, как будто его никогда не было
-    - message: <dark_gray>%player_name%<gray> свалил, как только понял, что тут ему
-        не светит
-    - message: <red>%player_name%<gray> свалил, пока никто не заметил
-    - message: <green>%player_name%<gray> оставил все планы на потом... или на никогда
-    - message: <yellow>%player_name%<gray> испарился, потому что задолбали все
-    - message: <blue>%player_name%<gray> исчез, оставив после себя только ошибки
-    - message: <gold>%player_name%<gray> свалил, оставив всем прощальный плевок
-    - message: <dark_red>%player_name%<gray> ушел, как король, но никто этого не заметил
-    - message: <dark_aqua>%player_name%<gray> свалил, как трус, но мы всё понимаем
-    - message: <green>%player_name%<gray> всё заруинил и свалил
-    - message: <dark_green>%player_name%<gray> исчез в тумане, оставив бардак
-    - message: <red>%player_name%<gray> испарился, как последний шанс на успех
-    - message: <dark_purple>%player_name%<gray> ушел, потому что где-то его ждет кровать
-    - message: <yellow>%player_name%<gray> свалил, как только запахло жареным
-    - message: <blue>%player_name%<gray> покинул сервер, потому что кому-то пора на
-        работу
-    - message: <gold>%player_name%<gray> исчез, как будто его тут не было
-    - message: <dark_aqua>%player_name%<gray> свалил, оставив кучу проблем
-    - message: <gray>%player_name%<gray> вышел, и сервер вздохнул с облегчением
-    - message: <light_purple>%player_name%<gray> покинул мир, и все стало спокойнее
-    - message: <dark_green>%player_name%<gray> свалил в закат, как герой, которого никто
-        не звал
-    - message: <red>%player_name%<gray> исчез, оставив всех в полной жопе
-    - message: <yellow>%player_name%<gray> испарился, как только начались реальные проблемы
-    - message: <blue>%player_name%<gray> вышел, потому что задолбало умирать
-    - message: <dark_gray>%player_name%<gray> свалил, как будто никто и не заметил
-    - message: <green>%player_name%<gray> исчез в тумане, оставив сервер в руинах
-    - message: <light_purple>%player_name%<gray> вышел, как только начал пахнуть жареным
-    - message: <gold>%player_name%<gray> свалил, как только начались реальные траблы
-    - message: <dark_red>%player_name%<gray> ушел, и всем стало легче
-    - message: <dark_aqua>%player_name%<gray> покинул сервер, оставив всех в замешательстве
-    - message: <blue>%player_name%<gray> испарился, как последний шанс на адекватность
-    - message: <yellow>%player_name%<gray> свалил, как будто ему тут вообще не рады
-    - message: <dark_purple>%player_name%<gray> исчез, как надежда на нормальную игру
-    - message: <red>%player_name%<gray> вышел, потому что понял, что это всё бессмысленно
-    - message: <light_purple>%player_name%<gray> исчез, как мама из-за плохих оценок
-    - message: <gold>%player_name%<gray> свалил, как интернет при плохой погоде
-    - message: <green>%player_name%<gray> вышел, потому что кто-то закричал "реальная
-        жизнь!"
-    - message: <dark_aqua>%player_name%<gray> исчез, как будто он что-то потерял
-    - message: <dark_green>%player_name%<gray> испарился, как надежда на лучшую жизнь
-    - message: <yellow>%player_name%<gray> ушел, и все задумались о смысле жизни
-    - message: <red>%player_name%<gray> свалил, как когда кто-то сказал "Пора спать"
-    - message: <blue>%player_name%<gray> испарился, как моя мотивация работать
-    - message: <light_purple>%player_name%<gray> ушел, потому что ему больше нечего
-        терять
-    - message: <green>%player_name%<gray> свалил, как будто его не было на вечеринке
-    - message: <gold>%player_name%<gray> исчез, оставив за собой след из ошибок
-    - message: <dark_gray>%player_name%<gray> свалил, как последний ломтик пиццы
-    - message: <red>%player_name%<gray> вышел, как если бы батя зашел в комнату
-    - message: <dark_aqua>%player_name%<gray> исчез, как последний пакет чипсов
-    - message: <gray>%player_name%<gray> свалил, как грузовик с твоими мечтами
+    customModelData: 11009
   default-lore:
     - <white>%prefix%%message%
   forbidden-lore:
@@ -316,23 +230,92 @@ leave-message-gui:
   current-lore:
     - <green>Это ваше текущее сообщение
   selected-material: ENDER_PEARL
-  switch-button: RED_STAINED_GLASS_PANE
-  switch-button-model-data: 0
-  switch-button-display: <gold>Выбрать сообщения при <green>входе
-  switch-button-lore: [ ]
+  current-temp-display: <dark_red>Это ваше текущее сообщение!
+leave-message-gui:
+  title: '&8Сообщения при выходе'
+  messages:
+  - message: <green>%player_name%<gray> съебался в туман
+  - message: <yellow>%player_name%<gray> испарился, потому что реальная жизнь зовет... или нет
+  - message: <dark_aqua>%player_name%<gray> свалил, оставив после себя одни проблемы
+  - message: <dark_purple>%player_name%<gray> ушел, потому что тут хрен делать
+  - message: <gold>%player_name%<gray> исчез, как последний шанс на победу
+  - message: <dark_aqua>%player_name%<gray> свалил, потому что всё это задолбало
+  - message: <dark_red>%player_name%<gray> свалил, оставив все на остальных дебилов
+  - message: <gray>%player_name%<gray> вышел, потому что не выдержал накала тупости
+  - message: <dark_purple>%player_name%<gray> слился, как крыса
+  - message: <blue>%player_name%<gray> ушел, потому что кто-то в реале орет "Убери мусор!"
+  - message: <light_purple>%player_name%<gray> исчез, как будто его никогда не было
+  - message: <dark_gray>%player_name%<gray> свалил, как только понял, что тут ему не светит
+  - message: <red>%player_name%<gray> свалил, пока никто не заметил
+  - message: <green>%player_name%<gray> оставил все планы на потом... или на никогда
+  - message: <yellow>%player_name%<gray> испарился, потому что задолбали все
+  - message: <blue>%player_name%<gray> исчез, оставив после себя только ошибки
+  - message: <gold>%player_name%<gray> свалил, оставив всем прощальный плевок
+  - message: <dark_red>%player_name%<gray> ушел, как король, но никто этого не заметил
+  - message: <dark_aqua>%player_name%<gray> свалил, как трус, но мы всё понимаем
+  - message: <green>%player_name%<gray> всё заруинил и свалил
+  - message: <dark_green>%player_name%<gray> исчез в тумане, оставив бардак
+  - message: <red>%player_name%<gray> испарился, как последний шанс на успех
+  - message: <dark_purple>%player_name%<gray> ушел, потому что где-то его ждет кровать
+  - message: <yellow>%player_name%<gray> свалил, как только запахло жареным
+  - message: <blue>%player_name%<gray> покинул сервер, потому что кому-то пора на работу
+  - message: <gold>%player_name%<gray> исчез, как будто его тут не было
+  - message: <dark_aqua>%player_name%<gray> свалил, оставив кучу проблем
+  - message: <gray>%player_name%<gray> вышел, и сервер вздохнул с облегчением
+  - message: <light_purple>%player_name%<gray> покинул мир, и все стало спокойнее
+  - message: <dark_green>%player_name%<gray> свалил в закат, как герой, которого никто не звал
+  - message: <red>%player_name%<gray> исчез, оставив всех в полной жопе
+  - message: <yellow>%player_name%<gray> испарился, как только начались реальные проблемы
+  - message: <blue>%player_name%<gray> вышел, потому что задолбало умирать
+  - message: <dark_gray>%player_name%<gray> свалил, как будто никто и не заметил
+  - message: <green>%player_name%<gray> исчез в тумане, оставив сервер в руинах
+  - message: <light_purple>%player_name%<gray> вышел, как только начал пахнуть жареным
+  - message: <gold>%player_name%<gray> свалил, как только начались реальные траблы
+  - message: <dark_red>%player_name%<gray> ушел, и всем стало легче
+  - message: <dark_aqua>%player_name%<gray> покинул сервер, оставив всех в замешательстве
+  - message: <blue>%player_name%<gray> испарился, как последний шанс на адекватность
+  - message: <yellow>%player_name%<gray> свалил, как будто ему тут вообще не рады
+  - message: <dark_purple>%player_name%<gray> исчез, как надежда на нормальную игру
+  - message: <red>%player_name%<gray> вышел, потому что понял, что это всё бессмысленно
+  - message: <light_purple>%player_name%<gray> исчез, как мама из-за плохих оценок
+  - message: <gold>%player_name%<gray> свалил, как интернет при плохой погоде
+  - message: <green>%player_name%<gray> вышел, потому что кто-то закричал "реальная жизнь!"
+  - message: <dark_aqua>%player_name%<gray> исчез, как будто он что-то потерял
+  - message: <dark_green>%player_name%<gray> испарился, как надежда на лучшую жизнь
+  - message: <yellow>%player_name%<gray> ушел, и все задумались о смысле жизни
+  - message: <red>%player_name%<gray> свалил, как когда кто-то сказал "Пора спать"
+  - message: <blue>%player_name%<gray> испарился, как моя мотивация работать
+  - message: <light_purple>%player_name%<gray> ушел, потому что ему больше нечего терять
+  - message: <green>%player_name%<gray> свалил, как будто его не было на вечеринке
+  - message: <gold>%player_name%<gray> исчез, оставив за собой след из ошибок
+  - message: <dark_gray>%player_name%<gray> свалил, как последний ломтик пиццы
+  - message: <red>%player_name%<gray> вышел, как если бы батя зашел в комнату
+  - message: <dark_aqua>%player_name%<gray> исчез, как последний пакет чипсов
+  - message: <gray>%player_name%<gray> свалил, как грузовик с твоими мечтами
+  switch-button:
+    material: RED_STAINED_GLASS_PANE
+    display: <gold>Выбрать сообщения при <green>входе
+    lore: []
+    customModelData: 0
   default-display-name: <gold>Сообщение %id%
   common-rank: <green>Для всех
   show-all: true
   prefix: '<dark_red>❖ '
   max-len: 80
   spaces-padding: 3
+  default-lore:
+    - <white>%prefix%%message%
+  forbidden-lore:
+    - <red>Это вам пока недоступно!
+  current-lore:
+    - <green>Это ваше текущее сообщение
+  selected-material: ENDER_PEARL
   current-temp-display: <dark_red>Это ваше текущее сообщение!
-# --- Формат даты/времени в сообщениях ---
 date-format: MM-dd HH:mm:ss
 timezone: '+3'
 
 # --- Набор имён миров для фильтров (YAML set; пусто = без ограничений по этому полю) ---
-worlds: !!set { }
+worlds: !!set {}
 
 # --- Отображаемые подписи миров (ключ = имя мира Bukkit) ---
 world-names:
@@ -400,4 +383,4 @@ world-names:
   spn_legends_of_the_guild_7: spn_legends_of_the_guild_7
   spn_the_hell_ring_30: spn_the_hell_ring_30
 # --- Миры, где перехватывается респавн (пустой set = нигде) ---
-respawn-intercept-worlds: !!set { }
+respawn-intercept-worlds: !!set {}

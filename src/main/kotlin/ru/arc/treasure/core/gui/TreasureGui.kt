@@ -13,6 +13,7 @@ import ru.arc.treasure.core.TreasureMessage
 import ru.arc.treasure.core.Treasures
 import ru.arc.util.GuiUtils
 import ru.arc.util.TextUtil
+import ru.arc.util.fromConfig
 
 /**
  * GUI for editing a specific treasure.
@@ -29,6 +30,7 @@ object TreasureGui {
             title = TreasureConfig.Gui.treasureTitle,
             rows = ROWS,
             player = player,
+            config = TreasureConfig.config(),
         ) {
             navBackground()
 
@@ -38,6 +40,7 @@ object TreasureGui {
                     material(Material.ANVIL)
                     display(TreasureConfig.Gui.treasureWeight.replace("%weight%", treasure.weight.toString()))
                     lore(listOf("<gray>ЛКМ - изменить вес"))
+                    fromConfig(TreasureConfig.config(), "gui.treasure.weight")
                     onClick {
                         TitleInput(player, WeightInput(player, poolId, treasure), 0)
                         player.closeInventory()
@@ -55,6 +58,7 @@ object TreasureGui {
                                     .replace("%max%", treasure.max.toString()),
                             )
                             lore(listOf("<gray>ЛКМ - изменить количество"))
+                            fromConfig(TreasureConfig.config(), "gui.treasure.amount")
                             onClick {
                                 TitleInput(player, AmountInput(player, poolId, treasure), 0)
                                 player.closeInventory()
@@ -71,6 +75,7 @@ object TreasureGui {
                                     .replace("%max%", treasure.max.toString()),
                             )
                             lore(listOf("<gray>ЛКМ - изменить сумму"))
+                            fromConfig(TreasureConfig.config(), "gui.treasure.amount")
                             onClick {
                                 TitleInput(player, MoneyAmountInput(player, poolId, treasure), 0)
                                 player.closeInventory()
@@ -117,6 +122,7 @@ object TreasureGui {
                             add("<red>ПКМ - очистить все")
                         },
                     )
+                    fromConfig(TreasureConfig.config(), "gui.treasure.messages")
                     onClick { event ->
                         if (event.isRightClick) {
                             val updated = treasure.clearMessages()
@@ -134,6 +140,7 @@ object TreasureGui {
                     material(Material.BARRIER)
                     display(TreasureConfig.Gui.treasureDelete)
                     lore(listOf("<gray>ЛКМ - удалить"))
+                    fromConfig(TreasureConfig.config(), "gui.treasure.delete")
                     onClick {
                         Treasures.removeTreasure(poolId, treasure)
                         backToPool(player, poolId)

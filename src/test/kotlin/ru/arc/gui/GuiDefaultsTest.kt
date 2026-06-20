@@ -80,13 +80,16 @@ class GuiDefaultsTest :
         }
 
         describe("with config") {
+            val emptyDefaults = emptyMap<String, Any>()
 
             it("should use config value for background material") {
                 val config =
                     mockk<Config> {
-                        every { string(any<String>()) } returns ""
-                        every { integer(any(), any()) } answers { secondArg() }
-                        every { string("background.material") } returns "BLACK_STAINED_GLASS_PANE"
+                        every { exists(any<String>()) } returns false
+                        every { exists("background") } returns true
+                        every { map("background", emptyDefaults) } returns mapOf("material" to "BLACK_STAINED_GLASS_PANE")
+                        every { string(any<String>(), any()) } returns ""
+                        every { integer(any<String>(), any()) } answers { secondArg() }
                     }
 
                 GuiDefaults.init(config)
@@ -97,9 +100,11 @@ class GuiDefaultsTest :
             it("should use config value for model data") {
                 val config =
                     mockk<Config> {
-                        every { string(any<String>()) } returns ""
-                        every { integer(any(), any()) } answers { secondArg() }
-                        every { integer("background.model-data", any()) } returns 99999
+                        every { exists(any<String>()) } returns false
+                        every { exists("background") } returns true
+                        every { map("background", emptyDefaults) } returns mapOf("customModelData" to 99999)
+                        every { string(any<String>(), any()) } returns ""
+                        every { integer(any<String>(), any()) } answers { secondArg() }
                     }
 
                 GuiDefaults.init(config)
@@ -110,9 +115,11 @@ class GuiDefaultsTest :
             it("should use config value for button material") {
                 val config =
                     mockk<Config> {
-                        every { string(any<String>()) } returns ""
-                        every { integer(any(), any()) } answers { secondArg() }
-                        every { string("buttons.back.material") } returns "DIAMOND_BLOCK"
+                        every { exists(any<String>()) } returns false
+                        every { exists("buttons.back") } returns true
+                        every { map("buttons.back", emptyDefaults) } returns mapOf("material" to "DIAMOND_BLOCK")
+                        every { string(any<String>(), any()) } returns ""
+                        every { integer(any<String>(), any()) } answers { secondArg() }
                     }
 
                 GuiDefaults.init(config)
@@ -123,9 +130,11 @@ class GuiDefaultsTest :
             it("should use config value for button display") {
                 val config =
                     mockk<Config> {
-                        every { string(any<String>()) } returns ""
-                        every { integer(any(), any()) } answers { secondArg() }
-                        every { string("buttons.back.default-display", any()) } returns "<gold>Go Back!"
+                        every { exists(any<String>()) } returns false
+                        every { exists("buttons.back") } returns true
+                        every { map("buttons.back", emptyDefaults) } returns mapOf("display" to "<gold>Go Back!")
+                        every { string(any<String>(), any()) } returns ""
+                        every { integer(any<String>(), any()) } answers { secondArg() }
                     }
 
                 GuiDefaults.init(config)
@@ -136,8 +145,9 @@ class GuiDefaultsTest :
             it("should use config value for slots") {
                 val config =
                     mockk<Config> {
-                        every { string(any<String>()) } returns ""
-                        every { integer(any(), any()) } answers { secondArg() }
+                        every { exists(any<String>()) } returns false
+                        every { string(any<String>(), any()) } returns ""
+                        every { integer(any<String>(), any()) } answers { secondArg() }
                         every { integer("slots.back", any()) } returns 8
                         every { integer("slots.prev", any()) } returns 2
                         every { integer("slots.next", any()) } returns 6
@@ -153,9 +163,11 @@ class GuiDefaultsTest :
             it("should fall back to default for invalid material") {
                 val config =
                     mockk<Config> {
-                        every { string(any<String>()) } returns ""
-                        every { integer(any(), any()) } answers { secondArg() }
-                        every { string("background.material") } returns "INVALID_MATERIAL_NAME"
+                        every { exists(any<String>()) } returns false
+                        every { exists("background") } returns true
+                        every { map("background", emptyDefaults) } returns mapOf("material" to "INVALID_MATERIAL_NAME")
+                        every { string(any<String>(), any()) } returns ""
+                        every { integer(any<String>(), any()) } answers { secondArg() }
                     }
 
                 GuiDefaults.init(config)
@@ -166,9 +178,11 @@ class GuiDefaultsTest :
             it("should fall back to default for blank material") {
                 val config =
                     mockk<Config> {
-                        every { string(any<String>()) } returns ""
-                        every { integer(any(), any()) } answers { secondArg() }
-                        every { string("background.material") } returns "   "
+                        every { exists(any<String>()) } returns false
+                        every { exists("background") } returns true
+                        every { map("background", emptyDefaults) } returns mapOf("material" to "   ")
+                        every { string(any<String>(), any()) } returns ""
+                        every { integer(any<String>(), any()) } answers { secondArg() }
                     }
 
                 GuiDefaults.init(config)
@@ -182,9 +196,11 @@ class GuiDefaultsTest :
             it("should reset to hardcoded defaults after reset") {
                 val config =
                     mockk<Config> {
-                        every { string(any<String>()) } returns ""
-                        every { integer(any(), any()) } answers { secondArg() }
-                        every { string("background.material") } returns "DIAMOND_BLOCK"
+                        every { exists(any<String>()) } returns false
+                        every { exists("background") } returns true
+                        every { map("background", emptyMap<String, Any>()) } returns mapOf("material" to "DIAMOND_BLOCK")
+                        every { string(any<String>(), any()) } returns ""
+                        every { integer(any<String>(), any()) } answers { secondArg() }
                     }
 
                 GuiDefaults.init(config)

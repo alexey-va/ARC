@@ -69,8 +69,14 @@ object BaltopGuiFactory {
                     tag("bank", formatAmount(entry.bank))
                     tag("total", formatAmount(entry.total))
 
-                    displayFromConfig("baltop.item.name")
-                    loreFromConfig("baltop.item.lore")
+                    display("<gold><player>")
+                    lore(listOf(
+                        "<gray>Всего: <green><total><white>💰",
+                        "",
+                        "<gray>Баланс: <green><balance><white>💰",
+                        "<gray>Банк: <green><bank><white>💰",
+                    ))
+                    fromConfig(config, "baltop.item")
 
                     onClick { /* No action on player click */ }
                 }
@@ -95,8 +101,9 @@ object BaltopGuiFactory {
                         }
 
                     tag("sort", sortName)
-                    displayFromConfig("baltop.sort.name")
-                    loreFromConfig("baltop.sort.lore")
+                    display("<gray>Сортировка: <sort>")
+                    lore(emptyList())
+                    fromConfig(config, "baltop.sort")
 
                     onClick { event ->
                         val clicker = event.whoClicked as? Player ?: return@onClick

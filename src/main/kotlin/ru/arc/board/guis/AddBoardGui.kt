@@ -15,9 +15,9 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.bukkit.Material
 import org.bukkit.boss.BarColor
 import org.bukkit.entity.Player
+import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.inventory.ItemFlag
 import org.bukkit.inventory.ItemStack
-import ru.arc.ARC
 import ru.arc.TitleInput
 import ru.arc.ai.GPTManager
 import ru.arc.ai.ModerationResponse
@@ -26,14 +26,15 @@ import ru.arc.board.BoardEntryType
 import ru.arc.board.BoardManager
 import ru.arc.board.ItemIcon
 import ru.arc.configs.BoardConfig
-import ru.arc.configs.ConfigManager
 import ru.arc.core.modules.EconomyModule
 import ru.arc.util.GuiUtils
-import ru.arc.util.ItemStackBuilder
 import ru.arc.util.Logging.error
 import ru.arc.util.TextUtil
 import ru.arc.util.TextUtil.mm
 import ru.arc.util.TextUtil.strip
+import ru.arc.util.fromConfig
+import ru.arc.util.guiItem
+import ru.arc.util.guiSkull
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -46,7 +47,6 @@ class AddBoardGui(
 ), Inputable {
 
     companion object {
-        private val config = ConfigManager.ofModule(ARC.instance.dataFolder.toPath(), "board.yml")
         private val defaultBossBarColors = mapOf(
             "blue" to "<blue>Синий</blue>",
             "red" to "<red>Красный</red>",
@@ -131,107 +131,123 @@ class AddBoardGui(
         else if (n == 1) description = s
     }
 
-    private fun backItem(): GuiItem = ItemStackBuilder(Material.BLUE_STAINED_GLASS_PANE)
-        .display("<gray>Назад")
-        .modelData(11013)
-        .toGuiItemBuilder()
-        .clickEvent { click ->
+    private fun backItem(): GuiItem = guiItem(Material.BLUE_STAINED_GLASS_PANE) {
+        onClick { click ->
             click.isCancelled = true
             GuiUtils.constructAndShowAsync({ BoardGuiFactory.createForPlayer(player) }, click.whoClicked)
-        }.build()
+        }
+        display("<gray>Назад")
+        modelData(11013)
+        fromConfig(BoardConfig.config(), "board-menu.back")
+    }
 
     private fun shortNameItem(): GuiItem {
-        val builder = ItemStackBuilder(Material.FLOWER_BANNER_PATTERN)
-            .flags(ItemFlag.HIDE_ATTRIBUTES)
-            .tagResolver(TagResolver.builder()
-                .resolver(TagResolver.resolver("short_name", Tag.inserting(Component.text(title ?: "Нету"))))
-                .resolver(TagResolver.resolver("short_name_length", Tag.inserting(Component.text(BoardConfig.shortNameLength.toString()))))
-                .build())
+        val shortNameResolver = TagResolver.builder()
+            .resolver(TagResolver.resolver("short_name", Tag.inserting(Component.text(title ?: "Нету"))))
+            .resolver(TagResolver.resolver("short_name_length", Tag.inserting(Component.text(BoardConfig.shortNameLength.toString()))))
+            .build()
+        val configPath = if (title == null) "add-menu.empty.short-name" else "add-menu.full.short-name"
 
-        if (title == null) {
-            builder.display(BoardConfig.getString("add-menu.empty.short-name.display"))
-                .appendLore(BoardConfig.getStringList("add-menu.empty.short-name.lore"))
-        } else {
-            builder.display(BoardConfig.getString("add-menu.full.short-name.display").replace("<short_name>", title!!), ItemStackBuilder.Deserializer.LEGACY)
-                .appendLore(BoardConfig.getStringList("add-menu.full.short-name.lore"))
-        }
-        return builder.toGuiItemBuilder()
-            .clickEvent { click ->
+        return guiItem(Material.FLOWER_BANNER_PATTERN) {
+            onClick { click ->
                 click.isCancelled = true
-                TitleInput(player, this, 0)
+                TitleInput(player, this@AddBoardGui, 0)
                 click.whoClicked.closeInventory()
-            }.build()
+            }
+            flags(ItemFlag.HIDE_ATTRIBUTES)
+            tagResolver(shortNameResolver)
+            if (title == null) {
+                display("<green>Короткое название <gray>(макс. длина <short_name_length>)")
+                lore(listOf("<gray>Нажмите чтобы установить"))
+            } else {
+                display("<short_name>")
+                lore(listOf("<gray>Нажмите чтобы поменять"))
+            }
+            fromConfig(BoardConfig.config(), configPath)
+        }
     }
 
     private fun descriptionItem(): GuiItem {
-        val builder = ItemStackBuilder(Material.PAPER)
-            .flags(ItemFlag.HIDE_ATTRIBUTES)
-            .tagResolver(TagResolver.resolver("description", Tag.inserting(Component.text(description ?: "Нету"))))
+        val descriptionResolver = TagResolver.resolver("description", Tag.inserting(Component.text(description ?: "Нету")))
+        val configPath = if (description == null) "add-menu.empty.description" else "add-menu.full.description"
 
-        if (description == null) {
-            builder.display(BoardConfig.getString("add-menu.empty.description.display"))
-                .appendLore(BoardConfig.getStringList("add-menu.empty.description.lore"))
-        } else {
-            val lore = mutableListOf<Component>()
-            for (s in BoardConfig.getStringList("add-menu.full.description.lore")) {
-                if (s.contains("<description>")) {
-                    lore.addAll(BoardEntryData.description(TagResolver.standard(), description))
-                    continue
-                }
-                lore.add(MiniMessage.miniMessage().deserialize(s))
-            }
-            builder.display(BoardConfig.getString("add-menu.full.description.display"))
-                .componentLore(lore)
-        }
-        return builder.toGuiItemBuilder()
-            .clickEvent { click ->
+        return guiItem(Material.PAPER) {
+            onClick { click ->
                 click.isCancelled = true
-                TitleInput(player, this, 1)
+                TitleInput(player, this@AddBoardGui, 1)
                 click.whoClicked.closeInventory()
-            }.build()
+            }
+            flags(ItemFlag.HIDE_ATTRIBUTES)
+            tagResolver(descriptionResolver)
+            display("<green>Комментарий")
+            if (description == null) {
+                lore(listOf("<gray>Нажмите чтобы установить"))
+            } else {
+                lore(listOf("<description>"))
+            }
+            fromConfig(BoardConfig.config(), configPath)
+            if (description != null) {
+                val lore = mutableListOf<Component>()
+                for (s in BoardConfig.config().stringList("$configPath.lore", listOf("<description>"))) {
+                    if (s.contains("<description>")) {
+                        lore.addAll(BoardEntryData.description(TagResolver.standard(), description))
+                        continue
+                    }
+                    lore.add(MiniMessage.miniMessage().deserialize(s, descriptionResolver))
+                }
+                loreComponents(lore)
+            }
+        }
     }
 
     private fun bossBarColor(): GuiItem {
-        val colors: Map<String, String> = config.map("boss-bar-colors", defaultBossBarColors)
+        val colors: Map<String, String> = BoardConfig.config().map("boss-bar-colors", defaultBossBarColors)
         val colorStr = colors[color.name.lowercase()] ?: color.name
         val material = Material.getMaterial("${color.name.uppercase()}_DYE")
-        val builder = ItemStackBuilder(material ?: Material.YELLOW_DYE)
-            .flags(ItemFlag.HIDE_ATTRIBUTES)
-            .display(config.component("add-menu.full.boss-bar-color.display", "<green>Цвет") { tag("color", colorStr) })
-            .appendComponentLore(config.componentList("add-menu.full.boss-bar-color.lore", listOf("<gray>Цвет панели: <white><color>")) { tag("color", colorStr) })
-        return builder.toGuiItemBuilder()
-            .clickEventWithStack { click, _ ->
+        val colorResolver = TagResolver.resolver("color", Tag.inserting(TextUtil.mm(colorStr, true)))
+        return guiItem(material ?: Material.YELLOW_DYE) {
+            onClick { click ->
                 click.isCancelled = true
-                val colorList: Map<String, String> = config.map("boss-bar-colors", defaultBossBarColors)
+                val colorList: Map<String, String> = BoardConfig.config().map("boss-bar-colors", defaultBossBarColors)
                 val barColors = colorList.keys.mapNotNull { s ->
                     try { BarColor.valueOf(s.uppercase()) } catch (e: IllegalArgumentException) {
                         error("Error while parsing boss bar color", e)
                         null
                     }
                 }
-                this.color = barColors[(barColors.indexOf(this.color) + 1) % barColors.size]
+                this@AddBoardGui.color = barColors[(barColors.indexOf(this@AddBoardGui.color) + 1) % barColors.size]
                 updateBossBarItem()
-            }.build()
+            }
+            flags(ItemFlag.HIDE_ATTRIBUTES)
+            tagResolver(colorResolver)
+            display("<green>Цвет")
+            lore(listOf("<gray>Цвет панели: <white><color>"))
+            fromConfig(BoardConfig.config(), "add-menu.full.boss-bar-color")
+        }
     }
 
     private fun iconItem(): GuiItem {
-        val builder = if (icon != null) {
-            ItemStackBuilder(icon.stack())
-                .display(BoardConfig.getString("add-menu.full.icon.display"))
-                .lore(BoardConfig.getStringList("add-menu.full.icon.lore"))
-        } else {
-            ItemStackBuilder(Material.PLAYER_HEAD)
-                .skull(player.uniqueId)
-                .display(BoardConfig.getString("add-menu.empty.icon.display"))
-                .lore(BoardConfig.getStringList("add-menu.empty.icon.lore"))
+        val onIconClick: (InventoryClickEvent) -> Unit = { click ->
+            click.isCancelled = true
+            val st: ItemStack = click.cursor
+            icon = if (st.type == Material.AIR) ItemIcon.of(player.uniqueId) else ItemIcon.of(st)
+            updateIcon()
         }
-        return builder.toGuiItemBuilder()
-            .clickEvent { click ->
-                click.isCancelled = true
-                val st: ItemStack = click.cursor
-                icon = if (st.type == Material.AIR) ItemIcon.of(player.uniqueId) else ItemIcon.of(st)
-                updateIcon()
-            }.build()
+        return if (icon != null) {
+            guiItem(icon.stack()) {
+                onClick(onIconClick)
+                display("<green>Иконка")
+                lore(listOf("<gray>Перетащите чтобы установить"))
+                fromConfig(BoardConfig.config(), "add-menu.full.icon")
+            }
+        } else {
+            guiSkull(player) {
+                onClick(onIconClick)
+                display("<green>Иконка")
+                lore(listOf("<gray>Перетащите чтобы установить"))
+                fromConfig(BoardConfig.config(), "add-menu.empty.icon")
+            }
+        }
     }
 
     private fun updateIcon() {
@@ -245,12 +261,8 @@ class AddBoardGui(
         this.update()
     }
 
-    private fun typeItem(): GuiItem = ItemStackBuilder(type.icon)
-        .tagResolver(TagResolver.resolver("type", Tag.inserting(type.displayName)))
-        .display(BoardConfig.getString("add-menu.full.type.display"))
-        .lore(BoardConfig.getStringList("add-menu.full.type.lore"))
-        .toGuiItemBuilder()
-        .clickEvent { click ->
+    private fun typeItem(): GuiItem = guiItem(type.icon) {
+        onClick { click ->
             click.isCancelled = true
             type = when (type) {
                 BoardEntryType.BUY -> BoardEntryType.INFO
@@ -259,34 +271,35 @@ class AddBoardGui(
                 BoardEntryType.SELL -> BoardEntryType.BUY
             }
             updateType()
-        }.build()
+        }
+        tagResolver(TagResolver.resolver("type", Tag.inserting(type.displayName)))
+        display("<type>")
+        lore(listOf("<green>Тип сообщения", "<gray>Нажмите чтобы поменять"))
+        fromConfig(BoardConfig.config(), "add-menu.full.type")
+    }
 
     private fun updateType() {
         typeItem.setItem(typeItem().item)
         this.update()
     }
 
-    private fun publishItem(): GuiItem = ItemStackBuilder(Material.GREEN_STAINED_GLASS_PANE)
-        .modelData(11007)
-        .display(BoardConfig.getString("add-menu.publish-display"))
-        .lore(BoardConfig.getStringList("add-menu.publish-lore"))
-        .toGuiItemBuilder()
-        .clickEvent { click ->
+    private fun publishItem(): GuiItem = guiItem(Material.GREEN_STAINED_GLASS_PANE) {
+        onClick { click ->
             click.isCancelled = true
             try {
                 val econ = EconomyModule.getEconomy()
                 if (econ == null || !econ.has(player, BoardConfig.editCost)) {
                     notEnoughMoneyDisplay(publishItem)
-                    return@clickEvent
+                    return@onClick
                 }
                 if (title == null) {
                     val lore = mutableListOf<Component>()
                     lore.add(Component.text("Короткое название не установлено", NamedTextColor.GRAY))
                     GuiUtils.temporaryChange(publishItem.item, Component.text("Остались незаполненные поля", NamedTextColor.RED), lore, 60L, ::update)
                     update()
-                    return@clickEvent
+                    return@onClick
                 }
-                val currentTitle = title ?: return@clickEvent
+                val currentTitle = title ?: return@onClick
                 GPTManager.moderationResponse("$currentTitle\n${description ?: ""}").thenAccept { moder ->
                     if (moder.isPresent) {
                         val response = moder.get()
@@ -317,31 +330,31 @@ class AddBoardGui(
                 click.whoClicked.closeInventory()
             }
             GuiUtils.constructAndShowAsync({ BoardGuiFactory.createForPlayer(player) }, click.whoClicked)
-        }.build()
+        }
+        modelData(11007)
+        display("<gray>Опубликовать")
+        lore(emptyList())
+        fromConfig(BoardConfig.config(), "add-menu.publish")
+    }
 
-    private fun editItem(): GuiItem = ItemStackBuilder(Material.GREEN_STAINED_GLASS_PANE)
-        .modelData(11007)
-        .display(BoardConfig.getString("add-menu.edit-display"))
-        .lore(BoardConfig.getStringList("add-menu.edit-lore"))
-        .tagResolver(TagResolver.resolver("cost", Tag.inserting(strip(Component.text(TextUtil.formatAmount(BoardConfig.editCost))) ?: Component.text(TextUtil.formatAmount(BoardConfig.editCost)))))
-        .toGuiItemBuilder()
-        .clickEvent { click ->
+    private fun editItem(): GuiItem = guiItem(Material.GREEN_STAINED_GLASS_PANE) {
+        onClick { click ->
             click.isCancelled = true
             try {
                 val econ = EconomyModule.getEconomy()
                 if (econ == null || !econ.has(player, BoardConfig.editCost)) {
                     notEnoughMoneyDisplay(publishItem)
-                    return@clickEvent
+                    return@onClick
                 }
                 if (title == null) {
                     val lore = mutableListOf<Component>()
                     lore.add(Component.text("Короткое название не установлено", NamedTextColor.GRAY))
                     GuiUtils.temporaryChange(publishItem.item, Component.text("Остались незаполненные поля", NamedTextColor.RED), lore, 60L, ::update)
                     update()
-                    return@clickEvent
+                    return@onClick
                 }
-                if (!takeMoney(BoardConfig.editCost)) return@clickEvent
-                val currentTitle = title ?: return@clickEvent
+                if (!takeMoney(BoardConfig.editCost)) return@onClick
+                val currentTitle = title ?: return@onClick
                 GPTManager.moderationResponse("$currentTitle\n${description ?: ""}").thenAccept { moder ->
                     if (moder.isPresent) {
                         val response = moder.get()
@@ -368,7 +381,13 @@ class AddBoardGui(
                 player.sendMessage(TextUtil.error())
                 click.whoClicked.closeInventory()
             }
-        }.build()
+        }
+        modelData(11007)
+        display("<gray>Изменить")
+        lore(listOf("<gray>Цена: "))
+        tagResolver(TagResolver.resolver("cost", Tag.inserting(strip(Component.text(TextUtil.formatAmount(BoardConfig.editCost))) ?: Component.text(TextUtil.formatAmount(BoardConfig.editCost)))))
+        fromConfig(BoardConfig.config(), "add-menu.edit")
+    }
 
     private fun takeMoney(cost: Double): Boolean {
         val econ = EconomyModule.getEconomy() ?: return false
@@ -382,12 +401,8 @@ class AddBoardGui(
         update()
     }
 
-    private fun deleteItem(): GuiItem = ItemStackBuilder(Material.RED_STAINED_GLASS_PANE)
-        .modelData(11002)
-        .display(BoardConfig.getString("add-menu.delete-display"))
-        .lore(BoardConfig.getStringList("add-menu.delete-lore"))
-        .toGuiItemBuilder()
-        .clickEvent { click ->
+    private fun deleteItem(): GuiItem = guiItem(Material.RED_STAINED_GLASS_PANE) {
+        onClick { click ->
             click.isCancelled = true
             if (confirmDelete) {
                 entry?.let { BoardManager.deleteEntry(it) }
@@ -397,12 +412,17 @@ class AddBoardGui(
                 GuiUtils.temporaryChange(deleteItem!!.item,
                     MiniMessage.miniMessage().deserialize(BoardConfig.getString("add-menu.confirm-delete")),
                     null, 100L) {
-                    this.update()
-                    this.confirmDelete = false
+                    this@AddBoardGui.update()
+                    this@AddBoardGui.confirmDelete = false
                 }
                 update()
             }
-        }.build()
+        }
+        modelData(11002)
+        display("<red>Удалить")
+        lore(emptyList())
+        fromConfig(BoardConfig.config(), "add-menu.delete")
+    }
 
     private fun setupBackground() {
         val pane = OutlinePane(9, 2, Pane.Priority.LOWEST)

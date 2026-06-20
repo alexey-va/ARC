@@ -84,23 +84,17 @@ object BuildConfig {
     // ==================== GUI Settings ====================
 
     object ConfirmGui {
-        private val section: ConfigSection get() = config.section("confirm-gui")
-
-        val title: String get() = section.string("title", "<dark_gray>Подтверждение постройки")
-        val confirmMaterial: Material get() = section.material("confirm-material", Material.PAPER)
-        val cancelMaterial: Material get() = section.material("cancel-material", Material.RED_STAINED_GLASS_PANE)
-        val confirmModelData: Int get() = section.int("confirm-model-data", 0)
-        val cancelModelData: Int get() = section.int("cancel-model-data", 0)
+        val title: String get() = config.string("confirm-gui.title", "<dark_gray>Подтверждение постройки")
     }
 
-    object BuildingGui {
-        private val section: ConfigSection get() = config.section("building-gui")
-
-        val confirmMaterial: Material get() = section.material("confirm-material", Material.PAPER)
-        val cancelMaterial: Material get() = section.material("cancel-material", Material.RED_STAINED_GLASS_PANE)
-        val fastFinishMaterial: Material get() = section.material("fast-finish-material", Material.BLAZE_POWDER)
-        val cancelModelData: Int get() = section.int("cancel-model-data", 0)
-    }
+    /** Module YAML — use [ru.arc.util.fromConfig] with paths under `building-gui.*` / `confirm-gui.*`. */
+    @JvmStatic
+    fun config(): Config =
+        if (ARC.plugin != null) {
+            ConfigManager.ofModule(ARC.instance.dataPath, "auto-build.yml")
+        } else {
+            ConfigManager.of(Paths.get(System.getProperty("java.io.tmpdir")), "auto-build.yml")
+        }
 
     // ==================== Messages ====================
 
@@ -141,22 +135,11 @@ object BuildConfig {
         fun noBook() =
             config.component("confirm-gui.no-book", "<gray>\uD83D\uDEE0 <red>У вас нет книги в инвентаре!")
 
-        fun confirmButton() = config.component("confirm-gui.confirm", "<green>Подтвердить постройку")
-        fun cancelButton() = config.component("confirm-gui.cancel", "<red>Отменить постройку")
-        fun cancelBuildButton() = config.component("building-gui.cancel-name", "<red>Отменить постройку")
-        fun cancelConfirmButton() =
-            config.component("building-gui.cancel-confirm", "<yellow>Нажмите ещё раз для подтверждения")
         fun cancelConfirmHint() =
             config.component(
                 "building-gui.cancel-hint",
                 "<gray>\uD83D\uDEE0 <yellow>Нажмите «Отменить» ещё раз для подтверждения",
             )
-        fun cancelLore() = config.componentList(
-            "building-gui.cancel-lore", listOf(
-                "<red>Книга не вернётся!",
-                "<gray>Нажмите ещё раз для отмены",
-            )
-        )
 
         fun displayLimit() = config.component(
             "messages.display-limit",

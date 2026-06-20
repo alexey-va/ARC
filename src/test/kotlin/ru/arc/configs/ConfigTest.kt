@@ -879,7 +879,7 @@ class ConfigTest {
         // Component methods require TextUtil which might not be available in tests
         // But we can test that they don't throw
         try {
-            val result = config.component("test.message")
+            val result = config.component("test.message", "<white>Test")
             assertNotNull(result, "Should return component")
         } catch (_: Exception) {
             // TextUtil might not be initialized in test environment

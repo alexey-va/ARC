@@ -12,6 +12,7 @@ import ru.arc.util.GuiUtils
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import ru.arc.util.TextUtil
+import ru.arc.util.fromConfig
 
 /**
  * GUI for selecting join/leave messages.
@@ -125,42 +126,32 @@ object JoinMessageGuiFactory {
 
             // Navigation bar
             navBar {
-                // Back button
                 back(
                     slot = 0,
                     configKey = "join-message-gui.back-button",
-                    material = cfg.material("join-message-gui.back-button", Material.BLUE_STAINED_GLASS_PANE),
-                    modelData = cfg.int("join-message-gui.back-button-model-data", 11013),
                 )
 
-                // Previous page
                 button(3) {
-                    material(cfg.material("join-message-gui.prev-button", Material.BLUE_STAINED_GLASS_PANE))
-                    modelData(cfg.int("join-message-gui.prev-button-model-data", 11013))
-                    display(cfg.string("join-message-gui.prev-button-display", "<gold>Назад"))
-                    lore(cfg.list("join-message-gui.prev-button-lore", listOf("<gray>Перейти к предыдущей странице")))
+                    display("<gold>Назад")
+                    lore(listOf("<gray>Перейти к предыдущей странице"))
+                    fromConfig(cfg, "join-message-gui.prev-button")
                     onClick { /* Handled by pagination */ }
                 }
 
-                // Switch join/leave mode
                 button(4) {
-                    material(cfg.material("${prefix}switch-button", Material.LIME_STAINED_GLASS_PANE))
-                    modelData(cfg.int("${prefix}switch-button-model-data", 0))
-                    display(cfg.string("${prefix}switch-button-display", "<gold>Сменить режим"))
-                    lore(cfg.list("${prefix}switch-button-lore"))
-
+                    display("<gold>Сменить режим")
+                    lore(emptyList())
+                    fromConfig(cfg, "${prefix}switch-button")
                     onClick { event ->
                         val clicker = event.whoClicked as? Player ?: return@onClick
                         GuiUtils.constructAndShowAsync({ create(clicker, !isJoin, 0) }, clicker)
                     }
                 }
 
-                // Next page
                 button(5) {
-                    material(cfg.material("join-message-gui.next-button", Material.BLUE_STAINED_GLASS_PANE))
-                    modelData(cfg.int("join-message-gui.next-button-model-data", 11013))
-                    display(cfg.string("join-message-gui.next-button-display", "<gold>Далее"))
-                    lore(cfg.list("join-message-gui.next-button-lore", listOf("<gray>Перейти к следующей странице")))
+                    display("<gold>Далее")
+                    lore(listOf("<gray>Перейти к следующей странице"))
+                    fromConfig(cfg, "join-message-gui.next-button")
                     onClick { /* Handled by pagination */ }
                 }
             }

@@ -84,27 +84,33 @@ class GuiDslTest :
                 lore.size shouldBe 3
             }
 
-            it("should use config for display") {
+            it("should overlay display from config via fromConfig") {
                 val mockConfig =
                     mockk<Config> {
-                        every { string("item.display", any()) } returns "<red>Config Display"
+                        every { exists("item") } returns true
+                        every { map("item", emptyMap<String, Any>()) } returns
+                            mapOf("display" to "<red>Config Display")
                     }
                 val builder = ItemBuilder.standalone(mockConfig)
                 builder.material(Material.STONE)
-                builder.displayFromConfig("item.display")
+                builder.display("<gray>Default")
+                builder.fromConfig(mockConfig, "item")
 
                 val item = builder.build()
                 item.shouldNotBeNull()
             }
 
-            it("should use config for lore") {
+            it("should overlay lore from config via fromConfig") {
                 val mockConfig =
                     mockk<Config> {
-                        every { stringList("item.lore") } returns listOf("<gray>A", "<gray>B")
+                        every { exists("item") } returns true
+                        every { map("item", emptyMap<String, Any>()) } returns
+                            mapOf("lore" to listOf("<gray>A", "<gray>B"))
                     }
                 val builder = ItemBuilder.standalone(mockConfig)
                 builder.material(Material.STONE)
-                builder.loreFromConfig("item.lore")
+                builder.lore("<gray>Default")
+                builder.fromConfig(mockConfig, "item")
 
                 val item = builder.build()
                 item.shouldNotBeNull()

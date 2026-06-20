@@ -30,6 +30,7 @@ import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
+import java.io.File
 import java.io.StringWriter
 import java.nio.file.Files
 import java.nio.file.Path
@@ -57,7 +58,7 @@ open class Config(
     private val folder: Path,
     private val filePath: String,
 ) {
-    val dataFolder get() = folder.toFile()
+    val dataFolder: File get() = folder.toFile()
 
     // ── SnakeYAML Engine v2 internals ──────────────────────────────────────
 
@@ -515,7 +516,7 @@ open class Config(
         val value = stringOrNull(path)
         if (value == null) {
             val tagNames = builder.getTagNames()
-            if (tagNames.isNotEmpty()) setComment(path, "Available tags: " + tagNames.joinToString(", ") { "<$it>" })
+            if (tagNames.isNotEmpty()) setComment(path, formatAvailableTagsComment(tagNames)!!)
             setValue(path, default)
             return MiniMessage.miniMessage().deserialize(default, builder.build())
         }
@@ -553,7 +554,7 @@ open class Config(
         val value = stringListOrNull(path)
         if (value == null) {
             val tagNames = builder.getTagNames()
-            if (tagNames.isNotEmpty()) setComment(path, "Available tags: " + tagNames.joinToString(", ") { "<$it>" })
+            if (tagNames.isNotEmpty()) setComment(path, formatAvailableTagsComment(tagNames)!!)
             setValue(path, default)
             return default.map { MiniMessage.miniMessage().deserialize(it, builder.build()) }
         }
@@ -587,7 +588,6 @@ open class Config(
             }
         return TextUtil.strip(TextUtil.mm(value, tagResolver))!!
     }
-
 
     // ── Property delegates (hot-reload) ────────────────────────────────────
 
@@ -1096,9 +1096,10 @@ open class Config(
  */
 internal fun prepareYamlContentForParsing(content: String): String {
     if (content.isEmpty()) return content
-    var normalized = MINIMESSAGE_HEX_SHORTHAND.replace(content) { match ->
-        "<color:#${match.groupValues[1]}>"
-    }
+    var normalized =
+        MINIMESSAGE_HEX_SHORTHAND.replace(content) { match ->
+            "<color:#${match.groupValues[1]}>"
+        }
     normalized = sanitizeUnpairedSurrogates(normalized)
     if (Character.isHighSurrogate(normalized.last())) {
         normalized += ' '
@@ -1123,10 +1124,12 @@ internal fun sanitizeUnpairedSurrogates(content: String): String {
                     i++
                 }
             }
+
             Character.isLowSurrogate(ch) -> {
                 out.append(' ')
                 i++
             }
+
             else -> {
                 out.append(ch)
                 i++

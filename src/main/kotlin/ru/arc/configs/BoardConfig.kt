@@ -47,6 +47,10 @@ object BoardConfig {
     @JvmStatic
     fun getStringList(key: String): List<String> = config.stringList(key)
 
+    /** Module YAML — use [ru.arc.util.fromConfig] with item paths (`add-menu.publish`, …). */
+    @JvmStatic
+    fun config(): Config = ConfigManager.ofModule(ARC.instance.dataFolder.toPath(), "board.yml")
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private fun String.miniToLegacy(): String =

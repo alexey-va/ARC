@@ -7,6 +7,7 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.bukkit.Material
 import org.bukkit.enchantments.Enchantment
 import org.bukkit.entity.Player
+import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.inventory.ItemFlag
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.meta.LeatherArmorMeta
@@ -71,6 +72,14 @@ fun itemStack(
 }
 
 /**
+ * Entry point for modifying an existing ItemStack.
+ */
+fun itemStack(
+    stack: ItemStack,
+    block: ItemStackDslBuilder.() -> Unit,
+): ItemStack = stack.modify(block)
+
+/**
  * Entry point for skull item.
  */
 fun skullItem(
@@ -91,24 +100,10 @@ fun skullItem(
     block: ItemStackDslBuilder.() -> Unit,
 ): ItemStack = skullItem(player.uniqueId, block)
 
-/**
- * Entry point with config for localized strings.
- */
-fun itemStackWithConfig(
-    material: Material,
-    config: Config,
-    block: ItemStackDslBuilder.() -> Unit,
-): ItemStack {
-    val builder = ItemStackDslBuilder(material, config = config)
-    builder.block()
-    return builder.build()
-}
-
 @ItemStackDslMarker
 class ItemStackDslBuilder(
     private var material: Material,
     private var amount: Int = 1,
-    private val config: Config? = null,
 ) {
     private var modelData: Int = 0
     private var display: String? = null
@@ -119,8 +114,10 @@ class ItemStackDslBuilder(
     private val enchants = mutableListOf<EnchantEntry>()
     private val itemFlags = mutableListOf<ItemFlag>()
     private val tagResolvers = mutableListOf<TagResolver>()
+    private val registeredTagNames = mutableSetOf<String>()
     private var leatherColor: org.bukkit.Color? = null
     private var unbreakable: Boolean = false
+    private var guiClickHandler: ((InventoryClickEvent) -> Unit)? = null
 
     private data class EnchantEntry(
         val enchantment: Enchantment,
@@ -142,20 +139,12 @@ class ItemStackDslBuilder(
 
     fun display(text: String) {
         this.display = text
+        this.displayComponent = null
     }
 
     fun display(component: Component) {
         this.displayComponent = component
-    }
-
-    /**
-     * Set display name from config.
-     */
-    fun displayFromConfig(
-        key: String,
-        default: String = "",
-    ) {
-        this.display = config?.string(key, default) ?: default
+        this.display = null
     }
 
     // ==================== Lore ====================
@@ -166,6 +155,7 @@ class ItemStackDslBuilder(
     fun lore(vararg lines: String) {
         loreLines.clear()
         loreLines.addAll(lines)
+        loreComponents = null
     }
 
     /**
@@ -174,6 +164,7 @@ class ItemStackDslBuilder(
     fun lore(lines: List<String>) {
         loreLines.clear()
         loreLines.addAll(lines)
+        loreComponents = null
     }
 
     /**
@@ -181,6 +172,7 @@ class ItemStackDslBuilder(
      */
     fun loreComponents(components: List<Component>) {
         loreComponents = components.toMutableList()
+        loreLines.clear()
     }
 
     /**
@@ -199,20 +191,14 @@ class ItemStackDslBuilder(
         builder.block()
         loreLines.clear()
         loreLines.addAll(builder.lines)
-    }
-
-    /**
-     * Set lore from config.
-     */
-    fun loreFromConfig(key: String) {
-        loreLines.clear()
-        loreLines.addAll(config?.stringList(key) ?: emptyList())
+        loreComponents = null
     }
 
     /**
      * Append lines to existing lore.
      */
     fun appendLore(vararg lines: String) {
+        loreComponents = null
         loreLines.addAll(lines)
     }
 
@@ -220,6 +206,7 @@ class ItemStackDslBuilder(
      * Append lines from list.
      */
     fun appendLore(lines: List<String>) {
+        loreComponents = null
         loreLines.addAll(lines)
     }
 
@@ -306,6 +293,7 @@ class ItemStackDslBuilder(
         name: String,
         value: String,
     ) {
+        registeredTagNames.add(name)
         tagResolvers.add(TagResolver.resolver(name, Tag.inserting(TextUtil.mm(value, true))))
     }
 
@@ -316,6 +304,7 @@ class ItemStackDslBuilder(
         name: String,
         value: Component,
     ) {
+        registeredTagNames.add(name)
         tagResolvers.add(TagResolver.resolver(name, Tag.inserting(value)))
     }
 
@@ -330,7 +319,7 @@ class ItemStackDslBuilder(
      * ```
      */
     fun tags(block: TagsDslBuilder.() -> Unit) {
-        val builder = TagsDslBuilder()
+        val builder = TagsDslBuilder(registeredTagNames)
         builder.block()
         tagResolvers.addAll(builder.resolvers)
     }
@@ -340,6 +329,13 @@ class ItemStackDslBuilder(
      */
     fun tagResolver(resolver: TagResolver) {
         tagResolvers.add(resolver)
+    }
+
+    /**
+     * Click handler for [guiItem] / [guiSkull] only (ignored by [itemStack]).
+     */
+    fun onClick(handler: (InventoryClickEvent) -> Unit) {
+        guiClickHandler = handler
     }
 
     // ==================== Misc ====================
@@ -429,6 +425,30 @@ class ItemStackDslBuilder(
         stack.itemMeta = meta
         return stack
     }
+
+    internal fun buildGuiItem(): com.github.stefvanschie.inventoryframework.gui.GuiItem =
+        build().toGuiItem(guiClickHandler)
+
+    internal fun peekDisplayDefault(): String? =
+        when {
+            display != null -> display
+            displayComponent != null -> MiniMessage.miniMessage().serialize(displayComponent!!)
+            else -> null
+        }
+
+    internal fun peekLoreDefault(): List<String>? =
+        when {
+            loreLines.isNotEmpty() -> loreLines.toList()
+            loreComponents != null && loreComponents!!.isNotEmpty() ->
+                loreComponents!!.map { MiniMessage.miniMessage().serialize(it) }
+            else -> null
+        }
+
+    internal fun peekModelDataDefault(): Int? = modelData.takeIf { it != 0 }
+
+    internal fun peekMaterialDefault(): Material = material
+
+    internal fun peekRegisteredTagNames(): Set<String> = registeredTagNames.toSet()
 }
 
 // ==================== Lore DSL Builder ====================
@@ -479,13 +499,16 @@ class LoreDslBuilder {
 // ==================== Tags DSL Builder ====================
 
 @ItemStackDslMarker
-class TagsDslBuilder {
+class TagsDslBuilder(
+    private val registeredTagNames: MutableSet<String>,
+) {
     internal val resolvers = mutableListOf<TagResolver>()
 
     /**
      * Add tag using infix to operator.
      */
     infix fun String.to(value: String) {
+        registeredTagNames.add(this)
         resolvers.add(TagResolver.resolver(this, Tag.inserting(TextUtil.mm(value, true))))
     }
 
@@ -493,6 +516,7 @@ class TagsDslBuilder {
      * Add tag with Component value.
      */
     infix fun String.to(value: Component) {
+        registeredTagNames.add(this)
         resolvers.add(TagResolver.resolver(this, Tag.inserting(value)))
     }
 }
@@ -547,7 +571,7 @@ fun quickItem(
  * Convert ItemStack to GuiItem with optional click handler.
  */
 fun ItemStack.toGuiItem(
-    onClick: ((org.bukkit.event.inventory.InventoryClickEvent) -> Unit)? = null,
+    onClick: ((InventoryClickEvent) -> Unit)? = null,
 ): com.github.stefvanschie.inventoryframework.gui.GuiItem =
     ru.arc.gui.GuiItems.create(this) { event ->
         event.isCancelled = true
@@ -555,18 +579,58 @@ fun ItemStack.toGuiItem(
     }
 
 /**
- * DSL for building a GuiItem directly.
+ * Build a clickable GUI item — material in constructor, appearance + [onClick] in one block.
+ *
+ * ```kotlin
+ * guiItem(Material.STICK) {
+ *     onClick { event -> ... }
+ *     display("<gold>Баланс")
+ *     modelData(11138)
+ *     fromConfig(config, "profile-menu.balance")  // module Config + path to item block
+ * }
+ * ```
  */
 fun guiItem(
     material: Material,
     block: ItemStackDslBuilder.() -> Unit,
-): com.github.stefvanschie.inventoryframework.gui.GuiItem = itemStack(material, block).toGuiItem()
+): com.github.stefvanschie.inventoryframework.gui.GuiItem {
+    val builder = ItemStackDslBuilder(material)
+    builder.block()
+    return builder.buildGuiItem()
+}
 
 /**
- * DSL for building a GuiItem with click handler.
+ * Build a clickable GUI item from an existing stack (material taken from [stack]).
  */
 fun guiItem(
-    material: Material,
-    onClick: ((org.bukkit.event.inventory.InventoryClickEvent) -> Unit)? = null,
+    stack: ItemStack,
+    block: ItemStackDslBuilder.() -> Unit = {},
+): com.github.stefvanschie.inventoryframework.gui.GuiItem {
+    val builder = ItemStackDslBuilder(stack.type, stack.amount)
+    stack.itemMeta?.let { meta ->
+        meta.customModelDataOrNull?.let { builder.modelData(it) }
+        meta.displayName()?.let { builder.display(it) }
+        meta.lore()?.let { builder.loreComponents(it) }
+        meta.itemFlags.forEach { builder.flags(it) }
+    }
+    builder.block()
+    return builder.buildGuiItem()
+}
+
+/**
+ * Skull GuiItem — [onClick] and appearance in one block.
+ */
+fun guiSkull(
+    uuid: UUID,
     block: ItemStackDslBuilder.() -> Unit,
-): com.github.stefvanschie.inventoryframework.gui.GuiItem = itemStack(material, block).toGuiItem(onClick)
+): com.github.stefvanschie.inventoryframework.gui.GuiItem {
+    val builder = ItemStackDslBuilder(Material.PLAYER_HEAD)
+    builder.skull(uuid)
+    builder.block()
+    return builder.buildGuiItem()
+}
+
+fun guiSkull(
+    player: Player,
+    block: ItemStackDslBuilder.() -> Unit,
+): com.github.stefvanschie.inventoryframework.gui.GuiItem = guiSkull(player.uniqueId, block)

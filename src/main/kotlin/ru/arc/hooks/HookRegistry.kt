@@ -24,7 +24,6 @@ import ru.arc.listeners.BlockListener
 import ru.arc.listeners.CMIListener
 import ru.arc.listeners.ChatListener
 import ru.arc.listeners.CommandListener
-import ru.arc.listeners.IAEvents
 import ru.arc.listeners.JoinListener
 import ru.arc.listeners.PickupListener
 import ru.arc.listeners.RespawnListener
@@ -34,14 +33,12 @@ import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 
 class HookRegistry {
-
     var chatListener: ChatListener? = null
     var commandListener: CommandListener? = null
     var spawnerListener: SpawnerListener? = null
     var blockListener: BlockListener? = null
     var joinListener: JoinListener? = null
     var pickupListener: PickupListener? = null
-    var iaEvents: IAEvents? = null
     var betterRTPListener: BetterRTPListener? = null
     var respawnListener: RespawnListener? = null
     var bsListener: BSListener? = null
@@ -50,31 +47,56 @@ class HookRegistry {
 
     companion object {
         @JvmField var landsHook: LandsHook? = null
+
         @JvmField var huskHomesHook: HuskHomesHook? = null
+
         @JvmField var papiHook: PAPIHook? = null
+
         @JvmField var cmiHook: CMIHook? = null
+
         @JvmField var itemsAdderHook: ItemsAdderHook? = null
+
         @JvmField var citizensHook: CitizensHook? = null
+
         @JvmField var viaVersionHook: ViaVersionHook? = null
+
         @JvmField var wgHook: WGHook? = null
+
         @JvmField var sfHook: SFHook? = null
+
         @JvmField var emHook: EMHook? = null
+
         @JvmField var yamipaHook: YamipaHook? = null
+
         @JvmField var luckPermsHook: LuckPermsHook? = null
+
         @JvmField var lootChestHook: LootChestHook? = null
+
         @JvmField var auctionHook: AuctionHook? = null
+
         @JvmField var translatorHook: TranslatorHook? = null
+
         @JvmField var jobsEnabled: Boolean = false
+
         @JvmField var bankHook: BankHook? = null
+
         @JvmField var redisEcoHook: RedisEcoHook? = null
+
         @JvmField var auraSkillsHook: AuraSkillsHook? = null
+
         @JvmField var playerWarpsHook: PlayerWarpsHook? = null
+
         @JvmField var packetEventsHook: PacketEventsHook? = null
+
         @JvmField var aeHook: AEHook? = null
 
         private val registeredHooks = HashSet<String>()
 
-        private fun register(pluginName: String, single: Boolean, runnable: Runnable) {
+        private fun register(
+            pluginName: String,
+            single: Boolean,
+            runnable: Runnable,
+        ) {
             if (registeredHooks.contains(pluginName)) {
                 info("Plugin {} already registered", pluginName)
                 return
@@ -93,7 +115,11 @@ class HookRegistry {
             }
         }
 
-        private fun registerFirstAvailable(single: Boolean, runnable: Runnable, vararg pluginNames: String) {
+        private fun registerFirstAvailable(
+            single: Boolean,
+            runnable: Runnable,
+            vararg pluginNames: String,
+        ) {
             for (pluginName in pluginNames) {
                 if (Bukkit.getServer().pluginManager.getPlugin(pluginName) != null) {
                     register(pluginName, single, runnable)
@@ -170,8 +196,6 @@ class HookRegistry {
         register("YamipaPlugin", true) { yamipaHook = YamipaHook() }
         register("ItemsAdder", true) {
             itemsAdderHook = ItemsAdderHook()
-            iaEvents = IAEvents()
-            Bukkit.getPluginManager().registerEvents(iaEvents!!, ARC.instance)
         }
         register("Citizens", true) {
             citizensHook = CitizensHook()

@@ -16,6 +16,7 @@ import org.bukkit.entity.Player
 import org.bukkit.event.inventory.InventoryClickEvent
 import ru.arc.ARC
 import ru.arc.configs.StockConfig
+import ru.arc.util.fromConfig
 import ru.arc.core.ScheduledTask
 import ru.arc.stock.Position
 import ru.arc.stock.Stock
@@ -23,11 +24,12 @@ import ru.arc.stock.StockMarket
 import ru.arc.stock.StockPlayer
 import ru.arc.stock.StockPlayerManager
 import ru.arc.util.GuiUtils
-import ru.arc.util.ItemStackBuilder
 import ru.arc.util.TextUtil
 import ru.arc.util.TextUtil.formatAmount
 import ru.arc.util.TextUtil.mm
 import ru.arc.util.TextUtil.strip
+import ru.arc.util.guiItem
+import ru.arc.util.itemStack
 import java.text.DecimalFormat
 import kotlin.math.max
 import kotlin.math.min
@@ -81,53 +83,137 @@ class PositionCreator(
         val staticPane = StaticPane(9, 1)
         val resolver = resolver(amount, type, leverage)
 
-        amountItem = ItemStackBuilder(Material.GOLD_INGOT)
-            .tagResolver(resolver)
-            .display(StockConfig.string("position-creator.amount-display"))
-            .lore(StockConfig.stringList("position-creator.amount-lore"))
-            .toGuiItemBuilder()
-            .clickEvent(::acceptAmountClick).build()
+        amountItem = guiItem(Material.GOLD_INGOT) {
+            onClick(::acceptAmountClick)
+            tagResolver(resolver)
+            display("                      <gold>Количество")
+            lore(listOf(
+                "                       <gray><strikethrough>             ",
+                "",
+                "  <white>💼 Количество: <#2196F3><amount>  ",
+                "",
+                "  <white>💲 Цена:<#4CAF50> <cost><white>💰  ",
+                "  <white>🔥 Комиссия: <#4CAF50><commission><white>💰  ",
+                "  <white>📈 Общая цена: <#4CAF50><total_cost><white>💰  ",
+                "  <white>₪ Ваш баланс: <#2196F3><balance><white>💰  ",
+                "",
+                "  <white>📈 Верхняя граница маржи: <#E91E63><upper><white>💰  ",
+                "  <white>📉 Нижняя граница маржи: <#E91E63><lower><white>💰  ",
+                "  <white>🛑 Авто-закроется при падении цены до: <#E91E63><close_at_low><white>💰  ",
+                "  <white>🛑 Авто-закроется при росте цены до: <#E91E63><close_at_high><white>💰  ",
+                "",
+                "           <#8c8c8c>• <#92bed8>Нажмите <#e6fff3>чтобы изменить <#8c8c8c>•  ",
+                "",
+            ))
+            fromConfig(StockConfig.config(), "locale.position-creator.amount")
+        }
         staticPane.addItem(amountItem, 0, 0)
 
-        typeItem = ItemStackBuilder(if (type == Position.Type.BOUGHT) Material.LAPIS_LAZULI else Material.COAL)
-            .tagResolver(resolver)
-            .display(StockConfig.string("position-creator.type-display"))
-            .lore(StockConfig.stringList("position-creator.type-lore"))
-            .toGuiItemBuilder()
-            .clickEvent(::acceptTypeClick).build()
+        typeItem = guiItem(
+            if (type == Position.Type.BOUGHT) Material.LAPIS_LAZULI else Material.COAL,
+        ) {
+            onClick(::acceptTypeClick)
+            tagResolver(resolver)
+            display("                 <gold>Тип")
+            lore(listOf(
+                "               <gray><strikethrough>         ",
+                "",
+                "            <white>🔥 <gray><type>",
+                "",
+                "   <#8c8c8c>• <#92bed8>Нажмите <#e6fff3>чтобы изменить <#8c8c8c>•  ",
+                "",
+            ))
+            fromConfig(StockConfig.config(), "locale.position-creator.type")
+        }
         staticPane.addItem(typeItem, 2, 0)
 
-        leverageItem = ItemStackBuilder(Material.LEVER)
-            .display(StockConfig.string("position-creator.leverage-display"))
-            .lore(StockConfig.stringList("position-creator.leverage-lore"))
-            .tagResolver(resolver)
-            .toGuiItemBuilder()
-            .clickEvent(::acceptLeverageClick).build()
+        leverageItem = guiItem(Material.LEVER) {
+            onClick(::acceptLeverageClick)
+            display("                      <gold>Рычаг")
+            lore(listOf(
+                "                    <gray><strikethrough>             ",
+                "",
+                "  <white>⚖ Рычаг: <#E91E63><leverage>  ",
+                "  <white>🛑 Максимальный рычаг: <#E91E63><max_leverage>  ",
+                "  <white>💹 Стоимость с учетом рычага: <#E91E63><leveraged_price><white>💰  ",
+                "  <white>🛑 Макс. стоимость с учетом рычага: <#E91E63><max_leveraged_price><white>💰  ",
+                "",
+                "             <#8c8c8c>• <#92bed8>Нажмите <#e6fff3>чтобы изменить <#8c8c8c>•  ",
+                "",
+            ))
+            tagResolver(resolver)
+            fromConfig(StockConfig.config(), "locale.position-creator.leverage")
+        }
         staticPane.addItem(leverageItem, 4, 0)
 
-        upperItem = ItemStackBuilder(Material.SLIME_BLOCK)
-            .display(StockConfig.string("position-creator.upper-display"))
-            .lore(StockConfig.stringList("position-creator.upper-lore"))
-            .tagResolver(resolver)
-            .toGuiItemBuilder()
-            .clickEvent(::acceptUpperClick).build()
+        upperItem = guiItem(Material.SLIME_BLOCK) {
+            onClick(::acceptUpperClick)
+            display("              <gold>Максимальная прибыль")
+            lore(listOf(
+                "                      <gray><strikethrough>             ",
+                "",
+                "    <white>📈 Граница: <green><upper><white>💰  ",
+                "",
+                "    <gray>Позиция автоматически закроется при  ",
+                "    <gray>достижении <green>прибыли<gray> в указаную величину  ",
+                "",
+                "             <#8c8c8c>• <#92bed8>Нажмите <#e6fff3>чтобы изменить <#8c8c8c>•  ",
+                "",
+            ))
+            tagResolver(resolver)
+            fromConfig(StockConfig.config(), "locale.position-creator.upper")
+        }
         staticPane.addItem(upperItem, 6, 0)
 
-        lowerItem = ItemStackBuilder(Material.HONEY_BLOCK)
-            .display(StockConfig.string("position-creator.lower-display"))
-            .lore(StockConfig.stringList("position-creator.lower-lore"))
-            .tagResolver(resolver)
-            .toGuiItemBuilder()
-            .clickEvent(::acceptLowerClick).build()
+        lowerItem = guiItem(Material.HONEY_BLOCK) {
+            onClick(::acceptLowerClick)
+            display("              <gold>Максимальные потери")
+            lore(listOf(
+                "                      <gray><strikethrough>             ",
+                "",
+                "    <white>📈 Граница: <green><lower><white>💰  ",
+                "",
+                "    <gray>Позиция автоматически закроется при  ",
+                "    <gray>достижении <green>прибыли<gray> в указаную величину  ",
+                "",
+                "             <#8c8c8c>• <#92bed8>Нажмите <#e6fff3>чтобы изменить <#8c8c8c>•  ",
+                "",
+            ))
+            tagResolver(resolver)
+            fromConfig(StockConfig.config(), "locale.position-creator.lower")
+        }
         staticPane.addItem(lowerItem, 7, 0)
 
         val canHaveMore = stockPlayer.isBelowMaxStockAmount()
-        createItem = ItemStackBuilder(Material.GREEN_STAINED_GLASS_PANE)
-            .display(if (canHaveMore) StockConfig.string("position-creator.create-display") else StockConfig.string("position-creator.create-display-limit"))
-            .lore(if (canHaveMore) StockConfig.stringList("position-creator.create-lore") else StockConfig.stringList("position-creator.create-lore-limit"))
-            .tagResolver(resolver)
-            .toGuiItemBuilder()
-            .clickEvent(if (!canHaveMore) { c -> c.isCancelled = true } else ::acceptCreateClick).build()
+        createItem = guiItem(Material.GREEN_STAINED_GLASS_PANE) {
+            onClick(if (!canHaveMore) { c -> c.isCancelled = true } else ::acceptCreateClick)
+            if (canHaveMore) {
+                display("                       <gold>Создать")
+                lore(listOf(
+                    "                       <gray><strikethrough>           ",
+                    "",
+                    "  <white>🏁 Цена: <#4CAF50><cost><white>💰  ",
+                    "  <white>🔥 Комиссия: <#E91E63><commission><white>💰  ",
+                    "  <white>📈 Общая цена: <#FF9800><total_cost><white>💰  ",
+                    "  <white>₪ Ваш баланс: <#2196F3><balance><white>💰  ",
+                    "  <white>🛑 Авто закроется при падении до: <#F44336><close_at_low><white>💰  ",
+                    "  <white>🛑 Авто закроется при росте до: <#9C27B0><close_at_high><white>💰  ",
+                    "  ",
+                    "  <white>🛒 У вас позиций: <#FFC107><position_amount>  ",
+                    "  <white>🛑 Ваш лимит: <#E91E63><max_stock_amount>  ",
+                    "",
+                    "           <#8c8c8c>• <#92bed8>Нажмите <#e6fff3>чтобы изменить <#8c8c8c>•  ",
+                    "",
+                ))
+                tagResolver(resolver)
+                fromConfig(StockConfig.config(), "locale.position-creator.create")
+            } else {
+                display(" <red>Вы достигли лимита активов ")
+                lore(emptyList())
+                tagResolver(resolver)
+                fromConfig(StockConfig.config(), "locale.position-creator.create-limit")
+            }
+        }
         staticPane.addItem(createItem, 8, 0)
 
         this.addPane(Slot.fromXY(0, 0), staticPane)
@@ -197,15 +283,16 @@ class PositionCreator(
         val pane = StaticPane(9, 1)
         this.addPane(Slot.fromXY(0, 1), pane)
 
-        back = ItemStackBuilder(Material.BLUE_STAINED_GLASS_PANE)
-            .display(StockConfig.string("position-creator.back-display"))
-            .lore(StockConfig.stringList("position-creator.back-lore"))
-            .modelData(11013)
-            .toGuiItemBuilder()
-            .clickEvent { click ->
+        back = guiItem(Material.BLUE_STAINED_GLASS_PANE) {
+            onClick { click ->
                 click.isCancelled = true
                 GuiUtils.constructAndShowAsync({ PositionSelector(stockPlayer, symbol) }, click.whoClicked)
-            }.build()
+            }
+            display("<gray>Назад")
+            lore(emptyList())
+            modelData(11013)
+            fromConfig(StockConfig.config(), "locale.position-creator.back")
+        }
         pane.addItem(back, 0, 0)
     }
 
@@ -300,8 +387,8 @@ class PositionCreator(
             if (!success) {
                 GuiUtils.temporaryChange(
                     createItem.item,
-                    MiniMessage.miniMessage().deserialize(StockConfig.string("position-creator.create-display-no-money")),
-                    StockConfig.stringList("position-creator.create-lore-no-money").map { MiniMessage.miniMessage().deserialize(it) },
+                    MiniMessage.miniMessage().deserialize(StockConfig.string("position-creator.create-no-money.display")),
+                    StockConfig.stringList("position-creator.create-no-money.lore").map { MiniMessage.miniMessage().deserialize(it) },
                     100L, ::update
                 )
                 this.update()
@@ -343,40 +430,116 @@ class PositionCreator(
         ARC.instance.server.scheduler.runTaskAsynchronously(ARC.instance, Runnable {
             val resolver = resolver(amount, type, leverage)
 
-            leverageItem.item.itemMeta = ItemStackBuilder(Material.LEVER)
-                .tagResolver(resolver)
-                .display(StockConfig.string("position-creator.leverage-display"))
-                .lore(StockConfig.stringList("position-creator.leverage-lore"))
-                .build().itemMeta
+            leverageItem.item.itemMeta = itemStack(Material.LEVER) {
+                tagResolver(resolver)
+                display("                      <gold>Рычаг")
+                lore(listOf(
+                    "                    <gray><strikethrough>             ",
+                    "",
+                    "  <white>⚖ Рычаг: <#E91E63><leverage>  ",
+                    "  <white>🛑 Максимальный рычаг: <#E91E63><max_leverage>  ",
+                    "  <white>💹 Стоимость с учетом рычага: <#E91E63><leveraged_price><white>💰  ",
+                    "  <white>🛑 Макс. стоимость с учетом рычага: <#E91E63><max_leveraged_price><white>💰  ",
+                    "",
+                    "             <#8c8c8c>• <#92bed8>Нажмите <#e6fff3>чтобы изменить <#8c8c8c>•  ",
+                    "",
+                ))
+                fromConfig(StockConfig.config(), "locale.position-creator.leverage")
+            }.itemMeta
 
-            lowerItem.item.itemMeta = ItemStackBuilder(Material.HONEY_BLOCK)
-                .tagResolver(resolver)
-                .display(StockConfig.string("position-creator.lower-display"))
-                .lore(StockConfig.stringList("position-creator.lower-lore"))
-                .build().itemMeta
+            lowerItem.item.itemMeta = itemStack(Material.HONEY_BLOCK) {
+                tagResolver(resolver)
+                display("              <gold>Максимальные потери")
+                lore(listOf(
+                    "                      <gray><strikethrough>             ",
+                    "",
+                    "    <white>📈 Граница: <green><lower><white>💰  ",
+                    "",
+                    "    <gray>Позиция автоматически закроется при  ",
+                    "    <gray>достижении <green>прибыли<gray> в указаную величину  ",
+                    "",
+                    "             <#8c8c8c>• <#92bed8>Нажмите <#e6fff3>чтобы изменить <#8c8c8c>•  ",
+                    "",
+                ))
+                fromConfig(StockConfig.config(), "locale.position-creator.lower")
+            }.itemMeta
 
-            upperItem.item.itemMeta = ItemStackBuilder(Material.SLIME_BLOCK)
-                .tagResolver(resolver)
-                .display(StockConfig.string("position-creator.upper-display"))
-                .lore(StockConfig.stringList("position-creator.upper-lore"))
-                .build().itemMeta
+            upperItem.item.itemMeta = itemStack(Material.SLIME_BLOCK) {
+                tagResolver(resolver)
+                display("              <gold>Максимальная прибыль")
+                lore(listOf(
+                    "                      <gray><strikethrough>             ",
+                    "",
+                    "    <white>📈 Граница: <green><upper><white>💰  ",
+                    "",
+                    "    <gray>Позиция автоматически закроется при  ",
+                    "    <gray>достижении <green>прибыли<gray> в указаную величину  ",
+                    "",
+                    "             <#8c8c8c>• <#92bed8>Нажмите <#e6fff3>чтобы изменить <#8c8c8c>•  ",
+                    "",
+                ))
+                fromConfig(StockConfig.config(), "locale.position-creator.upper")
+            }.itemMeta
 
-            typeItem.setItem(ItemStackBuilder(if (type == Position.Type.BOUGHT) Material.LAPIS_LAZULI else Material.COAL)
-                .tagResolver(resolver)
-                .display(StockConfig.string("position-creator.type-display"))
-                .lore(StockConfig.stringList("position-creator.type-lore"))
-                .build())
+            typeItem.setItem(itemStack(if (type == Position.Type.BOUGHT) Material.LAPIS_LAZULI else Material.COAL) {
+                tagResolver(resolver)
+                display("                 <gold>Тип")
+                lore(listOf(
+                    "               <gray><strikethrough>         ",
+                    "",
+                    "            <white>🔥 <gray><type>",
+                    "",
+                    "   <#8c8c8c>• <#92bed8>Нажмите <#e6fff3>чтобы изменить <#8c8c8c>•  ",
+                    "",
+                ))
+                fromConfig(StockConfig.config(), "locale.position-creator.type")
+            })
 
-            createItem.setItem(ItemStackBuilder(Material.GREEN_STAINED_GLASS_PANE)
-                .display(StockConfig.string("position-creator.create-display"))
-                .lore(StockConfig.stringList("position-creator.create-lore"))
-                .tagResolver(resolver).build())
+            createItem.setItem(itemStack(Material.GREEN_STAINED_GLASS_PANE) {
+                display("                       <gold>Создать")
+                lore(listOf(
+                    "                       <gray><strikethrough>           ",
+                    "",
+                    "  <white>🏁 Цена: <#4CAF50><cost><white>💰  ",
+                    "  <white>🔥 Комиссия: <#E91E63><commission><white>💰  ",
+                    "  <white>📈 Общая цена: <#FF9800><total_cost><white>💰  ",
+                    "  <white>₪ Ваш баланс: <#2196F3><balance><white>💰  ",
+                    "  <white>🛑 Авто закроется при падении до: <#F44336><close_at_low><white>💰  ",
+                    "  <white>🛑 Авто закроется при росте до: <#9C27B0><close_at_high><white>💰  ",
+                    "  ",
+                    "  <white>🛒 У вас позиций: <#FFC107><position_amount>  ",
+                    "  <white>🛑 Ваш лимит: <#E91E63><max_stock_amount>  ",
+                    "",
+                    "           <#8c8c8c>• <#92bed8>Нажмите <#e6fff3>чтобы изменить <#8c8c8c>•  ",
+                    "",
+                ))
+                tagResolver(resolver)
+                fromConfig(StockConfig.config(), "locale.position-creator.create")
+            })
 
-            amountItem.item.itemMeta = ItemStackBuilder(Material.GOLD_INGOT)
-                .tagResolver(resolver)
-                .display(StockConfig.string("position-creator.amount-display"))
-                .lore(StockConfig.stringList("position-creator.amount-lore"))
-                .build().itemMeta
+            amountItem.item.itemMeta = itemStack(Material.GOLD_INGOT) {
+                tagResolver(resolver)
+                display("                      <gold>Количество")
+                lore(listOf(
+                    "                       <gray><strikethrough>             ",
+                    "",
+                    "  <white>💼 Количество: <#2196F3><amount>  ",
+                    "",
+                    "  <white>💲 Цена:<#4CAF50> <cost><white>💰  ",
+                    "  <white>🔥 Комиссия: <#4CAF50><commission><white>💰  ",
+                    "  <white>📈 Общая цена: <#4CAF50><total_cost><white>💰  ",
+                    "  <white>₪ Ваш баланс: <#2196F3><balance><white>💰  ",
+                    "",
+                    "  <white>📈 Верхняя граница маржи: <#E91E63><upper><white>💰  ",
+                    "  <white>📉 Нижняя граница маржи: <#E91E63><lower><white>💰  ",
+                    "  <white>🛑 Авто-закроется при падении цены до: <#E91E63><close_at_low><white>💰  ",
+                    "  <white>🛑 Авто-закроется при росте цены до: <#E91E63><close_at_high><white>💰  ",
+                    "",
+                    "           <#8c8c8c>• <#92bed8>Нажмите <#e6fff3>чтобы изменить <#8c8c8c>•  ",
+                    "",
+                ))
+                fromConfig(StockConfig.config(), "locale.position-creator.amount")
+            }.itemMeta
 
             ARC.instance.server.scheduler.runTask(ARC.instance, Runnable { update() })
         })

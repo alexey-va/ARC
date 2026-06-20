@@ -44,8 +44,13 @@ fun createJobsListGui(
                 val resolver = createResolver(config, player, job, boost, data)
 
                 material(job.guiItem.type)
-                displayFromConfig("boost-menu.job-display")
-                loreFromConfig("boost-menu.job-lore")
+                display("<job>")
+                lore(listOf(
+                    "<gray>Опыт: <exp_boost>%",
+                    "<gray>Деньги: <money_boost>%",
+                    "<gray>Очки: <points_boost>%",
+                ))
+                fromConfig(config, "boost-menu.job")
                 tagResolver(resolver)
                 flags(ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_ATTRIBUTES)
 
@@ -66,8 +71,9 @@ fun createJobsListGui(
 
             button(4) {
                 material(Material.GREEN_STAINED_GLASS_PANE)
-                displayFromConfig("boost-menu.buy-display")
-                loreFromConfig("boost-menu.buy-lore")
+                display("<green>Купить буст")
+                lore(emptyList())
+                fromConfig(config, "boost-menu.buy")
                 onClick {
                     GuiUtils.constructAndShowAsync({ BuyBoostGuiFactory.create(player, null, config) }, player)
                 }

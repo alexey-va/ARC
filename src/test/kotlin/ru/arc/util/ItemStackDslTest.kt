@@ -281,5 +281,113 @@ class ItemStackDslTest :
                 modified.type shouldBe Material.DIAMOND
                 modified.itemMeta?.hasDisplayName() shouldBe true
             }
+
+            it("should replace component lore when lore list is set in modify") {
+                val original =
+                    itemStack(Material.DIAMOND) {
+                        loreComponents(listOf(net.kyori.adventure.text.Component.text("Old")))
+                    }
+
+                val modified =
+                    original.modify {
+                        lore("<gray>New line")
+                    }
+
+                modified.itemMeta?.lore()?.size shouldBe 1
+            }
+        }
+
+        describe("fromConfig overlay") {
+
+            it("should inject code defaults as nested item map when path is absent") {
+                val config = ru.arc.configs.TestConfig()
+                itemStack(Material.PAPER) {
+                    display("<gold>Default title")
+                    lore(listOf("<gray>Default lore"))
+                    fromConfig(config, "test.item")
+                }
+
+                config.stringOrNull("test.item.display") shouldBe "<gold>Default title"
+                config.stringListOrNull("test.item.lore") shouldBe listOf("<gray>Default lore")
+            }
+
+            it("should use nested config values when item map already exists") {
+                val config =
+                    ru.arc.configs.TestConfig(
+                        mapOf(
+                            "test" to
+                                mapOf(
+                                    "item" to
+                                        mapOf(
+                                            "display" to "<red>From config",
+                                            "lore" to listOf("<yellow>Line 1"),
+                                        ),
+                                ),
+                        ),
+                    )
+                val item =
+                    itemStack(Material.PAPER) {
+                        display("<gold>Code default")
+                        lore(listOf("<gray>Code lore"))
+                        fromConfig(config, "test.item")
+                    }
+
+                item.itemMeta?.hasDisplayName() shouldBe true
+                item.itemMeta?.lore()?.size shouldBe 1
+                config.stringOrNull("test.item.display") shouldBe "<red>From config"
+            }
+
+            it("should not read removed flat keys") {
+                val config =
+                    ru.arc.configs.TestConfig(
+                        mapOf(
+                            "test.item-display" to "<blue>Legacy title",
+                            "test.item-lore" to listOf("<gray>Legacy lore"),
+                        ),
+                    )
+                val item =
+                    itemStack(Material.PAPER) {
+                        display("<gold>Code default")
+                        lore(listOf("<gray>Code lore"))
+                        fromConfig(config, "test.item")
+                    }
+
+                item.itemMeta?.hasDisplayName() shouldBe true
+                config.stringOrNull("test.item.display") shouldBe "<gold>Code default"
+                config.stringOrNull("test.item-display") shouldBe "<blue>Legacy title"
+            }
+
+            it("should inject model data default into nested item map") {
+                val config = ru.arc.configs.TestConfig()
+                itemStack(Material.STICK) {
+                    modelData(42)
+                    fromConfig(config, "test.btn")
+                }
+
+                config.intOrNull("test.btn.customModelData") shouldBe 42
+            }
+
+            it("should collect available tags from registered tags and display or lore text") {
+                val tags =
+                    ItemConfigTagComment.collect(
+                        registered = listOf("max_stock_amount"),
+                        display = "<gold>Title",
+                        lore = listOf("<gray>Balance: <balance>", "<gray>Count: <position_count>"),
+                    )
+
+                tags shouldBe listOf("balance", "max_stock_amount", "position_count")
+            }
+
+            it("should support onClick inside guiItem block") {
+                var clicked = false
+                val item =
+                    guiItem(Material.LEVER) {
+                        onClick { clicked = true }
+                        display("<yellow>Toggle")
+                    }
+
+                item.shouldNotBeNull()
+                clicked shouldBe false
+            }
         }
     })

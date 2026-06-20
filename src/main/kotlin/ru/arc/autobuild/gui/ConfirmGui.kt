@@ -9,6 +9,7 @@ import ru.arc.autobuild.BuildingManager
 import ru.arc.autobuild.ConstructionSite
 import ru.arc.gui.gui
 import ru.arc.util.TextUtil
+import ru.arc.util.fromConfig
 
 /**
  * Confirmation GUI shown when player clicks on construction NPC.
@@ -18,16 +19,14 @@ object ConfirmGuiFactory {
     fun create(
         player: Player,
         site: ConstructionSite,
-    ): ChestGui =
-        gui(TextUtil.toLegacy(BuildConfig.ConfirmGui.title), 3, player) {
+    ): ChestGui {
+        val buildConfig = BuildConfig.config()
+        return gui(TextUtil.toLegacy(BuildConfig.ConfirmGui.title), 3, player) {
             background()
 
             staticPane(0, 1, 9, 1) {
-                // Confirm button
                 item(2, 0) {
-                    material(BuildConfig.ConfirmGui.confirmMaterial)
-                    display(BuildConfig.Messages.confirmButton())
-                    modelData(BuildConfig.ConfirmGui.confirmModelData)
+                    fromConfig(buildConfig, "confirm-gui.confirm")
 
                     onClick { event ->
                         event.isCancelled = true
@@ -40,11 +39,8 @@ object ConfirmGuiFactory {
                     }
                 }
 
-                // Cancel button
                 item(6, 0) {
-                    material(BuildConfig.ConfirmGui.cancelMaterial)
-                    display(BuildConfig.Messages.cancelButton())
-                    modelData(BuildConfig.ConfirmGui.cancelModelData)
+                    fromConfig(buildConfig, "confirm-gui.cancel")
 
                     onClick { event ->
                         event.isCancelled = true
@@ -54,6 +50,7 @@ object ConfirmGuiFactory {
                 }
             }
         }
+    }
 
     /**
      * Removes the building book from player's inventory.
@@ -83,4 +80,3 @@ object ConfirmGuiFactory {
         return false
     }
 }
-

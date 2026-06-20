@@ -4,27 +4,29 @@
 store:
   # GUI title
   title: "<dark_gray>Хранилище"
-  
+
   # Back button
-  back: "<gray>« Назад"
-  back-lore: [ ]
+  back:
+    display: "<gray>« Назад"
+    lore: []
+    customModelData: 11013
   back-command: "menu"
-  back-model-data: 11013
-  
-  # Cooldown message (when clicking too fast)
-  cooldown-title: "<red>Подождите..."
-  cooldown-lore:
+  cooldown:
+    display: "<red>Подождите..."
+    lore:
     - "<gray>Вы кликаете слишком быстро!"
-  
+
   # No inventory space message
-  no-space-title: "<red>Нет места!"
-  no-space-lore:
+  no-space:
+    display: "<red>Нет места!"
+    lore:
     - "<gray>В вашем инвентаре нет места"
     - "<gray>для этого предмета."
-  
+
   # Item was removed by someone else
-  item-is-gone-display: "<red>Предмет исчез!"
-  item-is-gone-lore:
+  item-is-gone:
+    display: "<red>Предмет исчез!"
+    lore:
     - "<gray>Этот предмет больше не доступен."
 
 

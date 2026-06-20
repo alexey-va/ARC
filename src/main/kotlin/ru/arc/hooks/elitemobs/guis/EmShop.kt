@@ -15,11 +15,12 @@ import org.bukkit.inventory.ItemStack
 import ru.arc.configs.Config
 import ru.arc.hooks.HookRegistry
 import ru.arc.hooks.elitemobs.EMHook
-import ru.arc.util.GuiItemBuilder
 import ru.arc.util.GuiUtils
-import ru.arc.util.ItemStackBuilder
 import ru.arc.util.TextUtil.formatAmount
 import ru.arc.util.TextUtil.mm
+import ru.arc.util.fromConfig
+import ru.arc.util.guiItem
+import ru.arc.util.itemComponents
 
 class EmShop(
     private val config: Config,
@@ -45,14 +46,21 @@ class EmShop(
             val stack = item.stack.clone()
             val meta = stack.itemMeta ?: continue
             val lore = meta.lore()?.toMutableList() ?: ArrayList()
-            lore.addAll(0, config.componentList("shop.item-price-lore") { tag("price", formatAmount(item.price)) })
+            lore.addAll(0, config.componentList("shop.item-price.lore") { tag("price", formatAmount(item.price)) })
             val removeLast = config.integer("shop.remove-last-lore", 0)
             repeat(removeLast) {
                 if (lore.isNotEmpty()) lore.removeAt(lore.size - 1)
             }
             meta.lore(lore)
             stack.itemMeta = meta
-            items.add(GuiItemBuilder(stack).clickEvent { click -> processClick(click.apply { isCancelled = true }, stack, item) }.build())
+            items.add(
+                guiItem(stack) {
+                    onClick { click ->
+                        click.isCancelled = true
+                        processClick(click, click.currentItem!!, item)
+                    }
+                },
+            )
         }
         pane.populateWithGuiItems(items)
     }
@@ -77,24 +85,26 @@ class EmShop(
         this.addPane(Slot.fromXY(0, 0), pane)
         val resolver = resolver()
 
-        val change = ItemStackBuilder(Material.GREEN_STAINED_GLASS_PANE)
-            .display(config.string("shop.change-display"))
-            .lore(config.stringList("shop.change-lore"))
-            .tagResolver(resolver)
-            .toGuiItemBuilder()
-            .clickEvent { click ->
+        val change = guiItem(Material.GREEN_STAINED_GLASS_PANE) {
+            onClick { click ->
                 click.isCancelled = true
                 GuiUtils.constructAndShowAsync({ EmShop(config, player, shopHolder, !isGear, emHook) }, click.whoClicked)
-            }.build()
+            }
+            display("<gold>Сменить тип товаров")
+            lore(listOf("<gray>Текущий тип: <green><type>"))
+            tagResolver(resolver)
+            fromConfig(config, "shop.change")
+        }
         pane.addItem(change, 4, 0)
 
-        val update = ItemStackBuilder(Material.PAPER)
-            .modelData(31173)
-            .display(config.string("shop.update-display"))
-            .lore(config.stringList("shop.update-lore"))
-            .tagResolver(resolver)
-            .toGuiItemBuilder()
-            .clickEvent { click -> click.isCancelled = true }.build()
+        val update = guiItem(Material.PAPER) {
+            onClick { click -> click.isCancelled = true }
+            modelData(31173)
+            display("<gold>Обновление ассортимента")
+            lore(listOf("<gray>Обновление через: <green><update_minutes> минут"))
+            tagResolver(resolver)
+            fromConfig(config, "shop.update")
+        }
         pane.addItem(update, 8, 0)
     }
 
@@ -111,18 +121,13 @@ class EmShop(
         val cost = item.price
 
         if (balance < cost) {
-            GuiUtils.temporaryChange(
-                stack,
-                config.component("shop.not-enough-money-display", "<red>Недостаточно средств") {
-                    tag("cost", formatAmount(cost))
-                    tag("balance", formatAmount(balance))
-                },
-                config.componentList("shop.not-enough-money-lore") {
-                    tag("cost", formatAmount(cost))
-                    tag("balance", formatAmount(balance))
-                },
-                60,
-            ) { update() }
+            val resolver =
+                TagResolver.resolver(
+                    TagResolver.resolver("cost", Tag.inserting(mm(formatAmount(cost), true))),
+                    TagResolver.resolver("balance", Tag.inserting(mm(formatAmount(balance), true))),
+                )
+            val (display, lore) = config.itemComponents("shop.not-enough-money", resolver)
+            GuiUtils.temporaryChange(stack, display, lore, 60) { update() }
             update()
             return
         }

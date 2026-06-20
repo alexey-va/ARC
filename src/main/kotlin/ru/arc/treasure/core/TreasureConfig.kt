@@ -5,14 +5,18 @@ import ru.arc.configs.Config
 import ru.arc.configs.ConfigManager
 
 /**
- * Configuration for the treasure module.
+ * Configuration for the treasure module (`plugins/ARC/treasures/config.yml`).
  */
 object TreasureConfig {
     private val config: Config
-        get() = ConfigManager.of(
-            ARC.instance.dataFolder.toPath().resolve("treasures"),
-            "config.yml",
-        )
+        get() =
+            ConfigManager.of(
+                ARC.instance.dataFolder.toPath().resolve("treasures"),
+                "config.yml",
+            )
+
+    /** Loaded treasure GUI YAML — use [ru.arc.util.fromConfig] with paths under `gui.*`. */
+    fun config(): Config = config
 
     // ==================== GUI Settings ====================
 
@@ -21,14 +25,14 @@ object TreasureConfig {
         val mainPoolLore: List<String>
             get() =
                 config
-                    .stringList("gui.main.pool-lore")
+                    .stringList("gui.main.pool-item.lore")
                     .ifEmpty { listOf("<gray>Предметов: <white>%size%") }
         val mainBackCommand: String get() = config.string("gui.main.back-command", "")
-        val mainCreatePool: String get() = config.string("gui.main.create-pool", "<green>Создать пул")
+        val mainCreatePool: String get() = config.string("gui.main.create-pool.display", "<green>Создать пул")
         val mainCreatePoolLore: List<String>
             get() =
                 config
-                    .stringList("gui.main.create-pool-lore")
+                    .stringList("gui.main.create-pool.lore")
                     .ifEmpty { listOf("<gray>Нажмите чтобы создать") }
         val mainCreatePoolStart: String get() = config.string("gui.main.create-pool-start", "<green>Введите ID пула")
         val mainCreatePoolDeny: String
@@ -39,37 +43,35 @@ object TreasureConfig {
                 )
 
         val poolTitle: String get() = config.string("gui.pool.title", "Пул: %pool%")
-        val poolAddItem: String get() = config.string("gui.pool.add-item", "<green>Добавить предмет")
-        val poolAddMoney: String get() = config.string("gui.pool.add-money", "<gold>Добавить деньги")
-        val poolAddCommand: String get() = config.string("gui.pool.add-command", "<aqua>Добавить команду")
-        val poolDelete: String get() = config.string("gui.pool.delete", "<red>Удалить пул")
+        val poolAddItem: String get() = config.string("gui.pool.add-item.display", "<green>Добавить предмет")
+        val poolAddMoney: String get() = config.string("gui.pool.add-money.display", "<gold>Добавить деньги")
+        val poolAddCommand: String get() = config.string("gui.pool.add-command.display", "<aqua>Добавить команду")
+        val poolDelete: String get() = config.string("gui.pool.delete.display", "<red>Удалить пул")
         val poolDeleteConfirm: String
             get() =
-                config.string(
-                    "gui.pool.delete-confirm",
-                    "<red>Shift+Click для подтверждения",
-                )
-        val poolMessages: String get() = config.string("gui.pool.messages", "<yellow>Сообщения пула")
+                config.stringList("gui.pool.delete.lore").firstOrNull()
+                    ?: config.string("gui.pool.delete-confirm", "<red>Shift+Click для подтверждения")
+        val poolMessages: String get() = config.string("gui.pool.messages.display", "<yellow>Сообщения пула")
         val poolMessagesLore: List<String>
             get() =
                 config
-                    .stringList("gui.pool.messages-lore")
+                    .stringList("gui.pool.messages.lore")
                     .ifEmpty { listOf("<gray>Сообщения при выдаче", "<gray>любой награды из пула") }
 
         val treasureTitle: String get() = config.string("gui.treasure.title", "Редактирование")
-        val treasureDelete: String get() = config.string("gui.treasure.delete", "<red>Удалить")
-        val treasureWeight: String get() = config.string("gui.treasure.weight", "<yellow>Вес: <white>%weight%")
+        val treasureDelete: String get() = config.string("gui.treasure.delete.display", "<red>Удалить")
+        val treasureWeight: String get() = config.string("gui.treasure.weight.display", "<yellow>Вес: <white>%weight%")
         val treasureAmount: String
             get() =
                 config.string(
-                    "gui.treasure.amount",
+                    "gui.treasure.amount.display",
                     "<yellow>Количество: <white>%min%-%max%",
                 )
-        val treasureMessages: String get() = config.string("gui.treasure.messages", "<yellow>Сообщения")
+        val treasureMessages: String get() = config.string("gui.treasure.messages.display", "<yellow>Сообщения")
         val treasureMessagesLore: List<String>
             get() =
                 config
-                    .stringList("gui.treasure.messages-lore")
+                    .stringList("gui.treasure.messages.lore")
                     .ifEmpty { listOf("<gray>Сообщения при получении", "<gray>этой награды") }
     }
 

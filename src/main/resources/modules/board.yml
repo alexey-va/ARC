@@ -48,35 +48,44 @@ item:
     - ''
     - ' <dark_gray>✎ <gray>нажмите <green>ПКМ <gray>чтобы оценить'
 rate-menu:
-  up-display: <green>Оценить положительно
-  up-lore: [ ]
-  down-display: <red>Оценить отрицательно
-  down-lore: [ ]
-  report-display: <dark_red>Пожаловаться
-  report-lore: [ ]
+  up:
+    display: <green>Оценить положительно
+    lore: [ ]
+  down:
+    display: <red>Оценить отрицательно
+    lore: [ ]
+  report:
+    display: <dark_red>Пожаловаться
+    lore: [ ]
   cant-rate: <dark_red>Вы не можете оценить это объявление
   already-rate: <dark_red>Вы уже поставили эту оценку
   already-report: <dark_red>Вы уже пожаловались!
   success-rate: <gold>Объявление оценено!
   success-report: <gold>Жалоба подана!
 board-menu:
-  publish-display: <gray>Опубликовать объявление
-  publish-lore: ' <dark_gray>● <white>Цена: <green><cost><white>💰'
-  refresh-display: <gray>Обновить
-  refresh-lore: [ ]
-  back-display: <gray>Назад
-  back-lore: [ ]
+  publish:
+    display: <gray>Опубликовать объявление
+    lore: ' <dark_gray>● <white>Цена: <green><cost><white>💰'
+  refresh:
+    display: <gray>Обновить
+    lore: [ ]
+  back:
+    display: <gray>Назад
+    lore: [ ]
 add-menu:
-  delete-display: <red>Удалить
-  delete-lore: [ ]
+  delete:
+    display: <red>Удалить
+    lore: [ ]
+  edit:
+    display: <gray>Изменить
+    lore: '<gray>Цена: '
+  publish:
+    display: <gray>Опубликовать
+    lore: [ ]
   confirm-delete: <dark_red>Нажмите для потверждения
-  edit-display: <gray>Изменить
-  edit-lore: '<gray>Цена: '
   published-successfully: <green>Ваше сообщение было опубликовано!
   edited-successfully: <green>Ваше сообщение было изменено!
   not-completed: <red>Остались незаполненные поля!
-  publish-display: <gray>Опубликовать
-  publish-lore: [ ]
   empty:
     short-name:
       display: <green>Короткое название <gray>(макс. длина <short_name_length>)

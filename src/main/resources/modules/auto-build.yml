@@ -57,25 +57,33 @@ construction:
 confirm-message: <gray>🛠 <green>Подтвердите постройку, нажав ПКМ на NPC
 confirm-gui:
   title: <dark_gray>Подтверждение постройки
-  confirm-material: PAPER
-  cancel-material: RED_STAINED_GLASS_PANE
-  confirm: <green>Подтвердить постройку
-  confirm-model-data: 0
-  cancel: <red>Отменить постройку
-  cancel-model-data: 0
+  confirm:
+    material: PAPER
+    display: <green>Подтвердить постройку
+    customModelData: 0
+  cancel:
+    material: RED_STAINED_GLASS_PANE
+    display: <red>Отменить постройку
+    customModelData: 0
 start-build-message: <gray>🛠 <green>Постройка начата
 already-building-message: <gray>🛠 <red>Вы уже строите одно здание!
 building-gui:
-  confirm-material: PAPER
-  cancel-material: RED_STAINED_GLASS_PANE
-  cancel-name: <red>Отменить постройку
-  cancel-confirm: <yellow>Нажмите ещё раз для подтверждения
+  progress:
+    material: PAPER
+    display: <gold>Прогресс строительства
+  cancel:
+    material: RED_STAINED_GLASS_PANE
+    display: <red>Отменить постройку
+    lore:
+      - <red>Книга не вернётся!
+      - <gray>Нажмите ещё раз для отмены
+    customModelData: 0
+  cancel-confirm:
+    display: <yellow>Нажмите ещё раз для подтверждения
   cancel-hint: <gray>🛠 <yellow>Нажмите «Отменить» ещё раз для подтверждения
-  cancel-lore:
-    - <red>Книга не вернётся!
-    - <gray>Нажмите ещё раз для отмены
-  cancel-model-data: 0
-  fast-finish-material: BLAZE_POWDER
+  fast-finish:
+    material: BLAZE_POWDER
+    display: <green>Мгновенно завершить
 inactivity-cancel-message: <gray>🛠 Постройка отменена из-за неактивности.
 messages:
   display-limit: <red>Слишком много блоков в строении. Показывается лишь <amount>/<max>
