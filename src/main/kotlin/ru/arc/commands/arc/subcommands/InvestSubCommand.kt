@@ -67,11 +67,11 @@ object InvestSubCommand : SubCommand {
         when (type) {
             "update" -> {
                 if (!sender.hasPermission("arc.stocks.update-images")) return true
-                if (HookRegistry.yamipaHook == null || StockConfig.stockMarketLocation == null) return true
-                val list =
-                    StockConfig.stockMarketLocation
-                        .getNearbyPlayers(StockConfig.updateImagesRadius)
-                        .filter { !it.hasMetadata("NPC") }
+                val marketLocation = StockConfig.stockMarketLocation
+                if (HookRegistry.yamipaHook == null || marketLocation == null) return true
+                val list = marketLocation
+                    .getNearbyPlayers(StockConfig.updateImagesRadius)
+                    .filter { !it.hasMetadata("NPC") }
                 if (list.isEmpty()) return true
                 HookRegistry.yamipaHook.updateImages(list[0].location, list)
                 return true

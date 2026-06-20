@@ -35,12 +35,16 @@ import ru.arc.util.Common;
 import static ru.arc.util.Logging.debug;
 import static ru.arc.util.Logging.error;
 
-@RequiredArgsConstructor
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class StockClient {
 
     private final String FINN_API_KEY;
     private final String POLY_API_KEY;
+
+    public StockClient(String finnApiKey, String polyApiKey) {
+        this.FINN_API_KEY = finnApiKey;
+        this.POLY_API_KEY = polyApiKey;
+    }
 
     static WebSocketClient webSocketClient;
     static volatile boolean isClosed = true;

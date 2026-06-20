@@ -11,7 +11,6 @@ import io.kotest.matchers.shouldBe
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.bukkit.Material
-import org.bukkit.configuration.file.YamlConfiguration
 import ru.arc.audit.AuditManager
 import ru.arc.audit.AuditService
 import ru.arc.configs.StockConfig
@@ -21,12 +20,6 @@ import ru.arc.repository.InMemorySyncService
 import ru.arc.repository.RepoConfig
 import java.util.UUID
 import kotlin.time.Duration.Companion.seconds
-
-private fun initStockConfigForTest() {
-    val field = StockConfig::class.java.getDeclaredField("config")
-    field.isAccessible = true
-    field.set(null, YamlConfiguration())
-}
 
 class StockPlayerManagerTest : FreeSpec({
 
@@ -66,8 +59,7 @@ class StockPlayerManagerTest : FreeSpec({
         StockConfig.commission = 0.01
         StockConfig.leveragePower = 0.5
         StockConfig.defaultStockMaxAmount = 30
-        StockConfig.iconMaterials = java.util.ArrayList<Material>().also { it.add(Material.PAPER) }
-        initStockConfigForTest()
+        StockConfig.iconMaterials = mutableListOf(Material.PAPER)
         AuditManager.init(mockk<AuditService>(relaxed = true))
     }
 

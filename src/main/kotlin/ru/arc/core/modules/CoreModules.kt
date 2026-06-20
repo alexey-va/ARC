@@ -330,7 +330,7 @@ object StockModule : PluginModule {
             return
         }
 
-        StockConfig.load()
+        StockConfig.load(config)
         AuctionConfig.load()
 
         StockMarket.stockRepo = redisRepo<Stock>(
