@@ -9,6 +9,8 @@ import org.jsoup.Jsoup
 import ru.arc.util.Common
 import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
+import ru.arc.util.Logging.info
+import ru.arc.util.Logging.warn
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URI
@@ -69,7 +71,7 @@ class StockClient(
         return try {
             val response = Jsoup.connect(url).execute()
             if (response.statusCode() < 200 || response.statusCode() > 299) {
-                println("Response code: ${response.statusCode()}")
+                warn("investing.com returned status {}", response.statusCode())
                 return -1.0
             }
             val document = response.parse()
@@ -109,7 +111,7 @@ class StockClient(
                         }
                     } else {
                         isClosed = true
-                        System.err.println("WebSocket connection could not be established within the timeout.")
+                        warn("WebSocket connection could not be established within {} seconds", timeoutSeconds)
                     }
                 } catch (e: Exception) {
                     isClosed = true
@@ -122,7 +124,7 @@ class StockClient(
 
     private fun getStockPrice(stock: ConfigStock): Double {
         if (webSocketClient == null || !webSocketClient!!.isRunning || isClosed) {
-            println("Websocket is closed. Starting...")
+            info("WebSocket is closed, reconnecting...")
             startWebSocket(StockMarket.stocks().filter { it.type == Stock.Type.STOCK }.map { it.symbol })
         }
         val list = prices.remove(stock.symbol)
@@ -195,7 +197,7 @@ class StockClient(
 
         override fun onWebSocketClose(statusCode: Int, reason: String) {
             super.onWebSocketClose(statusCode, reason)
-            println("WebSocket Closed: $statusCode - $reason")
+            info("WebSocket closed: {} - {}", statusCode, reason)
             isClosed = true
         }
 

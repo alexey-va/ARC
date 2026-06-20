@@ -32,7 +32,7 @@ class YamipaHook {
             currentState.forEach { it.destroy() }
             desiredState.forEach { image -> players.forEach { image.spawn(it) } }
         } catch (e: Exception) {
-            e.printStackTrace()
+            ru.arc.util.Logging.error("Failed to update yamipa images", e)
         }
     }
 }

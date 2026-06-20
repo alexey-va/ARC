@@ -32,7 +32,6 @@ class HeadTextureCache {
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
             data = Data()
             error("Could not create head cache file", e)
         }

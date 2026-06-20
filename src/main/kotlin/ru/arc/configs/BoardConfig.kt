@@ -4,6 +4,7 @@ import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.configuration.file.YamlConfiguration
 import ru.arc.ARC
+import ru.arc.util.Logging.warn
 
 class BoardConfig {
 
@@ -65,7 +66,7 @@ class BoardConfig {
         @JvmStatic
         fun getStringList(key: String): List<String> {
             if (!rawConfig.contains(key)) {
-                println("Locale does not contain list key: $key")
+                warn("BoardConfig locale missing list key: {}", key)
                 return emptyList()
             }
             return if (rawConfig.isString(key)) listOf(rawConfig.getString(key, key)!!)
@@ -75,7 +76,7 @@ class BoardConfig {
         @JvmStatic
         fun getString(key: String): String {
             if (!rawConfig.contains(key)) {
-                println("Locale does not contain key: $key")
+                warn("BoardConfig locale missing key: {}", key)
                 return key
             }
             return rawConfig.getString(key) ?: key

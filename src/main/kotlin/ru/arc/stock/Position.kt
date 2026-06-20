@@ -3,6 +3,7 @@ package ru.arc.stock
 import net.kyori.adventure.text.minimessage.tag.Tag
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.bukkit.Material
+import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil.formatAmount
 import ru.arc.util.TextUtil.mm
 import java.text.DecimalFormat
@@ -95,7 +96,7 @@ class Position(
 
     private fun getStockPrice(): Double {
         val stock = StockMarket.stock(symbol) ?: run {
-            println("Could not find: $symbol")
+            warn("Stock not found for symbol: {}", symbol)
             return 0.0
         }
         return stock.price

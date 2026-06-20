@@ -364,7 +364,7 @@ class AddBoardGui(
                     GuiUtils.constructAndShowAsync({ BoardGuiFactory.createForPlayer(player) }, click.whoClicked)
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                ru.arc.util.Logging.error("Error in editItem", e)
                 player.sendMessage(TextUtil.error())
                 click.whoClicked.closeInventory()
             }

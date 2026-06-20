@@ -8,6 +8,7 @@ import org.bukkit.entity.Player
 import ru.arc.configs.StockConfig
 import ru.arc.hooks.HookRegistry
 import ru.arc.repository.Entity
+import ru.arc.util.Logging.debug
 import ru.arc.util.TextUtil
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
@@ -45,7 +46,7 @@ class StockPlayer(
     @Synchronized
     fun giveDividend(symbol: String): Double {
         if (!positionMap.containsKey(symbol)) return 0.0
-        println("Giving dividend to $playerName")
+        debug("Giving dividend for {} to {}", symbol, playerName)
         val stock = StockMarket.stock(symbol) ?: return 0.0
         if (stock.dividend < 0.00001) return 0.0
 

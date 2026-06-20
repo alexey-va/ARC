@@ -8,21 +8,29 @@ import net.luckperms.api.query.QueryMode
 import net.luckperms.api.query.QueryOptions
 import org.bukkit.OfflinePlayer
 import org.bukkit.entity.Player
+import ru.arc.util.Logging
 import ru.arc.util.Logging.error
+import ru.arc.util.Logging.warn
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
 class LuckPermsHook {
-
-    fun hasPermission(offlinePlayer: OfflinePlayer, perm: String): Boolean {
+    fun hasPermission(
+        offlinePlayer: OfflinePlayer,
+        perm: String,
+    ): Boolean {
         val userManager = LuckPermsProvider.get().userManager
         if (offlinePlayer is Player) return offlinePlayer.hasPermission(perm)
         return try {
             if (Thread.currentThread().name.contains("main")) {
-                println("Loading permission data from main thread!!!")
+                warn("Loading permission data from main thread!")
             }
-            userManager.loadUser(offlinePlayer.uniqueId).get()
-                .cachedData.permissionData.checkPermission(perm).asBoolean()
+            userManager
+                .loadUser(offlinePlayer.uniqueId)
+                .get()
+                .cachedData.permissionData
+                .checkPermission(perm)
+                .asBoolean()
         } catch (e: Exception) {
             error("Error while checking permission", e)
             false
@@ -35,11 +43,14 @@ class LuckPermsHook {
             if (Thread.currentThread().name.contains("main")) {
                 error("Loading groups data from main thread!!!")
             }
-            userManager.loadUser(offlinePlayer.uniqueId).get()
+            userManager
+                .loadUser(offlinePlayer.uniqueId)
+                .get()
                 .getInheritedGroups(
-                    QueryOptions.builder(QueryMode.NON_CONTEXTUAL)
+                    QueryOptions
+                        .builder(QueryMode.NON_CONTEXTUAL)
                         .flag(Flag.RESOLVE_INHERITANCE, true)
-                        .build()
+                        .build(),
                 ).map(Group::getName)
         } catch (e: Exception) {
             error("Error while getting groups", e)
@@ -47,21 +58,35 @@ class LuckPermsHook {
         }
     }
 
-    fun setMeta(uuid: UUID, key: String, value: String?): CompletableFuture<Void> {
+    fun setMeta(
+        uuid: UUID,
+        key: String,
+        value: String?,
+    ): CompletableFuture<Void> {
         val userManager = LuckPermsProvider.get().userManager
         return userManager.modifyUser(uuid) { user ->
-            user.nodes.filterIsInstance<MetaNode>()
+            user.nodes
+                .filterIsInstance<MetaNode>()
                 .filter { it.metaKey == key }
                 .forEach { user.data().remove(it) }
             if (value == null) return@modifyUser
-            val node = MetaNode.builder().key(key).value(value).build()
+            val node =
+                MetaNode
+                    .builder()
+                    .key(key)
+                    .value(value)
+                    .build()
             user.data().add(node)
         }
     }
 
-    fun getMeta(uuid: UUID, key: String): CompletableFuture<String?> {
+    fun getMeta(
+        uuid: UUID,
+        key: String,
+    ): CompletableFuture<String?> {
         val userManager = LuckPermsProvider.get().userManager
-        return userManager.loadUser(uuid)
+        return userManager
+            .loadUser(uuid)
             .thenApply { it.cachedData.metaData.getMetaValue(key) }
     }
 }

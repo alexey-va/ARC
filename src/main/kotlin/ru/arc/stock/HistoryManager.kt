@@ -6,8 +6,10 @@ import ru.arc.ARC
 import ru.arc.configs.ConfigManager
 import ru.arc.configs.StockConfig
 import ru.arc.util.Common
+import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
+import ru.arc.util.Logging.warn
 import com.google.gson.reflect.TypeToken
 import java.io.IOException
 import java.nio.file.Files
@@ -92,8 +94,8 @@ object HistoryManager {
         if (file.exists()) {
             try {
                 val process = ProcessBuilder(path).redirectErrorStream(true).start()
-                process.inputStream.bufferedReader().forEachLine { println(it) }
-                println("Plotting took: ${System.currentTimeMillis() - time}ms")
+                process.inputStream.bufferedReader().forEachLine { debug("plot: {}", it) }
+                debug("Plotting took: {}ms", System.currentTimeMillis() - time)
                 if (sendPackets) {
                     Bukkit.getScheduler().runTask(ARC.instance, Runnable {
                         ARC.trySeverCommand("arc-invest -t:update")
@@ -104,7 +106,7 @@ object HistoryManager {
                 throw RuntimeException(e)
             }
         } else {
-            println("$path does not exist! Not updating plots!")
+            warn("Plot script {} does not exist, skipping", path)
         }
     }
 

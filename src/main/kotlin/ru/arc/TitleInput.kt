@@ -8,20 +8,22 @@ import ru.arc.board.guis.Inputable
 import ru.arc.core.Tasks
 import ru.arc.core.repeating
 import ru.arc.core.ticks
+import ru.arc.util.Logging
+import ru.arc.util.Logging.warn
 import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 
 class TitleInput(
     val player: Player,
     val inputable: Inputable,
-    val id: Int
+    val id: Int,
 ) {
     var timestamp: Long = System.currentTimeMillis()
 
     init {
         if (clearTask == null) setupTask(5)
         if (activeInputs.containsKey(player)) {
-            println("Player ${player.name} already has title input!")
+            warn("Player {} already has title input, replacing", player.name)
         }
         activeInputs[player] = this
         sendStartMessage()
@@ -54,9 +56,9 @@ class TitleInput(
                 Title.Times.times(
                     Duration.ofMillis(1000),
                     Duration.ofMillis(58_000),
-                    Duration.ofMillis(1000)
-                )
-            )
+                    Duration.ofMillis(1000),
+                ),
+            ),
         )
     }
 
@@ -66,23 +68,27 @@ class TitleInput(
 
         @JvmStatic
         fun setupTask(period: Long) {
-            clearTask = Tasks.scheduler.repeating(period = period.ticks, delay = period.ticks) {
-                val iter = activeInputs.entries.iterator()
-                while (iter.hasNext()) {
-                    val (p, input) = iter.next()
-                    if (!p.isOnline || input.isExpired()) {
-                        iter.remove()
-                        if (p.isOnline) input.sendTimeoutMessage()
+            clearTask =
+                Tasks.scheduler.repeating(period = period.ticks, delay = period.ticks) {
+                    val iter = activeInputs.entries.iterator()
+                    while (iter.hasNext()) {
+                        val (p, input) = iter.next()
+                        if (!p.isOnline || input.isExpired()) {
+                            iter.remove()
+                            if (p.isOnline) input.sendTimeoutMessage()
+                        }
                     }
                 }
-            }
         }
 
         @JvmStatic
         fun hasInput(player: Player): Boolean = activeInputs.containsKey(player)
 
         @JvmStatic
-        fun processMessage(player: Player, message: String) {
+        fun processMessage(
+            player: Player,
+            message: String,
+        ) {
             val titleInput = activeInputs[player] ?: return
             if (!titleInput.inputable.satisfy(message, titleInput.id)) {
                 titleInput.sendDenyMessage(message)
