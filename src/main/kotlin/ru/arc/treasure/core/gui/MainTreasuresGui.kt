@@ -37,7 +37,7 @@ object MainTreasuresGui {
                     material(Material.CHEST)
                     display("<yellow>${pool.id}")
                     lore(buildPoolLore(pool))
-                    fromConfig(cfg, "gui.main.pool-item")
+                    fromConfigStyle(cfg, "gui.main.pool-item")
                     onClick {
                         GuiUtils.constructAndShowAsync({ PoolGui.create(player, pool) }, player)
                     }

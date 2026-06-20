@@ -93,7 +93,7 @@ class StoreData(
                         }
 
                         stack.amount == remaining -> {
-                            toRemove.add(stack)
+                            itemList.remove(stack)
                             compact()
                             return@withLock true
                         }

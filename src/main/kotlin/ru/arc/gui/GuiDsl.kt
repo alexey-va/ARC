@@ -20,6 +20,7 @@ import org.bukkit.inventory.ItemStack
 import ru.arc.configs.Config
 import ru.arc.util.GuiUtils
 import ru.arc.util.TextUtil
+import ru.arc.util.ConfigItemSpec
 import ru.arc.util.applyItemFromConfig
 import ru.arc.util.ItemConfigTarget
 import ru.arc.util.fromConfig
@@ -124,6 +125,28 @@ fun dynamicGui(
     block: GuiBuilder.() -> Unit,
 ): ChestGui {
     val title = config.string(titleKey, "Menu")
+    return dynamicGui(title, itemCount, itemsPerRow, minRows, maxRows, navRows, player, config, block)
+}
+
+/**
+ * Entry point for GUI with dynamic rows and config-based title with placeholders.
+ */
+fun dynamicGui(
+    config: Config,
+    titleKey: String,
+    placeholders: Map<String, String>,
+    itemCount: Int,
+    itemsPerRow: Int = 9,
+    minRows: Int = 2,
+    maxRows: Int = 6,
+    navRows: Int = 1,
+    player: Player? = null,
+    block: GuiBuilder.() -> Unit,
+): ChestGui {
+    var title = config.string(titleKey, "Menu")
+    placeholders.forEach { (key, value) ->
+        title = title.replace("<$key>", value).replace("{$key}", value)
+    }
     return dynamicGui(title, itemCount, itemsPerRow, minRows, maxRows, navRows, player, config, block)
 }
 
@@ -721,6 +744,19 @@ class ItemBuilder private constructor(
         path: String,
     ) {
         applyItemFromConfig(config, path, GuiItemConfigTarget(this))
+    }
+
+    /**
+     * Style-only overlay (material, customModelData) for dynamic list rows — never injects display/lore.
+     */
+    fun fromConfigStyle(
+        config: Config,
+        path: String,
+    ) {
+        ConfigItemSpec.readFromConfig(config, path)?.let { spec ->
+            spec.material?.let { material(it) }
+            spec.modelData?.takeIf { it != 0 }?.let { modelData(it) }
+        }
     }
 
     /**

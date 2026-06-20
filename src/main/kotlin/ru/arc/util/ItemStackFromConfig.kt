@@ -98,6 +98,19 @@ fun Config.itemComponents(
 /** Lore lines from a nested item block, or empty if missing. */
 fun Config.itemLore(path: String): List<String> = ConfigItemSpec.readFromConfig(this, path)?.lore ?: emptyList()
 
+/**
+ * Apply only visual styling from config (material, customModelData) — no display/lore inject.
+ * Use for paginated GUI rows with per-item dynamic text.
+ */
+fun ItemStackDslBuilder.fromConfigStyle(
+    config: Config,
+    path: String,
+) {
+    ConfigItemSpec.readFromConfig(config, path)?.let { spec ->
+        applySpec(spec, applyMaterial = true)
+    }
+}
+
 /** Apply resolved [ConfigItemSpec] fields to an item DSL builder (used by ops JSON and tests). */
 fun ItemStackDslBuilder.applySpec(
     spec: ConfigItemSpec,

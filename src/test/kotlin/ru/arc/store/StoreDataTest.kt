@@ -192,10 +192,7 @@ class StoreDataTest :
                     store.getItems()[0].amount shouldBe 5
                 }
 
-                "should remove entire stack when amount matches - NOTE: BUG in implementation" {
-                    // BUG: When stack.amount == remaining, the code adds to toRemove and calls compact(),
-                    // but returns true WITHOUT calling itemList.removeAll(toRemove.toSet()).
-                    // So the item is NOT actually removed. This test documents the ACTUAL behavior.
+                "should remove entire stack when amount matches" {
                     val store = StoreData(UUID.randomUUID())
                     val item = ItemStack(Material.DIAMOND, 10)
                     store.addItem(item)
@@ -203,9 +200,7 @@ class StoreDataTest :
                     val result = store.removeItem(ItemStack(Material.DIAMOND), 10)
 
                     result shouldBe true
-                    // BUG: Item is still in the store due to the bug described above
-                    store.getItems().size shouldBe 1
-                    store.getItems()[0].amount shouldBe 10
+                    store.getItems() shouldBe emptyList()
                 }
 
                 "should remove from multiple stacks - partial removal works" {

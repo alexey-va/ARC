@@ -38,6 +38,7 @@ fun JobBoostGui(
     return dynamicGui(
         config = config,
         titleKey = "job-menu.title",
+        placeholders = mapOf("job" to JobsModule.jobDisplayMinimessage(job.name)),
         itemCount = totalItems,
         minRows = 2,
         maxRows = 6,
