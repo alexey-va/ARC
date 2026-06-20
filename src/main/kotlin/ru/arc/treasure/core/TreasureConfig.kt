@@ -2,23 +2,17 @@ package ru.arc.treasure.core
 
 import ru.arc.ARC
 import ru.arc.configs.Config
+import ru.arc.configs.ConfigManager
 
 /**
  * Configuration for the treasure module.
  */
 object TreasureConfig {
-    private val config: Config by lazy {
-        Config(
-            ARC.instance.dataFolder
-                .toPath()
-                .resolve("treasures"),
-            "treasures/config.yml",
+    private val config: Config
+        get() = ConfigManager.of(
+            ARC.instance.dataFolder.toPath().resolve("treasures"),
+            "config.yml",
         )
-    }
-
-    fun reload() {
-        config.load()
-    }
 
     // ==================== GUI Settings ====================
 

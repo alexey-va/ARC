@@ -45,7 +45,7 @@ class EmShop(
             val stack = item.stack.clone()
             val meta = stack.itemMeta ?: continue
             val lore = meta.lore()?.toMutableList() ?: ArrayList()
-            lore.addAll(0, config.componentList("shop.item-price-lore", "<price>", formatAmount(item.price)))
+            lore.addAll(0, config.componentList("shop.item-price-lore") { tag("price", formatAmount(item.price)) })
             val removeLast = config.integer("shop.remove-last-lore", 0)
             repeat(removeLast) {
                 if (lore.isNotEmpty()) lore.removeAt(lore.size - 1)
@@ -100,7 +100,7 @@ class EmShop(
 
     private fun processClick(click: org.bukkit.event.inventory.InventoryClickEvent, stack: ItemStack, item: ShopHolder.ShopItem) {
         if (click.whoClicked.inventory.firstEmpty() == -1) {
-            GuiUtils.temporaryChange(stack, config.component("shop.not-enough-space"), null, 60) { update() }
+            GuiUtils.temporaryChange(stack, config.component("shop.not-enough-space", "<red>Нет места в инвентаре"), null, 60) { update() }
             update()
             return
         }
@@ -113,8 +113,14 @@ class EmShop(
         if (balance < cost) {
             GuiUtils.temporaryChange(
                 stack,
-                config.component("shop.not-enough-money-display", "<cost>", formatAmount(cost), "<balance>", formatAmount(balance)),
-                config.componentList("shop.not-enough-money-lore", "<cost>", formatAmount(cost), "<balance>", formatAmount(balance)),
+                config.component("shop.not-enough-money-display", "<red>Недостаточно средств") {
+                    tag("cost", formatAmount(cost))
+                    tag("balance", formatAmount(balance))
+                },
+                config.componentList("shop.not-enough-money-lore") {
+                    tag("cost", formatAmount(cost))
+                    tag("balance", formatAmount(balance))
+                },
                 60,
             ) { update() }
             update()

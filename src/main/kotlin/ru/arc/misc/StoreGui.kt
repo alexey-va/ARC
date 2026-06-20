@@ -126,8 +126,8 @@ object StoreGuiFactory {
                 info("On cooldown")
                 GuiUtils.temporaryChange(
                     guiStack,
-                    TextUtil.mm(config.string("store.cooldown-title"), true),
-                    config.stringList("store.cooldown-lore").map { TextUtil.mm(it, true) },
+                    config.component("store.cooldown-title", "<red>Подождите..."),
+                    config.componentList("store.cooldown-lore"),
                     20L,
                 ) {}
                 return@create
@@ -141,8 +141,8 @@ object StoreGuiFactory {
                 info("No space")
                 GuiUtils.temporaryChange(
                     guiStack,
-                    TextUtil.mm(config.string("store.no-space-title"), true),
-                    config.stringList("store.no-space-lore").map { TextUtil.mm(it, true) },
+                    config.component("store.no-space-title", "<red>Нет места в инвентаре"),
+                    config.componentList("store.no-space-lore"),
                     60L,
                 ) {}
                 return@create
@@ -173,8 +173,8 @@ object StoreGuiFactory {
             } else {
                 GuiUtils.temporaryChange(
                     guiStack,
-                    TextUtil.mm(config.string("store.item-is-gone-display"), true),
-                    config.stringList("store.item-is-gone-lore").map { TextUtil.mm(it, true) },
+                    config.component("store.item-is-gone-display", "<red>Предмет уже забрали"),
+                    config.componentList("store.item-is-gone-lore"),
                     60L,
                 ) {}
             }

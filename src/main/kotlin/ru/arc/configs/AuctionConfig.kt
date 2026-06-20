@@ -1,31 +1,19 @@
 package ru.arc.configs
 
-import org.bukkit.configuration.file.YamlConfiguration
 import ru.arc.ARC
-import java.io.File
 
 object AuctionConfig {
 
-    @JvmField var broadcastItems: Boolean = false
-    @JvmField var categories: List<String> = emptyList()
-    @JvmField var refreshRate: Long = 20L * 60
+    private val config: Config
+        get() = ConfigManager.ofModule(ARC.instance.dataFolder.toPath(), "auction.yml")
 
-    private lateinit var config: YamlConfiguration
-    private lateinit var file: File
+    val broadcastItems: Boolean get() = config.bool("broadcast-items", false)
+    val categories: List<String> get() = config.stringList("discord-categories")
+    val refreshRate: Long get() = config.long("refresh-rate", 20L * 60)
 
     fun load() {
-        file = ConfigManager.moduleYamlPath(ARC.instance.dataFolder.toPath(), "auction.yml").toFile()
-        if (!file.exists()) {
-            file.parentFile.mkdirs()
-            ARC.instance.saveResource(ConfigManager.bundledModuleResource("auction.yml"), false)
-        }
-        config = YamlConfiguration.loadConfiguration(file)
-        loadConfig()
-    }
-
-    private fun loadConfig() {
-        categories = config.getStringList("discord-categories")
-        refreshRate = config.getLong("refresh-rate", 20L * 60)
-        broadcastItems = config.getBoolean("broadcast-items", false)
+        // Ensure the file exists with defaults by touching the config.
+        // ConfigManager.ofModule already handles bundled resource creation.
+        config.bool("broadcast-items", false)
     }
 }

@@ -70,7 +70,7 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
                 portals[player.uniqueId]?.removePortal()
                 task = createTask()
                 portals[player.uniqueId] = this
-                player.sendMessage(config.component("portal.message"))
+                player.sendMessage(config.component("portal.message", "<green>Портал создан!"))
             }
         }
     }

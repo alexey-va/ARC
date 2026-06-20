@@ -783,51 +783,6 @@ open class Config(
         default: Long = 0L,
     ): Long = long(path, default)
 
-    // ── Java vararg compat — old component(path, tag, value, ...) style ───
-    // Java callers that haven't been migrated to the DSL API yet use these.
-
-    /**
-     * Java-callable: resolves the component, applying [replacements] as alternating tag/value pairs.
-     * Falls back to the path key itself if the config entry is missing.
-     */
-    fun component(
-        path: String,
-        vararg replacements: String,
-    ): Component {
-        val raw =
-            stringOrNull(path) ?: run {
-                setValue(path, path)
-                path
-            }
-        var result = raw
-        var i = 0
-        while (i + 1 < replacements.size) {
-            result = result.replace(replacements[i], replacements[i + 1])
-            i += 2
-        }
-        return TextUtil.mm(result, true)
-    }
-
-    fun componentList(
-        path: String,
-        vararg replacements: String,
-    ): List<Component> {
-        val list =
-            stringListOrNull(path) ?: run {
-                setValue(path, emptyList<String>())
-                return emptyList()
-            }
-        return list.map { raw ->
-            var result = raw
-            var i = 0
-            while (i + 1 < replacements.size) {
-                result = result.replace(replacements[i], replacements[i + 1])
-                i += 2
-            }
-            TextUtil.mm(result, true)
-        }
-    }
-
     // ── Public injectDeepKey (for test compatibility) ──────────────────────
 
     fun injectDeepKey(

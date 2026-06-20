@@ -7,7 +7,6 @@ import ru.arc.audit.AuditManager
 import ru.arc.board.BoardManager
 import ru.arc.common.locationpools.LocationPoolManager
 import ru.arc.configs.AuctionConfig
-import ru.arc.configs.BoardConfig
 import ru.arc.configs.Config
 import ru.arc.configs.ConfigManager
 import ru.arc.configs.LocationPoolConfig
@@ -196,7 +195,6 @@ object BoardModule : PluginModule {
     override val priority = 40
 
     override fun init() {
-        ARC.instance.boardConfig = BoardConfig()
         BoardManager.init()
     }
 

@@ -23,7 +23,6 @@ object ReloadSubCommand : SubCommand {
         sender.sendMessage(CommandConfig.get("reload.starting", "<gray>Перезагрузка конфигурации..."))
 
         val timeMs = measureTimeMillis {
-            ARC.instance.reloadConfig()
             ARC.instance.reload()
         }
 

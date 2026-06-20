@@ -52,7 +52,6 @@ open class ARC : JavaPlugin() {
     // ==================== Instance Fields ====================
 
     var locationPoolConfig: LocationPoolConfig? = null
-    var boardConfig: BoardConfig? = null
 
     // ==================== Lifecycle ====================
 

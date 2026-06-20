@@ -2,88 +2,54 @@ package ru.arc.configs
 
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
-import org.bukkit.configuration.file.YamlConfiguration
 import ru.arc.ARC
-import ru.arc.util.Logging.warn
 
-class BoardConfig {
+object BoardConfig {
 
-    init { loadConfig() }
+    private val config: Config
+        get() = ConfigManager.ofModule(ARC.instance.dataFolder.toPath(), "board.yml")
 
-    fun loadConfig() {
-        val data = ARC.instance.dataFolder.toPath()
-        val path = ConfigManager.moduleYamlPath(data, "board.yml")
-        val file = path.toFile()
-        if (!file.exists()) {
-            file.parentFile.mkdirs()
-            ARC.instance.saveResource(ConfigManager.bundledModuleResource("board.yml"), false)
-        }
-        val cfg = YamlConfiguration.loadConfiguration(file)
+    // ── Scalars ──────────────────────────────────────────────────────────────
 
-        display = cfg.getString("item.display", "KEK")!!
-        lore = cfg.getStringList("item.lore")
-        descriptionPrefix = cfg.getString("item.description-prefix") ?: ""
-        editBottom = cfg.getStringList("item.click-to-edit")
-        rateBottom = cfg.getStringList("item.click-to-rate")
-        mainMenuBackCommand = cfg.getString("main-menu-back-command", "menu")!!
-        shortNameLength = cfg.getInt("short-name-length", 20)
-        publishCost = cfg.getDouble("publish-cost", 25000.0)
-        editCost = cfg.getDouble("edit-cost", 1000.0)
-        secondsLifetime = cfg.getInt("entry-lifetime-seconds", 86400)
-        mainServer = cfg.getBoolean("main-server", false)
-        secondsAnnounce = cfg.getInt("seconds-announce", 600)
-        receivePermission = cfg.getString("receive-permission", "arc.board-announce")!!
+    val shortNameLength: Int get() = config.integer("short-name-length", 20)
+    val publishCost: Double get() = config.double("publish-cost", 25000.0)
+    val editCost: Double get() = config.double("edit-cost", 1000.0)
+    val mainServer: Boolean get() = config.bool("main-server", false)
+    val secondsLifetime: Int get() = config.integer("entry-lifetime-seconds", 86400)
+    val secondsAnnounce: Int get() = config.integer("seconds-announce", 600)
+    val receivePermission: String get() = config.string("receive-permission", "arc.board-announce")
+    val mainMenuBackCommand: String get() = config.string("main-menu-back-command", "menu")
 
-        createEntryGuiName = cfg.getString("create-entry-gui-name", "&7Создать объявление")!!.miniToLegacy()
-        editEntryGuiName = cfg.getString("edit-entry-gui-name", "&7Редактировать объявление")!!.miniToLegacy()
-        boardGuiName = cfg.getString("board-gui-name", "&7Доска объявлений")!!.miniToLegacy()
-        rateGuiName = cfg.getString("rate-gui-name", "&7Оценить объявление")!!.miniToLegacy()
+    // ── Item fields ───────────────────────────────────────────────────────────
 
-        rawConfig = cfg
-    }
+    val display: String get() = config.string("item.display", "<yellow><bold>Доска объявлений")
+    val descriptionPrefix: String get() = config.string("item.description-prefix", "")
+    val lore: List<String> get() = config.stringList("item.lore")
+    val editBottom: List<String> get() = config.stringList("item.click-to-edit")
+    val rateBottom: List<String> get() = config.stringList("item.click-to-rate")
 
-    companion object {
-        @JvmField var lore: List<String> = emptyList()
-        @JvmField var display: String = ""
-        @JvmField var descriptionPrefix: String = ""
-        @JvmField var editBottom: List<String> = emptyList()
-        @JvmField var rateBottom: List<String> = emptyList()
-        @JvmField var mainMenuBackCommand: String = "menu"
-        @JvmField var shortNameLength: Int = 20
-        @JvmField var publishCost: Double = 25000.0
-        @JvmField var editCost: Double = 1000.0
-        @JvmField var createEntryGuiName: String = ""
-        @JvmField var editEntryGuiName: String = ""
-        @JvmField var rateGuiName: String = ""
-        @JvmField var boardGuiName: String = ""
-        @JvmField var mainServer: Boolean = false
-        @JvmField var secondsLifetime: Int = 86400
-        @JvmField var secondsAnnounce: Int = 600
-        @JvmField var receivePermission: String = "arc.board-announce"
+    // ── GUI names (ChestGui requires legacy §-format) ─────────────────────────
 
-        private var rawConfig: YamlConfiguration = YamlConfiguration()
+    val createEntryGuiName: String
+        get() = config.string("create-entry-gui-name", "<gray>Создать объявление").miniToLegacy()
+    val editEntryGuiName: String
+        get() = config.string("edit-entry-gui-name", "<gray>Редактировать объявление").miniToLegacy()
+    val boardGuiName: String
+        get() = config.string("board-gui-name", "<gray>Доска объявлений").miniToLegacy()
+    val rateGuiName: String
+        get() = config.string("rate-gui-name", "<gray>Оценить объявление").miniToLegacy()
 
-        @JvmStatic
-        fun getStringList(key: String): List<String> {
-            if (!rawConfig.contains(key)) {
-                warn("BoardConfig locale missing list key: {}", key)
-                return emptyList()
-            }
-            return if (rawConfig.isString(key)) listOf(rawConfig.getString(key, key)!!)
-            else rawConfig.getStringList(key)
-        }
+    // ── Arbitrary key lookup (for locale strings in board YAMLs) ─────────────
 
-        @JvmStatic
-        fun getString(key: String): String {
-            if (!rawConfig.contains(key)) {
-                warn("BoardConfig locale missing key: {}", key)
-                return key
-            }
-            return rawConfig.getString(key) ?: key
-        }
+    @JvmStatic
+    fun getString(key: String): String = config.string(key, key)
 
-        private fun String.miniToLegacy(): String =
-            LegacyComponentSerializer.legacyAmpersand()
-                .serialize(MiniMessage.miniMessage().deserialize(this))
-    }
+    @JvmStatic
+    fun getStringList(key: String): List<String> = config.stringList(key)
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private fun String.miniToLegacy(): String =
+        LegacyComponentSerializer.legacyAmpersand()
+            .serialize(MiniMessage.miniMessage().deserialize(this))
 }
