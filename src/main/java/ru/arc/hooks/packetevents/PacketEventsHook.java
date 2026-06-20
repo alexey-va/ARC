@@ -43,7 +43,7 @@ public class PacketEventsHook {
                         entityId,
                         UUID.randomUUID(),
                         EntityTypes.BLOCK_DISPLAY,
-                        SpigotConversionUtil.fromBukkitLocation(request.location()),
+                        SpigotConversionUtil.fromBukkitLocation(request.getLocation()),
                         0f,
                         0,
                         null
@@ -52,7 +52,7 @@ public class PacketEventsHook {
                 WrapperPlayServerEntityMetadata entityMetadataPacket = new WrapperPlayServerEntityMetadata(
                         entityId,
                         Collections.singletonList(
-                                new EntityData(23, EntityDataTypes.BLOCK_STATE, SpigotConversionUtil.fromBukkitBlockData(request.data()).getGlobalId())
+                                new EntityData(23, EntityDataTypes.BLOCK_STATE, SpigotConversionUtil.fromBukkitBlockData(request.getData()).getGlobalId())
                         )
                 );
 

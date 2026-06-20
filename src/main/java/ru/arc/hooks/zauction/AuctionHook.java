@@ -29,7 +29,7 @@ import static ru.arc.util.Logging.info;
 public class AuctionHook {
 
     @Setter
-    AuctionMessager auctionMessager;
+    public AuctionMessager auctionMessager;
     CategoryManager categoryManager;
     AuctionManager auctionManager;
 

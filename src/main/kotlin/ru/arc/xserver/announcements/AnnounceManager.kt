@@ -155,12 +155,12 @@ object AnnounceManager {
                 val cmi = HookRegistry.cmiHook ?: run { error("I cant use bossbar without cmi... sorry"); return }
                 val bbd = data.bossBarData ?: return
                 if (!data.hasVisibleContent(player)) return
-                cmi.sendBossbar("arcAnnounce", data.serializedMessage, player, bbd.color, bbd.seconds, bbd.keepFor)
+                cmi.sendBossbar("arcAnnounce", data.serializedMessage ?: "", player, bbd.color, bbd.seconds, bbd.keepFor)
             }
             XMessage.Type.ACTION_BAR -> {
                 val cmi = HookRegistry.cmiHook ?: run { error("I cant use actionbar without cmi... sorry"); return }
                 val abd = data.actionBarData ?: return
-                cmi.sendActionbar(data.serializedMessage, listOf(player), abd.seconds)
+                cmi.sendActionbar(data.serializedMessage ?: "", listOf(player), abd.seconds)
             }
             else -> {}
         }

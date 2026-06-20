@@ -348,10 +348,10 @@ public class AddBoardGui extends ChestGui implements Inputable {
                                 .thenAccept(moder -> {
                                     if (moder.isPresent()) {
                                         ModerResponse response = moder.get();
-                                        if (response.message() == ModerationResponse.BAD) {
+                                        if (response.getMessage() == ModerationResponse.BAD) {
                                             GuiUtils.temporaryChange(publishItem.getItem(),
                                                     Component.text("Ваш текст не прошёл модерацию", NamedTextColor.RED),
-                                                    TextUtil.splitLoreString(response.comment(), 40, 0).stream().map(s -> mm(s, true)).toList(),
+                                                    TextUtil.splitLoreString(response.getComment(), 40, 0).stream().map(s -> mm(s, true)).toList(),
                                                     60, this::update);
                                             return;
                                         }
@@ -429,10 +429,10 @@ public class AddBoardGui extends ChestGui implements Inputable {
                                 .thenAccept(moder -> {
                                     if (moder.isPresent()) {
                                         ModerResponse response = moder.get();
-                                        if (response.message() == ModerationResponse.BAD) {
+                                        if (response.getMessage() == ModerationResponse.BAD) {
                                             GuiUtils.temporaryChange(publishItem.getItem(),
                                                     Component.text("Ваш текст не прошёл модерацию", NamedTextColor.RED),
-                                                    TextUtil.splitLoreString(response.comment(), 40, 0).stream().map(s -> mm(s, true)).toList(),
+                                                    TextUtil.splitLoreString(response.getComment(), 40, 0).stream().map(s -> mm(s, true)).toList(),
                                                     60, this::update);
                                             return;
                                         }
