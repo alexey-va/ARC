@@ -100,13 +100,10 @@ object BuildBookSubCommand : SubCommand {
         val meta = stack.itemMeta ?: return true
         val longName = createLongName(name)
 
-        val display = config.componentDef(
+        val display = config.component(
             "build-book.display-name",
             "     <gray>\uD83D\uDEE0 <gold>Книга строительства <gray>\uD83D\uDEE0",
-            TagResolver.builder()
-                .tag("building", Tag.inserting(Component.text(fileName, NamedTextColor.GOLD)))
-                .build()
-        )
+        ) { tag("building", Component.text(fileName, NamedTextColor.GOLD)) }
 
         val lore = config.stringList(
             "build-book.lore", listOf(
@@ -135,12 +132,9 @@ object BuildBookSubCommand : SubCommand {
 
         player.inventory.addItem(stack)
 
-        val message = config.componentDef(
+        val message = config.component(
             "build-book.received", "<green>Вы получили книгу для <building>",
-            TagResolver.builder()
-                .tag("building", Tag.inserting(Component.text(fileName, NamedTextColor.GOLD)))
-                .build()
-        )
+        ) { tag("building", Component.text(fileName, NamedTextColor.GOLD)) }
         sender.sendMessage(message)
 
         return true

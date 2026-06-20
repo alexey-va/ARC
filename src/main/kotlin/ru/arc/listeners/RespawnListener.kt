@@ -47,7 +47,7 @@ class RespawnListener : Listener {
                 try {
                     if (!hasHome) {
                         HookRegistry.huskHomesHook!!.createDefaultHome(player, player.location)
-                        player.sendMessage(config.componentDef("rtp-respawn.bed-create-home", "<green>Ваш <gold>/home<green> установлен здесь! <gray>Чтобы изменить его, используйте команду /sethome"))
+                        player.sendMessage(config.component("rtp-respawn.bed-create-home", "<green>Ваш <gold>/home<green> установлен здесь! <gray>Чтобы изменить его, используйте команду /sethome"))
                     } else {
                         ARC.instance.server.scheduler.runTaskLater(ARC.instance, Runnable {
                             info("Setting respawn location for player {} to {}", player.name, oldRespawn)

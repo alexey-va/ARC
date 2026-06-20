@@ -216,12 +216,10 @@ object PersonalLootModule {
             data.set(breakKey, PersistentDataType.INTEGER, breaks)
             event.isCancelled = true
             event.player.sendMessage(
-                config.componentDef(
+                config.component(
                     "messages.break",
                     "<red>Этот сундук нужно сломать еще <amount> раз",
-                    "<amount>",
-                    (config.integer("max-breaks", 3) - breaks).toString(),
-                ),
+                ) { tag("amount", config.integer("max-breaks", 3) - breaks) },
             )
         }
     }
@@ -256,12 +254,10 @@ object PersonalLootModule {
 
         if (players.size >= maxPlayers && player.uniqueId !in players) {
             player.sendMessage(
-                config.componentDef(
+                config.component(
                     "messages.max-players",
                     "<red>Слишком много игроков уже открыли этот сундук!",
-                    "%amount%",
-                    players.size.toString(),
-                ),
+                ) { tag("amount", players.size) },
             )
             return
         }
@@ -289,7 +285,7 @@ object PersonalLootModule {
 
             if (cl == null || cl.isExhausted()) {
                 player.sendMessage(
-                    config.componentDef("messages.already-opened", "<red>Вы уже открывали этот сундук"),
+                    config.component("messages.already-opened", "<red>Вы уже открывали этот сундук"),
                 )
                 return@launch
             }

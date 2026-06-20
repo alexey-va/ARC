@@ -105,68 +105,65 @@ object BuildConfig {
     // ==================== Messages ====================
 
     object Messages {
-        fun disabled() = config.componentDef("disabled-message", "<gray>\uD83D\uDEE0 <red>Постройка здесь отключена!")
-        fun notFound() = config.componentDef("building-not-found-message", "<gray>\uD83D\uDEE0 <red>Здание не найдено!")
+        fun disabled() = config.component("disabled-message", "<gray>\uD83D\uDEE0 <red>Постройка здесь отключена!")
+        fun notFound() = config.component("building-not-found-message", "<gray>\uD83D\uDEE0 <red>Здание не найдено!")
         fun alreadyBuilding() =
-            config.componentDef("already-building-message", "<gray>\uD83D\uDEE0 <red>Вы уже строите одно здание!")
+            config.component("already-building-message", "<gray>\uD83D\uDEE0 <red>Вы уже строите одно здание!")
 
         fun cantBuild() =
-            config.componentDef("cant-build-message", "<gray>\uD83D\uDEE0 <red>Вы не можете строить здесь.")
+            config.component("cant-build-message", "<gray>\uD83D\uDEE0 <red>Вы не можете строить здесь.")
 
-        fun cooldown(ticksRemaining: Long) = config.componentDef(
+        fun cooldown(ticksRemaining: Long) = config.component(
             "cooldown-message",
             "<gray>\uD83D\uDEE0 <red>Вы не можете строить так часто. Подождите <time>.",
-            TagResolver.builder()
-                .tag("time", Tag.inserting(TextUtil.timeComponent(ticksRemaining / 20L, TimeUnit.SECONDS)))
-                .build()
-        )
+        ) { tag("time", TextUtil.timeComponent(ticksRemaining / 20L, TimeUnit.SECONDS)) }
 
-        fun startOutline() = config.componentDef(
+        fun startOutline() = config.component(
             "start-message",
             "<gray>\uD83D\uDEE0 <green>Нажмите на тот же блок, чтобы подтвердить постройку"
         )
 
         fun confirm() =
-            config.componentDef("confirm-message", "<gray>\uD83D\uDEE0 <green>Подтвердите постройку, нажав ПКМ на NPC")
+            config.component("confirm-message", "<gray>\uD83D\uDEE0 <green>Подтвердите постройку, нажав ПКМ на NPC")
 
-        fun startBuild() = config.componentDef("start-build-message", "<gray>\uD83D\uDEE0 <green>Постройка начата")
-        fun cancelled() = config.componentDef("cancel-build-message", "<gray>\uD83D\uDEE0 <red>Постройка отменена")
+        fun startBuild() = config.component("start-build-message", "<gray>\uD83D\uDEE0 <green>Постройка начата")
+        fun cancelled() = config.component("cancel-build-message", "<gray>\uD83D\uDEE0 <red>Постройка отменена")
         fun finished() =
-            config.componentDef("building-finished-message", "<gray>\uD83D\uDEE0 <green>Строительство завершено!")
+            config.component("building-finished-message", "<gray>\uD83D\uDEE0 <green>Строительство завершено!")
 
-        fun inactivity() = config.componentDef(
+        fun inactivity() = config.component(
             "inactivity-cancel-message",
             "<gray>\uD83D\uDEE0 Постройка отменена из-за неактивности."
         )
 
-        fun notYourNpc() = config.componentDef("not-your-npc", "<gray>\uD83D\uDEE0 <red>Этот NPC не принадлежит вам!")
+        fun notYourNpc() = config.component("not-your-npc", "<gray>\uD83D\uDEE0 <red>Этот NPC не принадлежит вам!")
 
         fun noBook() =
-            config.componentDef("confirm-gui.no-book", "<gray>\uD83D\uDEE0 <red>У вас нет книги в инвентаре!")
+            config.component("confirm-gui.no-book", "<gray>\uD83D\uDEE0 <red>У вас нет книги в инвентаре!")
 
-        fun confirmButton() = config.componentDef("confirm-gui.confirm", "<green>Подтвердить постройку")
-        fun cancelButton() = config.componentDef("confirm-gui.cancel", "<red>Отменить постройку")
-        fun cancelBuildButton() = config.componentDef("building-gui.cancel-name", "<red>Отменить постройку")
+        fun confirmButton() = config.component("confirm-gui.confirm", "<green>Подтвердить постройку")
+        fun cancelButton() = config.component("confirm-gui.cancel", "<red>Отменить постройку")
+        fun cancelBuildButton() = config.component("building-gui.cancel-name", "<red>Отменить постройку")
         fun cancelConfirmButton() =
-            config.componentDef("building-gui.cancel-confirm", "<yellow>Нажмите ещё раз для подтверждения")
+            config.component("building-gui.cancel-confirm", "<yellow>Нажмите ещё раз для подтверждения")
         fun cancelConfirmHint() =
-            config.componentDef(
+            config.component(
                 "building-gui.cancel-hint",
                 "<gray>\uD83D\uDEE0 <yellow>Нажмите «Отменить» ещё раз для подтверждения",
             )
-        fun cancelLore() = config.componentListDef(
+        fun cancelLore() = config.componentList(
             "building-gui.cancel-lore", listOf(
                 "<red>Книга не вернётся!",
                 "<gray>Нажмите ещё раз для отмены",
             )
         )
 
-        fun displayLimit() = config.componentDef(
+        fun displayLimit() = config.component(
             "messages.display-limit",
             "<gray>\uD83D\uDEE0 <red>Слишком много блоков в строении. Показывается лишь часть."
         )
 
-        fun displayRateLimit() = config.componentDef(
+        fun displayRateLimit() = config.component(
             "messages.display-limit-2",
             "<gray>\uD83D\uDEE0 <red>Превышен лимит показа блоков. Строение не будет показано"
         )

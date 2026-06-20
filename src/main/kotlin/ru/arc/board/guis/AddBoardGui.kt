@@ -197,8 +197,8 @@ class AddBoardGui(
         val material = Material.getMaterial("${color.name.uppercase()}_DYE")
         val builder = ItemStackBuilder(material ?: Material.YELLOW_DYE)
             .flags(ItemFlag.HIDE_ATTRIBUTES)
-            .display(config.componentDef("add-menu.full.boss-bar-color.display", "<green>Цвет", "<color>", colorStr))
-            .appendComponentLore(config.componentListDef("add-menu.full.boss-bar-color.lore", listOf("<gray>Цвет панели: <white><color>"), "<color>", colorStr))
+            .display(config.component("add-menu.full.boss-bar-color.display", "<green>Цвет") { tag("color", colorStr) })
+            .appendComponentLore(config.componentList("add-menu.full.boss-bar-color.lore", listOf("<gray>Цвет панели: <white><color>")) { tag("color", colorStr) })
         return builder.toGuiItemBuilder()
             .clickEventWithStack { click, _ ->
                 click.isCancelled = true

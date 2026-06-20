@@ -4,6 +4,7 @@ import net.kyori.adventure.text.Component
 import ru.arc.ARC
 import ru.arc.configs.Config
 import ru.arc.configs.ConfigManager
+import ru.arc.util.TextUtil
 
 /**
  * Centralized message and metadata configuration for all /arc commands.
@@ -59,7 +60,11 @@ object CommandConfig {
      * @param replacers Pairs of placeholder and value (e.g., "%player%", "Steve")
      */
     fun get(key: String, default: String, vararg replacers: String): Component {
-        return config.componentDef("messages.$key", default, *replacers)
+        var str = config.string("messages.$key", default)
+        for (i in replacers.indices step 2) {
+            if (i + 1 < replacers.size) str = str.replace(replacers[i], replacers[i + 1])
+        }
+        return TextUtil.mm(str, true)
     }
 
     // ==================== Common Messages ====================

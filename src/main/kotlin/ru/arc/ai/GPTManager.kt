@@ -189,9 +189,9 @@ object GPTManager {
         }
         if (conversation.endMessage != null) {
             processMessage(conversation.endMessage, player, appendCancel = false)
-                .thenAccept { player.sendMessage(config.componentDef("end-message", "<red>Вы закончили разговор")) }
+                .thenAccept { player.sendMessage(config.component("end-message", "<red>Вы закончили разговор")) }
         } else {
-            player.sendMessage(config.componentDef("end-message", "<red>Вы закончили разговор"))
+            player.sendMessage(config.component("end-message", "<red>Вы закончили разговор"))
         }
         convs.remove(conversation)
     }
@@ -199,7 +199,7 @@ object GPTManager {
     @JvmStatic
     fun endAllConversations(player: Player) {
         conversations.remove(player.uniqueId)
-        player.sendMessage(config.componentDef("end-all-message", "<red>Вы закончили все разговоры"))
+        player.sendMessage(config.component("end-all-message", "<red>Вы закончили все разговоры"))
         info("Player {} ended all conversations", player.name)
     }
 

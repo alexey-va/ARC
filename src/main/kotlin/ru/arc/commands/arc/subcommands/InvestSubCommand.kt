@@ -56,7 +56,7 @@ object InvestSubCommand : SubCommand {
     ): Boolean {
         if (!config.bool("enabled", false)) {
             info("Stocks are disabled")
-            sender.sendMessage(config.componentDef("messages.disabled", "<red>Здесь эта команда недоступна."))
+            sender.sendMessage(config.component("messages.disabled", "<red>Здесь эта команда недоступна."))
             return true
         }
 

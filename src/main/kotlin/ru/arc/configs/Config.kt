@@ -546,6 +546,22 @@ open class Config(
 
     fun componentList(
         path: String,
+        default: List<String>,
+        tags: TagResolverBuilder.() -> Unit = {},
+    ): List<Component> {
+        val builder = TagResolverBuilder().apply(tags)
+        val value = stringListOrNull(path)
+        if (value == null) {
+            val tagNames = builder.getTagNames()
+            if (tagNames.isNotEmpty()) setComment(path, "Available tags: " + tagNames.joinToString(", ") { "<$it>" })
+            setValue(path, default)
+            return default.map { MiniMessage.miniMessage().deserialize(it, builder.build()) }
+        }
+        return value.map { MiniMessage.miniMessage().deserialize(it, builder.build()) }
+    }
+
+    fun componentList(
+        path: String,
         tagResolver: TagResolver,
     ): List<Component> {
         val list =
@@ -572,62 +588,6 @@ open class Config(
         return TextUtil.strip(TextUtil.mm(value, tagResolver))!!
     }
 
-    // ── componentDef — kept for backward compat, prefer component() ────────
-
-    /**
-     * @deprecated Use [component] with an explicit default instead.
-     */
-    fun componentDef(
-        path: String,
-        def: String,
-        vararg replacers: String,
-    ): Component =
-        component(path, def) {}.let { c ->
-            if (replacers.isEmpty()) {
-                c
-            } else {
-                val str = stringOrNull(path) ?: def
-                var result = str
-                for (i in replacers.indices step 2) {
-                    if (i + 1 < replacers.size) result = result.replace(replacers[i], replacers[i + 1])
-                }
-                TextUtil.mm(result, true)
-            }
-        }
-
-    /**
-     * @deprecated Use [component] with an explicit default instead.
-     */
-    fun componentDef(
-        path: String,
-        def: String,
-        tagResolver: TagResolver,
-    ): Component {
-        val value =
-            stringOrNull(path) ?: run {
-                setValue(path, def)
-                return TextUtil.strip(TextUtil.mm(def, tagResolver))!!
-            }
-        return TextUtil.strip(TextUtil.mm(value, tagResolver))!!
-    }
-
-    fun componentListDef(
-        path: String,
-        def: List<String>,
-        vararg replacers: String,
-    ): List<Component> {
-        if (getValue(path) == null) setValue(path, def)
-        return componentList(path)
-    }
-
-    fun componentListDef(
-        path: String,
-        def: List<String>,
-        tagResolver: TagResolver,
-    ): List<Component> {
-        if (getValue(path) == null) setValue(path, def)
-        return componentList(path, tagResolver)
-    }
 
     // ── Property delegates (hot-reload) ────────────────────────────────────
 

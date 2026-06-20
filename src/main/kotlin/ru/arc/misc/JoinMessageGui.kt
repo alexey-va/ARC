@@ -87,7 +87,7 @@ object JoinMessageGuiFactory {
                         // Check permission
                         if (item.permission != null && !clicker.hasPermission(item.permission)) {
                             clicker.sendMessage(
-                                cfg.componentDef(
+                                cfg.component(
                                     "${prefix}forbidden-temp-display",
                                     "<dark_red>Вы не можете использовать это сообщение!",
                                 ),

@@ -17,6 +17,6 @@ class BetterRTPListener : Listener {
         val ifPresent = RespawnOnRtpSubCommand.playersForRtp.getIfPresent(player.name) ?: return
         RespawnOnRtpSubCommand.playersForRtp.invalidate(player.name)
         player.setRespawnLocation(event.location, true)
-        player.sendMessage(config.componentDef("rtp-respawn.set-spawn-message", "<green>Ваша точка возрождения установлена здесь! <gray>Чтобы изменить ее, используйте команду /sethome"))
+        player.sendMessage(config.component("rtp-respawn.set-spawn-message", "<green>Ваша точка возрождения установлена здесь! <gray>Чтобы изменить ее, используйте команду /sethome"))
     }
 }

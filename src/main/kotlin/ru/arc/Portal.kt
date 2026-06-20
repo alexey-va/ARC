@@ -133,12 +133,12 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
             if (p == player) return p
             if (!p.hasPermission("arc.portal.tp-by-other")) {
                 CooldownManager.onCooldown(p.uniqueId, "portal_tp_by_other_message", 60) {
-                    p.sendMessage(config.componentDef("portal.tp-by-other-disabled.message", "<red>Вы не можете телепортироваться через порталы других игроков!"))
+                    p.sendMessage(config.component("portal.tp-by-other-disabled.message", "<red>Вы не можете телепортироваться через порталы других игроков!"))
                 }
             }
             if (!player!!.hasPermission("arc.portal.tp-other")) {
                 CooldownManager.onCooldown(player.uniqueId, "portal_tp_other_message", 60) {
-                    p.sendMessage(config.componentDef("portal.tp-other-disabled.message", "<red>Этот игрок не разрешил другим игрокам телепортироваться через его порталы!"))
+                    p.sendMessage(config.component("portal.tp-other-disabled.message", "<red>Этот игрок не разрешил другим игрокам телепортироваться через его порталы!"))
                 }
             }
             return p

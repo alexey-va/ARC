@@ -72,7 +72,7 @@ class SFHook : Listener {
         val item = event.player.inventory.itemInMainHand
         val sfItem = SlimefunItem.getByItem(item) ?: return false
         if (!sfItem.id.contains("BACKPACK")) return false
-        event.player.sendMessage(config.componentDef("backpacks.forbidden", "<dark_red>Вы не можете использовать рюкзак здесь!"))
+        event.player.sendMessage(config.component("backpacks.forbidden", "<dark_red>Вы не можете использовать рюкзак здесь!"))
         event.cancel()
         return true
     }

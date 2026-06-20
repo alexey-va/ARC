@@ -233,24 +233,16 @@ class ConfigSection(
         tagResolver: TagResolver,
     ) = config.component(path(subPath), tagResolver)
 
-    /** @deprecated Use [component] with an explicit default. */
-    fun componentDef(
-        subPath: String,
-        def: String,
-        vararg replacers: String,
-    ) = config.componentDef(path(subPath), def, *replacers)
-
-    /** @deprecated Use [component] with an explicit default. */
-    fun componentDef(
-        subPath: String,
-        def: String,
-        tagResolver: TagResolver,
-    ) = config.componentDef(path(subPath), def, tagResolver)
-
     fun componentList(
         subPath: String,
         tags: TagResolverBuilder.() -> Unit = {},
     ) = config.componentList(path(subPath), tags)
+
+    fun componentList(
+        subPath: String,
+        default: List<String>,
+        tags: TagResolverBuilder.() -> Unit = {},
+    ) = config.componentList(path(subPath), default, tags)
 
     fun componentList(
         subPath: String,
