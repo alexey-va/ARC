@@ -86,7 +86,7 @@ class EMHook : Listener {
     }
 
     fun openShopGui(player: Player, isGear: Boolean) {
-        GuiUtils.constructAndShowAsync({ EmShop(config, player, shopHolder!!, isGear) }, player)
+        GuiUtils.constructAndShowAsync({ EmShop(config, player, shopHolder!!, isGear, this) }, player)
     }
 
     fun balance(player: Player): Double = EconomyHandler.checkCurrency(player.uniqueId)
