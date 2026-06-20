@@ -36,6 +36,7 @@ object StockMarket {
             stock.symbol = stock.symbol.uppercase()
             configStocks[stock.symbol] = stock
 
+            if (!::stockRepo.isInitialized) return
             val current = stockRepo.getNow(stock.symbol) ?: return
             current.lore = stock.lore
             current.display = stock.display
