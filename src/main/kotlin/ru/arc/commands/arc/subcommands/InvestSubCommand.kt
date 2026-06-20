@@ -73,7 +73,7 @@ object InvestSubCommand : SubCommand {
                     .getNearbyPlayers(StockConfig.updateImagesRadius)
                     .filter { !it.hasMetadata("NPC") }
                 if (list.isEmpty()) return true
-                HookRegistry.yamipaHook.updateImages(list[0].location, list)
+                HookRegistry.yamipaHook?.updateImages(list[0].location, list)
                 return true
             }
 

@@ -146,7 +146,7 @@ object OpsHttpHandlers {
         require(text.isNotBlank()) { "text required" }
         return OpsBukkitSync.call {
             val offline = resolveOfflinePlayer(playerName)
-            val parsed = HookRegistry.papiHook.parse(text, offline)
+            val parsed = HookRegistry.papiHook!!.parse(text, offline)
             mapOf(
                 "player" to (offline.name ?: playerName),
                 "uuid" to offline.uniqueId.toString(),
@@ -195,7 +195,7 @@ object OpsHttpHandlers {
             Runnable {
                 try {
                     val offline = resolveOfflinePlayer(playerName)
-                    val hook = HookRegistry.luckPermsHook
+                    val hook = HookRegistry.luckPermsHook!!
                     val allowed = hook.hasPermission(offline, node)
                     val groups = hook.getGroups(offline)
                     result.set(
@@ -525,7 +525,7 @@ object OpsHttpHandlers {
             Runnable {
                 try {
                     val offline = resolveOfflinePlayer(name)
-                    val groups = HookRegistry.luckPermsHook.getGroups(offline)
+                    val groups = HookRegistry.luckPermsHook!!.getGroups(offline)
                     result.set(
                         mapOf(
                             "name" to (offline.name ?: name),
@@ -594,7 +594,7 @@ object OpsHttpHandlers {
                 base["balance"] = econ.getBalance(player)
             }
             if (HookRegistry.luckPermsHook != null) {
-                base["groups"] = HookRegistry.luckPermsHook.getGroups(player)
+                base["groups"] = HookRegistry.luckPermsHook!!.getGroups(player)
             }
         }
         return base

@@ -155,7 +155,7 @@ object BaltopGuiFactory {
         info("Updating baltop cache")
         lastUpdate = System.currentTimeMillis()
 
-        return HookRegistry.redisEcoHook
+        return HookRegistry.redisEcoHook!!
             .getTopAccounts(224)
             .thenAccept { accounts ->
                 val entries =

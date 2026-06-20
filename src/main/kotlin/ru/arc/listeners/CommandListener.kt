@@ -120,10 +120,10 @@ class CommandListener : Listener {
         val ifCheck = commandConfig.bool("portal.check-player-warps", true) ||
             commandConfig.bool("portal.check-cmi-warps", true)
         if (commandConfig.bool("portal.check-player-warps", true) && HookRegistry.playerWarpsHook != null) {
-            warpExists = warpExists || HookRegistry.playerWarpsHook.warpExists(args[1], ev.player)
+            warpExists = warpExists || HookRegistry.playerWarpsHook!!.warpExists(args[1], ev.player)
         }
         if (commandConfig.bool("portal.check-cmi-warps", true) && HookRegistry.cmiHook != null) {
-            warpExists = warpExists || HookRegistry.cmiHook.warpExists(args[1])
+            warpExists = warpExists || HookRegistry.cmiHook!!.warpExists(args[1])
         }
         if (ifCheck && !warpExists) return
         Portal(ev.player.uniqueId, PortalData(PortalData.ActionType.COMMAND, null, null, ev.message.substring(1)))

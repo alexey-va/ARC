@@ -136,7 +136,7 @@ object GPTManager {
         }
         val s = TextUtil.mmToLegacy(message)
         val list = s.split("\n").map { CitizensHook.HologramLine(it, config.integer("bubble-duration-ticks", 20 * 20)) }
-        HookRegistry.citizensHook.addChatBubble(conversation.npcId, list)
+        HookRegistry.citizensHook?.addChatBubble(conversation.npcId, list)
     }
 
     private fun formatMessage(message: String, conversation: Conversation, appendCancel: Boolean): Component {

@@ -42,11 +42,11 @@ class RespawnListener : Listener {
                 info("Player {} tried to sleep during the day", player.name)
             }
             val oldRespawn = player.getRespawnLocation()
-            HookRegistry.huskHomesHook.hasHome(player).thenAccept { hasHome ->
+            HookRegistry.huskHomesHook!!.hasHome(player).thenAccept { hasHome ->
                 info("Player {} has home {}", player.name, hasHome)
                 try {
                     if (!hasHome) {
-                        HookRegistry.huskHomesHook.createDefaultHome(player, player.location)
+                        HookRegistry.huskHomesHook!!.createDefaultHome(player, player.location)
                         player.sendMessage(config.componentDef("rtp-respawn.bed-create-home", "<green>Ваш <gold>/home<green> установлен здесь! <gray>Чтобы изменить его, используйте команду /sethome"))
                     } else {
                         ARC.instance.server.scheduler.runTaskLater(ARC.instance, Runnable {

@@ -25,8 +25,8 @@ object Tools {
 
         override fun execute(): Any {
             val uuids = mustIncludePlayers.map { Bukkit.getOfflinePlayer(it).uniqueId }
-            val top = HookRegistry.redisEcoHook.getTopAccounts(100)
-            val specificPlayers = HookRegistry.redisEcoHook.getAccounts(uuids)
+            val top = HookRegistry.redisEcoHook!!.getTopAccounts(100)
+            val specificPlayers = HookRegistry.redisEcoHook!!.getAccounts(uuids)
 
             return specificPlayers.join().plus(top.join())
                 .sortedByDescending { it.balance }
@@ -43,10 +43,10 @@ object Tools {
 
         override fun execute(): Any {
             val uuids = playerNames.map { Bukkit.getOfflinePlayer(it).uniqueId }
-            val accounts = HookRegistry.redisEcoHook.getAccounts(uuids).join()
+            val accounts = HookRegistry.redisEcoHook!!.getAccounts(uuids).join()
             return playerNames.map { CMI.getInstance().playerManager.getUser(it) }
                 .associateWith { user: CMIUser ->
-                    val groups = HookRegistry.luckPermsHook.getGroups(user.offlinePlayer)
+                    val groups = HookRegistry.luckPermsHook!!.getGroups(user.offlinePlayer)
                         .filter { it.contains("vip") || it.contains("admin") }
                     val result = mutableMapOf<String, String>()
                     val timePlayed = user.totalPlayTime
