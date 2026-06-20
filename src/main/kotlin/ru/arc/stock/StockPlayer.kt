@@ -106,15 +106,10 @@ class StockPlayer(
     @Synchronized
     fun remove(symbol: String, uuid: UUID): Position? {
         val list = positionMap[symbol] ?: return null
-        val iter = list.iterator()
-        while (iter.hasNext()) {
-            val position = iter.next()
-            if (position.positionUuid == uuid) {
-                iter.remove()
-                return position
-            }
-        }
-        return null
+        val position = list.firstOrNull { it.positionUuid == uuid } ?: return null
+        list.remove(position)
+        if (list.isEmpty()) positionMap.remove(symbol)
+        return position
     }
 
     @Synchronized

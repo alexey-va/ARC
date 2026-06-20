@@ -634,4 +634,80 @@ class CachedRepositoryTest {
                 loadAllRepo.shutdown()
             }
     }
+
+    @Nested
+    @DisplayName("Sync Cache Accessors")
+    inner class SyncAccessorTests {
+
+        @Test
+        fun `getNow returns null when entity not in cache`() {
+            assertNull(repo.getNow("missing"))
+        }
+
+        @Test
+        fun `getNow returns entity after save`() =
+            runTest {
+                val entity = TestEntity("id1", "hello")
+                repo.save(entity)
+
+                assertEquals(entity, repo.getNow("id1"))
+            }
+
+        @Test
+        fun `getNow does not trigger storage load`() =
+            runTest {
+                storage.put(TestEntity("id1", "in_storage"))
+
+                assertNull(repo.getNow("id1"))
+                assertEquals(0, storage.loadCount)
+            }
+
+        @Test
+        fun `allNow returns empty list when cache is empty`() {
+            assertTrue(repo.allNow().isEmpty())
+        }
+
+        @Test
+        fun `allNow returns all cached entities`() =
+            runTest {
+                repo.save(TestEntity("a", "val-a"))
+                repo.save(TestEntity("b", "val-b"))
+                repo.save(TestEntity("c", "val-c"))
+
+                val result = repo.allNow()
+
+                assertEquals(3, result.size)
+                assertTrue(result.any { it.id() == "a" })
+                assertTrue(result.any { it.id() == "b" })
+                assertTrue(result.any { it.id() == "c" })
+            }
+
+        @Test
+        fun `markDirty puts entity in cache and marks dirty`() =
+            runTest {
+                val entity = TestEntity("id1", "val")
+                repo.markDirty(entity)
+
+                assertEquals(entity, repo.getNow("id1"))
+                assertEquals(1, repo.getStats().dirtyCount)
+            }
+
+        @Test
+        fun `markDirty mutated entity is persisted on saveDirty`() =
+            runTest {
+                val entity = TestEntity("id1", "original")
+                repo.save(entity)
+                repo.saveDirty()
+                assertEquals(0, repo.getStats().dirtyCount)
+
+                entity.value = "mutated"
+                repo.markDirty(entity)
+                assertEquals(1, repo.getStats().dirtyCount)
+
+                repo.saveDirty()
+
+                assertEquals("mutated", storage.get("id1")?.value)
+                assertEquals(0, repo.getStats().dirtyCount)
+            }
+    }
 }
