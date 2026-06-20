@@ -9,7 +9,7 @@ import ru.arc.util.Logging.info
 class ToolMessanger : ChannelListener {
     var gson: Gson = Gson()
 
-    override fun consume(channel: String?, message: String?, originServer: String?) {
+    override fun consume(channel: String, message: String, originServer: String) {
         val toolMessageRaw = gson.fromJson(message, ToolMessageRaw::class.java)
         val toolClass = getTool(toolMessageRaw.toolName ?: return)
         val toolDto: Tool = gson.fromJson(toolMessageRaw.toolDto, toolClass)

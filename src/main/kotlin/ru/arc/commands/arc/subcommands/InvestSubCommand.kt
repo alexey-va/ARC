@@ -86,7 +86,7 @@ object InvestSubCommand : SubCommand {
 
             "prune-history" -> {
                 if (!sender.hasPermission("arc.stocks.prunehistory")) return true
-                HistoryManager.pruneHistory(params["s"])
+                HistoryManager.pruneHistory(params["s"] ?: return true)
                 return true
             }
         }

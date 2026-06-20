@@ -56,11 +56,11 @@ object EliteLootGuiFactory {
     private fun buildItemList(): List<DecorItemData> {
         val result = mutableListOf<DecorItemData>()
 
-        val map: Map<LootType, DecorPool> = EliteLootManager.getLootMap()
+        val map: Map<LootType, DecorPool> = EliteLootManager.map
         for (entry in map.entries) {
             val lootType = entry.key
             val pool = entry.value
-            val decorsMap: java.util.TreeMap<Double, DecorItem> = pool.decorItems
+            val decorsMap = pool.decors
             for (decorEntry in decorsMap.entries) {
                 val decorItem = decorEntry.value
                 result.add(DecorItemData(decorItem.toItemStack(lootType)))

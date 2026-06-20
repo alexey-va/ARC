@@ -20,7 +20,7 @@ public class NetworkRegistry {
 
     public void init() {
         playerListMessager = new PlayerListMessager("arc.proxy_player_list");
-        redisManager.registerChannelUnique(playerListMessager.channel(), playerListMessager);
+        redisManager.registerChannelUnique(playerListMessager.getChannel(), playerListMessager);
 
         landsMessager = new LandsMessager(redisManager, "arc.lands_req", "arc.lands_response");
         landsMessager.init();
@@ -28,7 +28,7 @@ public class NetworkRegistry {
         redisManager.registerChannelUnique(landsMessager.getReqChannel(), landsMessager);
 
         HistoryMessager historyMessager = new HistoryMessager("arc.high_lows_update", redisManager);
-        redisManager.registerChannelUnique(historyMessager.channel, historyMessager);
+        redisManager.registerChannelUnique(historyMessager.getChannel(), historyMessager);
         HistoryManager.setMessager(historyMessager);
 
         if (HookRegistry.auctionHook != null) {

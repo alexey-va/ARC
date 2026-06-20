@@ -166,25 +166,25 @@ public class StockClient {
                     .map(Stock::getSymbol)
                     .toList());
         }
-        var list = prices.remove(stock.symbol);
-        if (list == null) return fetchFinnhub(stock.symbol);
+        var list = prices.remove(stock.getSymbol());
+        if (list == null) return fetchFinnhub(stock.getSymbol());
         OptionalDouble optional = list.stream().mapToDouble(Double::doubleValue).average();
-        if (optional.isEmpty()) return fetchFinnhub(stock.symbol);
+        if (optional.isEmpty()) return fetchFinnhub(stock.getSymbol());
         return optional.getAsDouble();
     }
 
     private Double getCurrencyPrice(ConfigStock stock) {
-        String url = "https://ru.investing.com/currencies/" + stock.symbol.replace("/", "-").toLowerCase();
+        String url = "https://ru.investing.com/currencies/" + stock.getSymbol().replace("/", "-").toLowerCase();
         return fetchInvesting(url);
     }
 
     private Double getCommodityPrice(ConfigStock stock) {
-        String url = "https://ru.investing.com/commodities/" + stock.symbol.replace("/", "-").toLowerCase();
+        String url = "https://ru.investing.com/commodities/" + stock.getSymbol().replace("/", "-").toLowerCase();
         return fetchInvesting(url);
     }
 
     public Double price(ConfigStock stock) {
-        return switch (stock.type) {
+        return switch (stock.getType()) {
             case STOCK -> getStockPrice(stock);
             case CURRENCY -> getCurrencyPrice(stock);
             case COMMODITY -> getCommodityPrice(stock);
