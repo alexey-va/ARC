@@ -3,7 +3,6 @@ package ru.arc.xserver.playerlist
 import com.google.gson.reflect.TypeToken
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
-import ru.arc.ARC
 import ru.arc.core.Tasks
 import ru.arc.util.Common
 import ru.arc.util.Logging.error
@@ -13,7 +12,6 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 object PlayerManager {
-
     private val playerMap = ConcurrentHashMap<UUID, PlayerData>()
     private val servers = HashSet<String>()
 
@@ -49,7 +47,9 @@ object PlayerManager {
         }
         val newMap = HashMap<UUID, PlayerData>()
         for (data in playerData) {
-            servers.add(data.server)
+            if (!data.server.isNullOrBlank()) {
+                servers.add(data.server)
+            }
             newMap[data.uuid] = data
         }
         playerMap.clear()
@@ -60,13 +60,12 @@ object PlayerManager {
     fun getPlayerData(uniqueId: UUID): PlayerData? = playerMap[uniqueId]
 
     @JvmStatic
-    fun findByName(name: String): PlayerData? =
-        playerMap.values.firstOrNull { it.username.equals(name, ignoreCase = true) }
+    fun findByName(name: String): PlayerData? = playerMap.values.firstOrNull { it.username.equals(name, ignoreCase = true) }
 
     data class PlayerData(
         val username: String,
         val server: String,
         val uuid: UUID,
-        val joinTime: Long
+        val joinTime: Long,
     )
 }

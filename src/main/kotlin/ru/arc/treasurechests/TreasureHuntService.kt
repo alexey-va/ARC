@@ -15,6 +15,7 @@ import org.bukkit.entity.Player
 import org.bukkit.event.entity.CreatureSpawnEvent
 import ru.arc.common.chests.CustomChest
 import ru.arc.common.locationpools.LocationPool
+import ru.arc.common.locationpools.LocationPoolManager
 import ru.arc.core.ScheduledTask
 import ru.arc.core.TaskScheduler
 import ru.arc.treasure.core.Treasures
@@ -78,6 +79,12 @@ class TreasureHuntService(
 ) {
     private val activeHunts = ConcurrentLinkedDeque<ActiveHunt>()
     private val blockToHunt = ConcurrentHashMap<Location, ActiveHunt>()
+
+    private companion object {
+        /** Сундуков за тик при массовом stop (IA destroy дорогой). */
+        const val BATCH_DESTROY_PER_TICK = 12
+        const val BATCH_DESTROY_THRESHOLD = 24
+    }
 
     // === Lifecycle ===
 
@@ -200,9 +207,9 @@ class TreasureHuntService(
             val chest = chestSpawner.createChest(block, chestType.type, namespaceId)
             if (chest != null) {
                 val created = chest.create()
-                if (created && block.type != Material.AIR) {
+                if (created) {
                     placedChests[block.location.toCenterLocation()] = PlacedChest(chest, chestType)
-                } else if (!created) {
+                } else {
                     warn("Failed to create chest at $location")
                     debug("[treasure-hunt] chestSpawner returned created=false at {}", location)
                 }
@@ -252,8 +259,8 @@ class TreasureHuntService(
         }
         hunt.bossBarAudience.clear()
 
-        // Destroy remaining chests
-        hunt.chests.values.forEach { it.chest.destroy() }
+        // Destroy remaining chests (распределяем по тикам, если их много)
+        destroyRemainingChests(hunt)
         hunt.chests.clear()
 
         // Announce stop
@@ -262,6 +269,12 @@ class TreasureHuntService(
         // Unregister
         blockToHunt.entries.removeIf { it.value === hunt }
         activeHunts.remove(hunt)
+
+        val poolId = hunt.config.locationPoolId
+        if (LocationPoolManager.isEphemeralPool(poolId)) {
+            LocationPoolManager.removeEphemeralPool(poolId)
+            debug("[treasure-hunt] removed ephemeral location pool {}", poolId)
+        }
 
         info("Stopped hunt in ${hunt.world.name}")
     }
@@ -331,6 +344,8 @@ class TreasureHuntService(
 
     fun getActiveHunts(): List<ActiveHunt> = activeHunts.toList()
 
+    fun hasActiveHunts(): Boolean = activeHunts.isNotEmpty()
+
     fun getHuntTypeIds(): List<String> = config.huntTypes.keys.toList()
 
     fun getHuntConfig(id: String): TreasureHuntConfig? = config.huntTypes[id]
@@ -351,6 +366,33 @@ class TreasureHuntService(
             }
     }
 
+    private fun destroyRemainingChests(hunt: ActiveHunt) {
+        val chests = hunt.chests.values.map { it.chest }
+        if (chests.isEmpty()) return
+
+        if (chests.size <= BATCH_DESTROY_THRESHOLD) {
+            chests.forEach { it.destroy() }
+            return
+        }
+
+        val iterator = chests.iterator()
+        var batchTask: ScheduledTask? = null
+        batchTask =
+            scheduler.runTimer(
+                1,
+                1,
+                Runnable {
+                    repeat(BATCH_DESTROY_PER_TICK) {
+                        if (!iterator.hasNext()) {
+                            batchTask?.cancel()
+                            return@Runnable
+                        }
+                        iterator.next().destroy()
+                    }
+                },
+            )
+    }
+
     private fun updateDisplay(
         hunt: ActiveHunt,
         soundCounter: AtomicInteger,
@@ -365,46 +407,62 @@ class TreasureHuntService(
         }
 
         val players = hunt.world.players
+        if (players.isEmpty()) {
+            updateBossBar(hunt)
+            return
+        }
+
         val playerSoundEach = config.particles.playerSoundEach
         val soundCount = soundCounter.getAndIncrement()
         if (soundCount >= playerSoundEach) soundCounter.set(0)
 
         val closestChests = mutableMapOf<Player, PlacedChest>()
+        val playerChunkRadius = 2 // ~32 блока; idle radius до 20
 
-        // Display particles
+        // Display particles — пропускаем сундуки далеко от игроков (дешёвый chunk-test)
         for ((_, placedChest) in hunt.chests) {
             val particleConfig = config.particles.getIdleConfig(placedChest.chestType.particlePath)
             val chestLocation = placedChest.chest.blockLocation
+            val radiusSq = particleConfig.radius * particleConfig.radius
+            val chestChunkX = chestLocation.blockX shr 4
+            val chestChunkZ = chestLocation.blockZ shr 4
 
-            val receivers = mutableListOf<Player>()
+            val receivers = ArrayList<Player>()
             for (player in players) {
-                val distance = player.location.distance(chestLocation)
-
+                val playerLoc = player.location
+                val chunkDx = (playerLoc.blockX shr 4) - chestChunkX
+                val chunkDz = (playerLoc.blockZ shr 4) - chestChunkZ
+                if (chunkDx !in -playerChunkRadius..playerChunkRadius ||
+                    chunkDz !in -playerChunkRadius..playerChunkRadius
+                ) {
+                    continue
+                }
+                if (playerLoc.distanceSquared(chestLocation) > radiusSq) continue
+                receivers.add(player)
                 closestChests.compute(player) { _, current ->
                     if (current == null) {
                         placedChest
-                    } else if (distance < player.location.distance(current.chest.blockLocation)) {
+                    } else if (
+                        playerLoc.distanceSquared(chestLocation) <
+                        playerLoc.distanceSquared(current.chest.blockLocation)
+                    ) {
                         placedChest
                     } else {
                         current
                     }
                 }
-
-                if (distance <= particleConfig.radius) {
-                    receivers.add(player)
-                }
             }
 
-            if (receivers.isNotEmpty()) {
-                ParticleManager.queue(
-                    ParticleBuilder(particleConfig.particle)
-                        .location(chestLocation.toCenterLocation())
-                        .count(particleConfig.count)
-                        .extra(particleConfig.extra)
-                        .offset(particleConfig.offset, particleConfig.offset, particleConfig.offset)
-                        .receivers(receivers),
-                )
-            }
+            if (receivers.isEmpty()) continue
+
+            ParticleManager.queue(
+                ParticleBuilder(particleConfig.particle)
+                    .location(chestLocation.toCenterLocation())
+                    .count(particleConfig.count)
+                    .extra(particleConfig.extra)
+                    .offset(particleConfig.offset, particleConfig.offset, particleConfig.offset)
+                    .receivers(receivers),
+            )
         }
 
         // Play proximity sounds

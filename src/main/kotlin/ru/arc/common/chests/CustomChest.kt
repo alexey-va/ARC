@@ -6,13 +6,13 @@ import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.block.Block
+import org.bukkit.entity.Entity
 import org.bukkit.persistence.PersistentDataType
 import ru.arc.ARC
+import ru.arc.treasurechests.HuntFurnitureRegistry
 import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.warn
-import ru.arc.util.cleanupCustomItemFrames
-import ru.arc.util.cleanupDisplayEntities
 
 /**
  * Интерфейс для работы с кастомными сундуками.
@@ -118,8 +118,28 @@ object ChestMarkerKey {
     }
 }
 
+object ChestEntityKey {
+    @Volatile
+    private var cachedKey: NamespacedKey? = null
+
+    @JvmStatic
+    fun get(): NamespacedKey {
+        cachedKey?.let { return it }
+        synchronized(this) {
+            cachedKey?.let { return it }
+            return NamespacedKey(ARC.instance, "custom_chest_entity").also { cachedKey = it }
+        }
+    }
+
+    @JvmStatic
+    fun clear() {
+        synchronized(this) {
+            cachedKey = null
+        }
+    }
+}
+
 /**
- * Vanilla Minecraft сундук.
  *
  * Размещает обычный сундук и маркирует его через CustomBlockData.
  *
@@ -169,8 +189,18 @@ interface FurnitureProvider {
 
     fun getByBlock(block: Block): Any?
 
+    /** Медленный fallback: скан entity рядом (только при destroy, не в hot path). */
+    fun findNearEntities(block: Block): Any?
+
+    fun getEntity(furniture: Any): Entity?
+
     fun remove(
         furniture: Any,
+        dropItems: Boolean,
+    )
+
+    fun removeEntity(
+        entity: Entity,
         dropItems: Boolean,
     )
 
@@ -192,13 +222,11 @@ interface FurnitureProvider {
                         null
                     }
 
-                override fun getByBlock(block: Block): Any? =
-                    try {
-                        CustomFurniture.byAlreadySpawned(block)
-                    } catch (e: Exception) {
-                        debug("Failed to get furniture at {}: {}", block.location, e.message)
-                        null
-                    }
+                override fun getByBlock(block: Block): Any? = ItemsAdderFurnitureLookup.findOnBlocks(block)
+
+                override fun findNearEntities(block: Block): Any? = ItemsAdderFurnitureLookup.findNearEntities(block)
+
+                override fun getEntity(furniture: Any): Entity? = (furniture as? CustomFurniture)?.entity
 
                 override fun remove(
                     furniture: Any,
@@ -206,8 +234,67 @@ interface FurnitureProvider {
                 ) {
                     (furniture as? CustomFurniture)?.remove(dropItems)
                 }
+
+                override fun removeEntity(
+                    entity: Entity,
+                    dropItems: Boolean,
+                ) {
+                    try {
+                        CustomFurniture.remove(entity, dropItems)
+                    } catch (e: Exception) {
+                        debug("Failed to remove ItemsAdder entity {}: {}", entity.uniqueId, e.message)
+                    }
+                }
             }
     }
+}
+
+/**
+ * Поиск ItemsAdder-мебели по anchor block и соседям (без скана всех entity).
+ */
+internal object ItemsAdderFurnitureLookup {
+    private val NEIGHBOR_OFFSETS =
+        listOf(
+            Triple(0, 0, 0),
+            Triple(0, 1, 0),
+            Triple(0, -1, 0),
+            Triple(1, 0, 0),
+            Triple(-1, 0, 0),
+            Triple(0, 0, 1),
+            Triple(0, 0, -1),
+        )
+
+    fun findOnBlocks(block: Block): Any? {
+        for ((dx, dy, dz) in NEIGHBOR_OFFSETS) {
+            findOnBlock(block.getRelative(dx, dy, dz))?.let { return it }
+        }
+        return null
+    }
+
+    /** Дорогой fallback — только если block lookup и UUID не помогли. */
+    fun findNearEntities(block: Block): Any? {
+        val center = block.location.add(0.5, 0.5, 0.5)
+        val world = center.world ?: return null
+        for (entity in world.getNearbyEntities(center, 2.5, 2.5, 2.5)) {
+            findOnEntity(entity)?.let { return it }
+        }
+        return null
+    }
+
+    private fun findOnBlock(relative: Block): Any? =
+        try {
+            CustomFurniture.byAlreadySpawned(relative)
+        } catch (e: Exception) {
+            debug("Failed to lookup furniture on {}: {}", relative.location, e.message)
+            null
+        }
+
+    private fun findOnEntity(entity: Entity): Any? =
+        try {
+            CustomFurniture.byAlreadySpawned(entity)
+        } catch (_: Exception) {
+            null
+        }
 }
 
 /**
@@ -226,12 +313,10 @@ class ItemsAdderChest(
     val namespaceId: String,
     private val blockDataProvider: BlockDataProvider = BlockDataProvider.default,
     private val furnitureProvider: FurnitureProvider = FurnitureProvider.default,
+    private val entityScanner: FurnitureEntityScanner = FurnitureEntityTracker,
 ) : CustomChest {
     companion object {
         const val MARKER_VALUE = "ia"
-
-        /** Радиус поиска ItemFrame для очистки */
-        private const val FRAME_SEARCH_RADIUS = 1.5
     }
 
     private var furniture: Any? = null
@@ -242,78 +327,49 @@ class ItemsAdderChest(
             return false
         }
 
+        val beforeEntities = entityScanner.snapshotNear(block, FurnitureEntityTracker.SPAWN_SCAN_RADIUS)
+        val beforeBarriers = FurnitureBarrierTracker.snapshotBarrierBlocks(block)
         furniture = furnitureProvider.spawn(namespaceId, block)
         if (furniture == null) {
             warn("Failed to spawn ItemsAdder furniture {} at {}", namespaceId, block.location)
             return false
         }
 
+        val afterEntities = entityScanner.snapshotNear(block, FurnitureEntityTracker.SPAWN_SCAN_RADIUS)
+        val afterBarriers = FurnitureBarrierTracker.snapshotBarrierBlocks(block)
+        val spawnedEntities =
+            FurnitureEntityTracker.mergeWithFurnitureEntity(
+                FurnitureEntityTracker.detectSpawned(beforeEntities, afterEntities),
+                furnitureProvider.getEntity(furniture!!),
+            )
+        val spawnedBarriers = FurnitureBarrierTracker.detectSpawned(beforeBarriers, afterBarriers)
+
         blockDataProvider.setMarker(block, ChestMarkerKey.get(), MARKER_VALUE)
+        HuntFurnitureRegistry.register(block, spawnedEntities, spawnedBarriers)
+        debug(
+            "ItemsAdder chest {} at {} tracked {} entities, {} barriers in registry",
+            namespaceId,
+            block.location,
+            spawnedEntities.size,
+            spawnedBarriers.size,
+        )
         return true
     }
 
     override fun destroy() {
-        val key = ChestMarkerKey.get()
-        val marker = blockDataProvider.getMarker(block, key)
-
-        if (marker != MARKER_VALUE) {
-            error("Block at {} is not ItemsAdderChest (marker={})! Not removing!", block.location, marker)
-            return
-        }
-
-        blockDataProvider.removeMarker(block, key)
-
-        // Получаем мебель если ещё не сохранена
-        val currentFurniture = furniture ?: furnitureProvider.getByBlock(block)
-
-        if (currentFurniture == null) {
-            debug("No furniture at block {}", block.location)
-        } else {
-            furnitureProvider.remove(currentFurniture, false)
-        }
-
-        // Очищаем окружающие блоки и entities
-        cleanup()
-    }
-
-    /**
-     * Очищает окружающие barrier блоки, невидимые ItemFrame и Display entities,
-     * которые могут остаться после удаления ItemsAdder мебели.
-     */
-    private fun cleanup() {
-        try {
-            cleanupItemFrames()
-            cleanupDisplayEntities()
-            cleanupBarrierBlocks()
-        } catch (e: Exception) {
-            error("Error cleaning up ItemsAdder chest at {}", block.location, e)
-        }
-    }
-
-    private fun cleanupItemFrames() {
-        block.location.cleanupCustomItemFrames(FRAME_SEARCH_RADIUS)
-    }
-
-    private fun cleanupDisplayEntities() {
-        block.location.cleanupDisplayEntities(FRAME_SEARCH_RADIUS)
-    }
-
-    private fun cleanupBarrierBlocks() {
-        val blocksToCheck =
-            listOf(
+        val anchor = HuntFurnitureRegistry.take(block)
+        ItemsAdderFurnitureRemover.clearMarkers(block, blockDataProvider)
+        val removed =
+            ItemsAdderFurnitureRemover.removeAll(
                 block,
-                block.getRelative(0, 1, 0),
-                block.getRelative(0, -1, 0),
-                block.getRelative(1, 0, 0),
-                block.getRelative(-1, 0, 0),
-                block.getRelative(0, 0, 1),
-                block.getRelative(0, 0, -1),
+                furniture,
+                anchor,
+                blockDataProvider,
+                furnitureProvider,
             )
-
-        for (b in blocksToCheck) {
-            if (b.type == Material.BARRIER) {
-                b.type = Material.AIR
-            }
+        furniture = null
+        if (removed == 0 && anchor != null && anchor.entityIds.isNotEmpty()) {
+            warn("Could not remove tracked entities at {}, visuals cleaned", block.location)
         }
     }
 }

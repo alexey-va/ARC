@@ -2,15 +2,16 @@ package ru.arc.misc
 
 import com.github.stefvanschie.inventoryframework.gui.GuiItem
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui
+import com.github.stefvanschie.inventoryframework.pane.PaginatedPane
 import org.bukkit.Material
-import org.bukkit.NamespacedKey
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
 import ru.arc.configs.Config
 import ru.arc.configs.ConfigManager
+import ru.arc.core.sync
+import ru.arc.gui.GuiBuilder
 import ru.arc.gui.GuiItems
-import ru.arc.gui.dynamicGui
 import ru.arc.gui.onBottomClick
 import ru.arc.gui.onTopClick
 import ru.arc.gui.onTopDrag
@@ -18,7 +19,7 @@ import ru.arc.store.StoreData
 import ru.arc.store.StoreManager
 import ru.arc.util.CooldownManager
 import ru.arc.util.GuiUtils
-import ru.arc.util.Logging.info
+import ru.arc.util.Logging.debug
 import ru.arc.util.itemComponents
 import kotlin.math.ceil
 import kotlin.math.min
@@ -37,78 +38,81 @@ object StoreGuiFactory {
     fun create(
         player: Player,
         store: StoreData,
-    ): ChestGui {
+    ): ChestGui = StoreGuiSession(player, store, config).build()
+}
+
+/**
+ * Live store GUI session — refreshes slots in place instead of reopening the inventory.
+ */
+private class StoreGuiSession(
+    private val player: Player,
+    private val store: StoreData,
+    private val config: Config,
+) {
+    private lateinit var chestGui: ChestGui
+    private lateinit var paginatedPane: PaginatedPane
+
+    fun build(): ChestGui {
         val rows = min(6, ceil(store.size.toDouble() / 9).toInt() + 1)
+        val builder =
+            GuiBuilder(
+                config.string("store.title"),
+                rows,
+                player,
+                config,
+            )
 
-        // Build item list with click handlers
-        val storeItems = buildStoreItems(player, store)
-
-        return dynamicGui(
-            title = config.string("store.title"),
-            itemCount = store.size,
-            minRows = 2,
-            maxRows = 6,
-            navRows = 1,
-            player = player,
-            config = config,
-        ) {
-            navBackground()
-
-            // Top drag - cancel to prevent item duplication
-            onTopDrag { it.isCancelled = true }
-
-            // Bottom click - shift-click items from player inventory to store
-            onBottomClick { click ->
-                handleBottomClick(click, player, store) {
-                    // Rebuild and show updated GUI
-                    GuiUtils.constructAndShowAsync({ create(player, store) }, player)
-                }
+        builder.navBackground()
+        builder.onTopDrag { it.isCancelled = true }
+        builder.onBottomClick { click -> handleBottomClick(click) { scheduleRefresh() } }
+        builder.onTopClick { click -> handleTopClick(click) { scheduleRefresh(clearCursor = true) } }
+        builder.pagination(0 until (rows - 1)) {
+            guiItems(buildStoreItems())
+        }
+        builder.navBar {
+            back(configKey = "store.back") {
+                player.closeInventory()
+                player.performCommand(config.string("store.back-command"))
             }
+        }
 
-            // Top click - handle placing items from cursor into empty store slots
-            onTopClick { click ->
-                handleTopClick(click, store) {
-                    // Rebuild and show updated GUI
-                    GuiUtils.constructAndShowAsync({ create(player, store) }, player)
-                }
-            }
+        chestGui = builder.build()
+        paginatedPane =
+            builder.paginatedContentPane()
+                ?: error("Store GUI must have a paginated content pane")
+        return chestGui
+    }
 
-            pagination(0 until (rows - 1)) {
-                guiItems(storeItems)
-            }
-
-            navBar {
-                val storeConfig = this@StoreGuiFactory.config
-                back(configKey = "store.back") {
-                    player.closeInventory()
-                    player.performCommand(storeConfig.string("store.back-command"))
-                }
+    /**
+     * Refresh store slots on the next tick, then sync cursor.
+     * [ChestGui.update] resets cursor if the item was set before refresh.
+     */
+    private fun scheduleRefresh(
+        cursorItem: ItemStack? = null,
+        clearCursor: Boolean = false,
+    ) {
+        sync {
+            refreshItems()
+            when {
+                clearCursor -> player.setItemOnCursor(null)
+                cursorItem != null -> player.setItemOnCursor(cursorItem)
             }
         }
     }
 
-    /**
-     * Build store items with click handlers.
-     */
-    private fun buildStoreItems(
-        player: Player,
-        store: StoreData,
-    ): List<GuiItem> =
+    private fun refreshItems() {
+        if (!chestGui.viewers.contains(player)) return
+        paginatedPane.clear()
+        paginatedPane.populateWithGuiItems(buildStoreItems())
+        chestGui.update()
+    }
+
+    private fun buildStoreItems(): List<GuiItem> =
         store.getItems().map { original ->
-            createStoreGuiItem(original, player, store) { gui ->
-                GuiUtils.constructAndShowAsync({ create(player, store) }, player)
-            }
+            createStoreGuiItem(original)
         }
 
-    /**
-     * Create a single store item with click handling.
-     */
-    private fun createStoreGuiItem(
-        original: ItemStack,
-        player: Player,
-        store: StoreData,
-        refreshGui: (ChestGui) -> Unit,
-    ): GuiItem {
+    private fun createStoreGuiItem(original: ItemStack): GuiItem {
         val storeItem = original.clone()
         val guiStack = storeItem.clone()
 
@@ -116,101 +120,87 @@ object StoreGuiFactory {
             if (click.isCancelled) return@create
             click.isCancelled = true
 
-            info("Clicked on item: {}", storeItem.type)
+            debug("[Store] Click on {}", storeItem.type)
 
-            // Check cooldown
             if (isOnCooldown(player)) {
-                info("On cooldown")
                 val (display, lore) = config.itemComponents("store.cooldown")
-                GuiUtils.temporaryChange(guiStack, display, lore, 20L) {}
+                GuiUtils.temporaryChange(guiStack, display, lore, 10L) {}
                 return@create
             }
+            CooldownManager.addCooldown(player.uniqueId, "store", 1L)
 
-            CooldownManager.addCooldown(player.uniqueId, "store", 5L)
-
-            // Check inventory space
-            val hasInvSpace = player.inventory.firstEmpty() != -1
-            if (!hasInvSpace) {
-                info("No space")
-                val (display, lore) = config.itemComponents("store.no-space")
-                GuiUtils.temporaryChange(guiStack, display, lore, 60L) {}
-                return@create
+            if (click.isShiftClick) {
+                if (player.inventory.firstEmpty() == -1 &&
+                    player.inventory.none { it != null && it.isSimilar(storeItem) && it.amount < it.maxStackSize }
+                ) {
+                    val (display, lore) = config.itemComponents("store.no-space")
+                    GuiUtils.temporaryChange(guiStack, display, lore, 40L) {}
+                    return@create
+                }
             }
 
-            // Calculate amount to remove (right-click = half)
             val amountToRemove =
                 if (click.isRightClick) {
                     storeItem.amount / 2 + storeItem.amount % 2
                 } else {
                     storeItem.amount
                 }
-            storeItem.amount = amountToRemove
+            val taken = storeItem.clone().also { it.amount = amountToRemove }
 
-            val success = store.removeItem(storeItem, amountToRemove)
-
+            val success = store.removeItem(taken, amountToRemove)
             if (success) {
-                info("Success removing {}", storeItem)
                 StoreManager.saveLater(store)
-                if (click.cursor.type != Material.AIR || click.isShiftClick) {
-                    info("Cursor not empty")
-                    player.inventory.addItem(storeItem)
+                if (click.isShiftClick) {
+                    depositToPlayerInventory(taken)
+                    scheduleRefresh()
                 } else {
-                    info("Cursor empty")
-                    @Suppress("DEPRECATION")
-                    click.setCursor(storeItem)
+                    scheduleTake(taken)
                 }
             } else {
                 val (display, lore) = config.itemComponents("store.item-is-gone")
-                GuiUtils.temporaryChange(guiStack, display, lore, 60L) {}
+                GuiUtils.temporaryChange(guiStack, display, lore, 40L) {}
+                scheduleRefresh()
             }
-
-            // Rebuild GUI
-            GuiUtils.constructAndShowAsync({ create(player, store) }, player)
         }
     }
 
     /**
-     * Handle bottom inventory (player inventory) shift-click.
+     * Refresh store slots, then apply cursor — order matters: [ChestGui.update] resets cursor if set earlier.
      */
+    private fun scheduleTake(cursorItem: ItemStack) {
+        scheduleRefresh(cursorItem = cursorItem)
+    }
+
+    /** Shift-click from store: move stack into player inventory (vanilla chest behavior). */
+    private fun depositToPlayerInventory(item: ItemStack) {
+        val leftover = player.inventory.addItem(item)
+        leftover.values.forEach { remaining ->
+            if (remaining.amount > 0) {
+                store.addItem(remaining)
+                StoreManager.saveLater(store)
+            }
+        }
+    }
+
     private fun handleBottomClick(
         click: org.bukkit.event.inventory.InventoryClickEvent,
-        player: Player,
-        store: StoreData,
         refresh: () -> Unit,
     ) {
-        if (!click.isShiftClick) {
-            info("B: Not shift click")
-            return
-        }
-        if (!store.hasSpace()) {
-            info("B: No space")
-            return
-        }
-        val currentItem =
-            click.currentItem ?: run {
-                info("B: No item")
-                return
-            }
+        if (!click.isShiftClick) return
+        if (!store.hasSpace()) return
+        val currentItem = click.currentItem ?: return
 
         click.isCancelled = true
 
-        val success = store.addItem(currentItem.clone())
-        if (!success) {
-            info("B: Not success")
-            return
-        }
+        if (!store.addItem(currentItem.clone())) return
 
         click.currentItem = null
         StoreManager.saveLater(store)
         refresh()
     }
 
-    /**
-     * Handle top inventory click (placing items from cursor).
-     */
     private fun handleTopClick(
         click: org.bukkit.event.inventory.InventoryClickEvent,
-        store: StoreData,
         refresh: () -> Unit,
     ) {
         val currentStoreItem = click.currentItem
@@ -220,37 +210,17 @@ object StoreGuiFactory {
         val hasCursorItem = cursor.type != Material.AIR
         val hasStoreSpace = store.hasSpace()
 
-        if (hasCurrentItem) {
-            info("T: Current item: ${currentStoreItem.type}")
-            return
-        }
-        if (!hasStoreSpace && hasCursorItem) {
-            info("T: No space")
-            return
-        }
+        if (hasCurrentItem) return
+        if (!hasStoreSpace && hasCursorItem) return
 
         click.isCancelled = true
-
         if (!hasCursorItem) return
 
-        val addedSuccess = store.addItem(cursor.clone())
+        if (!store.addItem(cursor.clone())) return
 
-        if (addedSuccess) {
-            info("T: Added success")
-            StoreManager.saveLater(store)
-            currentStoreItem?.let { item ->
-                item.editMeta { meta ->
-                    meta.persistentDataContainer.remove(NamespacedKey(ARC.instance, "if-uuid"))
-                }
-            }
-            @Suppress("DEPRECATION")
-            click.setCursor(currentStoreItem)
-            refresh()
-        }
+        StoreManager.saveLater(store)
+        refresh()
     }
 
-    /**
-     * Check if player is on store cooldown.
-     */
     private fun isOnCooldown(player: Player): Boolean = CooldownManager.cooldown(player.uniqueId, "store") != 0L
 }

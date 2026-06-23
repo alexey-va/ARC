@@ -168,7 +168,7 @@ messages:
   #  weight: 1
   #  personal: false
   '2':
-    message: '<dark_gray>● <gray>Добавить игрока в приват: <gold>/trust <white><имя>'
+    message: '<dark_gray>● <gray>Добавить игрока в приват: <gold>/trust <white>[имя]'
     servers: all
     player-specific: false
     cache: true

@@ -22,11 +22,6 @@ object TreasureConfig {
 
     object Gui {
         val mainTitle: String get() = config.string("gui.main.title", "Пулы сокровищ")
-        val mainPoolLore: List<String>
-            get() =
-                config
-                    .stringList("gui.main.pool-item.lore")
-                    .ifEmpty { listOf("<gray>Предметов: <white>%size%") }
         val mainBackCommand: String get() = config.string("gui.main.back-command", "")
         val mainCreatePool: String get() = config.string("gui.main.create-pool.display", "<green>Создать пул")
         val mainCreatePoolLore: List<String>
@@ -73,6 +68,33 @@ object TreasureConfig {
                 config
                     .stringList("gui.treasure.messages.lore")
                     .ifEmpty { listOf("<gray>Сообщения при получении", "<gray>этой награды") }
+    }
+
+    /** Labels and lore for typed treasure icons in pool lists (money, SF, command, …). */
+    object GuiIcons {
+        val moneyDisplay: String get() = config.string("gui.icons.money.display", "<gold>Деньги")
+        val moneyAmountLore: String
+            get() = config.string("gui.icons.money.amount-lore", "<gray>Сумма: <white><min>-<max>")
+
+        val commandDisplay: String get() = config.string("gui.icons.command.display", "<aqua>Команда")
+
+        val enchantDisplay: String get() = config.string("gui.icons.enchant.display", "<light_purple>Зачарование")
+        val enchantAmountLore: String
+            get() = config.string("gui.icons.enchant.amount-lore", "<gray>Количество: <white><min>-<max>")
+
+        val potionDisplay: String get() = config.string("gui.icons.potion.display", "<dark_purple>Зелье")
+        val potionAmountLore: String
+            get() = config.string("gui.icons.potion.amount-lore", "<gray>Количество: <white><min>-<max>")
+
+        val aeDisplay: String get() = config.string("gui.icons.ae.display", "<gold>AdvancedEnchantments")
+
+        val subPoolDisplay: String get() = config.string("gui.icons.sub-pool.display", "<purple>Подпул")
+        val subPoolLoreId: String get() = config.string("gui.icons.sub-pool.lore-id", "<gray>Пул: <white><pool_id>")
+
+        val slimefunDisplay: String get() = config.string("gui.icons.slimefun.display", "<green>Slimefun")
+        val slimefunLoreId: String get() = config.string("gui.icons.slimefun.lore-id", "<gray>ID: <white><item_id>")
+        val slimefunAmountLore: String
+            get() = config.string("gui.icons.slimefun.amount-lore", "<gray>Количество: <white><min>-<max>")
     }
 
     // ==================== Input Prompts ====================

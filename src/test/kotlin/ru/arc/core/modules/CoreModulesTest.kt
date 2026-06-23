@@ -10,6 +10,8 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import ru.arc.TestBase
 import ru.arc.core.PluginModule
+import ru.arc.restart.RestartModule
+import ru.arc.scheduled.ScheduledCommandsModule
 
 /**
  * Tests for core module implementations.
@@ -98,7 +100,9 @@ class CoreModulesTest : TestBase() {
             AuditModule,
             FarmModule,
             AnnounceModule,
+            ScheduledCommandsModule,
             XActionModule,
+            RestartModule,
             StockModule,
             StoreModule,
             TreasureModule,
@@ -234,7 +238,9 @@ class CoreModulesTest : TestBase() {
             AuditModule,
             FarmModule,
             AnnounceModule,
+            ScheduledCommandsModule,
             XActionModule,
+            RestartModule,
             StockModule,
             StoreModule,
             TreasureModule,
@@ -267,7 +273,7 @@ class CoreModulesTest : TestBase() {
     // ==================== Module Count Test ====================
 
     @Test
-    @DisplayName("Total module count is 24")
+    @DisplayName("Total module count is 26")
     fun testTotalModuleCount() {
         val allModules = listOf(
             RedisModule,
@@ -283,7 +289,9 @@ class CoreModulesTest : TestBase() {
             AuditModule,
             FarmModule,
             AnnounceModule,
+            ScheduledCommandsModule,
             XActionModule,
+            RestartModule,
             StockModule,
             StoreModule,
             TreasureModule,
@@ -296,6 +304,6 @@ class CoreModulesTest : TestBase() {
             SyncModule
         )
 
-        assertEquals(24, allModules.size, "Should have 24 modules")
+        assertEquals(26, allModules.size, "Should have 26 modules")
     }
 }

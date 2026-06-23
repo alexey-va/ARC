@@ -44,6 +44,8 @@ object AnnounceManager {
             messageTask = Tasks.scheduler.repeating(period = 1.ticks, delay = 0.ticks) {
                 while (queue.isNotEmpty()) {
                     val data = queue.poll() ?: break
+                    if (!data.appliesToServer(XCondition.currentServerName())) continue
+                    if (data.serializedMessage.isNullOrBlank()) continue
                     for (player in PlayerManager.getOnlinePlayersThreadSafe()) {
                         val fits = data.conditions?.all { it.test(player) } != false
                         if (fits) send(data, player)
@@ -52,9 +54,17 @@ object AnnounceManager {
             }
 
             val delayTicks = (config.integer("config.delay-seconds", 600) * 20L).ticks
+            val mainServer = ConfigManager.of(ARC.instance.dataFolder.toPath(), "misc.yml").bool("redis.main-server", false)
+            if (!mainServer) {
+                Logging.info("Announce rotation disabled on this node (not main-server)")
+                return
+            }
+
             task = Tasks.scheduler.repeating(period = delayTicks, delay = delayTicks) {
                 if (announcements.isEmpty()) return@repeating
-                announce(getRandom())
+                val server = XCondition.currentServerName()
+                val pick = getRandom(server) ?: return@repeating
+                announce(pick)
             }
         } catch (e: Exception) {
             error("Error initializing AnnounceManager: {}", e.message)
@@ -91,11 +101,13 @@ object AnnounceManager {
             ) else null
 
             val servers = config.stringList("messages.$key.servers", listOf("all")).toHashSet()
+            val targetServers =
+                if (servers.contains("all")) {
+                    null
+                } else {
+                    servers.map { it.lowercase() }.toSet()
+                }
             val xConditions = mutableListOf<XCondition>()
-
-            if (!servers.contains("all")) {
-                servers.forEach { xConditions.add(XCondition.ofServerName(it)) }
-            }
 
             if (config.exists("messages.$key.conditions")) {
                 val conditions = config.list<Map<String, Any>>("messages.$key.conditions")
@@ -115,7 +127,7 @@ object AnnounceManager {
                     conditions = xConditions,
                     toastData = toastData,
                     bossBarData = bossBarData,
-                    announceData = XMessage.AnnounceData(weight = weight)
+                    announceData = XMessage.AnnounceData(weight = weight, targetServers = targetServers),
                 )
             )
         }
@@ -129,6 +141,7 @@ object AnnounceManager {
 
     @JvmStatic
     fun sendMessageGlobally(playerUuid: UUID, mmString: String) {
+        if (mmString.isBlank()) return
         announce(
             XMessage(
                 serializedMessage = mmString,
@@ -141,6 +154,10 @@ object AnnounceManager {
 
     @JvmStatic
     fun announce(data: XMessage) {
+        if (data.serializedMessage.isNullOrBlank()) {
+            warn("Skipping announce with empty text")
+            return
+        }
         Logging.info("Announcing: {}", data.logSummary())
         XActionManager.publish(data)
     }
@@ -172,20 +189,31 @@ object AnnounceManager {
         announcements[totalWeight] = data
     }
 
-    private fun getRandom(): XMessage {
-        val rng = { Random().nextInt(totalWeight + 1) }
-        var data = announcements.ceilingEntry(rng())!!.value
+    private fun getRandom(serverName: String? = XCondition.currentServerName()): XMessage? {
+        val pool =
+            announcements.values.filter { it.appliesToServer(serverName) }
+        if (pool.isEmpty()) return null
+
+        val weighted = TreeMap<Int, XMessage>()
+        var weightSum = 0
+        for (message in pool) {
+            weightSum += message.announceData?.weight ?: 1
+            weighted[weightSum] = message
+        }
+
+        val rng = { Random().nextInt(weightSum + 1) }
+        var data = weighted.ceilingEntry(rng())!!.value
         repeat(10) {
             if (recentlyUsed.contains(data)) {
-                data = announcements.ceilingEntry(rng())!!.value
+                data = weighted.ceilingEntry(rng())!!.value
             }
         }
         recentlyUsed.offerFirst(data)
-        if (recentlyUsed.size > queueSize()) recentlyUsed.pollLast()
+        if (recentlyUsed.size > queueSize(weighted.size)) recentlyUsed.pollLast()
         return data
     }
 
-    private fun queueSize() = minOf(announcements.size - 1, 3)
+    private fun queueSize(poolSize: Int) = minOf(poolSize - 1, 3).coerceAtLeast(0)
 
     @JvmStatic
     fun queue(data: XMessage) {

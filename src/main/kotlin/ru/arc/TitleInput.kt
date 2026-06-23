@@ -8,7 +8,6 @@ import ru.arc.board.guis.Inputable
 import ru.arc.core.Tasks
 import ru.arc.core.repeating
 import ru.arc.core.ticks
-import ru.arc.util.Logging
 import ru.arc.util.Logging.warn
 import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
@@ -90,6 +89,12 @@ class TitleInput(
             message: String,
         ) {
             val titleInput = activeInputs[player] ?: return
+            if (titleInput.inputable.isCancelInput(message, titleInput.id)) {
+                titleInput.inputable.onInputCancel(titleInput.id)
+                titleInput.remove()
+                player.clearTitle()
+                return
+            }
             if (!titleInput.inputable.satisfy(message, titleInput.id)) {
                 titleInput.sendDenyMessage(message)
                 titleInput.timestamp = System.currentTimeMillis()

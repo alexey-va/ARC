@@ -43,7 +43,7 @@ fun createJobsListGui(
                 val boost = calculateBoosts(job, data)
                 val resolver = createResolver(config, player, job, boost, data)
 
-                material(job.guiItem.type)
+                stack(job.guiItem.clone())
                 display("<job>")
                 lore(listOf(
                     "<gray>Опыт: <exp_boost>%",

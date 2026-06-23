@@ -12,9 +12,20 @@ import io.mockk.verify
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import ru.arc.KotestTestBase
+import ru.arc.treasurechests.HuntFurnitureRegistry
+import java.nio.file.Files
 
 class ChestTest :
     KotestTestBase({
+
+        beforeTest {
+            HuntFurnitureRegistry.resetForTests()
+            HuntFurnitureRegistry.fileOverride = Files.createTempFile("hunt-furniture-test", ".json")
+        }
+
+        afterTest {
+            HuntFurnitureRegistry.fileOverride = null
+        }
 
         describe("VanillaChest") {
 
@@ -146,9 +157,19 @@ class ChestTest :
                     block.type = Material.AIR
 
                     val mockFurniture = mockk<Any>()
+                    val mockEntity = world.spawn(block.location, org.bukkit.entity.ArmorStand::class.java)
+                    val mockScanner =
+                        mockk<FurnitureEntityScanner> {
+                            every { snapshotNear(block, any()) } returnsMany
+                                listOf(
+                                    emptySet(),
+                                    setOf(mockEntity.uniqueId),
+                                )
+                        }
                     val mockFurnitureProvider =
                         mockk<FurnitureProvider> {
                             every { spawn("test:chest", block) } returns mockFurniture
+                            every { getEntity(mockFurniture) } returns mockEntity
                         }
                     val mockBlockDataProvider = mockk<BlockDataProvider>(relaxed = true)
 
@@ -158,12 +179,14 @@ class ChestTest :
                             namespaceId = "test:chest",
                             blockDataProvider = mockBlockDataProvider,
                             furnitureProvider = mockFurnitureProvider,
+                            entityScanner = mockScanner,
                         )
                     val result = chest.create()
 
                     result.shouldBeTrue()
                     verify { mockFurnitureProvider.spawn("test:chest", block) }
                     verify { mockBlockDataProvider.setMarker(block, any(), ItemsAdderChest.MARKER_VALUE) }
+                    HuntFurnitureRegistry.entityIdsAt(block) shouldBe listOf(mockEntity.uniqueId)
                 }
 
                 it("should return false when furniture spawn fails") {
@@ -193,14 +216,13 @@ class ChestTest :
 
             describe("destroy") {
 
-                it("should not destroy if marker is wrong") {
+                it("should remove tracked entities from registry on destroy") {
                     val world = server.addSimpleWorld("test")
                     val block = world.getBlockAt(0, 64, 0)
+                    val entity = world.spawn(block.location, org.bukkit.entity.ArmorStand::class.java)
 
-                    val mockBlockDataProvider =
-                        mockk<BlockDataProvider> {
-                            every { getMarker(block, any()) } returns "vanilla"
-                        }
+                    HuntFurnitureRegistry.register(block, listOf(entity.uniqueId))
+                    val mockBlockDataProvider = mockk<BlockDataProvider>(relaxed = true)
                     val mockFurnitureProvider = mockk<FurnitureProvider>(relaxed = true)
 
                     val chest =
@@ -212,18 +234,16 @@ class ChestTest :
                         )
                     chest.destroy()
 
-                    verify(exactly = 0) { mockFurnitureProvider.remove(any(), any()) }
+                    verify { mockFurnitureProvider.removeEntity(entity, false) }
+                    HuntFurnitureRegistry.entityIdsAt(block).shouldBe(emptyList())
                 }
 
-                it("should remove furniture and marker when valid") {
+                it("should fallback to furniture api when registry is empty") {
                     val world = server.addSimpleWorld("test")
                     val block = world.getBlockAt(0, 64, 0)
 
                     val mockFurniture = mockk<Any>()
-                    val mockBlockDataProvider =
-                        mockk<BlockDataProvider>(relaxed = true) {
-                            every { getMarker(block, any()) } returns ItemsAdderChest.MARKER_VALUE
-                        }
+                    val mockBlockDataProvider = mockk<BlockDataProvider>(relaxed = true)
                     val mockFurnitureProvider =
                         mockk<FurnitureProvider>(relaxed = true) {
                             every { getByBlock(block) } returns mockFurniture
@@ -238,36 +258,33 @@ class ChestTest :
                         )
                     chest.destroy()
 
-                    verify { mockBlockDataProvider.removeMarker(block, any()) }
                     verify { mockFurnitureProvider.remove(mockFurniture, false) }
                 }
 
-                it("should cleanup barrier blocks around the chest") {
+                it("should cleanup stored and neighbor barrier blocks on destroy") {
                     val world = server.addSimpleWorld("test")
                     val block = world.getBlockAt(0, 64, 0)
 
-                    // Размещаем barrier блоки вокруг
                     block.getRelative(0, 1, 0).type = Material.BARRIER
-                    block.getRelative(1, 0, 0).type = Material.BARRIER
+                    block.getRelative(5, 2, 0).type = Material.BARRIER
 
-                    val mockBlockDataProvider =
-                        mockk<BlockDataProvider>(relaxed = true) {
-                            every { getMarker(block, any()) } returns ItemsAdderChest.MARKER_VALUE
-                        }
-                    val mockFurnitureProvider = mockk<FurnitureProvider>(relaxed = true)
+                    HuntFurnitureRegistry.register(
+                        block,
+                        emptyList(),
+                        listOf(BlockPos.of(block.getRelative(5, 2, 0))),
+                    )
 
                     val chest =
                         ItemsAdderChest(
                             block = block,
                             namespaceId = "test:chest",
-                            blockDataProvider = mockBlockDataProvider,
-                            furnitureProvider = mockFurnitureProvider,
+                            blockDataProvider = mockk(relaxed = true),
+                            furnitureProvider = mockk(relaxed = true),
                         )
                     chest.destroy()
 
-                    // Barrier блоки должны быть очищены
                     block.getRelative(0, 1, 0).type shouldBe Material.AIR
-                    block.getRelative(1, 0, 0).type shouldBe Material.AIR
+                    block.getRelative(5, 2, 0).type shouldBe Material.AIR
                 }
 
                 @Suppress("DEPRECATION")

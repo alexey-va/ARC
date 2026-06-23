@@ -1,6 +1,5 @@
 package ru.arc
 
-import net.milkbowl.vault.economy.Economy
 import org.bukkit.Bukkit
 import org.bukkit.command.CommandExecutor
 import org.bukkit.command.TabCompleter
@@ -19,14 +18,38 @@ import ru.arc.commands.arc.subcommands.SoundFollowSubCommand
 import ru.arc.commands.arc.subcommands.StoreSubCommand
 import ru.arc.commands.arc.subcommands.TestSubCommand
 import ru.arc.commands.arc.subcommands.TreasuresSubCommand
-import ru.arc.configs.BoardConfig
 import ru.arc.configs.LocationPoolConfig
 import ru.arc.core.ModuleRegistry
-import ru.arc.core.modules.*
-import ru.arc.ops.OpsHttpModule
+import ru.arc.core.modules.AnnounceModule
+import ru.arc.core.modules.AuditModule
+import ru.arc.core.modules.BoardModule
+import ru.arc.core.modules.BuildingModule
+import ru.arc.core.modules.ConfigModule
+import ru.arc.core.modules.CooldownModule
+import ru.arc.core.modules.EconomyModule
+import ru.arc.core.modules.EliteLootModule
+import ru.arc.core.modules.FarmModule
+import ru.arc.core.modules.HeadCacheModule
+import ru.arc.core.modules.HooksModule
+import ru.arc.core.modules.JoinMessagesModule
+import ru.arc.core.modules.LeafDecayModule
+import ru.arc.core.modules.LocationPoolModule
+import ru.arc.core.modules.MobSpawnModule
+import ru.arc.core.modules.NetworkModule
+import ru.arc.core.modules.ParticleModule
+import ru.arc.core.modules.PersonalLootModule
+import ru.arc.core.modules.RedisModule
+import ru.arc.core.modules.StockModule
+import ru.arc.core.modules.StoreModule
+import ru.arc.core.modules.SyncModule
+import ru.arc.core.modules.TreasureModule
+import ru.arc.core.modules.XActionModule
 import ru.arc.hooks.HookRegistry
 import ru.arc.network.NetworkRegistry
 import ru.arc.network.RedisManager
+import ru.arc.ops.OpsHttpModule
+import ru.arc.restart.RestartModule
+import ru.arc.scheduled.ScheduledCommandsModule
 import ru.arc.util.HeadTextureCache
 import ru.arc.util.Logging.consoleLog
 import ru.arc.util.Logging.debug
@@ -133,7 +156,9 @@ open class ARC : JavaPlugin() {
             // Game features (priority 70-89)
             FarmModule,
             AnnounceModule,
+            ScheduledCommandsModule,
             XActionModule,
+            RestartModule,
             StockModule,
             StoreModule,
             TreasureModule,
@@ -213,7 +238,8 @@ open class ARC : JavaPlugin() {
 
     private fun initLogging() {
         try {
-            ru.arc.util.Logging.addLokiAppender()
+            ru.arc.util.Logging
+                .addLokiAppender()
         } catch (e: Throwable) {
             error("Error creating Loki appender", e)
         }
@@ -228,6 +254,8 @@ open class ARC : JavaPlugin() {
                 "modules/logging.yml",
                 "modules/ops-http.yml",
                 "modules/announce.yml",
+                "modules/scheduled-commands.yml",
+                "modules/restart.yml",
                 "modules/board.yml",
                 "modules/farms.yml",
                 "modules/auction.yml",
@@ -244,6 +272,7 @@ open class ARC : JavaPlugin() {
                 "backpacks.yml",
                 "commands.yml",
                 "config/commands.yml",
+                "guis/scheduled-commands.yml",
             )
 
         @JvmField var plugin: ARC? = null
@@ -275,6 +304,5 @@ open class ARC : JavaPlugin() {
                 Bukkit.dispatchCommand(event.sender, event.command)
             }
         }
-
     }
 }

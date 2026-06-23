@@ -188,7 +188,7 @@ class GuiUtilsTest : TestBase() {
 
         GuiUtils.constructAndShowAsync(supplier, player)
         server.scheduler.performTicks(5)
-        assertTrue(true, "Should use default delay")
+        assertTrue(true, "Should use zero-tick default delay")
     }
 
     @Test

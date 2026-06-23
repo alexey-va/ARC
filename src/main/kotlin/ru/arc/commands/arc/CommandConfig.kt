@@ -142,18 +142,68 @@ object CommandConfig {
     fun huntStopped() = get("hunt.stopped", "<gray>Охота на сокровища остановлена!")
     fun huntNotFound() = get("hunt.not-found", "<red>Охота на сокровища не найдена!")
     fun huntTypeNotFound() = get("hunt.type-not-found", "<red>Тип охоты на сокровища не найден!")
-    fun huntPoolNotFound(poolId: String) =
-        get("hunt.pool-not-found", "<red>Пул локаций <white>%pool_id%<red> не найден!", "%pool_id%", poolId)
 
-    fun huntNotEnoughArgs() = get(
-        "hunt.not-enough-args",
-        "<red>Недостаточно аргументов! <gray>Синтаксис: /arc hunt start <pool_id> <chests> <namespace> <treasure_pool>"
+    fun huntLocationPoolNotFound(locationPool: String) =
+        get(
+            "hunt.location-pool-not-found",
+            "<red>Пул локаций <white>%location_pool%<red> не найден!",
+            "%location_pool%",
+            locationPool,
+        )
+
+    /** @deprecated use [huntLocationPoolNotFound] */
+    fun huntPoolNotFound(locationPool: String) = huntLocationPoolNotFound(locationPool)
+
+    fun huntNotEnoughArgs() = huntCustomNotEnoughArgs()
+
+    fun huntCustomNotEnoughArgs() =
+        get(
+            "hunt.custom-not-enough-args",
+            "<red>Недостаточно аргументов! <gray>/arc hunt start custom <location_pool> <chests> <chest> <treasure_pool>",
+        )
+
+    fun huntCustomHintDefault() = "<gray>Пул: <white>/arc hunt start custom <location_pool> <chests> <chest> <treasure_pool>"
+
+    fun huntGenerateHintDefault() =
+        "<gray>Генерация: <white>/arc hunt start custom generate <x> <y> <z> <radius> <chests> <chest> <treasure_pool>"
+
+    fun huntChestHintDefault() = "<gray><chest> — модель сундука (alias из treasure-hunt.yml: pumpkin_1, easter, …) или <white>vanilla"
+
+    fun huntTypeLocation(
+        locationPool: String,
+        poolSizeSuffix: String,
+    ) = get(
+        "hunt.type-location",
+        "<gray>  location_pool: <white>%location_pool%%pool_size%",
+        "%location_pool%",
+        locationPool,
+        "%pool%",
+        locationPool,
+        "%pool_size%",
+        poolSizeSuffix,
+    )
+
+    fun huntGenerateNotEnoughArgs() =
+        get(
+            "hunt.generate-not-enough-args",
+            "<red>Недостаточно аргументов! <gray>/arc hunt start custom generate here <radius> <chests> <chest> <treasure_pool> " +
+                "или custom generate <x> <y> <z> <radius> <chests> <chest> <treasure_pool>",
     )
 
     fun huntInvalidChests(value: String) =
         get("hunt.invalid-chests", "<red>Неверное количество сундуков: <white>%value%", "%value%", value)
 
-    fun huntSpecifyPool() = get("hunt.specify-pool", "<red>Укажите пул локаций для остановки!")
+    fun huntSpecifyLocationPool() = get("hunt.specify-location-pool", "<red>Укажите location_pool для остановки!")
+
+    fun huntGeneratePlayerOnly() = get("hunt.generate-player-only", "<red>Режим <white>here<red> только для игрока в мире.")
+
+    fun huntGenerateNoWorld() = get("hunt.generate-no-world", "<red>Не удалось определить мир для генерации.")
+
+    fun huntInvalidRadius(value: String) = get("hunt.invalid-radius", "<red>Неверный радиус: <white>%value%", "%value%", value)
+
+    /** @deprecated use [huntSpecifyLocationPool] */
+    fun huntSpecifyPool() = huntSpecifyLocationPool()
+
     fun huntError() = get("hunt.error", "<red>Ошибка выполнения команды!")
     // New hunt messages are accessed via get() directly in the command
 

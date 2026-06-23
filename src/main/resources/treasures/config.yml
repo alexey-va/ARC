@@ -13,9 +13,10 @@ gui:
     create-pool-start: <green>Введите ID нового пула!
     create-pool-deny: <red>Пул с таким ID уже существует
     pool-item:
+      display: <yellow><pool_id>
       lore:
-        - '<gray>Предметов: <white>%size%'
-        - '<gray>Общий вес: <white>%weight%'
+        - '<gray>Предметов: <white><pool_size>'
+        - '<gray>Общий вес: <white><pool_weight>'
   pool:
     title: <dark_gray>%pool%
     messages:
@@ -52,6 +53,27 @@ gui:
       display: <red>Удалить
       lore:
         - <gray>ЛКМ - удалить
+  icons:
+    money:
+      display: <gold>Деньги
+      amount-lore: '<gray>Сумма: <white><min>-<max>'
+    command:
+      display: <aqua>Команда
+    enchant:
+      display: <light_purple>Зачарование
+      amount-lore: '<gray>Количество: <white><min>-<max>'
+    potion:
+      display: <dark_purple>Зелье
+      amount-lore: '<gray>Количество: <white><min>-<max>'
+    ae:
+      display: <gold>AdvancedEnchantments
+    sub-pool:
+      display: <purple>Подпул
+      lore-id: '<gray>Пул: <white><pool_id>'
+    slimefun:
+      display: <green>Slimefun
+      lore-id: '<gray>ID: <white><item_id>'
+      amount-lore: '<gray>Количество: <white><min>-<max>'
 
 input:
   weight: <green>Введите вес (число)

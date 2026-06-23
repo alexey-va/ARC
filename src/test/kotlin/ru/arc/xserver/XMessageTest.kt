@@ -33,6 +33,27 @@ class XMessageTest :
                 message.hasVisibleContent(player) shouldBe true
             }
 
+            it("should filter by target server") {
+                val spawnOnly =
+                    XMessage(
+                        type = XMessage.Type.CHAT,
+                        serializedMessage = "<gray>spawn tip",
+                        serializationType = XMessage.SerializationType.MINI_MESSAGE,
+                        announceData = XMessage.AnnounceData(weight = 1, targetServers = setOf("spawn")),
+                    )
+                val all =
+                    XMessage(
+                        type = XMessage.Type.CHAT,
+                        serializedMessage = "<gray>all tip",
+                        serializationType = XMessage.SerializationType.MINI_MESSAGE,
+                        announceData = XMessage.AnnounceData(weight = 1),
+                    )
+
+                spawnOnly.appliesToServer("spawn") shouldBe true
+                spawnOnly.appliesToServer("survival") shouldBe false
+                all.appliesToServer("survival") shouldBe true
+            }
+
             it("should format log summary with text") {
                 val message =
                     XMessage(

@@ -11,7 +11,6 @@ import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.inventory.ItemFlag
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.meta.LeatherArmorMeta
-import ru.arc.configs.Config
 import java.util.UUID
 
 /**
@@ -325,6 +324,13 @@ class ItemStackDslBuilder(
     }
 
     /**
+     * Add multiple tags from a map.
+     */
+    fun tags(map: Map<String, String>) {
+        map.forEach { (k, v) -> tag(k, v) }
+    }
+
+    /**
      * Add a custom TagResolver.
      */
     fun tagResolver(resolver: TagResolver) {
@@ -426,8 +432,7 @@ class ItemStackDslBuilder(
         return stack
     }
 
-    internal fun buildGuiItem(): com.github.stefvanschie.inventoryframework.gui.GuiItem =
-        build().toGuiItem(guiClickHandler)
+    internal fun buildGuiItem(): com.github.stefvanschie.inventoryframework.gui.GuiItem = build().toGuiItem(guiClickHandler)
 
     internal fun peekDisplayDefault(): String? =
         when {
@@ -438,10 +443,17 @@ class ItemStackDslBuilder(
 
     internal fun peekLoreDefault(): List<String>? =
         when {
-            loreLines.isNotEmpty() -> loreLines.toList()
-            loreComponents != null && loreComponents!!.isNotEmpty() ->
+            loreLines.isNotEmpty() -> {
+                loreLines.toList()
+            }
+
+            loreComponents != null && loreComponents!!.isNotEmpty() -> {
                 loreComponents!!.map { MiniMessage.miniMessage().serialize(it) }
-            else -> null
+            }
+
+            else -> {
+                null
+            }
         }
 
     internal fun peekModelDataDefault(): Int? = modelData.takeIf { it != 0 }
@@ -496,31 +508,6 @@ class LoreDslBuilder {
     }
 }
 
-// ==================== Tags DSL Builder ====================
-
-@ItemStackDslMarker
-class TagsDslBuilder(
-    private val registeredTagNames: MutableSet<String>,
-) {
-    internal val resolvers = mutableListOf<TagResolver>()
-
-    /**
-     * Add tag using infix to operator.
-     */
-    infix fun String.to(value: String) {
-        registeredTagNames.add(this)
-        resolvers.add(TagResolver.resolver(this, Tag.inserting(TextUtil.mm(value, true))))
-    }
-
-    /**
-     * Add tag with Component value.
-     */
-    infix fun String.to(value: Component) {
-        registeredTagNames.add(this)
-        resolvers.add(TagResolver.resolver(this, Tag.inserting(value)))
-    }
-}
-
 // ==================== Extension Functions ====================
 
 /**
@@ -570,9 +557,7 @@ fun quickItem(
 /**
  * Convert ItemStack to GuiItem with optional click handler.
  */
-fun ItemStack.toGuiItem(
-    onClick: ((InventoryClickEvent) -> Unit)? = null,
-): com.github.stefvanschie.inventoryframework.gui.GuiItem =
+fun ItemStack.toGuiItem(onClick: ((InventoryClickEvent) -> Unit)? = null): com.github.stefvanschie.inventoryframework.gui.GuiItem =
     ru.arc.gui.GuiItems.create(this) { event ->
         event.isCancelled = true
         onClick?.invoke(event)

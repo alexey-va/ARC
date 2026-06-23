@@ -24,6 +24,9 @@ data class ConfigItemSpec(
     fun hasContent(): Boolean =
         material != null || display != null || lore != null || modelData != null
 
+    /** Material-only defaults must not be persisted — they overwrite nested locale item specs. */
+    fun shouldPersistToConfig(): Boolean = display != null || lore != null || modelData != null
+
     /** Config values override [fallback] where present. */
     fun overlayWithConfig(fallback: ConfigItemSpec): ConfigItemSpec =
         ConfigItemSpec(
@@ -154,7 +157,7 @@ internal fun applyItemFromConfig(
     val codeDefaults = ConfigItemSpec.fromTarget(target)
     val fromFile = ConfigItemSpec.readFromConfig(config, path)
 
-    if (fromFile == null && codeDefaults.hasContent()) {
+    if (fromFile == null && codeDefaults.shouldPersistToConfig()) {
         ItemConfigTagComment.applyOnInject(
             config,
             path,

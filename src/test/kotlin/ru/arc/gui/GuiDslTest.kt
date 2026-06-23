@@ -161,6 +161,19 @@ class GuiDslTest :
                 item.shouldNotBeNull()
             }
 
+            it("should support tags infix block") {
+                val builder = ItemBuilder.standalone()
+                builder.material(Material.PAPER)
+                builder.tags {
+                    "a" to "1"
+                    "b" to "2"
+                }
+                builder.display("<a> <b>")
+
+                val item = builder.build()
+                item.shouldNotBeNull()
+            }
+
             it("should support setting amount") {
                 val builder = ItemBuilder.standalone()
                 builder.material(Material.DIAMOND)
@@ -216,6 +229,21 @@ class GuiDslTest :
 
                 item.shouldNotBeNull()
                 item.item.itemMeta?.customModelData shouldBe 9999
+            }
+
+            it("should preserve custom model data when built from existing stack") {
+                val base =
+                    org.bukkit.inventory.ItemStack(Material.PAPER).apply {
+                        editMeta { it.setCustomModelData(4242) }
+                    }
+                val builder = ItemBuilder.standalone()
+                builder.stack(base)
+                builder.display("<yellow>Pool")
+
+                builder
+                    .build()
+                    .item.itemMeta
+                    ?.customModelData shouldBe 4242
             }
 
             it("should create gui item with click handler") {

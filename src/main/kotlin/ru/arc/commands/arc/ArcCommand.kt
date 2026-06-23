@@ -4,14 +4,39 @@ import org.bukkit.command.Command
 import org.bukkit.command.CommandExecutor
 import org.bukkit.command.CommandSender
 import org.bukkit.command.TabCompleter
-import ru.arc.commands.arc.subcommands.*
+import ru.arc.commands.arc.subcommands.AuditSubCommand
+import ru.arc.commands.arc.subcommands.BaltopSubCommand
+import ru.arc.commands.arc.subcommands.BoardSubCommand
+import ru.arc.commands.arc.subcommands.BuildBookSubCommand
+import ru.arc.commands.arc.subcommands.EliteLootSubCommand
+import ru.arc.commands.arc.subcommands.EmshopSubCommand
+import ru.arc.commands.arc.subcommands.GiveBoostSubCommand
+import ru.arc.commands.arc.subcommands.GiveSubCommand
+import ru.arc.commands.arc.subcommands.HelpSubCommand
+import ru.arc.commands.arc.subcommands.HuntSubCommand
+import ru.arc.commands.arc.subcommands.InvestSubCommand
+import ru.arc.commands.arc.subcommands.JobsboostsSubCommand
+import ru.arc.commands.arc.subcommands.JoinMessageSubCommand
+import ru.arc.commands.arc.subcommands.LocpoolSubCommand
+import ru.arc.commands.arc.subcommands.LoggerSubCommand
+import ru.arc.commands.arc.subcommands.QuitMessageSubCommand
+import ru.arc.commands.arc.subcommands.ReloadSubCommand
+import ru.arc.commands.arc.subcommands.RepoSubCommand
+import ru.arc.commands.arc.subcommands.RespawnOnRtpSubCommand
+import ru.arc.commands.arc.subcommands.RestartSubCommand
+import ru.arc.commands.arc.subcommands.SchedulesSubCommand
+import ru.arc.commands.arc.subcommands.SoundFollowSubCommand
+import ru.arc.commands.arc.subcommands.StoreSubCommand
+import ru.arc.commands.arc.subcommands.TestSubCommand
+import ru.arc.commands.arc.subcommands.TreasuresSubCommand
 
 /**
  * Main /arc command that routes to subcommands.
  * All subcommand logic is delegated to individual [SubCommand] implementations.
  */
-class ArcCommand : CommandExecutor, TabCompleter {
-
+class ArcCommand :
+    CommandExecutor,
+    TabCompleter {
     private val subcommands = mutableMapOf<String, SubCommand>()
 
     // Legacy command is no longer needed - all subcommands are now in Kotlin
@@ -42,7 +67,9 @@ class ArcCommand : CommandExecutor, TabCompleter {
             StoreSubCommand,
             GiveBoostSubCommand,
             GiveSubCommand,
-            SoundFollowSubCommand
+            SoundFollowSubCommand,
+            SchedulesSubCommand,
+            RestartSubCommand,
         )
     }
 
@@ -55,14 +82,19 @@ class ArcCommand : CommandExecutor, TabCompleter {
         }
     }
 
-    override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<String>): Boolean {
+    override fun onCommand(
+        sender: CommandSender,
+        command: Command,
+        label: String,
+        args: Array<String>,
+    ): Boolean {
         if (args.isEmpty()) {
             sender.sendMessage(CommandConfig.arcUsage())
             sender.sendMessage(
                 CommandConfig.get(
                     "arc.help-hint",
-                    "<gray>Справка: <white>/arc help"
-                )
+                    "<gray>Справка: <white>/arc help",
+                ),
             )
             return true
         }
@@ -96,25 +128,24 @@ class ArcCommand : CommandExecutor, TabCompleter {
     /**
      * Returns unique subcommand names (excludes aliases to avoid duplicates).
      */
-    private fun getAvailableSubcommandNames(): List<String> {
-        return subcommands.values.map { it.name }.distinct()
-    }
+    private fun getAvailableSubcommandNames(): List<String> = subcommands.values.map { it.name }.distinct()
 
     override fun onTabComplete(
         sender: CommandSender,
         command: Command,
         label: String,
-        args: Array<String>
+        args: Array<String>,
     ): List<String>? {
         if (args.isEmpty()) return null
 
         // First arg - show subcommand names with smart sorting
         if (args.size == 1) {
             val input = args[0]
-            val available = subcommands.entries
-                .filter { sender.checkPermission(it.value.permission) }
-                .map { it.key }
-                .distinct()
+            val available =
+                subcommands.entries
+                    .filter { sender.checkPermission(it.value.permission) }
+                    .map { it.key }
+                    .distinct()
 
             return available.tabComplete(input)
         }

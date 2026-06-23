@@ -10,6 +10,26 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object LocationPoolRepository {
     private val pools = ConcurrentHashMap<String, LocationPool>()
+    private val ephemeralPoolIds = ConcurrentHashMap.newKeySet<String>()
+
+    /**
+     * Пул только в памяти — не сохраняется в location_pools (json-файлы).
+     */
+    fun createEphemeral(id: String = ephemeralId()): LocationPool {
+        val pool = LocationPool(id)
+        pools[id] = pool
+        ephemeralPoolIds.add(id)
+        return pool
+    }
+
+    fun isEphemeral(id: String): Boolean = id in ephemeralPoolIds
+
+    fun removeEphemeral(id: String): Boolean {
+        ephemeralPoolIds.remove(id)
+        return pools.remove(id) != null
+    }
+
+    private fun ephemeralId(): String = "@gen-${java.util.UUID.randomUUID().toString().substring(0, 8)}"
 
     /**
      * Получает пул по ID.
@@ -64,6 +84,7 @@ object LocationPoolRepository {
      */
     fun clear() {
         pools.clear()
+        ephemeralPoolIds.clear()
     }
 
     /**

@@ -12,7 +12,9 @@ import ru.arc.util.Logging.error
         JsonSubtype(clazz = XMessage::class, name = "xmessage"),
         JsonSubtype(clazz = XCommand::class, name = "xcommand"),
         JsonSubtype(clazz = XPay::class, name = "xpay"),
-    ]
+        JsonSubtype(clazz = XRestart::class, name = "xrestart"),
+        JsonSubtype(clazz = XRestartCancel::class, name = "xrestartcancel"),
+    ],
 )
 abstract class XAction {
 

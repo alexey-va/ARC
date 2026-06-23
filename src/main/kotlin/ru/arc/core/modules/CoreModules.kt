@@ -1,5 +1,11 @@
 package ru.arc.core.modules
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import net.milkbowl.vault.economy.Economy
 import org.bukkit.plugin.RegisteredServiceProvider
 import ru.arc.ARC
@@ -11,7 +17,11 @@ import ru.arc.configs.Config
 import ru.arc.configs.ConfigManager
 import ru.arc.configs.LocationPoolConfig
 import ru.arc.configs.StockConfig
+import ru.arc.core.BukkitTaskScheduler
 import ru.arc.core.PluginModule
+import ru.arc.core.ScheduledTask
+import ru.arc.core.repeating
+import ru.arc.core.ticks
 import ru.arc.eliteloot.EliteLootManager
 import ru.arc.farm.FarmManager
 import ru.arc.hooks.HookRegistry
@@ -20,15 +30,6 @@ import ru.arc.misc.JoinMessagesManager
 import ru.arc.mobspawn.MobSpawnManager
 import ru.arc.network.NetworkRegistry
 import ru.arc.network.RedisManager
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import ru.arc.core.ScheduledTask
-import ru.arc.core.repeating
-import ru.arc.core.ticks
 import ru.arc.repository.redisRepo
 import ru.arc.stock.HistoryManager
 import ru.arc.stock.Stock
@@ -42,6 +43,8 @@ import ru.arc.sync.SkillsSync
 import ru.arc.sync.SlimefunSync
 import ru.arc.sync.SyncManager
 import ru.arc.treasure.core.Treasures
+import ru.arc.treasurechests.HuntFurnitureJanitor
+import ru.arc.treasurechests.HuntFurnitureRegistry
 import ru.arc.treasurechests.TreasureHuntManager
 import ru.arc.treasurechests.TreasureHuntRegistry
 import ru.arc.util.CooldownManager
@@ -324,41 +327,46 @@ object StockModule : PluginModule {
     override fun init() {
         if (ARC.redisManager == null) return
         if (!config.bool("enabled", false)) {
-            ru.arc.util.Logging.info("Stocks are disabled")
+            ru.arc.util.Logging
+                .info("Stocks are disabled")
             return
         }
 
         StockConfig.load(config)
         AuctionConfig.load()
 
-        StockMarket.stockRepo = redisRepo<Stock>(
-            id = "stocks",
-            storageKey = "arc.stocks",
-            updateChannel = "arc.stocks_update",
-            scope = scope,
-        ) {
-            loadAllOnStart(true)
-            saveInterval(kotlin.time.Duration.parse("1s"))
-        }
+        StockMarket.stockRepo =
+            redisRepo<Stock>(
+                id = "stocks",
+                storageKey = "arc.stocks",
+                updateChannel = "arc.stocks_update",
+                scope = scope,
+            ) {
+                loadAllOnStart(true)
+                saveInterval(kotlin.time.Duration.parse("1s"))
+            }
 
-        StockPlayerManager.playerRepo = redisRepo<StockPlayer>(
-            id = "stock_players",
-            storageKey = "arc.stock_players",
-            updateChannel = "arc.stock_players_update",
-            scope = scope,
-        ) {
-            loadAllOnStart(true)
-            saveInterval(kotlin.time.Duration.parse("250ms"))
-        }
+        StockPlayerManager.playerRepo =
+            redisRepo<StockPlayer>(
+                id = "stock_players",
+                storageKey = "arc.stock_players",
+                updateChannel = "arc.stock_players_update",
+                scope = scope,
+            ) {
+                loadAllOnStart(true)
+                saveInterval(kotlin.time.Duration.parse("250ms"))
+            }
 
         HistoryManager.init()
 
-        updateTask = repeating(200.ticks, delay = 20.ticks) {
-            scope.launch { StockMarket.updateStocks() }
-        }
-        dividendTask = repeating(20.ticks, delay = 100.ticks) {
-            StockMarket.payDividends()
-        }
+        updateTask =
+            repeating(200.ticks, delay = 20.ticks) {
+                scope.launch { StockMarket.updateStocks() }
+            }
+        dividendTask =
+            repeating(20.ticks, delay = 100.ticks) {
+                StockMarket.payDividends()
+            }
     }
 
     override fun shutdown() {
@@ -400,6 +408,8 @@ object TreasureModule : PluginModule {
     override fun init() {
         Treasures.init()
         TreasureHuntRegistry.init()
+        HuntFurnitureRegistry.init()
+        HuntFurnitureJanitor.init(BukkitTaskScheduler(ARC.instance))
     }
 
     override fun reload() {

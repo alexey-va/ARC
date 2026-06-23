@@ -222,6 +222,8 @@ object TreasureHuntRegistry {
      */
     fun getActiveHunts(): List<ActiveHunt> = service?.getActiveHunts() ?: emptyList()
 
+    fun hasActiveHunts(): Boolean = service?.hasActiveHunts() == true
+
     /**
      * Получает все ID зарегистрированных типов охот.
      */

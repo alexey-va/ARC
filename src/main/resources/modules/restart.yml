@@ -1,0 +1,55 @@
+# =============================================================================
+# restart.yml — плановая перезагрузка сервера через /arc restart
+# Кросс-сервер: XAction (arc.xactions), по умолчанию только текущий инстанс.
+# =============================================================================
+
+enabled: true
+default-delay: 3m
+
+# Имена для tab-complete / -servers (совпадают с redis.server-name на инстансах)
+known-servers:
+  - spawn
+  - survival
+
+permission:
+  restart: arc.restart
+  all-servers: arc.restart.all
+  cancel: arc.restart.cancel
+
+messages:
+  scheduled: "<green>Запланирована перезагрузка через <white><delay>"
+  cancelled: "<yellow>Перезагрузка отменена"
+  already-pending: "<red>Уже запланирована перезагрузка. Отмена: <white>/arc restart cancel"
+  nothing-pending: "<gray>Нет запланированной перезагрузки"
+  broadcast-scheduled: "<red>[Сервер] <gray>Перезагрузка через <white><delay>"
+  broadcast-cancelled: "<green>[Сервер] <gray>Перезагрузка отменена"
+  kick: "<red>Сервер перезагружается. Зайдите через минуту."
+
+kick-before-restart: true
+kick-delay: 1s
+
+title:
+  warning: "<red>⚠ Перезагрузка"
+  subtitle: "<gray>через <white><time>"
+  cancelled-title: "<green>Отменено"
+  cancelled-subtitle: "<gray>Перезагрузка отменена"
+  fade-in: 10
+  stay: 70
+  fade-out: 20
+  # Последняя минута: title обновляется каждую секунду и держится дольше
+  final-countdown-seconds: 60
+  final-fade-in: 0
+  final-stay: 40
+  final-fade-out: 0
+
+warnings:
+  minute-marks: true
+  at-seconds:
+    - 30
+    - 10
+    - 5
+    - 4
+    - 3
+    - 2
+    - 1
+  chat-broadcast: true

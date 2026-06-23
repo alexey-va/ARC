@@ -8,11 +8,9 @@ import ru.arc.TitleInput
 import ru.arc.board.guis.Inputable
 import ru.arc.gui.gui
 import ru.arc.treasure.core.TreasureConfig
-import ru.arc.treasure.core.TreasurePool
 import ru.arc.treasure.core.Treasures
 import ru.arc.util.GuiUtils
 import ru.arc.util.TextUtil
-import ru.arc.util.fromConfig
 
 /**
  * Main GUI showing all treasure pools.
@@ -34,10 +32,20 @@ object MainTreasuresGui {
 
             pagination(0 until (ROWS - 1)) {
                 items(pools) { pool ->
-                    material(Material.CHEST)
-                    display("<yellow>${pool.id}")
-                    lore(buildPoolLore(pool))
-                    fromConfigStyle(cfg, "gui.main.pool-item")
+                    stack(TreasureGuiIcons.poolPreviewIcon(pool))
+                    display("<yellow><pool_id>")
+                    lore(
+                        listOf(
+                            "<gray>Предметов: <white><pool_size>",
+                            "<gray>Общий вес: <white><pool_weight>",
+                        ),
+                    )
+                    tags {
+                        "pool_id" to pool.id
+                        "pool_size" to pool.size.toString()
+                        "pool_weight" to pool.totalWeight.toString()
+                    }
+                    fromConfig(cfg, "gui.main.pool-item")
                     onClick {
                         GuiUtils.constructAndShowAsync({ PoolGui.create(player, pool) }, player)
                     }
@@ -66,13 +74,6 @@ object MainTreasuresGui {
             }
         }
     }
-
-    private fun buildPoolLore(pool: TreasurePool): List<String> =
-        TreasureConfig.Gui.mainPoolLore.map { line ->
-            line
-                .replace("%size%", pool.size.toString())
-                .replace("%weight%", pool.totalWeight.toString())
-        }
 
     private class CreatePoolInput(
         private val player: Player,

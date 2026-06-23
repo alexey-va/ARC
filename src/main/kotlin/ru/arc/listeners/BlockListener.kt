@@ -29,13 +29,11 @@ import ru.arc.treasure.core.Treasures
 import ru.arc.treasurechests.TreasureHuntManager
 import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
-import ru.arc.util.Logging.info
 import ru.arc.util.TextUtil
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 class BlockListener : Listener {
-
     companion object {
         private val TREASURE_USE_COOLDOWN: MutableMap<UUID, Long> = ConcurrentHashMap()
         private const val TREASURE_USE_COOLDOWN_MS = 500L
@@ -109,8 +107,11 @@ class BlockListener : Listener {
             TREASURE_USE_COOLDOWN[playerId] = now
             event.isCancelled = true
 
-            if (handItem.amount > 1) handItem.amount -= 1
-            else event.player.inventory.setItemInMainHand(null)
+            if (handItem.amount > 1) {
+                handItem.amount -= 1
+            } else {
+                event.player.inventory.setItemInMainHand(null)
+            }
 
             val treasure = pool.random()
             if (treasure != null) Treasures.service.give(treasure, event.player)
@@ -182,20 +183,27 @@ class BlockListener : Listener {
     }
 
     private fun processTreasureHunt(event: PlayerInteractEvent) {
+        if (!TreasureHuntManager.hasActiveHunts()) return
         var block = event.clickedBlock ?: return
-        val blocks = listOf(
-            block,
-            block.getRelative(1, 0, 0),
-            block.getRelative(-1, 0, 0),
-            block.getRelative(0, 0, 1),
-            block.getRelative(0, 0, -1),
-            block.getRelative(0, 1, 0),
-            block.getRelative(0, -1, 0),
-        )
-        var treasureHunt = blocks.firstOrNull { TreasureHuntManager.getByBlock(it) != null }
-            ?.let { b -> block = b; TreasureHuntManager.getByBlock(b) }
-            ?: return
-        info("Player {} found treasure hunt chest at {}", event.player.name, block.location)
+        val blocks =
+            listOf(
+                block,
+                block.getRelative(1, 0, 0),
+                block.getRelative(-1, 0, 0),
+                block.getRelative(0, 0, 1),
+                block.getRelative(0, 0, -1),
+                block.getRelative(0, 1, 0),
+                block.getRelative(0, -1, 0),
+            )
+        var treasureHunt =
+            blocks
+                .firstOrNull { TreasureHuntManager.getByBlock(it) != null }
+                ?.let { b ->
+                    block = b
+                    TreasureHuntManager.getByBlock(b)
+                }
+                ?: return
+        debug("Player {} found treasure hunt chest at {}", event.player.name, block.location)
         event.isCancelled = true
         TreasureHuntManager.popChest(block, treasureHunt, event.player)
     }

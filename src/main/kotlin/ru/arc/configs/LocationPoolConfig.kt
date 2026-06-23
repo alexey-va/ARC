@@ -11,7 +11,6 @@ import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import java.nio.file.Files
-import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 
 class LocationPoolConfig {
@@ -70,6 +69,7 @@ class LocationPoolConfig {
 
     fun saveLocationPools(onlyDirty: Boolean) {
         LocationPoolManager.getAll().forEach { lp ->
+            if (LocationPoolManager.isEphemeralPool(lp.id)) return@forEach
             if (onlyDirty && !lp.isDirty) return@forEach
             val path = ensureFolder().resolve("${lp.id}.json")
             lp.markClean()

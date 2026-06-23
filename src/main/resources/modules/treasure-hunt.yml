@@ -104,9 +104,9 @@ messages:
   location-pool-not-found: <red>Пул локаций %location_pool_id% не найден!
   hunt-stopped: <gray>Охота на сокровища остановлена!
   hunt-not-found: <red>Охота на сокровища не найдена!
-  not-enough-args: '<red>Неверная команда! <gray>Синтаксис: /arc hunt start <location_pool_id>
-    <chests> <namespace_id> <treasure_pool_id> или /arc hunt stop <location_pool_id>
-    или /arc hunt start <type>'
+  not-enough-args: '<red>Неверная команда! <gray>/arc hunt start custom <location_pool> <chests> <chest> <treasure_pool>
+    или /arc hunt start custom generate <x> <y> <z> <radius> <chests> <chest> <treasure_pool>
+    или /arc hunt start <preset> или /arc hunt stop <location_pool>'
 # Эффект после открытия сундука (ключ = particle-path из chest-type)
 claimed:
   easter:

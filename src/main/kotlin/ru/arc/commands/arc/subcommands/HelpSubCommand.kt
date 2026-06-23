@@ -164,7 +164,8 @@ object HelpSubCommand : SubCommand {
             InvestSubCommand,
             StoreSubCommand,
             GiveBoostSubCommand,
-            SoundFollowSubCommand
+            SoundFollowSubCommand,
+            SchedulesSubCommand,
         ).filter { sender.checkPermission(it.permission) }
     }
 

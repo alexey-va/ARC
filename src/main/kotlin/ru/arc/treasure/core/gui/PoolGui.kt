@@ -15,8 +15,6 @@ import ru.arc.treasure.core.TreasurePool
 import ru.arc.treasure.core.Treasures
 import ru.arc.util.GuiUtils
 import ru.arc.util.TextUtil
-import ru.arc.util.fromConfig
-import ru.arc.util.itemStack
 
 /**
  * GUI for viewing and managing a specific treasure pool.
@@ -40,7 +38,7 @@ object PoolGui {
                 // Build GuiItems for each treasure
                 guiItems(
                     pool.treasures.map { treasure ->
-                        buildTreasureGuiItem(treasure) { event ->
+                        TreasureGuiIcons.toGuiItem(treasure) { event ->
                             if (event.click == ClickType.RIGHT || event.click == ClickType.SHIFT_RIGHT) {
                                 Treasures.removeTreasure(pool.id, treasure)
                                 refreshPool(player, pool.id)
@@ -158,135 +156,6 @@ object PoolGui {
                 }
             }
         }
-
-    private fun buildTreasureGuiItem(
-        treasure: Treasure,
-        onClick: (org.bukkit.event.inventory.InventoryClickEvent) -> Unit,
-    ): com.github.stefvanschie.inventoryframework.gui.GuiItem {
-        val stack =
-            when (treasure) {
-                is Treasure.Item -> {
-                    itemStack(treasure.stack.type) {
-                        display("<yellow>Предмет: <white>${treasure.stack.type.name}")
-                        lore {
-                            +"<gray>Количество: <white>${treasure.min}-${treasure.max}"
-                            +"<gray>Вес: <white>${treasure.weight}"
-                            if (treasure.messages.isNotEmpty()) {
-                                +"<gray>Сообщений: <white>${treasure.messages.size}"
-                            }
-                            +""
-                            +"<yellow>ЛКМ - редактировать"
-                            +"<red>ПКМ - удалить"
-                        }
-                    }
-                }
-
-                is Treasure.Money -> {
-                    itemStack(Material.GOLD_INGOT) {
-                        display("<gold>Деньги: <white>${treasure.min}-${treasure.max}")
-                        lore {
-                            +"<gray>Вес: <white>${treasure.weight}"
-                            if (treasure.messages.isNotEmpty()) {
-                                +"<gray>Сообщений: <white>${treasure.messages.size}"
-                            }
-                            +""
-                            +"<yellow>ЛКМ - редактировать"
-                            +"<red>ПКМ - удалить"
-                        }
-                    }
-                }
-
-                is Treasure.Command -> {
-                    itemStack(Material.COMMAND_BLOCK) {
-                        display("<aqua>Команда")
-                        lore {
-                            treasure.commands.forEach { +"<gray>> <white>$it" }
-                            +"<gray>Вес: <white>${treasure.weight}"
-                            if (treasure.messages.isNotEmpty()) {
-                                +"<gray>Сообщений: <white>${treasure.messages.size}"
-                            }
-                            +""
-                            +"<yellow>ЛКМ - редактировать"
-                            +"<red>ПКМ - удалить"
-                        }
-                    }
-                }
-
-                is Treasure.SubPool -> {
-                    itemStack(Material.CHEST_MINECART) {
-                        display("<purple>Подпул: <white>${treasure.poolId}")
-                        lore {
-                            +"<gray>Вес: <white>${treasure.weight}"
-                            if (treasure.messages.isNotEmpty()) {
-                                +"<gray>Сообщений: <white>${treasure.messages.size}"
-                            }
-                            +""
-                            +"<yellow>ЛКМ - редактировать"
-                            +"<red>ПКМ - удалить"
-                        }
-                    }
-                }
-
-                is Treasure.Enchant -> {
-                    itemStack(Material.ENCHANTED_BOOK) {
-                        display("<light_purple>Зачарование: <white>${treasure.min}-${treasure.max}")
-                        lore {
-                            +"<gray>Вес: <white>${treasure.weight}"
-                            if (treasure.messages.isNotEmpty()) {
-                                +"<gray>Сообщений: <white>${treasure.messages.size}"
-                            }
-                            +""
-                            +"<yellow>ЛКМ - редактировать"
-                            +"<red>ПКМ - удалить"
-                        }
-                    }
-                }
-
-                is Treasure.Potion -> {
-                    itemStack(Material.POTION) {
-                        display("<dark_purple>Зелье: <white>${treasure.min}-${treasure.max}")
-                        lore {
-                            +"<gray>Вес: <white>${treasure.weight}"
-                            if (treasure.messages.isNotEmpty()) {
-                                +"<gray>Сообщений: <white>${treasure.messages.size}"
-                            }
-                            +""
-                            +"<yellow>ЛКМ - редактировать"
-                            +"<red>ПКМ - удалить"
-                        }
-                    }
-                }
-
-                is Treasure.Ae -> {
-                    itemStack(Material.ENCHANTED_BOOK) {
-                        display("<gold>${treasure.displayName}")
-                        lore {
-                            +"<gray>Вес: <white>${treasure.weight}"
-                            if (treasure.args.isNotEmpty()) {
-                                +"<gray>Аргументов: <white>${treasure.args.size}"
-                            }
-                            +""
-                            +"<yellow>ЛКМ - редактировать"
-                            +"<red>ПКМ - удалить"
-                        }
-                    }
-                }
-
-                is Treasure.Slimefun -> {
-                    itemStack(Material.IRON_INGOT) {
-                        display("<green>${treasure.displayName}")
-                        lore {
-                            +"<gray>Вес: <white>${treasure.weight}"
-                            +""
-                            +"<yellow>ЛКМ - редактировать"
-                            +"<red>ПКМ - удалить"
-                        }
-                    }
-                }
-            }
-        return com.github.stefvanschie.inventoryframework.gui
-            .GuiItem(stack) { onClick(it) }
-    }
 
     private fun refreshPool(
         player: Player,

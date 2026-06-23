@@ -48,8 +48,20 @@ object LocationPoolManager {
     }
 
     @JvmStatic
+    fun createEphemeralPool(): LocationPool = LocationPoolRepository.createEphemeral()
+
+    @JvmStatic
+    fun isEphemeralPool(id: String?): Boolean = id != null && LocationPoolRepository.isEphemeral(id)
+
+    @JvmStatic
+    fun removeEphemeralPool(id: String): Boolean = LocationPoolRepository.removeEphemeral(id)
+
+    @JvmStatic
     fun delete(id: String): Boolean {
         LocationPoolEditor.cancelEditingForPool(id)
+        if (isEphemeralPool(id)) {
+            return removeEphemeralPool(id)
+        }
         val removed = LocationPoolRepository.remove(id)
         if (removed) {
             ARC.plugin?.locationPoolConfig?.deleteFile(id)

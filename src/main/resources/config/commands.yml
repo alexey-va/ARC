@@ -62,6 +62,18 @@ commands:
     aliases: [ ]
     permission: arc.treasure-hunt
     player-only: false
+  schedules:
+    name: schedules
+    aliases: [ scheduler, cron ]
+    permission: arc.schedules.gui
+    player-only: true
+    usage: /arc schedules [run <id>]
+  restart:
+    name: restart
+    aliases: [ reboot ]
+    permission: arc.restart
+    player-only: false
+    usage: /arc restart [-servers all|spawn,survival] [-delay 3m] | /arc restart cancel
   treasures:
     name: treasures
     aliases: [ ]
@@ -110,10 +122,29 @@ messages:
   buildbook:
     not-found: <red>Строение <white>%name%<red> не найдено!
   hunt:
-    no-types: <gray>Нет настроенных типов охот
-    types-header: '<gold>Доступные типы охот:'
-    type-item: '<gray>• <white>%type% <gray>(пул: %pool%)'
-    start-hint: '<gray>Запуск: <white>/arc hunt <тип> [сундуков]'
+    no-types: <gray>Нет настроенных пресетов охот
+    types-header: <gold>═══ Пресеты охот ═══
+    types-blank: ''
+    types-custom-header: <gold>─── Custom ───
+    types-stop-hint: '<gray>Стоп: <white>/arc hunt stop <location_pool>'
+    type-name: <yellow>%type%
+    type-location: '<gray>  location_pool: <white>%location_pool%%pool_size%'
+    type-treasure: '<gray>  treasure_pool: <white>%treasure_pools%'
+    type-chest: '<gray>  chest: <white>%chests%'
+    type-start: '<gray>  → <white>/arc hunt start %type% [сундуков]'
+    custom-hint: '<gray>пул:  <white>/arc hunt start custom <location_pool> <chests> <chest> <treasure_pool>'
+    generate-hint: '<gray>ген:  <white>/arc hunt start custom generate <x> <y> <z> <radius> <chests> <chest> <treasure_pool>'
+    chest-hint: '<gray>chest — модель сундука (pumpkin_1, vanilla, …) · treasure_pool — loot из /arc treasures'
+    custom-not-enough-args: '<red>Недостаточно аргументов! <gray>/arc hunt start custom <location_pool> <chests> <chest> <treasure_pool>'
+    generate-not-enough-args: '<red>Недостаточно аргументов! <gray>/arc hunt start custom generate here ... или custom generate <x> <y> <z> ...'
+    generate-player-only: <red>Режим <white>here<red> только для игрока в мире.
+    generate-no-world: <red>Не удалось определить мир для генерации.
+    invalid-radius:
+      <red>Неверный радиус: <white>%value%
+    location-pool-not-found: <red>Пул локаций <white>%location_pool%<red> не найден!
+    specify-location-pool: <red>Укажите location_pool для остановки!
+    not-enough-args: '<red>Недостаточно аргументов! <gray>Синтаксис: /arc hunt start custom <location_pool> <chests> <namespace> <treasure_pool>'
+    active-item: '<gray>• <white>%location_pool% <gray>- <yellow>%chests%<gray> сундуков'
   treasures:
     list-header: '<gold>Пулы наград (%count%):'
     list-item: <gray>• <white>%pool_id% <gray>(%size% предметов)

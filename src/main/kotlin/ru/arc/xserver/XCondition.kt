@@ -41,5 +41,12 @@ data class XCondition(
         @JvmStatic fun ofServerName(serverName: String) = XCondition(serverName = serverName)
         @JvmStatic fun ofPlayerName(playerName: String) = XCondition(playerName = playerName)
         @JvmStatic fun ofPlayerUuid(playerUuid: UUID) = XCondition(playerUuid = playerUuid)
+
+        internal fun currentServerName(): String? {
+            if (ARC.plugin == null) return null
+            val misc = ConfigManager.of(ARC.instance.dataFolder.toPath(), "misc.yml")
+            return misc.string("redis.server-name").takeIf { it.isNotBlank() }?.lowercase()
+                ?: ARC.serverName?.lowercase()
+        }
     }
 }

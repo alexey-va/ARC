@@ -1,0 +1,60 @@
+# =============================================================================
+# scheduled-commands.yml — отложенный запуск консольных команд по расписанию.
+# GUI: /arc schedules (permission: arc.schedules.gui)
+# schedule.type: interval | daily | cron
+# =============================================================================
+
+enabled: true
+check-interval: 60s
+timezone: Europe/Moscow
+
+permission:
+  gui: arc.schedules.gui
+  run-now: arc.schedules.run
+
+gui:
+  title: "<gold>Расписание команд"
+  detail-title: "<gold>Команда: <white><id>"
+
+commands:
+  example_interval:
+    enabled: false
+    command: "say [ARC] Пример интервальной команды"
+    servers: all
+    schedule:
+      type: interval
+      every: 30m
+      run-on-start: false
+
+  example_daily:
+    enabled: false
+    command: "say [ARC] Доброе утро!"
+    servers:
+      - spawn
+    schedule:
+      type: daily
+      days: all
+      times:
+        - "09:00"
+        - "21:00"
+
+  example_weekly:
+    enabled: false
+    command: "cmi broadcast <yellow>Еженедельное напоминание"
+    servers:
+      - survival
+    schedule:
+      type: weekly
+      days:
+        - FRIDAY
+        - SATURDAY
+      times:
+        - "18:00"
+
+  example_cron:
+    enabled: false
+    command: "say [ARC] Cron каждый час в :00"
+    servers: all
+    schedule:
+      type: cron
+      expression: "0 * * * *"

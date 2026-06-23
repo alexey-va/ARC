@@ -802,6 +802,13 @@ open class Config(
             version++
         }
 
+    /** Removes a key from the YAML tree (no-op if missing). */
+    open fun removeKey(path: String) {
+        nodeLock.write {
+            removeKeyFromNode(rootNode, path.split("."))
+        }
+    }
+
     open fun save() {
         // applyComments mutates node metadata, so it needs the write lock.
         // Serialization is read-only and also runs under the write lock here
@@ -906,6 +913,24 @@ open class Config(
         val finalKey = parts.last()
         val newTuples = current.value.filter { (it.keyNode as? ScalarNode)?.value != finalKey }.toMutableList()
         newTuples.add(NodeTuple(createScalarNode(finalKey), createNodeForValue(value)))
+        current.value.clear()
+        current.value.addAll(newTuples)
+    }
+
+    private fun removeKeyFromNode(
+        root: MappingNode,
+        parts: List<String>,
+    ) {
+        if (parts.isEmpty()) return
+        var current = root
+        for (i in 0 until parts.size - 1) {
+            val part = parts[i]
+            val existing = current.value.find { (it.keyNode as? ScalarNode)?.value == part } ?: return
+            val next = existing.valueNode as? MappingNode ?: return
+            current = next
+        }
+        val finalKey = parts.last()
+        val newTuples = current.value.filter { (it.keyNode as? ScalarNode)?.value != finalKey }
         current.value.clear()
         current.value.addAll(newTuples)
     }

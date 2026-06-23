@@ -172,13 +172,14 @@ fun CommandSender.checkPermission(permission: String?): Boolean {
  * @return Filtered and sorted list of completions
  */
 fun List<String>.tabComplete(input: String): List<String> {
+    val safe = this.filterNotNull().filter { it.isNotBlank() }
     if (input.isEmpty()) {
-        return this.sortedWith(compareBy({ it.length }, { it.lowercase() }))
+        return safe.sortedWith(compareBy({ it.length }, { it.lowercase() }))
     }
 
     val inputLower = input.lowercase()
 
-    return this
+    return safe
         .filter { it.lowercase().startsWith(inputLower) }
         .sortedWith(
             compareBy(
@@ -187,8 +188,8 @@ fun List<String>.tabComplete(input: String): List<String> {
                 // 2. Shorter strings first (more likely what user wants)
                 { it.length },
                 // 3. Alphabetical
-                { it.lowercase() }
-            )
+                { it.lowercase() },
+            ),
         )
 }
 

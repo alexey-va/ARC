@@ -19,10 +19,12 @@ import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.inventory.ItemStack
 import ru.arc.configs.Config
 import ru.arc.util.GuiUtils
-import ru.arc.util.TextUtil
-import ru.arc.util.ConfigItemSpec
-import ru.arc.util.applyItemFromConfig
 import ru.arc.util.ItemConfigTarget
+import ru.arc.util.ItemStackDslBuilder
+import ru.arc.util.TagsDslBuilder
+import ru.arc.util.TextUtil
+import ru.arc.util.applyItemFromConfig
+import ru.arc.util.customModelDataOrNull
 import ru.arc.util.fromConfig
 import ru.arc.util.guiItem
 import ru.arc.util.itemStack
@@ -184,6 +186,12 @@ class GuiBuilder(
     private val buildCallbacks = mutableListOf<(ChestGui) -> Unit>()
 
     /**
+     * Paginated pane created by the last [pagination] call, if any.
+     * Used to refresh item grids without reopening the GUI.
+     */
+    fun paginatedContentPane(): PaginatedPane? = paginatedPane
+
+    /**
      * Register a callback to be called when GUI is built.
      * Used for adding event handlers and other post-build customization.
      */
@@ -200,10 +208,11 @@ class GuiBuilder(
         startRow: Int = 0,
         endRow: Int = rows,
     ) {
-        val pane = OutlinePane(9, endRow - startRow, Pane.Priority.LOWEST).apply {
-            addItem(GuiUtils.background(material, modelData))
-            setRepeat(true)
-        }
+        val pane =
+            OutlinePane(9, endRow - startRow, Pane.Priority.LOWEST).apply {
+                addItem(GuiUtils.background(material, modelData))
+                setRepeat(true)
+            }
         gui.addPane(Slot.fromXY(0, startRow), pane)
     }
 
@@ -667,6 +676,22 @@ class ItemBuilder private constructor(
     }
 
     /**
+     * Add multiple tags via infix DSL.
+     *
+     * ```kotlin
+     * tags {
+     *     "pool_id" to pool.id
+     *     "pool_size" to pool.size.toString()
+     * }
+     * ```
+     */
+    fun tags(block: TagsDslBuilder.() -> Unit) {
+        val builder = TagsDslBuilder(registeredTagNames)
+        builder.block()
+        tagResolvers.addAll(builder.resolvers)
+    }
+
+    /**
      * Add multiple tags from a map.
      */
     fun tags(map: Map<String, String>) {
@@ -747,19 +772,6 @@ class ItemBuilder private constructor(
     }
 
     /**
-     * Style-only overlay (material, customModelData) for dynamic list rows — never injects display/lore.
-     */
-    fun fromConfigStyle(
-        config: Config,
-        path: String,
-    ) {
-        ConfigItemSpec.readFromConfig(config, path)?.let { spec ->
-            spec.material?.let { material(it) }
-            spec.modelData?.takeIf { it != 0 }?.let { modelData(it) }
-        }
-    }
-
-    /**
      * Multi-action click handler builder.
      */
     @GuiDslMarker
@@ -810,17 +822,40 @@ class ItemBuilder private constructor(
 
     internal fun peekDisplayDefault(): String? =
         when {
-            display != null -> display
-            displayComponent != null -> displayComponent?.let { net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().serialize(it) }
-            else -> null
+            display != null -> {
+                display
+            }
+
+            displayComponent != null -> {
+                displayComponent?.let {
+                    net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().serialize(
+                        it,
+                    )
+                }
+            }
+
+            else -> {
+                null
+            }
         }
 
     internal fun peekLoreDefault(): List<String>? =
         when {
-            lore.isNotEmpty() -> lore
-            loreComponents != null && loreComponents!!.isNotEmpty() ->
-                loreComponents!!.map { net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().serialize(it) }
-            else -> null
+            lore.isNotEmpty() -> {
+                lore
+            }
+
+            loreComponents != null && loreComponents!!.isNotEmpty() -> {
+                loreComponents!!.map {
+                    net.kyori.adventure.text.minimessage.MiniMessage
+                        .miniMessage()
+                        .serialize(it)
+                }
+            }
+
+            else -> {
+                null
+            }
         }
 
     internal fun peekModelDataDefault(): Int? = modelData.takeIf { it != 0 }
@@ -831,79 +866,73 @@ class ItemBuilder private constructor(
 
     fun build(): GuiItem {
         val stack =
-            itemStack ?: run {
-                val builtStack =
-                    if (skullUuid != null) {
-                        skullItem(skullUuid!!) {
-                            if (modelData != 0) modelData(modelData)
-
-                            tagResolvers.forEach { tagResolver(it) }
-
-                            if (displayComponent != null) {
-                                display(displayComponent!!)
-                            } else if (display != null) {
-                                display(display!!)
-                            }
-
-                            if (loreComponents != null) {
-                                loreComponents(loreComponents!!)
-                            } else if (lore.isNotEmpty()) {
-                                lore(lore)
-                            }
-
-                            for ((enchant, level, ignoreLevelRestriction) in enchantments) {
-                                if (enchant != null) {
-                                    if (ignoreLevelRestriction) {
-                                        enchantUnsafe(enchant, level)
-                                    } else {
-                                        enchant(enchant, level)
-                                    }
-                                }
-                            }
-
-                            if (itemFlags.isNotEmpty()) {
-                                flags(*itemFlags.toTypedArray())
-                            }
-                        }
-                    } else {
-                        itemStack(material, amount) {
-                            if (modelData != 0) modelData(modelData)
-
-                            tagResolvers.forEach { tagResolver(it) }
-
-                            if (displayComponent != null) {
-                                display(displayComponent!!)
-                            } else if (display != null) {
-                                display(display!!)
-                            }
-
-                            if (loreComponents != null) {
-                                loreComponents(loreComponents!!)
-                            } else if (lore.isNotEmpty()) {
-                                lore(lore)
-                            }
-
-                            for ((enchant, level, ignoreLevelRestriction) in enchantments) {
-                                if (enchant != null) {
-                                    if (ignoreLevelRestriction) {
-                                        enchantUnsafe(enchant, level)
-                                    } else {
-                                        enchant(enchant, level)
-                                    }
-                                }
-                            }
-
-                            if (itemFlags.isNotEmpty()) {
-                                flags(*itemFlags.toTypedArray())
-                            }
-                        }
-                    }
-                builtStack.also { it.amount = amount }
-            }
+            itemStack?.let { base ->
+                applyAppearance(base.clone()).also { built ->
+                    if (amount > 0) built.amount = amount
+                }
+            } ?: buildMaterialStack()
 
         return GuiItems.create(stack) { event ->
             if (cancelClick) event.isCancelled = true
             clickHandler?.invoke(event)
+        }
+    }
+
+    private fun buildMaterialStack(): ItemStack {
+        val builtStack =
+            if (skullUuid != null) {
+                skullItem(skullUuid!!) {
+                    applyAppearanceToBuilder(this)
+                }
+            } else {
+                itemStack(material, amount) {
+                    applyAppearanceToBuilder(this)
+                }
+            }
+        return builtStack.also { it.amount = amount }
+    }
+
+    private fun applyAppearance(stack: ItemStack): ItemStack {
+        val builder = ItemStackDslBuilder(stack.type, stack.amount)
+        stack.itemMeta?.let { meta ->
+            meta.customModelDataOrNull?.let { builder.modelData(it) }
+            meta.displayName()?.let { builder.display(it) }
+            meta.lore()?.let { builder.loreComponents(it) }
+            meta.itemFlags.forEach { builder.flags(it) }
+        }
+        applyAppearanceToBuilder(builder)
+        return builder.build()
+    }
+
+    private fun applyAppearanceToBuilder(builder: ru.arc.util.ItemStackDslBuilder) {
+        if (modelData != 0) builder.modelData(modelData)
+
+        tagResolvers.forEach { builder.tagResolver(it) }
+
+        if (displayComponent != null) {
+            builder.display(displayComponent!!)
+        } else if (display != null) {
+            builder.display(display!!)
+        }
+
+        if (loreComponents != null) {
+            builder.loreComponents(loreComponents!!)
+        } else if (lore.isNotEmpty()) {
+            builder.lore(lore)
+        }
+
+        for ((enchant, level, ignoreLevelRestriction) in enchantments) {
+            if (enchant != null) {
+                if (ignoreLevelRestriction) {
+                    builder.enchantUnsafe(enchant, level)
+                } else {
+                    builder.enchant(enchant, level)
+                }
+            }
+        }
+
+        if (itemFlags.isNotEmpty()) {
+            builder.flags(*itemFlags.toTypedArray())
         }
     }
 }
@@ -952,7 +981,7 @@ fun ChestGui.showTo(player: Player?) {
  */
 fun ChestGui.showAsync(
     player: Player,
-    delay: Int = 3,
+    delay: Int = 0,
 ) {
     GuiUtils.constructAndShowAsync({ this }, player, delay)
 }

@@ -22,7 +22,15 @@ class XMessage(
     @SerializedName("ab")  var actionBarData: ActionBarData? = null
 ) : XAction() {
 
+    fun appliesToServer(serverName: String?): Boolean {
+        val targets = announceData?.targetServers
+        if (targets.isNullOrEmpty()) return true
+        if (serverName.isNullOrBlank()) return false
+        return targets.any { it.equals(serverName, ignoreCase = true) }
+    }
+
     override fun runInternal() {
+        if (!appliesToServer(XCondition.currentServerName())) return
         val players = filteredPlayers()
         when (type) {
             Type.CHAT ->
@@ -105,7 +113,9 @@ class XMessage(
 
     data class AnnounceData(
         @SerializedName("m") val weight: Int = 0,
-        @SerializedName("p") val personal: Boolean = false
+        @SerializedName("p") val personal: Boolean = false,
+        /** null = all servers; otherwise at least one name must match redis.server-name */
+        @SerializedName("srv") val targetServers: Set<String>? = null,
     )
 
     data class ActionBarData(

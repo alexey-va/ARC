@@ -13,13 +13,13 @@ import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.event.inventory.InventoryClickEvent
 import ru.arc.configs.StockConfig
-import ru.arc.util.fromConfig
 import ru.arc.core.modules.EconomyModule
 import ru.arc.stock.StockPlayer
 import ru.arc.stock.StockPlayerManager
 import ru.arc.util.GuiUtils
 import ru.arc.util.TextUtil
 import ru.arc.util.TextUtil.mm
+import ru.arc.util.fromConfig
 import ru.arc.util.guiItem
 import ru.arc.util.itemComponents
 import ru.arc.util.itemStack
@@ -30,14 +30,15 @@ class ProfileMenu(
     private val previous: Int,
     private val symbol: String?,
 ) : ChestGui(
-    2,
-    TextHolder.deserialize(
-        TextUtil.toLegacy(
-            StockConfig.string("profile-menu.menu-title"),
-            "name", stockPlayer.playerName,
-        )
-    )
-) {
+        2,
+        TextHolder.deserialize(
+            TextUtil.toLegacy(
+                StockConfig.string("profile-menu.menu-title"),
+                "name",
+                stockPlayer.playerName,
+            ),
+        ),
+    ) {
     private lateinit var back: GuiItem
     private lateinit var balance: GuiItem
     private lateinit var statistic: GuiItem
@@ -53,17 +54,21 @@ class ProfileMenu(
         val pane = StaticPane(9, 1)
         this.addPane(Slot.fromXY(0, 1), pane)
 
-        back = guiItem(Material.BLUE_STAINED_GLASS_PANE) {
-            onClick { click ->
-                click.isCancelled = true
-                if (previous == 0) {
-                    GuiUtils.constructAndShowAsync({ SymbolSelector(stockPlayer) }, click.whoClicked)
-                } else if (previous == 1) {
-                    GuiUtils.constructAndShowAsync({ PositionSelector(stockPlayer, symbol) }, click.whoClicked)
+        back =
+            guiItem(Material.BLUE_STAINED_GLASS_PANE) {
+                onClick { click ->
+                    click.isCancelled = true
+                    if (previous == 0) {
+                        GuiUtils.constructAndShowAsync({ SymbolSelector(stockPlayer) }, click.whoClicked)
+                    } else if (previous == 1) {
+                        GuiUtils.constructAndShowAsync({ PositionSelector(stockPlayer, symbol) }, click.whoClicked)
+                    }
                 }
+                display("<gray>Назад")
+                lore(emptyList())
+                modelData(11013)
+                fromConfig(StockConfig.config(), "locale.profile-menu.back")
             }
-            fromConfig(StockConfig.config(), "locale.profile-menu.back")
-        }
         pane.addItem(back, 0, 0)
     }
 
@@ -72,44 +77,51 @@ class ProfileMenu(
         this.addPane(Slot.fromXY(0, 0), staticPane)
         val tagResolver = stockPlayer.tagResolver()
 
-        statistic = guiItem(Material.PAPER) {
-            onClick { click -> click.isCancelled = true }
-            display("<yellow>Статистика")
-            lore(listOf(
-                "<gray>Текущая прибыль: <gains><white>💰",
-                "<gray>Общая прибыль: <total_gains><white>💰",
-                "<gray>Получено дивидендов: <received_dividends><white>💰",
-                "<gray>Количество позиций: <position_count>",
-            ))
-            tagResolver(tagResolver)
-            fromConfig(StockConfig.config(), "locale.profile-menu.statistic")
-        }
+        statistic =
+            guiItem(Material.PAPER) {
+                onClick { click -> click.isCancelled = true }
+                display("<yellow>Статистика")
+                lore(
+                    listOf(
+                        "<gray>Текущая прибыль: <gains><white>💰",
+                        "<gray>Общая прибыль: <total_gains><white>💰",
+                        "<gray>Получено дивидендов: <received_dividends><white>💰",
+                        "<gray>Количество позиций: <position_count>",
+                    ),
+                )
+                tagResolver(tagResolver)
+                fromConfig(StockConfig.config(), "locale.profile-menu.statistic")
+            }
         staticPane.addItem(statistic, 1, 0)
 
-        balance = guiItem(Material.STICK) {
-            onClick(::acceptBalanceClick)
-            display("<gold>Баланс")
-            lore(listOf(
-                "<gray>Баланс: <balance><white>💰",
-                "<gray>Суммарный баланс: <total_balance><white>💰",
-            ))
-            tagResolver(tagResolver)
-            fromConfig(StockConfig.config(), "locale.profile-menu.balance")
-        }
+        balance =
+            guiItem(Material.STICK) {
+                onClick(::acceptBalanceClick)
+                display("<gold>Баланс")
+                lore(
+                    listOf(
+                        "<gray>Баланс: <balance><white>💰",
+                        "<gray>Суммарный баланс: <total_balance><white>💰",
+                    ),
+                )
+                tagResolver(tagResolver)
+                fromConfig(StockConfig.config(), "locale.profile-menu.balance")
+            }
         staticPane.addItem(balance, 3, 0)
 
-        auto = guiItem(Material.LEVER) {
-            onClick { click ->
-                click.isCancelled = true
-                stockPlayer.updateAutoTake(!stockPlayer.autoTake)
-                auto.setItem(buildAutoTakeItem())
-                update()
+        auto =
+            guiItem(Material.LEVER) {
+                onClick { click ->
+                    click.isCancelled = true
+                    stockPlayer.updateAutoTake(!stockPlayer.autoTake)
+                    auto.setItem(buildAutoTakeItem())
+                    update()
+                }
+                display("<green>Автоматически пополнять счет")
+                lore(listOf("<gray>Включено: <auto_take>"))
+                tagResolver(tagResolver)
+                fromConfig(StockConfig.config(), "locale.profile-menu.auto-take")
             }
-            display("<green>Автоматически пополнять счет")
-            lore(listOf("<gray>Включено: <auto_take>"))
-            tagResolver(tagResolver)
-            fromConfig(StockConfig.config(), "locale.profile-menu.auto-take")
-        }
         staticPane.addItem(auto, 5, 0)
     }
 
@@ -124,10 +136,12 @@ class ProfileMenu(
     private fun buildBalanceItem() =
         itemStack(Material.STICK) {
             display("<gold>Баланс")
-            lore(listOf(
-                "<gray>Баланс: <balance><white>💰",
-                "<gray>Суммарный баланс: <total_balance><white>💰",
-            ))
+            lore(
+                listOf(
+                    "<gray>Баланс: <balance><white>💰",
+                    "<gray>Суммарный баланс: <total_balance><white>💰",
+                ),
+            )
             tagResolver(stockPlayer.tagResolver())
             fromConfig(StockConfig.config(), "locale.profile-menu.balance")
         }
@@ -166,9 +180,13 @@ class ProfileMenu(
         val econ = EconomyModule.getEconomy()
         val playerBalance = econ?.getBalance(offlinePlayer) ?: 0.0
         if (diff > 0 && diff > playerBalance) {
-            val resolver = TagResolver.resolver("player_balance", Tag.inserting(
-                mm(TextUtil.formatAmount(playerBalance), true)
-            ))
+            val resolver =
+                TagResolver.resolver(
+                    "player_balance",
+                    Tag.inserting(
+                        mm(TextUtil.formatAmount(playerBalance), true),
+                    ),
+                )
             val stockConfig = StockConfig.config()
             val (display, lore) = stockConfig.itemComponents("locale.profile-menu.not-enough-money", resolver)
             GuiUtils.temporaryChange(balance.item, display, lore, 100L, ::update)

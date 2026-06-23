@@ -1,0 +1,69 @@
+# Scheduled commands GUI — тексты и customModelData (как guis/board.yml)
+
+list-menu:
+  title: "<gold>Расписание команд"
+  back:
+    display: "<gray>« Назад"
+    lore: [ ]
+    customModelData: 11013
+
+  refresh:
+    display: "<yellow>Обновить"
+    lore:
+      - "<gray>Нажмите для обновления списка"
+
+  entry:
+    display: "<green><id>"
+    lore:
+      - "<gray><schedule>"
+      - "<dark_gray><command>"
+      - "<gray>Серверы: <white><servers>"
+      - ""
+      - "<yellow>Нажмите для редактирования"
+
+edit-menu:
+  title: "<gold>Расписание: <white><id>"
+  saved: "<green>Изменения сохранены"
+  input-cancelled: "<gray>Ввод отменён"
+  run-now-success: "<green>Команда выполнена"
+  run-now-fail: "<red>Не удалось выполнить"
+
+  command:
+    display: "<green>Команда"
+    lore:
+      - "<white><command>"
+      - ""
+      - "<gray>Нажмите, чтобы изменить"
+
+  id:
+    display: "<green>ID расписания"
+    lore:
+      - "<white><id>"
+      - ""
+      - "<gray>Нажмите, чтобы переименовать"
+
+  schedule-type:
+    display: "<green>Тип расписания"
+
+  schedule-value:
+    display: "<green>Расписание"
+
+  servers:
+    display: "<green>Серверы"
+
+  enabled:
+    display: "<green>Включено"
+
+  save:
+    display: "<green>Сохранить"
+    lore:
+      - "<gray>Записать в scheduled-commands.yml"
+    customModelData: 11007
+
+  run-now:
+    display: "<gold>Запустить сейчас"
+    lore:
+      - "<gray>Выполнить без ожидания расписания"
+
+permission:
+  run-now: arc.schedules.run

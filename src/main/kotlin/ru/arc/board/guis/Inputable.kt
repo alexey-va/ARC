@@ -8,4 +8,12 @@ interface Inputable {
     fun satisfy(input: String, id: Int): Boolean
     fun denyMessage(input: String, id: Int): Component
     fun startMessage(id: Int): Component
+
+    /** When true, input is aborted and [onInputCancel] is called instead of [setParameter]. */
+    fun isCancelInput(
+        input: String,
+        id: Int,
+    ): Boolean = false
+
+    fun onInputCancel(id: Int) {}
 }

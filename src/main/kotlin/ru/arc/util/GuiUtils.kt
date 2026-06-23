@@ -9,7 +9,6 @@ import org.bukkit.Material
 import org.bukkit.entity.HumanEntity
 import org.bukkit.inventory.ItemStack
 import ru.arc.core.ScheduledTask
-import ru.arc.core.async
 import ru.arc.core.delayed
 import ru.arc.core.ticks
 import ru.arc.util.Logging.error
@@ -18,10 +17,12 @@ import java.util.UUID
 import java.util.function.Supplier
 
 object GuiUtils {
-
     private val backgrounds = mutableMapOf<BgKey, GuiItem>()
 
-    data class BgKey(val material: Material, val model: Int)
+    data class BgKey(
+        val material: Material,
+        val model: Int,
+    )
 
     /**
      * Clears the backgrounds cache. Used in tests to reset state.
@@ -32,7 +33,10 @@ object GuiUtils {
     }
 
     @JvmStatic
-    fun background(material: Material, model: Int): GuiItem {
+    fun background(
+        material: Material,
+        model: Int,
+    ): GuiItem {
         val key = BgKey(material, model)
         return backgrounds.getOrPut(key) {
             guiItem(material) {
@@ -91,7 +95,11 @@ object GuiUtils {
     ): ScheduledTask? = temporaryChange(stack, display, lore, ticks, callback, null)
 
     @JvmStatic
-    fun cooldownCheck(guiItem: GuiItem, playerUuid: UUID, chestGui: ChestGui?): Boolean {
+    fun cooldownCheck(
+        guiItem: GuiItem,
+        playerUuid: UUID,
+        chestGui: ChestGui?,
+    ): Boolean {
         val cooldown = CooldownManager.cooldown(playerUuid, "gui_click")
         if (cooldown > 0) {
             temporaryChange(
@@ -113,7 +121,11 @@ object GuiUtils {
      * so this always runs the supplier synchronously on the main thread.
      */
     @JvmStatic
-    fun constructAndShowAsync(supplier: Supplier<ChestGui>, player: HumanEntity, delay: Int) {
+    fun constructAndShowAsync(
+        supplier: Supplier<ChestGui>,
+        player: HumanEntity,
+        delay: Int,
+    ) {
         delayed(delay.ticks) {
             val gui =
                 try {
@@ -127,18 +139,16 @@ object GuiUtils {
     }
 
     @JvmStatic
-    fun constructAndShowAsync(supplier: Supplier<ChestGui>, player: HumanEntity) {
-        constructAndShowAsync(supplier, player, 3)
+    fun constructAndShowAsync(
+        supplier: Supplier<ChestGui>,
+        player: HumanEntity,
+    ) {
+        constructAndShowAsync(supplier, player, 0)
     }
 
     @JvmStatic
-    fun background(material: Material): GuiItem {
-        return background(material, 0)
-    }
+    fun background(material: Material): GuiItem = background(material, 0)
 
     @JvmStatic
-    fun background(): GuiItem {
-        return background(Material.GRAY_STAINED_GLASS_PANE, 11000)
-    }
+    fun background(): GuiItem = background(Material.GRAY_STAINED_GLASS_PANE, 11000)
 }
-
