@@ -7,6 +7,7 @@ import ru.arc.ARC
 import ru.arc.configs.ConfigManager
 import ru.arc.core.ScheduledTask
 import ru.arc.core.Tasks
+import ru.arc.core.inWholeTicks
 import ru.arc.core.repeating
 import ru.arc.core.ticks
 import ru.arc.hooks.HookRegistry
@@ -42,12 +43,31 @@ object AnnounceManager {
     /** Reload announce config from disk and reschedule rotation/queue tasks. */
     @JvmStatic
     fun reload() {
+        val node = XCondition.currentServerName()
+        val previousGen = taskGeneration
+        Logging.info(
+            "Announce reload start node={} gen={} rotationTask={} queueTask={}",
+            node,
+            previousGen,
+            taskSummary(rotationTask),
+            taskSummary(messageTask),
+        )
         try {
             stopTasks()
             config.load()
+            val delaySeconds = config.integer("config.delay-seconds", 600)
             announcements.clear()
             totalWeight = 0
             loadXMessages()
+
+            val eligible = announcements.values.count { it.appliesToServer(node) }
+            Logging.info(
+                "Announce config loaded node={} delay-seconds={} messages={} eligibleOnNode={}",
+                node,
+                delaySeconds,
+                announcements.size,
+                eligible,
+            )
 
             val generation = taskGeneration
             messageTask =
@@ -58,23 +78,25 @@ object AnnounceManager {
                     }
                     drainQueue()
                 }
+            Logging.info(
+                "Announce queue-drain task started node={} gen={} taskId={}",
+                node,
+                generation,
+                messageTask?.id,
+            )
 
-            val delaySeconds = config.integer("config.delay-seconds", 600)
             val delayTicks = (delaySeconds * 20L).ticks
             val mainServer =
                 ConfigManager.of(ARC.instance.dataFolder.toPath(), "misc.yml")
                     .bool("redis.main-server", false)
             if (!mainServer) {
-                Logging.info("Announce rotation disabled on this node (not main-server)")
+                Logging.info(
+                    "Announce reload complete node={} gen={}: rotation disabled (redis.main-server=false), listening via Redis only",
+                    node,
+                    generation,
+                )
                 return
             }
-
-            Logging.info(
-                "Announce rotation scheduled every {}s ({} messages loaded, taskGen={})",
-                delaySeconds,
-                announcements.size,
-                generation,
-            )
 
             rotationTask =
                 Tasks.scheduler.repeating(period = delayTicks, delay = delayTicks) {
@@ -88,10 +110,25 @@ object AnnounceManager {
                     debug("Announce rotation pick server={} {}", server, pick.logSummary())
                     announce(pick)
                 }
+            Logging.info(
+                "Announce reload complete node={} gen={}: rotation every {}s ({} ticks), taskId={}",
+                node,
+                generation,
+                delaySeconds,
+                delayTicks.inWholeTicks,
+                rotationTask?.id,
+            )
         } catch (e: Exception) {
-            error("Error initializing AnnounceManager: {}", e.message, e)
+            error("Announce reload failed on node={}: {}", node, e.message, e)
         }
     }
+
+    private fun taskSummary(task: ScheduledTask?): String =
+        when {
+            task == null -> "none"
+            task.isCancelled -> "cancelled#${task.id}"
+            else -> "active#${task.id}"
+        }
 
     private fun drainQueue() {
         while (queue.isNotEmpty()) {
@@ -187,11 +224,22 @@ object AnnounceManager {
     fun cancel() = stopTasks()
 
     private fun stopTasks() {
+        val previousGen = taskGeneration
+        val rotationSummary = taskSummary(rotationTask)
+        val queueSummary = taskSummary(messageTask)
         taskGeneration++
         rotationTask?.takeUnless { it.isCancelled }?.cancel()
         messageTask?.takeUnless { it.isCancelled }?.cancel()
         rotationTask = null
         messageTask = null
+        Logging.info(
+            "Announce stopTasks node={} gen {} -> {} cancelled rotation={} queue={}",
+            XCondition.currentServerName(),
+            previousGen,
+            taskGeneration,
+            rotationSummary,
+            queueSummary,
+        )
     }
 
     @JvmStatic

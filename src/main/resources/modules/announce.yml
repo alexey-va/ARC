@@ -2,7 +2,7 @@
 # announce.yml — ротация объявлений в чат (AnnounceModule).
 # config.delay-seconds — пауза между циклами выбора сообщения.
 # messages.<id> — одно объявление: type, weight, conditions, servers (spawn|survival|…).
-# Ротация на main-server (spawn + survival). servers: all — все ноды сети.
+# Ротация только на main-server (spawn). servers: all — доставка на все ноды через Redis.
 # =============================================================================
 
 config:
