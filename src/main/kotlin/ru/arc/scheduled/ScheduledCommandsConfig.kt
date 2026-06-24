@@ -1,8 +1,8 @@
 package ru.arc.scheduled
 
-import ru.arc.configs.Config
-import ru.arc.configs.ConfigManager
-import ru.arc.configs.ConfigSection
+import ru.arc.config.Config
+import ru.arc.config.ConfigManager
+import ru.arc.config.ConfigSection
 import java.nio.file.Path
 import java.time.ZoneId
 
@@ -104,7 +104,7 @@ open class ScheduledCommandsConfig(
 
         internal fun loadEntry(
             id: String,
-            section: ConfigSection,
+            section: ru.arc.config.ConfigSection,
         ): ScheduledCommandEntry {
             val scheduleSection = section.section("schedule")
             return ScheduledCommandEntry(

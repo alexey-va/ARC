@@ -58,6 +58,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.10.2")
 
     implementation(kotlin("stdlib"))
+    implementation("ru.arc:arc-core:1.0-SNAPSHOT")
     implementation("org.snakeyaml:snakeyaml-engine:3.0.1")
 
     implementation(libs.com.github.stefvanschie.inventoryframework.`if`)
