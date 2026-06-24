@@ -295,6 +295,10 @@ object AnnounceModule : PluginModule {
         AnnounceManager.init()
     }
 
+    override fun reload() {
+        AnnounceManager.reload()
+    }
+
     override fun shutdown() {
         AnnounceManager.cancel()
     }

@@ -5,6 +5,7 @@ import org.bukkit.boss.BarColor
 import org.bukkit.entity.Player
 import ru.arc.ARC
 import ru.arc.configs.ConfigManager
+import ru.arc.core.ScheduledTask
 import ru.arc.core.Tasks
 import ru.arc.core.repeating
 import ru.arc.core.ticks
@@ -26,60 +27,84 @@ import java.util.concurrent.ConcurrentLinkedDeque
 object AnnounceManager {
 
     private var recentlyUsed = ArrayDeque<XMessage>(2)
-    private var task: Any? = null
-    private var messageTask: Any? = null
+    private var rotationTask: ScheduledTask? = null
+    private var messageTask: ScheduledTask? = null
+    private var taskGeneration = 0
     private var totalWeight: Int = 0
-    private val config = ConfigManager.ofModule(ARC.instance.dataPath, "announce.yml")
+    private val config get() = ConfigManager.ofModule(ARC.instance.dataPath, "announce.yml")
 
     private val announcements = TreeMap<Int, XMessage>()
     private val queue = ConcurrentLinkedDeque<XMessage>()
 
     @JvmStatic
-    fun init() {
+    fun init() = reload()
+
+    /** Reload announce config from disk and reschedule rotation/queue tasks. */
+    @JvmStatic
+    fun reload() {
         try {
-            cancel()
+            stopTasks()
+            config.load()
             announcements.clear()
             totalWeight = 0
             loadXMessages()
 
-            messageTask = Tasks.scheduler.repeating(period = 1.ticks, delay = 0.ticks) {
-                while (queue.isNotEmpty()) {
-                    val data = queue.poll() ?: break
-                    if (!data.appliesToServer(XCondition.currentServerName())) continue
-                    if (data.serializedMessage.isNullOrBlank()) {
-                        debug("Announce queue skip reason=serialized-empty {}", data.logSummary())
-                        continue
+            val generation = taskGeneration
+            messageTask =
+                Tasks.scheduler.repeating(period = 1.ticks, delay = 0.ticks) {
+                    if (generation != taskGeneration) {
+                        cancel()
+                        return@repeating
                     }
-                    for (player in PlayerManager.getOnlinePlayersThreadSafe()) {
-                        val fits = data.conditions?.all { it.test(player) } != false
-                        if (fits) send(data, player)
-                    }
+                    drainQueue()
                 }
-            }
 
             val delaySeconds = config.integer("config.delay-seconds", 600)
             val delayTicks = (delaySeconds * 20L).ticks
-            val mainServer = ConfigManager.of(ARC.instance.dataFolder.toPath(), "misc.yml").bool("redis.main-server", false)
+            val mainServer =
+                ConfigManager.of(ARC.instance.dataFolder.toPath(), "misc.yml")
+                    .bool("redis.main-server", false)
             if (!mainServer) {
                 Logging.info("Announce rotation disabled on this node (not main-server)")
                 return
             }
 
             Logging.info(
-                "Announce rotation scheduled every {}s ({} messages loaded)",
+                "Announce rotation scheduled every {}s ({} messages loaded, taskGen={})",
                 delaySeconds,
                 announcements.size,
+                generation,
             )
 
-            task = Tasks.scheduler.repeating(period = delayTicks, delay = delayTicks) {
-                if (announcements.isEmpty()) return@repeating
-                val server = XCondition.currentServerName()
-                val pick = getRandom(server) ?: return@repeating
-                debug("Announce rotation pick server={} {}", server, pick.logSummary())
-                announce(pick)
-            }
+            rotationTask =
+                Tasks.scheduler.repeating(period = delayTicks, delay = delayTicks) {
+                    if (generation != taskGeneration) {
+                        cancel()
+                        return@repeating
+                    }
+                    if (announcements.isEmpty()) return@repeating
+                    val server = XCondition.currentServerName()
+                    val pick = getRandom(server) ?: return@repeating
+                    debug("Announce rotation pick server={} {}", server, pick.logSummary())
+                    announce(pick)
+                }
         } catch (e: Exception) {
-            error("Error initializing AnnounceManager: {}", e.message)
+            error("Error initializing AnnounceManager: {}", e.message, e)
+        }
+    }
+
+    private fun drainQueue() {
+        while (queue.isNotEmpty()) {
+            val data = queue.poll() ?: break
+            if (!data.appliesToServer(XCondition.currentServerName())) continue
+            if (data.serializedMessage.isNullOrBlank()) {
+                debug("Announce queue skip reason=serialized-empty {}", data.logSummary())
+                continue
+            }
+            for (player in PlayerManager.getOnlinePlayersThreadSafe()) {
+                val fits = data.conditions?.all { it.test(player) } != false
+                if (fits) send(data, player)
+            }
         }
     }
 
@@ -92,25 +117,38 @@ object AnnounceManager {
                 continue
             }
             val type = XMessage.Type.valueOf(config.string("messages.$key.type", "chat").uppercase())
-            val serializationType = runCatching {
-                XMessage.SerializationType.valueOf(config.string("messages.$key.serialization-type", "mini_message").uppercase())
-            }.getOrElse {
-                error("Serialization type not found for message: {}", key)
-                XMessage.SerializationType.MINI_MESSAGE
-            }
+            val serializationType =
+                runCatching {
+                    XMessage.SerializationType.valueOf(
+                        config.string("messages.$key.serialization-type", "mini_message").uppercase(),
+                    )
+                }.getOrElse {
+                    error("Serialization type not found for message: {}", key)
+                    XMessage.SerializationType.MINI_MESSAGE
+                }
             val weight = config.integer("messages.$key.weight", 1)
 
-            val toastData = if (config.exists("messages.$key.toast")) XMessage.ToastData(
-                title = config.string("messages.$key.toast.title"),
-                material = config.material("messages.$key.toast.material", Material.STONE),
-                modelData = config.integer("messages.$key.toast.model-data", 0)
-            ) else null
+            val toastData =
+                if (config.exists("messages.$key.toast")) {
+                    XMessage.ToastData(
+                        title = config.string("messages.$key.toast.title"),
+                        material = config.material("messages.$key.toast.material", Material.STONE),
+                        modelData = config.integer("messages.$key.toast.model-data", 0),
+                    )
+                } else {
+                    null
+                }
 
-            val bossBarData = if (config.exists("messages.$key.bossbar")) XMessage.BossBarData(
-                name = config.string("messages.$key.bossbar.name"),
-                color = BarColor.valueOf(config.string("messages.$key.bossbar.color", "red").uppercase()),
-                seconds = config.integer("messages.$key.bossbar.seconds", 5)
-            ) else null
+            val bossBarData =
+                if (config.exists("messages.$key.bossbar")) {
+                    XMessage.BossBarData(
+                        name = config.string("messages.$key.bossbar.name"),
+                        color = BarColor.valueOf(config.string("messages.$key.bossbar.color", "red").uppercase()),
+                        seconds = config.integer("messages.$key.bossbar.seconds", 5),
+                    )
+                } else {
+                    null
+                }
 
             val servers = config.stringList("messages.$key.servers", listOf("all")).toHashSet()
             val targetServers =
@@ -140,15 +178,20 @@ object AnnounceManager {
                     toastData = toastData,
                     bossBarData = bossBarData,
                     announceData = XMessage.AnnounceData(weight = weight, targetServers = targetServers),
-                )
+                ),
             )
         }
     }
 
     @JvmStatic
-    fun cancel() {
-        (task as? ru.arc.core.ScheduledTask)?.cancel()
-        (messageTask as? ru.arc.core.ScheduledTask)?.cancel()
+    fun cancel() = stopTasks()
+
+    private fun stopTasks() {
+        taskGeneration++
+        rotationTask?.takeUnless { it.isCancelled }?.cancel()
+        messageTask?.takeUnless { it.isCancelled }?.cancel()
+        rotationTask = null
+        messageTask = null
     }
 
     @JvmStatic
@@ -160,7 +203,7 @@ object AnnounceManager {
                 type = XMessage.Type.CHAT,
                 serializationType = XMessage.SerializationType.MINI_MESSAGE,
                 conditions = listOf(XCondition.ofPlayerUuid(playerUuid)),
-            )
+            ),
         )
     }
 
@@ -224,8 +267,7 @@ object AnnounceManager {
     }
 
     private fun getRandom(serverName: String? = XCondition.currentServerName()): XMessage? {
-        val pool =
-            announcements.values.filter { it.appliesToServer(serverName) }
+        val pool = announcements.values.filter { it.appliesToServer(serverName) }
         if (pool.isEmpty()) return null
 
         val weighted = TreeMap<Int, XMessage>()
