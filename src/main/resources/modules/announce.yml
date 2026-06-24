@@ -2,16 +2,16 @@
 # announce.yml — ротация объявлений в чат (AnnounceModule).
 # config.delay-seconds — пауза между циклами выбора сообщения.
 # messages.<id> — одно объявление: type, weight, conditions, servers (spawn|survival|…).
-# Ротация только на main-server (spawn). servers: all = все ноды — не использовать.
+# Ротация на main-server (spawn + survival). servers: all — все ноды сети.
 # =============================================================================
 
 config:
   # Интервал между показами (секунды)
-  delay-seconds: 1800
+  delay-seconds: 3
 messages:
   '1':
     message: '<dark_gray>● <gray>Варп с данжами: <gold>/ag'
-    servers: spawn
+    servers: all
     player-specific: false
     cache: true
     conditions:
@@ -23,7 +23,7 @@ messages:
     personal: false
   '3':
     message: '<dark_gray>● <gray>Приватить землю можно <green>блоками<gray> из: <gold>/kit start'
-    servers: spawn
+    servers: all
     player-specific: false
     cache: true
     conditions:
@@ -35,7 +35,7 @@ messages:
     personal: false
   '4':
     message: '<dark_gray>● <gray>Меню квестов: <gold>/quest'
-    servers: spawn
+    servers: all
     player-specific: false
     cache: true
     conditions:
@@ -48,7 +48,7 @@ messages:
   # '6'/'7' — survival-only; rotation runs on spawn only.
   '8':
     message: '<dark_gray>● <gray>Если застряли, пишите: <gold>/stuck'
-    servers: spawn
+    servers: all
     player-specific: false
     cache: true
     conditions:
@@ -60,7 +60,7 @@ messages:
     personal: false
   '9':
     message: '<dark_gray>● <gray>Гайды по серверу: <gold>/help'
-    servers: spawn
+    servers: all
     player-specific: false
     cache: true
     conditions:
@@ -72,7 +72,7 @@ messages:
     personal: false
   '10':
     message: '<dark_gray>● <gray>Меню сервера: <gold>/m'
-    servers: spawn
+    servers: all
     player-specific: false
     cache: true
     conditions:
@@ -84,7 +84,7 @@ messages:
     personal: false
   '11':
     message: '<dark_gray>● <gray>Общая ферма: <gold>/farm'
-    servers: spawn
+    servers: all
     player-specific: false
     cache: true
     conditions:
@@ -96,7 +96,7 @@ messages:
     personal: false
   '12':
     message: '<dark_gray>● <gray>Общая шахта: <gold>/mine'
-    servers: spawn
+    servers: all
     player-specific: false
     cache: true
     conditions:
@@ -108,7 +108,7 @@ messages:
     personal: false
   '13':
     message: '<dark_gray>● <gray>Варп в <dark_aqua>энд<gray>: <dark_aqua>/warp end'
-    servers: spawn
+    servers: all
     player-specific: false
     cache: true
     conditions:
@@ -120,7 +120,7 @@ messages:
     personal: false
   '14':
     message: '<dark_gray>● <gray>Чтобы создать новое поселение пишите: <gold>/lands create <gray>[имя]'
-    servers: spawn
+    servers: all
     player-specific: false
     cache: true
     conditions:
@@ -147,7 +147,7 @@ messages:
   #  personal: false
   '2':
     message: '<dark_gray>● <gray>Добавить игрока в приват: <gold>/trust <white>[имя]'
-    servers: spawn
+    servers: all
     player-specific: false
     cache: true
     conditions:
