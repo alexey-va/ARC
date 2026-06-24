@@ -74,5 +74,54 @@ class AnnounceManagerReloadTest : FreeSpec({
                 MockBukkit.unmock()
             }
         }
+
+        "should not load rotation messages when main-server is false" {
+            if (MockBukkit.isMocked()) {
+                MockBukkit.unmock()
+            }
+            ConfigManager.clear()
+
+            val server = MockBukkit.mock()
+            ARC.serverName = "parkour"
+            val plugin = MockBukkit.load(ARC::class.java)
+            ARC.plugin = plugin
+            val dataPath = plugin.dataFolder.toPath()
+
+            File(plugin.dataFolder, "misc.yml").writeText(
+                """
+                redis:
+                  main-server: false
+                """.trimIndent(),
+            )
+
+            val announceFile = ConfigManager.moduleYamlPath(dataPath, "announce.yml").toFile()
+            announceFile.parentFile.mkdirs()
+            announceFile.writeText(
+                """
+                config:
+                  delay-seconds: 60
+                messages:
+                  '1':
+                    message: '<gray>should-not-rotate'
+                    servers: all
+                    type: chat
+                    serialization-type: mini_message
+                    weight: 1
+                """.trimIndent(),
+            )
+            ConfigManager.reloadAll()
+
+            val scheduler = TestTaskScheduler()
+            try {
+                Tasks.withScheduler(scheduler) {
+                    AnnounceManager.reload()
+                    scheduler.timerCount() shouldBe 1
+                }
+            } finally {
+                AnnounceManager.cancel()
+                ConfigManager.clear()
+                MockBukkit.unmock()
+            }
+        }
     }
 })

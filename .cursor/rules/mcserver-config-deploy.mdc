@@ -1,0 +1,33 @@
+---
+description: Runtime configs live in mcserver repo — deploy via mc deploy, not ARC git push alone
+alwaysApply: true
+---
+
+# Runtime configs → mcserver deploy
+
+ARC repo и mcserver — **разные** git-репозитории.
+
+| Изменил | Репо | Деплой на McFine |
+|---------|------|------------------|
+| Kotlin, тесты, `src/main/resources/` (шаблон) | **ARC** | `./scripts/mc arc` (JAR) |
+| **Prod YAML** (`announce.yml`, `misc.yml`, CMI, …) | **mcserver** | **`./scripts/mc deploy -m "..."`** |
+
+Bundled `src/main/resources/modules/*.yml` в ARC — **не** то же самое, что `~/mcserver/classic/plugins/ARC/modules/`. После правки prod-конфига:
+
+```bash
+cd ~/mcserver
+# правка classic/ classic_survival/ parkour/
+./scripts/mc deploy -m "ARC: …" --plugin ARC classic classic_survival parkour
+```
+
+**`git push` в ARC не обновляет live YAML.**  
+**`git push` в mcserver тоже не обновляет live** — только `./scripts/mc deploy`.
+
+## Агент: чеклист конца задачи
+
+- [ ] Код ARC → `./gradlew test` → commit ARC (если просили) → `./scripts/mc arc`
+- [ ] Runtime YAML → commit **mcserver** → **`./scripts/mc deploy -m "..."`** (spawn + survival + **parkour** если общий модуль)
+- [ ] Hotfix scp → `./scripts/mc pull` → commit mcserver
+- [ ] Не использовать `push-parkour-arc.sh` — parkour в `mc deploy`
+
+Конфликты с ручными правками на сервере: `~/mcserver/.cursor/rules/config-deploy.mdc`.

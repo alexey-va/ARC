@@ -58,12 +58,28 @@ object AnnounceManager {
             val delaySeconds = config.integer("config.delay-seconds", 600)
             announcements.clear()
             totalWeight = 0
-            loadXMessages()
+
+            val mainServer =
+                ConfigManager.of(ARC.instance.dataFolder.toPath(), "misc.yml")
+                    .bool("redis.main-server", false)
+            val configuredMessageKeys = config.keys("messages")
+            if (!mainServer) {
+                if (configuredMessageKeys.isNotEmpty()) {
+                    warn(
+                        "Announce node={} has {} message(s) in announce.yml but redis.main-server=false — rotation disabled, messages ignored",
+                        node,
+                        configuredMessageKeys.size,
+                    )
+                }
+            } else {
+                loadXMessages()
+            }
 
             val eligible = announcements.values.count { it.appliesToServer(node) }
             Logging.info(
-                "Announce config loaded node={} delay-seconds={} messages={} eligibleOnNode={}",
+                "Announce config loaded node={} main-server={} delay-seconds={} messages={} eligibleOnNode={}",
                 node,
+                mainServer,
                 delaySeconds,
                 announcements.size,
                 eligible,
@@ -85,10 +101,6 @@ object AnnounceManager {
                 messageTask?.id,
             )
 
-            val delayTicks = (delaySeconds * 20L).ticks
-            val mainServer =
-                ConfigManager.of(ARC.instance.dataFolder.toPath(), "misc.yml")
-                    .bool("redis.main-server", false)
             if (!mainServer) {
                 Logging.info(
                     "Announce reload complete node={} gen={}: rotation disabled (redis.main-server=false), listening via Redis only",
@@ -97,6 +109,8 @@ object AnnounceManager {
                 )
                 return
             }
+
+            val delayTicks = (delaySeconds * 20L).ticks
 
             rotationTask =
                 Tasks.scheduler.repeating(period = delayTicks, delay = delayTicks) {

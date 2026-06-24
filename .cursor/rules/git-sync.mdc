@@ -1,28 +1,41 @@
 ---
-description: Commit and push ARC plugin changes to git after code/config work
+description: Commit and push ARC plugin changes; runtime configs need mcserver deploy
 alwaysApply: true
 ---
 
 # Git sync (ARC)
 
-После изменений кода плагина, ресурсов (`src/main/resources/modules/`) или тестов — **обязательно** закоммить и запушить в приватный репозиторий.
+## Два репозитория
 
-## Когда коммитить
+1. **Этот репо (ARC)** — код плагина, bundled resources, тесты.
+2. **mcserver** — **runtime** конфиги на McFine. См. `.cursor/rules/mcserver-config-deploy.mdc`.
 
-- Kotlin/Java исходники, `plugin.yml`, module YAML
-- Тесты в `src/test/`
-- `build.gradle.kts`, зависимости — если менялись
+`git push` здесь **не деплоит** YAML на spawn/survival/parkour.
 
-## Workflow
+## Когда коммитить (ARC repo)
 
-1. `git status` — не коммитить `build/`, `bin/`, артефакты
-2. Сборка: `JAVA_HOME=... ./gradlew test` (или хотя бы `compileKotlin`) перед push значимых изменений
-3. Коммит + **`git push`**
+- Kotlin/Java, `plugin.yml`, `src/main/resources/`, тесты, `build.gradle.kts`
+
+## Workflow (ARC code)
+
+1. `git status` — не коммитить `build/`, `bin/`
+2. `./gradlew test` перед значимым push
+3. Commit + push (если пользователь просит)
+4. **JAR на прод:** `cd ~/mcserver && ./scripts/mc arc classic` (+ survival/parkour при необходимости)
+
+## Runtime configs (announce, board, …)
+
+Править **`~/mcserver/classic/plugins/ARC/`** (и survival/parkour), затем:
+
+```bash
+cd ~/mcserver && ./scripts/mc deploy -m "…" --plugin ARC classic classic_survival parkour
+```
+
+Не заканчивать задачу без deploy, если меняли prod YAML.
 
 ## После сессии с агентом
 
-Если код или ресурсы менялись — **в конце задачи** commit + push без напоминания пользователя.
+- Код → commit/push ARC + `mc arc` (по правилам пользователя про commit)
+- Prod YAML → commit mcserver + **`mc deploy`** (обязательно)
 
-Проверка на проде (логи, XAction, ошибки) — **Grafana Loki** через MCP `user-grafana` (`query_loki_logs`), не SSH grep. См. `mcserver/.cursor/rules/grafana-logs.mdc` и `mcserver/AGENTS.md` → «Логи».
-
-Приватный репозиторий: секреты в module-конфигах допустимы, если так принято в проекте.
+Логи: Grafana Loki (`query_loki_logs`), см. `mcserver/.cursor/rules/grafana-logs.mdc`.
