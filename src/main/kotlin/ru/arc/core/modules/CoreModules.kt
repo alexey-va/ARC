@@ -295,7 +295,9 @@ object AnnounceModule : PluginModule {
         AnnounceManager.init()
     }
 
-    override fun shutdown() {}
+    override fun shutdown() {
+        AnnounceManager.cancel()
+    }
 }
 
 /**

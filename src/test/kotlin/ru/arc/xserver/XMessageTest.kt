@@ -19,6 +19,7 @@ class XMessageTest :
                 val player = server.addPlayer("blanktest")
 
                 blank.hasVisibleContent(player) shouldBe false
+                blank.skipReason(player) shouldBe "resolved-empty"
             }
 
             it("should detect visible chat content") {

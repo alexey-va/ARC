@@ -7,6 +7,7 @@ import org.bukkit.Material
 import org.bukkit.boss.BarColor
 import org.bukkit.entity.Player
 import ru.arc.hooks.HookRegistry
+import ru.arc.util.Logging.debug
 import ru.arc.util.TextUtil
 import ru.arc.util.Logging.warn
 import ru.arc.xserver.playerlist.PlayerManager
@@ -30,29 +31,59 @@ class XMessage(
     }
 
     override fun runInternal() {
-        if (!appliesToServer(XCondition.currentServerName())) return
+        val serverName = XCondition.currentServerName()
+        if (!appliesToServer(serverName)) {
+            debug("XMessage skip server={} reason=server-filter {}", serverName, logSummary())
+            return
+        }
         val players = filteredPlayers()
         when (type) {
-            Type.CHAT ->
-                players.forEach { player ->
-                    if (hasVisibleContent(player)) {
-                        player.sendMessage(component(player))
-                    }
-                }
+            Type.CHAT -> deliverChat(players)
             Type.TOAST -> {
                 val cmi = HookRegistry.cmiHook ?: run { warn("CMILIB is required for TOAST xMessage"); return }
                 val td = toastData ?: run { warn("ToastData is required for TOAST xMessage"); return }
                 cmi.sendToast(serializedMessage, td.title, td.modelData, td.material, *players.toTypedArray())
             }
-            Type.BOSS_BAR -> {
-                val cmi = HookRegistry.cmiHook ?: run { warn("CMILIB is required for BOSS_BAR xMessage"); return }
-                val bbd = bossBarData ?: run { warn("BossBarData is required for BOSS_BAR xMessage"); return }
-                players.forEach { p ->
-                    if (!hasVisibleContent(p)) return@forEach
-                    cmi.sendBossbar(bbd.name ?: "xmessage", serializedMessage, p, bbd.color, bbd.seconds, bbd.keepFor)
-                }
-            }
+            Type.BOSS_BAR -> deliverBossBar(players)
             else -> {}
+        }
+    }
+
+    private fun deliverChat(players: List<Player>) {
+        for (player in players) {
+            val reason = skipReason(player)
+            if (reason != null) {
+                debug("XMessage CHAT skip player={} reason={} {}", player.name, reason, logSummary())
+                continue
+            }
+            debug(
+                "XMessage CHAT deliver player={} plainLen={} plain=\"{}\" {}",
+                player.name,
+                plainText(player).length,
+                plainText(player).take(120),
+                logSummary(),
+            )
+            player.sendMessage(component(player))
+        }
+    }
+
+    private fun deliverBossBar(players: List<Player>) {
+        val cmi = HookRegistry.cmiHook ?: run { warn("CMILIB is required for BOSS_BAR xMessage"); return }
+        val bbd = bossBarData ?: run { warn("BossBarData is required for BOSS_BAR xMessage"); return }
+        for (player in players) {
+            val reason = skipReason(player)
+            if (reason != null) {
+                debug("XMessage BOSS_BAR skip player={} reason={} {}", player.name, reason, logSummary())
+                continue
+            }
+            debug(
+                "XMessage BOSS_BAR deliver player={} plainLen={} plain=\"{}\" {}",
+                player.name,
+                plainText(player).length,
+                plainText(player).take(120),
+                logSummary(),
+            )
+            cmi.sendBossbar(bbd.name ?: "xmessage", serializedMessage, player, bbd.color, bbd.seconds, bbd.keepFor)
         }
     }
 
@@ -68,11 +99,16 @@ class XMessage(
         return message
     }
 
-    fun hasVisibleContent(player: Player): Boolean {
-        if (resolvedMessage(player).trim().isEmpty()) return false
-        val plain = PlainTextComponentSerializer.plainText().serialize(component(player))
-        return plain.isNotBlank()
+    fun hasVisibleContent(player: Player): Boolean = skipReason(player) == null
+
+    fun skipReason(player: Player): String? {
+        if (resolvedMessage(player).trim().isEmpty()) return "resolved-empty"
+        if (plainText(player).isBlank()) return "plain-empty"
+        return null
     }
+
+    fun plainText(player: Player): String =
+        PlainTextComponentSerializer.plainText().serialize(component(player))
 
     fun component(player: Player): Component {
         val message = resolvedMessage(player)

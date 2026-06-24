@@ -83,8 +83,9 @@ object ModuleRegistry {
     }
 
     fun reloadAll() {
-        consoleLog("<aqua>↻  Reloading ${modules.size} modules...</aqua>")
-        for (module in modules.filter { it.enabled }) {
+        val sorted = modules.filter { it.enabled }.sortedBy { it.priority }
+        consoleLog("<aqua>↻  Reloading ${sorted.size} modules...</aqua>")
+        for (module in sorted) {
             try {
                 module.reload()
                 consoleLog("  <green>↻  ${escapeMM(module.name)}</green>")

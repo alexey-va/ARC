@@ -13,8 +13,9 @@ import ru.arc.xserver.XActionManager
 import ru.arc.xserver.XCondition
 import ru.arc.xserver.XMessage
 import ru.arc.xserver.playerlist.PlayerManager
-import ru.arc.util.Logging.error
 import ru.arc.util.Logging
+import ru.arc.util.Logging.debug
+import ru.arc.util.Logging.error
 import ru.arc.util.Logging.warn
 import java.util.ArrayDeque
 import java.util.Random
@@ -45,7 +46,10 @@ object AnnounceManager {
                 while (queue.isNotEmpty()) {
                     val data = queue.poll() ?: break
                     if (!data.appliesToServer(XCondition.currentServerName())) continue
-                    if (data.serializedMessage.isNullOrBlank()) continue
+                    if (data.serializedMessage.isNullOrBlank()) {
+                        debug("Announce queue skip reason=serialized-empty {}", data.logSummary())
+                        continue
+                    }
                     for (player in PlayerManager.getOnlinePlayersThreadSafe()) {
                         val fits = data.conditions?.all { it.test(player) } != false
                         if (fits) send(data, player)
@@ -53,17 +57,25 @@ object AnnounceManager {
                 }
             }
 
-            val delayTicks = (config.integer("config.delay-seconds", 600) * 20L).ticks
+            val delaySeconds = config.integer("config.delay-seconds", 600)
+            val delayTicks = (delaySeconds * 20L).ticks
             val mainServer = ConfigManager.of(ARC.instance.dataFolder.toPath(), "misc.yml").bool("redis.main-server", false)
             if (!mainServer) {
                 Logging.info("Announce rotation disabled on this node (not main-server)")
                 return
             }
 
+            Logging.info(
+                "Announce rotation scheduled every {}s ({} messages loaded)",
+                delaySeconds,
+                announcements.size,
+            )
+
             task = Tasks.scheduler.repeating(period = delayTicks, delay = delayTicks) {
                 if (announcements.isEmpty()) return@repeating
                 val server = XCondition.currentServerName()
                 val pick = getRandom(server) ?: return@repeating
+                debug("Announce rotation pick server={} {}", server, pick.logSummary())
                 announce(pick)
             }
         } catch (e: Exception) {
@@ -147,7 +159,7 @@ object AnnounceManager {
                 serializedMessage = mmString,
                 type = XMessage.Type.CHAT,
                 serializationType = XMessage.SerializationType.MINI_MESSAGE,
-                conditions = listOf(XCondition.ofPlayerUuid(playerUuid))
+                conditions = listOf(XCondition.ofPlayerUuid(playerUuid)),
             )
         )
     }
@@ -158,20 +170,42 @@ object AnnounceManager {
             warn("Skipping announce with empty text")
             return
         }
-        Logging.info("Announcing: {}", data.logSummary())
+        debug("Announce publish {}", data.logSummary())
         XActionManager.publish(data)
     }
 
     private fun send(data: XMessage, player: Player) {
         when (data.type) {
             XMessage.Type.CHAT -> {
-                if (!data.hasVisibleContent(player)) return
+                val reason = data.skipReason(player)
+                if (reason != null) {
+                    debug("Announce deliver skip player={} reason={} {}", player.name, reason, data.logSummary())
+                    return
+                }
+                debug(
+                    "Announce deliver CHAT player={} plainLen={} plain=\"{}\" {}",
+                    player.name,
+                    data.plainText(player).length,
+                    data.plainText(player).take(120),
+                    data.logSummary(),
+                )
                 player.sendMessage(data.component(player))
             }
             XMessage.Type.BOSS_BAR -> {
                 val cmi = HookRegistry.cmiHook ?: run { error("I cant use bossbar without cmi... sorry"); return }
                 val bbd = data.bossBarData ?: return
-                if (!data.hasVisibleContent(player)) return
+                val reason = data.skipReason(player)
+                if (reason != null) {
+                    debug("Announce deliver skip player={} reason={} {}", player.name, reason, data.logSummary())
+                    return
+                }
+                debug(
+                    "Announce deliver BOSS_BAR player={} plainLen={} plain=\"{}\" {}",
+                    player.name,
+                    data.plainText(player).length,
+                    data.plainText(player).take(120),
+                    data.logSummary(),
+                )
                 cmi.sendBossbar("arcAnnounce", data.serializedMessage ?: "", player, bbd.color, bbd.seconds, bbd.keepFor)
             }
             XMessage.Type.ACTION_BAR -> {

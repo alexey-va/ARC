@@ -18,6 +18,7 @@ import ru.arc.commands.arc.subcommands.SoundFollowSubCommand
 import ru.arc.commands.arc.subcommands.StoreSubCommand
 import ru.arc.commands.arc.subcommands.TestSubCommand
 import ru.arc.commands.arc.subcommands.TreasuresSubCommand
+import ru.arc.configs.ConfigManager
 import ru.arc.configs.LocationPoolConfig
 import ru.arc.core.ModuleRegistry
 import ru.arc.core.modules.AnnounceModule
@@ -128,7 +129,15 @@ open class ARC : JavaPlugin() {
     /** Reload all plugin configuration and modules. Called by /arc reload. */
     fun reload() {
         info("Reloading ARC plugin")
+        // Reload YAML from disk before modules re-read configs (announce delay, etc.).
+        ConfigManager.reloadAll()
         ModuleRegistry.reloadAll()
+        // RedisModule.reload() reconnects and clears channel subscriptions; modules re-register
+        // listeners above, but subscription must be restarted explicitly (same as onEnable).
+        redisManager?.let {
+            info("Redis resubscribing to {} channels after reload", it.getChannelCount())
+            it.init()
+        }
         info("ARC plugin reloaded")
     }
 

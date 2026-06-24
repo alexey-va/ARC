@@ -667,6 +667,12 @@ object BoardManager {
                     conditions = listOf(XCondition.ofPermission(BoardConfig.receivePermission)),
                 )
             withContext(module = "board", player = entry.playerName, action = "announce") {
+                Logging.debug(
+                    "Board announce entry={} title=\"{}\" {}",
+                    entry.id(),
+                    entry.title.take(80),
+                    message.logSummary(),
+                )
                 AnnounceManager.announce(message)
             }
         }
