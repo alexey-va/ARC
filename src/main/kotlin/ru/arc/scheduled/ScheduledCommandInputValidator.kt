@@ -1,6 +1,6 @@
 package ru.arc.scheduled
 
-import ru.arc.configs.Config
+import ru.arc.config.Config
 import java.time.DayOfWeek
 import java.time.LocalTime
 import java.time.format.DateTimeParseException

@@ -18,8 +18,8 @@ import ru.arc.commands.arc.subcommands.SoundFollowSubCommand
 import ru.arc.commands.arc.subcommands.StoreSubCommand
 import ru.arc.commands.arc.subcommands.TestSubCommand
 import ru.arc.commands.arc.subcommands.TreasuresSubCommand
-import ru.arc.configs.ConfigManager
-import ru.arc.configs.LocationPoolConfig
+import ru.arc.config.ConfigManager
+import ru.arc.config.LocationPoolConfig
 import ru.arc.core.ModuleRegistry
 import ru.arc.core.modules.AnnounceModule
 import ru.arc.core.modules.AuditModule

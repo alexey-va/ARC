@@ -14,7 +14,7 @@ import ru.arc.Portal
 import ru.arc.PortalData
 import ru.arc.audit.AuditManager
 import ru.arc.audit.Type
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import ru.arc.hooks.HookRegistry
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info

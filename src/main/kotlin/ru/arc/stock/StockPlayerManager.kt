@@ -5,7 +5,7 @@ import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import ru.arc.audit.AuditManager
 import ru.arc.audit.Type
-import ru.arc.configs.StockConfig
+import ru.arc.config.StockConfig
 import ru.arc.core.modules.EconomyModule
 import ru.arc.repository.CachedRepository
 import ru.arc.util.Logging.error

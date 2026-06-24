@@ -1,6 +1,6 @@
 package ru.arc.restart
 
-import ru.arc.configs.Config
+import ru.arc.config.Config
 import java.time.Duration
 
 sealed class RestartServerTarget {

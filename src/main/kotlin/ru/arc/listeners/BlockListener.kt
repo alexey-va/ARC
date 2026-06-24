@@ -22,7 +22,7 @@ import ru.arc.autobuild.BuildingManager
 import ru.arc.autobuild.ConstructionState
 import ru.arc.bschests.PersonalLootModule
 import ru.arc.common.locationpools.LocationPoolManager
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import ru.arc.farm.FarmManager
 import ru.arc.leafdecay.LeafDecayManager
 import ru.arc.treasure.core.Treasures

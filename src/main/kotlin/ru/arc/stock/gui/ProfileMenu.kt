@@ -12,7 +12,7 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.event.inventory.InventoryClickEvent
-import ru.arc.configs.StockConfig
+import ru.arc.config.StockConfig
 import ru.arc.core.modules.EconomyModule
 import ru.arc.stock.StockPlayer
 import ru.arc.stock.StockPlayerManager

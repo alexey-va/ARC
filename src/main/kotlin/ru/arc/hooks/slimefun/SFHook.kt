@@ -11,7 +11,7 @@ import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import ru.arc.sync.SyncManager
 import ru.arc.util.TextUtil.mm
 import java.util.UUID

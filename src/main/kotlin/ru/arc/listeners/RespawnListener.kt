@@ -7,7 +7,7 @@ import org.bukkit.event.block.Action
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerRespawnEvent
 import ru.arc.ARC
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import ru.arc.hooks.HookRegistry
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info

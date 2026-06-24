@@ -2,8 +2,8 @@ package ru.arc.xserver
 
 import org.bukkit.Bukkit
 import ru.arc.ARC
-import ru.arc.configs.ConfigManager
-import ru.arc.configs.Config
+import ru.arc.config.ConfigManager
+import ru.arc.config.Config
 import ru.arc.core.Tasks
 import ru.arc.core.repeating
 import ru.arc.core.ticks

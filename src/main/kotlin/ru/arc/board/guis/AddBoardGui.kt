@@ -25,7 +25,7 @@ import ru.arc.board.BoardEntryData
 import ru.arc.board.BoardEntryType
 import ru.arc.board.BoardManager
 import ru.arc.board.ItemIcon
-import ru.arc.configs.BoardConfig
+import ru.arc.config.BoardConfig
 import ru.arc.core.modules.EconomyModule
 import ru.arc.util.GuiUtils
 import ru.arc.util.Logging.error

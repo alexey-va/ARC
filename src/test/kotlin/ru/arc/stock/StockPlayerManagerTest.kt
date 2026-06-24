@@ -13,7 +13,7 @@ import kotlinx.coroutines.test.runTest
 import org.bukkit.Material
 import ru.arc.audit.AuditManager
 import ru.arc.audit.AuditService
-import ru.arc.configs.StockConfig
+import ru.arc.config.StockConfig
 import ru.arc.repository.CachedRepository
 import ru.arc.repository.InMemoryStorage
 import ru.arc.repository.InMemorySyncService

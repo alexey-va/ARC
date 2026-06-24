@@ -5,12 +5,16 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.bukkit.Material
 import org.bukkit.Particle
 import ru.arc.ARC
-import ru.arc.configs.Config
-import ru.arc.configs.ConfigManager
-import ru.arc.configs.ConfigSection
+import ru.arc.config.Config
+import ru.arc.config.ConfigManager
+import ru.arc.config.ConfigSection
 import ru.arc.util.TextUtil
 import java.nio.file.Paths
 import java.util.concurrent.TimeUnit
+import ru.arc.config.material
+import ru.arc.config.materialSet
+import ru.arc.config.particle
+import ru.arc.config.sound
 
 /**
  * Centralized configuration for the building module.

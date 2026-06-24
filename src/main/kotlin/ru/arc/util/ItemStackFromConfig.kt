@@ -3,7 +3,11 @@ package ru.arc.util
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.bukkit.Material
-import ru.arc.configs.Config
+import ru.arc.config.Config
+import ru.arc.config.material
+import ru.arc.config.materialSet
+import ru.arc.config.particle
+import ru.arc.config.sound
 
 /**
  * Config overlay for [ItemStackDslBuilder]: code defaults are injected as a nested item map when missing,

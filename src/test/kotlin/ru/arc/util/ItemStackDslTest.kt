@@ -300,7 +300,7 @@ class ItemStackDslTest :
         describe("fromConfig overlay") {
 
             it("should inject code defaults as nested item map when path is absent") {
-                val config = ru.arc.configs.TestConfig()
+                val config = ru.arc.config.TestConfig()
                 itemStack(Material.PAPER) {
                     display("<gold>Default title")
                     lore(listOf("<gray>Default lore"))
@@ -313,7 +313,7 @@ class ItemStackDslTest :
 
             it("should use nested config values when item map already exists") {
                 val config =
-                    ru.arc.configs.TestConfig(
+                    ru.arc.config.TestConfig(
                         mapOf(
                             "test" to
                                 mapOf(
@@ -339,7 +339,7 @@ class ItemStackDslTest :
 
             it("should not read removed flat keys") {
                 val config =
-                    ru.arc.configs.TestConfig(
+                    ru.arc.config.TestConfig(
                         mapOf(
                             "test.item-display" to "<blue>Legacy title",
                             "test.item-lore" to listOf("<gray>Legacy lore"),
@@ -358,7 +358,7 @@ class ItemStackDslTest :
             }
 
             it("should inject model data default into nested item map") {
-                val config = ru.arc.configs.TestConfig()
+                val config = ru.arc.config.TestConfig()
                 itemStack(Material.STICK) {
                     modelData(42)
                     fromConfig(config, "test.btn")

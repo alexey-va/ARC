@@ -7,8 +7,8 @@ import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemFlag
 import ru.arc.ARC
-import ru.arc.configs.Config
-import ru.arc.configs.ConfigManager
+import ru.arc.config.Config
+import ru.arc.config.ConfigManager
 import ru.arc.gui.gui
 import ru.arc.scheduled.ScheduledCommandEntry
 import ru.arc.scheduled.ScheduledCommandsManager

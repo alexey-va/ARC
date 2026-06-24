@@ -2,8 +2,8 @@ package ru.arc.mobspawn
 
 import org.bukkit.entity.EntityType
 import ru.arc.common.WeightedRandom
-import ru.arc.configs.ConfigManager
-import ru.arc.configs.ConfigSection
+import ru.arc.config.ConfigManager
+import ru.arc.config.ConfigSection
 import java.nio.file.Path
 
 /**

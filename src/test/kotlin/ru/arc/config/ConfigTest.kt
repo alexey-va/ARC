@@ -1,5 +1,5 @@
 
-package ru.arc.configs
+package ru.arc.config
 
 import org.bukkit.Material
 import org.bukkit.Particle

@@ -6,7 +6,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import ru.arc.ARC
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import ru.arc.core.ContextAwareRepository
 import ru.arc.core.InMemoryRepository
 import ru.arc.repository.CachedRepository

@@ -11,7 +11,7 @@ import com.github.stefvanschie.inventoryframework.pane.util.Slot
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
-import ru.arc.configs.StockConfig
+import ru.arc.config.StockConfig
 import ru.arc.stock.Stock
 import ru.arc.stock.StockMarket
 import ru.arc.stock.StockPlayer

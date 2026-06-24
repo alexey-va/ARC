@@ -4,7 +4,7 @@ import com.magmaguy.elitemobs.api.EliteExplosionEvent
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import ru.arc.ARC
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 
 class EMListener : Listener {
 

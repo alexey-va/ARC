@@ -3,7 +3,7 @@ package ru.arc.treasurechests
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.nulls.shouldNotBeNull
 import ru.arc.KotestTestBase
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import ru.arc.treasure.core.Treasures
 
 /**

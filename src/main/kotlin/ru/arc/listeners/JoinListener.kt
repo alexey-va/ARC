@@ -9,7 +9,7 @@ import org.bukkit.event.player.PlayerKickEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import ru.arc.ARC
 import ru.arc.audit.AuditManager
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import ru.arc.sync.SyncManager
 import ru.arc.treasurechests.TreasureHuntManager
 import ru.arc.util.Logging.info

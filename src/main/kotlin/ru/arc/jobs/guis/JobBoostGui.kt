@@ -6,7 +6,7 @@ import net.kyori.adventure.text.minimessage.tag.Tag
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.bukkit.Material
 import org.bukkit.entity.Player
-import ru.arc.configs.Config
+import ru.arc.config.Config
 import ru.arc.gui.dynamicGui
 import ru.arc.jobs.BoostType
 import ru.arc.jobs.JobsBoostData

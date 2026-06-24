@@ -10,7 +10,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Bukkit
 import org.bukkit.scheduler.BukkitTask
 import ru.arc.ARC
-import ru.arc.configs.AuctionConfig
+import ru.arc.config.AuctionConfig
 import ru.arc.hooks.HookRegistry
 import ru.arc.util.Logging.info
 import ru.arc.util.TextUtil

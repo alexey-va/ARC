@@ -10,11 +10,15 @@ import org.bukkit.Particle
 import org.bukkit.Registry
 import org.bukkit.scheduler.BukkitTask
 import ru.arc.ARC
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import ru.arc.util.ParticleManager
 import ru.arc.xserver.playerlist.PlayerManager
+import ru.arc.config.material
+import ru.arc.config.materialSet
+import ru.arc.config.particle
+import ru.arc.config.sound
 
 class EMWormholes {
 

@@ -5,7 +5,7 @@ import me.clip.placeholderapi.expansion.PlaceholderExpansion
 import org.bukkit.OfflinePlayer
 import org.bukkit.entity.Player
 import ru.arc.ARC
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import ru.arc.jobs.JobsModule
 import ru.arc.xserver.playerlist.PlayerManager
 

@@ -7,7 +7,7 @@ import ru.arc.ARC
 import ru.arc.Portal
 import ru.arc.PortalData
 import ru.arc.PortalData.ActionType.TELEPORT
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 
 class CMIListener : Listener {
 

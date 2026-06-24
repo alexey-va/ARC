@@ -1,4 +1,4 @@
-package ru.arc.configs
+package ru.arc.config
 
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull

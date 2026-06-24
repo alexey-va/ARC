@@ -3,7 +3,7 @@ package ru.arc.misc
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui
 import org.bukkit.Material
 import org.bukkit.entity.Player
-import ru.arc.configs.Config
+import ru.arc.config.Config
 import ru.arc.core.async
 import ru.arc.core.sync
 import ru.arc.gui.gui

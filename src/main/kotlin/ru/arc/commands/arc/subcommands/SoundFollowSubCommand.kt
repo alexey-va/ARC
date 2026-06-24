@@ -8,6 +8,10 @@ import ru.arc.commands.arc.CommandConfig
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.tabComplete
 import ru.arc.commands.arc.tabCompletePlayers
+import ru.arc.config.material
+import ru.arc.config.materialSet
+import ru.arc.config.particle
+import ru.arc.config.sound
 
 /**
  * /arc soundfollow - проиграть звук игроку (следует за ним).

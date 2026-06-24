@@ -8,9 +8,9 @@ import ru.arc.ARC
 import ru.arc.board.BoardEntryData
 import ru.arc.board.BoardItem
 import ru.arc.board.BoardManager
-import ru.arc.configs.BoardConfig
-import ru.arc.configs.Config
-import ru.arc.configs.ConfigManager
+import ru.arc.config.BoardConfig
+import ru.arc.config.Config
+import ru.arc.config.ConfigManager
 import ru.arc.gui.gui
 import ru.arc.gui.hasBalance
 import ru.arc.util.GuiUtils

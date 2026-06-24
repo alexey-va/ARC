@@ -5,7 +5,7 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.bukkit.Bukkit
 import org.bukkit.OfflinePlayer
 import org.bukkit.entity.Player
-import ru.arc.configs.StockConfig
+import ru.arc.config.StockConfig
 import ru.arc.hooks.HookRegistry
 import ru.arc.repository.Entity
 import ru.arc.util.Logging.debug

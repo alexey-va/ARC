@@ -15,7 +15,7 @@ import org.bukkit.scheduler.BukkitTask
 import ru.arc.PortalData.ActionType.COMMAND
 import ru.arc.PortalData.ActionType.HUSK
 import ru.arc.PortalData.ActionType.TELEPORT
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import ru.arc.hooks.HookRegistry
 import ru.arc.util.CooldownManager
 import ru.arc.util.Logging.error
@@ -26,6 +26,10 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentSkipListSet
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import ru.arc.config.material
+import ru.arc.config.materialSet
+import ru.arc.config.particle
+import ru.arc.config.sound
 
 class Portal(uuid: UUID, private val portalData: PortalData) {
 

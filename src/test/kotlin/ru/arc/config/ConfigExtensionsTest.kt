@@ -1,4 +1,4 @@
-package ru.arc.configs
+package ru.arc.config
 
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.nulls.shouldBeNull

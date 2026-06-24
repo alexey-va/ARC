@@ -5,7 +5,7 @@ import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import ru.arc.ARC
 import ru.arc.commands.arc.subcommands.RespawnOnRtpSubCommand
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 
 class BetterRTPListener : Listener {
 

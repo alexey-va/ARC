@@ -2,7 +2,7 @@ package ru.arc.xserver
 
 import org.bukkit.entity.Player
 import ru.arc.ARC
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import ru.arc.hooks.HookRegistry
 import ru.arc.util.Logging.warn
 import java.util.UUID

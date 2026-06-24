@@ -1,8 +1,8 @@
 package ru.arc.treasure.core
 
 import ru.arc.ARC
-import ru.arc.configs.Config
-import ru.arc.configs.ConfigManager
+import ru.arc.config.Config
+import ru.arc.config.ConfigManager
 
 /**
  * Configuration for the treasure module (`plugins/ARC/treasures/config.yml`).

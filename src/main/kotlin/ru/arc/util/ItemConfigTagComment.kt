@@ -1,7 +1,7 @@
 package ru.arc.util
 
-import ru.arc.configs.Config
-import ru.arc.configs.formatAvailableTagsComment
+import ru.arc.config.Config
+import ru.arc.config.formatAvailableTagsComment
 
 /**
  * Collects MiniMessage placeholder names for item config comments on inject.

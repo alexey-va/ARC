@@ -18,7 +18,7 @@ import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.scheduler.BukkitTask
 import ru.arc.ARC
-import ru.arc.configs.StockConfig
+import ru.arc.config.StockConfig
 import ru.arc.stock.Position
 import ru.arc.stock.StockPlayer
 import ru.arc.util.GuiUtils

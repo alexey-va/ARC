@@ -4,7 +4,7 @@ import com.magmaguy.elitemobs.mobconstructor.custombosses.RegionalBossEntity
 import fr.black_eyes.api.events.LootChestSpawnEvent
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
-import ru.arc.configs.Config
+import ru.arc.config.Config
 import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
 import java.util.concurrent.ThreadLocalRandom

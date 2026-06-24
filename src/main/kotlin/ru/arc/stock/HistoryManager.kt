@@ -3,8 +3,8 @@ package ru.arc.stock
 import org.bukkit.Bukkit
 import org.bukkit.scheduler.BukkitTask
 import ru.arc.ARC
-import ru.arc.configs.ConfigManager
-import ru.arc.configs.StockConfig
+import ru.arc.config.ConfigManager
+import ru.arc.config.StockConfig
 import ru.arc.util.Common
 import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error

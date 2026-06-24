@@ -12,11 +12,11 @@ import ru.arc.ARC
 import ru.arc.audit.AuditManager
 import ru.arc.board.BoardManager
 import ru.arc.common.locationpools.LocationPoolManager
-import ru.arc.configs.AuctionConfig
-import ru.arc.configs.Config
-import ru.arc.configs.ConfigManager
-import ru.arc.configs.LocationPoolConfig
-import ru.arc.configs.StockConfig
+import ru.arc.config.AuctionConfig
+import ru.arc.config.Config
+import ru.arc.config.ConfigManager
+import ru.arc.config.LocationPoolConfig
+import ru.arc.config.StockConfig
 import ru.arc.core.BukkitTaskScheduler
 import ru.arc.core.PluginModule
 import ru.arc.core.ScheduledTask

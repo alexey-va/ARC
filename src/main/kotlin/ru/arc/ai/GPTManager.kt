@@ -7,7 +7,7 @@ import org.bukkit.Location
 import org.bukkit.entity.Player
 import org.bukkit.event.player.AsyncPlayerChatEvent
 import ru.arc.ARC
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import ru.arc.core.Tasks
 import ru.arc.core.repeatingAsync
 import ru.arc.core.ticks

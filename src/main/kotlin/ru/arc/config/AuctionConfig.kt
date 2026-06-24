@@ -1,4 +1,4 @@
-package ru.arc.configs
+package ru.arc.config
 
 import ru.arc.ARC
 

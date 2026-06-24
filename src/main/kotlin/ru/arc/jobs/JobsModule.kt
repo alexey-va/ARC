@@ -13,8 +13,8 @@ import org.bukkit.Bukkit
 import org.bukkit.OfflinePlayer
 import org.bukkit.entity.Player
 import ru.arc.ARC
-import ru.arc.configs.Config
-import ru.arc.configs.ConfigManager
+import ru.arc.config.Config
+import ru.arc.config.ConfigManager
 import ru.arc.repository.CachedRepository
 import ru.arc.repository.Entity
 import ru.arc.repository.Mergeable

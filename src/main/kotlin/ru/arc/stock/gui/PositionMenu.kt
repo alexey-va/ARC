@@ -9,7 +9,7 @@ import com.github.stefvanschie.inventoryframework.pane.StaticPane
 import com.github.stefvanschie.inventoryframework.pane.util.Slot
 import org.bukkit.Material
 import org.bukkit.entity.Player
-import ru.arc.configs.StockConfig
+import ru.arc.config.StockConfig
 import ru.arc.util.fromConfig
 import ru.arc.stock.Position
 import ru.arc.stock.StockPlayer

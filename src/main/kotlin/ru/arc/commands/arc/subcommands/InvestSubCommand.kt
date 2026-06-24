@@ -12,8 +12,8 @@ import ru.arc.commands.arc.CommandConfig
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.onlinePlayerNames
 import ru.arc.commands.arc.tabComplete
-import ru.arc.configs.ConfigManager
-import ru.arc.configs.StockConfig
+import ru.arc.config.ConfigManager
+import ru.arc.config.StockConfig
 import ru.arc.core.sync
 import ru.arc.hooks.HookRegistry
 import ru.arc.stock.HistoryManager

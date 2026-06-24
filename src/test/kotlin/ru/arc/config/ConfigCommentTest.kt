@@ -1,4 +1,4 @@
-package ru.arc.configs
+package ru.arc.config
 
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals

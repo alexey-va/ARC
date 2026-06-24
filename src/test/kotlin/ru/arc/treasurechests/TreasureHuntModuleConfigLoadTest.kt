@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import java.nio.file.Path
 
 /**

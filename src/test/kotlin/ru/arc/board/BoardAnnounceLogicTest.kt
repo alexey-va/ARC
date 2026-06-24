@@ -5,7 +5,7 @@ import io.kotest.matchers.shouldBe
 import org.bukkit.Material
 import org.bukkit.boss.BarColor
 import ru.arc.KotestTestBase
-import ru.arc.configs.BoardConfig
+import ru.arc.config.BoardConfig
 import java.util.UUID
 
 class BoardAnnounceLogicTest : KotestTestBase({

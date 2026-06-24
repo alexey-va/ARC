@@ -1,6 +1,6 @@
 package ru.arc.stock
 
-import ru.arc.configs.StockConfig
+import ru.arc.config.StockConfig
 import ru.arc.repository.CachedRepository
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info

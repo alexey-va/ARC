@@ -59,7 +59,9 @@ dependencies {
 
     implementation(kotlin("stdlib"))
     implementation("ru.arc:arc-core:1.0-SNAPSHOT")
-    implementation("org.snakeyaml:snakeyaml-engine:3.0.1")
+    implementation("ru.arc:arc-core-paper:1.0-SNAPSHOT")
+
+    // snakeyaml-engine comes transitively from arc-core
 
     implementation(libs.com.github.stefvanschie.inventoryframework.`if`)
     implementation(libs.com.jeff.media.custom.block.data)

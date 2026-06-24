@@ -19,9 +19,9 @@ import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemFlag
 import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
-import ru.arc.configs.BoardConfig
-import ru.arc.configs.Config
-import ru.arc.configs.ConfigManager
+import ru.arc.config.BoardConfig
+import ru.arc.config.Config
+import ru.arc.config.ConfigManager
 import ru.arc.repository.CachedRepository
 import ru.arc.repository.Entity
 import ru.arc.repository.Mergeable

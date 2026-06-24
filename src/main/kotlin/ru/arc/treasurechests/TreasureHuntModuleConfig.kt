@@ -3,11 +3,15 @@ package ru.arc.treasurechests
 import org.bukkit.Particle
 import ru.arc.common.WeightedRandom
 import ru.arc.common.locationpools.LocationPoolManager
-import ru.arc.configs.Config
-import ru.arc.configs.ConfigManager
-import ru.arc.configs.ConfigSection
+import ru.arc.config.Config
+import ru.arc.config.ConfigManager
+import ru.arc.config.ConfigSection
 import ru.arc.util.Logging.warn
 import java.nio.file.Path
+import ru.arc.config.material
+import ru.arc.config.materialSet
+import ru.arc.config.particle
+import ru.arc.config.sound
 
 /**
  * Configuration for the treasure hunt module.

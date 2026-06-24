@@ -10,7 +10,7 @@ import org.apache.logging.log4j.core.LoggerContext
 import org.apache.logging.log4j.core.impl.ContextDataFactory
 import org.apache.logging.log4j.core.impl.Log4jLogEvent
 import org.apache.logging.log4j.message.SimpleMessage
-import ru.arc.configs.EmptyConfig
+import ru.arc.config.EmptyConfig
 
 class LoggingStructuredTest : FreeSpec({
 

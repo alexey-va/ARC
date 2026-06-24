@@ -6,7 +6,7 @@ import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.block.Block
 import ru.arc.ARC
-import ru.arc.configs.Config
+import ru.arc.config.Config
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn

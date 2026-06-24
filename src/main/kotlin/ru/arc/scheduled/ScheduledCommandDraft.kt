@@ -185,6 +185,6 @@ data class ScheduledCommandDraft(
 /** Parses duration strings for draft → ScheduleSpec (mirrors Config.parseDuration). */
 private object ConfigDurationParser {
     fun parseDuration(value: String): java.time.Duration? =
-        ru.arc.configs.Config
+        ru.arc.config.Config
             .parseDuration(value.trim())
 }

@@ -12,7 +12,7 @@ import org.bukkit.Material
 import org.bukkit.enchantments.Enchantment
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemFlag
-import ru.arc.configs.Config
+import ru.arc.config.Config
 import ru.arc.gui.gui
 import ru.arc.jobs.BoostDataEntity
 import ru.arc.jobs.BoostType

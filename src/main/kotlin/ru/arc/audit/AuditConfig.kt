@@ -1,8 +1,8 @@
 package ru.arc.audit
 
 import ru.arc.ARC
-import ru.arc.configs.Config
-import ru.arc.configs.ConfigManager
+import ru.arc.config.Config
+import ru.arc.config.ConfigManager
 import java.nio.file.Path
 
 /**
@@ -123,7 +123,7 @@ class TestAuditConfig(
     override val prevPageFormat: String = "<click:run_command:/arc audit %player_name% %prev_page% %filter%><hover:show_text:'Previous page'><gold><</hover></click>",
     override val nextPageFormat: String = "<click:run_command:/arc audit %player_name% %next_page% %filter%><hover:show_text:'Next page'><gold>></hover></click>",
     override val noDataMessage: String = "<red>No audit data found for %player_name%",
-) : AuditConfig(ru.arc.configs.EmptyConfig) {
+) : AuditConfig(ru.arc.config.EmptyConfig) {
     /**
      * Creates a copy with modified values.
      */

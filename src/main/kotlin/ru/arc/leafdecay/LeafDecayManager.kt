@@ -13,8 +13,8 @@ import org.bukkit.block.Block
 import org.bukkit.entity.Player
 import org.bukkit.persistence.PersistentDataType
 import ru.arc.ARC
-import ru.arc.configs.Config
-import ru.arc.configs.ConfigManager
+import ru.arc.config.Config
+import ru.arc.config.ConfigManager
 import ru.arc.core.ScheduledTask
 import ru.arc.core.repeating
 import ru.arc.core.repeatingAsync

@@ -13,7 +13,7 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.event.inventory.InventoryClickEvent
-import ru.arc.configs.Config
+import ru.arc.config.Config
 import ru.arc.util.GuiUtils
 import ru.arc.util.TextUtil
 import ru.arc.util.fromConfig

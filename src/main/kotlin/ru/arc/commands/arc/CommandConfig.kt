@@ -2,8 +2,8 @@ package ru.arc.commands.arc
 
 import net.kyori.adventure.text.Component
 import ru.arc.ARC
-import ru.arc.configs.Config
-import ru.arc.configs.ConfigManager
+import ru.arc.config.Config
+import ru.arc.config.ConfigManager
 import ru.arc.util.TextUtil
 
 /**

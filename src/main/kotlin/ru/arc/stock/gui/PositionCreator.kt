@@ -15,7 +15,7 @@ import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.event.inventory.InventoryClickEvent
 import ru.arc.ARC
-import ru.arc.configs.StockConfig
+import ru.arc.config.StockConfig
 import ru.arc.util.fromConfig
 import ru.arc.core.ScheduledTask
 import ru.arc.stock.Position

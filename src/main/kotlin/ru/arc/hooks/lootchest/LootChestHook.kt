@@ -2,7 +2,7 @@ package ru.arc.hooks.lootchest
 
 import org.bukkit.Bukkit
 import ru.arc.ARC
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import ru.arc.util.Logging.error
 
 class LootChestHook {

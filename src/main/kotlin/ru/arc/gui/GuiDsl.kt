@@ -17,7 +17,7 @@ import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.inventory.ItemStack
-import ru.arc.configs.Config
+import ru.arc.config.Config
 import ru.arc.util.GuiUtils
 import ru.arc.util.ItemConfigTarget
 import ru.arc.util.ItemStackDslBuilder
@@ -29,6 +29,10 @@ import ru.arc.util.fromConfig
 import ru.arc.util.guiItem
 import ru.arc.util.itemStack
 import ru.arc.util.skullItem
+import ru.arc.config.material
+import ru.arc.config.materialSet
+import ru.arc.config.particle
+import ru.arc.config.sound
 
 /**
  * DSL for building GUIs declaratively.

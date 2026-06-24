@@ -4,7 +4,7 @@ import org.bukkit.Material
 import org.bukkit.boss.BarColor
 import org.bukkit.entity.Player
 import ru.arc.ARC
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import ru.arc.core.ScheduledTask
 import ru.arc.core.Tasks
 import ru.arc.core.inWholeTicks
@@ -24,6 +24,10 @@ import java.util.Random
 import java.util.TreeMap
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedDeque
+import ru.arc.config.material
+import ru.arc.config.materialSet
+import ru.arc.config.particle
+import ru.arc.config.sound
 
 object AnnounceManager {
 

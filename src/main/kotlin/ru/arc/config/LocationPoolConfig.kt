@@ -1,4 +1,4 @@
-package ru.arc.configs
+package ru.arc.config
 
 import com.google.gson.Gson
 import org.bukkit.scheduler.BukkitRunnable

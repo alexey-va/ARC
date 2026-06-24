@@ -15,7 +15,7 @@ import ru.arc.autobuild.BuildingManager
 import ru.arc.commands.arc.CommandConfig
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.tabComplete
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import ru.arc.util.TextUtil.strip
 import java.util.Collections
 

@@ -1,7 +1,7 @@
 package ru.arc.ops
 
 import ru.arc.ARC
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import ru.arc.core.PluginModule
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn

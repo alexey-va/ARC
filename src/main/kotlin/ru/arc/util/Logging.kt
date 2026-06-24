@@ -10,8 +10,8 @@ import org.bukkit.Bukkit
 import pl.tkowalcz.tjahzi.log4j2.LokiAppender
 import pl.tkowalcz.tjahzi.log4j2.labels.Label
 import ru.arc.ARC
-import ru.arc.configs.Config
-import ru.arc.configs.ConfigManager
+import ru.arc.config.Config
+import ru.arc.config.ConfigManager
 import ru.arc.ops.OpsLogBuffer
 import java.nio.charset.StandardCharsets
 import java.nio.file.Paths

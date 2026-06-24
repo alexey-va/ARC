@@ -1,7 +1,7 @@
 package ru.arc.ai
 
 import com.google.common.cache.CacheBuilder
-import ru.arc.configs.Config
+import ru.arc.config.Config
 import ru.arc.util.Common
 import ru.arc.util.Logging.error
 import java.net.URI

@@ -1,8 +1,8 @@
 package ru.arc.gui
 
 import org.bukkit.Material
-import ru.arc.configs.Config
-import ru.arc.configs.ConfigManager
+import ru.arc.config.Config
+import ru.arc.config.ConfigManager
 import ru.arc.util.ConfigItemSpec
 import java.nio.file.Path
 

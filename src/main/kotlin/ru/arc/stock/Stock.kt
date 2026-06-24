@@ -3,7 +3,7 @@ package ru.arc.stock
 import net.kyori.adventure.text.minimessage.tag.Tag
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import ru.arc.board.ItemIcon
-import ru.arc.configs.StockConfig
+import ru.arc.config.StockConfig
 import ru.arc.repository.Entity
 import java.time.Duration
 import java.time.Instant

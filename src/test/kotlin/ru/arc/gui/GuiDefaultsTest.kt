@@ -5,7 +5,7 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import org.bukkit.Material
-import ru.arc.configs.Config
+import ru.arc.config.Config
 
 /**
  * Tests for GuiDefaults configuration.

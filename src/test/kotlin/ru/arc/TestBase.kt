@@ -7,7 +7,7 @@ import org.mockbukkit.mockbukkit.ServerMock
 import org.mockbukkit.mockbukkit.inventory.ItemStackMock
 import ru.arc.autobuild.ClipboardLoaders
 import ru.arc.autobuild.MockClipboardLoader
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import ru.arc.gui.GuiItems
 import ru.arc.gui.MockGuiItemFactory
 import ru.arc.util.GuiUtils

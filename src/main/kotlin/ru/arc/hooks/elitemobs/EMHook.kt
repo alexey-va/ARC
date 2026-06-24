@@ -12,7 +12,7 @@ import org.bukkit.event.Listener
 import org.bukkit.inventory.ItemStack
 import org.bukkit.scheduler.BukkitTask
 import ru.arc.ARC
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import ru.arc.hooks.elitemobs.guis.EmShop
 import ru.arc.hooks.elitemobs.guis.ShopHolder
 import ru.arc.util.GuiUtils

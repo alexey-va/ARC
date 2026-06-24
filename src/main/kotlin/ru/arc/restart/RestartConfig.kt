@@ -1,8 +1,8 @@
 package ru.arc.restart
 
-import ru.arc.configs.Config
-import ru.arc.configs.ConfigManager
-import ru.arc.configs.EmptyConfig
+import ru.arc.config.Config
+import ru.arc.config.ConfigManager
+import ru.arc.config.EmptyConfig
 import java.nio.file.Path
 import java.time.Duration
 

@@ -1,4 +1,4 @@
-package ru.arc.configs
+package ru.arc.config
 
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer

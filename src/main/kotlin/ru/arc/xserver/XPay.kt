@@ -2,7 +2,7 @@ package ru.arc.xserver
 
 import org.bukkit.Bukkit
 import ru.arc.ARC
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import ru.arc.core.modules.EconomyModule
 import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error

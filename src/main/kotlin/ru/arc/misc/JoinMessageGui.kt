@@ -4,8 +4,8 @@ import com.github.stefvanschie.inventoryframework.gui.type.ChestGui
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import ru.arc.ARC
-import ru.arc.configs.Config
-import ru.arc.configs.ConfigManager
+import ru.arc.config.Config
+import ru.arc.config.ConfigManager
 import ru.arc.gui.gui
 import ru.arc.hooks.HookRegistry
 import ru.arc.util.GuiUtils
@@ -13,6 +13,10 @@ import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import ru.arc.util.TextUtil
 import ru.arc.util.fromConfig
+import ru.arc.config.material
+import ru.arc.config.materialSet
+import ru.arc.config.particle
+import ru.arc.config.sound
 
 /**
  * GUI for selecting join/leave messages.

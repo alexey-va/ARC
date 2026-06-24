@@ -3,7 +3,7 @@ package ru.arc.eliteloot
 import org.bukkit.Color
 import org.bukkit.Material
 import ru.arc.ARC
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.warn
 

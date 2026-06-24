@@ -4,7 +4,7 @@ import org.bukkit.command.CommandSender
 import ru.arc.ARC
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.player
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import ru.arc.misc.BaltopGuiFactory
 
 /**

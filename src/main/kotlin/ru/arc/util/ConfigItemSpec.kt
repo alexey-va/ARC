@@ -1,7 +1,7 @@
 package ru.arc.util
 
 import org.bukkit.Material
-import ru.arc.configs.Config
+import ru.arc.config.Config
 
 /**
  * Unified YAML/JSON item spec — same shape as [ru.arc.ops.OpsItemSpec] and `item-presets.yml`.

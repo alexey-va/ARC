@@ -4,8 +4,8 @@ import com.github.stefvanschie.inventoryframework.gui.type.ChestGui
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
-import ru.arc.configs.Config
-import ru.arc.configs.ConfigManager
+import ru.arc.config.Config
+import ru.arc.config.ConfigManager
 import ru.arc.gui.gui
 
 /**

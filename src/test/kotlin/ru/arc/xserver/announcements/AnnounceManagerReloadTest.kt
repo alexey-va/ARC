@@ -4,7 +4,7 @@ import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import org.mockbukkit.mockbukkit.MockBukkit
 import ru.arc.ARC
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
 import ru.arc.util.Logging

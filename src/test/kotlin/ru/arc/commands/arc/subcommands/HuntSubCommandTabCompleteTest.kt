@@ -7,7 +7,7 @@ import io.kotest.matchers.nulls.shouldNotBeNull
 import org.mockbukkit.mockbukkit.entity.PlayerMock
 import ru.arc.KotestTestBase
 import ru.arc.common.locationpools.LocationPoolManager
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import ru.arc.treasure.core.Treasures
 import ru.arc.treasurechests.TreasureHuntManager
 

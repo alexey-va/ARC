@@ -16,8 +16,8 @@ import org.bukkit.inventory.ItemFlag
 import ru.arc.ARC
 import ru.arc.TitleInput
 import ru.arc.board.guis.Inputable
-import ru.arc.configs.Config
-import ru.arc.configs.ConfigManager
+import ru.arc.config.Config
+import ru.arc.config.ConfigManager
 import ru.arc.scheduled.ScheduleEditorType
 import ru.arc.scheduled.ScheduledCommandDraft
 import ru.arc.scheduled.ScheduledCommandEntry

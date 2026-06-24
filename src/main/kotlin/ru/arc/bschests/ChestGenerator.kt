@@ -1,6 +1,6 @@
 package ru.arc.bschests
 
-import ru.arc.configs.Config
+import ru.arc.config.Config
 import ru.arc.network.repos.ItemList
 import ru.arc.treasure.core.Treasure
 import ru.arc.treasure.core.Treasures

@@ -1,10 +1,14 @@
 package ru.arc.farm
 
 import org.bukkit.Material
-import ru.arc.configs.Config
-import ru.arc.configs.ConfigManager
-import ru.arc.configs.EmptyConfig
+import ru.arc.config.Config
+import ru.arc.config.ConfigManager
+import ru.arc.config.EmptyConfig
 import java.nio.file.Path
+import ru.arc.config.material
+import ru.arc.config.materialSet
+import ru.arc.config.particle
+import ru.arc.config.sound
 
 /**
  * Configuration for the farm module.

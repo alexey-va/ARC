@@ -12,7 +12,7 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
-import ru.arc.configs.Config
+import ru.arc.config.Config
 import ru.arc.hooks.HookRegistry
 import ru.arc.hooks.elitemobs.EMHook
 import ru.arc.util.GuiUtils

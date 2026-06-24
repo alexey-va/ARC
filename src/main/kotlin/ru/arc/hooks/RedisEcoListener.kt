@@ -7,7 +7,7 @@ import org.bukkit.event.Listener
 import ru.arc.ARC
 import ru.arc.audit.AuditManager
 import ru.arc.audit.Type.PAY
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 

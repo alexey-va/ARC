@@ -10,7 +10,7 @@ import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.entity.Player
 import org.jetbrains.annotations.NotNull
 import ru.arc.ARC
-import ru.arc.configs.ConfigManager
+import ru.arc.config.ConfigManager
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.concurrent.ThreadLocalRandom
