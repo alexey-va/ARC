@@ -21,6 +21,7 @@ import ru.arc.commands.arc.subcommands.TreasuresSubCommand
 import ru.arc.config.ConfigManager
 import ru.arc.config.LocationPoolConfig
 import ru.arc.core.ModuleRegistry
+import ru.arc.core.PaperArcRuntime
 import ru.arc.core.modules.AnnounceModule
 import ru.arc.core.modules.AuditModule
 import ru.arc.core.modules.BoardModule
@@ -93,6 +94,10 @@ open class ARC : JavaPlugin() {
         }
 
         registerModules()
+        PaperArcRuntime.installModuleLifecycleReporting(
+            consoleLog = { consoleLog(it) },
+            logError = { msg, t -> error(msg, t) },
+        )
         ModuleRegistry.initAll()
         // Start the single Redis subscription after ALL modules have registered their channels.
         // Calling init() multiple times (once per module) caused the subscription to be
