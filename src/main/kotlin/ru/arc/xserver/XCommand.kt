@@ -20,7 +20,7 @@ class XCommand(
     var playerName: String? = null,
     var playerUuid: UUID? = null,
     var ticksTimeout: Int = 20 * 5,
-    var ticksDelay: Int? = 40,
+    var ticksDelay: Int? = null,
     var servers: Set<String>? = null
 ) : XAction() {
 
@@ -63,9 +63,9 @@ class XCommand(
                 else -> null
             }
             if (player != null) {
-                val delay = (ticksDelay ?: miscConfig.integer("xaction.command-delay-ticks", 10)).toLong()
+                val delay = (ticksDelay ?: miscConfig.integer("xaction.command-delay-ticks", 0)).toLong()
                 info("[XCommand] Player {} found, scheduling command '{}' in {} ticks as {}", player.name, command, delay, sender)
-                Tasks.scheduler.runLater(delay, Runnable {
+                val run = Runnable {
                     val cmd = command ?: return@Runnable
                     if (player.isOnline && sender == Sender.PLAYER) {
                         info("[XCommand] Player {} performing command: {}", player.name, cmd)
@@ -74,7 +74,12 @@ class XCommand(
                         info("[XCommand] Console executing command (player context: {}): {}", player.name, cmd)
                         ARC.trySeverCommand(cmd)
                     }
-                })
+                }
+                if (delay <= 0L) {
+                    run.run()
+                } else {
+                    Tasks.scheduler.runLater(delay, run)
+                }
                 cancel()
             } else {
                 if (ticks.incrementAndGet() >= ticksTimeout) {
@@ -104,7 +109,7 @@ class XCommand(
             playerName = playerName,
             playerUuid = playerUuid,
             ticksTimeout = if (ticksTimeout > 0) ticksTimeout else 100,
-            ticksDelay = ticksDelay ?: 40,
+            ticksDelay = ticksDelay,
             servers = servers
         )
     }

@@ -89,9 +89,8 @@ object XCommand : CommandExecutor, TabCompleter {
 
         info("[/x] Dispatching XCommand: command='{}', sender={}, player={}, uuid={}, servers={}, timeout={}, delay={}",
             commandStr, senderType, playerName, uuid, serverList, timeout, delay)
-        XActionManager.publish(xCommand)
 
-        // Handle move-to-server
+        // Handle move-to-server — transfer first so target node can run command as soon as player joins
         val moveToServer = params["move-to-server"]?.toBoolean() ?: false
         if (moveToServer) {
             if (playerName == null) {
@@ -114,6 +113,8 @@ object XCommand : CommandExecutor, TabCompleter {
             }
             XActionManager.movePlayerToServer(player, serverList.first())
         }
+
+        XActionManager.publish(xCommand)
 
         val message =
             config
