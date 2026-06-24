@@ -995,6 +995,17 @@ class ConfigTest {
     }
 
     @Test
+    fun testLoadProductionStockConfigWithEmoji() {
+        val resource = Config::class.java.classLoader.getResourceAsStream("stocks/stock-prod.yml")
+        assertNotNull(resource, "Test fixture stocks/stock-prod.yml must exist")
+        resource.use { Files.copy(it, tempDir.resolve("stock.yml"), java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
+        val stockConfig = ConfigManager.create(tempDir, "stock.yml", "stock.yml")
+        assertTrue(stockConfig.bool("main-server", false), "Production stock config should load with emoji lore lines")
+        val stocks = stockConfig.list<Map<String, Any>>("stocks")
+        assertFalse(stocks.isEmpty(), "Stock list should not be empty")
+    }
+
+    @Test
     fun testLoadBundledStockConfigWithEmoji() {
         val resource = Config::class.java.classLoader.getResourceAsStream("stocks/stock.yml")
         assertNotNull(resource, "Bundled stocks/stock.yml must exist")
