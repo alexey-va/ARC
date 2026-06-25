@@ -43,14 +43,7 @@ class GPTEntity(
         val maxTokens = npcChatConfig.maxTokens(archetype, llmConfig.moderationMaxTokens)
         val temperature = npcChatConfig.temperature(archetype, llmConfig.moderationTemperature)
 
-        val system = buildString {
-            npcChatConfig.commonSystemMessages.forEach {
-                appendLine(it.replace("%player_name%", playerName))
-            }
-            npcChatConfig.systemMessages(archetype).forEach {
-                appendLine(it.replace("%player_name%", playerName))
-            }
-        }
+        val system = npcChatConfig.systemPrompt(archetype).replace("%player_name%", playerName)
 
         val history = mutableListOf<ChatTurn>()
         val chatHistory =

@@ -5,22 +5,14 @@ import io.kotest.matchers.shouldBe
 
 class NpcChatConfigTest : FreeSpec({
     "NpcChatConfig" - {
-        "should read archetype settings from test config" {
+        "should read system prompt from test config" {
             val config =
                 TestNpcChatConfig(
-                    archetypes =
-                        mapOf(
-                            "joker" to
-                                TestNpcChatConfig.ArchetypeSettings(
-                                    system = listOf("Be funny"),
-                                    temperature = 0.9,
-                                ),
-                        ),
+                    prompts = mapOf("joker" to "Be funny"),
                 )
 
-            config.systemMessages("joker") shouldBe listOf("Be funny")
-            config.temperature("joker", 0.2) shouldBe 0.9
-            config.temperature("unknown", 0.2) shouldBe 0.2
+            config.systemPrompt("joker") shouldBe "Be funny"
+            config.systemPrompt("unknown") shouldBe ""
         }
     }
 })

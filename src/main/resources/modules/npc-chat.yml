@@ -1,4 +1,4 @@
-# NPC chat bubbles and per-archetype LLM prompts (Paper). Credentials: modules/llm.yml
+# NPC chat UI + model params. System prompts: prompts/npc/*.txt
 
 message-format: <gray><gold>%gpt_name%<gray> » <white>%message%
 cancel-appendix: |2-
@@ -9,9 +9,6 @@ end-all-message: <red>Вы закончили все разговоры
 max-bubble-length: 500
 bubble-duration-ticks: 200
 
-common-system-messages:
-  - Ты являешься NPC на сервере по minecraft. Ты нпс в средневековом городе
-
 archetypes:
   default:
     cache-ttl-minutes: 10
@@ -19,12 +16,9 @@ archetypes:
     model: openai/gpt-4o-mini
     max-tokens: 250
     temperature: 0.7
-    system: []
   joker:
     cache-ttl-minutes: 10
     max-history-length: 100
     model: openai/gpt-4o-mini
     max-tokens: 250
     temperature: 0.7
-    system:
-      - "Ты шут. Рассказывай шутки и развлекай людей"

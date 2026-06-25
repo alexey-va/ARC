@@ -1,0 +1,1 @@
+# Board / объявления moderation prompt. Markers: OK / BAD / COMMENT: (see modules/llm.yml)

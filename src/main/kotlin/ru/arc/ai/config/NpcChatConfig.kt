@@ -8,6 +8,7 @@ import java.nio.file.Path
 
 open class NpcChatConfig(
     private val config: Config,
+    private val dataPath: Path = Path.of("."),
 ) {
     open val messageFormat: String
         get() = config.string("message-format", "<gray><gold>%gpt_name%<gray> » <white>%message%")
@@ -31,8 +32,21 @@ open class NpcChatConfig(
     open val bubbleDurationTicks: Int
         get() = config.integer("bubble-duration-ticks", 20 * 20)
 
-    open val commonSystemMessages: List<String>
-        get() = config.stringList("common-system-messages", emptyList())
+    /** NPC prompts: `prompts/npc/common.txt` + `prompts/npc/{archetype}.txt` (plain text, no YAML). */
+    open fun systemPrompt(archetype: String): String {
+        val fromFiles =
+            buildList {
+                PromptFiles.readText(dataPath, "prompts/npc/common.txt")?.let { add(it) }
+                PromptFiles.readText(dataPath, "prompts/npc/$archetype.txt")?.let { add(it) }
+            }
+        if (fromFiles.isNotEmpty()) {
+            return fromFiles.joinToString("\n\n")
+        }
+        return buildString {
+            config.stringList("common-system-messages", emptyList()).forEach { appendLine(it) }
+            config.stringList("archetypes.$archetype.system", emptyList()).forEach { appendLine(it) }
+        }.trim()
+    }
 
     open fun cacheTtlMinutes(archetype: String): Long =
         config.integer("archetypes.$archetype.cache-ttl-minutes", 10).toLong()
@@ -49,15 +63,12 @@ open class NpcChatConfig(
     open fun temperature(archetype: String, defaultTemperature: Double): Double =
         config.real("archetypes.$archetype.temperature", defaultTemperature)
 
-    open fun systemMessages(archetype: String): List<String> =
-        config.stringList("archetypes.$archetype.system", emptyList())
-
     companion object {
         const val RESOURCE = "npc-chat.yml"
 
         fun load(dataPath: Path): NpcChatConfig {
             Config.copyDefaultConfig(ConfigManager.bundledModuleResource(RESOURCE), dataPath, replace = false)
-            return NpcChatConfig(ConfigManager.ofModule(dataPath, RESOURCE))
+            return NpcChatConfig(ConfigManager.ofModule(dataPath, RESOURCE), dataPath)
         }
     }
 }
@@ -69,7 +80,7 @@ class TestNpcChatConfig(
     override val endAllMessage: Component = Component.text("end all"),
     override val maxBubbleLength: Int = 500,
     override val bubbleDurationTicks: Int = 200,
-    override val commonSystemMessages: List<String> = emptyList(),
+    private val prompts: Map<String, String> = emptyMap(),
     private val archetypes: Map<String, ArchetypeSettings> = emptyMap(),
 ) : NpcChatConfig(EmptyConfig) {
     data class ArchetypeSettings(
@@ -78,8 +89,9 @@ class TestNpcChatConfig(
         val model: String = "openai/gpt-4o-mini",
         val maxTokens: Int = 250,
         val temperature: Double = 0.7,
-        val system: List<String> = emptyList(),
     )
+
+    override fun systemPrompt(archetype: String): String = prompts[archetype] ?: ""
 
     override fun cacheTtlMinutes(archetype: String): Long =
         archetypes[archetype]?.cacheTtlMinutes ?: 10
@@ -95,7 +107,4 @@ class TestNpcChatConfig(
 
     override fun temperature(archetype: String, defaultTemperature: Double): Double =
         archetypes[archetype]?.temperature ?: defaultTemperature
-
-    override fun systemMessages(archetype: String): List<String> =
-        archetypes[archetype]?.system ?: emptyList()
 }
