@@ -11,6 +11,7 @@ import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
+import ru.arc.config.ArcRedisConfig
 import ru.arc.config.ConfigManager
 import ru.arc.sync.SyncManager
 import ru.arc.util.TextUtil.mm
@@ -77,8 +78,5 @@ class SFHook : Listener {
         return true
     }
 
-    private fun isBackpackDisabled(): Boolean {
-        val misc = ConfigManager.of(ARC.instance.dataPath, "misc.yml")
-        return misc.bool("redis.main-server", false)
-    }
+    private fun isBackpackDisabled(): Boolean = ArcRedisConfig.get().mainServer
 }

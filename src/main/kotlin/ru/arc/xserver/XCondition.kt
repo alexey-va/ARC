@@ -2,7 +2,7 @@ package ru.arc.xserver
 
 import org.bukkit.entity.Player
 import ru.arc.ARC
-import ru.arc.config.ConfigManager
+import ru.arc.config.ArcRedisConfig
 import ru.arc.hooks.HookRegistry
 import ru.arc.util.Logging.warn
 import java.util.UUID
@@ -17,8 +17,7 @@ data class XCondition(
 ) : Predicate<Player> {
 
     override fun test(player: Player): Boolean {
-        val miscConfig = ConfigManager.of(ARC.instance.dataFolder.toPath(), "misc.yml")
-        if (serverName != null && !serverName.equals(miscConfig.string("redis.server-name"), ignoreCase = true)) return false
+        if (serverName != null && !serverName.equals(ArcRedisConfig.get().serverName, ignoreCase = true)) return false
         if (playerName != null && !player.name.equals(playerName, ignoreCase = true)) return false
         if (playerUuid != null && player.uniqueId != playerUuid) return false
         if (permission != null && !player.hasPermission(permission)) return false
@@ -44,8 +43,7 @@ data class XCondition(
 
         internal fun currentServerName(): String? {
             if (ARC.plugin == null) return null
-            val misc = ConfigManager.of(ARC.instance.dataFolder.toPath(), "misc.yml")
-            return misc.string("redis.server-name").takeIf { it.isNotBlank() }?.lowercase()
+            return ArcRedisConfig.get().serverName.takeIf { it.isNotBlank() }?.lowercase()
                 ?: ARC.serverName?.lowercase()
         }
     }

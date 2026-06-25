@@ -2,10 +2,10 @@ package ru.arc.farm
 
 import org.bukkit.event.block.BlockBreakEvent
 import ru.arc.ARC
-import ru.arc.core.BukkitTaskScheduler
 import ru.arc.core.Lifecycle
 import ru.arc.core.ScheduledTask
 import ru.arc.core.TaskScheduler
+import ru.arc.core.Tasks
 import ru.arc.hooks.HookRegistry
 import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.info
@@ -197,7 +197,7 @@ object FarmManager : ru.arc.core.ServiceManager<FarmService>() {
 
     override fun createService(): FarmService {
         val config = FarmModuleConfig.load(ARC.instance.dataPath)
-        val scheduler = BukkitTaskScheduler(ARC.instance)
+        val scheduler = Tasks.scheduler
         val regionFactory = WorldGuardRegionFactory()
 
         return FarmService(

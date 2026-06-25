@@ -17,7 +17,7 @@ import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import ru.arc.config.LocationPoolConfig
 import ru.arc.config.StockConfig
-import ru.arc.core.BukkitTaskScheduler
+import ru.arc.core.Tasks
 import ru.arc.core.PluginModule
 import ru.arc.core.ScheduledTask
 import ru.arc.core.repeating
@@ -29,7 +29,12 @@ import ru.arc.leafdecay.LeafDecayManager
 import ru.arc.misc.JoinMessagesManager
 import ru.arc.mobspawn.MobSpawnManager
 import ru.arc.network.NetworkRegistry
+import ru.arc.config.ArcRedisConfig
+import ru.arc.network.RedisConnection
 import ru.arc.network.RedisManager
+import ru.arc.network.ServerIdentity
+import ru.arc.redis.RedisConfigBootstrap
+import ru.arc.redis.RedisModuleConfig
 import ru.arc.repository.redisRepo
 import ru.arc.stock.HistoryManager
 import ru.arc.stock.Stock
@@ -65,23 +70,25 @@ object RedisModule : PluginModule {
     override val priority = 10
 
     override fun init() {
-        val config = ConfigManager.of(ARC.instance.dataPath, "misc.yml")
+        RedisConfigBootstrap.ensure(ARC.instance.dataPath)
+        val redis = RedisModuleConfig.load(ARC.instance.dataPath)
 
-        if (!config.bool("redis.enabled", true)) {
+        if (!redis.enabled) {
             info("Redis disabled — skipping connection (redis.enabled=false)")
             return
         }
 
-        val ip = config.string("redis.ip", "localhost")
-        val port = config.integer("redis.port", 3306)
-        val username = config.string("redis.username", "default")
-        val password = config.string("redis.password", "")
+        val connection = redis.connection()
 
         if (ARC.redisManager != null) {
-            ARC.redisManager!!.connect(ip, port, username, password)
+            ARC.redisManager!!.connect(connection)
             info("Reconnected to Redis")
         } else {
-            ARC.redisManager = RedisManager(ip, port, username, password)
+            ARC.redisManager =
+                RedisManager(
+                    connection,
+                    ServerIdentity { ARC.serverName ?: redis.serverName },
+                )
             info("Connected to Redis")
         }
     }
@@ -161,10 +168,7 @@ object ConfigModule : PluginModule {
 
     override fun init() {
         ConfigManager.reloadAll()
-        ARC.serverName =
-            ConfigManager
-                .of(ARC.instance.dataPath, "misc.yml")
-                .string("redis.server-name", "default")
+        ARC.serverName = ArcRedisConfig.get().serverName
     }
 
     override fun reload() = init()
@@ -415,7 +419,7 @@ object TreasureModule : PluginModule {
         Treasures.init()
         TreasureHuntRegistry.init()
         HuntFurnitureRegistry.init()
-        HuntFurnitureJanitor.init(BukkitTaskScheduler(ARC.instance))
+        HuntFurnitureJanitor.init(Tasks.scheduler)
     }
 
     override fun reload() {

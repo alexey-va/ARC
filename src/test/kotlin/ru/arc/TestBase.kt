@@ -23,11 +23,9 @@ abstract class TestBase {
         private val mockClipboardLoader = MockClipboardLoader()
 
         init {
-            // Disable Loki appender in tests to avoid OOM from direct buffer allocation
             Logging.disableLokiAppender = true
-
-            // Reduce console spam in tests - only show warnings and errors
             Logging.quietMode = false
+            Logging.bootstrapForTests()
 
             // Use MockBukkit's ItemStackMock instead of real ItemStack to avoid Paper ClassLoader issues
             ItemStackFactory.factory = { material, amount -> ItemStackMock(material, amount) }

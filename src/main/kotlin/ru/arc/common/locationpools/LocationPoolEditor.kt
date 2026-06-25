@@ -4,8 +4,8 @@ import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import org.bukkit.event.block.BlockPlaceEvent
 import ru.arc.ARC
-import ru.arc.core.BukkitTaskScheduler
 import ru.arc.core.TaskScheduler
+import ru.arc.core.Tasks
 import java.util.UUID
 
 /**
@@ -22,7 +22,7 @@ object LocationPoolEditor {
     fun init() {
         if (ARC.plugin == null) return
 
-        val scheduler: TaskScheduler = BukkitTaskScheduler(ARC.instance)
+        val scheduler: TaskScheduler = Tasks.scheduler
         val playerProvider =
             object : PlayerProvider {
                 override fun getPlayer(uuid: UUID): Player? = Bukkit.getPlayer(uuid)

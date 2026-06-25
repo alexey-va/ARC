@@ -1,14 +1,11 @@
 # =============================================================================
-# misc.yml — глобальные настройки ARC (Redis, порталы, синк, join/quit GUI, миры).
+# misc.yml — глобальные настройки ARC (порталы, синк, join/quit GUI, миры).
+# Redis: modules/redis.yml (arc-core-redis).
 # Стиль YAML: элементы списков (-) вложены в ключ (на 2 пробела правее, чем ключ).
 #
 # Фичевые YAML (announce, board, mobspawn, …) лежат в каталоге modules/ — см. paths ниже и ConfigManager.ofModule.
 #
-# Важно:
-#   - redis.server-name и xaction.server-name: логическое имя инстанса (тесты ждут
-#     test-server; на проде замените на имя вашего сервера, одно и то же везде).
-#   - redis.password: пустой в репозитории; на проде задайте пароль.
-# Секции: redis, join, portal, bees, xaction, sync, join-message-gui, leave-message-gui,
+# Секции: join, portal, bees, xaction, sync, join-message-gui, leave-message-gui,
 #         date-format, timezone, worlds, world-names, respawn-intercept-worlds.
 #
 # join-message-gui / leave-message-gui: длинные списки — типичный прод-экспорт;
@@ -20,20 +17,6 @@
 paths:
   # Каталог с per-module *.yml относительно папки плагина
   feature-config-directory: modules
-
-# --- Redis: Jedis; используется репозиториями и кросс-сервером ---
-redis:
-  # Хост и порт экземпляра Redis
-  ip: localhost
-  port: 25001
-  # ACL Redis (часто default)
-  username: default
-  # Пароль; в репозитории пусто — задайте на сервере
-  password: ""
-  # Имя этого сервера в кластере (должно совпадать с ожиданиями XCondition и т.п.)
-  server-name: test-server
-  # true если это «главный» инстанс для логики, завязанной на main-server
-  main-server: true
 
 # --- Вход игрока: краткая неуязвимость и полное здоровье ---
 join:

@@ -10,8 +10,8 @@ import ru.arc.common.chests.CustomChest
 import ru.arc.common.chests.ItemsAdderChest
 import ru.arc.common.chests.VanillaChest
 import ru.arc.common.locationpools.LocationPool
-import ru.arc.core.BukkitTaskScheduler
 import ru.arc.core.TaskScheduler
+import ru.arc.core.Tasks
 import ru.arc.hooks.HookRegistry
 import ru.arc.treasure.core.Treasures
 import ru.arc.util.Logging.info
@@ -35,7 +35,7 @@ object TreasureHuntRegistry {
     fun init() {
         if (ARC.plugin == null) return
 
-        val scheduler: TaskScheduler = BukkitTaskScheduler(ARC.instance)
+        val scheduler: TaskScheduler = Tasks.scheduler
 
         val announcer =
             object : MessageAnnouncer {

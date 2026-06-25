@@ -59,6 +59,8 @@ dependencies {
 
     implementation(kotlin("stdlib"))
     implementation("ru.arc:arc-core:1.0-SNAPSHOT")
+    implementation("ru.arc:arc-core-logging:1.0-SNAPSHOT")
+    implementation("ru.arc:arc-core-redis:1.0-SNAPSHOT")
     implementation("ru.arc:arc-core-paper:1.0-SNAPSHOT")
 
     // snakeyaml-engine comes transitively from arc-core
@@ -219,6 +221,37 @@ tasks {
         )
 
         exclude("META-INF/DEPENDENCIES", "META-INF/LICENSE", "META-INF/NOTICE")
+
+        // Canonical logging.yml / redis.yml live in arc-core-* (not duplicated in this repo).
+        from({
+            val loggingJar =
+                project.configurations.getByName("runtimeClasspath").files.first {
+                    it.name.startsWith("arc-core-logging")
+                }
+            zipTree(loggingJar)
+        }) {
+            include("modules/logging.yml")
+        }
+        from({
+            val redisJar =
+                project.configurations.getByName("runtimeClasspath").files.first {
+                    it.name.startsWith("arc-core-redis")
+                }
+            zipTree(redisJar)
+        }) {
+            include("modules/redis.yml")
+        }
+        from({
+            val coreJar =
+                project.configurations.getByName("runtimeClasspath").files.first {
+                    it.name.startsWith("arc-core-") && !it.name.startsWith("arc-core-logging") &&
+                        !it.name.startsWith("arc-core-redis") && !it.name.startsWith("arc-core-paper") &&
+                        !it.name.startsWith("arc-core-velocity")
+                }
+            zipTree(coreJar)
+        }) {
+            include("modules/scheduling.yml")
+        }
 
         relocate("com.jeff_media.customblockdata", "arc.arc.libs.customblockdata")
         relocate("com.github.stefvanschie.inventoryframework", "arc.arc.libs.inventoryframework")

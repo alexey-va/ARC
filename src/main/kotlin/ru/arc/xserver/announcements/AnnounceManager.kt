@@ -4,6 +4,7 @@ import org.bukkit.Material
 import org.bukkit.boss.BarColor
 import org.bukkit.entity.Player
 import ru.arc.ARC
+import ru.arc.config.ArcRedisConfig
 import ru.arc.config.ConfigManager
 import ru.arc.core.ScheduledTask
 import ru.arc.core.Tasks
@@ -63,9 +64,7 @@ object AnnounceManager {
             announcements.clear()
             totalWeight = 0
 
-            val mainServer =
-                ConfigManager.of(ARC.instance.dataFolder.toPath(), "misc.yml")
-                    .bool("redis.main-server", false)
+            val mainServer = ArcRedisConfig.get().mainServer
             val configuredMessageKeys = config.keys("messages")
             if (!mainServer) {
                 if (configuredMessageKeys.isNotEmpty()) {

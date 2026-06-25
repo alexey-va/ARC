@@ -1,7 +1,7 @@
 package ru.arc.scheduled
 
 import ru.arc.ARC
-import ru.arc.core.BukkitTaskScheduler
+import ru.arc.core.Tasks
 import ru.arc.core.PluginModule
 
 object ScheduledCommandsModule : PluginModule {
@@ -11,7 +11,7 @@ object ScheduledCommandsModule : PluginModule {
     override fun init() {
         ScheduledCommandsManager.init(
             dataPath = ARC.instance.dataPath,
-            taskScheduler = BukkitTaskScheduler(ARC.instance),
+            taskScheduler = Tasks.scheduler,
         )
     }
 

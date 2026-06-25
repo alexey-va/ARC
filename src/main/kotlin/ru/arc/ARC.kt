@@ -22,6 +22,7 @@ import ru.arc.config.ConfigManager
 import ru.arc.config.LocationPoolConfig
 import ru.arc.core.ModuleRegistry
 import ru.arc.core.PaperArcRuntime
+import ru.arc.core.dataPath
 import ru.arc.core.modules.AnnounceModule
 import ru.arc.core.modules.AuditModule
 import ru.arc.core.modules.BoardModule
@@ -53,6 +54,7 @@ import ru.arc.ops.OpsHttpModule
 import ru.arc.restart.RestartModule
 import ru.arc.scheduled.ScheduledCommandsModule
 import ru.arc.util.HeadTextureCache
+import ru.arc.util.Logging
 import ru.arc.util.Logging.consoleLog
 import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
@@ -93,6 +95,7 @@ open class ARC : JavaPlugin() {
             pluginMessenger = PluginMessenger()
         }
 
+        PaperArcRuntime.installScheduling(this)
         registerModules()
         PaperArcRuntime.installModuleLifecycleReporting(
             consoleLog = { consoleLog(it) },
@@ -252,10 +255,9 @@ open class ARC : JavaPlugin() {
 
     private fun initLogging() {
         try {
-            ru.arc.util.Logging
-                .addLokiAppender()
+            Logging.installForPlugin(dataPath)
         } catch (e: Throwable) {
-            error("Error creating Loki appender", e)
+            error("Error initializing logging / Loki", e)
         }
     }
 
@@ -266,6 +268,7 @@ open class ARC : JavaPlugin() {
         private val BUNDLED_RESOURCES =
             listOf(
                 "modules/logging.yml",
+                "modules/redis.yml",
                 "modules/ops-http.yml",
                 "modules/announce.yml",
                 "modules/scheduled-commands.yml",

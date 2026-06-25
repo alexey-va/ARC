@@ -6,7 +6,7 @@ import org.bukkit.World
 import org.bukkit.entity.EntityType
 import org.bukkit.entity.Player
 import ru.arc.ARC
-import ru.arc.core.BukkitTaskScheduler
+import ru.arc.core.Tasks
 import ru.arc.hooks.HookRegistry
 
 /**
@@ -58,7 +58,7 @@ object MobSpawnManager {
 
         service = MobSpawnService(
             config = config,
-            scheduler = BukkitTaskScheduler(ARC.instance),
+            scheduler = Tasks.scheduler,
             worldProvider = BukkitWorldProvider(),
             claimChecker = LandsClaimChecker(),
             entitySpawner = BukkitEntitySpawner()

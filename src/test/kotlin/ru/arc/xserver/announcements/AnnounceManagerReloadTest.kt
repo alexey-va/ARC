@@ -28,11 +28,13 @@ class AnnounceManagerReloadTest : FreeSpec({
             ARC.plugin = plugin
             val dataPath = plugin.dataFolder.toPath()
 
-            val miscFile = File(plugin.dataFolder, "misc.yml")
-            miscFile.writeText(
+            val redisFile = ConfigManager.moduleYamlPath(dataPath, "redis.yml").toFile()
+            redisFile.parentFile.mkdirs()
+            redisFile.writeText(
                 """
-                redis:
-                  main-server: true
+                enabled: false
+                server-name: test-server
+                main-server: true
                 """.trimIndent(),
             )
 
@@ -87,10 +89,13 @@ class AnnounceManagerReloadTest : FreeSpec({
             ARC.plugin = plugin
             val dataPath = plugin.dataFolder.toPath()
 
-            File(plugin.dataFolder, "misc.yml").writeText(
+            val redisFile = ConfigManager.moduleYamlPath(dataPath, "redis.yml").toFile()
+            redisFile.parentFile.mkdirs()
+            redisFile.writeText(
                 """
-                redis:
-                  main-server: false
+                enabled: false
+                server-name: parkour
+                main-server: false
                 """.trimIndent(),
             )
 

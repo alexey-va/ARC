@@ -7,7 +7,7 @@ import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import ru.arc.ARC
-import ru.arc.config.ConfigManager
+import ru.arc.config.ArcRedisConfig
 
 object BackpackBlockListener : Listener {
     @EventHandler(priority = EventPriority.LOWEST)
@@ -20,8 +20,5 @@ object BackpackBlockListener : Listener {
     }
 
     /** Disabled on main-server (classic/spawn hub); enabled on survival and other nodes. */
-    private fun isBackpackDisabled(): Boolean {
-        val misc = ConfigManager.of(ARC.instance.dataPath, "misc.yml")
-        return misc.bool("redis.main-server", false)
-    }
+    private fun isBackpackDisabled(): Boolean = ArcRedisConfig.get().mainServer
 }

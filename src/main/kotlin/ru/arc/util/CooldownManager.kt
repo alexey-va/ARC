@@ -1,7 +1,7 @@
 package ru.arc.util
 
 import ru.arc.ARC
-import ru.arc.core.BukkitTaskScheduler
+import ru.arc.core.Tasks
 import ru.arc.core.ScheduledTask
 import ru.arc.core.SystemTimeProvider
 import ru.arc.core.TaskScheduler
@@ -114,7 +114,7 @@ object CooldownManager {
     @JvmStatic
     fun setupTask(period: Long) {
         countdownTask?.cancel()
-        scheduler = BukkitTaskScheduler(ARC.instance)
+        scheduler = Tasks.scheduler
         countdownTask = scheduler!!.runTimer(period, period) {
             countdown(period)
         }

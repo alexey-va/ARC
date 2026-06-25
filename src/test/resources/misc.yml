@@ -1,17 +1,7 @@
-# Test override: Redis is disabled so unit tests don't try to connect.
-# This file takes precedence over main/resources/misc.yml on the test classpath.
+# Test override: misc.yml for tests (Redis → modules/redis.yml).
 
 paths:
   feature-config-directory: modules
-
-redis:
-  enabled: false
-  ip: localhost
-  port: 25001
-  username: default
-  password: ""
-  server-name: test-server
-  main-server: true
 
 join:
   grace-period: 5

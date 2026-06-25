@@ -3,7 +3,7 @@ package ru.arc.audit
 import net.kyori.adventure.audience.Audience
 import org.bukkit.Bukkit
 import ru.arc.ARC
-import ru.arc.core.BukkitTaskScheduler
+import ru.arc.core.Tasks
 import ru.arc.core.modules.EconomyModule
 import ru.arc.util.Logging.error
 import ru.arc.xserver.playerlist.PlayerManager
@@ -37,7 +37,7 @@ object AuditManager {
      */
     @JvmStatic
     fun init() {
-        val scheduler = BukkitTaskScheduler(ARC.instance)
+        val scheduler = Tasks.scheduler
         config = AuditConfig.load()
 
         val repository: AuditRepository = if (ARC.redisManager != null) {

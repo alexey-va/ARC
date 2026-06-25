@@ -1,4 +1,4 @@
-# Slimefun backpacks: blocked on main-server (misc.yml redis.main-server: true).
+# Slimefun backpacks: blocked on main-server (modules/redis.yml main-server: true).
 backpacks:
   use-other-player: <dark_red>Вы не можете импользовать чужие рюкзаки!
   forbidden: <dark_red>Вы не можете использовать рюкзак здесь!
