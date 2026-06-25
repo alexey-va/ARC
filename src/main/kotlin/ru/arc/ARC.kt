@@ -23,6 +23,7 @@ import ru.arc.config.LocationPoolConfig
 import ru.arc.core.ModuleRegistry
 import ru.arc.core.PaperArcRuntime
 import ru.arc.core.dataPath
+import ru.arc.core.modules.AiModule
 import ru.arc.core.modules.AnnounceModule
 import ru.arc.core.modules.AuditModule
 import ru.arc.core.modules.BoardModule
@@ -159,6 +160,7 @@ open class ARC : JavaPlugin() {
             RedisModule,
             NetworkModule,
             HooksModule,
+            AiModule,
             EconomyModule,
             // Configuration (priority 30-49)
             ConfigModule,

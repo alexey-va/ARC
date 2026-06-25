@@ -1,6 +1,5 @@
 package ru.arc.network
 
-import ru.arc.ai.assistant.ToolMessanger
 import ru.arc.hooks.HookRegistry
 import ru.arc.hooks.lands.LandsMessager
 import ru.arc.hooks.zauction.AuctionMessager
@@ -36,8 +35,5 @@ class NetworkRegistry(private val redisManager: RedisManager) {
             redisManager.registerChannelUnique(auctionMessager.channelAll, auctionMessager)
             HookRegistry.auctionHook!!.auctionMessager = auctionMessager
         }
-
-        val toolMessanger = ToolMessanger()
-        redisManager.registerChannelUnique(ToolMessanger.CHANNEL_REQUEST_TOOLS, toolMessanger)
     }
 }

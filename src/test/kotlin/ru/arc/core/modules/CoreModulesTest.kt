@@ -90,6 +90,7 @@ class CoreModulesTest : TestBase() {
             RedisModule,
             NetworkModule,
             HooksModule,
+            AiModule,
             EconomyModule,
             ConfigModule,
             LocationPoolModule,
@@ -129,6 +130,7 @@ class CoreModulesTest : TestBase() {
             assertTrue(RedisModule.priority < ConfigModule.priority)
             assertTrue(NetworkModule.priority < ConfigModule.priority)
             assertTrue(HooksModule.priority < ConfigModule.priority)
+            assertTrue(AiModule.priority < ConfigModule.priority)
             assertTrue(EconomyModule.priority < ConfigModule.priority)
         }
 
@@ -228,6 +230,7 @@ class CoreModulesTest : TestBase() {
             RedisModule,
             NetworkModule,
             HooksModule,
+            AiModule,
             EconomyModule,
             ConfigModule,
             LocationPoolModule,
@@ -273,12 +276,13 @@ class CoreModulesTest : TestBase() {
     // ==================== Module Count Test ====================
 
     @Test
-    @DisplayName("Total module count is 26")
+    @DisplayName("Total module count is 27")
     fun testTotalModuleCount() {
         val allModules = listOf(
             RedisModule,
             NetworkModule,
             HooksModule,
+            AiModule,
             EconomyModule,
             ConfigModule,
             LocationPoolModule,
@@ -304,6 +308,6 @@ class CoreModulesTest : TestBase() {
             SyncModule
         )
 
-        assertEquals(26, allModules.size, "Should have 26 modules")
+        assertEquals(27, allModules.size, "Should have 27 modules")
     }
 }
