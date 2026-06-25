@@ -1,0 +1,12 @@
+---
+description: Route agents to architecture canon before structural changes
+alwaysApply: true
+---
+
+Before moving code between repos or adding framework APIs, read:
+
+- **Architecture canon:** `~/IdeaProjects/arc-core/AGENTS.md` (or composite build sibling `../arc-core/AGENTS.md`)
+- **Paper delta:** `AGENTS.md` in this repo
+- **Ops/deploy:** `~/mcserver/AGENTS.md` + `TASKS.md`
+
+Do not duplicate boundary rules from arc-core here — link only.
