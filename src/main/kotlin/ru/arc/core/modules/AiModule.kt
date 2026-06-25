@@ -2,8 +2,8 @@ package ru.arc.core.modules
 
 import ru.arc.ARC
 import ru.arc.ai.GPTManager
-import ru.arc.ai.config.LlmConfigBootstrap
 import ru.arc.ai.config.LlmModuleConfig
+import ru.arc.ai.config.NpcChatConfig
 import ru.arc.ai.llm.OpenRouterLlmClient
 import ru.arc.ai.tools.PaperAiToolExecutors
 import ru.arc.ai.tools.ToolRpcServer
@@ -18,10 +18,10 @@ object AiModule : PluginModule {
 
     override fun init() {
         val dataPath = ARC.instance.dataPath
-        LlmConfigBootstrap.mergeLegacyPaper(dataPath)
         val llmConfig = LlmModuleConfig.load(dataPath)
+        val npcChatConfig = NpcChatConfig.load(dataPath)
         val llmClient = OpenRouterLlmClient.create(llmConfig)
-        GPTManager.init(llmConfig, llmClient)
+        GPTManager.init(llmConfig, npcChatConfig, llmClient)
 
         val redis = ARC.redisManager ?: return
         val serverName = ARC.serverName ?: ru.arc.redis.RedisModuleConfig.load(dataPath).serverName

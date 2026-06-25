@@ -3,12 +3,12 @@ package ru.arc.ai
 import org.bukkit.Location
 import org.bukkit.entity.Player
 import org.bukkit.event.player.AsyncPlayerChatEvent
-import ru.arc.ARC
 import ru.arc.ai.config.LlmModuleConfig
+import ru.arc.ai.config.NpcChatConfig
+import ru.arc.ai.llm.ModerationOutcome
 import ru.arc.ai.llm.ModerationService
 import ru.arc.ai.llm.OpenRouterLlmClient
 import ru.arc.ai.llm.SimpleChatService
-import ru.arc.config.ConfigManager
 import ru.arc.core.Tasks
 import ru.arc.core.repeatingAsync
 import ru.arc.core.ticks
@@ -26,21 +26,26 @@ import java.util.concurrent.ConcurrentSkipListSet
 
 object GPTManager {
 
-    private val legacyConfig = ConfigManager.of(ARC.instance.dataPath, "gpt.yml")
     private val entities = ConcurrentHashMap<String, GPTEntity>()
     private val conversations = ConcurrentHashMap<UUID, MutableList<Conversation>>()
     private val awaitingResponse = ConcurrentSkipListSet<UUID>()
     private var cleanupTask: Any? = null
 
     private lateinit var llmConfig: LlmModuleConfig
+    private lateinit var npcChatConfig: NpcChatConfig
     private lateinit var moderationService: ModerationService
     private lateinit var chatService: SimpleChatService
 
     @JvmStatic
-    fun init(config: LlmModuleConfig, llmClient: OpenRouterLlmClient) {
-        llmConfig = config
-        moderationService = ModerationService(llmClient, config)
-        chatService = SimpleChatService(llmClient, config)
+    fun init(
+        llmConfig: LlmModuleConfig,
+        npcChatConfig: NpcChatConfig,
+        llmClient: OpenRouterLlmClient,
+    ) {
+        this.llmConfig = llmConfig
+        this.npcChatConfig = npcChatConfig
+        moderationService = ModerationService(llmClient, llmConfig)
+        chatService = SimpleChatService(llmClient, llmConfig)
 
         entities.clear()
         conversations.clear()
@@ -87,17 +92,24 @@ object GPTManager {
             warn("AI moderation not initialized — skipping message")
             return CompletableFuture.completedFuture(Optional.empty())
         }
-        return try {
-            entities.computeIfAbsent("moderator") { createEntity("moderator", "moderator", false) }
-                .getModerResponse(message)
-        } catch (e: Exception) {
+        return moderationService.moderate(message).thenApply { optional ->
+            optional.flatMap { result ->
+                val response =
+                    when (result.outcome) {
+                        ModerationOutcome.OK -> ModerationResponse.OK
+                        ModerationOutcome.BAD -> ModerationResponse.BAD
+                        ModerationOutcome.UNKNOWN -> return@flatMap Optional.empty()
+                    }
+                Optional.of(ModerResponse(response, result.comment))
+            }
+        }.exceptionally { e ->
             error("Error getting moderation response", e)
-            CompletableFuture.completedFuture(Optional.empty())
+            Optional.empty()
         }
     }
 
     private fun createEntity(archetype: String, id: String, useHistory: Boolean): GPTEntity =
-        GPTEntity(legacyConfig, llmConfig, chatService, moderationService, archetype, id, useHistory)
+        GPTEntity(npcChatConfig, llmConfig, chatService, archetype, id, useHistory)
 
     @JvmStatic
     fun processMessage(chatEvent: AsyncPlayerChatEvent) {
@@ -164,11 +176,11 @@ object GPTManager {
 
     private fun displayChatBubble(message: String, conversation: Conversation) {
         if (HookRegistry.citizensHook == null || conversation.npcId == null) return
-        if (message.length > legacyConfig.integer("max-bubble-length", 50)) return
+        if (message.length > npcChatConfig.maxBubbleLength) return
         val s = TextUtil.mmToLegacy(message)
         val list =
             s.split("\n").map {
-                CitizensHook.HologramLine(it, legacyConfig.integer("bubble-duration-ticks", 20 * 20))
+                CitizensHook.HologramLine(it, npcChatConfig.bubbleDurationTicks)
             }
         HookRegistry.citizensHook?.addChatBubble(conversation.npcId, list)
     }
@@ -179,14 +191,9 @@ object GPTManager {
         appendCancel: Boolean,
     ) = TextUtil.mm(
         buildString {
-            append(legacyConfig.string("message-format", "<gray><gold>%gpt_name%<gray> » <white>%message%"))
+            append(npcChatConfig.messageFormat)
             if (appendCancel) {
-                append(
-                    legacyConfig.string(
-                        "cancel-appendix",
-                        "\n<red><hover:show_text:'Нажмите, чтобы закончить'><click:run_command:/arc ai stop %id%>[Нажмите, чтобы закончить разговор]</click></hover>",
-                    ),
-                )
+                append(npcChatConfig.cancelAppendix)
             }
         }.replace("%gpt_name%", conversation.talkerName ?: "")
             .replace("%message%", message)
@@ -237,9 +244,9 @@ object GPTManager {
         val conversation = convs.find { it.gptId == id } ?: return
         if (conversation.endMessage != null) {
             processMessage(conversation.endMessage, player, appendCancel = false)
-                .thenAccept { player.sendMessage(legacyConfig.component("end-message", "<red>Вы закончили разговор")) }
+                .thenAccept { player.sendMessage(npcChatConfig.endMessage) }
         } else {
-            player.sendMessage(legacyConfig.component("end-message", "<red>Вы закончили разговор"))
+            player.sendMessage(npcChatConfig.endMessage)
         }
         convs.remove(conversation)
     }
@@ -247,7 +254,7 @@ object GPTManager {
     @JvmStatic
     fun endAllConversations(player: Player) {
         conversations.remove(player.uniqueId)
-        player.sendMessage(legacyConfig.component("end-all-message", "<red>Вы закончили все разговоры"))
+        player.sendMessage(npcChatConfig.endAllMessage)
     }
 
     @JvmStatic
