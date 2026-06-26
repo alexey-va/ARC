@@ -29,7 +29,7 @@ import ru.arc.repository.redisRepo
 import ru.arc.util.TextUtil
 import ru.arc.util.Logging
 import ru.arc.util.Logging.withContext
-import ru.arc.xserver.XCondition
+import ru.arc.xaction.XCondition
 import ru.arc.xserver.XMessage
 import ru.arc.xserver.announcements.AnnounceManager
 import java.util.UUID

@@ -13,7 +13,9 @@ import ru.arc.core.repeating
 import ru.arc.core.ticks
 import ru.arc.hooks.HookRegistry
 import ru.arc.xserver.XActionManager
-import ru.arc.xserver.XCondition
+import ru.arc.xaction.XCondition
+import ru.arc.xserver.XConditionContext
+import ru.arc.xserver.matches
 import ru.arc.xserver.XMessage
 import ru.arc.xserver.playerlist.PlayerManager
 import ru.arc.util.Logging
@@ -48,7 +50,7 @@ object AnnounceManager {
     /** Reload announce config from disk and reschedule rotation/queue tasks. */
     @JvmStatic
     fun reload() {
-        val node = XCondition.currentServerName()
+        val node = XConditionContext.currentServerName()
         val previousGen = taskGeneration
         Logging.info(
             "Announce reload start node={} gen={} rotationTask={} queueTask={}",
@@ -122,7 +124,7 @@ object AnnounceManager {
                         return@repeating
                     }
                     if (announcements.isEmpty()) return@repeating
-                    val server = XCondition.currentServerName()
+                    val server = XConditionContext.currentServerName()
                     val pick = getRandom(server) ?: return@repeating
                     debug("Announce rotation pick server={} {}", server, pick.logSummary())
                     announce(pick)
@@ -150,13 +152,13 @@ object AnnounceManager {
     private fun drainQueue() {
         while (queue.isNotEmpty()) {
             val data = queue.poll() ?: break
-            if (!data.appliesToServer(XCondition.currentServerName())) continue
+            if (!data.appliesToServer(XConditionContext.currentServerName())) continue
             if (data.serializedMessage.isNullOrBlank()) {
                 debug("Announce queue skip reason=serialized-empty {}", data.logSummary())
                 continue
             }
             for (player in PlayerManager.getOnlinePlayersThreadSafe()) {
-                val fits = data.conditions?.all { it.test(player) } != false
+                val fits = data.conditions?.all { it.matches(player) } != false
                 if (fits) send(data, player)
             }
         }
@@ -251,7 +253,7 @@ object AnnounceManager {
         messageTask = null
         Logging.info(
             "Announce stopTasks node={} gen {} -> {} cancelled rotation={} queue={}",
-            XCondition.currentServerName(),
+            XConditionContext.currentServerName(),
             previousGen,
             taskGeneration,
             rotationSummary,
@@ -331,7 +333,7 @@ object AnnounceManager {
         announcements[totalWeight] = data
     }
 
-    private fun getRandom(serverName: String? = XCondition.currentServerName()): XMessage? {
+    private fun getRandom(serverName: String? = XConditionContext.currentServerName()): XMessage? {
         val pool = announcements.values.filter { it.appliesToServer(serverName) }
         if (pool.isEmpty()) return null
 

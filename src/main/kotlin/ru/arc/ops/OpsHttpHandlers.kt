@@ -13,7 +13,7 @@ import ru.arc.util.sendActionBarMM
 import ru.arc.util.sendMM
 import ru.arc.util.showTitleMM
 import ru.arc.xserver.XActionManager
-import ru.arc.xserver.XCondition
+import ru.arc.xaction.XCondition
 import ru.arc.xserver.XMessage
 import ru.arc.xserver.playerlist.PlayerManager
 import org.bukkit.boss.BarColor

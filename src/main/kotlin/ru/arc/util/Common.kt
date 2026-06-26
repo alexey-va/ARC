@@ -5,7 +5,7 @@ import com.google.gson.GsonBuilder
 import com.google.gson.InstanceCreator
 import org.bukkit.inventory.ItemStack
 import ru.arc.common.locationpools.LocationPool
-import ru.arc.network.adapters.PolymorphismAdapter
+import ru.arc.redis.gson.PolymorphismAdapter
 import ru.arc.network.repos.ItemList
 import ru.arc.network.repos.ItemListSerializer
 import ru.arc.network.repos.ItemStackSerializer

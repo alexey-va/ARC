@@ -6,6 +6,8 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.mockbukkit.mockbukkit.entity.PlayerMock
 import ru.arc.KotestTestBase
+import ru.arc.xaction.XCondition
+import ru.arc.xserver.matches
 import java.util.UUID
 
 /**
@@ -66,14 +68,14 @@ class XConditionTest : KotestTestBase({
             player.addAttachment(plugin, "arc.test.perm", true)
             val cond = XCondition.ofPermission("arc.test.perm")
 
-            cond.test(player).shouldBeTrue()
+            cond.matches(player).shouldBeTrue()
         }
 
         it("fails when player lacks the required permission") {
             val player = server.addPlayer("Herobrine") as PlayerMock
             val cond = XCondition.ofPermission("arc.test.perm")
 
-            cond.test(player).shouldBeFalse()
+            cond.matches(player).shouldBeFalse()
         }
 
         it("passes for op player (ops have all permissions)") {
@@ -81,7 +83,7 @@ class XConditionTest : KotestTestBase({
             player.isOp = true
             val cond = XCondition.ofPermission("any.perm")
 
-            cond.test(player).shouldBeTrue()
+            cond.matches(player).shouldBeTrue()
         }
     }
 
@@ -93,28 +95,28 @@ class XConditionTest : KotestTestBase({
             val player = server.addPlayer("Alice")
             val cond = XCondition.ofPlayerName("Alice")
 
-            cond.test(player).shouldBeTrue()
+            cond.matches(player).shouldBeTrue()
         }
 
         it("passes when player name matches case-insensitively") {
             val player = server.addPlayer("Alice")
             val cond = XCondition.ofPlayerName("ALICE")
 
-            cond.test(player).shouldBeTrue()
+            cond.matches(player).shouldBeTrue()
         }
 
         it("fails when player name does not match") {
             val player = server.addPlayer("Alice")
             val cond = XCondition.ofPlayerName("Bob")
 
-            cond.test(player).shouldBeFalse()
+            cond.matches(player).shouldBeFalse()
         }
 
         it("fails when name differs by single char") {
             val player = server.addPlayer("Alice")
             val cond = XCondition.ofPlayerName("Alic")
 
-            cond.test(player).shouldBeFalse()
+            cond.matches(player).shouldBeFalse()
         }
     }
 
@@ -126,14 +128,14 @@ class XConditionTest : KotestTestBase({
             val player = server.addPlayer("UuidPlayer")
             val cond = XCondition.ofPlayerUuid(player.uniqueId)
 
-            cond.test(player).shouldBeTrue()
+            cond.matches(player).shouldBeTrue()
         }
 
         it("fails when UUID does not match") {
             val player = server.addPlayer("UuidPlayer2")
             val cond = XCondition.ofPlayerUuid(UUID.randomUUID())
 
-            cond.test(player).shouldBeFalse()
+            cond.matches(player).shouldBeFalse()
         }
 
         it("matches specific player among many") {
@@ -142,7 +144,7 @@ class XConditionTest : KotestTestBase({
             server.addPlayer("Other2")
             val cond = XCondition.ofPlayerUuid(target.uniqueId)
 
-            cond.test(target).shouldBeTrue()
+            cond.matches(target).shouldBeTrue()
         }
     }
 
@@ -156,21 +158,21 @@ class XConditionTest : KotestTestBase({
             val player = server.addPlayer("ServerPlayer")
             val cond = XCondition.ofServerName("test-server")
 
-            cond.test(player).shouldBeTrue()
+            cond.matches(player).shouldBeTrue()
         }
 
         it("fails when server name does not match") {
             val player = server.addPlayer("ServerPlayer2")
             val cond = XCondition.ofServerName("other-server")
 
-            cond.test(player).shouldBeFalse()
+            cond.matches(player).shouldBeFalse()
         }
 
         it("passes case-insensitively for server name") {
             val player = server.addPlayer("ServerPlayer3")
             val cond = XCondition.ofServerName("TEST-SERVER")
 
-            cond.test(player).shouldBeTrue()
+            cond.matches(player).shouldBeTrue()
         }
     }
 
@@ -182,7 +184,7 @@ class XConditionTest : KotestTestBase({
             val player = server.addPlayer("Anybody")
             val cond = XCondition()
 
-            cond.test(player).shouldBeTrue()
+            cond.matches(player).shouldBeTrue()
         }
     }
 
@@ -195,21 +197,21 @@ class XConditionTest : KotestTestBase({
             val cond = XCondition(placeholders = mapOf("%some_placeholder%" to "value"))
 
             // No PAPI hook registered → should return false and log warning
-            cond.test(player).shouldBeFalse()
+            cond.matches(player).shouldBeFalse()
         }
 
         it("passes when placeholders map is empty") {
             val player = server.addPlayer("NoPAPIPlayer")
             val cond = XCondition(placeholders = emptyMap())
 
-            cond.test(player).shouldBeTrue()
+            cond.matches(player).shouldBeTrue()
         }
 
         it("passes when placeholders is null") {
             val player = server.addPlayer("NullPAPIPlayer")
             val cond = XCondition(placeholders = null)
 
-            cond.test(player).shouldBeTrue()
+            cond.matches(player).shouldBeTrue()
         }
     }
 
@@ -225,8 +227,8 @@ class XConditionTest : KotestTestBase({
             val condName = XCondition.ofPlayerName("MultiPlayer")
             val condPerm = XCondition.ofPermission("arc.multi")
 
-            condName.test(player).shouldBeTrue()
-            condPerm.test(player).shouldBeTrue()
+            condName.matches(player).shouldBeTrue()
+            condPerm.matches(player).shouldBeTrue()
         }
 
         it("fails if name matches but permission is missing") {
@@ -236,8 +238,8 @@ class XConditionTest : KotestTestBase({
             val condName = XCondition.ofPlayerName("ComboFail")
             val condPerm = XCondition.ofPermission("arc.combo")
 
-            condName.test(player).shouldBeTrue()
-            condPerm.test(player).shouldBeFalse()
+            condName.matches(player).shouldBeTrue()
+            condPerm.matches(player).shouldBeFalse()
         }
 
         it("both uuid and name can be checked independently on same player") {
@@ -245,8 +247,8 @@ class XConditionTest : KotestTestBase({
             val condUuid = XCondition.ofPlayerUuid(player.uniqueId)
             val condName = XCondition.ofPlayerName(player.name)
 
-            condUuid.test(player).shouldBeTrue()
-            condName.test(player).shouldBeTrue()
+            condUuid.matches(player).shouldBeTrue()
+            condName.matches(player).shouldBeTrue()
         }
     }
 

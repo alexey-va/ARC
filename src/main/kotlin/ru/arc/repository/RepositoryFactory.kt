@@ -1,72 +1,28 @@
 package ru.arc.repository
 
-import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.runBlocking
 import ru.arc.ARC
-import ru.arc.repository.redis.RedisStorage
-import ru.arc.repository.redis.RedisSyncService
 import ru.arc.util.Common
-import kotlin.time.Duration
 
 /**
- * Creates and initializes a [CachedRepository] backed by Redis.
- *
- * Eliminates the boilerplate of constructing [RepoConfig], [RedisStorage],
- * [RedisSyncService], and [CachedRepository] separately.
- *
- * Usage:
- * ```kotlin
- * repo = redisRepo<MyData>(
- *     id = "my-feature",
- *     storageKey = "arc.my_data",
- *     updateChannel = "arc.my_data_update",
- *     scope = scope,
- * ) {
- *     loadAllOnStart(true)
- *     saveInterval(500.milliseconds)
- * }
- * ```
+ * ARC convenience wrapper — injects [ARC.redisManager] and [Common.gson].
  */
 inline fun <reified T : Entity> redisRepo(
     id: String,
     storageKey: String,
     updateChannel: String,
     scope: CoroutineScope,
-    configure: RepoConfig.Builder<T>.() -> Unit = {}
+    configure: RepoConfig.Builder<T>.() -> Unit = {},
 ): CachedRepository<T> {
-    val entityType = object : TypeToken<T>() {}.type
-
-    val config = RepoConfig.builder<T>(id)
-        .storageKey(storageKey)
-        .updateChannel(updateChannel)
-        .apply(configure)
-        .build()
-
     val redis = ARC.redisManager
         ?: error("Redis is not available — cannot create redisRepo for '$id' (redis.enabled=false?)")
-
-    val storage = RedisStorage<T>(
+    return ru.arc.repository.redisRepo(
         redis = redis,
+        gson = Common.gson,
+        id = id,
         storageKey = storageKey,
-        entityType = entityType,
-        gson = Common.gson
+        updateChannel = updateChannel,
+        scope = scope,
+        configure = configure,
     )
-
-    val syncService = RedisSyncService<T>(
-        redis = redis,
-        channel = updateChannel,
-        entityType = entityType,
-        gson = Common.gson
-    )
-
-    val repo = CachedRepository(
-        config = config,
-        storage = storage,
-        syncService = syncService,
-        scope = scope
-    )
-
-    runBlocking { repo.init() }
-    return repo
 }

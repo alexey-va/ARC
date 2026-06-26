@@ -21,8 +21,6 @@ import java.nio.file.Paths
  * Do not duplicate this type in arc-core (classpath conflict with legacy ARC).
  */
 object Logging {
-    private const val LOKI_LOGGER_PREFIX = "ru.arc"
-
     private val paperPlatform = PaperLoggingPlatform(brandTag = "ARC")
 
     var quietMode: Boolean
@@ -88,8 +86,8 @@ object Logging {
             loki =
                 LokiInstallSpec(
                     dataFolder = dataPath,
-                    target = LokiAttachTarget.LOGGER_PREFIX,
-                    loggerPrefix = LOKI_LOGGER_PREFIX,
+                    target = LokiAttachTarget.ROOT,
+                    appenderName = "ArcLokiAppender",
                 ),
             opsSink = LoggingOpsSink { level, plain -> OpsLogBuffer.append(level, plain) },
         )
@@ -167,8 +165,8 @@ object Logging {
         ArcLogging.installLoki(
             LokiInstallSpec(
                 dataFolder = ARC.instance.dataPath,
-                target = LokiAttachTarget.LOGGER_PREFIX,
-                loggerPrefix = LOKI_LOGGER_PREFIX,
+                target = LokiAttachTarget.ROOT,
+                appenderName = "ArcLokiAppender",
             ),
         )
     }

@@ -10,6 +10,7 @@ import ru.arc.hooks.HookRegistry
 import ru.arc.util.Logging.debug
 import ru.arc.util.TextUtil
 import ru.arc.util.Logging.warn
+import ru.arc.xaction.XCondition
 import ru.arc.xserver.playerlist.PlayerManager
 
 class XMessage(
@@ -31,7 +32,7 @@ class XMessage(
     }
 
     override fun runInternal() {
-        val serverName = XCondition.currentServerName()
+        val serverName = XConditionContext.currentServerName()
         if (!appliesToServer(serverName)) {
             debug("XMessage skip server={} reason=server-filter {}", serverName, logSummary())
             return
@@ -89,7 +90,7 @@ class XMessage(
 
     fun filteredPlayers(): List<Player> {
         return PlayerManager.getOnlinePlayersThreadSafe().filter { player ->
-            conditions?.all { it.test(player) } != false
+            conditions?.all { it.matches(player) } != false
         }
     }
 

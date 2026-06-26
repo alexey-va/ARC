@@ -220,6 +220,17 @@ class CoreModulesTest : TestBase() {
         }
     }
 
+    @Nested
+    @DisplayName("StockModule")
+    inner class StockModuleTests {
+
+        @Test
+        @DisplayName("shutdown is safe when module was never initialized")
+        fun testShutdownWithoutInit() {
+            StockModule.shutdown()
+        }
+    }
+
     // ==================== PluginModule Interface Compliance ====================
 
     @Nested

@@ -329,7 +329,8 @@ object StockModule : PluginModule {
     override val name = "Stock"
     override val priority = 75
 
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var scope: CoroutineScope? = null
+    private var initialized = false
     private val config by lazy { ConfigManager.of(ARC.instance.dataPath, "stocks/stock.yml") }
     private var updateTask: ScheduledTask? = null
     private var dividendTask: ScheduledTask? = null
@@ -342,6 +343,9 @@ object StockModule : PluginModule {
             return
         }
 
+        scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val activeScope = scope ?: return
+
         StockConfig.load(config)
         AuctionConfig.load()
 
@@ -350,7 +354,7 @@ object StockModule : PluginModule {
                 id = "stocks",
                 storageKey = "arc.stocks",
                 updateChannel = "arc.stocks_update",
-                scope = scope,
+                scope = activeScope,
             ) {
                 loadAllOnStart(true)
                 saveInterval(kotlin.time.Duration.parse("1s"))
@@ -361,7 +365,7 @@ object StockModule : PluginModule {
                 id = "stock_players",
                 storageKey = "arc.stock_players",
                 updateChannel = "arc.stock_players_update",
-                scope = scope,
+                scope = activeScope,
             ) {
                 loadAllOnStart(true)
                 saveInterval(kotlin.time.Duration.parse("250ms"))
@@ -371,22 +375,31 @@ object StockModule : PluginModule {
 
         updateTask =
             repeating(200.ticks, delay = 20.ticks) {
-                scope.launch { StockMarket.updateStocks() }
+                activeScope.launch { StockMarket.updateStocks() }
             }
         dividendTask =
             repeating(20.ticks, delay = 100.ticks) {
                 StockMarket.payDividends()
             }
+
+        initialized = true
     }
 
     override fun shutdown() {
+        if (!initialized) return
+        initialized = false
+
         updateTask?.let { if (!it.isCancelled) it.cancel() }
         dividendTask?.let { if (!it.isCancelled) it.cancel() }
+        updateTask = null
+        dividendTask = null
+
         StockMarket.saveHistory()
         runBlocking { StockMarket.stockRepo.shutdown() }
         runBlocking { StockPlayerManager.playerRepo.shutdown() }
         StockClient.stopClient()
-        scope.cancel()
+        scope?.cancel()
+        scope = null
     }
 }
 

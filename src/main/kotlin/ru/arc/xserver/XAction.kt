@@ -2,8 +2,8 @@ package ru.arc.xserver
 
 import org.bukkit.Bukkit
 import ru.arc.core.Tasks
-import ru.arc.network.adapters.JsonSubtype
-import ru.arc.network.adapters.JsonType
+import ru.arc.redis.gson.JsonSubtype
+import ru.arc.redis.gson.JsonType
 import ru.arc.util.Logging.error
 
 @JsonType(
