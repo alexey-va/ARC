@@ -13,29 +13,32 @@ object OpsHttpModule : PluginModule {
     override val name = "OpsHttp"
     override val priority = 35
 
-    private var server: OpsHttpServer? = null
+    /** Single instance — new instance per reload orphaned the JDK HttpServer on bind races. */
+    private val httpServer = OpsHttpServer()
 
     override fun init() {
         if (System.getProperty("arc.test.unit") != null) return
         OpsHttpConfig.reload()
         val cfg = OpsHttpConfig.current()
         if (!cfg.enabled) {
+            httpServer.stop()
             info("Ops HTTP API disabled")
             return
         }
         OpsStartupLogTap.install()
-        server = OpsHttpServer().also { it.start() }
+        httpServer.start()
     }
 
     override fun reload() {
-        shutdown()
+        httpServer.stop()
+        // stop(0) can leave the port busy briefly; avoid BindException orphaning the old listener.
+        Thread.sleep(50)
         ConfigManager.reloadAll()
         init()
     }
 
     override fun shutdown() {
-        server?.stop()
-        server = null
+        httpServer.stop()
         OpsStartupLogTap.uninstall()
     }
 }

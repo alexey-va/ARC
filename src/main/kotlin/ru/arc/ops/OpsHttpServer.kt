@@ -46,7 +46,7 @@ class OpsHttpServer(
     }
 
     fun stop() {
-        httpServer?.stop(0)
+        httpServer?.stop(1)
         httpServer = null
     }
 

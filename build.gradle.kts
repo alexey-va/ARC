@@ -29,12 +29,10 @@ repositories {
     maven("https://maven.enginehub.org/repo/")
     maven("https://maven.citizensnpcs.co/repo")
     maven("https://repo.extendedclip.com/content/repositories/placeholderapi/")
-    maven("https://redempt.dev")
     maven("https://repo.codemc.io/repository/maven-public/")
     maven("https://repo.rus-crafting.ru/repository/grocermc/")
     maven("https://repo.viaversion.com")
     maven("https://jitpack.io")
-    maven("https://artifactory.cronapp.io/public-release/")
     maven("https://mvn-repo.arim.space/lesser-gpl3/")
     maven("https://repo.magmaguy.com/releases")
     mavenCentral()
@@ -63,6 +61,9 @@ dependencies {
     implementation("ru.arc:arc-core-redis:1.0-SNAPSHOT")
     implementation("ru.arc:arc-core-paper:1.0-SNAPSHOT")
     implementation("ru.arc:arc-core-ai:1.0-SNAPSHOT")
+
+    implementation("io.micrometer:micrometer-core:1.14.5")
+    implementation("io.micrometer:micrometer-registry-prometheus:1.14.5")
 
     // snakeyaml-engine comes transitively from arc-core
 

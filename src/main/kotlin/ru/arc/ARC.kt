@@ -29,6 +29,7 @@ import ru.arc.core.modules.AuditModule
 import ru.arc.core.modules.BoardModule
 import ru.arc.core.modules.BuildingModule
 import ru.arc.core.modules.ConfigModule
+import ru.arc.metrics.MetricsModule
 import ru.arc.core.modules.CooldownModule
 import ru.arc.core.modules.EconomyModule
 import ru.arc.core.modules.EliteLootModule
@@ -164,6 +165,7 @@ open class ARC : JavaPlugin() {
             EconomyModule,
             // Configuration (priority 30-49)
             ConfigModule,
+            MetricsModule,
             OpsHttpModule,
             LocationPoolModule,
             BoardModule,
@@ -270,6 +272,7 @@ open class ARC : JavaPlugin() {
         private val BUNDLED_RESOURCES =
             listOf(
                 "modules/logging.yml",
+                "modules/metrics.yml",
                 "modules/redis.yml",
                 "modules/ops-http.yml",
                 "modules/announce.yml",

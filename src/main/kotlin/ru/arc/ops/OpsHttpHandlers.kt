@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicReference
  * Runs Bukkit API code on the main thread from HTTP worker threads.
  */
 object OpsBukkitSync {
-    fun <T> call(timeoutSeconds: Long = 5, block: () -> T): T {
+    fun <T> call(timeoutSeconds: Long = 15, block: () -> T): T {
         if (Bukkit.isPrimaryThread()) {
             return block()
         }
