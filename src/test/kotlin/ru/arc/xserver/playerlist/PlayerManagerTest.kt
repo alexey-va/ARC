@@ -68,6 +68,7 @@ class PlayerManagerTest : DescribeSpec({
             // Alice should be gone
             PlayerManager.getPlayerNames() shouldBe setOf("Bob")
             PlayerManager.getPlayerUuids() shouldBe setOf(uuid2)
+            PlayerManager.getServerNames() shouldBe setOf("s2")
         }
 
         it("should accumulate servers across multiple players on same server") {
@@ -79,7 +80,7 @@ class PlayerManagerTest : DescribeSpec({
 
             PlayerManager.readMessage(json)
 
-            // Servers accumulate (once seen, always known) — at minimum lobby + survival present
+            // Duplicate server names are collapsed within the current snapshot.
             PlayerManager.getServerNames() shouldContainAll setOf("lobby", "survival")
         }
 

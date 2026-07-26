@@ -6,6 +6,7 @@ import org.bukkit.OfflinePlayer
 import org.bukkit.entity.Player
 import ru.arc.ARC
 import ru.arc.core.ModuleRegistry
+import ru.arc.core.Tasks
 import ru.arc.core.modules.EconomyModule
 import ru.arc.hooks.HookRegistry
 import ru.arc.util.playSoundSelf
@@ -17,6 +18,7 @@ import ru.arc.xaction.XCondition
 import ru.arc.xserver.XMessage
 import ru.arc.xserver.playerlist.PlayerManager
 import org.bukkit.boss.BarColor
+import org.bukkit.plugin.Plugin
 import java.io.File
 import java.nio.file.Path
 import java.util.concurrent.CountDownLatch
@@ -31,12 +33,10 @@ object OpsBukkitSync {
         if (Bukkit.isPrimaryThread()) {
             return block()
         }
-        val plugin = ARC.instance
         val result = AtomicReference<T>()
         val error = AtomicReference<Throwable>()
         val latch = CountDownLatch(1)
-        Bukkit.getScheduler().runTask(
-            plugin,
+        Tasks.scheduler.runSync(
             Runnable {
                 try {
                     result.set(block())
@@ -190,8 +190,7 @@ object OpsHttpHandlers {
         val result = AtomicReference<Map<String, Any?>>()
         val error = AtomicReference<Throwable>()
         val latch = CountDownLatch(1)
-        Bukkit.getScheduler().runTaskAsynchronously(
-            ARC.instance,
+        Tasks.scheduler.runAsync(
             Runnable {
                 try {
                     val offline = resolveOfflinePlayer(playerName)
@@ -280,17 +279,8 @@ object OpsHttpHandlers {
             val pm = Bukkit.getPluginManager()
             val loaded =
                 pm.plugins
-                    .map { plugin ->
-                        val status = if (plugin.isEnabled) "ok" else "disabled"
-                        mapOf(
-                            "name" to plugin.name,
-                            "enabled" to plugin.isEnabled,
-                            "status" to status,
-                            "version" to plugin.pluginMeta.version,
-                            "authors" to plugin.pluginMeta.authors,
-                            "main" to plugin.description.main,
-                        )
-                    }.sortedBy { it["name"] as String }
+                    .map(::pluginSummary)
+                    .sortedBy { it["name"] as String }
 
             val filtered =
                 when (statusFilter?.lowercase()) {
@@ -313,6 +303,19 @@ object OpsHttpHandlers {
                     ),
             )
         }
+
+    internal fun pluginSummary(plugin: Plugin): Map<String, Any?> {
+        val meta = plugin.pluginMeta
+        val enabled = plugin.isEnabled
+        return mapOf(
+            "name" to plugin.name,
+            "enabled" to enabled,
+            "status" to if (enabled) "ok" else "disabled",
+            "version" to meta.version,
+            "authors" to meta.authors,
+            "main" to meta.mainClass,
+        )
+    }
 
     fun configHash(
         paths: List<String>,
@@ -520,8 +523,7 @@ object OpsHttpHandlers {
         }
         val latch = CountDownLatch(1)
         val result = AtomicReference<Map<String, Any?>>()
-        Bukkit.getScheduler().runTaskAsynchronously(
-            ARC.instance,
+        Tasks.scheduler.runAsync(
             Runnable {
                 try {
                     val offline = resolveOfflinePlayer(name)

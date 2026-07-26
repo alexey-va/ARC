@@ -54,77 +54,6 @@ object OpsItemHandlers {
             )
         }
 
-    fun cmiBlobFromSpec(body: JsonObject): Map<String, Any?> =
-        OpsBukkitSync.call {
-            val itemJson = extractItemJson(body)
-            val stack = OpsItemSpec.build(itemJson)
-            val displayAmount =
-                body.get("amount")?.takeIf { !it.isJsonNull }?.asInt
-                    ?: itemJson.get("amount")?.takeIf { !it.isJsonNull }?.asInt
-                    ?: 1
-            cmiBlobResponse(stack, displayAmount.coerceIn(1, 64), source = "spec")
-        }
-
-    fun cmiBlobFromPreset(
-        preset: String,
-        amount: Int,
-    ): Map<String, Any?> =
-        OpsBukkitSync.call {
-            cmiBlobFromPresetInternal(preset, amount)
-        }
-
-    fun cmiBlobBatch(presetNames: List<String>): Map<String, Any?> =
-        OpsBukkitSync.call {
-            val blobs = linkedMapOf<String, Any?>()
-            for (name in presetNames) {
-                val key = ItemPresets.normalize(name)
-                val entry = cmiBlobFromPresetInternal(name, 1)
-                blobs[key] =
-                    mapOf(
-                        "blob" to entry["blob"],
-                        "item" to entry["item"],
-                    )
-            }
-            mapOf(
-                "format" to "cmi-gzip-nbt",
-                "count" to blobs.size,
-                "blobs" to blobs,
-            )
-        }
-
-    private fun cmiBlobFromPresetInternal(
-        preset: String,
-        amount: Int,
-    ): Map<String, Any?> {
-        val specs =
-            ItemPresets.resolveSpecs(preset, amount).getOrElse {
-                throw IllegalArgumentException(it.message ?: "Unknown preset")
-            }
-        if (specs.size != 1) {
-            throw IllegalArgumentException(
-                "Preset '$preset' is a bundle (${specs.size} items). Use cmi-blob/batch or single item presets.",
-            )
-        }
-        val stack = OpsItemSpec.build(specs.first())
-        return cmiBlobResponse(stack, stack.amount.coerceIn(1, 64), source = "preset:$preset")
-    }
-
-    private fun cmiBlobResponse(
-        stack: ItemStack,
-        displayAmount: Int,
-        source: String,
-    ): Map<String, Any?> {
-        val blob = CmiItemCodec.encode(stack, displayAmount)
-        return mapOf(
-            "format" to "cmi-gzip-nbt",
-            "source" to source,
-            "displayAmount" to displayAmount,
-            "blob" to blob,
-            "yaml" to CmiItemCodec.yamlBinaryLine(blob),
-            "item" to OpsItemSpec.toMap(stack),
-        )
-    }
-
     fun giveItem(
         playerName: String,
         body: JsonObject,
@@ -154,40 +83,6 @@ object OpsItemHandlers {
                 )
         }
 
-    fun handCmiBlob(
-        playerName: String,
-        amount: Int,
-    ): Map<String, Any?> =
-        OpsBukkitSync.call {
-            val player = requireOnline(playerName)
-            val stack = player.inventory.itemInMainHand
-            require(!stack.type.isAir) { "Player $playerName is not holding any item" }
-            cmiBlobResponse(stack, amount.coerceIn(1, 64), source = "hand:$playerName")
-        }
-
-    fun validatePresets(presetNames: List<String>): Map<String, Any?> {
-        val results = linkedMapOf<String, Any?>()
-        var valid = 0
-        var invalid = 0
-        for (name in presetNames) {
-            val resolved = ItemPresets.resolveSpecs(name, 1)
-            if (resolved.isSuccess) {
-                results[name] = mapOf("ok" to true)
-                valid++
-            } else {
-                results[name] = mapOf("ok" to false, "error" to (resolved.exceptionOrNull()?.message ?: "unknown"))
-                invalid++
-            }
-        }
-        return mapOf(
-            "ok" to (invalid == 0),
-            "valid" to valid,
-            "invalid" to invalid,
-            "total" to presetNames.size,
-            "results" to results,
-        )
-    }
-
     fun giveStacks(
         player: Player,
         stacks: List<ItemStack>,
@@ -207,7 +102,7 @@ object OpsItemHandlers {
 
     private fun extractItemJson(body: JsonObject): JsonObject {
         body.get("item")?.takeIf { it.isJsonObject }?.asJsonObject?.let { return it }
-        if (body.has("material") || body.has("itemsadder") || body.has("ia")) {
+        if (body.has("material") || body.has("itemsadder")) {
             return body
         }
         throw IllegalArgumentException("JSON body must contain \"item\" object or item fields (material/itemsadder)")

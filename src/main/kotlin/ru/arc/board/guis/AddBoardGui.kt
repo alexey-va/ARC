@@ -20,12 +20,14 @@ import org.bukkit.inventory.ItemFlag
 import org.bukkit.inventory.ItemStack
 import ru.arc.TitleInput
 import ru.arc.ai.GPTManager
+import ru.arc.ai.ModerResponse
 import ru.arc.ai.ModerationResponse
 import ru.arc.board.BoardEntryData
 import ru.arc.board.BoardEntryType
 import ru.arc.board.BoardManager
 import ru.arc.board.ItemIcon
 import ru.arc.config.BoardConfig
+import ru.arc.core.Tasks
 import ru.arc.core.modules.EconomyModule
 import ru.arc.util.GuiUtils
 import ru.arc.util.Logging.error
@@ -34,7 +36,6 @@ import ru.arc.util.TextUtil.mm
 import ru.arc.util.TextUtil.strip
 import ru.arc.util.fromConfig
 import ru.arc.util.guiItem
-import ru.arc.util.guiSkull
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -64,13 +65,14 @@ class AddBoardGui(
     private var type: BoardEntryType = BoardEntryType.INFO
     private var color: BarColor = BarColor.YELLOW
     private var confirmDelete = false
+    private var submissionInProgress = false
 
-    private lateinit var descriptionItem: GuiItem
-    private lateinit var bossBarColorItem: GuiItem
-    private lateinit var shortNameItem: GuiItem
-    private lateinit var iconItem: GuiItem
-    private lateinit var typeItem: GuiItem
-    private lateinit var publishItem: GuiItem
+    private val descriptionItem: GuiItem
+    private val bossBarColorItem: GuiItem
+    private val shortNameItem: GuiItem
+    private val iconItem: GuiItem
+    private val typeItem: GuiItem
+    private val publishItem: GuiItem
     private var deleteItem: GuiItem? = null
 
     init {
@@ -215,7 +217,12 @@ class AddBoardGui(
                         null
                     }
                 }
-                this@AddBoardGui.color = barColors[(barColors.indexOf(this@AddBoardGui.color) + 1) % barColors.size]
+                if (barColors.isEmpty()) {
+                    error("No valid boss bar colors configured")
+                    return@onClick
+                }
+                val currentIndex = barColors.indexOf(this@AddBoardGui.color)
+                this@AddBoardGui.color = barColors[(currentIndex + 1) % barColors.size]
                 updateBossBarItem()
             }
             flags(ItemFlag.HIDE_ATTRIBUTES)
@@ -233,20 +240,11 @@ class AddBoardGui(
             icon = if (st.type == Material.AIR) ItemIcon.of(player.uniqueId) else ItemIcon.of(st)
             updateIcon()
         }
-        return if (icon != null) {
-            guiItem(icon.stack()) {
-                onClick(onIconClick)
-                display("<green>Иконка")
-                lore(listOf("<gray>Перетащите чтобы установить"))
-                fromConfig(BoardConfig.config(), "add-menu.full.icon")
-            }
-        } else {
-            guiSkull(player) {
-                onClick(onIconClick)
-                display("<green>Иконка")
-                lore(listOf("<gray>Перетащите чтобы установить"))
-                fromConfig(BoardConfig.config(), "add-menu.empty.icon")
-            }
+        return guiItem(icon.stack()) {
+            onClick(onIconClick)
+            display("<green>Иконка")
+            lore(listOf("<gray>Перетащите чтобы установить"))
+            fromConfig(BoardConfig.config(), "add-menu.full.icon")
         }
     }
 
@@ -286,34 +284,18 @@ class AddBoardGui(
     private fun publishItem(): GuiItem = guiItem(Material.GREEN_STAINED_GLASS_PANE) {
         onClick { click ->
             click.isCancelled = true
+            if (submissionInProgress) return@onClick
             try {
                 val econ = EconomyModule.getEconomy()
-                if (econ == null || !econ.has(player, BoardConfig.editCost)) {
+                if (econ == null || !econ.has(player, BoardConfig.publishCost)) {
                     notEnoughMoneyDisplay(publishItem)
                     return@onClick
                 }
-                if (title == null) {
-                    val lore = mutableListOf<Component>()
-                    lore.add(Component.text("Короткое название не установлено", NamedTextColor.GRAY))
-                    GuiUtils.temporaryChange(publishItem.item, Component.text("Остались незаполненные поля", NamedTextColor.RED), lore, 60L, ::update)
-                    update()
-                    return@onClick
-                }
-                val currentTitle = title ?: return@onClick
-                GPTManager.moderationResponse("$currentTitle\n${description ?: ""}").thenAccept { moder ->
-                    if (moder.isPresent) {
-                        val response = moder.get()
-                        if (response.message == ModerationResponse.BAD) {
-                            GuiUtils.temporaryChange(publishItem.item,
-                                Component.text("Ваш текст не прошёл модерацию", NamedTextColor.RED),
-                                TextUtil.splitLoreString(response.comment, 40, 0).map { mm(it, true) },
-                                60L, ::update)
-                            return@thenAccept
-                        }
-                    }
+                val currentTitle = requireTitle() ?: return@onClick
+                moderateAndRun(currentTitle, "publishing board entry") {
                     if (!takeMoney(BoardConfig.publishCost)) {
                         notEnoughMoneyDisplay(publishItem)
-                        return@thenAccept
+                        return@moderateAndRun
                     }
                     val boardEntry = BoardEntryData(
                         UUID.randomUUID(), player.uniqueId, player.name,
@@ -323,13 +305,13 @@ class AddBoardGui(
                     )
                     BoardManager.addEntry(boardEntry)
                     player.sendMessage(TextUtil.mm(BoardConfig.getString("add-menu.published-successfully")))
+                    GuiUtils.constructAndShowAsync({ BoardGuiFactory.createForPlayer(player) }, click.whoClicked)
                 }
             } catch (e: Exception) {
                 error("Error while publishing board entry", e)
                 player.sendMessage(TextUtil.error())
                 click.whoClicked.closeInventory()
             }
-            GuiUtils.constructAndShowAsync({ BoardGuiFactory.createForPlayer(player) }, click.whoClicked)
         }
         modelData(11007)
         display("<gray>Опубликовать")
@@ -340,33 +322,21 @@ class AddBoardGui(
     private fun editItem(): GuiItem = guiItem(Material.GREEN_STAINED_GLASS_PANE) {
         onClick { click ->
             click.isCancelled = true
+            if (submissionInProgress) return@onClick
             try {
                 val econ = EconomyModule.getEconomy()
                 if (econ == null || !econ.has(player, BoardConfig.editCost)) {
                     notEnoughMoneyDisplay(publishItem)
                     return@onClick
                 }
-                if (title == null) {
-                    val lore = mutableListOf<Component>()
-                    lore.add(Component.text("Короткое название не установлено", NamedTextColor.GRAY))
-                    GuiUtils.temporaryChange(publishItem.item, Component.text("Остались незаполненные поля", NamedTextColor.RED), lore, 60L, ::update)
-                    update()
-                    return@onClick
-                }
-                if (!takeMoney(BoardConfig.editCost)) return@onClick
-                val currentTitle = title ?: return@onClick
-                GPTManager.moderationResponse("$currentTitle\n${description ?: ""}").thenAccept { moder ->
-                    if (moder.isPresent) {
-                        val response = moder.get()
-                        if (response.message == ModerationResponse.BAD) {
-                            GuiUtils.temporaryChange(publishItem.item,
-                                Component.text("Ваш текст не прошёл модерацию", NamedTextColor.RED),
-                                TextUtil.splitLoreString(response.comment, 40, 0).map { mm(it, true) },
-                                60L, ::update)
-                            return@thenAccept
-                        }
+                val currentTitle = requireTitle() ?: return@onClick
+                val currentEntry = entry ?: return@onClick
+                moderateAndRun(currentTitle, "editing board entry") {
+                    if (!takeMoney(BoardConfig.editCost)) {
+                        notEnoughMoneyDisplay(publishItem)
+                        return@moderateAndRun
                     }
-                    val e = entry ?: return@thenAccept
+                    val e = currentEntry
                     e.changeText(description ?: "")
                     e.changeTitle(currentTitle)
                     e.changeIcon(icon)
@@ -387,6 +357,64 @@ class AddBoardGui(
         lore(listOf("<gray>Цена: "))
         tagResolver(TagResolver.resolver("cost", Tag.inserting(strip(Component.text(TextUtil.formatAmount(BoardConfig.editCost))) ?: Component.text(TextUtil.formatAmount(BoardConfig.editCost)))))
         fromConfig(BoardConfig.config(), "add-menu.edit")
+    }
+
+    private fun requireTitle(): String? {
+        title?.let { return it }
+        val lore = listOf(Component.text("Короткое название не установлено", NamedTextColor.GRAY))
+        GuiUtils.temporaryChange(
+            publishItem.item,
+            Component.text("Остались незаполненные поля", NamedTextColor.RED),
+            lore,
+            60L,
+            ::update,
+        )
+        update()
+        return null
+    }
+
+    private fun moderateAndRun(
+        currentTitle: String,
+        operation: String,
+        action: () -> Unit,
+    ) {
+        submissionInProgress = true
+        GPTManager.moderationResponse("$currentTitle\n${description ?: ""}").thenAccept { moderation ->
+            Tasks.scheduler.runSync(
+                Runnable {
+                    try {
+                        when (boardModerationDecision(moderation)) {
+                            BoardModerationDecision.ALLOW -> action()
+                            BoardModerationDecision.REJECT -> {
+                                GuiUtils.temporaryChange(
+                                    publishItem.item,
+                                    Component.text("Ваш текст не прошёл модерацию", NamedTextColor.RED),
+                                    TextUtil.splitLoreString(moderation?.comment.orEmpty(), 40, 0).map { mm(it, true) },
+                                    60L,
+                                    ::update,
+                                )
+                                update()
+                            }
+                            BoardModerationDecision.UNAVAILABLE -> {
+                                GuiUtils.temporaryChange(
+                                    publishItem.item,
+                                    Component.text("Модерация временно недоступна", NamedTextColor.RED),
+                                    listOf(Component.text("Попробуйте ещё раз позднее", NamedTextColor.GRAY)),
+                                    60L,
+                                    ::update,
+                                )
+                                update()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        error("Error while {}", operation, e)
+                        player.sendMessage(TextUtil.error())
+                    } finally {
+                        submissionInProgress = false
+                    }
+                },
+            )
+        }
     }
 
     private fun takeMoney(cost: Double): Boolean {
@@ -431,3 +459,16 @@ class AddBoardGui(
         this.addPane(Slot.fromXY(0, 0), pane)
     }
 }
+
+internal enum class BoardModerationDecision {
+    ALLOW,
+    REJECT,
+    UNAVAILABLE,
+}
+
+internal fun boardModerationDecision(response: ModerResponse?): BoardModerationDecision =
+    when (response?.message) {
+        ModerationResponse.OK -> BoardModerationDecision.ALLOW
+        ModerationResponse.BAD -> BoardModerationDecision.REJECT
+        null -> BoardModerationDecision.UNAVAILABLE
+    }

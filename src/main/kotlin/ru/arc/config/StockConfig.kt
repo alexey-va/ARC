@@ -55,6 +55,7 @@ object StockConfig {
     @JvmStatic
     fun load(cfg: Config) {
         config = cfg
+        StockMarket.resetConfiguration()
 
         if (!cfg.bool("enabled", false)) {
             stockMarketLocation = null

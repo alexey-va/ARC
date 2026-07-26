@@ -8,60 +8,77 @@ import fr.maxlego08.zauctionhouse.api.item.StorageType
 import net.kyori.adventure.text.TextComponent
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Bukkit
-import org.bukkit.scheduler.BukkitTask
 import ru.arc.ARC
 import ru.arc.config.AuctionConfig
+import ru.arc.core.ScheduledTask
+import ru.arc.core.repeatingAsync
+import ru.arc.core.ticks
 import ru.arc.hooks.HookRegistry
 import ru.arc.util.Logging.info
 import ru.arc.util.TextUtil
 
-class AuctionHook {
+class AuctionHook : AutoCloseable {
 
     var auctionMessager: AuctionMessager? = null
     private var categoryManager: CategoryManager? = null
     private var auctionManager: AuctionManager? = null
-    private var auctionListener: AuctionListener? = null
-    private var broadcastItemsTask: BukkitTask? = null
+    private var broadcastItemsTask: ScheduledTask? = null
+    private var closed = false
 
     init {
         resolveApi()
+    }
 
+    @Synchronized
+    fun start() {
+        check(!closed) { "AuctionHook is closed" }
         if (auctionManager == null || categoryManager == null) {
             info("zAuctionHouse API providers not available yet")
         } else {
-            if (auctionListener == null) {
-                auctionListener = AuctionListener()
-                Bukkit.getPluginManager().registerEvents(auctionListener!!, ARC.instance)
-            }
             startTasks()
             info("zAuctionHouse hook initialized")
         }
     }
 
+    @Synchronized
     fun cancelTasks() {
         broadcastItemsTask?.takeUnless { it.isCancelled }?.cancel()
+        broadcastItemsTask = null
     }
 
+    @Synchronized
     fun startTasks() {
+        if (closed) return
         cancelTasks()
-        val am = auctionManager ?: return
-        broadcastItemsTask = ARC.instance.server.scheduler.runTaskTimerAsynchronously(
-            ARC.instance,
-            Runnable {
-                if (!AuctionConfig.broadcastItems) return@Runnable
-                val messager = auctionMessager ?: return@Runnable
+        auctionManager ?: return
+        broadcastItemsTask =
+            repeatingAsync(
+                AuctionConfig.refreshRate.ticks,
+                delay = AuctionConfig.refreshRate.ticks,
+            ) {
+                if (!AuctionConfig.broadcastItems) return@repeatingAsync
+                val messager = auctionMessager ?: return@repeatingAsync
                 messager.send(getAuctionItems())
-            },
-            AuctionConfig.refreshRate,
-            AuctionConfig.refreshRate,
-        )
+            }
     }
 
-    private fun getAuctionItems(): List<AuctionItemDto> =
-        auctionManager!!.getItems(StorageType.LISTED)
+    @Synchronized
+    override fun close() {
+        if (closed) return
+        closed = true
+        cancelTasks()
+        auctionMessager = null
+        auctionManager = null
+        categoryManager = null
+    }
+
+    private fun getAuctionItems(): List<AuctionItemDto> {
+        val manager = auctionManager ?: return emptyList()
+        return manager.getItems(StorageType.LISTED)
             .filter { !it.isExpired }
             .filter { matchesConfiguredCategory(it) }
             .mapNotNull { fromAuctionItem(resolveCategory(it), it) }
+    }
 
     private fun matchesConfiguredCategory(item: Item): Boolean =
         AuctionConfig.categories.any { item.hasCategory(it) }
@@ -72,9 +89,9 @@ class AuctionHook {
     private fun fromAuctionItem(category: String, item: Item): AuctionItemDto? {
         if (item.isExpired) return null
 
+        val stack = item.buildItemStack(null)
         var display: String? = item.itemDisplay
         if (display.isNullOrBlank()) {
-            val stack = item.buildItemStack(null)
             val meta = stack.itemMeta
             if (meta != null && meta.hasDisplayName()) {
                 val name = meta.displayName()
@@ -83,22 +100,22 @@ class AuctionHook {
                 }
             }
             if (display.isNullOrBlank()) {
-                display = if (HookRegistry.translatorHook != null) {
-                    HookRegistry.translatorHook!!.translate(item.buildItemStack(null))
+                val translator = HookRegistry.translatorHook
+                display = if (translator != null) {
+                    translator.translate(stack)
                 } else {
-                    item.buildItemStack(null).type.name.replace("_", "").lowercase()
+                    stack.type.name.replace("_", "").lowercase()
                 }
             }
         }
 
-        val stack = item.buildItemStack(null)
         val lore = stack.itemMeta?.lore()
             ?.filterIsInstance<TextComponent>()
             ?.map { it.content() }
             ?: emptyList()
 
         return AuctionItemDto(
-            display ?: "",
+            display,
             item.sellerName,
             TextUtil.formatAmount(item.price.toDouble()),
             item.expiredAt.time,
@@ -112,7 +129,7 @@ class AuctionHook {
     }
 
     private fun resolveApi() {
-        var plugin = Bukkit.getPluginManager().getPlugin("zAuctionHouse")
+        val plugin = Bukkit.getPluginManager().getPlugin("zAuctionHouse")
             ?: Bukkit.getPluginManager().getPlugin("zAuctionHouseV3")
         if (plugin is AuctionPlugin) {
             auctionManager = plugin.auctionManager

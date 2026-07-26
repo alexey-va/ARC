@@ -1,11 +1,14 @@
 package ru.arc.metrics
 
+import io.micrometer.prometheusmetrics.PrometheusConfig
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import ru.arc.config.ConfigManager
 import java.nio.file.Files
+import java.util.concurrent.Executors
 
 class MetricsConfigTest {
 
@@ -32,5 +35,32 @@ class MetricsConfigTest {
         assertEquals(3, cfg.sampleIntervalSeconds)
         assertEquals(45, cfg.heavySampleIntervalSeconds)
         assertTrue(!cfg.includeLoadedChunks)
+    }
+
+    @Test
+    @DisplayName("stops the metrics worker executor")
+    fun stopsExecutor() {
+        val dir = Files.createTempDirectory("arc-metrics-server-test")
+        Files.writeString(
+            dir.resolve("metrics.yml"),
+            """
+            enabled: true
+            bind-host: "127.0.0.1"
+            bind-port: 0
+            """.trimIndent(),
+        )
+        val config = MetricsConfig(ConfigManager.of(dir, "metrics.yml"))
+        val executor = Executors.newSingleThreadExecutor()
+        val server =
+            MetricsHttpServer(
+                PrometheusMeterRegistry(PrometheusConfig.DEFAULT),
+                executorFactory = { executor },
+                configProvider = { config },
+            )
+        server.start()
+
+        server.stop()
+
+        assertTrue(executor.isShutdown)
     }
 }

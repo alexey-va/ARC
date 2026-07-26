@@ -1,6 +1,5 @@
 package ru.arc.util
 
-import ru.arc.ARC
 import ru.arc.core.Tasks
 import ru.arc.core.ScheduledTask
 import ru.arc.core.SystemTimeProvider
@@ -30,7 +29,6 @@ object CooldownManager {
 
     private var countdownTask: ScheduledTask? = null
     private val cooldownMap = ConcurrentHashMap<UUID, MutableMap<String, Cooldown>>()
-    private var scheduler: TaskScheduler? = null
 
     private fun countdown(step: Long) {
         val uuidToRemove = mutableListOf<UUID>()
@@ -113,9 +111,9 @@ object CooldownManager {
 
     @JvmStatic
     fun setupTask(period: Long) {
+        require(period > 0) { "Cooldown period must be positive" }
         countdownTask?.cancel()
-        scheduler = Tasks.scheduler
-        countdownTask = scheduler!!.runTimer(period, period) {
+        countdownTask = Tasks.scheduler.runTimer(period, period) {
             countdown(period)
         }
     }
@@ -124,9 +122,9 @@ object CooldownManager {
      * Setup with custom scheduler (for testing).
      */
     fun setupTask(period: Long, customScheduler: TaskScheduler) {
+        require(period > 0) { "Cooldown period must be positive" }
         countdownTask?.cancel()
-        scheduler = customScheduler
-        countdownTask = scheduler!!.runTimer(period, period) {
+        countdownTask = customScheduler.runTimer(period, period) {
             countdown(period)
         }
     }

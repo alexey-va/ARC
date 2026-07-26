@@ -8,6 +8,7 @@ import org.bukkit.entity.Player
 import org.jetbrains.annotations.NotNull
 import ru.arc.ARC
 import ru.arc.config.ConfigManager
+import ru.arc.core.modules.EconomyModule
 import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.TimeUnit
 
@@ -28,7 +29,7 @@ object TextUtil {
     @JvmStatic
     fun error(): Component =
         Component.text("Произошла ошибка!", NamedTextColor.RED)
-            .append(Component.text(" Обратитесь к администратуору", NamedTextColor.GRAY))
+            .append(Component.text(" Обратитесь к администратору", NamedTextColor.GRAY))
 
     @JvmStatic
     fun mm(s: String): Component = TextUtils.mm(s)
@@ -47,23 +48,16 @@ object TextUtil {
 
     @JvmStatic
     fun noMoneyMessage(player: Player, need: Double) {
-        try {
-            val econField = ARC::class.java.getDeclaredField("econ")
-            econField.isAccessible = true
-            @Suppress("UNCHECKED_CAST")
-            val econ = econField.get(null) as? net.milkbowl.vault.economy.Economy ?: return
-            val balance = econ.getBalance(player)
-            val text =
-                strip(
-                    Component.text("Недостаточно денег!", NamedTextColor.RED)
-                        .append(Component.text(" Вам нужно еще ", NamedTextColor.GRAY))
-                        .append(Component.text(formatAmount(need - balance), NamedTextColor.GREEN))
-                        .append(Component.text("\uD83D\uDCB0", NamedTextColor.WHITE)),
-                )
-            player.sendMessage(text!!)
-        } catch (_: Exception) {
-            // Economy not available
-        }
+        val economy = EconomyModule.getEconomy() ?: return
+        val balance = economy.getBalance(player)
+        val text =
+            strip(
+                Component.text("Недостаточно денег!", NamedTextColor.RED)
+                    .append(Component.text(" Вам нужно еще ", NamedTextColor.GRAY))
+                    .append(Component.text(formatAmount(need - balance), NamedTextColor.GREEN))
+                    .append(Component.text("\uD83D\uDCB0", NamedTextColor.WHITE)),
+            )
+        player.sendMessage(checkNotNull(text))
     }
 
     @JvmStatic

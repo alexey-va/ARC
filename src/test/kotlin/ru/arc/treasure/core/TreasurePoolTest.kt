@@ -261,7 +261,7 @@ class TreasurePoolTest :
                 pool?.treasures?.first().shouldBeInstanceOf<Treasure.Money>()
             }
 
-            it("should migrate legacy message format") {
+            it("should ignore removed legacy pool message fields") {
                 val map =
                     mapOf(
                         "id" to "legacy-pool",
@@ -274,7 +274,7 @@ class TreasurePoolTest :
                 val pool = TreasurePool.fromMap(map)
 
                 pool shouldNotBe null
-                pool?.messages?.shouldHaveSize(2) // common + announce
+                pool?.messages shouldBe emptyList()
             }
 
             it("should handle missing treasures field") {
@@ -283,6 +283,21 @@ class TreasurePoolTest :
                 val pool = TreasurePool.fromMap(map)
 
                 pool?.size shouldBe 0
+            }
+
+            it("should reject a pool when any reward or message entry is invalid") {
+                TreasurePool.fromMap(
+                    mapOf(
+                        "id" to "invalid-reward",
+                        "treasures" to listOf(mapOf("type" to "removed-type")),
+                    ),
+                ) shouldBe null
+                TreasurePool.fromMap(
+                    mapOf(
+                        "id" to "invalid-message",
+                        "messages" to listOf(mapOf("text" to "Hi", "target" to "removed-target")),
+                    ),
+                ) shouldBe null
             }
 
             it("should return null for missing id") {

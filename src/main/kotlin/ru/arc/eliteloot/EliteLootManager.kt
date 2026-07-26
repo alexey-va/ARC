@@ -7,25 +7,45 @@ import ru.arc.util.Logging.warn
 import java.util.concurrent.ConcurrentHashMap
 
 object EliteLootManager {
+    private data class State(
+        val processor: EliteLootProcessor,
+        val parser: EliteLootConfigParser,
+        val pools: ConcurrentHashMap<LootType, DecorPool>,
+    )
 
-    @JvmStatic var eliteLootProcessor: EliteLootProcessor? = null
-        private set
-    @JvmStatic var eliteLootConfigParser: EliteLootConfigParser? = null
-        private set
-    @JvmStatic var map: MutableMap<LootType, DecorPool> = ConcurrentHashMap()
-        private set
+    @Volatile
+    private var state: State? = null
+
+    @get:JvmStatic
+    val eliteLootProcessor: EliteLootProcessor?
+        get() = state?.processor
+
+    @get:JvmStatic
+    val map: Map<LootType, DecorPool>
+        get() = state?.pools ?: emptyMap()
 
     @JvmStatic
+    @Synchronized
     fun init() {
-        eliteLootConfigParser = EliteLootConfigParser()
-        map = ConcurrentHashMap(eliteLootConfigParser!!.load())
-        eliteLootProcessor = EliteLootProcessor()
-        val totalItems = map.values.sumOf { it.decors.size }
-        info("EliteLoot loaded {} loot types, {} total decor items", map.size, totalItems)
-        map.forEach { (type, pool) ->
+        if (state != null) return
+
+        val parser = EliteLootConfigParser()
+        val pools = ConcurrentHashMap(parser.load())
+        val processor = EliteLootProcessor()
+        state = State(processor, parser, pools)
+
+        val totalItems = pools.values.sumOf { it.decors.size }
+        info("EliteLoot loaded {} loot types, {} total decor items", pools.size, totalItems)
+        pools.forEach { (type, pool) ->
             if (pool.decors.isNotEmpty()) info("  {} → {} items", type.name, pool.decors.size)
             else warn("  {} → empty pool!", type.name)
         }
+    }
+
+    @JvmStatic
+    @Synchronized
+    fun shutdown() {
+        state = null
     }
 
     @JvmStatic
@@ -58,6 +78,7 @@ object EliteLootManager {
     }
 
     @JvmStatic
+    @Synchronized
     fun addDecorItem(
         lootType: LootType,
         material: Material,
@@ -67,10 +88,11 @@ object EliteLootManager {
         iaNamespace: String?,
         iaId: String?,
     ): Boolean {
+        val current = state ?: return false
         val decorItem = DecorItem(material, weight, modelId, color, iaNamespace, iaId)
-        val pool = map.computeIfAbsent(lootType) { DecorPool() }
+        val pool = current.pools.computeIfAbsent(lootType) { DecorPool() }
         if (pool.contains(decorItem)) return false
-        eliteLootConfigParser?.addDecor(lootType, decorItem)
+        current.parser.addDecor(lootType, decorItem)
         pool.add(decorItem, weight)
         return true
     }

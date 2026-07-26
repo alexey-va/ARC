@@ -4,12 +4,14 @@ import ru.arc.config.StockConfig
 import ru.arc.repository.CachedRepository
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
+import java.util.concurrent.ConcurrentHashMap
 
 object StockMarket {
 
-    private val configStocks = mutableMapOf<String, ConfigStock>()
+    private val configStocks = ConcurrentHashMap<String, ConfigStock>()
     lateinit var stockRepo: CachedRepository<Stock>
-    private var _client: StockClient? = null
+    @Volatile
+    private var client: StockClient? = null
 
     @JvmStatic fun stock(symbol: String): Stock? = stockRepo.getNow(symbol)
 
@@ -25,7 +27,25 @@ object StockMarket {
 
     @JvmStatic
     fun setClient(stockClient: StockClient) {
-        _client = stockClient
+        val previous =
+            synchronized(this) {
+                client.also { client = stockClient }
+            }
+        if (previous !== stockClient) previous?.close()
+    }
+
+    @JvmStatic
+    fun closeClient() {
+        val previous =
+            synchronized(this) {
+                client.also { client = null }
+            }
+        previous?.close()
+    }
+
+    internal fun resetConfiguration() {
+        configStocks.clear()
+        closeClient()
     }
 
     @JvmStatic
@@ -51,7 +71,7 @@ object StockMarket {
 
     suspend fun updateStocks() {
         if (!StockConfig.mainServer) return
-        val client = _client ?: return
+        val activeClient = client ?: return
 
         val updates = mutableMapOf<String, Double>()
         var fetchedCrypto = false
@@ -63,11 +83,11 @@ object StockMarket {
                 if (System.currentTimeMillis() - lastUpdated > StockConfig.stockRefreshRate * 1000L) {
                     if (configStock.type == Stock.Type.CRYPTO) {
                         if (fetchedCrypto) continue
-                        updates.putAll(client.cryptoPrices())
+                        updates.putAll(activeClient.cryptoPrices())
                         fetchedCrypto = true
                         continue
                     }
-                    updates[symbol] = client.price(configStock)
+                    updates[symbol] = activeClient.price(configStock)
                 }
             } catch (e: Exception) {
                 error("Error fetching data for: {}", symbol, e)

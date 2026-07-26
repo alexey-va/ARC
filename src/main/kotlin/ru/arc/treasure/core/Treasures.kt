@@ -69,11 +69,6 @@ object Treasures : PluginModule {
     fun getOrCreatePool(id: String): TreasurePool = _manager.getOrCreatePool(id)
 
     /**
-     * Alias for getOrCreatePool for backward compatibility.
-     */
-    fun getOrCreate(id: String): TreasurePool = _manager.getOrCreatePool(id)
-
-    /**
      * Checks if a pool with the given ID exists.
      */
     fun exists(id: String): Boolean = _manager.getPool(id) != null
@@ -117,6 +112,16 @@ object Treasures : PluginModule {
         }
         return deleted
     }
+
+    /**
+     * Strict content-management write: durable file first, live catalog second.
+     */
+    fun replaceAndSave(pool: TreasurePool): TreasurePool = _manager.replaceAndSave(dataDir, pool)
+
+    /**
+     * Strict content-management delete: durable file first, live catalog second.
+     */
+    fun deleteAndSave(poolId: String): Boolean = _manager.deleteAndSave(dataDir, poolId)
 
     /**
      * Clears all pools from memory.

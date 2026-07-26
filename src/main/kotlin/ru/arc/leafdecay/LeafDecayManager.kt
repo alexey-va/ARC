@@ -3,6 +3,7 @@ package ru.arc.leafdecay
 import com.destroystokyo.paper.ParticleBuilder
 import com.jeff_media.customblockdata.CustomBlockData
 import org.bukkit.Bukkit
+import org.bukkit.Chunk
 import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
@@ -17,7 +18,6 @@ import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import ru.arc.core.ScheduledTask
 import ru.arc.core.repeating
-import ru.arc.core.repeatingAsync
 import ru.arc.core.ticks
 import ru.arc.util.ParticleManager
 import java.util.concurrent.ConcurrentLinkedDeque
@@ -34,9 +34,7 @@ object LeafDecayManager {
     private var decayTask: ScheduledTask? = null
     private var tagClearTask: ScheduledTask? = null
 
-    private val chunkQueue = ConcurrentSkipListSet<org.bukkit.Chunk>(
-        compareBy({ it.x }, { it.z })
-    )
+    private val chunkQueue = LeafChunkQueue()
     private val leafQueue = ConcurrentLinkedDeque<Location>()
     private val awaitingTagClearing = ConcurrentLinkedDeque<Block>()
 
@@ -78,6 +76,13 @@ object LeafDecayManager {
 
     @JvmStatic
     fun cancel() {
+        stopTasks()
+        chunkQueue.clear()
+        leafQueue.clear()
+        awaitingTagClearing.clear()
+    }
+
+    private fun stopTasks() {
         checkTask?.cancel()
         decayTask?.cancel()
         tagClearTask?.cancel()
@@ -87,15 +92,15 @@ object LeafDecayManager {
     }
 
     private fun start() {
-        cancel()
+        stopTasks()
         val counter = AtomicInteger()
 
         checkTask = repeating(period = checkInterval.ticks, delay = 60.ticks) {
             var count = 0
             if (leafQueue.size <= 10000) {
-                while (chunkQueue.isNotEmpty()) {
-                    if (count++ > 5) break
-                    val chunk = chunkQueue.pollFirst() ?: break
+                while (!chunkQueue.isEmpty()) {
+                    if (count++ >= MAX_CHUNKS_PER_TICK) break
+                    val chunk = chunkQueue.poll() ?: break
                     if (worlds.contains(chunk.world.name)) checkChunk(chunk)
                 }
             }
@@ -130,9 +135,9 @@ object LeafDecayManager {
             }
         }
 
-        tagClearTask = repeatingAsync(period = 1.ticks, delay = 60.ticks) {
-            while (awaitingTagClearing.isNotEmpty()) {
-                val block = awaitingTagClearing.pollFirst() ?: return@repeatingAsync
+        tagClearTask = repeating(period = 1.ticks, delay = 60.ticks) {
+            repeat(MAX_TAG_CLEARS_PER_TICK) {
+                val block = awaitingTagClearing.pollFirst() ?: return@repeating
                 val data = CustomBlockData(block, ARC.instance)
                 if (data.has(playerPlacedKey)) {
                     data.remove(playerPlacedKey)
@@ -169,7 +174,7 @@ object LeafDecayManager {
                 )
             }
             .toSet()
-            .let { chunkQueue.addAll(it) }
+            .forEach(chunkQueue::add)
     }
 
     @JvmStatic
@@ -182,5 +187,29 @@ object LeafDecayManager {
     @JvmStatic
     fun clearPlayerPlaced(block: Block) {
         awaitingTagClearing.add(block)
+    }
+
+    private const val MAX_CHUNKS_PER_TICK = 5
+    private const val MAX_TAG_CLEARS_PER_TICK = 200
+}
+
+internal class LeafChunkQueue {
+    private val chunks =
+        ConcurrentSkipListSet(
+            compareBy<Chunk>({ it.world.uid }, { it.x }, { it.z }),
+        )
+
+    fun add(chunk: Chunk) {
+        chunks.add(chunk)
+    }
+
+    fun poll(): Chunk? = chunks.pollFirst()
+
+    fun isEmpty(): Boolean = chunks.isEmpty()
+
+    fun size(): Int = chunks.size
+
+    fun clear() {
+        chunks.clear()
     }
 }

@@ -37,19 +37,21 @@ object AiModule : PluginModule {
 
         val redis = ARC.redisManager ?: return
         val serverName = ARC.serverName ?: ru.arc.redis.RedisModuleConfig.load(dataPath).serverName
-        toolRpcServer =
+        val server =
             ToolRpcServer(
                 localServerName = serverName,
                 redis = redis,
                 config = llmConfig,
                 executors = PaperAiToolExecutors.all(),
             )
-        toolRpcServer!!.start()
+        server.start()
+        toolRpcServer = server
         info("AI module ready (LLM enabled={})", llmClient.enabled)
     }
 
     override fun shutdown() {
         GPTManager.shutdown()
+        toolRpcServer?.close()
         toolRpcServer = null
     }
 }

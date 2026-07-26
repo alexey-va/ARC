@@ -307,9 +307,10 @@ class TaskDslTest :
 
                 Tasks.withScheduler(testScheduler) {
                     sync { executed = true }
+                    testScheduler.executeImmediate()
+                    executed shouldBe true
                 }
 
-                testScheduler.executeImmediate()
                 executed shouldBe true
             }
         }

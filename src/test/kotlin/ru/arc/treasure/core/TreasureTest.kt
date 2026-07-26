@@ -7,6 +7,7 @@ import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import org.bukkit.Material
 import org.bukkit.inventory.ItemStack
+import org.bukkit.inventory.meta.EnchantmentStorageMeta
 import ru.arc.KotestTestBase
 
 @Suppress("USELESS_CAST")
@@ -234,6 +235,13 @@ class TreasureTest :
                 map["amount"] shouldBe "1-2"
                 map["exclude"] shouldBe listOf("mending")
             }
+
+            it("should create a book through the current Paper enchantment registry") {
+                val stack = Treasure.Enchant().randomBook()
+                val meta = stack.itemMeta as EnchantmentStorageMeta
+
+                meta.storedEnchants.isNotEmpty() shouldBe true
+            }
         }
 
         describe("Treasure.Potion") {
@@ -305,7 +313,7 @@ class TreasureTest :
                 treasure.messages.first().text shouldBe "You got a diamond!"
             }
 
-            it("should migrate legacy message format") {
+            it("should ignore removed legacy treasure message fields") {
                 val stack = ItemStack(Material.DIAMOND)
                 val map =
                     mapOf(
@@ -320,7 +328,7 @@ class TreasureTest :
 
                 treasure.shouldBeInstanceOf<Treasure.Item>()
                 treasure as Treasure.Item
-                treasure.messages shouldHaveSize 2 // personal + global
+                treasure.messages shouldBe emptyList()
             }
 
             it("should deserialize Money treasure") {
@@ -367,7 +375,7 @@ class TreasureTest :
                 (treasure as Treasure.SubPool).poolId shouldBe "other-pool"
             }
 
-            it("should handle alternative sub-pool-id field") {
+            it("should reject removed sub-pool-id alias") {
                 val map =
                     mapOf(
                         "type" to "sub-pool",
@@ -376,8 +384,7 @@ class TreasureTest :
 
                 val treasure = Treasure.fromMap(map)
 
-                treasure.shouldBeInstanceOf<Treasure.SubPool>()
-                (treasure as Treasure.SubPool).poolId shouldBe "alt-pool"
+                treasure shouldBe null
             }
 
             it("should deserialize Enchant treasure") {
@@ -541,6 +548,64 @@ class TreasureTest :
                 message.target shouldBe MessageTarget.GLOBAL
             }
 
+            it("should map a global chat message to the Redis wire format") {
+                val player = server.addPlayer("TreasureHunter")
+                val message = TreasureMessage.broadcast("<gold>%player% found treasure", global = true)
+
+                val wire = message.toGlobalXMessage(MessageContext(player, poolId = "spawn"))
+
+                wire.type shouldBe ru.arc.xserver.XMessage.Type.CHAT
+                wire.serializationType shouldBe ru.arc.xserver.XMessage.SerializationType.MINI_MESSAGE
+                wire.serializedMessage shouldBe "<gold>TreasureHunter found treasure"
+            }
+
+            it("should preserve title content and timing in the Redis wire format") {
+                val player = server.addPlayer("TreasureHunter")
+                val message =
+                    TreasureMessage(
+                        text = "<gold>%player% won",
+                        destination = MessageDestination.TITLE,
+                        target = MessageTarget.GLOBAL,
+                        titleSubtitle = "<gray>Pool: %pool%",
+                        titleFadeIn = 5,
+                        titleStay = 40,
+                        titleFadeOut = 10,
+                    )
+
+                val wire = message.toGlobalXMessage(MessageContext(player, poolId = "weekly"))
+
+                wire.type shouldBe ru.arc.xserver.XMessage.Type.TITLE
+                wire.titleData shouldBe
+                    ru.arc.xserver.XMessage.TitleData(
+                        subtitle = "<gray>Pool: weekly",
+                        fadeInTicks = 5,
+                        stayTicks = 40,
+                        fadeOutTicks = 10,
+                    )
+            }
+
+            it("should preserve boss bar settings in the Redis wire format") {
+                val player = server.addPlayer("TreasureHunter")
+                val message =
+                    TreasureMessage(
+                        text = "Boss reward",
+                        destination = MessageDestination.BOSS_BAR,
+                        target = MessageTarget.GLOBAL,
+                        bossBarColor = org.bukkit.boss.BarColor.PURPLE,
+                        bossBarSeconds = 12,
+                    )
+
+                val wire = message.toGlobalXMessage(MessageContext(player))
+
+                wire.type shouldBe ru.arc.xserver.XMessage.Type.BOSS_BAR
+                wire.bossBarData shouldBe
+                    ru.arc.xserver.XMessage.BossBarData(
+                        name = "treasure-global",
+                        color = org.bukkit.boss.BarColor.PURPLE,
+                        seconds = 12,
+                    )
+            }
+
             it("should create action bar message") {
                 val message = TreasureMessage.actionBar("Action!")
 
@@ -586,30 +651,5 @@ class TreasureTest :
                 message?.target shouldBe MessageTarget.SERVER
             }
 
-            it("should migrate from legacy format") {
-                val messages =
-                    TreasureMessage.fromLegacy(
-                        message = "Personal",
-                        globalMessage = "Global",
-                        announce = true,
-                    )
-
-                messages shouldHaveSize 2
-                messages[0].text shouldBe "Personal"
-                messages[0].target shouldBe MessageTarget.PLAYER
-                messages[1].text shouldBe "Global"
-                messages[1].target shouldBe MessageTarget.GLOBAL
-            }
-
-            it("should not create global message if announce is false") {
-                val messages =
-                    TreasureMessage.fromLegacy(
-                        message = "Personal",
-                        globalMessage = "Global",
-                        announce = false,
-                    )
-
-                messages shouldHaveSize 1
-            }
         }
     })

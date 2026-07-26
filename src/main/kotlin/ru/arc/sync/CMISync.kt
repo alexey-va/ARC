@@ -20,31 +20,42 @@ import java.util.concurrent.ConcurrentHashMap
 class CMISync : Sync {
     private val key = "arc.cmi_data"
     private val repo: SyncRepo<CMIDataDTO> =
-        SyncRepo
-            .builder(CMIDataDTO::class.java)
-            .key(key)
-            .redisManager(ARC.redisManager!!)
-            .dataApplier(::applyData)
-            .dataProducer(::produceData)
-            .build()
+        SyncRepo(
+            clazz = CMIDataDTO::class.java,
+            key = key,
+            redisManager = checkNotNull(ARC.redisManager) { "Redis manager is not initialized" },
+            dataApplier = ::applyData,
+            dataProducer = ::produceData,
+        )
 
     private val loaded: MutableMap<UUID, Boolean> = ConcurrentHashMap()
 
     override fun playerJoin(uuid: UUID) {
-        repo.loadAndApplyData(uuid, false)
-        loaded[uuid] = true
+        repo
+            .loadAndApplyData(uuid)
+            .whenComplete { _, failure ->
+                if (failure == null && Bukkit.getPlayer(uuid) != null) {
+                    loaded[uuid] = true
+                } else {
+                    loaded.remove(uuid)
+                }
+            }
     }
 
     override fun forceSave(uuid: UUID) {
         if (!loaded.containsKey(uuid)) return
         val context = Context()
         context.put("uuid", uuid)
-        repo.saveAndPersistData(context, false)
+        repo.saveAndPersistData(context)
     }
 
     override fun playerQuit(uuid: UUID) {
         forceSave(uuid)
         loaded.remove(uuid)
+    }
+
+    override fun shutdown() {
+        loaded.clear()
     }
 
     @Suppress("DEPRECATION")

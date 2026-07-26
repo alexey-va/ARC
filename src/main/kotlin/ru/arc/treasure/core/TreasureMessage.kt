@@ -3,6 +3,8 @@ package ru.arc.treasure.core
 import org.bukkit.boss.BarColor
 import org.bukkit.entity.Player
 import ru.arc.util.TextUtil
+import ru.arc.xserver.XMessage
+import ru.arc.xserver.announcements.AnnounceManager
 import java.util.UUID
 
 /**
@@ -34,7 +36,7 @@ enum class MessageTarget {
 
 /**
  * Unified message configuration for treasures.
- * Replaces the old message/globalMessage/announce system with a more flexible approach.
+ * Canonical message configuration for treasure and pool notifications.
  */
 data class TreasureMessage(
     val text: String,
@@ -81,47 +83,42 @@ data class TreasureMessage(
     }
 
     private fun sendGlobal(context: MessageContext) {
-        // For cross-server broadcasts, we use AnnounceManager's global methods
-        // which handle XMessage building internally via Java
-        val resolved = resolveText(context)
-
-        when (destination) {
-            MessageDestination.CHAT -> {
-                // Use sendToServer first, then trigger cross-server via simple announce
-                org.bukkit.Bukkit.getOnlinePlayers().forEach { player ->
-                    player.sendMessage(TextUtil.mm(resolved))
-                }
-                // TODO: Add cross-server support via XActionManager when Kotlin-Lombok interop is resolved
-            }
-
-            MessageDestination.ACTION_BAR -> {
-                org.bukkit.Bukkit.getOnlinePlayers().forEach { player ->
-                    player.sendActionBar(TextUtil.mm(resolved))
-                }
-            }
-
-            MessageDestination.BOSS_BAR -> {
-                ru.arc.hooks.HookRegistry.cmiHook?.let { cmi ->
-                    org.bukkit.Bukkit.getOnlinePlayers().forEach { player ->
-                        cmi.sendBossbar(
-                            "treasure-global",
-                            resolved,
-                            player,
-                            bossBarColor,
-                            bossBarSeconds,
-                            0,
-                        )
-                    }
-                }
-            }
-
-            MessageDestination.TITLE -> {
-                org.bukkit.Bukkit.getOnlinePlayers().forEach { player ->
-                    sendTitle(player, resolved, context)
-                }
-            }
-        }
+        AnnounceManager.announce(toGlobalXMessage(context))
     }
+
+    internal fun toGlobalXMessage(context: MessageContext): XMessage =
+        XMessage(
+            type =
+                when (destination) {
+                    MessageDestination.CHAT -> XMessage.Type.CHAT
+                    MessageDestination.ACTION_BAR -> XMessage.Type.ACTION_BAR
+                    MessageDestination.BOSS_BAR -> XMessage.Type.BOSS_BAR
+                    MessageDestination.TITLE -> XMessage.Type.TITLE
+                },
+            serializedMessage = resolveText(context),
+            serializationType = XMessage.SerializationType.MINI_MESSAGE,
+            bossBarData =
+                if (destination == MessageDestination.BOSS_BAR) {
+                    XMessage.BossBarData(
+                        name = "treasure-global",
+                        color = bossBarColor,
+                        seconds = bossBarSeconds,
+                    )
+                } else {
+                    null
+                },
+            titleData =
+                if (destination == MessageDestination.TITLE) {
+                    XMessage.TitleData(
+                        subtitle = titleSubtitle?.let { resolveText(context, it) },
+                        fadeInTicks = titleFadeIn,
+                        stayTicks = titleStay,
+                        fadeOutTicks = titleFadeOut,
+                    )
+                } else {
+                    null
+                },
+        )
 
     private fun sendNearby(context: MessageContext) {
         resolveText(context)
@@ -155,7 +152,7 @@ data class TreasureMessage(
         text: String,
         context: MessageContext,
     ) {
-        val subtitle = titleSubtitle?.let { resolveText(context.copy(text = it)) } ?: ""
+        val subtitle = titleSubtitle?.let { resolveText(context, it) } ?: ""
         player.showTitle(
             net.kyori.adventure.title.Title.title(
                 TextUtil.mm(text),
@@ -169,13 +166,16 @@ data class TreasureMessage(
         )
     }
 
-    private fun resolveText(context: MessageContext): String =
-        context.text?.let { text.replace("%text%", it) }
-            ?: text
-                .replace("%player%", context.player.name)
-                .replace("%amount%", formatAmount(context.amount))
-                .replace("%item%", context.itemName ?: "")
-                .replace("%pool%", context.poolId ?: "")
+    private fun resolveText(
+        context: MessageContext,
+        template: String = text,
+    ): String =
+        template
+            .replace("%text%", context.text ?: "")
+            .replace("%player%", context.player.name)
+            .replace("%amount%", formatAmount(context.amount))
+            .replace("%item%", context.itemName ?: "")
+            .replace("%pool%", context.poolId ?: "")
 
     private fun formatAmount(amount: Number?): String {
         if (amount == null) return ""
@@ -213,27 +213,35 @@ data class TreasureMessage(
             val text = map["text"] as? String ?: return null
 
             val destination =
-                (map["destination"] as? String)
-                    ?.uppercase()
-                    ?.let { runCatching { MessageDestination.valueOf(it) }.getOrNull() }
-                    ?: MessageDestination.CHAT
+                if (map.containsKey("destination")) {
+                    val raw = map["destination"] as? String ?: return null
+                    runCatching { MessageDestination.valueOf(raw.uppercase()) }.getOrNull() ?: return null
+                } else {
+                    MessageDestination.CHAT
+                }
 
             val target =
-                (map["target"] as? String)
-                    ?.uppercase()
-                    ?.let { runCatching { MessageTarget.valueOf(it) }.getOrNull() }
-                    ?: MessageTarget.PLAYER
+                if (map.containsKey("target")) {
+                    val raw = map["target"] as? String ?: return null
+                    runCatching { MessageTarget.valueOf(raw.uppercase()) }.getOrNull() ?: return null
+                } else {
+                    MessageTarget.PLAYER
+                }
+
+            val bossBarColor =
+                if (map.containsKey("bossbar-color")) {
+                    val raw = map["bossbar-color"] as? String ?: return null
+                    runCatching { BarColor.valueOf(raw.uppercase()) }.getOrNull() ?: return null
+                } else {
+                    BarColor.YELLOW
+                }
 
             return TreasureMessage(
                 text = text,
                 destination = destination,
                 target = target,
                 nearbyRadius = (map["radius"] as? Number)?.toDouble() ?: 50.0,
-                bossBarColor =
-                    (map["bossbar-color"] as? String)
-                        ?.uppercase()
-                        ?.let { runCatching { BarColor.valueOf(it) }.getOrNull() }
-                        ?: BarColor.YELLOW,
+                bossBarColor = bossBarColor,
                 bossBarSeconds = (map["bossbar-seconds"] as? Number)?.toInt() ?: 5,
                 titleSubtitle = map["subtitle"] as? String,
             )
@@ -289,23 +297,6 @@ data class TreasureMessage(
             titleSubtitle = subtitle,
         )
 
-        /**
-         * Migrates old message format to new format.
-         * @param message Personal message (nullable)
-         * @param globalMessage Global announcement message (nullable)
-         * @param announce Whether to announce
-         */
-        fun fromLegacy(
-            message: String?,
-            globalMessage: String?,
-            announce: Boolean,
-        ): List<TreasureMessage> =
-            buildList {
-                message?.let { add(chat(it)) }
-                if (announce && globalMessage != null) {
-                    add(broadcast(globalMessage, global = true))
-                }
-            }
     }
 }
 

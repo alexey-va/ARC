@@ -13,6 +13,8 @@ import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.utility.DockerImageName
 import ru.arc.ARC
+import ru.arc.redis.ChannelListener
+import ru.arc.redis.RedisManager
 import java.io.File
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch

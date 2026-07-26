@@ -5,6 +5,7 @@ import org.bukkit.command.CommandSender
 import ru.arc.commands.arc.CommandConfig
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.tabComplete
+import ru.arc.core.sync
 import ru.arc.misc.StoreGuiFactory
 import ru.arc.store.StoreManager
 import ru.arc.util.GuiUtils
@@ -33,11 +34,28 @@ object StoreSubCommand : SubCommand {
 
         // /arc store dump
         if (args.size == 1 && args[0].equals("dump", ignoreCase = true)) {
-            StoreManager.getStoreAsync(player.uniqueId).thenAccept { store ->
-                println("Dumping store for ${player.name}")
-                store.itemList.forEach { println(it) }
-            }
-            player.sendMessage(CommandConfig.get("store.dumped", "<gray>Содержимое хранилища выведено в консоль."))
+            StoreManager
+                .getStoreAsync(player.uniqueId)
+                .thenAccept { store ->
+                    println("Dumping store for ${player.name}")
+                    store.getItems().forEach { println(it) }
+                    sync {
+                        player.sendMessage(
+                            CommandConfig.get(
+                                "store.dumped",
+                                "<gray>Содержимое хранилища выведено в консоль.",
+                            ),
+                        )
+                    }
+                }.exceptionally { failure ->
+                    Logging.error("[Store] Failed to dump store for {}", player.uniqueId, failure.cause ?: failure)
+                    sync {
+                        player.sendMessage(
+                            CommandConfig.get("store.error", "<red>Failed to load store. Check console for details."),
+                        )
+                    }
+                    null
+                }
             return true
         }
 
@@ -87,9 +105,11 @@ object StoreSubCommand : SubCommand {
             }
             .exceptionally { e ->
                 Logging.error("[Store] Failed to load store for {}: {}", uuid, e.cause ?: e)
-                sender.sendMessage(
-                    CommandConfig.get("store.error", "<red>Failed to load store. Check console for details.")
-                )
+                sync {
+                    sender.sendMessage(
+                        CommandConfig.get("store.error", "<red>Failed to load store. Check console for details."),
+                    )
+                }
                 null
             }
 
@@ -110,5 +130,3 @@ object StoreSubCommand : SubCommand {
         }
     }
 }
-
-

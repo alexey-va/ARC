@@ -97,14 +97,12 @@ sealed class AeArg {
 
     companion object {
         @Suppress("UNCHECKED_CAST")
-        fun parseList(raw: Any?): List<AeArg> {
-            val entries = raw as? List<*> ?: return emptyList()
-            return entries.mapNotNull { entry ->
-                when (entry) {
-                    is Map<*, *> -> parseEntry(entry as Map<String, Any?>)
-                    is String -> parseIntRangeString(entry)?.let { IntRange(it.first, it.second) }
-                    else -> null
-                }
+        fun parseList(raw: Any?): List<AeArg>? {
+            if (raw == null) return emptyList()
+            val entries = raw as? List<*> ?: return null
+            return entries.map { entry ->
+                val map = entry as? Map<String, Any?> ?: return null
+                parseEntry(map) ?: return null
             }
         }
 
@@ -114,6 +112,7 @@ sealed class AeArg {
                 map["slot"] == "random" -> return RandomSlot
                 map.containsKey("int") -> {
                     val range = parseIntValue(map["int"]) ?: return null
+                    if (range.first > range.second) return null
                     return IntRange(range.first, range.second)
                 }
             }

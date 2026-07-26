@@ -23,6 +23,7 @@ import ru.arc.util.GuiUtils
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import java.util.*
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration.Companion.milliseconds
@@ -80,9 +81,9 @@ data class JobsBoostData(
     /** Unique identifier for this boost */
     val id: String = "",
 ) {
-    fun expiresInMillis(): Long = expires - System.currentTimeMillis()
+    fun expiresInMillis(nowMillis: Long = System.currentTimeMillis()): Long = expires - nowMillis
 
-    fun isExpired(): Boolean = expires < System.currentTimeMillis()
+    fun isExpired(nowMillis: Long = System.currentTimeMillis()): Boolean = expires <= nowMillis
 
     /**
      * Check if this boost applies to the given job.
@@ -127,11 +128,9 @@ class BoostDataEntity(
             addAll(boosts)
         }
 
-    /** Read-only view of boosts for serialization */
+    /** Detached read-only snapshot of boosts for serialization and callers. */
+    @get:Synchronized
     val boosts: Set<JobsBoostData> get() = _boosts.toSet()
-
-    @Transient
-    var isDirty: Boolean = false
 
     @Transient
     private val boostCache: Cache<BoostContext, Double> =
@@ -148,19 +147,23 @@ class BoostDataEntity(
     override fun id(): String = player.toString()
 
     override fun merge(other: BoostDataEntity) {
-        _boosts.clear()
-        _boosts.addAll(other._boosts)
-        boostCache.invalidateAll()
+        if (this === other) return
+        val incoming = other.boosts
+        synchronized(this) {
+            _boosts.clear()
+            _boosts.addAll(incoming)
+            boostCache.invalidateAll()
+        }
     }
 
     /**
      * Remove expired boosts.
      * @return true if any boosts were removed
      */
+    @Synchronized
     fun removeExpired(): Boolean {
         val removed = _boosts.removeIf { it.isExpired() }
         if (removed) {
-            isDirty = true
             boostCache.invalidateAll()
         }
         return removed
@@ -179,6 +182,7 @@ class BoostDataEntity(
      * Calculate total boost multiplier for a job name and type.
      * @return Multiplier (1.0 = no boost, 1.5 = +50%, 2.0 = +100%)
      */
+    @Synchronized
     fun getBoost(
         jobName: String,
         type: BoostType,
@@ -201,12 +205,20 @@ class BoostDataEntity(
     /**
      * Find a boost by its ID.
      */
-    fun findById(id: String): JobsBoostData? = _boosts.find { it.id == id }
+    @Synchronized
+    fun findById(id: String): JobsBoostData? {
+        removeExpired()
+        return _boosts.find { it.id == id }
+    }
 
     /**
      * Check if a boost with the given ID exists.
      */
-    fun hasBoostWithId(id: String): Boolean = _boosts.any { it.id == id }
+    @Synchronized
+    fun hasBoostWithId(id: String): Boolean {
+        removeExpired()
+        return _boosts.any { it.id == id }
+    }
 
     /**
      * Get all boosts applicable to a job (for GUI display).
@@ -216,6 +228,7 @@ class BoostDataEntity(
     /**
      * Get all boosts applicable to a job name.
      */
+    @Synchronized
     fun boostsForJob(jobName: String): List<JobsBoostData> {
         removeExpired()
         return _boosts.filter { it.appliesToJob(jobName) }.toList()
@@ -224,6 +237,7 @@ class BoostDataEntity(
     /**
      * Get all active (non-expired) boosts.
      */
+    @Synchronized
     fun activeBoosts(): List<JobsBoostData> {
         removeExpired()
         return _boosts.toList()
@@ -233,6 +247,7 @@ class BoostDataEntity(
      * Add a new boost.
      * @return true if boost was added, false if a boost with same ID already exists
      */
+    @Synchronized
     fun addBoost(boost: JobsBoostData): Boolean {
         removeExpired()
 
@@ -242,7 +257,6 @@ class BoostDataEntity(
         }
 
         _boosts.add(boost)
-        isDirty = true
         boostCache.invalidateAll()
         return true
     }
@@ -251,27 +265,42 @@ class BoostDataEntity(
      * Remove a boost by ID.
      * @return true if boost was removed
      */
+    @Synchronized
     fun removeBoost(boostId: String): Boolean {
         val removed = _boosts.removeIf { it.id == boostId }
         if (removed) {
-            isDirty = true
             boostCache.invalidateAll()
         }
         return removed
     }
 
     /**
+     * Remove only the exact boost IDs supplied by the caller.
+     * Used to undo a partially prepared add without touching older variants.
+     */
+    @Synchronized
+    fun removeBoostIds(boostIds: Set<String>): Int {
+        if (boostIds.isEmpty()) return 0
+        val sizeBefore = _boosts.size
+        _boosts.removeIf { it.id in boostIds }
+        val removed = sizeBefore - _boosts.size
+        if (removed > 0) boostCache.invalidateAll()
+        return removed
+    }
+
+    /**
      * Clear all boosts.
      */
+    @Synchronized
     fun clearBoosts() {
         _boosts.clear()
-        isDirty = true
         boostCache.invalidateAll()
     }
 
     /**
      * Get the count of active boosts.
      */
+    @Synchronized
     fun boostCount(): Int {
         removeExpired()
         return _boosts.size
@@ -285,49 +314,111 @@ class BoostDataEntity(
  * Boosts are stored in Redis and synchronized across servers.
  */
 object JobsModule {
-    private lateinit var repo: CachedRepository<BoostDataEntity>
-    private lateinit var config: Config
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private var initialized = false
+    private data class JobsRuntime(
+        val repo: CachedRepository<BoostDataEntity>,
+        val config: Config,
+        val scope: CoroutineScope,
+    )
+
+    @Volatile
+    private var runtime: JobsRuntime? = null
     private var listenerRegistered = false
 
+    private fun JobsRuntime.launchOperation(
+        operation: String,
+        block: suspend JobsRuntime.() -> Unit,
+    ) {
+        scope.launch {
+            try {
+                this@launchOperation.block()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                error("Jobs operation '$operation' failed", failure)
+            }
+        }
+    }
+
+    private fun <T> JobsRuntime.submitOperation(
+        operation: String,
+        block: suspend JobsRuntime.() -> T,
+    ): CompletableFuture<T> {
+        val result = CompletableFuture<T>()
+        scope.launch {
+            try {
+                result.complete(this@submitOperation.block())
+            } catch (cancelled: CancellationException) {
+                result.completeExceptionally(cancelled)
+                throw cancelled
+            } catch (failure: Exception) {
+                error("Jobs operation '$operation' failed", failure)
+                result.completeExceptionally(failure)
+            }
+        }
+        return result
+    }
+
     @JvmStatic
-    fun init() {
-        if (initialized) return
-        if (ru.arc.ARC.redisManager == null) return
+    @Synchronized
+    fun init(): Boolean {
+        if (runtime != null) return true
+        if (ru.arc.ARC.redisManager == null) return false
 
         info("Jobs hook enabled")
 
-        // Register listener only once
-        if (!listenerRegistered) {
-            Bukkit.getPluginManager().registerEvents(JobsModuleListener, ARC.instance)
-            listenerRegistered = true
+        val newConfig = ConfigManager.of(ARC.instance.dataFolder.toPath(), "jobs.yml")
+        val newScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val newRepo =
+            try {
+                redisRepo<BoostDataEntity>(
+                    id = "jobs",
+                    storageKey = "arc.jobs_boosts",
+                    updateChannel = "arc.jobs_boosts_update",
+                    scope = newScope,
+                ) {
+                    loadAllOnStart(true)
+                    saveInterval(500.milliseconds)
+                }
+            } catch (failure: Throwable) {
+                newScope.cancel()
+                throw failure
+            }
+
+        try {
+            if (!listenerRegistered) {
+                Bukkit.getPluginManager().registerEvents(JobsModuleListener, ARC.instance)
+                listenerRegistered = true
+            }
+        } catch (failure: Throwable) {
+            try {
+                runBlocking { newRepo.shutdown() }
+            } catch (cleanupFailure: Throwable) {
+                failure.addSuppressed(cleanupFailure)
+            } finally {
+                newScope.cancel()
+            }
+            throw failure
         }
 
-        config = ConfigManager.of(ARC.instance.dataFolder.toPath(), "jobs.yml")
-
-        repo =
-            redisRepo<BoostDataEntity>(
-                id = "jobs",
-                storageKey = "arc.jobs_boosts",
-                updateChannel = "arc.jobs_boosts_update",
-                scope = scope,
-            ) {
-                loadAllOnStart(true)
-                saveInterval(500.milliseconds)
-            }
-        initialized = true
+        runtime = JobsRuntime(newRepo, newConfig, newScope)
+        return true
     }
 
     @JvmStatic
+    @Synchronized
     fun shutdown() {
-        if (!initialized) return
-        runBlocking { repo.shutdown() }
-        initialized = false
+        val current = runtime ?: return
+        runtime = null
+        try {
+            runBlocking { current.repo.shutdown() }
+        } finally {
+            current.scope.cancel()
+        }
     }
 
     @JvmStatic
-    fun getConfig(): Config = config
+    fun getConfig(): Config =
+        runtime?.config ?: kotlin.error("JobsModule is not initialized")
 
     @JvmStatic
     fun jobDisplayMinimessage(jobName: String): String {
@@ -358,57 +449,84 @@ object JobsModule {
         expires: Long,
         boostId: String,
         types: List<BoostType>,
-    ) {
-        // Parse job targets
-        val jobTargets: List<JobTarget> =
-            when {
-                jobs.isEmpty() -> listOf(JobTarget.All)
-                jobs.any { it.equals("all", ignoreCase = true) } -> listOf(JobTarget.All)
-                else -> jobs.map { JobTarget.Specific(it) }
-            }
+    ): CompletableFuture<Boolean> {
+        val current = runtime ?: return CompletableFuture.completedFuture(false)
+        if (!isValidBoostRequest(boost, expires, boostId)) {
+            return CompletableFuture.completedFuture(false)
+        }
 
-        // Parse boost types
-        val typesToApply: List<BoostType> =
-            when {
-                types.isEmpty() -> listOf(BoostType.ALL)
-                types.contains(BoostType.ALL) -> listOf(BoostType.ALL)
-                else -> types
-            }
+        val variants = boostVariants(jobs, types)
 
-        scope.launch {
+        return current.submitOperation("add boost") {
             val data =
                 repo
                     .getOrCreate(player.toString()) {
                         BoostDataEntity(player)
                     }.getOrThrow()
+            val expiredRemoved = data.removeExpired()
 
             info("Adding boost for player $player jobs $jobs boost $boost expires $expires boostId $boostId types $types")
 
-            var addedCount = 0
-            for (jobTarget in jobTargets) {
-                for (type in typesToApply) {
-                    val uniqueId = buildBoostId(boostId, jobTarget, type)
+            val addedIds = mutableSetOf<String>()
+            for ((jobTarget, type) in variants) {
+                val uniqueId = buildBoostId(boostId, jobTarget, type)
 
-                    val jobsBoost =
-                        JobsBoostData(
-                            boost = boost,
-                            expires = expires,
-                            boostUuid = player,
-                            id = uniqueId,
-                            type = type,
-                            jobTarget = jobTarget,
-                        )
+                val jobsBoost =
+                    JobsBoostData(
+                        boost = boost,
+                        expires = expires,
+                        boostUuid = player,
+                        id = uniqueId,
+                        type = type,
+                        jobTarget = jobTarget,
+                    )
 
-                    if (data.addBoost(jobsBoost)) {
-                        addedCount++
-                    }
+                if (data.addBoost(jobsBoost)) {
+                    addedIds += uniqueId
                 }
             }
 
-            if (addedCount > 0) {
-                repo.save(data)
-                info("Added $addedCount boost(s) for player $player")
+            if (addedIds.isNotEmpty()) {
+                repo.markDirty(data)
+                try {
+                    repo.saveDirty().getOrThrow()
+                } catch (failure: Exception) {
+                    data.removeBoostIds(addedIds)
+                    repo.markDirty(data)
+                    throw failure
+                }
+            } else if (expiredRemoved) {
+                repo.markDirty(data)
             }
+            if (addedIds.isNotEmpty()) {
+                info("Added ${addedIds.size} boost(s) for player $player")
+            }
+            addedIds.isNotEmpty()
+        }
+    }
+
+    /**
+     * Roll back every generated variant belonging to one shop boost ID.
+     */
+    @JvmStatic
+    fun removeBoosts(
+        player: UUID,
+        boostId: String,
+        jobs: List<String>,
+        types: List<BoostType>,
+    ): CompletableFuture<Boolean> {
+        val current = runtime ?: return CompletableFuture.completedFuture(false)
+        val boostIds = boostVariants(jobs, types).mapTo(mutableSetOf()) { (jobTarget, type) ->
+            buildBoostId(boostId, jobTarget, type)
+        }
+        return current.submitOperation("remove boost") {
+            val data = repo.get(player.toString()).getOrThrow() ?: return@submitOperation false
+            val removed = data.removeBoostIds(boostIds)
+            if (removed > 0) {
+                repo.markDirty(data)
+                repo.saveDirty().getOrThrow()
+            }
+            removed > 0
         }
     }
 
@@ -425,15 +543,36 @@ object JobsModule {
         return "${baseId}_${jobPart}_$typePart"
     }
 
+    private fun boostVariants(
+        jobs: List<String>,
+        types: List<BoostType>,
+    ): List<Pair<JobTarget, BoostType>> {
+        val jobTargets =
+            when {
+                jobs.isEmpty() -> listOf(JobTarget.All)
+                jobs.any { it.equals("all", ignoreCase = true) } -> listOf(JobTarget.All)
+                else -> jobs.distinctBy { it.lowercase() }.map { JobTarget.Specific(it) }
+            }
+        val typesToApply =
+            when {
+                types.isEmpty() || BoostType.ALL in types -> listOf(BoostType.ALL)
+                else -> types.distinct()
+            }
+        return jobTargets.flatMap { jobTarget ->
+            typesToApply.map { type -> jobTarget to type }
+        }
+    }
+
     @JvmStatic
     fun getJobNames(): List<String> = Jobs.getJobs().map { it.name }
 
     @JvmStatic
     fun openBoostGui(player: Player) {
+        val current = runtime ?: return
         GuiUtils.constructAndShowAsync(
             {
                 _root_ide_package_.ru.arc.jobs.guis
-                    .createJobsListGui(config, player)
+                    .createJobsListGui(current.config, player)
             },
             player,
         )
@@ -447,12 +586,26 @@ object JobsModule {
     fun hasBoost(
         player: OfflinePlayer,
         boostId: String,
-    ): Boolean =
-        runBlocking {
-            val data = repo.get(player.uniqueId.toString()).getOrNull() ?: return@runBlocking false
-            // Check for exact match or prefixed match (for multi-job/type boosts)
-            data.boosts.any { it.id == boostId || it.id.startsWith("${boostId}_") }
+    ): Boolean {
+        val data = getBoostData(player.uniqueId) ?: return false
+        return data.activeBoosts().any { it.id == boostId || it.id.startsWith("${boostId}_") }
+    }
+
+    /**
+     * Check the exact variants configured for a shop entry.
+     */
+    @JvmStatic
+    fun hasBoost(
+        player: OfflinePlayer,
+        boostId: String,
+        jobs: List<String>,
+        types: List<BoostType>,
+    ): Boolean {
+        val data = getBoostData(player.uniqueId) ?: return false
+        return boostVariants(jobs, types).any { (jobTarget, type) ->
+            data.hasBoostWithId(buildBoostId(boostId, jobTarget, type))
         }
+    }
 
     /**
      * Get Jobs plugin's built-in boost for a player.
@@ -490,14 +643,15 @@ object JobsModule {
      */
     @JvmStatic
     fun resetBoosts(player: Player) {
-        scope.launch {
+        val current = runtime ?: return
+        current.launchOperation("reset boosts") {
             val data =
                 repo
                     .getOrCreate(player.uniqueId.toString()) {
                         BoostDataEntity(player.uniqueId)
                     }.getOrThrow()
             data.clearBoosts()
-            repo.save(data)
+            repo.markDirty(data)
         }
     }
 
@@ -506,8 +660,24 @@ object JobsModule {
      * Returns null if player has no boost data.
      */
     @JvmStatic
-    fun getBoostData(playerUuid: UUID): BoostDataEntity? =
-        runBlocking {
-            repo.get(playerUuid.toString()).getOrNull()
+    fun getBoostData(playerUuid: UUID): BoostDataEntity? {
+        val current = runtime ?: return null
+        val data = current.repo.getNow(playerUuid.toString()) ?: return null
+        if (data.removeExpired()) {
+            current.repo.markDirty(data)
         }
+        return data
+    }
 }
+
+internal fun isValidBoostRequest(
+    boost: Double,
+    expires: Long,
+    boostId: String,
+    now: Long = System.currentTimeMillis(),
+): Boolean =
+    boost.isFinite() &&
+        boost > 0.0 &&
+        expires > now &&
+        boostId.isNotBlank() &&
+        boostId == boostId.trim()

@@ -6,6 +6,7 @@ import org.bukkit.Material
 import org.bukkit.inventory.ItemStack
 import org.mockbukkit.mockbukkit.MockBukkit
 import org.mockbukkit.mockbukkit.ServerMock
+import ru.arc.util.Common
 import java.util.UUID
 
 /**
@@ -47,6 +48,18 @@ class StoreDataTest :
 
                     store.size shouldBe 27
                     store.hasSpace() shouldBe true
+                }
+
+                "should remain usable after Gson round trip" {
+                    val original = StoreData(UUID.randomUUID(), size = 27)
+                    original.addItem(ItemStack(Material.DIAMOND, 10))
+
+                    val restored = Common.gson.fromJson(Common.gson.toJson(original), StoreData::class.java)
+
+                    restored.size shouldBe 27
+                    restored.getItems().single().amount shouldBe 10
+                    restored.removeItem(ItemStack(Material.DIAMOND), 4) shouldBe true
+                    restored.getItems().single().amount shouldBe 6
                 }
             }
 
@@ -217,15 +230,23 @@ class StoreDataTest :
                     totalDiamonds shouldBe 98 // 128 - 30
                 }
 
-                "should return false when not enough items to remove and remove what it can" {
+                "should leave items unchanged when there are not enough to remove" {
                     val store = StoreData(UUID.randomUUID())
                     store.addItem(ItemStack(Material.DIAMOND, 10))
 
                     val result = store.removeItem(ItemStack(Material.DIAMOND), 20)
 
                     result shouldBe false
-                    // Items are removed when not enough found
-                    store.getItems().size shouldBe 0
+                    store.getItems().single().amount shouldBe 10
+                }
+
+                "should reject zero and negative amounts without changing items" {
+                    val store = StoreData(UUID.randomUUID())
+                    store.addItem(ItemStack(Material.DIAMOND, 10))
+
+                    store.removeItem(ItemStack(Material.DIAMOND), 0) shouldBe false
+                    store.removeItem(ItemStack(Material.DIAMOND), -5) shouldBe false
+                    store.getItems().single().amount shouldBe 10
                 }
 
                 "should return false when item type not found" {
@@ -281,17 +302,14 @@ class StoreDataTest :
                     store.getItems() shouldBe emptyList()
                 }
 
-                "should return list of items (not deep copy)" {
-                    // Note: getItems() returns a new List, but the ItemStack objects
-                    // are references, not clones. So modifying them affects the original.
+                "should return a detached item snapshot" {
                     val store = StoreData(UUID.randomUUID())
                     store.addItem(ItemStack(Material.DIAMOND, 10))
 
                     val items = store.getItems()
-                    items[0].amount = 999 // Modify the ItemStack
+                    items[0].amount = 999
 
-                    // The ItemStack is a reference, so the original is also changed
-                    store.getItems()[0].amount shouldBe 999
+                    store.getItems()[0].amount shouldBe 10
                 }
             }
 
@@ -309,6 +327,9 @@ class StoreDataTest :
                     store1.size shouldBe 27
                     store1.getItems().size shouldBe 1
                     store1.getItems()[0].type shouldBe Material.GOLD_INGOT
+
+                    store2.removeItem(ItemStack(Material.GOLD_INGOT), 5)
+                    store1.getItems()[0].amount shouldBe 20
                 }
             }
 

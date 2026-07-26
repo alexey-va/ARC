@@ -4,7 +4,7 @@ import com.jeff_media.customblockdata.CustomBlockData
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
@@ -31,6 +31,8 @@ import ru.arc.util.Logging.warn
 import java.util.UUID
 import kotlin.time.Duration.Companion.seconds
 
+private const val PERSONAL_LOOT_SEPARATOR = ":::"
+
 /**
  * Custom loot data for personal chest loot.
  */
@@ -42,28 +44,46 @@ class CustomLootData(
     var filled: Boolean = false,
 ) : Entity,
     Mergeable<CustomLootData> {
-    @Transient
-    var isDirty: Boolean = false
-
-    override fun id(): String = "$playerUuid:::$chestUuid"
+    override fun id(): String = "$playerUuid$PERSONAL_LOOT_SEPARATOR$chestUuid"
 
     override fun merge(other: CustomLootData) {
-        items.clear()
-        items.addAll(other.items)
+        val (otherItems, otherFilled, otherTimestamp) = other.persistedSnapshot()
+        synchronized(this) {
+            items.clear()
+            items.addAll(otherItems)
+            filled = otherFilled
+            timestamp = otherTimestamp
+        }
     }
 
     /**
      * Check if this entry should be removed.
      */
-    fun shouldRemove(): Boolean {
-        val ttl = 1000L * 60 * 60 * 24 * 7 // 7 days
-        return System.currentTimeMillis() - timestamp > ttl || (filled && items.isEmpty())
-    }
+    fun shouldRemove(): Boolean =
+        synchronized(this) {
+            val ttl = 1000L * 60 * 60 * 24 * 7 // 7 days
+            System.currentTimeMillis() - timestamp > ttl || (filled && items.all { it == null })
+        }
 
     /**
      * Check if all items have been taken.
      */
-    fun isExhausted(): Boolean = filled && items.all { it == null }
+    fun isExhausted(): Boolean = synchronized(this) { filled && items.all { it == null } }
+
+    fun needsItems(): Boolean = synchronized(this) { !filled && items.isEmpty() }
+
+    fun fillIfEmpty(generated: Iterable<ItemStack?>): Boolean =
+        synchronized(this) {
+            if (filled || items.isNotEmpty()) return@synchronized false
+            generated.forEach { items.add(it?.clone()) }
+            filled = true
+            true
+        }
+
+    fun snapshotItems(): List<ItemStack?> =
+        synchronized(this) {
+            items.map { it?.clone() }
+        }
 
     /**
      * Remove an item from the loot.
@@ -71,43 +91,54 @@ class CustomLootData(
     fun removeItem(
         item: ItemStack,
         slot: Int,
-    ) {
-        var amountLeft = tryRemoveSlotItem(item, slot)
-        if (amountLeft == 0) {
-            isDirty = true
-            return
-        }
-        for (i in 0 until items.size) {
-            amountLeft = tryRemoveSlotItem(item, i)
-            if (amountLeft == 0) {
-                isDirty = true
-                return
+    ): Boolean = synchronized(this) {
+        if (item.amount <= 0) return false
+
+        val candidateSlots =
+            buildList {
+                if (slot in items.indices) add(slot)
+                items.indices.filterTo(this) { it != slot }
             }
+        val matchingSlots =
+            candidateSlots.filter { index ->
+                items[index]?.isSimilar(item) == true
+            }
+        val available = matchingSlots.sumOf { index -> items[index]?.amount ?: 0 }
+        if (available < item.amount) {
+            warn(
+                "Unable to remove personal loot item: requested={}, available={}, preferredSlot={}",
+                item.amount,
+                available,
+                slot,
+            )
+            return false
         }
-        ru.arc.util.Logging
-            .error("Item not found in chest: {} {}", item, slot)
-    }
 
-    private fun tryRemoveSlotItem(
-        item: ItemStack,
-        slot: Int,
-    ): Int {
-        if (items.size <= slot) return item.amount
-        val itemStack = items[slot] ?: return item.amount
-
-        if (itemStack.isSimilar(item)) {
-            val amount = itemStack.amount
-            if (amount > item.amount) {
-                itemStack.amount = amount - item.amount
-                items[slot] = itemStack
-                return 0
+        var remaining = item.amount
+        for (index in matchingSlots) {
+            if (remaining == 0) break
+            val stored = items[index] ?: continue
+            val removed = minOf(stored.amount, remaining)
+            if (removed == stored.amount) {
+                items[index] = null
             } else {
-                items[slot] = null
-                return item.amount - amount
+                stored.amount -= removed
             }
+            remaining -= removed
         }
-        return item.amount
+
+        check(remaining == 0) { "Personal loot changed while removing an item" }
+        return true
     }
+
+    private fun persistedSnapshot(): Triple<List<ItemStack?>, Boolean, Long> =
+        synchronized(this) {
+            Triple(
+                items.map { it?.clone() },
+                filled,
+                timestamp,
+            )
+        }
 
     companion object {
         fun create(
@@ -136,17 +167,15 @@ object PersonalLootModule {
     private var inventories: Set<InventoryType> = emptySet()
     private var maxPlayers: Int = 5
     private var useBsLoot: Boolean = false
-    private const val SEPARATOR = ":::"
 
-    private lateinit var repo: CachedRepository<CustomLootData>
+    private var repo: CachedRepository<CustomLootData>? = null
     private lateinit var chestGenerator: ChestGenerator
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private var initialized = false
 
     @JvmStatic
     fun init() {
-        if (initialized) return
-        if (ru.arc.ARC.redisManager == null) return
+        if (repo != null) return
+        if (ARC.redisManager == null) return
+        val serverName = checkNotNull(ARC.serverName) { "ARC server name is not initialized" }
 
         key = NamespacedKey(ARC.instance, "ploot")
         uuidKey = NamespacedKey(ARC.instance, "ploot_uuid")
@@ -155,27 +184,33 @@ object PersonalLootModule {
 
         reload()
 
-        val storageKey = "arc.${ARC.serverName}-ploot"
-        val updateChannel = "arc.${ARC.serverName}-ploot-update"
+        val storageKey = "arc.$serverName-ploot"
+        val updateChannel = "arc.$serverName-ploot-update"
 
-        repo =
-            redisRepo<CustomLootData>(
-                id = "${ARC.serverName}-ploot",
-                storageKey = storageKey,
-                updateChannel = updateChannel,
-                scope = scope,
-            ) {
-                loadAllOnStart(true)
-                saveInterval(1.seconds)
+        val newScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val newRepository =
+            try {
+                redisRepo<CustomLootData>(
+                    id = "$serverName-ploot",
+                    storageKey = storageKey,
+                    updateChannel = updateChannel,
+                    scope = newScope,
+                ) {
+                    loadAllOnStart(true)
+                    saveInterval(1.seconds)
+                }
+            } catch (failure: Throwable) {
+                newScope.cancel()
+                throw failure
             }
-        initialized = true
+        repo = newRepository
     }
 
     @JvmStatic
     fun shutdown() {
-        if (!initialized) return
-        runBlocking { repo.shutdown() }
-        initialized = false
+        val currentRepository = repo ?: return
+        repo = null
+        runBlocking { currentRepository.shutdown() }
     }
 
     @JvmStatic
@@ -199,6 +234,7 @@ object PersonalLootModule {
 
     @JvmStatic
     fun processChestBreak(event: BlockBreakEvent) {
+        if (repo == null) return
         val block = event.block
         if (block.type !in chests) return
 
@@ -226,6 +262,7 @@ object PersonalLootModule {
 
     @JvmStatic
     fun processChestOpen(event: InventoryOpenEvent) {
+        val repository = repo ?: return
         if (event.inventory.type !in inventories) return
 
         val player = event.player as? Player ?: return
@@ -235,22 +272,21 @@ object PersonalLootModule {
 
         val data = CustomBlockData(block, ARC.instance)
         if (!data.has(uuidKey)) return
+        event.isCancelled = true
 
-        val chestUuid = UUID.fromString(data.get(uuidKey, PersistentDataType.STRING))
+        val chestUuid =
+            parsePersonalLootUuid(data.get(uuidKey, PersistentDataType.STRING))
+                ?: run {
+                    warn("Personal loot chest has an invalid UUID at {}", block.location)
+                    return
+                }
         val playerListString = data.get(key, PersistentDataType.STRING)
         if (playerListString == null) {
             warn("Player list string is null")
             return
         }
 
-        val players =
-            playerListString
-                .split(SEPARATOR)
-                .filter { it.isNotEmpty() && it.length == 36 }
-                .map { UUID.fromString(it) }
-                .toMutableSet()
-
-        event.isCancelled = true
+        val players = parsePersonalLootPlayers(playerListString).toMutableSet()
 
         if (players.size >= maxPlayers && player.uniqueId !in players) {
             player.sendMessage(
@@ -265,7 +301,7 @@ object PersonalLootModule {
         players.add(player.uniqueId)
         for (b in blocks) {
             val bData = CustomBlockData(b, ARC.instance)
-            bData.set(key, PersistentDataType.STRING, players.joinToString(SEPARATOR) { it.toString() })
+            bData.set(key, PersistentDataType.STRING, players.joinToString(PERSONAL_LOOT_SEPARATOR) { it.toString() })
         }
 
         val poolName = data.get(poolKey, PersistentDataType.STRING)
@@ -275,40 +311,36 @@ object PersonalLootModule {
             extractInventory(block)?.clear()
         }
 
-        scope.launch {
-            val lootId = "${player.uniqueId}$SEPARATOR$chestUuid"
-            val cl =
-                repo
-                    .getOrCreate(lootId) {
-                        CustomLootData.create(player.uniqueId, chestUuid)
-                    }.getOrNull()
+        val lootId = "${player.uniqueId}$PERSONAL_LOOT_SEPARATOR$chestUuid"
+        val lootData =
+            repository.getNow(lootId)
+                ?: CustomLootData.create(player.uniqueId, chestUuid)
 
-            if (cl == null || cl.isExhausted()) {
-                player.sendMessage(
-                    config.component("messages.already-opened", "<red>Вы уже открывали этот сундук"),
-                )
-                return@launch
-            }
-
-            if (!cl.filled && cl.items.isEmpty()) {
-                val generated =
-                    if (useBsLoot) {
-                        ItemList().apply { addAll(currentItems) }
-                    } else {
-                        chestGenerator.generate(poolName ?: "default", 5, 27)
-                    }
-                cl.items.addAll(generated)
-                cl.filled = true
-                cl.isDirty = true
-                repo.save(cl)
-            }
-
-            GuiUtils.constructAndShowAsync({ LootGuiFactory.create(player, cl) }, player)
+        if (lootData.isExhausted()) {
+            player.sendMessage(
+                config.component("messages.already-opened", "<red>Вы уже открывали этот сундук"),
+            )
+            return
         }
+
+        if (lootData.needsItems()) {
+            val generated =
+                if (useBsLoot) {
+                    ItemList().apply { addAll(currentItems) }
+                } else {
+                    chestGenerator.generate(poolName ?: "default", 5, 27)
+                }
+            if (lootData.fillIfEmpty(generated)) {
+                repository.markDirty(lootData)
+            }
+        }
+
+        GuiUtils.constructAndShowAsync({ LootGuiFactory.create(player, lootData) }, player)
     }
 
     @JvmStatic
     fun processChestGen(block: Block) {
+        if (repo == null) return
         val blocks = connectedChests(block)
         val uuid = UUID.randomUUID().toString()
 
@@ -327,8 +359,15 @@ object PersonalLootModule {
      */
     @JvmStatic
     fun save(lootData: CustomLootData) {
-        scope.launch {
-            repo.save(lootData)
-        }
+        repo?.markDirty(lootData)
     }
 }
+
+internal fun parsePersonalLootUuid(raw: String?): UUID? =
+    raw?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+
+internal fun parsePersonalLootPlayers(raw: String): Set<UUID> =
+    raw
+        .split(PERSONAL_LOOT_SEPARATOR)
+        .mapNotNull(::parsePersonalLootUuid)
+        .toSet()

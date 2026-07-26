@@ -2,14 +2,14 @@ package ru.arc.stock
 
 import com.google.gson.reflect.TypeToken
 import ru.arc.ARC
-import ru.arc.network.ChannelListener
-import ru.arc.network.RedisManager
+import ru.arc.redis.ChannelListener
+import ru.arc.redis.RedisOperations
 import ru.arc.util.Common
 import ru.arc.util.Logging.error
 
 class HistoryMessager(
     val channel: String,
-    private val redisManager: RedisManager,
+    private val redis: RedisOperations,
 ) : ChannelListener {
 
     override fun consume(channel: String, message: String, originServer: String) {
@@ -25,7 +25,7 @@ class HistoryMessager(
 
     fun send(highLowMap: Map<String, HistoryManager.HighLow>) {
         try {
-            redisManager.publish(channel, Common.gson.toJson(highLowMap))
+            redis.publish(channel, Common.gson.toJson(highLowMap))
         } catch (e: Exception) {
             error("Error sending highlows", e)
         }

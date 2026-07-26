@@ -5,43 +5,50 @@ import com.magmaguy.elitemobs.items.ScalableItemConstructor
 import com.magmaguy.elitemobs.items.customitems.CustomItem
 import com.magmaguy.elitemobs.items.itemconstructor.ItemConstructor
 import com.magmaguy.elitemobs.playerdata.ElitePlayerInventory
-import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.entity.Player
-import org.bukkit.event.Listener
 import org.bukkit.inventory.ItemStack
-import org.bukkit.scheduler.BukkitTask
 import ru.arc.ARC
+import ru.arc.config.Config
 import ru.arc.config.ConfigManager
+import ru.arc.core.ScheduledTask
+import ru.arc.core.repeating
+import ru.arc.core.ticks
 import ru.arc.hooks.elitemobs.guis.EmShop
 import ru.arc.hooks.elitemobs.guis.ShopHolder
 import ru.arc.util.GuiUtils
+import ru.arc.util.Logging.error
 
-class EMHook : Listener {
+class EMHook internal constructor(
+    private val config: Config,
+    private val wormholesFactory: () -> EMWormholes,
+    private val shopHolderFactory: () -> ShopHolder,
+    private val scheduleShopReset: (intervalTicks: Long, reset: () -> Unit) -> ScheduledTask,
+) : AutoCloseable {
+    constructor() : this(
+        config = ConfigManager.of(ARC.instance.dataPath, "elitemobs.yml"),
+        wormholesFactory = ::EMWormholes,
+        shopHolderFactory = ::ShopHolder,
+        scheduleShopReset = { intervalTicks, reset ->
+            repeating(intervalTicks.ticks, delay = intervalTicks.ticks) {
+                reset()
+            }
+        },
+    )
 
-    private val config = ConfigManager.of(ARC.instance.dataFolder.toPath(), "elitemobs.yml")
-    private var resetShopTask: BukkitTask? = null
+    private var emWormholes: EMWormholes? = null
+    private var shopHolder: ShopHolder? = null
+    private var resetShopTask: ScheduledTask? = null
+    private var closed = false
+
+    @Volatile
     var lastShopReset: Long = System.currentTimeMillis()
+        private set
 
-    init {
-        if (emWormholes == null) {
-            emWormholes = EMWormholes()
-            emWormholes!!.init()
-        }
-        if (shopHolder == null) {
-            shopHolder = ShopHolder()
-        }
-        startTasks()
-    }
-
-    private fun cancelTasks() {
-        resetShopTask?.takeUnless { it.isCancelled }?.cancel()
-    }
-
-    private fun startTasks() {
-        cancelTasks()
+    private fun scheduleReset(holder: ShopHolder): ScheduledTask {
         val resetTime = config.integer("shop.reset-ticks", 20 * 60 * 5).toLong()
-        resetShopTask = Bukkit.getScheduler().runTaskTimer(ARC.instance, Runnable { shopHolder!!.deleteAll() }, resetTime, resetTime)
+        require(resetTime > 0) { "shop.reset-ticks must be positive, got $resetTime" }
+        return scheduleShopReset(resetTime, holder::deleteAll)
     }
 
     fun generateDrop(tier: Int, player: Player, trinket: Boolean, customChance: Double): ItemStack {
@@ -58,35 +65,98 @@ class EMHook : Listener {
             val list = CustomItem.getCustomItems().values
                 .filter { ci -> if (trinket) ci.scalability == CustomItem.Scalability.SCALABLE else true }
                 .filter { ci -> !forbidden.contains(ci.customItemsConfigFields.material) }
-            val customItem = list[(Math.random() * list.size).toInt()]
-            return customItem.generateItemStack(tier, player, null)
+            list.randomOrNull()?.let { customItem ->
+                return customItem.generateItemStack(tier, player, null)
+            }
         }
         return if (trinket) ScalableItemConstructor.randomizeScalableItem(tier, player, null)
         else ItemConstructor.constructItem(tier.toDouble(), null, player, true)
     }
 
     fun tier(player: Player): Int =
-        ElitePlayerInventory.playerInventories[player.uniqueId]!!.getFullPlayerTier(false)
+        ElitePlayerInventory.playerInventories
+            ?.get(player.uniqueId)
+            ?.getFullPlayerTier(false)
+            ?: 1
 
+    @Synchronized
     fun reload() {
-        emWormholes?.cancel()
-        emWormholes = EMWormholes()
-        emWormholes!!.init()
+        check(!closed) { "EMHook is closed" }
+
+        val holder = shopHolder ?: shopHolderFactory()
+        val replacementWormholes = wormholesFactory()
+        val replacementTask =
+            try {
+                replacementWormholes.init()
+                scheduleReset(holder)
+            } catch (failure: Throwable) {
+                try {
+                    replacementWormholes.close()
+                } catch (cleanupFailure: Throwable) {
+                    failure.addSuppressed(cleanupFailure)
+                }
+                throw failure
+            }
+
+        val previousWormholes = emWormholes
+        val previousTask = resetShopTask
+        emWormholes = replacementWormholes
+        shopHolder = holder
+        resetShopTask = replacementTask
+
+        val cleanupFailures = mutableListOf<Throwable>()
+        cleanup(cleanupFailures) { previousTask?.takeUnless { it.isCancelled }?.cancel() }
+        cleanup(cleanupFailures) { previousWormholes?.close() }
+        if (cleanupFailures.isNotEmpty()) {
+            val first = cleanupFailures.first()
+            cleanupFailures.drop(1).forEach(first::addSuppressed)
+            error("Error cleaning previous EliteMobs runtime after reload", first)
+        }
         resetShop()
-        startTasks()
     }
 
+    @Synchronized
     fun resetShop() {
+        check(!closed) { "EMHook is closed" }
         lastShopReset = System.currentTimeMillis()
-        shopHolder?.deleteAll()
+        checkNotNull(shopHolder) { "EMHook is not started" }.deleteAll()
     }
 
+    @Deprecated("Use close()", ReplaceWith("close()"))
     fun cancel() {
-        emWormholes?.cancel()
+        close()
+    }
+
+    @Synchronized
+    override fun close() {
+        if (closed) return
+        closed = true
+
+        val task = resetShopTask
+        val wormholes = emWormholes
+        val holder = shopHolder
+        resetShopTask = null
+        emWormholes = null
+        shopHolder = null
+
+        val failures = mutableListOf<Throwable>()
+        cleanup(failures) { task?.takeUnless { it.isCancelled }?.cancel() }
+        cleanup(failures) { wormholes?.close() }
+        cleanup(failures) { holder?.deleteAll() }
+        if (failures.isNotEmpty()) {
+            val first = failures.first()
+            failures.drop(1).forEach(first::addSuppressed)
+            throw first
+        }
     }
 
     fun openShopGui(player: Player, isGear: Boolean) {
-        GuiUtils.constructAndShowAsync({ EmShop(config, player, shopHolder!!, isGear, this) }, player)
+        val holder =
+            synchronized(this) {
+                check(!closed) { "EMHook is closed" }
+                checkNotNull(shopHolder) { "EMHook is not started" }
+            }
+        GuiUtils.constructAndShowAsync({ EmShop(config, player, holder, isGear, this) }, player)
     }
 
     fun balance(player: Player): Double = EconomyHandler.checkCurrency(player.uniqueId)
@@ -95,8 +165,14 @@ class EMHook : Listener {
 
     fun removeBalance(player: Player, amount: Double) = EconomyHandler.subtractCurrency(player.uniqueId, amount)
 
-    companion object {
-        private var emWormholes: EMWormholes? = null
-        private var shopHolder: ShopHolder? = null
+    private inline fun cleanup(
+        failures: MutableList<Throwable>,
+        action: () -> Unit,
+    ) {
+        try {
+            action()
+        } catch (failure: Throwable) {
+            failures += failure
+        }
     }
 }

@@ -11,7 +11,7 @@ import io.kotest.matchers.string.shouldNotContain
 import org.testcontainers.containers.GenericContainer
 import org.testcontainers.utility.DockerImageName
 import ru.arc.ARC
-import ru.arc.network.RedisManager
+import ru.arc.redis.RedisManager
 import ru.arc.sync.base.Context
 import ru.arc.sync.base.SyncRepo
 import java.io.File
@@ -160,11 +160,11 @@ class EmSyncTest : FreeSpec() {
                 val uuid = UUID.randomUUID()
 
                 val repo =
-                    SyncRepo
-                        .builder(EmSync.EmDataDTO::class.java)
-                        .key("test.em_sync.$uuid")
-                        .redisManager(redisManager)
-                        .dataProducer { ctx ->
+                    SyncRepo(
+                        clazz = EmSync.EmDataDTO::class.java,
+                        key = "test.em_sync.$uuid",
+                        redisManager = redisManager,
+                        dataProducer = { ctx ->
                             val id: UUID = ctx.get("uuid")
                             EmSync.EmDataDTO(
                                 ts = System.currentTimeMillis(),
@@ -180,15 +180,16 @@ class EmSyncTest : FreeSpec() {
                                 gamblingDebt = 0.0,
                                 questsCompleted = 3,
                             )
-                        }.dataApplier { received.set(it) }
-                        .build()
+                        },
+                        dataApplier = { received.set(it) },
+                    )
 
                 val ctx = Context().also { it.put("uuid", uuid) }
-                repo.saveAndPersistData(ctx, false).get(2, TimeUnit.SECONDS)
+                repo.saveAndPersistData(ctx).get(2, TimeUnit.SECONDS)
                 Thread.sleep(300)
 
                 ARC.serverName = "server-em-b"
-                repo.loadAndApplyData(uuid, true).get(2, TimeUnit.SECONDS)
+                repo.loadAndApplyData(uuid).get(2, TimeUnit.SECONDS)
                 Thread.sleep(200)
 
                 val dto = received.get().shouldNotBeNull()
@@ -207,21 +208,22 @@ class EmSyncTest : FreeSpec() {
 
                 ARC.serverName = "server-em-self"
                 val repo =
-                    SyncRepo
-                        .builder(EmSync.EmDataDTO::class.java)
-                        .key("test.em_sync_self.$uuid")
-                        .redisManager(redisManager)
-                        .dataProducer { ctx ->
+                    SyncRepo(
+                        clazz = EmSync.EmDataDTO::class.java,
+                        key = "test.em_sync_self.$uuid",
+                        redisManager = redisManager,
+                        dataProducer = { ctx ->
                             val id: UUID = ctx.get("uuid")
                             EmSync.EmDataDTO(ts = 1L, srv = "server-em-self", id = id, currency = 100.0)
-                        }.dataApplier { received.set(it) }
-                        .build()
+                        },
+                        dataApplier = { received.set(it) },
+                    )
 
                 val ctx = Context().also { it.put("uuid", uuid) }
-                repo.saveAndPersistData(ctx, false).get(2, TimeUnit.SECONDS)
+                repo.saveAndPersistData(ctx).get(2, TimeUnit.SECONDS)
                 Thread.sleep(300)
 
-                repo.loadAndApplyData(uuid, true).get(2, TimeUnit.SECONDS)
+                repo.loadAndApplyData(uuid).get(2, TimeUnit.SECONDS)
                 Thread.sleep(200)
 
                 received.get() shouldBe null
@@ -233,22 +235,23 @@ class EmSyncTest : FreeSpec() {
                 val expectedXP = longArrayOf(100L, 200L, 300L, 400L, 500L, 600L, 700L, 800L, 900L)
 
                 val repo =
-                    SyncRepo
-                        .builder(EmSync.EmDataDTO::class.java)
-                        .key("test.em_skillxp.$uuid")
-                        .redisManager(redisManager)
-                        .dataProducer { ctx ->
+                    SyncRepo(
+                        clazz = EmSync.EmDataDTO::class.java,
+                        key = "test.em_skillxp.$uuid",
+                        redisManager = redisManager,
+                        dataProducer = { ctx ->
                             val id: UUID = ctx.get("uuid")
                             EmSync.EmDataDTO(ts = 1L, srv = "server-xp-a", id = id, skillXP = expectedXP)
-                        }.dataApplier { received.set(it) }
-                        .build()
+                        },
+                        dataApplier = { received.set(it) },
+                    )
 
                 val ctx = Context().also { it.put("uuid", uuid) }
-                repo.saveAndPersistData(ctx, false).get(2, TimeUnit.SECONDS)
+                repo.saveAndPersistData(ctx).get(2, TimeUnit.SECONDS)
                 Thread.sleep(300)
 
                 ARC.serverName = "server-xp-b"
-                repo.loadAndApplyData(uuid, true).get(2, TimeUnit.SECONDS)
+                repo.loadAndApplyData(uuid).get(2, TimeUnit.SECONDS)
                 Thread.sleep(200)
 
                 received.get()?.skillXP?.toList() shouldBe expectedXP.toList()

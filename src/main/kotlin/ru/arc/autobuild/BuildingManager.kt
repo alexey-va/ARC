@@ -14,12 +14,10 @@ import ru.arc.util.CooldownManager
 import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
-import java.nio.file.FileVisitOption
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.io.path.isDirectory
 import kotlin.io.path.name
 
 /**
@@ -52,12 +50,15 @@ object BuildingManager {
         Files.createDirectories(schematicsPath)
 
         try {
-            Files.walk(schematicsPath, 3, FileVisitOption.FOLLOW_LINKS)
+            val loaded = HashMap<String, Building>()
+            Files.walk(schematicsPath, 3)
                 .use { stream ->
-                    stream.filter { !it.isDirectory() }
+                    stream.filter { Files.isRegularFile(it) }
                         .map { Building(it.name) }
-                        .forEach { buildings[it.fileName] = it }
+                        .forEach { loaded[it.fileName] = it }
                 }
+            buildings.clear()
+            buildings.putAll(loaded)
             debug("[autobuild] Loaded {} schematics from {}", buildings.size, schematicsPath)
         } catch (e: Exception) {
             error("Error loading buildings", e)
@@ -315,6 +316,9 @@ object BuildingManager {
         cleanup(force = true)
         cleanupTask?.cancel()
         cleanupTask = null
+        pendingSites.clear()
+        activeSites.clear()
+        buildings.clear()
         Display.clearCache()
     }
 

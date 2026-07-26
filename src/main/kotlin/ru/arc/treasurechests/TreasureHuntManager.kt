@@ -10,7 +10,6 @@ import ru.arc.common.locationpools.LocationPool
 import ru.arc.common.locationpools.LocationPoolManager
 import ru.arc.treasure.core.TreasurePool
 import ru.arc.treasure.core.Treasures
-import java.util.Optional
 
 /**
  * Фасад для управления охотами за сокровищами.
@@ -104,11 +103,6 @@ object TreasureHuntManager {
     }
 
     @JvmStatic
-    fun removeHunt(hunt: ActiveHunt) {
-        TreasureHuntRegistry.removeHunt(hunt)
-    }
-
-    @JvmStatic
     fun stopAll() {
         TreasureHuntRegistry.stopAll()
     }
@@ -119,8 +113,8 @@ object TreasureHuntManager {
     fun getByBlock(block: Block): ActiveHunt? = TreasureHuntRegistry.getByBlock(block)
 
     @JvmStatic
-    fun getByLocationPool(locationPool: LocationPool): Optional<ActiveHunt> =
-        Optional.ofNullable(TreasureHuntRegistry.getByLocationPool(locationPool))
+    fun getByLocationPool(locationPool: LocationPool): ActiveHunt? =
+        TreasureHuntRegistry.getByLocationPool(locationPool)
 
     @JvmStatic
     fun getActiveHunts(): Collection<ActiveHunt> = TreasureHuntRegistry.getActiveHunts()

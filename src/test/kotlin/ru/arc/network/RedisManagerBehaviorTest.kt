@@ -4,10 +4,15 @@ package ru.arc.network
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import ru.arc.redis.ChannelListener
+import ru.arc.redis.InMemoryRedis
+import ru.arc.redis.RedisManager
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.ExecutionException
 
 /**
  * Behavioral tests for RedisManager.
@@ -38,8 +43,8 @@ class RedisManagerBehaviorTest {
 
     @Test
     fun `saveMapEntries processes key-value pairs correctly`() {
-        // Test that the method accepts varargs correctly
-        val future = redisManager.saveMapEntries(
+        val redis = InMemoryRedis()
+        val future = redis.saveMapEntries(
             "test:kv",
             "key1", "value1",
             "key2", "value2",
@@ -50,6 +55,7 @@ class RedisManagerBehaviorTest {
         assertDoesNotThrow {
             future.get(1, TimeUnit.SECONDS)
         }
+        assertTrue(redis.getHash("test:kv") == mapOf("key1" to "value1", "key2" to "value2", "key3" to "value3"))
     }
 
     @Test
@@ -61,8 +67,10 @@ class RedisManagerBehaviorTest {
             "key2" // Missing value
         )
 
-        // Should not throw immediately
         assertNotNull(future)
+        assertThrows(ExecutionException::class.java) {
+            future.get(1, TimeUnit.SECONDS)
+        }
     }
 
     @Test
@@ -159,4 +167,3 @@ class RedisManagerBehaviorTest {
         assertTrue(duration < 50, "saveMap() should return quickly (async)")
     }
 }
-

@@ -45,13 +45,13 @@ class StockPlayer(
 
     @Synchronized
     fun giveDividend(symbol: String): Double {
-        if (!positionMap.containsKey(symbol)) return 0.0
+        val positions = positionMap[symbol] ?: return 0.0
         debug("Giving dividend for {} to {}", symbol, playerName)
         val stock = StockMarket.stock(symbol) ?: return 0.0
         if (stock.dividend < 0.00001) return 0.0
 
         var gave = 0.0
-        for (position in positionMap[symbol]!!) {
+        for (position in positions) {
             val dividend = stock.dividend * position.amount
             if (dividend == 0.0) continue
             balance += dividend
@@ -66,26 +66,24 @@ class StockPlayer(
     fun find(symbol: String, uuid: UUID): Position? =
         positionMap[symbol]?.firstOrNull { it.positionUuid == uuid }
 
-    fun isBelowMaxStockAmount(): Boolean {
-        val currentAmount = positions().size
-        if (currentAmount < StockConfig.defaultStockMaxAmount) return true
-        val entry = StockConfig.permissionMap.ceilingEntry(currentAmount + 1) ?: return false
-        val offlinePlayer = Bukkit.getOfflinePlayer(playerUuid)
-        if (!offlinePlayer.isOnline && HookRegistry.luckPermsHook == null) return false
-        return HookRegistry.luckPermsHook!!.hasPermission(offlinePlayer, entry.value)
-    }
+    fun isBelowMaxStockAmount(): Boolean = positions().size < maxStockAmount()
 
     fun maxStockAmount(): Int {
-        var max = -1
+        val hook = HookRegistry.luckPermsHook ?: return StockConfig.defaultStockMaxAmount
         val offlinePlayer = Bukkit.getOfflinePlayer(playerUuid)
-        if (!offlinePlayer.isOnline && HookRegistry.luckPermsHook == null) return -1
-        for (entry in StockConfig.permissionMap.entries) {
-            if (HookRegistry.luckPermsHook!!.hasPermission(offlinePlayer, entry.value) && entry.key > max) {
-                max = entry.key
-            }
-        }
-        return if (max == -1) StockConfig.defaultStockMaxAmount else max
+        return maxStockAmount { permission -> hook.hasPermission(offlinePlayer, permission) }
     }
+
+    internal fun isBelowMaxStockAmount(hasPermission: (String) -> Boolean): Boolean =
+        positions().size < maxStockAmount(hasPermission)
+
+    internal fun maxStockAmount(hasPermission: (String) -> Boolean): Int =
+        StockConfig.permissionMap.entries
+            .asSequence()
+            .filter { (amount) -> amount > StockConfig.defaultStockMaxAmount }
+            .filter { (_, permission) -> hasPermission(permission) }
+            .maxOfOrNull { (amount) -> amount }
+            ?: StockConfig.defaultStockMaxAmount
 
     fun tagResolver(): TagResolver {
         val bal = balance

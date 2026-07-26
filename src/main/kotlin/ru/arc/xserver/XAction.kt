@@ -5,6 +5,7 @@ import ru.arc.core.Tasks
 import ru.arc.redis.gson.JsonSubtype
 import ru.arc.redis.gson.JsonType
 import ru.arc.util.Logging.error
+import ru.arc.util.Logging.warn
 
 @JsonType(
     property = "type",
@@ -19,6 +20,7 @@ import ru.arc.util.Logging.error
 abstract class XAction {
 
     var afterTimestamp: Long? = null
+    /** Legacy wire field. Bukkit-backed actions are always scheduled on the main thread. */
     var async: Boolean? = null
 
     protected abstract fun runInternal()
@@ -28,7 +30,10 @@ abstract class XAction {
             val ts = afterTimestamp ?: System.currentTimeMillis().also { afterTimestamp = it }
             val delta = ts - System.currentTimeMillis()
             val ticksDelay = maxOf(0L, delta / 50 + if (delta % 50 != 0L) 1 else 0)
-            if (async == true) scheduleAsync(ticksDelay) else schedule(ticksDelay)
+            if (async == true) {
+                warn("Ignoring unsafe async=true on {}", javaClass.simpleName)
+            }
+            schedule(ticksDelay)
         } catch (e: Exception) {
             error("Error executing action: {}", this, e)
         }
@@ -42,7 +47,15 @@ abstract class XAction {
         Tasks.scheduler.runLater(ticksDelay) { runInternal() }
     }
 
-    private fun scheduleAsync(ticksDelay: Long) {
-        Tasks.scheduler.runLaterAsync(ticksDelay) { runInternal() }
-    }
+}
+
+internal fun targetsCurrentServer(
+    targetServers: Set<String>?,
+    currentServer: String?,
+): Boolean {
+    if (targetServers == null) return true
+    if (targetServers.isEmpty()) return false
+    if (targetServers.any { it.trim().equals("all", ignoreCase = true) }) return true
+    if (currentServer.isNullOrBlank()) return false
+    return targetServers.any { it.trim().equals(currentServer.trim(), ignoreCase = true) }
 }

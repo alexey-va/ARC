@@ -35,7 +35,7 @@ import ru.arc.util.itemLore
 class BuildingGui(
     private val player: Player,
     private val site: ConstructionSite
-) : ChestGui(3, TextHolder.deserialize("&8Потверждение строительства"), ARC.instance) {
+) : ChestGui(3, TextHolder.deserialize("&8Подтверждение строительства"), ARC.instance) {
     private var youSure = false
     private var renameTask: ScheduledTask? = null
     private var progressTask: ScheduledTask? = null
@@ -44,8 +44,12 @@ class BuildingGui(
         setupBackground()
         setupButtons()
 
-        // Cancel progress update task when GUI is closed
-        setOnClose { progressTask?.cancel() }
+        setOnClose {
+            progressTask?.cancel()
+            renameTask?.cancel()
+            progressTask = null
+            renameTask = null
+        }
     }
 
     private fun setupBackground() {

@@ -1,7 +1,6 @@
 package ru.arc.ops
 
-import ru.arc.ARC
-import ru.arc.config.ConfigManager
+import org.bukkit.Bukkit
 import ru.arc.core.PluginModule
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
@@ -26,6 +25,9 @@ object OpsHttpModule : PluginModule {
             return
         }
         OpsStartupLogTap.install()
+        if (Bukkit.getPluginManager().isPluginEnabled("BlueMap")) {
+            BlueMapNpcMarkers.start()
+        }
         httpServer.start()
     }
 
@@ -33,7 +35,6 @@ object OpsHttpModule : PluginModule {
         httpServer.stop()
         // stop(0) can leave the port busy briefly; avoid BindException orphaning the old listener.
         Thread.sleep(50)
-        ConfigManager.reloadAll()
         init()
     }
 

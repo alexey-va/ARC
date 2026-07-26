@@ -2,7 +2,6 @@ package ru.arc.listeners
 
 import com.jeff_media.customblockdata.CustomBlockData
 import de.tr7zw.changeme.nbtapi.NBT
-import de.tr7zw.changeme.nbtapi.NBTItem
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.block.Beehive
@@ -167,12 +166,12 @@ class BlockListener : Listener {
         }
         val clickedBlock = event.clickedBlock ?: return
         val center = clickedBlock.location.add(0.0, 1.0, 0.0)
-        val nbtItem = NBTItem(hand)
-        val buildingId = nbtItem.getString("arc:building_key")
+        val nbt = NBT.readNbt(hand)
+        val buildingId = nbt.getString("arc:building_key")
         if (buildingId.isNullOrEmpty()) return
 
-        val rotation = if (nbtItem.hasKey("arc:rotation")) nbtItem.getString("arc:rotation") else null
-        val yOff = if (nbtItem.hasKey("arc:y_offset")) nbtItem.getString("arc:y_offset") else null
+        val rotation = if (nbt.hasTag("arc:rotation")) nbt.getString("arc:rotation") else null
+        val yOff = if (nbt.hasTag("arc:y_offset")) nbt.getString("arc:y_offset") else null
 
         event.isCancelled = true
         BuildingManager.processPlayerClick(event.player, center, buildingId, rotation, yOff)

@@ -18,9 +18,7 @@ class XRestart(
             delayMillis,
             initiatedBy,
         )
-        if (servers != null && ARC.serverName != null &&
-            !servers!!.contains(ARC.serverName!!.lowercase())
-        ) {
+        if (!targetsCurrentServer(servers, ARC.serverName)) {
             info("[XRestart] Skipping — this server ({}) is not in target list: {}", ARC.serverName, servers)
             return
         }

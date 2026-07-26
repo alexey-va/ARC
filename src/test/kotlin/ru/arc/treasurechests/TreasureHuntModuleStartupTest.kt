@@ -30,7 +30,7 @@ class TreasureHuntModuleStartupTest : KotestTestBase({
                     weight: 1
             """.trimIndent()
         )
-        Treasures.getOrCreate("module-smoke-treasure")
+        Treasures.getOrCreatePool("module-smoke-treasure")
         ConfigManager.reloadAll()
         TreasureHuntManager.loadTreasureHuntTypes()
 

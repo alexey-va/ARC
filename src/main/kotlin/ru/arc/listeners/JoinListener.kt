@@ -10,6 +10,8 @@ import org.bukkit.event.player.PlayerQuitEvent
 import ru.arc.ARC
 import ru.arc.audit.AuditManager
 import ru.arc.config.ConfigManager
+import ru.arc.core.delayed
+import ru.arc.core.ticks
 import ru.arc.sync.SyncManager
 import ru.arc.treasurechests.TreasureHuntManager
 import ru.arc.util.Logging.info
@@ -53,7 +55,9 @@ class JoinListener : Listener {
         invMap[player.uniqueId] = player.name
         info("Player {} is invulnerable", player.name)
         val ticks = config.integer("join.invulnerable-ticks", 20 * 7).toLong()
-        ARC.instance.server.scheduler.runTaskLater(ARC.instance, Runnable { stripInvulnerable(player) }, ticks)
+        delayed(ticks.ticks) {
+            stripInvulnerable(player)
+        }
     }
 
     private fun stripInvulnerable(player: Player) {
@@ -65,17 +69,13 @@ class JoinListener : Listener {
 
     @Suppress("DEPRECATION")
     private fun fullHeal(player: Player) {
-        ARC.instance.server.scheduler.runTaskLater(
-            ARC.instance,
-            Runnable {
-                if (!config.bool("join.full-heal", true)) return@Runnable
-                if (!player.isOnline) return@Runnable
-                val currentHealth = player.health
-                val maxHealth = player.maxHealth
-                info("Player {} health {} maxhealth {}", player.name, currentHealth, maxHealth)
-                if (currentHealth < maxHealth) player.health = maxHealth
-            },
-            config.integer("join.full-heal-delay-ticks", 10).toLong(),
-        )
+        delayed(config.integer("join.full-heal-delay-ticks", 10).toLong().ticks) {
+            if (!config.bool("join.full-heal", true)) return@delayed
+            if (!player.isOnline) return@delayed
+            val currentHealth = player.health
+            val maxHealth = player.maxHealth
+            info("Player {} health {} maxhealth {}", player.name, currentHealth, maxHealth)
+            if (currentHealth < maxHealth) player.health = maxHealth
+        }
     }
 }

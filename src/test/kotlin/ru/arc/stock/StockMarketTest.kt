@@ -44,10 +44,12 @@ class StockMarketTest : FreeSpec({
     )
 
     beforeEach {
+        StockMarket.resetConfiguration()
         StockMarket.stockRepo = makeRepo()
     }
 
     afterEach {
+        StockMarket.resetConfiguration()
         runTest { StockMarket.stockRepo.shutdown() }
     }
 
@@ -133,6 +135,15 @@ class StockMarketTest : FreeSpec({
 
         "does not crash on malformed map" {
             StockMarket.loadStockFromMap(mapOf("bad" to "data"))
+        }
+
+        "reset removes stocks that disappeared from configuration" {
+            StockMarket.loadStockFromMap(stockMap("REMOVED"))
+
+            StockMarket.resetConfiguration()
+
+            StockMarket.isEnabledStock(makeStock("REMOVED")) shouldBe false
+            StockMarket.configStocks().shouldBeEmpty()
         }
     }
 })

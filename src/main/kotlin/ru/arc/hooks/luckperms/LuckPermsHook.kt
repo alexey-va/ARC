@@ -6,6 +6,7 @@ import net.luckperms.api.node.types.MetaNode
 import net.luckperms.api.query.Flag
 import net.luckperms.api.query.QueryMode
 import net.luckperms.api.query.QueryOptions
+import org.bukkit.Bukkit
 import org.bukkit.OfflinePlayer
 import org.bukkit.entity.Player
 import ru.arc.util.Logging
@@ -22,7 +23,7 @@ class LuckPermsHook {
         val userManager = LuckPermsProvider.get().userManager
         if (offlinePlayer is Player) return offlinePlayer.hasPermission(perm)
         return try {
-            if (Thread.currentThread().name.contains("main")) {
+            if (Bukkit.isPrimaryThread()) {
                 warn("Loading permission data from main thread!")
             }
             userManager
@@ -40,7 +41,7 @@ class LuckPermsHook {
     fun getGroups(offlinePlayer: OfflinePlayer): List<String> {
         val userManager = LuckPermsProvider.get().userManager
         return try {
-            if (Thread.currentThread().name.contains("main")) {
+            if (Bukkit.isPrimaryThread()) {
                 error("Loading groups data from main thread!!!")
             }
             userManager

@@ -2,11 +2,15 @@ package ru.arc.ops
 
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import java.io.ByteArrayInputStream
 import java.net.HttpURLConnection
 import java.net.URI
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Executors
 
 class OpsAuthTest : FreeSpec({
 
@@ -83,6 +87,38 @@ class OpsHttpServerTest : FreeSpec({
             }
         }
 
+        "should shut down its worker executor on stop" {
+            val executor = Executors.newSingleThreadExecutor()
+            val server = OpsHttpServer({ executor }, { testConfig })
+            server.start()
+
+            server.stop()
+
+            executor.isShutdown shouldBe true
+        }
+
+        "should replace and stop the previous executor when started again" {
+            val executors = CopyOnWriteArrayList<java.util.concurrent.ExecutorService>()
+            val server =
+                OpsHttpServer(
+                    executorFactory = {
+                        Executors.newSingleThreadExecutor().also(executors::add)
+                    },
+                    configProvider = { testConfig },
+                )
+            server.start()
+            try {
+                server.start()
+
+                executors shouldHaveSize 2
+                executors.first().isShutdown shouldBe true
+                executors.last().isShutdown shouldBe false
+            } finally {
+                server.stop()
+            }
+            executors.last().isShutdown shouldBe true
+        }
+
         "should accept authorized requests to index" {
             val server = OpsHttpServer { testConfig }
             server.start()
@@ -94,6 +130,26 @@ class OpsHttpServerTest : FreeSpec({
                     )
                 conn.responseCode shouldBe 200
                 readBody(conn) shouldContain "\"routes\""
+            } finally {
+                server.stop()
+            }
+        }
+
+        "should reject oversized request bodies" {
+            val server = OpsHttpServer { testConfig }
+            server.start()
+            try {
+                val oversizedBody = "x".repeat(OPS_MAX_REQUEST_BODY_BYTES + 1)
+                val conn =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/console",
+                        method = "POST",
+                        token = testConfig.token,
+                        body = oversizedBody,
+                    )
+
+                conn.responseCode shouldBe 413
+                readBody(conn) shouldContain "Request body too large"
             } finally {
                 server.stop()
             }
@@ -150,6 +206,438 @@ class OpsHttpServerTest : FreeSpec({
                 conn.responseCode shouldBe 403
             } finally {
                 server.stop()
+            }
+        }
+
+        "should block CMI kit writes when disabled in config" {
+            val locked = testConfig.copy(cmiKitsWriteEnabled = false)
+            val server = OpsHttpServer { locked }
+            server.start()
+            try {
+                val conn =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/cmi/kits/menu",
+                        method = "PUT",
+                        token = locked.token,
+                        body =
+                            """
+                            {
+                              "display":"Menu",
+                              "icon":{"material":"CLOCK"},
+                              "commands":["say test"]
+                            }
+                            """.trimIndent(),
+                    )
+                conn.responseCode shouldBe 403
+                readBody(conn) shouldContain "CMI kit writes disabled"
+            } finally {
+                server.stop()
+            }
+        }
+
+        "should block scheduled command writes when disabled in config" {
+            val locked = testConfig.copy(scheduledCommandsWriteEnabled = false)
+            val server = OpsHttpServer { locked }
+            server.start()
+            try {
+                val put =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/scheduled-commands/weekend",
+                        method = "PUT",
+                        token = locked.token,
+                        body =
+                            """
+                            {
+                              "command":"say weekend",
+                              "servers":["spawn"],
+                              "schedule":{"type":"interval","every":"30m"}
+                            }
+                            """.trimIndent(),
+                    )
+                put.responseCode shouldBe 403
+                readBody(put) shouldContain "Scheduled command writes disabled"
+
+                val delete =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/scheduled-commands/weekend",
+                        method = "DELETE",
+                        token = locked.token,
+                    )
+                delete.responseCode shouldBe 403
+                readBody(delete) shouldContain "Scheduled command writes disabled"
+            } finally {
+                server.stop()
+            }
+        }
+
+        "should block scheduled command reads when disabled in config" {
+            val locked = testConfig.copy(scheduledCommandsReadEnabled = false)
+            val server = OpsHttpServer { locked }
+            server.start()
+            try {
+                val conn =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/scheduled-commands",
+                        token = locked.token,
+                    )
+                conn.responseCode shouldBe 403
+                readBody(conn) shouldContain "Scheduled command read endpoints disabled"
+            } finally {
+                server.stop()
+            }
+        }
+
+        "should reject unsafe scheduled command ids before config access" {
+            val enabled =
+                testConfig.copy(
+                    scheduledCommandsReadEnabled = true,
+                    scheduledCommandsWriteEnabled = true,
+                )
+            val server = OpsHttpServer { enabled }
+            server.start()
+            try {
+                val read =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/scheduled-commands/bad.id",
+                        token = enabled.token,
+                    )
+                read.responseCode shouldBe 400
+                readBody(read) shouldContain "ID:"
+
+                val delete =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/scheduled-commands/bad.id",
+                        method = "DELETE",
+                        token = enabled.token,
+                    )
+                delete.responseCode shouldBe 400
+                readBody(delete) shouldContain "ID:"
+            } finally {
+                server.stop()
+            }
+        }
+
+        "should reject a non-string scheduled command preview id" {
+            val enabled = testConfig.copy(scheduledCommandsReadEnabled = true)
+            val server = OpsHttpServer { enabled }
+            server.start()
+            try {
+                val preview =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/scheduled-commands/preview",
+                        method = "POST",
+                        token = enabled.token,
+                        body =
+                            """
+                            {
+                              "id":{"nested":"bad"},
+                              "command":"say test",
+                              "schedule":{"type":"interval","every":"30m"}
+                            }
+                            """.trimIndent(),
+                    )
+                preview.responseCode shouldBe 400
+                readBody(preview) shouldContain "id string"
+
+                val unsafe =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/scheduled-commands/preview",
+                        method = "POST",
+                        token = enabled.token,
+                        body =
+                            """
+                            {
+                              "id":"bad.id",
+                              "command":"say test",
+                              "schedule":{"type":"interval","every":"30m"}
+                            }
+                            """.trimIndent(),
+                    )
+                unsafe.responseCode shouldBe 400
+                readBody(unsafe) shouldContain "ID:"
+            } finally {
+                server.stop()
+            }
+        }
+
+        "should gate location pool reads and writes independently" {
+            val locked =
+                testConfig.copy(
+                    locationPoolsReadEnabled = false,
+                    locationPoolsWriteEnabled = false,
+                )
+            val server = OpsHttpServer { locked }
+            server.start()
+            try {
+                val read =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/location-pools",
+                        token = locked.token,
+                    )
+                read.responseCode shouldBe 403
+                readBody(read) shouldContain "Location pool read endpoints disabled"
+
+                val write =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/location-pools/event_spawn",
+                        method = "PUT",
+                        token = locked.token,
+                        body =
+                            """
+                            {
+                              "locations":[
+                                {"server":"spawn","world":"spawn","x":1,"y":64,"z":1}
+                              ]
+                            }
+                            """.trimIndent(),
+                    )
+                write.responseCode shouldBe 403
+                readBody(write) shouldContain "Location pool writes disabled"
+            } finally {
+                server.stop()
+            }
+        }
+
+        "should gate item preset reads and writes independently" {
+            val locked =
+                testConfig.copy(
+                    itemPresetsReadEnabled = false,
+                    itemPresetsWriteEnabled = false,
+                )
+            val server = OpsHttpServer { locked }
+            server.start()
+            try {
+                val read =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/item-presets",
+                        token = locked.token,
+                    )
+                read.responseCode shouldBe 403
+                readBody(read) shouldContain "Item preset read endpoints disabled"
+
+                val write =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/item-presets/content_reward",
+                        method = "PUT",
+                        token = locked.token,
+                        body = """{"type":"preset","item":{"material":"DIAMOND"}}""",
+                    )
+                write.responseCode shouldBe 403
+                readBody(write) shouldContain "Item preset writes disabled"
+            } finally {
+                server.stop()
+            }
+        }
+
+        "should reject unsafe item preset ids before config access" {
+            val enabled =
+                testConfig.copy(
+                    itemPresetsReadEnabled = true,
+                    itemPresetsWriteEnabled = true,
+                )
+            val server = OpsHttpServer { enabled }
+            server.start()
+            try {
+                val read =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/item-presets/bad.id",
+                        token = enabled.token,
+                    )
+                read.responseCode shouldBe 400
+                readBody(read) shouldContain "Item preset ID"
+
+                val delete =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/item-presets/bad.id",
+                        method = "DELETE",
+                        token = enabled.token,
+                    )
+                delete.responseCode shouldBe 400
+                readBody(delete) shouldContain "Item preset ID"
+            } finally {
+                server.stop()
+            }
+        }
+
+        "should gate native preset giving with the item mutation flag" {
+            val locked = testConfig.copy(itemsGiveEnabled = false)
+            val server = OpsHttpServer { locked }
+            server.start()
+            try {
+                val give =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/player/Steve/give-preset",
+                        method = "POST",
+                        token = locked.token,
+                        body = """{"preset":"golden_apple","amount":2}""",
+                    )
+                give.responseCode shouldBe 403
+                readBody(give) shouldContain "Item give endpoint disabled"
+            } finally {
+                server.stop()
+            }
+        }
+
+        "should gate treasure pool reads and writes independently" {
+            val locked =
+                testConfig.copy(
+                    treasurePoolsReadEnabled = false,
+                    treasurePoolsWriteEnabled = false,
+                )
+            val server = OpsHttpServer { locked }
+            server.start()
+            try {
+                val read =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/treasure-pools",
+                        token = locked.token,
+                    )
+                read.responseCode shouldBe 403
+                readBody(read) shouldContain "Treasure pool read endpoints disabled"
+
+                val write =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/treasure-pools/event_rewards",
+                        method = "PUT",
+                        token = locked.token,
+                        body = """{"treasures":[]}""",
+                    )
+                write.responseCode shouldBe 403
+                readBody(write) shouldContain "Treasure pool writes disabled"
+            } finally {
+                server.stop()
+            }
+        }
+
+        "should reject unsafe treasure pool ids before native catalog access" {
+            val enabled =
+                testConfig.copy(
+                    treasurePoolsReadEnabled = true,
+                    treasurePoolsWriteEnabled = true,
+                )
+            val server = OpsHttpServer { enabled }
+            server.start()
+            try {
+                val read =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/treasure-pools/bad.id",
+                        token = enabled.token,
+                    )
+                read.responseCode shouldBe 400
+                readBody(read) shouldContain "Treasure pool ID"
+
+                val delete =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/treasure-pools/bad.id",
+                        method = "DELETE",
+                        token = enabled.token,
+                    )
+                delete.responseCode shouldBe 400
+                readBody(delete) shouldContain "Treasure pool ID"
+            } finally {
+                server.stop()
+            }
+        }
+
+        "should reject unsafe location pool ids before Bukkit access" {
+            val enabled =
+                testConfig.copy(
+                    locationPoolsReadEnabled = true,
+                    locationPoolsWriteEnabled = true,
+                )
+            val server = OpsHttpServer { enabled }
+            server.start()
+            try {
+                val read =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/location-pools/bad.id",
+                        token = enabled.token,
+                    )
+                read.responseCode shouldBe 400
+                readBody(read) shouldContain "Location pool ID"
+
+                val delete =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/location-pools/bad.id",
+                        method = "DELETE",
+                        token = enabled.token,
+                    )
+                delete.responseCode shouldBe 400
+                readBody(delete) shouldContain "Location pool ID"
+            } finally {
+                server.stop()
+            }
+        }
+
+        "should gate NPC reads and writes independently" {
+            val locked =
+                testConfig.copy(
+                    npcsReadEnabled = false,
+                    npcsWriteEnabled = false,
+                )
+            val server = OpsHttpServer { locked }
+            server.start()
+            try {
+                val read =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/npcs",
+                        token = locked.token,
+                    )
+                read.responseCode shouldBe 403
+                readBody(read) shouldContain "NPC read endpoints disabled"
+
+                val preview =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/npcs/preview",
+                        method = "POST",
+                        token = locked.token,
+                        body = """{"world":"spawn","x":0,"z":0}""",
+                    )
+                preview.responseCode shouldBe 403
+                readBody(preview) shouldContain "NPC read endpoints disabled"
+
+                val upsert =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/npcs",
+                        method = "PUT",
+                        token = locked.token,
+                        body = """{"name":"Test","location":{"world":"spawn","x":0,"z":0}}""",
+                    )
+                upsert.responseCode shouldBe 403
+                readBody(upsert) shouldContain "NPC writes disabled"
+
+                val delete =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/npcs/42",
+                        method = "DELETE",
+                        token = locked.token,
+                    )
+                delete.responseCode shouldBe 403
+                readBody(delete) shouldContain "NPC writes disabled"
+            } finally {
+                server.stop()
+            }
+        }
+
+    }
+})
+
+class OpsRequestBodyTest : FreeSpec({
+
+    "readOpsRequestBody" - {
+        "should accept a body exactly at the configured limit" {
+            readOpsRequestBody(
+                ByteArrayInputStream("1234".toByteArray(StandardCharsets.UTF_8)),
+                maxBytes = 4,
+            ) shouldBe "1234"
+        }
+
+        "should reject a body over the configured limit" {
+            shouldThrow<OpsRequestBodyTooLargeException> {
+                readOpsRequestBody(
+                    ByteArrayInputStream("12345".toByteArray(StandardCharsets.UTF_8)),
+                    maxBytes = 4,
+                )
             }
         }
     }

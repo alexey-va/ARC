@@ -6,6 +6,10 @@ import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import java.io.File
+import java.nio.charset.StandardCharsets
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -44,6 +48,62 @@ class TreasureManager {
         if (!pools.containsKey(pool.id)) return null
         pools[pool.id] = pool
         return pool
+    }
+
+    /**
+     * Atomically persists one complete pool and only then publishes it in memory.
+     *
+     * This is the content-management write boundary. Unlike the lifecycle
+     * save methods, persistence failures are propagated to the caller.
+     */
+    @Synchronized
+    fun replaceAndSave(
+        directory: File,
+        pool: TreasurePool,
+    ): TreasurePool {
+        directory.mkdirs()
+        require(directory.isDirectory) { "Treasure path is not a directory: ${directory.absolutePath}" }
+
+        val saved = pool.markClean()
+        val yaml = YamlConfiguration()
+        saved.toMap().forEach { (key, value) -> yaml.set(key, value) }
+        val target = File(directory, "${saved.id}.yml").toPath()
+        val temp = Files.createTempFile(directory.toPath(), ".${saved.id}-", ".tmp")
+
+        try {
+            Files.writeString(temp, yaml.saveToString(), StandardCharsets.UTF_8)
+            try {
+                Files.move(
+                    temp,
+                    target,
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING,
+                )
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING)
+            }
+            pools[saved.id] = saved
+            return saved
+        } finally {
+            Files.deleteIfExists(temp)
+        }
+    }
+
+    /**
+     * Deletes one durable pool and then removes it from memory.
+     *
+     * Missing files are tolerated when the in-memory pool exists, which lets
+     * an administrator repair drift without inventing a second state model.
+     */
+    @Synchronized
+    fun deleteAndSave(
+        directory: File,
+        poolId: String,
+    ): Boolean {
+        if (!pools.containsKey(poolId)) return false
+        Files.deleteIfExists(File(directory, "$poolId.yml").toPath())
+        pools.remove(poolId)
+        return true
     }
 
     /**

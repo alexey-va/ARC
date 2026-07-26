@@ -27,9 +27,6 @@ class AuditData(
     var created: Long = System.currentTimeMillis()
 ) : Entity,
     Mergeable<AuditData> {
-    @Transient
-    var isDirty: Boolean = false
-
     companion object {
         /** Максимальное количество последних транзакций для поиска агрегации */
         private const val AGGREGATION_LOOKUP_LIMIT = 10
@@ -70,7 +67,6 @@ class AuditData(
             transactions.add(Transaction(type, amount, comment))
         }
 
-        isDirty = true
     }
 
     /**
@@ -110,10 +106,6 @@ class AuditData(
             removed++
         }
 
-        if (removed > 0) {
-            isDirty = true
-        }
-
         return removed
     }
 
@@ -151,7 +143,6 @@ class AuditData(
      */
     fun clear() {
         transactions.clear()
-        isDirty = true
     }
 
     /**

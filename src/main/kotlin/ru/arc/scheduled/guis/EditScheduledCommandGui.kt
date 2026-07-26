@@ -40,13 +40,13 @@ class EditScheduledCommandGui(
     private val draft: ScheduledCommandDraft = ScheduledCommandDraft.from(entry)
     private var lastValidationError: String = "Некорректное значение"
 
-    private lateinit var idItem: GuiItem
-    private lateinit var commandItem: GuiItem
-    private lateinit var scheduleValueItem: GuiItem
-    private lateinit var scheduleTypeItem: GuiItem
-    private lateinit var serversItem: GuiItem
-    private lateinit var enabledItem: GuiItem
-    private lateinit var saveItem: GuiItem
+    private val idItem: GuiItem
+    private val commandItem: GuiItem
+    private val scheduleValueItem: GuiItem
+    private val scheduleTypeItem: GuiItem
+    private val serversItem: GuiItem
+    private val enabledItem: GuiItem
+    private val saveItem: GuiItem
 
     init {
         setupBackground()

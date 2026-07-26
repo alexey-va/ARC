@@ -14,7 +14,6 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.event.inventory.InventoryClickEvent
-import ru.arc.ARC
 import ru.arc.config.StockConfig
 import ru.arc.util.fromConfig
 import ru.arc.core.ScheduledTask
@@ -427,8 +426,7 @@ class PositionCreator(
     }
 
     private fun updateItems() {
-        ARC.instance.server.scheduler.runTaskAsynchronously(ARC.instance, Runnable {
-            val resolver = resolver(amount, type, leverage)
+        val resolver = resolver(amount, type, leverage)
 
             leverageItem.item.itemMeta = itemStack(Material.LEVER) {
                 tagResolver(resolver)
@@ -541,7 +539,6 @@ class PositionCreator(
                 fromConfig(StockConfig.config(), "locale.position-creator.amount")
             }.itemMeta
 
-            ARC.instance.server.scheduler.runTask(ARC.instance, Runnable { update() })
-        })
+        update()
     }
 }

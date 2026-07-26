@@ -12,7 +12,7 @@ import io.kotest.matchers.string.shouldNotContain
 import org.testcontainers.containers.GenericContainer
 import org.testcontainers.utility.DockerImageName
 import ru.arc.ARC
-import ru.arc.network.RedisManager
+import ru.arc.redis.RedisManager
 import ru.arc.sync.base.Context
 import ru.arc.sync.base.SyncRepo
 import java.io.File
@@ -143,11 +143,11 @@ class SkillsSyncTest : FreeSpec() {
                     )
 
                 val repo =
-                    SyncRepo
-                        .builder(SkillsSync.UserSkillData::class.java)
-                        .key("test.skills_sync.$uuid")
-                        .redisManager(redisManager)
-                        .dataProducer { ctx ->
+                    SyncRepo(
+                        clazz = SkillsSync.UserSkillData::class.java,
+                        key = "test.skills_sync.$uuid",
+                        redisManager = redisManager,
+                        dataProducer = { ctx ->
                             val id: UUID = ctx.get("uuid")
                             SkillsSync.UserSkillData(
                                 id = id,
@@ -156,15 +156,16 @@ class SkillsSyncTest : FreeSpec() {
                                 ts = System.currentTimeMillis(),
                                 srv = "server-skills-a",
                             )
-                        }.dataApplier { received.set(it) }
-                        .build()
+                        },
+                        dataApplier = { received.set(it) },
+                    )
 
                 val ctx = Context().also { it.put("uuid", uuid) }
-                repo.saveAndPersistData(ctx, false).get(2, TimeUnit.SECONDS)
+                repo.saveAndPersistData(ctx).get(2, TimeUnit.SECONDS)
                 Thread.sleep(300)
 
                 ARC.serverName = "server-skills-b"
-                repo.loadAndApplyData(uuid, true).get(2, TimeUnit.SECONDS)
+                repo.loadAndApplyData(uuid).get(2, TimeUnit.SECONDS)
                 Thread.sleep(200)
 
                 val dto = received.get().shouldNotBeNull()
@@ -183,21 +184,22 @@ class SkillsSyncTest : FreeSpec() {
 
                 ARC.serverName = "server-skills-self"
                 val repo =
-                    SyncRepo
-                        .builder(SkillsSync.UserSkillData::class.java)
-                        .key("test.skills_sync_self.$uuid")
-                        .redisManager(redisManager)
-                        .dataProducer { ctx ->
+                    SyncRepo(
+                        clazz = SkillsSync.UserSkillData::class.java,
+                        key = "test.skills_sync_self.$uuid",
+                        redisManager = redisManager,
+                        dataProducer = { ctx ->
                             val id: UUID = ctx.get("uuid")
                             SkillsSync.UserSkillData(ts = 1L, srv = "server-skills-self", id = id, mana = 50.0)
-                        }.dataApplier { received.set(it) }
-                        .build()
+                        },
+                        dataApplier = { received.set(it) },
+                    )
 
                 val ctx = Context().also { it.put("uuid", uuid) }
-                repo.saveAndPersistData(ctx, false).get(2, TimeUnit.SECONDS)
+                repo.saveAndPersistData(ctx).get(2, TimeUnit.SECONDS)
                 Thread.sleep(300)
 
-                repo.loadAndApplyData(uuid, true).get(2, TimeUnit.SECONDS)
+                repo.loadAndApplyData(uuid).get(2, TimeUnit.SECONDS)
                 Thread.sleep(200)
 
                 received.get() shouldBe null
@@ -209,22 +211,23 @@ class SkillsSyncTest : FreeSpec() {
                 val preciseMana = 123.456789
 
                 val repo =
-                    SyncRepo
-                        .builder(SkillsSync.UserSkillData::class.java)
-                        .key("test.skills_mana.$uuid")
-                        .redisManager(redisManager)
-                        .dataProducer { ctx ->
+                    SyncRepo(
+                        clazz = SkillsSync.UserSkillData::class.java,
+                        key = "test.skills_mana.$uuid",
+                        redisManager = redisManager,
+                        dataProducer = { ctx ->
                             val id: UUID = ctx.get("uuid")
                             SkillsSync.UserSkillData(ts = 1L, srv = "server-skills-a", id = id, mana = preciseMana)
-                        }.dataApplier { received.set(it) }
-                        .build()
+                        },
+                        dataApplier = { received.set(it) },
+                    )
 
                 val ctx = Context().also { it.put("uuid", uuid) }
-                repo.saveAndPersistData(ctx, false).get(2, TimeUnit.SECONDS)
+                repo.saveAndPersistData(ctx).get(2, TimeUnit.SECONDS)
                 Thread.sleep(300)
 
                 ARC.serverName = "server-skills-c"
-                repo.loadAndApplyData(uuid, true).get(2, TimeUnit.SECONDS)
+                repo.loadAndApplyData(uuid).get(2, TimeUnit.SECONDS)
                 Thread.sleep(200)
 
                 received.get()?.mana shouldBe preciseMana
@@ -236,11 +239,11 @@ class SkillsSyncTest : FreeSpec() {
                 val bigXp = 99999999.99
 
                 val repo =
-                    SyncRepo
-                        .builder(SkillsSync.UserSkillData::class.java)
-                        .key("test.skills_bigxp.$uuid")
-                        .redisManager(redisManager)
-                        .dataProducer { ctx ->
+                    SyncRepo(
+                        clazz = SkillsSync.UserSkillData::class.java,
+                        key = "test.skills_bigxp.$uuid",
+                        redisManager = redisManager,
+                        dataProducer = { ctx ->
                             val id: UUID = ctx.get("uuid")
                             SkillsSync.UserSkillData(
                                 ts = 1L,
@@ -248,15 +251,16 @@ class SkillsSyncTest : FreeSpec() {
                                 id = id,
                                 skills = listOf(SkillsSync.SkillInfo(id = "auraskills:fighting", level = 100, xp = bigXp)),
                             )
-                        }.dataApplier { received.set(it) }
-                        .build()
+                        },
+                        dataApplier = { received.set(it) },
+                    )
 
                 val ctx = Context().also { it.put("uuid", uuid) }
-                repo.saveAndPersistData(ctx, false).get(2, TimeUnit.SECONDS)
+                repo.saveAndPersistData(ctx).get(2, TimeUnit.SECONDS)
                 Thread.sleep(300)
 
                 ARC.serverName = "server-skills-d"
-                repo.loadAndApplyData(uuid, true).get(2, TimeUnit.SECONDS)
+                repo.loadAndApplyData(uuid).get(2, TimeUnit.SECONDS)
                 Thread.sleep(200)
 
                 received

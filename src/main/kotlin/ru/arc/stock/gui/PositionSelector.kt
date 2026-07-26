@@ -12,13 +12,13 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.minimessage.tag.Tag
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
-import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
-import org.bukkit.scheduler.BukkitTask
-import ru.arc.ARC
 import ru.arc.config.StockConfig
+import ru.arc.core.ScheduledTask
+import ru.arc.core.repeating
+import ru.arc.core.ticks
 import ru.arc.stock.Position
 import ru.arc.stock.StockPlayer
 import ru.arc.util.GuiUtils
@@ -53,7 +53,7 @@ class PositionSelector(
     private lateinit var back: GuiItem
     private lateinit var create: GuiItem
     private lateinit var profile: GuiItem
-    private var refreshTask: BukkitTask? = null
+    private var refreshTask: ScheduledTask? = null
     private lateinit var paginatedPane: PaginatedPane
     private val positionItemsByUuid = linkedMapOf<java.util.UUID, GuiItem>()
     private var lastRefreshFingerprint: String? = null
@@ -72,18 +72,13 @@ class PositionSelector(
         setupNav()
 
         refreshTask =
-            ARC.instance.server.scheduler.runTaskTimerAsynchronously(
-                ARC.instance,
-                Runnable {
-                    if (viewers.isEmpty()) {
-                        refreshTask?.cancel()
-                        return@Runnable
-                    }
-                    Bukkit.getScheduler().runTask(ARC.instance, Runnable { refreshPositionsInPlace() })
-                },
-                20L,
-                100L,
-            )
+            repeating(100.ticks, delay = 20.ticks) {
+                if (viewers.isEmpty()) {
+                    cancel()
+                    return@repeating
+                }
+                refreshPositionsInPlace()
+            }
         this.setOnClose { cancelTasks() }
     }
 

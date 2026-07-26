@@ -16,8 +16,8 @@ class XPay(
 
     override fun runInternal() {
         val miscConfig = ConfigManager.of(ARC.instance.dataFolder.toPath(), "misc.yml")
-        if (amount == 0.0) {
-            error("Amount is 0: {}", this)
+        if (!isValidPaymentAmount(amount)) {
+            error("Invalid payment amount {}: {}", amount, this)
             return
         }
         if (!miscConfig.bool("xaction.main-server", false)) {
@@ -40,3 +40,5 @@ class XPay(
         }
     }
 }
+
+internal fun isValidPaymentAmount(amount: Double): Boolean = amount.isFinite() && amount > 0.0

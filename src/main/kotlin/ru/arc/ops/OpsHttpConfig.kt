@@ -45,6 +45,39 @@ open class OpsHttpConfig(private val config: Config) {
     open val itemsGiveMaxStack: Int
         get() = config.integer("items-give-max-stack", 64).coerceIn(1, 6400)
 
+    open val itemPresetsReadEnabled: Boolean
+        get() = config.bool("item-presets-read-enabled", true)
+
+    open val itemPresetsWriteEnabled: Boolean
+        get() = config.bool("item-presets-write-enabled", false)
+
+    open val cmiKitsWriteEnabled: Boolean
+        get() = config.bool("cmi-kits-write-enabled", false)
+
+    open val scheduledCommandsReadEnabled: Boolean
+        get() = config.bool("scheduled-commands-read-enabled", true)
+
+    open val scheduledCommandsWriteEnabled: Boolean
+        get() = config.bool("scheduled-commands-write-enabled", false)
+
+    open val locationPoolsReadEnabled: Boolean
+        get() = config.bool("location-pools-read-enabled", true)
+
+    open val locationPoolsWriteEnabled: Boolean
+        get() = config.bool("location-pools-write-enabled", false)
+
+    open val treasurePoolsReadEnabled: Boolean
+        get() = config.bool("treasure-pools-read-enabled", true)
+
+    open val treasurePoolsWriteEnabled: Boolean
+        get() = config.bool("treasure-pools-write-enabled", false)
+
+    open val npcsReadEnabled: Boolean
+        get() = config.bool("npcs-read-enabled", true)
+
+    open val npcsWriteEnabled: Boolean
+        get() = config.bool("npcs-write-enabled", false)
+
     open val errorBufferSize: Int
         get() = config.integer("error-buffer-size", 200).coerceIn(50, 2000)
 
@@ -81,6 +114,17 @@ class TestOpsHttpConfig(
     override val itemsReadEnabled: Boolean = true,
     override val itemsGiveEnabled: Boolean = true,
     override val itemsGiveMaxStack: Int = 64,
+    override val itemPresetsReadEnabled: Boolean = true,
+    override val itemPresetsWriteEnabled: Boolean = false,
+    override val cmiKitsWriteEnabled: Boolean = false,
+    override val scheduledCommandsReadEnabled: Boolean = true,
+    override val scheduledCommandsWriteEnabled: Boolean = false,
+    override val locationPoolsReadEnabled: Boolean = true,
+    override val locationPoolsWriteEnabled: Boolean = false,
+    override val treasurePoolsReadEnabled: Boolean = true,
+    override val treasurePoolsWriteEnabled: Boolean = false,
+    override val npcsReadEnabled: Boolean = true,
+    override val npcsWriteEnabled: Boolean = false,
     override val errorBufferSize: Int = 100,
 ) : OpsHttpConfig(EmptyConfig) {
     fun copy(
@@ -88,6 +132,17 @@ class TestOpsHttpConfig(
         messagesEnabled: Boolean = this.messagesEnabled,
         runAsEnabled: Boolean = this.runAsEnabled,
         itemsGiveEnabled: Boolean = this.itemsGiveEnabled,
+        itemPresetsReadEnabled: Boolean = this.itemPresetsReadEnabled,
+        itemPresetsWriteEnabled: Boolean = this.itemPresetsWriteEnabled,
+        cmiKitsWriteEnabled: Boolean = this.cmiKitsWriteEnabled,
+        scheduledCommandsReadEnabled: Boolean = this.scheduledCommandsReadEnabled,
+        scheduledCommandsWriteEnabled: Boolean = this.scheduledCommandsWriteEnabled,
+        locationPoolsReadEnabled: Boolean = this.locationPoolsReadEnabled,
+        locationPoolsWriteEnabled: Boolean = this.locationPoolsWriteEnabled,
+        treasurePoolsReadEnabled: Boolean = this.treasurePoolsReadEnabled,
+        treasurePoolsWriteEnabled: Boolean = this.treasurePoolsWriteEnabled,
+        npcsReadEnabled: Boolean = this.npcsReadEnabled,
+        npcsWriteEnabled: Boolean = this.npcsWriteEnabled,
     ): TestOpsHttpConfig =
         TestOpsHttpConfig(
             enabled = enabled,
@@ -102,6 +157,17 @@ class TestOpsHttpConfig(
             itemsReadEnabled = itemsReadEnabled,
             itemsGiveEnabled = itemsGiveEnabled,
             itemsGiveMaxStack = itemsGiveMaxStack,
+            itemPresetsReadEnabled = itemPresetsReadEnabled,
+            itemPresetsWriteEnabled = itemPresetsWriteEnabled,
+            cmiKitsWriteEnabled = cmiKitsWriteEnabled,
+            scheduledCommandsReadEnabled = scheduledCommandsReadEnabled,
+            scheduledCommandsWriteEnabled = scheduledCommandsWriteEnabled,
+            locationPoolsReadEnabled = locationPoolsReadEnabled,
+            locationPoolsWriteEnabled = locationPoolsWriteEnabled,
+            treasurePoolsReadEnabled = treasurePoolsReadEnabled,
+            treasurePoolsWriteEnabled = treasurePoolsWriteEnabled,
+            npcsReadEnabled = npcsReadEnabled,
+            npcsWriteEnabled = npcsWriteEnabled,
             errorBufferSize = errorBufferSize,
         )
 }

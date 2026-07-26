@@ -40,6 +40,12 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * Board entry entity representing an ad/announcement on the board.
  */
+internal enum class BoardActionResult {
+    APPLIED,
+    ALREADY_APPLIED,
+    NOT_ALLOWED,
+}
+
 data class BoardEntryData(
     val entryUuid: UUID,
     val playerUuid: UUID,
@@ -57,10 +63,12 @@ data class BoardEntryData(
 ) : Entity,
     Mergeable<BoardEntryData> {
     @Transient
+    @Volatile
     private var _tagResolver: TagResolver? = null
 
     override fun id(): String = entryUuid.toString()
 
+    @Synchronized
     override fun merge(other: BoardEntryData) {
         type = other.type
         text = other.text
@@ -271,16 +279,13 @@ data class BoardEntryData(
      * Check if a player has rated this entry.
      * @return 1 for positive, -1 for negative, 0 for no rating
      */
-    fun hasRated(player: Player): Int =
-        when {
-            positiveRatings.contains(player.name) -> 1
-            negativeRatings.contains(player.name) -> -1
-            else -> 0
-        }
+    @Synchronized
+    fun hasRated(player: Player): Int = ratingBy(player.name)
 
     /**
      * Check if a player has reported this entry.
      */
+    @Synchronized
     fun hasReported(player: Player): Boolean = reports.contains(player.name)
 
     /**
@@ -298,10 +303,24 @@ data class BoardEntryData(
      * @param name player name
      * @param rating 1 for positive, -1 for negative
      */
-    fun rate(
+    @Synchronized
+    internal fun tryRate(
+        player: Player,
+        rating: Int,
+    ): BoardActionResult {
+        requireValidRating(rating)
+        if (!canRate(player)) return BoardActionResult.NOT_ALLOWED
+        return tryRate(player.name, rating)
+    }
+
+    @Synchronized
+    internal fun tryRate(
         name: String,
         rating: Int,
-    ) {
+    ): BoardActionResult {
+        requireValidRating(rating)
+        if (ratingBy(name) == rating) return BoardActionResult.ALREADY_APPLIED
+
         when (rating) {
             1 -> {
                 negativeRatings.remove(name)
@@ -314,14 +333,47 @@ data class BoardEntryData(
             }
         }
         _tagResolver = null
+        return BoardActionResult.APPLIED
+    }
+
+    @Synchronized
+    fun rate(
+        name: String,
+        rating: Int,
+    ) {
+        tryRate(name, rating)
     }
 
     /**
      * Report this entry.
      */
-    fun report(name: String) {
-        reports.add(name)
+    @Synchronized
+    internal fun tryReport(player: Player): BoardActionResult {
+        if (!canRate(player)) return BoardActionResult.NOT_ALLOWED
+        return tryReport(player.name)
+    }
+
+    @Synchronized
+    internal fun tryReport(name: String): BoardActionResult {
+        if (!reports.add(name)) return BoardActionResult.ALREADY_APPLIED
         _tagResolver = null
+        return BoardActionResult.APPLIED
+    }
+
+    @Synchronized
+    fun report(name: String) {
+        tryReport(name)
+    }
+
+    private fun ratingBy(name: String): Int =
+        when {
+            positiveRatings.contains(name) -> 1
+            negativeRatings.contains(name) -> -1
+            else -> 0
+        }
+
+    private fun requireValidRating(rating: Int) {
+        require(rating == 1 || rating == -1) { "Rating must be 1 or -1, got $rating" }
     }
 
     /**
@@ -543,13 +595,16 @@ internal fun selectNextAnnounceEntry(entries: Collection<BoardEntryData>): Board
  */
 object BoardManager {
     private lateinit var repo: CachedRepository<BoardEntryData>
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private lateinit var scope: CoroutineScope
     private var initialized = false
 
     private val cache = BoardEntryCache()
     private var updateCacheJob: kotlinx.coroutines.Job? = null
     private var announceJob: kotlinx.coroutines.Job? = null
     private var purgeJob: kotlinx.coroutines.Job? = null
+
+    @JvmStatic
+    fun isAvailable(): Boolean = initialized
 
     private val config: Config get() = ConfigManager.ofModule(ARC.instance.dataFolder.toPath(), "board.yml")
 
@@ -561,6 +616,7 @@ object BoardManager {
             return
         }
 
+        scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         repo =
             redisRepo<BoardEntryData>(
                 id = "board",
@@ -683,13 +739,13 @@ object BoardManager {
      */
     @JvmStatic
     fun items(): List<BoardItem> =
-        runBlocking {
+        if (initialized) {
             repo
-                .all()
-                .getOrNull()
-                ?.filter { !it.isExpired() }
-                ?.map { cache.get(it) }
-                ?: emptyList()
+                .allNow()
+                .filter { !it.isExpired() }
+                .map { cache.get(it) }
+        } else {
+            emptyList()
         }
 
     /**
@@ -707,6 +763,7 @@ object BoardManager {
      */
     @JvmStatic
     fun addEntry(entry: BoardEntryData) {
+        check(initialized) { "Board is unavailable because Redis is not initialized" }
         scope.launch {
             repo.save(entry)
             updateCache(entry.entryUuid)
@@ -718,6 +775,7 @@ object BoardManager {
      */
     @JvmStatic
     fun deleteEntry(entry: BoardEntryData) {
+        if (!initialized) return
         scope.launch {
             repo.delete(entry.id())
             cache.remove(entry.entryUuid)
@@ -729,15 +787,14 @@ object BoardManager {
      */
     @JvmStatic
     fun getEntry(uuid: UUID): BoardEntryData? =
-        runBlocking {
-            repo.get(uuid.toString()).getOrNull()
-        }
+        if (initialized) repo.getNow(uuid.toString()) else null
 
     /**
      * Save an entry after modification.
      */
     @JvmStatic
     fun saveEntry(entry: BoardEntryData) {
+        check(initialized) { "Board is unavailable because Redis is not initialized" }
         scope.launch {
             repo.save(entry)
             updateCache(entry.entryUuid)
@@ -748,6 +805,7 @@ object BoardManager {
      * Update the cache for a specific entry.
      */
     fun updateCache(uuid: UUID) {
+        if (!initialized) return
         scope.launch {
             val entry = repo.get(uuid.toString()).getOrNull()
             if (entry != null) {
@@ -762,6 +820,7 @@ object BoardManager {
      * Update all cached entries.
      */
     fun updateAllCache() {
+        if (!initialized) return
         cache.clear()
         scope.launch {
             purgeExpiredEntries()

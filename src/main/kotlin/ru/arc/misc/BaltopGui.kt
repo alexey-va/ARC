@@ -34,6 +34,7 @@ object BaltopGuiFactory {
 
     private val cachedEntries = CopyOnWriteArrayList<BaltopEntry>()
     private var lastUpdate = 0L
+    private var refreshInFlight: CompletableFuture<Void>? = null
 
     fun create(
         config: Config,
@@ -150,19 +151,21 @@ object BaltopGuiFactory {
     /**
      * Update the cache if it's stale.
      */
+    @Synchronized
     private fun updateCacheIfNeeded(): CompletableFuture<Void> {
-        if (HookRegistry.redisEcoHook == null) {
+        val redisEco = HookRegistry.redisEcoHook
+        if (redisEco == null) {
             return CompletableFuture.completedFuture(null)
         }
 
         if (System.currentTimeMillis() - lastUpdate <= 60000) {
             return CompletableFuture.completedFuture(null)
         }
+        refreshInFlight?.takeUnless { it.isDone }?.let { return it }
 
         info("Updating baltop cache")
-        lastUpdate = System.currentTimeMillis()
-
-        return HookRegistry.redisEcoHook!!
+        val refresh =
+            redisEco
             .getTopAccounts(224)
             .thenAccept { accounts ->
                 val entries =
@@ -181,6 +184,16 @@ object BaltopGuiFactory {
 
                 cachedEntries.clear()
                 cachedEntries.addAll(entries)
+                lastUpdate = System.currentTimeMillis()
             }
+        refreshInFlight = refresh
+        refresh.whenComplete { _, _ ->
+            synchronized(this) {
+                if (refreshInFlight === refresh) {
+                    refreshInFlight = null
+                }
+            }
+        }
+        return refresh
     }
 }

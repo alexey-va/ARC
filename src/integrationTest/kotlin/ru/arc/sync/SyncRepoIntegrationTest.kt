@@ -9,7 +9,7 @@ import io.kotest.matchers.shouldBe
 import org.testcontainers.containers.GenericContainer
 import org.testcontainers.utility.DockerImageName
 import ru.arc.ARC
-import ru.arc.network.RedisManager
+import ru.arc.redis.RedisManager
 import ru.arc.sync.base.Context
 import ru.arc.sync.base.SyncData
 import ru.arc.sync.base.SyncRepo
@@ -51,11 +51,11 @@ class SyncRepoIntegrationTest : FreeSpec() {
             val repo = buildRepo(redisManager, uuid, received)
 
             val ctx = Context().also { it.put("uuid", uuid) }
-            repo.saveAndPersistData(ctx, false).get(2, TimeUnit.SECONDS)
+            repo.saveAndPersistData(ctx).get(2, TimeUnit.SECONDS)
             Thread.sleep(300)
 
             ARC.serverName = "server-B"
-            repo.loadAndApplyData(uuid, true).get(2, TimeUnit.SECONDS)
+            repo.loadAndApplyData(uuid).get(2, TimeUnit.SECONDS)
             Thread.sleep(200)
 
             val dto = received.get().shouldNotBeNull()
@@ -71,10 +71,10 @@ class SyncRepoIntegrationTest : FreeSpec() {
             val repo = buildRepo(redisManager, uuid, received, server = "same-server")
 
             val ctx = Context().also { it.put("uuid", uuid) }
-            repo.saveAndPersistData(ctx, false).get(2, TimeUnit.SECONDS)
+            repo.saveAndPersistData(ctx).get(2, TimeUnit.SECONDS)
             Thread.sleep(300)
 
-            repo.loadAndApplyData(uuid, true).get(2, TimeUnit.SECONDS)
+            repo.loadAndApplyData(uuid).get(2, TimeUnit.SECONDS)
             Thread.sleep(200)
 
             received.get() shouldBe null
@@ -86,7 +86,7 @@ class SyncRepoIntegrationTest : FreeSpec() {
             val repo = buildRepo(redisManager, uuid, received)
 
             ARC.serverName = "other-server"
-            repo.loadAndApplyData(uuid, true).get(2, TimeUnit.SECONDS)
+            repo.loadAndApplyData(uuid).get(2, TimeUnit.SECONDS)
             Thread.sleep(200)
 
             received.get() shouldBe null
@@ -97,25 +97,27 @@ class SyncRepoIntegrationTest : FreeSpec() {
             val uuid = UUID.randomUUID()
 
             var counter = 0
-            val repo = SyncRepo.builder(TestDto::class.java)
-                .key("test.overwrite")
-                .redisManager(redisManager)
-                .dataProducer { ctx ->
+            val repo =
+                SyncRepo(
+                    clazz = TestDto::class.java,
+                    key = "test.overwrite",
+                    redisManager = redisManager,
+                    dataProducer = { ctx ->
                     counter++
                     val id: UUID = ctx.get("uuid")
                     TestDto(ts = System.currentTimeMillis(), srv = "server-A", id = id, value = "v$counter")
-                }
-                .dataApplier { received.set(it) }
-                .build()
+                    },
+                    dataApplier = { received.set(it) },
+                )
 
             val ctx = Context().also { it.put("uuid", uuid) }
             repeat(3) {
-                repo.saveAndPersistData(ctx, false).get(2, TimeUnit.SECONDS)
+                repo.saveAndPersistData(ctx).get(2, TimeUnit.SECONDS)
                 Thread.sleep(100)
             }
 
             ARC.serverName = "server-B"
-            repo.loadAndApplyData(uuid, true).get(2, TimeUnit.SECONDS)
+            repo.loadAndApplyData(uuid).get(2, TimeUnit.SECONDS)
             Thread.sleep(200)
 
             received.get()?.value shouldBe "v3"
@@ -171,15 +173,17 @@ class SyncRepoIntegrationTest : FreeSpec() {
             uuid: UUID,
             received: AtomicReference<TestDto?>,
             server: String = "server-A",
-        ): SyncRepo<TestDto> = SyncRepo.builder(TestDto::class.java)
-            .key("test.sync_repo.${uuid}")
-            .redisManager(redisManager)
-            .dataProducer { ctx ->
-                val id: UUID = ctx.get("uuid")
-                TestDto(ts = System.currentTimeMillis(), srv = server, id = id, value = "synced-$id")
-            }
-            .dataApplier { received.set(it) }
-            .build()
+        ): SyncRepo<TestDto> =
+            SyncRepo(
+                clazz = TestDto::class.java,
+                key = "test.sync_repo.$uuid",
+                redisManager = redisManager,
+                dataProducer = { ctx ->
+                    val id: UUID = ctx.get("uuid")
+                    TestDto(ts = System.currentTimeMillis(), srv = server, id = id, value = "synced-$id")
+                },
+                dataApplier = { received.set(it) },
+            )
     }
 
     data class TestDto(

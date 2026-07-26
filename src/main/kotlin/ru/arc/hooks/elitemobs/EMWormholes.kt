@@ -8,9 +8,12 @@ import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Particle
 import org.bukkit.Registry
-import org.bukkit.scheduler.BukkitTask
 import ru.arc.ARC
+import ru.arc.config.Config
 import ru.arc.config.ConfigManager
+import ru.arc.core.ScheduledTask
+import ru.arc.core.repeating
+import ru.arc.core.ticks
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import ru.arc.util.ParticleManager
@@ -20,33 +23,55 @@ import ru.arc.config.materialSet
 import ru.arc.config.particle
 import ru.arc.config.sound
 
-class EMWormholes {
+class EMWormholes internal constructor(
+    private val config: Config,
+    private val scheduleWormholes: (periodTicks: Long, task: () -> Unit) -> ScheduledTask,
+) : AutoCloseable {
+    constructor() : this(
+        config = ConfigManager.of(ARC.instance.dataPath, "elitemobs.yml"),
+        scheduleWormholes = { periodTicks, task ->
+            repeating(periodTicks.ticks, delay = 20.ticks) {
+                task()
+            }
+        },
+    )
 
-    companion object {
-        private var wormholeTask: BukkitTask? = null
-        val config = ConfigManager.of(ARC.instance.dataPath, "elitemobs.yml")
-    }
+    private var wormholeTask: ScheduledTask? = null
+    private var closed = false
 
+    @Synchronized
     fun init() {
-        cancel()
+        check(!closed) { "EMWormholes is closed" }
+        cancelTask()
         info("Starting wormhole task")
-        wormholeTask = ARC.instance.server.scheduler.runTaskTimerAsynchronously(
-            ARC.instance,
-            Runnable {
-                try {
-                    runWormholes()
-                    runChests()
-                } catch (e: Exception) {
-                    error("Error running wormholes", e)
-                }
-            },
-            20L,
-            config.integer("wormholes.period-ticks", 2).toLong(),
-        )
+        val periodTicks = config.integer("wormholes.period-ticks", 2).toLong()
+        require(periodTicks > 0) { "wormholes.period-ticks must be positive, got $periodTicks" }
+        wormholeTask = scheduleWormholes(periodTicks) {
+            try {
+                runWormholes()
+                runChests()
+            } catch (e: Exception) {
+                error("Error running wormholes", e)
+            }
+        }
     }
 
+    @Deprecated("Use close()", ReplaceWith("close()"))
     fun cancel() {
-        wormholeTask?.takeUnless { it.isCancelled }?.cancel()
+        close()
+    }
+
+    @Synchronized
+    override fun close() {
+        if (closed) return
+        closed = true
+        cancelTask()
+    }
+
+    private fun cancelTask() {
+        val task = wormholeTask
+        wormholeTask = null
+        task?.takeUnless { it.isCancelled }?.cancel()
     }
 
     private fun runChests() {

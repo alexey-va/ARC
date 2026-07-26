@@ -5,6 +5,7 @@ import org.bukkit.Bukkit
 import org.bukkit.Chunk
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
+import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
 import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.world.ChunkLoadEvent
@@ -23,13 +24,34 @@ object HuntFurnitureJanitor : Listener {
     private const val CHUNKS_PER_TICK = 4
 
     private lateinit var scheduler: TaskScheduler
-    private var scanTask: ScheduledTask? = null
+    private var startupTask: ScheduledTask? = null
+    private var registryScanTask: ScheduledTask? = null
+    private var legacyScanTask: ScheduledTask? = null
 
     @JvmStatic
     fun init(taskScheduler: TaskScheduler) {
+        shutdown()
         scheduler = taskScheduler
         Bukkit.getPluginManager().registerEvents(this, ARC.instance)
-        scheduler.runLater(STARTUP_DELAY_TICKS, Runnable { startStartupCleanup() })
+        startupTask =
+            scheduler.runLater(
+                STARTUP_DELAY_TICKS,
+                Runnable {
+                    startupTask = null
+                    startStartupCleanup()
+                },
+            )
+    }
+
+    @JvmStatic
+    fun shutdown() {
+        startupTask?.cancel()
+        registryScanTask?.cancel()
+        legacyScanTask?.cancel()
+        startupTask = null
+        registryScanTask = null
+        legacyScanTask = null
+        HandlerList.unregisterAll(this)
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -61,15 +83,16 @@ object HuntFurnitureJanitor : Listener {
 
         var index = 0
         var removedEntities = 0
-        scanTask?.cancel()
-        scanTask =
+        registryScanTask?.cancel()
+        registryScanTask =
             scheduler.runTimer(
                 1,
                 1,
                 Runnable {
                     repeat(ANCHORS_PER_TICK) {
                         if (index >= anchors.size) {
-                            scanTask?.cancel()
+                            registryScanTask?.cancel()
+                            registryScanTask = null
                             info(
                                 "[hunt-furniture] registry cleanup finished: {} anchors, {} entities",
                                 anchors.size,
@@ -92,12 +115,23 @@ object HuntFurnitureJanitor : Listener {
 
         var index = 0
         var cleaned = 0
-        scheduler.runTimer(
+        legacyScanTask?.cancel()
+        legacyScanTask =
+            scheduler.runTimer(
             1,
             1,
             Runnable {
                 repeat(CHUNKS_PER_TICK) {
-                    if (index >= chunks.size) return@Runnable
+                    if (index >= chunks.size) {
+                        legacyScanTask?.cancel()
+                        legacyScanTask = null
+                        info(
+                            "[hunt-furniture] legacy chunk scan finished: {} chunks, {} blocks",
+                            chunks.size,
+                            cleaned,
+                        )
+                        return@Runnable
+                    }
                     cleaned += cleanupChunk(chunks[index++])
                 }
             },

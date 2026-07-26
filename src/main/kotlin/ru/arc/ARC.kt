@@ -22,6 +22,7 @@ import ru.arc.config.ConfigManager
 import ru.arc.config.LocationPoolConfig
 import ru.arc.core.ModuleRegistry
 import ru.arc.core.PaperArcRuntime
+import ru.arc.core.Tasks
 import ru.arc.core.dataPath
 import ru.arc.core.modules.AiModule
 import ru.arc.core.modules.AnnounceModule
@@ -51,7 +52,7 @@ import ru.arc.core.modules.TreasureModule
 import ru.arc.core.modules.XActionModule
 import ru.arc.hooks.HookRegistry
 import ru.arc.network.NetworkRegistry
-import ru.arc.network.RedisManager
+import ru.arc.redis.RedisManager
 import ru.arc.ops.OpsHttpModule
 import ru.arc.restart.RestartModule
 import ru.arc.scheduled.ScheduledCommandsModule
@@ -131,6 +132,7 @@ open class ARC : JavaPlugin() {
     override fun onDisable() {
         info("Stopping ARC plugin")
         ModuleRegistry.shutdownAll()
+        Tasks.reset()
         info("ARC plugin disabled")
     }
 
@@ -142,8 +144,8 @@ open class ARC : JavaPlugin() {
         // Reload YAML from disk before modules re-read configs (announce delay, etc.).
         ConfigManager.reloadAll()
         ModuleRegistry.reloadAll()
-        // RedisModule.reload() reconnects and clears channel subscriptions; modules re-register
-        // listeners above, but subscription must be restarted explicitly (same as onEnable).
+        // Modules may replace channel listeners during reload; restart the subscription once
+        // after every module has refreshed its registrations.
         redisManager?.let {
             info("Redis resubscribing to {} channels after reload", it.getChannelCount())
             it.init()

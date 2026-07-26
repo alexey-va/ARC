@@ -197,7 +197,16 @@ object ScheduledCommandsManager {
     }
 
     @JvmStatic
-    fun settings(): ScheduledCommandsSettings = config
+    fun settings(): ScheduledCommandsSettings {
+        check(::config.isInitialized) { "Scheduled commands manager is not initialized" }
+        return config
+    }
+
+    @JvmStatic
+    fun entries(): List<ScheduledCommandEntry> = settings().entries()
+
+    @JvmStatic
+    fun entry(id: String): ScheduledCommandEntry? = settings().entry(id.trim().lowercase())
 
     @JvmStatic
     fun openGui(player: org.bukkit.entity.Player) {
@@ -213,6 +222,7 @@ object ScheduledCommandsManager {
 
     @JvmStatic
     fun saveEntry(draft: ScheduledCommandDraft): ValidationResult {
+        check(::config.isInitialized) { "Scheduled commands manager is not initialized" }
         val existingIds = config.commandIds().toSet()
         val result = ScheduledCommandInputValidator.validateDraft(draft, existingIds)
         if (result is ValidationResult.Error) return result
@@ -223,5 +233,16 @@ object ScheduledCommandsManager {
         service?.clearEntryState(oldId)
         service?.clearEntryState(draft.id)
         return ValidationResult.Ok
+    }
+
+    @JvmStatic
+    fun deleteEntry(id: String): Boolean {
+        check(::config.isInitialized) { "Scheduled commands manager is not initialized" }
+        val normalizedId = id.trim().lowercase()
+        val deleted = config.deleteEntry(normalizedId)
+        if (!deleted) return false
+        config.reloadConfig()
+        service?.clearEntryState(normalizedId)
+        return true
     }
 }

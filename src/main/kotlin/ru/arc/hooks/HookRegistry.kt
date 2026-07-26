@@ -1,6 +1,8 @@
 package ru.arc.hooks
 
 import org.bukkit.Bukkit
+import org.bukkit.event.HandlerList
+import org.bukkit.event.Listener
 import ru.arc.ARC
 import ru.arc.hooks.auraskills.AuraSkillsHook
 import ru.arc.hooks.bank.BankHook
@@ -32,7 +34,9 @@ import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 
-class HookRegistry {
+class HookRegistry(
+    private val stopJobs: () -> Unit = JobsModule::shutdown,
+) : AutoCloseable {
     var chatListener: ChatListener? = null
     var commandListener: CommandListener? = null
     var spawnerListener: SpawnerListener? = null
@@ -44,6 +48,12 @@ class HookRegistry {
     var bsListener: BSListener? = null
     var shopListener: ShopListener? = null
     var emListener: EMListener? = null
+
+    private val registeredHooks = HashSet<String>()
+    private val registeredListeners = LinkedHashSet<Listener>()
+
+    internal var isClosed: Boolean = false
+        private set
 
     companion object {
         @JvmField var landsHook: LandsHook? = null
@@ -90,104 +100,212 @@ class HookRegistry {
 
         @JvmField var aeHook: AEHook? = null
 
-        private val registeredHooks = HashSet<String>()
-
-        private fun register(
-            pluginName: String,
-            single: Boolean,
-            runnable: Runnable,
-        ) {
-            if (registeredHooks.contains(pluginName)) {
-                info("Plugin {} already registered", pluginName)
-                return
-            }
-            if (Bukkit.getServer().pluginManager.getPlugin(pluginName) != null) {
-                info("Registering {} hook", pluginName)
-                try {
-                    runnable.run()
-                    if (single) registeredHooks.add(pluginName)
-                } catch (e: Throwable) {
-                    error("Error registering {} hook", pluginName, e)
-                    debug("Hook {} registration failed: {}", pluginName, e.message)
-                }
-            } else {
-                debug("Plugin {} not installed — hook skipped", pluginName)
-            }
-        }
-
-        private fun registerFirstAvailable(
-            single: Boolean,
-            runnable: Runnable,
-            vararg pluginNames: String,
-        ) {
-            for (pluginName in pluginNames) {
-                if (Bukkit.getServer().pluginManager.getPlugin(pluginName) != null) {
-                    register(pluginName, single, runnable)
-                    return
-                }
-            }
-            info("Unable to find plugin '{}'", pluginNames.joinToString("' or '"))
+        private fun clearGlobalHooks() {
+            landsHook = null
+            huskHomesHook = null
+            papiHook = null
+            cmiHook = null
+            itemsAdderHook = null
+            citizensHook = null
+            viaVersionHook = null
+            wgHook = null
+            sfHook = null
+            emHook = null
+            yamipaHook = null
+            luckPermsHook = null
+            lootChestHook = null
+            auctionHook = null
+            translatorHook = null
+            jobsEnabled = false
+            bankHook = null
+            redisEcoHook = null
+            auraSkillsHook = null
+            playerWarpsHook = null
+            packetEventsHook = null
+            aeHook = null
         }
     }
 
     fun setupHooks() {
+        check(!isClosed) { "HookRegistry is closed" }
         registerVanillaEvents()
         registerHooks()
     }
 
+    @Deprecated("Use close()", ReplaceWith("close()"))
     fun cancelTasks() {
-        emHook?.cancel()
+        close()
+    }
+
+    override fun close() {
+        if (isClosed) return
+        isClosed = true
+
+        val failures = mutableListOf<Throwable>()
+        cleanup(failures) { emHook?.close() }
+        cleanup(failures) { auctionHook?.close() }
+        cleanup(failures) { citizensHook?.close() }
+        cleanup(failures) { papiHook?.unregister() }
+        if (jobsEnabled) {
+            cleanup(failures, stopJobs)
+        }
+        jobsEnabled = false
+
+        registeredListeners.forEach { listener ->
+            cleanup(failures) { HandlerList.unregisterAll(listener) }
+        }
+        registeredListeners.clear()
+        registeredHooks.clear()
+        clearInstanceListeners()
+        clearGlobalHooks()
+
+        if (failures.isNotEmpty()) {
+            val first = failures.first()
+            failures.drop(1).forEach(first::addSuppressed)
+            throw first
+        }
+    }
+
+    private fun cleanup(
+        failures: MutableList<Throwable>,
+        action: () -> Unit,
+    ) {
+        try {
+            action()
+        } catch (failure: Throwable) {
+            failures += failure
+        }
+    }
+
+    private fun clearInstanceListeners() {
+        chatListener = null
+        commandListener = null
+        spawnerListener = null
+        blockListener = null
+        joinListener = null
+        pickupListener = null
+        betterRTPListener = null
+        respawnListener = null
+        bsListener = null
+        shopListener = null
+        emListener = null
+    }
+
+    private fun register(
+        pluginName: String,
+        single: Boolean,
+        action: () -> Unit,
+    ) {
+        if (pluginName in registeredHooks) {
+            info("Plugin {} already registered", pluginName)
+            return
+        }
+        if (Bukkit.getServer().pluginManager.getPlugin(pluginName) == null) {
+            debug("Plugin {} not installed — hook skipped", pluginName)
+            return
+        }
+
+        info("Registering {} hook", pluginName)
+        val listenersBefore = registeredListeners.toSet()
+        try {
+            action()
+            if (single) registeredHooks += pluginName
+        } catch (failure: Throwable) {
+            val partiallyRegistered = registeredListeners - listenersBefore
+            partiallyRegistered.forEach { listener ->
+                runCatching { HandlerList.unregisterAll(listener) }
+            }
+            registeredListeners.removeAll(partiallyRegistered.toSet())
+            error("Error registering {} hook", pluginName, failure)
+            debug("Hook {} registration failed: {}", pluginName, failure.message)
+        }
+    }
+
+    private fun registerFirstAvailable(
+        single: Boolean,
+        action: () -> Unit,
+        vararg pluginNames: String,
+    ) {
+        for (pluginName in pluginNames) {
+            if (Bukkit.getServer().pluginManager.getPlugin(pluginName) != null) {
+                register(pluginName, single, action)
+                return
+            }
+        }
+        info("Unable to find plugin '{}'", pluginNames.joinToString("' or '"))
+    }
+
+    private fun <T : Listener> registerListener(listener: T): T {
+        Bukkit.getPluginManager().registerEvents(listener, ARC.instance)
+        registeredListeners += listener
+        return listener
     }
 
     private fun registerHooks() {
         register("PlaceholderAPI", true) {
-            papiHook = PAPIHook()
-            papiHook!!.register()
+            val hook = PAPIHook()
+            check(hook.register()) { "PlaceholderAPI rejected ARC expansion registration" }
+            papiHook = hook
         }
         register("WorldGuard", true) {
-            wgHook = WGHook()
-            Bukkit.getPluginManager().registerEvents(wgHook!!, ARC.instance)
+            wgHook = registerListener(WGHook())
         }
         register("Slimefun", true) {
-            sfHook = SFHook()
-            Bukkit.getPluginManager().registerEvents(sfHook!!, ARC.instance)
-            Bukkit.getPluginManager().registerEvents(BackpackBlockListener, ARC.instance)
+            val hook = registerListener(SFHook())
+            registerListener(BackpackBlockListener)
+            sfHook = hook
         }
         register("AdvancedEnchantments", true) {
-            aeHook = AEHook()
-            Bukkit.getPluginManager().registerEvents(aeHook!!, ARC.instance)
+            aeHook = registerListener(AEHook())
         }
         register("EliteMobs", false) {
-            if (emHook == null) emHook = EMHook()
-            emHook!!.reload()
-            if (emListener == null) {
-                emListener = EMListener()
-                Bukkit.getPluginManager().registerEvents(emListener!!, ARC.instance)
+            val existingHook = emHook
+            val hook = existingHook ?: EMHook()
+            try {
+                hook.reload()
+                val listener = emListener ?: registerListener(EMListener())
+                emHook = hook
+                emListener = listener
+            } catch (failure: Throwable) {
+                if (existingHook == null) hook.close()
+                throw failure
             }
         }
         register("HuskHomes", true) {
-            huskHomesHook = HuskHomesHook()
-            Bukkit.getPluginManager().registerEvents(huskHomesHook!!, ARC.instance)
+            huskHomesHook = registerListener(HuskHomesHook())
         }
         register("Lands", true) { landsHook = LandsHook() }
-        register("Jobs", true) {
-            JobsModule.init()
-            jobsEnabled = true
+        register("Jobs", false) {
+            if (!jobsEnabled) jobsEnabled = JobsModule.init()
         }
-        registerFirstAvailable(true, Runnable { auctionHook = AuctionHook() }, "zAuctionHouse", "zAuctionHouseV3")
+        registerFirstAvailable(
+            true,
+            {
+                val hook = AuctionHook()
+                try {
+                    hook.start()
+                    auctionHook = hook
+                } catch (failure: Throwable) {
+                    hook.close()
+                    throw failure
+                }
+            },
+            "zAuctionHouse",
+            "zAuctionHouseV3",
+        )
         register("Bank", true) { bankHook = BankHook() }
         register("RedisEconomy", true) {
-            redisEcoHook = RedisEcoHook()
-            val redisEcoListener = RedisEcoListener()
-            Bukkit.getPluginManager().registerEvents(redisEcoListener, ARC.instance)
+            val hook = RedisEcoHook()
+            registerListener(RedisEcoListener())
+            redisEcoHook = hook
         }
-        translatorHook = TranslatorHook()
+        if (translatorHook == null) translatorHook = TranslatorHook()
         register("LuckPerms", true) { luckPermsHook = LuckPermsHook() }
         register("AuraSkills", true) { auraSkillsHook = AuraSkillsHook() }
         register("CMI", true) {
-            cmiHook = CMIHook()
-            val cmiListener = CMIListener()
-            Bukkit.getPluginManager().registerEvents(cmiListener, ARC.instance)
+            val hook = CMIHook()
+            registerListener(CMIListener())
+            cmiHook = hook
         }
         register("ViaVersion", true) { viaVersionHook = ViaVersionHook() }
         register("packetevents", true) { packetEventsHook = PacketEventsHook() }
@@ -198,51 +316,47 @@ class HookRegistry {
             itemsAdderHook = ItemsAdderHook()
         }
         register("Citizens", true) {
-            citizensHook = CitizensHook()
-            citizensHook!!.registerListeners()
+            val hook = CitizensHook()
+            try {
+                hook.registerListeners()
+                citizensHook = hook
+            } catch (failure: Throwable) {
+                hook.close()
+                throw failure
+            }
         }
         register("BetterRTP", true) {
-            betterRTPListener = BetterRTPListener()
-            Bukkit.getPluginManager().registerEvents(betterRTPListener!!, ARC.instance)
+            betterRTPListener = registerListener(BetterRTPListener())
         }
         register("BetterStructures", true) {
-            bsListener = BSListener()
-            Bukkit.getPluginManager().registerEvents(bsListener!!, ARC.instance)
+            bsListener = registerListener(BSListener())
         }
         register("EconomyShopGUI-Premium", true) {
-            shopListener = ShopListener()
-            Bukkit.getPluginManager().registerEvents(shopListener!!, ARC.instance)
+            shopListener = registerListener(ShopListener())
         }
     }
 
     private fun registerVanillaEvents() {
         if (chatListener == null) {
-            chatListener = ChatListener()
-            Bukkit.getPluginManager().registerEvents(chatListener!!, ARC.instance)
+            chatListener = registerListener(ChatListener())
         }
         if (respawnListener == null) {
-            respawnListener = RespawnListener()
-            Bukkit.getPluginManager().registerEvents(respawnListener!!, ARC.instance)
+            respawnListener = registerListener(RespawnListener())
         }
         if (spawnerListener == null) {
-            spawnerListener = SpawnerListener()
-            Bukkit.getPluginManager().registerEvents(spawnerListener!!, ARC.instance)
+            spawnerListener = registerListener(SpawnerListener())
         }
         if (joinListener == null) {
-            joinListener = JoinListener()
-            Bukkit.getPluginManager().registerEvents(joinListener!!, ARC.instance)
+            joinListener = registerListener(JoinListener())
         }
         if (blockListener == null) {
-            blockListener = BlockListener()
-            Bukkit.getPluginManager().registerEvents(blockListener!!, ARC.instance)
+            blockListener = registerListener(BlockListener())
         }
         if (pickupListener == null) {
-            pickupListener = PickupListener()
-            Bukkit.getPluginManager().registerEvents(pickupListener!!, ARC.instance)
+            pickupListener = registerListener(PickupListener())
         }
         if (commandListener == null) {
-            commandListener = CommandListener()
-            Bukkit.getPluginManager().registerEvents(commandListener!!, ARC.instance)
+            commandListener = registerListener(CommandListener())
         }
     }
 }

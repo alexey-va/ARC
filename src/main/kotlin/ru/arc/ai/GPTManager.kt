@@ -2,13 +2,13 @@ package ru.arc.ai
 
 import org.bukkit.Location
 import org.bukkit.entity.Player
-import org.bukkit.event.player.AsyncPlayerChatEvent
 import ru.arc.ai.config.LlmModuleConfig
 import ru.arc.ai.config.NpcChatConfig
 import ru.arc.ai.llm.ModerationOutcome
 import ru.arc.ai.llm.ModerationService
 import ru.arc.ai.llm.OpenRouterLlmClient
 import ru.arc.ai.llm.SimpleChatService
+import ru.arc.core.ScheduledTask
 import ru.arc.core.Tasks
 import ru.arc.core.repeatingAsync
 import ru.arc.core.ticks
@@ -18,18 +18,24 @@ import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
-import java.util.Optional
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ConcurrentSkipListSet
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 
 object GPTManager {
+    private const val LLM_THREADS = 2
 
     private val entities = ConcurrentHashMap<String, GPTEntity>()
-    private val conversations = ConcurrentHashMap<UUID, MutableList<Conversation>>()
-    private val awaitingResponse = ConcurrentSkipListSet<UUID>()
-    private var cleanupTask: Any? = null
+    private val conversations = ConcurrentHashMap<UUID, CopyOnWriteArrayList<Conversation>>()
+    private val responseGate = AwaitingResponseGate()
+    private val threadNumber = AtomicInteger()
+    private var cleanupTask: ScheduledTask? = null
+    private var requestExecutor: ExecutorService? = null
+    private var running = false
 
     private lateinit var llmConfig: LlmModuleConfig
     private lateinit var npcChatConfig: NpcChatConfig
@@ -42,34 +48,52 @@ object GPTManager {
         npcChatConfig: NpcChatConfig,
         llmClient: OpenRouterLlmClient,
     ) {
+        shutdown()
         this.llmConfig = llmConfig
         this.npcChatConfig = npcChatConfig
-        moderationService = ModerationService(llmClient, llmConfig)
-        chatService = SimpleChatService(llmClient, llmConfig)
-
-        entities.clear()
-        conversations.clear()
-        cancel()
-
-        cleanupTask =
-            Tasks.scheduler.repeatingAsync(period = (20 * 30L).ticks, delay = 0.ticks) {
-                val now = System.currentTimeMillis()
-                conversations.forEach { (uuid, convs) ->
-                    val removed = convs.removeIf { now - it.lastMessageTime > it.lifeTime }
-                    if (removed) info("Removed expired conversations for player {}", uuid)
-                    if (convs.isEmpty()) conversations.remove(uuid)
+        val executor =
+            Executors.newFixedThreadPool(LLM_THREADS) { runnable ->
+                Thread(runnable, "arc-gpt-${threadNumber.incrementAndGet()}").apply {
+                    isDaemon = true
                 }
             }
+        requestExecutor = executor
+        moderationService = ModerationService(llmClient, llmConfig, executor)
+        chatService = SimpleChatService(llmClient, executor)
+
+        try {
+            cleanupTask =
+                Tasks.scheduler.repeatingAsync(period = (20 * 30L).ticks, delay = 0.ticks) {
+                    val now = System.currentTimeMillis()
+                    conversations.forEach { (uuid, convs) ->
+                        val removed = convs.removeIf { now - it.lastMessageTime > it.lifeTime }
+                        if (removed) info("Removed expired conversations for player {}", uuid)
+                        if (convs.isEmpty()) conversations.remove(uuid)
+                    }
+                }
+            running = true
+        } catch (error: Exception) {
+            executor.shutdownNow()
+            requestExecutor = null
+            throw error
+        }
     }
 
     @JvmStatic
     fun shutdown() {
+        running = false
         cancel()
+        entities.clear()
+        conversations.clear()
+        responseGate.clear()
+        requestExecutor?.shutdownNow()
+        requestExecutor = null
     }
 
     @JvmStatic
     fun cancel() {
-        (cleanupTask as? ru.arc.core.ScheduledTask)?.cancel()
+        cleanupTask?.cancel()
+        cleanupTask = null
     }
 
     @JvmStatic
@@ -78,7 +102,8 @@ object GPTManager {
         message: String,
         id: String,
         archetype: String,
-    ): CompletableFuture<Optional<String>> {
+    ): CompletableFuture<String?> {
+        if (!running) return CompletableFuture.completedFuture(null)
         val entity = entities.computeIfAbsent(id) { createEntity(archetype, id, true) }
         if (entity.archetype != archetype) {
             warn("Entity {} has different archetype {} than expected {}", id, entity.archetype, archetype)
@@ -87,35 +112,28 @@ object GPTManager {
     }
 
     @JvmStatic
-    fun moderationResponse(message: String): CompletableFuture<Optional<ModerResponse>> {
-        if (!::moderationService.isInitialized) {
+    fun moderationResponse(message: String): CompletableFuture<ModerResponse?> {
+        if (!running || !::moderationService.isInitialized) {
             warn("AI moderation not initialized — skipping message")
-            return CompletableFuture.completedFuture(Optional.empty())
+            return CompletableFuture.completedFuture(null)
         }
-        return moderationService.moderate(message).thenApply { optional ->
-            optional.flatMap { result ->
-                val response =
-                    when (result.outcome) {
-                        ModerationOutcome.OK -> ModerationResponse.OK
-                        ModerationOutcome.BAD -> ModerationResponse.BAD
-                        ModerationOutcome.UNKNOWN -> return@flatMap Optional.empty()
-                    }
-                Optional.of(ModerResponse(response, result.comment))
-            }
-        }.exceptionally { e ->
-            error("Error getting moderation response", e)
-            Optional.empty()
+        return moderationService.moderate(message).thenApply { result ->
+            result ?: return@thenApply null
+            val response =
+                when (result.outcome) {
+                    ModerationOutcome.OK -> ModerationResponse.OK
+                    ModerationOutcome.BAD -> ModerationResponse.BAD
+                    ModerationOutcome.UNKNOWN -> return@thenApply null
+                }
+            ModerResponse(response, result.comment)
+        }.exceptionally { failure ->
+            error("Error getting moderation response", failure)
+            null
         }
     }
 
     private fun createEntity(archetype: String, id: String, useHistory: Boolean): GPTEntity =
         GPTEntity(npcChatConfig, llmConfig, chatService, archetype, id, useHistory)
-
-    @JvmStatic
-    fun processMessage(chatEvent: AsyncPlayerChatEvent) {
-        if (awaitingResponse.contains(chatEvent.player.uniqueId)) return
-        processMessage(chatEvent.message, chatEvent.player, appendCancel = true)
-    }
 
     @JvmStatic
     fun processMessage(
@@ -145,22 +163,24 @@ object GPTManager {
         conversation: Conversation,
         appendCancel: Boolean,
     ): CompletableFuture<Void> {
-        awaitingResponse.add(player.uniqueId)
-        return getResponse(
-            player,
-            message,
-            conversation.gptId ?: return CompletableFuture.completedFuture(null),
-            conversation.archetype ?: "default",
-        ).thenAccept { response ->
+        val gptId = conversation.gptId ?: return CompletableFuture.completedFuture(null)
+        val responseFuture =
+            responseGate.run(player.uniqueId) {
+                getResponse(
+                    player,
+                    message,
+                    gptId,
+                    conversation.archetype ?: "default",
+                )
+            } ?: return CompletableFuture.completedFuture(null)
+
+        return responseFuture.thenAccept { response ->
             conversation.lastMessageTime = System.currentTimeMillis()
-            if (response.isEmpty) {
-                awaitingResponse.remove(player.uniqueId)
-                return@thenAccept
-            }
-            val responseMessage = formatMessage(response.get(), conversation, appendCancel)
+            response ?: return@thenAccept
+            val responseMessage = formatMessage(response, conversation, appendCancel)
             Tasks.scheduler.runSync(
                 Runnable {
-                    displayChatBubble(response.get(), conversation)
+                    displayChatBubble(response, conversation)
                     if (conversation.privateConversation) {
                         player.sendMessage(responseMessage)
                     } else {
@@ -168,7 +188,6 @@ object GPTManager {
                             it.sendMessage(responseMessage)
                         }
                     }
-                    awaitingResponse.remove(player.uniqueId)
                 },
             )
         }
@@ -214,8 +233,12 @@ object GPTManager {
         npcId: Int?,
         privateConversation: Boolean,
     ) {
+        if (!running) {
+            warn("Cannot start GPT conversation before AI initialization")
+            return
+        }
         entities.computeIfAbsent(id) { createEntity(archetype, id, true) }
-        val convs = conversations.computeIfAbsent(player.uniqueId) { mutableListOf() }
+        val convs = conversations.computeIfAbsent(player.uniqueId) { CopyOnWriteArrayList() }
         if (convs.any { it.gptId == id }) return
 
         val conv =
@@ -258,5 +281,55 @@ object GPTManager {
     }
 
     @JvmStatic
-    fun getConversations(player: Player): List<Conversation> = conversations.getOrDefault(player.uniqueId, emptyList())
+    fun getConversations(player: Player): List<Conversation> = conversations[player.uniqueId]?.toList() ?: emptyList()
+
+    internal fun isRunning(): Boolean = running
+
+    internal fun hasActiveExecutor(): Boolean = requestExecutor?.isShutdown == false
+}
+
+internal class AwaitingResponseGate {
+    private val active = ConcurrentHashMap<UUID, ActiveRequest>()
+
+    fun <T> run(
+        playerId: UUID,
+        operation: () -> CompletableFuture<T>,
+    ): CompletableFuture<T>? {
+        val request = ActiveRequest()
+        if (active.putIfAbsent(playerId, request) != null) return null
+        val future =
+            try {
+                operation()
+            } catch (error: Exception) {
+                CompletableFuture.failedFuture(error)
+            }
+        request.attach(future)
+        return future.whenComplete { _, _ -> active.remove(playerId, request) }
+    }
+
+    fun isAwaiting(playerId: UUID): Boolean = active.containsKey(playerId)
+
+    fun clear() {
+        val requests = active.values.toList()
+        active.clear()
+        requests.forEach(ActiveRequest::cancel)
+    }
+
+    private class ActiveRequest {
+        @Volatile
+        private var future: CompletableFuture<*>? = null
+
+        @Volatile
+        private var cancelled = false
+
+        fun attach(future: CompletableFuture<*>) {
+            this.future = future
+            if (cancelled) future.cancel(true)
+        }
+
+        fun cancel() {
+            cancelled = true
+            future?.cancel(true)
+        }
+    }
 }

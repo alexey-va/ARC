@@ -7,15 +7,15 @@ import net.citizensnpcs.trait.HologramTrait
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.entity.EntityType
+import org.bukkit.event.HandlerList
 import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
 import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.warn
 import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
 
-class CitizensHook {
+class CitizensHook : AutoCloseable {
 
     data class HologramLine(val text: String, val ticks: Int)
     data class InsertedHologramLine(val line: Int, val expireTime: Long)
@@ -26,14 +26,30 @@ class CitizensHook {
         .expireAfterAccess(10, TimeUnit.MINUTES)
         .build<Int, ConcurrentLinkedDeque<InsertedHologramLine>>()
 
-    companion object {
-        private var listener: CitizensListener? = null
+    private var listener: CitizensListener? = null
+    private var closed = false
+
+    @Synchronized
+    fun registerListeners() {
+        check(!closed) { "CitizensHook is closed" }
+        if (listener != null) return
+        val newListener = CitizensListener()
+        try {
+            Bukkit.getPluginManager().registerEvents(newListener, ARC.instance)
+            listener = newListener
+        } catch (failure: Throwable) {
+            HandlerList.unregisterAll(newListener)
+            throw failure
+        }
     }
 
-    fun registerListeners() {
-        if (listener != null) return
-        listener = CitizensListener()
-        Bukkit.getPluginManager().registerEvents(listener!!, ARC.instance)
+    @Synchronized
+    override fun close() {
+        if (closed) return
+        closed = true
+        listener?.let(HandlerList::unregisterAll)
+        listener = null
+        linesCache.invalidateAll()
     }
 
     fun createNpc(name: String, location: Location): Int {
@@ -68,10 +84,10 @@ class CitizensHook {
             }
             lineCache.clear()
 
-            val initialSize = AtomicInteger(trait.lines.size)
+            var nextLine = trait.lines.size
             lineList.reversed().forEach { line ->
                 trait.addTemporaryLine(line.text, line.ticks)
-                lineCache.add(InsertedHologramLine(initialSize.getAndIncrement(), System.currentTimeMillis() + line.ticks * 50L))
+                lineCache.add(InsertedHologramLine(nextLine++, System.currentTimeMillis() + line.ticks * 50L))
             }
         } catch (e: Exception) {
             warn("Error adding hologram lines", e)

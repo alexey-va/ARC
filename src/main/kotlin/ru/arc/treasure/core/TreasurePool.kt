@@ -127,32 +127,24 @@ data class TreasurePool(
         fun fromMap(map: Map<String, Any?>): TreasurePool? {
             val id = map["id"] as? String ?: return null
 
-            // Parse new message format
+            val messageEntries = map["messages"] as? List<*> ?: emptyList<Any>()
             val messages =
-                (map["messages"] as? List<*>)
-                    ?.mapNotNull { (it as? Map<String, Any?>)?.let { m -> TreasureMessage.fromMap(m) } }
-                    ?: emptyList()
-
-            // Legacy migration
-            val legacyMessages =
-                if (messages.isEmpty()) {
-                    val commonMessage = map["commonMessage"] as? String
-                    val commonAnnounceMessage = map["commonAnnounceMessage"] as? String
-                    val commonAnnounce = map["commonAnnounce"] as? Boolean ?: false
-                    TreasureMessage.fromLegacy(commonMessage, commonAnnounceMessage, commonAnnounce)
-                } else {
-                    messages
+                messageEntries.map { entry ->
+                    val messageMap = entry as? Map<String, Any?> ?: return null
+                    TreasureMessage.fromMap(messageMap) ?: return null
                 }
 
+            val treasureEntries = map["treasures"] as? List<*> ?: emptyList<Any>()
             val treasuresList =
-                (map["treasures"] as? List<*>)?.mapNotNull { entry ->
-                    (entry as? Map<String, Any?>)?.let { Treasure.fromMap(it) }
-                } ?: emptyList()
+                treasureEntries.map { entry ->
+                    val treasureMap = entry as? Map<String, Any?> ?: return null
+                    Treasure.fromMap(treasureMap) ?: return null
+                }
 
             return TreasurePool(
                 id = id,
                 treasures = treasuresList,
-                messages = legacyMessages,
+                messages = messages,
                 isDirty = false, // Loaded pools start clean
             )
         }

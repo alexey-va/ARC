@@ -274,15 +274,6 @@ class AuditModuleTest : TestBase() {
         }
 
         @Test
-        @DisplayName("operation() устанавливает dirty flag")
-        fun testOperationSetsDirty() {
-            auditData.isDirty = false
-            auditData.operation(100.0, Type.SHOP, "Тест")
-
-            assertTrue(auditData.isDirty)
-        }
-
-        @Test
         @DisplayName("operation() обновляет timestamp2 при агрегации")
         fun testOperationUpdatesTimestamp2() {
             auditData.operation(100.0, Type.JOB, "Работа")
@@ -360,7 +351,6 @@ class AuditModuleTest : TestBase() {
             auditData.clear()
 
             assertTrue(auditData.transactions.isEmpty())
-            assertTrue(auditData.isDirty)
         }
 
         @Test

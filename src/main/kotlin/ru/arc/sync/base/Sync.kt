@@ -8,4 +8,5 @@ interface Sync {
     fun playerJoin(uuid: UUID) {}
     fun playerQuit(uuid: UUID) {}
     fun processEvent(event: Event) {}
+    fun shutdown() {}
 }

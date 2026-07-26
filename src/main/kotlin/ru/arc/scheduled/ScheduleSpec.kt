@@ -131,13 +131,59 @@ class CronField private constructor(
             min: Int,
             max: Int,
         ): CronField {
+            require(min <= max) { "Invalid cron field bounds: $min..$max" }
             val trimmed = spec.trim()
+            require(trimmed.isNotEmpty()) { "Cron field must not be empty" }
             if (trimmed == "*") return CronField(trimmed) { true }
+            val parts = trimmed.split(',')
+            require(parts.none { it.isBlank() }) { "Cron field contains an empty list element: $spec" }
+            parts.forEach { validatePart(it.trim(), min, max) }
 
             val matcher: (Int) -> Boolean = { value ->
-                trimmed.split(',').any { part -> part.trim().matchesPart(value, min, max) }
+                parts.any { part -> part.trim().matchesPart(value, min, max) }
             }
             return CronField(trimmed, matcher)
+        }
+
+        private fun validatePart(
+            part: String,
+            min: Int,
+            max: Int,
+        ) {
+            if (part.contains('/')) {
+                val stepParts = part.split('/')
+                require(stepParts.size == 2) { "Invalid cron step: $part" }
+                val base = stepParts[0].trim()
+                val step = stepParts[1].trim().toIntOrNull()
+                require(step != null && step > 0) { "Invalid cron step: $part" }
+                require(base == "*" || base.contains('-') || base.toIntOrNull() != null) {
+                    "Invalid cron step base: $part"
+                }
+                if (base != "*") validateBase(base, min, max)
+                return
+            }
+            validateBase(part, min, max)
+        }
+
+        private fun validateBase(
+            part: String,
+            min: Int,
+            max: Int,
+        ) {
+            if (part.contains('-')) {
+                val rangeParts = part.split('-')
+                require(rangeParts.size == 2) { "Invalid cron range: $part" }
+                val start = rangeParts[0].trim().toIntOrNull()
+                val end = rangeParts[1].trim().toIntOrNull()
+                require(start != null && end != null && start in min..max && end in min..max && start <= end) {
+                    "Invalid cron range: $part (expected $min..$max)"
+                }
+                return
+            }
+            val value = part.toIntOrNull()
+            require(value != null && value in min..max) {
+                "Invalid cron value: $part (expected $min..$max)"
+            }
         }
 
         private fun String.matchesPart(
@@ -148,15 +194,17 @@ class CronField private constructor(
             if (contains('/')) {
                 val stepParts = split('/', limit = 2)
                 val base = stepParts[0].trim()
-                val step = stepParts[1].trim().toIntOrNull() ?: return false
-                if (step <= 0) return false
-                val baseMatcher =
-                    if (base == "*") {
-                        { v: Int -> v in min..max }
-                    } else {
-                        parse(base, min, max).matcher
+                val step = stepParts[1].trim().toInt()
+                val (start, end) =
+                    when {
+                        base == "*" -> min to max
+                        base.contains('-') -> {
+                            val range = base.split('-', limit = 2)
+                            range[0].trim().toInt() to range[1].trim().toInt()
+                        }
+                        else -> base.toInt() to max
                     }
-                return value in min..max && baseMatcher(value) && (value - min) % step == 0
+                return value in start..end && (value - start) % step == 0
             }
             if (contains('-')) {
                 val rangeParts = split('-', limit = 2)

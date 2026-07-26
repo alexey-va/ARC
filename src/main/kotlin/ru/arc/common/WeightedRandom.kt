@@ -14,6 +14,8 @@ class WeightedRandom<T> {
         return map.values.map { it.value }
     }
 
+    fun entries(): List<Pair<T>> = map.values.toList()
+
     fun add(value: T, weight: Double) {
         if (weight <= 0 || !weight.isFinite()) {
             // Reject zero, negative, NaN, and Infinity weights
@@ -114,4 +116,3 @@ class WeightedRandom<T> {
         return true
     }
 }
-

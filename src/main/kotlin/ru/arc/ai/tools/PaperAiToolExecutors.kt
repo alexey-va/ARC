@@ -7,9 +7,11 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonPrimitive
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.entity.Player
+import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
 import ru.arc.core.Tasks
 import ru.arc.hooks.HookRegistry
@@ -71,7 +73,7 @@ object PaperAiToolExecutors {
             entry.addProperty("isOnline", user.isOnline)
             entry.addProperty("isFlying", user.isFlying)
             entry.addProperty("isJailed", user.isJailed)
-            entry.addProperty("exp", user.exp)
+            entry.addProperty("exp", user.totalExp)
             entry.addProperty("level", user.level)
             entry.addProperty("mails", user.mails.size)
             entry.addProperty("rank", user.rank.name)
@@ -112,9 +114,7 @@ object PaperAiToolExecutors {
             val item = JsonObject()
             item.addProperty("material", stack.type.name)
             item.addProperty("amount", stack.amount)
-            if (stack.itemMeta.hasDisplayName()) {
-                item.addProperty("displayName", stack.itemMeta.displayName)
-            }
+            itemDisplayName(stack)?.let { item.addProperty("displayName", it) }
             items.add(item)
         }
         val root = JsonObject()
@@ -123,6 +123,12 @@ object PaperAiToolExecutors {
         root.add("items", items)
         return root
     }
+
+    internal fun itemDisplayName(stack: ItemStack): String? =
+        stack.itemMeta
+            .displayName()
+            ?.let(PlainTextComponentSerializer.plainText()::serialize)
+            ?.takeIf(String::isNotBlank)
 
     private data class BalTopPayload(val mustIncludePlayers: List<String>? = null)
 

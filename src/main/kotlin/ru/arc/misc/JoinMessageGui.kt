@@ -17,6 +17,7 @@ import ru.arc.config.material
 import ru.arc.config.materialSet
 import ru.arc.config.particle
 import ru.arc.config.sound
+import ru.arc.core.sync
 
 /**
  * GUI for selecting join/leave messages.
@@ -59,9 +60,10 @@ object JoinMessageGuiFactory {
     /**
      * Create the join/leave message selection GUI.
      */
-    fun create(
+    private fun create(
         player: Player,
         isJoin: Boolean,
+        currentMessages: Set<String>,
         startPage: Int = 0,
     ): ChestGui {
         val cfg = config
@@ -69,7 +71,7 @@ object JoinMessageGuiFactory {
         val rows = cfg.int("join-message-gui.rows", 6)
         val title = cfg.string("${prefix}title", if (isJoin) "&8Сообщения при входе" else "&8Сообщения при выходе")
 
-        val messageItems = parseMessageItems(cfg, prefix, player, isJoin)
+        val messageItems = parseMessageItems(cfg, prefix, player, isJoin, currentMessages)
 
         return gui(title, rows, player, cfg) {
             // Background for nav bar
@@ -107,23 +109,19 @@ object JoinMessageGuiFactory {
 
                         val currentPage = 0 // Will need pane reference for real page
 
-                        if (item.isCurrent) {
-                            // Remove message
-                            if (isJoin) {
-                                JoinMessagesManager.removeJoinMessageBlocking(clicker.name, item.message)
-                            } else {
-                                JoinMessagesManager.removeLeaveMessageBlocking(clicker.name, item.message)
+                        JoinMessagesManager
+                            .updateMessageAsync(
+                                player = clicker.name,
+                                message = item.message,
+                                isJoin = isJoin,
+                                selected = !item.isCurrent,
+                            ).whenComplete { _, failure ->
+                                if (failure != null) {
+                                    reportFailure(clicker, "update message", failure)
+                                } else {
+                                    show(clicker, isJoin, currentPage)
+                                }
                             }
-                        } else {
-                            // Add message
-                            if (isJoin) {
-                                JoinMessagesManager.addJoinMessageBlocking(clicker.name, item.message)
-                            } else {
-                                JoinMessagesManager.addLeaveMessageBlocking(clicker.name, item.message)
-                            }
-                        }
-
-                        GuiUtils.constructAndShowAsync({ create(clicker, isJoin, currentPage) }, clicker)
                     }
                 }
             }
@@ -148,7 +146,7 @@ object JoinMessageGuiFactory {
                     fromConfig(cfg, "${prefix}switch-button")
                     onClick { event ->
                         val clicker = event.whoClicked as? Player ?: return@onClick
-                        GuiUtils.constructAndShowAsync({ create(clicker, !isJoin, 0) }, clicker)
+                        show(clicker, !isJoin, 0)
                     }
                 }
 
@@ -173,7 +171,22 @@ object JoinMessageGuiFactory {
         isJoin: Boolean = true,
         startPage: Int = 0,
     ) {
-        GuiUtils.constructAndShowAsync({ create(player, isJoin, startPage) }, player)
+        JoinMessagesManager.getOrCreateAsync(player.name).whenComplete { data, failure ->
+            if (failure != null) {
+                reportFailure(player, "load messages", failure)
+                return@whenComplete
+            }
+            val currentMessages =
+                if (isJoin) {
+                    data.joinMessages.toSet()
+                } else {
+                    data.leaveMessages.toSet()
+                }
+            GuiUtils.constructAndShowAsync(
+                { create(player, isJoin, currentMessages, startPage) },
+                player,
+            )
+        }
     }
 
     // ==================== Message Parsing ====================
@@ -186,9 +199,9 @@ object JoinMessageGuiFactory {
         prefix: String,
         player: Player,
         isJoin: Boolean,
+        currentMessages: Set<String>,
     ): List<MessageItem> {
         val msgConfig = loadMessageConfig(cfg, prefix)
-        val currentMessages = getCurrentMessages(player, isJoin)
         val unseenMessages = currentMessages.toMutableSet()
         val messages = cfg.list<Map<String, Any>>("${prefix}messages")
 
@@ -247,17 +260,6 @@ object JoinMessageGuiFactory {
             defaultDisplayName = cfg.string("${prefix}default-display-name", "<gold>Сообщение %id%"),
             commonRank = cfg.string("${prefix}common-rank", "<green>Для всех"),
         )
-
-    /**
-     * Get current messages for player.
-     */
-    private fun getCurrentMessages(
-        player: Player,
-        isJoin: Boolean,
-    ): Set<String> {
-        val joinData = JoinMessagesManager.getOrCreateBlocking(player.name)
-        return if (isJoin) joinData.joinMessages else joinData.leaveMessages
-    }
 
     /**
      * Parse a single message item from config map.
@@ -350,12 +352,28 @@ object JoinMessageGuiFactory {
         if (unseenMessages.isEmpty()) return
 
         info("Player {} has unseen messages: {}", player.name, unseenMessages)
-        unseenMessages.forEach { msg ->
-            if (isJoin) {
-                JoinMessagesManager.removeJoinMessageBlocking(player.name, msg)
-            } else {
-                JoinMessagesManager.removeLeaveMessageBlocking(player.name, msg)
+        JoinMessagesManager
+            .removeMessagesAsync(player.name, unseenMessages, isJoin)
+            .whenComplete { _, failure ->
+                if (failure != null) {
+                    reportFailure(player, "remove unavailable messages", failure)
+                }
             }
+    }
+
+    private fun reportFailure(
+        player: Player,
+        operation: String,
+        failure: Throwable,
+    ) {
+        error("Failed to {} for player {}", operation, player.name, failure)
+        sync {
+            player.sendMessage(
+                config.component(
+                    "join-message-gui.error",
+                    "<red>Не удалось обновить сообщения. Попробуйте ещё раз.",
+                ),
+            )
         }
     }
 }

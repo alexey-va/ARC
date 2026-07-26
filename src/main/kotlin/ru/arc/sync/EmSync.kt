@@ -5,8 +5,10 @@ import com.magmaguy.elitemobs.playerdata.database.PlayerData
 import com.magmaguy.elitemobs.skills.SkillType
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
-import org.bukkit.scheduler.BukkitRunnable
 import ru.arc.ARC
+import ru.arc.core.ScheduledTask
+import ru.arc.core.repeating
+import ru.arc.core.ticks
 import ru.arc.sync.base.Context
 import ru.arc.sync.base.Sync
 import ru.arc.sync.base.SyncData
@@ -26,26 +28,30 @@ class EmSync : Sync {
     }
 
     private val repo: SyncRepo<EmDataDTO> =
-        SyncRepo
-            .builder(EmDataDTO::class.java)
-            .key("arc.em_data")
-            .redisManager(ARC.redisManager!!)
-            .dataApplier(::deserializeAndSavePlayerData)
-            .dataProducer(::serializePlayerData)
-            .build()
+        SyncRepo(
+            clazz = EmDataDTO::class.java,
+            key = "arc.em_data",
+            redisManager = checkNotNull(ARC.redisManager) { "Redis manager is not initialized" },
+            dataApplier = ::deserializeAndSavePlayerData,
+            dataProducer = ::serializePlayerData,
+        )
 
     private val loaded: MutableMap<UUID, Boolean> = ConcurrentHashMap()
+    private val joinTasks = ConcurrentHashMap<UUID, ScheduledTask>()
 
     override fun playerJoin(uuid: UUID) {
         val counter = AtomicInteger(0)
-        object : BukkitRunnable() {
-            override fun run() {
+        val task =
+            repeating(
+                PLAYER_DATA_POLL_PERIOD_TICKS.ticks,
+                delay = PLAYER_DATA_POLL_DELAY_TICKS.ticks,
+            ) {
                 if (Bukkit.getPlayer(uuid) == null) {
-                    cancel()
-                    return
+                    cancelJoinTask(uuid)
+                    return@repeating
                 }
-                val pd = PlayerData.getPlayerData(uuid)
-                if (pd == null) {
+                val playerData = PlayerData.getPlayerData(uuid)
+                if (playerData == null) {
                     if (counter.incrementAndGet() > MAX_PLAYER_DATA_WAIT_CYCLES) {
                         Logging.warn(
                             "PlayerData is null for {} after {} cycles (~{}s). Cancelling EM sync task.",
@@ -53,27 +59,45 @@ class EmSync : Sync {
                             MAX_PLAYER_DATA_WAIT_CYCLES,
                             MAX_PLAYER_DATA_WAIT_CYCLES * PLAYER_DATA_POLL_PERIOD_TICKS / 20,
                         )
-                        cancel()
+                        cancelJoinTask(uuid)
                     }
-                    return
+                    return@repeating
                 }
-                repo.loadAndApplyData(uuid, false)
-                loaded[uuid] = true
-                cancel()
+                repo
+                    .loadAndApplyData(uuid)
+                    .whenComplete { _, failure ->
+                        if (failure == null && Bukkit.getPlayer(uuid) != null) {
+                            loaded[uuid] = true
+                        } else {
+                            loaded.remove(uuid)
+                        }
+                    }
+                cancelJoinTask(uuid)
             }
-        }.runTaskTimer(ARC.instance, PLAYER_DATA_POLL_DELAY_TICKS, PLAYER_DATA_POLL_PERIOD_TICKS)
+        joinTasks.put(uuid, task)?.cancel()
     }
 
     override fun playerQuit(uuid: UUID) {
         forceSave(uuid)
         loaded.remove(uuid)
+        cancelJoinTask(uuid)
     }
 
     override fun forceSave(uuid: UUID) {
-        if (!loaded.containsKey(uuid)) return
+        if (loaded[uuid] != true) return
         val context = Context()
         context.put("uuid", uuid)
-        repo.saveAndPersistData(context, false)
+        repo.saveAndPersistData(context)
+    }
+
+    override fun shutdown() {
+        joinTasks.values.forEach(ScheduledTask::cancel)
+        joinTasks.clear()
+        loaded.clear()
+    }
+
+    private fun cancelJoinTask(uuid: UUID) {
+        joinTasks.remove(uuid)?.cancel()
     }
 
     private fun deserializeAndSavePlayerData(data: EmDataDTO) {

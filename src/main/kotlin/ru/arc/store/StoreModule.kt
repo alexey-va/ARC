@@ -3,6 +3,7 @@ package ru.arc.store
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.future.future
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.bukkit.Material
@@ -14,7 +15,6 @@ import ru.arc.repository.Mergeable
 import ru.arc.repository.redisRepo
 import ru.arc.util.Logging
 import java.util.UUID
-import java.util.concurrent.locks.Lock
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.time.Duration.Companion.seconds
 
@@ -23,32 +23,46 @@ import kotlin.time.Duration.Companion.seconds
  */
 class StoreData(
     val uuid: UUID,
-    var itemList: ItemList = ItemList(),
+    itemList: ItemList = ItemList(),
     var size: Int = 9,
 ) : Entity,
     Mergeable<StoreData> {
-    @Transient
-    private var _lock: Lock? = null
+    var itemList: ItemList = itemList
+        private set
 
-    private val lock: Lock
-        get() {
-            if (_lock == null) _lock = ReentrantLock()
-            return _lock!!
-        }
+    @Transient
+    @Volatile
+    private var lockRef: ReentrantLock? = null
+
+    private val lock: ReentrantLock
+        get() =
+            lockRef ?: synchronized(this) {
+                lockRef ?: ReentrantLock().also { lockRef = it }
+            }
 
     override fun id(): String = uuid.toString()
 
     override fun merge(other: StoreData) {
+        val (otherItems, otherSize) = other.snapshot()
         withLock {
-            itemList = other.itemList
-            size = other.size
+            itemList = otherItems
+            size = otherSize
         }
     }
 
     /**
-     * Get items in this store.
+     * Get a detached snapshot of the items in this store.
      */
-    fun getItems(): List<ItemStack> = withLock { itemList.filterNotNull() }
+    fun getItems(): List<ItemStack> = withLock { itemList.filterNotNull().map(ItemStack::clone) }
+
+    /**
+     * Remove invalid entries left by legacy serialized data.
+     */
+    fun sanitize(): Int =
+        withLock {
+            itemList.removeIf { it == null || it.type == Material.AIR }
+            itemList.size
+        }
 
     /**
      * Check if store has space for more items.
@@ -78,38 +92,25 @@ class StoreData(
     fun removeItem(
         item: ItemStack,
         amount: Int,
-    ): Boolean =
-        withLock {
+    ): Boolean {
+        if (amount <= 0) return false
+
+        return withLock {
+            val matching = itemList.filterNotNull().filter { it.isSimilar(item) }
+            if (matching.sumOf { it.amount } < amount) return@withLock false
+
             var remaining = amount
-            val toRemove = mutableListOf<ItemStack>()
-
-            for (stack in itemList.filterNotNull()) {
-                if (stack.isSimilar(item)) {
-                    when {
-                        stack.amount > remaining -> {
-                            stack.amount -= remaining
-                            compact()
-                            return@withLock true
-                        }
-
-                        stack.amount == remaining -> {
-                            itemList.remove(stack)
-                            compact()
-                            return@withLock true
-                        }
-
-                        else -> {
-                            remaining -= stack.amount
-                            toRemove.add(stack)
-                        }
-                    }
-                }
+            for (stack in matching) {
+                if (remaining == 0) break
+                val removed = minOf(stack.amount, remaining)
+                stack.amount -= removed
+                remaining -= removed
+                if (stack.amount == 0) itemList.remove(stack)
             }
-
-            itemList.removeAll(toRemove.toSet())
             compact()
-            false
+            true
         }
+    }
 
     private fun compact() {
         val current = ArrayList(itemList)
@@ -162,6 +163,13 @@ class StoreData(
         }
     }
 
+    private fun snapshot(): Pair<ItemList, Int> =
+        withLock {
+            ItemList().apply {
+                itemList.forEach { add(it?.clone()) }
+            } to size
+        }
+
     companion object {
         private val FORBIDDEN_MATCHERS =
             listOf(
@@ -183,8 +191,9 @@ class StoreData(
  * Manager for player stores.
  */
 object StoreManager {
+    private const val UNAVAILABLE_MESSAGE = "Player store is unavailable because Redis is not initialized"
     private lateinit var repo: CachedRepository<StoreData>
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private lateinit var scope: CoroutineScope
     private var initialized = false
 
     @JvmStatic
@@ -192,6 +201,7 @@ object StoreManager {
         if (initialized) return
         if (ru.arc.ARC.redisManager == null) return
 
+        scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         repo =
             redisRepo<StoreData>(
                 id = "store",
@@ -216,6 +226,7 @@ object StoreManager {
      * Get a player's store.
      */
     suspend fun getStore(playerUuid: UUID): StoreData {
+        check(initialized) { UNAVAILABLE_MESSAGE }
         Logging.debug("[Store] getStore({})", playerUuid)
         val store =
             repo
@@ -224,44 +235,20 @@ object StoreManager {
                     StoreData(playerUuid)
                 }.getOrThrow()
 
-        Logging.debug("[Store] raw itemList size={} for {}", store.itemList.size, playerUuid)
-        store.itemList.removeIf { it == null || it.type == Material.AIR }
-        store.size = 9
-        Logging.debug("[Store] final itemList size={} for {}", store.itemList.size, playerUuid)
+        Logging.debug("[Store] loaded item count={} for {}", store.sanitize(), playerUuid)
 
         return store
     }
 
-    /**
-     * Get a player's store (blocking for Java interop).
-     */
     @JvmStatic
-    fun getStore(
-        playerUuid: UUID,
-        callback: java.util.function.Consumer<StoreData>,
-    ) {
-        scope.launch {
-            val store = getStore(playerUuid)
-            callback.accept(store)
-        }
-    }
-
-    /**
-     * Get a player's store (blocking CompletableFuture for Java interop).
-     */
-    @JvmStatic
-    fun getStoreAsync(playerUuid: UUID): java.util.concurrent.CompletableFuture<StoreData> {
-        val future = java.util.concurrent.CompletableFuture<StoreData>()
-        scope.launch {
-            try {
-                val store = getStore(playerUuid)
-                future.complete(store)
-            } catch (e: Exception) {
-                future.completeExceptionally(e)
+    fun getStoreAsync(playerUuid: UUID): java.util.concurrent.CompletableFuture<StoreData> =
+        if (initialized) {
+            scope.future {
+                getStore(playerUuid)
             }
+        } else {
+            unavailableFuture()
         }
-        return future
-    }
 
     /**
      * Save a store.
@@ -276,15 +263,20 @@ object StoreManager {
      */
     @JvmStatic
     fun saveLater(store: StoreData) {
+        if (!initialized) return
         scope.launch { save(store) }
     }
 
-    /**
-     * Force save all stores.
-     */
     @JvmStatic
-    fun saveAll() =
-        runBlocking {
-            repo.saveDirty()
+    fun saveAllAsync(): java.util.concurrent.CompletableFuture<Unit> =
+        if (initialized) {
+            scope.future {
+                repo.saveDirty().getOrThrow()
+            }
+        } else {
+            unavailableFuture()
         }
+
+    private fun <T> unavailableFuture(): java.util.concurrent.CompletableFuture<T> =
+        java.util.concurrent.CompletableFuture.failedFuture(IllegalStateException(UNAVAILABLE_MESSAGE))
 }

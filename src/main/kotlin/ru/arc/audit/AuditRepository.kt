@@ -3,30 +3,34 @@ package ru.arc.audit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.future.future
 import kotlinx.coroutines.runBlocking
 import ru.arc.ARC
 import ru.arc.config.ConfigManager
-import ru.arc.core.ContextAwareRepository
-import ru.arc.core.InMemoryRepository
 import ru.arc.repository.CachedRepository
 import ru.arc.repository.redisRepo
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Repository interface for audit data.
+ * Minimal persistence boundary required by [AuditService].
  */
-interface AuditRepository : ContextAwareRepository<AuditData, String> {
+interface AuditRepository {
+    fun get(id: String): CompletableFuture<AuditData?>
 
-    /**
-     * Save all data to persistent storage.
-     */
-    fun saveAll()
+    fun getOrCreate(id: String, factory: () -> AuditData): CompletableFuture<AuditData>
 
-    /**
-     * Shutdown the repository.
-     */
+    fun save(entity: AuditData)
+
+    fun all(): Collection<AuditData>
+
+    fun addContext(id: String)
+
+    fun removeContext(id: String)
+
+    fun getContext(): Set<String>
+
     fun shutdown()
 }
 
@@ -37,76 +41,23 @@ class RedisAuditRepository private constructor(
     private val repo: CachedRepository<AuditData>,
     private val scope: CoroutineScope,
 ) : AuditRepository {
-    private val contextIds = mutableSetOf<String>()
+    private val contextIds = ConcurrentHashMap.newKeySet<String>()
 
-    override fun get(id: String): CompletableFuture<AuditData?> {
-        val future = CompletableFuture<AuditData?>()
-        scope.launch {
-            try {
-                val result = repo.get(id.lowercase())
-                future.complete(result.getOrNull())
-            } catch (e: Exception) {
-                future.completeExceptionally(e)
-            }
+    override fun get(id: String): CompletableFuture<AuditData?> =
+        scope.future {
+            repo.get(id.lowercase()).getOrThrow()
         }
-        return future
-    }
 
-    override fun getOrCreate(id: String, factory: () -> AuditData): CompletableFuture<AuditData> {
-        val future = CompletableFuture<AuditData>()
-        scope.launch {
-            try {
-                val result = repo.getOrCreate(id.lowercase()) { factory() }
-                future.complete(result.getOrThrow())
-            } catch (e: Exception) {
-                future.completeExceptionally(e)
-            }
+    override fun getOrCreate(id: String, factory: () -> AuditData): CompletableFuture<AuditData> =
+        scope.future {
+            repo.getOrCreate(id.lowercase()) { factory() }.getOrThrow()
         }
-        return future
-    }
 
     override fun save(entity: AuditData) {
-        entity.isDirty = true
-        scope.launch {
-            repo.save(entity)
-        }
+        repo.markDirty(entity)
     }
 
-    override fun delete(id: String) {
-        scope.launch {
-            val data = repo.get(id.lowercase()).getOrNull()
-            if (data != null) {
-                data.transactions.clear()
-                data.isDirty = true
-                repo.save(data)
-            }
-        }
-    }
-
-    override fun all(): Collection<AuditData> =
-        runBlocking {
-            repo.all().getOrNull() ?: emptyList()
-        }
-
-    override fun exists(id: String): Boolean =
-        runBlocking {
-            repo.get(id.lowercase()).getOrNull() != null
-        }
-
-    override fun count(): Int =
-        runBlocking {
-            repo.all().getOrNull()?.size ?: 0
-        }
-
-    override fun clear() {
-        scope.launch {
-            repo.all().getOrNull()?.forEach {
-                it.transactions.clear()
-                it.isDirty = true
-                repo.save(it)
-            }
-        }
-    }
+    override fun all(): Collection<AuditData> = repo.allNow()
 
     override fun addContext(id: String) {
         val lowerId = id.lowercase()
@@ -121,12 +72,6 @@ class RedisAuditRepository private constructor(
     }
 
     override fun getContext(): Set<String> = contextIds.toSet()
-
-    override fun saveAll() {
-        runBlocking {
-            repo.saveDirty()
-        }
-    }
 
     override fun shutdown() {
         runBlocking {
@@ -164,21 +109,39 @@ class RedisAuditRepository private constructor(
 /**
  * In-memory implementation for testing.
  */
-class InMemoryAuditRepository : InMemoryRepository<AuditData, String>({ it.id() }), AuditRepository {
+class InMemoryAuditRepository : AuditRepository {
+    private val data = ConcurrentHashMap<String, AuditData>()
+    private val contexts = ConcurrentHashMap.newKeySet<String>()
 
-    override fun get(id: String): CompletableFuture<AuditData?> {
-        return super.get(id.lowercase())
+    override fun get(id: String): CompletableFuture<AuditData?> =
+        CompletableFuture.completedFuture(data[id.lowercase()])
+
+    override fun getOrCreate(id: String, factory: () -> AuditData): CompletableFuture<AuditData> =
+        CompletableFuture.completedFuture(
+            data.computeIfAbsent(id.lowercase()) {
+                factory().also { created ->
+                    require(created.id() == id.lowercase()) {
+                        "Created audit id '${created.id()}' does not match requested id '${id.lowercase()}'"
+                    }
+                }
+            },
+        )
+
+    override fun save(entity: AuditData) {
+        data[entity.id()] = entity
     }
 
-    override fun getOrCreate(id: String, factory: () -> AuditData): CompletableFuture<AuditData> {
-        return super.getOrCreate(id.lowercase(), factory)
+    override fun all(): Collection<AuditData> = data.values.toList()
+
+    override fun addContext(id: String) {
+        contexts.add(id.lowercase())
     }
 
-    override fun saveAll() {
-        // No-op for in-memory
+    override fun removeContext(id: String) {
+        contexts.remove(id.lowercase())
     }
 
-    override fun shutdown() {
-        // No-op for in-memory
-    }
+    override fun getContext(): Set<String> = contexts.toSet()
+
+    override fun shutdown() = Unit
 }

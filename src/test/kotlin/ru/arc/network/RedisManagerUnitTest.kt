@@ -9,6 +9,9 @@ import org.junit.jupiter.api.Test
 import org.mockito.kotlin.mock
 import redis.clients.jedis.JedisPooled
 import ru.arc.ARC
+import ru.arc.redis.ChannelListener
+import ru.arc.redis.InMemoryRedis
+import ru.arc.redis.RedisManager
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
@@ -121,7 +124,8 @@ class RedisManagerUnitTest {
 
     @Test
     fun `saveMapEntries handles null values for deletion`() {
-        val future = redisManager.saveMapEntries(
+        val redis = InMemoryRedis()
+        val future = redis.saveMapEntries(
             "test:null",
             "key1", "value1",
             "key2", null,
@@ -184,4 +188,3 @@ class RedisManagerUnitTest {
         }
     }
 }
-

@@ -11,35 +11,37 @@ class JobsBoostDataTest :
 
             describe("expiration") {
                 it("should be expired when expires is in the past") {
+                    val now = 10_000L
                     val boost =
                         _root_ide_package_.ru.arc.jobs.JobsBoostData(
                             boost = 0.5,
-                            expires = System.currentTimeMillis() - 1000,
+                            expires = now - 1000,
                         )
 
-                    boost.isExpired() shouldBe true
+                    boost.isExpired(now) shouldBe true
                 }
 
                 it("should not be expired when expires is in the future") {
+                    val now = 10_000L
                     val boost =
                         _root_ide_package_.ru.arc.jobs.JobsBoostData(
                             boost = 0.5,
-                            expires = System.currentTimeMillis() + 60000,
+                            expires = now + 60_000,
                         )
 
-                    boost.isExpired() shouldBe false
+                    boost.isExpired(now) shouldBe false
                 }
 
                 it("should calculate remaining time correctly") {
-                    val futureTime = System.currentTimeMillis() + 30000
+                    val now = 10_000L
+                    val futureTime = now + 30_000
                     val boost =
                         _root_ide_package_.ru.arc.jobs.JobsBoostData(
                             boost = 0.5,
                             expires = futureTime,
                         )
 
-                    val remaining = boost.expiresInMillis()
-                    remaining shouldBe (futureTime - System.currentTimeMillis()) // approximately
+                    boost.expiresInMillis(now) shouldBe 30_000L
                 }
             }
 

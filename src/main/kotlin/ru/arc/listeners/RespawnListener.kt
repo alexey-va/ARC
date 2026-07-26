@@ -8,6 +8,8 @@ import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerRespawnEvent
 import ru.arc.ARC
 import ru.arc.config.ConfigManager
+import ru.arc.core.sync
+import ru.arc.core.ticks
 import ru.arc.hooks.HookRegistry
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
@@ -42,20 +44,24 @@ class RespawnListener : Listener {
                 info("Player {} tried to sleep during the day", player.name)
             }
             val oldRespawn = player.getRespawnLocation()
-            HookRegistry.huskHomesHook!!.hasHome(player).thenAccept { hasHome ->
-                info("Player {} has home {}", player.name, hasHome)
-                try {
+            val hook = HookRegistry.huskHomesHook ?: return
+            val bedLocation = player.location.clone()
+            hook.hasHome(player).whenComplete { hasHome, failure ->
+                sync {
+                    if (failure != null) {
+                        error("Error checking home for player {}", player.name, failure)
+                        return@sync
+                    }
+                    info("Player {} has home {}", player.name, hasHome)
                     if (!hasHome) {
-                        HookRegistry.huskHomesHook!!.createDefaultHome(player, player.location)
+                        hook.createDefaultHome(player, bedLocation)
                         player.sendMessage(config.component("rtp-respawn.bed-create-home", "<green>Ваш <gold>/home<green> установлен здесь! <gray>Чтобы изменить его, используйте команду /sethome"))
                     } else {
-                        ARC.instance.server.scheduler.runTaskLater(ARC.instance, Runnable {
+                        delayed(3.ticks) {
                             info("Setting respawn location for player {} to {}", player.name, oldRespawn)
                             player.setRespawnLocation(oldRespawn, true)
-                        }, 3L)
+                        }
                     }
-                } catch (ex: Exception) {
-                    error("Error setting respawn location for player {}", player.name, ex)
                 }
             }
         }

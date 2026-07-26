@@ -3,11 +3,13 @@ package ru.arc.misc
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.future.future
 import kotlinx.coroutines.runBlocking
 import ru.arc.repository.CachedRepository
 import ru.arc.repository.Entity
 import ru.arc.repository.Mergeable
 import ru.arc.repository.redisRepo
+import java.util.concurrent.CompletableFuture
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -29,6 +31,23 @@ data class JoinMessagesData(
         leaveMessages.addAll(other.leaveMessages)
     }
 
+    fun updateMessage(
+        message: String,
+        isJoin: Boolean,
+        selected: Boolean,
+    ): Boolean {
+        val messages = if (isJoin) joinMessages else leaveMessages
+        return if (selected) messages.add(message) else messages.remove(message)
+    }
+
+    fun removeMessages(
+        messages: Set<String>,
+        isJoin: Boolean,
+    ): Boolean {
+        val selectedMessages = if (isJoin) joinMessages else leaveMessages
+        return selectedMessages.removeAll(messages)
+    }
+
     /**
      * Check if this entry should be removed (expired and empty).
      */
@@ -44,8 +63,9 @@ data class JoinMessagesData(
  * Manager for player join/leave messages.
  */
 object JoinMessagesManager {
+    private const val UNAVAILABLE_MESSAGE = "Join messages are unavailable because Redis is not initialized"
     private lateinit var repo: CachedRepository<JoinMessagesData>
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private lateinit var scope: CoroutineScope
     private var initialized = false
 
     @JvmStatic
@@ -53,6 +73,7 @@ object JoinMessagesManager {
         if (initialized) return
         if (ru.arc.ARC.redisManager == null) return
 
+        scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         repo =
             redisRepo<JoinMessagesData>(
                 id = "join_messages",
@@ -76,121 +97,77 @@ object JoinMessagesManager {
     /**
      * Get messages for a player.
      */
-    suspend fun getOrCreate(player: String): JoinMessagesData =
-        repo
+    suspend fun getOrCreate(player: String): JoinMessagesData {
+        check(initialized) { UNAVAILABLE_MESSAGE }
+        return repo
             .getOrCreate(player) {
                 JoinMessagesData(player)
             }.getOrThrow()
+    }
 
-    /**
-     * Get messages for a player (blocking for Java interop).
-     */
     @JvmStatic
-    fun getOrCreateBlocking(player: String): JoinMessagesData =
-        runBlocking {
-            getOrCreate(player)
+    fun getOrCreateAsync(player: String): CompletableFuture<JoinMessagesData> =
+        if (initialized) {
+            scope.future {
+                getOrCreate(player)
+            }
+        } else {
+            unavailableFuture()
         }
 
-    /**
-     * Add a join message for a player.
-     */
-    suspend fun addJoinMessage(
+    suspend fun updateMessage(
         player: String,
         message: String,
+        isJoin: Boolean,
+        selected: Boolean,
     ) {
         val data = getOrCreate(player)
-        data.joinMessages.add(message)
-        repo.save(data)
+        if (data.updateMessage(message, isJoin, selected)) {
+            repo.save(data).getOrThrow()
+        }
     }
 
-    /**
-     * Add a join message for a player (blocking for Java interop).
-     */
     @JvmStatic
-    fun addJoinMessageBlocking(
+    fun updateMessageAsync(
         player: String,
         message: String,
-    ) = runBlocking {
-        addJoinMessage(player, message)
-    }
+        isJoin: Boolean,
+        selected: Boolean,
+    ): CompletableFuture<Unit> =
+        if (initialized) {
+            scope.future {
+                updateMessage(player, message, isJoin, selected)
+            }
+        } else {
+            unavailableFuture()
+        }
 
-    /**
-     * Remove a join message from a player.
-     */
-    suspend fun removeJoinMessage(
+    suspend fun removeMessages(
         player: String,
-        message: String,
+        messages: Set<String>,
+        isJoin: Boolean,
     ) {
+        if (messages.isEmpty()) return
         val data = getOrCreate(player)
-        data.joinMessages.remove(message)
-        repo.save(data)
+        if (data.removeMessages(messages, isJoin)) {
+            repo.save(data).getOrThrow()
+        }
     }
 
-    /**
-     * Remove a join message from a player (blocking for Java interop).
-     */
     @JvmStatic
-    fun removeJoinMessageBlocking(
+    fun removeMessagesAsync(
         player: String,
-        message: String,
-    ) = runBlocking {
-        removeJoinMessage(player, message)
-    }
+        messages: Set<String>,
+        isJoin: Boolean,
+    ): CompletableFuture<Unit> =
+        if (initialized) {
+            scope.future {
+                removeMessages(player, messages, isJoin)
+            }
+        } else {
+            unavailableFuture()
+        }
 
-    /**
-     * Add a leave message for a player.
-     */
-    suspend fun addLeaveMessage(
-        player: String,
-        message: String,
-    ) {
-        val data = getOrCreate(player)
-        data.leaveMessages.add(message)
-        repo.save(data)
-    }
-
-    /**
-     * Add a leave message for a player (blocking for Java interop).
-     */
-    @JvmStatic
-    fun addLeaveMessageBlocking(
-        player: String,
-        message: String,
-    ) = runBlocking {
-        addLeaveMessage(player, message)
-    }
-
-    /**
-     * Remove a leave message from a player.
-     */
-    suspend fun removeLeaveMessage(
-        player: String,
-        message: String,
-    ) {
-        val data = getOrCreate(player)
-        data.leaveMessages.remove(message)
-        repo.save(data)
-    }
-
-    /**
-     * Remove a leave message from a player (blocking for Java interop).
-     */
-    @JvmStatic
-    fun removeLeaveMessageBlocking(
-        player: String,
-        message: String,
-    ) = runBlocking {
-        removeLeaveMessage(player, message)
-    }
-
-    /**
-     * Get all messages.
-     */
-    suspend fun all(): List<JoinMessagesData> = repo.all().getOrNull() ?: emptyList()
-
-    /**
-     * Get all messages (blocking for Java interop).
-     */
-    @JvmStatic
-    fun allBlocking(): List<JoinMessagesData> = runBlocking { all() }
+    private fun <T> unavailableFuture(): CompletableFuture<T> =
+        CompletableFuture.failedFuture(IllegalStateException(UNAVAILABLE_MESSAGE))
 }

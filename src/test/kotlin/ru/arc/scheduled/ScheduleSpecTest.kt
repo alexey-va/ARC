@@ -75,6 +75,26 @@ class ScheduleSpecTest :
                 field.matches(15) shouldBe true
                 field.matches(10) shouldBe false
             }
+
+            "should apply ranged steps from the range start" {
+                val field = CronField.parse("5-55/15", 0, 59)
+
+                field.matches(5) shouldBe true
+                field.matches(20) shouldBe true
+                field.matches(15) shouldBe false
+            }
+
+            "should reject malformed and out-of-range fields" {
+                listOf(
+                    "x * * * *",
+                    "60 * * * *",
+                    "*/0 * * * *",
+                    "0 24 * * *",
+                    "0 0 * * 8",
+                ).forEach { expression ->
+                    runCatching { ScheduleSpecParser.parseCron(expression) }.isFailure shouldBe true
+                }
+            }
         }
 
         "ScheduleSpecParser" - {

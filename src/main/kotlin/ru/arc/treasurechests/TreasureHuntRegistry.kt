@@ -186,13 +186,6 @@ object TreasureHuntRegistry {
     }
 
     /**
-     * Удаляет охоту из реестра (legacy, не требуется с новой архитектурой).
-     */
-    fun removeHunt(hunt: ActiveHunt) {
-        // No-op, service handles this internally
-    }
-
-    /**
      * Останавливает все охоты.
      */
     fun stopAll() {

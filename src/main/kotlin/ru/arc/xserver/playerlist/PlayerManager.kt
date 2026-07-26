@@ -8,12 +8,14 @@ import ru.arc.util.Common
 import ru.arc.util.Logging.error
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 object PlayerManager {
-    private val playerMap = ConcurrentHashMap<UUID, PlayerData>()
-    private val servers = HashSet<String>()
+    @Volatile
+    private var playerMap: Map<UUID, PlayerData> = emptyMap()
+
+    @Volatile
+    private var servers: Set<String> = emptySet()
 
     @JvmStatic
     fun getOnlinePlayersThreadSafe(): List<Player> {
@@ -21,7 +23,7 @@ object PlayerManager {
         val future = CompletableFuture<List<Player>>()
         Tasks.scheduler.runSync(Runnable { future.complete(ArrayList(Bukkit.getOnlinePlayers())) })
         return try {
-            future.get(3, TimeUnit.MINUTES)
+            future.get(MAIN_THREAD_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         } catch (e: Exception) {
             error("Timeout waiting for players", e)
             emptyList()
@@ -46,14 +48,15 @@ object PlayerManager {
             return
         }
         val newMap = HashMap<UUID, PlayerData>()
+        val newServers = HashSet<String>()
         for (data in playerData) {
             if (!data.server.isNullOrBlank()) {
-                servers.add(data.server)
+                newServers.add(data.server)
             }
             newMap[data.uuid] = data
         }
-        playerMap.clear()
-        playerMap.putAll(newMap)
+        playerMap = newMap
+        servers = newServers
     }
 
     @JvmStatic
@@ -68,4 +71,6 @@ object PlayerManager {
         val uuid: UUID,
         val joinTime: Long,
     )
+
+    private const val MAIN_THREAD_TIMEOUT_SECONDS = 3L
 }

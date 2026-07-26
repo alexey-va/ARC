@@ -12,13 +12,21 @@ object XActionManager {
 
     @JvmStatic
     fun init() {
+        shutdown()
         val redis = ARC.redisManager ?: run {
             error("Redis manager is not initialized. XActionManager will not work.")
             return
         }
-        messager = XActionMessager(redis)
-        messager!!.register()
+        val created = XActionMessager(redis)
+        created.register()
+        messager = created
         info("XActionManager registered channel: {}", XActionMessager.CHANNEL)
+    }
+
+    @JvmStatic
+    fun shutdown() {
+        messager?.close()
+        messager = null
     }
 
     @JvmStatic

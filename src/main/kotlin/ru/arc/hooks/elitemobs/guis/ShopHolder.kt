@@ -11,16 +11,17 @@ import ru.arc.config.ConfigManager
 import ru.arc.hooks.elitemobs.EMHook
 import java.util.Random
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 class ShopHolder {
 
     private val config = ConfigManager.of(ARC.instance.dataPath, "elitemobs.yml")
-    private val items = HashMap<UUID, Shop>()
+    private val items = ConcurrentHashMap<UUID, Shop>()
 
     fun getShop(player: Player, emHook: EMHook): Shop {
         val gearSize = config.integer("shop.gear-size", 36)
         val trinketSize = config.integer("shop.trinket-size", 36)
-        return items.getOrPut(player.uniqueId) {
+        return items.computeIfAbsent(player.uniqueId) {
             Shop(gearSize, trinketSize, emHook.tier(player), player, emHook)
         }
     }
@@ -48,7 +49,7 @@ class ShopHolder {
             repeat((size * 1.5).toInt()) {
                 val gauss = random.nextGaussian() * (tier * 0.15) + (tier * 0.8)
                 val rTier = maxOf(1, minOf(tier + 3, Math.round(gauss).toInt()))
-                val stack = emHook.generateDrop(rTier, player, false, 0.05) ?: return@repeat
+                val stack = emHook.generateDrop(rTier, player, false, 0.05)
                 val display = stack.itemMeta?.displayName()
                 val text = if (display == null) "" else PlainTextComponentSerializer.plainText().serialize(display)
                 if (titles.contains(text)) return@repeat
@@ -73,7 +74,7 @@ class ShopHolder {
             repeat((size * 1.5).toInt()) {
                 val gauss = random.nextGaussian() * (tier * 0.15) + (tier * 0.75)
                 val rTier = maxOf(1, minOf(tier - 5, Math.round(gauss).toInt()))
-                val stack = emHook.generateDrop(rTier, player, true, 0.1) ?: return@repeat
+                val stack = emHook.generateDrop(rTier, player, true, 0.1)
                 val display = stack.itemMeta?.displayName()
                 val text = if (display == null) "" else PlainTextComponentSerializer.plainText().serialize(display)
                 if (titles.contains(text)) return@repeat

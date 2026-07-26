@@ -31,19 +31,18 @@ object SoundUtils {
      */
     @JvmStatic
     fun getSound(name: String): Sound? {
-        if (name.isBlank()) return null
+        val normalizedName = normalizeName(name) ?: return null
 
-        val key = name.lowercase(Locale.ROOT)
         return soundCache
-            .getOrPut(key) {
-                Optional.ofNullable(findSound(name))
+            .getOrPut(normalizedName) {
+                Optional.ofNullable(findSound(normalizedName))
             }.orElse(null)
     }
 
     private fun findSound(name: String): Sound? {
         // Try as namespaced key first (handles "minecraft:block.stone.break", "block.stone.break")
         NamespacedKey
-            .fromString(name.lowercase(Locale.ROOT))
+            .fromString(name)
             ?.let { Registry.SOUNDS.get(it) }
             ?.let { return it }
 
@@ -67,16 +66,18 @@ object SoundUtils {
      */
     @JvmStatic
     fun getNamespacedKey(name: String): NamespacedKey? {
-        if (name.isBlank()) return null
+        val normalizedName = normalizeName(name) ?: return null
 
-        val key = name.lowercase(Locale.ROOT)
         return keyCache
-            .getOrPut(key) {
-                Optional.ofNullable(getNamespacedKeyInternal(name))
+            .getOrPut(normalizedName) {
+                Optional.ofNullable(getNamespacedKeyInternal(normalizedName))
             }.orElse(null)
     }
 
-    private fun getNamespacedKeyInternal(name: String): NamespacedKey? = NamespacedKey.fromString(name.lowercase(Locale.ROOT))
+    private fun getNamespacedKeyInternal(name: String): NamespacedKey? = NamespacedKey.fromString(name)
+
+    private fun normalizeName(name: String): String? =
+        name.trim().takeIf { it.isNotEmpty() }?.lowercase(Locale.ROOT)
 
     /**
      * Plays a sound at a location for all nearby players.
@@ -95,7 +96,8 @@ object SoundUtils {
         pitch: Float = 1.0f,
     ): Boolean {
         val sound = getSound(soundName) ?: return false
-        location.world?.playSound(location, sound, volume, pitch)
+        val world = location.world ?: return false
+        world.playSound(location, sound, volume, pitch)
         return true
     }
 

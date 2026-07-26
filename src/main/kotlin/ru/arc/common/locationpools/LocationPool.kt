@@ -101,7 +101,7 @@ class LocationPool(
     ): Set<ServerLocation> =
         _locations
             .values()
-            .filter { it.distance(center).orElse(Double.MAX_VALUE) <= radius }
+            .filter { (it.distance(center) ?: Double.MAX_VALUE) <= radius }
             .toSet()
 
     /**
@@ -121,6 +121,11 @@ class LocationPool(
     fun getAllLocations(): Collection<ServerLocation> = _locations.values()
 
     /**
+     * Получает локации вместе с весами без раскрытия внутреннего TreeMap.
+     */
+    fun getWeightedLocations(): List<WeightedRandom.Pair<ServerLocation>> = _locations.entries()
+
+    /**
      * Сбрасывает флаг dirty после сохранения.
      */
     fun markClean() {
@@ -136,4 +141,17 @@ class LocationPool(
     }
 
     override fun hashCode(): Int = id.hashCode()
+
+    companion object {
+        private val PERSISTENT_ID_PATTERN = Regex("^[a-z][a-z0-9_-]{0,47}$")
+
+        @JvmStatic
+        fun normalizePersistentId(raw: String): String {
+            val normalized = raw.trim().lowercase()
+            require(PERSISTENT_ID_PATTERN.matches(normalized)) {
+                "Location pool ID must start with a letter and contain only letters, digits, _, or - (max 48)"
+            }
+            return normalized
+        }
+    }
 }

@@ -11,11 +11,14 @@ import org.bukkit.block.data.BlockData
 import org.bukkit.entity.Player
 import org.bukkit.potion.PotionEffect
 import org.bukkit.potion.PotionEffectType.BLINDNESS
-import org.bukkit.scheduler.BukkitTask
 import ru.arc.PortalData.ActionType.COMMAND
 import ru.arc.PortalData.ActionType.HUSK
 import ru.arc.PortalData.ActionType.TELEPORT
 import ru.arc.config.ConfigManager
+import ru.arc.core.ScheduledTask
+import ru.arc.core.repeating
+import ru.arc.core.sync
+import ru.arc.core.ticks
 import ru.arc.hooks.HookRegistry
 import ru.arc.util.CooldownManager
 import ru.arc.util.Logging.error
@@ -31,6 +34,52 @@ import ru.arc.config.materialSet
 import ru.arc.config.particle
 import ru.arc.config.sound
 
+internal enum class PortalAccess {
+    ALLOWED,
+    VISITOR_DENIED,
+    OWNER_DENIED,
+}
+
+internal fun evaluatePortalAccess(
+    isOwner: Boolean,
+    visitorAllowsForeignPortals: Boolean,
+    ownerAllowsVisitors: Boolean,
+): PortalAccess =
+    when {
+        isOwner -> PortalAccess.ALLOWED
+        !visitorAllowsForeignPortals -> PortalAccess.VISITOR_DENIED
+        !ownerAllowsVisitors -> PortalAccess.OWNER_DENIED
+        else -> PortalAccess.ALLOWED
+    }
+
+private val portalPassableMaterials =
+    setOf(
+        Material.SNOW,
+        Material.TRIPWIRE,
+        Material.SHORT_GRASS,
+        Material.TALL_GRASS,
+        Material.ACACIA_SLAB,
+        Material.ANDESITE_SLAB,
+        Material.BRICK_SLAB,
+        Material.BIRCH_SLAB,
+        Material.BLACKSTONE_SLAB,
+        Material.COBBLED_DEEPSLATE_SLAB,
+        Material.COBBLESTONE_SLAB,
+        Material.CRIMSON_SLAB,
+        Material.CUT_COPPER_SLAB,
+        Material.DIORITE_SLAB,
+        Material.END_STONE_BRICK_SLAB,
+        Material.DARK_OAK_SLAB,
+        Material.JUNGLE_SLAB,
+    )
+
+internal fun hasPortalClearance(
+    blockUp: Block,
+    blockUp2: Block,
+): Boolean =
+    (blockUp.isEmpty || blockUp.type in portalPassableMaterials) &&
+        (blockUp2.isEmpty || blockUp2.type in portalPassableMaterials)
+
 class Portal(uuid: UUID, private val portalData: PortalData) {
 
     private val borderLocations = ArrayList<Location>()
@@ -43,17 +92,11 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
 
     private var centerBlock: Block? = null
     private val player: Player?
-    private var task: BukkitTask? = null
+    private var task: ScheduledTask? = null
 
     companion object {
-        private val occupiedBlocks = ConcurrentSkipListSet<Block>(Comparator.comparingInt { it.hashCode() })
+        private val occupiedBlocks = ConcurrentHashMap.newKeySet<Block>()
         private val portals = ConcurrentHashMap<UUID, Portal>()
-        private val empties = setOf(
-            Material.SNOW, Material.TRIPWIRE, Material.SHORT_GRASS, Material.TALL_GRASS,
-            Material.ACACIA_SLAB, Material.ANDESITE_SLAB, Material.BRICK_SLAB, Material.BIRCH_SLAB, Material.BLACKSTONE_SLAB,
-            Material.COBBLED_DEEPSLATE_SLAB, Material.COBBLESTONE_SLAB, Material.CRIMSON_SLAB, Material.CUT_COPPER_SLAB,
-            Material.DIORITE_SLAB, Material.END_STONE_BRICK_SLAB, Material.DARK_OAK_SLAB, Material.JUNGLE_SLAB,
-        )
         private val config = ConfigManager.of(ARC.instance.dataPath, "misc.yml")
 
         @JvmStatic
@@ -72,6 +115,7 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
                 info("Could not find suitable location for portal near {}", player.name)
             } else {
                 portals[player.uniqueId]?.removePortal()
+                reservePortal(centerBlock!!)
                 task = createTask()
                 portals[player.uniqueId] = this
                 player.sendMessage(config.component("portal.message", "<green>Портал создан!"))
@@ -87,17 +131,15 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
 
         if (occupiedBlocks.contains(block) || occupiedBlocks.contains(blockUp) || occupiedBlocks.contains(blockUp2)) return false
 
-        return (block.isSolid || block.type == Material.WATER)
-            && (blockUp.isEmpty || empties.contains(blockUp.type))
-            && (blockUp2.isEmpty || empties.contains(blockUp.type))
+        return (block.isSolid || block.type == Material.WATER) && hasPortalClearance(blockUp, blockUp2)
     }
 
-    private fun createTask(): BukkitTask {
+    private fun createTask(): ScheduledTask {
         val cb = centerBlock!!
-        return ARC.instance.server.scheduler.runTaskTimer(ARC.instance, Runnable {
+        return repeating(1.ticks, delay = 1.ticks) {
             if (phase.get() > 400 || success.get()) {
                 removePortal()
-                return@Runnable
+                return@repeating
             }
             val particleDistance = config.real("portal.particle-distance", 50.0)
             val nearbyPlayers = HashSet<Player>()
@@ -118,34 +160,40 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
             addLocations()
             if (phase.get() == 58) cb.world.playSound(cb.location, org.bukkit.Sound.BLOCK_END_PORTAL_SPAWN, 1f, 1f)
 
-            ARC.instance.server.scheduler.runTaskAsynchronously(ARC.instance, Runnable {
-                displayParticles(nearbyPlayers)
-                if (phase.get() >= 58 && (phase.get() == 58 || phase.get() % 10 == 0)) placeBlocksPackets(nearbyPlayers)
-                if (phase.get() >= 61) {
-                    val enteredPlayer = getEnteredPlayer(nearbyPlayers)
-                    if (enteredPlayer != null && !success.getAndSet(true)) executeAction(enteredPlayer)
-                }
-            })
+            displayParticles(nearbyPlayers)
+            if (phase.get() >= 58 && (phase.get() == 58 || phase.get() % 10 == 0)) placeBlocksPackets(nearbyPlayers)
+            if (phase.get() >= 61) {
+                val enteredPlayer = getEnteredPlayer(nearbyPlayers)
+                if (enteredPlayer != null && !success.getAndSet(true)) executeAction(enteredPlayer)
+            }
             phase.incrementAndGet()
-        }, 1L, 1L)
+        }
     }
 
     private fun getEnteredPlayer(nearby: Collection<Player>): Player? {
         val cb = centerBlock ?: return null
+        val owner = player ?: return null
         for (p in nearby) {
             if (!inPortal(p, cb.location)) continue
-            if (p == player) return p
-            if (!p.hasPermission("arc.portal.tp-by-other")) {
-                CooldownManager.onCooldown(p.uniqueId, "portal_tp_by_other_message", 60) {
-                    p.sendMessage(config.component("portal.tp-by-other-disabled.message", "<red>Вы не можете телепортироваться через порталы других игроков!"))
+            when (
+                evaluatePortalAccess(
+                    isOwner = p == owner,
+                    visitorAllowsForeignPortals = p.hasPermission("arc.portal.tp-by-other"),
+                    ownerAllowsVisitors = owner.hasPermission("arc.portal.tp-other"),
+                )
+            ) {
+                PortalAccess.ALLOWED -> return p
+                PortalAccess.VISITOR_DENIED -> {
+                    CooldownManager.onCooldown(p.uniqueId, "portal_tp_by_other_message", 60) {
+                        p.sendMessage(config.component("portal.tp-by-other-disabled.message", "<red>Вы не можете телепортироваться через порталы других игроков!"))
+                    }
+                }
+                PortalAccess.OWNER_DENIED -> {
+                    CooldownManager.onCooldown(p.uniqueId, "portal_tp_other_message", 60) {
+                        p.sendMessage(config.component("portal.tp-other-disabled.message", "<red>Этот игрок не разрешил другим игрокам телепортироваться через его порталы!"))
+                    }
                 }
             }
-            if (!player!!.hasPermission("arc.portal.tp-other")) {
-                CooldownManager.onCooldown(player.uniqueId, "portal_tp_other_message", 60) {
-                    p.sendMessage(config.component("portal.tp-other-disabled.message", "<red>Этот игрок не разрешил другим игрокам телепортироваться через его порталы!"))
-                }
-            }
-            return p
         }
         return null
     }
@@ -153,26 +201,26 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
     private fun executeAction(player: Player) {
         when (portalData.actionType) {
             COMMAND -> {
-                ARC.instance.server.scheduler.runTask(ARC.instance, Runnable {
+                sync {
                     player.world.playSound(player.location, org.bukkit.Sound.ENTITY_ENDERMAN_TELEPORT, 1f, 1f)
-                    player.performCommand(portalData.command ?: return@Runnable)
-                })
+                    player.performCommand(portalData.command ?: return@sync)
+                }
             }
             HUSK -> {
                 if (HookRegistry.huskHomesHook == null) {
                     error("HuskHomes hook is not active!")
                     return
                 }
-                ARC.instance.server.scheduler.runTask(ARC.instance, Runnable {
+                sync {
                     player.world.playSound(player.location, org.bukkit.Sound.ENTITY_ENDERMAN_TELEPORT, 1f, 1f)
-                    HookRegistry.huskHomesHook!!.teleport(portalData.huskTeleport ?: return@Runnable, player)
-                })
+                    HookRegistry.huskHomesHook!!.teleport(portalData.huskTeleport ?: return@sync, player)
+                }
             }
             TELEPORT -> {
-                ARC.instance.server.scheduler.runTask(ARC.instance, Runnable {
+                sync {
                     player.world.playSound(player.location, org.bukkit.Sound.ENTITY_ENDERMAN_TELEPORT, 1f, 1f)
                     player.teleport(portalData.location!!)
-                })
+                }
             }
             else -> {}
         }
@@ -197,10 +245,9 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
     @Suppress("DEPRECATION")
     private fun clearBlockPackets() {
         val cb = centerBlock ?: return
-        val air: BlockData = Bukkit.createBlockData(Material.AIR)
         val map = mapOf(
-            cb.getRelative(0, 1, 0).location to air,
-            cb.getRelative(0, 2, 0).location to air,
+            cb.getRelative(0, 1, 0).let { it.location to it.blockData },
+            cb.getRelative(0, 2, 0).let { it.location to it.blockData },
         )
         for (uuid in blockChangePlayers) {
             val p = Bukkit.getPlayer(uuid) ?: continue
@@ -315,14 +362,23 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
 
     private fun removePortal() {
         task?.takeUnless { it.isCancelled }?.cancel()
-        centerBlock?.let { cb ->
-            occupiedBlocks.remove(cb)
-            occupiedBlocks.remove(cb.getRelative(0, 1, 0))
-            occupiedBlocks.remove(cb.getRelative(0, 2, 0))
-            occupiedBlocks.remove(cb.getRelative(0, 3, 0))
-        }
+        centerBlock?.let(::releasePortal)
         player?.let { portals.remove(it.uniqueId) }
         clearBlockPackets()
+    }
+
+    private fun reservePortal(base: Block) {
+        occupiedBlocks.add(base)
+        occupiedBlocks.add(base.getRelative(0, 1, 0))
+        occupiedBlocks.add(base.getRelative(0, 2, 0))
+        occupiedBlocks.add(base.getRelative(0, 3, 0))
+    }
+
+    private fun releasePortal(base: Block) {
+        occupiedBlocks.remove(base)
+        occupiedBlocks.remove(base.getRelative(0, 1, 0))
+        occupiedBlocks.remove(base.getRelative(0, 2, 0))
+        occupiedBlocks.remove(base.getRelative(0, 3, 0))
     }
 
     private fun findPortalLocation(): Block? {
@@ -341,17 +397,15 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
 
         var found = false
         val tb = targetBlock
-        if (tb != null) {
-            outer@ for (i in -1..1) {
-                for (j in -1..1) {
-                    for (k in -1..1) {
-                        if (i == 0 && j == 0 && k == 0) continue
-                        val newBlock = tb.getRelative(i, j, k)
-                        if (isSuitable(newBlock)) {
-                            found = true
-                            targetBlock = newBlock
-                            break@outer
-                        }
+        outer@ for (i in -1..1) {
+            for (j in -1..1) {
+                for (k in -1..1) {
+                    if (i == 0 && j == 0 && k == 0) continue
+                    val newBlock = tb.getRelative(i, j, k)
+                    if (isSuitable(newBlock)) {
+                        found = true
+                        targetBlock = newBlock
+                        break@outer
                     }
                 }
             }

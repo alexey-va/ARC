@@ -9,6 +9,7 @@ data class Conversation(
     val radius: Double = 0.0,
     val gptId: String? = null,
     val archetype: String? = null,
+    @Volatile
     var lastMessageTime: Long = 0L,
     val lifeTime: Long = 0L,
     val talkerName: String? = null,

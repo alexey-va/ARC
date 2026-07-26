@@ -6,6 +6,7 @@ import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import java.net.InetSocketAddress
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 /**
@@ -13,9 +14,15 @@ import java.util.concurrent.Executors
  */
 class MetricsHttpServer(
     private val registry: PrometheusMeterRegistry,
+    private val executorFactory: () -> ExecutorService = {
+        Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "arc-metrics-http").apply { isDaemon = true }
+        }
+    },
     private val configProvider: () -> MetricsConfig = { MetricsConfig.current() },
 ) {
     private var httpServer: HttpServer? = null
+    private var executor: ExecutorService? = null
 
     val actualPort: Int
         get() = httpServer?.address?.port ?: configProvider().bindPort
@@ -28,10 +35,16 @@ class MetricsHttpServer(
         val server = HttpServer.create(InetSocketAddress(cfg.bindHost, cfg.bindPort), 0)
         server.createContext("/metrics") { exchange -> handleMetrics(exchange) }
         server.createContext("/health") { exchange -> respond(exchange, 200, "ok\n") }
-        server.executor = Executors.newSingleThreadExecutor { r ->
-            Thread(r, "arc-metrics-http").apply { isDaemon = true }
+        val newExecutor = executorFactory()
+        server.executor = newExecutor
+        try {
+            server.start()
+        } catch (e: Exception) {
+            newExecutor.shutdownNow()
+            server.stop(0)
+            throw e
         }
-        server.start()
+        executor = newExecutor
         httpServer = server
         info("Prometheus metrics on {}:{}", cfg.bindHost, actualPort)
     }
@@ -39,6 +52,8 @@ class MetricsHttpServer(
     fun stop() {
         httpServer?.stop(1)
         httpServer = null
+        executor?.shutdownNow()
+        executor = null
     }
 
     private fun handleMetrics(exchange: HttpExchange) {

@@ -77,4 +77,16 @@ class BuildingManagerTest : TestBase() {
 
         assertNull(result, "Should return null when no pending construction")
     }
+
+    @Test
+    fun `reload removes schematics deleted from disk`() {
+        createMockSchematic(plugin.dataFolder, "temporary.schem")
+        BuildingManager.init()
+        assertTrue(BuildingManager.getBuilding("temporary.schem") != null)
+
+        plugin.dataFolder.resolve("schematics/temporary.schem").delete()
+        BuildingManager.init()
+
+        assertNull(BuildingManager.getBuilding("temporary.schem"))
+    }
 }

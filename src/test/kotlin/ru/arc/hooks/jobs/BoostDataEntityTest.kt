@@ -68,22 +68,6 @@ class BoostDataEntityTest :
                     entity.boostCount() shouldBe 1
                 }
 
-                it("should set isDirty when boost is added") {
-                    val entity =
-                        _root_ide_package_.ru.arc.jobs
-                            .BoostDataEntity(player = UUID.randomUUID())
-                    entity.isDirty = false
-
-                    entity.addBoost(
-                        _root_ide_package_.ru.arc.jobs.JobsBoostData(
-                            boost = 0.5,
-                            id = "test",
-                            expires = futureTime(),
-                        ),
-                    )
-
-                    entity.isDirty shouldBe true
-                }
             }
 
             describe("removeBoost") {
@@ -98,13 +82,10 @@ class BoostDataEntityTest :
                             expires = futureTime(),
                         ),
                     )
-                    entity.isDirty = false
-
                     val result = entity.removeBoost("test")
 
                     result shouldBe true
                     entity.boostCount() shouldBe 0
-                    entity.isDirty shouldBe true
                 }
 
                 it("should return false when boost not found") {
@@ -133,15 +114,12 @@ class BoostDataEntityTest :
                             player = UUID.randomUUID(),
                             boosts = setOf(expiredBoost, activeBoost),
                         )
-                    entity.isDirty = false
-
                     val result = entity.removeExpired()
 
                     result shouldBe true
                     entity.boostCount() shouldBe 1
                     entity.findById("expired") shouldBe null
                     entity.findById("active") shouldNotBe null
-                    entity.isDirty shouldBe true
                 }
 
                 it("should return false when no boosts expired") {
@@ -155,12 +133,9 @@ class BoostDataEntityTest :
                             expires = futureTime(),
                         ),
                     )
-                    entity.isDirty = false
-
                     val result = entity.removeExpired()
 
                     result shouldBe false
-                    entity.isDirty shouldBe false
                 }
 
                 it("should be called automatically during addBoost") {
@@ -479,12 +454,9 @@ class BoostDataEntityTest :
                             expires = futureTime(),
                         ),
                     )
-                    entity.isDirty = false
-
                     entity.clearBoosts()
 
                     entity.boostCount() shouldBe 0
-                    entity.isDirty shouldBe true
                 }
             }
 

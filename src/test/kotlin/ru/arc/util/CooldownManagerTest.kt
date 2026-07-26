@@ -4,6 +4,7 @@ package ru.arc.util
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -148,6 +149,15 @@ class CooldownManagerTest {
             CooldownManager.setupTask(20, scheduler)
 
             assertEquals(1, scheduler.timerCount())
+        }
+
+        @Test
+        fun `setupTask rejects a non-positive period`() {
+            assertThrows(IllegalArgumentException::class.java) {
+                CooldownManager.setupTask(0, scheduler)
+            }
+
+            assertEquals(0, scheduler.timerCount())
         }
 
         @Test

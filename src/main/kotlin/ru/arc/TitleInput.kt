@@ -5,6 +5,7 @@ import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.title.Title
 import org.bukkit.entity.Player
 import ru.arc.board.guis.Inputable
+import ru.arc.core.ScheduledTask
 import ru.arc.core.Tasks
 import ru.arc.core.repeating
 import ru.arc.core.ticks
@@ -20,7 +21,7 @@ class TitleInput(
     var timestamp: Long = System.currentTimeMillis()
 
     init {
-        if (clearTask == null) setupTask(5)
+        if (clearTask?.isCancelled != false) setupTask(5)
         if (activeInputs.containsKey(player)) {
             warn("Player {} already has title input, replacing", player.name)
         }
@@ -32,11 +33,11 @@ class TitleInput(
     fun isExpired(): Boolean = System.currentTimeMillis() - timestamp > 120_000L
 
     fun sendDenyMessage(message: String) {
-        inputable.denyMessage(message, id)?.let { player.sendMessage(it) }
+        player.sendMessage(inputable.denyMessage(message, id))
     }
 
     fun sendStartMessage() {
-        inputable.startMessage(id)?.let { player.sendMessage(it) }
+        player.sendMessage(inputable.startMessage(id))
     }
 
     fun sendTimeoutMessage() {
@@ -63,10 +64,11 @@ class TitleInput(
 
     companion object {
         private val activeInputs: MutableMap<Player, TitleInput> = ConcurrentHashMap()
-        private var clearTask: Any? = null
+        private var clearTask: ScheduledTask? = null
 
         @JvmStatic
         fun setupTask(period: Long) {
+            clearTask?.cancel()
             clearTask =
                 Tasks.scheduler.repeating(period = period.ticks, delay = period.ticks) {
                     val iter = activeInputs.entries.iterator()
@@ -78,6 +80,13 @@ class TitleInput(
                         }
                     }
                 }
+        }
+
+        @JvmStatic
+        fun shutdown() {
+            clearTask?.cancel()
+            clearTask = null
+            activeInputs.clear()
         }
 
         @JvmStatic

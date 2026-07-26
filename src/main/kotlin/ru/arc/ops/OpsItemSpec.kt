@@ -3,11 +3,11 @@ package ru.arc.ops
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import de.tr7zw.changeme.nbtapi.NBT
-import de.tr7zw.changeme.nbtapi.NBTItem
+import io.papermc.paper.registry.RegistryAccess
+import io.papermc.paper.registry.RegistryKey
 import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
-import org.bukkit.Registry
 import org.bukkit.enchantments.Enchantment
 import org.bukkit.inventory.ItemFlag
 import org.bukkit.inventory.ItemStack
@@ -64,7 +64,7 @@ object OpsItemSpec {
         )
 
     fun build(json: JsonObject): ItemStack {
-        val itemsAdderId = json.stringOrNull("itemsadder") ?: json.stringOrNull("ia")
+        val itemsAdderId = json.stringOrNull("itemsadder")
         val mapped = itemsAdderId?.let { knownItemsAdder[it.lowercase()] }
         val itemFields = ConfigItemSpec.fromJsonFields(json.toItemFieldMap())
 
@@ -81,7 +81,6 @@ object OpsItemSpec {
         val modelData =
             itemFields.modelData
                 ?: json.get("customModelData")?.takeIf { !it.isJsonNull }?.asInt
-                ?: json.get("modelData")?.takeIf { !it.isJsonNull }?.asInt
                 ?: mapped?.second
                 ?: 0
 
@@ -164,11 +163,12 @@ object OpsItemSpec {
             result["itemFlags"] = flags.map { it.name }
         }
 
-        if (System.getProperty("arc.test.unit") == null) runCatching {
-            val compound = NBTItem(stack, false).compound ?: return@runCatching
-            val snbt = compound.toString()
-            if (snbt.isNotBlank() && snbt != "{}") {
-                result["nbt"] = snbt
+        if (System.getProperty("arc.test.unit") == null) {
+            runCatching {
+                val snbt = NBT.readNbt(stack).toString()
+                if (snbt.isNotBlank() && snbt != "{}") {
+                    result["nbt"] = snbt
+                }
             }
         }
 
@@ -186,8 +186,8 @@ object OpsItemSpec {
         if (data.size() == 0) return
 
         if (System.getProperty("arc.test.unit") != null) return
-        // Paper 1.20.5+ stores token fields in minecraft:custom_data; NBTItem writes root tags
-        // that Denizen and BlockListener (NBT.get) do not see.
+        // Paper 1.20.5+ stores token fields in minecraft:custom_data; root item tags are not
+        // visible to Denizen or the NBT API custom-data view used by BlockListener.
         NBT.modify(stack) { nbt ->
             for ((key, value) in data.entrySet()) {
                 if (value.isJsonNull) continue
@@ -246,9 +246,8 @@ object OpsItemSpec {
     ) {
         val trimmed = snbt.trim()
         if (trimmed.isEmpty()) return
-        val item = NBTItem(stack)
         val compound = NBT.parseNBT(trimmed)
-        item.mergeCompound(compound)
+        NBT.modify(stack) { item -> item.mergeCompound(compound) }
     }
 
     private fun parseEnchants(element: JsonElement?): Map<Enchantment, Int> {
@@ -283,9 +282,16 @@ object OpsItemSpec {
 
     private fun resolveEnchantment(raw: String): Enchantment? {
         val normalized = raw.lowercase().replace(' ', '_').replace('-', '_')
-        Registry.ENCHANTMENT.get(NamespacedKey.minecraft(normalized))?.let { return it }
-        @Suppress("DEPRECATION")
-        return Enchantment.getByName(normalized.uppercase())
+        val key =
+            if (':' in normalized) {
+                NamespacedKey.fromString(normalized)
+            } else {
+                NamespacedKey.minecraft(normalized)
+            } ?: return null
+        return RegistryAccess
+            .registryAccess()
+            .getRegistry(RegistryKey.ENCHANTMENT)
+            .get(key)
     }
 
     private fun JsonObject.stringOrNull(key: String): String? {
@@ -315,8 +321,7 @@ object OpsItemSpec {
         stringOrNull("material")?.let { map["material"] = it }
         stringOrNull("display")?.let { map["display"] = it }
         stringList("lore").takeIf { it.isNotEmpty() }?.let { map["lore"] = it }
-        (get("customModelData")?.takeIf { !it.isJsonNull }?.asInt
-            ?: get("modelData")?.takeIf { !it.isJsonNull }?.asInt)?.let { map["customModelData"] = it }
+        get("customModelData")?.takeIf { !it.isJsonNull }?.asInt?.let { map["customModelData"] = it }
         return map
     }
 }

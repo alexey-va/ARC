@@ -57,7 +57,8 @@ class EmShop(
                 guiItem(stack) {
                     onClick { click ->
                         click.isCancelled = true
-                        processClick(click, click.currentItem!!, item)
+                        val clickedStack = click.currentItem ?: return@onClick
+                        processClick(click, clickedStack, item)
                     }
                 },
             )
@@ -69,8 +70,7 @@ class EmShop(
         val resetTimeTicks = config.integer("shop.reset-ticks", 20 * 60 * 5)
         val resetTime = resetTimeTicks * 50L
         val sinceLastReset = System.currentTimeMillis() - shopHolder.getShop(player, emHook).timestamp
-        var minsTillReset = ((resetTime - sinceLastReset) / 1000 / 60).toInt()
-        if (minsTillReset == 0) minsTillReset = 1
+        val minsTillReset = maxOf(1, ((resetTime - sinceLastReset) / 1000 / 60).toInt())
 
         return TagResolver.builder()
             .resolver(TagResolver.resolver("type", Tag.inserting(mm(if (isGear) "Снаряжение" else "Тринкеты", true))))
@@ -115,7 +115,7 @@ class EmShop(
             return
         }
 
-        val player1 = click.whoClicked as Player
+        val player1 = click.whoClicked as? Player ?: return
         val em = HookRegistry.emHook ?: return
         val balance = em.balance(player1)
         val cost = item.price

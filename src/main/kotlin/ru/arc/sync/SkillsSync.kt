@@ -4,8 +4,10 @@ import com.google.gson.annotations.SerializedName
 import dev.aurelium.auraskills.api.AuraSkillsApi
 import dev.aurelium.auraskills.api.registry.NamespacedId
 import org.bukkit.Bukkit
-import org.bukkit.scheduler.BukkitRunnable
 import ru.arc.ARC
+import ru.arc.core.ScheduledTask
+import ru.arc.core.repeating
+import ru.arc.core.ticks
 import ru.arc.sync.base.Context
 import ru.arc.sync.base.Sync
 import ru.arc.sync.base.SyncData
@@ -17,48 +19,69 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class SkillsSync : Sync {
 
-    private val syncRepo: SyncRepo<UserSkillData> = SyncRepo.builder(UserSkillData::class.java)
-        .key("arc.skills_data")
-        .redisManager(ARC.redisManager!!)
-        .dataApplier(::applySkillData)
-        .dataProducer(::getSkillData)
-        .build()
+    private val syncRepo =
+        SyncRepo(
+            clazz = UserSkillData::class.java,
+            key = "arc.skills_data",
+            redisManager = checkNotNull(ARC.redisManager) { "Redis manager is not initialized" },
+            dataApplier = ::applySkillData,
+            dataProducer = ::getSkillData,
+        )
 
     private val loaded: MutableMap<UUID, Boolean> = ConcurrentHashMap()
+    private val joinTasks = ConcurrentHashMap<UUID, ScheduledTask>()
 
     override fun playerJoin(uuid: UUID) {
         val counter = AtomicInteger(0)
-        object : BukkitRunnable() {
-            override fun run() {
+        val task =
+            repeating(5.ticks, delay = 5.ticks) {
                 if (Bukkit.getPlayer(uuid) == null) {
-                    cancel()
-                    return
+                    cancelJoinTask(uuid)
+                    return@repeating
                 }
                 val user = AuraSkillsApi.get().getUser(uuid)
                 if (user == null) {
                     if (counter.incrementAndGet() > 20) {
                         Logging.warn("SkillsUser is null for {} for 20 cycles. Cancelling task.", uuid)
-                        cancel()
+                        cancelJoinTask(uuid)
                     }
-                    return
+                    return@repeating
                 }
-                syncRepo.loadAndApplyData(uuid, false)
-                loaded[uuid] = true
-                cancel()
+                syncRepo
+                    .loadAndApplyData(uuid)
+                    .whenComplete { _, failure ->
+                        if (failure == null && Bukkit.getPlayer(uuid) != null) {
+                            loaded[uuid] = true
+                        } else {
+                            loaded.remove(uuid)
+                        }
+                    }
+                cancelJoinTask(uuid)
             }
-        }.runTaskTimer(ARC.instance, 5L, 5L)
+        joinTasks.put(uuid, task)?.cancel()
     }
 
     override fun forceSave(uuid: UUID) {
-        if (!loaded.containsKey(uuid)) return
+        if (loaded[uuid] != true) return
         val context = Context()
         context.put("uuid", uuid)
-        syncRepo.saveAndPersistData(context, false)
+        syncRepo.saveAndPersistData(context)
     }
 
     override fun playerQuit(uuid: UUID) {
         forceSave(uuid)
         loaded.remove(uuid)
+        cancelJoinTask(uuid)
+    }
+
+    override fun shutdown() {
+        joinTasks.values.forEach(ScheduledTask::cancel)
+        joinTasks.clear()
+        loaded.clear()
+    }
+
+    private fun cancelJoinTask(uuid: UUID) {
+        joinTasks.remove(uuid)?.cancel()
     }
 
     fun getSkillData(context: Context): UserSkillData? {

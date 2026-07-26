@@ -5,22 +5,48 @@ import com.sun.net.httpserver.HttpServer
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
+import java.io.InputStream
 import java.net.InetSocketAddress
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+
+internal const val OPS_MAX_REQUEST_BODY_BYTES = 1_048_576
+
+internal class OpsRequestBodyTooLargeException : RuntimeException()
+
+internal fun readOpsRequestBody(
+    input: InputStream,
+    maxBytes: Int = OPS_MAX_REQUEST_BODY_BYTES,
+): String {
+    require(maxBytes > 0) { "maxBytes must be positive" }
+    val bytes = input.readNBytes(maxBytes + 1)
+    if (bytes.size > maxBytes) {
+        throw OpsRequestBodyTooLargeException()
+    }
+    return String(bytes, StandardCharsets.UTF_8)
+}
 
 /**
  * Lightweight JDK HttpServer exposing authenticated ops endpoints under /ops/.
  */
 class OpsHttpServer(
+    private val executorFactory: () -> ExecutorService = {
+        Executors.newFixedThreadPool(4) { runnable ->
+            Thread(runnable, "arc-ops-http").apply { isDaemon = true }
+        }
+    },
     private val configProvider: () -> OpsHttpConfig = { OpsHttpConfig.current() },
 ) {
+    @Volatile
     private var httpServer: HttpServer? = null
+    private var executor: ExecutorService? = null
 
     val actualPort: Int
         get() = httpServer?.address?.port ?: configProvider().bindPort
 
+    @Synchronized
     fun start() {
         stop()
         val cfg = configProvider()
@@ -29,10 +55,16 @@ class OpsHttpServer(
         val address = InetSocketAddress(cfg.bindHost, cfg.bindPort)
         val server = HttpServer.create(address, 0)
         server.createContext("/ops") { exchange -> handle(exchange) }
-        server.executor = Executors.newFixedThreadPool(4) { r ->
-            Thread(r, "arc-ops-http").apply { isDaemon = true }
+        val newExecutor = executorFactory()
+        server.executor = newExecutor
+        try {
+            server.start()
+        } catch (e: Exception) {
+            newExecutor.shutdownNow()
+            server.stop(0)
+            throw e
         }
-        server.start()
+        executor = newExecutor
         httpServer = server
         info(
             "Ops HTTP API listening on {}:{} (console={})",
@@ -45,9 +77,12 @@ class OpsHttpServer(
         }
     }
 
+    @Synchronized
     fun stop() {
         httpServer?.stop(1)
         httpServer = null
+        executor?.shutdownNow()
+        executor = null
     }
 
     internal fun handle(exchange: HttpExchange) {
@@ -67,9 +102,12 @@ class OpsHttpServer(
             }
 
             route(exchange, cfg)
+        } catch (_: OpsRequestBodyTooLargeException) {
+            val (code, body) = OpsJson.error(413, "Request body too large")
+            respond(exchange, code, body)
         } catch (t: Throwable) {
             error("Ops HTTP handler failed", t)
-            val (code, body) = OpsJson.error(500, t.message ?: "Internal error")
+            val (code, body) = OpsJson.error(500, "Internal error")
             respond(exchange, code, body)
         } finally {
             exchange.close()
@@ -81,7 +119,7 @@ class OpsHttpServer(
         cfg: OpsHttpConfig,
     ) {
         val method = exchange.requestMethod.uppercase()
-        val path = exchange.requestURI.path.removePrefix("/ops").trim('/')
+        val path = exchange.requestURI.rawPath.removePrefix("/ops").trim('/')
         val segments = if (path.isEmpty()) emptyList() else path.split('/')
         val query = parseQuery(exchange.requestURI.rawQuery)
 
@@ -113,23 +151,14 @@ class OpsHttpServer(
             method == "GET" && segments.size == 3 && segments[0] == "player" && segments[2] == "item" ->
                 handlePlayerItem(exchange, cfg, segments[1], query)
 
-            method == "GET" && segments.size == 4 && segments[0] == "player" && segments[2] == "item" && segments[3] == "cmi-blob" ->
-                handlePlayerItemCmiBlob(exchange, cfg, segments[1], query)
-
             method == "POST" && segments.size == 3 && segments[0] == "player" && segments[2] == "give" ->
                 handlePlayerGive(exchange, cfg, segments[1])
 
+            method == "POST" && segments.size == 3 && segments[0] == "player" && segments[2] == "give-preset" ->
+                handlePlayerGivePreset(exchange, cfg, segments[1])
+
             method == "POST" && segments == listOf("item", "preview") ->
                 handleItemPreview(exchange, cfg)
-
-            method == "POST" && segments == listOf("item", "cmi-blob") ->
-                handleItemCmiBlob(exchange, cfg)
-
-            method == "GET" && segments.size == 3 && segments[0] == "item" && segments[1] == "cmi-blob" && segments[2] == "presets" ->
-                handleItemCmiBlobPresets(exchange, cfg)
-
-            method == "GET" && segments.size == 4 && segments[0] == "item" && segments[1] == "cmi-blob" && segments[2] == "preset" ->
-                handleItemCmiBlobPreset(exchange, cfg, segments[3], query)
 
             method == "GET" && segments == listOf("placeholder") ->
                 handlePlaceholder(exchange, query)
@@ -178,6 +207,9 @@ class OpsHttpServer(
             method == "GET" && segments == listOf("redis") ->
                 respondOk(exchange, OpsHttpHandlers.redis())
 
+            method == "GET" && segments == listOf("content", "health") ->
+                handleContentHealth(exchange, cfg)
+
             method == "POST" && segments == listOf("message") ->
                 handleMessage(exchange, cfg)
 
@@ -187,8 +219,95 @@ class OpsHttpServer(
             method == "POST" && segments == listOf("effect") ->
                 handleEffect(exchange, cfg)
 
-            method == "POST" && segments == listOf("kits", "validate") ->
-                handleKitsValidate(exchange, cfg)
+            method == "GET" && segments == listOf("item-presets") ->
+                handleItemPresetsList(exchange, cfg, null)
+
+            method == "GET" && segments.size == 2 && segments[0] == "item-presets" ->
+                handleItemPresetsList(exchange, cfg, segments[1])
+
+            method == "POST" && segments == listOf("item-presets", "preview") ->
+                handleItemPresetPreview(exchange, cfg)
+
+            method == "PUT" && segments.size == 2 && segments[0] == "item-presets" ->
+                handleItemPresetUpsert(exchange, cfg, segments[1])
+
+            method == "DELETE" && segments.size == 2 && segments[0] == "item-presets" ->
+                handleItemPresetDelete(exchange, cfg, segments[1])
+
+            method == "GET" && segments == listOf("cmi", "kits") ->
+                handleCmiKitsList(exchange, cfg, null)
+
+            method == "GET" && segments.size == 3 && segments[0] == "cmi" && segments[1] == "kits" ->
+                handleCmiKitsList(exchange, cfg, segments[2])
+
+            method == "POST" && segments == listOf("cmi", "kits", "preview") ->
+                handleCmiKitPreview(exchange, cfg)
+
+            method == "PUT" && segments.size == 3 && segments[0] == "cmi" && segments[1] == "kits" ->
+                handleCmiKitUpsert(exchange, cfg, segments[2])
+
+            method == "GET" && segments == listOf("scheduled-commands") ->
+                handleScheduledCommandsList(exchange, cfg, null)
+
+            method == "GET" && segments.size == 2 && segments[0] == "scheduled-commands" ->
+                handleScheduledCommandsList(exchange, cfg, segments[1])
+
+            method == "POST" && segments == listOf("scheduled-commands", "preview") ->
+                handleScheduledCommandPreview(exchange, cfg)
+
+            method == "PUT" && segments.size == 2 && segments[0] == "scheduled-commands" ->
+                handleScheduledCommandUpsert(exchange, cfg, segments[1])
+
+            method == "DELETE" && segments.size == 2 && segments[0] == "scheduled-commands" ->
+                handleScheduledCommandDelete(exchange, cfg, segments[1])
+
+            method == "GET" && segments == listOf("location-pools") ->
+                handleLocationPoolsList(exchange, cfg, null)
+
+            method == "GET" && segments.size == 2 && segments[0] == "location-pools" ->
+                handleLocationPoolsList(exchange, cfg, segments[1])
+
+            method == "POST" && segments == listOf("location-pools", "preview") ->
+                handleLocationPoolPreview(exchange, cfg)
+
+            method == "PUT" && segments.size == 2 && segments[0] == "location-pools" ->
+                handleLocationPoolUpsert(exchange, cfg, segments[1])
+
+            method == "DELETE" && segments.size == 2 && segments[0] == "location-pools" ->
+                handleLocationPoolDelete(exchange, cfg, segments[1])
+
+            method == "GET" && segments == listOf("treasure-pools") ->
+                handleTreasurePoolsList(exchange, cfg, null)
+
+            method == "GET" && segments.size == 2 && segments[0] == "treasure-pools" ->
+                handleTreasurePoolsList(exchange, cfg, segments[1])
+
+            method == "POST" && segments == listOf("treasure-pools", "preview") ->
+                handleTreasurePoolPreview(exchange, cfg)
+
+            method == "PUT" && segments.size == 2 && segments[0] == "treasure-pools" ->
+                handleTreasurePoolUpsert(exchange, cfg, segments[1])
+
+            method == "DELETE" && segments.size == 2 && segments[0] == "treasure-pools" ->
+                handleTreasurePoolDelete(exchange, cfg, segments[1])
+
+            method == "GET" && segments == listOf("npcs") ->
+                handleNpcsList(exchange, cfg, query)
+
+            method == "GET" && segments.size == 2 && segments[0] == "npcs" ->
+                handleNpcGet(exchange, cfg, segments[1])
+
+            method == "POST" && segments == listOf("npcs", "preview") ->
+                handleNpcPreview(exchange, cfg)
+
+            method == "PUT" && segments == listOf("npcs") ->
+                handleNpcUpsert(exchange, cfg)
+
+            method == "PUT" && segments.size == 2 && segments[0] == "npcs" ->
+                handleNpcUpsert(exchange, cfg, segments[1])
+
+            method == "DELETE" && segments.size == 2 && segments[0] == "npcs" ->
+                handleNpcDelete(exchange, cfg, segments[1])
 
             method == "POST" && segments == listOf("reload") ->
                 handleReload(exchange, cfg)
@@ -333,6 +452,29 @@ class OpsHttpServer(
         }
     }
 
+    private fun handlePlayerGivePreset(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        rawName: String,
+    ) {
+        if (!cfg.itemsGiveEnabled) {
+            val (code, body) = OpsJson.error(403, "Item give endpoint disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        val name = URLDecoder.decode(rawName, StandardCharsets.UTF_8)
+        val body = parseJsonBody(exchange) ?: return
+        try {
+            respondOk(exchange, OpsItemPresetHandlers.give(name, body))
+        } catch (e: IllegalArgumentException) {
+            val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, json)
+        } catch (e: IllegalStateException) {
+            val (code, json) = OpsJson.error(503, e.message ?: "Item presets unavailable")
+            respond(exchange, code, json)
+        }
+    }
+
     private fun handleItemPreview(
         exchange: HttpExchange,
         cfg: OpsHttpConfig,
@@ -349,85 +491,6 @@ class OpsHttpServer(
             val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
             respond(exchange, code, json)
         }
-    }
-
-    private fun handleItemCmiBlob(
-        exchange: HttpExchange,
-        cfg: OpsHttpConfig,
-    ) {
-        if (!cfg.itemsReadEnabled) {
-            val (code, body) = OpsJson.error(403, "Item cmi-blob disabled in config")
-            respond(exchange, code, body)
-            return
-        }
-        val body = parseJsonBody(exchange) ?: return
-        try {
-            val presets = body.get("presets")?.takeIf { it.isJsonArray }
-            if (presets != null) {
-                val names =
-                    presets.asJsonArray.mapNotNull { element ->
-                        if (element.isJsonNull) null else element.asString.trim().takeIf { it.isNotEmpty() }
-                    }
-                if (names.isEmpty()) {
-                    val (code, json) = OpsJson.error(400, "JSON presets array must not be empty")
-                    respond(exchange, code, json)
-                    return
-                }
-                respondOk(exchange, OpsItemHandlers.cmiBlobBatch(names))
-                return
-            }
-
-            val preset = body.get("preset")?.takeIf { !it.isJsonNull }?.asString?.trim()
-            if (!preset.isNullOrEmpty()) {
-                val amount = body.get("amount")?.takeIf { !it.isJsonNull }?.asInt ?: 1
-                respondOk(exchange, OpsItemHandlers.cmiBlobFromPreset(preset, amount))
-                return
-            }
-
-            respondOk(exchange, OpsItemHandlers.cmiBlobFromSpec(body))
-        } catch (e: IllegalArgumentException) {
-            val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
-            respond(exchange, code, json)
-        }
-    }
-
-    private fun handleItemCmiBlobPreset(
-        exchange: HttpExchange,
-        cfg: OpsHttpConfig,
-        rawPreset: String,
-        query: Map<String, String>,
-    ) {
-        if (!cfg.itemsReadEnabled) {
-            val (code, body) = OpsJson.error(403, "Item cmi-blob disabled in config")
-            respond(exchange, code, body)
-            return
-        }
-        val preset = URLDecoder.decode(rawPreset, StandardCharsets.UTF_8)
-        val amount = query["amount"]?.toIntOrNull()?.coerceIn(1, 64) ?: 1
-        try {
-            respondOk(exchange, OpsItemHandlers.cmiBlobFromPreset(preset, amount))
-        } catch (e: IllegalArgumentException) {
-            val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
-            respond(exchange, code, json)
-        }
-    }
-
-    private fun handleItemCmiBlobPresets(
-        exchange: HttpExchange,
-        cfg: OpsHttpConfig,
-    ) {
-        if (!cfg.itemsReadEnabled) {
-            val (code, body) = OpsJson.error(403, "Item cmi-blob disabled in config")
-            respond(exchange, code, body)
-            return
-        }
-        respondOk(
-            exchange,
-            mapOf(
-                "presets" to ItemPresets.allNames(),
-                "hint" to "GET /ops/item/cmi-blob/preset/{name} or POST /ops/item/cmi-blob {\"preset\":\"sf_lootbox\"}",
-            ),
-        )
     }
 
     private fun handlePermission(
@@ -494,6 +557,18 @@ class OpsHttpServer(
         }
     }
 
+    private fun handleContentHealth(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+    ) {
+        try {
+            respondOk(exchange, OpsContentHealthHandlers.health(cfg))
+        } catch (e: IllegalStateException) {
+            val (code, body) = OpsJson.error(503, e.message ?: "Content health unavailable")
+            respond(exchange, code, body)
+        }
+    }
+
     private fun handleBroadcast(
         exchange: HttpExchange,
         cfg: OpsHttpConfig,
@@ -557,62 +632,601 @@ class OpsHttpServer(
         }
     }
 
-    private fun handlePlayerItemCmiBlob(
+    private fun handleItemPresetsList(
         exchange: HttpExchange,
         cfg: OpsHttpConfig,
-        rawName: String,
-        query: Map<String, String>,
+        rawId: String?,
     ) {
-        if (!cfg.itemsReadEnabled) {
-            val (code, body) = OpsJson.error(403, "Item read endpoints disabled in config")
+        if (!cfg.itemPresetsReadEnabled) {
+            val (code, body) = OpsJson.error(403, "Item preset read endpoints disabled in config")
             respond(exchange, code, body)
             return
         }
-        val name = URLDecoder.decode(rawName, StandardCharsets.UTF_8)
-        val amount = query["amount"]?.toIntOrNull()?.coerceIn(1, 64) ?: 1
         try {
-            respondOk(exchange, OpsItemHandlers.handCmiBlob(name, amount))
+            val id = rawId?.let { URLDecoder.decode(it, StandardCharsets.UTF_8) }
+            respondOk(exchange, OpsItemPresetHandlers.list(id))
         } catch (e: IllegalArgumentException) {
-            val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
-            respond(exchange, code, json)
+            val (code, body) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, body)
+        } catch (e: NoSuchElementException) {
+            val (code, body) = OpsJson.error(404, e.message ?: "Item preset not found")
+            respond(exchange, code, body)
+        } catch (e: IllegalStateException) {
+            val (code, body) = OpsJson.error(503, e.message ?: "Item presets unavailable")
+            respond(exchange, code, body)
         }
     }
 
-    private fun handleKitsValidate(
+    private fun handleItemPresetPreview(
         exchange: HttpExchange,
         cfg: OpsHttpConfig,
     ) {
-        if (!cfg.itemsReadEnabled) {
-            val (code, body) = OpsJson.error(403, "Item read endpoints disabled in config")
+        if (!cfg.itemPresetsReadEnabled) {
+            val (code, body) = OpsJson.error(403, "Item preset preview disabled in config")
             respond(exchange, code, body)
             return
         }
         val body = parseJsonBody(exchange) ?: return
-        val presetsEl = body.get("presets")
-        if (presetsEl == null || !presetsEl.isJsonArray) {
-            val (code, json) = OpsJson.error(400, "JSON body required: {\"presets\":[\"sf_lootbox\",...]}")
+        val idElement = body.get("id")?.takeIf { !it.isJsonNull }
+        val id =
+            idElement
+                ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
+                ?.asString
+                ?.trim()
+        if (id.isNullOrEmpty()) {
+            val (code, json) = OpsJson.error(400, "JSON body requires item preset id string")
             respond(exchange, code, json)
             return
         }
-        val names = presetsEl.asJsonArray.mapNotNull { el ->
-            if (el.isJsonNull) null else el.asString.trim().takeIf { it.isNotEmpty() }
+        try {
+            respondOk(exchange, OpsItemPresetHandlers.preview(id, body))
+        } catch (e: IllegalArgumentException) {
+            val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, json)
+        } catch (e: IllegalStateException) {
+            val (code, json) = OpsJson.error(503, e.message ?: "Item presets unavailable")
+            respond(exchange, code, json)
         }
-        if (names.isEmpty()) {
-            val (code, json) = OpsJson.error(400, "presets array must not be empty")
+    }
+
+    private fun handleItemPresetUpsert(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        rawId: String,
+    ) {
+        if (!cfg.itemPresetsWriteEnabled) {
+            val (code, body) = OpsJson.error(403, "Item preset writes disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        val body = parseJsonBody(exchange) ?: return
+        try {
+            val id = URLDecoder.decode(rawId, StandardCharsets.UTF_8)
+            respondOk(exchange, OpsItemPresetHandlers.upsert(id, body))
+        } catch (e: IllegalArgumentException) {
+            val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, json)
+        } catch (e: IllegalStateException) {
+            val (code, json) = OpsJson.error(503, e.message ?: "Item presets unavailable")
+            respond(exchange, code, json)
+        }
+    }
+
+    private fun handleItemPresetDelete(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        rawId: String,
+    ) {
+        if (!cfg.itemPresetsWriteEnabled) {
+            val (code, body) = OpsJson.error(403, "Item preset writes disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        try {
+            val id = URLDecoder.decode(rawId, StandardCharsets.UTF_8)
+            respondOk(exchange, OpsItemPresetHandlers.delete(id))
+        } catch (e: IllegalArgumentException) {
+            val (code, body) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, body)
+        } catch (e: NoSuchElementException) {
+            val (code, body) = OpsJson.error(404, e.message ?: "Item preset not found")
+            respond(exchange, code, body)
+        } catch (e: IllegalStateException) {
+            val (code, body) = OpsJson.error(503, e.message ?: "Item presets unavailable")
+            respond(exchange, code, body)
+        }
+    }
+
+    private fun handleCmiKitsList(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        rawName: String?,
+    ) {
+        if (!cfg.itemsReadEnabled) {
+            val (code, body) = OpsJson.error(403, "CMI kit read endpoints disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        val name = rawName?.let { URLDecoder.decode(it, StandardCharsets.UTF_8) }
+        try {
+            respondOk(exchange, OpsCmiKitHandlers.listKits(name))
+        } catch (e: NoSuchElementException) {
+            val (code, body) = OpsJson.error(404, e.message ?: "CMI kit not found")
+            respond(exchange, code, body)
+        } catch (e: IllegalStateException) {
+            val (code, body) = OpsJson.error(503, e.message ?: "CMI unavailable")
+            respond(exchange, code, body)
+        }
+    }
+
+    private fun handleCmiKitPreview(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+    ) {
+        if (!cfg.itemsReadEnabled) {
+            val (code, body) = OpsJson.error(403, "CMI kit preview disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        val body = parseJsonBody(exchange) ?: return
+        val name = body.get("name")?.takeIf { !it.isJsonNull }?.asString?.trim()
+        if (name.isNullOrEmpty()) {
+            val (code, json) = OpsJson.error(400, "JSON body requires kit name")
             respond(exchange, code, json)
             return
         }
-        respondOk(exchange, OpsItemHandlers.validatePresets(names))
+        try {
+            respondOk(exchange, OpsCmiKitHandlers.preview(name, body))
+        } catch (e: IllegalArgumentException) {
+            val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, json)
+        } catch (e: IllegalStateException) {
+            val (code, json) = OpsJson.error(503, e.message ?: "CMI unavailable")
+            respond(exchange, code, json)
+        }
+    }
+
+    private fun handleCmiKitUpsert(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        rawName: String,
+    ) {
+        if (!cfg.cmiKitsWriteEnabled) {
+            val (code, body) = OpsJson.error(403, "CMI kit writes disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        val name = URLDecoder.decode(rawName, StandardCharsets.UTF_8)
+        val body = parseJsonBody(exchange) ?: return
+        try {
+            respondOk(exchange, OpsCmiKitHandlers.upsert(name, body))
+        } catch (e: IllegalArgumentException) {
+            val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, json)
+        } catch (e: IllegalStateException) {
+            val (code, json) = OpsJson.error(503, e.message ?: "CMI unavailable")
+            respond(exchange, code, json)
+        }
+    }
+
+    private fun handleScheduledCommandsList(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        rawId: String?,
+    ) {
+        if (!cfg.scheduledCommandsReadEnabled) {
+            val (code, body) = OpsJson.error(403, "Scheduled command read endpoints disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        try {
+            val id = rawId?.let { URLDecoder.decode(it, StandardCharsets.UTF_8) }
+            respondOk(exchange, OpsScheduledCommandHandlers.list(id))
+        } catch (e: IllegalArgumentException) {
+            val (code, body) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, body)
+        } catch (e: NoSuchElementException) {
+            val (code, body) = OpsJson.error(404, e.message ?: "Scheduled command not found")
+            respond(exchange, code, body)
+        } catch (e: IllegalStateException) {
+            val (code, body) = OpsJson.error(503, e.message ?: "Scheduled commands unavailable")
+            respond(exchange, code, body)
+        }
+    }
+
+    private fun handleScheduledCommandPreview(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+    ) {
+        if (!cfg.scheduledCommandsReadEnabled) {
+            val (code, body) = OpsJson.error(403, "Scheduled command preview disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        val body = parseJsonBody(exchange) ?: return
+        val idElement = body.get("id")?.takeIf { !it.isJsonNull }
+        val id =
+            idElement
+                ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
+                ?.asString
+                ?.trim()
+        if (id.isNullOrEmpty()) {
+            val (code, json) = OpsJson.error(400, "JSON body requires scheduled command id string")
+            respond(exchange, code, json)
+            return
+        }
+        try {
+            respondOk(exchange, OpsScheduledCommandHandlers.preview(id, body))
+        } catch (e: IllegalArgumentException) {
+            val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, json)
+        } catch (e: IllegalStateException) {
+            val (code, json) = OpsJson.error(503, e.message ?: "Scheduled commands unavailable")
+            respond(exchange, code, json)
+        }
+    }
+
+    private fun handleScheduledCommandUpsert(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        rawId: String,
+    ) {
+        if (!cfg.scheduledCommandsWriteEnabled) {
+            val (code, body) = OpsJson.error(403, "Scheduled command writes disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        val body = parseJsonBody(exchange) ?: return
+        try {
+            val id = URLDecoder.decode(rawId, StandardCharsets.UTF_8)
+            respondOk(exchange, OpsScheduledCommandHandlers.upsert(id, body))
+        } catch (e: IllegalArgumentException) {
+            val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, json)
+        } catch (e: IllegalStateException) {
+            val (code, json) = OpsJson.error(503, e.message ?: "Scheduled commands unavailable")
+            respond(exchange, code, json)
+        }
+    }
+
+    private fun handleScheduledCommandDelete(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        rawId: String,
+    ) {
+        if (!cfg.scheduledCommandsWriteEnabled) {
+            val (code, body) = OpsJson.error(403, "Scheduled command writes disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        try {
+            val id = URLDecoder.decode(rawId, StandardCharsets.UTF_8)
+            respondOk(exchange, OpsScheduledCommandHandlers.delete(id))
+        } catch (e: IllegalArgumentException) {
+            val (code, body) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, body)
+        } catch (e: NoSuchElementException) {
+            val (code, body) = OpsJson.error(404, e.message ?: "Scheduled command not found")
+            respond(exchange, code, body)
+        } catch (e: IllegalStateException) {
+            val (code, body) = OpsJson.error(503, e.message ?: "Scheduled commands unavailable")
+            respond(exchange, code, body)
+        }
+    }
+
+    private fun handleLocationPoolsList(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        rawId: String?,
+    ) {
+        if (!cfg.locationPoolsReadEnabled) {
+            val (code, body) = OpsJson.error(403, "Location pool read endpoints disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        try {
+            val id = rawId?.let { URLDecoder.decode(it, StandardCharsets.UTF_8) }
+            respondOk(exchange, OpsLocationPoolHandlers.list(id))
+        } catch (e: IllegalArgumentException) {
+            val (code, body) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, body)
+        } catch (e: NoSuchElementException) {
+            val (code, body) = OpsJson.error(404, e.message ?: "Location pool not found")
+            respond(exchange, code, body)
+        } catch (e: IllegalStateException) {
+            val (code, body) = OpsJson.error(503, e.message ?: "Location pools unavailable")
+            respond(exchange, code, body)
+        }
+    }
+
+    private fun handleLocationPoolPreview(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+    ) {
+        if (!cfg.locationPoolsReadEnabled) {
+            val (code, body) = OpsJson.error(403, "Location pool preview disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        val body = parseJsonBody(exchange) ?: return
+        val idElement = body.get("id")?.takeIf { !it.isJsonNull }
+        val id =
+            idElement
+                ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
+                ?.asString
+                ?.trim()
+        if (id.isNullOrEmpty()) {
+            val (code, json) = OpsJson.error(400, "JSON body requires location pool id string")
+            respond(exchange, code, json)
+            return
+        }
+        try {
+            respondOk(exchange, OpsLocationPoolHandlers.preview(id, body))
+        } catch (e: IllegalArgumentException) {
+            val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, json)
+        } catch (e: IllegalStateException) {
+            val (code, json) = OpsJson.error(503, e.message ?: "Location pools unavailable")
+            respond(exchange, code, json)
+        }
+    }
+
+    private fun handleLocationPoolUpsert(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        rawId: String,
+    ) {
+        if (!cfg.locationPoolsWriteEnabled) {
+            val (code, body) = OpsJson.error(403, "Location pool writes disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        val body = parseJsonBody(exchange) ?: return
+        try {
+            val id = URLDecoder.decode(rawId, StandardCharsets.UTF_8)
+            respondOk(exchange, OpsLocationPoolHandlers.upsert(id, body))
+        } catch (e: IllegalArgumentException) {
+            val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, json)
+        } catch (e: IllegalStateException) {
+            val (code, json) = OpsJson.error(503, e.message ?: "Location pools unavailable")
+            respond(exchange, code, json)
+        }
+    }
+
+    private fun handleLocationPoolDelete(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        rawId: String,
+    ) {
+        if (!cfg.locationPoolsWriteEnabled) {
+            val (code, body) = OpsJson.error(403, "Location pool writes disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        try {
+            val id = URLDecoder.decode(rawId, StandardCharsets.UTF_8)
+            respondOk(exchange, OpsLocationPoolHandlers.delete(id))
+        } catch (e: IllegalArgumentException) {
+            val (code, body) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, body)
+        } catch (e: NoSuchElementException) {
+            val (code, body) = OpsJson.error(404, e.message ?: "Location pool not found")
+            respond(exchange, code, body)
+        } catch (e: IllegalStateException) {
+            val (code, body) = OpsJson.error(503, e.message ?: "Location pools unavailable")
+            respond(exchange, code, body)
+        }
+    }
+
+    private fun handleTreasurePoolsList(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        rawId: String?,
+    ) {
+        if (!cfg.treasurePoolsReadEnabled) {
+            val (code, body) = OpsJson.error(403, "Treasure pool read endpoints disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        try {
+            val id = rawId?.let { URLDecoder.decode(it, StandardCharsets.UTF_8) }
+            respondOk(exchange, OpsTreasurePoolHandlers.list(id))
+        } catch (e: IllegalArgumentException) {
+            val (code, body) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, body)
+        } catch (e: NoSuchElementException) {
+            val (code, body) = OpsJson.error(404, e.message ?: "Treasure pool not found")
+            respond(exchange, code, body)
+        } catch (e: IllegalStateException) {
+            val (code, body) = OpsJson.error(503, e.message ?: "Treasure pools unavailable")
+            respond(exchange, code, body)
+        }
+    }
+
+    private fun handleTreasurePoolPreview(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+    ) {
+        if (!cfg.treasurePoolsReadEnabled) {
+            val (code, body) = OpsJson.error(403, "Treasure pool preview disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        val body = parseJsonBody(exchange) ?: return
+        val idElement = body.get("id")?.takeIf { !it.isJsonNull }
+        val id =
+            idElement
+                ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
+                ?.asString
+                ?.trim()
+        if (id.isNullOrEmpty()) {
+            val (code, json) = OpsJson.error(400, "JSON body requires treasure pool id string")
+            respond(exchange, code, json)
+            return
+        }
+        try {
+            respondOk(exchange, OpsTreasurePoolHandlers.preview(id, body))
+        } catch (e: IllegalArgumentException) {
+            val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, json)
+        } catch (e: IllegalStateException) {
+            val (code, json) = OpsJson.error(503, e.message ?: "Treasure pools unavailable")
+            respond(exchange, code, json)
+        }
+    }
+
+    private fun handleTreasurePoolUpsert(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        rawId: String,
+    ) {
+        if (!cfg.treasurePoolsWriteEnabled) {
+            val (code, body) = OpsJson.error(403, "Treasure pool writes disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        val body = parseJsonBody(exchange) ?: return
+        try {
+            val id = URLDecoder.decode(rawId, StandardCharsets.UTF_8)
+            respondOk(exchange, OpsTreasurePoolHandlers.upsert(id, body))
+        } catch (e: IllegalArgumentException) {
+            val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, json)
+        } catch (e: IllegalStateException) {
+            val (code, json) = OpsJson.error(503, e.message ?: "Treasure pools unavailable")
+            respond(exchange, code, json)
+        }
+    }
+
+    private fun handleTreasurePoolDelete(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        rawId: String,
+    ) {
+        if (!cfg.treasurePoolsWriteEnabled) {
+            val (code, body) = OpsJson.error(403, "Treasure pool writes disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        try {
+            val id = URLDecoder.decode(rawId, StandardCharsets.UTF_8)
+            respondOk(exchange, OpsTreasurePoolHandlers.delete(id))
+        } catch (e: IllegalArgumentException) {
+            val (code, body) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, body)
+        } catch (e: NoSuchElementException) {
+            val (code, body) = OpsJson.error(404, e.message ?: "Treasure pool not found")
+            respond(exchange, code, body)
+        } catch (e: IllegalStateException) {
+            val (code, body) = OpsJson.error(503, e.message ?: "Treasure pools unavailable")
+            respond(exchange, code, body)
+        }
     }
 
     private fun parseJsonBody(exchange: HttpExchange): com.google.gson.JsonObject? {
-        val bodyText = exchange.requestBody.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
+        val bodyText = readRequestBody(exchange)
         return runCatching {
             com.google.gson.JsonParser.parseString(bodyText).asJsonObject
         }.getOrElse {
             val (code, body) = OpsJson.error(400, "Invalid JSON body")
             respond(exchange, code, body)
             null
+        }
+    }
+
+    private fun handleNpcsList(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        query: Map<String, String>,
+    ) {
+        if (!cfg.npcsReadEnabled) {
+            val (code, body) = OpsJson.error(403, "NPC read endpoints disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        handleNpcErrors(exchange) {
+            OpsNpcHandlers.list(
+                worldName = query["world"],
+                limit = query["limit"]?.toIntOrNull() ?: 200,
+            )
+        }
+    }
+
+    private fun handleNpcGet(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        rawId: String,
+    ) {
+        if (!cfg.npcsReadEnabled) {
+            val (code, body) = OpsJson.error(403, "NPC read endpoints disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        handleNpcErrors(exchange) {
+            OpsNpcHandlers.list(id = parseNpcId(rawId))
+        }
+    }
+
+    private fun handleNpcPreview(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+    ) {
+        if (!cfg.npcsReadEnabled) {
+            val (code, body) = OpsJson.error(403, "NPC read endpoints disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        val body = parseJsonBody(exchange) ?: return
+        handleNpcErrors(exchange) { OpsNpcHandlers.preview(body) }
+    }
+
+    private fun handleNpcUpsert(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        rawId: String? = null,
+    ) {
+        if (!cfg.npcsWriteEnabled) {
+            val (code, body) = OpsJson.error(403, "NPC writes disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        val body = parseJsonBody(exchange) ?: return
+        handleNpcErrors(exchange) { OpsNpcHandlers.upsert(rawId?.let(::parseNpcId), body) }
+    }
+
+    private fun handleNpcDelete(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        rawId: String,
+    ) {
+        if (!cfg.npcsWriteEnabled) {
+            val (code, body) = OpsJson.error(403, "NPC writes disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        handleNpcErrors(exchange) { OpsNpcHandlers.delete(parseNpcId(rawId)) }
+    }
+
+    private fun parseNpcId(rawId: String): Int =
+        URLDecoder.decode(rawId, StandardCharsets.UTF_8).toIntOrNull()
+            ?: throw IllegalArgumentException("NPC id must be an integer")
+
+    private fun handleNpcErrors(
+        exchange: HttpExchange,
+        block: () -> Map<String, Any?>,
+    ) {
+        try {
+            respondOk(exchange, block())
+        } catch (e: IllegalArgumentException) {
+            val (code, body) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, body)
+        } catch (e: NoSuchElementException) {
+            val (code, body) = OpsJson.error(404, e.message ?: "NPC not found")
+            respond(exchange, code, body)
+        } catch (e: IllegalStateException) {
+            val (code, body) = OpsJson.error(503, e.message ?: "NPC provider unavailable")
+            respond(exchange, code, body)
         }
     }
 
@@ -633,7 +1247,7 @@ class OpsHttpServer(
             respond(exchange, code, body)
             return
         }
-        val bodyText = exchange.requestBody.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
+        val bodyText = readRequestBody(exchange)
         val command =
             runCatching {
                 com.google.gson.JsonParser.parseString(bodyText).asJsonObject.get("command")?.asString
@@ -645,6 +1259,9 @@ class OpsHttpServer(
         }
         respondOk(exchange, OpsHttpHandlers.runConsole(command))
     }
+
+    private fun readRequestBody(exchange: HttpExchange): String =
+        readOpsRequestBody(exchange.requestBody)
 
     private fun routes(cfg: OpsHttpConfig): Map<String, Any?> {
         val routes =
@@ -665,6 +1282,7 @@ class OpsHttpServer(
                 "GET /ops/modules",
                 "GET /ops/plugins?status=ok|disabled",
                 "GET /ops/redis",
+                "GET /ops/content/health",
             )
         if (cfg.messagesEnabled) {
             routes += "POST /ops/message {\"channel\":\"broadcast|player|ops\",\"text\":\"...\"}"
@@ -686,15 +1304,56 @@ class OpsHttpServer(
         if (cfg.itemsReadEnabled) {
             routes += "GET /ops/player/{name}/inventory"
             routes += "GET /ops/player/{name}/item?slot= | ?hand=true"
-            routes += "GET /ops/player/{name}/item/cmi-blob?amount=1"
             routes += "POST /ops/item/preview {ItemSpec JSON}"
-            routes += "GET /ops/item/cmi-blob/presets"
-            routes += "GET /ops/item/cmi-blob/preset/{name}?amount=1"
-            routes += "POST /ops/item/cmi-blob {ItemSpec|preset|presets[]}"
-            routes += "POST /ops/kits/validate {\"presets\":[\"sf_lootbox\",...]}"
+            routes += "GET /ops/cmi/kits[/{name}]"
+            routes += "POST /ops/cmi/kits/preview {name,display,icon:ItemSpec,items:{},commands:[]}"
         }
         if (cfg.itemsGiveEnabled) {
             routes += "POST /ops/player/{name}/give {\"item\":{ItemSpec},\"slot\":-1,\"dropOverflow\":true}"
+            routes += "POST /ops/player/{name}/give-preset {\"preset\":\"sf_lootbox\",\"amount\":1,\"dropOverflow\":true}"
+        }
+        if (cfg.itemPresetsReadEnabled) {
+            routes += "GET /ops/item-presets[/{id}]"
+            routes += "POST /ops/item-presets/preview {id,type:preset|bundle,description,item|items}"
+        }
+        if (cfg.itemPresetsWriteEnabled) {
+            routes += "PUT /ops/item-presets/{id} {type:preset|bundle,description,item|items}"
+            routes += "DELETE /ops/item-presets/{id}"
+        }
+        if (cfg.cmiKitsWriteEnabled) {
+            routes += "PUT /ops/cmi/kits/{name} {display,icon:ItemSpec,items:{},extraItems:{},commands:[]}"
+        }
+        if (cfg.scheduledCommandsReadEnabled) {
+            routes += "GET /ops/scheduled-commands[/{id}]"
+            routes += "POST /ops/scheduled-commands/preview {id,command,servers,schedule:{...}}"
+        }
+        if (cfg.scheduledCommandsWriteEnabled) {
+            routes += "PUT /ops/scheduled-commands/{id} {command,servers,schedule:{...}}"
+            routes += "DELETE /ops/scheduled-commands/{id}"
+        }
+        if (cfg.locationPoolsReadEnabled) {
+            routes += "GET /ops/location-pools[/{id}]"
+            routes += "POST /ops/location-pools/preview {id,locations:[{server,world,x,y,z,yaw,pitch,weight}]}"
+        }
+        if (cfg.locationPoolsWriteEnabled) {
+            routes += "PUT /ops/location-pools/{id} {locations:[{server,world,x,y,z,yaw,pitch,weight}]}"
+            routes += "DELETE /ops/location-pools/{id}"
+        }
+        if (cfg.treasurePoolsReadEnabled) {
+            routes += "GET /ops/treasure-pools[/{id}]"
+            routes += "POST /ops/treasure-pools/preview {id,messages:[],treasures:[{type,weight,...}]}"
+        }
+        if (cfg.treasurePoolsWriteEnabled) {
+            routes += "PUT /ops/treasure-pools/{id} {messages:[],treasures:[{type,weight,...}]}"
+            routes += "DELETE /ops/treasure-pools/{id}"
+        }
+        if (cfg.npcsReadEnabled) {
+            routes += "GET /ops/npcs[/{id}]?world=&limit="
+            routes += "POST /ops/npcs/preview {world,x,y?,z,yaw?,pitch?}"
+        }
+        if (cfg.npcsWriteEnabled) {
+            routes += "PUT /ops/npcs[/{id}] NpcSpec (create without id; patch existing with id)"
+            routes += "DELETE /ops/npcs/{id}"
         }
         return mapOf("routes" to routes, "auth" to "Bearer token or X-ARC-Ops-Token header")
     }

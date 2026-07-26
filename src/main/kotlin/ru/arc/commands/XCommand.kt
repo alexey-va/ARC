@@ -60,12 +60,22 @@ object XCommand : CommandExecutor, TabCompleter {
             if (serversStr == null || serversStr.equals("all", ignoreCase = true)) {
                 null // null means all servers
             } else {
-                serversStr.split(",").toSet()
+                serversStr
+                    .split(",")
+                    .map(String::trim)
+                    .filter(String::isNotEmpty)
+                    .map(String::lowercase)
+                    .toSet()
             }
 
         val playerName = params["player"]
         val timeout = params["timeout"]?.toIntOrNull() ?: 100
-        val uuid = params["uuid"]?.let { UUID.fromString(it) }
+        val uuidText = params["uuid"]
+        val uuid = uuidText?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+        if (uuidText != null && uuid == null) {
+            sender.sendMessage(TextUtil.mm("<red>Некорректный UUID: <gray>$uuidText"))
+            return true
+        }
         val delay = params["delay"]?.toIntOrNull() ?: 0
         val senderType =
             params["sender"]?.uppercase()?.let {

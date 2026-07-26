@@ -1,36 +1,47 @@
 package ru.arc.hooks.lands
 
-import ru.arc.ARC
 import ru.arc.common.ServerLocation
+import ru.arc.core.ScheduledTask
+import ru.arc.core.repeatingAsync
+import ru.arc.core.ticks
 import ru.arc.hooks.HookRegistry
-import ru.arc.network.ChannelListener
-import ru.arc.network.RedisManager
+import ru.arc.redis.ChannelListener
+import ru.arc.redis.RedisOperations
 import ru.arc.network.RedisSerializer
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeoutException
 
 class LandsMessager(
-    private val redisManager: RedisManager,
+    private val redis: RedisOperations,
     val reqChannel: String,
     val respChannel: String,
 ) : ChannelListener {
 
     val futures: MutableMap<UUID, TimedRequest> = ConcurrentHashMap()
+    private var cleanupTask: ScheduledTask? = null
 
     fun init() {
-        ARC.instance.server.scheduler.runTaskTimerAsynchronously(
-            ARC.instance,
-            Runnable {
-                futures.entries.removeIf { (_, v) ->
-                    Duration.between(v.instant, Instant.now()).seconds > 5
+        close()
+        cleanupTask =
+            repeatingAsync(20.ticks, delay = 20.ticks) {
+                futures.entries.forEach { (id, request) ->
+                    val expired = Duration.between(request.instant, Instant.now()).seconds > 5
+                    if (expired && futures.remove(id, request)) {
+                        request.future.completeExceptionally(TimeoutException("Lands request timed out"))
+                    }
                 }
-            },
-            20L,
-            20L,
-        )
+            }
+    }
+
+    fun close() {
+        cleanupTask?.cancel()
+        cleanupTask = null
+        futures.values.forEach { it.future.cancel(true) }
+        futures.clear()
     }
 
     override fun consume(channel: String, message: String, originServer: String) {
@@ -46,7 +57,7 @@ class LandsMessager(
                 .thenApply { ServerLocation.of(it) }
                 .thenApply { loc -> LandsRequest(req.uuid, playerUuid, loc) }
                 .thenApply { RedisSerializer.toJson(it) }
-                .thenAccept { json -> redisManager.publish(respChannel, json) }
+                .thenAccept { json -> redis.publish(respChannel, json) }
         }
     }
 
@@ -54,7 +65,12 @@ class LandsMessager(
         val uuid = UUID.randomUUID()
         val future = CompletableFuture<ServerLocation>()
         futures[uuid] = TimedRequest(future, Instant.now())
-        redisManager.publish(reqChannel, RedisSerializer.toJson(LandsRequest(uuid, playerUuid, null)))
+        try {
+            redis.publish(reqChannel, RedisSerializer.toJson(LandsRequest(uuid, playerUuid, null)))
+        } catch (error: Exception) {
+            futures.remove(uuid)
+            future.completeExceptionally(error)
+        }
         return future
     }
 

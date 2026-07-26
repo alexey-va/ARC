@@ -1,11 +1,13 @@
 package ru.arc.treasure.core
 
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.kotest.matchers.string.shouldContain
 import org.bukkit.Material
 import org.bukkit.inventory.ItemStack
 import ru.arc.KotestTestBase
@@ -158,6 +160,34 @@ class TreasureManagerTest :
         }
 
         describe("TreasureManager persistence") {
+
+            it("should atomically replace one pool without leaving temp files") {
+                val pool =
+                    TreasurePool(
+                        "atomic",
+                        treasures = listOf(Treasure.Money(10.0, 20.0, id = "money")),
+                    )
+
+                val saved = manager.replaceAndSave(tempDir, pool)
+
+                saved.isDirty shouldBe false
+                manager.getPool("atomic")?.isDirty shouldBe false
+                File(tempDir, "atomic.yml").readText() shouldContain "id: atomic"
+                Files
+                    .list(tempDir.toPath())
+                    .use { stream -> stream.filter { it.fileName.toString().endsWith(".tmp") }.toList() }
+                    .shouldBeEmpty()
+            }
+
+            it("should delete the durable file before dropping the live pool") {
+                manager.replaceAndSave(tempDir, TreasurePool("delete-strict"))
+                File(tempDir, "delete-strict.yml").exists() shouldBe true
+
+                manager.deleteAndSave(tempDir, "delete-strict") shouldBe true
+
+                File(tempDir, "delete-strict.yml").exists() shouldBe false
+                manager.getPool("delete-strict") shouldBe null
+            }
 
             it("should save and load pools") {
                 val treasure =

@@ -123,6 +123,17 @@ class AuditServiceTest {
                 service.expense("Player1", -10.0, Type.SHOP, "Invalid")
             }
         }
+
+        @Test
+        fun `operation explicitly saves a mutated cached entity`() {
+            val recordingRepository = RecordingAuditRepository()
+            val recordingService = AuditService(recordingRepository, config, scheduler, timeProvider)
+
+            recordingService.operation("Player1", 15.0, Type.SHOP, "sale")
+
+            assertEquals(1, recordingRepository.saveCount)
+            assertEquals(15.0, recordingRepository.get("player1").join()!!.transactions.single().amount)
+        }
     }
 
     @Nested
@@ -208,6 +219,19 @@ class AuditServiceTest {
                     ?.size ?: 0,
             )
         }
+
+        @Test
+        fun `clearPlayer persists the cleared entity`() {
+            val recordingRepository = RecordingAuditRepository()
+            val recordingService = AuditService(recordingRepository, config, scheduler, timeProvider)
+            recordingService.operation("Player1", 100.0, Type.SHOP, "tx")
+            recordingRepository.saveCount = 0
+
+            recordingService.clearPlayer("Player1")
+
+            assertEquals(1, recordingRepository.saveCount)
+            assertTrue(recordingRepository.get("player1").join()!!.transactions.isEmpty())
+        }
     }
 
     @Nested
@@ -250,6 +274,20 @@ class AuditServiceTest {
             smallService.pruneOldData()
 
             // Just verify no exception is thrown
+        }
+
+        @Test
+        fun `pruning persists trimmed entities`() {
+            val recordingRepository = RecordingAuditRepository()
+            val pruneConfig = config.copy(maxWeight = 0, maxTransactions = 0)
+            val recordingService = AuditService(recordingRepository, pruneConfig, scheduler, timeProvider)
+            recordingService.operation("Player1", 1.0, Type.SHOP, "tx")
+            recordingRepository.saveCount = 0
+
+            recordingService.pruneOldData()
+
+            assertTrue(recordingRepository.saveCount > 0)
+            assertTrue(recordingRepository.get("player1").join()!!.transactions.isEmpty())
         }
     }
 
@@ -389,5 +427,16 @@ class AuditServiceTest {
             assertEquals(1, filtered.size)
             assertEquals(Type.PAY, filtered.first().type)
         }
+    }
+}
+
+private class RecordingAuditRepository(
+    private val delegate: InMemoryAuditRepository = InMemoryAuditRepository(),
+) : AuditRepository by delegate {
+    var saveCount: Int = 0
+
+    override fun save(entity: AuditData) {
+        saveCount++
+        delegate.save(entity)
     }
 }

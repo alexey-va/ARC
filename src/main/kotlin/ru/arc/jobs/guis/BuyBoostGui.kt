@@ -12,10 +12,13 @@ import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemFlag
 import ru.arc.config.Config
 import ru.arc.core.modules.EconomyModule
+import ru.arc.core.sync
 import ru.arc.gui.dynamicGui
 import ru.arc.jobs.BoostType
 import ru.arc.jobs.JobsModule
 import ru.arc.util.GuiUtils
+import ru.arc.util.Logging.error
+import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
 import ru.arc.util.TextUtil.formatAmount
 import ru.arc.util.guiItem
@@ -134,27 +137,34 @@ object BuyBoostGuiFactory {
         return config.keys(basePath).mapNotNull { key ->
             val path = "$basePath.$key"
             try {
-                Boost(
-                    display = config.string("$path.display"),
-                    lore = config.stringList("$path.lore"),
-                    price = config.real("$path.price", 1000.0),
-                    boostAmount = config.real("$path.boost-amount", 0.1),
-                    seconds = config.long("$path.seconds", 3600),
-                    permission = config.string("$path.permission", ""),
-                    material = Material.valueOf(config.string("$path.material", "GOLD_INGOT").uppercase()),
-                    modelData = config.integer("$path.model-data", 0),
-                    currency = BuyCurrency.valueOf(config.string("$path.currency", "MONEY").uppercase()),
-                    id = config.string("$path.id", "none"),
-                    jobs = config.stringList("$path.jobs").map { it.lowercase().intern() },
-                    types =
-                        config.stringList("$path.types").mapNotNull {
-                            try {
-                                BoostType.valueOf(it.uppercase())
-                            } catch (_: Exception) {
-                                null
-                            }
-                        },
-                )
+                val boost =
+                    Boost(
+                        display = config.string("$path.display"),
+                        lore = config.stringList("$path.lore"),
+                        price = config.real("$path.price", 1000.0),
+                        boostAmount = config.real("$path.boost-amount", 0.1),
+                        seconds = config.long("$path.seconds", 3600),
+                        permission = config.string("$path.permission", ""),
+                        material = Material.valueOf(config.string("$path.material", "GOLD_INGOT").uppercase()),
+                        modelData = config.integer("$path.model-data", 0),
+                        currency = BuyCurrency.valueOf(config.string("$path.currency", "MONEY").uppercase()),
+                        id = config.string("$path.id", "none"),
+                        jobs = config.stringList("$path.jobs").map { it.lowercase().intern() },
+                        types =
+                            config.stringList("$path.types").mapNotNull {
+                                try {
+                                    BoostType.valueOf(it.uppercase())
+                                } catch (_: Exception) {
+                                    null
+                                }
+                            },
+                    )
+                if (boost.isValid()) {
+                    boost
+                } else {
+                    warn("Ignoring invalid Jobs boost config at {}", path)
+                    null
+                }
             } catch (_: Exception) {
                 null
             }
@@ -190,7 +200,7 @@ object BuyBoostGuiFactory {
 
         val economyCheck = checkEconomy(player, boost.currency, boost.price)
         val currencyName = config.string("currency-names.${boost.currency.name.lowercase()}", "Money")
-        val hasBoost = JobsModule.hasBoost(player, boost.id)
+        val hasBoost = JobsModule.hasBoost(player, boost.id, boost.jobs, boost.types)
 
         val lore =
             when {
@@ -234,34 +244,83 @@ object BuyBoostGuiFactory {
 
             onClick { click ->
                 click.isCancelled = true
-
-                if (JobsModule.hasBoost(player, boost.id)) {
-                    val (display, _) = config.itemComponents("boostbuy-menu.already-have-boost")
-                    GuiUtils.temporaryChange(click.currentItem!!, display, null, 60) {}
-                    return@onClick
+                val clickedItem = click.currentItem ?: return@onClick
+                val coordinator =
+                    BoostPurchaseCoordinator(
+                        alreadyOwned = {
+                            JobsModule.hasBoost(player, boost.id, boost.jobs, boost.types)
+                        },
+                        hasPermission = {
+                            boost.permission.isEmpty() || player.hasPermission(boost.permission)
+                        },
+                        hasFunds = {
+                            checkEconomy(player, boost.currency, boost.price).hasEnough
+                        },
+                        reserveBoost = {
+                            JobsModule.addBoost(
+                                player.uniqueId,
+                                boost.jobs,
+                                boost.boostAmount,
+                                calculateBoostExpiration(System.currentTimeMillis(), boost.seconds) ?: 0L,
+                                boost.id,
+                                boost.types,
+                            )
+                        },
+                        chargeCurrency = {
+                            takeCurrency(player, boost.currency, boost.price)
+                        },
+                        rollbackBoost = {
+                            JobsModule.removeBoosts(
+                                player.uniqueId,
+                                boost.id,
+                                boost.jobs,
+                                boost.types,
+                            )
+                        },
+                        runOnMainThread = { action -> sync { action() } },
+                    )
+                coordinator.purchase().whenComplete { result, failure ->
+                    sync {
+                        if (failure != null) {
+                            error("Jobs boost purchase failed for {}", player.uniqueId, failure)
+                            showPurchaseMessage(clickedItem, config, "boostbuy-menu.purchase-failed")
+                            return@sync
+                        }
+                        when (result) {
+                            BoostPurchaseResult.PURCHASED -> onPurchase()
+                            BoostPurchaseResult.ALREADY_OWNED ->
+                                showPurchaseMessage(clickedItem, config, "boostbuy-menu.already-have-boost")
+                            BoostPurchaseResult.NO_PERMISSION ->
+                                showPurchaseMessage(clickedItem, config, "boostbuy-menu.no-permission")
+                            BoostPurchaseResult.INSUFFICIENT_FUNDS ->
+                                showPurchaseMessage(clickedItem, config, "boostbuy-menu.not-enough-money")
+                            BoostPurchaseResult.PAYMENT_FAILED,
+                            BoostPurchaseResult.UNAVAILABLE,
+                            null,
+                            ->
+                                showPurchaseMessage(clickedItem, config, "boostbuy-menu.purchase-failed")
+                        }
+                    }
                 }
-
-                val ec = checkEconomy(player, boost.currency, boost.price)
-                if (!ec.hasEnough) {
-                    val (display, _) = config.itemComponents("boostbuy-menu.not-enough-money")
-                    GuiUtils.temporaryChange(click.currentItem!!, display, null, 60) {}
-                    return@onClick
-                }
-
-                takeCurrency(player, boost.currency, boost.price)
-
-                JobsModule.addBoost(
-                    player.uniqueId,
-                    boost.jobs,
-                    boost.boostAmount,
-                    System.currentTimeMillis() + boost.seconds * 1000L,
-                    boost.id,
-                    boost.types,
-                )
-
-                onPurchase()
             }
         }
+    }
+
+    private fun showPurchaseMessage(
+        item: org.bukkit.inventory.ItemStack,
+        config: Config,
+        configKey: String,
+    ) {
+        val configuredDisplay = config.itemComponents(configKey).first
+        val fallback =
+            when (configKey) {
+                "boostbuy-menu.already-have-boost" -> "<red>У вас уже есть этот буст"
+                "boostbuy-menu.no-permission" -> "<red>Нет доступа к этому бусту"
+                "boostbuy-menu.not-enough-money" -> "<red>Недостаточно средств"
+                else -> "<red>Не удалось купить буст"
+            }
+        val display = configuredDisplay ?: TextUtil.mm(fallback, true)
+        GuiUtils.temporaryChange(item, display, null, 60) {}
     }
 
     private fun createTypeResolver(
@@ -311,19 +370,26 @@ object BuyBoostGuiFactory {
         player: Player,
         currency: BuyCurrency,
         price: Double,
-    ) {
-        when (currency) {
+    ): Boolean {
+        if (!price.isFinite() || price < 0.0) return false
+        return when (currency) {
             BuyCurrency.MONEY -> {
-                EconomyModule.getEconomy()?.withdrawPlayer(player, price)
+                val economy = EconomyModule.getEconomy() ?: return false
+                economy.has(player, price) &&
+                    economy.withdrawPlayer(player, price).transactionSuccess()
             }
 
             BuyCurrency.POINTS -> {
                 val pointsData = Jobs.getPlayerManager().getJobsPlayer(player).pointsData
+                if (pointsData.currentPoints < price) return false
                 pointsData.setPoints(pointsData.currentPoints - price)
+                true
             }
 
             BuyCurrency.EXP -> {
+                if (player.totalExperience < price) return false
                 player.totalExperience = (player.totalExperience - price).toInt()
+                true
             }
         }
     }
@@ -334,8 +400,7 @@ object BuyBoostGuiFactory {
         price: Double,
     ): EconomyCheck {
         val balance = getCurrency(player, currency)
-        val diff = balance - price
-        return EconomyCheck(hasEnough = diff >= 0, currencyNeeded = -diff.coerceAtLeast(0.0))
+        return calculateEconomyCheck(balance, price)
     }
 
     private fun getTypeStackData(type: BoostType): TypeStackData =
@@ -361,7 +426,20 @@ object BuyBoostGuiFactory {
         val id: String,
         val jobs: List<String>,
         val types: List<BoostType>,
-    )
+    ) {
+        internal fun isValid(): Boolean =
+            display.isNotBlank() &&
+                price.isFinite() &&
+                price >= 0.0 &&
+                boostAmount.isFinite() &&
+                boostAmount > 0.0 &&
+                seconds > 0 &&
+                seconds <= Long.MAX_VALUE / 1000L &&
+                id.isNotBlank() &&
+                id == id.trim() &&
+                !id.equals("none", ignoreCase = true) &&
+                (currency != BuyCurrency.EXP || price <= Int.MAX_VALUE.toDouble() && price % 1.0 == 0.0)
+    }
 
     data class EconomyCheck(
         val hasEnough: Boolean,
@@ -377,5 +455,31 @@ object BuyBoostGuiFactory {
         MONEY,
         POINTS,
         EXP,
+    }
+}
+
+internal fun calculateEconomyCheck(
+    balance: Double,
+    price: Double,
+): BuyBoostGuiFactory.EconomyCheck {
+    if (!balance.isFinite() || !price.isFinite() || price < 0.0) {
+        return BuyBoostGuiFactory.EconomyCheck(hasEnough = false, currencyNeeded = 0.0)
+    }
+    val difference = balance - price
+    return BuyBoostGuiFactory.EconomyCheck(
+        hasEnough = difference >= 0.0,
+        currencyNeeded = (-difference).coerceAtLeast(0.0),
+    )
+}
+
+internal fun calculateBoostExpiration(
+    now: Long,
+    seconds: Long,
+): Long? {
+    if (seconds <= 0L) return null
+    return try {
+        Math.addExact(now, Math.multiplyExact(seconds, 1000L))
+    } catch (_: ArithmeticException) {
+        null
     }
 }

@@ -45,50 +45,56 @@ class BukkitWorldProvider : WorldProvider {
  * Provides Java-compatible static methods for plugin initialization.
  */
 object MobSpawnManager {
+    @Volatile
     private var service: MobSpawnService? = null
 
     /**
      * Initialize and start the mob spawn service.
      */
     @JvmStatic
+    @Synchronized
     fun init() {
         cancel()
 
         val config = MobSpawnConfig.load(ARC.instance.dataPath)
 
-        service = MobSpawnService(
-            config = config,
-            scheduler = Tasks.scheduler,
-            worldProvider = BukkitWorldProvider(),
-            claimChecker = LandsClaimChecker(),
-            entitySpawner = BukkitEntitySpawner()
-        )
-
-        service?.start()
+        val newService =
+            MobSpawnService(
+                config = config,
+                scheduler = Tasks.scheduler,
+                worldProvider = BukkitWorldProvider(),
+                claimChecker = LandsClaimChecker(),
+                entitySpawner = BukkitEntitySpawner(),
+            )
+        newService.start()
+        service = newService
     }
 
     /**
      * Initialize with custom service (for testing).
      */
-    fun init(customService: MobSpawnService) {
+    @Synchronized
+    internal fun init(customService: MobSpawnService) {
         cancel()
+        customService.start()
         service = customService
-        service?.start()
     }
 
     /**
      * Cancel the mob spawn service.
      */
     @JvmStatic
+    @Synchronized
     fun cancel() {
-        service?.stop()
+        val current = service
         service = null
+        current?.stop()
     }
 
     /**
      * Get current service instance.
      */
-    fun getService(): MobSpawnService? = service
+    internal fun getService(): MobSpawnService? = service
 
     /**
      * Check if service is running.

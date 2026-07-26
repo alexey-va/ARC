@@ -1,7 +1,8 @@
 package ru.arc.treasure.core
 
+import io.papermc.paper.registry.RegistryAccess
+import io.papermc.paper.registry.RegistryKey
 import org.bukkit.Material
-import org.bukkit.Registry
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.meta.EnchantmentStorageMeta
 import org.bukkit.inventory.meta.PotionMeta
@@ -201,9 +202,10 @@ sealed class Treasure {
         val amount: Int get() = if (min == max) min else ThreadLocalRandom.current().nextInt(min, max + 1)
 
         fun randomBook(): ItemStack {
-            @Suppress("DEPRECATION")
             val enchants =
-                Registry.ENCHANTMENT
+                RegistryAccess
+                    .registryAccess()
+                    .getRegistry(RegistryKey.ENCHANTMENT)
                     .filter { it.key.key !in exclude.map { e -> e.lowercase() } }
                     .toList()
 
@@ -375,47 +377,32 @@ sealed class Treasure {
             val id = map["id"] as? String ?: UUID.randomUUID().toString()
             val weight = (map["weight"] as? Number)?.toInt() ?: 1
 
-            // Parse new message format
             val messages =
                 (map["messages"] as? List<*>)
                     ?.mapNotNull { (it as? Map<String, Any?>)?.let { m -> TreasureMessage.fromMap(m) } }
                     ?: emptyList()
 
-            // Legacy migration: if old format exists, convert to new
-            val legacyMessages =
-                if (messages.isEmpty()) {
-                    val oldMessage = map["message"] as? String
-                    val oldGlobalMessage = map["globalMessage"] as? String
-                    val oldAnnounce = map["announce"] as? Boolean ?: false
-                    TreasureMessage.fromLegacy(oldMessage, oldGlobalMessage, oldAnnounce)
-                } else {
-                    messages
-                }
-
-            return when (type.lowercase()) {
+            return when (type) {
                 "item" -> {
                     val stackMap = map["stack"] as? Map<String, Any> ?: return null
                     val stack = ItemStack.deserialize(stackMap)
                     val (min, max) = parseAmountInt(map["amount"])
-                    Item(stack, min, max, weight, legacyMessages, id)
+                    Item(stack, min, max, weight, messages, id)
                 }
 
                 "money" -> {
                     val (min, max) = parseAmountDouble(map["amount"])
-                    Money(min, max, weight, legacyMessages, id)
+                    Money(min, max, weight, messages, id)
                 }
 
                 "command" -> {
                     val commands = (map["commands"] as? List<*>)?.filterIsInstance<String>() ?: emptyList()
-                    Command(commands, weight, legacyMessages, id)
+                    Command(commands, weight, messages, id)
                 }
 
                 "sub-pool" -> {
-                    val poolId =
-                        map["poolId"] as? String
-                            ?: map["sub-pool-id"] as? String
-                            ?: return null
-                    SubPool(poolId, weight, legacyMessages, id)
+                    val poolId = map["poolId"] as? String ?: return null
+                    SubPool(poolId, weight, messages, id)
                 }
 
                 "enchant" -> {
@@ -426,34 +413,36 @@ sealed class Treasure {
                             ?.map { it.lowercase() }
                             ?.toSet()
                             ?: emptySet()
-                    Enchant(min, max, exclude, weight, legacyMessages, id)
+                    Enchant(min, max, exclude, weight, messages, id)
                 }
 
                 "potion" -> {
                     val (min, max) = parseAmountInt(map["amount"])
-                    Potion(min, max, weight, legacyMessages, id)
+                    Potion(min, max, weight, messages, id)
                 }
 
                 "ae" -> {
                     val kind =
                         when ((map["kind"] as? String)?.lowercase()) {
-                            "book", "random_book", "randombook" -> AeKind.RANDOM_BOOK
-                            else -> AeKind.ITEM
+                            "item" -> AeKind.ITEM
+                            "random_book" -> AeKind.RANDOM_BOOK
+                            else -> return null
                         }
-                    val itemName = map["name"] as? String
+                    val itemName =
+                        if (kind == AeKind.ITEM) {
+                            map["name"] as? String ?: return null
+                        } else {
+                            null
+                        }
                     val amount = (map["amount"] as? Number)?.toInt() ?: 1
-                    val args = AeArg.parseList(map["args"])
-                    Ae(kind, itemName, amount, args, weight, legacyMessages, id)
+                    val args = AeArg.parseList(map["args"]) ?: return null
+                    Ae(kind, itemName, amount, args, weight, messages, id)
                 }
 
                 "slimefun" -> {
-                    val itemId =
-                        map["item-id"] as? String
-                            ?: map["itemId"] as? String
-                            ?: map["item"] as? String
-                            ?: return null
+                    val itemId = map["item-id"] as? String ?: return null
                     val (min, max) = parseAmountInt(map["amount"])
-                    Slimefun(itemId, min, max, weight, legacyMessages, id)
+                    Slimefun(itemId, min, max, weight, messages, id)
                 }
 
                 else -> {

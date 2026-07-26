@@ -1,10 +1,12 @@
 package ru.arc.stock
 
-import org.bukkit.Bukkit
-import org.bukkit.scheduler.BukkitTask
 import ru.arc.ARC
 import ru.arc.config.ConfigManager
 import ru.arc.config.StockConfig
+import ru.arc.core.ScheduledTask
+import ru.arc.core.repeatingAsync
+import ru.arc.core.sync
+import ru.arc.core.ticks
 import ru.arc.util.Common
 import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
@@ -24,7 +26,7 @@ object HistoryManager {
     private val highLows: MutableMap<String, HighLow> = ConcurrentHashMap()
     private var messager: HistoryMessager? = null
     private var historyPath: Path? = null
-    private var saveTask: BukkitTask? = null
+    private var saveTask: ScheduledTask? = null
 
     private val config by lazy {
         ConfigManager.of(ARC.instance.dataPath, "stocks/stock.yml")
@@ -37,6 +39,11 @@ object HistoryManager {
     @JvmStatic
     fun setMessager(m: HistoryMessager) {
         messager = m
+    }
+
+    @JvmStatic
+    fun clearMessager(expected: HistoryMessager) {
+        if (messager === expected) messager = null
     }
 
     @JvmStatic
@@ -69,21 +76,17 @@ object HistoryManager {
     @JvmStatic
     fun startTasks() {
         cancelTasks()
-        saveTask = ARC.instance.server.scheduler.runTaskTimerAsynchronously(
-            ARC.instance,
-            Runnable {
+        saveTask =
+            repeatingAsync(6_000.ticks, delay = 100.ticks) {
                 try {
-                    if (!StockConfig.mainServer) return@Runnable
+                    if (!StockConfig.mainServer) return@repeatingAsync
                     saveHistory()
                     drawPlots(true)
                     messager?.send(highLows)
                 } catch (e: Exception) {
                     error("Error in saveTask", e)
                 }
-            },
-            100L,
-            20L * 300,
-        )
+            }
     }
 
     @JvmStatic
@@ -97,9 +100,9 @@ object HistoryManager {
                 process.inputStream.bufferedReader().forEachLine { debug("plot: {}", it) }
                 debug("Plotting took: {}ms", System.currentTimeMillis() - time)
                 if (sendPackets) {
-                    Bukkit.getScheduler().runTask(ARC.instance, Runnable {
+                    sync {
                         ARC.trySeverCommand("arc-invest -t:update")
-                    })
+                    }
                 }
             } catch (e: Exception) {
                 error("Error drawing plots", e)
@@ -113,6 +116,7 @@ object HistoryManager {
     @JvmStatic
     fun cancelTasks() {
         saveTask?.takeIf { !it.isCancelled }?.cancel()
+        saveTask = null
     }
 
     @JvmStatic

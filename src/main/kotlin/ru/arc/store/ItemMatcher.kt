@@ -5,7 +5,6 @@ import org.bukkit.Material
 import org.bukkit.inventory.ItemStack
 import ru.arc.hooks.HookRegistry
 import ru.arc.util.hasCustomModelDataSafe
-import java.util.concurrent.atomic.AtomicBoolean
 
 data class ItemMatcher(
     val material: Material? = null,
@@ -14,36 +13,36 @@ data class ItemMatcher(
     val hasModelData: Boolean? = null,
     val isSfItem: Boolean? = null,
 ) {
+    private val materialPattern: Regex? =
+        materialName?.let { expression ->
+            require(expression.isNotBlank()) { "Material pattern must not be blank" }
+            Regex(expression, RegexOption.IGNORE_CASE)
+        }
 
     fun matches(stack: ItemStack): Boolean {
-        if (material != null && stack.type == material) return true
+        if (stack.type == material) return true
 
         if (!nbt.isNullOrEmpty()) {
-            val allMatch = AtomicBoolean(false)
-            NBT.get(stack) { readableItemNBT ->
-                allMatch.set(nbt.all { readableItemNBT.hasTag(it) })
-            }
-            if (allMatch.get()) return true
+            val itemNbt = NBT.readNbt(stack)
+            if (matchesCustomNbtTags(itemNbt::hasTag)) return true
         }
 
-        if (materialName != null) {
-            val mat = stack.type.name.lowercase()
-            if (mat.matches(materialName.toRegex())) return true
+        if (materialPattern?.matches(stack.type.name) == true) return true
+
+        if (hasModelData != null && stack.itemMeta?.hasCustomModelDataSafe() == hasModelData) {
+            return true
         }
 
-        if (hasModelData != null && stack.itemMeta != null) {
-            if (stack.itemMeta!!.hasCustomModelDataSafe() == hasModelData) return true
-        }
-
-        if (isSfItem != null) {
-            val meta = stack.itemMeta
-            if (meta != null && HookRegistry.sfHook != null &&
-                HookRegistry.sfHook!!.isSlimefunItem(stack) == isSfItem
-            ) return true
+        val slimefunHook = HookRegistry.sfHook
+        if (isSfItem != null && slimefunHook != null) {
+            if (slimefunHook.isSlimefunItem(stack) == isSfItem) return true
         }
 
         return false
     }
+
+    internal fun matchesCustomNbtTags(hasTag: (String) -> Boolean): Boolean =
+        !nbt.isNullOrEmpty() && nbt.all(hasTag)
 
     companion object {
         @JvmStatic fun of(material: Material) = ItemMatcher(material = material)

@@ -96,7 +96,7 @@ object TreasuresSubCommand : SubCommand {
         val pool =
             Treasures.getPool(poolId) ?: run {
                 sender.sendMessage(CommandConfig.treasuresPoolCreating(poolId))
-                Treasures.getOrCreate(poolId)
+                Treasures.getOrCreatePool(poolId)
             }
 
         // Обрабатываем действие

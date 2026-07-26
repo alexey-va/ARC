@@ -22,7 +22,7 @@ object FurnitureBarrierTracker {
         block: Block,
         radius: Int = SCAN_RADIUS,
     ): Set<BlockPos> {
-        val world = block.world ?: return emptySet()
+        val world = block.world
         val result = linkedSetOf<BlockPos>()
         val cx = block.x
         val cy = block.y

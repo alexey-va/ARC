@@ -1,10 +1,12 @@
 package ru.arc.commands.arc.subcommands
 
 import org.bukkit.command.CommandSender
+import ru.arc.board.BoardManager
 import ru.arc.board.guis.BoardGuiFactory
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.player
 import ru.arc.util.GuiUtils
+import ru.arc.util.TextUtil
 
 /**
  * /arc board - Opens the scoreboard GUI.
@@ -20,6 +22,10 @@ object BoardSubCommand : SubCommand {
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
         val player = sender.player ?: return true
+        if (!BoardManager.isAvailable()) {
+            player.sendMessage(TextUtil.mm("<red>Доска объявлений временно недоступна."))
+            return true
+        }
         GuiUtils.constructAndShowAsync({ BoardGuiFactory.create(player) }, player)
         return true
     }

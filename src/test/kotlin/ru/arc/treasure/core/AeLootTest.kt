@@ -50,7 +50,7 @@ class AeLootTest :
                         mapOf("int" to "10-13"),
                         mapOf("int" to 5),
                     ),
-                )
+                )!!
 
             args.size shouldBe 4
             args[0] shouldBe AeArg.RandomTier
@@ -94,6 +94,21 @@ class TreasureNativeLootTypesTest :
             parsed.min shouldBe 5
             parsed.max shouldBe 10
             parsed.weight shouldBe 15
+        }
+
+        it("should reject removed native loot aliases") {
+            Treasure.fromMap(
+                mapOf(
+                    "type" to "ae",
+                    "kind" to "book",
+                ),
+            ) shouldBe null
+            Treasure.fromMap(
+                mapOf(
+                    "type" to "slimefun",
+                    "itemId" to "STEEL_INGOT",
+                ),
+            ) shouldBe null
         }
     })
 

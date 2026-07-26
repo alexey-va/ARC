@@ -10,7 +10,7 @@ import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSp
 import io.github.retrooper.packetevents.util.SpigotConversionUtil
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
-import ru.arc.ARC
+import ru.arc.core.sync
 import ru.arc.util.Logging.debug
 import java.util.Optional
 import java.util.UUID
@@ -61,6 +61,6 @@ class PacketEventsHook {
 
     private fun runOnMainThread(action: () -> Unit) {
         if (Bukkit.isPrimaryThread()) action()
-        else Bukkit.getScheduler().runTask(ARC.instance, action)
+        else sync(action)
     }
 }

@@ -3,7 +3,7 @@
 #
 # presets.<id> — ItemSpec (material, display, lore, customModelData, customData, itemsadder, …)
 #   description — подсказка в /arc give list (не часть ItemSpec)
-# bundles.<id> — набор preset + amount (amount: amount = масштаб от аргумента команды)
+# bundles.<id> — набор preset + amount (amount: scaled = масштаб от аргумента команды)
 # =============================================================================
 
 presets:
@@ -149,7 +149,7 @@ bundles:
     description: SF×N, AE×2, enchant×2, potion×2, money tier 4
     items:
       - preset: sf_lootbox
-        amount: amount
+        amount: scaled
       - preset: ae_lootbox
         amount: 2
       - preset: enchant_token

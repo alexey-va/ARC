@@ -37,10 +37,39 @@ items-read-enabled: true
 
 # POST /ops/player/{name}/give — выдать предмет по JSON ItemSpec
 # POST /ops/item/preview — собрать ItemSpec без выдачи
-# GET  /ops/item/cmi-blob/preset/{name}?amount=1 — CMI !!binary blob (Paper serializeAsBytes + gzip)
-# POST /ops/item/cmi-blob — ItemSpec JSON, или {"preset":"sf_lootbox"}, или {"presets":["sf_lootbox",…]}
 items-give-enabled: false
 items-give-max-stack: 64
+
+# GET/preview read the live ARC item-presets catalog.
+item-presets-read-enabled: true
+# PUT/DELETE atomically persist modules/item-presets.yml.
+# Production mutation: enable only for an explicitly authorized operation.
+item-presets-write-enabled: false
+
+# GET/preview используют CMI Java API и обычные ItemSpec JSON.
+# PUT /ops/cmi/kits/{name} меняет runtime CMI kit и вызывает KitsManager.safeSave().
+# По умолчанию запрещено: включать только для явно авторизованной content-операции.
+cmi-kits-write-enabled: false
+
+# GET/preview для modules/scheduled-commands.yml.
+scheduled-commands-read-enabled: true
+# PUT/DELETE сохраняют расписание через ScheduledCommandsManager.
+# Production mutation: включать только для явно авторизованной операции.
+scheduled-commands-write-enabled: false
+
+# GET/preview expose normalized weighted coordinates, not internal persistence JSON.
+location-pools-read-enabled: true
+# PUT/DELETE persist through LocationPoolManager using atomic file replacement.
+location-pools-write-enabled: false
+
+# Native ARC treasure/reward pools. Preview never grants rewards or runs commands.
+treasure-pools-read-enabled: true
+# Production mutation: enable only for an explicitly authorized content operation.
+treasure-pools-write-enabled: false
+
+# Native Citizens API. Preview/list are read-only; create/move/delete stay gated.
+npcs-read-enabled: true
+npcs-write-enabled: false
 
 # Сколько WARN/ERROR держать в памяти для GET /ops/errors
 error-buffer-size: 200

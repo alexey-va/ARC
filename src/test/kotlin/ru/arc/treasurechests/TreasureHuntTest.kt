@@ -38,7 +38,7 @@ class TreasureHuntTest :
             locationPool.addLocation(location2, 1.0)
 
             // Setup treasure pool
-            treasurePool = Treasures.getOrCreate("test-treasure-pool")
+            treasurePool = Treasures.getOrCreatePool("test-treasure-pool")
             val treasure = Treasure.Money(min = 100.0, max = 200.0, weight = 10)
             Treasures.addTreasure("test-treasure-pool", treasure)
             treasurePool = Treasures.getPool("test-treasure-pool")!!

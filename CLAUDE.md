@@ -19,7 +19,7 @@ export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-25.jdk/Contents/Home
 | `mcserver/TASKS.md` | Current tasks — read after chat reset |
 | `mcserver/AGENTS.md` | Deploy, MCP, server roles |
 | `mcserver/classic/plugins/ARC/AGENTS.md` | Runtime YAML, ops-http |
-| `src/main/kotlin/ru/arc/ops/AGENTS.md` | Item Ops, CmiItemCodec |
+| `src/main/kotlin/ru/arc/ops/AGENTS.md` | Item Ops, CMI kits API |
 
 Deploy: `cd ~/mcserver && ./scripts/mc arc classic classic_survival`
 

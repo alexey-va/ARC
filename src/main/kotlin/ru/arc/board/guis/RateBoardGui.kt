@@ -4,6 +4,7 @@ import com.github.stefvanschie.inventoryframework.gui.type.ChestGui
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import ru.arc.ARC
+import ru.arc.board.BoardActionResult
 import ru.arc.board.BoardEntryData
 import ru.arc.board.BoardManager
 import ru.arc.config.BoardConfig
@@ -48,7 +49,8 @@ object RateBoardGuiFactory {
                         display(boardConfig.string("rate-menu.already-rate", "<dark_red>Вы уже поставили эту оценку"))
                     }
                     onClick { click ->
-                        handleUpVote(player, entry, click.currentItem!!) {
+                        val clickedItem = click.currentItem ?: return@onClick
+                        handleUpVote(player, entry, clickedItem) {
                             GuiUtils.constructAndShowAsync({ create(player, entry) }, player)
                         }
                     }
@@ -64,7 +66,8 @@ object RateBoardGuiFactory {
                         display(boardConfig.string("rate-menu.already-rate", "<dark_red>Вы уже поставили эту оценку"))
                     }
                     onClick { click ->
-                        handleDownVote(player, entry, click.currentItem!!) {
+                        val clickedItem = click.currentItem ?: return@onClick
+                        handleDownVote(player, entry, clickedItem) {
                             GuiUtils.constructAndShowAsync({ create(player, entry) }, player)
                         }
                     }
@@ -80,7 +83,8 @@ object RateBoardGuiFactory {
                         display(boardConfig.string("rate-menu.already-report", "<dark_red>Вы уже пожаловались!"))
                     }
                     onClick { click ->
-                        handleReport(player, entry, click.currentItem!!) {
+                        val clickedItem = click.currentItem ?: return@onClick
+                        handleReport(player, entry, clickedItem) {
                             GuiUtils.constructAndShowAsync({ create(player, entry) }, player)
                         }
                     }
@@ -107,19 +111,16 @@ object RateBoardGuiFactory {
         item: org.bukkit.inventory.ItemStack,
         refresh: () -> Unit,
     ) {
-        if (!entry.canRate(player)) {
-            showTemporaryMessage(item, "rate-menu.cant-rate", refresh)
-            return
+        when (entry.tryRate(player, 1)) {
+            BoardActionResult.NOT_ALLOWED ->
+                showTemporaryMessage(item, "rate-menu.cant-rate", refresh)
+            BoardActionResult.ALREADY_APPLIED ->
+                showTemporaryMessage(item, "rate-menu.already-rate", refresh)
+            BoardActionResult.APPLIED -> {
+                BoardManager.saveEntry(entry)
+                showTemporaryMessage(item, "rate-menu.success-rate", refresh, permanent = true)
+            }
         }
-
-        if (entry.hasRated(player) == 1) {
-            showTemporaryMessage(item, "rate-menu.already-rate", refresh)
-            return
-        }
-
-        entry.rate(player.name, 1)
-        BoardManager.saveEntry(entry)
-        showTemporaryMessage(item, "rate-menu.success-rate", refresh, permanent = true)
     }
 
     private fun handleDownVote(
@@ -128,19 +129,16 @@ object RateBoardGuiFactory {
         item: org.bukkit.inventory.ItemStack,
         refresh: () -> Unit,
     ) {
-        if (!entry.canRate(player)) {
-            showTemporaryMessage(item, "rate-menu.cant-rate", refresh)
-            return
+        when (entry.tryRate(player, -1)) {
+            BoardActionResult.NOT_ALLOWED ->
+                showTemporaryMessage(item, "rate-menu.cant-rate", refresh)
+            BoardActionResult.ALREADY_APPLIED ->
+                showTemporaryMessage(item, "rate-menu.already-rate", refresh)
+            BoardActionResult.APPLIED -> {
+                BoardManager.saveEntry(entry)
+                showTemporaryMessage(item, "rate-menu.success-rate", refresh, permanent = true)
+            }
         }
-
-        if (entry.hasRated(player) == -1) {
-            showTemporaryMessage(item, "rate-menu.already-rate", refresh)
-            return
-        }
-
-        entry.rate(player.name, -1)
-        BoardManager.saveEntry(entry)
-        showTemporaryMessage(item, "rate-menu.success-rate", refresh, permanent = true)
     }
 
     private fun handleReport(
@@ -149,19 +147,16 @@ object RateBoardGuiFactory {
         item: org.bukkit.inventory.ItemStack,
         refresh: () -> Unit,
     ) {
-        if (!entry.canRate(player)) {
-            showTemporaryMessage(item, "rate-menu.cant-rate", refresh)
-            return
+        when (entry.tryReport(player)) {
+            BoardActionResult.NOT_ALLOWED ->
+                showTemporaryMessage(item, "rate-menu.cant-rate", refresh)
+            BoardActionResult.ALREADY_APPLIED ->
+                showTemporaryMessage(item, "rate-menu.already-report", refresh)
+            BoardActionResult.APPLIED -> {
+                BoardManager.saveEntry(entry)
+                showTemporaryMessage(item, "rate-menu.success-report", refresh)
+            }
         }
-
-        if (entry.hasReported(player)) {
-            showTemporaryMessage(item, "rate-menu.already-report", refresh)
-            return
-        }
-
-        entry.report(player.name)
-        BoardManager.saveEntry(entry)
-        showTemporaryMessage(item, "rate-menu.success-report", refresh)
     }
 
     private fun showTemporaryMessage(

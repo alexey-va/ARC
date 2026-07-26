@@ -87,7 +87,7 @@ class HuntSubCommandTabCompleteTest : KotestTestBase({
                         weight: 1
                 """.trimIndent()
             )
-            Treasures.getOrCreate("tab-treasure")
+            Treasures.getOrCreatePool("tab-treasure")
             ConfigManager.reloadAll()
             TreasureHuntManager.loadTreasureHuntTypes()
 
@@ -110,7 +110,7 @@ class HuntSubCommandTabCompleteTest : KotestTestBase({
                         weight: 1
                 """.trimIndent()
             )
-            Treasures.getOrCreate("tab-treasure")
+            Treasures.getOrCreatePool("tab-treasure")
             ConfigManager.reloadAll()
             TreasureHuntManager.loadTreasureHuntTypes()
 
@@ -146,7 +146,7 @@ class HuntSubCommandTabCompleteTest : KotestTestBase({
                         weight: 1
                 """.trimIndent()
             )
-            Treasures.getOrCreate("st2-treasure")
+            Treasures.getOrCreatePool("st2-treasure")
             ConfigManager.reloadAll()
             TreasureHuntManager.loadTreasureHuntTypes()
 
@@ -158,7 +158,7 @@ class HuntSubCommandTabCompleteTest : KotestTestBase({
         }
 
         it("suggests treasure pools for start custom pool on sixth arg") {
-            Treasures.getOrCreate("sixth-tab-treasure")
+            Treasures.getOrCreatePool("sixth-tab-treasure")
             val result = HuntSubCommand.tabComplete(player, arrayOf("start", "custom", "pool", "5", "vanilla", "six"))
             result.shouldNotBeNull()
             result shouldContain "sixth-tab-treasure"

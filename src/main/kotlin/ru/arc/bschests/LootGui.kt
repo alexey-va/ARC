@@ -28,13 +28,14 @@ object LootGuiFactory {
         player: Player,
         lootData: CustomLootData,
     ): ChestGui {
-        val rows = calculateRows(lootData)
+        val itemSnapshot = lootData.snapshotItems()
+        val rows = calculateRows(itemSnapshot.size)
         val title = config.string("gui.title", "Лут данжа")
 
         return gui(title, rows, player, config) {
             // Display loot items
             staticPane(0, 0, 9, rows) {
-                lootData.items.forEachIndexed { index, itemStack ->
+                itemSnapshot.forEachIndexed { index, itemStack ->
                     if (itemStack == null) return@forEachIndexed
 
                     item(index % 9, index / 9) {
@@ -46,7 +47,10 @@ object LootGuiFactory {
                             if (currentItem.type == Material.AIR) return@onClick
 
                             // Remove item from loot data
-                            lootData.removeItem(itemStack, index)
+                            if (!lootData.removeItem(itemStack, index)) {
+                                click.isCancelled = true
+                                return@onClick
+                            }
                             PersonalLootModule.save(lootData)
 
                             // Remove IF metadata from item
@@ -84,8 +88,7 @@ object LootGuiFactory {
         }
     }
 
-    private fun calculateRows(lootData: CustomLootData): Int {
-        val itemCount = lootData.items.size
+    private fun calculateRows(itemCount: Int): Int {
         return maxOf(1, minOf(6, (itemCount + 8) / 9))
     }
 }

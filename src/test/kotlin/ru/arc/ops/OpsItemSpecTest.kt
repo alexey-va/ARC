@@ -42,10 +42,10 @@ class OpsItemSpecTest :
                 stack.customModelDataOrNull shouldBe 11000
             }
 
-            it("should resolve iageneric bag_of_coins shorthand") {
+            it("should resolve iageneric bag_of_coins through canonical itemsadder field") {
                 val json =
                     JsonObject().apply {
-                        addProperty("ia", "iageneric:bag_of_coins")
+                        addProperty("itemsadder", "iageneric:bag_of_coins")
                     }
 
                 val stack = OpsItemSpec.build(json)
@@ -73,6 +73,22 @@ class OpsItemSpecTest :
                 meta.enchants[Enchantment.SHARPNESS] shouldBe 5
                 meta.itemFlags.contains(ItemFlag.HIDE_ENCHANTS) shouldBe true
                 meta.isUnbreakable shouldBe true
+            }
+
+            it("should resolve a namespaced enchantment key") {
+                val json =
+                    JsonParser.parseString(
+                        """
+                        {
+                          "material": "DIAMOND_SWORD",
+                          "enchants": {"minecraft:sharpness": 3}
+                        }
+                        """.trimIndent(),
+                    ).asJsonObject
+
+                val stack = OpsItemSpec.build(json)
+
+                stack.itemMeta.enchants[Enchantment.SHARPNESS] shouldBe 3
             }
 
             it("should format customData as SNBT for treasure tokens") {
@@ -158,6 +174,100 @@ class OpsItemSpecTest :
                 val item = result["item"] as Map<String, Any?>
                 item["material"] shouldBe "BLUE_STAINED_GLASS_PANE"
                 item["customModelData"] shouldBe 11013
+            }
+        }
+
+        describe("OpsCmiKitHandlers") {
+
+            it("should parse ItemSpec kit definition without binary blobs") {
+                val body =
+                    JsonParser.parseString(
+                        """
+                        {
+                          "display": "&eМеню",
+                          "delay": 0,
+                          "enabled": true,
+                          "icon": {"material": "CLOCK", "display": "<yellow>Меню"},
+                          "items": {
+                            "0": {"material": "TORCH", "amount": 16}
+                          },
+                          "extraItems": {
+                            "offhand": {"material": "SHIELD"}
+                          },
+                          "commands": ["asConsole! dm open main_menu [playerName]"]
+                        }
+                        """.trimIndent(),
+                    ).asJsonObject
+
+                val definition = OpsCmiKitHandlers.parseDefinition("menu", body)
+
+                definition.name shouldBe "menu"
+                definition.commandName shouldBe "menu"
+                definition.delay shouldBe 0L
+                definition.icon.type shouldBe Material.CLOCK
+                definition.items[0]?.type shouldBe Material.TORCH
+                definition.items[0]?.amount shouldBe 16
+                definition.extraItems.values.single().type shouldBe Material.SHIELD
+                definition.commands shouldBe listOf("asConsole! dm open main_menu [playerName]")
+            }
+
+            it("should reject preview-only empty kits") {
+                val body =
+                    JsonParser.parseString(
+                        """
+                        {
+                          "display": "Empty",
+                          "icon": {"material": "CHEST"}
+                        }
+                        """.trimIndent(),
+                    ).asJsonObject
+
+                val error =
+                    runCatching {
+                        OpsCmiKitHandlers.parseDefinition("empty", body)
+                    }.exceptionOrNull()
+
+                error?.message shouldBe "kit needs items, extraItems, and/or commands"
+            }
+
+            it("should reject binary data instead of accepting legacy CMI blobs") {
+                val body =
+                    JsonParser.parseString(
+                        """
+                        {
+                          "display": "Legacy",
+                          "icon": {"blob": "H4sIA..."},
+                          "commands": ["say test"]
+                        }
+                        """.trimIndent(),
+                    ).asJsonObject
+
+                val error =
+                    runCatching {
+                        OpsCmiKitHandlers.parseDefinition("legacy", body)
+                    }.exceptionOrNull()
+
+                error?.message shouldBe "material or itemsadder required"
+            }
+
+            it("should require a live CMI plugin for runtime preview") {
+                val body =
+                    JsonParser.parseString(
+                        """
+                        {
+                          "display": "Menu",
+                          "icon": {"material": "CLOCK"},
+                          "commands": ["say test"]
+                        }
+                        """.trimIndent(),
+                    ).asJsonObject
+
+                val error =
+                    runCatching {
+                        OpsCmiKitHandlers.preview("menu", body)
+                    }.exceptionOrNull()
+
+                error?.message shouldBe "CMI plugin is not enabled"
             }
         }
     })

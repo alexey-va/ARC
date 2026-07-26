@@ -1,9 +1,5 @@
 package ru.arc.commands.arc.subcommands
 
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import org.bukkit.Bukkit
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
@@ -14,6 +10,7 @@ import ru.arc.commands.arc.onlinePlayerNames
 import ru.arc.commands.arc.tabComplete
 import ru.arc.config.ConfigManager
 import ru.arc.config.StockConfig
+import ru.arc.core.modules.StockModule
 import ru.arc.core.sync
 import ru.arc.hooks.HookRegistry
 import ru.arc.stock.HistoryManager
@@ -47,7 +44,6 @@ object InvestSubCommand : SubCommand {
     override val defaultUsage = "/arc invest [-t:menu|buy|short|close|add-money|withdraw-money|auto] [-s:SYMBOL] [-amount:N] [-leverage:N] [-up:N] [-down:N]"
     override val defaultPlayerOnly = false // Console can do admin actions
 
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val config get() = ConfigManager.of(ARC.instance.dataPath, "stocks/stock.yml")
 
     override fun execute(
@@ -57,6 +53,10 @@ object InvestSubCommand : SubCommand {
         if (!config.bool("enabled", false)) {
             info("Stocks are disabled")
             sender.sendMessage(config.component("messages.disabled", "<red>Здесь эта команда недоступна."))
+            return true
+        }
+        if (!StockModule.isAvailable()) {
+            sender.sendMessage(config.component("messages.unavailable", "<red>Биржа временно недоступна."))
             return true
         }
 
@@ -102,7 +102,7 @@ object InvestSubCommand : SubCommand {
         if (args.isEmpty() || type == "menu") {
             val targetName = params["player"]
             if (targetName == null) {
-                scope.launch {
+                StockModule.launch {
                     val sp = StockPlayerManager.getOrCreate(player)
                     GuiUtils.constructAndShowAsync({ SymbolSelector(sp) }, player)
                 }
@@ -123,7 +123,7 @@ object InvestSubCommand : SubCommand {
         when (type) {
             "add-money" -> {
                 val amount = params["amount"]?.toDoubleOrNull() ?: 1000.0
-                scope.launch {
+                StockModule.launch {
                     val sp = StockPlayerManager.getOrCreate(player)
                     runInMainThread { StockPlayerManager.addToTradingBalanceFromVault(sp, amount) }
                 }
@@ -132,7 +132,7 @@ object InvestSubCommand : SubCommand {
 
             "withdraw-money" -> {
                 val amount = params["amount"]?.toDoubleOrNull() ?: 1000.0
-                scope.launch {
+                StockModule.launch {
                     val sp = StockPlayerManager.getOrCreate(player)
                     runInMainThread { StockPlayerManager.addToTradingBalanceFromVault(sp, -amount) }
                 }
@@ -140,7 +140,7 @@ object InvestSubCommand : SubCommand {
             }
 
             "auto" -> {
-                scope.launch {
+                StockModule.launch {
                     val sp = StockPlayerManager.getOrCreate(player)
                     StockPlayerManager.switchAuto(sp)
                 }
@@ -173,14 +173,14 @@ object InvestSubCommand : SubCommand {
 
         when (type) {
             "buy" -> {
-                scope.launch {
+                StockModule.launch {
                     val sp = StockPlayerManager.getOrCreate(player)
                     runInMainThread { StockPlayerManager.buyStock(sp, stock, amount, leverage, up, down) }
                 }
             }
 
             "short" -> {
-                scope.launch {
+                StockModule.launch {
                     val sp = StockPlayerManager.getOrCreate(player)
                     runInMainThread { StockPlayerManager.shortStock(sp, stock, amount, leverage, up, down) }
                 }
@@ -193,7 +193,7 @@ object InvestSubCommand : SubCommand {
                         return true
                     }
                 val reason = params["reason"]?.toIntOrNull() ?: 1
-                scope.launch {
+                StockModule.launch {
                     val sp = StockPlayerManager.getOrCreate(player)
                     runInMainThread { StockPlayerManager.closePosition(sp, symbol, uuid, reason) }
                 }

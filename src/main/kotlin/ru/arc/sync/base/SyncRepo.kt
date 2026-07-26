@@ -1,38 +1,40 @@
 package ru.arc.sync.base
 
-import com.google.gson.Gson
-import org.bukkit.Bukkit
 import ru.arc.ARC
-import ru.arc.network.RedisManager
+import ru.arc.core.sync
+import ru.arc.redis.RedisOperations
+import ru.arc.util.Common
 import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
 class SyncRepo<T : SyncData>(
-    val clazz: Class<T>,
-    val key: String,
-    val redisManager: RedisManager,
-    val dataApplier: (T) -> Unit,
-    val dataProducer: (Context) -> T?,
+    private val clazz: Class<T>,
+    private val key: String,
+    private val redisManager: RedisOperations,
+    private val dataApplier: (T) -> Unit,
+    private val dataProducer: (Context) -> T?,
 ) {
-    val gson: Gson = Gson()
-
-    companion object {
-        @JvmStatic
-        fun <T : SyncData> builder(clazz: Class<T>): SyncRepoBuilder<T> = SyncRepoBuilder(clazz)
+    init {
+        require(key.isNotBlank()) { "Sync repository key must not be blank" }
     }
 
     private fun saveDataPersistently(data: T): CompletableFuture<Void> {
         val uuid = data.uuid()?.toString() ?: return CompletableFuture.completedFuture(null)
-        return CompletableFuture.supplyAsync { gson.toJson(data) }
-            .thenAccept { json -> redisManager.saveMapEntries(key, uuid, json) }
+        val json =
+            try {
+                Common.gson.toJson(data)
+            } catch (exception: Exception) {
+                return CompletableFuture.failedFuture(exception)
+            }
+        return redisManager.saveMapEntries(key, uuid, json).thenApply { null }
     }
 
     private fun loadData(uuid: UUID): CompletableFuture<T?> =
         redisManager.loadMapEntries(key, uuid.toString()).thenApply { list ->
             if (list.isNullOrEmpty() || list.first() == null) return@thenApply null
-            gson.fromJson(list.first(), clazz)
+            Common.gson.fromJson(list.first(), clazz)
         }
 
     private fun applyData(data: T?) {
@@ -44,23 +46,46 @@ class SyncRepo<T : SyncData>(
         dataApplier(data)
     }
 
-    private fun produceData(context: Context, async: Boolean): CompletableFuture<T?> =
-        if (async) CompletableFuture.supplyAsync { dataProducer(context) }
-        else CompletableFuture.completedFuture(dataProducer(context))
-
-    fun loadAndApplyData(uuid: UUID, async: Boolean): CompletableFuture<Void> =
-        loadData(uuid).thenAccept { data ->
+    private fun applyOnMainThread(data: T?): CompletableFuture<Void> {
+        val result = CompletableFuture<Void>()
+        sync {
             try {
-                if (async) applyData(data)
-                else Bukkit.getScheduler().runTask(ARC.instance, Runnable { applyData(data) })
+                applyData(data)
+                result.complete(null)
             } catch (e: Exception) {
-                error("Error loading and applying data", e)
+                result.completeExceptionally(e)
+            }
+        }
+        return result
+    }
+
+    fun loadAndApplyData(uuid: UUID): CompletableFuture<Void> =
+        loadData(uuid).thenCompose(::applyOnMainThread).whenComplete { _, failure ->
+            if (failure != null) {
+                error("Failed to load sync data from {} for {}", key, uuid, failure)
             }
         }
 
-    fun saveAndPersistData(context: Context, async: Boolean): CompletableFuture<Void?> =
-        produceData(context, async).thenAccept { data ->
-            if (data == null || data.trash()) return@thenAccept
-            saveDataPersistently(data)
+    fun saveAndPersistData(context: Context): CompletableFuture<Void> {
+        val data =
+            try {
+                dataProducer(context)
+            } catch (exception: Exception) {
+                return CompletableFuture.failedFuture<Void>(exception).logSaveFailure()
+            }
+        val future: CompletableFuture<Void> =
+            if (data == null || data.trash()) {
+                CompletableFuture.completedFuture(null)
+            } else {
+                saveDataPersistently(data)
+            }
+        return future.logSaveFailure()
+    }
+
+    private fun CompletableFuture<Void>.logSaveFailure(): CompletableFuture<Void> =
+        whenComplete { _, failure ->
+            if (failure != null) {
+                error("Failed to persist sync data to {}", key, failure)
+            }
         }
 }

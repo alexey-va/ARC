@@ -5,7 +5,7 @@ import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
 import org.bukkit.inventory.ItemStack
-import org.yaml.snakeyaml.external.biz.base64Coder.Base64Coder
+import java.util.Base64
 
 class ItemListSerializer : TypeAdapter<ItemList>() {
 
@@ -17,7 +17,7 @@ class ItemListSerializer : TypeAdapter<ItemList>() {
         }
         for (stack in value) {
             if (stack == null) out.nullValue()
-            else out.value(String(Base64Coder.encode(stack.serializeAsBytes())))
+            else out.value(Base64.getEncoder().encodeToString(stack.serializeAsBytes()))
         }
         out.endArray()
     }
@@ -30,7 +30,7 @@ class ItemListSerializer : TypeAdapter<ItemList>() {
                 reader.nextNull()
                 itemList.add(null)
             } else {
-                itemList.add(ItemStack.deserializeBytes(Base64Coder.decode(reader.nextString())))
+                itemList.add(ItemStack.deserializeBytes(Base64.getDecoder().decode(reader.nextString())))
             }
         }
         reader.endArray()

@@ -64,6 +64,7 @@ open class ScheduledCommandsConfig(
         config.setStringList("$base.servers", draft.serverMode.toYaml())
 
         val sched = "$base.schedule"
+        config.removeKey(sched)
         config.setString("$sched.type", draft.scheduleType.configKey)
         when (draft.scheduleType) {
             ScheduleEditorType.INTERVAL -> {
@@ -86,6 +87,15 @@ open class ScheduledCommandsConfig(
             }
         }
         config.save()
+    }
+
+    fun deleteEntry(id: String): Boolean {
+        val normalizedId = id.trim().lowercase()
+        val path = "commands.$normalizedId"
+        if (!config.exists(path)) return false
+        config.removeKey(path)
+        config.save()
+        return true
     }
 
     fun reloadConfig() {

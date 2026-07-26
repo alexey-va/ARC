@@ -11,7 +11,7 @@ import io.kotest.matchers.string.shouldNotContain
 import org.testcontainers.containers.GenericContainer
 import org.testcontainers.utility.DockerImageName
 import ru.arc.ARC
-import ru.arc.network.RedisManager
+import ru.arc.redis.RedisManager
 import ru.arc.sync.base.Context
 import ru.arc.sync.base.SyncRepo
 import java.io.File
@@ -180,11 +180,11 @@ class CMISyncTest : FreeSpec() {
                 val uuid = UUID.randomUUID()
 
                 val repo =
-                    SyncRepo
-                        .builder(CMISync.CMIDataDTO::class.java)
-                        .key("test.cmi_sync.$uuid")
-                        .redisManager(redisManager)
-                        .dataProducer { ctx ->
+                    SyncRepo(
+                        clazz = CMISync.CMIDataDTO::class.java,
+                        key = "test.cmi_sync.$uuid",
+                        redisManager = redisManager,
+                        dataProducer = { ctx ->
                             val id: UUID = ctx.get("uuid")
                             CMISync.CMIDataDTO(
                                 ts = System.currentTimeMillis(),
@@ -198,15 +198,16 @@ class CMISyncTest : FreeSpec() {
                                 mail = listOf(CMISync.CMIDataDTO.Mail(sender = "System", time = 1L, message = "Welcome")),
                                 kitUsage = mapOf("starter" to CMISync.CMIDataDTO.KitUsage(uses = 1, lastUse = 0L)),
                             )
-                        }.dataApplier { received.set(it) }
-                        .build()
+                        },
+                        dataApplier = { received.set(it) },
+                    )
 
                 val ctx = Context().also { it.put("uuid", uuid) }
-                repo.saveAndPersistData(ctx, false).get(2, TimeUnit.SECONDS)
+                repo.saveAndPersistData(ctx).get(2, TimeUnit.SECONDS)
                 Thread.sleep(300)
 
                 ARC.serverName = "server-cmi-b"
-                repo.loadAndApplyData(uuid, true).get(2, TimeUnit.SECONDS)
+                repo.loadAndApplyData(uuid).get(2, TimeUnit.SECONDS)
                 Thread.sleep(200)
 
                 val dto = received.get().shouldNotBeNull()
@@ -224,21 +225,22 @@ class CMISyncTest : FreeSpec() {
 
                 ARC.serverName = "server-cmi-self"
                 val repo =
-                    SyncRepo
-                        .builder(CMISync.CMIDataDTO::class.java)
-                        .key("test.cmi_sync_self.$uuid")
-                        .redisManager(redisManager)
-                        .dataProducer { ctx ->
+                    SyncRepo(
+                        clazz = CMISync.CMIDataDTO::class.java,
+                        key = "test.cmi_sync_self.$uuid",
+                        redisManager = redisManager,
+                        dataProducer = { ctx ->
                             val id: UUID = ctx.get("uuid")
                             CMISync.CMIDataDTO(ts = 1L, srv = "server-cmi-self", id = id, prefix = "&aAdmin")
-                        }.dataApplier { received.set(it) }
-                        .build()
+                        },
+                        dataApplier = { received.set(it) },
+                    )
 
                 val ctx = Context().also { it.put("uuid", uuid) }
-                repo.saveAndPersistData(ctx, false).get(2, TimeUnit.SECONDS)
+                repo.saveAndPersistData(ctx).get(2, TimeUnit.SECONDS)
                 Thread.sleep(300)
 
-                repo.loadAndApplyData(uuid, true).get(2, TimeUnit.SECONDS)
+                repo.loadAndApplyData(uuid).get(2, TimeUnit.SECONDS)
                 Thread.sleep(200)
 
                 received.get() shouldBe null

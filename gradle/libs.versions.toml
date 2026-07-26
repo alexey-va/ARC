@@ -15,7 +15,7 @@ com-github-retrooper-packetevents-spigot = "2.5.0"
 com-github-slimefun-slimefun4 = "4.10"
 com-github-stefvanschie-inventoryframework-if = "0.12.0"
 com-github-ulrichbr-uclans-api = "8.6.0"
-com-github-zrips-cmilib = "1.4.7.4"
+com-github-zrips-cmilib = "1.5.8.1"
 com-github-zrips-jobs = "5.2.4.2"
 com-google-code-gson-gson = "2.11.0"
 com-jeff-media-custom-block-data = "2.2.4"
@@ -26,7 +26,7 @@ com-sk89q-worldedit-worldedit-bukkit = "7.3.0-SNAPSHOT"
 com-sk89q-worldguard-worldguard-bukkit = "7.0.9"
 com-thedeanda-lorem = "2.2"
 com-viaversion-viaversion-api = "4.9.3-SNAPSHOT"
-com-zrips-cmi-api = "9.7.4.1"
+com-zrips-cmi-api = "9.8.6.4"
 de-tr7zw-item-nbt-api = "2.15.7"
 dev-aurelium-auraskills-api-bukkit = "2.0.0"
 dev-espi-protectionstones = "2.10.2"
@@ -37,7 +37,7 @@ io-lettuce-lettuce-core = "6.3.2.RELEASE"
 io-papermc-paper-paper-api = "26.1.2.build.+"
 me-clip-placeholderapi = "2.11.5"
 net-advancedplugins-advancedenchantments = "8.7.4"
-net-citizensnpcs-citizens-main = "2.0.35-SNAPSHOT"
+net-citizensnpcs-citizens-main = "2.0.42-SNAPSHOT"
 net-luckperms-api = "5.4"
 net-william278-huskhomes = "4.4.5"
 org-apache-logging-log4j-log4j-api = "2.23.0"
@@ -74,7 +74,7 @@ com-sk89q-worldedit-worldedit-bukkit = { module = "com.sk89q.worldedit:worldedit
 com-sk89q-worldguard-worldguard-bukkit = { module = "com.sk89q.worldguard:worldguard-bukkit", version.ref = "com-sk89q-worldguard-worldguard-bukkit" }
 com-thedeanda-lorem = { module = "com.thedeanda:lorem", version.ref = "com-thedeanda-lorem" }
 com-viaversion-viaversion-api = { module = "com.viaversion:viaversion-api", version.ref = "com-viaversion-viaversion-api" }
-com-zrips-cmi-api = { module = "com.zrips:CMI-API", version.ref = "com-zrips-cmi-api" }
+com-zrips-cmi-api = { module = "com.github.Zrips:CMI-API", version.ref = "com-zrips-cmi-api" }
 de-tr7zw-item-nbt-api = { module = "de.tr7zw:item-nbt-api", version.ref = "de-tr7zw-item-nbt-api" }
 dev-aurelium-auraskills-api-bukkit = { module = "dev.aurelium:auraskills-api-bukkit", version.ref = "dev-aurelium-auraskills-api-bukkit" }
 dev-espi-protectionstones = { module = "dev.espi:protectionstones", version.ref = "dev-espi-protectionstones" }

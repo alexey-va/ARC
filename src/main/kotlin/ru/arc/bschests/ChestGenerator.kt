@@ -8,7 +8,7 @@ import ru.arc.treasure.core.Treasures
 class ChestGenerator(private val config: Config) {
 
     fun generate(poolName: String, amount: Int, size: Int): ItemList {
-        val pool = Treasures.getOrCreate(poolName)
+        val pool = Treasures.getOrCreatePool(poolName)
         val items = ItemList()
         repeat(amount) {
             val treasure = pool.random()

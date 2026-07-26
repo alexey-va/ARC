@@ -6,7 +6,6 @@ import ru.arc.ai.config.NpcChatConfig
 import ru.arc.ai.llm.ChatTurn
 import ru.arc.ai.llm.SimpleChatService
 import ru.arc.util.Logging.error
-import java.util.Optional
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
@@ -33,10 +32,10 @@ class GPTEntity(
         playerUuid: UUID,
         playerName: String,
         message: String,
-    ): CompletableFuture<Optional<String>> {
+    ): CompletableFuture<String?> {
         if (!llmConfig.llmEnabled) {
             error("API key is not set")
-            return CompletableFuture.completedFuture(Optional.empty())
+            return CompletableFuture.completedFuture(null)
         }
 
         val model = npcChatConfig.model(archetype, llmConfig.moderationModel)
@@ -63,10 +62,9 @@ class GPTEntity(
             history.add(ChatTurn("user", message))
         }
 
-        return chatService.complete(model, system, history, maxTokens, temperature).thenApply { optional ->
-            optional.map { response ->
-                chatHistory?.addBotMessage(response)
-                response
+        return chatService.complete(model, system, history, maxTokens, temperature).thenApply { response ->
+            response?.also {
+                chatHistory?.addBotMessage(it)
             }
         }
     }

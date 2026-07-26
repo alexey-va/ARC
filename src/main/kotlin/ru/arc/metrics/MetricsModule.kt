@@ -2,8 +2,6 @@ package ru.arc.metrics
 
 import io.micrometer.prometheusmetrics.PrometheusConfig
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
-import ru.arc.ARC
-import ru.arc.config.ConfigManager
 import ru.arc.core.PluginModule
 import ru.arc.core.ScheduledTask
 import ru.arc.core.Tasks
@@ -28,7 +26,6 @@ object MetricsModule : PluginModule {
 
     override fun init() {
         if (System.getProperty("arc.test.unit") != null) return
-        ConfigManager.reloadAll()
         MetricsConfig.reload()
         val cfg = MetricsConfig.current()
         if (!cfg.enabled) {
@@ -59,7 +56,6 @@ object MetricsModule : PluginModule {
 
     override fun reload() {
         httpServer?.stop()
-        Thread.sleep(50)
         init()
     }
 

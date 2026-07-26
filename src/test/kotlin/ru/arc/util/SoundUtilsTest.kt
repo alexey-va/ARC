@@ -5,6 +5,7 @@ import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import org.bukkit.Location
 import org.bukkit.Sound
 import ru.arc.KotestTestBase
 
@@ -32,6 +33,12 @@ class SoundUtilsTest :
                 val sound = SoundUtils.getSound("entity_player_levelup")
 
                 sound.shouldNotBeNull()
+                sound shouldBe Sound.ENTITY_PLAYER_LEVELUP
+            }
+
+            it("should normalize surrounding whitespace") {
+                val sound = SoundUtils.getSound("  ENTITY_PLAYER_LEVELUP  ")
+
                 sound shouldBe Sound.ENTITY_PLAYER_LEVELUP
             }
 
@@ -66,6 +73,12 @@ class SoundUtilsTest :
                 key.namespace shouldBe "minecraft"
             }
 
+            it("should normalize namespaced key whitespace and case") {
+                val key = SoundUtils.getNamespacedKey("  MINECRAFT:ENTITY.PLAYER.LEVELUP  ")
+
+                key.toString() shouldBe "minecraft:entity.player.levelup"
+            }
+
             it("should return null for blank string") {
                 val key = SoundUtils.getNamespacedKey("")
 
@@ -89,6 +102,15 @@ class SoundUtilsTest :
                 val location = world.getBlockAt(0, 64, 0).location
 
                 val result = SoundUtils.playSound(location, "invalid_sound")
+
+                result.shouldBeFalse()
+            }
+
+            it("should return false when location has no world") {
+                val result = SoundUtils.playSound(
+                    Location(null, 0.0, 64.0, 0.0),
+                    "ENTITY_PLAYER_LEVELUP",
+                )
 
                 result.shouldBeFalse()
             }

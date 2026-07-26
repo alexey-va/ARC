@@ -11,6 +11,7 @@ plugins {
 group = "ARC"
 version = "1.0"
 description = "ARC"
+val pluginVersion = version.toString()
 
 java { toolchain { languageVersion.set(JavaLanguageVersion.of(25)) } }
 kotlin { jvmToolchain(25) }
@@ -35,22 +36,11 @@ repositories {
     maven("https://jitpack.io")
     maven("https://mvn-repo.arim.space/lesser-gpl3/")
     maven("https://repo.magmaguy.com/releases")
+    maven("https://repo.bluecolored.de/releases")
     mavenCentral()
 }
 
-configurations {
-    // libs we shade go in implementation
-    // server-provided jars go in compileOnly
-    compileOnly {
-        extendsFrom(configurations.annotationProcessor.get())
-    }
-}
-
 dependencies {
-    // Lombok
-    compileOnly("org.projectlombok:lombok:1.18.42")
-    annotationProcessor("org.projectlombok:lombok:1.18.42")
-
     // Kotlin coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.10.2")
@@ -100,6 +90,7 @@ dependencies {
     compileOnly(libs.com.olziedev.playerwarps)
     compileOnly(libs.com.github.lonedev6.api.itemsadder)
     compileOnly(libs.net.citizensnpcs.citizens.main) { exclude(group = "*", module = "*") }
+    compileOnly("de.bluecolored:bluemap-api:2.7.7")
     compileOnly(libs.com.viaversion.viaversion.api)
     compileOnly(libs.org.eclipse.jetty.websocket.websocket.client)
     compileOnly(libs.io.josemmo.yamipa)
@@ -153,8 +144,15 @@ dependencies {
         exclude(group = "org.bukkit", module = "bukkit")
     }
     testImplementation(libs.redis.clients.jedis)
+    testImplementation(libs.com.github.emibergo02.rediseconomy)
+    testImplementation(libs.io.lettuce.lettuce.core)
     testImplementation(libs.org.jsoup.jsoup)
+    testImplementation(libs.org.eclipse.jetty.websocket.websocket.client)
     testImplementation("commons-lang:commons-lang:2.6")
+    testImplementation(libs.com.zrips.cmi.api)
+    testImplementation(libs.net.citizensnpcs.citizens.main) { exclude(group = "*", module = "*") }
+    testImplementation(libs.com.magmaguy.elitemobs)
+    testImplementation(libs.com.github.zrips.cmilib)
     // Jackson databind needed for Log4j JsonLayout used in Logging.addLokiAppender()
     testImplementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
     // Log4j dependencies needed for Logging class
@@ -170,12 +168,38 @@ dependencies {
     testImplementation(libs.com.sk89q.worldedit.worldedit.bukkit)
 }
 
+val runtimeClasspathConfiguration = configurations.named("runtimeClasspath")
+val loggingModuleResources =
+    zipTree(
+        runtimeClasspathConfiguration.map { configuration ->
+            configuration.files.first { it.name.startsWith("arc-core-logging") }
+        },
+    )
+val redisModuleResources =
+    zipTree(
+        runtimeClasspathConfiguration.map { configuration ->
+            configuration.files.first { it.name.startsWith("arc-core-redis") }
+        },
+    )
+val schedulingModuleResources =
+    zipTree(
+        runtimeClasspathConfiguration.map { configuration ->
+            configuration.files.first {
+                it.name.startsWith("arc-core-") &&
+                    !it.name.startsWith("arc-core-logging") &&
+                    !it.name.startsWith("arc-core-redis") &&
+                    !it.name.startsWith("arc-core-paper") &&
+                    !it.name.startsWith("arc-core-velocity")
+            }
+        },
+    )
+
 tasks {
     processResources {
         filesMatching("plugin.yml") {
             expand(
-                "version" to project.version,
-                "project" to mapOf("version" to project.version),
+                "version" to pluginVersion,
+                "project" to mapOf("version" to pluginVersion),
             )
         }
     }
@@ -225,33 +249,13 @@ tasks {
         exclude("META-INF/DEPENDENCIES", "META-INF/LICENSE", "META-INF/NOTICE")
 
         // Canonical logging.yml / redis.yml live in arc-core-* (not duplicated in this repo).
-        from({
-            val loggingJar =
-                project.configurations.getByName("runtimeClasspath").files.first {
-                    it.name.startsWith("arc-core-logging")
-                }
-            zipTree(loggingJar)
-        }) {
+        from(loggingModuleResources) {
             include("modules/logging.yml")
         }
-        from({
-            val redisJar =
-                project.configurations.getByName("runtimeClasspath").files.first {
-                    it.name.startsWith("arc-core-redis")
-                }
-            zipTree(redisJar)
-        }) {
+        from(redisModuleResources) {
             include("modules/redis.yml")
         }
-        from({
-            val coreJar =
-                project.configurations.getByName("runtimeClasspath").files.first {
-                    it.name.startsWith("arc-core-") && !it.name.startsWith("arc-core-logging") &&
-                        !it.name.startsWith("arc-core-redis") && !it.name.startsWith("arc-core-paper") &&
-                        !it.name.startsWith("arc-core-velocity")
-                }
-            zipTree(coreJar)
-        }) {
+        from(schedulingModuleResources) {
             include("modules/scheduling.yml")
         }
 

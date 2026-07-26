@@ -1,6 +1,6 @@
 package ru.arc.commands.arc.subcommands
 
-import de.tr7zw.changeme.nbtapi.NBTItem
+import de.tr7zw.changeme.nbtapi.NBT
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.minimessage.MiniMessage
@@ -79,22 +79,15 @@ object BuildBookSubCommand : SubCommand {
         // Создаём предмет
         val stack = ItemStack(Material.BOOK)
 
-        @Suppress("DEPRECATION")
-        val nbtItem = NBTItem(stack)
-        nbtItem.setString("arc:building_key", fileName)
-
-        // Rotation
-        if (args.size >= 3) {
-            nbtItem.setString("arc:rotation", args[2])
+        NBT.modify(stack) { nbt ->
+            nbt.setString("arc:building_key", fileName)
+            if (args.size >= 3) {
+                nbt.setString("arc:rotation", args[2])
+            }
+            if (args.size >= 4) {
+                nbt.setString("arc:y_offset", args[3])
+            }
         }
-
-        // Y-offset
-        if (args.size >= 4) {
-            nbtItem.setString("arc:y_offset", args[3])
-        }
-
-        @Suppress("DEPRECATION")
-        nbtItem.applyNBT(stack)
 
         // Настраиваем мету
         val meta = stack.itemMeta ?: return true
@@ -166,4 +159,3 @@ object BuildBookSubCommand : SubCommand {
         }
     }
 }
-

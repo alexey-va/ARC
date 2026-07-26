@@ -285,46 +285,7 @@ object AnnounceManager {
     }
 
     private fun send(data: XMessage, player: Player) {
-        when (data.type) {
-            XMessage.Type.CHAT -> {
-                val reason = data.skipReason(player)
-                if (reason != null) {
-                    debug("Announce deliver skip player={} reason={} {}", player.name, reason, data.logSummary())
-                    return
-                }
-                debug(
-                    "Announce deliver CHAT player={} plainLen={} plain=\"{}\" {}",
-                    player.name,
-                    data.plainText(player).length,
-                    data.plainText(player).take(120),
-                    data.logSummary(),
-                )
-                player.sendMessage(data.component(player))
-            }
-            XMessage.Type.BOSS_BAR -> {
-                val cmi = HookRegistry.cmiHook ?: run { error("I cant use bossbar without cmi... sorry"); return }
-                val bbd = data.bossBarData ?: return
-                val reason = data.skipReason(player)
-                if (reason != null) {
-                    debug("Announce deliver skip player={} reason={} {}", player.name, reason, data.logSummary())
-                    return
-                }
-                debug(
-                    "Announce deliver BOSS_BAR player={} plainLen={} plain=\"{}\" {}",
-                    player.name,
-                    data.plainText(player).length,
-                    data.plainText(player).take(120),
-                    data.logSummary(),
-                )
-                cmi.sendBossbar("arcAnnounce", data.serializedMessage ?: "", player, bbd.color, bbd.seconds, bbd.keepFor)
-            }
-            XMessage.Type.ACTION_BAR -> {
-                val cmi = HookRegistry.cmiHook ?: run { error("I cant use actionbar without cmi... sorry"); return }
-                val abd = data.actionBarData ?: return
-                cmi.sendActionbar(data.serializedMessage ?: "", listOf(player), abd.seconds)
-            }
-            else -> {}
-        }
+        data.deliverTo(player)
     }
 
     @JvmStatic

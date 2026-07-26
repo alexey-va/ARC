@@ -1,7 +1,7 @@
 # =============================================================================
 # scheduled-commands.yml — отложенный запуск консольных команд по расписанию.
 # GUI: /arc schedules (permission: arc.schedules.gui)
-# schedule.type: interval | daily | cron
+# schedule.type: interval | daily | weekly | cron
 # =============================================================================
 
 enabled: true

@@ -83,7 +83,7 @@ object MainTreasuresGui {
             s: String,
         ) {
             if (n == 0) {
-                val pool = Treasures.getOrCreate(s)
+                val pool = Treasures.getOrCreatePool(s)
                 player.sendMessage(TextUtil.mm(TreasureConfig.Messages.poolCreated.replace("%pool%", s)))
                 GuiUtils.constructAndShowAsync({ PoolGui.create(player, pool) }, player)
             }

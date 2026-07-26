@@ -6,8 +6,11 @@ import com.google.gson.annotations.SerializedName
 import io.github.thebusybiscuit.slimefun4.api.player.PlayerProfile
 import io.github.thebusybiscuit.slimefun4.api.researches.Research
 import io.github.thebusybiscuit.slimefun4.implementation.Slimefun
-import org.bukkit.scheduler.BukkitRunnable
+import org.bukkit.Bukkit
 import ru.arc.ARC
+import ru.arc.core.ScheduledTask
+import ru.arc.core.delayed
+import ru.arc.core.ticks
 import ru.arc.sync.base.Context
 import ru.arc.sync.base.Sync
 import ru.arc.sync.base.SyncData
@@ -21,37 +24,52 @@ import java.util.concurrent.ConcurrentHashMap
 class SlimefunSync : Sync {
 
     private val syncRepo: SyncRepo<SlimefunDataDTO> =
-        SyncRepo
-            .builder(SlimefunDataDTO::class.java)
-            .key("arc.slimefun_data")
-            .redisManager(ARC.redisManager!!)
-            .dataApplier(::deserializeAndSavePlayerData)
-            .dataProducer(::serializePlayerData)
-            .build()
+        SyncRepo(
+            clazz = SlimefunDataDTO::class.java,
+            key = "arc.slimefun_data",
+            redisManager = checkNotNull(ARC.redisManager) { "Redis manager is not initialized" },
+            dataApplier = ::deserializeAndSavePlayerData,
+            dataProducer = ::serializePlayerData,
+        )
 
     private val loaded: MutableMap<UUID, Boolean> = ConcurrentHashMap()
+    private val joinTasks = ConcurrentHashMap<UUID, ScheduledTask>()
 
     override fun playerJoin(uuid: UUID) {
-        object : BukkitRunnable() {
-            override fun run() {
+        val task =
+            delayed(20.ticks) {
+                joinTasks.remove(uuid)
                 syncRepo
-                    .loadAndApplyData(uuid, false)
-                    .whenComplete { _, _ -> loaded[uuid] = true }
+                    .loadAndApplyData(uuid)
+                    .whenComplete { _, failure ->
+                        if (failure == null && Bukkit.getPlayer(uuid) != null) {
+                            loaded[uuid] = true
+                        } else {
+                            loaded.remove(uuid)
+                        }
+                    }
             }
-        }.runTaskLater(ARC.instance, 20L)
+        joinTasks.put(uuid, task)?.cancel()
     }
 
     override fun playerQuit(uuid: UUID) {
         forceSave(uuid)
         loaded.remove(uuid)
+        joinTasks.remove(uuid)?.cancel()
     }
 
     override fun forceSave(uuid: UUID) {
         if (!loaded.containsKey(uuid)) return
         val context = Context()
         context.put("uuid", uuid)
-        if (loaded.getOrDefault(uuid, false)) syncRepo.saveAndPersistData(context, false)
+        if (loaded.getOrDefault(uuid, false)) syncRepo.saveAndPersistData(context)
         else warn("Player data not loaded for {}. Skipping save", uuid)
+    }
+
+    override fun shutdown() {
+        joinTasks.values.forEach(ScheduledTask::cancel)
+        joinTasks.clear()
+        loaded.clear()
     }
 
     private fun serializePlayerData(context: Context): SlimefunDataDTO? {

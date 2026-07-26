@@ -373,13 +373,14 @@ object HuntSubCommand : SubCommand {
                 return
             }
 
-        TreasureHuntManager.getByLocationPool(locationPool).ifPresentOrElse(
-            { hunt ->
-                TreasureHuntManager.stopHunt(hunt)
-                sender.sendMessage(CommandConfig.huntStopped())
-            },
-            { sender.sendMessage(CommandConfig.huntNotFound()) },
-        )
+        val hunt = TreasureHuntManager.getByLocationPool(locationPool)
+        if (hunt == null) {
+            sender.sendMessage(CommandConfig.huntNotFound())
+            return
+        }
+
+        TreasureHuntManager.stopHunt(hunt)
+        sender.sendMessage(CommandConfig.huntStopped())
     }
 
     override fun tabComplete(

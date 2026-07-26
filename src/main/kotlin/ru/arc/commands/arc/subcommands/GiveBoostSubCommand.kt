@@ -6,6 +6,7 @@ import ru.arc.commands.arc.CommandConfig
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.tabComplete
 import ru.arc.commands.arc.tabCompletePlayers
+import ru.arc.core.sync
 import ru.arc.hooks.HookRegistry
 import ru.arc.jobs.BoostType
 import ru.arc.jobs.JobsModule
@@ -47,17 +48,20 @@ object GiveBoostSubCommand : SubCommand {
         if (jobName.equals("all", ignoreCase = true)) jobName = null
 
         val boost =
-            args[2].toDoubleOrNull() ?: run {
-                sender.sendMessage(
-                    CommandConfig.get(
-                        "giveboost.invalid-boost",
-                        "<red>Неверное значение буста: <white>%value%",
-                        "%value%",
-                        args[2],
-                    ),
-                )
-                return true
-            }
+            args[2]
+                .toDoubleOrNull()
+                ?.takeIf(::isValidBoostMultiplier)
+                ?: run {
+                    sender.sendMessage(
+                        CommandConfig.get(
+                            "giveboost.invalid-boost",
+                            "<red>Неверное значение буста: <white>%value%",
+                            "%value%",
+                            args[2],
+                        ),
+                    )
+                    return true
+                }
 
         val boostType =
             try {
@@ -76,7 +80,7 @@ object GiveBoostSubCommand : SubCommand {
                 return true
             }
 
-        val durationMs = parseDuration(args[4])
+        val durationMs = parseBoostDuration(args[4])
         if (durationMs == null) {
             sender.sendMessage(
                 CommandConfig.get(
@@ -88,8 +92,26 @@ object GiveBoostSubCommand : SubCommand {
             )
             return true
         }
+        val expires =
+            try {
+                Math.addExact(System.currentTimeMillis(), durationMs)
+            } catch (_: ArithmeticException) {
+                sender.sendMessage(
+                    CommandConfig.get(
+                        "giveboost.invalid-duration",
+                        "<red>Неверный формат длительности: <white>%value%<gray>. Используйте: 1s, 1m, 1h, 1d",
+                        "%value%",
+                        args[4],
+                    ),
+                )
+                return true
+            }
 
-        val id = args.getOrNull(5)?.takeIf { it != "null" }
+        val id =
+            args
+                .getOrNull(5)
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() && !it.equals("null", ignoreCase = true) }
 
         if (!HookRegistry.jobsEnabled) {
             sender.sendMessage(CommandConfig.hookNotLoaded("Jobs"))
@@ -97,37 +119,39 @@ object GiveBoostSubCommand : SubCommand {
         }
 
         val jobNames = listOfNotNull(jobName)
-        JobsModule.addBoost(
-            player.uniqueId,
-            jobNames,
-            boost,
-            System.currentTimeMillis() + durationMs,
-            id ?: UUID.randomUUID().toString(),
-            listOf(boostType),
-        )
-
-        sender.sendMessage(
-            CommandConfig.get(
-                "giveboost.success",
-                "<green>Буст добавлен игроку <white>%player%<green>!",
-                "%player%",
-                player.name,
-            ),
-        )
+        JobsModule
+            .addBoost(
+                player.uniqueId,
+                jobNames,
+                boost,
+                expires,
+                id ?: UUID.randomUUID().toString(),
+                listOf(boostType),
+            ).whenComplete { added, failure ->
+                sync {
+                    if (failure != null || added != true) {
+                        sender.sendMessage(
+                            CommandConfig.get(
+                                "giveboost.failed",
+                                "<red>Не удалось добавить буст игроку <white>%player%</white>.",
+                                "%player%",
+                                player.name,
+                            ),
+                        )
+                    } else {
+                        sender.sendMessage(
+                            CommandConfig.get(
+                                "giveboost.success",
+                                "<green>Буст добавлен игроку <white>%player%<green>!",
+                                "%player%",
+                                player.name,
+                            ),
+                        )
+                    }
+                }
+            }
 
         return true
-    }
-
-    private fun parseDuration(duration: String): Long? {
-        if (duration.length < 2) return null
-        val value = duration.dropLast(1).toLongOrNull() ?: return null
-        return when (duration.last()) {
-            's' -> value * 1000
-            'm' -> value * 1000 * 60
-            'h' -> value * 1000 * 60 * 60
-            'd' -> value * 1000 * 60 * 60 * 24
-            else -> null
-        }
     }
 
     override fun tabComplete(
@@ -164,4 +188,24 @@ object GiveBoostSubCommand : SubCommand {
                 null
             }
         }
+}
+
+internal fun isValidBoostMultiplier(value: Double): Boolean = value.isFinite() && value > 0.0
+
+internal fun parseBoostDuration(duration: String): Long? {
+    if (duration.length < 2) return null
+    val value = duration.dropLast(1).toLongOrNull()?.takeIf { it > 0 } ?: return null
+    val multiplier =
+        when (duration.last().lowercaseChar()) {
+            's' -> 1_000L
+            'm' -> 60_000L
+            'h' -> 3_600_000L
+            'd' -> 86_400_000L
+            else -> return null
+        }
+    return try {
+        Math.multiplyExact(value, multiplier)
+    } catch (_: ArithmeticException) {
+        null
+    }
 }

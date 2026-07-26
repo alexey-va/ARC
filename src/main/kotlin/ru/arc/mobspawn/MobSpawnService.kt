@@ -39,8 +39,39 @@ interface WorldProvider {
 data class SpawnResult(
     val spawned: Int,
     val skipped: Boolean = false,
-    val reason: String? = null
+    val reason: String? = null,
 )
+
+internal const val MAX_SPAWN_ATTEMPTS = 10_000
+
+internal data class SpawnLocationPolicy(
+    val groundSolid: Boolean,
+    val feetPassable: Boolean,
+    val headPassable: Boolean,
+    val withinRadius: Boolean,
+    val lightAllowed: Boolean,
+    val visibleToPlayer: Boolean,
+    val claimed: Boolean,
+) {
+    fun isValid(): Boolean =
+        groundSolid &&
+            feetPassable &&
+            headPassable &&
+            withinRadius &&
+            lightAllowed &&
+            !visibleToPlayer &&
+            !claimed
+}
+
+internal fun calculateSpawnAttemptLimit(
+    amount: Int,
+    tryMultiplier: Int,
+): Int {
+    if (amount <= 0 || tryMultiplier <= 0) return 0
+    return (amount.toLong() * tryMultiplier.toLong())
+        .coerceAtMost(MAX_SPAWN_ATTEMPTS.toLong())
+        .toInt()
+}
 
 /**
  * Core service for mob spawning logic.
@@ -53,7 +84,7 @@ class MobSpawnService(
     private val worldProvider: WorldProvider,
     private val claimChecker: ClaimChecker,
     private val entitySpawner: EntitySpawner,
-    private val random: () -> Double = { Math.random() }
+    private val random: () -> Double = { Math.random() },
 ) {
     private var task: ScheduledTask? = null
     private val mobPicker: WeightedRandom<EntityType> = config.createMobPicker()
@@ -215,7 +246,7 @@ class MobSpawnService(
         val locations = mutableListOf<Location>()
         val center = player.location
         val radius = config.radius.toInt()
-        val maxAttempts = amount * config.tryMultiplier
+        val maxAttempts = calculateSpawnAttemptLimit(amount, config.tryMultiplier)
 
         repeat(maxAttempts) {
             if (locations.size >= amount) return@repeat
@@ -239,26 +270,21 @@ class MobSpawnService(
 
         val loc = Location(center.world, x, y, z)
 
-        // Must be on solid ground
-        if (!loc.block.type.isSolid) return null
-
-        // Must have 2 blocks of air above
-        if (loc.block.getRelative(0, 1, 0).type.isSolid) return null
-        if (loc.block.getRelative(0, 2, 0).type.isSolid) return null
-
-        // Must be within radius
-        if (loc.distance(center) > radius) return null
-
-        // Check light level
-        if (loc.block.getRelative(0, 1, 0).lightLevel > config.maxLightLevel) return null
-
-        // Must not be in line of sight
-        if (player.hasLineOfSight(loc)) return null
-
-        // Final passable check
-        if (!loc.block.isPassable) return null
-
-        return loc.add(0.0, 1.0, 0.0)
+        val ground = loc.block
+        val feet = ground.getRelative(0, 1, 0)
+        val head = ground.getRelative(0, 2, 0)
+        val spawnLocation = loc.clone().add(0.0, 1.0, 0.0)
+        val policy =
+            SpawnLocationPolicy(
+                groundSolid = ground.type.isSolid,
+                feetPassable = feet.isPassable,
+                headPassable = head.isPassable,
+                withinRadius = loc.distance(center) <= radius,
+                lightAllowed = feet.lightLevel <= config.maxLightLevel,
+                visibleToPlayer = player.hasLineOfSight(spawnLocation),
+                claimed = claimChecker.isClaimed(spawnLocation),
+            )
+        return spawnLocation.takeIf { policy.isValid() }
     }
 
     /**
@@ -269,7 +295,6 @@ class MobSpawnService(
     /**
      * Check if service is running.
      */
-    fun isRunning(): Boolean = task != null
+    fun isRunning(): Boolean = task?.isCancelled == false
 }
-
 

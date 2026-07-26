@@ -203,6 +203,23 @@ class XCommandTest : TestBase() {
             assertTrue(result)
             assertTrue(player.hasReceivedMessage())
         }
+
+        @Test
+        @DisplayName("Invalid UUID is rejected without throwing")
+        fun testInvalidUuid() {
+            player.addAttachment(plugin, "arc.x", true)
+
+            val result =
+                XCommand.onCommand(
+                    player,
+                    mockCommand,
+                    "x",
+                    arrayOf("-uuid:not-a-uuid", "say", "hello"),
+                )
+
+            assertTrue(result)
+            assertTrue(player.hasReceivedMessage())
+        }
     }
 
     // ==================== Tab Completion Tests ====================

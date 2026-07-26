@@ -83,7 +83,10 @@ class AuditService(
         repository.getOrCreate(playerName.lowercase()) {
             AuditData.create(playerName)
         }.thenAccept { data ->
-            data.operation(amount, type, comment)
+            synchronized(data) {
+                data.operation(amount, type, comment)
+                repository.save(data)
+            }
         }
     }
 
@@ -143,7 +146,12 @@ class AuditService(
      */
     fun clearPlayer(playerName: String) {
         repository.get(playerName.lowercase()).thenAccept { data ->
-            data?.clear()
+            if (data != null) {
+                synchronized(data) {
+                    data.clear()
+                    repository.save(data)
+                }
+            }
         }
     }
 
@@ -151,7 +159,12 @@ class AuditService(
      * Clear all audit data.
      */
     fun clearAll() {
-        repository.all().forEach { it.clear() }
+        repository.all().forEach { data ->
+            synchronized(data) {
+                data.clear()
+                repository.save(data)
+            }
+        }
     }
 
     // ==================== Maintenance ====================
@@ -168,7 +181,11 @@ class AuditService(
             info("Pruning audit data, weight: {}, maxAge: {}ms", currentWeight, currentMaxAge)
 
             repository.all().forEach { data ->
-                data.trim(currentMaxAge, config.maxTransactions)
+                synchronized(data) {
+                    if (data.trim(currentMaxAge, config.maxTransactions) > 0) {
+                        repository.save(data)
+                    }
+                }
             }
 
             currentWeight = totalWeight()
@@ -252,5 +269,4 @@ class AuditService(
             .replace("%filter%", filter.name.lowercase())
     }
 }
-
 

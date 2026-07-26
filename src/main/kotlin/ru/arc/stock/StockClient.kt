@@ -1,10 +1,6 @@
 package ru.arc.stock
 
 import com.google.gson.reflect.TypeToken
-import org.eclipse.jetty.util.thread.QueuedThreadPool
-import org.eclipse.jetty.websocket.api.Session
-import org.eclipse.jetty.websocket.api.WebSocketAdapter
-import org.eclipse.jetty.websocket.client.WebSocketClient
 import org.jsoup.Jsoup
 import ru.arc.util.Common
 import ru.arc.util.Logging.debug
@@ -14,125 +10,181 @@ import ru.arc.util.Logging.warn
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URI
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.CopyOnWriteArrayList
 
 @Suppress("UNCHECKED_CAST")
-class StockClient(
-    private val finnApiKey: String?,
-    private val polyApiKey: String?,
-) {
+class StockClient internal constructor(
+    finnApiKey: String?,
+    polyApiKey: String?,
+    private val streamFactory: StockPriceStreamFactory,
+) : AutoCloseable {
+    constructor(
+        finnApiKey: String?,
+        polyApiKey: String?,
+    ) : this(
+        finnApiKey = finnApiKey,
+        polyApiKey = polyApiKey,
+        streamFactory =
+            StockPriceStreamFactory { apiKey, onPrice ->
+                JettyStockPriceStream(apiKey, onPrice)
+            },
+    )
+
+    private val finnApiKey = finnApiKey?.takeIf { it.isNotBlank() }
+    private val polyApiKey = polyApiKey?.takeIf { it.isNotBlank() }
+    private val prices = ConcurrentHashMap<String, CopyOnWriteArrayList<Double>>()
+    private var stream: StockPriceStream? = null
+    @Volatile
+    private var lifecycleVersion = 0L
 
     companion object {
-        var webSocketClient: WebSocketClient? = null
-        @Volatile var isClosed = true
-        val prices = ConcurrentHashMap<String, MutableList<Double>>()
+        private const val HTTP_TIMEOUT_MS = 10_000
+        private const val HTTP_USER_AGENT = "RusCrafting-ARC/1.0"
+        private val YAHOO_TICKERS = mapOf("XBR/USD" to "BZ=F")
         private val gson = Common.gson
-        private val service = Executors.newSingleThreadExecutor()
-
-        @JvmStatic
-        fun stopClient() {
-            val wsc = webSocketClient ?: return
-            if (!isClosed) {
-                try {
-                    wsc.stop()
-                    isClosed = true
-                } catch (e: Exception) {
-                    throw RuntimeException(e)
-                }
-            }
-        }
     }
 
+    internal val isClosed: Boolean
+        @Synchronized get() = stream?.isRunning != true
+
+    @Synchronized
+    internal fun hasWebSocketClient(): Boolean = stream != null
+
     fun cryptoPrices(): Map<String, Double> {
-        val ids = StockMarket.configStocks()
-            .filter { it.type == Stock.Type.CRYPTO }
-            .joinToString("%2C") { it.symbol }
+        val ids =
+            StockMarket.configStocks()
+                .filter { it.type == Stock.Type.CRYPTO }
+                .joinToString("%2C") { it.symbol }
+        if (ids.isEmpty()) return emptyMap()
         val url = "https://api.coingecko.com/api/v3/simple/price?ids=$ids&vs_currencies=usd&precision=full"
         debug("Fetching crypto prices from {}", url)
         return try {
             val connection = URI.create(url).toURL().openConnection() as HttpURLConnection
-            val reader = InputStreamReader(connection.inputStream)
+            connection.connectTimeout = HTTP_TIMEOUT_MS
+            connection.readTimeout = HTTP_TIMEOUT_MS
             val typeToken = object : TypeToken<Map<String, Map<String, Double>>>() {}
-            val map: Map<String, Map<String, Double>> = gson.fromJson(reader, typeToken)
-            val result = HashMap<String, Double>()
-            map.forEach { (key, value) -> result[key] = value["usd"] ?: 0.0 }
-            debug("Fetched crypto prices: {}", result)
-            result
+            val map: Map<String, Map<String, Double>> =
+                InputStreamReader(connection.inputStream).use { reader ->
+                    gson.fromJson(reader, typeToken)
+                }
+            buildMap {
+                map.forEach { (key, value) -> put(key, value["usd"] ?: 0.0) }
+            }.also { result ->
+                debug("Fetched crypto prices: {}", result)
+            }
         } catch (e: Exception) {
             error("Could not load crypto prices", e)
             emptyMap()
         }
     }
 
-    private fun fetchInvesting(url: String): Double {
-        return try {
-            val response = Jsoup.connect(url).execute()
-            if (response.statusCode() < 200 || response.statusCode() > 299) {
+    private fun fetchInvesting(url: String): Double =
+        try {
+            val response = Jsoup.connect(url).timeout(HTTP_TIMEOUT_MS).execute()
+            if (response.statusCode() !in 200..299) {
                 warn("investing.com returned status {}", response.statusCode())
-                return -1.0
+                -1.0
+            } else {
+                response.parse()
+                    .select("div[data-test=instrument-price-last]")
+                    .first()
+                    ?.text()
+                    ?.replace(".", "")
+                    ?.replace(",", ".")
+                    ?.toDoubleOrNull()
+                    ?: -1.0
             }
-            val document = response.parse()
-            val divElement = document.select("div[data-test=instrument-price-last]").first() ?: return -1.0
-            divElement.text().replace(".", "").replace(",", ".").toDouble()
         } catch (e: Exception) {
             error("Could not load price from investing.com", e)
             -1.0
         }
-    }
 
     fun startWebSocket(symbols: Collection<String>) {
-        try {
-            val client = MySocket()
-            webSocketClient = WebSocketClient()
-
-            val serverUri = "wss://ws.finnhub.io?token=cn7rbt9r01qplv1e8j50cn7rbt9r01qplv1e8j5g"
-            val timeoutSeconds = 5L
-
-            val threadPool = QueuedThreadPool(30, 1, 60000)
-            webSocketClient!!.executor = threadPool
-            webSocketClient!!.start()
-            webSocketClient!!.connect(client, URI(serverUri))
-
-            isClosed = false
-            service.submit {
-                try {
-                    if (client.latch.await(timeoutSeconds, TimeUnit.SECONDS)) {
-                        symbols.forEach { s ->
-                            try {
-                                client.session.remote.sendString("""{"type":"subscribe","symbol":"$s"}""")
-                                Thread.sleep(100)
-                            } catch (e: Exception) {
-                                error("Could not send message to server", e)
-                                throw RuntimeException(e)
-                            }
-                        }
-                    } else {
-                        isClosed = true
-                        warn("WebSocket connection could not be established within {} seconds", timeoutSeconds)
-                    }
-                } catch (e: Exception) {
-                    isClosed = true
-                }
-            }
-        } catch (e: Exception) {
-            isClosed = true
+        val apiKey = finnApiKey ?: return
+        val normalizedSymbols =
+            symbols.asSequence()
+                .map(String::trim)
+                .filter(String::isNotEmpty)
+                .distinct()
+                .toList()
+        if (normalizedSymbols.isEmpty()) return
+        val startVersion: Long
+        val previous: StockPriceStream?
+        synchronized(this) {
+            if (stream?.isRunning == true) return
+            previous = stream
+            stream = null
+            prices.clear()
+            startVersion = ++lifecycleVersion
         }
+        previous?.close()
+
+        val created =
+            try {
+                streamFactory.create(
+                    apiKey,
+                    { symbol, price -> recordPrice(startVersion, symbol, price) },
+                )
+            } catch (e: Exception) {
+                error("Could not create stock WebSocket", e)
+                return
+            }
+        try {
+            created.start(normalizedSymbols)
+            val installed =
+                synchronized(this) {
+                    if (lifecycleVersion == startVersion && stream == null && created.isRunning) {
+                        stream = created
+                        true
+                    } else {
+                        false
+                    }
+                }
+            if (!installed) created.close()
+        } catch (e: Exception) {
+            error("Could not start stock WebSocket", e)
+            created.close()
+        }
+    }
+
+    private fun recordPrice(version: Long, symbol: String, price: Double) {
+        synchronized(this) {
+            if (lifecycleVersion != version) return
+            prices.computeIfAbsent(symbol) { CopyOnWriteArrayList() }.add(price)
+        }
+    }
+
+    override fun close() {
+        val current =
+            synchronized(this) {
+                lifecycleVersion++
+                prices.clear()
+                stream.also { stream = null }
+            }
+        current?.close()
     }
 
     private fun getStockPrice(stock: ConfigStock): Double {
-        if (webSocketClient == null || !webSocketClient!!.isRunning || isClosed) {
+        if (finnApiKey == null) return -1.0
+        if (isClosed) {
             info("WebSocket is closed, reconnecting...")
-            startWebSocket(StockMarket.stocks().filter { it.type == Stock.Type.STOCK }.map { it.symbol })
+            startWebSocket(
+                StockMarket.stocks()
+                    .filter { it.type == Stock.Type.STOCK }
+                    .map { it.symbol },
+            )
         }
-        val list = prices.remove(stock.symbol)
-        if (list == null) return fetchFinnhub(stock.symbol)
-        return list.stream().mapToDouble { it }.average().orElseGet { fetchFinnhub(stock.symbol) }
+        val buffered = prices.remove(stock.symbol) ?: return fetchFinnhub(stock.symbol)
+        return buffered.stream().mapToDouble { it }.average().orElseGet { fetchFinnhub(stock.symbol) }
     }
 
     private fun getCurrencyPrice(stock: ConfigStock): Double {
+        YAHOO_TICKERS[stock.symbol]?.let { ticker ->
+            return fetchYahooFinance(ticker)
+        }
         val url = "https://ru.investing.com/currencies/${stock.symbol.replace("/", "-").lowercase()}"
         return fetchInvesting(url)
     }
@@ -142,11 +194,34 @@ class StockClient(
         return fetchInvesting(url)
     }
 
-    fun price(stock: ConfigStock): Double = when (stock.type) {
-        Stock.Type.STOCK -> getStockPrice(stock)
-        Stock.Type.CURRENCY -> getCurrencyPrice(stock)
-        Stock.Type.COMMODITY -> getCommodityPrice(stock)
-        else -> -1.0
+    fun price(stock: ConfigStock): Double =
+        when (stock.type) {
+            Stock.Type.STOCK -> getStockPrice(stock)
+            Stock.Type.CURRENCY -> getCurrencyPrice(stock)
+            Stock.Type.COMMODITY -> getCommodityPrice(stock)
+            else -> -1.0
+        }
+
+    private fun fetchYahooFinance(ticker: String): Double {
+        val encodedTicker = URLEncoder.encode(ticker, StandardCharsets.UTF_8)
+        val url = "https://query1.finance.yahoo.com/v8/finance/chart/$encodedTicker?interval=1d&range=1d"
+        return try {
+            val connection = URI.create(url).toURL().openConnection() as HttpURLConnection
+            connection.connectTimeout = HTTP_TIMEOUT_MS
+            connection.readTimeout = HTTP_TIMEOUT_MS
+            connection.setRequestProperty("User-Agent", HTTP_USER_AGENT)
+            val body =
+                InputStreamReader(connection.inputStream).use { reader ->
+                    reader.readText()
+                }
+            parseYahooRegularMarketPrice(body) ?: run {
+                warn("Yahoo Finance returned no market price for {}", ticker)
+                -1.0
+            }
+        } catch (e: Exception) {
+            error("Could not load price from Yahoo Finance for {}", ticker, e)
+            -1.0
+        }
     }
 
     private fun fetchFinnhub(symbol: String): Double {
@@ -154,7 +229,12 @@ class StockClient(
         val url = "https://finnhub.io/api/v1/quote?symbol=$symbol&token=$finnApiKey"
         return try {
             val connection = URI.create(url).toURL().openConnection() as HttpURLConnection
-            val map = gson.fromJson(InputStreamReader(connection.inputStream), Map::class.java) as Map<String, Any>
+            connection.connectTimeout = HTTP_TIMEOUT_MS
+            connection.readTimeout = HTTP_TIMEOUT_MS
+            val map =
+                InputStreamReader(connection.inputStream).use { reader ->
+                    gson.fromJson(reader, Map::class.java) as Map<String, Any>
+                }
             (map["c"] as Number).toDouble()
         } catch (e: Exception) {
             error("Could not load price from finnhub for {}", symbol, e)
@@ -167,42 +247,26 @@ class StockClient(
         val url = "https://api.polygon.io/v3/reference/dividends?ticker=$symbol&apiKey=$polyApiKey"
         return try {
             val connection = URI.create(url).toURL().openConnection() as HttpURLConnection
-            val map = gson.fromJson(InputStreamReader(connection.inputStream), Map::class.java) as Map<String, Any>
-            ((map["results"] as List<Any>).first() as Map<String, Any>)["cash_amount"] as Double
-        } catch (e: Exception) {
+            connection.connectTimeout = HTTP_TIMEOUT_MS
+            connection.readTimeout = HTTP_TIMEOUT_MS
+            val map =
+                InputStreamReader(connection.inputStream).use { reader ->
+                    gson.fromJson(reader, Map::class.java) as Map<String, Any>
+                }
+            val results = map["results"] as? List<*> ?: return 0.0
+            val first = results.firstOrNull() as? Map<*, *> ?: return 0.0
+            (first["cash_amount"] as? Number)?.toDouble() ?: 0.0
+        } catch (_: Exception) {
             0.0
         }
     }
-
-    class MySocket : WebSocketAdapter() {
-        val latch = CountDownLatch(1)
-
-        override fun onWebSocketConnect(sess: Session) {
-            super.onWebSocketConnect(sess)
-            latch.countDown()
-        }
-
-        override fun onWebSocketText(message: String) {
-            super.onWebSocketText(message)
-            try {
-                val map = gson.fromJson(message, Map::class.java) as Map<String, Any>
-                val data = (map["data"] as List<Any>).first() as Map<String, Any>
-                val price = (data["p"] as Number).toDouble()
-                val symbol = data["s"] as String
-                prices.getOrPut(symbol) { ArrayList() }.add(price)
-            } catch (e: Exception) {
-                // ignore malformed messages
-            }
-        }
-
-        override fun onWebSocketClose(statusCode: Int, reason: String) {
-            super.onWebSocketClose(statusCode, reason)
-            info("WebSocket closed: {} - {}", statusCode, reason)
-            isClosed = true
-        }
-
-        override fun onWebSocketError(cause: Throwable) {
-            super.onWebSocketError(cause)
-        }
-    }
 }
+
+internal fun parseYahooRegularMarketPrice(payload: String): Double? =
+    runCatching {
+        val root = Common.gson.fromJson(payload, Map::class.java) ?: return@runCatching null
+        val chart = root["chart"] as? Map<*, *> ?: return@runCatching null
+        val result = (chart["result"] as? List<*>)?.firstOrNull() as? Map<*, *> ?: return@runCatching null
+        val meta = result["meta"] as? Map<*, *> ?: return@runCatching null
+        (meta["regularMarketPrice"] as? Number)?.toDouble()
+    }.getOrNull()

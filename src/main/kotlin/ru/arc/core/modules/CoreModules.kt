@@ -9,6 +9,7 @@ import kotlinx.coroutines.runBlocking
 import net.milkbowl.vault.economy.Economy
 import org.bukkit.plugin.RegisteredServiceProvider
 import ru.arc.ARC
+import ru.arc.TitleInput
 import ru.arc.audit.AuditManager
 import ru.arc.board.BoardManager
 import ru.arc.common.locationpools.LocationPoolManager
@@ -30,15 +31,15 @@ import ru.arc.misc.JoinMessagesManager
 import ru.arc.mobspawn.MobSpawnManager
 import ru.arc.network.NetworkRegistry
 import ru.arc.config.ArcRedisConfig
-import ru.arc.network.RedisConnection
-import ru.arc.network.RedisManager
-import ru.arc.network.ServerIdentity
+import ru.arc.redis.RedisConnection
+import ru.arc.redis.RedisManager
+import ru.arc.redis.ServerIdentity
 import ru.arc.redis.RedisConfigBootstrap
 import ru.arc.redis.RedisModuleConfig
+import ru.arc.repository.CachedRepository
 import ru.arc.repository.redisRepo
 import ru.arc.stock.HistoryManager
 import ru.arc.stock.Stock
-import ru.arc.stock.StockClient
 import ru.arc.stock.StockMarket
 import ru.arc.stock.StockPlayer
 import ru.arc.stock.StockPlayerManager
@@ -74,6 +75,8 @@ object RedisModule : PluginModule {
         val redis = RedisModuleConfig.load(ARC.instance.dataPath)
 
         if (!redis.enabled) {
+            ARC.redisManager?.close()
+            ARC.redisManager = null
             info("Redis disabled — skipping connection (redis.enabled=false)")
             return
         }
@@ -96,7 +99,8 @@ object RedisModule : PluginModule {
     override fun reload() = init()
 
     override fun shutdown() {
-        // Shutdown handled by individual modules
+        ARC.redisManager?.close()
+        ARC.redisManager = null
     }
 }
 
@@ -108,12 +112,16 @@ object NetworkModule : PluginModule {
     override val priority = 15
 
     override fun init() {
-        if (ARC.redisManager == null) return
-        ARC.networkRegistry = NetworkRegistry(ARC.redisManager!!)
-        ARC.networkRegistry!!.init()
+        val redis = ARC.redisManager ?: return
+        val registry = NetworkRegistry(redis)
+        registry.init()
+        ARC.networkRegistry = registry
     }
 
-    override fun shutdown() {}
+    override fun shutdown() {
+        ARC.networkRegistry?.shutdown()
+        ARC.networkRegistry = null
+    }
 }
 
 /**
@@ -124,12 +132,30 @@ object HooksModule : PluginModule {
     override val priority = 20
 
     override fun init() {
-        ARC.hookRegistry = HookRegistry()
-        ARC.hookRegistry!!.setupHooks()
+        val registry = HookRegistry()
+        try {
+            registry.setupHooks()
+            ARC.hookRegistry = registry
+        } catch (failure: Throwable) {
+            runCatching { registry.close() }
+                .exceptionOrNull()
+                ?.let(failure::addSuppressed)
+            throw failure
+        }
+    }
+
+    override fun reload() {
+        ARC.hookRegistry?.setupHooks()
     }
 
     override fun shutdown() {
-        ARC.hookRegistry!!.cancelTasks()
+        val registry = ARC.hookRegistry
+        ARC.hookRegistry = null
+        try {
+            TitleInput.shutdown()
+        } finally {
+            registry?.close()
+        }
     }
 }
 
@@ -154,7 +180,9 @@ object EconomyModule : PluginModule {
         economy = rsp?.provider
     }
 
-    override fun shutdown() {}
+    override fun shutdown() {
+        economy = null
+    }
 }
 
 // ==================== Priority 30-50: Configuration ====================
@@ -171,7 +199,9 @@ object ConfigModule : PluginModule {
         ARC.serverName = ArcRedisConfig.get().serverName
     }
 
-    override fun reload() = init()
+    override fun reload() {
+        ARC.serverName = ArcRedisConfig.get().serverName
+    }
 
     override fun shutdown() {}
 }
@@ -191,6 +221,7 @@ object LocationPoolModule : PluginModule {
     override fun shutdown() {
         ARC.instance.locationPoolConfig?.saveLocationPools(true)
         ARC.instance.locationPoolConfig?.cancelTasks()
+        ARC.instance.locationPoolConfig = null
     }
 }
 
@@ -223,7 +254,9 @@ object ParticleModule : PluginModule {
         ParticleManager.setupParticleManager()
     }
 
-    override fun shutdown() {}
+    override fun shutdown() {
+        ParticleManager.stopTasks()
+    }
 }
 
 /**
@@ -237,7 +270,9 @@ object CooldownModule : PluginModule {
         CooldownManager.setupTask(5)
     }
 
-    override fun shutdown() {}
+    override fun shutdown() {
+        CooldownManager.stop()
+    }
 }
 
 /**
@@ -285,7 +320,9 @@ object FarmModule : PluginModule {
         FarmManager.init()
     }
 
-    override fun shutdown() {}
+    override fun shutdown() {
+        FarmManager.cancelTasks()
+    }
 }
 
 /**
@@ -319,7 +356,9 @@ object XActionModule : PluginModule {
         XActionManager.init()
     }
 
-    override fun shutdown() {}
+    override fun shutdown() {
+        XActionManager.shutdown()
+    }
 }
 
 /**
@@ -335,6 +374,13 @@ object StockModule : PluginModule {
     private var updateTask: ScheduledTask? = null
     private var dividendTask: ScheduledTask? = null
 
+    @JvmStatic
+    fun isAvailable(): Boolean = initialized
+
+    fun launch(block: suspend CoroutineScope.() -> Unit) {
+        scope?.launch(block = block)
+    }
+
     override fun init() {
         if (ARC.redisManager == null) return
         if (!config.bool("enabled", false)) {
@@ -345,12 +391,15 @@ object StockModule : PluginModule {
 
         scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         val activeScope = scope ?: return
+        var stockRepository: CachedRepository<Stock>? = null
+        var playerRepository: CachedRepository<StockPlayer>? = null
 
-        StockConfig.load(config)
-        AuctionConfig.load()
+        try {
+            StockConfig.load(config)
+            AuctionConfig.load()
 
-        StockMarket.stockRepo =
-            redisRepo<Stock>(
+            stockRepository =
+                redisRepo<Stock>(
                 id = "stocks",
                 storageKey = "arc.stocks",
                 updateChannel = "arc.stocks_update",
@@ -360,8 +409,8 @@ object StockModule : PluginModule {
                 saveInterval(kotlin.time.Duration.parse("1s"))
             }
 
-        StockPlayerManager.playerRepo =
-            redisRepo<StockPlayer>(
+            playerRepository =
+                redisRepo<StockPlayer>(
                 id = "stock_players",
                 storageKey = "arc.stock_players",
                 updateChannel = "arc.stock_players_update",
@@ -371,18 +420,36 @@ object StockModule : PluginModule {
                 saveInterval(kotlin.time.Duration.parse("250ms"))
             }
 
-        HistoryManager.init()
+            StockMarket.stockRepo = stockRepository
+            StockPlayerManager.playerRepo = playerRepository
 
-        updateTask =
-            repeating(200.ticks, delay = 20.ticks) {
-                activeScope.launch { StockMarket.updateStocks() }
-            }
-        dividendTask =
-            repeating(20.ticks, delay = 100.ticks) {
-                StockMarket.payDividends()
-            }
+            HistoryManager.init()
 
-        initialized = true
+            updateTask =
+                repeating(200.ticks, delay = 20.ticks) {
+                    activeScope.launch { StockMarket.updateStocks() }
+                }
+            dividendTask =
+                repeating(20.ticks, delay = 100.ticks) {
+                    StockMarket.payDividends()
+                }
+
+            initialized = true
+        } catch (e: Exception) {
+            updateTask?.cancel()
+            dividendTask?.cancel()
+            updateTask = null
+            dividendTask = null
+            HistoryManager.cancelTasks()
+            runBlocking {
+                playerRepository?.shutdown()
+                stockRepository?.shutdown()
+            }
+            activeScope.cancel()
+            scope = null
+            StockMarket.closeClient()
+            throw e
+        }
     }
 
     override fun shutdown() {
@@ -393,11 +460,12 @@ object StockModule : PluginModule {
         dividendTask?.let { if (!it.isCancelled) it.cancel() }
         updateTask = null
         dividendTask = null
+        HistoryManager.cancelTasks()
 
         StockMarket.saveHistory()
         runBlocking { StockMarket.stockRepo.shutdown() }
         runBlocking { StockPlayerManager.playerRepo.shutdown() }
-        StockClient.stopClient()
+        StockMarket.closeClient()
         scope?.cancel()
         scope = null
     }
@@ -441,6 +509,7 @@ object TreasureModule : PluginModule {
     }
 
     override fun shutdown() {
+        HuntFurnitureJanitor.shutdown()
         TreasureHuntManager.stopAll()
         Treasures.shutdown()
     }
@@ -457,7 +526,9 @@ object EliteLootModule : PluginModule {
         EliteLootManager.init()
     }
 
-    override fun shutdown() {}
+    override fun shutdown() {
+        EliteLootManager.shutdown()
+    }
 }
 
 /**
@@ -468,7 +539,6 @@ object LeafDecayModule : PluginModule {
     override val priority = 79
 
     override fun init() {
-        LeafDecayManager.reload()
         LeafDecayManager.init()
     }
 
@@ -489,7 +559,6 @@ object PersonalLootModule : PluginModule {
     override val priority = 80
 
     override fun init() {
-        PersonalLoot.reload()
         PersonalLoot.init()
     }
 
@@ -513,7 +582,9 @@ object MobSpawnModule : PluginModule {
         MobSpawnManager.init()
     }
 
-    override fun shutdown() {}
+    override fun shutdown() {
+        MobSpawnManager.cancel()
+    }
 }
 
 /**
@@ -588,6 +659,6 @@ object SyncModule : PluginModule {
     }
 
     override fun shutdown() {
-        SyncManager.saveAll()
+        SyncManager.shutdown()
     }
 }

@@ -58,15 +58,27 @@ object LocationPoolManager {
 
     @JvmStatic
     fun delete(id: String): Boolean {
-        LocationPoolEditor.cancelEditingForPool(id)
         if (isEphemeralPool(id)) {
+            LocationPoolEditor.cancelEditingForPool(id)
             return removeEphemeralPool(id)
         }
-        val removed = LocationPoolRepository.remove(id)
-        if (removed) {
-            ARC.plugin?.locationPoolConfig?.deleteFile(id)
-        }
-        return removed
+        if (LocationPoolRepository.get(id) == null) return false
+        // Delete durable state first so a failed filesystem operation cannot
+        // make a pool disappear only until the next restart.
+        ARC.plugin?.locationPoolConfig?.deleteFile(id)
+        LocationPoolEditor.cancelEditingForPool(id)
+        return LocationPoolRepository.remove(id)
+    }
+
+    @JvmStatic
+    fun replacePersistent(pool: LocationPool) {
+        require(!isEphemeralPool(pool.id)) { "Cannot replace an ephemeral location pool" }
+        val config =
+            ARC.plugin?.locationPoolConfig
+                ?: throw IllegalStateException("Location pool config is not initialized")
+        // Persist the fully built replacement before publishing it to readers.
+        config.saveLocationPool(pool)
+        LocationPoolRepository.add(pool)
     }
 
     // === Работа с локациями ===
