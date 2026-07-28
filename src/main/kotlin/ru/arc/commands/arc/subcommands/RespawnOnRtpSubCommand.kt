@@ -1,31 +1,31 @@
 package ru.arc.commands.arc.subcommands
 
-import com.google.common.cache.Cache
-import com.google.common.cache.CacheBuilder
 import org.bukkit.command.CommandSender
 import ru.arc.commands.arc.CommandConfig
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.tabCompletePlayers
-import java.util.concurrent.TimeUnit
+import ru.arc.rtp.RtpRespawnTracker
 
 /**
- * /arc respawnonrtp - добавить игрока в список RTP-респауна.
+ * /arc respawnonrtp - пометить следующий RTP для установки респавна.
  *
- * Игроки в этом списке будут телепортированы в случайную локацию при респауне.
- * Запись истекает через 1 минуту.
+ * После post-teleport события RTP-провайдера ARC установит точку возрождения
+ * в месте приземления. Запись истекает через 1 минуту.
  */
 object RespawnOnRtpSubCommand : SubCommand {
 
     override val configKey = "respawnonrtp"
     override val defaultName = "respawnonrtp"
     override val defaultPermission = "arc.rtp-respawn"
-    override val defaultDescription = "Отметить игрока для телепортации RTP при следующем респауне (действует 1 мин)"
+    override val defaultDescription = "Установить респавн после следующего RTP игрока (действует 1 мин)"
     override val defaultUsage = "/arc respawnonrtp <player>"
 
-    /** Кеш игроков для RTP при респауне (истекает через 1 минуту) */
-    val playersForRtp: Cache<String, Any> = CacheBuilder.newBuilder()
-        .expireAfterWrite(1, TimeUnit.MINUTES)
-        .build()
+    /**
+     * Legacy accessor retained for tests and extensions that used the old API.
+     * New code should use [RtpRespawnTracker].
+     */
+    @Deprecated("Use RtpRespawnTracker")
+    val playersForRtp = RtpRespawnTracker.pending
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
         if (args.isEmpty()) {
@@ -34,7 +34,7 @@ object RespawnOnRtpSubCommand : SubCommand {
         }
 
         val playerName = args[0]
-        playersForRtp.put(playerName, Unit)
+        RtpRespawnTracker.mark(playerName)
         sender.sendMessage(CommandConfig.rtpAdded(playerName))
 
         return true

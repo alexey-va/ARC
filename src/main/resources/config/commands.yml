@@ -53,6 +53,11 @@ commands:
     name: respawnonrtp
     aliases: [ ]
     permission: arc.rtp-respawn
+  firstrtp:
+    name: firstrtp
+    aliases: [ ]
+    permission: arc.rtp-respawn
+    usage: /arc firstrtp <player> <world> [set-respawn:true|false] | reset <player|uuid> [world|all]
   locpool:
     name: locpool
     aliases: [ ]

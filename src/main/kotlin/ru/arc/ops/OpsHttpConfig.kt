@@ -54,6 +54,12 @@ open class OpsHttpConfig(private val config: Config) {
     open val cmiKitsWriteEnabled: Boolean
         get() = config.bool("cmi-kits-write-enabled", false)
 
+    open val cmiHologramsReadEnabled: Boolean
+        get() = config.bool("cmi-holograms-read-enabled", true)
+
+    open val cmiHologramsWriteEnabled: Boolean
+        get() = config.bool("cmi-holograms-write-enabled", false)
+
     open val scheduledCommandsReadEnabled: Boolean
         get() = config.bool("scheduled-commands-read-enabled", true)
 
@@ -117,6 +123,8 @@ class TestOpsHttpConfig(
     override val itemPresetsReadEnabled: Boolean = true,
     override val itemPresetsWriteEnabled: Boolean = false,
     override val cmiKitsWriteEnabled: Boolean = false,
+    override val cmiHologramsReadEnabled: Boolean = true,
+    override val cmiHologramsWriteEnabled: Boolean = false,
     override val scheduledCommandsReadEnabled: Boolean = true,
     override val scheduledCommandsWriteEnabled: Boolean = false,
     override val locationPoolsReadEnabled: Boolean = true,
@@ -135,6 +143,8 @@ class TestOpsHttpConfig(
         itemPresetsReadEnabled: Boolean = this.itemPresetsReadEnabled,
         itemPresetsWriteEnabled: Boolean = this.itemPresetsWriteEnabled,
         cmiKitsWriteEnabled: Boolean = this.cmiKitsWriteEnabled,
+        cmiHologramsReadEnabled: Boolean = this.cmiHologramsReadEnabled,
+        cmiHologramsWriteEnabled: Boolean = this.cmiHologramsWriteEnabled,
         scheduledCommandsReadEnabled: Boolean = this.scheduledCommandsReadEnabled,
         scheduledCommandsWriteEnabled: Boolean = this.scheduledCommandsWriteEnabled,
         locationPoolsReadEnabled: Boolean = this.locationPoolsReadEnabled,
@@ -160,6 +170,8 @@ class TestOpsHttpConfig(
             itemPresetsReadEnabled = itemPresetsReadEnabled,
             itemPresetsWriteEnabled = itemPresetsWriteEnabled,
             cmiKitsWriteEnabled = cmiKitsWriteEnabled,
+            cmiHologramsReadEnabled = cmiHologramsReadEnabled,
+            cmiHologramsWriteEnabled = cmiHologramsWriteEnabled,
             scheduledCommandsReadEnabled = scheduledCommandsReadEnabled,
             scheduledCommandsWriteEnabled = scheduledCommandsWriteEnabled,
             locationPoolsReadEnabled = locationPoolsReadEnabled,

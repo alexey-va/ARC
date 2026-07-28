@@ -15,6 +15,7 @@ import org.mockito.Mockito.mock
 import ru.arc.TestBase
 import ru.arc.commands.arc.ArcCommand
 import ru.arc.commands.arc.subcommands.RespawnOnRtpSubCommand
+import ru.arc.rtp.RtpCompletionRequest
 import org.bukkit.command.Command as BukkitCommand
 
 /**
@@ -759,7 +760,7 @@ class ArcCommandTest : TestBase() {
             val playerName = "CacheTest1"
             assertNull(RespawnOnRtpSubCommand.playersForRtp.getIfPresent(playerName))
 
-            RespawnOnRtpSubCommand.playersForRtp.put(playerName, Any())
+            RespawnOnRtpSubCommand.playersForRtp.put(playerName, completionRequest())
 
             assertNotNull(RespawnOnRtpSubCommand.playersForRtp.getIfPresent(playerName))
 
@@ -771,7 +772,7 @@ class ArcCommandTest : TestBase() {
         @DisplayName("Player can be removed from cache")
         fun testRemoveFromCache() {
             val playerName = "CacheTest2"
-            RespawnOnRtpSubCommand.playersForRtp.put(playerName, Any())
+            RespawnOnRtpSubCommand.playersForRtp.put(playerName, completionRequest())
             assertNotNull(RespawnOnRtpSubCommand.playersForRtp.getIfPresent(playerName))
 
             RespawnOnRtpSubCommand.playersForRtp.invalidate(playerName)
@@ -784,7 +785,7 @@ class ArcCommandTest : TestBase() {
         fun testMultiplePlayers() {
             val players = listOf("CachePlayer1", "CachePlayer2", "CachePlayer3")
 
-            players.forEach { RespawnOnRtpSubCommand.playersForRtp.put(it, Any()) }
+            players.forEach { RespawnOnRtpSubCommand.playersForRtp.put(it, completionRequest()) }
 
             players.forEach { playerName ->
                 assertNotNull(
@@ -801,7 +802,7 @@ class ArcCommandTest : TestBase() {
         @DisplayName("InvalidateAll clears all entries")
         fun testInvalidateAll() {
             val players = listOf("Clear1", "Clear2", "Clear3")
-            players.forEach { RespawnOnRtpSubCommand.playersForRtp.put(it, Any()) }
+            players.forEach { RespawnOnRtpSubCommand.playersForRtp.put(it, completionRequest()) }
 
             RespawnOnRtpSubCommand.playersForRtp.invalidateAll()
 
@@ -812,6 +813,8 @@ class ArcCommandTest : TestBase() {
                 )
             }
         }
+
+        private fun completionRequest() = RtpCompletionRequest(null, true, null, null)
     }
 
     // ==================== Test Subcommand ====================

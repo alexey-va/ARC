@@ -246,6 +246,21 @@ class OpsHttpServer(
             method == "PUT" && segments.size == 3 && segments[0] == "cmi" && segments[1] == "kits" ->
                 handleCmiKitUpsert(exchange, cfg, segments[2])
 
+            method == "GET" && segments == listOf("cmi", "holograms") ->
+                handleCmiHologramsList(exchange, cfg, null, query)
+
+            method == "GET" && segments.size == 3 && segments[0] == "cmi" && segments[1] == "holograms" ->
+                handleCmiHologramsList(exchange, cfg, segments[2], query)
+
+            method == "POST" && segments == listOf("cmi", "holograms", "preview") ->
+                handleCmiHologramPreview(exchange, cfg)
+
+            method == "PUT" && segments.size == 3 && segments[0] == "cmi" && segments[1] == "holograms" ->
+                handleCmiHologramUpsert(exchange, cfg, segments[2])
+
+            method == "DELETE" && segments.size == 3 && segments[0] == "cmi" && segments[1] == "holograms" ->
+                handleCmiHologramDelete(exchange, cfg, segments[2])
+
             method == "GET" && segments == listOf("scheduled-commands") ->
                 handleScheduledCommandsList(exchange, cfg, null)
 
@@ -809,6 +824,102 @@ class OpsHttpServer(
         }
     }
 
+    private fun handleCmiHologramsList(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        rawName: String?,
+        query: Map<String, String>,
+    ) {
+        if (!cfg.cmiHologramsReadEnabled) {
+            val (code, body) = OpsJson.error(403, "CMI hologram read endpoints disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        handleCmiHologramErrors(exchange) {
+            OpsCmiHologramHandlers.list(
+                name = rawName?.let { URLDecoder.decode(it, StandardCharsets.UTF_8) },
+                worldName = query["world"],
+                limit = query["limit"]?.toIntOrNull() ?: 200,
+            )
+        }
+    }
+
+    private fun handleCmiHologramPreview(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+    ) {
+        if (!cfg.cmiHologramsReadEnabled) {
+            val (code, body) = OpsJson.error(403, "CMI hologram preview disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        val body = parseJsonBody(exchange) ?: return
+        val name = body.remove("name")
+            ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
+            ?.asString
+            ?.trim()
+        if (name.isNullOrEmpty()) {
+            val (code, json) = OpsJson.error(400, "JSON body requires hologram name string")
+            respond(exchange, code, json)
+            return
+        }
+        handleCmiHologramErrors(exchange) {
+            OpsCmiHologramHandlers.preview(name, body)
+        }
+    }
+
+    private fun handleCmiHologramUpsert(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        rawName: String,
+    ) {
+        if (!cfg.cmiHologramsWriteEnabled) {
+            val (code, body) = OpsJson.error(403, "CMI hologram writes disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        val body = parseJsonBody(exchange) ?: return
+        handleCmiHologramErrors(exchange) {
+            OpsCmiHologramHandlers.upsert(
+                URLDecoder.decode(rawName, StandardCharsets.UTF_8),
+                body,
+            )
+        }
+    }
+
+    private fun handleCmiHologramDelete(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        rawName: String,
+    ) {
+        if (!cfg.cmiHologramsWriteEnabled) {
+            val (code, body) = OpsJson.error(403, "CMI hologram writes disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        handleCmiHologramErrors(exchange) {
+            OpsCmiHologramHandlers.delete(URLDecoder.decode(rawName, StandardCharsets.UTF_8))
+        }
+    }
+
+    private fun handleCmiHologramErrors(
+        exchange: HttpExchange,
+        block: () -> Map<String, Any?>,
+    ) {
+        try {
+            respondOk(exchange, block())
+        } catch (e: IllegalArgumentException) {
+            val (code, body) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, body)
+        } catch (e: NoSuchElementException) {
+            val (code, body) = OpsJson.error(404, e.message ?: "CMI hologram not found")
+            respond(exchange, code, body)
+        } catch (e: IllegalStateException) {
+            val (code, body) = OpsJson.error(503, e.message ?: "CMI unavailable")
+            respond(exchange, code, body)
+        }
+    }
+
     private fun handleScheduledCommandsList(
         exchange: HttpExchange,
         cfg: OpsHttpConfig,
@@ -1322,6 +1433,14 @@ class OpsHttpServer(
         }
         if (cfg.cmiKitsWriteEnabled) {
             routes += "PUT /ops/cmi/kits/{name} {display,icon:ItemSpec,items:{},extraItems:{},commands:[]}"
+        }
+        if (cfg.cmiHologramsReadEnabled) {
+            routes += "GET /ops/cmi/holograms[/{name}]?world=&limit="
+            routes += "POST /ops/cmi/holograms/preview {name,HologramSpec}"
+        }
+        if (cfg.cmiHologramsWriteEnabled) {
+            routes += "PUT /ops/cmi/holograms/{name} HologramSpec"
+            routes += "DELETE /ops/cmi/holograms/{name}"
         }
         if (cfg.scheduledCommandsReadEnabled) {
             routes += "GET /ops/scheduled-commands[/{id}]"

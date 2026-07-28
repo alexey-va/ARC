@@ -10,6 +10,7 @@ import ru.arc.commands.arc.subcommands.BoardSubCommand
 import ru.arc.commands.arc.subcommands.BuildBookSubCommand
 import ru.arc.commands.arc.subcommands.EliteLootSubCommand
 import ru.arc.commands.arc.subcommands.EmshopSubCommand
+import ru.arc.commands.arc.subcommands.FirstRtpSubCommand
 import ru.arc.commands.arc.subcommands.GiveBoostSubCommand
 import ru.arc.commands.arc.subcommands.GiveSubCommand
 import ru.arc.commands.arc.subcommands.HelpSubCommand
@@ -56,6 +57,7 @@ class ArcCommand :
             JoinMessageSubCommand,
             QuitMessageSubCommand,
             RespawnOnRtpSubCommand,
+            FirstRtpSubCommand,
             LocpoolSubCommand,
             HuntSubCommand,
             TreasuresSubCommand,

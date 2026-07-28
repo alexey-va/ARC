@@ -51,6 +51,12 @@ item-presets-write-enabled: false
 # По умолчанию запрещено: включать только для явно авторизованной content-операции.
 cmi-kits-write-enabled: false
 
+# Native CMI hologram API. Read/preview never modify Saves/Holograms.yml.
+cmi-holograms-read-enabled: true
+# PUT/DELETE update CMI runtime state and persistence. Enable only for an
+# explicitly authorized production content operation.
+cmi-holograms-write-enabled: false
+
 # GET/preview для modules/scheduled-commands.yml.
 scheduled-commands-read-enabled: true
 # PUT/DELETE сохраняют расписание через ScheduledCommandsManager.

@@ -155,6 +155,7 @@ object HelpSubCommand : SubCommand {
             JoinMessageSubCommand,
             QuitMessageSubCommand,
             RespawnOnRtpSubCommand,
+            FirstRtpSubCommand,
             LocpoolSubCommand,
             HuntSubCommand,
             TreasuresSubCommand,

@@ -34,6 +34,7 @@ softdepend:
   - PlaceholderAPI
   - Duels
   - BetterRTP
+  - RTP
 commands:
   arc:
     description: Main command

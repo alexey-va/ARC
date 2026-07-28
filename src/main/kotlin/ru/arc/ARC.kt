@@ -55,6 +55,7 @@ import ru.arc.network.NetworkRegistry
 import ru.arc.redis.RedisManager
 import ru.arc.ops.OpsHttpModule
 import ru.arc.restart.RestartModule
+import ru.arc.rtp.RtpPlayerRegistry
 import ru.arc.scheduled.ScheduledCommandsModule
 import ru.arc.util.HeadTextureCache
 import ru.arc.util.Logging
@@ -99,6 +100,7 @@ open class ARC : JavaPlugin() {
         }
 
         PaperArcRuntime.installScheduling(this)
+        RtpPlayerRegistry.initialize(dataPath)
         registerModules()
         PaperArcRuntime.installModuleLifecycleReporting(
             consoleLog = { consoleLog(it) },

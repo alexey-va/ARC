@@ -8,6 +8,7 @@ HTTP ops API и ItemSpec для RusCrafting MCP. **Runtime configs:** `mcserver/
 - Item build/give from JSON presets
 - Item preset/bundle read/preview/write/delete and native give
 - CMI kit read/preview/write through the CMI Java API and ordinary ItemSpec JSON
+- CMI hologram list/preview/presence-aware upsert/delete through the native CMI API
 - Scheduled-command read/preview/write/delete through ARC's native manager
 - Location-pool read/preview/write/delete through native ARC storage
 - Treasure/reward-pool read/preview/write/delete through native `TreasureManager`
@@ -24,6 +25,7 @@ HTTP ops API и ItemSpec для RusCrafting MCP. **Runtime configs:** `mcserver/
 | `OpsHttpHandlers` | Console, broadcast, reload, … |
 | `OpsItemHandlers` | inventory, give, preview |
 | `OpsCmiKitHandlers` | CMI `KitsManager` read/preview/upsert + `safeSave()` |
+| `OpsCmiHologramHandlers` | CMI `HologramManager` read/preview/upsert/delete + native persistence |
 | `OpsScheduledCommandHandlers` | Structured schedule list/preview/upsert/delete |
 | `OpsLocationPoolHandlers` | Stable weighted coordinates over native location pools |
 | `OpsTreasurePoolHandlers` | Strict reward schema over native treasure pools |
@@ -70,6 +72,27 @@ cache and persistence. Never make MCP callers encode, decode, or patch
 `!!binary`. Writes require `cmi-kits-write-enabled: true` and explicit
 production authorization. The old blob codec and YAML generator were removed;
 do not recreate an alternate kit-management path.
+
+## CMI holograms (canonical)
+
+```
+GET    /ops/cmi/holograms[/{name}]?world=&limit=
+POST   /ops/cmi/holograms/preview
+PUT    /ops/cmi/holograms/{name}
+DELETE /ops/cmi/holograms/{name}
+```
+
+The public HologramSpec is presence-aware: omitted root and nested fields
+preserve current values. It covers the complete persistent CMI 9.8.6.4 editor
+surface: location, display type, all lines/pages, ranges, intervals, spacing,
+global click commands, permission/LOS flags, TextDisplay properties,
+icon/board transforms, interaction bounds/particles, pagination, and
+fade/rotation animations. CText click actions stay embedded in `lines`, as CMI
+expects. Creation requires a complete loaded-world location. ARC calls CMI's
+`HologramManager` and hologram persistence methods; never edit
+`CMI/Saves/Holograms.yml` from MCP. Read/preview require
+`cmi-holograms-read-enabled`; writes and deletes require
+`cmi-holograms-write-enabled` plus explicit production authorization.
 
 ## Scheduled commands (canonical)
 
@@ -165,6 +188,8 @@ surface is intentionally compact:
 - `arc_ops_content_health` performs the cross-catalog audit.
 - `arc_ops_npc_read` covers list/detail/preview;
 - `arc_ops_npc_write` covers gated presence-aware upsert/delete;
+- `arc_ops_hologram_read` covers CMI list/detail/preview;
+- `arc_ops_hologram_write` covers gated CMI presence-aware upsert/delete;
 - `arc_ops_world_snapshot` wraps the ready-made BlueMap renderer.
 
 Do not expose one MCP tool per HTTP verb/catalog, and do not add native content

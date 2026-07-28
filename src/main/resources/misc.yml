@@ -367,3 +367,9 @@ world-names:
   spn_the_hell_ring_30: spn_the_hell_ring_30
 # --- Миры, где перехватывается респавн (пустой set = нигде) ---
 respawn-intercept-worlds: !!set {}
+
+# --- Адаптер первого RTP ---
+rtp-respawn:
+  # Переключать на leafrtp только вместе с отдельным cutover конфигов и permissions.
+  provider: betterrtp
+  set-spawn-message: <green>Ваша точка возрождения установлена здесь! <gray>Чтобы изменить ее, используйте команду /sethome

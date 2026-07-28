@@ -235,6 +235,56 @@ class OpsHttpServerTest : FreeSpec({
             }
         }
 
+        "should gate CMI hologram reads and writes independently" {
+            val locked =
+                testConfig.copy(
+                    cmiHologramsReadEnabled = false,
+                    cmiHologramsWriteEnabled = false,
+                )
+            val server = OpsHttpServer { locked }
+            server.start()
+            try {
+                val read =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/cmi/holograms",
+                        token = locked.token,
+                    )
+                read.responseCode shouldBe 403
+                readBody(read) shouldContain "CMI hologram read endpoints disabled"
+
+                val preview =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/cmi/holograms/preview",
+                        method = "POST",
+                        token = locked.token,
+                        body = """{"name":"test","lines":["hello"]}""",
+                    )
+                preview.responseCode shouldBe 403
+                readBody(preview) shouldContain "CMI hologram preview disabled"
+
+                val upsert =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/cmi/holograms/test",
+                        method = "PUT",
+                        token = locked.token,
+                        body = """{"lines":["hello"]}""",
+                    )
+                upsert.responseCode shouldBe 403
+                readBody(upsert) shouldContain "CMI hologram writes disabled"
+
+                val delete =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/cmi/holograms/test",
+                        method = "DELETE",
+                        token = locked.token,
+                    )
+                delete.responseCode shouldBe 403
+                readBody(delete) shouldContain "CMI hologram writes disabled"
+            } finally {
+                server.stop()
+            }
+        }
+
         "should block scheduled command writes when disabled in config" {
             val locked = testConfig.copy(scheduledCommandsWriteEnabled = false)
             val server = OpsHttpServer { locked }

@@ -31,7 +31,7 @@ repositories {
     maven("https://maven.citizensnpcs.co/repo")
     maven("https://repo.extendedclip.com/content/repositories/placeholderapi/")
     maven("https://repo.codemc.io/repository/maven-public/")
-    maven("https://repo.rus-crafting.ru/repository/grocermc/")
+    maven("https://repo.rus-crafting.ru/grocermc/")
     maven("https://repo.viaversion.com")
     maven("https://jitpack.io")
     maven("https://mvn-repo.arim.space/lesser-gpl3/")
@@ -73,6 +73,8 @@ dependencies {
     compileOnly(libs.com.github.slimefun.slimefun4)
     compileOnly(libs.com.magmaguy.betterstructures)
     compileOnly(libs.betterrtp.betterrtp)
+    // Private mirror of the exact server-provided LeafRTP JAR; never shaded.
+    compileOnly("ru.ruscrafting.thirdparty:leafrtp-lite:3.2.0")
     compileOnly(libs.org.jsoup.jsoup)
     compileOnly(libs.dev.espi.protectionstones)
     compileOnly(libs.com.alessiodp.parties.parties.api)
@@ -153,6 +155,7 @@ dependencies {
     testImplementation(libs.net.citizensnpcs.citizens.main) { exclude(group = "*", module = "*") }
     testImplementation(libs.com.magmaguy.elitemobs)
     testImplementation(libs.com.github.zrips.cmilib)
+    testImplementation("ru.ruscrafting.thirdparty:leafrtp-lite:3.2.0")
     // Jackson databind needed for Log4j JsonLayout used in Logging.addLokiAppender()
     testImplementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
     // Log4j dependencies needed for Logging class

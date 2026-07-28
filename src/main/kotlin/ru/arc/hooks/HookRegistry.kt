@@ -44,6 +44,7 @@ class HookRegistry(
     var joinListener: JoinListener? = null
     var pickupListener: PickupListener? = null
     var betterRTPListener: BetterRTPListener? = null
+    var leafRTPListener: LeafRTPListener? = null
     var respawnListener: RespawnListener? = null
     var bsListener: BSListener? = null
     var shopListener: ShopListener? = null
@@ -185,6 +186,7 @@ class HookRegistry(
         joinListener = null
         pickupListener = null
         betterRTPListener = null
+        leafRTPListener = null
         respawnListener = null
         bsListener = null
         shopListener = null
@@ -327,6 +329,9 @@ class HookRegistry(
         }
         register("BetterRTP", true) {
             betterRTPListener = registerListener(BetterRTPListener())
+        }
+        register("RTP", true) {
+            leafRTPListener = registerListener(LeafRTPListener())
         }
         register("BetterStructures", true) {
             bsListener = registerListener(BSListener())
