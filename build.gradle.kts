@@ -48,12 +48,10 @@ dependencies {
     implementation(kotlin("stdlib"))
     implementation("ru.arc:arc-core:1.0-SNAPSHOT")
     implementation("ru.arc:arc-core-logging:1.0-SNAPSHOT")
+    implementation("ru.arc:arc-core-metrics:1.0-SNAPSHOT")
     implementation("ru.arc:arc-core-redis:1.0-SNAPSHOT")
     implementation("ru.arc:arc-core-paper:1.0-SNAPSHOT")
     implementation("ru.arc:arc-core-ai:1.0-SNAPSHOT")
-
-    implementation("io.micrometer:micrometer-core:1.14.5")
-    implementation("io.micrometer:micrometer-registry-prometheus:1.14.5")
 
     // snakeyaml-engine comes transitively from arc-core
 

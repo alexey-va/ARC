@@ -115,8 +115,12 @@ object FirstRtpService {
             RtpProvider.LEAFRTP -> {
                 val region = leafRegion(player, world)
                 buildString {
-                    append("rtp player:${player.name} world:${world.name}")
-                    if (region != null) append(" region:$region")
+                    append("rtp player:${player.name}")
+                    if (region != null) {
+                        append(" region:$region")
+                    } else {
+                        append(" world:${world.name}")
+                    }
                 }
             }
         }
@@ -124,12 +128,16 @@ object FirstRtpService {
     internal fun leafRegion(
         player: Player,
         world: World,
-    ): String? {
-        if (!world.name.equals("survival", ignoreCase = true)) return null
-        return when {
-            player.hasPermission("rtp.regions.vip") -> "vip"
-            player.hasPermission("rtp.regions.newbie") -> "newbie"
-            else -> "survival"
+    ): String? =
+        when (world.name.lowercase()) {
+            "survival" ->
+                when {
+                    player.hasPermission("rtp.regions.vip") -> "vip"
+                    player.hasPermission("rtp.regions.newbie") -> "newbie"
+                    else -> "survival"
+                }
+            "mining" -> "mining"
+            "vanilla" -> "vanilla"
+            else -> null
         }
-    }
 }

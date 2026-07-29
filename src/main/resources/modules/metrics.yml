@@ -2,7 +2,7 @@
 # metrics.yml — Prometheus scrape endpoint (localhost, no auth).
 #
 # Exposed via nginx on Gercena for utils Prometheus (see gercena-metrics-proxy.conf).
-# Gauges refresh on a slow timer — scrape only reads cached values (no main-thread work).
+# Gauges refresh on slow timers — scrape only reads cached values (no platform/API work).
 # =============================================================================
 
 enabled: true
@@ -10,9 +10,13 @@ enabled: true
 bind-host: "127.0.0.1"
 bind-port: 9950
 
-# Cheap gauges: TPS, memory, players, redis (seconds)
+# JVM/OS plus cheap Paper gauges: TPS, MSPT, players, Redis (seconds)
 sample-interval-seconds: 5
 
-# Expensive: sum loaded chunks across worlds (seconds)
+# Disk and Paper world detail: chunks, entities, block entities, distances (seconds)
 heavy-sample-interval-seconds: 60
-include-loaded-chunks: true
+
+include-jvm: true
+include-system: true
+include-disk: true
+include-platform-heavy: true

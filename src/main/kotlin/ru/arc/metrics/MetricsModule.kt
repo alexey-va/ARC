@@ -1,73 +1,126 @@
 package ru.arc.metrics
 
-import io.micrometer.prometheusmetrics.PrometheusConfig
-import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
+import org.bukkit.Bukkit
+import ru.arc.ARC
+import ru.arc.config.ConfigManager
 import ru.arc.core.PluginModule
 import ru.arc.core.ScheduledTask
-import ru.arc.core.Tasks
 import ru.arc.core.repeating
-import ru.arc.core.ticks
+import ru.arc.metrics.core.ArcMetricsRuntime
+import ru.arc.metrics.core.MetricPoint
+import ru.arc.metrics.core.MetricsConfig
+import ru.arc.metrics.core.MetricsIdentity
+import ru.arc.metrics.core.RedisMetricsBinder
+import ru.arc.metrics.paper.PaperMetricsCollector
 import ru.arc.util.Logging.info
+import kotlin.time.Duration.Companion.seconds
 
-/**
- * Low-overhead Prometheus gauges for TPS, JVM memory, players, Redis, chunks.
- *
- * Values are cached on a slow repeating task; scrape only reads the registry.
- */
+/** Paper lifecycle adapter around the shared cached Prometheus runtime. */
 object MetricsModule : PluginModule {
     override val name = "Metrics"
     override val priority = 34
 
-    private var registry: PrometheusMeterRegistry? = null
-    private var httpServer: MetricsHttpServer? = null
-    private var sampler: MetricsSampler? = null
-    private var cheapTask: ScheduledTask? = null
+    private var runtime: ArcMetricsRuntime? = null
+    private var collector: PaperMetricsCollector? = null
+    private var redisMetrics: RedisMetricsBinder? = null
+    private var fastTask: ScheduledTask? = null
     private var heavyTask: ScheduledTask? = null
 
     override fun init() {
         if (System.getProperty("arc.test.unit") != null) return
-        MetricsConfig.reload()
-        val cfg = MetricsConfig.current()
+        shutdown()
+
+        val cfg = MetricsConfig(ConfigManager.ofModule(ARC.instance.dataPath, "metrics.yml"))
         if (!cfg.enabled) {
-            shutdown()
             info("Prometheus metrics disabled")
             return
         }
 
-        val prom = registry ?: PrometheusMeterRegistry(PrometheusConfig.DEFAULT).also { registry = it }
-        val sample = MetricsSampler(prom)
-        sampler = sample
-        httpServer = MetricsHttpServer(prom).also { it.start() }
-
-        cheapTask?.cancel()
-        heavyTask?.cancel()
-        val cheapTicks = (cfg.sampleIntervalSeconds * 20).coerceAtLeast(20)
-        cheapTask =
-            repeating(cheapTicks.ticks, delay = 40.ticks) {
-                sample.sampleCheap()
+        val metrics =
+            ArcMetricsRuntime(
+                config = cfg,
+                identity =
+                    MetricsIdentity(
+                        application = "ARC",
+                        platform = "paper",
+                        serverName = ARC.serverName ?: "unknown",
+                        version = ARC.instance.pluginMeta.version,
+                    ),
+                dataPath = ARC.instance.dataPath,
+            )
+        val paper = PaperMetricsCollector(Bukkit.getServer())
+        val redisBinder = ARC.redisManager?.let { RedisMetricsBinder(it, metrics.registry) }
+        try {
+            metrics.start()
+            runtime = metrics
+            collector = paper
+            redisMetrics = redisBinder
+            sampleFast()
+            if (cfg.includePlatformHeavy) sampleHeavy()
+            fastTask =
+                repeating(
+                    cfg.sampleIntervalSeconds.seconds,
+                    delay = cfg.sampleIntervalSeconds.seconds,
+                ) {
+                    sampleFast()
+                }
+            if (cfg.includePlatformHeavy) {
+                heavyTask =
+                    repeating(
+                        cfg.heavySampleIntervalSeconds.seconds,
+                        delay = cfg.heavySampleIntervalSeconds.seconds,
+                    ) {
+                        sampleHeavy()
+                    }
             }
-        val heavyTicks = (cfg.heavySampleIntervalSeconds * 20).coerceAtLeast(200)
-        heavyTask =
-            repeating(heavyTicks.ticks, delay = 200.ticks) {
-                sample.sampleHeavy()
-            }
-        sample.sampleCheap()
+        } catch (failure: Throwable) {
+            redisBinder?.close()
+            metrics.close()
+            throw failure
+        }
     }
 
-    override fun reload() {
-        httpServer?.stop()
-        init()
+    private fun sampleFast() {
+        val metrics = runtime ?: return
+        val paper = collector ?: return
+        metrics.recordSnapshot("paper-fast", "platform") {
+            val redis = ARC.redisManager
+            paper.fastSnapshot() +
+                MetricPoint(
+                    "arc_redis_connected",
+                    "ARC Redis connection state",
+                    if (redis?.isConnected() == true) 1.0 else 0.0,
+                ) +
+                MetricPoint(
+                    "arc_redis_subscription_active",
+                    "ARC Redis subscription state",
+                    if (redis?.isSubscriptionActive() == true) 1.0 else 0.0,
+                ) +
+                MetricPoint(
+                    "arc_redis_channels",
+                    "Registered ARC Redis channels",
+                    (redis?.getChannelCount() ?: 0).toDouble(),
+                )
+        }
     }
+
+    private fun sampleHeavy() {
+        val metrics = runtime ?: return
+        val paper = collector ?: return
+        metrics.recordSnapshot("paper-heavy", "platform-heavy", paper::heavySnapshot)
+    }
+
+    override fun reload() = init()
 
     override fun shutdown() {
-        cheapTask?.cancel()
+        fastTask?.cancel()
         heavyTask?.cancel()
-        cheapTask = null
+        fastTask = null
         heavyTask = null
-        httpServer?.stop()
-        httpServer = null
-        sampler = null
-        registry?.close()
-        registry = null
+        collector = null
+        redisMetrics?.close()
+        redisMetrics = null
+        runtime?.close()
+        runtime = null
     }
 }
