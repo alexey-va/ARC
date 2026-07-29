@@ -315,7 +315,11 @@ class HookRegistry(
         register("LootChest", true) { lootChestHook = LootChestHook() }
         register("YamipaPlugin", true) { yamipaHook = YamipaHook() }
         register("ItemsAdder", true) {
-            itemsAdderHook = ItemsAdderHook()
+            val itemsAdder = checkNotNull(Bukkit.getPluginManager().getPlugin("ItemsAdder"))
+            val resourcePackZip = itemsAdder.dataFolder.toPath().resolve("output/generated.zip")
+            val syncScript = BundledResourcePackSyncScript.install(ARC.instance.dataFolder.toPath())
+            val config = ResourcePackSyncConfig.load(ARC.instance.dataFolder.toPath())
+            itemsAdderHook = registerListener(ItemsAdderHook(resourcePackZip, syncScript, config))
         }
         register("Citizens", true) {
             val hook = CitizensHook()

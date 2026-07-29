@@ -153,6 +153,7 @@ dependencies {
     testImplementation(libs.net.citizensnpcs.citizens.main) { exclude(group = "*", module = "*") }
     testImplementation(libs.com.magmaguy.elitemobs)
     testImplementation(libs.com.github.zrips.cmilib)
+    testImplementation(libs.com.github.lonedev6.api.itemsadder)
     testImplementation("ru.ruscrafting.thirdparty:leafrtp-lite:3.2.0")
     // Jackson databind needed for Log4j JsonLayout used in Logging.addLokiAppender()
     testImplementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")

@@ -1,0 +1,19 @@
+# Public defaults only. Put real credentials in the private server config:
+# plugins/ARC/modules/resourcepack-sync.yml
+enabled: true
+
+aws:
+  access-key-id: ""
+  secret-access-key: ""
+  default-region: "ru-central1"
+  cli: "aws"
+
+s3:
+  endpoint: "https://storage.yandexcloud.net"
+  bucket: "ruscraftinresources"
+  upload-name: "RusCraftingResource.zip"
+  key: "RusCraftingResource.zip"
+  manifest-key: "RusCraftingResource.zip.sha256"
+  archive-prefix: "archive"
+
+force-upload: false
