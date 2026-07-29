@@ -23,10 +23,11 @@ class PAPIHook : PlaceholderExpansion() {
     override fun getVersion(): String = "1.0"
     override fun persist(): Boolean = true
 
-    override fun onRequest(player: OfflinePlayer, params: String): String? {
+    override fun onRequest(player: OfflinePlayer?, params: String): String? {
         return when {
             params.equals("players", ignoreCase = true) ->
                 PlayerManager.getPlayerNames().joinToString(", ")
+            player == null -> null
             params.split("_")[0] == "jobsboosts" -> jobsBoosts(player, params)
             params.startsWith("rubycount") -> formatRubyCount(player)
             params.startsWith("guildrank") -> formatGuildRankAndPrestige(player)

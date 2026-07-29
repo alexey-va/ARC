@@ -4,6 +4,7 @@ import io.kotest.matchers.shouldBe
 import org.bukkit.Location
 import org.mockbukkit.mockbukkit.world.WorldMock
 import ru.arc.KotestTestBase
+import ru.arc.util.Common
 
 class LocationPoolTest :
     KotestTestBase({
@@ -20,6 +21,50 @@ class LocationPoolTest :
 
                 pool.id shouldBe "test-pool"
                 pool.isEmpty shouldBe true
+            }
+        }
+
+        describe("LocationPool persistence") {
+            it("loads the tracked legacy locations field") {
+                val json =
+                    """
+                    {
+                      "id": "spawn",
+                      "locations": {
+                        "map": {
+                          "1.0": {
+                            "value": {
+                              "server": "test-server",
+                              "world": "test-world",
+                              "x": 10.5,
+                              "y": 20.5,
+                              "z": 30.5,
+                              "yaw": 0.0,
+                              "pitch": 0.0
+                            },
+                            "weight": 1.0
+                          }
+                        },
+                        "totalWeight": 1.0
+                      }
+                    }
+                    """.trimIndent()
+
+                val pool = Common.prettyGson.fromJson(json, LocationPool::class.java)
+
+                pool.id shouldBe "spawn"
+                pool.size shouldBe 1
+                pool.getLocalLocations().size shouldBe 1
+            }
+
+            it("keeps the stable locations field when saving") {
+                val pool = LocationPool("spawn")
+                pool.addLocation(Location(world, 10.5, 20.5, 30.5))
+
+                val json = Common.prettyGson.toJson(pool)
+
+                json.contains("\"locations\"") shouldBe true
+                json.contains("\"_locations\"") shouldBe false
             }
         }
 

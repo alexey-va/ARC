@@ -1,5 +1,6 @@
 package ru.arc.common.locationpools
 
+import com.google.gson.annotations.SerializedName
 import org.bukkit.Location
 import ru.arc.common.ServerLocation
 import ru.arc.common.WeightedRandom
@@ -15,6 +16,7 @@ import ru.arc.common.WeightedRandom
 class LocationPool(
     val id: String,
 ) {
+    @SerializedName("locations")
     private val _locations = WeightedRandom<ServerLocation>()
     private var _dirty = false
 

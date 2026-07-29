@@ -147,6 +147,7 @@ dependencies {
     testImplementation(libs.com.github.emibergo02.rediseconomy)
     testImplementation(libs.io.lettuce.lettuce.core)
     testImplementation(libs.org.jsoup.jsoup)
+    testImplementation(libs.me.clip.placeholderapi)
     testImplementation(libs.org.eclipse.jetty.websocket.websocket.client)
     testImplementation("commons-lang:commons-lang:2.6")
     testImplementation(libs.com.zrips.cmi.api)
