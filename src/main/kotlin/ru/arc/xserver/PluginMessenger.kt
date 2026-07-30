@@ -79,26 +79,27 @@ class PluginMessenger : PluginMessageListener {
                 .stringList("rtp-respawn.allowed-worlds", listOf("survival", "mining", "vanilla"))
                 .map { it.trim().lowercase(Locale.ROOT) }
                 .toSet()
-        if (request.worldName !in allowedWorlds) {
+        val worldName = resolveNetworkRtpWorld(request.worldName, player.world.name)
+        if (worldName !in allowedWorlds) {
             player.sendMessage(TextUtil.mm("<red>Для этого мира RTP недоступен."))
-            warn("Rejected network RTP request {} for disallowed world {}", request.requestId, request.worldName)
+            warn("Rejected network RTP request {} for disallowed world {}", request.requestId, worldName)
             return
         }
-        val world = Bukkit.getWorld(request.worldName)
+        val world = Bukkit.getWorld(worldName)
         if (world == null) {
             player.sendMessage(TextUtil.mm("<red>Мир временно недоступен. Попробуйте позже."))
-            warn("Rejected network RTP request {} because world {} is not loaded", request.requestId, request.worldName)
+            warn("Rejected network RTP request {} because world {} is not loaded", request.requestId, worldName)
             return
         }
 
         when (request.mode) {
             NetworkRtpMode.FIRST_ENTRY ->
                 if (FirstRtpCoordinator.needsFirstRtp(player, world)) {
-                    handleFirstEntryRtp(player, request, world)
+                    handleFirstEntryRtp(player, request, world, worldName)
                 } else {
-                    handleRegularRtp(player, request, world)
+                    handleRegularRtp(player, request, world, worldName)
                 }
-            NetworkRtpMode.REGULAR -> handleRegularRtp(player, request, world)
+            NetworkRtpMode.REGULAR -> handleRegularRtp(player, request, world, worldName)
         }
     }
 
@@ -106,11 +107,12 @@ class PluginMessenger : PluginMessageListener {
         player: Player,
         request: NetworkRtpRequest,
         world: org.bukkit.World,
+        worldName: String,
     ) {
         when (val result = FirstRtpCoordinator.route(player, world)) {
             FirstRtpRouteResult.ReturnedToWorldSpawn ->
                 player.sendMessage(
-                    TextUtil.mm("<green>Вы вернулись в мир <white>${request.worldName}<green>."),
+                    TextUtil.mm("<green>Вы вернулись в мир <white>$worldName<green>."),
                 )
 
             is FirstRtpRouteResult.Started ->
@@ -118,7 +120,7 @@ class PluginMessenger : PluginMessageListener {
                     "Network RTP request {} started for {} in {} through {}",
                     request.requestId,
                     player.name,
-                    request.worldName,
+                    worldName,
                     result.result.provider,
                 )
 
@@ -140,6 +142,7 @@ class PluginMessenger : PluginMessageListener {
         player: Player,
         request: NetworkRtpRequest,
         world: org.bukkit.World,
+        worldName: String,
     ) {
         when (val result = RegularRtpService.start(player, world)) {
             is FirstRtpResult.Started ->
@@ -147,7 +150,7 @@ class PluginMessenger : PluginMessageListener {
                     "Regular network RTP request {} started for {} in {} through {}",
                     request.requestId,
                     player.name,
-                    request.worldName,
+                    worldName,
                     result.provider,
                 )
 
@@ -189,3 +192,13 @@ class PluginMessenger : PluginMessageListener {
         sendBungeeCord(player, bytes.toByteArray())
     }
 }
+
+internal fun resolveNetworkRtpWorld(
+    requestedWorld: String,
+    playerWorld: String,
+): String =
+    if (requestedWorld == NetworkRtpRequest.CURRENT_WORLD) {
+        playerWorld.trim().lowercase(Locale.ROOT)
+    } else {
+        requestedWorld
+    }
