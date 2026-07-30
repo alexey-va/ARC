@@ -115,11 +115,11 @@ object FirstRtpService {
             RtpProvider.LEAFRTP -> {
                 val region = leafRegion(player, world)
                 buildString {
-                    append("rtp player:${player.name}")
+                    append("rtp player=${player.name}")
                     if (region != null) {
-                        append(" region:$region")
+                        append(" region=$region")
                     } else {
-                        append(" world:${world.name}")
+                        append(" world=${world.name}")
                     }
                 }
             }

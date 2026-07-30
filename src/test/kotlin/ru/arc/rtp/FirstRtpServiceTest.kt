@@ -34,7 +34,7 @@ class FirstRtpServiceTest :
             whenever(player.hasPermission("rtp.regions.newbie")).thenReturn(true)
 
             FirstRtpService.buildCommand(RtpProvider.LEAFRTP, player, world) shouldBe
-                "rtp player:Steve region:vip"
+                "rtp player=Steve region=vip"
         }
 
         test("selects newbie LeafRTP region") {
@@ -42,7 +42,7 @@ class FirstRtpServiceTest :
             whenever(player.hasPermission("rtp.regions.newbie")).thenReturn(true)
 
             FirstRtpService.buildCommand(RtpProvider.LEAFRTP, player, world) shouldBe
-                "rtp player:Steve region:newbie"
+                "rtp player=Steve region=newbie"
         }
 
         test("selects the base survival region without creating a world override") {
@@ -50,28 +50,28 @@ class FirstRtpServiceTest :
             whenever(player.hasPermission("rtp.regions.newbie")).thenReturn(false)
 
             FirstRtpService.buildCommand(RtpProvider.LEAFRTP, player, world) shouldBe
-                "rtp player:Steve region:survival"
+                "rtp player=Steve region=survival"
         }
 
         test("selects the explicit mining region") {
             whenever(world.name).thenReturn("mining")
 
             FirstRtpService.buildCommand(RtpProvider.LEAFRTP, player, world) shouldBe
-                "rtp player:Steve region:mining"
+                "rtp player=Steve region=mining"
         }
 
         test("selects the explicit vanilla region") {
             whenever(world.name).thenReturn("vanilla")
 
             FirstRtpService.buildCommand(RtpProvider.LEAFRTP, player, world) shouldBe
-                "rtp player:Steve region:vanilla"
+                "rtp player=Steve region=vanilla"
         }
 
         test("falls back to a world selector for an unconfigured world") {
             whenever(world.name).thenReturn("event_world")
 
             FirstRtpService.buildCommand(RtpProvider.LEAFRTP, player, world) shouldBe
-                "rtp player:Steve world:event_world"
+                "rtp player=Steve world=event_world"
         }
 
         test("rejects a disabled provider without creating a pending respawn") {
