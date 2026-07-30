@@ -134,6 +134,8 @@ open class ARC : JavaPlugin() {
     override fun onDisable() {
         info("Stopping ARC plugin")
         ModuleRegistry.shutdownAll()
+        pluginMessenger?.shutdown()
+        pluginMessenger = null
         Tasks.reset()
         info("ARC plugin disabled")
     }

@@ -5,21 +5,18 @@ import org.bukkit.command.CommandSender
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.tabComplete
 import ru.arc.commands.arc.tabCompletePlayers
-import ru.arc.rtp.FirstRtpResult
-import ru.arc.rtp.FirstRtpService
+import ru.arc.rtp.FirstRtpCoordinator
+import ru.arc.rtp.FirstRtpRouteResult
 import ru.arc.rtp.RtpPlayerRegistry
 import ru.arc.util.Logging.error
 import ru.arc.util.TextUtil
 import java.util.UUID
 
 /**
- * Internal compatibility bridge for the Denizen cross-server flow.
+ * Administrative entry point for the native first-RTP flow.
  *
  * /arc firstrtp <player> <world>
  * /arc firstrtp reset <player|uuid> [world|all]
- *
- * The optional third argument is a temporary compatibility bridge for the old
- * Denizen script, which used to own persistence and the first-RTP decision.
  */
 object FirstRtpSubCommand : SubCommand {
     override val configKey = "firstrtp"
@@ -27,7 +24,7 @@ object FirstRtpSubCommand : SubCommand {
     override val defaultPermission = "arc.rtp-respawn"
     override val defaultDescription = "Перевести игрока в мир, при первом посещении запустить RTP"
     override val defaultUsage =
-        "/arc firstrtp <player> <world> [set-respawn:true|false] | reset <player|uuid> [world|all]"
+        "/arc firstrtp <player> <world> | reset <player|uuid> [world|all]"
 
     override fun execute(
         sender: CommandSender,
@@ -37,6 +34,10 @@ object FirstRtpSubCommand : SubCommand {
             return reset(sender, args)
         }
         if (!requireArgs(sender, args, 2)) return true
+        if (args.size != 2) {
+            sendUsage(sender)
+            return true
+        }
 
         val player = getOnlinePlayer(sender, args[0]) ?: return true
         val world =
@@ -45,32 +46,27 @@ object FirstRtpSubCommand : SubCommand {
                     sender.sendMessage(TextUtil.mm("<red>Мир <white>${args[1]}<red> не загружен", true))
                     return true
                 }
-        if (args.size >= 3) {
-            val setRespawn =
-                args[2].toBooleanStrictOrNull()
-                    ?: run {
-                        sendUsage(sender)
-                        return true
-                    }
-            startRtp(sender, player, world, setRespawn, persist = false)
-            return true
-        }
+        when (val result = FirstRtpCoordinator.route(player, world)) {
+            FirstRtpRouteResult.ReturnedToWorldSpawn ->
+                sender.sendMessage(
+                    TextUtil.mm(
+                        "<green>Игрок <white>${player.name}<green> возвращён в мир <white>${world.name}",
+                        true,
+                    ),
+                )
 
-        val state = RtpPlayerRegistry.state(player.uniqueId, world.name)
-        if (state.hasTeleportedToWorld) {
-            if (player.world.uid != world.uid) {
-                player.teleport(world.spawnLocation)
-            }
-            sender.sendMessage(
-                TextUtil.mm(
-                    "<green>Игрок <white>${player.name}<green> возвращён в мир <white>${world.name}",
-                    true,
-                ),
-            )
-            return true
-        }
+            is FirstRtpRouteResult.Started ->
+                sender.sendMessage(
+                    TextUtil.mm(
+                        "<green>RTP запущен для <white>${player.name}<green> через " +
+                            "<white>${result.result.provider.name.lowercase()}",
+                        true,
+                    ),
+                )
 
-        startRtp(sender, player, world, setRespawn = !state.hasTeleported, persist = true)
+            is FirstRtpRouteResult.Rejected ->
+                sender.sendMessage(TextUtil.mm("<red>Не удалось запустить RTP: <white>${result.reason}", true))
+        }
         return true
     }
 
@@ -147,28 +143,6 @@ object FirstRtpSubCommand : SubCommand {
         return null
     }
 
-    private fun startRtp(
-        sender: CommandSender,
-        player: org.bukkit.entity.Player,
-        world: org.bukkit.World,
-        setRespawn: Boolean,
-        persist: Boolean,
-    ) {
-        when (val result = FirstRtpService.start(player, world, setRespawn, persist)) {
-            is FirstRtpResult.Started ->
-                sender.sendMessage(
-                    TextUtil.mm(
-                        "<green>RTP запущен для <white>${player.name}<green> через " +
-                            "<white>${result.provider.name.lowercase()}",
-                        true,
-                    ),
-                )
-
-            is FirstRtpResult.Rejected ->
-                sender.sendMessage(TextUtil.mm("<red>Не удалось запустить RTP: <white>${result.reason}", true))
-        }
-    }
-
     override fun tabComplete(
         sender: CommandSender,
         args: Array<String>,
@@ -183,7 +157,6 @@ object FirstRtpSubCommand : SubCommand {
             when (args.size) {
                 1 -> (listOf("reset") + Bukkit.getOnlinePlayers().map { it.name }).tabComplete(args[0])
                 2 -> Bukkit.getWorlds().map { it.name }.tabComplete(args[1])
-                3 -> listOf("true", "false").tabComplete(args[2])
                 else -> null
             }
         }

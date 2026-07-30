@@ -372,4 +372,8 @@ respawn-intercept-worlds: !!set {}
 rtp-respawn:
   # Переключать на leafrtp только вместе с отдельным cutover конфигов и permissions.
   provider: betterrtp
+  allowed-worlds:
+  - survival
+  - mining
+  - vanilla
   set-spawn-message: <green>Ваша точка возрождения установлена здесь! <gray>Чтобы изменить ее, используйте команду /sethome
