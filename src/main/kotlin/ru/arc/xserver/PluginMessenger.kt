@@ -92,7 +92,12 @@ class PluginMessenger : PluginMessageListener {
         }
 
         when (request.mode) {
-            NetworkRtpMode.FIRST_ENTRY -> handleFirstEntryRtp(player, request, world)
+            NetworkRtpMode.FIRST_ENTRY ->
+                if (FirstRtpCoordinator.needsFirstRtp(player, world)) {
+                    handleFirstEntryRtp(player, request, world)
+                } else {
+                    handleRegularRtp(player, request, world)
+                }
             NetworkRtpMode.REGULAR -> handleRegularRtp(player, request, world)
         }
     }

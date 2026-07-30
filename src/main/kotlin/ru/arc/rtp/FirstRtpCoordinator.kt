@@ -13,6 +13,18 @@ sealed interface FirstRtpRouteResult {
 
 /** Owns the first-world/first-network decision independently of transport. */
 object FirstRtpCoordinator {
+    /**
+     * Public network `/rtp` uses the one-time flow only before this player has
+     * ever reached the requested world. Later requests must use the regular
+     * provider instead of becoming a no-op after the backend switch.
+     */
+    fun needsFirstRtp(
+        player: Player,
+        world: World,
+    ): Boolean = needsFirstRtp(RtpPlayerRegistry.state(player.uniqueId, world.name))
+
+    internal fun needsFirstRtp(state: PlayerRtpState): Boolean = !state.hasTeleportedToWorld
+
     fun route(
         player: Player,
         world: World,

@@ -18,6 +18,15 @@ class FirstRtpCoordinatorTest :
         every { currentWorld.uid } returns UUID.randomUUID()
         every { targetWorld.uid } returns UUID.randomUUID()
 
+        "network RTP uses the first-entry flow only for an unvisited world" {
+            FirstRtpCoordinator.needsFirstRtp(
+                PlayerRtpState(hasTeleported = false, hasTeleportedToWorld = false),
+            ) shouldBe true
+            FirstRtpCoordinator.needsFirstRtp(
+                PlayerRtpState(hasTeleported = true, hasTeleportedToWorld = true),
+            ) shouldBe false
+        }
+
         "returns an existing visitor to the world spawn without starting RTP" {
             var started = false
             FirstRtpCoordinator.route(
