@@ -5,10 +5,12 @@ import com.google.gson.GsonBuilder
 import com.google.gson.InstanceCreator
 import org.bukkit.inventory.ItemStack
 import ru.arc.common.locationpools.LocationPool
-import ru.arc.redis.gson.PolymorphismAdapter
+import ru.arc.jobs.JobTarget
+import ru.arc.jobs.JobTargetJsonAdapter
 import ru.arc.network.repos.ItemList
 import ru.arc.network.repos.ItemListSerializer
 import ru.arc.network.repos.ItemStackSerializer
+import ru.arc.redis.gson.PolymorphismAdapter
 import ru.arc.xserver.XAction
 
 object Common {
@@ -19,6 +21,7 @@ object Common {
     @JvmField
     val gson: Gson = GsonBuilder()
         .registerTypeHierarchyAdapter(XAction::class.java, PolymorphismAdapter<XAction>())
+        .registerTypeHierarchyAdapter(JobTarget::class.java, JobTargetJsonAdapter)
         .registerTypeHierarchyAdapter(ItemStack::class.java, ItemStackSerializer())
         .registerTypeHierarchyAdapter(ItemList::class.java, ItemListSerializer())
         .registerTypeAdapter(LocationPool::class.java, locationPoolCreator)
@@ -27,9 +30,9 @@ object Common {
     @JvmField
     val prettyGson: Gson = GsonBuilder().setPrettyPrinting()
         .registerTypeHierarchyAdapter(XAction::class.java, PolymorphismAdapter<XAction>())
+        .registerTypeHierarchyAdapter(JobTarget::class.java, JobTargetJsonAdapter)
         .registerTypeHierarchyAdapter(ItemStack::class.java, ItemStackSerializer())
         .registerTypeHierarchyAdapter(ItemList::class.java, ItemListSerializer())
         .registerTypeAdapter(LocationPool::class.java, locationPoolCreator)
         .create()
 }
-
