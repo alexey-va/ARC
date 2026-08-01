@@ -135,6 +135,55 @@ class OpsHttpServerTest : FreeSpec({
             }
         }
 
+        "should discover LuckPerms routes and hide disabled writes" {
+            val readsOnly =
+                testConfig.copy(
+                    luckpermsGroupsReadEnabled = true,
+                    luckpermsUsersReadEnabled = true,
+                    luckpermsGroupsWriteEnabled = false,
+                    luckpermsUsersWriteEnabled = false,
+                    luckpermsMigrationsEnabled = false,
+                )
+            val server = OpsHttpServer { readsOnly }
+            server.start()
+            try {
+                val conn =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/",
+                        token = readsOnly.token,
+                    )
+                val body = readBody(conn)
+                body shouldContain "GET /ops/luckperms/groups"
+                body shouldContain "POST /ops/luckperms/check"
+                body.contains("/ops/luckperms/migrations/apply") shouldBe false
+            } finally {
+                server.stop()
+            }
+        }
+
+        "should reject LuckPerms point preview when write gate is disabled" {
+            val readsOnly =
+                testConfig.copy(
+                    luckpermsGroupsWriteEnabled = false,
+                    luckpermsUsersWriteEnabled = false,
+                )
+            val server = OpsHttpServer { readsOnly }
+            server.start()
+            try {
+                val conn =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/luckperms/subjects/group/builder/preview",
+                        method = "POST",
+                        token = readsOnly.token,
+                        body = """{"version":1,"reason":"test","operations":[{"op":"set_permission","permission":"example.node"}]}""",
+                    )
+                conn.responseCode shouldBe 403
+                readBody(conn) shouldContain "enabled only on spawn"
+            } finally {
+                server.stop()
+            }
+        }
+
         "should reject oversized request bodies" {
             val server = OpsHttpServer { testConfig }
             server.start()

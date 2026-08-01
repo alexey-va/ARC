@@ -2,6 +2,11 @@ package ru.arc.ops
 
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
+import ru.arc.ARC
+import ru.arc.ops.luckperms.LpSubjectRef
+import ru.arc.ops.luckperms.LpSubjectType
+import ru.arc.ops.luckperms.LpWriteGateException
+import ru.arc.ops.luckperms.OpsLuckPermsHandlers
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
@@ -171,6 +176,69 @@ class OpsHttpServer(
 
             method == "GET" && segments == listOf("permission") ->
                 handlePermission(exchange, query)
+
+            method == "GET" && segments == listOf("luckperms", "groups") ->
+                handleLuckPermsRead(exchange, cfg.luckpermsGroupsReadEnabled) {
+                    OpsLuckPermsHandlers.current().groups()
+                }
+
+            method == "GET" && segments.size == 3 && segments[0] == "luckperms" && segments[1] == "groups" ->
+                handleLuckPermsRead(exchange, cfg.luckpermsGroupsReadEnabled) {
+                    OpsLuckPermsHandlers.current().group(decodeSegment(segments[2]))
+                }
+
+            method == "GET" && segments == listOf("luckperms", "users", "lookup") ->
+                handleLuckPermsRead(exchange, cfg.luckpermsUsersReadEnabled) {
+                    OpsLuckPermsHandlers.current().userLookup(query["name"] ?: throw IllegalArgumentException("Missing name"))
+                }
+
+            method == "GET" && segments.size == 3 && segments[0] == "luckperms" && segments[1] == "users" ->
+                handleLuckPermsRead(exchange, cfg.luckpermsUsersReadEnabled) {
+                    OpsLuckPermsHandlers.current().user(decodeSegment(segments[2]))
+                }
+
+            method == "POST" && segments == listOf("luckperms", "check") ->
+                handleLuckPermsRead(exchange, cfg.luckpermsUsersReadEnabled) {
+                    OpsLuckPermsHandlers.current().check(readRequestBody(exchange))
+                }
+
+            method == "POST" &&
+                segments.size == 5 &&
+                segments[0] == "luckperms" &&
+                segments[1] == "subjects" &&
+                segments[4] == "preview" ->
+                handleLuckPermsWrite(exchange, cfg, parseLuckPermsSubject(segments[2], segments[3]), preview = true)
+
+            method == "POST" &&
+                segments.size == 5 &&
+                segments[0] == "luckperms" &&
+                segments[1] == "subjects" &&
+                segments[4] == "apply" ->
+                handleLuckPermsWrite(exchange, cfg, parseLuckPermsSubject(segments[2], segments[3]), preview = false)
+
+            method == "POST" && segments == listOf("luckperms", "reconcile", "preview") ->
+                handleLuckPermsMigrationPreview(exchange, cfg)
+
+            method == "POST" && segments == listOf("luckperms", "reconcile", "apply") ->
+                handleLuckPermsMigrationApply(exchange, cfg)
+
+            method == "POST" && segments == listOf("luckperms", "migrations", "preview") ->
+                handleLuckPermsMigrationPreview(exchange, cfg)
+
+            method == "POST" && segments == listOf("luckperms", "migrations", "apply") ->
+                handleLuckPermsMigrationApply(exchange, cfg)
+
+            method == "GET" && segments.size == 3 && segments[0] == "luckperms" && segments[1] == "migrations" ->
+                handleLuckPermsRead(exchange, cfg.luckpermsMigrationsEnabled) {
+                    OpsLuckPermsHandlers.current().migrationStatus(decodeSegment(segments[2]))
+                }
+
+            method == "POST" &&
+                segments.size == 4 &&
+                segments[0] == "luckperms" &&
+                segments[1] == "migrations" &&
+                segments[3] == "rollback" ->
+                handleLuckPermsMigrationRollback(exchange, cfg, decodeSegment(segments[2]))
 
             method == "GET" && segments == listOf("errors") ->
                 respondOk(
@@ -1374,6 +1442,139 @@ class OpsHttpServer(
     private fun readRequestBody(exchange: HttpExchange): String =
         readOpsRequestBody(exchange.requestBody)
 
+    private fun handleLuckPermsRead(
+        exchange: HttpExchange,
+        enabled: Boolean,
+        block: () -> Map<String, Any?>,
+    ) {
+        if (!enabled) {
+            respondError(exchange, 403, "LuckPerms read endpoint disabled in config")
+            return
+        }
+        handleLuckPermsErrors(exchange, block)
+    }
+
+    private fun handleLuckPermsWrite(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        ref: LpSubjectRef,
+        preview: Boolean,
+    ) {
+        val enabled =
+            when (ref.type) {
+                LpSubjectType.GROUP -> cfg.luckpermsGroupsWriteEnabled
+                LpSubjectType.USER -> cfg.luckpermsUsersWriteEnabled
+            }
+        if (!enabled || ARC.serverName != "spawn") {
+            respondError(exchange, 403, "LuckPerms writes are enabled only on spawn")
+            return
+        }
+        handleLuckPermsErrors(exchange) {
+            val body = readRequestBody(exchange)
+            if (preview) OpsLuckPermsHandlers.current().preview(ref, body) else OpsLuckPermsHandlers.current().apply(ref, body)
+        }
+    }
+
+    private fun handleLuckPermsMigrationPreview(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+    ) {
+        if (!cfg.luckpermsMigrationsEnabled || ARC.serverName != "spawn") {
+            respondError(exchange, 403, "LuckPerms migrations are enabled only on spawn")
+            return
+        }
+        handleLuckPermsErrors(exchange) {
+            OpsLuckPermsHandlers.current().migrationPreview(readRequestBody(exchange))
+        }
+    }
+
+    private fun handleLuckPermsMigrationApply(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+    ) {
+        if (!cfg.luckpermsMigrationsEnabled || ARC.serverName != "spawn") {
+            respondError(exchange, 403, "LuckPerms migrations are enabled only on spawn")
+            return
+        }
+        handleLuckPermsErrors(exchange) {
+            val root = com.google.gson.JsonParser.parseString(readRequestBody(exchange)).asJsonObject
+            require(root.keySet() == setOf("version", "jobId", "idempotencyKey")) {
+                "Unknown migration apply fields"
+            }
+            require(root.get("version")?.asInt == 1) { "Unsupported LuckPerms request version" }
+            val jobId = root.get("jobId")?.asString ?: throw IllegalArgumentException("Missing jobId")
+            val key = root.get("idempotencyKey")?.asString ?: throw IllegalArgumentException("Missing idempotencyKey")
+            OpsLuckPermsHandlers.current().migrationApply(
+                jobId,
+                com.google.gson.Gson().toJson(mapOf("version" to 1, "idempotencyKey" to key)),
+            )
+        }
+    }
+
+    private fun handleLuckPermsMigrationRollback(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        jobId: String,
+    ) {
+        if (!cfg.luckpermsMigrationsEnabled || ARC.serverName != "spawn") {
+            respondError(exchange, 403, "LuckPerms migrations are enabled only on spawn")
+            return
+        }
+        handleLuckPermsErrors(exchange) {
+            OpsLuckPermsHandlers.current().migrationRollback(jobId, readRequestBody(exchange))
+        }
+    }
+
+    private fun handleLuckPermsErrors(
+        exchange: HttpExchange,
+        block: () -> Map<String, Any?>,
+    ) {
+        try {
+            respondOk(exchange, block())
+        } catch (e: NoSuchElementException) {
+            respondError(exchange, 404, e.message ?: "LuckPerms subject not found")
+        } catch (e: LpWriteGateException) {
+            respondError(exchange, 403, e.message ?: "LuckPerms write disabled")
+        } catch (e: IllegalArgumentException) {
+            respondError(exchange, 422, e.message ?: "Invalid LuckPerms request")
+        } catch (e: IllegalStateException) {
+            respondError(exchange, 409, e.message ?: "LuckPerms state conflict")
+        } catch (e: java.util.concurrent.CompletionException) {
+            val cause = e.cause ?: e
+            when (cause) {
+                is NoSuchElementException -> respondError(exchange, 404, cause.message ?: "LuckPerms subject not found")
+                is LpWriteGateException -> respondError(exchange, 403, cause.message ?: "LuckPerms write disabled")
+                is IllegalArgumentException -> respondError(exchange, 422, cause.message ?: "Invalid LuckPerms request")
+                is IllegalStateException -> respondError(exchange, 409, cause.message ?: "LuckPerms state conflict")
+                else -> throw e
+            }
+        }
+    }
+
+    private fun parseLuckPermsSubject(
+        type: String,
+        rawIdentifier: String,
+    ): LpSubjectRef =
+        LpSubjectRef(
+            when (type) {
+                "group" -> LpSubjectType.GROUP
+                "user" -> LpSubjectType.USER
+                else -> throw IllegalArgumentException("Unsupported LuckPerms subject type: $type")
+            },
+            decodeSegment(rawIdentifier),
+        )
+
+    private fun decodeSegment(value: String): String = URLDecoder.decode(value, StandardCharsets.UTF_8)
+
+    private fun respondError(
+        exchange: HttpExchange,
+        status: Int,
+        message: String,
+    ) {
+        val (code, body) = OpsJson.error(status, message)
+        respond(exchange, code, body)
+    }
+
     private fun routes(cfg: OpsHttpConfig): Map<String, Any?> {
         val routes =
             mutableListOf(
@@ -1473,6 +1674,27 @@ class OpsHttpServer(
         if (cfg.npcsWriteEnabled) {
             routes += "PUT /ops/npcs[/{id}] NpcSpec (create without id; patch existing with id)"
             routes += "DELETE /ops/npcs/{id}"
+        }
+        if (cfg.luckpermsGroupsReadEnabled) {
+            routes += "GET /ops/luckperms/groups"
+            routes += "GET /ops/luckperms/groups/{name}"
+        }
+        if (cfg.luckpermsUsersReadEnabled) {
+            routes += "GET /ops/luckperms/users/{uuid}"
+            routes += "GET /ops/luckperms/users/lookup?name="
+            routes += "POST /ops/luckperms/check"
+        }
+        if (cfg.luckpermsGroupsWriteEnabled || cfg.luckpermsUsersWriteEnabled) {
+            routes += "POST /ops/luckperms/subjects/{group|user}/{id}/preview"
+            routes += "POST /ops/luckperms/subjects/{group|user}/{id}/apply"
+        }
+        if (cfg.luckpermsMigrationsEnabled) {
+            routes += "POST /ops/luckperms/reconcile/preview"
+            routes += "POST /ops/luckperms/reconcile/apply"
+            routes += "POST /ops/luckperms/migrations/preview"
+            routes += "POST /ops/luckperms/migrations/apply"
+            routes += "GET /ops/luckperms/migrations/{jobId}"
+            routes += "POST /ops/luckperms/migrations/{jobId}/rollback"
         }
         return mapOf("routes" to routes, "auth" to "Bearer token or X-ARC-Ops-Token header")
     }

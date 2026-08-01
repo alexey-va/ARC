@@ -15,6 +15,8 @@ HTTP ops API и ItemSpec для RusCrafting MCP. **Runtime configs:** `mcserver/
 - Citizens NPC list/preview/upsert/delete through the native Citizens API
 - Citizens marker publication into BlueMap through BlueMap API 2.7.7
 - One read-only health overview across every managed content catalog
+- Native LuckPerms group/user reads, effective checks, reviewed point changes,
+  and journaled migrations without console commands or direct storage writes
 
 ## Key classes
 
@@ -35,6 +37,18 @@ HTTP ops API и ItemSpec для RusCrafting MCP. **Runtime configs:** `mcserver/
 | `OpsItemSpec` | JSON → ItemStack (MiniMessage, NBT, customData) |
 | `ItemPresets` | Native runtime and atomic persistence for `item-presets.yml` |
 | `OpsItemPresetHandlers` | Strict catalog/preview/upsert/delete/give boundary |
+| `OpsLuckPermsHandlers` | Typed native LuckPerms read/check/preview/apply/migration boundary |
+
+## LuckPerms control plane
+
+Reads use normalized persisted direct nodes; effective checks report exact
+unexpired direct/inherited matches separately. Point writes require a one-time
+review token, idempotency key, fresh digest, save/reload verification, and
+spawn leadership. Migrations journal under `plugins/ARC/data/permission-migrations/`;
+that runtime state is never tracked or deployed.
+
+Never add raw commands, Bukkit offline UUID generation, `clear`, group/user
+delete, direct SQL, unbounded user listing, or a generic raw HTTP route.
 
 ## Item presets (canonical)
 

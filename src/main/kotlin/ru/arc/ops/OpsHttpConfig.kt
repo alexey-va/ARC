@@ -84,6 +84,21 @@ open class OpsHttpConfig(private val config: Config) {
     open val npcsWriteEnabled: Boolean
         get() = config.bool("npcs-write-enabled", false)
 
+    open val luckpermsGroupsReadEnabled: Boolean
+        get() = config.bool("luckperms-groups-read-enabled", true)
+
+    open val luckpermsGroupsWriteEnabled: Boolean
+        get() = config.bool("luckperms-groups-write-enabled", false)
+
+    open val luckpermsUsersReadEnabled: Boolean
+        get() = config.bool("luckperms-users-read-enabled", true)
+
+    open val luckpermsUsersWriteEnabled: Boolean
+        get() = config.bool("luckperms-users-write-enabled", false)
+
+    open val luckpermsMigrationsEnabled: Boolean
+        get() = config.bool("luckperms-migrations-enabled", false)
+
     open val errorBufferSize: Int
         get() = config.integer("error-buffer-size", 200).coerceIn(50, 2000)
 
@@ -133,6 +148,11 @@ class TestOpsHttpConfig(
     override val treasurePoolsWriteEnabled: Boolean = false,
     override val npcsReadEnabled: Boolean = true,
     override val npcsWriteEnabled: Boolean = false,
+    override val luckpermsGroupsReadEnabled: Boolean = true,
+    override val luckpermsGroupsWriteEnabled: Boolean = false,
+    override val luckpermsUsersReadEnabled: Boolean = true,
+    override val luckpermsUsersWriteEnabled: Boolean = false,
+    override val luckpermsMigrationsEnabled: Boolean = false,
     override val errorBufferSize: Int = 100,
 ) : OpsHttpConfig(EmptyConfig) {
     fun copy(
@@ -153,6 +173,11 @@ class TestOpsHttpConfig(
         treasurePoolsWriteEnabled: Boolean = this.treasurePoolsWriteEnabled,
         npcsReadEnabled: Boolean = this.npcsReadEnabled,
         npcsWriteEnabled: Boolean = this.npcsWriteEnabled,
+        luckpermsGroupsReadEnabled: Boolean = this.luckpermsGroupsReadEnabled,
+        luckpermsGroupsWriteEnabled: Boolean = this.luckpermsGroupsWriteEnabled,
+        luckpermsUsersReadEnabled: Boolean = this.luckpermsUsersReadEnabled,
+        luckpermsUsersWriteEnabled: Boolean = this.luckpermsUsersWriteEnabled,
+        luckpermsMigrationsEnabled: Boolean = this.luckpermsMigrationsEnabled,
     ): TestOpsHttpConfig =
         TestOpsHttpConfig(
             enabled = enabled,
@@ -180,6 +205,11 @@ class TestOpsHttpConfig(
             treasurePoolsWriteEnabled = treasurePoolsWriteEnabled,
             npcsReadEnabled = npcsReadEnabled,
             npcsWriteEnabled = npcsWriteEnabled,
+            luckpermsGroupsReadEnabled = luckpermsGroupsReadEnabled,
+            luckpermsGroupsWriteEnabled = luckpermsGroupsWriteEnabled,
+            luckpermsUsersReadEnabled = luckpermsUsersReadEnabled,
+            luckpermsUsersWriteEnabled = luckpermsUsersWriteEnabled,
+            luckpermsMigrationsEnabled = luckpermsMigrationsEnabled,
             errorBufferSize = errorBufferSize,
         )
 }

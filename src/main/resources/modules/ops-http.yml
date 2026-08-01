@@ -77,5 +77,13 @@ treasure-pools-write-enabled: false
 npcs-read-enabled: true
 npcs-write-enabled: false
 
+# Native LuckPerms API. Reads are safe on every Paper instance.
+luckperms-groups-read-enabled: true
+luckperms-users-read-enabled: true
+# Shared-storage writes are enabled only in the private spawn runtime config.
+luckperms-groups-write-enabled: false
+luckperms-users-write-enabled: false
+luckperms-migrations-enabled: false
+
 # Сколько WARN/ERROR держать в памяти для GET /ops/errors
 error-buffer-size: 200

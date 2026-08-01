@@ -175,14 +175,83 @@ data class LpSubjectSnapshot(
 data class LpPlan(
     val subject: LpSubjectRef,
     val operations: List<LpOperation>,
+    val reason: String,
 )
+
+data class LpReviewPlan(
+    val reviewToken: String,
+    val liveDigest: String,
+    val planDigest: String,
+    val plan: LpPlan,
+    val warnings: List<String>,
+    val expiresAt: Instant,
+)
+
+enum class LpApplyStatus {
+    VERIFIED,
+    ROLLED_BACK,
+    PARTIAL_FATAL,
+}
 
 data class LpApplyResult(
     val subject: LpSubjectRef,
+    val status: LpApplyStatus,
     val applied: List<LpOperation>,
+    val beforeDigest: String,
+    val afterDigest: String,
+    val message: String? = null,
 )
 
+data class LpMigrationRequest(
+    val version: Int,
+    val id: String,
+    val reason: String,
+    val subjects: List<LpMutationRequest>,
+) {
+    init {
+        require(version == 1) { "Unsupported LuckPerms migration version: $version" }
+        require(SAFE_MIGRATION_ID.matches(id)) { "Unsafe LuckPerms migration id: $id" }
+        require(reason.isNotBlank()) { "LuckPerms migration reason must not be blank" }
+        require(subjects.isNotEmpty()) { "LuckPerms migration must include at least one subject" }
+        require(subjects.map { it.subject }.distinct().size == subjects.size) {
+            "LuckPerms migration must not contain duplicate subjects"
+        }
+    }
+}
+
+enum class LpMigrationState {
+    PREVIEWING,
+    READY,
+    APPLYING,
+    VERIFIED,
+    ROLLING_BACK,
+    ROLLED_BACK,
+    RECOVERY_REQUIRED,
+    PARTIAL_FATAL,
+}
+
+data class LpMigrationStatus(
+    val jobId: String,
+    val migrationId: String,
+    val contentHash: String,
+    val state: LpMigrationState,
+    val totalSubjects: Int,
+    val completedSubjects: Int,
+    val rollbackCompletedSubjects: Int = 0,
+    val currentSubject: LpSubjectRef? = null,
+    val failures: List<String> = emptyList(),
+)
+
+class LpReviewTokenException(message: String) : IllegalStateException(message)
+
+class LpStaleReviewException(message: String) : IllegalStateException(message)
+
+class LpConcurrentApplyException(message: String) : IllegalStateException(message)
+
+class LpWriteGateException(message: String) : IllegalStateException(message)
+
 private val SAFE_GROUP_NAME = Regex("[a-z0-9][a-z0-9._-]*")
+private val SAFE_MIGRATION_ID = Regex("[a-zA-Z0-9][a-zA-Z0-9._-]*")
 
 private fun requireSafeGroupName(groupName: String) {
     require(SAFE_GROUP_NAME.matches(groupName)) { "Unsafe LuckPerms group name: $groupName" }
