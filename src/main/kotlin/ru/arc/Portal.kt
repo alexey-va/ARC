@@ -52,33 +52,10 @@ internal fun evaluatePortalAccess(
         else -> PortalAccess.ALLOWED
     }
 
-private val portalPassableMaterials =
-    setOf(
-        Material.SNOW,
-        Material.TRIPWIRE,
-        Material.SHORT_GRASS,
-        Material.TALL_GRASS,
-        Material.ACACIA_SLAB,
-        Material.ANDESITE_SLAB,
-        Material.BRICK_SLAB,
-        Material.BIRCH_SLAB,
-        Material.BLACKSTONE_SLAB,
-        Material.COBBLED_DEEPSLATE_SLAB,
-        Material.COBBLESTONE_SLAB,
-        Material.CRIMSON_SLAB,
-        Material.CUT_COPPER_SLAB,
-        Material.DIORITE_SLAB,
-        Material.END_STONE_BRICK_SLAB,
-        Material.DARK_OAK_SLAB,
-        Material.JUNGLE_SLAB,
-    )
-
 internal fun hasPortalClearance(
     blockUp: Block,
     blockUp2: Block,
-): Boolean =
-    (blockUp.isEmpty || blockUp.type in portalPassableMaterials) &&
-        (blockUp2.isEmpty || blockUp2.type in portalPassableMaterials)
+): Boolean = blockUp.isPassable && blockUp2.isPassable
 
 class Portal(uuid: UUID, private val portalData: PortalData) {
 
