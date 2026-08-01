@@ -40,10 +40,17 @@ class NativeLuckPermsSubjectGateway(
         loadKnownUser(request.userId).thenApply { user ->
             user ?: return@thenApply null
             val options = QueryOptions.contextual(request.contexts.toLuckPermsContextSet())
-            val directMatches = user.permissionMatches(request.permission, options)
+            val permissionResult = user.cachedData.getPermissionData(options).queryPermission(request.permission)
+            val inheritedGroups = user.getInheritedGroups(options)
+            val sourceNode =
+                permissionResult
+                    .node()
+                    ?.takeIf { !it.hasExpired() }
+                    ?.let(LuckPermsNodeCodec::toSpec)
+                    as? PermissionNodeSpec
+            val directMatches = user.permissionMatches(request.permission, options).toMutableSet()
             val inheritedMatches =
-                user
-                    .getInheritedGroups(options)
+                inheritedGroups
                     .flatMap { group ->
                         group.permissionMatches(request.permission, options).map { node ->
                             LpInheritedPermissionMatch(
@@ -51,11 +58,28 @@ class NativeLuckPermsSubjectGateway(
                                 node = node,
                             )
                         }
-                    }.sortedBy { match -> "${match.group.identifier}:${match.node.canonicalKey()}" }
+                    }.toMutableSet()
+            if (sourceNode != null) {
+                when {
+                    user.nodes.any { node -> LuckPermsNodeCodec.toSpec(node) == sourceNode } ->
+                        directMatches += sourceNode
+                    else ->
+                        inheritedGroups
+                            .filter { group ->
+                                group.nodes.any { node -> LuckPermsNodeCodec.toSpec(node) == sourceNode }
+                            }.forEach { group ->
+                                inheritedMatches +=
+                                    LpInheritedPermissionMatch(
+                                        group = LpSubjectRef(LpSubjectType.GROUP, group.name),
+                                        node = sourceNode,
+                                    )
+                            }
+                }
+            }
             LpPermissionCheckResult(
-                result = user.cachedData.getPermissionData(options).checkPermission(request.permission).toLpPermissionResult(),
-                directMatches = directMatches,
-                inheritedMatches = inheritedMatches,
+                result = permissionResult.result().toLpPermissionResult(),
+                directMatches = directMatches.sortedBy(PermissionNodeSpec::canonicalKey),
+                inheritedMatches = inheritedMatches.sortedBy { match -> "${match.group.identifier}:${match.node.canonicalKey()}" },
             )
         }
 
@@ -104,15 +128,21 @@ class NativeLuckPermsSubjectGateway(
     private fun snapshot(
         ref: LpSubjectRef,
         holder: PermissionHolder,
-    ): LpSubjectSnapshot =
-        LpSubjectSnapshot(ref, holder.data().toCollection().map(LuckPermsNodeCodec::toSpec).sortedBy(LpNodeSpec::canonicalKey))
-
-    private fun PermissionHolder.applyExactNodes(
-        additions: Set<LpNodeSpec>,
-        removals: Set<LpNodeSpec>,
-    ) {
-        additions.sortedBy(LpNodeSpec::canonicalKey).forEach { spec -> data().add(LuckPermsNodeCodec.toNode(spec)) }
-        removals.sortedBy(LpNodeSpec::canonicalKey).forEach { spec -> data().remove(LuckPermsNodeCodec.toNode(spec)) }
+    ): LpSubjectSnapshot {
+        val inheritedGroups =
+            if (holder is User) {
+                holder
+                    .getInheritedGroups(holder.queryOptions)
+                    .map { group -> LpSubjectRef(LpSubjectType.GROUP, group.name) }
+                    .sortedBy { it.identifier }
+            } else {
+                emptyList()
+            }
+        return LpSubjectSnapshot(
+            ref,
+            holder.data().toCollection().map(LuckPermsNodeCodec::toSpec).sortedBy(LpNodeSpec::canonicalKey),
+            inheritedGroups,
+        )
     }
 
     private fun PermissionHolder.permissionMatches(
@@ -125,6 +155,15 @@ class NativeLuckPermsSubjectGateway(
             .map(LuckPermsNodeCodec::toSpec)
             .filterIsInstance<PermissionNodeSpec>()
             .sortedBy(PermissionNodeSpec::canonicalKey)
+
+    private fun PermissionHolder.applyExactNodes(
+        additions: Set<LpNodeSpec>,
+        removals: Set<LpNodeSpec>,
+    ) {
+        additions.sortedBy(LpNodeSpec::canonicalKey).forEach { spec -> data().add(LuckPermsNodeCodec.toNode(spec)) }
+        removals.sortedBy(LpNodeSpec::canonicalKey).forEach { spec -> data().remove(LuckPermsNodeCodec.toNode(spec)) }
+    }
+
 }
 
 private fun LpContextSet.toLuckPermsContextSet(): ContextSet =

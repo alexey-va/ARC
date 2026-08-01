@@ -55,28 +55,18 @@ class OpsLuckPermsHandlers(
 
     fun migrationApply(
         jobId: String,
-        body: String,
-    ): Map<String, Any?> {
-        val root = com.google.gson.JsonParser.parseString(body).asJsonObject
-        val key = root.get("idempotencyKey")?.asString ?: throw IllegalArgumentException("Missing idempotencyKey")
-        require(root.keySet() == setOf("version", "idempotencyKey")) { "Unknown migration apply fields" }
-        require(root.get("version")?.asInt == 1) { "Unsupported LuckPerms request version" }
-        return OpsLuckPermsJson.migrationStatusMap(migrations.startMigration(jobId, key))
-    }
+        idempotencyKey: String,
+    ): Map<String, Any?> =
+        OpsLuckPermsJson.migrationStatusMap(migrations.startMigration(jobId, idempotencyKey))
 
     fun migrationStatus(jobId: String): Map<String, Any?> =
         OpsLuckPermsJson.migrationStatusMap(migrations.status(jobId))
 
     fun migrationRollback(
         jobId: String,
-        body: String,
-    ): Map<String, Any?> {
-        val root = com.google.gson.JsonParser.parseString(body).asJsonObject
-        val key = root.get("idempotencyKey")?.asString ?: throw IllegalArgumentException("Missing idempotencyKey")
-        require(root.keySet() == setOf("version", "idempotencyKey")) { "Unknown migration rollback fields" }
-        require(root.get("version")?.asInt == 1) { "Unsupported LuckPerms request version" }
-        return OpsLuckPermsJson.migrationStatusMap(migrations.rollbackMigration(jobId, key))
-    }
+        idempotencyKey: String,
+    ): Map<String, Any?> =
+        OpsLuckPermsJson.migrationStatusMap(migrations.rollbackMigration(jobId, idempotencyKey))
 
     companion object {
         @Volatile

@@ -132,25 +132,9 @@ class LuckPermsNodeCodecTest : FreeSpec({
             }
         }
 
-        "rejects duplicate context values and expired set operations" {
+        "rejects duplicate context values" {
             shouldThrow<IllegalArgumentException> {
                 LpContextSet(mapOf("server" to listOf("survival", "survival")))
-            }
-            shouldThrow<IllegalArgumentException> {
-                LpMutationRequest(
-                    subject = LpSubjectRef(LpSubjectType.GROUP, "moderator"),
-                    operations =
-                        listOf(
-                            LpOperation(
-                                LpOperationAction.SET,
-                                PermissionNodeSpec(
-                                    permission = "example.node",
-                                    expiresAt = Instant.parse("2020-01-01T00:00:00Z"),
-                                ),
-                            ),
-                        ),
-                    reason = "set temporary permission",
-                )
             }
         }
 

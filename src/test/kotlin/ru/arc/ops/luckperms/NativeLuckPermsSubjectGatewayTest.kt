@@ -13,6 +13,7 @@ import net.luckperms.api.LuckPerms
 import net.luckperms.api.LuckPermsProvider
 import net.luckperms.api.cacheddata.CachedDataManager
 import net.luckperms.api.cacheddata.CachedPermissionData
+import net.luckperms.api.cacheddata.Result
 import net.luckperms.api.context.ContextManager
 import net.luckperms.api.context.ContextSet
 import net.luckperms.api.context.ContextSetFactory
@@ -96,6 +97,24 @@ class NativeLuckPermsSubjectGatewayTest : FreeSpec({
             fixture.gateway.get(LpSubjectRef(LpSubjectType.USER, "00000000-0000-0000-0000-000000000102")).join().shouldBeNull()
         }
 
+        "user snapshots include effective inherited groups" {
+            val userId = UUID.fromString("00000000-0000-0000-0000-000000000103")
+            fixture.putGroup("member")
+            fixture.putGroup("builder")
+            fixture.putUser(
+                userId,
+                "GroupedUser",
+                inheritedGroups = setOf("member", "builder"),
+            )
+
+            fixture.gateway
+                .get(LpSubjectRef(LpSubjectType.USER, userId.toString()))
+                .join()!!
+                .inheritedGroups
+                .map { it.identifier }
+                .shouldContainExactly("builder", "member")
+        }
+
         "resolves a player name only through LuckPerms lookupUniqueId" {
             val userId = UUID.fromString("00000000-0000-0000-0000-000000000201")
             fixture.lookup("KnownName", userId)
@@ -152,6 +171,28 @@ class NativeLuckPermsSubjectGatewayTest : FreeSpec({
             fixture.gateway
                 .check(LpPermissionCheckRequest(userId, "example.expired"))
                 .join() shouldBe LpPermissionCheckResult(LpPermissionResult.UNDEFINED, emptyList(), emptyList())
+        }
+
+        "explains wildcard permission checks with the actual LuckPerms source node" {
+            val userId = UUID.fromString("00000000-0000-0000-0000-000000000304")
+            val wildcardSpec = PermissionNodeSpec("example.*")
+            val wildcard = fixture.node(wildcardSpec)
+            fixture.putUser(
+                userId,
+                "WildcardUser",
+                wildcard,
+                effectiveResult = Tristate.TRUE,
+                effectiveSource = wildcard,
+            )
+
+            fixture.gateway
+                .check(LpPermissionCheckRequest(userId, "example.build"))
+                .join() shouldBe
+                LpPermissionCheckResult(
+                    result = LpPermissionResult.TRUE,
+                    directMatches = listOf(wildcardSpec),
+                    inheritedMatches = emptyList(),
+                )
         }
 
         "uses the explicit context for direct global and inherited permission sources" {
@@ -345,10 +386,11 @@ private class NativeGatewayFixture {
         vararg nodes: Node,
         inheritedGroups: Set<String> = emptySet(),
         effectiveResult: Tristate = Tristate.UNDEFINED,
+        effectiveSource: Node? = null,
     ) {
         usernames[uuid] = username
         nameLookup[username] = uuid
-        users[uuid] = GatewayUser(uuid, nodes.toMutableSet(), inheritedGroups, effectiveResult)
+        users[uuid] = GatewayUser(uuid, nodes.toMutableSet(), inheritedGroups, effectiveResult, effectiveSource = effectiveSource)
     }
 
     fun putUserWithTransient(
@@ -396,14 +438,17 @@ private class NativeGatewayFixture {
         inheritedGroups: Set<String>,
         effectiveResult: Tristate,
         private val transientNodes: MutableSet<Node> = linkedSetOf(),
+        effectiveSource: Node? = null,
     ) {
         val user = mockk<User>()
         private val nodeMap = mockk<NodeMap>()
         private val cachedData = mockk<CachedDataManager>()
         private val permissionData = mockk<CachedPermissionData>()
+        private val permissionResult = mockk<Result<Tristate, Node>>()
 
         init {
             every { user.uniqueId } returns uuid
+            every { user.queryOptions } returns queryOptions
             every { user.nodes } answers { nodes.plus(transientNodes).toSet() }
             every { user.data() } returns nodeMap
             every { nodeMap.toCollection() } answers { nodes.toSet() }
@@ -417,6 +462,9 @@ private class NativeGatewayFixture {
                 permissionData
             }
             every { permissionData.checkPermission(any()) } returns effectiveResult
+            every { permissionData.queryPermission(any()) } returns permissionResult
+            every { permissionResult.result() } returns effectiveResult
+            every { permissionResult.node() } returns effectiveSource
             every { nodeMap.add(any()) } answers {
                 nodes += firstArg<Node>()
                 DataMutateResult.SUCCESS

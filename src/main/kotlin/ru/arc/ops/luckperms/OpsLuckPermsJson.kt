@@ -38,6 +38,20 @@ object OpsLuckPermsJson {
         return root.requiredString("reviewToken") to root.requiredString("idempotencyKey")
     }
 
+    fun parseMigrationApply(body: String): Pair<String, String> {
+        val root = parseObject(body, "migration apply")
+        root.requireOnly("version", "jobId", "idempotencyKey")
+        require(root.requiredInt("version") == 1) { "Unsupported LuckPerms request version" }
+        return root.requiredString("jobId") to root.requiredString("idempotencyKey")
+    }
+
+    fun parseMigrationControl(body: String): String {
+        val root = parseObject(body, "migration control")
+        root.requireOnly("version", "idempotencyKey")
+        require(root.requiredInt("version") == 1) { "Unsupported LuckPerms request version" }
+        return root.requiredString("idempotencyKey")
+    }
+
     fun parseMigration(body: String): LpMigrationRequest {
         val root = parseObject(body, "migration")
         root.requireOnly("version", "id", "reason", "subjects")
@@ -57,10 +71,26 @@ object OpsLuckPermsJson {
                     }
                 if (type == "group") require(!subject.has("uuid")) { "Group migration subject must not contain uuid" }
                 if (type == "user") require(!subject.has("name")) { "User migration subject must use uuid, not name" }
-                subject.get("expected_name")?.takeUnless(JsonElement::isJsonNull)?.asString?.let {
-                    require(it.isNotBlank()) { "expected_name must not be blank" }
+                if (type == "group") {
+                    require(!subject.has("expected_name")) {
+                        "Group migration subject must not contain expected_name"
+                    }
                 }
-                LpMutationRequest(ref, subject.requiredArray("operations").map(::parseOperation), reason)
+                val expectedName =
+                    subject.get("expected_name")?.takeUnless(JsonElement::isJsonNull)?.let {
+                        require(it.isJsonPrimitive && it.asJsonPrimitive.isString) {
+                            "expected_name must be a string"
+                        }
+                        it.asString.also { value ->
+                            require(value.isNotBlank()) { "expected_name must not be blank" }
+                        }
+                    }
+                LpMutationRequest(
+                    subject = ref,
+                    operations = subject.requiredArray("operations").map(::parseOperation),
+                    reason = reason,
+                    expectedName = expectedName,
+                )
             }
         return LpMigrationRequest(version, id, reason, subjects)
     }
@@ -70,6 +100,7 @@ object OpsLuckPermsJson {
             "subject" to subjectMap(snapshot.subject),
             "digest" to snapshotDigest(snapshot),
             "nodes" to snapshot.nodes.sortedBy(LpNodeSpec::canonicalKey).map(::nodeMap),
+            "inheritedGroups" to snapshot.inheritedGroups.map { it.identifier },
         )
 
     fun reviewMap(review: LpReviewPlan): Map<String, Any?> =
@@ -144,7 +175,10 @@ object OpsLuckPermsJson {
                         put("type", subject.subject.type.name.lowercase())
                         when (subject.subject.type) {
                             LpSubjectType.GROUP -> put("name", subject.subject.identifier)
-                            LpSubjectType.USER -> put("uuid", subject.subject.identifier)
+                            LpSubjectType.USER -> {
+                                put("uuid", subject.subject.identifier)
+                                subject.expectedName?.let { put("expected_name", it) }
+                            }
                         }
                         put("operations", subject.operations.map(::operationMap))
                     }
@@ -277,21 +311,44 @@ object OpsLuckPermsJson {
     }
 
     private fun JsonObject.requiredString(name: String): String =
-        get(name)?.takeUnless(JsonElement::isJsonNull)?.asString?.also {
+        get(name)
+            ?.takeUnless(JsonElement::isJsonNull)
+            ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
+            ?.asString
+            ?.also {
             require(it.isNotBlank()) { "LuckPerms field '$name' must not be blank" }
         } ?: throw IllegalArgumentException("Missing LuckPerms field '$name'")
 
     private fun JsonObject.optionalString(name: String): String? =
-        get(name)?.takeUnless(JsonElement::isJsonNull)?.asString
+        get(name)?.takeUnless(JsonElement::isJsonNull)?.let { element ->
+            require(element.isJsonPrimitive && element.asJsonPrimitive.isString) {
+                "LuckPerms field '$name' must be a string"
+            }
+            element.asString
+        }
 
-    private fun JsonObject.requiredInt(name: String): Int =
-        get(name)?.takeUnless(JsonElement::isJsonNull)?.asInt
-            ?: throw IllegalArgumentException("Missing LuckPerms field '$name'")
+    private fun JsonObject.requiredInt(name: String): Int {
+        val element =
+            get(name)?.takeUnless(JsonElement::isJsonNull)
+                ?: throw IllegalArgumentException("Missing LuckPerms field '$name'")
+        require(element.isJsonPrimitive && element.asJsonPrimitive.isNumber) {
+            "LuckPerms field '$name' must be an integer"
+        }
+        val raw = element.asJsonPrimitive.toString()
+        require(INTEGER_PATTERN.matches(raw)) { "LuckPerms field '$name' must be an integer" }
+        return raw.toIntOrNull() ?: throw IllegalArgumentException("LuckPerms field '$name' is outside integer range")
+    }
 
     private fun JsonObject.optionalBoolean(
         name: String,
         default: Boolean,
-    ): Boolean = get(name)?.takeUnless(JsonElement::isJsonNull)?.asBoolean ?: default
+    ): Boolean =
+        get(name)?.takeUnless(JsonElement::isJsonNull)?.let { element ->
+            require(element.isJsonPrimitive && element.asJsonPrimitive.isBoolean) {
+                "LuckPerms field '$name' must be a boolean"
+            }
+            element.asBoolean
+        } ?: default
 
     private fun JsonObject.requiredArray(name: String): JsonArray =
         get(name)?.takeIf(JsonElement::isJsonArray)?.asJsonArray
@@ -303,8 +360,16 @@ object OpsLuckPermsJson {
         val contexts =
             element.asJsonObject.entrySet().associate { (key, values) ->
                 require(values.isJsonArray) { "LuckPerms context '$key' must be an array" }
-                key to values.asJsonArray.map { it.asString }
+                key to
+                    values.asJsonArray.map { value ->
+                        require(value.isJsonPrimitive && value.asJsonPrimitive.isString) {
+                            "LuckPerms context '$key' values must be strings"
+                        }
+                        value.asString
+                    }
             }
         return LpContextSet(contexts)
     }
+
+    private val INTEGER_PATTERN = Regex("-?(0|[1-9][0-9]*)")
 }

@@ -1497,17 +1497,8 @@ class OpsHttpServer(
             return
         }
         handleLuckPermsErrors(exchange) {
-            val root = com.google.gson.JsonParser.parseString(readRequestBody(exchange)).asJsonObject
-            require(root.keySet() == setOf("version", "jobId", "idempotencyKey")) {
-                "Unknown migration apply fields"
-            }
-            require(root.get("version")?.asInt == 1) { "Unsupported LuckPerms request version" }
-            val jobId = root.get("jobId")?.asString ?: throw IllegalArgumentException("Missing jobId")
-            val key = root.get("idempotencyKey")?.asString ?: throw IllegalArgumentException("Missing idempotencyKey")
-            OpsLuckPermsHandlers.current().migrationApply(
-                jobId,
-                com.google.gson.Gson().toJson(mapOf("version" to 1, "idempotencyKey" to key)),
-            )
+            val (jobId, key) = ru.arc.ops.luckperms.OpsLuckPermsJson.parseMigrationApply(readRequestBody(exchange))
+            OpsLuckPermsHandlers.current().migrationApply(jobId, key)
         }
     }
 
@@ -1521,7 +1512,8 @@ class OpsHttpServer(
             return
         }
         handleLuckPermsErrors(exchange) {
-            OpsLuckPermsHandlers.current().migrationRollback(jobId, readRequestBody(exchange))
+            val key = ru.arc.ops.luckperms.OpsLuckPermsJson.parseMigrationControl(readRequestBody(exchange))
+            OpsLuckPermsHandlers.current().migrationRollback(jobId, key)
         }
     }
 

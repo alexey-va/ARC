@@ -2,12 +2,14 @@ package ru.arc.ops.luckperms
 
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
+import java.time.Clock
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicBoolean
 
 class LuckPermsApplyService(
     private val gateway: LuckPermsSubjectGateway,
     private val reviews: LuckPermsReviewStore,
+    private val clock: Clock = Clock.systemUTC(),
     private val networkId: () -> String?,
 ) {
     private val applyInProgress = AtomicBoolean(false)
@@ -18,6 +20,13 @@ class LuckPermsApplyService(
                 throw NoSuchElementException("Unknown LuckPerms user UUID: ${request.subject.identifier}")
             }
             val snapshot = live ?: LpSubjectSnapshot(request.subject, emptyList())
+            request.operations
+                .filter { it.action == LpOperationAction.SET }
+                .forEach { operation ->
+                    require(operation.node.expiresAt?.isAfter(clock.instant()) != false) {
+                        "LuckPerms set operation cannot use an expired node"
+                    }
+                }
             val duplicate =
                 request.operations
                     .groupingBy { "${it.action}:${it.node.canonicalKey()}" }
@@ -74,7 +83,7 @@ class LuckPermsApplyService(
             }
         claim.completed?.let { return CompletableFuture.completedFuture(it) }
         if (!applyInProgress.compareAndSet(false, true)) {
-            reviews.invalidate(reviewToken, idempotencyKey)
+            reviews.release(reviewToken, idempotencyKey)
             return failedFuture(LpConcurrentApplyException("Another LuckPerms apply is in progress"))
         }
 
@@ -87,6 +96,15 @@ class LuckPermsApplyService(
                         LpStaleReviewException("LuckPerms subject changed after preview"),
                     )
                 }
+                record.plan.operations
+                    .filter { it.action == LpOperationAction.SET }
+                    .forEach { operation ->
+                        if (operation.node.expiresAt?.isAfter(clock.instant()) == false) {
+                            return@thenCompose failedFuture<LpApplyResult>(
+                                LpStaleReviewException("LuckPerms set operation expired after preview"),
+                            )
+                        }
+                    }
                 if (record.plan.operations.isEmpty()) {
                     val result =
                         LpApplyResult(
@@ -106,6 +124,12 @@ class LuckPermsApplyService(
             if (failure != null) reviews.invalidate(reviewToken, idempotencyKey)
             applyInProgress.set(false)
         }
+    }
+
+    internal fun snapshot(ref: LpSubjectRef): CompletableFuture<LpSubjectSnapshot?> = gateway.get(ref)
+
+    internal fun discardReview(reviewToken: String) {
+        reviews.discard(reviewToken)
     }
 
     private fun mutateAndVerify(
