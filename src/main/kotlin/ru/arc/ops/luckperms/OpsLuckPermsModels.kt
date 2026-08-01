@@ -55,6 +55,7 @@ class LpContextSet(contexts: Map<String, List<String>> = emptyMap()) {
 }
 
 sealed interface LpNodeSpec {
+    val value: Boolean
     val contexts: LpContextSet
     val expiresAt: Instant?
 
@@ -63,7 +64,7 @@ sealed interface LpNodeSpec {
 
 data class PermissionNodeSpec(
     val permission: String,
-    val value: Boolean = true,
+    override val value: Boolean = true,
     override val contexts: LpContextSet = LpContextSet(),
     override val expiresAt: Instant? = null,
 ) : LpNodeSpec {
@@ -78,59 +79,65 @@ data class InheritanceNodeSpec(
     val groupName: String,
     override val contexts: LpContextSet = LpContextSet(),
     override val expiresAt: Instant? = null,
+    override val value: Boolean = true,
 ) : LpNodeSpec {
     init {
         requireSafeGroupName(groupName)
     }
 
-    override fun canonicalKey(): String = canonicalKey("inheritance", groupName)
+    override fun canonicalKey(): String = canonicalKey("inheritance", groupName, value.toString())
 }
 
 data class MetaNodeSpec(
     val key: String,
-    val value: String,
+    val metaValue: String,
     override val contexts: LpContextSet = LpContextSet(),
     override val expiresAt: Instant? = null,
+    override val value: Boolean = true,
 ) : LpNodeSpec {
     init {
         require(key.isNotBlank()) { "LuckPerms meta key must not be blank" }
     }
 
-    override fun canonicalKey(): String = canonicalKey("meta", key, value)
+    override fun canonicalKey(): String = canonicalKey("meta", key, metaValue, value.toString())
 }
 
 data class PrefixNodeSpec(
     val priority: Int,
-    val value: String,
+    val prefix: String,
     override val contexts: LpContextSet = LpContextSet(),
     override val expiresAt: Instant? = null,
+    override val value: Boolean = true,
 ) : LpNodeSpec {
-    override fun canonicalKey(): String = canonicalKey("prefix", priority.toString(), value)
+    override fun canonicalKey(): String = canonicalKey("prefix", priority.toString(), prefix, value.toString())
 }
 
 data class SuffixNodeSpec(
     val priority: Int,
-    val value: String,
+    val suffix: String,
     override val contexts: LpContextSet = LpContextSet(),
     override val expiresAt: Instant? = null,
+    override val value: Boolean = true,
 ) : LpNodeSpec {
-    override fun canonicalKey(): String = canonicalKey("suffix", priority.toString(), value)
+    override fun canonicalKey(): String = canonicalKey("suffix", priority.toString(), suffix, value.toString())
 }
 
 data class WeightNodeSpec(
     val weight: Int,
     override val contexts: LpContextSet = LpContextSet(),
     override val expiresAt: Instant? = null,
+    override val value: Boolean = true,
 ) : LpNodeSpec {
-    override fun canonicalKey(): String = canonicalKey("weight", weight.toString())
+    override fun canonicalKey(): String = canonicalKey("weight", weight.toString(), value.toString())
 }
 
 data class DisplayNameNodeSpec(
     val displayName: String,
     override val contexts: LpContextSet = LpContextSet(),
     override val expiresAt: Instant? = null,
+    override val value: Boolean = true,
 ) : LpNodeSpec {
-    override fun canonicalKey(): String = canonicalKey("display-name", displayName)
+    override fun canonicalKey(): String = canonicalKey("display-name", displayName, value.toString())
 }
 
 enum class LpOperationAction {
@@ -146,10 +153,12 @@ data class LpOperation(
 data class LpMutationRequest(
     val subject: LpSubjectRef,
     val operations: List<LpOperation>,
+    val reason: String,
     val requestedAt: Instant = Instant.now(),
 ) {
     init {
         require(operations.isNotEmpty()) { "LuckPerms mutation must include at least one operation" }
+        require(reason.isNotBlank()) { "LuckPerms mutation reason must not be blank" }
         operations.filter { it.action == LpOperationAction.SET }.forEach { operation ->
             require(operation.node.expiresAt?.isAfter(requestedAt) != false) {
                 "LuckPerms set operation cannot use an expired node"

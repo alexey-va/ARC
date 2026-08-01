@@ -16,30 +16,31 @@ object LuckPermsNodeCodec {
     fun toSpec(node: Node): LpNodeSpec =
         when (node) {
             is PermissionNode -> PermissionNodeSpec(node.permission, node.value, node.contexts.toLpContextSet(), node.expiry)
-            is InheritanceNode -> InheritanceNodeSpec(node.groupName, node.contexts.toLpContextSet(), node.expiry)
-            is MetaNode -> MetaNodeSpec(node.metaKey, node.metaValue, node.contexts.toLpContextSet(), node.expiry)
-            is PrefixNode -> PrefixNodeSpec(node.priority, node.metaValue, node.contexts.toLpContextSet(), node.expiry)
-            is SuffixNode -> SuffixNodeSpec(node.priority, node.metaValue, node.contexts.toLpContextSet(), node.expiry)
-            is WeightNode -> WeightNodeSpec(node.weight, node.contexts.toLpContextSet(), node.expiry)
-            is DisplayNameNode -> DisplayNameNodeSpec(node.displayName, node.contexts.toLpContextSet(), node.expiry)
+            is InheritanceNode ->
+                InheritanceNodeSpec(node.groupName, node.contexts.toLpContextSet(), node.expiry, node.value)
+            is MetaNode -> MetaNodeSpec(node.metaKey, node.metaValue, node.contexts.toLpContextSet(), node.expiry, node.value)
+            is PrefixNode -> PrefixNodeSpec(node.priority, node.metaValue, node.contexts.toLpContextSet(), node.expiry, node.value)
+            is SuffixNode -> SuffixNodeSpec(node.priority, node.metaValue, node.contexts.toLpContextSet(), node.expiry, node.value)
+            is WeightNode -> WeightNodeSpec(node.weight, node.contexts.toLpContextSet(), node.expiry, node.value)
+            is DisplayNameNode ->
+                DisplayNameNodeSpec(node.displayName, node.contexts.toLpContextSet(), node.expiry, node.value)
             else -> throw IllegalArgumentException("Unsupported LuckPerms node type: ${node::class.qualifiedName}")
         }
 
     fun toNode(spec: LpNodeSpec): Node =
         when (spec) {
-            is PermissionNodeSpec ->
-                PermissionNode.builder(spec.permission).value(spec.value).withAttributes(spec).build()
+            is PermissionNodeSpec -> PermissionNode.builder(spec.permission).withAttributes(spec).build()
             is InheritanceNodeSpec -> InheritanceNode.builder(spec.groupName).withAttributes(spec).build()
-            is MetaNodeSpec -> MetaNode.builder().key(spec.key).value(spec.value).withAttributes(spec).build()
-            is PrefixNodeSpec -> PrefixNode.builder(spec.value, spec.priority).withAttributes(spec).build()
-            is SuffixNodeSpec -> SuffixNode.builder(spec.value, spec.priority).withAttributes(spec).build()
+            is MetaNodeSpec -> MetaNode.builder().key(spec.key).value(spec.metaValue).withAttributes(spec).build()
+            is PrefixNodeSpec -> PrefixNode.builder(spec.prefix, spec.priority).withAttributes(spec).build()
+            is SuffixNodeSpec -> SuffixNode.builder(spec.suffix, spec.priority).withAttributes(spec).build()
             is WeightNodeSpec -> WeightNode.builder(spec.weight).withAttributes(spec).build()
             is DisplayNameNodeSpec -> DisplayNameNode.builder(spec.displayName).withAttributes(spec).build()
         }
 }
 
 private fun NodeBuilder<*, *>.withAttributes(spec: LpNodeSpec): NodeBuilder<*, *> =
-    withContext(spec.contexts.toLuckPermsContextSet()).also { builder ->
+    value(spec.value).withContext(spec.contexts.toLuckPermsContextSet()).also { builder ->
         spec.expiresAt?.let(builder::expiry)
     }
 

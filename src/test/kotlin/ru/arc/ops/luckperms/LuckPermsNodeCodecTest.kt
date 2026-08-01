@@ -69,6 +69,47 @@ class LuckPermsNodeCodecTest : FreeSpec({
             }
         }
 
+        "round-trips false value for every non-permission node" {
+            val nodes: List<Node> =
+                listOf(
+                    InheritanceNode.builder("moderator").value(false).build(),
+                    MetaNode.builder("rank", "moderator").value(false).build(),
+                    PrefixNode.builder("<gold>Mod", 100).value(false).build(),
+                    SuffixNode.builder("<gray>[M]", 100).value(false).build(),
+                    WeightNode.builder(100).value(false).build(),
+                    DisplayNameNode.builder("Moderator").value(false).build(),
+                )
+
+            nodes.forEach { node ->
+                val spec = LuckPermsNodeCodec.toSpec(node)
+                spec.value shouldBe false
+                val restored = LuckPermsNodeCodec.toNode(spec)
+                restored.value shouldBe false
+                LuckPermsNodeCodec.toSpec(restored) shouldBe spec
+            }
+        }
+
+        "canonical identity includes value for every non-permission node" {
+            val specsByValue =
+                listOf(
+                    InheritanceNodeSpec(groupName = "moderator", value = false) to
+                        InheritanceNodeSpec(groupName = "moderator", value = true),
+                    MetaNodeSpec(key = "rank", metaValue = "moderator", value = false) to
+                        MetaNodeSpec(key = "rank", metaValue = "moderator", value = true),
+                    PrefixNodeSpec(priority = 100, prefix = "<gold>Mod", value = false) to
+                        PrefixNodeSpec(priority = 100, prefix = "<gold>Mod", value = true),
+                    SuffixNodeSpec(priority = 100, suffix = "<gray>[M]", value = false) to
+                        SuffixNodeSpec(priority = 100, suffix = "<gray>[M]", value = true),
+                    WeightNodeSpec(weight = 100, value = false) to WeightNodeSpec(weight = 100, value = true),
+                    DisplayNameNodeSpec(displayName = "Moderator", value = false) to
+                        DisplayNameNodeSpec(displayName = "Moderator", value = true),
+                )
+
+            specsByValue.forEach { (negative, positive) ->
+                negative.canonicalKey() shouldNotBe positive.canonicalKey()
+            }
+        }
+
         "normalizes context map and values into canonical order" {
             val contexts =
                 LpContextSet(
@@ -108,6 +149,40 @@ class LuckPermsNodeCodecTest : FreeSpec({
                                 ),
                             ),
                         ),
+                    reason = "set temporary permission",
+                )
+            }
+        }
+
+        "preserves the mandatory mutation reason" {
+            val request =
+                LpMutationRequest(
+                    subject = LpSubjectRef(LpSubjectType.GROUP, "moderator"),
+                    operations =
+                        listOf(
+                            LpOperation(
+                                LpOperationAction.UNSET,
+                                PermissionNodeSpec("example.node"),
+                            ),
+                        ),
+                    reason = "remove obsolete direct grant",
+                )
+
+            request.reason shouldBe "remove obsolete direct grant"
+        }
+
+        "rejects a blank mutation reason" {
+            shouldThrow<IllegalArgumentException> {
+                LpMutationRequest(
+                    subject = LpSubjectRef(LpSubjectType.GROUP, "moderator"),
+                    operations =
+                        listOf(
+                            LpOperation(
+                                LpOperationAction.SET,
+                                PermissionNodeSpec("example.node"),
+                            ),
+                        ),
+                    reason = "  ",
                 )
             }
         }
@@ -230,10 +305,10 @@ private object TestLuckPermsNodeFactory {
                 "getValue" -> value
                 else -> defaultValue(method.returnType)
             }
-        }
+    }
 
     private fun nodeBuilder(nodeType: Class<out Node>, builderType: Class<*>): Any {
-        val state = mutableMapOf<String, Any?>()
+        val state = mutableMapOf<String, Any?>("contexts" to contextSet(emptyList()))
         lateinit var builder: Any
         builder =
             proxy(builderType) { method, args ->
