@@ -14,6 +14,7 @@ import net.luckperms.api.LuckPermsProvider
 import net.luckperms.api.cacheddata.CachedDataManager
 import net.luckperms.api.cacheddata.CachedPermissionData
 import net.luckperms.api.context.ContextManager
+import net.luckperms.api.context.ContextSet
 import net.luckperms.api.context.ContextSetFactory
 import net.luckperms.api.context.ImmutableContextSet
 import net.luckperms.api.model.data.DataMutateResult
@@ -28,6 +29,8 @@ import net.luckperms.api.query.QueryMode
 import net.luckperms.api.query.QueryOptions
 import net.luckperms.api.util.Tristate
 import java.lang.reflect.Field
+import java.time.Instant
+import java.util.IdentityHashMap
 import java.util.Optional
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
@@ -58,6 +61,28 @@ class NativeLuckPermsSubjectGatewayTest : FreeSpec({
             fixture.gateway
                 .get(LpSubjectRef(LpSubjectType.GROUP, "builder")).join()!!.nodes
                 .shouldContainExactly(PermissionNodeSpec("example.group", contexts = LpContextSet(mapOf("server" to listOf("spawn")))))
+        }
+
+        "loads snapshots from NORMAL persisted nodes only" {
+            val normal = PermissionNodeSpec("example.persisted", value = true)
+            val transient = PermissionNodeSpec("example.persisted", value = false)
+            val groupUserId = UUID.fromString("00000000-0000-0000-0000-000000000111")
+            val user = PermissionNodeSpec("example.user-persisted", value = true)
+            val userTransient = PermissionNodeSpec("example.user-persisted", value = false)
+            fixture.putGroupWithTransient("builder", setOf(fixture.node(normal)), setOf(fixture.node(transient)))
+            fixture.putUserWithTransient(
+                groupUserId,
+                "PersistedUser",
+                normalNodes = setOf(fixture.node(user)),
+                transientNodes = setOf(fixture.node(userTransient)),
+            )
+
+            fixture.gateway
+                .get(LpSubjectRef(LpSubjectType.GROUP, "builder")).join()!!.nodes
+                .shouldContainExactly(normal)
+            fixture.gateway
+                .get(LpSubjectRef(LpSubjectType.USER, groupUserId.toString())).join()!!.nodes
+                .shouldContainExactly(user)
         }
 
         "loads a UUID-pinned user only when LuckPerms knows that UUID" {
@@ -110,6 +135,58 @@ class NativeLuckPermsSubjectGatewayTest : FreeSpec({
                 )
         }
 
+        "excludes expired direct and inherited nodes from effective permission sources" {
+            val userId = UUID.fromString("00000000-0000-0000-0000-000000000302")
+            val expiredAt = Instant.now().minusSeconds(60)
+            val expiredDirect = fixture.node(PermissionNodeSpec("example.expired", expiresAt = expiredAt))
+            val expiredInherited = fixture.node(PermissionNodeSpec("example.expired", expiresAt = expiredAt))
+            fixture.putGroup("expired-parent", expiredInherited)
+            fixture.putUser(
+                userId,
+                "ExpiredUser",
+                expiredDirect,
+                inheritedGroups = setOf("expired-parent"),
+                effectiveResult = Tristate.UNDEFINED,
+            )
+
+            fixture.gateway
+                .check(LpPermissionCheckRequest(userId, "example.expired"))
+                .join() shouldBe LpPermissionCheckResult(LpPermissionResult.UNDEFINED, emptyList(), emptyList())
+        }
+
+        "uses the explicit context for direct global and inherited permission sources" {
+            val userId = UUID.fromString("00000000-0000-0000-0000-000000000303")
+            val spawn = PermissionNodeSpec("example.context", contexts = LpContextSet(mapOf("server" to listOf("spawn"))))
+            val survival = PermissionNodeSpec("example.context", contexts = LpContextSet(mapOf("server" to listOf("survival"))))
+            val global = PermissionNodeSpec("example.context")
+            val inheritedSpawn = PermissionNodeSpec("example.context", contexts = LpContextSet(mapOf("server" to listOf("spawn"))))
+            fixture.putGroup("context-parent", fixture.node(inheritedSpawn))
+            fixture.putUser(
+                userId,
+                "ContextUser",
+                fixture.node(spawn),
+                fixture.node(survival),
+                fixture.node(global),
+                inheritedGroups = setOf("context-parent"),
+                effectiveResult = Tristate.TRUE,
+            )
+
+            fixture.gateway.check(LpPermissionCheckRequest(userId, "example.context", LpContextSet(mapOf("server" to listOf("spawn"))))).join() shouldBe
+                LpPermissionCheckResult(
+                    result = LpPermissionResult.TRUE,
+                    directMatches = listOf(spawn, global),
+                    inheritedMatches = listOf(LpInheritedPermissionMatch(LpSubjectRef(LpSubjectType.GROUP, "context-parent"), inheritedSpawn)),
+                )
+            fixture.lastPermissionContext shouldBe LpContextSet(mapOf("server" to listOf("spawn")))
+            fixture.lastInheritedGroupContext shouldBe LpContextSet(mapOf("server" to listOf("spawn")))
+
+            fixture.gateway
+                .check(LpPermissionCheckRequest(userId, "example.context", LpContextSet(mapOf("server" to listOf("survival")))))
+                .join() shouldBe LpPermissionCheckResult(LpPermissionResult.TRUE, listOf(survival, global), emptyList())
+            fixture.lastPermissionContext shouldBe LpContextSet(mapOf("server" to listOf("survival")))
+            fixture.lastInheritedGroupContext shouldBe LpContextSet(mapOf("server" to listOf("survival")))
+        }
+
         "creates a missing group and returns the reloaded exact node snapshot after mutation" {
             val addition = PermissionNodeSpec("example.add")
             val removal = PermissionNodeSpec("example.remove")
@@ -150,13 +227,19 @@ private class NativeGatewayFixture {
     private val contextManager = mockk<ContextManager>()
     private val contextSetFactory = mockk<ContextSetFactory>()
     private val contextSetBuilder = mockk<ImmutableContextSet.Builder>()
-    private val contextSet = mockk<ImmutableContextSet>()
+    private val requestContextSet = mockk<ImmutableContextSet>()
     private val queryBuilder = mockk<QueryOptions.Builder>()
     private val queryOptions = mockk<QueryOptions>()
     private val groups = linkedMapOf<String, GatewayGroup>()
     private val users = linkedMapOf<UUID, GatewayUser>()
     private val usernames = linkedMapOf<UUID, String>()
     private val nameLookup = linkedMapOf<String, UUID>()
+    private val contextSpecs = IdentityHashMap<ContextSet, LpContextSet>()
+    private val requestContextEntries = mutableListOf<Pair<String, String>>()
+    private var queryContext: LpContextSet? = null
+
+    var lastPermissionContext: LpContextSet? = null
+    var lastInheritedGroupContext: LpContextSet? = null
 
     lateinit var gateway: NativeLuckPermsSubjectGateway
 
@@ -166,13 +249,27 @@ private class NativeGatewayFixture {
         every { luckPerms.userManager } returns userManager
         every { luckPerms.contextManager } returns contextManager
         every { contextManager.contextSetFactory } returns contextSetFactory
-        every { contextSetFactory.immutableBuilder() } returns contextSetBuilder
-        every { contextSetBuilder.add(any(), any()) } returns contextSetBuilder
-        every { contextSetBuilder.build() } returns contextSet
+        every { contextSetFactory.immutableBuilder() } answers {
+            requestContextEntries.clear()
+            contextSetBuilder
+        }
+        every { contextSetBuilder.add(any(), any()) } answers {
+            requestContextEntries += firstArg<String>() to secondArg<String>()
+            contextSetBuilder
+        }
+        every { contextSetBuilder.build() } answers {
+            contextSpecs[requestContextSet] = LpContextSet(requestContextEntries.groupBy({ it.first }, { it.second }))
+            requestContextSet
+        }
         every { contextManager.queryOptionsBuilder(QueryMode.CONTEXTUAL) } returns queryBuilder
-        every { queryBuilder.context(any()) } returns queryBuilder
+        every { queryBuilder.context(any()) } answers {
+            queryContext = contextSpecs[firstArg<ContextSet>()]
+            queryBuilder
+        }
         every { queryBuilder.build() } returns queryOptions
-        every { queryOptions.satisfies(any()) } returns true
+        every { queryOptions.satisfies(any()) } answers {
+            contextMatches(requireNotNull(queryContext), contextSpecs.getValue(firstArg()))
+        }
 
         every { groupManager.loadAllGroups() } returns CompletableFuture.completedFuture(null)
         every { groupManager.loadedGroups } answers { groups.values.map { it.group }.toSet() }
@@ -213,17 +310,33 @@ private class NativeGatewayFixture {
         users.clear()
         usernames.clear()
         nameLookup.clear()
+        contextSpecs.clear()
+        requestContextEntries.clear()
+        queryContext = null
+        lastPermissionContext = null
+        lastInheritedGroupContext = null
     }
 
     fun node(spec: LpNodeSpec): Node = mockk<PermissionNode>().also { node ->
+        val nodeContextSet = mockk<ImmutableContextSet>()
+        contextSpecs[nodeContextSet] = spec.contexts
         every { node.permission } returns (spec as PermissionNodeSpec).permission
-        every { node.contexts } returns contextSet
+        every { node.contexts } returns nodeContextSet
+        every { node.hasExpired() } returns (spec.expiresAt?.isBefore(Instant.now()) ?: false)
         every { LuckPermsNodeCodec.toSpec(node) } returns spec
         every { LuckPermsNodeCodec.toNode(spec) } returns node
     }
 
     fun putGroup(name: String, vararg nodes: Node) {
         groups[name] = GatewayGroup(name, nodes.toMutableSet())
+    }
+
+    fun putGroupWithTransient(
+        name: String,
+        normalNodes: Set<Node>,
+        transientNodes: Set<Node>,
+    ) {
+        groups[name] = GatewayGroup(name, normalNodes.toMutableSet(), transientNodes.toMutableSet())
     }
 
     fun putUser(
@@ -238,27 +351,40 @@ private class NativeGatewayFixture {
         users[uuid] = GatewayUser(uuid, nodes.toMutableSet(), inheritedGroups, effectiveResult)
     }
 
+    fun putUserWithTransient(
+        uuid: UUID,
+        username: String,
+        normalNodes: Set<Node>,
+        transientNodes: Set<Node>,
+    ) {
+        usernames[uuid] = username
+        nameLookup[username] = uuid
+        users[uuid] = GatewayUser(uuid, normalNodes.toMutableSet(), emptySet(), Tristate.UNDEFINED, transientNodes.toMutableSet())
+    }
+
     fun lookup(name: String, uuid: UUID) {
         nameLookup[name] = uuid
     }
 
     private inner class GatewayGroup(
         name: String,
-        private val nodes: MutableSet<Node> = linkedSetOf(),
+        private val normalNodes: MutableSet<Node> = linkedSetOf(),
+        private val transientNodes: MutableSet<Node> = linkedSetOf(),
     ) {
         val group = mockk<Group>()
         private val nodeMap = mockk<NodeMap>()
 
         init {
             every { group.name } returns name
-            every { group.nodes } answers { nodes.toSet() }
+            every { group.nodes } answers { normalNodes.plus(transientNodes).toSet() }
             every { group.data() } returns nodeMap
+            every { nodeMap.toCollection() } answers { normalNodes.toSet() }
             every { nodeMap.add(any()) } answers {
-                nodes += firstArg<Node>()
+                normalNodes += firstArg<Node>()
                 DataMutateResult.SUCCESS
             }
             every { nodeMap.remove(any()) } answers {
-                nodes -= firstArg<Node>()
+                normalNodes -= firstArg<Node>()
                 DataMutateResult.SUCCESS
             }
         }
@@ -269,6 +395,7 @@ private class NativeGatewayFixture {
         private val nodes: MutableSet<Node>,
         inheritedGroups: Set<String>,
         effectiveResult: Tristate,
+        private val transientNodes: MutableSet<Node> = linkedSetOf(),
     ) {
         val user = mockk<User>()
         private val nodeMap = mockk<NodeMap>()
@@ -277,13 +404,18 @@ private class NativeGatewayFixture {
 
         init {
             every { user.uniqueId } returns uuid
-            every { user.nodes } answers { nodes.toSet() }
+            every { user.nodes } answers { nodes.plus(transientNodes).toSet() }
             every { user.data() } returns nodeMap
+            every { nodeMap.toCollection() } answers { nodes.toSet() }
             every { user.getInheritedGroups(any()) } answers {
+                lastInheritedGroupContext = queryContext
                 inheritedGroups.mapNotNull { groups[it]?.group }.toSet()
             }
             every { user.cachedData } returns cachedData
-            every { cachedData.getPermissionData(any()) } returns permissionData
+            every { cachedData.getPermissionData(any()) } answers {
+                lastPermissionContext = queryContext
+                permissionData
+            }
             every { permissionData.checkPermission(any()) } returns effectiveResult
             every { nodeMap.add(any()) } answers {
                 nodes += firstArg<Node>()
@@ -295,4 +427,12 @@ private class NativeGatewayFixture {
             }
         }
     }
+
+    private fun contextMatches(
+        requested: LpContextSet,
+        required: LpContextSet,
+    ): Boolean =
+        required.asMap().all { (key, requiredValues) ->
+            requested.asMap()[key].orEmpty().any(requiredValues::contains)
+        }
 }

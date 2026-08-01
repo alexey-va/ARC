@@ -6,7 +6,6 @@ import net.luckperms.api.context.ContextSet
 import net.luckperms.api.context.ImmutableContextSet
 import net.luckperms.api.model.PermissionHolder
 import net.luckperms.api.model.user.User
-import net.luckperms.api.node.Node
 import net.luckperms.api.node.types.PermissionNode
 import net.luckperms.api.query.QueryOptions
 import net.luckperms.api.util.Tristate
@@ -19,7 +18,7 @@ class NativeLuckPermsSubjectGateway(
     override fun listGroups(): CompletableFuture<List<LpSubjectSnapshot>> =
         luckPerms.groupManager.loadAllGroups().thenApply {
             luckPerms.groupManager.loadedGroups
-                .map { group -> snapshot(LpSubjectRef(LpSubjectType.GROUP, group.name), group.nodes) }
+                .map { group -> snapshot(LpSubjectRef(LpSubjectType.GROUP, group.name), group) }
                 .sortedBy { it.subject.identifier }
         }
 
@@ -28,8 +27,8 @@ class NativeLuckPermsSubjectGateway(
             LpSubjectType.GROUP ->
                 luckPerms.groupManager
                     .loadGroup(ref.identifier)
-                    .thenApply { group -> group.orElse(null)?.let { snapshot(ref, it.nodes) } }
-            LpSubjectType.USER -> loadKnownUser(UUID.fromString(ref.identifier)).thenApply { user -> user?.let { snapshot(ref, it.nodes) } }
+                    .thenApply { group -> group.orElse(null)?.let { snapshot(ref, it) } }
+            LpSubjectType.USER -> loadKnownUser(UUID.fromString(ref.identifier)).thenApply { user -> user?.let { snapshot(ref, it) } }
         }
 
     override fun lookupUser(name: String): CompletableFuture<LpUserIdentity?> {
@@ -104,9 +103,9 @@ class NativeLuckPermsSubjectGateway(
 
     private fun snapshot(
         ref: LpSubjectRef,
-        nodes: Collection<Node>,
+        holder: PermissionHolder,
     ): LpSubjectSnapshot =
-        LpSubjectSnapshot(ref, nodes.map(LuckPermsNodeCodec::toSpec).sortedBy(LpNodeSpec::canonicalKey))
+        LpSubjectSnapshot(ref, holder.data().toCollection().map(LuckPermsNodeCodec::toSpec).sortedBy(LpNodeSpec::canonicalKey))
 
     private fun PermissionHolder.applyExactNodes(
         additions: Set<LpNodeSpec>,
@@ -122,7 +121,7 @@ class NativeLuckPermsSubjectGateway(
     ): List<PermissionNodeSpec> =
         nodes
             .filterIsInstance<PermissionNode>()
-            .filter { node -> node.permission == permission && options.satisfies(node.contexts) }
+            .filter { node -> !node.hasExpired() && node.permission == permission && options.satisfies(node.contexts) }
             .map(LuckPermsNodeCodec::toSpec)
             .filterIsInstance<PermissionNodeSpec>()
             .sortedBy(PermissionNodeSpec::canonicalKey)
