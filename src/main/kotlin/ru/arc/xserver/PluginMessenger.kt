@@ -6,6 +6,7 @@ import org.bukkit.plugin.messaging.PluginMessageListener
 import ru.arc.ARC
 import ru.arc.config.ConfigManager
 import ru.arc.core.Tasks
+import ru.arc.rtp.BackendRtpRequest
 import ru.arc.rtp.FirstRtpCoordinator
 import ru.arc.rtp.FirstRtpRouteResult
 import ru.arc.rtp.FirstRtpResult
@@ -24,6 +25,10 @@ class PluginMessenger : PluginMessageListener {
 
     init {
         Bukkit.getServer().messenger.registerOutgoingPluginChannel(ARC.instance, "BungeeCord")
+        Bukkit.getServer().messenger.registerOutgoingPluginChannel(
+            ARC.instance,
+            BackendRtpRequest.CHANNEL,
+        )
         Bukkit.getServer().messenger.registerIncomingPluginChannel(
             ARC.instance,
             NetworkRtpRequest.CHANNEL,
@@ -172,7 +177,22 @@ class PluginMessenger : PluginMessageListener {
             NetworkRtpRequest.CHANNEL,
             this,
         )
+        Bukkit.getServer().messenger.unregisterOutgoingPluginChannel(
+            ARC.instance,
+            BackendRtpRequest.CHANNEL,
+        )
         Bukkit.getServer().messenger.unregisterOutgoingPluginChannel(ARC.instance, "BungeeCord")
+    }
+
+    fun sendBackendRtpRequest(
+        player: Player,
+        request: BackendRtpRequest,
+    ) {
+        player.sendPluginMessage(
+            ARC.instance,
+            BackendRtpRequest.CHANNEL,
+            request.encode(),
+        )
     }
 
     fun sendBungeeCord(player: Player, bytes: ByteArray) {

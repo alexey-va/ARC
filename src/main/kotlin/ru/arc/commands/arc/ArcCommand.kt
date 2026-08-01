@@ -25,6 +25,7 @@ import ru.arc.commands.arc.subcommands.ReloadSubCommand
 import ru.arc.commands.arc.subcommands.RepoSubCommand
 import ru.arc.commands.arc.subcommands.RespawnOnRtpSubCommand
 import ru.arc.commands.arc.subcommands.RestartSubCommand
+import ru.arc.commands.arc.subcommands.RtpSubCommand
 import ru.arc.commands.arc.subcommands.SchedulesSubCommand
 import ru.arc.commands.arc.subcommands.SoundFollowSubCommand
 import ru.arc.commands.arc.subcommands.StoreSubCommand
@@ -58,6 +59,7 @@ class ArcCommand :
             QuitMessageSubCommand,
             RespawnOnRtpSubCommand,
             FirstRtpSubCommand,
+            RtpSubCommand,
             LocpoolSubCommand,
             HuntSubCommand,
             TreasuresSubCommand,
