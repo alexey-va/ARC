@@ -89,12 +89,25 @@ class NativeLuckPermsSubjectGateway(
         removals: Set<LpNodeSpec>,
     ): CompletableFuture<LpSubjectSnapshot> =
         when (ref.type) {
-            LpSubjectType.GROUP ->
-                luckPerms.groupManager
-                    .modifyGroup(ref.identifier) { group -> group.applyExactNodes(additions, removals) }
-                    .thenCompose { reloadedSnapshot(ref) }
+            LpSubjectType.GROUP -> mutateGroup(ref, additions, removals)
             LpSubjectType.USER -> mutateKnownUser(ref, additions, removals)
         }
+
+    private fun mutateGroup(
+        ref: LpSubjectRef,
+        additions: Set<LpNodeSpec>,
+        removals: Set<LpNodeSpec>,
+    ): CompletableFuture<LpSubjectSnapshot> =
+        luckPerms.groupManager
+            .loadGroup(ref.identifier)
+            .thenCompose { loaded ->
+                loaded
+                    .map { group -> CompletableFuture.completedFuture(group) }
+                    .orElseGet { luckPerms.groupManager.createAndLoadGroup(ref.identifier) }
+            }.thenCompose { group ->
+                group.applyExactNodes(additions, removals)
+                luckPerms.groupManager.saveGroup(group)
+            }.thenCompose { reloadedSnapshot(ref) }
 
     private fun mutateKnownUser(
         ref: LpSubjectRef,

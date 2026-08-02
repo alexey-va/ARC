@@ -3,6 +3,7 @@ package ru.arc.ops.luckperms
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -231,15 +232,17 @@ class NativeLuckPermsSubjectGatewayTest : FreeSpec({
         "creates a missing group and returns the reloaded exact node snapshot after mutation" {
             val addition = PermissionNodeSpec("example.add")
             val removal = PermissionNodeSpec("example.remove")
+            val untouched = PermissionNodeSpec("example.untouched")
             fixture.node(addition)
-            fixture.putGroup("existing", fixture.node(removal))
+            fixture.putGroup("existing", fixture.node(removal), fixture.node(untouched))
 
             fixture.gateway
                 .mutate(
                     LpSubjectRef(LpSubjectType.GROUP, "existing"),
                     additions = setOf(addition),
                     removals = setOf(removal),
-                ).join().nodes.shouldContainExactly(addition)
+                ).join().nodes.shouldContainExactlyInAnyOrder(addition, untouched)
+            fixture.legacyModifyCalls shouldBe 0
 
             fixture.gateway
                 .mutate(
@@ -281,6 +284,7 @@ private class NativeGatewayFixture {
 
     var lastPermissionContext: LpContextSet? = null
     var lastInheritedGroupContext: LpContextSet? = null
+    var legacyModifyCalls: Int = 0
 
     lateinit var gateway: NativeLuckPermsSubjectGateway
 
@@ -317,7 +321,13 @@ private class NativeGatewayFixture {
         every { groupManager.loadGroup(any()) } answers {
             CompletableFuture.completedFuture(Optional.ofNullable(groups[firstArg<String>()]?.group))
         }
+        every { groupManager.createAndLoadGroup(any()) } answers {
+            val name = firstArg<String>()
+            CompletableFuture.completedFuture(groups.getOrPut(name) { GatewayGroup(name) }.group)
+        }
+        every { groupManager.saveGroup(any()) } returns CompletableFuture.completedFuture(null)
         every { groupManager.modifyGroup(any(), any()) } answers {
+            legacyModifyCalls += 1
             val name = firstArg<String>()
             val group = groups.getOrPut(name) { GatewayGroup(name) }.group
             @Suppress("UNCHECKED_CAST")
