@@ -8,6 +8,7 @@ import ru.arc.commands.arc.subcommands.AuditSubCommand
 import ru.arc.commands.arc.subcommands.BaltopSubCommand
 import ru.arc.commands.arc.subcommands.BoardSubCommand
 import ru.arc.commands.arc.subcommands.BuildBookSubCommand
+import ru.arc.commands.arc.subcommands.ChatSubCommand
 import ru.arc.commands.arc.subcommands.EliteLootSubCommand
 import ru.arc.commands.arc.subcommands.EmshopSubCommand
 import ru.arc.commands.arc.subcommands.FirstRtpSubCommand
@@ -49,6 +50,7 @@ class ArcCommand :
             HelpSubCommand, // Help first for discoverability
             ReloadSubCommand,
             BoardSubCommand,
+            ChatSubCommand,
             BaltopSubCommand,
             AuditSubCommand,
             RepoSubCommand,

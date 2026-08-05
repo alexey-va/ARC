@@ -18,6 +18,7 @@ import ru.arc.commands.arc.subcommands.SoundFollowSubCommand
 import ru.arc.commands.arc.subcommands.StoreSubCommand
 import ru.arc.commands.arc.subcommands.TestSubCommand
 import ru.arc.commands.arc.subcommands.TreasuresSubCommand
+import ru.arc.commands.chat.ChatModeAliasCommand
 import ru.arc.config.ConfigManager
 import ru.arc.config.LocationPoolConfig
 import ru.arc.core.ModuleRegistry
@@ -209,6 +210,8 @@ open class ARC : JavaPlugin() {
         val arcCommand = ArcCommand.INSTANCE
         registerCommand("arc", arcCommand, arcCommand)
         registerCommand("x", XCommand, XCommand)
+        registerCommand("g", ChatModeAliasCommand, null)
+        registerCommand("l", ChatModeAliasCommand, null)
         registerLegacyCommands()
     }
 

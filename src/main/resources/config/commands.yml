@@ -16,6 +16,12 @@ commands:
     name: board
     aliases: [ ]
     permission: arc.board
+  chat:
+    name: chat
+    aliases: [ ]
+    permission: ''
+    player-only: true
+    usage: /arc chat <local|global>
   baltop:
     name: baltop
     aliases: [ ]
@@ -124,6 +130,9 @@ commands:
 messages:
   common:
     usage: '<red>Использование: <gray>%usage%'
+  chat:
+    local: '<gray>Режим чата: <white>локальный<gray>. Переключить: <white>/g'
+    global: '<gray>Режим чата: <white>глобальный<gray>. Переключить: <white>/l'
   buildbook:
     not-found: <red>Строение <white>%name%<red> не найдено!
   hunt:

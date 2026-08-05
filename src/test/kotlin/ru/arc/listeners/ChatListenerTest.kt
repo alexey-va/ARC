@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
+import java.util.UUID
 
 class ChatListenerTest {
     private lateinit var scheduler: TestTaskScheduler
@@ -29,7 +30,10 @@ class ChatListenerTest {
 
     @Test
     fun `npc chat handling is moved from async event to the main scheduler`() {
-        val player = mockk<Player>()
+        val player =
+            mockk<Player> {
+                every { uniqueId } returns UUID.randomUUID()
+            }
         val event =
             mockk<AsyncChatEvent>(relaxed = true) {
                 every { isAsynchronous } returns true

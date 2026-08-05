@@ -42,6 +42,12 @@ commands:
   x:
     description: x
     usage: x
+  g:
+    description: Switch to global chat mode
+    usage: /g
+  l:
+    description: Switch to local chat mode
+    usage: /l
   locpool:
     description: Edit location pools
     usage: /locpool [pool]
