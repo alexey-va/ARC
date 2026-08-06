@@ -226,11 +226,12 @@ class StockClient internal constructor(
 
     private fun fetchFinnhub(symbol: String): Double {
         if (finnApiKey == null) return -1.0
-        val url = "https://finnhub.io/api/v1/quote?symbol=$symbol&token=$finnApiKey"
+        val request = finnhubQuoteRequest(symbol, finnApiKey)
         return try {
-            val connection = URI.create(url).toURL().openConnection() as HttpURLConnection
+            val connection = request.uri.toURL().openConnection() as HttpURLConnection
             connection.connectTimeout = HTTP_TIMEOUT_MS
             connection.readTimeout = HTTP_TIMEOUT_MS
+            request.headers.forEach(connection::setRequestProperty)
             val map =
                 InputStreamReader(connection.inputStream).use { reader ->
                     gson.fromJson(reader, Map::class.java) as Map<String, Any>
@@ -261,6 +262,24 @@ class StockClient internal constructor(
         }
     }
 }
+
+internal data class FinnhubQuoteRequest(
+    val uri: URI,
+    val headers: Map<String, String>,
+)
+
+internal fun finnhubQuoteRequest(
+    symbol: String,
+    apiKey: String,
+): FinnhubQuoteRequest =
+    FinnhubQuoteRequest(
+        uri =
+            URI.create(
+                "https://finnhub.io/api/v1/quote?symbol=" +
+                    URLEncoder.encode(symbol, StandardCharsets.UTF_8),
+            ),
+        headers = mapOf("X-Finnhub-Token" to apiKey),
+    )
 
 internal fun parseYahooRegularMarketPrice(payload: String): Double? =
     runCatching {

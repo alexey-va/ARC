@@ -4,6 +4,7 @@ import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.doubles.shouldBeExactly
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldNotContain
 import io.mockk.mockk
 import ru.arc.board.ItemIcon
 
@@ -140,6 +141,14 @@ class StockClientTest : FreeSpec({
     "Yahoo Finance parser rejects incomplete and malformed payloads" {
         parseYahooRegularMarketPrice("""{"chart":{"result":[]}}""") shouldBe null
         parseYahooRegularMarketPrice("not-json") shouldBe null
+    }
+
+    "Finnhub REST authentication keeps the API key out of the request URI" {
+        val request = finnhubQuoteRequest("AAPL", "test-secret")
+
+        request.uri.toString() shouldBe "https://finnhub.io/api/v1/quote?symbol=AAPL"
+        request.uri.toString() shouldNotContain "test-secret"
+        request.headers shouldBe mapOf("X-Finnhub-Token" to "test-secret")
     }
 })
 
