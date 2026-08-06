@@ -9,6 +9,7 @@ import org.bukkit.event.player.PlayerKickEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import ru.arc.ARC
 import ru.arc.audit.AuditManager
+import ru.arc.chat.ChatModeService
 import ru.arc.config.ConfigManager
 import ru.arc.core.delayed
 import ru.arc.core.ticks
@@ -25,6 +26,7 @@ class JoinListener : Listener {
 
     @EventHandler
     fun onPlayerJoin(event: PlayerJoinEvent) {
+        ChatModeService.track(event.player.uniqueId)
         SyncManager.playerJoin(event.player.uniqueId)
         invulnerable(event.player)
         fullHeal(event.player)
@@ -33,6 +35,7 @@ class JoinListener : Listener {
 
     @EventHandler(priority = EventPriority.LOW)
     fun onPlayerLeave(event: PlayerQuitEvent) {
+        ChatModeService.untrack(event.player.uniqueId)
         SyncManager.playerQuit(event.player.uniqueId)
         AuditManager.leave(event.player.name)
         if (invMap.containsKey(event.player.uniqueId)) stripInvulnerable(event.player)
@@ -41,6 +44,7 @@ class JoinListener : Listener {
 
     @EventHandler(ignoreCancelled = true)
     fun onPlayerKick(event: PlayerKickEvent) {
+        ChatModeService.untrack(event.player.uniqueId)
         SyncManager.playerQuit(event.player.uniqueId)
         AuditManager.leave(event.player.name)
         if (invMap.containsKey(event.player.uniqueId)) stripInvulnerable(event.player)

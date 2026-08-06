@@ -39,6 +39,7 @@ import ru.arc.core.modules.FarmModule
 import ru.arc.core.modules.HeadCacheModule
 import ru.arc.core.modules.HooksModule
 import ru.arc.core.modules.JoinMessagesModule
+import ru.arc.core.modules.ChatModeModule
 import ru.arc.core.modules.LeafDecayModule
 import ru.arc.core.modules.LocationPoolModule
 import ru.arc.core.modules.MobSpawnModule
@@ -195,6 +196,7 @@ open class ARC : JavaPlugin() {
             PersonalLootModule,
             MobSpawnModule,
             JoinMessagesModule,
+            ChatModeModule,
             // Building system (priority 90)
             BuildingModule,
             // Sync systems (priority 100)

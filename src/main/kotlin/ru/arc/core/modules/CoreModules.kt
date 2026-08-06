@@ -23,6 +23,7 @@ import ru.arc.core.PluginModule
 import ru.arc.core.ScheduledTask
 import ru.arc.core.repeating
 import ru.arc.core.ticks
+import ru.arc.chat.ChatModeService
 import ru.arc.eliteloot.EliteLootManager
 import ru.arc.farm.FarmManager
 import ru.arc.hooks.HookRegistry
@@ -601,6 +602,21 @@ object JoinMessagesModule : PluginModule {
     override fun shutdown() {
         JoinMessagesManager.shutdown()
     }
+}
+
+object ChatModeModule : PluginModule {
+    override val name = "ChatMode"
+    override val priority = 66
+
+    override fun init() {
+        ChatModeService.init()
+    }
+
+    override fun shutdown() {
+        ChatModeService.shutdown()
+    }
+
+    override fun reload() {}
 }
 
 // ==================== Priority 90: Building System ====================

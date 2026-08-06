@@ -133,6 +133,9 @@ messages:
   chat:
     local: '<gray>Режим чата: <white>локальный<gray>. Переключить: <white>/g'
     global: '<gray>Режим чата: <white>глобальный<gray>. Переключить: <white>/l'
+    local-already: '<gray>Вы уже в <white>локальном<gray> режиме чата. Переключить: <white>/g'
+    global-already: '<gray>Вы уже в <white>глобальном<gray> режиме чата. Переключить: <white>/l'
+    error: '<red>Не удалось переключить режим чата. Попробуйте ещё раз.'
   buildbook:
     not-found: <red>Строение <white>%name%<red> не найдено!
   hunt:

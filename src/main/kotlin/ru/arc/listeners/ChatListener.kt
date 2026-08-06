@@ -11,14 +11,20 @@ import ru.arc.ai.GPTManager
 import ru.arc.chat.ChatMode
 import ru.arc.chat.ChatModeService
 import ru.arc.core.sync
+import ru.arc.util.Logging.debug
 import ru.arc.util.TextUtils
+import java.util.UUID
 
 class ChatListener internal constructor(
     private val npcMessageHandler: (String, Player) -> Unit,
+    private val modeProvider: (UUID) -> ChatMode,
 ) : Listener {
+    internal constructor(npcMessageHandler: (String, Player) -> Unit) :
+        this(npcMessageHandler, ChatModeService::getMode)
+
     constructor() : this({ message, player ->
         GPTManager.processMessage(message, player, appendCancel = true)
-    })
+    }, ChatModeService::getMode)
 
     @EventHandler(priority = EventPriority.LOWEST)
     fun onPlayerChat(event: AsyncChatEvent) {
@@ -32,10 +38,24 @@ class ChatListener internal constructor(
     }
 
     private fun applyChatMode(event: AsyncChatEvent) {
-        if (ChatModeService.getMode(event.player.uniqueId) != ChatMode.GLOBAL) return
+        val mode = modeProvider(event.player.uniqueId)
         val message = event.message()
-        if (TextUtils.plain(message).startsWith("!")) return
+        val hadPrefix = TextUtils.plain(message).startsWith("!")
+        if (mode != ChatMode.GLOBAL || hadPrefix) {
+            debug(
+                "[ChatMode] backend player={} mode={} had-prefix={} prefix-added=false",
+                event.player.uniqueId,
+                mode,
+                hadPrefix,
+            )
+            return
+        }
         event.message(Component.text("!").append(message))
+        debug(
+            "[ChatMode] backend player={} mode={} had-prefix=false prefix-added=true",
+            event.player.uniqueId,
+            mode,
+        )
     }
 
     private fun processTitleInput(event: AsyncChatEvent): Boolean {
