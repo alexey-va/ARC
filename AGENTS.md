@@ -10,6 +10,10 @@
 - **Commands** — [`src/main/kotlin/ru/arc/commands/arc/COMMANDS.md`](src/main/kotlin/ru/arc/commands/arc/COMMANDS.md)
 - **Ops HTTP** — [`src/main/kotlin/ru/arc/ops/AGENTS.md`](src/main/kotlin/ru/arc/ops/AGENTS.md)
 
+Chat mode commands and shared state exist in ARC, but ProxyARC exclusively adds
+the `!` routing prefix. CMI consumes that prefix on Paper before formatting;
+ARC must not restore it afterward.
+
 ## Runtime & deploy
 
 | Doc | Purpose |
