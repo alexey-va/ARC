@@ -70,4 +70,18 @@ class OpsHttpHandlersTest :
                 loadedPluginNames = setOf("PrometheusExporter", "My_Worlds"),
             ) shouldBe false
         }
+
+        "plugin jar matching uses the loaded plugin code source" {
+            val identifiers =
+                OpsHttpHandlers.loadedPluginIdentifiers(
+                    pluginName = "Oh_the_dungeons_youll_go_Redux",
+                    mainClassName = "otd.Main",
+                    codeSourceFileName = "OTD-Redux-1.21.11-0.3.0.jar",
+                )
+
+            OpsHttpHandlers.matchesLoadedPluginJar(
+                jarStem = "OTD-Redux-1.21.11-0.3.0",
+                loadedPluginNames = identifiers,
+            ) shouldBe true
+        }
     })

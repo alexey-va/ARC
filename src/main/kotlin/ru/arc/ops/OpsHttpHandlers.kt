@@ -552,13 +552,25 @@ object OpsHttpHandlers {
         val pluginsDir = File(Bukkit.getWorldContainer().parentFile, "plugins")
         if (!pluginsDir.isDirectory) return emptyList()
 
-        val loadedNames = pm.plugins.map { it.name }.toSet()
+        val loadedIdentifiers =
+            pm.plugins
+                .flatMap { plugin ->
+                    loadedPluginIdentifiers(
+                        pluginName = plugin.name,
+                        mainClassName = plugin.pluginMeta.mainClass,
+                        codeSourceFileName =
+                            runCatching {
+                                val location = plugin.javaClass.protectionDomain?.codeSource?.location
+                                location?.let { File(it.toURI()).takeIf(File::isFile)?.name }
+                            }.getOrNull(),
+                    )
+                }.toSet()
         return pluginsDir
             .listFiles()
             .orEmpty()
             .asSequence()
             .filter { it.isFile && it.extension.equals("jar", ignoreCase = true) }
-            .filterNot { jar -> matchesLoadedPluginJar(jar.nameWithoutExtension, loadedNames) }
+            .filterNot { jar -> matchesLoadedPluginJar(jar.nameWithoutExtension, loadedIdentifiers) }
             .take(limit)
             .map { jar ->
                 mapOf(
@@ -568,6 +580,24 @@ object OpsHttpHandlers {
                 )
             }.toList()
     }
+
+    internal fun loadedPluginIdentifiers(
+        pluginName: String,
+        mainClassName: String,
+        codeSourceFileName: String?,
+    ): Set<String> =
+        buildSet {
+            add(pluginName)
+            codeSourceFileName
+                ?.let(::File)
+                ?.takeIf { it.extension.equals("jar", ignoreCase = true) }
+                ?.let { add(it.nameWithoutExtension) }
+
+            val rootPackage = mainClassName.substringBefore('.')
+            if (rootPackage.length >= 3 && rootPackage.lowercase() !in GENERIC_ROOT_PACKAGES) {
+                add(rootPackage)
+            }
+        }
 
     internal fun matchesLoadedPluginJar(
         jarStem: String,
@@ -586,6 +616,9 @@ object OpsHttpHandlers {
 
     private fun normalizePluginIdentifier(value: String): String =
         value.lowercase().filter(Char::isLetterOrDigit)
+
+    private val GENERIC_ROOT_PACKAGES =
+        setOf("com", "org", "net", "io", "dev", "me", "de", "fr", "ru", "eu", "wtf")
 
     private fun playerSummary(
         player: Player,
