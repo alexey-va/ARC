@@ -52,4 +52,22 @@ class OpsHttpHandlersTest :
             summary["enabled"] shouldBe false
             summary["status"] shouldBe "disabled"
         }
+
+        "plugin jar matching ignores filename separators and vendor prefixes" {
+            OpsHttpHandlers.matchesLoadedPluginJar(
+                jarStem = "minecraft-prometheus-exporter-3.1.2",
+                loadedPluginNames = setOf("PrometheusExporter"),
+            ) shouldBe true
+            OpsHttpHandlers.matchesLoadedPluginJar(
+                jarStem = "MyWorlds-2.0.0-SNAPSHOT-362",
+                loadedPluginNames = setOf("My_Worlds"),
+            ) shouldBe true
+        }
+
+        "plugin jar matching does not hide unrelated jars" {
+            OpsHttpHandlers.matchesLoadedPluginJar(
+                jarStem = "SomeOtherPlugin-1.0",
+                loadedPluginNames = setOf("PrometheusExporter", "My_Worlds"),
+            ) shouldBe false
+        }
     })

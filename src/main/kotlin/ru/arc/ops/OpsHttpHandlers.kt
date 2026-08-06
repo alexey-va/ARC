@@ -552,16 +552,13 @@ object OpsHttpHandlers {
         val pluginsDir = File(Bukkit.getWorldContainer().parentFile, "plugins")
         if (!pluginsDir.isDirectory) return emptyList()
 
-        val loadedNames = pm.plugins.map { it.name.lowercase() }.toSet()
+        val loadedNames = pm.plugins.map { it.name }.toSet()
         return pluginsDir
             .listFiles()
             .orEmpty()
             .asSequence()
             .filter { it.isFile && it.extension.equals("jar", ignoreCase = true) }
-            .filter { jar ->
-                val stem = jar.nameWithoutExtension.lowercase()
-                loadedNames.none { stem.contains(it) || it.contains(stem.substringBefore('-')) }
-            }
+            .filterNot { jar -> matchesLoadedPluginJar(jar.nameWithoutExtension, loadedNames) }
             .take(limit)
             .map { jar ->
                 mapOf(
@@ -571,6 +568,24 @@ object OpsHttpHandlers {
                 )
             }.toList()
     }
+
+    internal fun matchesLoadedPluginJar(
+        jarStem: String,
+        loadedPluginNames: Set<String>,
+    ): Boolean {
+        val normalizedStem = normalizePluginIdentifier(jarStem)
+        return loadedPluginNames.any { loadedName ->
+            val normalizedName = normalizePluginIdentifier(loadedName)
+            normalizedName.isNotEmpty() &&
+                (
+                    normalizedStem.startsWith(normalizedName) ||
+                        (normalizedName.length >= 5 && normalizedStem.contains(normalizedName))
+                )
+        }
+    }
+
+    private fun normalizePluginIdentifier(value: String): String =
+        value.lowercase().filter(Char::isLetterOrDigit)
 
     private fun playerSummary(
         player: Player,
