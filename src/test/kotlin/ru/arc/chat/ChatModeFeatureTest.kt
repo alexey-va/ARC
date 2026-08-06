@@ -50,7 +50,7 @@ class ChatModeFeatureTest : FreeSpec({
             handler.priority shouldBe EventPriority.LOWEST
         }
 
-        "prefixes an unprefixed message in global mode" {
+        "does not restore the proxy prefix after CMI consumed it" {
             val playerId = UUID.randomUUID()
             val player = player(playerId)
             var message: Component = Component.text("Привет")
@@ -58,7 +58,7 @@ class ChatModeFeatureTest : FreeSpec({
 
             ChatListener({ _, _ -> }, { ChatMode.GLOBAL }).onPlayerChat(event)
 
-            plainText.serialize(message) shouldBe "!Привет"
+            plainText.serialize(message) shouldBe "Привет"
         }
 
         "does not add a second prefix in global mode" {
