@@ -252,7 +252,6 @@ class BoostDataEntity(
         removeExpired()
 
         if (hasBoostWithId(boost.id)) {
-            error("Boost with id {} already exists for {}", boost.id, player)
             return false
         }
 
