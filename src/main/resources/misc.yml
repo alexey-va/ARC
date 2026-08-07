@@ -65,6 +65,8 @@ portal:
   - home
   - warmup
   - spawn
+  # Выполнять commands-only CMI portal, если игрок подключился уже внутри cuboid
+  cmi-command-only-on-join: false
   # Сообщение при появлении портала (MiniMessage)
   message: <dark_green>Недалеко появляется портал...
   # Дистанция отображения частиц
