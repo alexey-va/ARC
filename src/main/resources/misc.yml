@@ -305,10 +305,11 @@ worlds: !!set {}
 # --- Отображаемые подписи миров (ключ = имя мира Bukkit) ---
 world-names:
   vanilla: '&7Ванильный мир'
-  vanilla_nether: '&cВанильный ад'
+  vanilla_nether: '&4Ванильный ад'
   vanilla_the_end: '&3Ванильный Энд'
   survival: '&aМир с биомами'
-  nether: '&cАд'
+  survival_nether: '&4Ад'
+  nether: '&4Ад'
   world_the_end: '&3Новый Энд'
   em_*: '&6Мир данжа'
   spawn: '&2Спавн'
