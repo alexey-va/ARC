@@ -1,5 +1,6 @@
 package ru.arc.stock
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
@@ -8,9 +9,11 @@ import io.kotest.matchers.doubles.shouldBeLessThan
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.bukkit.Material
+import org.bukkit.entity.Player
 import ru.arc.audit.AuditManager
 import ru.arc.audit.AuditService
 import ru.arc.config.StockConfig
@@ -113,6 +116,27 @@ class StockPlayerManagerTest : FreeSpec({
             val leveraged = StockPlayerManager.commission(s, amount = 10.0, leverage = 200)
 
             leveraged shouldBeGreaterThan base
+        }
+    }
+
+    "getOrCreate()" - {
+        "propagates repository load failures instead of inventing an empty account" {
+            val storage = InMemoryStorage<StockPlayer>().apply { failOnLoad = true }
+            StockPlayerManager.playerRepo =
+                CachedRepository(
+                    config = RepoConfig.builder<StockPlayer>("players-failing").build(),
+                    storage = storage,
+                    syncService = InMemorySyncService(),
+                )
+            val playerId = UUID.randomUUID()
+            val bukkitPlayer = mockk<Player> {
+                every { uniqueId } returns playerId
+                every { name } returns "LoadFailure"
+            }
+
+            shouldThrow<IllegalStateException> {
+                StockPlayerManager.getOrCreate(bukkitPlayer)
+            }
         }
     }
 

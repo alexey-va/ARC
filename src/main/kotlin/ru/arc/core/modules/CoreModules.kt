@@ -407,6 +407,8 @@ object StockModule : PluginModule {
                 scope = activeScope,
             ) {
                 loadAllOnStart(true)
+                // The market catalog is a small complete mirror used by bulk jobs.
+                enableCleanup(false)
                 saveInterval(kotlin.time.Duration.parse("1s"))
             }
 
@@ -418,6 +420,8 @@ object StockModule : PluginModule {
                 scope = activeScope,
             ) {
                 loadAllOnStart(true)
+                // Margin calls and dividends must include offline positions too.
+                enableCleanup(false)
                 saveInterval(kotlin.time.Duration.parse("250ms"))
             }
 

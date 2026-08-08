@@ -1,10 +1,12 @@
 package ru.arc.bschests
 
 import com.jeff_media.customblockdata.CustomBlockData
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
@@ -18,6 +20,7 @@ import org.bukkit.persistence.PersistentDataType
 import ru.arc.ARC
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
+import ru.arc.core.sync
 import ru.arc.network.repos.ItemList
 import ru.arc.repository.CachedRepository
 import ru.arc.repository.Entity
@@ -27,6 +30,7 @@ import ru.arc.util.GuiUtils
 import ru.arc.util.ItemUtils.connectedChests
 import ru.arc.util.ItemUtils.extractInventory
 import ru.arc.util.ItemUtils.extractItems
+import ru.arc.util.Logging.error
 import ru.arc.util.Logging.warn
 import java.util.UUID
 import kotlin.time.Duration.Companion.seconds
@@ -169,6 +173,7 @@ object PersonalLootModule {
     private var useBsLoot: Boolean = false
 
     private var repo: CachedRepository<CustomLootData>? = null
+    private var repositoryScope: CoroutineScope? = null
     private lateinit var chestGenerator: ChestGenerator
 
     @JvmStatic
@@ -204,13 +209,22 @@ object PersonalLootModule {
                 throw failure
             }
         repo = newRepository
+        repositoryScope = newScope
     }
 
     @JvmStatic
     fun shutdown() {
-        val currentRepository = repo ?: return
+        val currentRepository = repo
+        val currentScope = repositoryScope
         repo = null
-        runBlocking { currentRepository.shutdown() }
+        repositoryScope = null
+        try {
+            if (currentRepository != null) {
+                runBlocking { currentRepository.shutdown() }
+            }
+        } finally {
+            currentScope?.cancel()
+        }
     }
 
     @JvmStatic
@@ -263,6 +277,7 @@ object PersonalLootModule {
     @JvmStatic
     fun processChestOpen(event: InventoryOpenEvent) {
         val repository = repo ?: return
+        val activeScope = repositoryScope ?: return
         if (event.inventory.type !in inventories) return
 
         val player = event.player as? Player ?: return
@@ -298,29 +313,94 @@ object PersonalLootModule {
             return
         }
 
-        players.add(player.uniqueId)
-        for (b in blocks) {
-            val bData = CustomBlockData(b, ARC.instance)
-            bData.set(key, PersistentDataType.STRING, players.joinToString(PERSONAL_LOOT_SEPARATOR) { it.toString() })
-        }
-
         val poolName = data.get(poolKey, PersistentDataType.STRING)
         val currentItems = blocks.flatMap { extractItems(it) }.map { it.clone() }
 
-        if (!useBsLoot) {
-            extractInventory(block)?.clear()
+        val playerUuid = player.uniqueId
+        val lootId = "$playerUuid$PERSONAL_LOOT_SEPARATOR$chestUuid"
+        activeScope.launch {
+            try {
+                val lootData =
+                    repository
+                        .getOrCreate(lootId) {
+                            CustomLootData.create(playerUuid, chestUuid)
+                        }.getOrThrow()
+                sync {
+                    finishChestOpen(
+                        player = player,
+                        block = block,
+                        expectedChestUuid = chestUuid,
+                        poolName = poolName,
+                        currentItems = currentItems,
+                        lootData = lootData,
+                        repository = repository,
+                    )
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                error("Failed to load personal loot {}", lootId, failure)
+                sync {
+                    if (player.isOnline) {
+                        player.sendMessage(
+                            config.component(
+                                "messages.load-error",
+                                "<red>Не удалось загрузить содержимое сундука. Попробуйте ещё раз.",
+                            ),
+                        )
+                    }
+                }
+            }
         }
+    }
 
-        val lootId = "${player.uniqueId}$PERSONAL_LOOT_SEPARATOR$chestUuid"
-        val lootData =
-            repository.getNow(lootId)
-                ?: CustomLootData.create(player.uniqueId, chestUuid)
+    private fun finishChestOpen(
+        player: Player,
+        block: Block,
+        expectedChestUuid: UUID,
+        poolName: String?,
+        currentItems: List<ItemStack>,
+        lootData: CustomLootData,
+        repository: CachedRepository<CustomLootData>,
+    ) {
+        if (!player.isOnline || block.type !in chests) return
+
+        val currentData = CustomBlockData(block, ARC.instance)
+        val currentChestUuid =
+            parsePersonalLootUuid(currentData.get(uuidKey, PersistentDataType.STRING))
+        if (currentChestUuid != expectedChestUuid) return
+
+        val playerListString = currentData.get(key, PersistentDataType.STRING) ?: return
+        val players = parsePersonalLootPlayers(playerListString).toMutableSet()
+        if (players.size >= maxPlayers && player.uniqueId !in players) {
+            player.sendMessage(
+                config.component(
+                    "messages.max-players",
+                    "<red>Слишком много игроков уже открыли этот сундук!",
+                ) { tag("amount", players.size) },
+            )
+            return
+        }
 
         if (lootData.isExhausted()) {
             player.sendMessage(
                 config.component("messages.already-opened", "<red>Вы уже открывали этот сундук"),
             )
             return
+        }
+
+        val blocks = connectedChests(block)
+        players.add(player.uniqueId)
+        for (connectedBlock in blocks) {
+            CustomBlockData(connectedBlock, ARC.instance).set(
+                key,
+                PersistentDataType.STRING,
+                players.joinToString(PERSONAL_LOOT_SEPARATOR) { it.toString() },
+            )
+        }
+
+        if (!useBsLoot) {
+            extractInventory(block)?.clear()
         }
 
         if (lootData.needsItems()) {

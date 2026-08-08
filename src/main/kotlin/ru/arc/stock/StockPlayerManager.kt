@@ -69,7 +69,7 @@ object StockPlayerManager {
     suspend fun getOrCreate(player: Player): StockPlayer {
         return playerRepo.getOrCreate(player.uniqueId.toString()) {
             StockPlayer(player.name, player.uniqueId)
-        }.getOrNull() ?: StockPlayer(player.name, player.uniqueId)
+        }.getOrThrow()
     }
 
     @JvmStatic fun buyStock(stockPlayer: StockPlayer, stock: Stock, amount: Double, leverage: Int, lowerBound: Double, upperBound: Double) {

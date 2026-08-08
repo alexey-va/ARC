@@ -625,6 +625,8 @@ object BoardManager {
                 scope = scope,
             ) {
                 loadAllOnStart(true)
+                // Board operations enumerate the complete network-wide queue.
+                enableCleanup(false)
                 saveInterval(1.seconds)
             }
         setupTasks()

@@ -97,7 +97,9 @@ class RedisAuditRepository private constructor(
                     updateChannel = "arc.audit-update",
                     scope = scope,
                 ) {
-                    loadAllOnStart(false)
+                    // Weight, pruning and clear-all operate on the complete audit set.
+                    loadAllOnStart(true)
+                    enableCleanup(false)
                     saveInterval((saveIntervalMs / 1000).seconds)
                 }
 

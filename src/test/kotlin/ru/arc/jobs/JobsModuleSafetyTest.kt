@@ -21,6 +21,13 @@ class JobsModuleSafetyTest : FreeSpec({
         JobsModule.getBoostData(UUID.randomUUID()).shouldBeNull()
     }
 
+    "online player tracking is safe before initialization" {
+        val playerId = UUID.randomUUID()
+
+        JobsModule.trackPlayer(playerId)
+        JobsModule.untrackPlayer(playerId)
+    }
+
     "addBoost rejects work before initialization" {
         JobsModule
             .addBoost(

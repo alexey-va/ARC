@@ -36,6 +36,9 @@ object ChatModeService {
                     scope = newScope,
                 ) {
                     loadAllOnStart(true)
+                    // Chat routing is synchronous; keep every mode available so
+                    // the first message after a join cannot race an async reload.
+                    enableCleanup(false)
                     saveInterval(1.seconds)
                 }
             repository = newRepository

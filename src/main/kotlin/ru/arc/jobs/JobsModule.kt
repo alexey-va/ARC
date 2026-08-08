@@ -376,6 +376,9 @@ object JobsModule {
                     scope = newScope,
                 ) {
                     loadAllOnStart(true)
+                    // Jobs rewards use synchronous hot-path reads. Keep the full
+                    // Redis mirror resident so a cleanup pass can never drop a boost.
+                    enableCleanup(false)
                     saveInterval(500.milliseconds)
                 }
             } catch (failure: Throwable) {
@@ -399,6 +402,9 @@ object JobsModule {
             throw failure
         }
 
+        Bukkit.getOnlinePlayers().forEach { player ->
+            newRepo.addContext(player.uniqueId.toString())
+        }
         runtime = JobsRuntime(newRepo, newConfig, newScope)
         return true
     }
@@ -418,6 +424,18 @@ object JobsModule {
     @JvmStatic
     fun getConfig(): Config =
         runtime?.config ?: kotlin.error("JobsModule is not initialized")
+
+    /** Keep an online player's boost record pinned and subscribed to remote updates. */
+    @JvmStatic
+    fun trackPlayer(playerUuid: UUID) {
+        runtime?.repo?.addContext(playerUuid.toString())
+    }
+
+    /** Release the online-player pin. The complete mirror remains cache-resident. */
+    @JvmStatic
+    fun untrackPlayer(playerUuid: UUID) {
+        runtime?.repo?.removeContext(playerUuid.toString())
+    }
 
     @JvmStatic
     fun jobDisplayMinimessage(jobName: String): String {
