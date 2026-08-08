@@ -101,6 +101,8 @@ class HookRegistry(
 
         @JvmField var aeHook: AEHook? = null
 
+        @JvmField var myWorldsHook: MyWorldsHook? = null
+
         private fun clearGlobalHooks() {
             landsHook = null
             huskHomesHook = null
@@ -124,6 +126,7 @@ class HookRegistry(
             playerWarpsHook = null
             packetEventsHook = null
             aeHook = null
+            myWorldsHook = null
         }
     }
 
@@ -336,6 +339,10 @@ class HookRegistry(
         }
         register("RTP", true) {
             leafRTPListener = registerListener(LeafRTPListener())
+        }
+        register("My_Worlds", true) {
+            val plugin = checkNotNull(Bukkit.getPluginManager().getPlugin("My_Worlds"))
+            myWorldsHook = MyWorldsHook(plugin)
         }
         register("BetterStructures", true) {
             bsListener = registerListener(BSListener())

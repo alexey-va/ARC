@@ -18,17 +18,9 @@ class FirstRtpCoordinatorTest :
         every { currentWorld.uid } returns UUID.randomUUID()
         every { targetWorld.uid } returns UUID.randomUUID()
 
-        "network RTP uses the first-entry flow only for an unvisited world" {
-            FirstRtpCoordinator.needsFirstRtp(
-                PlayerRtpState(hasTeleported = false, hasTeleportedToWorld = false),
-            ) shouldBe true
-            FirstRtpCoordinator.needsFirstRtp(
-                PlayerRtpState(hasTeleported = true, hasTeleportedToWorld = true),
-            ) shouldBe false
-        }
-
-        "returns an existing visitor to the world spawn without starting RTP" {
+        "returns an existing visitor to the requested world without starting RTP" {
             var started = false
+            var returned = false
             FirstRtpCoordinator.route(
                 player = player,
                 world = targetWorld,
@@ -37,9 +29,42 @@ class FirstRtpCoordinatorTest :
                     started = true
                     FirstRtpResult.Rejected("must not run")
                 },
-                teleport = { true },
-            ) shouldBe FirstRtpRouteResult.ReturnedToWorldSpawn
+                returnToWorld = {
+                    returned = true
+                    true
+                },
+            ) shouldBe FirstRtpRouteResult.ReturnedToWorld
             started shouldBe false
+            returned shouldBe true
+        }
+
+        "keeps an existing visitor at the current location in the requested world" {
+            every { player.world } returns targetWorld
+            var returned = false
+
+            FirstRtpCoordinator.route(
+                player = player,
+                world = targetWorld,
+                state = PlayerRtpState(hasTeleported = true, hasTeleportedToWorld = true),
+                start = { error("must not start") },
+                returnToWorld = {
+                    returned = true
+                    true
+                },
+            ) shouldBe FirstRtpRouteResult.ReturnedToWorld
+            returned shouldBe false
+        }
+
+        "rejects an existing visitor when returning to the requested world fails" {
+            every { player.world } returns currentWorld
+
+            FirstRtpCoordinator.route(
+                player = player,
+                world = targetWorld,
+                state = PlayerRtpState(hasTeleported = true, hasTeleportedToWorld = true),
+                start = { error("must not start") },
+                returnToWorld = { false },
+            ) shouldBe FirstRtpRouteResult.Rejected("не удалось вернуть игрока в мир")
         }
 
         "sets respawn only for the first network RTP" {
@@ -57,7 +82,7 @@ class FirstRtpCoordinatorTest :
                     setRespawn = it
                     providerResult
                 },
-                teleport = { error("must not teleport") },
+                returnToWorld = { error("must not return") },
             ) shouldBe FirstRtpRouteResult.Started(providerResult)
             setRespawn shouldBe true
         }
@@ -72,7 +97,7 @@ class FirstRtpCoordinatorTest :
                     setRespawn = it
                     FirstRtpResult.Rejected("provider unavailable")
                 },
-                teleport = { error("must not teleport") },
+                returnToWorld = { error("must not return") },
             ) shouldBe FirstRtpRouteResult.Rejected("provider unavailable")
             setRespawn shouldBe false
         }

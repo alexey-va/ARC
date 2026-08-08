@@ -47,7 +47,7 @@ object FirstRtpSubCommand : SubCommand {
                     return true
                 }
         when (val result = FirstRtpCoordinator.route(player, world)) {
-            FirstRtpRouteResult.ReturnedToWorldSpawn ->
+            FirstRtpRouteResult.ReturnedToWorld ->
                 sender.sendMessage(
                     TextUtil.mm(
                         "<green>Игрок <white>${player.name}<green> возвращён в мир <white>${world.name}",

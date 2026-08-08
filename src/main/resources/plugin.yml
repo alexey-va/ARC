@@ -35,6 +35,7 @@ softdepend:
   - Duels
   - BetterRTP
   - RTP
+  - My_Worlds
 commands:
   arc:
     description: Main command

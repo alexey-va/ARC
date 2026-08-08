@@ -2,9 +2,10 @@ package ru.arc.rtp
 
 import org.bukkit.World
 import org.bukkit.entity.Player
+import ru.arc.hooks.HookRegistry
 
 sealed interface FirstRtpRouteResult {
-    data object ReturnedToWorldSpawn : FirstRtpRouteResult
+    data object ReturnedToWorld : FirstRtpRouteResult
 
     data class Started(val result: FirstRtpResult.Started) : FirstRtpRouteResult
 
@@ -13,18 +14,6 @@ sealed interface FirstRtpRouteResult {
 
 /** Owns the first-world/first-network decision independently of transport. */
 object FirstRtpCoordinator {
-    /**
-     * Public network `/rtp` uses the one-time flow only before this player has
-     * ever reached the requested world. Later requests must use the regular
-     * provider instead of becoming a no-op after the backend switch.
-     */
-    fun needsFirstRtp(
-        player: Player,
-        world: World,
-    ): Boolean = needsFirstRtp(RtpPlayerRegistry.state(player.uniqueId, world.name))
-
-    internal fun needsFirstRtp(state: PlayerRtpState): Boolean = !state.hasTeleportedToWorld
-
     fun route(
         player: Player,
         world: World,
@@ -41,7 +30,15 @@ object FirstRtpCoordinator {
                     persist = true,
                 )
             },
-            teleport = { player.teleport(world.spawnLocation) },
+            returnToWorld = {
+                val hook = HookRegistry.myWorldsHook
+                val previousLocation = hook?.lastLocation(player, world)
+                if (previousLocation == null) {
+                    player.teleport(world.spawnLocation)
+                } else {
+                    hook.teleportToExact(player, previousLocation)
+                }
+            },
         )
 
     internal fun route(
@@ -49,13 +46,13 @@ object FirstRtpCoordinator {
         world: World,
         state: PlayerRtpState,
         start: (setRespawn: Boolean) -> FirstRtpResult,
-        teleport: () -> Boolean,
+        returnToWorld: () -> Boolean,
     ): FirstRtpRouteResult {
         if (state.hasTeleportedToWorld) {
-            if (player.world.uid != world.uid && !teleport()) {
-                return FirstRtpRouteResult.Rejected("не удалось вернуть игрока на спавн мира")
+            if (player.world.uid != world.uid && !returnToWorld()) {
+                return FirstRtpRouteResult.Rejected("не удалось вернуть игрока в мир")
             }
-            return FirstRtpRouteResult.ReturnedToWorldSpawn
+            return FirstRtpRouteResult.ReturnedToWorld
         }
 
         return when (val result = start(!state.hasTeleported)) {

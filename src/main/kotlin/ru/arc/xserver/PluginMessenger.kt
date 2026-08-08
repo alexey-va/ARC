@@ -98,12 +98,7 @@ class PluginMessenger : PluginMessageListener {
         }
 
         when (request.mode) {
-            NetworkRtpMode.FIRST_ENTRY ->
-                if (FirstRtpCoordinator.needsFirstRtp(player, world)) {
-                    handleFirstEntryRtp(player, request, world, worldName)
-                } else {
-                    handleRegularRtp(player, request, world, worldName)
-                }
+            NetworkRtpMode.FIRST_ENTRY -> handleFirstEntryRtp(player, request, world, worldName)
             NetworkRtpMode.REGULAR -> handleRegularRtp(player, request, world, worldName)
         }
     }
@@ -115,10 +110,17 @@ class PluginMessenger : PluginMessageListener {
         worldName: String,
     ) {
         when (val result = FirstRtpCoordinator.route(player, world)) {
-            FirstRtpRouteResult.ReturnedToWorldSpawn ->
+            FirstRtpRouteResult.ReturnedToWorld -> {
+                info(
+                    "Network first-entry request {} returned {} to {} without RTP",
+                    request.requestId,
+                    player.name,
+                    worldName,
+                )
                 player.sendMessage(
                     TextUtil.mm("<green>Вы вернулись в мир <white>$worldName<green>."),
                 )
+            }
 
             is FirstRtpRouteResult.Started ->
                 info(
