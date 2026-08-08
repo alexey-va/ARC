@@ -10,6 +10,7 @@ import ru.arc.gui.gui
 import ru.arc.hooks.HookRegistry
 import ru.arc.util.CooldownManager
 import ru.arc.util.GuiUtils
+import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import ru.arc.util.TextUtil.formatAmount
 import ru.arc.util.TextUtil.mm
@@ -142,10 +143,25 @@ object BaltopGuiFactory {
         player: Player,
         sort: Sort = Sort.TOTAL,
     ) {
-        updateCacheIfNeeded().thenRun {
-            val gui = create(config, player, sort)
-            sync { gui.show(player) }
-        }
+        updateCacheIfNeeded()
+            .thenRun {
+                val gui = create(config, player, sort)
+                sync { gui.show(player) }
+            }.exceptionally { failure ->
+                error("Failed to show baltop for {}", player.name, failure.cause ?: failure)
+                sync {
+                    player.sendMessage(
+                        mm(
+                            config.string(
+                                "baltop.error",
+                                "<red>Не удалось загрузить таблицу лидеров. Попробуйте ещё раз позже.",
+                            ),
+                            true,
+                        ),
+                    )
+                }
+                null
+            }
     }
 
     /**

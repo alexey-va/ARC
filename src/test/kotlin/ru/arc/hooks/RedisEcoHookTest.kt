@@ -2,9 +2,9 @@ package ru.arc.hooks
 
 import dev.unnm3d.rediseconomy.api.RedisEconomyAPI
 import dev.unnm3d.rediseconomy.currency.Currency
-import io.lettuce.core.ScoredValue
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
@@ -34,22 +34,38 @@ class RedisEcoHookTest {
     }
 
     @Test
-    fun `top accounts use typed scored values and skip malformed ids`() {
-        val playerId = UUID.randomUUID()
+    fun `top accounts use the public currency cache without touching relocated lettuce types`() {
+        val richestId = UUID.randomUUID()
+        val secondId = UUID.randomUUID()
+        val excludedId = UUID.randomUUID()
         val currency = mockk<Currency>()
-        every { currency.getOrderedAccounts(10) } returns
-            CompletableFuture.completedFuture(
-                listOf(
-                    ScoredValue.just(99.25, playerId.toString()),
-                    ScoredValue.just(50.0, "not-a-uuid"),
+        every { currency.accounts } returns
+            mapOf(
+                secondId to 50.0,
+                excludedId to 10.0,
+                richestId to 99.25,
+            )
+        val api =
+            api(
+                currency,
+                mapOf(
+                    richestId to "Richest",
+                    secondId to "Second",
+                    excludedId to "Excluded",
                 ),
             )
-        val api = api(currency, mapOf(playerId to "Player"))
-        val hook = RedisEcoHook { api }
+        val hook = RedisEcoHook(apiProvider = { api }, runAsync = Runnable::run)
 
-        val accounts = hook.getTopAccounts(10).join()
+        val accounts = hook.getTopAccounts(2).join()
 
-        assertEquals(listOf(RedisEcoHook.Account("Player", playerId, 99.25)), accounts)
+        assertEquals(
+            listOf(
+                RedisEcoHook.Account("Richest", richestId, 99.25),
+                RedisEcoHook.Account("Second", secondId, 50.0),
+            ),
+            accounts,
+        )
+        verify(exactly = 0) { currency.getOrderedAccounts(any()) }
     }
 
     @Test
