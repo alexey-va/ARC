@@ -8,6 +8,7 @@ import ru.arc.ARC
 import ru.arc.config.ConfigManager
 import ru.arc.core.Tasks
 import ru.arc.rtp.BackendRtpRequest
+import ru.arc.rtp.BackendRtpReady
 import ru.arc.rtp.FirstRtpCoordinator
 import ru.arc.rtp.FirstRtpRouteResult
 import ru.arc.rtp.FirstRtpResult
@@ -29,6 +30,10 @@ class PluginMessenger : PluginMessageListener {
         Bukkit.getServer().messenger.registerOutgoingPluginChannel(
             ARC.instance,
             BackendRtpRequest.CHANNEL,
+        )
+        Bukkit.getServer().messenger.registerOutgoingPluginChannel(
+            ARC.instance,
+            BackendRtpReady.CHANNEL,
         )
         Bukkit.getServer().messenger.registerIncomingPluginChannel(
             ARC.instance,
@@ -180,6 +185,10 @@ class PluginMessenger : PluginMessageListener {
             ARC.instance,
             BackendRtpRequest.CHANNEL,
         )
+        Bukkit.getServer().messenger.unregisterOutgoingPluginChannel(
+            ARC.instance,
+            BackendRtpReady.CHANNEL,
+        )
         Bukkit.getServer().messenger.unregisterOutgoingPluginChannel(ARC.instance, "BungeeCord")
     }
 
@@ -191,6 +200,14 @@ class PluginMessenger : PluginMessageListener {
             ARC.instance,
             BackendRtpRequest.CHANNEL,
             request.encode(),
+        )
+    }
+
+    fun sendBackendRtpReady(player: Player) {
+        player.sendPluginMessage(
+            ARC.instance,
+            BackendRtpReady.CHANNEL,
+            BackendRtpReady(player.uniqueId).encode(),
         )
     }
 

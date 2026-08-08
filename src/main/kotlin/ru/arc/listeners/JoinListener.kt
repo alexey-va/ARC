@@ -27,6 +27,7 @@ class JoinListener : Listener {
 
     @EventHandler
     fun onPlayerJoin(event: PlayerJoinEvent) {
+        ARC.pluginMessenger?.sendBackendRtpReady(event.player)
         ChatModeService.track(event.player.uniqueId)
         JobsModule.trackPlayer(event.player.uniqueId)
         SyncManager.playerJoin(event.player.uniqueId)
