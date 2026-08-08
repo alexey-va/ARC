@@ -1,5 +1,6 @@
 package ru.arc.xserver
 
+import net.kyori.adventure.text.Component
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import org.bukkit.plugin.messaging.PluginMessageListener
@@ -109,16 +110,14 @@ class PluginMessenger : PluginMessageListener {
         world: org.bukkit.World,
         worldName: String,
     ) {
-        when (val result = FirstRtpCoordinator.route(player, world)) {
+        val result = FirstRtpCoordinator.route(player, world)
+        when (result) {
             FirstRtpRouteResult.ReturnedToWorld -> {
                 info(
                     "Network first-entry request {} returned {} to {} without RTP",
                     request.requestId,
                     player.name,
                     worldName,
-                )
-                player.sendMessage(
-                    TextUtil.mm("<green>Вы вернулись в мир <white>$worldName<green>."),
                 )
             }
 
@@ -132,9 +131,6 @@ class PluginMessenger : PluginMessageListener {
                 )
 
             is FirstRtpRouteResult.Rejected -> {
-                player.sendMessage(
-                    TextUtil.mm("<red>Не удалось запустить RTP: <white>${result.reason}"),
-                )
                 warn(
                     "Network RTP request {} rejected for {}: {}",
                     request.requestId,
@@ -143,6 +139,7 @@ class PluginMessenger : PluginMessageListener {
                 )
             }
         }
+        firstEntryPlayerMessage(result)?.let { player.sendMessage(it) }
     }
 
     private fun handleRegularRtp(
@@ -223,4 +220,14 @@ internal fun resolveNetworkRtpWorld(
         playerWorld.trim().lowercase(Locale.ROOT)
     } else {
         requestedWorld
+    }
+
+internal fun firstEntryPlayerMessage(result: FirstRtpRouteResult): Component? =
+    when (result) {
+        FirstRtpRouteResult.ReturnedToWorld,
+        is FirstRtpRouteResult.Started,
+        -> null
+
+        is FirstRtpRouteResult.Rejected ->
+            TextUtil.mm("<red>Не удалось запустить RTP: <white>${result.reason}")
     }
