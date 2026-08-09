@@ -16,7 +16,6 @@ import ru.arc.commands.arc.subcommands.HuntSubCommand
 import ru.arc.commands.arc.subcommands.InvestSubCommand
 import ru.arc.commands.arc.subcommands.LocpoolSubCommand
 import ru.arc.commands.arc.subcommands.SoundFollowSubCommand
-import ru.arc.commands.arc.subcommands.StoreSubCommand
 import ru.arc.commands.arc.subcommands.TestSubCommand
 import ru.arc.commands.arc.subcommands.TreasuresSubCommand
 import ru.arc.commands.chat.ChatModeAliasCommand
@@ -228,7 +227,6 @@ open class ARC : JavaPlugin() {
                 "arc-invest" to InvestSubCommand,
                 "sound-follow" to SoundFollowSubCommand,
                 "give-jobs-boost" to GiveBoostSubCommand,
-                "arcstore" to StoreSubCommand,
                 "arctest" to TestSubCommand,
                 "eliteloot" to EliteLootSubCommand,
                 "buy" to BuySubCommand,

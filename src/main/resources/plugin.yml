@@ -73,9 +73,6 @@ commands:
   give-jobs-boost:
     description: Give Jobs Reborn boost
     usage: /give-jobs-boost <player> <job|all> <multiplier> <type> <duration>
-  arcstore:
-    description: Open player store
-    usage: /arcstore [player]
   arctest:
     description: ARC dev test commands
     usage: /arctest <action>

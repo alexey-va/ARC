@@ -56,32 +56,95 @@ class StoreData(
     fun getItems(): List<ItemStack> = withLock { itemList.filterNotNull().map(ItemStack::clone) }
 
     /**
+     * Get a detached, fixed-size snapshot that preserves every store slot.
+     */
+    fun getSlots(): List<ItemStack?> =
+        withLock {
+            List(size.coerceAtLeast(0)) { slot ->
+                itemList.getOrNull(slot)?.takeUnless { it.type == Material.AIR }?.clone()
+            }
+        }
+
+    /**
+     * Get a detached snapshot of one explicit store slot.
+     */
+    fun getItemAt(slot: Int): ItemStack? =
+        withLock {
+            if (slot !in 0 until size) return@withLock null
+            itemList.getOrNull(slot)?.takeUnless { it.type == Material.AIR }?.clone()
+        }
+
+    /**
      * Remove invalid entries left by legacy serialized data.
      */
     fun sanitize(): Int =
         withLock {
-            itemList.removeIf { it == null || it.type == Material.AIR }
-            itemList.size
+            itemList.indices.forEach { slot ->
+                if (itemList[slot]?.type == Material.AIR) itemList[slot] = null
+            }
+            itemList.count { it != null }
         }
 
     /**
      * Check if store has space for more items.
      */
-    fun hasSpace(): Boolean = withLock { itemList.size < size }
+    fun hasSpace(): Boolean = withLock { occupiedSlots() < size }
+
+    /**
+     * Check whether the complete stack can be stored without moving existing stacks.
+     */
+    fun canAddItem(item: ItemStack?): Boolean {
+        if (!isAllowed(item)) return false
+        val validItem = item ?: return false
+        if (validItem.type == Material.AIR) return true
+        return withLock { canFit(validItem) }
+    }
 
     /**
      * Add an item to the store.
      * @return true if item was added successfully
      */
     fun addItem(item: ItemStack?): Boolean {
-        if (item == null) return false
-        if (item.type == Material.AIR) return true
-        if (FORBIDDEN_MATCHERS.any { it.matches(item) }) return false
+        if (!isAllowed(item)) return false
+        val validItem = item ?: return false
+        if (validItem.type == Material.AIR) return true
 
         return withLock {
-            if (!canFit(item)) return@withLock false
-            addAndDistribute(item)
+            if (!canFit(validItem)) return@withLock false
+            addAndDistribute(validItem)
             true
+        }
+    }
+
+    /**
+     * Add an item to one explicit store slot without compacting neighbouring slots.
+     */
+    fun addItemAt(
+        slot: Int,
+        item: ItemStack?,
+    ): Boolean {
+        if (!isAllowed(item)) return false
+        val validItem = item ?: return false
+        if (validItem.type == Material.AIR) return true
+
+        return withLock {
+            if (slot !in 0 until size) return@withLock false
+
+            val existing = itemList.getOrNull(slot)?.takeUnless { it.type == Material.AIR }
+            when {
+                existing == null -> {
+                    if (validItem.amount > validItem.maxStackSize) return@withLock false
+                    setSlot(slot, validItem.clone())
+                    true
+                }
+
+                existing.isSimilar(validItem) && existing.amount + validItem.amount <= existing.maxStackSize -> {
+                    existing.amount += validItem.amount
+                    true
+                }
+
+                else -> false
+            }
         }
     }
 
@@ -96,62 +159,112 @@ class StoreData(
         if (amount <= 0) return false
 
         return withLock {
-            val matching = itemList.filterNotNull().filter { it.isSimilar(item) }
-            if (matching.sumOf { it.amount } < amount) return@withLock false
+            val matchingSlots =
+                itemList.indices.filter { slot ->
+                    slot < size && itemList[slot]?.isSimilar(item) == true
+                }
+            if (matchingSlots.sumOf { slot -> itemList[slot]?.amount ?: 0 } < amount) return@withLock false
 
             var remaining = amount
-            for (stack in matching) {
+            for (slot in matchingSlots) {
                 if (remaining == 0) break
+                val stack = itemList[slot] ?: continue
                 val removed = minOf(stack.amount, remaining)
                 stack.amount -= removed
                 remaining -= removed
-                if (stack.amount == 0) itemList.remove(stack)
+                if (stack.amount == 0) itemList[slot] = null
             }
-            compact()
             true
         }
     }
 
-    private fun compact() {
-        val current = ArrayList(itemList)
-        itemList.clear()
-        current.forEach { addAndDistribute(it) }
+    /**
+     * Remove an amount from one explicit slot without affecting any other slot.
+     */
+    fun removeItemAt(
+        slot: Int,
+        expected: ItemStack,
+        amount: Int,
+    ): Boolean {
+        if (amount <= 0) return false
+
+        return withLock {
+            if (slot !in 0 until size) return@withLock false
+            val stored = itemList.getOrNull(slot) ?: return@withLock false
+            if (!stored.isSimilar(expected) || stored.amount < amount) return@withLock false
+
+            stored.amount -= amount
+            if (stored.amount == 0) itemList[slot] = null
+            true
+        }
     }
 
-    private fun addAndDistribute(item: ItemStack?) {
-        if (item == null || item.type == Material.AIR) return
+    private fun addAndDistribute(item: ItemStack) {
+        if (item.type == Material.AIR) return
 
         var leftToFit = item.amount
 
-        for (stack in itemList.filterNotNull()) {
+        for (slot in 0 until minOf(size, itemList.size)) {
+            val stack = itemList[slot] ?: continue
             if (stack.isSimilar(item)) {
-                val toAdd = minOf(stack.maxStackSize - stack.amount, leftToFit)
+                val toAdd = minOf((stack.maxStackSize - stack.amount).coerceAtLeast(0), leftToFit)
                 stack.amount += toAdd
                 leftToFit -= toAdd
             }
             if (leftToFit <= 0) return
         }
 
-        if (leftToFit > 0) {
+        for (slot in 0 until size) {
+            if (leftToFit <= 0) return
+            if (itemList.getOrNull(slot)?.type?.let { it != Material.AIR } == true) continue
+
             val toAdd = item.clone()
-            toAdd.amount = leftToFit
-            itemList.add(toAdd)
+            toAdd.amount = minOf(item.maxStackSize, leftToFit)
+            setSlot(slot, toAdd)
+            leftToFit -= toAdd.amount
         }
     }
 
-    private fun canFit(stack: ItemStack?): Boolean {
-        if (stack == null) return false
+    private fun canFit(stack: ItemStack): Boolean {
         if (stack.type == Material.AIR) return true
-        if (itemList.size < size) return true
 
         var leftToFit = stack.amount
-        for (item in itemList.filterNotNull()) {
-            if (item.isSimilar(stack)) {
-                leftToFit -= item.maxStackSize - item.amount
-            }
+        for (slot in 0 until size) {
+            val item = itemList.getOrNull(slot)
+            leftToFit -=
+                when {
+                    item == null || item.type == Material.AIR -> stack.maxStackSize
+                    item.isSimilar(stack) -> (item.maxStackSize - item.amount).coerceAtLeast(0)
+                    else -> 0
+                }
             if (leftToFit <= 0) return true
         }
         return false
+    }
+
+    private fun setSlot(
+        slot: Int,
+        item: ItemStack?,
+    ) {
+        while (itemList.size <= slot) itemList.add(null)
+        itemList[slot] = item
+    }
+
+    private fun isAllowed(item: ItemStack?): Boolean {
+        if (item == null) return false
+        if (item.type == Material.AIR) return true
+        if (item.amount <= 0) return false
+        return FORBIDDEN_MATCHERS.none { it.matches(item) }
+    }
+
+    private fun occupiedSlots(): Int {
+        var occupied = 0
+        for (slot in 0 until size) {
+            if (itemList.getOrNull(slot)?.type?.let { it != Material.AIR } == true) {
+                occupied++
+            }
+        }
+        return occupied
     }
 
     private inline fun <T> withLock(block: () -> T): T {

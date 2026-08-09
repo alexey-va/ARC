@@ -88,6 +88,17 @@ class StoreDataTest :
                     store.getItems()[0].amount shouldBe 25
                 }
 
+                "should stack into an explicit slot without moving neighbouring items" {
+                    val store = StoreData(UUID.randomUUID(), size = 9)
+                    store.addItemAt(4, ItemStack(Material.DIAMOND, 10)) shouldBe true
+                    store.addItemAt(7, ItemStack(Material.GOLD_INGOT, 5)) shouldBe true
+
+                    store.addItemAt(4, ItemStack(Material.DIAMOND, 15)) shouldBe true
+
+                    store.getSlots()[4]?.amount shouldBe 25
+                    store.getSlots()[7]?.type shouldBe Material.GOLD_INGOT
+                }
+
                 "should split stacks when exceeding max stack size" {
                     val store = StoreData(UUID.randomUUID())
                     val item = ItemStack(Material.DIAMOND, 64)
@@ -293,6 +304,18 @@ class StoreDataTest :
 
                     store.hasSpace() shouldBe true
                 }
+
+                "should treat a preserved hole as available space" {
+                    val store = StoreData(UUID.randomUUID(), size = 2)
+                    store.addItem(ItemStack(Material.DIAMOND, 64))
+                    store.addItem(ItemStack(Material.GOLD_INGOT, 64))
+                    store.removeItemAt(0, ItemStack(Material.DIAMOND), 64)
+
+                    store.hasSpace() shouldBe true
+                    store.addItem(ItemStack(Material.EMERALD, 64)) shouldBe true
+                    store.getSlots()[0]?.type shouldBe Material.EMERALD
+                    store.getSlots()[1]?.type shouldBe Material.GOLD_INGOT
+                }
             }
 
             "getItems" - {
@@ -310,6 +333,45 @@ class StoreDataTest :
                     items[0].amount = 999
 
                     store.getItems()[0].amount shouldBe 10
+                }
+
+                "should preserve explicit slot positions across removal and serialization" {
+                    val store = StoreData(UUID.randomUUID(), size = 9)
+                    store.addItemAt(2, ItemStack(Material.DIAMOND, 10)) shouldBe true
+                    store.addItemAt(7, ItemStack(Material.GOLD_INGOT, 5)) shouldBe true
+
+                    store.removeItemAt(2, ItemStack(Material.DIAMOND), 10) shouldBe true
+
+                    val slots = store.getSlots()
+                    slots.size shouldBe 9
+                    slots[2] shouldBe null
+                    slots[7]?.type shouldBe Material.GOLD_INGOT
+
+                    val restored = Common.gson.fromJson(Common.gson.toJson(store), StoreData::class.java)
+                    restored.getSlots()[2] shouldBe null
+                    restored.getSlots()[7]?.type shouldBe Material.GOLD_INGOT
+                }
+
+                "should remove the selected slot when identical stacks exist" {
+                    val store = StoreData(UUID.randomUUID(), size = 9)
+                    store.addItemAt(0, ItemStack(Material.DIAMOND, 64)) shouldBe true
+                    store.addItemAt(5, ItemStack(Material.DIAMOND, 64)) shouldBe true
+
+                    store.removeItemAt(5, ItemStack(Material.DIAMOND), 64) shouldBe true
+
+                    store.getSlots()[0]?.amount shouldBe 64
+                    store.getSlots()[5] shouldBe null
+                }
+
+                "should keep a hole when a stack before another item is removed" {
+                    val store = StoreData(UUID.randomUUID(), size = 9)
+                    store.addItem(ItemStack(Material.DIAMOND, 64)) shouldBe true
+                    store.addItem(ItemStack(Material.GOLD_INGOT, 64)) shouldBe true
+
+                    store.removeItem(ItemStack(Material.DIAMOND), 64) shouldBe true
+
+                    store.getSlots()[0] shouldBe null
+                    store.getSlots()[1]?.type shouldBe Material.GOLD_INGOT
                 }
             }
 

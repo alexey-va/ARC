@@ -2,6 +2,7 @@ package ru.arc.commands.arc.subcommands
 
 import org.bukkit.Bukkit
 import org.bukkit.command.CommandSender
+import ru.arc.ARC
 import ru.arc.commands.arc.CommandConfig
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.tabComplete
@@ -28,6 +29,8 @@ object StoreSubCommand : SubCommand {
     override val defaultDescription = "Открыть GUI хранилища предметов (своё или другого игрока)"
     override val defaultUsage = "/arc store [<player>|<uuid>|dump]"
     override val defaultPlayerOnly = true
+
+    override fun isAvailable(): Boolean = !ARC.serverName.equals("parkour", ignoreCase = true)
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
         val player = requirePlayer(sender) ?: return true

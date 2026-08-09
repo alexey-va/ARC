@@ -167,7 +167,7 @@ object HelpSubCommand : SubCommand {
             GiveBoostSubCommand,
             SoundFollowSubCommand,
             SchedulesSubCommand,
-        ).filter { sender.checkPermission(it.permission) }
+        ).filter { it.isAvailable() && sender.checkPermission(it.permission) }
     }
 
     override fun tabComplete(sender: CommandSender, args: Array<String>): List<String>? {

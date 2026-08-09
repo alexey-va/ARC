@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.mockbukkit.mockbukkit.entity.PlayerMock
 import org.mockito.Mockito.mock
+import ru.arc.ARC
 import ru.arc.TestBase
 import ru.arc.commands.arc.ArcCommand
 import ru.arc.commands.arc.subcommands.RespawnOnRtpSubCommand
@@ -1014,6 +1015,31 @@ class ArcCommandTest : TestBase() {
 
             assertNotNull(completions)
             assertTrue(completions!!.contains("dump"))
+        }
+
+        @Test
+        @DisplayName("Store is unavailable and hidden on parkour")
+        fun testStoreUnavailableOnParkour() {
+            player.addAttachment(plugin, "arc.store", true)
+            ARC.serverName = "parkour"
+
+            try {
+                val rootCompletions = arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf(""))
+                assertNotNull(rootCompletions)
+                assertFalse(rootCompletions!!.contains("store"))
+
+                val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("store"))
+                assertTrue(result)
+                assertTrue(player.hasReceivedMessage(), "Unavailable command should be rejected immediately")
+            } finally {
+                ARC.serverName = "test-server"
+            }
+        }
+
+        @Test
+        @DisplayName("Standalone /arcstore command is not registered")
+        fun testStandaloneArcStoreIsNotRegistered() {
+            assertFalse(plugin.description.commands.containsKey("arcstore"))
         }
     }
 

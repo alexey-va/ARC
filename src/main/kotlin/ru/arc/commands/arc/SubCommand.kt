@@ -42,6 +42,9 @@ interface SubCommand {
     /** Whether this command requires a player (not console) */
     val playerOnly: Boolean get() = CommandConfig.isPlayerOnly(configKey, defaultPlayerOnly)
 
+    /** Whether this command is available on the current server. */
+    fun isAvailable(): Boolean = true
+
     /** Short description for help */
     val description: String get() = CommandConfig.getCommandDescription(configKey, defaultDescription)
 

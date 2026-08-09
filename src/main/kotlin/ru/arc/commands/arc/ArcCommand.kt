@@ -110,7 +110,7 @@ class ArcCommand :
         val subName = args[0].lowercase()
         val subCommand = subcommands[subName]
 
-        if (subCommand == null) {
+        if (subCommand == null || !subCommand.isAvailable()) {
             sender.sendMessage(CommandConfig.arcUnknownCommand(subName))
             sender.sendMessage(CommandConfig.arcAvailable(getAvailableSubcommandNames().sorted().joinToString(", ")))
             return true
@@ -136,7 +136,8 @@ class ArcCommand :
     /**
      * Returns unique subcommand names (excludes aliases to avoid duplicates).
      */
-    private fun getAvailableSubcommandNames(): List<String> = subcommands.values.map { it.name }.distinct()
+    private fun getAvailableSubcommandNames(): List<String> =
+        subcommands.values.filter { it.isAvailable() }.map { it.name }.distinct()
 
     override fun onTabComplete(
         sender: CommandSender,
@@ -151,7 +152,7 @@ class ArcCommand :
             val input = args[0]
             val available =
                 subcommands.entries
-                    .filter { sender.checkPermission(it.value.permission) }
+                    .filter { it.value.isAvailable() && sender.checkPermission(it.value.permission) }
                     .map { it.key }
                     .distinct()
 
@@ -161,7 +162,7 @@ class ArcCommand :
         val subName = args[0].lowercase()
 
         // Delegate to subcommand
-        val subCommand = subcommands[subName] ?: return null
+        val subCommand = subcommands[subName]?.takeIf { it.isAvailable() } ?: return null
 
         if (!sender.checkPermission(subCommand.permission)) return null
 
