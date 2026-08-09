@@ -1,5 +1,6 @@
 package ru.arc.commands.arc.subcommands
 
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 import ru.arc.commands.arc.CommandConfig
@@ -129,10 +130,18 @@ internal object BuySubCommand : SubCommand {
                 "%amount%",
                 outcome.amount.toString(),
                 "%price%",
-                TextUtils.escapeMM(outcome.formattedPrice.orEmpty()),
+                safePriceText(outcome.formattedPrice.orEmpty()),
             ),
         )
     }
+
+    /** Economy formatters may return legacy section codes, which MiniMessage deliberately rejects. */
+    private fun safePriceText(formattedPrice: String): String =
+        TextUtils.escapeMM(
+            TextUtils.plain(
+                LegacyComponentSerializer.legacySection().deserialize(formattedPrice),
+            ),
+        )
 
     override fun tabComplete(
         sender: CommandSender,

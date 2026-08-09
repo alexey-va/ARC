@@ -1,8 +1,10 @@
 package ru.arc.commands
 
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.entity.Player
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import ru.arc.TestBase
@@ -42,6 +44,31 @@ class BuyCommandTest : TestBase() {
         assertTrue(server.dispatchCommand(player, "buy Blocks.12 0"))
 
         assertTrue(purchases.isEmpty())
+    }
+
+    @Test
+    fun `legacy formatting in economy price does not break success response`() {
+        HookRegistry.shopPurchaseService =
+            object : ShopPurchaseService {
+                override fun itemQueries(player: Player) = listOf("Blocks.CALCITE")
+
+                override fun purchase(player: Player, itemPath: String, amount: Int) =
+                    ShopPurchaseOutcome(
+                        ShopPurchaseStatus.SUCCESS,
+                        "Blocks.page1.items.1",
+                        amount,
+                        "4,00§f💰",
+                    )
+            }
+        val player = server.addPlayer()
+
+        assertDoesNotThrow { server.dispatchCommand(player, "buy Blocks CALCITE 1") }
+
+        val message = requireNotNull(player.nextComponentMessage())
+        assertEquals(
+            "Куплено 1 шт. товара Blocks.page1.items.1 за 4,00💰.",
+            PlainTextComponentSerializer.plainText().serialize(message),
+        )
     }
 
     private fun fakeService() =
