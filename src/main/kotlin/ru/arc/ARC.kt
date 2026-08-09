@@ -9,6 +9,7 @@ import ru.arc.commands.XCommand
 import ru.arc.commands.arc.ArcCommand
 import ru.arc.commands.arc.LegacySubCommandExecutor
 import ru.arc.commands.arc.subcommands.BuildBookSubCommand
+import ru.arc.commands.arc.subcommands.BuySubCommand
 import ru.arc.commands.arc.subcommands.EliteLootSubCommand
 import ru.arc.commands.arc.subcommands.GiveBoostSubCommand
 import ru.arc.commands.arc.subcommands.HuntSubCommand
@@ -230,6 +231,7 @@ open class ARC : JavaPlugin() {
                 "arcstore" to StoreSubCommand,
                 "arctest" to TestSubCommand,
                 "eliteloot" to EliteLootSubCommand,
+                "buy" to BuySubCommand,
             )
 
         for ((name, subCommand) in legacyCommands) {

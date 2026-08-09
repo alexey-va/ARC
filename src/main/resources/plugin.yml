@@ -40,6 +40,9 @@ commands:
   arc:
     description: Main command
     usage: Main command
+  buy:
+    description: Buy an exact item quantity from EconomyShopGUI
+    usage: /buy <item-path> <amount>
   x:
     description: x
     usage: x

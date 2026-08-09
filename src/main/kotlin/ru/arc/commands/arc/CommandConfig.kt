@@ -51,6 +51,10 @@ object CommandConfig {
         return config.stringList("commands.$commandKey.aliases")
     }
 
+    internal fun getCommandInt(commandKey: String, field: String, default: Int): Int {
+        return config.integer("commands.$commandKey.$field", default)
+    }
+
     // ==================== Message Methods ====================
 
     /**

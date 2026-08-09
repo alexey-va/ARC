@@ -77,7 +77,8 @@ dependencies {
     compileOnly(libs.dev.espi.protectionstones)
     compileOnly(libs.com.alessiodp.parties.parties.api)
     compileOnly(libs.me.clip.placeholderapi)
-    compileOnly(libs.com.github.gypopo.economyshopgui.api)
+    // Private mirror of the exact server-provided Premium JAR; never shaded.
+    compileOnly("ru.ruscrafting.thirdparty:economyshopgui-premium:6.3.0")
     compileOnly(libs.net.william278.huskhomes)
     compileOnly(libs.com.github.angeschossen.landsapi)
     compileOnly(libs.com.github.milkbowl.vaultapi) {
@@ -157,6 +158,7 @@ dependencies {
     testImplementation(libs.com.github.zrips.cmilib)
     testImplementation(libs.com.github.lonedev6.api.itemsadder)
     testImplementation("ru.ruscrafting.thirdparty:leafrtp-lite:3.2.0")
+    testImplementation("ru.ruscrafting.thirdparty:economyshopgui-premium:6.3.0")
     // Jackson databind needed for Log4j JsonLayout used in Logging.addLokiAppender()
     testImplementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
     // Log4j dependencies needed for Logging class

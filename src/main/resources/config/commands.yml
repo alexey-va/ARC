@@ -22,6 +22,13 @@ commands:
     permission: ''
     player-only: true
     usage: /arc chat <local|global>
+  buy:
+    name: buy
+    aliases: [ ]
+    permission: ''
+    player-only: true
+    max-amount: 2304
+    usage: /buy <путь> <кол-во> или /buy <раздел> <товар> <кол-во>
   baltop:
     name: baltop
     aliases: [ ]
@@ -136,6 +143,23 @@ messages:
     local-already: '<gray>Вы уже в <white>локальном<gray> режиме чата. Переключить: <white>/g'
     global-already: '<gray>Вы уже в <white>глобальном<gray> режиме чата. Переключить: <white>/l'
     error: '<red>Не удалось переключить режим чата. Попробуйте ещё раз.'
+  buy:
+    unavailable: '<red>Покупка командой недоступна на этом сервере: магазин не загружен.'
+    invalid-amount: '<red>Количество должно быть целым числом от <white>1<red> до <white>%max%<red>.'
+    item-not-found: '<red>Товар <white>%item%<red> не найден. <gray>Используйте Tab, чтобы выбрать путь.'
+    item-error: '<red>Товар <white>%item%<red> временно недоступен из-за ошибки настройки.'
+    not-buyable: '<red>Товар <white>%item%<red> нельзя купить.'
+    no-permissions: '<red>У вас нет доступа к товару <white>%item%<red>.'
+    requirements-failed: '<red>Вы не выполнили требования для покупки товара <white>%item%<red>.'
+    insufficient-funds: '<red>Недостаточно средств для покупки <white>%amount% шт.<red> товара <white>%item%<red>.'
+    no-inventory-space: '<red>В инвентаре недостаточно места для всех <white>%amount% шт.<red>'
+    cancelled: '<red>Покупка отменена другим плагином. Деньги не списаны.'
+    below-minimum: '<red>Это количество меньше минимальной покупки для товара <white>%item%<red>.'
+    above-maximum: '<red>Это количество превышает лимит покупки товара <white>%item%<red>.'
+    out-of-stock: '<red>На складе недостаточно товара <white>%item%<red> для покупки <white>%amount% шт.<red>'
+    failed: '<red>Не удалось выполнить покупку. Деньги не списаны.'
+    success: '<green>Куплено <white>%amount% шт.<green> товара <white>%item%<green> за <white>%price%<green>.'
+    success-no-price: '<green>Куплено <white>%amount% шт.<green> товара <white>%item%<green>.'
   buildbook:
     not-found: <red>Строение <white>%name%<red> не найдено!
   hunt:

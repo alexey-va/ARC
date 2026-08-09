@@ -10,6 +10,8 @@ import ru.arc.hooks.betterstructures.BSListener
 import ru.arc.hooks.citizens.CitizensHook
 import ru.arc.hooks.elitemobs.EMHook
 import ru.arc.hooks.elitemobs.EMListener
+import ru.arc.hooks.economyshop.EconomyShopGuiPurchaseService
+import ru.arc.hooks.economyshop.ShopPurchaseService
 import ru.arc.hooks.lands.LandsHook
 import ru.arc.hooks.lootchest.LootChestHook
 import ru.arc.hooks.luckperms.LuckPermsHook
@@ -103,6 +105,8 @@ class HookRegistry(
 
         @JvmField var myWorldsHook: MyWorldsHook? = null
 
+        internal var shopPurchaseService: ShopPurchaseService? = null
+
         private fun clearGlobalHooks() {
             landsHook = null
             huskHomesHook = null
@@ -127,6 +131,7 @@ class HookRegistry(
             packetEventsHook = null
             aeHook = null
             myWorldsHook = null
+            shopPurchaseService = null
         }
     }
 
@@ -348,7 +353,9 @@ class HookRegistry(
             bsListener = registerListener(BSListener())
         }
         register("EconomyShopGUI-Premium", true) {
+            val purchaseService = EconomyShopGuiPurchaseService()
             shopListener = registerListener(ShopListener())
+            shopPurchaseService = purchaseService
         }
     }
 

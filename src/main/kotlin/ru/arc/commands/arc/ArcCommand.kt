@@ -8,6 +8,7 @@ import ru.arc.commands.arc.subcommands.AuditSubCommand
 import ru.arc.commands.arc.subcommands.BaltopSubCommand
 import ru.arc.commands.arc.subcommands.BoardSubCommand
 import ru.arc.commands.arc.subcommands.BuildBookSubCommand
+import ru.arc.commands.arc.subcommands.BuySubCommand
 import ru.arc.commands.arc.subcommands.ChatSubCommand
 import ru.arc.commands.arc.subcommands.EliteLootSubCommand
 import ru.arc.commands.arc.subcommands.EmshopSubCommand
@@ -48,6 +49,7 @@ class ArcCommand :
         // Register all subcommands
         register(
             HelpSubCommand, // Help first for discoverability
+            BuySubCommand,
             ReloadSubCommand,
             BoardSubCommand,
             ChatSubCommand,

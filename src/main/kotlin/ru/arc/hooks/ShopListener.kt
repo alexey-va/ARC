@@ -25,6 +25,7 @@ class ShopListener : Listener {
         Transaction.Type.BUY_STACKS_SCREEN,
         Transaction.Type.QUICK_BUY,
         Transaction.Type.SHOPSTAND_BUY_SCREEN,
+        Transaction.Type.API_BUY,
     )
 
     @EventHandler
