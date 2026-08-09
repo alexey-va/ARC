@@ -76,3 +76,7 @@ commands:
   eliteloot:
     description: Elite loot admin
     usage: /eliteloot [list|add]
+permissions:
+  arc.hide.bypass:
+    description: Bypass all CommandHide groups
+    default: op

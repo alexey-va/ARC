@@ -1,0 +1,33 @@
+# Скрытие и блокировка команд по наследуемым permission-группам.
+#
+# Игрок получает ограничения группы, когда у него есть arc.hide.<group>.
+# arc.hide.bypass отключает все ограничения для сотрудника.
+enabled: true
+bypass-permission: "arc.hide.bypass"
+
+# Один namespace-шаблон закрывает также namespaced-варианты команды:
+# plugins -> bukkit:plugins, paper:plugins и т. п.
+strip-command-namespace: true
+
+# Политика игрока обновляется сразу при пересборке command tree; TTL страхует
+# изменения permissions, которые не вызвали такую пересборку.
+policy-cache: 5s
+blocked-message: "<red>Неизвестная команда."
+
+# Шаблон сравнивается без учёта регистра и без начального "/".
+#   *  — ровно одно слово
+#   ** — ноль или больше оставшихся слов; допустим только последним
+#
+# Без wildcard совпадение точное. Для всей ветки команды используй "**":
+# "plugins **" блокирует /plugins и любое количество аргументов.
+groups:
+  plugin-list:
+    inherits: []
+    commands:
+      - "plugins **"
+      - "pl **"
+
+  player:
+    inherits:
+      - "plugin-list"
+    commands: []

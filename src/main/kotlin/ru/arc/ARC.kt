@@ -18,6 +18,7 @@ import ru.arc.commands.arc.subcommands.SoundFollowSubCommand
 import ru.arc.commands.arc.subcommands.TestSubCommand
 import ru.arc.commands.arc.subcommands.TreasuresSubCommand
 import ru.arc.commands.chat.ChatModeAliasCommand
+import ru.arc.commandhide.CommandHideModule
 import ru.arc.config.ConfigManager
 import ru.arc.config.LocationPoolConfig
 import ru.arc.core.ModuleRegistry
@@ -196,6 +197,7 @@ open class ARC : JavaPlugin() {
             MobSpawnModule,
             JoinMessagesModule,
             ChatModeModule,
+            CommandHideModule,
             // Building system (priority 90)
             BuildingModule,
             // Sync systems (priority 100)
@@ -288,6 +290,7 @@ open class ARC : JavaPlugin() {
                 "modules/scheduled-commands.yml",
                 "modules/restart.yml",
                 "modules/board.yml",
+                "modules/command-hide.yml",
                 "modules/farms.yml",
                 "modules/auction.yml",
                 "modules/treasure-hunt.yml",
