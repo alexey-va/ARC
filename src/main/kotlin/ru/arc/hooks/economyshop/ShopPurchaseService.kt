@@ -20,6 +20,7 @@ internal data class ShopPurchaseOutcome(
     val itemPath: String,
     val amount: Int,
     val formattedPrice: String? = null,
+    val itemName: String? = null,
 )
 
 internal enum class ShopPurchaseStatus {

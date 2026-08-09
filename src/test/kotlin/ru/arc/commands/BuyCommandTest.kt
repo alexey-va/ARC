@@ -47,7 +47,7 @@ class BuyCommandTest : TestBase() {
     }
 
     @Test
-    fun `legacy formatting in economy price does not break success response`() {
+    fun `localized item name and legacy economy price render in success response`() {
         HookRegistry.shopPurchaseService =
             object : ShopPurchaseService {
                 override fun itemQueries(player: Player) = listOf("Blocks.CALCITE")
@@ -57,7 +57,8 @@ class BuyCommandTest : TestBase() {
                         ShopPurchaseStatus.SUCCESS,
                         "Blocks.page1.items.1",
                         amount,
-                        "4,00§f💰",
+                        formattedPrice = "4,00§f💰",
+                        itemName = "Голубой краситель",
                     )
             }
         val player = server.addPlayer()
@@ -66,7 +67,7 @@ class BuyCommandTest : TestBase() {
 
         val message = requireNotNull(player.nextComponentMessage())
         assertEquals(
-            "Куплено 1 шт. товара Blocks.page1.items.1 за 4,00💰.",
+            "Куплено 1 шт. товара Голубой краситель за 4,00💰.",
             PlainTextComponentSerializer.plainText().serialize(message),
         )
     }

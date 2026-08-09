@@ -353,7 +353,8 @@ class HookRegistry(
             bsListener = registerListener(BSListener())
         }
         register("EconomyShopGUI-Premium", true) {
-            val purchaseService = EconomyShopGuiPurchaseService()
+            val translator = checkNotNull(translatorHook) { "Material translator is not initialized" }
+            val purchaseService = EconomyShopGuiPurchaseService { item -> translator.translate(item) }
             shopListener = registerListener(ShopListener())
             shopPurchaseService = purchaseService
         }

@@ -83,6 +83,7 @@ internal object BuySubCommand : SubCommand {
     }
 
     private fun sendOutcome(sender: CommandSender, outcome: ShopPurchaseOutcome) {
+        val itemName = outcome.itemName?.takeIf(String::isNotBlank) ?: outcome.itemPath
         val (key, fallback) =
             when (outcome.status) {
                 ShopPurchaseStatus.SUCCESS -> {
@@ -126,7 +127,7 @@ internal object BuySubCommand : SubCommand {
                 key,
                 fallback,
                 "%item%",
-                TextUtils.escapeMM(outcome.itemPath),
+                TextUtils.escapeMM(itemName),
                 "%amount%",
                 outcome.amount.toString(),
                 "%price%",

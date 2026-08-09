@@ -5,9 +5,12 @@ import me.gypopo.economyshopgui.objects.ShopItem
 import me.gypopo.economyshopgui.util.EcoType
 import me.gypopo.economyshopgui.util.Transaction
 import org.bukkit.entity.Player
+import org.bukkit.inventory.ItemStack
 
 /** EconomyShopGUI Premium 6.3.0 implementation, loaded only while that plugin is present. */
-internal class EconomyShopGuiPurchaseService : ShopPurchaseService {
+internal class EconomyShopGuiPurchaseService(
+    private val translateItem: (ItemStack?) -> String,
+) : ShopPurchaseService {
     override fun itemQueries(player: Player): List<String> =
         allItems()
             .asSequence()
@@ -25,9 +28,15 @@ internal class EconomyShopGuiPurchaseService : ShopPurchaseService {
         val item = resolveItem(itemPath)
             ?: return ShopPurchaseOutcome(ShopPurchaseStatus.ITEM_NOT_FOUND, itemPath, amount)
         val canonicalPath = item.itemPath
+        val itemName = translatedName(item)
 
         if (item.isHidden || item.isDisplayItem || !item.isBuyAble) {
-            return ShopPurchaseOutcome(ShopPurchaseStatus.NOT_BUYABLE, canonicalPath, amount)
+            return ShopPurchaseOutcome(
+                ShopPurchaseStatus.NOT_BUYABLE,
+                canonicalPath,
+                amount,
+                itemName = itemName,
+            )
         }
 
         // check permissions, check requirements, disallow partial quantity, suppress native
@@ -39,8 +48,14 @@ internal class EconomyShopGuiPurchaseService : ShopPurchaseService {
             itemPath = canonicalPath,
             amount = fulfilledAmount,
             formattedPrice = formatPrices(result.prices),
+            itemName = itemName,
         )
     }
+
+    private fun translatedName(item: ShopItem): String? =
+        runCatching { translateItem(item.shopItem) }
+            .getOrNull()
+            ?.takeIf(String::isNotBlank)
 
     private fun resolveItem(itemPath: String): ShopItem? {
         EconomyShopGUIHook.getShopItem(itemPath)?.let { return it }
