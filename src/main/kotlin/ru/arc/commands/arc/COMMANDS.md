@@ -11,7 +11,7 @@
 - [Покупка из магазина](#arc-buy--buy)
 - [Охота на сокровища](#arc-hunt)
 - [Пулы наград](#arc-treasures)
-- [Пулы локаций](#arc-locpool)
+- [Пулы локаций](#arc-locationpool)
 - [Биржа и инвестиции](#arc-invest)
 - [Строительство](#arc-buildbook)
 - [Elite Loot](#arc-eliteloot)
@@ -43,7 +43,7 @@
 /arc treasures common add
 
 # Редактировать пул локаций
-/arc locpool my_pool
+/arc locationpool my_pool
 
 # Открыть биржу
 /arc invest
@@ -219,7 +219,7 @@ treasure-hunt-types:
 
 ---
 
-## /arc locpool
+## /arc locationpool
 
 Управление пулами локаций. Пулы хранят точки спауна для охот, мобов и других систем.
 
@@ -230,28 +230,28 @@ treasure-hunt-types:
 
 ### Базовые команды
 
-| Команда                      | Описание                                         |
-|------------------------------|--------------------------------------------------|
-| `/arc locpool`               | Показать статус: редактируемый пул, список пулов |
-| `/arc locpool list`          | Список всех пулов с размерами                    |
-| `/arc locpool <pool>`        | Начать/остановить редактирование пула            |
-| `/arc locpool delete <pool>` | Удалить пул                                      |
+| Команда                           | Описание                                         |
+|-----------------------------------|--------------------------------------------------|
+| `/arc locationpool`               | Показать статус: редактируемый пул, список пулов |
+| `/arc locationpool list`          | Список всех пулов с размерами                    |
+| `/arc locationpool <pool>`        | Начать/остановить редактирование пула            |
+| `/arc locationpool delete <pool>` | Удалить пул                                      |
 
 ### Редактирование пула
 
 ```bash
 # 1. Начать редактирование (получите блоки)
-/arc locpool my_pool
+/arc locationpool my_pool
 
 # 2. Редактирование:
 #    - ЛКМ Золотым блоком → добавить локацию
 #    - ЛКМ Красным блоком → удалить ближайшую локацию
 
 # 3. Остановить редактирование
-/arc locpool my_pool  # повторная команда останавливает
+/arc locationpool my_pool  # повторная команда останавливает
 
 # Переключиться на другой пул
-/arc locpool other_pool  # автоматически остановит текущий и начнёт новый
+/arc locationpool other_pool  # автоматически остановит текущий и начнёт новый
 ```
 
 ---
@@ -656,7 +656,6 @@ commands:
 | `reload`      | `rl`             |
 | `logger`      | `log`            |
 | `treasures`   | `tr`             |
-| `locpool`     | `lp`             |
 | `jobsboosts`  | `jb`             |
 | `joinmessage` | `jmsg`           |
 | `quitmessage` | `qmsg`           |
@@ -779,7 +778,7 @@ lp group admin permission set arc.x true
 | `arc.admin`               | `/arc reload`, `/arc repo`, `/arc logger`, `/arc emshop`, `/arc test` | Админ     |
 | `arc.admin.givejobsboost` | `/arc giveboost`                                                      | Админ     |
 | `arc.treasures.admin`     | `/arc treasures`                                                      | Админ     |
-| `arc.locpool.admin`       | `/arc locpool`                                                        | Админ     |
+| `arc.locpool.admin`       | `/arc locationpool`                                                    | Админ     |
 | `arc.eliteloot`           | `/arc eliteloot`                                                      | Админ     |
 | `arc.x`                   | `/x`                                                                  | Админ     |
 

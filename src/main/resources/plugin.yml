@@ -52,9 +52,6 @@ commands:
   l:
     description: Switch to local chat mode
     usage: /l
-  locpool:
-    description: Edit location pools
-    usage: /locpool [pool]
   treasure-hunt:
     description: Treasure hunt admin
     usage: /treasure-hunt [status|types|start|stop]

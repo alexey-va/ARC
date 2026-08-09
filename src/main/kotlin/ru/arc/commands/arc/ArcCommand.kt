@@ -20,7 +20,7 @@ import ru.arc.commands.arc.subcommands.HuntSubCommand
 import ru.arc.commands.arc.subcommands.InvestSubCommand
 import ru.arc.commands.arc.subcommands.JobsboostsSubCommand
 import ru.arc.commands.arc.subcommands.JoinMessageSubCommand
-import ru.arc.commands.arc.subcommands.LocpoolSubCommand
+import ru.arc.commands.arc.subcommands.LocationPoolSubCommand
 import ru.arc.commands.arc.subcommands.LoggerSubCommand
 import ru.arc.commands.arc.subcommands.QuitMessageSubCommand
 import ru.arc.commands.arc.subcommands.ReloadSubCommand
@@ -64,7 +64,7 @@ class ArcCommand :
             RespawnOnRtpSubCommand,
             FirstRtpSubCommand,
             RtpSubCommand,
-            LocpoolSubCommand,
+            LocationPoolSubCommand,
             HuntSubCommand,
             TreasuresSubCommand,
             // New subcommands

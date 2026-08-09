@@ -11,7 +11,7 @@ import ru.arc.commands.arc.tabComplete
 import ru.arc.common.locationpools.LocationPoolManager
 
 /**
- * /arc locpool - управление пулами локаций.
+ * /arc locationpool - управление пулами локаций.
  *
  * Использование:
  * - (без аргументов) - показать статус и список
@@ -19,20 +19,20 @@ import ru.arc.common.locationpools.LocationPoolManager
  * - <pool_id> - начать/остановить редактирование
  * - delete <pool_id> - удалить пул
  */
-object LocpoolSubCommand : SubCommand {
+object LocationPoolSubCommand : SubCommand {
 
     override val configKey = "locpool"
-    override val defaultName = "locpool"
+    override val defaultName = "locationpool"
     override val defaultPermission = "arc.locpool.admin"
     override val defaultDescription = "Редактирование пулов локаций: добавление/удаление точек кликом на блок"
-    override val defaultUsage = "/arc locpool [list|delete <pool>|<pool>]  — <pool> переключает режим редактирования"
+    override val defaultUsage = "/arc locationpool [list|delete <pool>|<pool>]  — <pool> переключает режим редактирования"
     override val defaultPlayerOnly = true
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
         val player = requirePlayer(sender) ?: return true
         val currentPool = LocationPoolManager.getEditing(player.uniqueId)
 
-        // /arc locpool - показать статус
+        // /arc locationpool - показать статус
         if (args.isEmpty()) {
             showStatus(player, currentPool)
             return true
@@ -64,7 +64,7 @@ object LocpoolSubCommand : SubCommand {
             }
 
             else -> {
-                // /arc locpool <pool_id> - начать/остановить редактирование
+                // /arc locationpool <pool_id> - начать/остановить редактирование
                 toggleEditing(player, args[0], currentPool)
             }
         }
@@ -90,7 +90,7 @@ object LocpoolSubCommand : SubCommand {
             player.sendMessage(
                 CommandConfig.get(
                     "locpool.stop-hint",
-                    "<gray>Для остановки: <white>/arc locpool %pool_id%",
+                    "<gray>Для остановки: <white>/arc locationpool %pool_id%",
                     "%pool_id%",
                     currentPool
                 )

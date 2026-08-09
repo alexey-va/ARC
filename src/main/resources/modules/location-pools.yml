@@ -2,7 +2,7 @@
 # location-pools.yml — сообщения редактора пулов локаций (YAML).
 #
 # Сами координаты пулов хранятся отдельно: каталог location_pools/*.yml (JSON в .yml)
-# через LocationPoolConfig (Java). Здесь только тексты для игрока при /locpool.
+# через LocationPoolConfig (Java). Здесь только тексты для игрока при /arc locationpool.
 # =============================================================================
 
 messages:

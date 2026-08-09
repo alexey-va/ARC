@@ -14,7 +14,6 @@ import ru.arc.commands.arc.subcommands.EliteLootSubCommand
 import ru.arc.commands.arc.subcommands.GiveBoostSubCommand
 import ru.arc.commands.arc.subcommands.HuntSubCommand
 import ru.arc.commands.arc.subcommands.InvestSubCommand
-import ru.arc.commands.arc.subcommands.LocpoolSubCommand
 import ru.arc.commands.arc.subcommands.SoundFollowSubCommand
 import ru.arc.commands.arc.subcommands.TestSubCommand
 import ru.arc.commands.arc.subcommands.TreasuresSubCommand
@@ -220,7 +219,6 @@ open class ARC : JavaPlugin() {
     private fun registerLegacyCommands() {
         val legacyCommands =
             mapOf(
-                "locpool" to LocpoolSubCommand,
                 "treasure-hunt" to HuntSubCommand,
                 "treasure-pool" to TreasuresSubCommand,
                 "build-book" to BuildBookSubCommand,

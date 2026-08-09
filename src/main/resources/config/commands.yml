@@ -72,7 +72,7 @@ commands:
     permission: arc.rtp-respawn
     usage: /arc firstrtp <player> <world> | reset <player|uuid> [world|all]
   locpool:
-    name: locpool
+    name: locationpool
     aliases: [ ]
     permission: arc.locpool.admin
   hunt:

@@ -21,7 +21,7 @@ import org.bukkit.command.Command as BukkitCommand
 
 /**
  * Tests for the main /arc command and its subcommands.
- * Note: Subcommands like locpool, hunt, treasures are now in Kotlin SubCommand implementations
+ * Note: Subcommands like locationpool, hunt, treasures are now in Kotlin SubCommand implementations
  * and send Component messages, not String messages.
  */
 class ArcCommandTest : TestBase() {
@@ -150,17 +150,17 @@ class ArcCommandTest : TestBase() {
         }
     }
 
-    // ==================== Locpool Subcommand ====================
+    // ==================== LocationPool Subcommand ====================
 
     @Nested
-    @DisplayName("/arc locpool")
-    inner class LocpoolTests {
+    @DisplayName("/arc locationpool")
+    inner class LocationPoolTests {
         @Test
         @DisplayName("Without permission - sends no permission message")
         fun testNoPermission() {
             assertFalse(player.hasPermission("arc.locpool.admin"))
 
-            val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("locpool"))
+            val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("locationpool"))
 
             assertTrue(result)
             assertTrue(player.hasReceivedMessage(), "Should send no permission message")
@@ -171,7 +171,7 @@ class ArcCommandTest : TestBase() {
         fun testListPools() {
             player.addAttachment(plugin, "arc.locpool.admin", true)
 
-            val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("locpool"))
+            val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("locationpool"))
 
             assertTrue(result)
             // Component message is sent, check via nextComponentMessage
@@ -183,7 +183,7 @@ class ArcCommandTest : TestBase() {
         fun testEditNoPoolId() {
             player.addAttachment(plugin, "arc.locpool.admin", true)
 
-            val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("locpool", "edit"))
+            val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("locationpool", "edit"))
 
             assertTrue(result)
             assertTrue(player.hasReceivedMessage(), "Should show 'not editing' message")
@@ -194,10 +194,19 @@ class ArcCommandTest : TestBase() {
         fun testDeleteNoPoolId() {
             player.addAttachment(plugin, "arc.locpool.admin", true)
 
-            val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("locpool", "delete"))
+            val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("locationpool", "delete"))
 
             assertTrue(result)
             assertTrue(player.hasReceivedMessage(), "Should ask to specify pool")
+        }
+
+        @Test
+        @DisplayName("Legacy locpool subcommand and standalone command are not registered")
+        fun testLegacyLocpoolIsNotRegistered() {
+            player.addAttachment(plugin, "arc.locpool.admin", true)
+
+            assertNull(arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("locpool", "")))
+            assertFalse(plugin.description.commands.containsKey("locpool"))
         }
     }
 
@@ -566,7 +575,7 @@ class ArcCommandTest : TestBase() {
                     "joinmessage",
                     "quitmessage",
                     "respawnonrtp",
-                    "locpool",
+                    "locationpool",
                     "hunt",
                     "treasures",
                     "test",
@@ -598,11 +607,11 @@ class ArcCommandTest : TestBase() {
         }
 
         @Test
-        @DisplayName("Locpool subcommand shows list/delete")
-        fun testLocpoolTabCompletion() {
+        @DisplayName("LocationPool subcommand shows list/delete")
+        fun testLocationPoolTabCompletion() {
             player.addAttachment(plugin, "arc.locpool.admin", true)
 
-            val completions = arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("locpool", ""))
+            val completions = arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("locationpool", ""))
 
             assertNotNull(completions)
             assertTrue(completions!!.contains("list"), "Should contain 'list'")
@@ -1399,15 +1408,15 @@ class ArcCommandTest : TestBase() {
         }
 
         @Test
-        @DisplayName("arc.locpool.admin permission gates locpool")
-        fun testLocpoolPermission() {
+        @DisplayName("arc.locpool.admin permission gates locationpool")
+        fun testLocationPoolPermission() {
             assertFalse(player.hasPermission("arc.locpool.admin"))
 
-            arcCommand.onCommand(player, mockCommand, "arc", arrayOf("locpool"))
+            arcCommand.onCommand(player, mockCommand, "arc", arrayOf("locationpool"))
             assertTrue(player.hasReceivedMessage(), "Should deny without permission")
 
             player.addAttachment(plugin, "arc.locpool.admin", true)
-            arcCommand.onCommand(player, mockCommand, "arc", arrayOf("locpool"))
+            arcCommand.onCommand(player, mockCommand, "arc", arrayOf("locationpool"))
             assertTrue(player.hasReceivedMessage(), "Should show pools with permission")
         }
 
@@ -1694,11 +1703,11 @@ class ArcCommandTest : TestBase() {
         }
 
         @Test
-        @DisplayName("Locpool list works")
-        fun testLocpoolList() {
+        @DisplayName("LocationPool list works")
+        fun testLocationPoolList() {
             player.addAttachment(plugin, "arc.locpool.admin", true)
 
-            val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("locpool", "list"))
+            val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("locationpool", "list"))
 
             assertTrue(result)
             assertTrue(player.hasReceivedMessage())
