@@ -11,6 +11,7 @@ import org.bukkit.block.data.BlockData
 import org.bukkit.entity.Player
 import org.bukkit.potion.PotionEffect
 import org.bukkit.potion.PotionEffectType.BLINDNESS
+import org.bukkit.util.BoundingBox
 import ru.arc.PortalData.ActionType.COMMAND
 import ru.arc.PortalData.ActionType.HUSK
 import ru.arc.PortalData.ActionType.TELEPORT
@@ -56,6 +57,23 @@ internal fun hasPortalClearance(
     blockUp: Block,
     blockUp2: Block,
 ): Boolean = blockUp.isPassable && blockUp2.isPassable
+
+internal fun touchesPortalEntrance(
+    playerLocation: Location,
+    playerBounds: BoundingBox,
+    portalBase: Location,
+): Boolean {
+    val portalX = portalBase.blockX.toDouble()
+    val portalZ = portalBase.blockZ.toDouble()
+    val touchesHorizontalBounds =
+        playerBounds.maxX >= portalX &&
+            playerBounds.minX <= portalX + 1.0 &&
+            playerBounds.maxZ >= portalZ &&
+            playerBounds.minZ <= portalZ + 1.0
+    val feetOffset = playerLocation.y - portalBase.y
+
+    return touchesHorizontalBounds && feetOffset > -1.0 && feetOffset <= 1.5
+}
 
 class Portal(uuid: UUID, private val portalData: PortalData) {
 
@@ -331,10 +349,7 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
     }
 
     private fun inPortal(player: Player, location: Location): Boolean {
-        return player.location.toBlockLocation().x == location.toBlockLocation().x
-            && player.location.toBlockLocation().z == location.toBlockLocation().z
-            && player.location.y - location.y < 1.5
-            && player.location.y - location.y > -1
+        return touchesPortalEntrance(player.location, player.boundingBox, location)
     }
 
     private fun removePortal() {
