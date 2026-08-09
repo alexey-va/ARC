@@ -53,6 +53,7 @@ private class StoreGuiSession(
     private lateinit var chestGui: ChestGui
     private lateinit var storePane: StaticPane
     private var visibleStoreSlots: Int = 0
+    private var renderedStoreSlots: List<ItemStack?> = emptyList()
 
     fun build(): ChestGui {
         val rows = min(6, ceil(store.size.toDouble() / 9).toInt() + 1)
@@ -70,7 +71,8 @@ private class StoreGuiSession(
         builder.onTopClick { click -> handleTopClick(click) }
         visibleStoreSlots = (rows - 1) * 9
         storePane = StaticPane(9, rows - 1)
-        populateStorePane()
+        renderedStoreSlots = snapshotVisibleStoreSlots()
+        populateStorePane(renderedStoreSlots)
         builder.gui.addPane(Slot.fromXY(0, 0), storePane)
         builder.navBar {
             back(configKey = "store.back") {
@@ -84,13 +86,16 @@ private class StoreGuiSession(
     }
 
     /**
-     * Refresh store slots on the next tick, then sync cursor.
-     * [ChestGui.update] resets cursor if the item was set before refresh.
+     * Patch changed store cells before the click event returns, so the server state matches client prediction.
+     * Cursor synchronization remains on the next tick because Bukkit may overwrite it while completing the event.
      */
     private fun scheduleRefresh(
         cursorItem: ItemStack? = null,
         clearCursor: Boolean = false,
     ) {
+        refreshItems()
+        if (!clearCursor && cursorItem == null) return
+
         sync {
             refreshItems()
             when {
@@ -102,56 +107,61 @@ private class StoreGuiSession(
 
     private fun refreshItems() {
         if (!chestGui.viewers.contains(player)) return
-        storePane.clear()
-        populateStorePane()
-        chestGui.update()
+        val desiredSlots = snapshotVisibleStoreSlots()
+        StoreSlotDiff.changedSlots(renderedStoreSlots, desiredSlots).forEach { slot ->
+            updateStoreSlot(slot, desiredSlots.getOrNull(slot))
+        }
+        renderedStoreSlots = desiredSlots.map { it?.clone() }
     }
 
-    private fun populateStorePane() {
-        store.getSlots().take(visibleStoreSlots).forEachIndexed { slot, item ->
+    private fun snapshotVisibleStoreSlots(): List<ItemStack?> {
+        val storeSlots = store.getSlots()
+        return List(visibleStoreSlots) { slot -> storeSlots.getOrNull(slot)?.clone() }
+    }
+
+    private fun populateStorePane(items: List<ItemStack?>) {
+        items.forEachIndexed { slot, item ->
             if (item != null) {
                 storePane.addItem(createStoreGuiItem(item), slot % 9, slot / 9)
             }
         }
     }
 
+    /**
+     * Keep the IF pane model and the currently open Bukkit inventory aligned without a full GUI redraw.
+     */
+    private fun updateStoreSlot(
+        slot: Int,
+        item: ItemStack?,
+    ) {
+        val x = slot % 9
+        val y = slot / 9
+        storePane.removeItem(x, y)
+
+        if (item == null || item.type == Material.AIR) {
+            chestGui.inventory.setItem(slot, null)
+            return
+        }
+
+        val paneItem = createStoreGuiItem(item)
+        storePane.addItem(paneItem, x, y)
+
+        // StaticPane applies this UUID only while rendering. Apply it to the one slot sent now as well,
+        // so InventoryFramework can still match later clicks without calling ChestGui.update().
+        val renderedItem = paneItem.copy().also { it.applyUUID() }
+        chestGui.inventory.setItem(slot, renderedItem.item.clone())
+    }
+
     private fun createStoreGuiItem(original: ItemStack): GuiItem = GuiItems.create(original.clone())
 
-    /**
-     * Refresh store slots, then apply cursor — order matters: [ChestGui.update] resets cursor if set earlier.
-     */
     private fun scheduleTake(cursorItem: ItemStack) {
         scheduleRefresh(cursorItem = cursorItem)
     }
 
-    /** Shift-click from store: move stack into player inventory (vanilla chest behavior). */
-    private fun depositToPlayerInventory(
-        sourceSlot: Int,
-        item: ItemStack,
-    ): ItemStack? {
-        val leftover = player.inventory.addItem(item)
-        leftover.values.forEach { remaining ->
-            if (remaining.amount > 0 && !store.addItemAt(sourceSlot, remaining)) {
-                debug("[Store] Source slot {} changed while returning inventory leftover", sourceSlot)
-                return remaining.clone()
-            }
-            StoreManager.saveLater(store)
+    private fun applyPlayerStorageTransfer(plan: PlayerStorageTransferPlan) {
+        plan.updates.forEach { update ->
+            player.inventory.setItem(update.slot, update.item.clone())
         }
-        return null
-    }
-
-    private fun canFitPlayerInventory(item: ItemStack): Boolean {
-        var remaining = item.amount
-        for (stack in player.inventory.storageContents) {
-            remaining -=
-                when {
-                    stack == null || stack.type == Material.AIR -> item.maxStackSize
-                    stack.isSimilar(item) -> (stack.maxStackSize - stack.amount).coerceAtLeast(0)
-                    else -> 0
-                }
-            if (remaining <= 0) return true
-        }
-        return false
     }
 
     private fun handleBottomClick(
@@ -228,11 +238,17 @@ private class StoreGuiSession(
             }
         val taken = currentStoreItem.clone().also { it.amount = amountToRemove }
 
-        if (click.isShiftClick && !canFitPlayerInventory(taken)) {
-            val (display, lore) = config.itemComponents("store.no-space")
-            GuiUtils.temporaryChange(guiStack, display, lore, 40L) {}
-            return
-        }
+        val storageTransfer =
+            if (click.isShiftClick) {
+                VanillaPlayerStorageTransfer.planFull(player.inventory.storageContents, taken)
+                    ?: run {
+                        val (display, lore) = config.itemComponents("store.no-space")
+                        GuiUtils.temporaryChange(guiStack, display, lore, 40L) {}
+                        return
+                    }
+            } else {
+                null
+            }
 
         if (!store.removeItemAt(storeSlot, taken, amountToRemove)) {
             val (display, lore) = config.itemComponents("store.item-is-gone")
@@ -242,8 +258,9 @@ private class StoreGuiSession(
         }
 
         StoreManager.saveLater(store)
-        if (click.isShiftClick) {
-            scheduleRefresh(cursorItem = depositToPlayerInventory(storeSlot, taken))
+        if (storageTransfer != null) {
+            applyPlayerStorageTransfer(storageTransfer)
+            scheduleRefresh()
         } else {
             scheduleTake(taken)
         }
