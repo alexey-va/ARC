@@ -1,6 +1,7 @@
 package ru.arc.metrics
 
 import org.bukkit.Bukkit
+import io.micrometer.core.instrument.MeterRegistry
 import ru.arc.ARC
 import ru.arc.config.ConfigManager
 import ru.arc.core.PluginModule
@@ -25,6 +26,8 @@ object MetricsModule : PluginModule {
     private var redisMetrics: RedisMetricsBinder? = null
     private var fastTask: ScheduledTask? = null
     private var heavyTask: ScheduledTask? = null
+
+    fun registry(): MeterRegistry? = runtime?.registry
 
     override fun init() {
         if (System.getProperty("arc.test.unit") != null) return

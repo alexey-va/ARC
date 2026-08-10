@@ -9,6 +9,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import ru.arc.TestBase
+import ru.arc.util.Common
 
 /**
  * Тесты для модуля аудита экономики.
@@ -38,6 +39,45 @@ class AuditModuleTest : TestBase() {
             assertEquals("Покупка меча", transaction.comment)
             assertTrue(transaction.timestamp > 0)
             assertTrue(transaction.timestamp2 > 0)
+        }
+
+        @Test
+        @DisplayName("Старый JSON без ledger metadata сохраняет семантику")
+        fun testLegacyTransactionJson() {
+            val transaction =
+                Common.gson.fromJson(
+                    """{"t":"JOB","a":125.0,"c":"legacy","ts":1000,"ts2":2000}""",
+                    Transaction::class.java,
+                )
+
+            assertEquals(Type.JOB, transaction.type)
+            assertEquals(125.0, transaction.amount, 0.001)
+            assertEquals(EconomySource.LEGACY, transaction.normalizedSource)
+            assertEquals(EconomyFlow.UNKNOWN, transaction.normalizedFlow)
+            assertEquals(1, transaction.occurrenceCount)
+        }
+
+        @Test
+        @DisplayName("Текущий ledger JSON проходит полный round-trip")
+        fun testCurrentTransactionJsonRoundTrip() {
+            val original =
+                Transaction(
+                    type = Type.QUEST,
+                    amount = 500.0,
+                    comment = "quest",
+                    timestamp = 1000,
+                    timestamp2 = 2000,
+                    source = EconomySource.QUESTS,
+                    flow = EconomyFlow.MINT,
+                    currency = "vault",
+                    server = "survival",
+                    origin = "quests.Reward",
+                    occurrences = 3,
+                )
+
+            val restored = Common.gson.fromJson(Common.gson.toJson(original), Transaction::class.java)
+
+            assertEquals(original, restored)
         }
 
         @Test
@@ -168,7 +208,7 @@ class AuditModuleTest : TestBase() {
         @Test
         @DisplayName("Количество типов транзакций")
         fun testTypeCount() {
-            assertEquals(9, Type.entries.size)
+            assertEquals(17, Type.entries.size)
         }
 
         @Test
@@ -208,6 +248,14 @@ class AuditModuleTest : TestBase() {
         }
 
         @Test
+        @DisplayName("Старый AuditData JSON без shard id остаётся читаемым")
+        fun testLegacyAuditDataJson() {
+            val restored = Common.gson.fromJson("""{"t":[],"n":"LegacyPlayer","c":1}""", AuditData::class.java)
+
+            assertEquals("legacyplayer", restored.id())
+        }
+
+        @Test
         @DisplayName("id() возвращает имя в нижнем регистре")
         fun testId() {
             auditData.name = "TestPlayer"
@@ -238,6 +286,25 @@ class AuditModuleTest : TestBase() {
             // Должна быть одна агрегированная транзакция
             assertEquals(1, auditData.transactions.size)
             assertEquals(150.0, auditData.transactions.first.amount, 0.001)
+            assertEquals(2, auditData.transactions.first.occurrenceCount)
+        }
+
+        @Test
+        @DisplayName("operation() не агрегирует противоположные направления")
+        fun testOperationDoesNotNetIncomeAndExpense() {
+            auditData.operation(100.0, Type.SHOP, "Trade")
+            auditData.operation(-100.0, Type.SHOP, "Trade")
+
+            assertEquals(2, auditData.transactions.size)
+        }
+
+        @Test
+        @DisplayName("operation() не агрегирует за пределами временного окна")
+        fun testOperationRespectsAggregationWindow() {
+            auditData.operation(100.0, Type.JOB, "Mining", at = 1_000, aggregationWindowMillis = 10_000)
+            auditData.operation(50.0, Type.JOB, "Mining", at = 11_001, aggregationWindowMillis = 10_000)
+
+            assertEquals(2, auditData.transactions.size)
         }
 
         @Test
@@ -288,7 +355,7 @@ class AuditModuleTest : TestBase() {
         }
 
         @Test
-        @DisplayName("merge() заменяет транзакции")
+        @DisplayName("merge() объединяет append-only транзакции без потери локальных событий")
         fun testMerge() {
             auditData.operation(100.0, Type.SHOP, "Первая")
 
@@ -298,8 +365,9 @@ class AuditModuleTest : TestBase() {
 
             auditData.merge(other)
 
-            assertEquals(2, auditData.transactions.size)
-            assertEquals(200.0, auditData.transactions.first.amount, 0.001)
+            assertEquals(3, auditData.transactions.size)
+            assertTrue(auditData.transactions.any { it.amount == 100.0 })
+            assertTrue(auditData.transactions.any { it.amount == 200.0 })
         }
 
         @Test
@@ -403,7 +471,8 @@ class AuditModuleTest : TestBase() {
         @DisplayName("trim() удаляет старые транзакции")
         fun testTrim() {
             // Добавляем транзакции с разными временами
-            val oldTransaction = Transaction(Type.JOB, 100.0, "Старая", System.currentTimeMillis() - 100000)
+            val oldTimestamp = System.currentTimeMillis() - 100000
+            val oldTransaction = Transaction(Type.JOB, 100.0, "Старая", oldTimestamp, oldTimestamp)
             val newTransaction = Transaction(Type.JOB, 50.0, "Новая")
 
             auditData.transactions.add(oldTransaction)
@@ -414,6 +483,19 @@ class AuditModuleTest : TestBase() {
             assertEquals(1, removed)
             assertEquals(1, auditData.transactions.size)
             assertEquals("Новая", auditData.transactions.first.comment)
+        }
+
+        @Test
+        @DisplayName("trim() удаляет старые транзакции независимо от порядка вставки")
+        fun testTrimOutOfOrder() {
+            val now = 200_000L
+            auditData.transactions.add(Transaction(Type.JOB, 50.0, "Новая", now, now))
+            auditData.transactions.add(Transaction(Type.JOB, 100.0, "Старая", 1_000L, 1_000L))
+
+            val removed = auditData.trim(maxAge = 50_000, now = now)
+
+            assertEquals(1, removed)
+            assertEquals(listOf("Новая"), auditData.transactions.map { it.comment })
         }
     }
 

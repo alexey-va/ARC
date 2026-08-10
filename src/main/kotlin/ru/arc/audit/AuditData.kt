@@ -24,7 +24,11 @@ class AuditData(
     var name: String = "",
 
     @SerializedName("c")
-    var created: Long = System.currentTimeMillis()
+    var created: Long = System.currentTimeMillis(),
+
+    /** Server-qualified repository key. Null keeps legacy player-only records readable. */
+    @SerializedName("i")
+    val storageId: String? = null,
 ) : Entity,
     Mergeable<AuditData> {
     companion object {
@@ -37,11 +41,12 @@ class AuditData(
         /**
          * Создать новые данные аудита для игрока.
          */
-        fun create(playerName: String): AuditData {
+        fun create(playerName: String, storageId: String? = null): AuditData {
             return AuditData(
                 transactions = ConcurrentLinkedDeque(),
                 name = playerName,
-                created = System.currentTimeMillis()
+                created = System.currentTimeMillis(),
+                storageId = storageId,
             )
         }
     }
@@ -57,14 +62,34 @@ class AuditData(
      * @param type Тип операции
      * @param comment Описание
      */
-    fun operation(amount: Double, type: Type, comment: String) {
+    fun operation(
+        amount: Double,
+        type: Type,
+        comment: String,
+        metadata: AuditMetadata = AuditMetadata.legacy(),
+        at: Long = System.currentTimeMillis(),
+        aggregationWindowMillis: Long = 10_000L,
+    ) {
         // Ищем транзакцию для агрегации среди последних N
-        val matchingTransaction = findTransactionForAggregation(type, comment)
+        val matchingTransaction = findTransactionForAggregation(type, amount, comment, metadata, at, aggregationWindowMillis)
 
         if (matchingTransaction != null) {
-            matchingTransaction.aggregate(amount)
+            matchingTransaction.aggregate(amount, at)
         } else {
-            transactions.add(Transaction(type, amount, comment))
+            transactions.add(
+                Transaction(
+                    type = type,
+                    amount = amount,
+                    comment = comment,
+                    timestamp = at,
+                    timestamp2 = at,
+                    source = metadata.source,
+                    flow = metadata.flow,
+                    currency = metadata.currency,
+                    server = metadata.server,
+                    origin = metadata.origin,
+                ),
+            )
         }
 
     }
@@ -72,10 +97,17 @@ class AuditData(
     /**
      * Найти транзакцию для агрегации среди последних.
      */
-    private fun findTransactionForAggregation(type: Type, comment: String): Transaction? {
+    private fun findTransactionForAggregation(
+        type: Type,
+        amount: Double,
+        comment: String,
+        metadata: AuditMetadata,
+        at: Long,
+        aggregationWindowMillis: Long,
+    ): Transaction? {
         var count = 0
         for (transaction in transactions.reversed()) {
-            if (transaction.canAggregate(type, comment)) {
+            if (transaction.canAggregate(type, amount, comment, metadata, at, aggregationWindowMillis)) {
                 return transaction
             }
             if (++count >= AGGREGATION_LOOKUP_LIMIT) {
@@ -92,16 +124,20 @@ class AuditData(
      * @param maxTransactions Максимальное количество транзакций
      * @return Количество удалённых транзакций
      */
-    fun trim(maxAge: Long, maxTransactions: Int = 50000): Int {
-        val cutoffTime = System.currentTimeMillis() - maxAge
+    fun trim(
+        maxAge: Long,
+        maxTransactions: Int = 50000,
+        now: Long = System.currentTimeMillis(),
+    ): Int {
+        val cutoffTime = now - maxAge
         var removed = 0
 
-        while (transactions.isNotEmpty()) {
-            val oldest = transactions.peek() ?: break
+        // Async repository callbacks are not guaranteed to append in timestamp order.
+        // Keep an aggregate while its most recent occurrence is still inside retention.
+        removed += transactions.count { it.timestamp2 < cutoffTime }
+        transactions.removeIf { it.timestamp2 < cutoffTime }
 
-            val shouldRemove = transactions.size > maxTransactions || oldest.timestamp < cutoffTime
-            if (!shouldRemove) break
-
+        while (transactions.size > maxTransactions.coerceAtLeast(0)) {
             transactions.poll()
             removed++
         }
@@ -155,13 +191,24 @@ class AuditData(
 
     // ==================== Entity Implementation ====================
 
-    override fun id(): String = name.lowercase()
+    override fun id(): String = storageId?.takeIf(String::isNotBlank) ?: name.lowercase()
 
     // ==================== Mergeable Implementation ====================
 
     override fun merge(other: AuditData) {
+        val merged = linkedMapOf<String, Transaction>()
+        (transactions.toList() + other.transactions.toList()).forEach { candidate ->
+            val current = merged[candidate.mergeKey]
+            if (
+                current == null ||
+                candidate.occurrenceCount > current.occurrenceCount ||
+                (candidate.occurrenceCount == current.occurrenceCount && candidate.timestamp2 > current.timestamp2)
+            ) {
+                merged[candidate.mergeKey] = candidate.copy()
+            }
+        }
         transactions.clear()
-        transactions.addAll(other.transactions)
+        merged.values.sortedBy(Transaction::timestamp).forEach(transactions::add)
     }
 }
 

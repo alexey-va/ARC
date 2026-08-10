@@ -49,7 +49,6 @@ class HookRegistry(
     var leafRTPListener: LeafRTPListener? = null
     var respawnListener: RespawnListener? = null
     var bsListener: BSListener? = null
-    var shopListener: ShopListener? = null
     var emListener: EMListener? = null
 
     private val registeredHooks = HashSet<String>()
@@ -197,7 +196,6 @@ class HookRegistry(
         leafRTPListener = null
         respawnListener = null
         bsListener = null
-        shopListener = null
         emListener = null
     }
 
@@ -355,7 +353,6 @@ class HookRegistry(
         register("EconomyShopGUI-Premium", true) {
             val translator = checkNotNull(translatorHook) { "Material translator is not initialized" }
             val purchaseService = EconomyShopGuiPurchaseService { item -> translator.translate(item) }
-            shopListener = registerListener(ShopListener())
             shopPurchaseService = purchaseService
         }
     }

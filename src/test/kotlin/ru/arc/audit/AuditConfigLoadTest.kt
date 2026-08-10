@@ -27,8 +27,17 @@ class AuditConfigLoadTest {
             prune-interval: 12000
             max-age-seconds: 604800
             max-weight: 50000
+            shard-max-weight: 30000
             max-transactions: 25000
             balance-history: true
+            aggregation-window-seconds: 15
+            monitoring:
+              enabled: true
+              large-transaction-amount: 50000
+              rapid-income-window-seconds: 120
+              rapid-income-amount: 75000
+              rapid-income-transactions: 12
+              anomaly-cooldown-seconds: 60
             messages:
               page-size: 10
               header-format: "<blue>Аудит %player_name%"
@@ -70,6 +79,7 @@ class AuditConfigLoadTest {
     fun `max weight loaded from YAML`() {
         val cfg = AuditConfig.fromFile(tempDir)
         assertEquals(50000, cfg.maxWeight)
+        assertEquals(30000, cfg.shardMaxWeight)
     }
 
     @Test
@@ -82,6 +92,17 @@ class AuditConfigLoadTest {
     fun `balance history enabled from YAML`() {
         val cfg = AuditConfig.fromFile(tempDir)
         assertEquals(true, cfg.balanceHistoryEnabled)
+    }
+
+    @Test
+    fun `monitoring values loaded from YAML`() {
+        val cfg = AuditConfig.fromFile(tempDir)
+        assertEquals(15, cfg.aggregationWindowSeconds)
+        assertEquals(50_000.0, cfg.largeTransactionAmount)
+        assertEquals(120, cfg.rapidIncomeWindowSeconds)
+        assertEquals(75_000.0, cfg.rapidIncomeAmount)
+        assertEquals(12, cfg.rapidIncomeTransactions)
+        assertEquals(60, cfg.anomalyCooldownSeconds)
     }
 
     @Test

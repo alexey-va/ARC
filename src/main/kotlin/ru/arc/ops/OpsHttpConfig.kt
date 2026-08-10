@@ -36,6 +36,9 @@ open class OpsHttpConfig(private val config: Config) {
     open val runAsEnabled: Boolean
         get() = config.bool("run-as-enabled", false)
 
+    open val economyAuditReadEnabled: Boolean
+        get() = config.bool("economy-audit-read-enabled", true)
+
     open val itemsReadEnabled: Boolean
         get() = config.bool("items-read-enabled", true)
 
@@ -132,6 +135,7 @@ class TestOpsHttpConfig(
     override val effectsEnabled: Boolean = true,
     override val reloadEnabled: Boolean = true,
     override val runAsEnabled: Boolean = false,
+    override val economyAuditReadEnabled: Boolean = true,
     override val itemsReadEnabled: Boolean = true,
     override val itemsGiveEnabled: Boolean = true,
     override val itemsGiveMaxStack: Int = 64,
@@ -159,6 +163,7 @@ class TestOpsHttpConfig(
         consoleEnabled: Boolean = this.consoleEnabled,
         messagesEnabled: Boolean = this.messagesEnabled,
         runAsEnabled: Boolean = this.runAsEnabled,
+        economyAuditReadEnabled: Boolean = this.economyAuditReadEnabled,
         itemsGiveEnabled: Boolean = this.itemsGiveEnabled,
         itemPresetsReadEnabled: Boolean = this.itemPresetsReadEnabled,
         itemPresetsWriteEnabled: Boolean = this.itemPresetsWriteEnabled,
@@ -189,6 +194,7 @@ class TestOpsHttpConfig(
             effectsEnabled = effectsEnabled,
             reloadEnabled = reloadEnabled,
             runAsEnabled = runAsEnabled,
+            economyAuditReadEnabled = economyAuditReadEnabled,
             itemsReadEnabled = itemsReadEnabled,
             itemsGiveEnabled = itemsGiveEnabled,
             itemsGiveMaxStack = itemsGiveMaxStack,

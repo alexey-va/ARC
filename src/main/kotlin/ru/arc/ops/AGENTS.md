@@ -32,6 +32,7 @@ HTTP ops API и ItemSpec для RusCrafting MCP. **Runtime configs:** `mcserver/
 | `OpsLocationPoolHandlers` | Stable weighted coordinates over native location pools |
 | `OpsTreasurePoolHandlers` | Strict reward schema over native treasure pools |
 | `OpsContentHealthHandlers` | Isolated cross-catalog health summary |
+| `OpsEconomyAuditHandlers` | Read-only persisted economy ledger summary and top balances |
 | `OpsNpcHandlers` | Citizens list/placement validation/gated mutations |
 | `BlueMapNpcMarkers` | Dynamic Citizens POI layer for each BlueMap world |
 | `OpsItemSpec` | JSON → ItemStack (MiniMessage, NBT, customData) |
@@ -196,6 +197,10 @@ turn it into a write, repair, reload, draw, or execution endpoint.
 
 The internal HTTP routes stay catalog-specific and typed. The external MCP
 surface is intentionally compact:
+
+- `arc_ops_server` returns normal server status, or `GET /ops/economy/audit`
+  when `economy_hours > 0`; the ledger read is gated by
+  `economy-audit-read-enabled` and never mutates balances.
 
 - `arc_ops_content_read` dispatches list/detail and preview;
 - `arc_ops_content_write` dispatches gated upsert/delete on one explicit node;

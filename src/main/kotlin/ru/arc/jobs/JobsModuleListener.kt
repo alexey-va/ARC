@@ -7,8 +7,6 @@ import com.google.common.cache.CacheBuilder
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
-import ru.arc.audit.AuditManager
-import ru.arc.audit.Type
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
@@ -126,11 +124,7 @@ object JobsModuleListener : Listener {
                 val adjustedMoney = targetMoney / (1.0 + baseMoneyBoost)
 
                 event.amount = adjustedMoney
-                AuditManager.operation(player.name, targetMoney, Type.JOB, event.job.name)
             }
-        } else {
-            // No custom boost, just audit the base amount
-            AuditManager.operation(player.name, originalMoney * (baseMoneyBoost + 1.0), Type.JOB, event.job.name)
         }
 
         // Process points boost

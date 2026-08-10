@@ -12,6 +12,8 @@ class RedisEcoHook(
     @JvmRecord
     data class Account(@JvmField val name: String?, @JvmField val uuid: UUID?, @JvmField val balance: Double)
 
+    fun getCachedName(playerId: UUID): String? = apiProvider()?.getUsernameFromUUIDCache(playerId)
+
     fun getAccounts(players: List<UUID>): CompletableFuture<List<Account>> {
         val api = apiProvider() ?: return CompletableFuture.completedFuture(emptyList())
         val currency = api.defaultCurrency

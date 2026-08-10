@@ -28,6 +28,10 @@ open class AuditConfig(
     open val maxWeight: Int
         get() = config.integer("max-weight", 100000)
 
+    /** Per-server shard budget; configured shard totals form the network maximum. */
+    open val shardMaxWeight: Int
+        get() = config.integer("shard-max-weight", maxWeight).coerceAtLeast(0)
+
     /** Maximum transactions per player */
     open val maxTransactions: Int
         get() = config.integer("max-transactions", 50000)
@@ -35,6 +39,28 @@ open class AuditConfig(
     /** Enable balance history recording */
     open val balanceHistoryEnabled: Boolean
         get() = config.bool("balance-history", false)
+
+    /** Maximum gap between records combined into one persisted transaction. */
+    open val aggregationWindowSeconds: Int
+        get() = config.integer("aggregation-window-seconds", 10).coerceIn(0, 300)
+
+    open val monitoringEnabled: Boolean
+        get() = config.bool("monitoring.enabled", true)
+
+    open val largeTransactionAmount: Double
+        get() = config.double("monitoring.large-transaction-amount", 100_000.0).coerceAtLeast(0.0)
+
+    open val rapidIncomeWindowSeconds: Int
+        get() = config.integer("monitoring.rapid-income-window-seconds", 300).coerceIn(10, 86_400)
+
+    open val rapidIncomeAmount: Double
+        get() = config.double("monitoring.rapid-income-amount", 250_000.0).coerceAtLeast(0.0)
+
+    open val rapidIncomeTransactions: Int
+        get() = config.integer("monitoring.rapid-income-transactions", 40).coerceAtLeast(1)
+
+    open val anomalyCooldownSeconds: Int
+        get() = config.integer("monitoring.anomaly-cooldown-seconds", 300).coerceAtLeast(1)
 
     private val msgs get() = config.section("messages")
 
@@ -112,8 +138,16 @@ class TestAuditConfig(
     override val pruneInterval: Long = 6000,
     override val maxAgeSeconds: Int = 86400 * 30,
     override val maxWeight: Int = 100000,
+    override val shardMaxWeight: Int = maxWeight,
     override val maxTransactions: Int = 50000,
     override val balanceHistoryEnabled: Boolean = false,
+    override val aggregationWindowSeconds: Int = 10,
+    override val monitoringEnabled: Boolean = true,
+    override val largeTransactionAmount: Double = 100_000.0,
+    override val rapidIncomeWindowSeconds: Int = 300,
+    override val rapidIncomeAmount: Double = 250_000.0,
+    override val rapidIncomeTransactions: Int = 40,
+    override val anomalyCooldownSeconds: Int = 300,
     override val pageSize: Int = 20,
     override val headerFormat: String = "\n<gold>%player_name%'s Audit Data",
     override val transactionFormat: String = "<hover:<yellow>%comment%><gray>%counter%. <gray>[%date%] <white>%type% <gold>%amount%</hover>",
@@ -132,8 +166,16 @@ class TestAuditConfig(
         pruneInterval: Long = this.pruneInterval,
         maxAgeSeconds: Int = this.maxAgeSeconds,
         maxWeight: Int = this.maxWeight,
+        shardMaxWeight: Int = this.shardMaxWeight,
         maxTransactions: Int = this.maxTransactions,
         balanceHistoryEnabled: Boolean = this.balanceHistoryEnabled,
+        aggregationWindowSeconds: Int = this.aggregationWindowSeconds,
+        monitoringEnabled: Boolean = this.monitoringEnabled,
+        largeTransactionAmount: Double = this.largeTransactionAmount,
+        rapidIncomeWindowSeconds: Int = this.rapidIncomeWindowSeconds,
+        rapidIncomeAmount: Double = this.rapidIncomeAmount,
+        rapidIncomeTransactions: Int = this.rapidIncomeTransactions,
+        anomalyCooldownSeconds: Int = this.anomalyCooldownSeconds,
         pageSize: Int = this.pageSize,
         headerFormat: String = this.headerFormat,
         transactionFormat: String = this.transactionFormat,
@@ -149,8 +191,16 @@ class TestAuditConfig(
             pruneInterval,
             maxAgeSeconds,
             maxWeight,
+            shardMaxWeight,
             maxTransactions,
             balanceHistoryEnabled,
+            aggregationWindowSeconds,
+            monitoringEnabled,
+            largeTransactionAmount,
+            rapidIncomeWindowSeconds,
+            rapidIncomeAmount,
+            rapidIncomeTransactions,
+            anomalyCooldownSeconds,
             pageSize,
             headerFormat,
             transactionFormat,

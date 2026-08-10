@@ -79,6 +79,15 @@ class RedisEcoHookTest {
         }
     }
 
+    @Test
+    fun `cached RedisEconomy name is available for offline transaction attribution`() {
+        val playerId = UUID.randomUUID()
+        val currency = mockk<Currency>()
+        val hook = RedisEcoHook { api(currency, mapOf(playerId to "OfflinePlayer")) }
+
+        assertEquals("OfflinePlayer", hook.getCachedName(playerId))
+    }
+
     private fun api(
         currency: Currency,
         names: Map<UUID, String>,

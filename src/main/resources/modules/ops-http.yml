@@ -31,6 +31,9 @@ reload-enabled: true
 # POST /ops/run-as — выполнить команду от имени онлайн-игрока (осторожно)
 run-as-enabled: false
 
+# GET /ops/economy/audit — persisted sources/sinks, top balances and anomalies.
+economy-audit-read-enabled: true
+
 # GET /ops/player/{name}/inventory — инвентарь онлайн-игрока (слоты 0-40)
 # GET /ops/player/{name}/item?slot= | ?hand=true — один слот / предмет в руке
 items-read-enabled: true

@@ -138,6 +138,9 @@ class OpsHttpServer(
             method == "GET" && segments == listOf("server") ->
                 respondOk(exchange, OpsHttpHandlers.serverInfo())
 
+            method == "GET" && segments == listOf("economy", "audit") ->
+                handleEconomyAudit(exchange, cfg, query)
+
             method == "GET" && segments == listOf("online") ->
                 respondOk(exchange, OpsHttpHandlers.onlinePlayers())
 
@@ -671,6 +674,27 @@ class OpsHttpServer(
             val (code, json) = OpsJson.error(503, e.message ?: "XAction unavailable")
             respond(exchange, code, json)
         }
+    }
+
+    private fun handleEconomyAudit(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        query: Map<String, String>,
+    ) {
+        if (!cfg.economyAuditReadEnabled) {
+            val (code, body) = OpsJson.error(403, "Economy audit read endpoint disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        val hours = query["hours"]?.toIntOrNull() ?: 24
+        val limit = query["limit"]?.toIntOrNull() ?: 20
+        val server = query["server"]?.trim()?.lowercase() ?: "all"
+        if (hours !in 1..(24 * 31) || limit !in 1..100 || server !in setOf("all", "spawn", "survival", "parkour")) {
+            val (code, body) = OpsJson.error(400, "hours must be 1..744, limit 1..100, server all|spawn|survival|parkour")
+            respond(exchange, code, body)
+            return
+        }
+        respondOk(exchange, OpsEconomyAuditHandlers.summary(hours, limit, server.takeUnless { it == "all" }))
     }
 
     private fun handleEffect(
@@ -1588,6 +1612,9 @@ class OpsHttpServer(
                 "GET /ops/redis",
                 "GET /ops/content/health",
             )
+        if (cfg.economyAuditReadEnabled) {
+            routes += "GET /ops/economy/audit?hours=&limit=&server=all|spawn|survival|parkour"
+        }
         if (cfg.messagesEnabled) {
             routes += "POST /ops/message {\"channel\":\"broadcast|player|ops\",\"text\":\"...\"}"
             routes +=

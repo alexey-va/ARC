@@ -13,8 +13,14 @@ import ru.arc.ARC
 import ru.arc.Portal
 import ru.arc.PortalData
 import ru.arc.audit.AuditManager
+import ru.arc.audit.AdminEconomyCommandTracker
+import ru.arc.audit.AuditMetadata
+import ru.arc.audit.EconomyFlow
+import ru.arc.audit.EconomySource
 import ru.arc.audit.Type
 import ru.arc.config.ConfigManager
+import ru.arc.core.Tasks
+import ru.arc.core.modules.EconomyModule
 import ru.arc.hooks.HookRegistry
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
@@ -25,6 +31,7 @@ import ru.arc.xserver.playerlist.PlayerManager
 class CommandListener : Listener {
 
     private val commandConfig = ConfigManager.of(ARC.instance.dataPath, "misc.yml")
+    private var suppressCanonicalSetAudit = false
 
     @EventHandler(priority = EventPriority.HIGH)
     fun onPlayerPlaceBlock(ev: BlockPlaceEvent) {
@@ -36,12 +43,24 @@ class CommandListener : Listener {
         val args = ev.message.split(" ")
         warpCommand(ev, args)
         moneyCommand(ev.player, ev, args)
+        scheduleCanonicalSetAudit(args, ev.player.name)
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
     fun onServerCommand(serverCommandEvent: ServerCommandEvent) {
         val args = serverCommandEvent.command.split(" ")
         moneyCommandServer(serverCommandEvent, args)
+        scheduleCanonicalSetAudit(args, "Server")
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun trackPlayerAdminEconomyCommand(ev: PlayerCommandPreprocessEvent) {
+        AdminEconomyCommandTracker.track(ev.message.split(" "), ev.player.name)
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun trackServerAdminEconomyCommand(ev: ServerCommandEvent) {
+        AdminEconomyCommandTracker.track(ev.command.split(" "), "Server")
     }
 
     @EventHandler(priority = EventPriority.HIGH)
@@ -63,7 +82,7 @@ class CommandListener : Listener {
 
     private fun moneyCommand(player: Player, ev: Cancellable, args: List<String>) {
         val sub = setOf("give", "set", "take")
-        if (args.size > 2 && args[0].equals("/money", ignoreCase = true) && sub.contains(args[1])) {
+        if (args.size > 2 && args[0].equals("/money", ignoreCase = true) && sub.contains(args[1].lowercase())) {
             if (!player.hasPermission("rediseconomy.admin")) {
                 player.sendMessage(TextUtil.noPermissions())
                 return
@@ -72,9 +91,10 @@ class CommandListener : Listener {
                 ev.isCancelled = true
                 try {
                     val money = args[3].toDouble()
+                    val before = balanceBeforeSet(args[1], args[2])
                     val command = "money ${args[2]} vault ${args[1]} $money"
-                    player.performCommand(command)
-                    AuditManager.operation(args[2], money, Type.COMMAND, player.name)
+                    rerouteMoneyCommand { player.performCommand(command) }
+                    scheduleSetDelta(args[1], args[2], player.name, before)
                     info("Rerouted {} to {}", args.joinToString(" "), command)
                 } catch (e: Exception) {
                     error("Failed to reroute /money give command to /money <player> vault give <amount>", e)
@@ -87,19 +107,75 @@ class CommandListener : Listener {
 
     private fun moneyCommandServer(ev: Cancellable, args: List<String>) {
         val sub = setOf("give", "set", "take")
-        if (args.size > 2 && args[0].equals("money", ignoreCase = true) && sub.contains(args[1])) {
+        if (args.size > 2 && args[0].equals("money", ignoreCase = true) && sub.contains(args[1].lowercase())) {
             if (args.size == 4) {
                 ev.isCancelled = true
                 try {
                     val money = args[3].toDouble()
+                    val before = balanceBeforeSet(args[1], args[2])
                     val command = "money ${args[2]} vault ${args[1]} $money"
-                    ARC.trySeverCommand(command)
-                    AuditManager.operation(args[2], money, Type.COMMAND, "Server")
+                    rerouteMoneyCommand { ARC.trySeverCommand(command) }
+                    scheduleSetDelta(args[1], args[2], "Server", before)
                     info("Rerouted {} to {}", args.joinToString(" "), command)
                 } catch (e: Exception) {
                     error("Failed to reroute /money give command to /money <player> vault give <amount>", e)
                 }
             }
+        }
+    }
+
+    private fun balanceBeforeSet(action: String, target: String): Double? {
+        if (!action.equals("set", ignoreCase = true)) return null
+        val economy = EconomyModule.getEconomy() ?: return null
+        return economy.getBalance(org.bukkit.Bukkit.getOfflinePlayer(target))
+    }
+
+    private fun auditSetDelta(action: String, target: String, actor: String, before: Double?) {
+        if (!action.equals("set", ignoreCase = true) || before == null) return
+        val economy = EconomyModule.getEconomy() ?: return
+        val after = economy.getBalance(org.bukkit.Bukkit.getOfflinePlayer(target))
+        val delta = after - before
+        if (delta == 0.0) return
+        AuditManager.economyOperation(
+            target,
+            delta,
+            Type.BALANCE_SET,
+            "Balance set by $actor",
+            AuditMetadata(
+                source = EconomySource.BALANCE_SET,
+                flow = EconomyFlow.ADJUSTMENT,
+                server = ARC.serverName ?: "unknown",
+                origin = actor,
+            ),
+        )
+    }
+
+    private fun scheduleCanonicalSetAudit(args: List<String>, actor: String) {
+        if (suppressCanonicalSetAudit) return
+        val command = args.firstOrNull()?.removePrefix("/")?.lowercase() ?: return
+        val target =
+            when {
+                command == "money" && args.size == 5 && args[2].equals("vault", ignoreCase = true) && args[3].equals("set", ignoreCase = true) -> args[1]
+                command == "cmi" && args.size == 5 && args[1].equals("money", ignoreCase = true) && args[2].equals("set", ignoreCase = true) -> args[3]
+                else -> return
+            }
+        // Legacy /money set <player> <amount> is cancelled and audited through its rerouted command above.
+        if (command == "money" && args.getOrNull(1)?.lowercase() in setOf("give", "set", "take")) return
+        val before = balanceBeforeSet("set", target) ?: return
+        scheduleSetDelta("set", target, actor, before)
+    }
+
+    private fun scheduleSetDelta(action: String, target: String, actor: String, before: Double?) {
+        if (!action.equals("set", ignoreCase = true) || before == null) return
+        Tasks.scheduler.runLater(1) { auditSetDelta(action, target, actor, before) }
+    }
+
+    private inline fun rerouteMoneyCommand(block: () -> Unit) {
+        suppressCanonicalSetAudit = true
+        try {
+            block()
+        } finally {
+            suppressCanonicalSetAudit = false
         }
     }
 

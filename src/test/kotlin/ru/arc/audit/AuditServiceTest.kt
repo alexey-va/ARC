@@ -12,6 +12,8 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import ru.arc.core.TestTaskScheduler
 import ru.arc.core.TestTimeProvider
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
+import java.util.concurrent.CompletableFuture
 
 /**
  * Unit tests for AuditService.
@@ -133,6 +135,32 @@ class AuditServiceTest {
 
             assertEquals(1, recordingRepository.saveCount)
             assertEquals(15.0, recordingRepository.get("player1").join()!!.transactions.single().amount)
+        }
+
+        @Test
+        fun `economy operations use server-qualified shards and combine for player queries`() {
+            val spawn = AuditMetadata(EconomySource.JOBS, EconomyFlow.MINT, server = "spawn")
+            val survival = AuditMetadata(EconomySource.SHOP, EconomyFlow.MINT, server = "survival")
+
+            service.economyOperation("Player1", 10.0, Type.JOB, "spawn", spawn)
+            service.economyOperation("Player1", 20.0, Type.SHOP, "survival", survival)
+
+            assertNotNull(repository.get("spawn:player1").join())
+            assertNotNull(repository.get("survival:player1").join())
+            assertEquals(2, service.getAuditData("Player1")!!.transactions.size)
+        }
+
+        @Test
+        fun `repository failures increment a bounded persistence metric`() {
+            val registry = SimpleMeterRegistry()
+            val monitor = EconomyAuditMonitor(config, { registry }, timeProvider)
+            val failing = FailingAuditRepository()
+            val failingService = AuditService(failing, config, scheduler, timeProvider, monitor)
+            val metadata = AuditMetadata(EconomySource.JOBS, EconomyFlow.MINT, server = "survival")
+
+            failingService.economyOperation("Player1", 10.0, Type.JOB, "failure", metadata)
+
+            assertEquals(1.0, registry.get("arc_economy_persistence_failures_total").counter().count())
         }
     }
 
@@ -270,10 +298,30 @@ class AuditServiceTest {
             val initialWeight = smallService.totalWeight()
             assertEquals(5L, initialWeight)
 
-            // Pruning should be triggered (but may not reduce due to age check)
             smallService.pruneOldData()
 
-            // Just verify no exception is thrown
+            assertEquals(3L, smallService.totalWeight())
+        }
+
+        @Test
+        fun `pruneOldData enforces age retention even below weight limit`() {
+            val retentionConfig = config.copy(maxWeight = 1000, maxAgeSeconds = 60)
+            val retentionService = AuditService(repository, retentionConfig, scheduler, timeProvider)
+            val data = AuditData.create("Player1")
+            data.transactions.add(
+                Transaction(
+                    type = Type.SHOP,
+                    amount = 1.0,
+                    comment = "expired",
+                    timestamp = timeProvider.currentTimeMillis() - 61_000,
+                    timestamp2 = timeProvider.currentTimeMillis() - 61_000,
+                ),
+            )
+            repository.save(data)
+
+            retentionService.pruneOldData()
+
+            assertTrue(repository.get("player1").join()!!.transactions.isEmpty())
         }
 
         @Test
@@ -288,6 +336,22 @@ class AuditServiceTest {
 
             assertTrue(recordingRepository.saveCount > 0)
             assertTrue(recordingRepository.get("player1").join()!!.transactions.isEmpty())
+        }
+
+        @Test
+        fun `server shard pruning never mutates another server shard`() {
+            val shardConfig = config.copy(shardMaxWeight = 1, maxTransactions = 10)
+            val shardService = AuditService(repository, shardConfig, scheduler, timeProvider, localServer = "survival")
+            val spawn = AuditMetadata(EconomySource.JOBS, EconomyFlow.MINT, server = "spawn")
+            val survival = AuditMetadata(EconomySource.JOBS, EconomyFlow.MINT, server = "survival")
+            shardService.economyOperation("Player", 1.0, Type.JOB, "spawn", spawn)
+            shardService.economyOperation("Player", 1.0, Type.JOB, "survival-1", survival)
+            shardService.economyOperation("Player", 1.0, Type.JOB, "survival-2", survival)
+
+            shardService.pruneOldData()
+
+            assertEquals(1, repository.get("spawn:player").join()!!.transactions.size)
+            assertEquals(1, repository.get("survival:player").join()!!.transactions.size)
         }
     }
 
@@ -439,4 +503,16 @@ private class RecordingAuditRepository(
         saveCount++
         delegate.save(entity)
     }
+}
+
+private class FailingAuditRepository : AuditRepository {
+    override fun get(id: String): CompletableFuture<AuditData?> = CompletableFuture.failedFuture(IllegalStateException("load failed"))
+    override fun getOrCreate(id: String, factory: () -> AuditData): CompletableFuture<AuditData> =
+        CompletableFuture.failedFuture(IllegalStateException("load failed"))
+    override fun save(entity: AuditData) = Unit
+    override fun all(): Collection<AuditData> = emptyList()
+    override fun addContext(id: String) = Unit
+    override fun removeContext(id: String) = Unit
+    override fun getContext(): Set<String> = emptySet()
+    override fun shutdown() = Unit
 }

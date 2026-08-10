@@ -8,6 +8,7 @@ import ru.arc.core.TaskScheduler
 import ru.arc.core.TimeProvider
 import ru.arc.util.DateUtils
 import ru.arc.util.Logging.info
+import ru.arc.util.Logging.error
 import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil.mm
 
@@ -25,7 +26,9 @@ class AuditService(
     private val repository: AuditRepository,
     private val config: AuditConfig = AuditConfig.default(),
     private val scheduler: TaskScheduler? = null,
-    private val timeProvider: TimeProvider = SystemTimeProvider
+    private val timeProvider: TimeProvider = SystemTimeProvider,
+    private val monitor: EconomyAuditMonitor? = null,
+    private val localServer: String? = null,
 ) {
     private var pruneTask: ScheduledTask? = null
 
@@ -79,15 +82,62 @@ class AuditService(
     /**
      * Record a financial operation.
      */
-    fun operation(playerName: String, amount: Double, type: Type, comment: String) {
-        repository.getOrCreate(playerName.lowercase()) {
-            AuditData.create(playerName)
-        }.thenAccept { data ->
-            synchronized(data) {
-                data.operation(amount, type, comment)
-                repository.save(data)
+    fun operation(
+        playerName: String,
+        amount: Double,
+        type: Type,
+        comment: String,
+        metadata: AuditMetadata = AuditMetadata.legacy(),
+    ) {
+        if (!amount.isFinite()) {
+            warn("Rejected non-finite economy audit amount for {}: {}", playerName, amount)
+            return
+        }
+        val occurredAt = timeProvider.currentTimeMillis()
+        val entityId = entityId(playerName, metadata)
+        repository.getOrCreate(entityId) {
+            AuditData.create(playerName, entityId.takeIf { ':' in it })
+        }.whenComplete { data, failure ->
+            if (failure != null) {
+                error("Failed to load economy audit data for {}", playerName, failure)
+                monitor?.persistenceFailure(metadata)
+                return@whenComplete
+            }
+            try {
+                synchronized(data) {
+                    data.operation(
+                        amount = amount,
+                        type = type,
+                        comment = comment.take(240),
+                        metadata = metadata,
+                        at = occurredAt,
+                        aggregationWindowMillis = config.aggregationWindowSeconds * 1000L,
+                    )
+                    repository.save(data)
+                }
+            } catch (saveFailure: Throwable) {
+                error("Failed to persist economy audit data for {}", playerName, saveFailure)
+                monitor?.persistenceFailure(metadata)
             }
         }
+    }
+
+    fun economyOperation(
+        playerName: String,
+        amount: Double,
+        type: Type,
+        comment: String,
+        metadata: AuditMetadata,
+    ) {
+        operation(playerName, amount, type, comment, metadata)
+        monitor?.observe(playerName, amount, metadata, comment)
+    }
+
+    fun unresolvedBalanceSet(playerName: String, absoluteBalance: Double, observedMetadata: AuditMetadata) {
+        val metadata = observedMetadata.copy(source = EconomySource.BALANCE_SET, flow = EconomyFlow.ADJUSTMENT)
+        val reason = "Unresolved API setBalance; requested absolute balance=$absoluteBalance"
+        operation(playerName, 0.0, Type.BALANCE_SET, reason, metadata)
+        monitor?.unresolvedBalanceSet(playerName, absoluteBalance, metadata, reason)
     }
 
     /**
@@ -119,24 +169,45 @@ class AuditService(
      * Send formatted audit to audience.
      */
     fun sendAudit(audience: Audience, playerName: String, page: Int, filter: AuditFilter) {
-        repository.getOrCreate(playerName.lowercase()) {
-            AuditData.create(playerName)
-        }.thenAccept { data ->
-            if (data.transactions.isEmpty()) {
-                audience.sendMessage(noDataMessage(playerName))
-                return@thenAccept
-            }
-
-            val filtered = data.getFiltered(filter).reversed()
-            audience.sendMessage(formatAudit(filtered, playerName, page, filter))
+        val data = getAuditData(playerName)
+        if (data == null || data.transactions.isEmpty()) {
+            audience.sendMessage(noDataMessage(playerName))
+            return
         }
+
+        val filtered = data.getFiltered(filter).reversed()
+        audience.sendMessage(formatAudit(filtered, playerName, page, filter))
     }
 
     /**
      * Get player's audit data.
      */
     fun getAuditData(playerName: String): AuditData? {
-        return repository.get(playerName.lowercase()).join()
+        val matches = playerData(playerName)
+        if (matches.isEmpty()) return null
+        if (matches.size == 1) return matches.single()
+        return AuditData.create(playerName).also { combined ->
+            matches.flatMap { data -> synchronized(data) { data.transactions.map(Transaction::copy) } }
+                .sortedBy(Transaction::timestamp)
+                .forEach(combined.transactions::add)
+        }
+    }
+
+    fun economySummary(hours: Int, limit: Int, serverFilter: String? = null): Map<String, Any?> {
+        val safeHours = hours.coerceIn(1, 24 * 31)
+        val now = timeProvider.currentTimeMillis()
+        return buildAuditSummary(
+            data = repository.all(),
+            generatedAt = now,
+            since = now - safeHours * 60L * 60L * 1000L,
+            limit = limit.coerceIn(1, 100),
+            serverFilter = serverFilter?.trim()?.lowercase()?.takeIf { it.isNotEmpty() && it != "all" },
+            anomalies = monitor?.recent(100).orEmpty(),
+            rapidWindowMillis = config.rapidIncomeWindowSeconds * 1000L,
+            rapidAmount = config.rapidIncomeAmount,
+            rapidTransactions = config.rapidIncomeTransactions,
+            largeTransactionAmount = config.largeTransactionAmount,
+        )
     }
 
     // ==================== Clear ====================
@@ -145,12 +216,10 @@ class AuditService(
      * Clear specific player's audit.
      */
     fun clearPlayer(playerName: String) {
-        repository.get(playerName.lowercase()).thenAccept { data ->
-            if (data != null) {
-                synchronized(data) {
-                    data.clear()
-                    repository.save(data)
-                }
+        ownedData().filter { it.name.equals(playerName, ignoreCase = true) }.forEach { data ->
+            synchronized(data) {
+                data.clear()
+                repository.save(data)
             }
         }
     }
@@ -159,7 +228,7 @@ class AuditService(
      * Clear all audit data.
      */
     fun clearAll() {
-        repository.all().forEach { data ->
+        ownedData().forEach { data ->
             synchronized(data) {
                 data.clear()
                 repository.save(data)
@@ -170,33 +239,61 @@ class AuditService(
     // ==================== Maintenance ====================
 
     /**
-     * Prune old data to stay under weight limit.
+     * Enforce retention first, then shorten the window if the global weight is still too high.
      */
     fun pruneOldData() {
-        var currentMaxAge = config.maxAgeSeconds * 1000L
-        var currentWeight = totalWeight()
-        var iterations = 0
+        val now = timeProvider.currentTimeMillis()
+        trimAll(config.maxAgeSeconds * 1000L, now)
+        trimGlobalWeight(if (localServer == null) config.maxWeight else config.shardMaxWeight)
+    }
 
-        while (currentWeight > config.maxWeight && iterations < 10) {
-            info("Pruning audit data, weight: {}, maxAge: {}ms", currentWeight, currentMaxAge)
-
-            repository.all().forEach { data ->
-                synchronized(data) {
-                    if (data.trim(currentMaxAge, config.maxTransactions) > 0) {
-                        repository.save(data)
-                    }
+    private fun trimAll(maxAgeMillis: Long, now: Long) {
+        ownedData().forEach { data ->
+            synchronized(data) {
+                if (data.trim(maxAgeMillis, config.maxTransactions, now) > 0) {
+                    repository.save(data)
                 }
             }
-
-            currentWeight = totalWeight()
-            currentMaxAge /= 2
-            iterations++
-        }
-
-        if (iterations >= 10 && currentWeight > config.maxWeight) {
-            warn("Pruning failed to reduce weight below {}", config.maxWeight)
         }
     }
+
+    private fun trimGlobalWeight(maxWeight: Int) {
+        val safeMaxWeight = maxWeight.coerceAtLeast(0)
+        val owned = ownedData()
+        val ownedWeight = owned.sumOf { it.transactions.size.toLong() }
+        val excess = (ownedWeight - safeMaxWeight).coerceAtLeast(0).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        if (excess == 0) return
+        info("Pruning {} globally oldest audit records to enforce max weight {}", excess, safeMaxWeight)
+        val oldest =
+            owned
+                .flatMap { data -> synchronized(data) { data.transactions.map { transaction -> data to transaction } } }
+                .sortedBy { (_, transaction) -> transaction.timestamp2 }
+                .take(excess)
+                .groupBy({ it.first }, { it.second })
+        oldest.forEach { (data, transactions) ->
+            synchronized(data) {
+                transactions.forEach(data.transactions::remove)
+                repository.save(data)
+            }
+        }
+    }
+
+    private fun playerData(playerName: String): List<AuditData> =
+        repository.all().filter { it.name.equals(playerName, ignoreCase = true) }
+
+    private fun ownedData(): List<AuditData> {
+        val server = localServer?.trim()?.lowercase()?.takeIf(String::isNotEmpty) ?: return repository.all().toList()
+        return repository.all().filter { data ->
+            data.storageId?.startsWith("$server:") == true || (server == "spawn" && data.storageId.isNullOrBlank())
+        }
+    }
+
+    private fun entityId(playerName: String, metadata: AuditMetadata): String {
+        val playerId = playerName.lowercase()
+        val server = metadata.server.trim().lowercase().takeUnless { it.isEmpty() || it == "unknown" }
+        return if (server == null) playerId else "$server:$playerId"
+    }
+
 
     // ==================== Formatting ====================
 
@@ -244,6 +341,11 @@ class AuditService(
             .replace("%amount%", formattedAmount)
             .replace("%date2%", DateUtils.formatDate(transaction.timestamp2))
             .replace("%comment%", transaction.comment.ifEmpty { "-" })
+            .replace("%source%", transaction.normalizedSource.label)
+            .replace("%flow%", transaction.normalizedFlow.label)
+            .replace("%currency%", transaction.normalizedCurrency)
+            .replace("%server%", transaction.normalizedServer)
+            .replace("%occurrences%", transaction.occurrenceCount.toString())
     }
 
     private fun formatFooter(playerName: String, page: Int, totalPages: Int, filter: AuditFilter): String {
@@ -269,4 +371,3 @@ class AuditService(
             .replace("%filter%", filter.name.lowercase())
     }
 }
-

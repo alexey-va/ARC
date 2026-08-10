@@ -5,6 +5,7 @@ import org.bukkit.Bukkit
 import ru.arc.ARC
 import ru.arc.core.Tasks
 import ru.arc.core.modules.EconomyModule
+import ru.arc.metrics.MetricsModule
 import ru.arc.util.Logging.error
 import ru.arc.xserver.playerlist.PlayerManager
 import java.io.IOException
@@ -46,10 +47,13 @@ object AuditManager {
             InMemoryAuditRepository()
         }
 
+        val monitor = EconomyAuditMonitor(config, registryProvider = MetricsModule::registry)
         service = AuditService(
             repository = repository,
             config = config,
-            scheduler = scheduler
+            scheduler = scheduler,
+            monitor = monitor,
+            localServer = ARC.serverName,
         )
 
         service.start()
@@ -129,6 +133,21 @@ object AuditManager {
     }
 
     @JvmStatic
+    fun operation(name: String, amount: Double, type: Type, comment: String, metadata: AuditMetadata) {
+        service.operation(name, amount, type, comment, metadata)
+    }
+
+    @JvmStatic
+    fun economyOperation(name: String, amount: Double, type: Type, comment: String, metadata: AuditMetadata) {
+        service.economyOperation(name, amount, type, comment, metadata)
+    }
+
+    @JvmStatic
+    fun unresolvedBalanceSet(name: String, absoluteBalance: Double, metadata: AuditMetadata) {
+        service.unresolvedBalanceSet(name, absoluteBalance, metadata)
+    }
+
+    @JvmStatic
     fun income(name: String, amount: Double, type: Type, comment: String) {
         service.income(name, amount, type, comment)
     }
@@ -142,6 +161,10 @@ object AuditManager {
 
     @JvmStatic
     fun weight(): Long = service.totalWeight()
+
+    @JvmStatic
+    fun economySummary(hours: Int, limit: Int, serverFilter: String? = null): Map<String, Any?> =
+        service.economySummary(hours, limit, serverFilter)
 
     @JvmStatic
     fun sendAudit(audience: Audience, playerName: String, page: Int, filter: AuditFilter) {

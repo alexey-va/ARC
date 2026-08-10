@@ -135,6 +135,35 @@ class OpsHttpServerTest : FreeSpec({
             }
         }
 
+        "should expose the economy audit route only when its read gate is enabled" {
+            val enabled = testConfig.copy(economyAuditReadEnabled = true)
+            val disabled = testConfig.copy(economyAuditReadEnabled = false)
+
+            listOf(enabled to true, disabled to false).forEach { (config, expected) ->
+                val server = OpsHttpServer { config }
+                server.start()
+                try {
+                    val conn = open("http://127.0.0.1:${server.actualPort}/ops/", token = config.token)
+                    readBody(conn).contains("/ops/economy/audit") shouldBe expected
+                } finally {
+                    server.stop()
+                }
+            }
+        }
+
+        "should validate economy audit query before reading the ledger" {
+            val enabled = testConfig.copy(economyAuditReadEnabled = true)
+            val server = OpsHttpServer { enabled }
+            server.start()
+            try {
+                val conn = open("http://127.0.0.1:${server.actualPort}/ops/economy/audit?hours=0", token = enabled.token)
+                conn.responseCode shouldBe 400
+                readBody(conn) shouldContain "hours must be 1..744"
+            } finally {
+                server.stop()
+            }
+        }
+
         "should discover LuckPerms routes and hide disabled writes" {
             val readsOnly =
                 testConfig.copy(
