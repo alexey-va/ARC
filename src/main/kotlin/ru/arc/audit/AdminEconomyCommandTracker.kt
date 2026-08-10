@@ -1,6 +1,7 @@
 package ru.arc.audit
 
 import java.util.Locale
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.atomic.AtomicLong
@@ -15,6 +16,8 @@ object AdminEconomyCommandTracker {
         val kind: Kind,
         val amount: Double,
         val actor: String,
+        val action: String,
+        val correlationId: String,
         val expiresAt: Long,
     )
 
@@ -57,7 +60,15 @@ object AdminEconomyCommandTracker {
                 "take" -> -rawAmount
                 else -> return null
             }
-        return parsed.first.lowercase(Locale.ROOT) to Pending(kind, signedAmount, actor.take(80), now + TTL_MILLIS)
+        return parsed.first.lowercase(Locale.ROOT) to
+            Pending(
+                kind = kind,
+                amount = signedAmount,
+                actor = actor.take(80),
+                action = action,
+                correlationId = UUID.randomUUID().toString(),
+                expiresAt = now + TTL_MILLIS,
+            )
     }
 
     private fun consume(player: String, kind: Kind, amount: Double, now: Long): Pending? {

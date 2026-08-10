@@ -88,12 +88,23 @@ class RedisEcoHookTest {
         assertEquals("OfflinePlayer", hook.getCachedName(playerId))
     }
 
+    @Test
+    fun `cached balance observation uses the transaction currency`() {
+        val playerId = UUID.randomUUID()
+        val currency = mockk<Currency>()
+        every { currency.getBalance(playerId) } returns 42.5
+        val hook = RedisEcoHook { api(currency, emptyMap()) }
+
+        assertEquals(42.5, hook.getCachedBalance(playerId, "vault"))
+    }
+
     private fun api(
         currency: Currency,
         names: Map<UUID, String>,
     ): RedisEconomyAPI =
         mockk {
             every { defaultCurrency } returns currency
+            every { getCurrencyByName(any()) } returns currency
             every { getUsernameFromUUIDCache(any()) } answers { names[firstArg()] }
         }
 }

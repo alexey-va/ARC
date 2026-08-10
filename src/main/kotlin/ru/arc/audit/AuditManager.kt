@@ -2,6 +2,7 @@ package ru.arc.audit
 
 import net.kyori.adventure.audience.Audience
 import org.bukkit.Bukkit
+import org.bukkit.entity.Player
 import ru.arc.ARC
 import ru.arc.core.Tasks
 import ru.arc.core.modules.EconomyModule
@@ -26,6 +27,7 @@ object AuditManager {
     private lateinit var service: AuditService
     private lateinit var config: AuditConfig
     private var balanceHistoryTask: ru.arc.core.ScheduledTask? = null
+    private val sessionTracker = EconomySessionTracker()
 
     private val balanceHistoryPath: Path by lazy {
         ARC.instance.dataPath.resolve("balance-history")
@@ -100,6 +102,9 @@ object AuditManager {
         }
         balanceHistoryTask?.cancel()
         balanceHistoryTask = null
+        sessionTracker.clear()
+        EconomyPendingContextTracker.clear()
+        EconomyTransferCorrelationTracker.clear()
     }
 
     /**
@@ -121,9 +126,25 @@ object AuditManager {
     }
 
     @JvmStatic
+    fun join(player: Player) {
+        service.playerJoined(player.name)
+        sessionTracker.joined(player.uniqueId, player.world.name, System.currentTimeMillis())
+    }
+
+    @JvmStatic
     fun leave(name: String) {
         service.playerLeft(name)
     }
+
+    @JvmStatic
+    fun leave(player: Player) {
+        service.playerLeft(player.name)
+        sessionTracker.left(player.uniqueId, player.world.name, System.currentTimeMillis())
+    }
+
+    @JvmStatic
+    fun session(playerId: java.util.UUID, currentWorld: String? = null): EconomySessionSnapshot? =
+        sessionTracker.snapshot(playerId, currentWorld, System.currentTimeMillis())
 
     // ==================== Operations ====================
 
@@ -138,13 +159,36 @@ object AuditManager {
     }
 
     @JvmStatic
-    fun economyOperation(name: String, amount: Double, type: Type, comment: String, metadata: AuditMetadata) {
-        service.economyOperation(name, amount, type, comment, metadata)
+    fun economyOperation(
+        name: String,
+        amount: Double,
+        type: Type,
+        comment: String,
+        metadata: AuditMetadata,
+        context: EconomyLedgerContext? = null,
+    ) {
+        service.economyOperation(name, amount, type, comment, metadata, context)
     }
 
     @JvmStatic
-    fun unresolvedBalanceSet(name: String, absoluteBalance: Double, metadata: AuditMetadata) {
-        service.unresolvedBalanceSet(name, absoluteBalance, metadata)
+    fun economyAttempt(
+        name: String,
+        type: Type,
+        comment: String,
+        metadata: AuditMetadata,
+        context: EconomyLedgerContext,
+    ) {
+        service.economyAttempt(name, type, comment, metadata, context)
+    }
+
+    @JvmStatic
+    fun unresolvedBalanceSet(
+        name: String,
+        absoluteBalance: Double,
+        metadata: AuditMetadata,
+        context: EconomyLedgerContext? = null,
+    ) {
+        service.unresolvedBalanceSet(name, absoluteBalance, metadata, context)
     }
 
     @JvmStatic

@@ -41,6 +41,10 @@ class EconomyAuditMonitor(
 
     private data class PersistenceMetricKey(val source: String, val server: String)
 
+    private data class AttemptMetricKey(val source: String, val status: String, val action: String)
+
+    private data class ContextMetricKey(val source: String, val field: String, val present: String)
+
     private class IncomeWindow {
         val points = ArrayDeque<IncomePoint>()
         var total = 0.0
@@ -53,6 +57,8 @@ class EconomyAuditMonitor(
     private val amountCounters = ConcurrentHashMap<MetricKey, Counter>()
     private val anomalyCounters = ConcurrentHashMap<AnomalyMetricKey, Counter>()
     private val persistenceFailureCounters = ConcurrentHashMap<PersistenceMetricKey, Counter>()
+    private val attemptCounters = ConcurrentHashMap<AttemptMetricKey, Counter>()
+    private val contextCounters = ConcurrentHashMap<ContextMetricKey, Counter>()
     private val observations = AtomicLong()
 
     fun observe(
@@ -60,9 +66,11 @@ class EconomyAuditMonitor(
         amount: Double,
         metadata: AuditMetadata,
         reason: String,
+        context: EconomyLedgerContext? = null,
     ) {
         if (!config.monitoringEnabled || !amount.isFinite() || amount == 0.0) return
         recordMetrics(amount, metadata)
+        recordContextMetrics(metadata, context)
 
         val now = timeProvider.currentTimeMillis()
         if (abs(amount) >= config.largeTransactionAmount && config.largeTransactionAmount > 0.0) {
@@ -77,6 +85,23 @@ class EconomyAuditMonitor(
     }
 
     fun recent(limit: Int): List<EconomyAnomaly> = anomalies.toList().takeLast(limit.coerceIn(1, 100))
+
+    fun observeAttempt(metadata: AuditMetadata, context: EconomyLedgerContext) {
+        if (!config.monitoringEnabled) return
+        val registry = registryProvider() ?: return
+        val key =
+            AttemptMetricKey(
+                source = metadata.source.label,
+                status = context.normalizedStatus.name.lowercase(),
+                action = normalizeMetricLabel(context.action),
+            )
+        attemptCounters.computeIfAbsent(key) {
+            Counter.builder("arc_economy_attempts_total")
+                .description("Observed structured economy attempts by outcome")
+                .tags("source", key.source, "status", key.status, "action", key.action)
+                .register(registry)
+        }.increment()
+    }
 
     fun persistenceFailure(metadata: AuditMetadata) {
         val registry = registryProvider() ?: return
@@ -117,6 +142,32 @@ class EconomyAuditMonitor(
                 .register(registry)
         }.increment(abs(amount))
     }
+
+    private fun recordContextMetrics(metadata: AuditMetadata, context: EconomyLedgerContext?) {
+        val registry = registryProvider() ?: return
+        val fields =
+            linkedMapOf(
+                "balance" to (context?.balanceBefore != null && context.balanceAfter != null),
+                "session" to !context?.sessionId.isNullOrBlank(),
+                "world" to !context?.world.isNullOrBlank(),
+                "counterparty" to (context?.counterparty != null),
+                "items" to !context?.normalizedItems.isNullOrEmpty(),
+                "correlation" to !context?.correlationId.isNullOrBlank(),
+                "provider_timestamp" to (context?.providerTimestamp != null),
+            )
+        fields.forEach { (field, present) ->
+            val key = ContextMetricKey(metadata.source.label, field, if (present) "true" else "false")
+            contextCounters.computeIfAbsent(key) {
+                Counter.builder("arc_economy_context_total")
+                    .description("Economy ledger context field coverage")
+                    .tags("source", key.source, "field", key.field, "present", key.present)
+                    .register(registry)
+            }.increment()
+        }
+    }
+
+    private fun normalizeMetricLabel(value: String?): String =
+        value.orEmpty().lowercase().replace(Regex("[^a-z0-9_-]+"), "_").trim('_').take(32).ifBlank { "unknown" }
 
     private fun observeIncome(
         player: String,

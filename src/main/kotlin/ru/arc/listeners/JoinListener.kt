@@ -33,7 +33,7 @@ class JoinListener : Listener {
         SyncManager.playerJoin(event.player.uniqueId)
         invulnerable(event.player)
         fullHeal(event.player)
-        AuditManager.join(event.player.name)
+        AuditManager.join(event.player)
     }
 
     @EventHandler(priority = EventPriority.LOW)
@@ -41,7 +41,7 @@ class JoinListener : Listener {
         ChatModeService.untrack(event.player.uniqueId)
         JobsModule.untrackPlayer(event.player.uniqueId)
         SyncManager.playerQuit(event.player.uniqueId)
-        AuditManager.leave(event.player.name)
+        AuditManager.leave(event.player)
         if (invMap.containsKey(event.player.uniqueId)) stripInvulnerable(event.player)
         TreasureHuntManager.onPlayerQuit(event.player)
     }
@@ -51,7 +51,7 @@ class JoinListener : Listener {
         ChatModeService.untrack(event.player.uniqueId)
         JobsModule.untrackPlayer(event.player.uniqueId)
         SyncManager.playerQuit(event.player.uniqueId)
-        AuditManager.leave(event.player.name)
+        AuditManager.leave(event.player)
         if (invMap.containsKey(event.player.uniqueId)) stripInvulnerable(event.player)
         TreasureHuntManager.onPlayerQuit(event.player)
     }

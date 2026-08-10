@@ -15,7 +15,12 @@ import ru.arc.PortalData
 import ru.arc.audit.AuditManager
 import ru.arc.audit.AdminEconomyCommandTracker
 import ru.arc.audit.AuditMetadata
+import ru.arc.audit.EconomyBalanceObservation
+import ru.arc.audit.EconomyEventStatus
 import ru.arc.audit.EconomyFlow
+import ru.arc.audit.EconomyLedgerContext
+import ru.arc.audit.EconomyLedgerParty
+import ru.arc.audit.EconomyRecordKind
 import ru.arc.audit.EconomySource
 import ru.arc.audit.Type
 import ru.arc.config.ConfigManager
@@ -27,6 +32,7 @@ import ru.arc.util.Logging.info
 import ru.arc.util.TextUtil
 import ru.arc.util.TextUtil.mm
 import ru.arc.xserver.playerlist.PlayerManager
+import java.util.UUID
 
 class CommandListener : Listener {
 
@@ -133,9 +139,21 @@ class CommandListener : Listener {
     private fun auditSetDelta(action: String, target: String, actor: String, before: Double?) {
         if (!action.equals("set", ignoreCase = true) || before == null) return
         val economy = EconomyModule.getEconomy() ?: return
-        val after = economy.getBalance(org.bukkit.Bukkit.getOfflinePlayer(target))
+        val offlinePlayer = org.bukkit.Bukkit.getOfflinePlayer(target)
+        val after = economy.getBalance(offlinePlayer)
         val delta = after - before
         if (delta == 0.0) return
+        val targetId = offlinePlayer.uniqueId
+        val onlinePlayer = org.bukkit.Bukkit.getPlayer(targetId)
+        val session = AuditManager.session(targetId, onlinePlayer?.world?.name)
+        val balance = EconomyBalanceObservation.exact(before, after)
+        val actorParty =
+            if (actor.equals("Server", ignoreCase = true)) {
+                EconomyLedgerParty(id = "server", name = "Server", kind = "server")
+            } else {
+                val actorPlayer = org.bukkit.Bukkit.getOfflinePlayer(actor)
+                EconomyLedgerParty(id = actorPlayer.uniqueId.toString(), name = actor.take(80), kind = "player")
+            }
         AuditManager.economyOperation(
             target,
             delta,
@@ -146,6 +164,22 @@ class CommandListener : Listener {
                 flow = EconomyFlow.ADJUSTMENT,
                 server = ARC.serverName ?: "unknown",
                 origin = actor,
+            ),
+            EconomyLedgerContext(
+                recordKind = EconomyRecordKind.TRANSACTION,
+                status = EconomyEventStatus.SUCCEEDED,
+                accountId = targetId.toString(),
+                correlationId = UUID.randomUUID().toString(),
+                counterparty = actorParty,
+                world = session?.world,
+                sessionId = session?.sessionId,
+                sessionStartedAt = session?.startedAt,
+                balanceBefore = balance?.before,
+                balanceAfter = balance?.after,
+                balanceEvidence = balance?.evidence,
+                requestedAmount = after,
+                action = "balance_set",
+                capturedAt = System.currentTimeMillis(),
             ),
         )
     }

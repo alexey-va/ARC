@@ -100,7 +100,8 @@ dependencies {
     compileOnly(libs.fr.maxlego08.zauctionhouse)
     compileOnly(libs.com.github.zrips.jobs)
     compileOnly(libs.bank.bank)
-    compileOnly(libs.com.github.emibergo02.rediseconomy)
+    // Exact private mirror of the active RedisEconomy runtime; never shaded.
+    compileOnly(libs.ru.ruscrafting.thirdparty.rediseconomy)
     compileOnly(libs.io.lettuce.lettuce.core)
     compileOnly(libs.dev.aurelium.auraskills.api.bukkit)
     compileOnly(libs.com.github.zrips.cmilib)
@@ -145,7 +146,7 @@ dependencies {
         exclude(group = "org.bukkit", module = "bukkit")
     }
     testImplementation(libs.redis.clients.jedis)
-    testImplementation(libs.com.github.emibergo02.rediseconomy)
+    testImplementation(libs.ru.ruscrafting.thirdparty.rediseconomy)
     testImplementation(libs.io.lettuce.lettuce.core)
     testImplementation(libs.org.jsoup.jsoup)
     testImplementation(libs.net.luckperms.api)

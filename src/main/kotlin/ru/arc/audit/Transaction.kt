@@ -52,6 +52,10 @@ data class Transaction(
     /** Stable identity lets full-snapshot Redis merges retain concurrent append-only events. */
     @SerializedName("id")
     val eventId: String? = UUID.randomUUID().toString(),
+
+    /** Optional v2 evidence; absent on original ledger records. */
+    @SerializedName("x")
+    val context: EconomyLedgerContext? = null,
 ) {
     /**
      * Является ли транзакция доходом.
@@ -77,6 +81,10 @@ data class Transaction(
     val normalizedCurrency: String get() = currency?.ifBlank { "vault" } ?: "vault"
 
     val normalizedServer: String get() = server?.ifBlank { "unknown" } ?: "unknown"
+
+    val normalizedRecordKind: EconomyRecordKind get() = context?.normalizedRecordKind ?: EconomyRecordKind.TRANSACTION
+
+    val normalizedStatus: EconomyEventStatus get() = context?.normalizedStatus ?: EconomyEventStatus.SUCCEEDED
 
     val mergeKey: String
         get() =
@@ -117,6 +125,7 @@ data class Transaction(
             normalizedCurrency == metadata.currency &&
             normalizedServer == metadata.server &&
             origin.orEmpty() == metadata.origin &&
+            context == null &&
             at - timestamp2 in 0..windowMillis
 
     companion object {

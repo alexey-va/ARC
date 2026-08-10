@@ -67,11 +67,17 @@ class AuditData(
         type: Type,
         comment: String,
         metadata: AuditMetadata = AuditMetadata.legacy(),
+        context: EconomyLedgerContext? = null,
         at: Long = System.currentTimeMillis(),
         aggregationWindowMillis: Long = 10_000L,
     ) {
         // Ищем транзакцию для агрегации среди последних N
-        val matchingTransaction = findTransactionForAggregation(type, amount, comment, metadata, at, aggregationWindowMillis)
+        val matchingTransaction =
+            if (context == null) {
+                findTransactionForAggregation(type, amount, comment, metadata, at, aggregationWindowMillis)
+            } else {
+                null
+            }
 
         if (matchingTransaction != null) {
             matchingTransaction.aggregate(amount, at)
@@ -88,6 +94,7 @@ class AuditData(
                     currency = metadata.currency,
                     server = metadata.server,
                     origin = metadata.origin,
+                    context = context,
                 ),
             )
         }

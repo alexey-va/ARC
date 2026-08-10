@@ -14,6 +14,12 @@ class RedisEcoHook(
 
     fun getCachedName(playerId: UUID): String? = apiProvider()?.getUsernameFromUUIDCache(playerId)
 
+    fun getCachedBalance(playerId: UUID, currencyName: String?): Double? {
+        val api = apiProvider() ?: return null
+        val currency = currencyName?.takeIf(String::isNotBlank)?.let(api::getCurrencyByName) ?: api.defaultCurrency
+        return runCatching { currency.getBalance(playerId) }.getOrNull()?.takeIf(Double::isFinite)
+    }
+
     fun getAccounts(players: List<UUID>): CompletableFuture<List<Account>> {
         val api = apiProvider() ?: return CompletableFuture.completedFuture(emptyList())
         val currency = api.defaultCurrency

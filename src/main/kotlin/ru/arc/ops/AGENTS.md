@@ -200,7 +200,11 @@ surface is intentionally compact:
 
 - `arc_ops_server` returns normal server status, or `GET /ops/economy/audit`
   when `economy_hours > 0`; the ledger read is gated by
-  `economy-audit-read-enabled` and never mutates balances.
+  `economy-audit-read-enabled` and never mutates balances. Economy ledger
+  schema v2 also returns bounded `recentEvents`, `recentFailures`, attempt
+  outcomes, and context-field coverage. Detailed account, session, balance,
+  item, counterparty, and correlation evidence stays in this authenticated
+  response and must never become Prometheus labels.
 
 - `arc_ops_content_read` dispatches list/detail and preview;
 - `arc_ops_content_write` dispatches gated upsert/delete on one explicit node;

@@ -58,16 +58,51 @@ internal fun buildAuditSummary(
     var observedNet = 0.0
     var operations = 0L
     var records = 0L
+    var attempts = 0L
+    var enrichedRecords = 0L
     var oldest: Long? = null
     var newest: Long? = null
     val persistedRecords = mutableListOf<Pair<String, Transaction>>()
+    val allRecords = mutableListOf<Pair<String, Transaction>>()
+    val attemptsByStatus = linkedMapOf<String, Long>()
+    val attemptsByAction = linkedMapOf<String, Long>()
+    val attemptsBySource = linkedMapOf<String, Long>()
+    val contextPresent = linkedMapOf<String, Long>()
+    var contextEligible = 0L
 
     data.forEach { auditData ->
         val snapshot = synchronized(auditData) { auditData.transactions.map(Transaction::copy) }
         snapshot.forEach { transaction ->
             if (transaction.timestamp2 < since) return@forEach
             if (!serverFilter.isNullOrBlank() && transaction.normalizedServer != serverFilter) return@forEach
+            allRecords += auditData.name to transaction
+            if (transaction.normalizedRecordKind == EconomyRecordKind.ATTEMPT) {
+                attempts += transaction.occurrenceCount
+                attemptsByStatus.merge(transaction.normalizedStatus.name.lowercase(), transaction.occurrenceCount.toLong(), Long::plus)
+                attemptsByAction.merge(transaction.context?.action?.ifBlank { "unknown" } ?: "unknown", transaction.occurrenceCount.toLong(), Long::plus)
+                attemptsBySource.merge(transaction.normalizedSource.label, transaction.occurrenceCount.toLong(), Long::plus)
+                oldest = minOf(oldest ?: transaction.timestamp, transaction.timestamp)
+                newest = maxOf(newest ?: transaction.timestamp2, transaction.timestamp2)
+                return@forEach
+            }
+            if (transaction.normalizedStatus !in setOf(EconomyEventStatus.SUCCEEDED, EconomyEventStatus.REVERTED)) {
+                return@forEach
+            }
             persistedRecords += auditData.name to transaction
+            contextEligible++
+            if (transaction.context != null) enrichedRecords++
+            val context = transaction.context
+            linkedMapOf(
+                "balance" to (context?.balanceBefore != null && context.balanceAfter != null),
+                "session" to !context?.sessionId.isNullOrBlank(),
+                "world" to !context?.world.isNullOrBlank(),
+                "counterparty" to (context?.counterparty != null),
+                "items" to !context?.normalizedItems.isNullOrEmpty(),
+                "correlation" to !context?.correlationId.isNullOrBlank(),
+                "providerTimestamp" to (context?.providerTimestamp != null),
+            ).forEach { (field, present) ->
+                if (present) contextPresent.merge(field, 1L, Long::plus)
+            }
             val source = transaction.normalizedSource.label
             sources.computeIfAbsent(source) { MutableAuditStats() }.add(auditData.name, transaction)
             players.computeIfAbsent(auditData.name) { MutableAuditStats() }.add(auditData.name, transaction)
@@ -105,7 +140,35 @@ internal fun buildAuditSummary(
             limit,
         )
 
+    val contextCoverage =
+        listOf("balance", "session", "world", "counterparty", "items", "correlation", "providerTimestamp")
+            .associateWith { field ->
+                val present = contextPresent[field] ?: 0L
+                linkedMapOf(
+                    "present" to present,
+                    "total" to contextEligible,
+                    "ratio" to if (contextEligible == 0L) 0.0 else present.toDouble() / contextEligible,
+                )
+            }
+
+    val recentEvents =
+        allRecords
+            .sortedByDescending { (_, transaction) -> transaction.timestamp2 }
+            .take(limit)
+            .map(::ledgerEventMap)
+    val recentFailures =
+        allRecords
+            .asSequence()
+            .filter { (_, transaction) ->
+                transaction.normalizedStatus in setOf(EconomyEventStatus.FAILED, EconomyEventStatus.CANCELLED)
+            }
+            .sortedByDescending { (_, transaction) -> transaction.timestamp2 }
+            .take(limit)
+            .map(::ledgerEventMap)
+            .toList()
+
     return linkedMapOf(
+        "ledgerSchemaVersion" to 2,
         "generatedAt" to generatedAt,
         "since" to since,
         "serverFilter" to serverFilter,
@@ -116,6 +179,8 @@ internal fun buildAuditSummary(
                 "records" to records,
                 "operations" to operations,
                 "players" to players.size,
+                "attempts" to attempts,
+                "enrichedRecords" to enrichedRecords,
             ),
         "totals" to
             linkedMapOf(
@@ -133,6 +198,14 @@ internal fun buildAuditSummary(
                 "supplyCoverage" to "known_mint_burn_only; bank_interest_and_transfer_fees_require_separate_reconciliation",
             ),
         "sources" to ranked(sources, "source"),
+        "attempts" to
+            linkedMapOf(
+                "total" to attempts,
+                "byStatus" to attemptsByStatus.toSortedMap(),
+                "byAction" to attemptsByAction.toSortedMap(),
+                "bySource" to attemptsBySource.toSortedMap(),
+            ),
+        "contextCoverage" to contextCoverage,
         "topPlayers" to ranked(players, "player"),
         "unknownOrigins" to ranked(unknownOrigins, "origin"),
         "recentAnomalies" to
@@ -141,6 +214,46 @@ internal fun buildAuditSummary(
                     anomaly.timestamp >= since && (serverFilter.isNullOrBlank() || anomaly.server == serverFilter)
                 }.takeLast(limit),
         "derivedAnomalies" to derivedAnomalies,
+        "recentEvents" to recentEvents,
+        "recentFailures" to recentFailures,
+    )
+}
+
+private fun ledgerEventMap(entry: Pair<String, Transaction>): Map<String, Any?> {
+    val (player, transaction) = entry
+    val context = transaction.context
+    return linkedMapOf(
+        "eventId" to transaction.eventId,
+        "player" to player,
+        "accountId" to context?.accountId,
+        "recordKind" to transaction.normalizedRecordKind.name.lowercase(),
+        "status" to transaction.normalizedStatus.name.lowercase(),
+        "amount" to transaction.amount,
+        "requestedAmount" to context?.requestedAmount,
+        "operations" to transaction.occurrenceCount,
+        "source" to transaction.normalizedSource.label,
+        "flow" to transaction.normalizedFlow.label,
+        "currency" to transaction.normalizedCurrency,
+        "server" to transaction.normalizedServer,
+        "world" to context?.world,
+        "sessionId" to context?.sessionId,
+        "sessionStartedAt" to context?.sessionStartedAt,
+        "balanceBefore" to context?.balanceBefore,
+        "balanceAfter" to context?.balanceAfter,
+        "balanceEvidence" to context?.balanceEvidence?.name?.lowercase(),
+        "counterparty" to context?.counterparty,
+        "correlationId" to context?.correlationId,
+        "providerTimestamp" to context?.providerTimestamp,
+        "action" to context?.action,
+        "shopId" to context?.shopId,
+        "items" to context?.normalizedItems.orEmpty(),
+        "priceComponents" to context?.normalizedPriceComponents.orEmpty(),
+        "failureReason" to context?.failureReason,
+        "revertedWith" to context?.revertedWith,
+        "reason" to transaction.comment,
+        "origin" to transaction.origin,
+        "timestamp" to transaction.timestamp,
+        "timestamp2" to transaction.timestamp2,
     )
 }
 
@@ -176,7 +289,10 @@ private fun derivePersistedAnomalies(
     val rapid = mutableListOf<Map<String, Any?>>()
     records
         .filter { (_, transaction) ->
-            transaction.amount > 0.0 && transaction.normalizedFlow !in setOf(EconomyFlow.ADJUSTMENT, EconomyFlow.INTERNAL)
+            transaction.normalizedRecordKind == EconomyRecordKind.TRANSACTION &&
+                transaction.normalizedStatus in setOf(EconomyEventStatus.SUCCEEDED, EconomyEventStatus.REVERTED) &&
+                transaction.amount > 0.0 &&
+                transaction.normalizedFlow !in setOf(EconomyFlow.ADJUSTMENT, EconomyFlow.INTERNAL)
         }.groupBy { (player, transaction) ->
             listOf(player.lowercase(), transaction.normalizedSource.label, transaction.normalizedServer, transaction.normalizedCurrency)
         }.forEach { (key, grouped) ->

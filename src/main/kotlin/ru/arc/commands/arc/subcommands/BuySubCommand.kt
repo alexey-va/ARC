@@ -3,6 +3,17 @@ package ru.arc.commands.arc.subcommands
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
+import ru.arc.ARC
+import ru.arc.audit.AuditManager
+import ru.arc.audit.AuditMetadata
+import ru.arc.audit.EconomyBalanceObservation
+import ru.arc.audit.EconomyEventStatus
+import ru.arc.audit.EconomyFlow
+import ru.arc.audit.EconomyLedgerContext
+import ru.arc.audit.EconomyLedgerItem
+import ru.arc.audit.EconomyRecordKind
+import ru.arc.audit.EconomySource
+import ru.arc.audit.Type
 import ru.arc.commands.arc.CommandConfig
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.tabComplete
@@ -11,6 +22,7 @@ import ru.arc.hooks.economyshop.ShopPurchaseOutcome
 import ru.arc.hooks.economyshop.ShopPurchaseStatus
 import ru.arc.util.Logging
 import ru.arc.util.TextUtils
+import java.util.UUID
 
 /** Buy an exact item quantity through EconomyShopGUI: /arc buy or /buy. */
 internal object BuySubCommand : SubCommand {
@@ -63,6 +75,7 @@ internal object BuySubCommand : SubCommand {
         val outcome = try {
             service.purchase(player, request.itemPath, request.amount)
         } catch (failure: Throwable) {
+            recordPreflightFailure(player, request.itemPath, request.amount, "internal_exception")
             Logging.error(
                 "EconomyShopGUI command purchase failed for player {} item {} amount {}",
                 player.name,
@@ -79,7 +92,46 @@ internal object BuySubCommand : SubCommand {
             return
         }
 
+        if (outcome.status in setOf(ShopPurchaseStatus.ITEM_NOT_FOUND, ShopPurchaseStatus.NOT_BUYABLE)) {
+            recordPreflightFailure(player, outcome.itemPath, outcome.amount, outcome.status.name.lowercase())
+        }
+
         sendOutcome(sender, outcome)
+    }
+
+    private fun recordPreflightFailure(player: Player, itemPath: String, amount: Int, reason: String) {
+        val session = AuditManager.session(player.uniqueId, player.world.name)
+        val balance = HookRegistry.redisEcoHook?.getCachedBalance(player.uniqueId, "vault")
+            ?.let(EconomyBalanceObservation::unchanged)
+        AuditManager.economyAttempt(
+            player.name,
+            Type.SHOP,
+            "ARC_BUY:${reason.uppercase()}",
+            AuditMetadata(
+                source = EconomySource.SHOP,
+                flow = EconomyFlow.UNKNOWN,
+                currency = "vault",
+                server = ARC.serverName ?: "unknown",
+                origin = "ru.arc.commands.arc.subcommands.BuySubCommand",
+            ),
+            EconomyLedgerContext(
+                recordKind = EconomyRecordKind.ATTEMPT,
+                status = EconomyEventStatus.FAILED,
+                accountId = player.uniqueId.toString(),
+                correlationId = UUID.randomUUID().toString(),
+                world = session?.world ?: player.world.name,
+                sessionId = session?.sessionId,
+                sessionStartedAt = session?.startedAt,
+                balanceBefore = balance?.before,
+                balanceAfter = balance?.after,
+                balanceEvidence = balance?.evidence,
+                action = "arc_buy",
+                shopId = itemPath.substringBefore('.').take(80),
+                items = listOf(EconomyLedgerItem(key = itemPath.take(160), quantity = amount.coerceAtLeast(0))),
+                failureReason = reason.take(80),
+                capturedAt = System.currentTimeMillis(),
+            ),
+        )
     }
 
     private fun sendOutcome(sender: CommandSender, outcome: ShopPurchaseOutcome) {

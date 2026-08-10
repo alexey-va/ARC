@@ -7,7 +7,7 @@ betterrtp-betterrtp = "3.6.13"
 com-alessiodp-parties-parties-api = "3.2.15"
 com-github-angeschossen-landsapi = "6.26.18"
 com-github-dumbo-the-developer-duels-duels-api = "4.0"
-com-github-emibergo02-rediseconomy = "4.3.9"
+ru-ruscrafting-thirdparty-rediseconomy = "4.5.12"
 com-github-lonedev6-api-itemsadder = "3.6.1"
 com-github-milkbowl-vaultapi = "1.7"
 com-github-retrooper-packetevents-spigot = "2.5.0"
@@ -55,7 +55,7 @@ bank-bank = { module = "bank:Bank", version.ref = "bank-bank" }
 betterrtp-betterrtp = { module = "betterrtp:BetterRTP", version.ref = "betterrtp-betterrtp" }
 com-alessiodp-parties-parties-api = { module = "com.alessiodp.parties:parties-api", version.ref = "com-alessiodp-parties-parties-api" }
 com-github-angeschossen-landsapi = { module = "com.github.angeschossen:LandsAPI", version.ref = "com-github-angeschossen-landsapi" }
-com-github-emibergo02-rediseconomy = { module = "com.github.Emibergo02:RedisEconomy", version.ref = "com-github-emibergo02-rediseconomy" }
+ru-ruscrafting-thirdparty-rediseconomy = { module = "ru.ruscrafting.thirdparty:rediseconomy", version.ref = "ru-ruscrafting-thirdparty-rediseconomy" }
 com-github-lonedev6-api-itemsadder = { module = "com.github.LoneDev6:api-itemsadder", version.ref = "com-github-lonedev6-api-itemsadder" }
 com-github-milkbowl-vaultapi = { module = "com.github.MilkBowl:VaultAPI", version.ref = "com-github-milkbowl-vaultapi" }
 com-github-retrooper-packetevents-spigot = { module = "com.github.retrooper:packetevents-spigot", version.ref = "com-github-retrooper-packetevents-spigot" }

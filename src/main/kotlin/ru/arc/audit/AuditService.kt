@@ -88,6 +88,7 @@ class AuditService(
         type: Type,
         comment: String,
         metadata: AuditMetadata = AuditMetadata.legacy(),
+        context: EconomyLedgerContext? = null,
     ) {
         if (!amount.isFinite()) {
             warn("Rejected non-finite economy audit amount for {}: {}", playerName, amount)
@@ -110,6 +111,7 @@ class AuditService(
                         type = type,
                         comment = comment.take(240),
                         metadata = metadata,
+                        context = context,
                         at = occurredAt,
                         aggregationWindowMillis = config.aggregationWindowSeconds * 1000L,
                     )
@@ -128,15 +130,33 @@ class AuditService(
         type: Type,
         comment: String,
         metadata: AuditMetadata,
+        context: EconomyLedgerContext? = null,
     ) {
-        operation(playerName, amount, type, comment, metadata)
-        monitor?.observe(playerName, amount, metadata, comment)
+        operation(playerName, amount, type, comment, metadata, context)
+        monitor?.observe(playerName, amount, metadata, comment, context)
     }
 
-    fun unresolvedBalanceSet(playerName: String, absoluteBalance: Double, observedMetadata: AuditMetadata) {
+    fun economyAttempt(
+        playerName: String,
+        type: Type,
+        comment: String,
+        metadata: AuditMetadata,
+        context: EconomyLedgerContext,
+    ) {
+        require(context.normalizedRecordKind == EconomyRecordKind.ATTEMPT) { "Attempt context must use ATTEMPT kind" }
+        operation(playerName, 0.0, type, comment, metadata, context)
+        monitor?.observeAttempt(metadata, context)
+    }
+
+    fun unresolvedBalanceSet(
+        playerName: String,
+        absoluteBalance: Double,
+        observedMetadata: AuditMetadata,
+        context: EconomyLedgerContext? = null,
+    ) {
         val metadata = observedMetadata.copy(source = EconomySource.BALANCE_SET, flow = EconomyFlow.ADJUSTMENT)
         val reason = "Unresolved API setBalance; requested absolute balance=$absoluteBalance"
-        operation(playerName, 0.0, Type.BALANCE_SET, reason, metadata)
+        operation(playerName, 0.0, Type.BALANCE_SET, reason, metadata, context)
         monitor?.unresolvedBalanceSet(playerName, absoluteBalance, metadata, reason)
     }
 

@@ -11,6 +11,7 @@ import ru.arc.hooks.citizens.CitizensHook
 import ru.arc.hooks.elitemobs.EMHook
 import ru.arc.hooks.elitemobs.EMListener
 import ru.arc.hooks.economyshop.EconomyShopGuiPurchaseService
+import ru.arc.hooks.economyshop.EconomyShopGuiAuditListener
 import ru.arc.hooks.economyshop.ShopPurchaseService
 import ru.arc.hooks.lands.LandsHook
 import ru.arc.hooks.lootchest.LootChestHook
@@ -353,6 +354,7 @@ class HookRegistry(
         register("EconomyShopGUI-Premium", true) {
             val translator = checkNotNull(translatorHook) { "Material translator is not initialized" }
             val purchaseService = EconomyShopGuiPurchaseService { item -> translator.translate(item) }
+            registerListener(EconomyShopGuiAuditListener())
             shopPurchaseService = purchaseService
         }
     }
