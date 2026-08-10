@@ -6,11 +6,11 @@ import com.github.stefvanschie.inventoryframework.pane.StaticPane
 import com.github.stefvanschie.inventoryframework.pane.util.Slot
 import org.bukkit.Material
 import org.bukkit.entity.Player
+import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
-import ru.arc.core.sync
 import ru.arc.gui.GuiBuilder
 import ru.arc.gui.GuiItems
 import ru.arc.gui.onBottomClick
@@ -42,6 +42,15 @@ object StoreGuiFactory {
     ): ChestGui = StoreGuiSession(player, store, config).build()
 }
 
+/** Apply the cursor half of an already-cancelled Store click before Bukkit completes the event. */
+internal fun commitCancelledStoreCursor(
+    click: InventoryClickEvent,
+    cursorItem: ItemStack?,
+) {
+    check(click.isCancelled) { "Store cursor can only be committed for a cancelled click" }
+    click.view.setCursor(cursorItem)
+}
+
 /**
  * Live store GUI session — refreshes slots in place instead of reopening the inventory.
  */
@@ -67,7 +76,7 @@ private class StoreGuiSession(
 
         builder.navBackground()
         builder.onTopDrag { it.isCancelled = true }
-        builder.onBottomClick { click -> handleBottomClick(click) { scheduleRefresh() } }
+        builder.onBottomClick { click -> handleBottomClick(click, ::refreshItems) }
         builder.onTopClick { click -> handleTopClick(click) }
         visibleStoreSlots = (rows - 1) * 9
         storePane = StaticPane(9, rows - 1)
@@ -85,24 +94,13 @@ private class StoreGuiSession(
         return chestGui
     }
 
-    /**
-     * Patch changed store cells before the click event returns, so the server state matches client prediction.
-     * Cursor synchronization remains on the next tick because Bukkit may overwrite it while completing the event.
-     */
-    private fun scheduleRefresh(
-        cursorItem: ItemStack? = null,
-        clearCursor: Boolean = false,
+    /** Commit both halves of a cancelled click before Bukkit sends its final slot state to the client. */
+    private fun commitStoreChange(
+        click: InventoryClickEvent,
+        cursorItem: ItemStack?,
     ) {
         refreshItems()
-        if (!clearCursor && cursorItem == null) return
-
-        sync {
-            refreshItems()
-            when {
-                clearCursor -> player.setItemOnCursor(null)
-                cursorItem != null -> player.setItemOnCursor(cursorItem)
-            }
-        }
+        commitCancelledStoreCursor(click, cursorItem)
     }
 
     private fun refreshItems() {
@@ -154,10 +152,6 @@ private class StoreGuiSession(
 
     private fun createStoreGuiItem(original: ItemStack): GuiItem = GuiItems.create(original.clone())
 
-    private fun scheduleTake(cursorItem: ItemStack) {
-        scheduleRefresh(cursorItem = cursorItem)
-    }
-
     private fun applyPlayerStorageTransfer(plan: PlayerStorageTransferPlan) {
         plan.updates.forEach { update ->
             player.inventory.setItem(update.slot, update.item.clone())
@@ -165,7 +159,7 @@ private class StoreGuiSession(
     }
 
     private fun handleBottomClick(
-        click: org.bukkit.event.inventory.InventoryClickEvent,
+        click: InventoryClickEvent,
         refresh: () -> Unit,
     ) {
         if (!click.isShiftClick) return
@@ -181,7 +175,7 @@ private class StoreGuiSession(
         refresh()
     }
 
-    private fun handleTopClick(click: org.bukkit.event.inventory.InventoryClickEvent) {
+    private fun handleTopClick(click: InventoryClickEvent) {
         val storeSlot = click.rawSlot
         if (storeSlot !in 0 until minOf(store.size, visibleStoreSlots)) return
 
@@ -194,7 +188,7 @@ private class StoreGuiSession(
         if (currentStoreItem == null) {
             if (!hasCursorItem || !store.addItemAt(storeSlot, cursor.clone())) return
             StoreManager.saveLater(store)
-            scheduleRefresh(clearCursor = true)
+            commitStoreChange(click, null)
             return
         }
 
@@ -217,7 +211,7 @@ private class StoreGuiSession(
 
             val deposited = cursor.clone().also { it.amount = amountToAdd }
             if (!store.addItemAt(storeSlot, deposited)) {
-                scheduleRefresh(cursorItem = cursor.clone())
+                refreshItems()
                 return
             }
 
@@ -226,7 +220,7 @@ private class StoreGuiSession(
                     cursor.clone().also { it.amount = amount }
                 }
             StoreManager.saveLater(store)
-            scheduleRefresh(cursorItem = remaining, clearCursor = remaining == null)
+            commitStoreChange(click, remaining)
             return
         }
 
@@ -253,16 +247,16 @@ private class StoreGuiSession(
         if (!store.removeItemAt(storeSlot, taken, amountToRemove)) {
             val (display, lore) = config.itemComponents("store.item-is-gone")
             GuiUtils.temporaryChange(guiStack, display, lore, 40L) {}
-            scheduleRefresh()
+            refreshItems()
             return
         }
 
         StoreManager.saveLater(store)
         if (storageTransfer != null) {
             applyPlayerStorageTransfer(storageTransfer)
-            scheduleRefresh()
+            refreshItems()
         } else {
-            scheduleTake(taken)
+            commitStoreChange(click, taken)
         }
     }
 
