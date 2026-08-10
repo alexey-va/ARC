@@ -252,6 +252,20 @@ class NativeLuckPermsSubjectGatewayTest : FreeSpec({
                 ).join().nodes.shouldContainExactly(addition)
         }
 
+        "replaces a permission value without removing the newly added identity" {
+            val enabled = PermissionNodeSpec("example.replaced", value = true)
+            val disabled = PermissionNodeSpec("example.replaced", value = false)
+            fixture.putGroup("builder", fixture.node(enabled))
+            fixture.node(disabled)
+
+            fixture.gateway
+                .mutate(
+                    LpSubjectRef(LpSubjectType.GROUP, "builder"),
+                    additions = setOf(disabled),
+                    removals = setOf(enabled),
+                ).join().nodes.shouldContainExactly(disabled)
+        }
+
         "rejects mutation of an unknown UUID instead of manufacturing a Bukkit offline identity" {
             val unknown = LpSubjectRef(LpSubjectType.USER, "00000000-0000-0000-0000-000000000401")
 
@@ -279,6 +293,7 @@ private class NativeGatewayFixture {
     private val usernames = linkedMapOf<UUID, String>()
     private val nameLookup = linkedMapOf<String, UUID>()
     private val contextSpecs = IdentityHashMap<ContextSet, LpContextSet>()
+    private val nodeSpecs = IdentityHashMap<Node, LpNodeSpec>()
     private val requestContextEntries = mutableListOf<Pair<String, String>>()
     private var queryContext: LpContextSet? = null
 
@@ -362,6 +377,7 @@ private class NativeGatewayFixture {
         usernames.clear()
         nameLookup.clear()
         contextSpecs.clear()
+        nodeSpecs.clear()
         requestContextEntries.clear()
         queryContext = null
         lastPermissionContext = null
@@ -369,6 +385,7 @@ private class NativeGatewayFixture {
     }
 
     fun node(spec: LpNodeSpec): Node = mockk<PermissionNode>().also { node ->
+        nodeSpecs[node] = spec
         val nodeContextSet = mockk<ImmutableContextSet>()
         contextSpecs[nodeContextSet] = spec.contexts
         every { node.permission } returns (spec as PermissionNodeSpec).permission
@@ -432,11 +449,11 @@ private class NativeGatewayFixture {
             every { group.data() } returns nodeMap
             every { nodeMap.toCollection() } answers { normalNodes.toSet() }
             every { nodeMap.add(any()) } answers {
-                normalNodes += firstArg<Node>()
+                addNode(normalNodes, firstArg())
                 DataMutateResult.SUCCESS
             }
             every { nodeMap.remove(any()) } answers {
-                normalNodes -= firstArg<Node>()
+                removeNode(normalNodes, firstArg())
                 DataMutateResult.SUCCESS
             }
         }
@@ -476,15 +493,37 @@ private class NativeGatewayFixture {
             every { permissionResult.result() } returns effectiveResult
             every { permissionResult.node() } returns effectiveSource
             every { nodeMap.add(any()) } answers {
-                nodes += firstArg<Node>()
+                addNode(nodes, firstArg())
                 DataMutateResult.SUCCESS
             }
             every { nodeMap.remove(any()) } answers {
-                nodes -= firstArg<Node>()
+                removeNode(nodes, firstArg())
                 DataMutateResult.SUCCESS
             }
         }
     }
+
+    private fun addNode(
+        nodes: MutableSet<Node>,
+        node: Node,
+    ) {
+        removeNode(nodes, node)
+        nodes += node
+    }
+
+    private fun removeNode(
+        nodes: MutableSet<Node>,
+        node: Node,
+    ) {
+        val spec = nodeSpecs.getValue(node)
+        nodes.removeIf { existing -> nodeIdentity(nodeSpecs.getValue(existing)) == nodeIdentity(spec) }
+    }
+
+    private fun nodeIdentity(spec: LpNodeSpec): String =
+        when (spec) {
+            is PermissionNodeSpec -> "permission:${spec.permission}:${spec.contexts}:${spec.expiresAt != null}"
+            else -> spec.canonicalKey()
+        }
 
     private fun contextMatches(
         requested: LpContextSet,

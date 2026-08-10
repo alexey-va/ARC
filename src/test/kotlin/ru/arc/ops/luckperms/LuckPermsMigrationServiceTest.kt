@@ -347,6 +347,106 @@ class LuckPermsMigrationServiceTest : FreeSpec({
         gateway.nodes.getValue(group) shouldBe emptyList()
     }
 
+    "rollback repairs a legacy journal whose in-flight apply was mislabeled as rollback" {
+        val directory = Files.createTempDirectory("lp-migration-legacy-recovery-phase")
+        val request = migration(group, permission)
+        val requestJson = Gson().toJson(OpsLuckPermsJson.migrationMap(request))
+        val planJson =
+            Gson().toJson(
+                mapOf(
+                    "version" to 1,
+                    "reason" to request.reason,
+                    "operations" to request.subjects.single().operations.map(OpsLuckPermsJson::operationMap),
+                ),
+            )
+        val store = LuckPermsMigrationStore(directory)
+        store.save(
+            MigrationJournal(
+                jobId = "legacy-rollback-phase",
+                migrationId = request.id,
+                contentHash = migrationHash(requestJson),
+                state = LpMigrationState.PARTIAL_FATAL,
+                requestJson = requestJson,
+                planJson = mutableListOf(planJson),
+                liveDigests = mutableListOf(snapshotDigest(LpSubjectSnapshot(group, emptyList()))),
+                planDigests = mutableListOf("sha256:plan"),
+                completedSubjects = 0,
+                rollbackCompletedSubjects = 0,
+                currentSubjectIndex = 0,
+                recoveryPhase = LpMigrationRecoveryPhase.ROLLBACK,
+            ),
+        )
+        val gateway = MigrationFakeGateway(mapOf(group to listOf(permission)))
+        val apply = LuckPermsApplyService(gateway, LuckPermsReviewStore()) { "spawn" }
+        val service = LuckPermsMigrationService(apply, store, Executor(Runnable::run))
+
+        val rolledBack = service.rollbackMigration("legacy-rollback-phase", "repair")
+
+        rolledBack.state shouldBe LpMigrationState.ROLLED_BACK
+        rolledBack.completedSubjects shouldBe 1
+        rolledBack.rollbackCompletedSubjects shouldBe 1
+        gateway.nodes.getValue(group) shouldBe emptyList()
+    }
+
+    "failed apply classification preserves its recovery phase for a later repair" {
+        val directory = Files.createTempDirectory("lp-migration-preserve-recovery-phase")
+        val secondPermission = PermissionNodeSpec("example.migration.second")
+        val subjectRequest =
+            LpMutationRequest(
+                group,
+                listOf(
+                    LpOperation(LpOperationAction.SET, permission),
+                    LpOperation(LpOperationAction.SET, secondPermission),
+                ),
+                "bounded migration test",
+            )
+        val request =
+            LpMigrationRequest(
+                version = 1,
+                id = "migration-test",
+                reason = "bounded migration test",
+                subjects = listOf(subjectRequest),
+            )
+        val requestJson = Gson().toJson(OpsLuckPermsJson.migrationMap(request))
+        val planJson =
+            Gson().toJson(
+                mapOf(
+                    "version" to 1,
+                    "reason" to request.reason,
+                    "operations" to subjectRequest.operations.map(OpsLuckPermsJson::operationMap),
+                ),
+            )
+        val store = LuckPermsMigrationStore(directory)
+        store.save(
+            MigrationJournal(
+                jobId = "preserve-apply-phase",
+                migrationId = request.id,
+                contentHash = migrationHash(requestJson),
+                state = LpMigrationState.ROLLING_BACK,
+                requestJson = requestJson,
+                planJson = mutableListOf(planJson),
+                liveDigests = mutableListOf(snapshotDigest(LpSubjectSnapshot(group, emptyList()))),
+                planDigests = mutableListOf("sha256:plan"),
+                currentSubjectIndex = 0,
+                recoveryPhase = LpMigrationRecoveryPhase.APPLY,
+            ),
+        )
+        val gateway = MigrationFakeGateway(mapOf(group to listOf(permission)))
+        val apply = LuckPermsApplyService(gateway, LuckPermsReviewStore()) { "spawn" }
+        val service = LuckPermsMigrationService(apply, store, Executor(Runnable::run))
+
+        service.rollbackMigration("preserve-apply-phase", "first-repair").state shouldBe LpMigrationState.PARTIAL_FATAL
+        store.load("preserve-apply-phase")!!.recoveryPhase shouldBe LpMigrationRecoveryPhase.APPLY
+
+        gateway.nodes.getValue(group) += secondPermission
+        val repaired = service.rollbackMigration("preserve-apply-phase", "second-repair")
+
+        repaired.state shouldBe LpMigrationState.ROLLED_BACK
+        repaired.completedSubjects shouldBe 1
+        repaired.rollbackCompletedSubjects shouldBe 1
+        gateway.nodes.getValue(group) shouldBe emptyList()
+    }
+
     "unresolved recovery blocks a different migration" {
         val directory = Files.createTempDirectory("lp-migration-block-recovery")
         val request = migration(group, permission)

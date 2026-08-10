@@ -304,7 +304,7 @@ class LuckPermsMigrationService(
             store.save(journal)
         } catch (t: Throwable) {
             journal.failures += rootMessage(t)
-            journal.recoveryPhase = LpMigrationRecoveryPhase.ROLLBACK
+            journal.recoveryPhase = journal.recoveryPhase ?: LpMigrationRecoveryPhase.ROLLBACK
             journal.state = LpMigrationState.PARTIAL_FATAL
             store.save(journal)
         }
@@ -334,9 +334,23 @@ class LuckPermsMigrationService(
             }
             LpMigrationRecoveryPhase.ROLLBACK -> {
                 val expectedIndex = journal.completedSubjects - journal.rollbackCompletedSubjects - 1
-                require(index == expectedIndex) {
-                    "Interrupted rollback journal has inconsistent subject counters"
+                if (index == journal.completedSubjects) {
+                    // Older journals could be mislabeled as ROLLBACK when classifying an
+                    // interrupted APPLY failed. Recover the in-flight apply first.
+                    journal.recoveryPhase = LpMigrationRecoveryPhase.APPLY
+                    when (classifyCurrentState(plan)) {
+                        LpTouchedState.BEFORE -> journal.currentSubjectIndex = null
+                        LpTouchedState.AFTER -> {
+                            journal.completedSubjects = index + 1
+                            journal.currentSubjectIndex = null
+                        }
+                        LpTouchedState.MIXED ->
+                            error("Interrupted subject ${plan.subject.identifier} has mixed touched state")
+                    }
+                    store.save(journal)
+                    return
                 }
+                require(index == expectedIndex) { "Interrupted rollback journal has inconsistent subject counters" }
                 when (classifyCurrentState(plan)) {
                     LpTouchedState.BEFORE -> {
                         journal.rollbackCompletedSubjects += 1

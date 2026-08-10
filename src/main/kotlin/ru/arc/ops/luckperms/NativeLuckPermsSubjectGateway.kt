@@ -173,8 +173,8 @@ class NativeLuckPermsSubjectGateway(
         additions: Set<LpNodeSpec>,
         removals: Set<LpNodeSpec>,
     ) {
-        additions.sortedBy(LpNodeSpec::canonicalKey).forEach { spec -> data().add(LuckPermsNodeCodec.toNode(spec)) }
         removals.sortedBy(LpNodeSpec::canonicalKey).forEach { spec -> data().remove(LuckPermsNodeCodec.toNode(spec)) }
+        additions.sortedBy(LpNodeSpec::canonicalKey).forEach { spec -> data().add(LuckPermsNodeCodec.toNode(spec)) }
     }
 
 }
