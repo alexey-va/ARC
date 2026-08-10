@@ -4,6 +4,8 @@ import net.kyori.adventure.text.Component
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import org.bukkit.plugin.messaging.PluginMessageListener
+import org.bukkit.potion.PotionEffect
+import org.bukkit.potion.PotionEffectType.BLINDNESS
 import ru.arc.ARC
 import ru.arc.config.ConfigManager
 import ru.arc.core.Tasks
@@ -12,7 +14,6 @@ import ru.arc.rtp.BackendRtpReady
 import ru.arc.rtp.FirstRtpCoordinator
 import ru.arc.rtp.FirstRtpRouteResult
 import ru.arc.rtp.FirstRtpResult
-import ru.arc.rtp.NetworkRtpMode
 import ru.arc.rtp.NetworkRtpRequest
 import ru.arc.rtp.RegularRtpService
 import ru.arc.util.Logging.error
@@ -103,9 +104,18 @@ class PluginMessenger : PluginMessageListener {
             return
         }
 
-        when (request.mode) {
-            NetworkRtpMode.FIRST_ENTRY -> handleFirstEntryRtp(player, request, world, worldName)
-            NetworkRtpMode.REGULAR -> handleRegularRtp(player, request, world, worldName)
+        if (request.mode.serverTransfer) {
+            applyNetworkTransferBlindness(
+                player = player,
+                enabled = config.bool("portal.blindness", true),
+                durationTicks = config.integer("portal.blindness-duration", 40),
+            )
+        }
+
+        if (request.mode.onlyIfFirst) {
+            handleFirstEntryRtp(player, request, world, worldName)
+        } else {
+            handleRegularRtp(player, request, world, worldName)
         }
     }
 
@@ -248,3 +258,14 @@ internal fun firstEntryPlayerMessage(result: FirstRtpRouteResult): Component? =
         is FirstRtpRouteResult.Rejected ->
             TextUtil.mm("<red>Не удалось запустить RTP: <white>${result.reason}")
     }
+
+internal fun applyNetworkTransferBlindness(
+    player: Player,
+    enabled: Boolean,
+    durationTicks: Int,
+): Boolean {
+    if (!enabled || durationTicks <= 0) return false
+    return player.addPotionEffect(
+        PotionEffect(BLINDNESS, durationTicks, 0, false, false, false),
+    )
+}

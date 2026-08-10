@@ -58,9 +58,6 @@ commands:
   treasure-pool:
     description: Treasure reward pools
     usage: /treasure-pool [pool] [action]
-  build-book:
-    description: Give auto-build book
-    usage: /build-book <building> <model-id> [rotation] [y-offset] [name...]
   arc-invest:
     description: Stock market GUI
     usage: /arc-invest [gui|buy|sell|portfolio]

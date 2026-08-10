@@ -7,6 +7,7 @@ import io.mockk.mockk
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 import ru.arc.rtp.BackendRtpRequest
+import ru.arc.rtp.NetworkRtpMode
 import java.util.UUID
 
 class RtpSubCommandTest :
@@ -28,6 +29,43 @@ class RtpSubCommandTest :
             rejections shouldBe 0
         }
 
+        "defaults a missing world to survival" {
+            val player = mockk<Player>(relaxed = true)
+            val playerId = UUID.randomUUID()
+            val sent = mutableListOf<BackendRtpRequest>()
+
+            every { player.uniqueId } returns playerId
+
+            RtpCommandHandler(
+                send = { _, request -> sent += request },
+                reject = {},
+            ).execute(player, emptyArray())
+
+            sent shouldBe listOf(BackendRtpRequest.create(playerId, "survival"))
+        }
+
+        "preserves first-entry behavior only behind the explicit flag" {
+            val player = mockk<Player>(relaxed = true)
+            val playerId = UUID.randomUUID()
+            val sent = mutableListOf<BackendRtpRequest>()
+
+            every { player.uniqueId } returns playerId
+
+            RtpCommandHandler(
+                send = { _, request -> sent += request },
+                reject = {},
+            ).execute(player, arrayOf("mining", "--only-if-first"))
+
+            sent shouldBe
+                listOf(
+                    BackendRtpRequest.create(
+                        playerId,
+                        "mining",
+                        NetworkRtpMode.FIRST_ENTRY,
+                    ),
+                )
+        }
+
         "rejects console, missing, extra, and unsafe arguments" {
             val console = mockk<CommandSender>(relaxed = true)
             val player = mockk<Player>(relaxed = true)
@@ -40,12 +78,11 @@ class RtpSubCommandTest :
                 )
 
             handler.execute(console, arrayOf("mining"))
-            handler.execute(player, emptyArray())
             handler.execute(player, arrayOf("mining", "extra"))
             handler.execute(player, arrayOf("../world"))
 
             sends shouldBe 0
-            rejections shouldBe 4
+            rejections shouldBe 3
         }
 
         "offers the three public worlds for tab completion" {
@@ -55,10 +92,10 @@ class RtpSubCommandTest :
             ) shouldBe listOf("vanilla")
         }
 
-        "does not complete a second argument" {
+        "offers the first-entry flag as the second argument" {
             RtpSubCommand.tabComplete(
                 mockk(relaxed = true),
                 arrayOf("vanilla", ""),
-            ) shouldBe null
+            ) shouldBe listOf("--only-if-first")
         }
     })

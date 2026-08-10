@@ -6,6 +6,7 @@ import ru.arc.ARC
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.tabComplete
 import ru.arc.rtp.BackendRtpRequest
+import ru.arc.rtp.NetworkRtpMode
 import ru.arc.util.TextUtil
 
 internal class RtpCommandHandler(
@@ -22,12 +23,21 @@ internal class RtpCommandHandler(
                     reject(sender)
                     return true
                 }
-        if (args.size != 1) {
+        val onlyIfFirstCount = args.count { it.equals(ONLY_IF_FIRST_FLAG, ignoreCase = true) }
+        val worldArgs = args.filterNot { it.equals(ONLY_IF_FIRST_FLAG, ignoreCase = true) }
+        if (onlyIfFirstCount > 1 || worldArgs.size > 1) {
             reject(sender)
             return true
         }
+        val worldName = worldArgs.singleOrNull() ?: DEFAULT_WORLD
+        val mode =
+            if (onlyIfFirstCount == 1) {
+                NetworkRtpMode.FIRST_ENTRY
+            } else {
+                NetworkRtpMode.REGULAR
+            }
         val request =
-            runCatching { BackendRtpRequest.create(player.uniqueId, args.single()) }
+            runCatching { BackendRtpRequest.create(player.uniqueId, worldName, mode) }
                 .getOrElse {
                     reject(sender)
                     return true
@@ -41,7 +51,8 @@ object RtpSubCommand : SubCommand {
     override val configKey = "rtp"
     override val defaultName = "rtp"
     override val defaultDescription = "Запустить сетевой RTP"
-    override val defaultUsage = "/arc rtp <survival|mining|vanilla>"
+    override val defaultUsage =
+        "/arc rtp [survival|mining|vanilla] [--only-if-first]"
     override val defaultPlayerOnly = true
 
     private val handler =
@@ -62,11 +73,19 @@ object RtpSubCommand : SubCommand {
         sender: CommandSender,
         args: Array<String>,
     ): List<String>? =
-        if (args.size == 1) {
-            PUBLIC_WORLDS.tabComplete(args[0])
-        } else {
-            null
+        when (args.size) {
+            1 -> (PUBLIC_WORLDS + ONLY_IF_FIRST_FLAG).tabComplete(args[0])
+            2 ->
+                if (args[0].equals(ONLY_IF_FIRST_FLAG, ignoreCase = true)) {
+                    PUBLIC_WORLDS.tabComplete(args[1])
+                } else {
+                    listOf(ONLY_IF_FIRST_FLAG).tabComplete(args[1])
+                }
+            else -> null
         }
 
     private val PUBLIC_WORLDS = listOf("survival", "mining", "vanilla")
 }
+
+private const val DEFAULT_WORLD = "survival"
+private const val ONLY_IF_FIRST_FLAG = "--only-if-first"

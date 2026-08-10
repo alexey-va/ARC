@@ -8,7 +8,6 @@ import org.bukkit.plugin.java.JavaPlugin
 import ru.arc.commands.XCommand
 import ru.arc.commands.arc.ArcCommand
 import ru.arc.commands.arc.LegacySubCommandExecutor
-import ru.arc.commands.arc.subcommands.BuildBookSubCommand
 import ru.arc.commands.arc.subcommands.BuySubCommand
 import ru.arc.commands.arc.subcommands.EliteLootSubCommand
 import ru.arc.commands.arc.subcommands.GiveBoostSubCommand
@@ -223,7 +222,6 @@ open class ARC : JavaPlugin() {
             mapOf(
                 "treasure-hunt" to HuntSubCommand,
                 "treasure-pool" to TreasuresSubCommand,
-                "build-book" to BuildBookSubCommand,
                 "arc-invest" to InvestSubCommand,
                 "sound-follow" to SoundFollowSubCommand,
                 "give-jobs-boost" to GiveBoostSubCommand,

@@ -54,6 +54,13 @@ class ArcCommandTest : TestBase() {
         assertTrue(player.hasReceivedMessage(), "Should send usage message")
     }
 
+    @Test
+    @DisplayName("Legacy /build-book command is not registered")
+    fun testLegacyBuildBookRemoved() {
+        assertNull(plugin.getCommand("build-book"))
+        assertNotNull(plugin.getCommand("arc"))
+    }
+
     // ==================== Reload Subcommand ====================
 
     @Nested
