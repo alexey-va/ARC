@@ -20,3 +20,14 @@ include-jvm: true
 include-system: true
 include-disk: true
 include-platform-heavy: true
+
+# Product metrics for EliteMobs/OTD dungeon worlds. Player identity is never a label.
+dungeon-interest:
+  enabled: true
+  world-globs:
+    - "em_*"
+    - "spn_*"
+    - "otd_dungeon"
+  excluded-worlds:
+    - "em_adventurers_guild" # EliteMobs hub, not a dungeon visit
+  max-tracked-worlds: 128

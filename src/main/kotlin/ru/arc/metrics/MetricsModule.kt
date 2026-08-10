@@ -2,10 +2,16 @@ package ru.arc.metrics
 
 import org.bukkit.Bukkit
 import io.micrometer.core.instrument.MeterRegistry
+import org.bukkit.event.player.PlayerChangedWorldEvent
+import org.bukkit.event.player.PlayerJoinEvent
+import org.bukkit.event.player.PlayerQuitEvent
+import org.bukkit.event.world.WorldLoadEvent
 import ru.arc.ARC
 import ru.arc.config.ConfigManager
+import ru.arc.core.EventScope
 import ru.arc.core.PluginModule
 import ru.arc.core.ScheduledTask
+import ru.arc.core.eventScope
 import ru.arc.core.repeating
 import ru.arc.metrics.core.ArcMetricsRuntime
 import ru.arc.metrics.core.MetricPoint
@@ -24,6 +30,8 @@ object MetricsModule : PluginModule {
     private var runtime: ArcMetricsRuntime? = null
     private var collector: PaperMetricsCollector? = null
     private var redisMetrics: RedisMetricsBinder? = null
+    private var dungeonInterest: DungeonInterestMetrics? = null
+    private var dungeonEvents: EventScope? = null
     private var fastTask: ScheduledTask? = null
     private var heavyTask: ScheduledTask? = null
 
@@ -33,7 +41,8 @@ object MetricsModule : PluginModule {
         if (System.getProperty("arc.test.unit") != null) return
         shutdown()
 
-        val cfg = MetricsConfig(ConfigManager.ofModule(ARC.instance.dataPath, "metrics.yml"))
+        val moduleConfig = ConfigManager.ofModule(ARC.instance.dataPath, "metrics.yml")
+        val cfg = MetricsConfig(moduleConfig)
         if (!cfg.enabled) {
             info("Prometheus metrics disabled")
             return
@@ -58,6 +67,29 @@ object MetricsModule : PluginModule {
             runtime = metrics
             collector = paper
             redisMetrics = redisBinder
+            val dungeonConfig = DungeonInterestConfig.from(moduleConfig)
+            if (dungeonConfig.enabled) {
+                val tracker = DungeonInterestMetrics(metrics.registry, dungeonConfig)
+                Bukkit.getWorlds().forEach { tracker.registerWorld(it.name) }
+                Bukkit.getOnlinePlayers().forEach { player ->
+                    tracker.trackExisting(player.uniqueId.toString(), player.world.name)
+                }
+                dungeonInterest = tracker
+                val scope = eventScope()
+                dungeonEvents = scope
+                scope.on<PlayerJoinEvent> { event ->
+                    tracker.enter(event.player.uniqueId.toString(), event.player.world.name)
+                }
+                scope.on<PlayerChangedWorldEvent> { event ->
+                    tracker.enter(event.player.uniqueId.toString(), event.player.world.name)
+                }
+                scope.on<PlayerQuitEvent> { event ->
+                    tracker.leave(event.player.uniqueId.toString())
+                }
+                scope.on<WorldLoadEvent> { event ->
+                    tracker.registerWorld(event.world.name)
+                }
+            }
             sampleFast()
             if (cfg.includePlatformHeavy) sampleHeavy()
             fastTask =
@@ -77,8 +109,12 @@ object MetricsModule : PluginModule {
                     }
             }
         } catch (failure: Throwable) {
-            redisBinder?.close()
-            metrics.close()
+            if (runtime === metrics) {
+                shutdown()
+            } else {
+                redisBinder?.close()
+                metrics.close()
+            }
             throw failure
         }
     }
@@ -105,6 +141,7 @@ object MetricsModule : PluginModule {
                     (redis?.getChannelCount() ?: 0).toDouble(),
                 )
         }
+        dungeonInterest?.sample()
     }
 
     private fun sampleHeavy() {
@@ -120,6 +157,10 @@ object MetricsModule : PluginModule {
         heavyTask?.cancel()
         fastTask = null
         heavyTask = null
+        dungeonEvents?.unregisterAll()
+        dungeonEvents = null
+        dungeonInterest?.shutdown()
+        dungeonInterest = null
         collector = null
         redisMetrics?.close()
         redisMetrics = null
