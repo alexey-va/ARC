@@ -33,6 +33,7 @@ HTTP ops API и ItemSpec для RusCrafting MCP. **Runtime configs:** `mcserver/
 | `OpsTreasurePoolHandlers` | Strict reward schema over native treasure pools |
 | `OpsContentHealthHandlers` | Isolated cross-catalog health summary |
 | `OpsEconomyAuditHandlers` | Read-only persisted economy ledger summary and top balances |
+| `BankAuditModule` | Single-leader Bank supply snapshots, aggregate metrics, and bounded account-change evidence |
 | `OpsNpcHandlers` | Citizens list/placement validation/gated mutations |
 | `BlueMapNpcMarkers` | Dynamic Citizens POI layer for each BlueMap world |
 | `OpsItemSpec` | JSON → ItemStack (MiniMessage, NBT, customData) |
@@ -205,6 +206,10 @@ surface is intentionally compact:
   outcomes, and context-field coverage. Detailed account, session, balance,
   item, counterparty, and correlation evidence stays in this authenticated
   response and must never become Prometheus labels.
+  The same response includes `bankAudit` from the single `spawn` collector:
+  aggregate Bank supply plus bounded top accounts and recent account changes.
+  Survival and parkour must remain standby rather than collecting duplicate
+  network snapshots.
 
 - `arc_ops_content_read` dispatches list/detail and preview;
 - `arc_ops_content_write` dispatches gated upsert/delete on one explicit node;

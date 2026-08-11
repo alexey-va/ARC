@@ -5,6 +5,7 @@ import org.bukkit.command.CommandExecutor
 import org.bukkit.command.TabCompleter
 import org.bukkit.event.server.ServerCommandEvent
 import org.bukkit.plugin.java.JavaPlugin
+import ru.arc.audit.bank.BankAuditModule
 import ru.arc.commands.XCommand
 import ru.arc.commands.arc.ArcCommand
 import ru.arc.commands.arc.LegacySubCommandExecutor
@@ -181,6 +182,7 @@ open class ARC : JavaPlugin() {
             CooldownModule,
             HeadCacheModule,
             AuditModule,
+            BankAuditModule,
             // Game features (priority 70-89)
             FarmModule,
             AnnounceModule,

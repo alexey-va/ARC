@@ -37,6 +37,15 @@ object MetricsModule : PluginModule {
 
     fun registry(): MeterRegistry? = runtime?.registry
 
+    /** Let feature modules publish cached snapshots without owning scrape-time work. */
+    fun recordSnapshot(
+        source: String,
+        tier: String,
+        snapshot: () -> Collection<MetricPoint>,
+    ) {
+        runtime?.recordSnapshot(source, tier, snapshot)
+    }
+
     override fun init() {
         if (System.getProperty("arc.test.unit") != null) return
         shutdown()

@@ -1,0 +1,10 @@
+# Network Bank supply audit. Runtime mirrors select exactly one collector server.
+enabled: false
+collector-server: "spawn"
+sample-interval-seconds: 600
+initial-delay-seconds: 30
+max-accounts: 100000
+top-accounts: 50
+recent-changes: 100
+minimum-change: 0.01
+expected-max-lag-seconds: 600

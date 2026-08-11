@@ -20,6 +20,18 @@ class RedisEcoHook(
         return runCatching { currency.getBalance(playerId) }.getOrNull()?.takeIf(Double::isFinite)
     }
 
+    /** Complete default-currency cache snapshot for async audit collectors. */
+    fun getCachedAccounts(): List<Account> {
+        val api = checkNotNull(apiProvider()) { "RedisEconomy API unavailable" }
+        return api.defaultCurrency.accounts.entries.map { (uuid, balance) ->
+            Account(
+                name = api.getUsernameFromUUIDCache(uuid),
+                uuid = uuid,
+                balance = balance,
+            )
+        }
+    }
+
     fun getAccounts(players: List<UUID>): CompletableFuture<List<Account>> {
         val api = apiProvider() ?: return CompletableFuture.completedFuture(emptyList())
         val currency = api.defaultCurrency
