@@ -208,6 +208,10 @@ surface is intentionally compact:
   unattributed remainder for EconomyShopGUI and AutoSellChests sales. Detailed
   account, session, balance, item, counterparty, and correlation evidence stays
   in this authenticated response and must never become Prometheus labels.
+  `autoSellAudit` is a local, read-only runtime diagnostic: loaded/eligible
+  chest counts, interval and multiplier distributions, lifetime item count,
+  and ARC-captured AutoSell pre-events. It samples only already loaded chests
+  and must never expose owner, chest, inventory, or location identity.
   The same response includes `bankAudit` from the single `spawn` collector:
   aggregate Bank supply plus bounded top accounts and recent account changes.
   Survival and parkour must remain standby rather than collecting duplicate

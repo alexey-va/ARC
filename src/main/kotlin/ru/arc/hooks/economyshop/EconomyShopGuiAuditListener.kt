@@ -23,6 +23,7 @@ import ru.arc.audit.EconomyPendingContextTracker
 import ru.arc.audit.EconomyRecordKind
 import ru.arc.audit.EconomySource
 import ru.arc.audit.Type
+import ru.arc.audit.autosell.AutoSellAuditModule
 import ru.arc.hooks.HookRegistry
 import java.util.UUID
 import kotlin.math.abs
@@ -62,6 +63,7 @@ internal class EconomyShopGuiAuditListener(
                 capturedAt = capturedAt,
             )
         EconomyPendingContextTracker.register(player.uniqueId, expectedPayouts, context, capturedAt)
+        AutoSellAuditModule.recordPreTransaction(context.items.orEmpty().sumOf { it.quantity ?: 0 })
     }
 
     @EventHandler(priority = EventPriority.MONITOR)

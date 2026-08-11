@@ -19,6 +19,7 @@ softdepend:
   - ProtectionStones
   - Slimefun
   - EconomyShopGUI-Premium
+  - AutoSellChests
   - AdvancedEnchantments
   - ItemsAdder
   - ProtocolLib

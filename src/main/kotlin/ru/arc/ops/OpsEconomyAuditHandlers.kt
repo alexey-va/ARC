@@ -1,6 +1,7 @@
 package ru.arc.ops
 
 import ru.arc.audit.AuditManager
+import ru.arc.audit.autosell.AutoSellAuditModule
 import ru.arc.audit.bank.BankAuditModule
 import ru.arc.hooks.HookRegistry
 import java.util.concurrent.TimeUnit
@@ -10,6 +11,7 @@ object OpsEconomyAuditHandlers {
     fun summary(hours: Int, limit: Int, serverFilter: String?): Map<String, Any?> {
         val safeLimit = limit.coerceIn(1, 100)
         val result = LinkedHashMap(AuditManager.economySummary(hours, safeLimit, serverFilter))
+        result["autoSellAudit"] = AutoSellAuditModule.summary()
         val bankAudit = BankAuditModule.summary(safeLimit)
         result["bankAudit"] = bankAudit
         val hook = HookRegistry.redisEcoHook
