@@ -27,6 +27,7 @@ enum class EconomySource(val label: String, val type: Type) {
     GRAVES("graves", Type.OTHER),
     WILDLOADERS("wildloaders", Type.OTHER),
     ELITEMOBS("elitemobs", Type.OTHER),
+    ADVANCED_ENCHANTMENTS("advanced_enchantments", Type.OTHER),
     LOOT("loot", Type.OTHER),
     DENIZEN("denizen", Type.OTHER),
     ADMIN_COMMAND("admin_command", Type.COMMAND),
@@ -130,6 +131,7 @@ object EconomyAttributionResolver {
             haystack.contains("graves") -> EconomySource.GRAVES
             haystack.contains("wildloaders") -> EconomySource.WILDLOADERS
             haystack.contains("elitemobs") -> EconomySource.ELITEMOBS
+            haystack.contains("net.advancedplugins.ae") -> EconomySource.ADVANCED_ENCHANTMENTS
             haystack.contains("lootchest") || haystack.contains("betterstructures") -> EconomySource.LOOT
             haystack.contains("denizenscript") -> EconomySource.DENIZEN
             else -> EconomySource.UNKNOWN

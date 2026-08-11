@@ -67,6 +67,21 @@ class EconomyAuditTest : FreeSpec({
             withdrawalFromVault.metadata.flow shouldBe EconomyFlow.TRANSFER
         }
 
+        "classifies AdvancedEnchantments enchanter purchases as burns" {
+            val attribution =
+                EconomyAttributionResolver.resolve(
+                    "Withdraw\nCall:net.advancedplugins.ae.features.enchanter.PaymentHandler",
+                    -12_500.0,
+                    "vault",
+                    "spawn",
+                )
+
+            attribution.metadata.source shouldBe EconomySource.ADVANCED_ENCHANTMENTS
+            attribution.metadata.source.label shouldBe "advanced_enchantments"
+            attribution.metadata.flow shouldBe EconomyFlow.BURN
+            attribution.reason shouldBe "Withdraw"
+        }
+
         "classifies Vault movement to the internal stock wallet as a transfer" {
             val attribution =
                 EconomyAttributionResolver.resolve(
