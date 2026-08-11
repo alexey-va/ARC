@@ -16,6 +16,7 @@ import ru.arc.audit.AuditManager
 import ru.arc.audit.AdminEconomyCommandTracker
 import ru.arc.audit.AuditMetadata
 import ru.arc.audit.EconomyBalanceObservation
+import ru.arc.audit.EconomyCommandOriginResolver
 import ru.arc.audit.EconomyEventStatus
 import ru.arc.audit.EconomyFlow
 import ru.arc.audit.EconomyLedgerContext
@@ -66,7 +67,13 @@ class CommandListener : Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun trackServerAdminEconomyCommand(ev: ServerCommandEvent) {
-        AdminEconomyCommandTracker.track(ev.command.split(" "), "Server")
+        val origin = EconomyCommandOriginResolver.resolve()
+        AdminEconomyCommandTracker.track(
+            ev.command.split(" "),
+            "Server",
+            source = origin.source,
+            origin = origin.origin,
+        )
     }
 
     @EventHandler(priority = EventPriority.HIGH)

@@ -80,12 +80,17 @@ class RedisEcoListener : Listener {
                 resolved.copy(
                     metadata =
                         resolved.metadata.copy(
-                            source = EconomySource.ADMIN_COMMAND,
+                            source = it.source,
                             flow = if (amount > 0.0) EconomyFlow.MINT else EconomyFlow.BURN,
-                            origin = it.actor,
+                            origin = it.origin,
                         ),
-                    type = ru.arc.audit.Type.COMMAND,
-                    reason = "Admin command by ${it.actor}",
+                    type = it.source.type,
+                    reason =
+                        if (it.source == EconomySource.ADMIN_COMMAND) {
+                            "Admin command by ${it.actor}"
+                        } else {
+                            resolved.reason
+                        },
                 )
             } ?: resolved
         val comment =

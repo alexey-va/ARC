@@ -17,6 +17,8 @@ object AdminEconomyCommandTracker {
         val amount: Double,
         val actor: String,
         val action: String,
+        val source: EconomySource,
+        val origin: String,
         val correlationId: String,
         val expiresAt: Long,
     )
@@ -24,8 +26,14 @@ object AdminEconomyCommandTracker {
     private val pending = ConcurrentHashMap<String, ConcurrentLinkedDeque<Pending>>()
     private val trackedCommands = AtomicLong()
 
-    fun track(args: List<String>, actor: String, now: Long = System.currentTimeMillis()): Boolean {
-        val parsed = parse(args, actor, now) ?: return false
+    fun track(
+        args: List<String>,
+        actor: String,
+        now: Long = System.currentTimeMillis(),
+        source: EconomySource = EconomySource.ADMIN_COMMAND,
+        origin: String = actor,
+    ): Boolean {
+        val parsed = parse(args, actor, source, origin, now) ?: return false
         val queue = pending.computeIfAbsent(parsed.first) { ConcurrentLinkedDeque() }
         queue.addLast(parsed.second)
         while (queue.size > MAX_PENDING_PER_PLAYER) queue.pollFirst()
@@ -41,7 +49,13 @@ object AdminEconomyCommandTracker {
 
     internal fun clear() = pending.clear()
 
-    private fun parse(args: List<String>, actor: String, now: Long): Pair<String, Pending>? {
+    private fun parse(
+        args: List<String>,
+        actor: String,
+        source: EconomySource,
+        origin: String,
+        now: Long,
+    ): Pair<String, Pending>? {
         val command = args.firstOrNull()?.removePrefix("/")?.lowercase(Locale.ROOT) ?: return null
         val parsed =
             when {
@@ -66,6 +80,8 @@ object AdminEconomyCommandTracker {
                 amount = signedAmount,
                 actor = actor.take(80),
                 action = action,
+                source = source,
+                origin = origin.take(240),
                 correlationId = UUID.randomUUID().toString(),
                 expiresAt = now + TTL_MILLIS,
             )
@@ -94,4 +110,28 @@ object AdminEconomyCommandTracker {
     private const val TTL_MILLIS = 5_000L
     private const val CLEANUP_INTERVAL = 256L
     private const val MAX_PENDING_PER_PLAYER = 16
+}
+
+internal data class EconomyCommandOrigin(
+    val source: EconomySource,
+    val origin: String,
+)
+
+/**
+ * Preserves one bounded gameplay source when a Denizen queue dispatches a
+ * console economy command through CMI. RedisEconomy records only CMI's class in
+ * that path, so the upstream source is available only while the command event
+ * is still on the synchronous stack.
+ */
+internal object EconomyCommandOriginResolver {
+    fun resolve(stackTrace: Array<StackTraceElement> = Thread.currentThread().stackTrace): EconomyCommandOrigin {
+        val denizenCaller = stackTrace.firstOrNull { it.className.startsWith(DENIZEN_PACKAGE) }
+        return if (denizenCaller != null) {
+            EconomyCommandOrigin(EconomySource.DENIZEN, denizenCaller.className.take(240))
+        } else {
+            EconomyCommandOrigin(EconomySource.ADMIN_COMMAND, "Server")
+        }
+    }
+
+    private const val DENIZEN_PACKAGE = "com.denizenscript."
 }

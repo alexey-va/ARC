@@ -82,6 +82,20 @@ class EconomyAuditTest : FreeSpec({
             attribution.reason shouldBe "Withdraw"
         }
 
+        "classifies ARC treasure payouts separately from generic ARC activity" {
+            val attribution =
+                EconomyAttributionResolver.resolve(
+                    "Deposit\nCall:ru.arc.treasure.core.TreasureService",
+                    4_500.0,
+                    "vault",
+                    "spawn",
+                )
+
+            attribution.metadata.source shouldBe EconomySource.TREASURE
+            attribution.metadata.source.label shouldBe "treasure"
+            attribution.metadata.flow shouldBe EconomyFlow.MINT
+        }
+
         "classifies Vault movement to the internal stock wallet as a transfer" {
             val attribution =
                 EconomyAttributionResolver.resolve(
@@ -161,15 +175,52 @@ class EconomyAuditTest : FreeSpec({
     }
 
     "admin command correlation" - {
+        "recognizes Denizen-backed console economy commands as one bounded source" {
+            val caller =
+                EconomyCommandOriginResolver.resolve(
+                    arrayOf(
+                        StackTraceElement("org.bukkit.craftbukkit.CraftServer", "dispatchCommand", "CraftServer.java", 1),
+                        StackTraceElement("com.denizenscript.denizen.scripts.commands.server.ExecuteCommand", "execute", "ExecuteCommand.java", 2),
+                    ),
+                )
+
+            caller.source shouldBe EconomySource.DENIZEN
+            caller.origin shouldBe "com.denizenscript.denizen.scripts.commands.server.ExecuteCommand"
+        }
+
+        "keeps ordinary console economy commands administrative" {
+            val caller =
+                EconomyCommandOriginResolver.resolve(
+                    arrayOf(StackTraceElement("org.bukkit.craftbukkit.CraftServer", "dispatchCommand", "CraftServer.java", 1)),
+                )
+
+            caller.source shouldBe EconomySource.ADMIN_COMMAND
+            caller.origin shouldBe "Server"
+        }
+
         "matches canonical give take and set without leaking stale entries" {
             AdminEconomyCommandTracker.clear()
 
             AdminEconomyCommandTracker.track(listOf("/money", "Player", "vault", "give", "100"), "Admin", 1_000) shouldBe true
-            AdminEconomyCommandTracker.consumeDelta("player", 100.0, 1_001)?.actor shouldBe "Admin"
+            val adminPending = AdminEconomyCommandTracker.consumeDelta("player", 100.0, 1_001)
+            adminPending?.actor shouldBe "Admin"
+            adminPending?.source shouldBe EconomySource.ADMIN_COMMAND
+            adminPending?.origin shouldBe "Admin"
             AdminEconomyCommandTracker.consumeDelta("player", 100.0, 1_002) shouldBe null
 
             AdminEconomyCommandTracker.track(listOf("cmi", "money", "take", "Player", "25"), "Server", 2_000) shouldBe true
             AdminEconomyCommandTracker.consumeDelta("Player", -25.0, 2_001)?.actor shouldBe "Server"
+
+            AdminEconomyCommandTracker.track(
+                listOf("cmi", "money", "give", "Player", "50"),
+                "Server",
+                2_100,
+                source = EconomySource.DENIZEN,
+                origin = "com.denizenscript.denizen.scripts.commands.server.ExecuteCommand",
+            ) shouldBe true
+            val denizenPending = AdminEconomyCommandTracker.consumeDelta("Player", 50.0, 2_101)
+            denizenPending?.source shouldBe EconomySource.DENIZEN
+            denizenPending?.origin shouldBe "com.denizenscript.denizen.scripts.commands.server.ExecuteCommand"
 
             AdminEconomyCommandTracker.track(listOf("money", "Player", "vault", "set", "500"), "Admin", 3_000) shouldBe true
             AdminEconomyCommandTracker.consumeSet("Player", 500.0, 3_001)?.kind shouldBe AdminEconomyCommandTracker.Kind.SET
