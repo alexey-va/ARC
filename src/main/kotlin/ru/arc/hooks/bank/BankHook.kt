@@ -3,7 +3,15 @@ package ru.arc.hooks.bank
 import me.dablakbandit.bank.api.BankAPI
 import org.bukkit.entity.Player
 
-class BankHook {
+class BankHook(
+    private val accountReader: (String) -> Account = { playerId ->
+        val api = BankAPI.getInstance()
+        Account(
+            balance = api.getMoney(playerId),
+            pendingInterest = api.getOfflineMoney(playerId),
+        )
+    },
+) {
     data class Account(
         val balance: Double,
         val pendingInterest: Double,
@@ -13,19 +21,10 @@ class BankHook {
     fun balance(player: Player): Double = BankAPI.getInstance().getMoney(player)
 
     /**
-     * Public BankAPI signatures are binary-identical in compileOnly 4.6.9 and
-     * the verified live 5.0.3-RELEASE artifact. Pending offline interest is
-     * part of bank supply until Bank moves it into the available balance.
+     * Bank 5.0.3 delegates its String overloads to CorePlayers(String), whose
+     * verified runtime bytecode parses the value with UUID.fromString. A cached
+     * username is display metadata, never a valid account identifier here.
      */
-    fun account(playerId: String, knownName: String?): Account {
-        val api = BankAPI.getInstance()
-        val identifier =
-            knownName?.takeIf(String::isNotBlank)
-                ?: api.getUsername(playerId)?.takeIf(String::isNotBlank)
-                ?: playerId
-        return Account(
-            balance = api.getMoney(identifier),
-            pendingInterest = api.getOfflineMoney(identifier),
-        )
-    }
+    @Suppress("UNUSED_PARAMETER")
+    fun account(playerId: String, knownName: String?): Account = accountReader(playerId)
 }
