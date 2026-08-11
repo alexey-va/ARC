@@ -203,9 +203,11 @@ surface is intentionally compact:
   when `economy_hours > 0`; the ledger read is gated by
   `economy-audit-read-enabled` and never mutates balances. Economy ledger
   schema v2 also returns bounded `recentEvents`, `recentFailures`, attempt
-  outcomes, and context-field coverage. Detailed account, session, balance,
-  item, counterparty, and correlation evidence stays in this authenticated
-  response and must never become Prometheus labels.
+  outcomes, context-field coverage, and `adminShopSales`: ranked item path,
+  material, exact sold quantity, actual attributed income, evidence kind, and
+  unattributed remainder for EconomyShopGUI and AutoSellChests sales. Detailed
+  account, session, balance, item, counterparty, and correlation evidence stays
+  in this authenticated response and must never become Prometheus labels.
   The same response includes `bankAudit` from the single `spawn` collector:
   aggregate Bank supply plus bounded top accounts and recent account changes.
   Survival and parkour must remain standby rather than collecting duplicate

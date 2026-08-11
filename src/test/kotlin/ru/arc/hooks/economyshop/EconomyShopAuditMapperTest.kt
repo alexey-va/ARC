@@ -17,6 +17,13 @@ class EconomyShopAuditMapperTest : FreeSpec({
             EconomyShopAuditMapping(EconomySource.AUTOSELL, EconomyEventStatus.SUCCEEDED, EconomyFlow.MINT, 50.0)
     }
 
+    "derives bounded AutoSell payout candidates and source from captured context" {
+        EconomyShopAuditMapper.autoSellPayoutCandidates(100.0, listOf(1.0, 1.1, 1.15, 1.25, Double.NaN, -1.0)) shouldBe
+            listOf(100.0, 110.00000000000001, 114.99999999999999, 125.0)
+        EconomyShopAuditMapper.sourceForContext("auto_sell_chest", EconomySource.SHOP) shouldBe EconomySource.AUTOSELL
+        EconomyShopAuditMapper.sourceForContext("sell_all_command", EconomySource.SHOP) shouldBe EconomySource.SHOP
+    }
+
     "keeps cancellation and failure separate without inventing a currency delta" {
         EconomyShopAuditMapper.map("BUY_SCREEN", "TRANSACTION_CANCELLED", null) shouldBe
             EconomyShopAuditMapping(EconomySource.SHOP, EconomyEventStatus.CANCELLED, EconomyFlow.UNKNOWN, null)

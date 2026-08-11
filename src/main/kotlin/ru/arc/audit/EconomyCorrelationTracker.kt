@@ -8,7 +8,7 @@ import kotlin.math.abs
 /** Correlates a structured shop attempt with RedisEconomy's later balance event. */
 object EconomyPendingContextTracker {
     private data class Pending(
-        val expectedAmount: Double?,
+        val expectedAmounts: List<Double>,
         val context: EconomyLedgerContext,
         val expiresAt: Long,
     )
@@ -16,8 +16,15 @@ object EconomyPendingContextTracker {
     private val pending = ConcurrentHashMap<UUID, ConcurrentLinkedDeque<Pending>>()
 
     fun register(playerId: UUID, expectedAmount: Double?, context: EconomyLedgerContext, now: Long) {
+        val amount = expectedAmount?.takeIf(Double::isFinite) ?: return
+        register(playerId, listOf(amount), context, now)
+    }
+
+    fun register(playerId: UUID, expectedAmounts: Collection<Double>, context: EconomyLedgerContext, now: Long) {
+        val amounts = expectedAmounts.asSequence().filter(Double::isFinite).distinct().toList()
+        if (amounts.isEmpty()) return
         val queue = pending.computeIfAbsent(playerId) { ConcurrentLinkedDeque() }
-        queue.addLast(Pending(expectedAmount?.takeIf(Double::isFinite), context, now + TTL_MILLIS))
+        queue.addLast(Pending(amounts, context, now + TTL_MILLIS))
         while (queue.size > MAX_PENDING_PER_PLAYER) queue.pollFirst()
     }
 
@@ -25,7 +32,7 @@ object EconomyPendingContextTracker {
         val queue = pending[playerId] ?: return null
         queue.removeIf { it.expiresAt < now }
         val match = queue.firstOrNull { candidate ->
-            candidate.expectedAmount?.let { approximatelyEqualMoney(it, amount) } ?: true
+            candidate.expectedAmounts.any { approximatelyEqualMoney(it, amount) }
         }
         if (match != null) queue.remove(match)
         if (queue.isEmpty()) pending.remove(playerId, queue)

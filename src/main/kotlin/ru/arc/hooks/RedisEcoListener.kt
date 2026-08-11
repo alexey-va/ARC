@@ -17,6 +17,7 @@ import ru.arc.audit.EconomyPendingContextTracker
 import ru.arc.audit.EconomyRecordKind
 import ru.arc.audit.EconomySource
 import ru.arc.audit.EconomyTransferCorrelationTracker
+import ru.arc.hooks.economyshop.EconomyShopAuditMapper
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import java.util.UUID
@@ -100,12 +101,7 @@ class RedisEcoListener : Listener {
                 attribution.reason
             }
 
-        AuditManager.economyOperation(
-            playerName,
-            amount,
-            attribution.type,
-            comment,
-            attribution.metadata,
+        val context =
             ledgerContext(
                 playerId = accountId.uuid,
                 amount = amount,
@@ -118,7 +114,29 @@ class RedisEcoListener : Listener {
                 revertedWith = transaction.revertedWith,
                 action = adminCommand?.action,
                 forcedCorrelationId = adminCommand?.correlationId,
-            ),
+            )
+        val contextualSource = EconomyShopAuditMapper.sourceForContext(context.action, attribution.metadata.source)
+        val contextualAttribution =
+            if (contextualSource == attribution.metadata.source) {
+                attribution
+            } else {
+                attribution.copy(
+                    metadata =
+                        attribution.metadata.copy(
+                            source = contextualSource,
+                            flow = EconomyFlow.MINT,
+                        ),
+                    type = contextualSource.type,
+                )
+            }
+
+        AuditManager.economyOperation(
+            playerName,
+            amount,
+            contextualAttribution.type,
+            comment,
+            contextualAttribution.metadata,
+            context,
         )
     }
 

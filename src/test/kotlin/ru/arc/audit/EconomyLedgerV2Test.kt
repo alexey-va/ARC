@@ -125,6 +125,41 @@ class EconomyLedgerV2Test : FreeSpec({
             matched?.correlationId shouldBe "shop-correlation"
         }
 
+        "matches an AutoSell balance delta against configured multiplier outcomes" {
+            val playerId = UUID.randomUUID()
+            val context =
+                EconomyLedgerContext(
+                    recordKind = EconomyRecordKind.ATTEMPT,
+                    status = EconomyEventStatus.SUBMITTED,
+                    correlationId = "autosell-correlation",
+                    action = "auto_sell_chest",
+                )
+            EconomyPendingContextTracker.register(
+                playerId,
+                listOf(100.0, 110.0, 115.0, 125.0),
+                context,
+                1_000,
+            )
+
+            EconomyPendingContextTracker.consume(playerId, 117.0, 1_100) shouldBe null
+            val matched = EconomyPendingContextTracker.consume(playerId, 125.0, 1_200)
+            matched?.normalizedRecordKind shouldBe EconomyRecordKind.TRANSACTION
+            matched?.normalizedStatus shouldBe EconomyEventStatus.SUCCEEDED
+            matched?.action shouldBe "auto_sell_chest"
+        }
+
+        "does not treat a missing expected amount as a wildcard correlation" {
+            val playerId = UUID.randomUUID()
+            EconomyPendingContextTracker.register(
+                playerId,
+                null,
+                EconomyLedgerContext(correlationId = "must-not-match"),
+                1_000,
+            )
+
+            EconomyPendingContextTracker.consume(playerId, 50.0, 1_100) shouldBe null
+        }
+
         "pairs complementary sides of one player transfer" {
             val debit =
                 EconomyTransferCorrelationTracker.correlate(
@@ -202,6 +237,66 @@ class EconomyLedgerV2Test : FreeSpec({
             coverage.containsKey("balance") shouldBe true
             (summary["recentFailures"] as List<*>).shouldHaveSize(1)
             (summary["recentEvents"] as List<*>).shouldHaveSize(2)
+        }
+
+        "ranks admin shop sales by exact quantity and attributed income" {
+            val data = AuditData.create("Seller", "survival:seller")
+            data.operation(
+                100.0,
+                Type.SHOP,
+                "single item sale",
+                AuditMetadata(EconomySource.SHOP, EconomyFlow.MINT, server = "survival"),
+                EconomyLedgerContext(
+                    recordKind = EconomyRecordKind.TRANSACTION,
+                    status = EconomyEventStatus.SUCCEEDED,
+                    action = "sell_screen",
+                    items = listOf(EconomyLedgerItem("ores.diamond", "minecraft:diamond", 10, 10.0)),
+                ),
+                at = 1_000,
+            )
+            data.operation(
+                125.0,
+                Type.SHOP,
+                "automated batch sale",
+                AuditMetadata(EconomySource.AUTOSELL, EconomyFlow.MINT, server = "survival"),
+                EconomyLedgerContext(
+                    recordKind = EconomyRecordKind.TRANSACTION,
+                    status = EconomyEventStatus.SUCCEEDED,
+                    action = "auto_sell_chest",
+                    items =
+                        listOf(
+                            EconomyLedgerItem("blocks.stone", "minecraft:stone", 5, 10.0),
+                            EconomyLedgerItem("ores.coal", "minecraft:coal", 5, 15.0),
+                        ),
+                ),
+                at = 2_000,
+            )
+            data.operation(
+                30.0,
+                Type.SHOP,
+                "sale without item evidence",
+                AuditMetadata(EconomySource.SHOP, EconomyFlow.MINT, server = "survival"),
+                EconomyLedgerContext(
+                    recordKind = EconomyRecordKind.TRANSACTION,
+                    status = EconomyEventStatus.SUCCEEDED,
+                ),
+                at = 3_000,
+            )
+
+            val summary = buildAuditSummary(listOf(data), 4_000, 0, 20, null, emptyList())
+            val sales = summary["adminShopSales"] as Map<*, *>
+            val items = (sales["items"] as List<*>).map { it as Map<*, *> }
+
+            sales["income"] shouldBe 255.0
+            sales["attributedIncome"] shouldBe 225.0
+            sales["exactIncome"] shouldBe 100.0
+            sales["allocatedIncome"] shouldBe 125.0
+            sales["unattributedIncome"] shouldBe 30.0
+            sales["quantity"] shouldBe 20L
+            items.map { it["item"] } shouldBe listOf("ores.diamond", "ores.coal", "blocks.stone")
+            items.map { it["quantity"] } shouldBe listOf(10L, 5L, 5L)
+            items.map { it["income"] } shouldBe listOf(100.0, 75.0, 50.0)
+            items.map { it["incomeEvidence"] } shouldBe listOf("exact", "allocated", "allocated")
         }
 
         "exports low-cardinality attempt outcomes and context coverage" {

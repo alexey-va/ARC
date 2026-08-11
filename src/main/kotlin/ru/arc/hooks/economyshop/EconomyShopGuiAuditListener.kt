@@ -1,12 +1,16 @@
 package ru.arc.hooks.economyshop
 
+import me.gypopo.economyshopgui.api.events.PreTransactionEvent
 import me.gypopo.economyshopgui.api.events.PostTransactionEvent
 import me.gypopo.economyshopgui.objects.ShopItem
 import me.gypopo.economyshopgui.util.EcoType
 import me.gypopo.economyshopgui.util.EconomyType
+import org.bukkit.Bukkit
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
+import org.bukkit.entity.Player
+import org.bukkit.plugin.java.JavaPlugin
 import ru.arc.ARC
 import ru.arc.audit.AuditManager
 import ru.arc.audit.AuditMetadata
@@ -23,18 +27,50 @@ import ru.arc.hooks.HookRegistry
 import java.util.UUID
 import kotlin.math.abs
 
+private const val AUTO_SELL_ACTION = "auto_sell_chest"
+
 /** Adds item, price and explicit outcome evidence around EconomyShopGUI mutations. */
 internal class EconomyShopGuiAuditListener(
     private val now: () -> Long = System::currentTimeMillis,
     private val correlationId: () -> String = { UUID.randomUUID().toString() },
+    private val autoSellMultipliers: () -> Collection<Double> = ::configuredAutoSellMultipliers,
 ) : Listener {
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onPreTransaction(event: PreTransactionEvent) {
+        if (event.transactionType.name != AUTO_SELL_ACTION.uppercase()) return
+        val priceComponents = priceComponents(event.prices, event.price)
+        val baseVaultPrice = vaultPrice(event.prices, priceComponents) ?: return
+        val expectedPayouts = EconomyShopAuditMapper.autoSellPayoutCandidates(baseVaultPrice, autoSellMultipliers())
+        if (expectedPayouts.isEmpty()) return
+
+        val capturedAt = now()
+        val player = event.player
+        val session = AuditManager.session(player.uniqueId, player.world.name)
+        val context =
+            EconomyLedgerContext(
+                recordKind = EconomyRecordKind.ATTEMPT,
+                status = EconomyEventStatus.SUBMITTED,
+                accountId = player.uniqueId.toString(),
+                correlationId = correlationId(),
+                world = session?.world ?: player.world.name,
+                sessionId = session?.sessionId,
+                sessionStartedAt = session?.startedAt,
+                action = AUTO_SELL_ACTION,
+                shopId = shopId(event.items, event.shopItem),
+                items = items(event.items, event.shopItem, event.amount, player, baseVaultPrice, true),
+                priceComponents = priceComponents.mapKeys { (key, _) -> "base:$key" },
+                capturedAt = capturedAt,
+            )
+        EconomyPendingContextTracker.register(player.uniqueId, expectedPayouts, context, capturedAt)
+    }
+
     @EventHandler(priority = EventPriority.MONITOR)
     fun onPostTransaction(event: PostTransactionEvent) {
         val capturedAt = now()
         val player = event.player
         val action = event.transactionType.name.lowercase()
-        val priceComponents = priceComponents(event)
-        val vaultPrice = vaultPrice(event, priceComponents)
+        val priceComponents = priceComponents(event.prices, event.price)
+        val vaultPrice = vaultPrice(event.prices, priceComponents)
         val mapped = EconomyShopAuditMapper.map(event.transactionType.name, event.transactionResult.name, vaultPrice)
         val source = mapped.source
         val succeeded = mapped.status == EconomyEventStatus.SUCCEEDED
@@ -48,8 +84,9 @@ internal class EconomyShopGuiAuditListener(
                 !succeeded -> EconomyBalanceObservation.unchanged(balanceAfter)
                 else -> null
             }
-        val items = items(event, vaultPrice)
-        val shopId = shopId(event)
+        val isSale = event.transactionType.name.contains("SELL")
+        val items = items(event.items, event.shopItem, event.amount, player, vaultPrice, isSale)
+        val shopId = shopId(event.items, event.shopItem)
         val context =
             EconomyLedgerContext(
                 recordKind = EconomyRecordKind.ATTEMPT,
@@ -90,19 +127,19 @@ internal class EconomyShopGuiAuditListener(
         }
     }
 
-    private fun priceComponents(event: PostTransactionEvent): Map<String, Double> {
+    private fun priceComponents(prices: Map<EcoType, Double>?, fallbackPrice: Double?): Map<String, Double> {
         val mapped =
-            event.prices.orEmpty().entries
+            prices.orEmpty().entries
                 .asSequence()
                 .filter { (_, amount) -> amount.isFinite() }
                 .take(MAX_PRICE_COMPONENTS)
                 .associate { (type, amount) -> priceKey(type) to amount }
         if (mapped.isNotEmpty()) return mapped.toSortedMap()
-        return event.price.takeIf(Double::isFinite)?.let { mapOf("vault" to it) }.orEmpty()
+        return fallbackPrice?.takeIf(Double::isFinite)?.let { mapOf("vault" to it) }.orEmpty()
     }
 
-    private fun vaultPrice(event: PostTransactionEvent, components: Map<String, Double>): Double? {
-        event.prices.orEmpty().entries.firstOrNull { (type, amount) ->
+    private fun vaultPrice(prices: Map<EcoType, Double>?, components: Map<String, Double>): Double? {
+        prices.orEmpty().entries.firstOrNull { (type, amount) ->
             type.type == EconomyType.VAULT && amount.isFinite()
         }?.let { return it.value }
         return components["vault"]?.takeIf(Double::isFinite)
@@ -113,18 +150,44 @@ internal class EconomyShopGuiAuditListener(
         return (if (currency.isBlank()) type.type.name.lowercase() else "${type.type.name.lowercase()}:$currency").take(80)
     }
 
-    private fun items(event: PostTransactionEvent, vaultPrice: Double?): List<EconomyLedgerItem> {
-        val multi = event.items.orEmpty()
+    private fun items(
+        eventItems: Map<ShopItem, Int>?,
+        eventItem: ShopItem?,
+        eventAmount: Int,
+        player: Player,
+        vaultPrice: Double?,
+        isSale: Boolean,
+    ): List<EconomyLedgerItem> {
+        val multi = eventItems.orEmpty()
         if (multi.isNotEmpty()) {
-            return multi.entries
+            val evidence =
+                multi.entries
                 .sortedBy { (item, _) -> item.itemPath }
                 .take(MAX_ITEMS)
-                .map { (item, quantity) -> itemEvidence(item, quantity, null) }
+                .map { (item, quantity) ->
+                    val unitPrice = if (isSale) saleUnitPrice(item, player, quantity) else null
+                    itemEvidence(item, quantity, unitPrice)
+                }
+            return normalizeUnitPrices(evidence, vaultPrice)
         }
-        val item = event.shopItem ?: return emptyList()
-        val quantity = event.amount.coerceAtLeast(0)
+        val item = eventItem ?: return emptyList()
+        val quantity = eventAmount.coerceAtLeast(0)
         val unitPrice = vaultPrice?.takeIf { quantity > 0 }?.let { abs(it) / quantity }
         return listOf(itemEvidence(item, quantity, unitPrice))
+    }
+
+    private fun saleUnitPrice(item: ShopItem, player: Player, quantity: Int): Double? {
+        if (quantity <= 0 || item.ecoType.type != EconomyType.VAULT) return null
+        val total = runCatching { item.getSellPrice(player, quantity) }.getOrNull() ?: return null
+        return (total / quantity).takeIf { it.isFinite() && it > 0.0 }
+    }
+
+    private fun normalizeUnitPrices(items: List<EconomyLedgerItem>, total: Double?): List<EconomyLedgerItem> {
+        val expectedTotal = abs(total ?: return items)
+        val weights = items.map { item -> (item.unitPrice ?: return items) * (item.quantity ?: return items) }
+        val weightTotal = weights.sum().takeIf { it.isFinite() && it > 0.0 } ?: return items
+        val scale = expectedTotal / weightTotal
+        return items.map { item -> item.copy(unitPrice = item.unitPrice?.times(scale)) }
     }
 
     private fun itemEvidence(item: ShopItem, quantity: Int, unitPrice: Double?): EconomyLedgerItem =
@@ -135,13 +198,13 @@ internal class EconomyShopGuiAuditListener(
             unitPrice = unitPrice?.takeIf(Double::isFinite),
         )
 
-    private fun shopId(event: PostTransactionEvent): String? {
-        event.shopItem?.let { item ->
+    private fun shopId(eventItems: Map<ShopItem, Int>?, eventItem: ShopItem?): String? {
+        eventItem?.let { item ->
             item.section?.takeIf(String::isNotBlank)?.let { return it.take(80) }
             item.itemPath.substringBefore('.').takeIf(String::isNotBlank)?.let { return it.take(80) }
         }
         val sections =
-            event.items.orEmpty().keys.mapNotNull { item ->
+            eventItems.orEmpty().keys.mapNotNull { item ->
                 item.section?.takeIf(String::isNotBlank) ?: item.itemPath.substringBefore('.').takeIf(String::isNotBlank)
             }.distinct()
         return when (sections.size) {
@@ -154,6 +217,17 @@ internal class EconomyShopGuiAuditListener(
     private companion object {
         const val MAX_ITEMS = 64
         const val MAX_PRICE_COMPONENTS = 16
+
+        fun configuredAutoSellMultipliers(): Collection<Double> {
+            val plugin = Bukkit.getPluginManager().getPlugin("AutoSellChests") as? JavaPlugin ?: return listOf(1.0)
+            val section = plugin.config.getConfigurationSection("multiplier-upgrades") ?: return listOf(1.0)
+            return buildList {
+                add(1.0)
+                section.getKeys(false).forEach { key ->
+                    section.getString("$key.multiplier")?.toDoubleOrNull()?.let(::add)
+                }
+            }
+        }
     }
 }
 
@@ -189,4 +263,20 @@ internal object EconomyShopAuditMapper {
             requestedAmount = requestedAmount,
         )
     }
+
+    fun autoSellPayoutCandidates(baseVaultPrice: Double, multipliers: Collection<Double>): List<Double> {
+        if (!baseVaultPrice.isFinite() || baseVaultPrice <= 0.0) return emptyList()
+        return multipliers.asSequence()
+            .filter { it.isFinite() && it > 0.0 && it <= MAX_AUTOSELL_MULTIPLIER }
+            .map { baseVaultPrice * it }
+            .filter(Double::isFinite)
+            .distinct()
+            .sorted()
+            .toList()
+    }
+
+    fun sourceForContext(action: String?, fallback: EconomySource): EconomySource =
+        if (action == AUTO_SELL_ACTION) EconomySource.AUTOSELL else fallback
+
+    private const val MAX_AUTOSELL_MULTIPLIER = 100.0
 }
