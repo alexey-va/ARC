@@ -47,6 +47,67 @@ enum class EconomyFlow(val label: String) {
     UNKNOWN("unknown"),
 }
 
+/** Bounded action labels derived only from an observed delta and trusted ARC context. */
+enum class EconomyAction(val label: String) {
+    SHOP_BUY("shop_buy"),
+    SHOP_SELL("shop_sell"),
+    AUTOSELL_SALE("autosell_sale"),
+    WALLET_TO_BANK("wallet_to_bank"),
+    BANK_TO_WALLET("bank_to_wallet"),
+    GAMBLING_WAGER("gambling_wager"),
+    GAMBLING_PAYOUT("gambling_payout"),
+    TRANSFER_IN("transfer_in"),
+    TRANSFER_OUT("transfer_out"),
+    ADMIN_GIVE("admin_give"),
+    ADMIN_TAKE("admin_take"),
+    BALANCE_SET("balance_set"),
+    SOURCE_CREDIT("source_credit"),
+    SOURCE_DEBIT("source_debit"),
+    ZERO_CHANGE("zero_change"),
+}
+
+/**
+ * Normalizes optional provider actions into a fixed vocabulary. Unknown
+ * provider strings never become metric labels; direction remains observed
+ * while source-specific semantics are inferred only where they are unambiguous.
+ */
+object EconomyActionClassifier {
+    fun classify(
+        source: EconomySource,
+        amount: Double,
+        providerAction: String? = null,
+    ): EconomyAction {
+        val action = providerAction.orEmpty().trim().lowercase(Locale.ROOT)
+        when {
+            action == "balance_set" || action == "set" -> return EconomyAction.BALANCE_SET
+            source == EconomySource.ADMIN_COMMAND && action == "give" -> return EconomyAction.ADMIN_GIVE
+            source == EconomySource.ADMIN_COMMAND && action == "take" -> return EconomyAction.ADMIN_TAKE
+            source in setOf(EconomySource.SHOP, EconomySource.AUTOSELL) && action.contains("auto_sell") ->
+                return EconomyAction.AUTOSELL_SALE
+            source == EconomySource.SHOP && action.startsWith("sell") -> return EconomyAction.SHOP_SELL
+            source == EconomySource.SHOP && action.startsWith("buy") -> return EconomyAction.SHOP_BUY
+        }
+
+        if (amount == 0.0 || !amount.isFinite()) return EconomyAction.ZERO_CHANGE
+        return when (source) {
+            EconomySource.BANK -> if (amount > 0.0) EconomyAction.BANK_TO_WALLET else EconomyAction.WALLET_TO_BANK
+            EconomySource.GAMBLING -> if (amount > 0.0) EconomyAction.GAMBLING_PAYOUT else EconomyAction.GAMBLING_WAGER
+            EconomySource.SHOP -> if (amount > 0.0) EconomyAction.SHOP_SELL else EconomyAction.SHOP_BUY
+            EconomySource.AUTOSELL -> EconomyAction.AUTOSELL_SALE
+            EconomySource.PLAYER_TRANSFER,
+            EconomySource.QUICKSHOP,
+            EconomySource.AUCTION,
+            EconomySource.PLAYER_AUCTIONS,
+            EconomySource.PLAYER_WARPS,
+            EconomySource.INTERNAL_STOCK,
+            -> if (amount > 0.0) EconomyAction.TRANSFER_IN else EconomyAction.TRANSFER_OUT
+            EconomySource.BALANCE_SET -> EconomyAction.BALANCE_SET
+            EconomySource.ADMIN_COMMAND -> if (amount > 0.0) EconomyAction.ADMIN_GIVE else EconomyAction.ADMIN_TAKE
+            else -> if (amount > 0.0) EconomyAction.SOURCE_CREDIT else EconomyAction.SOURCE_DEBIT
+        }
+    }
+}
+
 data class AuditMetadata(
     val source: EconomySource,
     val flow: EconomyFlow,

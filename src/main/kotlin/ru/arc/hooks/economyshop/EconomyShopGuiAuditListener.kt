@@ -198,6 +198,7 @@ internal class EconomyShopGuiAuditListener(
             material = runCatching { item.shopItem.type.key.asString() }.getOrNull()?.take(120),
             quantity = quantity.coerceAtLeast(0),
             unitPrice = unitPrice?.takeIf(Double::isFinite),
+            customItemId = runCatching { HookRegistry.sfHook?.getSlimefunItemId(item.shopItem) }.getOrNull()?.take(120),
         )
 
     private fun shopId(eventItems: Map<ShopItem, Int>?, eventItem: ShopItem?): String? {

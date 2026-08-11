@@ -46,7 +46,16 @@ class EconomyLedgerV2Test : FreeSpec({
                     requestedAmount = -25.0,
                     action = "buy_screen",
                     shopId = "blocks",
-                    items = listOf(EconomyLedgerItem("blocks.stone", "minecraft:stone", 5, 5.0)),
+                    items =
+                        listOf(
+                            EconomyLedgerItem(
+                                "blocks.stone",
+                                "minecraft:stone",
+                                5,
+                                5.0,
+                                customItemId = "SLIMEFUN_TEST_ITEM",
+                            ),
+                        ),
                     priceComponents = mapOf("vault" to 25.0),
                     capturedAt = 1_010,
                 )
@@ -68,6 +77,7 @@ class EconomyLedgerV2Test : FreeSpec({
             val restored = Common.gson.fromJson(Common.gson.toJson(original), Transaction::class.java)
 
             restored shouldBe original
+            restored.context?.normalizedItems?.single()?.customItemId shouldBe "SLIMEFUN_TEST_ITEM"
         }
     }
 
@@ -229,12 +239,15 @@ class EconomyLedgerV2Test : FreeSpec({
             val totals = summary["totals"] as Map<*, *>
             val attempts = summary["attempts"] as Map<*, *>
             val coverage = summary["contextCoverage"] as Map<*, *>
+            val actions = summary["actions"] as List<*>
 
             summary["ledgerSchemaVersion"] shouldBe 2
             totals["minted"] shouldBe 10.0
             attempts["total"] shouldBe 1L
             (attempts["byStatus"] as Map<*, *>)["failed"] shouldBe 1L
             coverage.containsKey("balance") shouldBe true
+            coverage.containsKey("action") shouldBe true
+            (actions.single() as Map<*, *>)["action"] shouldBe "shop_sell"
             (summary["recentFailures"] as List<*>).shouldHaveSize(1)
             (summary["recentEvents"] as List<*>).shouldHaveSize(2)
         }
@@ -266,7 +279,7 @@ class EconomyLedgerV2Test : FreeSpec({
                     items =
                         listOf(
                             EconomyLedgerItem("blocks.stone", "minecraft:stone", 5, 10.0),
-                            EconomyLedgerItem("ores.coal", "minecraft:coal", 5, 15.0),
+                            EconomyLedgerItem("ores.coal", "minecraft:coal", 5, 15.0, customItemId = "CARBONADO"),
                         ),
                 ),
                 at = 2_000,
@@ -297,6 +310,10 @@ class EconomyLedgerV2Test : FreeSpec({
             items.map { it["quantity"] } shouldBe listOf(10L, 5L, 5L)
             items.map { it["income"] } shouldBe listOf(100.0, 75.0, 50.0)
             items.map { it["incomeEvidence"] } shouldBe listOf("exact", "allocated", "allocated")
+            items.map { it["effectiveUnitPrice"] } shouldBe listOf(10.0, 15.0, 10.0)
+            items.map { it["topPlayerIncomeShare"] } shouldBe listOf(1.0, 1.0, 1.0)
+            items.map { it["topPlayerQuantityShare"] } shouldBe listOf(1.0, 1.0, 1.0)
+            items.map { it["customItemId"] } shouldBe listOf(null, "CARBONADO", null)
         }
 
         "exports low-cardinality attempt outcomes and context coverage" {

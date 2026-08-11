@@ -8,6 +8,7 @@ import ru.arc.ARC
 import ru.arc.audit.AdminEconomyCommandTracker
 import ru.arc.audit.AuditManager
 import ru.arc.audit.EconomyAttributionResolver
+import ru.arc.audit.EconomyActionClassifier
 import ru.arc.audit.EconomyBalanceObservation
 import ru.arc.audit.EconomyEventStatus
 import ru.arc.audit.EconomyFlow
@@ -194,7 +195,7 @@ class RedisEcoListener : Listener {
             balanceAfter = balance?.after ?: pending?.balanceAfter ?: observedAfter,
             balanceEvidence = balance?.evidence ?: pending?.balanceEvidence,
             requestedAmount = pending?.requestedAmount ?: requestedAmount,
-            action = pending?.action ?: action,
+            action = pending?.action ?: action ?: amount?.let { EconomyActionClassifier.classify(source, it).label },
             revertedWith = revertedWith?.take(120),
             capturedAt = capturedAt,
         )

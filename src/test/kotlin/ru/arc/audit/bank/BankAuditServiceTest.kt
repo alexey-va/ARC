@@ -63,7 +63,7 @@ class BankAuditServiceTest :
             service.metricPoints(snapshot).flatMap { it.tags.values }.contains("Alice") shouldBe false
         }
 
-        "does not invent a Bank supply change when pending interest becomes available" {
+        "classifies interest capitalization without inventing a Bank supply change" {
             val service = BankAuditService(TestBankAuditConfig())
             service.accept(read(account("a", bank = 100.0, pending = 20.0)))
 
@@ -71,7 +71,66 @@ class BankAuditServiceTest :
 
             snapshot.bankSupplyDelta!! shouldBeExactly 0.0
             snapshot.changedAccounts shouldBe 0
+            snapshot.classifiedChanges shouldBe 1
+            snapshot.changeTypes shouldBe mapOf("observed_interest_capitalization" to 1)
+            @Suppress("UNCHECKED_CAST")
+            val change = (service.summary(10)["recentBankChanges"] as List<Map<String, Any?>>).single()
+            change["classification"] shouldBe "observed_interest_capitalization"
+            change["classificationEvidence"] shouldBe "snapshot_delta_inferred"
+        }
+
+        "classifies transfers interest accrual and unexplained Bank supply changes" {
+            val service = BankAuditService(TestBankAuditConfig(minimumChange = 0.01))
+            service.accept(
+                read(
+                    account("a", wallet = 100.0, bank = 100.0),
+                    account("b", wallet = 100.0, bank = 100.0),
+                    account("c", wallet = 100.0, bank = 100.0),
+                    account("d", wallet = 100.0, bank = 100.0),
+                ),
+            )
+
+            val snapshot =
+                service.accept(
+                    read(
+                        account("a", wallet = 75.0, bank = 125.0),
+                        account("b", wallet = 140.0, bank = 60.0),
+                        account("c", wallet = 100.0, bank = 100.0, pending = 5.0),
+                        account("d", wallet = 100.0, bank = 110.0),
+                    ),
+                )
+
+            snapshot.changeTypes shouldBe
+                mapOf(
+                    "observed_interest_accrual" to 1,
+                    "observed_transfer_from_bank" to 1,
+                    "observed_transfer_to_bank" to 1,
+                    "unexplained_supply_increase" to 1,
+                )
+            val actionPoints = service.metricPoints(snapshot).filter { it.name == "arc_bank_last_change_accounts" }
+            actionPoints.size shouldBe 4
+            actionPoints.all { it.tags["evidence"] == "snapshot_delta_inferred" } shouldBe true
+        }
+
+        "ignores wallet-only activity outside Bank" {
+            val service = BankAuditService(TestBankAuditConfig(minimumChange = 0.01))
+            service.accept(read(account("a", wallet = 100.0, bank = 100.0)))
+
+            val snapshot = service.accept(read(account("a", wallet = 250.0, bank = 100.0)))
+
+            snapshot.classifiedChanges shouldBe 0
+            snapshot.changeTypes shouldBe emptyMap()
             (service.summary(10)["recentBankChanges"] as List<*>).shouldBeEmpty()
+        }
+
+        "does not classify unchanged accounts when configured minimum is zero" {
+            val service = BankAuditService(TestBankAuditConfig(minimumChange = 0.0))
+            service.accept(read(account("a", wallet = 100.0, bank = 100.0)))
+
+            val snapshot = service.accept(read(account("a", wallet = 100.0, bank = 100.0)))
+
+            snapshot.classifiedChanges shouldBe 0
+            snapshot.changeTypes shouldBe emptyMap()
         }
 
         "marks capped or failed reads partial and suppresses misleading total deltas" {

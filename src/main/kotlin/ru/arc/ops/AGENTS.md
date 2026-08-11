@@ -204,8 +204,12 @@ surface is intentionally compact:
   `economy-audit-read-enabled` and never mutates balances. Economy ledger
   schema v2 also returns bounded `recentEvents`, `recentFailures`, attempt
   outcomes, context-field coverage, and `adminShopSales`: ranked item path,
-  material, exact sold quantity, actual attributed income, evidence kind, and
-  unattributed remainder for EconomyShopGUI and AutoSellChests sales. Detailed
+  material, canonical Slimefun ID when available, exact sold quantity,
+  effective unit price, seller concentration, actual attributed income,
+  evidence kind, and unattributed remainder for EconomyShopGUI and
+  AutoSellChests sales. The response also ranks successful transactions by a
+  bounded `source + action` classifier; arbitrary provider strings never become
+  metric labels. Detailed
   account, session, balance, item, counterparty, and correlation evidence stays
   in this authenticated response and must never become Prometheus labels.
   `autoSellAudit` is a local, read-only runtime diagnostic: loaded/eligible
@@ -214,6 +218,9 @@ surface is intentionally compact:
   and must never expose owner, chest, inventory, or location identity.
   The same response includes `bankAudit` from the single `spawn` collector:
   aggregate Bank supply plus bounded top accounts and recent account changes.
+  Complete snapshot pairs classify observed transfers, interest accrual,
+  interest capitalization, unexplained supply movement, and mixed changes;
+  this is explicitly `snapshot_delta_inferred`, not an exact Bank event.
   Survival and parkour must remain standby rather than collecting duplicate
   network snapshots.
 

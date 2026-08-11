@@ -49,6 +49,9 @@ data class EconomyLedgerItem(
 
     @SerializedName("u")
     val unitPrice: Double? = null,
+
+    @SerializedName("ci")
+    val customItemId: String? = null,
 )
 
 /**

@@ -37,6 +37,9 @@ class SFHook : Listener {
     fun getSlimefunItemStack(id: String): ItemStack? =
         SlimefunItem.getById(id)?.item
 
+    fun getSlimefunItemId(stack: ItemStack): String? =
+        SlimefunItem.getByItem(stack)?.id
+
     fun checkForOthersPlayersBackpackUse(event: PlayerRightClickEvent): Boolean {
         if (event.player.inventory.itemInMainHand.type == Material.AIR) return false
         val item = event.player.inventory.itemInMainHand

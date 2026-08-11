@@ -37,6 +37,12 @@ private data class AdminShopItemKey(
     val source: String,
     val item: String,
     val material: String?,
+    val customItemId: String?,
+)
+
+private data class EconomyActionKey(
+    val source: String,
+    val action: String,
 )
 
 private class MutableAdminShopItemStats {
@@ -44,7 +50,8 @@ private class MutableAdminShopItemStats {
     var exactIncome = 0.0
     var allocatedIncome = 0.0
     var transactions = 0L
-    val players = linkedSetOf<String>()
+    private val quantityByPlayer = linkedMapOf<String, Long>()
+    private val incomeByPlayer = linkedMapOf<String, Double>()
 
     fun add(player: String, itemQuantity: Int, income: Double?, exact: Boolean) {
         quantity += itemQuantity.toLong()
@@ -52,7 +59,8 @@ private class MutableAdminShopItemStats {
             if (exact) exactIncome += income else allocatedIncome += income
         }
         transactions++
-        players += player
+        quantityByPlayer.merge(player, itemQuantity.toLong(), Long::plus)
+        if (income != null) incomeByPlayer.merge(player, income, Double::plus)
     }
 
     fun toMap(key: AdminShopItemKey): Map<String, Any?> =
@@ -60,8 +68,11 @@ private class MutableAdminShopItemStats {
             "source" to key.source,
             "item" to key.item,
             "material" to key.material,
+            "customItemId" to key.customItemId,
             "quantity" to quantity,
             "income" to exactIncome + allocatedIncome,
+            "effectiveUnitPrice" to
+                (exactIncome + allocatedIncome).takeIf { quantity > 0L }?.div(quantity.toDouble()),
             "exactIncome" to exactIncome,
             "allocatedIncome" to allocatedIncome,
             "incomeEvidence" to
@@ -72,8 +83,13 @@ private class MutableAdminShopItemStats {
                     else -> "unattributed"
                 },
             "transactions" to transactions,
-            "players" to players.size,
+            "players" to quantityByPlayer.size,
+            "topPlayerQuantityShare" to share(quantityByPlayer.values.maxOrNull()?.toDouble(), quantity.toDouble()),
+            "topPlayerIncomeShare" to share(incomeByPlayer.values.maxOrNull(), exactIncome + allocatedIncome),
         )
+
+    private fun share(part: Double?, total: Double): Double? =
+        part?.takeIf { total > 0.0 }?.div(total)?.coerceIn(0.0, 1.0)
 }
 
 private class AdminShopSalesSummary {
@@ -169,6 +185,7 @@ private class AdminShopSalesSummary {
                 source = transaction.normalizedSource.label,
                 item = item.key?.takeIf(String::isNotBlank) ?: item.material!!,
                 material = item.material,
+                customItemId = item.customItemId,
             )
         items.computeIfAbsent(key) { MutableAdminShopItemStats() }
             .add(player, item.quantity!!, itemIncome, exact)
@@ -188,6 +205,7 @@ internal fun buildAuditSummary(
     largeTransactionAmount: Double = 100_000.0,
 ): Map<String, Any?> {
     val sources = linkedMapOf<String, MutableAuditStats>()
+    val actions = linkedMapOf<EconomyActionKey, MutableAuditStats>()
     val players = linkedMapOf<String, MutableAuditStats>()
     val unknownOrigins = linkedMapOf<String, MutableAuditStats>()
     var minted = 0.0
@@ -243,12 +261,16 @@ internal fun buildAuditSummary(
                 "items" to !context?.normalizedItems.isNullOrEmpty(),
                 "correlation" to !context?.correlationId.isNullOrBlank(),
                 "providerTimestamp" to (context?.providerTimestamp != null),
+                "action" to !context?.action.isNullOrBlank(),
             ).forEach { (field, present) ->
                 if (present) contextPresent.merge(field, 1L, Long::plus)
             }
             val source = transaction.normalizedSource.label
+            val action = transaction.normalizedAction.label
             adminShopSales.add(auditData.name, transaction)
             sources.computeIfAbsent(source) { MutableAuditStats() }.add(auditData.name, transaction)
+            actions.computeIfAbsent(EconomyActionKey(source, action)) { MutableAuditStats() }
+                .add(auditData.name, transaction)
             players.computeIfAbsent(auditData.name) { MutableAuditStats() }.add(auditData.name, transaction)
             if (transaction.normalizedSource == EconomySource.UNKNOWN) {
                 unknownOrigins.computeIfAbsent(transaction.origin.orEmpty().ifBlank { "unresolved" }) { MutableAuditStats() }
@@ -285,7 +307,7 @@ internal fun buildAuditSummary(
         )
 
     val contextCoverage =
-        listOf("balance", "session", "world", "counterparty", "items", "correlation", "providerTimestamp")
+        listOf("balance", "session", "world", "counterparty", "items", "correlation", "providerTimestamp", "action")
             .associateWith { field ->
                 val present = contextPresent[field] ?: 0L
                 linkedMapOf(
@@ -342,6 +364,23 @@ internal fun buildAuditSummary(
                 "supplyCoverage" to "known_mint_burn_only; bank_interest_and_transfer_fees_require_separate_reconciliation",
             ),
         "sources" to ranked(sources, "source"),
+        "actions" to
+            actions.entries
+                .sortedByDescending { it.value.volume() }
+                .take(limit)
+                .map { (key, stats) ->
+                    linkedMapOf<String, Any?>(
+                        "source" to key.source,
+                        "action" to key.action,
+                        "income" to stats.income,
+                        "expense" to stats.expense,
+                        "net" to stats.income - stats.expense,
+                        "operations" to stats.operations,
+                        "records" to stats.records,
+                        "players" to stats.players.size,
+                        "flows" to stats.flows.toSortedMap(),
+                    )
+                },
         "attempts" to
             linkedMapOf(
                 "total" to attempts,

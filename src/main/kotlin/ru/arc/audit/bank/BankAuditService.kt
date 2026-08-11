@@ -4,6 +4,7 @@ import ru.arc.metrics.core.MetricPoint
 import java.util.ArrayDeque
 import kotlin.math.abs
 import kotlin.math.ceil
+import kotlin.math.max
 
 data class BankAuditAccount(
     val playerId: String,
@@ -26,6 +27,17 @@ data class BankAuditReadResult(
         get() = !capped && failedAccounts == 0 && accounts.size == discoveredAccounts
 }
 
+/** Inferred from two complete account snapshots; labels explicitly retain the observed/inferred nature. */
+enum class BankAuditChangeType(val label: String) {
+    OBSERVED_TRANSFER_TO_BANK("observed_transfer_to_bank"),
+    OBSERVED_TRANSFER_FROM_BANK("observed_transfer_from_bank"),
+    OBSERVED_INTEREST_ACCRUAL("observed_interest_accrual"),
+    OBSERVED_INTEREST_CAPITALIZATION("observed_interest_capitalization"),
+    UNEXPLAINED_SUPPLY_INCREASE("unexplained_supply_increase"),
+    UNEXPLAINED_SUPPLY_DECREASE("unexplained_supply_decrease"),
+    MIXED_CHANGE("mixed_change"),
+}
+
 data class BankAuditChange(
     val timestamp: Long,
     val playerId: String,
@@ -33,7 +45,11 @@ data class BankAuditChange(
     val before: Double,
     val after: Double,
     val delta: Double,
+    val walletDelta: Double,
+    val bankBalanceDelta: Double,
     val pendingInterestDelta: Double,
+    val knownSupplyDelta: Double,
+    val classification: BankAuditChangeType,
 )
 
 data class BankAuditSnapshot(
@@ -56,6 +72,8 @@ data class BankAuditSnapshot(
     val observedBankDecrease: Double,
     val observedPendingInterestIncrease: Double,
     val changedAccounts: Int,
+    val classifiedChanges: Int,
+    val changeTypes: Map<String, Int>,
     val bankQuantiles: Map<String, Double>,
     val bankConcentration: Map<String, Double>,
     val knownConcentration: Map<String, Double>,
@@ -98,7 +116,14 @@ class BankAuditService(
             current.forEach { (playerId, account) ->
                 val previous = previousAccounts[playerId] ?: return@forEach
                 val delta = account.bankSupply - previous.bankSupply
-                if (abs(delta) < config.minimumChange) return@forEach
+                val walletDelta = account.walletBalance - previous.walletBalance
+                val bankBalanceDelta = account.bankBalance - previous.bankBalance
+                val pendingInterestDelta = account.pendingInterest - previous.pendingInterest
+                val knownSupplyDelta = account.knownSupply - previous.knownSupply
+                // Wallet movement alone belongs to the main ledger, not the Bank activity stream.
+                if (max(abs(bankBalanceDelta), abs(pendingInterestDelta)) < changeThreshold()) {
+                    return@forEach
+                }
                 changes +=
                     BankAuditChange(
                         timestamp = now,
@@ -107,13 +132,17 @@ class BankAuditService(
                         before = previous.bankSupply,
                         after = account.bankSupply,
                         delta = delta,
-                        pendingInterestDelta = account.pendingInterest - previous.pendingInterest,
+                        walletDelta = walletDelta,
+                        bankBalanceDelta = bankBalanceDelta,
+                        pendingInterestDelta = pendingInterestDelta,
+                        knownSupplyDelta = knownSupplyDelta,
+                        classification = classifyChange(walletDelta, bankBalanceDelta, pendingInterestDelta),
                     )
             }
         }
 
         changes
-            .sortedBy { abs(it.delta) }
+            .sortedBy(::changeMagnitude)
             .forEach(recentChanges::addLast)
         while (recentChanges.size > config.recentChanges) recentChanges.removeFirst()
 
@@ -151,7 +180,12 @@ class BankAuditService(
                         .map(BankAuditChange::pendingInterestDelta)
                         .filter { it > 0.0 }
                         .sum(),
-                changedAccounts = changes.size,
+                changedAccounts = changes.count { abs(it.delta) >= changeThreshold() },
+                classifiedChanges = changes.size,
+                changeTypes =
+                    changes.groupingBy { it.classification.label }
+                        .eachCount()
+                        .toSortedMap(),
                 bankQuantiles =
                     linkedMapOf(
                         "0.50" to quantile(bankValues, 0.50),
@@ -202,6 +236,8 @@ class BankAuditService(
                     "sampled" to snapshot.sampledAccounts,
                     "failed" to snapshot.failedAccounts,
                     "positiveBankBalance" to snapshot.positiveBankAccounts,
+                    "supplyChanged" to snapshot.changedAccounts,
+                    "classifiedChanges" to snapshot.classifiedChanges,
                     "capped" to snapshot.capped,
                 ),
             "money" to
@@ -218,6 +254,7 @@ class BankAuditService(
                     "observedBankDecrease" to snapshot.observedBankDecrease,
                     "observedPendingInterestIncrease" to snapshot.observedPendingInterestIncrease,
                 ),
+            "changeTypes" to snapshot.changeTypes,
             "distribution" to
                 linkedMapOf(
                     "bankQuantiles" to snapshot.bankQuantiles,
@@ -279,7 +316,46 @@ class BankAuditService(
             add(deltaPoint("observed_bank_decrease", -completeSnapshot.observedBankDecrease))
             add(deltaPoint("observed_pending_interest_increase", completeSnapshot.observedPendingInterestIncrease))
             add(point("arc_bank_changed_accounts", "Accounts with an observed Bank supply change since the previous complete snapshot", completeSnapshot.changedAccounts.toDouble()))
+            completeSnapshot.changeTypes.forEach { (action, count) -> add(changeTypePoint(action, count)) }
         }
+
+    private fun classifyChange(
+        walletDelta: Double,
+        bankBalanceDelta: Double,
+        pendingInterestDelta: Double,
+    ): BankAuditChangeType {
+        val bankSupplyDelta = bankBalanceDelta + pendingInterestDelta
+        val knownSupplyDelta = walletDelta + bankSupplyDelta
+        return when {
+            positive(bankBalanceDelta) && negative(pendingInterestDelta) && nearZero(walletDelta) && offsets(bankBalanceDelta, pendingInterestDelta) ->
+                BankAuditChangeType.OBSERVED_INTEREST_CAPITALIZATION
+            positive(pendingInterestDelta) && nearZero(walletDelta) && nearZero(bankBalanceDelta) ->
+                BankAuditChangeType.OBSERVED_INTEREST_ACCRUAL
+            positive(bankSupplyDelta) && negative(walletDelta) && offsets(bankSupplyDelta, walletDelta) ->
+                BankAuditChangeType.OBSERVED_TRANSFER_TO_BANK
+            negative(bankSupplyDelta) && positive(walletDelta) && offsets(bankSupplyDelta, walletDelta) ->
+                BankAuditChangeType.OBSERVED_TRANSFER_FROM_BANK
+            nearZero(walletDelta) && positive(knownSupplyDelta) -> BankAuditChangeType.UNEXPLAINED_SUPPLY_INCREASE
+            nearZero(walletDelta) && negative(knownSupplyDelta) -> BankAuditChangeType.UNEXPLAINED_SUPPLY_DECREASE
+            else -> BankAuditChangeType.MIXED_CHANGE
+        }
+    }
+
+    private fun positive(value: Double): Boolean = value >= changeThreshold()
+
+    private fun negative(value: Double): Boolean = value <= -changeThreshold()
+
+    private fun nearZero(value: Double): Boolean = abs(value) < changeThreshold()
+
+    private fun offsets(first: Double, second: Double): Boolean {
+        val tolerance = max(changeThreshold(), max(abs(first), abs(second)) * 1e-8)
+        return abs(first + second) <= tolerance
+    }
+
+    private fun changeThreshold(): Double = max(config.minimumChange, 0.000_001)
+
+    private fun changeMagnitude(change: BankAuditChange): Double =
+        maxOf(abs(change.walletDelta), abs(change.bankBalanceDelta), abs(change.pendingInterestDelta))
 
     private fun validAccount(account: BankAuditAccount): Boolean =
         account.playerId.isNotBlank() &&
@@ -336,6 +412,14 @@ class BankAuditService(
             mapOf("scope" to scope),
         )
 
+    private fun changeTypePoint(action: String, value: Int): MetricPoint =
+        MetricPoint(
+            "arc_bank_last_change_accounts",
+            "Accounts by bounded snapshot-delta Bank change classification",
+            value.toDouble(),
+            mapOf("action" to action, "evidence" to "snapshot_delta_inferred"),
+        )
+
     private fun concentrationPoint(scope: String, top: String, value: Double): MetricPoint =
         MetricPoint(
             "arc_bank_concentration_ratio",
@@ -363,7 +447,12 @@ class BankAuditService(
             "before" to change.before,
             "after" to change.after,
             "delta" to change.delta,
+            "walletDelta" to change.walletDelta,
+            "bankBalanceDelta" to change.bankBalanceDelta,
             "pendingInterestDelta" to change.pendingInterestDelta,
+            "knownSupplyDelta" to change.knownSupplyDelta,
+            "classification" to change.classification.label,
+            "classificationEvidence" to "snapshot_delta_inferred",
         )
 
     private fun bool(value: Boolean): Double = if (value) 1.0 else 0.0

@@ -132,6 +132,16 @@ class EconomyAuditTest : FreeSpec({
             attribution.metadata.source shouldBe EconomySource.UNKNOWN
             attribution.metadata.origin shouldBe "example.newplugin.RewardService"
         }
+
+        "normalizes transaction actions into a bounded source-aware vocabulary" {
+            EconomyActionClassifier.classify(EconomySource.BANK, -100.0) shouldBe EconomyAction.WALLET_TO_BANK
+            EconomyActionClassifier.classify(EconomySource.BANK, 100.0) shouldBe EconomyAction.BANK_TO_WALLET
+            EconomyActionClassifier.classify(EconomySource.GAMBLING, -50.0) shouldBe EconomyAction.GAMBLING_WAGER
+            EconomyActionClassifier.classify(EconomySource.GAMBLING, 75.0) shouldBe EconomyAction.GAMBLING_PAYOUT
+            EconomyActionClassifier.classify(EconomySource.SHOP, 20.0, "auto_sell_chest") shouldBe EconomyAction.AUTOSELL_SALE
+            EconomyActionClassifier.classify(EconomySource.DENIZEN, 20.0, "untrusted arbitrary script id") shouldBe
+                EconomyAction.SOURCE_CREDIT
+        }
     }
 
     "monitor" - {
@@ -154,6 +164,12 @@ class EconomyAuditTest : FreeSpec({
 
             registry.get("arc_economy_transactions_total").counter().count() shouldBeExactly 2.0
             registry.get("arc_economy_amount_total").counter().count() shouldBeExactly 110.0
+            registry.get("arc_economy_action_transactions_total")
+                .tags("source", "jobs", "action", "source_credit", "direction", "income")
+                .counter().count() shouldBeExactly 2.0
+            registry.get("arc_economy_action_amount_total")
+                .tags("source", "jobs", "action", "source_credit", "direction", "income")
+                .counter().count() shouldBeExactly 110.0
             monitor.recent(10).shouldHaveSize(1)
             monitor.recent(10).single().kind shouldBe "rapid_income"
         }

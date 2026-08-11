@@ -45,6 +45,8 @@ class EconomyAuditMonitor(
 
     private data class ContextMetricKey(val source: String, val field: String, val present: String)
 
+    private data class ActionMetricKey(val source: String, val action: String, val direction: String)
+
     private class IncomeWindow {
         val points = ArrayDeque<IncomePoint>()
         var total = 0.0
@@ -59,6 +61,8 @@ class EconomyAuditMonitor(
     private val persistenceFailureCounters = ConcurrentHashMap<PersistenceMetricKey, Counter>()
     private val attemptCounters = ConcurrentHashMap<AttemptMetricKey, Counter>()
     private val contextCounters = ConcurrentHashMap<ContextMetricKey, Counter>()
+    private val actionTransactionCounters = ConcurrentHashMap<ActionMetricKey, Counter>()
+    private val actionAmountCounters = ConcurrentHashMap<ActionMetricKey, Counter>()
     private val observations = AtomicLong()
 
     fun observe(
@@ -70,6 +74,7 @@ class EconomyAuditMonitor(
     ) {
         if (!config.monitoringEnabled || !amount.isFinite() || amount == 0.0) return
         recordMetrics(amount, metadata)
+        recordActionMetrics(amount, metadata, context)
         recordContextMetrics(metadata, context)
 
         val now = timeProvider.currentTimeMillis()
@@ -143,6 +148,29 @@ class EconomyAuditMonitor(
         }.increment(abs(amount))
     }
 
+    private fun recordActionMetrics(amount: Double, metadata: AuditMetadata, context: EconomyLedgerContext?) {
+        val registry = registryProvider() ?: return
+        val key =
+            ActionMetricKey(
+                source = metadata.source.label,
+                action = EconomyActionClassifier.classify(metadata.source, amount, context?.action).label,
+                direction = if (amount > 0.0) "income" else "expense",
+            )
+        actionTransactionCounters.computeIfAbsent(key) {
+            Counter.builder("arc_economy_action_transactions_total")
+                .description("Observed player economy transactions by bounded action")
+                .tags("source", key.source, "action", key.action, "direction", key.direction)
+                .register(registry)
+        }.increment()
+        actionAmountCounters.computeIfAbsent(key) {
+            Counter.builder("arc_economy_action_amount_total")
+                .description("Absolute observed player economy amount by bounded action")
+                .baseUnit("currency")
+                .tags("source", key.source, "action", key.action, "direction", key.direction)
+                .register(registry)
+        }.increment(abs(amount))
+    }
+
     private fun recordContextMetrics(metadata: AuditMetadata, context: EconomyLedgerContext?) {
         val registry = registryProvider() ?: return
         val fields =
@@ -154,6 +182,7 @@ class EconomyAuditMonitor(
                 "items" to !context?.normalizedItems.isNullOrEmpty(),
                 "correlation" to !context?.correlationId.isNullOrBlank(),
                 "provider_timestamp" to (context?.providerTimestamp != null),
+                "action" to !context?.action.isNullOrBlank(),
             )
         fields.forEach { (field, present) ->
             val key = ContextMetricKey(metadata.source.label, field, if (present) "true" else "false")
