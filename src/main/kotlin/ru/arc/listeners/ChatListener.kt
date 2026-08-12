@@ -1,6 +1,7 @@
 package ru.arc.listeners
 
 import io.papermc.paper.event.player.AsyncChatEvent
+import net.kyori.adventure.text.Component
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
@@ -28,7 +29,7 @@ class ChatListener internal constructor(
     @EventHandler(priority = EventPriority.LOWEST)
     fun onPlayerChat(event: AsyncChatEvent) {
         if (processTitleInput(event)) return
-        logChatMode(event)
+        applyChatMode(event)
         val message = TextUtils.plain(event.message())
         val player = event.player
         sync {
@@ -36,10 +37,23 @@ class ChatListener internal constructor(
         }
     }
 
-    private fun logChatMode(event: AsyncChatEvent) {
+    private fun applyChatMode(event: AsyncChatEvent) {
         val mode = modeProvider(event.player.uniqueId)
+        val message = event.message()
+        val hadPrefix = TextUtils.plain(message).startsWith("!")
+        if (mode != ChatMode.GLOBAL || hadPrefix) {
+            debug(
+                "[ChatMode] backend player={} mode={} had-prefix={} prefix-added=false prefix-owner=backend",
+                event.player.uniqueId,
+                mode,
+                hadPrefix,
+            )
+            return
+        }
+
+        event.message(Component.text("!").append(message))
         debug(
-            "[ChatMode] backend player={} mode={} prefix-owner=proxy",
+            "[ChatMode] backend player={} mode={} had-prefix=false prefix-added=true prefix-owner=backend",
             event.player.uniqueId,
             mode,
         )
