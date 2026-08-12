@@ -25,10 +25,96 @@ ARCHIVE_PREFIX="${S3_RP_ARCHIVE_PREFIX:-archive}"
 
 [[ -f "${RP_SOURCE}" ]] || die "Missing ${RP_SOURCE} — regenerate ItemsAdder pack first"
 
+for required_command in python3 unzip zip; do
+  command -v "${required_command}" >/dev/null 2>&1 || die "Missing required command: ${required_command}"
+done
+
 staging_dir="$(mktemp -d)"
 trap 'rm -rf "${staging_dir}"' EXIT
 upload_path="${staging_dir}/${RP_UPLOAD_NAME}"
 cp "${RP_SOURCE}" "${upload_path}"
+
+# Minecraft 1.21.9+ requires min_format/max_format when a pack supports resource
+# pack format 65 or newer. ItemsAdder 4.0.17 still emits only the legacy
+# supported_formats range, so patch just the root metadata before publication.
+metadata_entries="$(unzip -Z1 "${upload_path}" | awk '$0 == "pack.mcmeta" { count++ } END { print count + 0 }')"
+[[ "${metadata_entries}" == "1" ]] || die "Expected exactly one root pack.mcmeta, found ${metadata_entries}"
+
+metadata_path="${staging_dir}/pack.mcmeta"
+unzip -p "${upload_path}" pack.mcmeta > "${metadata_path}" || die "Unable to read root pack.mcmeta"
+
+if ! metadata_status="$(python3 - "${metadata_path}" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+
+def version_major(value):
+    if isinstance(value, bool):
+        raise ValueError("boolean is not a pack version")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, list) and value and isinstance(value[0], int):
+        return value[0]
+    raise ValueError(f"unsupported pack version: {value!r}")
+
+
+def supported_range(value, fallback):
+    if value is None:
+        if fallback is None:
+            raise ValueError("pack_format and supported_formats are both missing")
+        return fallback, fallback
+    if isinstance(value, bool):
+        raise ValueError("boolean is not a supported_formats range")
+    if isinstance(value, int):
+        return value, value
+    if isinstance(value, list) and len(value) == 2:
+        return value[0], value[1]
+    if isinstance(value, dict) and "min_inclusive" in value and "max_inclusive" in value:
+        return value["min_inclusive"], value["max_inclusive"]
+    raise ValueError(f"unsupported supported_formats range: {value!r}")
+
+
+metadata_path = Path(sys.argv[1])
+metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+pack = metadata.get("pack")
+if not isinstance(pack, dict):
+    raise ValueError("pack.mcmeta has no pack object")
+
+if "min_format" in pack and "max_format" in pack:
+    print("unchanged")
+    raise SystemExit(0)
+
+pack_format = pack.get("pack_format")
+range_min, range_max = supported_range(metadata.get("supported_formats"), pack_format)
+declares_modern_format = version_major(range_max) > 64
+if pack_format is not None:
+    declares_modern_format = declares_modern_format or version_major(pack_format) > 64
+
+if not declares_modern_format:
+    print("unchanged")
+    raise SystemExit(0)
+
+pack.setdefault("min_format", range_min)
+pack.setdefault("max_format", range_max)
+metadata_path.write_text(
+    json.dumps(metadata, ensure_ascii=False, separators=(",", ":")),
+    encoding="utf-8",
+)
+# Keep the replacement entry deterministic across repeated publications.
+os.utime(metadata_path, (315532800, 315532800))
+print(f"patched min_format={pack['min_format']!r} max_format={pack['max_format']!r}")
+PY
+)"; then
+  die "Invalid pack.mcmeta; refusing to publish"
+fi
+
+if [[ "${metadata_status}" == patched* ]]; then
+  zip -q -X -j "${upload_path}" "${metadata_path}" || die "Unable to update root pack.mcmeta"
+  unzip -tq "${upload_path}" >/dev/null || die "Patched resource pack failed ZIP integrity check"
+  log "Compatibility metadata ${metadata_status}"
+fi
 
 local_sha="$(sha256sum "${upload_path}" | awk '{print $1}')"
 remote_sha=""

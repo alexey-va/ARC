@@ -17,5 +17,13 @@ The script uploads:
 - `RusCraftingResource.zip.sha256` — checksum used to skip unchanged packs;
 - `archive/YYYYMMDD-HHMMSS-RusCraftingResource.zip` — versioned archive.
 
+Before hashing or uploading, the script validates that the archive has exactly
+one root `pack.mcmeta`. For packs that declare support for resource-pack format
+65 or newer, it fills missing `pack.min_format` and `pack.max_format` from the
+ItemsAdder `supported_formats` range. This is a staging-only compatibility fix
+for ItemsAdder 4.0.17 output; `output/generated.zip` is not modified. The ZIP is
+then integrity-checked before publication. If both modern fields already exist,
+the staging archive is uploaded byte-for-byte without a metadata rewrite.
+
 The hook passes the current ItemsAdder instance's `output/generated.zip` as
 `RP_SOURCE`, so spawn and survival publish their own generated pack.
