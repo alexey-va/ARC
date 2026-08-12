@@ -39,9 +39,9 @@ trap 'rm -rf "${staging_dir}"' EXIT
 upload_path="${staging_dir}/${RP_UPLOAD_NAME}"
 cp "${RP_SOURCE}" "${upload_path}"
 
-# Minecraft 1.21.9+ requires min_format/max_format when a pack supports resource
-# pack format 65 or newer. ItemsAdder 4.0.17 still emits only the legacy
-# supported_formats range, so patch just the root metadata before publication.
+# Minecraft 1.21.9+ reads min_format, max_format, and supported_formats from the
+# pack object. ItemsAdder 4.0.17 still emits supported_formats at the JSON root,
+# so normalize only the staged metadata before publication.
 metadata_entries="$(unzip -Z1 "${upload_path}" | awk '$0 == "pack.mcmeta" { count++ } END { print count + 0 }')"
 [[ "${metadata_entries}" == "1" ]] || die "Expected exactly one root pack.mcmeta, found ${metadata_entries}"
 
@@ -75,7 +75,12 @@ def supported_range(value, fallback):
     if isinstance(value, int):
         return value, value
     if isinstance(value, list) and len(value) == 2:
-        return value[0], value[1]
+        minimum, maximum = value
+        if any(isinstance(item, bool) or not isinstance(item, int) for item in (minimum, maximum)):
+            raise ValueError(f"unsupported supported_formats range: {value!r}")
+        if minimum > maximum:
+            raise ValueError(f"reversed supported_formats range: {value!r}")
+        return minimum, maximum
     if isinstance(value, dict) and "min_inclusive" in value and "max_inclusive" in value:
         return value["min_inclusive"], value["max_inclusive"]
     raise ValueError(f"unsupported supported_formats range: {value!r}")
@@ -87,38 +92,152 @@ pack = metadata.get("pack")
 if not isinstance(pack, dict):
     raise ValueError("pack.mcmeta has no pack object")
 
-if "min_format" in pack and "max_format" in pack:
-    print("unchanged")
-    raise SystemExit(0)
-
 pack_format = pack.get("pack_format")
-range_min, range_max = supported_range(metadata.get("supported_formats"), pack_format)
-declares_modern_format = version_major(range_max) > 64
+root_supported_formats = metadata.get("supported_formats")
+pack_supported_formats = pack.get("supported_formats")
+range_source = root_supported_formats if root_supported_formats is not None else pack_supported_formats
+if range_source is None and pack_format is None and "min_format" in pack and "max_format" in pack:
+    range_min = version_major(pack["min_format"])
+    range_max = version_major(pack["max_format"])
+else:
+    range_min, range_max = supported_range(range_source, pack_format)
+
+effective_min = version_major(pack.get("min_format", range_min))
+effective_max = version_major(pack.get("max_format", range_max))
+if effective_min > effective_max:
+    raise ValueError(f"min_format {effective_min} exceeds max_format {effective_max}")
+
+declares_modern_format = effective_max > 64
 if pack_format is not None:
     declares_modern_format = declares_modern_format or version_major(pack_format) > 64
 
-if not declares_modern_format:
+changed = False
+if root_supported_formats is not None:
+    metadata.pop("supported_formats")
+    changed = True
+
+if declares_modern_format:
+    if "min_format" not in pack:
+        pack["min_format"] = range_min
+        effective_min = version_major(range_min)
+        changed = True
+    if "max_format" not in pack:
+        pack["max_format"] = range_max
+        effective_max = version_major(range_max)
+        changed = True
+
+# Formats up to 64 use the legacy integer range. Formats 65+ use min/max.
+# A multi-version pack crossing that boundary must declare both representations.
+if effective_min <= 64:
+    legacy_range = [effective_min, min(effective_max, 64)]
+    if pack.get("supported_formats") != legacy_range:
+        pack["supported_formats"] = legacy_range
+        changed = True
+
+if not changed:
     print("unchanged")
     raise SystemExit(0)
 
-pack.setdefault("min_format", range_min)
-pack.setdefault("max_format", range_max)
 metadata_path.write_text(
     json.dumps(metadata, ensure_ascii=False, separators=(",", ":")),
     encoding="utf-8",
 )
 # Keep the replacement entry deterministic across repeated publications.
 os.utime(metadata_path, (315532800, 315532800))
-print(f"patched min_format={pack['min_format']!r} max_format={pack['max_format']!r}")
+print(
+    "patched "
+    f"min_format={pack.get('min_format')!r} "
+    f"max_format={pack.get('max_format')!r} "
+    f"supported_formats={pack.get('supported_formats')!r}"
+)
 PY
 )"; then
   die "Invalid pack.mcmeta; refusing to publish"
 fi
 
+archive_patched=0
 if [[ "${metadata_status}" == patched* ]]; then
   zip -q -X -j "${upload_path}" "${metadata_path}" || die "Unable to update root pack.mcmeta"
-  unzip -tq "${upload_path}" >/dev/null || die "Patched resource pack failed ZIP integrity check"
+  archive_patched=1
   log "Compatibility metadata ${metadata_status}"
+fi
+
+# ItemsAdder 4.0.17 adds every vanilla entity texture to the blocks atlas on
+# modern clients. Minecraft already owns those textures in dedicated entity
+# atlases, producing hundreds of duplicate-sprite warnings. No custom model in
+# this pack needs that blanket directory source, so remove only that exact entry.
+modern_blocks_atlas="ia_overlay_modern_atlas/assets/minecraft/atlases/blocks.json"
+atlas_entries="$(unzip -Z1 "${upload_path}" | awk -v target="${modern_blocks_atlas}" '$0 == target { count++ } END { print count + 0 }')"
+[[ "${atlas_entries}" -le 1 ]] || die "Expected at most one ${modern_blocks_atlas}, found ${atlas_entries}"
+
+if [[ "${atlas_entries}" == "1" ]]; then
+  atlas_path="${staging_dir}/${modern_blocks_atlas}"
+  mkdir -p "$(dirname "${atlas_path}")"
+  unzip -p "${upload_path}" "${modern_blocks_atlas}" > "${atlas_path}" ||
+    die "Unable to read ${modern_blocks_atlas}"
+
+  if ! atlas_status="$(python3 - "${atlas_path}" "${upload_path}" <<'PY'
+import json
+import os
+import sys
+import zipfile
+from pathlib import Path
+
+
+atlas_path = Path(sys.argv[1])
+archive_path = Path(sys.argv[2])
+atlas = json.loads(atlas_path.read_text(encoding="utf-8"))
+sources = atlas.get("sources")
+if not isinstance(sources, list):
+    raise ValueError("modern blocks atlas has no sources list")
+
+
+def is_duplicate_entity_directory(source):
+    return (
+        isinstance(source, dict)
+        and source.get("type") in {"directory", "minecraft:directory"}
+        and source.get("source") == "entity"
+        and source.get("prefix") == "entity/"
+    )
+
+
+removed = sum(1 for source in sources if is_duplicate_entity_directory(source))
+if removed == 0:
+    print("unchanged")
+    raise SystemExit(0)
+
+with zipfile.ZipFile(archive_path) as archive:
+    for entry in archive.infolist():
+        if entry.is_dir() or "/models/" not in entry.filename or not entry.filename.endswith(".json"):
+            continue
+        model = archive.read(entry)
+        if b"minecraft:entity/" in model or b'"entity/' in model:
+            print(f"unchanged guarded_by_model={entry.filename}")
+            raise SystemExit(0)
+
+filtered = [source for source in sources if not is_duplicate_entity_directory(source)]
+atlas["sources"] = filtered
+atlas_path.write_text(
+    json.dumps(atlas, ensure_ascii=False, separators=(",", ":")),
+    encoding="utf-8",
+)
+os.utime(atlas_path, (315532800, 315532800))
+print(f"patched removed_entity_directory_sources={removed}")
+PY
+  )"; then
+    die "Invalid ${modern_blocks_atlas}; refusing to publish"
+  fi
+
+  if [[ "${atlas_status}" == patched* ]]; then
+    (cd "${staging_dir}" && zip -q -X "${upload_path}" "${modern_blocks_atlas}") ||
+      die "Unable to update ${modern_blocks_atlas}"
+    archive_patched=1
+    log "Compatibility atlas ${atlas_status}"
+  fi
+fi
+
+if [[ "${archive_patched}" == "1" ]]; then
+  unzip -tq "${upload_path}" >/dev/null || die "Patched resource pack failed ZIP integrity check"
 fi
 
 local_sha="$(sha256sum "${upload_path}" | awk '{print $1}')"

@@ -194,6 +194,11 @@ class ItemsAdderHookTest :
                         }
                     metadata.getAsJsonObject("pack").get("min_format").asInt shouldBeExactly 32
                     metadata.getAsJsonObject("pack").get("max_format").asInt shouldBeExactly 9_999
+                    metadata.getAsJsonObject("pack").getAsJsonArray("supported_formats").let { range ->
+                        range[0].asInt shouldBeExactly 32
+                        range[1].asInt shouldBeExactly 64
+                    }
+                    metadata.has("supported_formats").shouldBeFalse()
                 }
 
                 ZipFile(resourcePackZip.toFile()).use { original ->
@@ -203,6 +208,158 @@ class ItemsAdderHookTest :
                         }
                     metadata.getAsJsonObject("pack").has("min_format").shouldBeFalse()
                     metadata.getAsJsonObject("pack").has("max_format").shouldBeFalse()
+                }
+            }
+
+            "moves legacy supported formats into pack even when min and max already exist" {
+                val directory = Files.createTempDirectory("arc-resourcepack-sync-supported-formats")
+                val resourcePackZip = directory.resolve("generated.zip")
+                val uploadedZip = directory.resolve("uploaded.zip")
+                val fakeAws = directory.resolve("fake-aws.sh")
+                val fakeRedis = directory.resolve("fake-redis.sh")
+                val script = BundledResourcePackSyncScript.install(directory.resolve("arc-data"))
+
+                ZipOutputStream(Files.newOutputStream(resourcePackZip)).use { output ->
+                    output.putNextEntry(ZipEntry("pack.mcmeta"))
+                    output.write(
+                        """{"pack":{"pack_format":75,"description":"ItemsAdder","min_format":32,"max_format":9999},"supported_formats":[32,9999]}"""
+                            .toByteArray(),
+                    )
+                    output.closeEntry()
+                }
+                fakeAws.writeText(fakeAwsUploaderScript())
+                fakeAws.toFile().setExecutable(true).shouldBeTrue()
+                fakeRedis.writeText(fakeRedisPublisherScript())
+                fakeRedis.toFile().setExecutable(true).shouldBeTrue()
+
+                ResourcePackSyncScript(
+                    script,
+                    processEnvironment = {
+                        testEnvironment() +
+                            notificationEnvironment(fakeRedis, directory) +
+                            mapOf(
+                                "AWS_CLI" to fakeAws.toAbsolutePath().toString(),
+                                "CAPTURED_UPLOAD" to uploadedZip.toAbsolutePath().toString(),
+                            )
+                    },
+                ).publish(resourcePackZip).shouldBeTrue()
+
+                ZipFile(uploadedZip.toFile()).use { archive ->
+                    val metadata =
+                        archive.getInputStream(archive.getEntry("pack.mcmeta")).bufferedReader().use { reader ->
+                            JsonParser.parseReader(reader).asJsonObject
+                        }
+                    metadata.has("supported_formats").shouldBeFalse()
+                    metadata.getAsJsonObject("pack").getAsJsonArray("supported_formats").let { range ->
+                        range[0].asInt shouldBeExactly 32
+                        range[1].asInt shouldBeExactly 64
+                    }
+                }
+            }
+
+            "removes the duplicate vanilla entity directory from the modern block atlas" {
+                val directory = Files.createTempDirectory("arc-resourcepack-sync-entity-atlas")
+                val resourcePackZip = directory.resolve("generated.zip")
+                val uploadedZip = directory.resolve("uploaded.zip")
+                val fakeAws = directory.resolve("fake-aws.sh")
+                val fakeRedis = directory.resolve("fake-redis.sh")
+                val script = BundledResourcePackSyncScript.install(directory.resolve("arc-data"))
+                val atlasPath = "ia_overlay_modern_atlas/assets/minecraft/atlases/blocks.json"
+
+                ZipOutputStream(Files.newOutputStream(resourcePackZip)).use { output ->
+                    output.putNextEntry(ZipEntry("pack.mcmeta"))
+                    output.write(
+                        """{"pack":{"description":"ready","min_format":75,"max_format":75}}"""
+                            .toByteArray(),
+                    )
+                    output.closeEntry()
+                    output.putNextEntry(ZipEntry(atlasPath))
+                    output.write(
+                        """{"sources":[{"type":"directory","source":"entity","prefix":"entity/"},{"type":"directory","source":"blocks","prefix":"blocks/"}]}"""
+                            .toByteArray(),
+                    )
+                    output.closeEntry()
+                }
+                fakeAws.writeText(fakeAwsUploaderScript())
+                fakeAws.toFile().setExecutable(true).shouldBeTrue()
+                fakeRedis.writeText(fakeRedisPublisherScript())
+                fakeRedis.toFile().setExecutable(true).shouldBeTrue()
+
+                ResourcePackSyncScript(
+                    script,
+                    processEnvironment = {
+                        testEnvironment() +
+                            notificationEnvironment(fakeRedis, directory) +
+                            mapOf(
+                                "AWS_CLI" to fakeAws.toAbsolutePath().toString(),
+                                "CAPTURED_UPLOAD" to uploadedZip.toAbsolutePath().toString(),
+                            )
+                    },
+                ).publish(resourcePackZip).shouldBeTrue()
+
+                ZipFile(uploadedZip.toFile()).use { archive ->
+                    val atlas =
+                        archive.getInputStream(archive.getEntry(atlasPath)).bufferedReader().use { reader ->
+                            JsonParser.parseReader(reader).asJsonObject
+                        }
+                    val sources = atlas.getAsJsonArray("sources")
+                    sources.size() shouldBeExactly 1
+                    sources[0].asJsonObject.get("source").asString shouldBe "blocks"
+                }
+            }
+
+            "keeps the entity atlas source when a custom model references it" {
+                val directory = Files.createTempDirectory("arc-resourcepack-sync-entity-atlas-guard")
+                val resourcePackZip = directory.resolve("generated.zip")
+                val uploadedZip = directory.resolve("uploaded.zip")
+                val fakeAws = directory.resolve("fake-aws.sh")
+                val fakeRedis = directory.resolve("fake-redis.sh")
+                val script = BundledResourcePackSyncScript.install(directory.resolve("arc-data"))
+                val atlasPath = "ia_overlay_modern_atlas/assets/minecraft/atlases/blocks.json"
+
+                ZipOutputStream(Files.newOutputStream(resourcePackZip)).use { output ->
+                    output.putNextEntry(ZipEntry("pack.mcmeta"))
+                    output.write(
+                        """{"pack":{"description":"ready","min_format":75,"max_format":75}}"""
+                            .toByteArray(),
+                    )
+                    output.closeEntry()
+                    output.putNextEntry(ZipEntry(atlasPath))
+                    output.write(
+                        """{"sources":[{"type":"directory","source":"entity","prefix":"entity/"}]}"""
+                            .toByteArray(),
+                    )
+                    output.closeEntry()
+                    output.putNextEntry(ZipEntry("assets/example/models/item/entity_texture.json"))
+                    output.write(
+                        """{"textures":{"layer0":"minecraft:entity/chest/normal"}}"""
+                            .toByteArray(),
+                    )
+                    output.closeEntry()
+                }
+                fakeAws.writeText(fakeAwsUploaderScript())
+                fakeAws.toFile().setExecutable(true).shouldBeTrue()
+                fakeRedis.writeText(fakeRedisPublisherScript())
+                fakeRedis.toFile().setExecutable(true).shouldBeTrue()
+
+                ResourcePackSyncScript(
+                    script,
+                    processEnvironment = {
+                        testEnvironment() +
+                            notificationEnvironment(fakeRedis, directory) +
+                            mapOf(
+                                "AWS_CLI" to fakeAws.toAbsolutePath().toString(),
+                                "CAPTURED_UPLOAD" to uploadedZip.toAbsolutePath().toString(),
+                            )
+                    },
+                ).publish(resourcePackZip).shouldBeTrue()
+
+                ZipFile(uploadedZip.toFile()).use { archive ->
+                    val atlas =
+                        archive.getInputStream(archive.getEntry(atlasPath)).bufferedReader().use { reader ->
+                            JsonParser.parseReader(reader).asJsonObject
+                        }
+                    atlas.getAsJsonArray("sources").size() shouldBeExactly 1
                 }
             }
 

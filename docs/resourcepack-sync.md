@@ -33,12 +33,16 @@ with a stale Velocity hash. Set
 environment.
 
 Before hashing or uploading, the script validates that the archive has exactly
-one root `pack.mcmeta`. For packs that declare support for resource-pack format
-65 or newer, it fills missing `pack.min_format` and `pack.max_format` from the
-ItemsAdder `supported_formats` range. This is a staging-only compatibility fix
-for ItemsAdder 4.0.17 output; `output/generated.zip` is not modified. The ZIP is
-then integrity-checked before publication. If both modern fields already exist,
-the staging archive is uploaded byte-for-byte without a metadata rewrite.
+one root `pack.mcmeta`. It normalizes ItemsAdder 4.0.17 metadata into the exact
+Minecraft 1.21.11 layout: `supported_formats` moves from the JSON root into the
+`pack` object as the legacy `[min, 64]` segment, while missing `pack.min_format`
+and `pack.max_format` retain the complete declared range. It also removes the
+single blanket `entity/` directory source that ItemsAdder adds to the modern
+blocks atlas; Minecraft already owns those vanilla textures in dedicated entity
+atlases, and loading them twice produces hundreds of duplicate-sprite warnings.
+These are staging-only compatibility fixes; `output/generated.zip` is not
+modified. The ZIP is integrity-checked before publication. Already-correct
+metadata and atlas content are left byte-identical.
 
 The hook passes the current ItemsAdder instance's `output/generated.zip` as
 `RP_SOURCE`, so spawn and survival publish their own generated pack.
