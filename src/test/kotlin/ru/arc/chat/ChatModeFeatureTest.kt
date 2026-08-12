@@ -7,7 +7,8 @@ import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
 import io.mockk.verify
-import io.papermc.paper.event.player.AsyncChatEvent
+import io.papermc.paper.event.player.AsyncChatCommandDecorateEvent
+import io.papermc.paper.event.player.AsyncChatDecorateEvent
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.command.Command
@@ -41,33 +42,34 @@ class ChatModeFeatureTest : FreeSpec({
     }
 
     "chat listener" - {
-        "runs at the earliest Bukkit priority" {
+        "decorates before the regular chat event at the earliest Bukkit priority" {
             val handler =
                 ChatListener::class.java
-                    .getDeclaredMethod("onPlayerChat", AsyncChatEvent::class.java)
+                    .getDeclaredMethod("onChatDecorate", AsyncChatDecorateEvent::class.java)
                     .getAnnotation(EventHandler::class.java)
 
             handler.priority shouldBe EventPriority.LOWEST
         }
 
-        "prefixes an unprefixed message in global mode before CMI" {
+        "prefixes an unprefixed message in global mode during decoration" {
             val playerId = UUID.randomUUID()
             val player = player(playerId)
-            var message: Component = Component.text("Привет")
-            val event = chatEvent(player, { message }, { message = it })
+            val original = Component.text("Привет")
+            var message: Component = original
+            val event = decorateEvent(player, { message }, { message = it })
 
-            ChatListener({ _, _ -> }, { ChatMode.GLOBAL }).onPlayerChat(event)
+            ChatListener({ _, _ -> }, { ChatMode.GLOBAL }).onChatDecorate(event)
 
-            plainText.serialize(message) shouldBe "!Привет"
+            message shouldBe Component.text("!").append(original)
         }
 
         "does not add a second prefix in global mode" {
             val playerId = UUID.randomUUID()
             val player = player(playerId)
             var message: Component = Component.text("!Привет")
-            val event = chatEvent(player, { message }, { message = it })
+            val event = decorateEvent(player, { message }, { message = it })
 
-            ChatListener({ _, _ -> }, { ChatMode.GLOBAL }).onPlayerChat(event)
+            ChatListener({ _, _ -> }, { ChatMode.GLOBAL }).onChatDecorate(event)
 
             plainText.serialize(message) shouldBe "!Привет"
         }
@@ -76,9 +78,36 @@ class ChatModeFeatureTest : FreeSpec({
             val playerId = UUID.randomUUID()
             val player = player(playerId)
             var message: Component = Component.text("Привет")
-            val event = chatEvent(player, { message }, { message = it })
+            val event = decorateEvent(player, { message }, { message = it })
 
-            ChatListener({ _, _ -> }, { ChatMode.LOCAL }).onPlayerChat(event)
+            ChatListener({ _, _ -> }, { ChatMode.LOCAL }).onChatDecorate(event)
+
+            plainText.serialize(message) shouldBe "Привет"
+        }
+
+        "does not decorate messages sent through commands" {
+            val playerId = UUID.randomUUID()
+            val player = player(playerId)
+            var message: Component = Component.text("Привет")
+            val event =
+                mockk<AsyncChatCommandDecorateEvent>(relaxed = true) {
+                    every { this@mockk.player() } returns player
+                    every { result() } answers { message }
+                    every { result(any()) } answers { message = firstArg() }
+                }
+
+            ChatListener({ _, _ -> }, { ChatMode.GLOBAL }).onChatDecorate(event)
+
+            plainText.serialize(message) shouldBe "Привет"
+        }
+
+        "does not decorate input captured by a title form" {
+            val playerId = UUID.randomUUID()
+            val player = player(playerId)
+            var message: Component = Component.text("Привет")
+            val event = decorateEvent(player, { message }, { message = it })
+
+            ChatListener({ _, _ -> }, { ChatMode.GLOBAL }, { true }).onChatDecorate(event)
 
             plainText.serialize(message) shouldBe "Привет"
         }
@@ -147,14 +176,13 @@ private fun player(playerId: UUID): Player =
         every { isOnline } returns true
     }
 
-private fun chatEvent(
+private fun decorateEvent(
     player: Player,
-    getMessage: () -> Component,
-    setMessage: (Component) -> Unit,
-): AsyncChatEvent =
+    getResult: () -> Component,
+    setResult: (Component) -> Unit,
+): AsyncChatDecorateEvent =
     mockk(relaxed = true) {
-        every { isAsynchronous } returns true
-        every { this@mockk.player } returns player
-        every { message() } answers { getMessage() }
-        every { message(any()) } answers { setMessage(firstArg()) }
+        every { this@mockk.player() } returns player
+        every { result() } answers { getResult() }
+        every { result(any()) } answers { setResult(firstArg()) }
     }

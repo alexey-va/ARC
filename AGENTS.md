@@ -11,9 +11,11 @@
 - **Ops HTTP** — [`src/main/kotlin/ru/arc/ops/AGENTS.md`](src/main/kotlin/ru/arc/ops/AGENTS.md)
 
 Chat mode commands and shared state exist in ARC. ARC adds CMI's `!` routing
-prefix at `LOWEST` on the Paper `AsyncChatEvent`, before CMI formats the
-message. ProxyARC may derive the same prefixed text logically for routing and
-Discord/Telegram bridges, but must never replace the Velocity
+prefix at `LOWEST` on Paper's `AsyncChatDecorateEvent`, which is emitted before
+CMI's `AsyncChatEvent` shout handler. Do not move the prefix back to
+`AsyncChatEvent`: CMI also listens at `LOWEST`, so registration order can make
+the change too late. ProxyARC may derive the same prefixed text logically for
+routing and Discord/Telegram bridges, but must never replace the Velocity
 `PlayerChatEvent`: changing signed chat disconnects modern clients.
 
 ## Runtime & deploy
