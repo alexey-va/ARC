@@ -17,6 +17,21 @@ The script uploads:
 - `RusCraftingResource.zip.sha256` — checksum used to skip unchanged packs;
 - `archive/YYYYMMDD-HHMMSS-RusCraftingResource.zip` — versioned archive.
 
+After the archive and public object uploads succeed, the script publishes a
+versioned event containing only the staged ZIP SHA-256 and a random request ID
+to `arc.resourcepack.published` through the existing Redis connection. ProxyARC
+accepts that event only from the Paper server identities and runs the fixed
+VelocityResourcePacks `generatehashes` command.
+Each request has a random ID; the script waits up to 30 seconds for ProxyARC to
+acknowledge successful command dispatch in the fixed Redis field for the
+originating Paper server. Only the latest acknowledgement is retained for each
+allowed server, so interrupted uploads cannot grow Redis state. The manifest is
+written only after that acknowledgement, so a missing proxy listener or
+rejected command remains retryable instead of recording a completed publication
+with a stale Velocity hash. Set
+`publish-notification.enabled: false` only for an intentionally standalone
+environment.
+
 Before hashing or uploading, the script validates that the archive has exactly
 one root `pack.mcmeta`. For packs that declare support for resource-pack format
 65 or newer, it fills missing `pack.min_format` and `pack.max_format` from the

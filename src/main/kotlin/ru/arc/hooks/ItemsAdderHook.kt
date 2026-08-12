@@ -7,6 +7,9 @@ import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import ru.arc.core.TaskScheduler
 import ru.arc.core.Tasks
+import ru.arc.redis.RedisModuleConfig
+import ru.arc.redis.RedisWire
+import ru.arc.redis.resourcepack.ResourcePackPublication
 import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
@@ -137,6 +140,7 @@ internal class ResourcePackSyncScript(
 
 internal class ResourcePackSyncConfig(
     private val config: Config,
+    private val redisConfig: RedisModuleConfig,
 ) {
     val enabled: Boolean
         get() = config.bool("enabled", true)
@@ -154,13 +158,27 @@ internal class ResourcePackSyncConfig(
             "S3_RP_MANIFEST_KEY" to config.string("s3.manifest-key", "RusCraftingResource.zip.sha256"),
             "S3_RP_ARCHIVE_PREFIX" to config.string("s3.archive-prefix", "archive"),
             "FORCE_UPLOAD" to if (config.bool("force-upload", false)) "1" else "0",
+            "RP_NOTIFY_ENABLED" to
+                if (config.bool("publish-notification.enabled", true) && redisConfig.enabled) "1" else "0",
+            "REDIS_CLI" to config.string("publish-notification.redis-cli", "redis-cli"),
+            "REDIS_HOST" to redisConfig.host,
+            "REDIS_PORT" to redisConfig.port.toString(),
+            "REDIS_USERNAME" to redisConfig.username,
+            "REDISCLI_AUTH" to redisConfig.password,
+            "REDIS_SERVER_NAME" to redisConfig.serverName,
+            "REDIS_WIRE_DELIMITER" to RedisWire.SERVER_DELIMITER,
+            "RP_PUBLISHED_CHANNEL" to ResourcePackPublication.CHANNEL,
+            "RP_PUBLISHED_ACK_KEY" to ResourcePackPublication.ACK_KEY,
         )
 
     companion object {
         const val FILE_NAME = "resourcepack-sync.yml"
 
         fun load(dataFolder: Path): ResourcePackSyncConfig =
-            ResourcePackSyncConfig(ConfigManager.ofModule(dataFolder, FILE_NAME))
+            ResourcePackSyncConfig(
+                ConfigManager.ofModule(dataFolder, FILE_NAME),
+                RedisModuleConfig.load(dataFolder),
+            )
     }
 }
 

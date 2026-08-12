@@ -19,7 +19,6 @@ com-github-zrips-jobs = "5.2.4.2"
 com-google-code-gson-gson = "2.11.0"
 com-jeff-media-custom-block-data = "2.2.4"
 com-magmaguy-betterstructures = "1.7.1"
-com-magmaguy-elitemobs = "10.1.1"
 com-olziedev-playerwarps = "6.29.0"
 com-sk89q-worldedit-worldedit-bukkit = "7.3.0-SNAPSHOT"
 com-sk89q-worldguard-worldguard-bukkit = "7.0.9"
@@ -49,6 +48,8 @@ org-junit-jupiter-junit-jupiter-params = "5.10.1"
 org-projectlombok-lombok = "1.18.30"
 pl-tkowalcz-tjahzi-log4j2-appender-nodep = "0.9.41"
 redis-clients-jedis = "5.2.0-alpha2"
+ru-ruscrafting-thirdparty-elitemobs-api = "10.1.1"
+ru-ruscrafting-thirdparty-magmacore = "2.1.0-c214b8cd"
 
 [libraries]
 bank-bank = { module = "bank:Bank", version.ref = "bank-bank" }
@@ -66,7 +67,6 @@ com-github-zrips-jobs = { module = "com.github.Zrips:Jobs", version.ref = "com-g
 com-google-code-gson-gson = { module = "com.google.code.gson:gson", version.ref = "com-google-code-gson-gson" }
 com-jeff-media-custom-block-data = { module = "com.jeff-media:custom-block-data", version.ref = "com-jeff-media-custom-block-data" }
 com-magmaguy-betterstructures = { module = "com.magmaguy:BetterStructures", version.ref = "com-magmaguy-betterstructures" }
-com-magmaguy-elitemobs = { module = "com.magmaguy:EliteMobs", version.ref = "com-magmaguy-elitemobs" }
 com-olziedev-playerwarps = { module = "com.olziedev:PlayerWarps", version.ref = "com-olziedev-playerwarps" }
 com-sk89q-worldedit-worldedit-bukkit = { module = "com.sk89q.worldedit:worldedit-bukkit", version.ref = "com-sk89q-worldedit-worldedit-bukkit" }
 com-sk89q-worldguard-worldguard-bukkit = { module = "com.sk89q.worldguard:worldguard-bukkit", version.ref = "com-sk89q-worldguard-worldguard-bukkit" }
@@ -96,3 +96,5 @@ org-junit-jupiter-junit-jupiter-params = { module = "org.junit.jupiter:junit-jup
 org-projectlombok-lombok = { module = "org.projectlombok:lombok", version.ref = "org-projectlombok-lombok" }
 pl-tkowalcz-tjahzi-log4j2-appender-nodep = { module = "pl.tkowalcz.tjahzi:log4j2-appender-nodep", version.ref = "pl-tkowalcz-tjahzi-log4j2-appender-nodep" }
 redis-clients-jedis = { module = "redis.clients:jedis", version.ref = "redis-clients-jedis" }
+ru-ruscrafting-thirdparty-elitemobs-api = { module = "ru.ruscrafting.thirdparty:elitemobs-api", version.ref = "ru-ruscrafting-thirdparty-elitemobs-api" }
+ru-ruscrafting-thirdparty-magmacore = { module = "ru.ruscrafting.thirdparty:magmacore", version.ref = "ru-ruscrafting-thirdparty-magmacore" }

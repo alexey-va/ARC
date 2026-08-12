@@ -6,6 +6,7 @@ import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.ints.shouldBeExactly
 import io.kotest.matchers.paths.shouldExist
+import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.shouldBe
 import ru.arc.core.TestTaskScheduler
 import java.nio.file.Files
@@ -106,6 +107,7 @@ class ItemsAdderHookTest :
                 val resourcePackZip = directory.resolve("generated.zip")
                 val uploadedZip = directory.resolve("uploaded.zip")
                 val fakeAws = directory.resolve("fake-aws.sh")
+                val fakeRedis = directory.resolve("fake-redis.sh")
                 val script = BundledResourcePackSyncScript.install(directory.resolve("arc-data"))
 
                 ZipOutputStream(Files.newOutputStream(resourcePackZip)).use { output ->
@@ -118,11 +120,14 @@ class ItemsAdderHookTest :
                 }
                 fakeAws.writeText(fakeAwsUploaderScript())
                 fakeAws.toFile().setExecutable(true).shouldBeTrue()
+                fakeRedis.writeText(fakeRedisPublisherScript())
+                fakeRedis.toFile().setExecutable(true).shouldBeTrue()
 
                 ResourcePackSyncScript(
                     script,
                     processEnvironment = {
                         testEnvironment() +
+                            notificationEnvironment(fakeRedis, directory) +
                             mapOf(
                                 "AWS_CLI" to fakeAws.toAbsolutePath().toString(),
                                 "CAPTURED_UPLOAD" to uploadedZip.toAbsolutePath().toString(),
@@ -139,6 +144,9 @@ class ItemsAdderHookTest :
                 val resourcePackZip = directory.resolve("generated.zip")
                 val uploadedZip = directory.resolve("uploaded.zip")
                 val fakeAws = directory.resolve("fake-aws.sh")
+                val fakeRedis = directory.resolve("fake-redis.sh")
+                val capturedNotification = directory.resolve("redis-notification.txt")
+                val capturedManifest = directory.resolve("manifest.txt")
                 val script = BundledResourcePackSyncScript.install(directory.resolve("arc-data"))
 
                 ZipOutputStream(Files.newOutputStream(resourcePackZip)).use { output ->
@@ -155,19 +163,28 @@ class ItemsAdderHookTest :
                 }
                 fakeAws.writeText(fakeAwsUploaderScript())
                 fakeAws.toFile().setExecutable(true).shouldBeTrue()
+                fakeRedis.writeText(fakeRedisPublisherScript())
+                fakeRedis.toFile().setExecutable(true).shouldBeTrue()
 
                 ResourcePackSyncScript(
                     script,
                     processEnvironment = {
                         testEnvironment() +
+                            notificationEnvironment(fakeRedis, directory) +
                             mapOf(
                                 "AWS_CLI" to fakeAws.toAbsolutePath().toString(),
                                 "CAPTURED_UPLOAD" to uploadedZip.toAbsolutePath().toString(),
+                                "CAPTURED_NOTIFICATION" to capturedNotification.toAbsolutePath().toString(),
+                                "CAPTURED_MANIFEST" to capturedManifest.toAbsolutePath().toString(),
                             )
                     },
                 ).publish(resourcePackZip).shouldBeTrue()
 
                 uploadedZip.shouldExist()
+                capturedNotification.shouldExist()
+                capturedNotification.readText() shouldContain
+                    "PUBLISH arc.resourcepack.published spawn<>#<>#<>v1:"
+                capturedManifest.shouldExist()
                 ZipFile(uploadedZip.toFile()).use { archive ->
                     archive.entries().asSequence().count { it.name == "pack.mcmeta" } shouldBeExactly 1
                     archive.size() shouldBeExactly 2_001
@@ -187,6 +204,44 @@ class ItemsAdderHookTest :
                     metadata.getAsJsonObject("pack").has("min_format").shouldBeFalse()
                     metadata.getAsJsonObject("pack").has("max_format").shouldBeFalse()
                 }
+            }
+
+            "fails publication when Velocity has no notification subscriber" {
+                val directory = Files.createTempDirectory("arc-resourcepack-sync-no-proxy")
+                val resourcePackZip = directory.resolve("generated.zip")
+                val uploadedZip = directory.resolve("uploaded.zip")
+                val fakeAws = directory.resolve("fake-aws.sh")
+                val fakeRedis = directory.resolve("fake-redis.sh")
+                val capturedManifest = directory.resolve("manifest.txt")
+                val script = BundledResourcePackSyncScript.install(directory.resolve("arc-data"))
+
+                ZipOutputStream(Files.newOutputStream(resourcePackZip)).use { output ->
+                    output.putNextEntry(ZipEntry("pack.mcmeta"))
+                    output.write(
+                        """{"pack":{"description":"ready","min_format":75,"max_format":75}}"""
+                            .toByteArray(),
+                    )
+                    output.closeEntry()
+                }
+                fakeAws.writeText(fakeAwsUploaderScript())
+                fakeAws.toFile().setExecutable(true).shouldBeTrue()
+                fakeRedis.writeText(fakeRedisPublisherScript())
+                fakeRedis.toFile().setExecutable(true).shouldBeTrue()
+
+                ResourcePackSyncScript(
+                    script,
+                    processEnvironment = {
+                        testEnvironment() +
+                            notificationEnvironment(fakeRedis, directory) +
+                            mapOf(
+                                "AWS_CLI" to fakeAws.toAbsolutePath().toString(),
+                                "CAPTURED_UPLOAD" to uploadedZip.toAbsolutePath().toString(),
+                                "CAPTURED_MANIFEST" to capturedManifest.toAbsolutePath().toString(),
+                                "FAKE_REDIS_SUBSCRIBERS" to "0",
+                            )
+                    },
+                ).publish(resourcePackZip).shouldBeFalse()
+                Files.exists(capturedManifest).shouldBeFalse()
             }
 
             "passes the generated zip through RP_SOURCE" {
@@ -296,8 +351,58 @@ private fun fakeAwsUploaderScript(): String =
     |  exit 1
     |fi
     |if [ "${'$'}3" = "-" ]; then
-    |  cat >/dev/null
+    |  if [ -n "${'$'}CAPTURED_MANIFEST" ]; then
+    |    cat > "${'$'}CAPTURED_MANIFEST"
+    |  else
+    |    cat >/dev/null
+    |  fi
     |  exit 0
     |fi
     |cp "${'$'}3" "${'$'}CAPTURED_UPLOAD"
+    """.trimMargin()
+
+private fun notificationEnvironment(
+    fakeRedis: java.nio.file.Path,
+    directory: java.nio.file.Path,
+): Map<String, String> =
+    mapOf(
+        "RP_NOTIFY_ENABLED" to "1",
+        "REDIS_CLI" to fakeRedis.toAbsolutePath().toString(),
+        "REDIS_HOST" to "redis.test",
+        "REDIS_PORT" to "6379",
+        "REDIS_USERNAME" to "test-user",
+        "REDISCLI_AUTH" to "test-password",
+        "REDIS_SERVER_NAME" to "spawn",
+        "REDIS_WIRE_DELIMITER" to "<>#<>#<>",
+        "RP_PUBLISHED_CHANNEL" to "arc.resourcepack.published",
+        "RP_PUBLISHED_ACK_KEY" to "arc:resourcepack:hash-refresh-acks",
+        "FAKE_REDIS_STATE" to directory.resolve("redis-ack.txt").toAbsolutePath().toString(),
+    )
+
+private fun fakeRedisPublisherScript(): String =
+    """
+    |#!/bin/sh
+    |all_args="${'$'}*"
+    |while [ "${'$'}#" -gt 0 ]; do
+    |  case "${'$'}1" in
+    |    PUBLISH)
+    |      if [ -n "${'$'}CAPTURED_NOTIFICATION" ]; then
+    |        printf '%s\n' "${'$'}all_args" > "${'$'}CAPTURED_NOTIFICATION"
+    |      fi
+    |      notification="${'$'}3"
+    |      hash_and_request="${'$'}{notification#*v1:}"
+    |      hash="${'$'}{hash_and_request%%:*}"
+    |      request="${'$'}{hash_and_request#*:}"
+    |      printf 'v1:%s:%s\n' "${'$'}request" "${'$'}hash" > "${'$'}FAKE_REDIS_STATE"
+    |      printf '%s\n' "${'$'}{FAKE_REDIS_SUBSCRIBERS:-1}"
+    |      exit 0
+    |      ;;
+    |    HGET)
+    |      [ -f "${'$'}FAKE_REDIS_STATE" ] && cat "${'$'}FAKE_REDIS_STATE"
+    |      exit 0
+    |      ;;
+    |  esac
+    |  shift
+    |done
+    |exit 2
     """.trimMargin()

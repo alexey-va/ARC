@@ -16,4 +16,8 @@ s3:
   manifest-key: "RusCraftingResource.zip.sha256"
   archive-prefix: "archive"
 
+publish-notification:
+  enabled: true
+  redis-cli: "redis-cli"
+
 force-upload: false

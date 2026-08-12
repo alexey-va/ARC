@@ -67,7 +67,10 @@ dependencies {
     compileOnly(libs.io.papermc.paper.paper.api)
     compileOnly(libs.net.advancedplugins.advancedenchantments)
     compileOnly(libs.com.github.retrooper.packetevents.spigot)
-    compileOnly(libs.com.magmaguy.elitemobs)
+    // Immutable private mirrors of the exact EliteMobs API and its mutable MagmaCore snapshot.
+    // Both are provided by the shaded EliteMobs runtime and must never be shaded into ARC.
+    compileOnly(libs.ru.ruscrafting.thirdparty.elitemobs.api)
+    compileOnly(libs.ru.ruscrafting.thirdparty.magmacore)
     compileOnly(libs.com.github.slimefun.slimefun4)
     compileOnly(libs.com.magmaguy.betterstructures)
     compileOnly(libs.betterrtp.betterrtp)
@@ -155,7 +158,8 @@ dependencies {
     testImplementation("commons-lang:commons-lang:2.6")
     testImplementation(libs.com.zrips.cmi.api)
     testImplementation(libs.net.citizensnpcs.citizens.main) { exclude(group = "*", module = "*") }
-    testImplementation(libs.com.magmaguy.elitemobs)
+    testImplementation(libs.ru.ruscrafting.thirdparty.elitemobs.api)
+    testImplementation(libs.ru.ruscrafting.thirdparty.magmacore)
     testImplementation(libs.com.github.zrips.cmilib)
     testImplementation(libs.com.github.lonedev6.api.itemsadder)
     testImplementation("ru.ruscrafting.thirdparty:leafrtp-lite:3.2.0")

@@ -25,9 +25,14 @@ ARCHIVE_PREFIX="${S3_RP_ARCHIVE_PREFIX:-archive}"
 
 [[ -f "${RP_SOURCE}" ]] || die "Missing ${RP_SOURCE} — regenerate ItemsAdder pack first"
 
+REDIS="${REDIS_CLI:-redis-cli}"
+
 for required_command in python3 unzip zip; do
   command -v "${required_command}" >/dev/null 2>&1 || die "Missing required command: ${required_command}"
 done
+if [[ "${RP_NOTIFY_ENABLED:-1}" == "1" ]]; then
+  command -v "${REDIS}" >/dev/null 2>&1 || die "Missing required command: ${REDIS}"
+fi
 
 staging_dir="$(mktemp -d)"
 trap 'rm -rf "${staging_dir}"' EXIT
@@ -130,19 +135,50 @@ if [[ "${local_sha}" == "${remote_sha}" && "${FORCE_UPLOAD:-0}" != "1" ]]; then
   exit 0
 fi
 
-log "Uploading $(du -h "${upload_path}" | cut -f1) as ${RP_UPLOAD_NAME} → s3://${S3_BUCKET}/${S3_KEY}"
-"${AWS}" s3 cp "${upload_path}" "s3://${S3_BUCKET}/${S3_KEY}" \
-  --endpoint-url "${S3_ENDPOINT}" \
-  --content-type "application/zip"
-
-printf '%s  %s\n' "${local_sha}" "${RP_UPLOAD_NAME}" | "${AWS}" s3 cp - "s3://${S3_BUCKET}/${S3_MANIFEST_KEY}" \
-  --endpoint-url "${S3_ENDPOINT}" \
-  --content-type "text/plain"
-
 archive_key="${ARCHIVE_PREFIX}/$(date +%Y%m%d-%H%M%S)-${RP_UPLOAD_NAME}"
 log "Archive → s3://${S3_BUCKET}/${archive_key}"
 "${AWS}" s3 cp "${upload_path}" "s3://${S3_BUCKET}/${archive_key}" \
   --endpoint-url "${S3_ENDPOINT}" \
   --content-type "application/zip"
+
+log "Uploading $(du -h "${upload_path}" | cut -f1) as ${RP_UPLOAD_NAME} → s3://${S3_BUCKET}/${S3_KEY}"
+"${AWS}" s3 cp "${upload_path}" "s3://${S3_BUCKET}/${S3_KEY}" \
+  --endpoint-url "${S3_ENDPOINT}" \
+  --content-type "application/zip"
+
+if [[ "${RP_NOTIFY_ENABLED:-1}" == "1" ]]; then
+  : "${REDIS_HOST:?REDIS_HOST not set}"
+  : "${REDIS_PORT:?REDIS_PORT not set}"
+  : "${REDIS_SERVER_NAME:?REDIS_SERVER_NAME not set}"
+  : "${REDIS_WIRE_DELIMITER:?REDIS_WIRE_DELIMITER not set}"
+  : "${RP_PUBLISHED_CHANNEL:?RP_PUBLISHED_CHANNEL not set}"
+  : "${RP_PUBLISHED_ACK_KEY:?RP_PUBLISHED_ACK_KEY not set}"
+
+  redis_args=(--raw --no-auth-warning -h "${REDIS_HOST}" -p "${REDIS_PORT}")
+  if [[ -n "${REDIS_USERNAME:-}" ]]; then
+    redis_args+=(--user "${REDIS_USERNAME}")
+  fi
+  request_id="$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
+  notification="${REDIS_SERVER_NAME}${REDIS_WIRE_DELIMITER}v1:${local_sha}:${request_id}"
+  subscribers="$("${REDIS}" "${redis_args[@]}" PUBLISH "${RP_PUBLISHED_CHANNEL}" "${notification}")" ||
+    die "Unable to notify Velocity about the published resource pack"
+  [[ "${subscribers}" =~ ^[1-9][0-9]*$ ]] ||
+    die "Velocity resource-pack notification had no subscribers"
+
+  acknowledged=""
+  expected_ack="v1:${request_id}:${local_sha}"
+  for ((attempt = 1; attempt <= 30; attempt++)); do
+    acknowledged="$("${REDIS}" "${redis_args[@]}" HGET "${RP_PUBLISHED_ACK_KEY}" "${REDIS_SERVER_NAME}" 2>/dev/null || true)"
+    [[ "${acknowledged}" == "${expected_ack}" ]] && break
+    sleep 1
+  done
+  [[ "${acknowledged}" == "${expected_ack}" ]] ||
+    die "Velocity did not acknowledge the resource-pack hash refresh"
+  log "Velocity hash refresh acknowledged (subscribers=${subscribers})"
+fi
+
+printf '%s  %s\n' "${local_sha}" "${RP_UPLOAD_NAME}" | "${AWS}" s3 cp - "s3://${S3_BUCKET}/${S3_MANIFEST_KEY}" \
+  --endpoint-url "${S3_ENDPOINT}" \
+  --content-type "text/plain"
 
 log "Done. sha256=${local_sha}"
