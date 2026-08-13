@@ -29,7 +29,8 @@ public class Duels extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        saveResource("rusduels.yml", false);
+        File configFile = new File(getDataFolder(), "rusduels.yml");
+        if (!configFile.isFile()) saveResource("rusduels.yml", false);
         recovery = new RecoveryStore(getDataFolder().toPath().resolve("recovery"));
         stats = new StatsRegistry(
                 getDataFolder().toPath().resolve("rusduels-stats.yml"),
