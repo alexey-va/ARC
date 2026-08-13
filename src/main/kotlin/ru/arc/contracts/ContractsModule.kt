@@ -69,9 +69,10 @@ object ContractsManager {
     // durable-before-side-effect ordering. Bounded terminal retention and the
     // authenticated operator reconciliation state machine are implemented;
     // production crash injection and control-plane smoke are still required.
-    // Season mutations additionally remain gated until operator reconciliation,
-    // a cancellable pre-start admission guard and the bound-item contribution
-    // journal exist. Native events currently prove only start/completion.
+    // Season money now has its own authenticated, replay-safe reconciliation.
+    // Season mutations remain gated until a cancellable pre-start admission
+    // guard and the bound-item contribution journal exist. Native events
+    // currently prove only start/completion.
     // No config value may unlock inventory or money mutations before that gate.
     private const val SUBMISSION_RUNTIME_READY = false
     private const val SEASON_MUTATION_RUNTIME_READY = false
@@ -557,6 +558,94 @@ object ContractsManager {
     }
 
     @JvmStatic
+    fun seasonMoneyReconciliationRecords(limit: Int = 20): List<SeasonMoneyJournalRecord> {
+        require(limit in 1..100) { "Season money reconciliation limit must be 1..100" }
+        val current = seasonMoneyJournalRepo ?: throw IllegalStateException("Season money journal is unavailable")
+        return current.allNow().asSequence()
+            .map { it.validated() }
+            .filter { it.status == SeasonMoneyJournalStatus.MANUAL_REVIEW || it.reconciliation != null }
+            .sortedWith(compareByDescending<SeasonMoneyJournalRecord> { it.updatedAt }.thenBy { it.actionId })
+            .take(limit)
+            .toList()
+    }
+
+    @JvmStatic
+    fun seasonMoneyReconciliationRecord(actionId: String): SeasonMoneyJournalRecord? {
+        val current = seasonMoneyJournalRepo ?: throw IllegalStateException("Season money journal is unavailable")
+        return current.getNow(actionId)?.validated()
+    }
+
+    @JvmStatic
+    @Synchronized
+    fun previewSeasonMoneyReconciliation(
+        request: SeasonMoneyReconciliationRequest,
+    ): SeasonMoneyReconciliationPreview {
+        require(isLeader()) { "Season money reconciliation is available only on the configured leader" }
+        val currentJournal = seasonMoneyJournalRepo ?: throw IllegalStateException("Season money journal is unavailable")
+        requireUniqueSeasonMoneyReconciliationKey(currentJournal, request)
+        val record = requireNotNull(currentJournal.getNow(request.actionId)) { "Season money action not found" }.validated()
+        val preview = SeasonMoneyReconciliationEngine.preview(record, request)
+        verifyReconciledSeasonCommit(record, preview)
+        return preview
+    }
+
+    @JvmStatic
+    @Synchronized
+    fun applySeasonMoneyReconciliation(
+        request: SeasonMoneyReconciliationRequest,
+        reviewDigest: String,
+        now: Long = System.currentTimeMillis(),
+    ): SeasonMoneyReconciliationApplyResult {
+        require(isLeader()) { "Season money reconciliation is available only on the configured leader" }
+        val currentJournal = seasonMoneyJournalRepo ?: throw IllegalStateException("Season money journal is unavailable")
+        val coordinator = seasonMoneyCoordinator ?: throw IllegalStateException("Season money coordinator is unavailable")
+        val catalog = requireNotNull(configRef.get()?.observeSeasonCatalog(SEASON_MUTATION_RUNTIME_READY)) {
+            "Season catalog is unavailable"
+        }
+        return runBlocking {
+            submissionMutex.withLock {
+                val before = requireNotNull(currentJournal.getNow(request.actionId)) {
+                    "Season money action not found"
+                }.validated()
+                requireUniqueSeasonMoneyReconciliationKey(currentJournal, request)
+                val preview = SeasonMoneyReconciliationEngine.preview(before, request)
+                verifyReconciledSeasonCommit(before, preview)
+                var resolved = SeasonMoneyReconciliationEngine.apply(before, request, reviewDigest, now)
+                val replayed = before.reconciliation != null
+                if (resolved != before) {
+                    currentJournal.markDirty(resolved)
+                    currentJournal.saveDirty().getOrThrow()
+                }
+
+                var receipt: SeasonMoneyActionReceipt? = null
+                if (resolved.status == SeasonMoneyJournalStatus.FUNDS_WITHDRAWN) {
+                    when (val outcome = coordinator.commitReconciled(catalog, resolved)) {
+                        is SeasonMoneyActionOutcome.Committed -> receipt = outcome.receipt
+                        is SeasonMoneyActionOutcome.Duplicate -> receipt = outcome.receipt
+                        else -> throw IllegalStateException("Reconciled season money state commit remains incomplete")
+                    }
+                    resolved = requireNotNull(currentJournal.getNow(request.actionId)) {
+                        "Committed season money journal disappeared"
+                    }.validated()
+                } else if (resolved.status == SeasonMoneyJournalStatus.STATE_COMMITTED) {
+                    receipt = seasonState()?.recentReceipts?.get(resolved.actionId)
+                }
+
+                if (!replayed) {
+                    info(
+                        "Season money action {} reconciled as {} by authenticated operator {}",
+                        resolved.actionId,
+                        requireNotNull(resolved.reconciliation).resolution.label,
+                        resolved.reconciliation.operatorId,
+                    )
+                }
+                publishMetrics()
+                SeasonMoneyReconciliationApplyResult(preview, resolved, receipt, replayed)
+            }
+        }
+    }
+
+    @JvmStatic
     fun reconciliationRecords(limit: Int = 20): List<ContractSubmissionJournalRecord> {
         require(limit in 1..100) { "Reconciliation limit must be 1..100" }
         val current = journalRepo ?: throw IllegalStateException("Contract submission journal is unavailable")
@@ -905,6 +994,46 @@ object ContractsManager {
                 it.id == record.contractId && it.windowStartsAt == record.contractWindowStartsAt
             },
         ) { "Configured contract policy for submission ${record.submissionId} is unavailable" }
+
+    private fun verifyReconciledSeasonCommit(
+        record: SeasonMoneyJournalRecord,
+        preview: SeasonMoneyReconciliationPreview,
+    ) {
+        if (!preview.commitsSeasonState || record.status == SeasonMoneyJournalStatus.STATE_COMMITTED) return
+        val catalog = requireNotNull(configRef.get()?.observeSeasonCatalog(SEASON_MUTATION_RUNTIME_READY)) {
+            "Season catalog is unavailable"
+        }
+        val state = seasonState() ?: throw IllegalStateException("Season runtime state is unavailable")
+        SeasonMoneyActionEngine.commit(
+            catalog,
+            state,
+            SeasonMoneyActionPlan.Accepted(
+                actionId = record.actionId,
+                kind = record.kind,
+                targetId = record.targetId,
+                playerId = record.playerId,
+                amountMinor = record.amountMinor,
+                expectedStateRevision = state.revision,
+                catalogDigest = record.catalogDigest,
+                plannedAt = record.createdAt,
+            ),
+            System.currentTimeMillis(),
+        )
+    }
+
+    private fun requireUniqueSeasonMoneyReconciliationKey(
+        journalRepository: CachedRepository<SeasonMoneyJournalRecord>,
+        request: SeasonMoneyReconciliationRequest,
+    ) {
+        val reused =
+            journalRepository.allNow().asSequence()
+                .map { it.validated() }
+                .firstOrNull {
+                    it.actionId != request.actionId &&
+                        it.reconciliation?.idempotencyKey == request.idempotencyKey
+                }
+        require(reused == null) { "Season money reconciliation idempotency key is already bound to another action" }
+    }
 
     private fun requireUniqueReconciliationKey(
         journalRepository: CachedRepository<ContractSubmissionJournalRecord>,

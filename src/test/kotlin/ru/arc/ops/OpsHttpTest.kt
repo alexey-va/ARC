@@ -245,7 +245,10 @@ class OpsHttpServerTest : FreeSpec({
                 val routes = readBody(index)
                 routes shouldContain "GET /ops/economy/contracts/reconciliations"
                 routes shouldContain "POST /ops/economy/contracts/reconciliations/preview"
+                routes shouldContain "GET /ops/economy/season-money/reconciliations"
+                routes shouldContain "POST /ops/economy/season-money/reconciliations/preview"
                 routes.contains("POST /ops/economy/contracts/reconciliations/apply") shouldBe false
+                routes.contains("POST /ops/economy/season-money/reconciliations/apply") shouldBe false
 
                 val apply =
                     open(
@@ -256,6 +259,16 @@ class OpsHttpServerTest : FreeSpec({
                     )
                 apply.responseCode shouldBe 403
                 readBody(apply) shouldContain "apply disabled"
+
+                val seasonApply =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/economy/season-money/reconciliations/apply",
+                        method = "POST",
+                        token = readsOnly.token,
+                        body = "{}",
+                    )
+                seasonApply.responseCode shouldBe 403
+                readBody(seasonApply) shouldContain "apply disabled"
             } finally {
                 server.stop()
             }
@@ -276,6 +289,30 @@ class OpsHttpServerTest : FreeSpec({
                         method = "POST",
                         token = readsOnly.token,
                         body = """{"submissionId":"unsafe","expectedRevision":0,"resolution":"payment_confirmed","operatorId":"ops","operatorEvidence":"checked","idempotencyKey":"reconcile-safe","rawPath":"/ops/console"}""",
+                    )
+                preview.responseCode shouldBe 409
+                readBody(preview) shouldContain "unknown fields: rawPath"
+            } finally {
+                server.stop()
+            }
+        }
+
+        "should reject malformed season money reconciliation before journal access" {
+            val readsOnly =
+                testConfig.copy(
+                    contractReconciliationReadEnabled = true,
+                    contractReconciliationWriteEnabled = false,
+                )
+            val server = OpsHttpServer { readsOnly }
+            server.start()
+            try {
+                val preview =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/economy/season-money/reconciliations/preview",
+                        method = "POST",
+                        token = readsOnly.token,
+                        body =
+                            """{"actionId":"unsafe","expectedRevision":0,"resolution":"withdrawal_confirmed","operatorId":"ops","operatorEvidence":"checked","idempotencyKey":"season-safe","providerHistoryCheckedAt":1,"providerBalanceAfterMinor":1,"rawPath":"/ops/console"}""",
                     )
                 preview.responseCode shouldBe 409
                 readBody(preview) shouldContain "unknown fields: rawPath"

@@ -46,6 +46,8 @@ data class SeasonMoneyJournalRecord(
     val reviewFromStatus: SeasonMoneyJournalStatus? = null,
     val reviewReason: SeasonMoneyReviewReason? = null,
     val reviewEvidence: String? = null,
+    val providerTransactionId: String? = null,
+    val reconciliation: SeasonMoneyReconciliation? = null,
     val revision: Long = 0L,
 ) : Entity {
     init {
@@ -65,8 +67,20 @@ data class SeasonMoneyJournalRecord(
         require(createdAt >= 0L && updatedAt >= createdAt && revision >= 0L) {
             "Invalid season money journal timestamps or revision"
         }
+        require(
+            providerTransactionId == null ||
+                providerTransactionId.isNotBlank() &&
+                providerTransactionId.length <= MAX_PROVIDER_TRANSACTION_ID_LENGTH &&
+                providerTransactionId.none(Char::isISOControl),
+        ) { "Invalid season money provider transaction id" }
+        reconciliation?.validated()
         when (status) {
-            SeasonMoneyJournalStatus.PREPARED -> requireNoMutationEvidence()
+            SeasonMoneyJournalStatus.PREPARED -> {
+                require(providerTransactionId == null && reconciliation == null) {
+                    "Prepared season money journal contains reconciliation evidence"
+                }
+                requireNoMutationEvidence()
+            }
             SeasonMoneyJournalStatus.WITHDRAWAL_STARTED -> {
                 require(withdrawalStartedAt != null && balanceBeforeMinor != null) {
                     "Started season withdrawal requires a before balance"
@@ -75,6 +89,9 @@ data class SeasonMoneyJournalRecord(
                     "Started season withdrawal contains later evidence"
                 }
                 require(providerCallAttempted == null) { "Started season withdrawal contains provider call evidence" }
+                require(providerTransactionId == null && reconciliation == null) {
+                    "Started season withdrawal contains reconciliation evidence"
+                }
                 requireNoTerminalEvidence()
             }
             SeasonMoneyJournalStatus.FUNDS_WITHDRAWN,
@@ -97,6 +114,20 @@ data class SeasonMoneyJournalRecord(
                 } else {
                     require(stateCommittedAt == null) { "Uncommitted season journal contains a commit timestamp" }
                 }
+                reconciliation?.let {
+                    require(it.resolution == SeasonMoneyReconciliationResolution.WITHDRAWAL_CONFIRMED) {
+                        "Withdrawn season journal has the wrong reconciliation resolution"
+                    }
+                    require(
+                        balanceAfterMinor == it.providerBalanceAfterMinor &&
+                            providerTransactionId == it.providerTransactionId,
+                    ) {
+                        "Withdrawn season journal provider evidence disagrees with reconciliation"
+                    }
+                    require(it.reviewedRevision < revision && it.reconciledAt <= updatedAt) {
+                        "Withdrawn season journal reconciliation revision is inconsistent"
+                    }
+                }
                 requireNoTerminalEvidence()
             }
             SeasonMoneyJournalStatus.CANCELLED -> {
@@ -106,7 +137,14 @@ data class SeasonMoneyJournalRecord(
                 require(fundsWithdrawnAt == null && stateCommittedAt == null) {
                     "Cancelled season money journal cannot contain a proven withdrawal or commit"
                 }
-                if (withdrawalStartedAt == null) {
+                if (reconciliation?.resolution == SeasonMoneyReconciliationResolution.WITHDRAWAL_NOT_APPLIED) {
+                    require(withdrawalStartedAt != null && balanceBeforeMinor != null && balanceAfterMinor == balanceBeforeMinor) {
+                        "Reconciled season cancellation must prove an unchanged provider balance"
+                    }
+                    require(providerCallAttempted != false) {
+                        "Reconciled season cancellation contradicts proven skipped-call evidence"
+                    }
+                } else if (withdrawalStartedAt == null) {
                     require(providerCallAttempted == null && balanceBeforeMinor == null && balanceAfterMinor == null) {
                         "Pre-withdrawal cancellation contains provider evidence"
                     }
@@ -122,6 +160,23 @@ data class SeasonMoneyJournalRecord(
                 require(reviewFromStatus == null && reviewReason == null && reviewEvidence == null) {
                     "Cancelled season money journal contains review evidence"
                 }
+                reconciliation?.let {
+                    require(it.resolution == SeasonMoneyReconciliationResolution.WITHDRAWAL_NOT_APPLIED) {
+                        "Cancelled season journal has the wrong reconciliation resolution"
+                    }
+                    require(
+                        providerTransactionId == null &&
+                            balanceAfterMinor == balanceBeforeMinor &&
+                            balanceAfterMinor == it.providerBalanceAfterMinor,
+                    ) {
+                        "Cancelled season reconciliation must prove no withdrawal"
+                    }
+                    require(it.reviewedRevision < revision && it.reconciledAt <= updatedAt) {
+                        "Cancelled season journal reconciliation revision is inconsistent"
+                    }
+                } ?: require(providerTransactionId == null) {
+                    "Cancelled season journal contains unbound provider transaction evidence"
+                }
             }
             SeasonMoneyJournalStatus.MANUAL_REVIEW -> {
                 require(reviewFromStatus != null && reviewFromStatus != SeasonMoneyJournalStatus.MANUAL_REVIEW) {
@@ -132,6 +187,9 @@ data class SeasonMoneyJournalRecord(
                 }
                 require(cancelledAt == null && cancellationCode == null && stateCommittedAt == null) {
                     "Season manual review contains terminal evidence"
+                }
+                require(providerTransactionId == null && reconciliation == null) {
+                    "Unresolved season manual review contains reconciliation evidence"
                 }
             }
         }
@@ -155,6 +213,7 @@ data class SeasonMoneyJournalRecord(
 
     companion object {
         const val MAX_EVIDENCE_LENGTH = 128
+        const val MAX_PROVIDER_TRANSACTION_ID_LENGTH = 128
 
         fun withdrawalReason(kind: SeasonMoneyActionKind, actionId: String): String =
             "arc-season:${kind.ledgerSource}:$actionId"

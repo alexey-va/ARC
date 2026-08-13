@@ -284,6 +284,38 @@ class SeasonMoneyCoordinator(
         return result
     }
 
+    /** Commits already adjudicated provider evidence without making another provider call. */
+    suspend fun commitReconciled(
+        catalog: ObserveSeasonCatalog,
+        reconciled: SeasonMoneyJournalRecord,
+    ): SeasonMoneyActionOutcome {
+        val valid = reconciled.validated()
+        require(valid.status == SeasonMoneyJournalStatus.FUNDS_WITHDRAWN) {
+            "Reconciled season money action does not contain proven funds"
+        }
+        require(
+            valid.reconciliation?.resolution == SeasonMoneyReconciliationResolution.WITHDRAWAL_CONFIRMED,
+        ) { "Season money action lacks confirmed reconciliation evidence" }
+        val current = loadState(catalog) ?: return SeasonMoneyActionOutcome.ManualReview(valid.actionId)
+        val rebasedPlan = valid.toAcceptedPlan().copy(expectedStateRevision = current.revision)
+        val result =
+            runCatching { SeasonMoneyActionEngine.commit(catalog, current, rebasedPlan, clock()) }
+                .getOrElse { return SeasonMoneyActionOutcome.ManualReview(valid.actionId) }
+        if (result.changed) {
+            try {
+                persistence.persistState(result.state)
+            } catch (_: Throwable) {
+                return SeasonMoneyActionOutcome.ManualReview(valid.actionId)
+            }
+        }
+        val committed = SeasonMoneyJournalEngine.confirmStateCommitted(valid, clock())
+        return if (persistJournal(committed)) {
+            SeasonMoneyActionOutcome.Committed(result.receipt)
+        } else {
+            SeasonMoneyActionOutcome.ManualReview(valid.actionId)
+        }
+    }
+
     private suspend fun commit(
         catalog: ObserveSeasonCatalog,
         withdrawn: SeasonMoneyJournalRecord,

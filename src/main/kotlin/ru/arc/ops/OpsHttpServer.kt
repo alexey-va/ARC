@@ -159,6 +159,23 @@ class OpsHttpServer(
             method == "POST" && segments == listOf("economy", "contracts", "reconciliations", "apply") ->
                 handleContractReconciliationApply(exchange, cfg)
 
+            method == "GET" && segments == listOf("economy", "season-money", "reconciliations") ->
+                handleSeasonMoneyReconciliationRead(exchange, cfg) {
+                    OpsSeasonMoneyReconciliationHandlers.list(query["limit"]?.toIntOrNull() ?: 20)
+                }
+
+            method == "GET" && segments.size == 4 &&
+                segments.take(3) == listOf("economy", "season-money", "reconciliations") ->
+                handleSeasonMoneyReconciliationRead(exchange, cfg) {
+                    OpsSeasonMoneyReconciliationHandlers.get(decodeSegment(segments[3]))
+                }
+
+            method == "POST" && segments == listOf("economy", "season-money", "reconciliations", "preview") ->
+                handleSeasonMoneyReconciliationPreview(exchange, cfg)
+
+            method == "POST" && segments == listOf("economy", "season-money", "reconciliations", "apply") ->
+                handleSeasonMoneyReconciliationApply(exchange, cfg)
+
             method == "GET" && segments == listOf("online") ->
                 respondOk(exchange, OpsHttpHandlers.onlinePlayers())
 
@@ -850,6 +867,62 @@ class OpsHttpServer(
             respondError(exchange, 409, failure.message ?: "Reconciliation apply conflict")
         } catch (failure: IllegalStateException) {
             respondError(exchange, 503, failure.message ?: "Contract reconciliation unavailable")
+        }
+    }
+
+    private fun handleSeasonMoneyReconciliationRead(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        block: () -> Map<String, Any?>,
+    ) {
+        if (!cfg.contractReconciliationReadEnabled) {
+            respondError(exchange, 403, "Season money reconciliation read endpoint disabled in config")
+            return
+        }
+        try {
+            respondOk(exchange, block())
+        } catch (failure: IllegalArgumentException) {
+            respondError(exchange, 400, failure.message ?: "Bad request")
+        } catch (failure: NoSuchElementException) {
+            respondError(exchange, 404, failure.message ?: "Not found")
+        } catch (failure: IllegalStateException) {
+            respondError(exchange, 503, failure.message ?: "Season money reconciliation unavailable")
+        }
+    }
+
+    private fun handleSeasonMoneyReconciliationPreview(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+    ) {
+        if (!cfg.contractReconciliationReadEnabled) {
+            respondError(exchange, 403, "Season money reconciliation preview disabled in config")
+            return
+        }
+        val body = parseJsonBody(exchange) ?: return
+        try {
+            respondOk(exchange, OpsSeasonMoneyReconciliationHandlers.preview(body))
+        } catch (failure: IllegalArgumentException) {
+            respondError(exchange, 409, failure.message ?: "Season money reconciliation preview conflict")
+        } catch (failure: IllegalStateException) {
+            respondError(exchange, 503, failure.message ?: "Season money reconciliation unavailable")
+        }
+    }
+
+    private fun handleSeasonMoneyReconciliationApply(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+    ) {
+        if (!cfg.contractReconciliationWriteEnabled) {
+            respondError(exchange, 403, "Season money reconciliation apply disabled in config")
+            return
+        }
+        val body = parseJsonBody(exchange) ?: return
+        try {
+            respondOk(exchange, OpsSeasonMoneyReconciliationHandlers.apply(body))
+        } catch (failure: IllegalArgumentException) {
+            respondError(exchange, 409, failure.message ?: "Season money reconciliation apply conflict")
+        } catch (failure: IllegalStateException) {
+            respondError(exchange, 503, failure.message ?: "Season money reconciliation unavailable")
         }
     }
 
@@ -1778,9 +1851,13 @@ class OpsHttpServer(
             routes += "GET /ops/economy/contracts/reconciliations?limit="
             routes += "GET /ops/economy/contracts/reconciliations/{submissionId}"
             routes += "POST /ops/economy/contracts/reconciliations/preview"
+            routes += "GET /ops/economy/season-money/reconciliations?limit="
+            routes += "GET /ops/economy/season-money/reconciliations/{actionId}"
+            routes += "POST /ops/economy/season-money/reconciliations/preview"
         }
         if (cfg.contractReconciliationWriteEnabled) {
             routes += "POST /ops/economy/contracts/reconciliations/apply"
+            routes += "POST /ops/economy/season-money/reconciliations/apply"
         }
         if (cfg.messagesEnabled) {
             routes += "POST /ops/message {\"channel\":\"broadcast|player|ops\",\"text\":\"...\"}"

@@ -140,6 +140,51 @@ class SeasonMoneyCoordinatorTest : StringSpec({
         persistence.current.admissionPasses.values.single().status shouldBe DungeonAdmissionPassStatus.CONSUMED
     }
 
+    "commits reconciled funds without another provider call" {
+        val persistence = FakeSeasonMoneyPersistence(SeasonRuntimeState.empty(catalog).copy(revision = 7L))
+        val gateway = FakeSeasonMoneyGateway(99_000_00L)
+        val plan = acceptedProjectPlan(catalog, playerId, now, "action-reconciled-commit")
+        val started =
+            SeasonMoneyJournalEngine.beginWithdrawal(
+                SeasonMoneyJournalEngine.prepare(catalog, plan, now),
+                100_000_00L,
+                now + 1,
+            )
+        val review =
+            SeasonMoneyJournalEngine.haltForReview(
+                started,
+                SeasonMoneyReviewReason.PROVIDER_EVIDENCE_CONFLICT,
+                "withdrawal_outcome_ambiguous",
+                null,
+                true,
+                now + 2,
+            )
+        val request =
+            SeasonMoneyReconciliationRequest(
+                actionId = review.actionId,
+                expectedRevision = review.revision,
+                resolution = SeasonMoneyReconciliationResolution.WITHDRAWAL_CONFIRMED,
+                operatorId = "ops-primary",
+                operatorEvidence = "Exact provider history and balance checked",
+                idempotencyKey = "season-reconciled-commit-1",
+                providerHistoryCheckedAt = now + 3,
+                providerBalanceAfterMinor = 99_000_00L,
+                providerTransactionId = "redis-transaction-commit",
+                providerTransactionReason = review.withdrawalReason,
+            )
+        val preview = SeasonMoneyReconciliationEngine.preview(review, request)
+        val resolved = SeasonMoneyReconciliationEngine.apply(review, request, preview.reviewDigest, now + 4)
+        persistence.journal[resolved.actionId] = resolved
+        var clock = now + 5
+
+        val outcome = SeasonMoneyCoordinator(persistence, gateway) { clock++ }.commitReconciled(catalog, resolved)
+
+        outcome shouldBe SeasonMoneyActionOutcome.Committed(persistence.current.recentReceipts.getValue(resolved.actionId))
+        persistence.current.revision shouldBe 8L
+        gateway.withdrawCalls shouldBe 0
+        persistence.journal.getValue(resolved.actionId).status shouldBe SeasonMoneyJournalStatus.STATE_COMMITTED
+    }
+
     "prunes oldest terminal records before accepting another action" {
         val persistence = FakeSeasonMoneyPersistence(SeasonRuntimeState.empty(catalog))
         repeat(2_049) { index ->
