@@ -202,6 +202,13 @@ open class ContractsConfig(
                     require(id !in stage.requiresProjectStages) {
                         "Season project stage '$id' cannot require itself"
                     }
+                    require(
+                        stage.cashContributionMinor > 0L ||
+                            stage.requiredResources.isNotEmpty() ||
+                            stage.requiredBoundRewards.isNotEmpty(),
+                    ) {
+                        "Season project stage '$id' must require at least one contribution"
+                    }
                 }
             }
         require(completionStage in stages) { "Season completion stage '$completionStage' is missing" }

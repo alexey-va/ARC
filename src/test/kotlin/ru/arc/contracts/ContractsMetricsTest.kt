@@ -14,7 +14,24 @@ class ContractsMetricsTest : StringSpec({
                 localLeader = true,
                 submissionRuntimeReady = false,
                 submissionsEnabled = false,
+                seasonMutationRuntimeReady = false,
                 serverWeeklyBudgetMinor = 25_000_000L,
+                dungeonObservation =
+                    DungeonContractObservationSnapshot(
+                        catalogAvailable = true,
+                        activeRunsByContract = mapOf("mines_recon" to 1),
+                        statsByContract =
+                            mapOf(
+                                "mines_recon" to
+                                    DungeonContractObservationStats(
+                                        startedRuns = 2,
+                                        nativeCompletedRuns = 1,
+                                        completionPlayers = 2,
+                                        nativeCompletionDurationSeconds = 600,
+                                        playerOutcomes = mapOf(DungeonCompletionPlayerOutcome.START_TO_FINISH to 2),
+                                    ),
+                            ),
+                    ),
                 journal =
                     ContractSubmissionJournalSummary(
                         available = true,
@@ -53,6 +70,7 @@ class ContractsMetricsTest : StringSpec({
 
         points.first { it.name == "arc_contracts_submission_runtime_ready" }.value shouldBeExactly 0.0
         points.first { it.name == "arc_contracts_submissions_enabled" }.value shouldBeExactly 0.0
+        points.first { it.name == "arc_season_mutation_runtime_ready" }.value shouldBeExactly 0.0
         points.first { it.name == "arc_contracts_available" }.value shouldBeExactly 1.0
         points.first { it.name == "arc_contracts_server_weekly_budget_currency" }.value shouldBeExactly 250_000.0
         points.first { it.name == "arc_contract_journal_manual_review" }.value shouldBeExactly 1.0
@@ -66,6 +84,15 @@ class ContractsMetricsTest : StringSpec({
         points.first {
             it.name == "arc_contract_quantity" && it.tags["component"] == "reserved"
         }.value shouldBeExactly 5.0
+        points.first {
+            it.name == "arc_dungeon_contract_active_runs" && it.tags["contract"] == "mines_recon"
+        }.value shouldBeExactly 1.0
+        points.first {
+            it.name == "arc_dungeon_contract_completion_players_total" &&
+                it.tags["outcome"] == DungeonCompletionPlayerOutcome.START_TO_FINISH.label
+        }.value shouldBeExactly 2.0
+        points.first { it.name == "arc_dungeon_contract_completion_duration_seconds_total" }
+            .value shouldBeExactly 600.0
         points.flatMap { it.tags.keys }.none { it.contains("player", ignoreCase = true) } shouldBe true
         points.flatMap { it.tags.values }.none { it.contains("player", ignoreCase = true) } shouldBe true
         points.flatMap { it.tags.values }.none { it.contains("submission", ignoreCase = true) } shouldBe true

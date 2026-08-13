@@ -71,6 +71,7 @@ object ContractsManager {
     // production crash injection and control-plane smoke are still required.
     // No config value may unlock inventory or money mutations before that gate.
     private const val SUBMISSION_RUNTIME_READY = false
+    private const val SEASON_MUTATION_RUNTIME_READY = false
 
     private val configRef = AtomicReference<ContractsConfig>()
     private var repo: CachedRepository<ResourceContractRecord>? = null
@@ -80,6 +81,7 @@ object ContractsManager {
     private var submissionScope: CoroutineScope? = null
     private var submissionCoordinator: ContractSubmissionCoordinator? = null
     private var submissionMutex = Mutex()
+    private val dungeonObserver = DungeonContractObserver()
 
     @JvmStatic
     @Synchronized
@@ -87,6 +89,7 @@ object ContractsManager {
         if (repo != null || journalRepo != null) return
         val loaded = ContractsConfig.load().validated()
         configRef.set(loaded)
+        dungeonObserver.configure(loaded.observeSeasonCatalog())
         if (!loaded.enabled || loaded.mode == ContractsMode.DISABLED) {
             info("Contracts disabled by policy")
             publishMetrics()
@@ -180,6 +183,7 @@ object ContractsManager {
     fun reload() {
         val loaded = ContractsConfig.load().validated()
         configRef.set(loaded)
+        dungeonObserver.configure(loaded.observeSeasonCatalog())
         val currentRepo = repo
         if (currentRepo != null && (!loaded.enabled || loaded.mode == ContractsMode.DISABLED)) {
             shutdown()
@@ -214,6 +218,7 @@ object ContractsManager {
         submissionScope = null
         submissionCoordinator = null
         submissionMutex = Mutex()
+        dungeonObserver.configure(null)
         currentSubmissionScope?.cancel()
         try {
             runBlocking {
@@ -242,6 +247,34 @@ object ContractsManager {
     @JvmStatic
     fun submissionsEnabled(): Boolean =
         SUBMISSION_RUNTIME_READY && isAvailable() && isLeader() && mode() == ContractsMode.ENFORCE
+
+    @JvmStatic
+    fun observeDungeonStarted(
+        runId: String,
+        world: String,
+        participantIds: Set<String>,
+        now: Long = System.currentTimeMillis(),
+    ): Boolean {
+        val recorded = dungeonObserver.started(runId, world, participantIds, now)
+        if (recorded) publishMetrics()
+        return recorded
+    }
+
+    @JvmStatic
+    fun observeDungeonCompleted(
+        runId: String,
+        world: String,
+        participantIds: Set<String>,
+        now: Long = System.currentTimeMillis(),
+    ): DungeonContractCompletionObservation? {
+        val observation = dungeonObserver.completed(runId, world, participantIds, now)
+        if (observation != null) publishMetrics()
+        return observation
+    }
+
+    @JvmStatic
+    fun dungeonObservationSnapshot(now: Long = System.currentTimeMillis()): DungeonContractObservationSnapshot =
+        dungeonObserver.snapshot(now)
 
     @JvmStatic
     fun submit(
@@ -348,8 +381,10 @@ object ContractsManager {
             "localLeader" to isLeader(),
             "submissionRuntimeReady" to SUBMISSION_RUNTIME_READY,
             "submissionsEnabled" to submissionsEnabled(),
+            "seasonMutationRuntimeReady" to SEASON_MUTATION_RUNTIME_READY,
             "serverWeeklyBudgetMinor" to (config?.serverWeeklyBudgetMinor ?: 0L),
             "seasonCatalog" to config?.observeSeasonCatalog()?.summary(),
+            "dungeonObservation" to dungeonObservationSnapshot(),
             "submissionJournal" to journalSummary(),
             "orders" to views,
         )
@@ -466,9 +501,11 @@ object ContractsManager {
                 localLeader = isLeader(),
                 submissionRuntimeReady = SUBMISSION_RUNTIME_READY,
                 submissionsEnabled = submissionsEnabled(),
+                seasonMutationRuntimeReady = SEASON_MUTATION_RUNTIME_READY,
                 serverWeeklyBudgetMinor = config?.serverWeeklyBudgetMinor ?: 0L,
                 views = currentViews(),
                 journal = journalSummary(),
+                dungeonObservation = dungeonObservationSnapshot(),
             )
         }
     }
@@ -660,9 +697,11 @@ object ContractsMetrics {
         localLeader: Boolean,
         submissionRuntimeReady: Boolean,
         submissionsEnabled: Boolean,
+        seasonMutationRuntimeReady: Boolean,
         serverWeeklyBudgetMinor: Long,
         views: List<ResourceContractView>,
         journal: ContractSubmissionJournalSummary,
+        dungeonObservation: DungeonContractObservationSnapshot,
     ): List<MetricPoint> =
         buildList {
             add(point("arc_contracts_enabled", "Whether the Economy V2 contracts policy is enabled", enabled))
@@ -670,6 +709,13 @@ object ContractsMetrics {
             add(point("arc_contracts_local_leader", "Whether this Paper node is the configured contracts mutation leader", localLeader))
             add(point("arc_contracts_submission_runtime_ready", "Whether the atomic inventory and payout runtime is implemented", submissionRuntimeReady))
             add(point("arc_contracts_submissions_enabled", "Whether contract submissions may mutate inventory and money", submissionsEnabled))
+            add(
+                point(
+                    "arc_season_mutation_runtime_ready",
+                    "Whether season project and dungeon money or item mutations are enabled",
+                    seasonMutationRuntimeReady,
+                ),
+            )
             add(
                 MetricPoint(
                     "arc_contracts_mode",
@@ -748,6 +794,57 @@ object ContractsMetrics {
                     journal.oldestAttentionAgeSeconds.toDouble(),
                 ),
             )
+            add(
+                point(
+                    "arc_dungeon_contract_catalog_available",
+                    "Whether a validated observe-only dungeon contract catalog is loaded",
+                    dungeonObservation.catalogAvailable,
+                ),
+            )
+            dungeonObservation.statsByContract.forEach { (contractId, observation) ->
+                add(
+                    MetricPoint(
+                        "arc_dungeon_contract_active_runs",
+                        "Native EliteMobs dungeon runs currently observed by configured contract",
+                        (dungeonObservation.activeRunsByContract[contractId] ?: 0).toDouble(),
+                        mapOf("contract" to contractId),
+                    ),
+                )
+                add(
+                    MetricPoint(
+                        "arc_dungeon_contract_runs_total",
+                        "Native EliteMobs dungeon run events observed by configured contract",
+                        observation.startedRuns.toDouble(),
+                        mapOf("contract" to contractId, "event" to "started"),
+                    ),
+                )
+                add(
+                    MetricPoint(
+                        "arc_dungeon_contract_runs_total",
+                        "Native EliteMobs dungeon run events observed by configured contract",
+                        observation.nativeCompletedRuns.toDouble(),
+                        mapOf("contract" to contractId, "event" to "native_completed"),
+                    ),
+                )
+                add(
+                    MetricPoint(
+                        "arc_dungeon_contract_completion_duration_seconds_total",
+                        "Total duration of native completions whose configured dungeon start was observed",
+                        observation.nativeCompletionDurationSeconds.toDouble(),
+                        mapOf("contract" to contractId),
+                    ),
+                )
+                DungeonCompletionPlayerOutcome.entries.forEach { outcome ->
+                    add(
+                        MetricPoint(
+                            "arc_dungeon_contract_completion_players_total",
+                            "Players associated with native dungeon runs grouped by bounded completion outcome",
+                            (observation.playerOutcomes[outcome] ?: 0L).toDouble(),
+                            mapOf("contract" to contractId, "outcome" to outcome.label),
+                        ),
+                    )
+                }
+            }
             views.forEach { view ->
                 add(quantity(view, "target", view.targetQuantity))
                 add(quantity(view, "accepted", view.acceptedQuantity))
