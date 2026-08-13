@@ -22,11 +22,31 @@ class MountModuleConfigTest : StringSpec({
     }
 
     "maximum level is a fast and intentionally expensive final sprint" {
-        val catalog = bundledConfig("progression").catalog()
+        val config = bundledConfig("progression")
+        val catalog = config.catalog()
+        val purchasable = catalog.all.filter { it.price(3) != null }
 
-        catalog.all.filter { it.price(3) != null }.all { it.level(3).handlingMultiplier == 1.28 } shouldBe true
-        catalog.all.filter { it.price(3) != null }.all { it.level(3).sprintMultiplier == 1.12 } shouldBe true
+        purchasable.all { it.level(3).handlingMultiplier == 1.28 } shouldBe true
+        purchasable.all { it.level(3).sprintMultiplier == 1.12 } shouldBe true
+        purchasable.all { mount -> mount.level(3).speed >= mount.level(2).speed * 1.85 } shouldBe true
+        purchasable.all { mount -> checkNotNull(mount.price(3)) >= checkNotNull(mount.price(2)) * 7.0 } shouldBe true
+        catalog.all.all { mount ->
+            val scale =
+                when (mount.movement) {
+                    MountMovement.WALKING -> config.walkingSpeedScale
+                    MountMovement.FLYING -> config.flyingSpeedScale
+                    MountMovement.SWIMMING -> config.swimmingSpeedScale
+                }
+            val final = mount.level(3)
+            val blocksPerTick =
+                (final.speed * scale * config.sprintMultiplier * final.sprintMultiplier)
+                    .coerceAtMost(config.maximumSpeedBlocksPerTick)
+            blocksPerTick * 20.0 >= 19.0
+        } shouldBe true
         catalog.all.filter { it.rarity == MountRarity.COMMON }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(5_000_000.0)
+        catalog.all.filter { it.rarity == MountRarity.UNCOMMON }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(8_000_000.0)
+        catalog.all.filter { it.rarity == MountRarity.RARE }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(12_000_000.0)
+        catalog.all.filter { it.rarity == MountRarity.EPIC }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(20_000_000.0)
         catalog.all.filter { it.rarity == MountRarity.LEGENDARY }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(35_000_000.0)
     }
 

@@ -111,7 +111,11 @@ class MountPurchaseCoordinatorTest : StringSpec({
     }
 
     "startup recovery uses exact provider history after an interrupted withdrawal call" {
-        val fixture = PurchaseFixture().also { it.wallet.historyTransactionId = "91234" }
+        val fixture = PurchaseFixture().also {
+            it.wallet.historyTransactionId = "91234"
+            it.wallet.historyTransactionAtMillis = 2L
+            it.wallet.historyAmountMinor = -5_000_000L
+        }
         val record = fixture.preparedRecord()
         fixture.journal.persist(record) shouldBe true
         fixture.journal.persist(
@@ -126,8 +130,99 @@ class MountPurchaseCoordinatorTest : StringSpec({
         fixture.coordinator.recover(MountCatalog(listOf(fixture.mount)), manual::add)
 
         fixture.wallet.historyReasons shouldBe listOf("arc-mount:${record.transactionId}")
+        fixture.wallet.historyNotBeforeMillis shouldBe listOf(record.createdAt)
         fixture.ownership.level shouldBe 1
         fixture.journal.records().single().status shouldBe MountPurchaseJournalStatus.COMPLETED
+        manual shouldBe emptyList()
+    }
+
+    "manual review history search includes the provider call that preceded quarantine" {
+        val fixture = PurchaseFixture().also {
+            it.wallet.historyTransactionId = "91234"
+            it.wallet.historyTransactionAtMillis = 2L
+            it.wallet.historyAmountMinor = -5_000_000L
+        }
+        val record = fixture.preparedRecord()
+        fixture.journal.persist(record) shouldBe true
+        fixture.journal.persist(
+            record.copy(
+                status = MountPurchaseJournalStatus.WITHDRAWAL_STARTED,
+                updatedAt = 2L,
+                balanceBeforeMinor = 10_000_000L,
+            ),
+        ) shouldBe true
+        fixture.journal.persist(
+            record.copy(
+                status = MountPurchaseJournalStatus.MANUAL_REVIEW,
+                updatedAt = 3L,
+                balanceBeforeMinor = 10_000_000L,
+                evidence = "provider_threw",
+            ),
+        ) shouldBe true
+        val manual = mutableListOf<MountPurchaseJournalRecord>()
+
+        fixture.coordinator.recover(MountCatalog(listOf(fixture.mount)), manual::add)
+
+        fixture.wallet.historyNotBeforeMillis shouldBe listOf(record.createdAt)
+        fixture.ownership.level shouldBe 1
+        fixture.journal.records().single().status shouldBe MountPurchaseJournalStatus.COMPLETED
+        manual shouldBe emptyList()
+    }
+
+    "manual review refund search includes the provider call that preceded quarantine" {
+        val fixture = PurchaseFixture().also {
+            it.wallet.historyTransactionId = "92345"
+            it.wallet.historyTransactionAtMillis = 5L
+            it.wallet.historyAmountMinor = 5_000_000L
+        }
+        val record = fixture.preparedRecord()
+        val withdrawn =
+            record.copy(
+                status = MountPurchaseJournalStatus.FUNDS_WITHDRAWN,
+                updatedAt = 3L,
+                balanceBeforeMinor = 10_000_000L,
+                balanceAfterMinor = 5_000_000L,
+                evidence = "exact_balance_delta",
+            )
+        fixture.journal.persist(record) shouldBe true
+        fixture.journal.persist(
+            record.copy(
+                status = MountPurchaseJournalStatus.WITHDRAWAL_STARTED,
+                updatedAt = 2L,
+                balanceBeforeMinor = 10_000_000L,
+            ),
+        ) shouldBe true
+        fixture.journal.persist(withdrawn) shouldBe true
+        fixture.journal.persist(
+            withdrawn.copy(
+                status = MountPurchaseJournalStatus.OWNERSHIP_STARTED,
+                updatedAt = 4L,
+                evidence = "permission_write_started",
+            ),
+        ) shouldBe true
+        fixture.journal.persist(
+            withdrawn.copy(
+                status = MountPurchaseJournalStatus.REFUND_STARTED,
+                updatedAt = 5L,
+                refundBalanceBeforeMinor = 5_000_000L,
+                evidence = "permission_not_applied",
+            ),
+        ) shouldBe true
+        fixture.journal.persist(
+            withdrawn.copy(
+                status = MountPurchaseJournalStatus.MANUAL_REVIEW,
+                updatedAt = 6L,
+                refundBalanceBeforeMinor = 5_000_000L,
+                evidence = "provider_threw",
+            ),
+        ) shouldBe true
+        val manual = mutableListOf<MountPurchaseJournalRecord>()
+
+        fixture.coordinator.recover(MountCatalog(listOf(fixture.mount)), manual::add)
+
+        fixture.wallet.historyReasons shouldBe listOf("arc-mount-refund:${record.transactionId}")
+        fixture.wallet.historyNotBeforeMillis shouldBe listOf(record.createdAt)
+        fixture.journal.records().single().status shouldBe MountPurchaseJournalStatus.REFUNDED
         manual shouldBe emptyList()
     }
 
@@ -253,7 +348,10 @@ private class MutableWallet : MountWallet {
     var withdrawals = 0
     var deposits = 0
     var historyTransactionId: String? = null
+    var historyTransactionAtMillis: Long? = null
+    var historyAmountMinor: Long? = null
     val historyReasons = mutableListOf<String>()
+    val historyNotBeforeMillis = mutableListOf<Long>()
     override val available = true
 
     override fun balanceMinor(playerId: UUID): Long? = balanceMinor.takeIf { balanceAvailable }
@@ -284,8 +382,12 @@ private class MutableWallet : MountWallet {
         notBeforeMillis: Long,
     ): CompletableFuture<MountProviderTransactionEvidence> {
         historyReasons += reason
-        amountMinor shouldBe -5_000_000L
-        notBeforeMillis shouldBe 2L
-        return CompletableFuture.completedFuture(MountProviderTransactionEvidence(historyTransactionId, true))
+        historyNotBeforeMillis += notBeforeMillis
+        val visibleTransaction =
+            historyTransactionId.takeIf {
+                amountMinor == historyAmountMinor &&
+                    historyTransactionAtMillis?.let { transactionAt -> transactionAt >= notBeforeMillis } == true
+            }
+        return CompletableFuture.completedFuture(MountProviderTransactionEvidence(visibleTransaction, true))
     }
 }

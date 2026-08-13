@@ -373,7 +373,7 @@ class MountPurchaseCoordinator(
             playerId = playerId,
             amountMinor = -record.priceMinor,
             reason = "arc-mount:${record.transactionId}",
-            notBeforeMillis = record.updatedAt,
+            notBeforeMillis = record.createdAt,
         ).whenComplete { history, failure ->
             runSync {
                 if (failure != null || history?.found != true) {
@@ -404,7 +404,7 @@ class MountPurchaseCoordinator(
             playerId = playerId,
             amountMinor = record.priceMinor,
             reason = "arc-mount-refund:${record.transactionId}",
-            notBeforeMillis = record.updatedAt,
+            notBeforeMillis = record.createdAt,
         ).whenComplete { history, failure ->
             runSync {
                 if (failure != null || history?.found != true) {
