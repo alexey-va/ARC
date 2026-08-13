@@ -33,6 +33,7 @@ enum class BankAuditChangeType(val label: String) {
     OBSERVED_TRANSFER_FROM_BANK("observed_transfer_from_bank"),
     OBSERVED_INTEREST_ACCRUAL("observed_interest_accrual"),
     OBSERVED_INTEREST_CAPITALIZATION("observed_interest_capitalization"),
+    OBSERVED_PENDING_INTEREST_REDUCTION("observed_pending_interest_reduction"),
     UNEXPLAINED_SUPPLY_INCREASE("unexplained_supply_increase"),
     UNEXPLAINED_SUPPLY_DECREASE("unexplained_supply_decrease"),
     MIXED_CHANGE("mixed_change"),
@@ -331,6 +332,8 @@ class BankAuditService(
                 BankAuditChangeType.OBSERVED_INTEREST_CAPITALIZATION
             positive(pendingInterestDelta) && nearZero(walletDelta) && nearZero(bankBalanceDelta) ->
                 BankAuditChangeType.OBSERVED_INTEREST_ACCRUAL
+            negative(pendingInterestDelta) && nearZero(walletDelta) && nearZero(bankBalanceDelta) ->
+                BankAuditChangeType.OBSERVED_PENDING_INTEREST_REDUCTION
             positive(bankSupplyDelta) && negative(walletDelta) && offsets(bankSupplyDelta, walletDelta) ->
                 BankAuditChangeType.OBSERVED_TRANSFER_TO_BANK
             negative(bankSupplyDelta) && positive(walletDelta) && offsets(bankSupplyDelta, walletDelta) ->

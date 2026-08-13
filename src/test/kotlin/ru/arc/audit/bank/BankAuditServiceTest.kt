@@ -112,6 +112,20 @@ class BankAuditServiceTest :
             actionPoints.all { it.tags["evidence"] == "snapshot_delta_inferred" } shouldBe true
         }
 
+        "separates a pending interest reduction from an unknown Bank burn" {
+            val service = BankAuditService(TestBankAuditConfig(minimumChange = 0.01))
+            service.accept(read(account("a", wallet = 100.0, bank = 100.0, pending = 20_000.0)))
+
+            val snapshot = service.accept(read(account("a", wallet = 100.0, bank = 100.0, pending = 1_000.0)))
+
+            snapshot.bankSupplyDelta!! shouldBeExactly -19_000.0
+            snapshot.changeTypes shouldBe mapOf("observed_pending_interest_reduction" to 1)
+            @Suppress("UNCHECKED_CAST")
+            val change = (service.summary(10)["recentBankChanges"] as List<Map<String, Any?>>).single()
+            change["classification"] shouldBe "observed_pending_interest_reduction"
+            change["classificationEvidence"] shouldBe "snapshot_delta_inferred"
+        }
+
         "ignores wallet-only activity outside Bank" {
             val service = BankAuditService(TestBankAuditConfig(minimumChange = 0.01))
             service.accept(read(account("a", wallet = 100.0, bank = 100.0)))
