@@ -14,11 +14,13 @@ class ContractsConfigTest : StringSpec({
 
         config.validated() shouldBe config
         config.mode shouldBe ContractsMode.OBSERVE
-        config.serverWeeklyBudgetMinor shouldBe 24_300_000L
+        config.serverWeeklyBudgetMinor shouldBe 9_500_000L
         config.resourceOrders().shouldHaveSize(5)
         val season = config.observeSeasonCatalog()
         requireNotNull(season)
         season.completionStage shouldBe "expedition_museum"
+        season.startsAt shouldBe 1_787_184_764_000L
+        season.endsAt shouldBe 1_789_603_964_000L
         season.dungeonContracts.size shouldBe 4
         season.projectStages.size shouldBe 4
         season.dungeonContracts.getValue("bridge_recon").requiresProjectStage shouldBe "track_and_lighting"
@@ -90,7 +92,7 @@ class ContractsConfigTest : StringSpec({
 
         shouldThrow<IllegalArgumentException> {
             ContractsConfig.fromFile(root).resourceOrders()
-        }.message shouldBe "Configured contract budgets 1001 exceed server weekly envelope 1000 minor units"
+        }.message shouldBe "Configured concurrent contract budgets 1001 exceed server weekly envelope 1000 minor units"
     }
 
     "rejects fractional money below one minor unit" {
@@ -177,6 +179,10 @@ class ContractsConfigTest : StringSpec({
         shouldThrow<IllegalArgumentException> {
             ContractsConfig.fromFile(root).validated()
         }.message shouldBe "Season catalog is observe-only and cannot be loaded outside observe mode"
+
+        val enabledForCompiledRuntime = ContractsConfig.fromFile(root)
+        enabledForCompiledRuntime.validated(allowSeasonMutations = true) shouldBe enabledForCompiledRuntime
+        enabledForCompiledRuntime.observeSeasonCatalog(allowSeasonMutations = true)?.id shouldBe "road_revival"
     }
 
     "rejects a season project locked behind its own dungeon reward" {
@@ -201,5 +207,49 @@ class ContractsConfigTest : StringSpec({
         shouldThrow<IllegalArgumentException> {
             ContractsConfig.fromFile(root).validated()
         }.message shouldBe "Season project progression is cyclic or reward-locked"
+    }
+
+    "rejects an old season schema and a duration mismatch" {
+        val resource = requireNotNull(ContractsConfigTest::class.java.getResource("/contracts/modules/contracts.yml"))
+        val source = Files.readString(Path.of(resource.toURI()))
+
+        fun brokenConfig(name: String, content: String): ContractsConfig {
+            val root = Files.createTempDirectory(name)
+            Files.createDirectories(root.resolve("modules"))
+            Files.writeString(root.resolve("modules/contracts.yml"), content)
+            return ContractsConfig.fromFile(root)
+        }
+
+        shouldThrow<IllegalArgumentException> {
+            brokenConfig(
+                "arc-contract-season-schema",
+                source.replace("season-catalog:\n  schema-version: 4", "season-catalog:\n  schema-version: 3"),
+            ).validated()
+        }.message shouldBe "Season catalog schema-version must be 4"
+
+        shouldThrow<IllegalArgumentException> {
+            brokenConfig(
+                "arc-contract-season-duration",
+                source.replace("ends-at: '2026-09-17T00:12:44Z'", "ends-at: '2026-09-16T00:12:44Z'"),
+            ).validated()
+        }.message shouldBe "Season window must exactly match duration-days"
+    }
+
+    "rejects a resource-order window outside the exact season" {
+        val resource = requireNotNull(ContractsConfigTest::class.java.getResource("/contracts/modules/contracts.yml"))
+        val source = Files.readString(Path.of(resource.toURI()))
+        val root = Files.createTempDirectory("arc-contract-season-order-window")
+        Files.createDirectories(root.resolve("modules"))
+        Files.writeString(
+            root.resolve("modules/contracts.yml"),
+            source.replace(
+                "window-starts-at: '2026-08-20T00:12:44Z'",
+                "window-starts-at: '2026-08-19T00:12:44Z'",
+            ),
+        )
+
+        shouldThrow<IllegalArgumentException> {
+            ContractsConfig.fromFile(root).validated()
+        }.message shouldBe "Season resource-order windows must remain inside the season window"
     }
 })

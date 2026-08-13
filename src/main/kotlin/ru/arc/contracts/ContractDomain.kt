@@ -252,6 +252,7 @@ enum class SubmissionRejection(val label: String) {
     PLAYER_CAP_REACHED("player_cap_reached"),
     CONTRIBUTOR_LIMIT_REACHED("contributor_limit_reached"),
     BELOW_MINIMUM("below_minimum"),
+    PROJECT_STAGE_LOCKED("project_stage_locked"),
     INVENTORY_UNAVAILABLE("inventory_unavailable"),
     JOURNAL_CAPACITY_REACHED("journal_capacity_reached"),
 }

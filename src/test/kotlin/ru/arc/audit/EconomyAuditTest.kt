@@ -99,6 +99,30 @@ class EconomyAuditTest : FreeSpec({
             attribution.metadata.flow shouldBe EconomyFlow.MINT
         }
 
+        "classifies season project and dungeon burns into exact budget portfolios" {
+            val project =
+                EconomyAttributionResolver.resolve(
+                    "arc-season:public_projects:action-project-1\nCall:ru.arc.contracts.RedisEconomySeasonMoneyGateway",
+                    -1_000.0,
+                    "vault",
+                    "spawn",
+                )
+            val dungeon =
+                EconomyAttributionResolver.resolve(
+                    "arc-season:dungeon_entry:action-pass-1\nCall:ru.arc.contracts.RedisEconomySeasonMoneyGateway",
+                    -750.0,
+                    "vault",
+                    "spawn",
+                )
+
+            project.metadata.source shouldBe EconomySource.PUBLIC_PROJECTS
+            project.metadata.source.label shouldBe "public_projects"
+            project.metadata.flow shouldBe EconomyFlow.BURN
+            dungeon.metadata.source shouldBe EconomySource.DUNGEON_ENTRY
+            dungeon.metadata.source.label shouldBe "dungeon_entry"
+            dungeon.metadata.flow shouldBe EconomyFlow.BURN
+        }
+
         "classifies Vault movement to the internal stock wallet as a transfer" {
             val attribution =
                 EconomyAttributionResolver.resolve(

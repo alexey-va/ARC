@@ -21,6 +21,8 @@ enum class EconomySource(val label: String, val type: Type) {
     PLAYER_WARPS("player_warps", Type.PLAYER_WARP),
     QUESTS("quests", Type.QUEST),
     GAMBLING("gambling", Type.GAMBLING),
+    PUBLIC_PROJECTS("public_projects", Type.ARC),
+    DUNGEON_ENTRY("dungeon_entry", Type.ARC),
     CMI("cmi", Type.CMI),
     ARC("arc", Type.ARC),
     HUSKHOMES("huskhomes", Type.OTHER),
@@ -232,6 +234,8 @@ object EconomyAttributionResolver {
         val haystack = "$reason $origin".lowercase(Locale.ROOT)
         return when {
             reason.equals("Payment", ignoreCase = true) -> EconomySource.PLAYER_TRANSFER
+            haystack.contains("arc-season:public_projects:") -> EconomySource.PUBLIC_PROJECTS
+            haystack.contains("arc-season:dungeon_entry:") -> EconomySource.DUNGEON_ENTRY
             haystack.contains("reset balance") || haystack.contains("set balance") -> EconomySource.BALANCE_SET
             haystack.contains("commandgive") || haystack.contains("commandtake") -> EconomySource.ADMIN_COMMAND
             haystack.contains("gamingmesh.jobs") || haystack.contains("zrips.jobs") -> EconomySource.JOBS

@@ -1,6 +1,6 @@
 generated-policy-evidence:
   schema-version: 2
-  catalog-schema-version: 3
+  catalog-schema-version: 4
   season-id: road_revival
   observe-only: true
   calibration-window-start-epoch-millis: 1786579964000
@@ -12,7 +12,7 @@ generated-policy-evidence:
 enabled: true
 mode: observe
 leader-server: spawn
-server-weekly-budget: '243000.00'
+server-weekly-budget: '95000.00'
 orders:
   road_stone:
     enabled: true
@@ -48,8 +48,8 @@ orders:
     display-name: Железо для каркаса станции
     item: minecraft:iron_ingot
     funding: server_envelope
-    window-starts-at: '2026-08-20T00:12:44Z'
-    window-ends-at: '2026-08-27T00:12:44Z'
+    window-starts-at: '2026-08-27T00:12:44Z'
+    window-ends-at: '2026-09-03T00:12:44Z'
     payout-per-unit: '7.50'
     budget: '60000.00'
     target-quantity: 8000
@@ -62,8 +62,8 @@ orders:
     display-name: Рельсы для шахтной ветки
     item: minecraft:rail
     funding: server_envelope
-    window-starts-at: '2026-08-20T00:12:44Z'
-    window-ends-at: '2026-08-27T00:12:44Z'
+    window-starts-at: '2026-09-03T00:12:44Z'
+    window-ends-at: '2026-09-10T00:12:44Z'
     payout-per-unit: '8.00'
     budget: '48000.00'
     target-quantity: 6000
@@ -76,8 +76,8 @@ orders:
     display-name: Фонари для тракта и станции
     item: minecraft:lantern
     funding: server_envelope
-    window-starts-at: '2026-08-20T00:12:44Z'
-    window-ends-at: '2026-08-27T00:12:44Z'
+    window-starts-at: '2026-09-03T00:12:44Z'
+    window-ends-at: '2026-09-10T00:12:44Z'
     payout-per-unit: '5.00'
     budget: '40000.00'
     target-quantity: 8000
@@ -85,10 +85,13 @@ orders:
     min-submission-quantity: 32
     max-submission-quantity: 512
 season-catalog:
+  schema-version: 4
   id: road_revival
   title: Возрождение тракта
   completion-stage: expedition_museum
   duration-days: 28
+  starts-at: '2026-08-20T00:12:44Z'
+  ends-at: '2026-09-17T00:12:44Z'
   dungeon-contracts:
     mines_recon:
       display-name: Разведка старых шахт

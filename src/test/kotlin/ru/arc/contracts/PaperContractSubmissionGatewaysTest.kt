@@ -112,4 +112,70 @@ class PaperContractSubmissionGatewaysTest : StringSpec({
             RedisEconomyContractPaymentGateway { api }.balanceMinor(playerId.toString()) shouldBe null
         }
     }
+
+    "withdraws an exact season burn with the RedisEconomy reason API" {
+        runTest {
+            val playerId = java.util.UUID.fromString("11111111-1111-1111-1111-111111111111")
+            val currency = mockk<Currency>()
+            val api = mockk<RedisEconomyAPI>()
+            every { api.defaultCurrency } returns currency
+            every { currency.currencyName } returns "vault"
+            every { currency.transactionTax } returns 0.0
+            every { currency.getBalance(playerId) } returnsMany listOf(100.0, 90.0)
+            every { currency.withdrawPlayer(playerId, "vault", 10.0, "arc-season:dungeon_entry:action-pass-1") } returns
+                EconomyResponse(10.0, 90.0, EconomyResponse.ResponseType.SUCCESS, null)
+
+            RedisEconomySeasonMoneyGateway { api }.withdraw(
+                playerId.toString(),
+                1_000L,
+                "arc-season:dungeon_entry:action-pass-1",
+                10_000L,
+            ) shouldBe SeasonMoneyEvidence(true, true, 9_000L)
+            verify(exactly = 1) {
+                currency.withdrawPlayer(playerId, "vault", 10.0, "arc-season:dungeon_entry:action-pass-1")
+            }
+        }
+    }
+
+    "skips the season provider call when tax or balance changed" {
+        runTest {
+            val playerId = java.util.UUID.fromString("11111111-1111-1111-1111-111111111111")
+            val currency = mockk<Currency>()
+            val api = mockk<RedisEconomyAPI>()
+            every { api.defaultCurrency } returns currency
+            every { currency.getBalance(playerId) } returns 99.0
+            every { currency.transactionTax } returns 0.0
+
+            RedisEconomySeasonMoneyGateway { api }.withdraw(
+                playerId.toString(),
+                1_000L,
+                "arc-season:dungeon_entry:action-pass-1",
+                10_000L,
+            ) shouldBe SeasonMoneyEvidence(false, false, 9_900L, "provider_balance_changed_before_call")
+            verify(exactly = 0) { currency.withdrawPlayer(any<java.util.UUID>(), any(), any(), any()) }
+
+            every { currency.getBalance(playerId) } returns 100.0
+            every { currency.transactionTax } returns 0.01
+            RedisEconomySeasonMoneyGateway { api }.withdraw(
+                playerId.toString(),
+                1_000L,
+                "arc-season:dungeon_entry:action-pass-2",
+                10_000L,
+            ) shouldBe SeasonMoneyEvidence(false, false, 10_000L, "provider_transaction_tax_nonzero")
+            verify(exactly = 0) { currency.withdrawPlayer(any<java.util.UUID>(), any(), any(), any()) }
+        }
+    }
+
+    "proves a skipped season provider call when the API disappears" {
+        runTest {
+            val gateway = RedisEconomySeasonMoneyGateway { null }
+
+            gateway.withdraw(
+                "11111111-1111-1111-1111-111111111111",
+                1_000L,
+                "arc-season:dungeon_entry:action-pass-3",
+                10_000L,
+            ) shouldBe SeasonMoneyEvidence(false, false, null, "provider_unavailable")
+        }
+    }
 })

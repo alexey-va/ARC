@@ -8,7 +8,7 @@ import io.kotest.matchers.shouldBe
 import java.nio.file.Path
 
 class SeasonRuntimeTest : StringSpec({
-    val catalog = goldenCatalog()
+    val catalog = testSeasonCatalog()
 
     "public project opens stages only after exact prerequisite completion" {
         val initial = SeasonProjectEngine.initial(catalog)
@@ -179,7 +179,7 @@ class SeasonRuntimeTest : StringSpec({
     }
 })
 
-private fun goldenCatalog(): ObserveSeasonCatalog {
+internal fun testSeasonCatalog(): ObserveSeasonCatalog {
     val resource = requireNotNull(SeasonRuntimeTest::class.java.getResource("/contracts/modules/contracts.yml"))
     return requireNotNull(ContractsConfig.fromFile(Path.of(resource.toURI()).parent.parent).validated().observeSeasonCatalog())
 }

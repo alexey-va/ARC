@@ -6,6 +6,7 @@ import ru.arc.config.ConfigManager
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.nio.file.Path
+import java.security.MessageDigest
 import java.time.Instant
 
 enum class ContractsMode(val label: String) {
@@ -40,10 +41,13 @@ data class ObserveProjectStageDefinition(
 )
 
 data class ObserveSeasonCatalog(
+    val schemaVersion: Int,
     val id: String,
     val title: String,
     val completionStage: String,
     val durationDays: Int,
+    val startsAt: Long,
+    val endsAt: Long,
     val dungeonContracts: Map<String, ObserveDungeonContractDefinition>,
     val projectId: String,
     val projectTitle: String,
@@ -52,10 +56,13 @@ data class ObserveSeasonCatalog(
     fun summary(): Map<String, Any?> =
         linkedMapOf(
             "observeOnly" to true,
+            "schemaVersion" to schemaVersion,
             "id" to id,
             "title" to title,
             "completionStage" to completionStage,
             "durationDays" to durationDays,
+            "startsAt" to startsAt,
+            "endsAt" to endsAt,
             "dungeonContracts" to dungeonContracts.values,
             "publicProject" to
                 linkedMapOf(
@@ -67,8 +74,12 @@ data class ObserveSeasonCatalog(
 
     fun validatedResourceLinks(resourceOrders: List<ResourceContractDefinition>): ObserveSeasonCatalog {
         val quantities = mutableMapOf<String, Long>()
+        val resourceStages = mutableMapOf<String, String>()
         projectStages.values.forEach { stage ->
             stage.requiredResources.forEach { (orderId, quantity) ->
+                require(resourceStages.put(orderId, stage.id) == null) {
+                    "Season resource order '$orderId' must belong to exactly one project stage"
+                }
                 quantities[orderId] = Math.addExact(quantities[orderId] ?: 0L, quantity)
             }
         }
@@ -76,7 +87,63 @@ data class ObserveSeasonCatalog(
         require(quantities == targets) {
             "Season project resource requirements must exactly consume configured resource-order targets"
         }
+        require(
+            resourceOrders.all { order -> order.windowStartsAt >= startsAt && order.windowEndsAt <= endsAt },
+        ) {
+            "Season resource-order windows must remain inside the season window"
+        }
         return this
+    }
+
+    fun isOpenAt(now: Long): Boolean = now in startsAt until endsAt
+
+    fun revisionDigest(): String {
+        val canonical = StringBuilder()
+        fun field(value: Any) {
+            val text = value.toString()
+            canonical.append(text.length).append(':').append(text)
+        }
+        field(schemaVersion)
+        field(id)
+        field(title)
+        field(completionStage)
+        field(durationDays)
+        field(startsAt)
+        field(endsAt)
+        dungeonContracts.toSortedMap().forEach { (dungeonId, dungeon) ->
+            field(dungeonId)
+            field(dungeon.displayName)
+            field(dungeon.world)
+            field(dungeon.requiresProjectStage)
+            field(dungeon.expectedActiveMinutes)
+            field(dungeon.rewardCooldownMinutes)
+            field(dungeon.payoutMinorPerPlayer)
+            field(dungeon.entryBurnMinorPerPlayer)
+            field(dungeon.minimumActiveShare)
+            field(dungeon.weeklyQualifyingPlayerCap)
+            field(dungeon.plannedBoundReward)
+        }
+        field(projectId)
+        field(projectTitle)
+        projectStages.toSortedMap().forEach { (stageId, stage) ->
+            field(stageId)
+            field(stage.displayName)
+            stage.requiresProjectStages.sorted().forEach(::field)
+            field(stage.cashContributionMinor)
+            stage.requiredResources.toSortedMap().forEach { (key, value) ->
+                field(key)
+                field(value)
+            }
+            stage.requiredBoundRewards.toSortedMap().forEach { (key, value) ->
+                field(key)
+                field(value)
+            }
+            stage.unlocksDungeonContracts.sorted().forEach(::field)
+            field(stage.unlock)
+        }
+        return MessageDigest.getInstance("SHA-256")
+            .digest(canonical.toString().toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
     }
 }
 
@@ -92,13 +159,13 @@ open class ContractsConfig(
     open val serverWeeklyBudgetMinor: Long
         get() = moneyMinor(config.string("server-weekly-budget", "0"), "server-weekly-budget", allowZero = true)
 
-    open fun validated(): ContractsConfig {
+    open fun validated(allowSeasonMutations: Boolean = false): ContractsConfig {
         enabled
         mode
         require(SERVER_ID_PATTERN.matches(leaderServer)) { "Invalid contracts leader-server: $leaderServer" }
         serverWeeklyBudgetMinor
         val orders = resourceOrders()
-        observeSeasonCatalog()?.validatedResourceLinks(orders)
+        observeSeasonCatalog(allowSeasonMutations)?.validatedResourceLinks(orders)
         return this
     }
 
@@ -142,21 +209,32 @@ open class ContractsConfig(
                     }
                 }
             }
-        val totalBudget = definitions.fold(0L) { total, definition -> Math.addExact(total, definition.budgetMinor) }
-        require(totalBudget <= serverWeeklyBudgetMinor) {
-            "Configured contract budgets $totalBudget exceed server weekly envelope $serverWeeklyBudgetMinor minor units"
+        val concurrentBudget = maximumConcurrentBudget(definitions)
+        require(concurrentBudget <= serverWeeklyBudgetMinor) {
+            "Configured concurrent contract budgets $concurrentBudget exceed server weekly envelope $serverWeeklyBudgetMinor minor units"
         }
         return definitions
     }
 
-    open fun observeSeasonCatalog(): ObserveSeasonCatalog? {
+    open fun observeSeasonCatalog(allowSeasonMutations: Boolean = false): ObserveSeasonCatalog? {
         if (!config.exists("season-catalog")) return null
-        require(mode == ContractsMode.OBSERVE) {
+        require(mode == ContractsMode.OBSERVE || (allowSeasonMutations && mode == ContractsMode.ENFORCE)) {
             "Season catalog is observe-only and cannot be loaded outside observe mode"
         }
         val root = "season-catalog"
+        val schemaVersion = config.integer("$root.schema-version", 0)
+        require(schemaVersion == SEASON_CATALOG_SCHEMA_VERSION) {
+            "Season catalog schema-version must be $SEASON_CATALOG_SCHEMA_VERSION"
+        }
         val seasonId = normalizedId(config.string("$root.id", ""), "$root.id")
         val completionStage = normalizedId(config.string("$root.completion-stage", ""), "$root.completion-stage")
+        val durationDays = positiveInt("$root.duration-days")
+        val startsAt = instant(config.string("$root.starts-at", ""), "$root.starts-at")
+        val endsAt = instant(config.string("$root.ends-at", ""), "$root.ends-at")
+        require(endsAt > startsAt) { "Season end must be after its start" }
+        require(Math.subtractExact(endsAt, startsAt) == Math.multiplyExact(durationDays.toLong(), MILLIS_PER_DAY)) {
+            "Season window must exactly match duration-days"
+        }
         val dungeonIds = normalizedKeys("$root.dungeon-contracts", MAX_SEASON_DUNGEONS)
         val dungeons =
             dungeonIds.associateWith { id ->
@@ -270,10 +348,13 @@ open class ContractsConfig(
         }
 
         return ObserveSeasonCatalog(
+            schemaVersion = schemaVersion,
             id = seasonId,
             title = printable(config.string("$root.title", ""), "$root.title"),
             completionStage = completionStage,
-            durationDays = positiveInt("$root.duration-days"),
+            durationDays = durationDays,
+            startsAt = startsAt,
+            endsAt = endsAt,
             dungeonContracts = dungeons,
             projectId = normalizedId(config.string("$projectRoot.id", ""), "$projectRoot.id"),
             projectTitle = printable(config.string("$projectRoot.title", ""), "$projectRoot.title"),
@@ -323,6 +404,12 @@ open class ContractsConfig(
         return value
     }
 
+    private fun maximumConcurrentBudget(definitions: List<ResourceContractDefinition>): Long =
+        definitions.map { it.windowStartsAt }.maxOfOrNull { instant ->
+            definitions.filter { instant >= it.windowStartsAt && instant < it.windowEndsAt }
+                .fold(0L) { total, definition -> Math.addExact(total, definition.budgetMinor) }
+        } ?: 0L
+
     private fun strictShare(path: String): Double {
         val raw = config.stringOrNull(path) ?: throw IllegalArgumentException("$path must be present")
         val value = raw.toDoubleOrNull() ?: throw IllegalArgumentException("$path must be numeric")
@@ -356,6 +443,8 @@ open class ContractsConfig(
         const val MAX_CONFIGURED_ORDERS = 64
         const val MAX_SEASON_DUNGEONS = 16
         const val MAX_PROJECT_STAGES = 16
+        const val SEASON_CATALOG_SCHEMA_VERSION = 4
+        private const val MILLIS_PER_DAY = 86_400_000L
         private val SERVER_ID_PATTERN = Regex("[a-z0-9][a-z0-9_-]{2,31}")
         private val ID_PATTERN = Regex("[a-z0-9][a-z0-9_-]{2,63}")
         private val NAMESPACED_KEY_PATTERN = Regex("[a-z0-9_.-]+:[a-z0-9_./-]+")

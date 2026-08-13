@@ -16,6 +16,9 @@ class ContractsMetricsTest : StringSpec({
                 submissionsEnabled = false,
                 seasonMutationRuntimeReady = false,
                 serverWeeklyBudgetMinor = 25_000_000L,
+                seasonCatalog = testSeasonCatalog(),
+                seasonState = null,
+                seasonMoneyJournal = SeasonMoneyJournalAudit.unavailable(),
                 dungeonObservation =
                     DungeonContractObservationSnapshot(
                         catalogAvailable = true,
@@ -71,6 +74,15 @@ class ContractsMetricsTest : StringSpec({
         points.first { it.name == "arc_contracts_submission_runtime_ready" }.value shouldBeExactly 0.0
         points.first { it.name == "arc_contracts_submissions_enabled" }.value shouldBeExactly 0.0
         points.first { it.name == "arc_season_mutation_runtime_ready" }.value shouldBeExactly 0.0
+        points.first { it.name == "arc_season_catalog_available" }.value shouldBeExactly 1.0
+        points.first {
+            it.name == "arc_season_project_resource_quantity" &&
+                it.tags["contract"] == "road_stone" && it.tags["component"] == "accepted"
+        }.value shouldBeExactly 50.0
+        points.first {
+            it.name == "arc_season_dungeon_money_currency" &&
+                it.tags["contract"] == "mines_recon" && it.tags["component"] == "entry_burn"
+        }.value shouldBeExactly 1_000.0
         points.first { it.name == "arc_contracts_available" }.value shouldBeExactly 1.0
         points.first { it.name == "arc_contracts_server_weekly_budget_currency" }.value shouldBeExactly 250_000.0
         points.first { it.name == "arc_contract_journal_manual_review" }.value shouldBeExactly 1.0
@@ -96,5 +108,6 @@ class ContractsMetricsTest : StringSpec({
         points.flatMap { it.tags.keys }.none { it.contains("player", ignoreCase = true) } shouldBe true
         points.flatMap { it.tags.values }.none { it.contains("player", ignoreCase = true) } shouldBe true
         points.flatMap { it.tags.values }.none { it.contains("submission", ignoreCase = true) } shouldBe true
+        points.none { it.name.contains("alert", ignoreCase = true) } shouldBe true
     }
 })

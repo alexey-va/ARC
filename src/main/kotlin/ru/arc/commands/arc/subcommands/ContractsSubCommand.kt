@@ -139,6 +139,7 @@ object ContractsSubCommand : SubCommand {
             SubmissionRejection.PLAYER_CAP_REACHED -> "твой лимит по заказу исчерпан"
             SubmissionRejection.CONTRIBUTOR_LIMIT_REACHED -> "лимит участников заказа исчерпан"
             SubmissionRejection.BELOW_MINIMUM -> "количество меньше минимальной партии"
+            SubmissionRejection.PROJECT_STAGE_LOCKED -> "этот этап общего проекта ещё не открыт"
             SubmissionRejection.INVENTORY_UNAVAILABLE -> "нет нужного количества обычных предметов без модификаций"
             SubmissionRejection.JOURNAL_CAPACITY_REACHED -> "журнал заявок заполнен; нужна проверка администратора"
         }
