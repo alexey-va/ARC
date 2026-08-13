@@ -420,6 +420,12 @@ internal fun buildAuditSummary(
     var records = 0L
     var attempts = 0L
     var enrichedRecords = 0L
+    var boundaryExcludedRecords = 0L
+    var boundaryExcludedOperations = 0L
+    var boundaryExcludedAbsoluteAmount = 0.0
+    var futureExcludedRecords = 0L
+    var futureExcludedOperations = 0L
+    var futureExcludedAbsoluteAmount = 0.0
     var oldest: Long? = null
     var newest: Long? = null
     val persistedRecords = mutableListOf<Pair<String, Transaction>>()
@@ -437,6 +443,22 @@ internal fun buildAuditSummary(
         snapshot.forEach { transaction ->
             if (transaction.timestamp2 < since) return@forEach
             if (!serverFilter.isNullOrBlank() && transaction.normalizedServer != serverFilter) return@forEach
+            if (transaction.timestamp < since) {
+                // An aggregate crossing the requested boundary cannot be split
+                // into an exact post-boundary amount. Exclude it completely and
+                // expose the ambiguity instead of silently attributing its
+                // pre-boundary operations to the clean window.
+                boundaryExcludedRecords++
+                boundaryExcludedOperations += transaction.occurrenceCount
+                boundaryExcludedAbsoluteAmount += transaction.absoluteAmount
+                return@forEach
+            }
+            if (transaction.timestamp2 > generatedAt) {
+                futureExcludedRecords++
+                futureExcludedOperations += transaction.occurrenceCount
+                futureExcludedAbsoluteAmount += transaction.absoluteAmount
+                return@forEach
+            }
             allRecords += auditData.name to transaction
             if (transaction.normalizedRecordKind == EconomyRecordKind.ATTEMPT) {
                 attempts += transaction.occurrenceCount
@@ -470,7 +492,7 @@ internal fun buildAuditSummary(
             val source = transaction.normalizedSource.label
             val action = transaction.normalizedAction.label
             val accountKey = context?.accountId?.takeIf(String::isNotBlank) ?: auditData.name.lowercase()
-            adminShopSales.add(auditData.name, transaction)
+            adminShopSales.add(accountKey, transaction)
             jobsRewards.add(accountKey, transaction)
             sources.computeIfAbsent(source) { MutableAuditStats(trackBalanceProfile = true) }
                 .add(accountKey, transaction, since)
@@ -554,6 +576,17 @@ internal fun buildAuditSummary(
         "generatedAt" to generatedAt,
         "since" to since,
         "serverFilter" to serverFilter,
+        "windowBoundary" to
+            linkedMapOf(
+                "exact" to (boundaryExcludedRecords == 0L && futureExcludedRecords == 0L),
+                "excludedCrossingRecords" to boundaryExcludedRecords,
+                "excludedCrossingOperations" to boundaryExcludedOperations,
+                "excludedCrossingAbsoluteAmount" to boundaryExcludedAbsoluteAmount,
+                "excludedFutureRecords" to futureExcludedRecords,
+                "excludedFutureOperations" to futureExcludedOperations,
+                "excludedFutureAbsoluteAmount" to futureExcludedAbsoluteAmount,
+                "evidence" to "records crossing since or extending past generatedAt are excluded because their amount cannot be split exactly",
+            ),
         "coverage" to
             linkedMapOf(
                 "oldest" to oldest,

@@ -5,8 +5,19 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import java.nio.file.Files
+import java.nio.file.Path
 
 class ContractsConfigTest : StringSpec({
+    "accepts the generated Economy V2 observe-policy golden fixture" {
+        val resource = requireNotNull(ContractsConfigTest::class.java.getResource("/contracts/modules/contracts.yml"))
+        val config = ContractsConfig.fromFile(Path.of(resource.toURI()).parent.parent)
+
+        config.validated() shouldBe config
+        config.mode shouldBe ContractsMode.OBSERVE
+        config.serverWeeklyBudgetMinor shouldBe 24_300_000L
+        config.resourceOrders().shouldHaveSize(5)
+    }
+
     "loads exact decimal money and explicit resource-order windows" {
         val root = Files.createTempDirectory("arc-contract-config")
         val modules = root.resolve("modules")

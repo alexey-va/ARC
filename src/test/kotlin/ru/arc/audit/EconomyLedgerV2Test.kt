@@ -357,6 +357,81 @@ class EconomyLedgerV2Test : FreeSpec({
             items.map { it["customItemId"] } shouldBe listOf(null, "CARBONADO", null)
         }
 
+        "excludes an aggregate crossing the exact since boundary and exposes ambiguity" {
+            val data = AuditData.create("Legacy", "survival:legacy")
+            val metadata = AuditMetadata(EconomySource.JOBS, EconomyFlow.MINT, server = "survival")
+            data.operation(10.0, Type.JOB, "Mining", metadata, at = 900, aggregationWindowMillis = 1_000)
+            data.operation(10.0, Type.JOB, "Mining", metadata, at = 1_100, aggregationWindowMillis = 1_000)
+            data.operation(
+                7.0,
+                Type.JOB,
+                "exact post-boundary",
+                metadata,
+                EconomyLedgerContext(
+                    recordKind = EconomyRecordKind.TRANSACTION,
+                    status = EconomyEventStatus.SUCCEEDED,
+                ),
+                at = 1_200,
+            )
+
+            val summary = buildAuditSummary(listOf(data), 2_000, 1_000, 20, null, emptyList())
+            val boundary = summary["windowBoundary"] as Map<*, *>
+            val totals = summary["totals"] as Map<*, *>
+            val coverage = summary["coverage"] as Map<*, *>
+
+            boundary["exact"] shouldBe false
+            boundary["excludedCrossingRecords"] shouldBe 1L
+            boundary["excludedCrossingOperations"] shouldBe 2L
+            boundary["excludedCrossingAbsoluteAmount"] shouldBe 20.0
+            boundary["excludedFutureRecords"] shouldBe 0L
+            totals["minted"] shouldBe 7.0
+            coverage["records"] shouldBe 1L
+            coverage["operations"] shouldBe 1L
+        }
+
+        "excludes a record beyond generatedAt from an exact audit window" {
+            val data = AuditData.create("Future", "survival:future")
+            data.operation(
+                25.0,
+                Type.JOB,
+                "future payout",
+                AuditMetadata(EconomySource.JOBS, EconomyFlow.MINT, server = "survival"),
+                at = 2_001,
+            )
+
+            val summary = buildAuditSummary(listOf(data), 2_000, 1_000, 20, null, emptyList())
+            val boundary = summary["windowBoundary"] as Map<*, *>
+            val totals = summary["totals"] as Map<*, *>
+
+            boundary["exact"] shouldBe false
+            boundary["excludedCrossingRecords"] shouldBe 0L
+            boundary["excludedFutureRecords"] shouldBe 1L
+            boundary["excludedFutureOperations"] shouldBe 1L
+            boundary["excludedFutureAbsoluteAmount"] shouldBe 25.0
+            totals["minted"] shouldBe 0.0
+        }
+
+        "counts admin shop sellers by stable account identity" {
+            val first = AuditData.create("OldName", "survival:account")
+            val second = AuditData.create("NewName", "spawn:account")
+            fun context() =
+                EconomyLedgerContext(
+                    recordKind = EconomyRecordKind.TRANSACTION,
+                    status = EconomyEventStatus.SUCCEEDED,
+                    accountId = "stable-account",
+                    items = listOf(EconomyLedgerItem("blocks.stone", "minecraft:stone", 10, 1.0)),
+                )
+            val metadata = AuditMetadata(EconomySource.SHOP, EconomyFlow.MINT, server = "survival")
+            first.operation(10.0, Type.SHOP, "sale", metadata, context(), at = 1_000)
+            second.operation(10.0, Type.SHOP, "sale", metadata, context(), at = 2_000)
+
+            val summary = buildAuditSummary(listOf(first, second), 3_000, 0, 20, null, emptyList())
+            val sale = ((summary["adminShopSales"] as Map<*, *>)["items"] as List<*>).single() as Map<*, *>
+
+            sale["players"] shouldBe 1
+            sale["topPlayerQuantityShare"] shouldBe 1.0
+        }
+
         "reports only post-activation Slimefun sales as policy violations" {
             val data = AuditData.create("Seller", "survival:seller")
             fun saleContext(providerTimestamp: Long) =
@@ -541,18 +616,21 @@ class EconomyLedgerV2Test : FreeSpec({
             (recent.last()["jobBreakdown"] as List<*>).shouldHaveSize(2)
         }
 
-        "does not invent an activity bucket when an aggregate crosses the query cutoff" {
+        "does not invent totals or activity when an aggregate crosses the query cutoff" {
             val data = AuditData.create("Player")
             val metadata = AuditMetadata(EconomySource.JOBS, EconomyFlow.MINT, server = "survival")
             data.operation(10.0, Type.JOB, "Mining", metadata, at = 299_990)
             data.operation(10.0, Type.JOB, "Mining", metadata, at = 300_001)
 
             val summary = buildAuditSummary(listOf(data), 600_000, 299_995, 20, null, emptyList())
-            val source = (summary["sources"] as List<*>).single() as Map<*, *>
-            val activity = source["activity"] as Map<*, *>
+            val boundary = summary["windowBoundary"] as Map<*, *>
+            val totals = summary["totals"] as Map<*, *>
 
-            activity["mintPlayerBuckets"] shouldBe 1
-            activity["mintActivityPlayerHoursProxy"] shouldBe (1.0 / 12.0)
+            (summary["sources"] as List<*>).shouldHaveSize(0)
+            totals["minted"] shouldBe 0.0
+            boundary["exact"] shouldBe false
+            boundary["excludedCrossingRecords"] shouldBe 1L
+            boundary["excludedCrossingOperations"] shouldBe 2L
         }
 
         "exports low-cardinality attempt outcomes and context coverage" {

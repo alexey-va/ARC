@@ -206,6 +206,9 @@ surface is intentionally compact:
   accepts either bounded `hours` or exact `since_epoch_ms`, never both. The
   absolute boundary is useful for clean post-policy windows, stays inside the
   same 31-day retention cap, and is echoed exactly as response `since`.
+  `windowBoundary.exact` is true only when no persisted aggregate crosses
+  `since` and no record extends past `generatedAt`; ambiguous rows are excluded
+  from totals and reported only through bounded crossing/future counters.
   Economy ledger
   schema v2 also returns bounded `recentEvents`, `recentFailures`, attempt
   outcomes, context-field coverage, and `adminShopSales`: ranked item path,

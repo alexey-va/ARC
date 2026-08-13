@@ -1,0 +1,85 @@
+generated-policy-evidence:
+  schema-version: 1
+  season-id: road_revival
+  observe-only: true
+  calibration-window-start-epoch-millis: 1786579964000
+  calibration-window-end-epoch-millis: 1787184764000
+  input-digests:
+    catalogSha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    budgetSha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    evidenceSha256: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+enabled: true
+mode: observe
+leader-server: spawn
+server-weekly-budget: '243000.00'
+orders:
+  road_stone:
+    enabled: true
+    kind: resource
+    display-name: Камень для старого тракта
+    item: minecraft:stone
+    funding: server_envelope
+    window-starts-at: '2026-08-20T00:12:44Z'
+    window-ends-at: '2026-08-27T00:12:44Z'
+    payout-per-unit: '0.45'
+    budget: '45000.00'
+    target-quantity: 100000
+    per-player-quantity-cap: 20000
+    min-submission-quantity: 256
+    max-submission-quantity: 2304
+  station_timber:
+    enabled: true
+    kind: resource
+    display-name: Дубовые брёвна для станции
+    item: minecraft:oak_log
+    funding: server_envelope
+    window-starts-at: '2026-08-20T00:12:44Z'
+    window-ends-at: '2026-08-27T00:12:44Z'
+    payout-per-unit: '2.50'
+    budget: '50000.00'
+    target-quantity: 20000
+    per-player-quantity-cap: 4000
+    min-submission-quantity: 64
+    max-submission-quantity: 2304
+  station_iron:
+    enabled: true
+    kind: resource
+    display-name: Железо для каркаса станции
+    item: minecraft:iron_ingot
+    funding: server_envelope
+    window-starts-at: '2026-08-20T00:12:44Z'
+    window-ends-at: '2026-08-27T00:12:44Z'
+    payout-per-unit: '7.50'
+    budget: '60000.00'
+    target-quantity: 8000
+    per-player-quantity-cap: 1600
+    min-submission-quantity: 32
+    max-submission-quantity: 512
+  station_rails:
+    enabled: true
+    kind: resource
+    display-name: Рельсы для шахтной ветки
+    item: minecraft:rail
+    funding: server_envelope
+    window-starts-at: '2026-08-20T00:12:44Z'
+    window-ends-at: '2026-08-27T00:12:44Z'
+    payout-per-unit: '8.00'
+    budget: '48000.00'
+    target-quantity: 6000
+    per-player-quantity-cap: 1200
+    min-submission-quantity: 64
+    max-submission-quantity: 512
+  station_lanterns:
+    enabled: true
+    kind: resource
+    display-name: Фонари для тракта и станции
+    item: minecraft:lantern
+    funding: server_envelope
+    window-starts-at: '2026-08-20T00:12:44Z'
+    window-ends-at: '2026-08-27T00:12:44Z'
+    payout-per-unit: '5.00'
+    budget: '40000.00'
+    target-quantity: 8000
+    per-player-quantity-cap: 1600
+    min-submission-quantity: 32
+    max-submission-quantity: 512
