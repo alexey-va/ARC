@@ -118,17 +118,17 @@ internal data class EconomyCommandOrigin(
 )
 
 /**
- * Preserves one bounded gameplay source when a Denizen queue dispatches a
- * console economy command through CMI. RedisEconomy records only CMI's class in
- * that path, so the upstream source is available only while the command event
+ * Preserves one bounded gameplay source when a trusted plugin dispatches a
+ * console economy command. RedisEconomy can record only the downstream command
+ * executor, so the upstream source is available only while the command event
  * is still on the synchronous stack.
  */
 internal object EconomyCommandOriginResolver {
     fun resolve(stackTrace: Array<StackTraceElement> = Thread.currentThread().stackTrace): EconomyCommandOrigin {
         val gameplayCaller =
-            GAMEPLAY_PACKAGES.firstNotNullOfOrNull { (packageName, source) ->
-                stackTrace.firstOrNull { it.className.startsWith(packageName) }
-                    ?.let { EconomyCommandOrigin(source, it.className.take(240)) }
+            stackTrace.firstNotNullOfOrNull { frame ->
+                GAMEPLAY_PACKAGES.firstOrNull { (packageName, _) -> frame.className.startsWith(packageName) }
+                    ?.let { (_, source) -> EconomyCommandOrigin(source, frame.className.take(240)) }
             }
         return gameplayCaller ?: EconomyCommandOrigin(EconomySource.ADMIN_COMMAND, "Server")
     }

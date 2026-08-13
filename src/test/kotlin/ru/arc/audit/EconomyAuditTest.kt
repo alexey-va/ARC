@@ -219,6 +219,12 @@ class EconomyAuditTest : FreeSpec({
                             "DispatchUtils.java",
                             2,
                         ),
+                        StackTraceElement(
+                            "com.denizenscript.denizen.scripts.commands.server.ExecuteCommand",
+                            "execute",
+                            "ExecuteCommand.java",
+                            3,
+                        ),
                     ),
                 )
 
