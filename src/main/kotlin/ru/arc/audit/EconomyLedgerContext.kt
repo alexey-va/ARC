@@ -54,6 +54,29 @@ data class EconomyLedgerItem(
     val customItemId: String? = null,
 )
 
+/** One bounded Jobs action contributing to a provider-level buffered payout. */
+data class EconomyJobRewardComponent(
+    @SerializedName("j")
+    val job: String? = null,
+
+    @SerializedName("ac")
+    val activity: String? = null,
+
+    @SerializedName("t")
+    val target: String? = null,
+
+    @SerializedName("o")
+    val origin: String? = null,
+
+    @SerializedName("a")
+    val amount: Double? = null,
+
+    @SerializedName("n")
+    val occurrences: Int? = null,
+) {
+    val normalizedOccurrences: Int get() = occurrences?.coerceIn(1, 1_000_000) ?: 1
+}
+
 /**
  * Optional v2 evidence attached to one persisted ledger record.
  *
@@ -112,6 +135,10 @@ data class EconomyLedgerContext(
     @SerializedName("pc")
     val priceComponents: Map<String, Double>? = null,
 
+    /** Jobs buffers many action payments into one Vault deposit. */
+    @SerializedName("jb")
+    val jobBreakdown: List<EconomyJobRewardComponent>? = null,
+
     @SerializedName("fr")
     val failureReason: String? = null,
 
@@ -129,12 +156,26 @@ data class EconomyLedgerContext(
 
     val normalizedPriceComponents: Map<String, Double> get() = priceComponents.orEmpty()
 
+    val normalizedJobBreakdown: List<EconomyJobRewardComponent>
+        get() =
+            jobBreakdown.orEmpty().asSequence()
+                .filter { component ->
+                    !component.job.isNullOrBlank() &&
+                        !component.activity.isNullOrBlank() &&
+                        component.amount?.let { it.isFinite() && it > 0.0 } == true
+                }.take(MAX_JOB_BREAKDOWN_COMPONENTS)
+                .toList()
+
     fun asTransaction(): EconomyLedgerContext =
         copy(
             recordKind = EconomyRecordKind.TRANSACTION,
             status = EconomyEventStatus.SUCCEEDED,
             failureReason = null,
         )
+
+    private companion object {
+        const val MAX_JOB_BREAKDOWN_COMPONENTS = 64
+    }
 }
 
 data class EconomyBalanceObservation(

@@ -124,6 +124,105 @@ private data class EconomyActionKey(
     val action: String,
 )
 
+private data class JobRewardKey(
+    val job: String,
+    val activity: String,
+    val target: String?,
+    val origin: String,
+)
+
+private class MutableJobRewardStats {
+    var income = 0.0
+    var actions = 0L
+    var payments = 0L
+    private val players = linkedSetOf<String>()
+
+    fun add(player: String, component: EconomyJobRewardComponent) {
+        income += component.amount ?: return
+        actions += component.normalizedOccurrences.toLong()
+        payments++
+        players += player
+    }
+
+    fun toMap(key: JobRewardKey): Map<String, Any?> =
+        linkedMapOf(
+            "job" to key.job,
+            "activity" to key.activity,
+            "target" to key.target,
+            "origin" to key.origin,
+            "income" to income,
+            "actions" to actions,
+            "payments" to payments,
+            "players" to players.size,
+            "averagePerAction" to income.takeIf { actions > 0L }?.div(actions),
+        )
+}
+
+private class JobsRewardsSummary {
+    private val components = linkedMapOf<JobRewardKey, MutableJobRewardStats>()
+    var income = 0.0
+        private set
+    var attributedIncome = 0.0
+        private set
+    var payments = 0L
+        private set
+    var attributedPayments = 0L
+        private set
+    var mismatchedPayments = 0L
+        private set
+    var actions = 0L
+        private set
+
+    fun add(player: String, transaction: Transaction) {
+        if (transaction.normalizedSource != EconomySource.JOBS) return
+        if (transaction.normalizedFlow != EconomyFlow.MINT || transaction.amount <= 0.0) return
+        if (transaction.normalizedStatus !in setOf(EconomyEventStatus.SUCCEEDED, EconomyEventStatus.REVERTED)) return
+        income += transaction.amount
+        payments++
+        val evidence = transaction.context?.normalizedJobBreakdown.orEmpty()
+        val evidenceTotal = evidence.sumOf { it.amount ?: 0.0 }
+        if (evidence.isEmpty() || !approximatelyEqualMoney(evidenceTotal, transaction.amount)) {
+            if (evidence.isNotEmpty()) mismatchedPayments++
+            return
+        }
+        attributedIncome += transaction.amount
+        attributedPayments++
+        evidence.forEach { component ->
+            val key =
+                JobRewardKey(
+                    job = component.job!!,
+                    activity = component.activity!!,
+                    target = component.target,
+                    origin = component.origin ?: "other",
+                )
+            components.computeIfAbsent(key) { MutableJobRewardStats() }.add(player, component)
+            actions += component.normalizedOccurrences.toLong()
+        }
+    }
+
+    fun toMap(limit: Int): Map<String, Any?> =
+        linkedMapOf(
+            "income" to income,
+            "payments" to payments,
+            "actions" to actions,
+            "attributedIncome" to attributedIncome,
+            "unattributedIncome" to (income - attributedIncome).coerceAtLeast(0.0),
+            "attributionRatio" to if (income == 0.0) 0.0 else attributedIncome / income,
+            "attributedPayments" to attributedPayments,
+            "unattributedPayments" to (payments - attributedPayments),
+            "mismatchedPayments" to mismatchedPayments,
+            "components" to
+                components.entries
+                    .sortedWith(
+                        compareByDescending<Map.Entry<JobRewardKey, MutableJobRewardStats>> { it.value.income }
+                            .thenByDescending { it.value.actions }
+                            .thenBy { it.key.job }
+                            .thenBy { it.key.activity },
+                    ).take(limit)
+                    .map { it.value.toMap(it.key) },
+        )
+}
+
 private class MutableAdminShopItemStats {
     var quantity = 0L
     var exactIncome = 0.0
@@ -330,6 +429,7 @@ internal fun buildAuditSummary(
     val attemptsBySource = linkedMapOf<String, Long>()
     val contextPresent = linkedMapOf<String, Long>()
     val adminShopSales = AdminShopSalesSummary()
+    val jobsRewards = JobsRewardsSummary()
     var contextEligible = 0L
 
     data.forEach { auditData ->
@@ -363,6 +463,7 @@ internal fun buildAuditSummary(
                 "correlation" to !context?.correlationId.isNullOrBlank(),
                 "providerTimestamp" to (context?.providerTimestamp != null),
                 "action" to !context?.action.isNullOrBlank(),
+                "jobsBreakdown" to !context?.normalizedJobBreakdown.isNullOrEmpty(),
             ).forEach { (field, present) ->
                 if (present) contextPresent.merge(field, 1L, Long::plus)
             }
@@ -370,6 +471,7 @@ internal fun buildAuditSummary(
             val action = transaction.normalizedAction.label
             val accountKey = context?.accountId?.takeIf(String::isNotBlank) ?: auditData.name.lowercase()
             adminShopSales.add(auditData.name, transaction)
+            jobsRewards.add(accountKey, transaction)
             sources.computeIfAbsent(source) { MutableAuditStats(trackBalanceProfile = true) }
                 .add(accountKey, transaction, since)
             actions.computeIfAbsent(EconomyActionKey(source, action)) { MutableAuditStats(trackBalanceProfile = true) }
@@ -421,7 +523,7 @@ internal fun buildAuditSummary(
         )
 
     val contextCoverage =
-        listOf("balance", "session", "world", "counterparty", "items", "correlation", "providerTimestamp", "action")
+        listOf("balance", "session", "world", "counterparty", "items", "correlation", "providerTimestamp", "action", "jobsBreakdown")
             .associateWith { field ->
                 val present = contextPresent[field] ?: 0L
                 linkedMapOf(
@@ -504,6 +606,7 @@ internal fun buildAuditSummary(
             ),
         "contextCoverage" to contextCoverage,
         "adminShopSales" to adminShopSales.toMap(limit),
+        "jobsRewards" to jobsRewards.toMap(limit),
         "topPlayers" to ranked(players, "player"),
         "unknownOrigins" to ranked(unknownOrigins, "origin"),
         "policyViolations" to policyViolations,
@@ -591,6 +694,7 @@ private fun ledgerEventMap(entry: Pair<String, Transaction>): Map<String, Any?> 
         "shopId" to context?.shopId,
         "items" to context?.normalizedItems.orEmpty(),
         "priceComponents" to context?.normalizedPriceComponents.orEmpty(),
+        "jobBreakdown" to context?.normalizedJobBreakdown.orEmpty(),
         "failureReason" to context?.failureReason,
         "revertedWith" to context?.revertedWith,
         "reason" to transaction.comment,

@@ -1,12 +1,18 @@
 package ru.arc.jobs
 
 import com.gamingmesh.jobs.api.JobsExpGainEvent
+import com.gamingmesh.jobs.api.JobsPaymentEvent
 import com.gamingmesh.jobs.api.JobsPrePaymentEvent
+import com.gamingmesh.jobs.container.CurrencyType
 import com.google.common.cache.Cache
 import com.google.common.cache.CacheBuilder
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
+import ru.arc.audit.EconomyPendingContextTracker
+import ru.arc.audit.EconomySource
+import ru.arc.audit.JobsEconomyContextTracker
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
@@ -139,4 +145,80 @@ object JobsModuleListener : Listener {
             }
         }
     }
+
+    /** Captures the final boosted value for each Jobs action before buffering. */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun captureJobsAction(event: JobsPrePaymentEvent) {
+        val action = event.actionInfo
+        val activity = action?.type?.name
+        JobsEconomyContextTracker.capture(
+            playerId = event.player.uniqueId,
+            job = event.job.name,
+            activity = activity,
+            target =
+                event.livingEntity?.type?.key?.asString()
+                    ?: event.entity?.type?.key?.asString()
+                    ?: event.block?.type?.key?.asString()
+                    ?: action?.nameWithSub
+                    ?: action?.name,
+            origin = entityOrigin(activity, event.livingEntity ?: event.entity),
+            amount = event.amount,
+            now = System.currentTimeMillis(),
+        )
+    }
+
+    /** Joins the buffered action mix to the exact final provider deposit. */
+    @EventHandler(priority = EventPriority.MONITOR)
+    fun captureJobsPayment(event: JobsPaymentEvent) {
+        val playerId = event.player.uniqueId
+        if (event.isCancelled) {
+            JobsEconomyContextTracker.discard(playerId)
+            return
+        }
+        val amount = event.get(CurrencyType.MONEY)
+        val capturedAt = System.currentTimeMillis()
+        val context = JobsEconomyContextTracker.finalizePayment(playerId, amount, capturedAt) ?: return
+        EconomyPendingContextTracker.register(playerId, amount, context, capturedAt, EconomySource.JOBS)
+    }
+
+    private fun entityOrigin(activity: String?, entity: org.bukkit.entity.Entity?): String {
+        if (activity !in KILL_ACTIVITIES || entity == null) return "not_applicable"
+        if (entity.fromMobSpawner()) return "spawner"
+        return when (entity.entitySpawnReason.name) {
+            in SPAWNER_REASONS -> "spawner"
+            in NATURAL_REASONS -> "natural"
+            in PLAYER_GENERATED_REASONS -> "player_generated"
+            "COMMAND", "CUSTOM" -> "custom"
+            else -> "other"
+        }
+    }
+
+    private val KILL_ACTIVITIES = setOf("KILL", "MMKILL", "FORCEKILL")
+    private val SPAWNER_REASONS = setOf("SPAWNER", "TRIAL_SPAWNER", "OMINOUS_ITEM_SPAWNER")
+    private val NATURAL_REASONS =
+        setOf(
+            "NATURAL",
+            "JOCKEY",
+            "CHUNK_GEN",
+            "VILLAGE_DEFENSE",
+            "VILLAGE_INVASION",
+            "SLIME_SPLIT",
+            "REINFORCEMENTS",
+            "RAID",
+            "PATROL",
+            "TRAP",
+        )
+    private val PLAYER_GENERATED_REASONS =
+        setOf(
+            "EGG",
+            "SPAWNER_EGG",
+            "DISPENSE_EGG",
+            "BREEDING",
+            "BUILD_IRONGOLEM",
+            "BUILD_SNOWMAN",
+            "BUILD_WITHER",
+            "BUILD_COPPER_GOLEM",
+            "BUCKET",
+            "DUPLICATION",
+        )
 }

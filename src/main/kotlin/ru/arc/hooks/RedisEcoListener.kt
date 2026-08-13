@@ -162,8 +162,8 @@ class RedisEcoListener : Listener {
         val observedAfter = HookRegistry.redisEcoHook?.getCachedBalance(playerId, currency)
         val balance = amount?.let { delta -> observedAfter?.let { EconomyBalanceObservation.inferredFromAfter(delta, it) } }
         val pending =
-            if (amount != null && source in setOf(EconomySource.SHOP, EconomySource.AUTOSELL)) {
-                EconomyPendingContextTracker.consume(playerId, amount, capturedAt)
+            if (amount != null && source in setOf(EconomySource.JOBS, EconomySource.SHOP, EconomySource.AUTOSELL)) {
+                EconomyPendingContextTracker.consume(playerId, amount, capturedAt, source)
             } else {
                 null
             }

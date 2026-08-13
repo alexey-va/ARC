@@ -62,7 +62,13 @@ internal class EconomyShopGuiAuditListener(
                 priceComponents = priceComponents.mapKeys { (key, _) -> "base:$key" },
                 capturedAt = capturedAt,
             )
-        EconomyPendingContextTracker.register(player.uniqueId, expectedPayouts, context, capturedAt)
+        EconomyPendingContextTracker.register(
+            player.uniqueId,
+            expectedPayouts,
+            context,
+            capturedAt,
+            EconomySource.AUTOSELL,
+        )
         AutoSellAuditModule.recordPreTransaction(context.items.orEmpty().sumOf { it.quantity ?: 0 })
     }
 
@@ -125,7 +131,7 @@ internal class EconomyShopGuiAuditListener(
             context,
         )
         if (succeeded && requestedAmount != null) {
-            EconomyPendingContextTracker.register(player.uniqueId, requestedAmount, context, capturedAt)
+            EconomyPendingContextTracker.register(player.uniqueId, requestedAmount, context, capturedAt, source)
         }
     }
 

@@ -48,6 +48,8 @@ class EconomyAuditMonitor(
 
     private data class ActionMetricKey(val source: String, val action: String, val direction: String)
 
+    private data class JobMetricKey(val job: String, val activity: String, val origin: String)
+
     private data class PolicyMetricKey(val policy: String)
 
     private class IncomeWindow {
@@ -66,6 +68,9 @@ class EconomyAuditMonitor(
     private val contextCounters = ConcurrentHashMap<ContextMetricKey, Counter>()
     private val actionTransactionCounters = ConcurrentHashMap<ActionMetricKey, Counter>()
     private val actionAmountCounters = ConcurrentHashMap<ActionMetricKey, Counter>()
+    private val jobMetricKeys = ConcurrentHashMap.newKeySet<JobMetricKey>()
+    private val jobActionCounters = ConcurrentHashMap<JobMetricKey, Counter>()
+    private val jobAmountCounters = ConcurrentHashMap<JobMetricKey, Counter>()
     private val policyViolationCounters = ConcurrentHashMap<PolicyMetricKey, Counter>()
     private val observations = AtomicLong()
 
@@ -83,6 +88,7 @@ class EconomyAuditMonitor(
         if (!config.monitoringEnabled || !amount.isFinite() || amount == 0.0) return
         recordMetrics(amount, metadata)
         recordActionMetrics(amount, metadata, context)
+        recordJobRewardMetrics(amount, metadata, context)
         recordContextMetrics(metadata, context)
 
         val now = timeProvider.currentTimeMillis()
@@ -213,6 +219,7 @@ class EconomyAuditMonitor(
                 "correlation" to !context?.correlationId.isNullOrBlank(),
                 "provider_timestamp" to (context?.providerTimestamp != null),
                 "action" to !context?.action.isNullOrBlank(),
+                "jobs_breakdown" to !context?.normalizedJobBreakdown.isNullOrEmpty(),
             )
         fields.forEach { (field, present) ->
             val key = ContextMetricKey(metadata.source.label, field, if (present) "true" else "false")
@@ -223,6 +230,48 @@ class EconomyAuditMonitor(
                     .register(registry)
             }.increment()
         }
+    }
+
+    private fun recordJobRewardMetrics(amount: Double, metadata: AuditMetadata, context: EconomyLedgerContext?) {
+        if (metadata.source != EconomySource.JOBS || amount <= 0.0) return
+        val registry = registryProvider() ?: return
+        val breakdown = context?.normalizedJobBreakdown.orEmpty()
+        if (!approximatelyEqualMoney(breakdown.sumOf { it.amount ?: 0.0 }, amount)) return
+        breakdown.forEach { component ->
+            val amount = component.amount?.takeIf { it.isFinite() && it > 0.0 } ?: return@forEach
+            val key = boundedJobMetricKey(component)
+            jobAmountCounters.computeIfAbsent(key) {
+                Counter.builder("arc_jobs_reward_amount_total")
+                    .description("Attributed Jobs reward amount by profession, activity and spawn origin")
+                    .baseUnit("currency")
+                    .tags("source", EconomySource.JOBS.label, "job", key.job, "activity", key.activity, "origin", key.origin)
+                    .register(registry)
+            }.increment(amount)
+            jobActionCounters.computeIfAbsent(key) {
+                Counter.builder("arc_jobs_reward_actions_total")
+                    .description("Attributed Jobs actions by profession, activity and spawn origin")
+                    .tags("source", EconomySource.JOBS.label, "job", key.job, "activity", key.activity, "origin", key.origin)
+                    .register(registry)
+            }.increment(component.normalizedOccurrences.toDouble())
+        }
+    }
+
+    private fun boundedJobMetricKey(component: EconomyJobRewardComponent): JobMetricKey {
+        val requested =
+            JobMetricKey(
+                job = normalizeMetricLabel(component.job),
+                activity = normalizeMetricLabel(component.activity),
+                origin = normalizeMetricLabel(component.origin),
+            )
+        if (requested in jobMetricKeys) return requested
+        synchronized(jobMetricKeys) {
+            if (requested in jobMetricKeys) return requested
+            if (jobMetricKeys.size < MAX_JOB_METRIC_KEYS) {
+                jobMetricKeys += requested
+                return requested
+            }
+        }
+        return OTHER_JOB_METRIC_KEY
     }
 
     private fun registerPolicyMeters() {
@@ -366,5 +415,7 @@ class EconomyAuditMonitor(
 
     private companion object {
         const val CLEANUP_INTERVAL = 1_000L
+        const val MAX_JOB_METRIC_KEYS = 256
+        val OTHER_JOB_METRIC_KEY = JobMetricKey("other", "other", "other")
     }
 }

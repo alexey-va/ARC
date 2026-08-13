@@ -10,29 +10,43 @@ object EconomyPendingContextTracker {
     private data class Pending(
         val expectedAmounts: List<Double>,
         val context: EconomyLedgerContext,
+        val source: EconomySource?,
         val expiresAt: Long,
     )
 
     private val pending = ConcurrentHashMap<UUID, ConcurrentLinkedDeque<Pending>>()
 
-    fun register(playerId: UUID, expectedAmount: Double?, context: EconomyLedgerContext, now: Long) {
+    fun register(
+        playerId: UUID,
+        expectedAmount: Double?,
+        context: EconomyLedgerContext,
+        now: Long,
+        source: EconomySource? = null,
+    ) {
         val amount = expectedAmount?.takeIf(Double::isFinite) ?: return
-        register(playerId, listOf(amount), context, now)
+        register(playerId, listOf(amount), context, now, source)
     }
 
-    fun register(playerId: UUID, expectedAmounts: Collection<Double>, context: EconomyLedgerContext, now: Long) {
+    fun register(
+        playerId: UUID,
+        expectedAmounts: Collection<Double>,
+        context: EconomyLedgerContext,
+        now: Long,
+        source: EconomySource? = null,
+    ) {
         val amounts = expectedAmounts.asSequence().filter(Double::isFinite).distinct().toList()
         if (amounts.isEmpty()) return
         val queue = pending.computeIfAbsent(playerId) { ConcurrentLinkedDeque() }
-        queue.addLast(Pending(amounts, context, now + TTL_MILLIS))
+        queue.addLast(Pending(amounts, context, source, now + TTL_MILLIS))
         while (queue.size > MAX_PENDING_PER_PLAYER) queue.pollFirst()
     }
 
-    fun consume(playerId: UUID, amount: Double, now: Long): EconomyLedgerContext? {
+    fun consume(playerId: UUID, amount: Double, now: Long, source: EconomySource? = null): EconomyLedgerContext? {
         val queue = pending[playerId] ?: return null
         queue.removeIf { it.expiresAt < now }
         val match = queue.firstOrNull { candidate ->
-            candidate.expectedAmounts.any { approximatelyEqualMoney(it, amount) }
+            (source == null || candidate.source == source) &&
+                candidate.expectedAmounts.any { approximatelyEqualMoney(it, amount) }
         }
         if (match != null) queue.remove(match)
         if (queue.isEmpty()) pending.remove(playerId, queue)

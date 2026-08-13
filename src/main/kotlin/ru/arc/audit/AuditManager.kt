@@ -105,6 +105,7 @@ object AuditManager {
         sessionTracker.clear()
         EconomyPendingContextTracker.clear()
         EconomyTransferCorrelationTracker.clear()
+        JobsEconomyContextTracker.clear()
     }
 
     /**

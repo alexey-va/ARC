@@ -57,6 +57,10 @@ class EconomyLedgerV2Test : FreeSpec({
                             ),
                         ),
                     priceComponents = mapOf("vault" to 25.0),
+                    jobBreakdown =
+                        listOf(
+                            EconomyJobRewardComponent("miner", "break", "minecraft:stone", "not_applicable", 25.0, 5),
+                        ),
                     capturedAt = 1_010,
                 )
             val original =
@@ -78,6 +82,7 @@ class EconomyLedgerV2Test : FreeSpec({
 
             restored shouldBe original
             restored.context?.normalizedItems?.single()?.customItemId shouldBe "SLIMEFUN_TEST_ITEM"
+            restored.context?.normalizedJobBreakdown?.single()?.job shouldBe "miner"
         }
     }
 
@@ -168,6 +173,40 @@ class EconomyLedgerV2Test : FreeSpec({
             )
 
             EconomyPendingContextTracker.consume(playerId, 50.0, 1_100) shouldBe null
+        }
+
+        "does not cross-correlate equal Jobs and shop amounts" {
+            val playerId = UUID.randomUUID()
+            EconomyPendingContextTracker.register(
+                playerId,
+                50.0,
+                EconomyLedgerContext(correlationId = "jobs", action = "job_reward"),
+                1_000,
+                EconomySource.JOBS,
+            )
+            EconomyPendingContextTracker.register(
+                playerId,
+                50.0,
+                EconomyLedgerContext(correlationId = "shop", action = "sell_screen"),
+                1_001,
+                EconomySource.SHOP,
+            )
+
+            EconomyPendingContextTracker.consume(playerId, 50.0, 1_100, EconomySource.SHOP)?.correlationId shouldBe "shop"
+            EconomyPendingContextTracker.consume(playerId, 50.0, 1_101, EconomySource.JOBS)?.correlationId shouldBe "jobs"
+        }
+
+        "does not use an unscoped pending context as a source wildcard" {
+            val playerId = UUID.randomUUID()
+            EconomyPendingContextTracker.register(
+                playerId,
+                50.0,
+                EconomyLedgerContext(correlationId = "unscoped"),
+                1_000,
+            )
+
+            EconomyPendingContextTracker.consume(playerId, 50.0, 1_100, EconomySource.JOBS) shouldBe null
+            EconomyPendingContextTracker.consume(playerId, 50.0, 1_101)?.correlationId shouldBe "unscoped"
         }
 
         "pairs complementary sides of one player transfer" {
@@ -450,6 +489,56 @@ class EconomyLedgerV2Test : FreeSpec({
             evidence["percentileMethod"] shouldBe "nearest_rank"
             evidence["bucketMinutes"] shouldBe 5
             evidence["interpretation"] shouldBe "five_minute_presence_proxy_not_measured_session_duration"
+        }
+
+        "summarizes exact Jobs profession, activity, target and spawn-origin evidence" {
+            val data = AuditData.create("Hunter", "survival:hunter")
+            data.operation(
+                80.0,
+                Type.JOB,
+                "Jobs payout",
+                AuditMetadata(EconomySource.JOBS, EconomyFlow.MINT, server = "survival"),
+                EconomyLedgerContext(
+                    recordKind = EconomyRecordKind.TRANSACTION,
+                    status = EconomyEventStatus.SUCCEEDED,
+                    action = "job_reward",
+                    jobBreakdown =
+                        listOf(
+                            EconomyJobRewardComponent("miner", "break", "minecraft:stone", "not_applicable", 32.0, 2),
+                            EconomyJobRewardComponent("hunter", "kill", "minecraft:zombie", "natural", 48.0, 3),
+                        ),
+                ),
+                at = 1_000,
+            )
+            data.operation(
+                20.0,
+                Type.JOB,
+                "Legacy Jobs payout",
+                AuditMetadata(EconomySource.JOBS, EconomyFlow.MINT, server = "survival"),
+                at = 2_000,
+            )
+
+            val summary = buildAuditSummary(listOf(data), 3_000, 0, 20, null, emptyList())
+            val rewards = summary["jobsRewards"] as Map<*, *>
+            val components = (rewards["components"] as List<*>).map { it as Map<*, *> }
+            val recent = (summary["recentEvents"] as List<*>).map { it as Map<*, *> }
+
+            rewards["income"] shouldBe 100.0
+            rewards["payments"] shouldBe 2L
+            rewards["actions"] shouldBe 5L
+            rewards["attributedIncome"] shouldBe 80.0
+            rewards["unattributedIncome"] shouldBe 20.0
+            rewards["attributionRatio"] shouldBe 0.8
+            rewards["attributedPayments"] shouldBe 1L
+            rewards["unattributedPayments"] shouldBe 1L
+            rewards["mismatchedPayments"] shouldBe 0L
+            components.map { it["job"] } shouldBe listOf("hunter", "miner")
+            components.map { it["income"] } shouldBe listOf(48.0, 32.0)
+            components.first()["activity"] shouldBe "kill"
+            components.first()["target"] shouldBe "minecraft:zombie"
+            components.first()["origin"] shouldBe "natural"
+            components.first()["actions"] shouldBe 3L
+            (recent.last()["jobBreakdown"] as List<*>).shouldHaveSize(2)
         }
 
         "does not invent an activity bucket when an aggregate crosses the query cutoff" {

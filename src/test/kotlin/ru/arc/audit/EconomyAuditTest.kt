@@ -5,6 +5,8 @@ import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.doubles.shouldBeExactly
 import io.kotest.matchers.shouldBe
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
+import io.micrometer.prometheusmetrics.PrometheusConfig
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import ru.arc.core.TestTimeProvider
 
 class EconomyAuditTest : FreeSpec({
@@ -260,6 +262,75 @@ class EconomyAuditTest : FreeSpec({
                 .counter().count() shouldBeExactly 110.0
             monitor.recent(10).shouldHaveSize(1)
             monitor.recent(10).single().kind shouldBe "rapid_income"
+        }
+
+        "records Jobs profession and activity metrics without target or player labels" {
+            val registry = SimpleMeterRegistry()
+            val monitor = EconomyAuditMonitor(TestAuditConfig(), { registry })
+            val metadata = AuditMetadata(EconomySource.JOBS, EconomyFlow.MINT, server = "survival")
+            val context =
+                EconomyLedgerContext(
+                    action = "job_reward",
+                    jobBreakdown =
+                        listOf(
+                            EconomyJobRewardComponent("hunter", "kill", "minecraft:zombie", "natural", 30.0, 3),
+                            EconomyJobRewardComponent("hunter", "kill", "minecraft:zombie", "spawner", 20.0, 4),
+                        ),
+                )
+
+            monitor.observe("Player", 50.0, metadata, "Jobs payout", context)
+
+            registry.get("arc_jobs_reward_amount_total")
+                .tags("job", "hunter", "activity", "kill", "origin", "natural")
+                .counter().count() shouldBeExactly 30.0
+            registry.get("arc_jobs_reward_actions_total")
+                .tags("job", "hunter", "activity", "kill", "origin", "spawner")
+                .counter().count() shouldBeExactly 4.0
+            registry.meters.flatMap { it.id.tags }.map { it.key }.toSet()
+                .intersect(setOf("player", "target", "entity", "account")) shouldBe emptySet()
+        }
+
+        "does not export a Jobs breakdown that disagrees with the provider amount" {
+            val registry = SimpleMeterRegistry()
+            val monitor = EconomyAuditMonitor(TestAuditConfig(), { registry })
+            monitor.observe(
+                "Player",
+                50.0,
+                AuditMetadata(EconomySource.JOBS, EconomyFlow.MINT, server = "survival"),
+                "Jobs payout",
+                EconomyLedgerContext(
+                    action = "job_reward",
+                    jobBreakdown =
+                        listOf(EconomyJobRewardComponent("hunter", "kill", "minecraft:zombie", "natural", 49.0, 1)),
+                ),
+            )
+
+            registry.find("arc_jobs_reward_amount_total").counter() shouldBe null
+            registry.find("arc_jobs_reward_actions_total").counter() shouldBe null
+        }
+
+        "exports the exact Prometheus metric names consumed by the gameplay dashboard" {
+            val registry = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
+            val monitor = EconomyAuditMonitor(TestAuditConfig(), { registry })
+            monitor.observe(
+                "Player",
+                25.0,
+                AuditMetadata(EconomySource.JOBS, EconomyFlow.MINT, server = "survival"),
+                "Jobs payout",
+                EconomyLedgerContext(
+                    action = "job_reward",
+                    jobBreakdown =
+                        listOf(EconomyJobRewardComponent("miner", "break", "minecraft:stone", "not_applicable", 25.0, 5)),
+                ),
+            )
+
+            val scrape = registry.scrape()
+            scrape.contains("arc_jobs_reward_amount_total_currency_total") shouldBe true
+            scrape.contains("arc_jobs_reward_actions_total") shouldBe true
+            scrape.contains("source=\"jobs\"") shouldBe true
+            scrape.contains("job=\"miner\"") shouldBe true
+            scrape.contains("target=") shouldBe false
+            scrape.contains("player=") shouldBe false
         }
 
         "suppressed anomalies do not extend the cooldown forever" {
