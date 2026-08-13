@@ -4,6 +4,7 @@ import ru.arc.audit.AuditManager
 import ru.arc.audit.autosell.AutoSellAuditModule
 import ru.arc.audit.bank.BankAuditModule
 import ru.arc.audit.stock.StockAuditModule
+import ru.arc.contracts.ContractsManager
 import ru.arc.hooks.HookRegistry
 import java.util.concurrent.TimeUnit
 
@@ -17,6 +18,7 @@ object OpsEconomyAuditHandlers {
         result["bankAudit"] = bankAudit
         val stockAudit = StockAuditModule.summary()
         result["stockAudit"] = stockAudit
+        result["contractsAudit"] = ContractsManager.summary()
         val bankKnownSupply = nestedNumber(bankAudit, "money", "knownSupply")
         val stockLiability = nestedNumber(stockAudit, "money", "redeemableLiabilityOutsideBankAudit")
         if (bankAudit["status"] == "ready" && stockAudit["status"] == "ready" && stockAudit["complete"] == true && bankKnownSupply != null && stockLiability != null) {

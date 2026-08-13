@@ -54,6 +54,7 @@ import ru.arc.core.modules.StoreModule
 import ru.arc.core.modules.SyncModule
 import ru.arc.core.modules.TreasureModule
 import ru.arc.core.modules.XActionModule
+import ru.arc.contracts.ContractsModule
 import ru.arc.hooks.HookRegistry
 import ru.arc.network.NetworkRegistry
 import ru.arc.redis.RedisManager
@@ -195,6 +196,7 @@ open class ARC : JavaPlugin() {
             StockModule,
             StoreModule,
             StockAuditModule,
+            ContractsModule,
             TreasureModule,
             EliteLootModule,
             LeafDecayModule,
@@ -295,6 +297,7 @@ open class ARC : JavaPlugin() {
                 "modules/restart.yml",
                 "modules/board.yml",
                 "modules/command-hide.yml",
+                "modules/contracts.yml",
                 "modules/farms.yml",
                 "modules/auction.yml",
                 "modules/treasure-hunt.yml",

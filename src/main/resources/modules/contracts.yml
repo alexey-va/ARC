@@ -1,0 +1,9 @@
+# Economy V2 contracts remain in calibration until a complete post-hardening baseline.
+enabled: true
+mode: observe
+leader-server: spawn
+server-weekly-budget: "250000.00"
+
+# Resource orders are added with explicit ISO-8601 windows and exact decimal prices.
+# Disabled/empty catalogs mint nothing and keep the public runtime read-only.
+orders: {}

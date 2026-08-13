@@ -10,6 +10,7 @@ import ru.arc.commands.arc.subcommands.BoardSubCommand
 import ru.arc.commands.arc.subcommands.BuildBookSubCommand
 import ru.arc.commands.arc.subcommands.BuySubCommand
 import ru.arc.commands.arc.subcommands.ChatSubCommand
+import ru.arc.commands.arc.subcommands.ContractsSubCommand
 import ru.arc.commands.arc.subcommands.EliteLootSubCommand
 import ru.arc.commands.arc.subcommands.EmshopSubCommand
 import ru.arc.commands.arc.subcommands.FirstRtpSubCommand
@@ -53,6 +54,7 @@ class ArcCommand :
             ReloadSubCommand,
             BoardSubCommand,
             ChatSubCommand,
+            ContractsSubCommand,
             BaltopSubCommand,
             AuditSubCommand,
             RepoSubCommand,

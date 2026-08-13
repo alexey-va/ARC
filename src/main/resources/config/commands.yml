@@ -4,6 +4,12 @@
 # =============================================================================
 
 commands:
+  contracts:
+    name: contracts
+    aliases: [заказы]
+    permission: ''
+    player-only: false
+    usage: /arc contracts [status|submit <id> <количество>]
   help:
     name: help
     aliases: [ ]
@@ -135,6 +141,10 @@ commands:
     permission: arc.sound-follow
     usage: /arc soundfollow <player> <namespace:sound>
 messages:
+  contracts:
+    header: '<gold>═══ Доска контрактов ═══'
+    calibration: '<gray>Идёт калибровка экономики. Первые ресурсные заказы появятся после чистого периода наблюдений.'
+    observe-only: '<yellow>Контракты пока калибруются. <gray>Сдача предметов и выплаты выключены.'
   common:
     usage: '<red>Использование: <gray>%usage%'
   chat:
