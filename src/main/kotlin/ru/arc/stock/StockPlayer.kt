@@ -48,12 +48,14 @@ class StockPlayer(
         val positions = positionMap[symbol] ?: return 0.0
         debug("Giving dividend for {} to {}", symbol, playerName)
         val stock = StockMarket.stock(symbol) ?: return 0.0
-        if (stock.dividend < 0.00001) return 0.0
+        val safeDividendPerShare = StockMarket.effectiveDividendPerShare(stock)
+        if (safeDividendPerShare < 0.00001) return 0.0
 
         var gave = 0.0
         for (position in positions) {
-            val dividend = stock.dividend * position.amount
-            if (dividend == 0.0) continue
+            if (position.type != Position.Type.BOUGHT || !position.amount.isFinite() || position.amount <= 0.0) continue
+            val dividend = safeDividendPerShare * position.amount
+            if (!dividend.isFinite() || dividend <= 0.0) continue
             balance += dividend
             receivedDividend += dividend
             gave += dividend

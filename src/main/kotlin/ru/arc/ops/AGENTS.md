@@ -223,6 +223,12 @@ surface is intentionally compact:
   this is explicitly `snapshot_delta_inferred`, not an exact Bank event.
   Survival and parkour must remain standby rather than collecting duplicate
   network snapshots.
+  `stockAudit` is another single-leader aggregate: it measures the trading
+  balance, principal, gross leverage, unrealized P/L, redeemable liability,
+  dividends, and short-position dividend exposure held outside wallet and Bank
+  supply. It never returns player or position identifiers. When both collectors
+  are ready, `moneySupplyCoverage` adds redeemable stock equity to wallet+Bank
+  known supply without pretending that every possible plugin currency is covered.
 
 - `arc_ops_content_read` dispatches list/detail and preview;
 - `arc_ops_content_write` dispatches gated upsert/delete on one explicit node;

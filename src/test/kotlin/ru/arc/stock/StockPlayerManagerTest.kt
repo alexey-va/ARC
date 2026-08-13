@@ -57,10 +57,25 @@ class StockPlayerManagerTest : FreeSpec({
     )
 
     beforeEach {
+        StockMarket.resetConfiguration()
         StockPlayerManager.playerRepo = makePlayerRepo()
         StockMarket.stockRepo = makeStockRepo()
+        StockMarket.loadStockFromMap(
+            mapOf(
+                "symbol" to "AAPL",
+                "display" to "Apple",
+                "lore" to emptyList<String>(),
+                "type" to "STOCK",
+                "maxLeverage" to 1000,
+                "icon" to mapOf("material" to "PAPER", "data" to 0),
+            ),
+        )
         StockConfig.commission = 0.01
         StockConfig.leveragePower = 0.5
+        StockConfig.maxBuyPrice = 1_000_000.0
+        StockConfig.maxLeveragedPrice = 10_000_000.0
+        StockConfig.dividendPercentFromPrice = 0.02
+        StockConfig.maxDividendPercentFromPrice = 0.02
         StockConfig.defaultStockMaxAmount = 30
         StockConfig.iconMaterials = mutableListOf(Material.PAPER)
         AuditManager.init(mockk<AuditService>(relaxed = true))
@@ -71,6 +86,7 @@ class StockPlayerManagerTest : FreeSpec({
             StockPlayerManager.playerRepo.shutdown()
             StockMarket.stockRepo.shutdown()
         }
+        StockMarket.resetConfiguration()
     }
 
     "economyCheck()" - {
@@ -92,6 +108,25 @@ class StockPlayerManagerTest : FreeSpec({
 
             result.success.shouldBeFalse()
             result.lack shouldBeGreaterThan 0.0
+        }
+
+        "rejects non-positive amounts and leverage beyond the symbol limit" {
+            val sp = player(10_000.0)
+            val s = stock(price = 100.0).apply { maxLeverage = 10 }
+
+            StockPlayerManager.economyCheck(sp, s, amount = -1.0, leverage = 1).success.shouldBeFalse()
+            StockPlayerManager.economyCheck(sp, s, amount = Double.NaN, leverage = 1).success.shouldBeFalse()
+            StockPlayerManager.economyCheck(sp, s, amount = 1.0, leverage = 11).success.shouldBeFalse()
+        }
+
+        "rejects principal and leveraged exposure beyond configured limits" {
+            val sp = player(10_000.0)
+            val s = stock(price = 100.0).apply { maxLeverage = 1000 }
+            StockConfig.maxBuyPrice = 500.0
+            StockConfig.maxLeveragedPrice = 1_000.0
+
+            StockPlayerManager.economyCheck(sp, s, amount = 6.0, leverage = 1).success.shouldBeFalse()
+            StockPlayerManager.economyCheck(sp, s, amount = 5.0, leverage = 3).success.shouldBeFalse()
         }
     }
 
@@ -184,6 +219,20 @@ class StockPlayerManagerTest : FreeSpec({
                 sp.positions() shouldBe emptyList()
             }
         }
+
+        "does not mint trading balance from a negative direct-command amount" {
+            runTest {
+                val sp = player(balance = 1_000.0)
+                val s = stock(price = 100.0)
+                StockMarket.stockRepo.save(s)
+                val before = sp.getBalance()
+
+                StockPlayerManager.buyStock(sp, s, amount = -10.0, leverage = 1, lowerBound = 1_000.0, upperBound = 1_000.0)
+
+                sp.getBalance() shouldBe before
+                sp.positions() shouldBe emptyList()
+            }
+        }
     }
 
     "shortStock()" - {
@@ -214,6 +263,47 @@ class StockPlayerManagerTest : FreeSpec({
 
                 sp.getBalance() shouldBeLessThan before
             }
+        }
+    }
+
+    "StockPlayer.giveDividend()" - {
+        "pays long positions but never credits short positions" {
+            runTest {
+                val sp = player(balance = 0.0)
+                val s = stock(price = 100.0).apply { dividend = 2.0 }
+                StockMarket.stockRepo.save(s)
+                sp.addPosition(Position(symbol = "AAPL", startPrice = 100.0, type = Position.Type.BOUGHT, amount = 1.0))
+                sp.addPosition(Position(symbol = "AAPL", startPrice = 100.0, type = Position.Type.SHORTED, amount = 1.0))
+
+                sp.giveDividend("AAPL") shouldBe 0.02
+                sp.getBalance() shouldBe 0.02
+                sp.positions("AAPL")!![0].receivedDividend shouldBe 0.02
+                sp.positions("AAPL")!![1].receivedDividend shouldBe 0.0
+            }
+        }
+
+        "caps a stale unsafe cached dividend immediately" {
+            runTest {
+                StockConfig.dividendPercentFromPrice = 0.02
+                StockConfig.maxDividendPercentFromPrice = 0.0002
+                val sp = player(balance = 0.0)
+                val s = stock(price = 100.0).apply { dividend = 2.0 }
+                StockMarket.stockRepo.save(s)
+                sp.addPosition(Position(symbol = "AAPL", startPrice = 100.0, type = Position.Type.BOUGHT, amount = 1.0))
+
+                sp.giveDividend("AAPL") shouldBe 0.02
+                sp.getBalance() shouldBe 0.02
+            }
+        }
+    }
+
+    "addToTradingBalanceFromVault()" - {
+        "rejects non-finite and zero amounts before calling Vault" {
+            val sp = player()
+
+            StockPlayerManager.addToTradingBalanceFromVault(sp, Double.NaN).shouldBeFalse()
+            StockPlayerManager.addToTradingBalanceFromVault(sp, Double.POSITIVE_INFINITY).shouldBeFalse()
+            StockPlayerManager.addToTradingBalanceFromVault(sp, 0.0).shouldBeFalse()
         }
     }
 
@@ -289,6 +379,24 @@ class StockPlayerManagerTest : FreeSpec({
             sp.remove("GOOG", uuid)
 
             sp.positions("GOOG").shouldBeNull()
+        }
+    }
+
+    "Position.totalValue()" - {
+        "matches the amount credited by closePosition at leverage" {
+            runTest {
+                StockMarket.stockRepo.save(stock(price = 110.0))
+                val position =
+                    Position(
+                        symbol = "AAPL",
+                        startPrice = 100.0,
+                        leverage = 2.0,
+                        type = Position.Type.BOUGHT,
+                        amount = 1.0,
+                    )
+
+                position.totalValue() shouldBe 120.0
+            }
         }
     }
 

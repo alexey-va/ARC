@@ -47,7 +47,7 @@ class Position(
 
     fun totalValue(): Double {
         val stock = getStock() ?: return 0.0
-        return gains(stock.price) * (leverage - 1) + amount * stock.price
+        return startPrice * amount + gains(stock.price)
     }
 
     fun marginCallAtPrice(balance: Double, isAutoTake: Boolean): AutoClosePrices {
@@ -67,7 +67,7 @@ class Position(
         val gains = gains(currentPrice)
         return TagResolver.builder()
             .resolver(TagResolver.resolver("amount", Tag.inserting(mm(formatAmount(amount), true))))
-            .resolver(TagResolver.resolver("dividend_amount", Tag.inserting(mm(formatAmount(amount * (stock?.dividend ?: 0.0)), true))))
+            .resolver(TagResolver.resolver("dividend_amount", Tag.inserting(mm(formatAmount(amount * (stock?.let(StockMarket::effectiveDividendPerShare) ?: 0.0)), true))))
             .resolver(TagResolver.resolver("position_gains", Tag.inserting(mm(formatAmount(gains), true))))
             .resolver(TagResolver.resolver("symbol", Tag.inserting(mm(symbol, true))))
             .resolver(TagResolver.resolver("total_position_gains", Tag.inserting(mm(formatAmount(gains - commission), true))))
@@ -79,7 +79,7 @@ class Position(
             .resolver(TagResolver.resolver("leveraged_price", Tag.inserting(mm(formatAmount(leverage * amount * startPrice), true))))
             .resolver(TagResolver.resolver("stock_price", Tag.inserting(mm(formatAmount(getStockPrice()), true))))
             .resolver(TagResolver.resolver("received_dividend", Tag.inserting(mm(formatAmount(receivedDividend), true))))
-            .resolver(TagResolver.resolver("dividend", Tag.inserting(mm(formatAmount(stock?.dividend ?: 0.0), true))))
+            .resolver(TagResolver.resolver("dividend", Tag.inserting(mm(formatAmount(stock?.let(StockMarket::effectiveDividendPerShare) ?: 0.0), true))))
             .resolver(TagResolver.resolver("upper", Tag.inserting(
                 if (upperBoundMargin > 1_000_000_000) mm("<red>Нет")
                 else mm(formatAmount(upperBoundMargin), true)

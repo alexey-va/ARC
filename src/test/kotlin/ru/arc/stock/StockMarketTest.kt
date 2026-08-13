@@ -7,6 +7,7 @@ import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.test.runTest
+import ru.arc.config.StockConfig
 import ru.arc.repository.CachedRepository
 import ru.arc.repository.InMemoryStorage
 import ru.arc.repository.InMemorySyncService
@@ -144,6 +145,32 @@ class StockMarketTest : FreeSpec({
 
             StockMarket.isEnabledStock(makeStock("REMOVED")) shouldBe false
             StockMarket.configStocks().shouldBeEmpty()
+        }
+    }
+
+    "dividend safety policy" - {
+        "caps an unsafe configured rate" {
+            StockConfig.dividendPercentFromPrice = 0.02
+            StockConfig.maxDividendPercentFromPrice = 0.0002
+
+            StockMarket.effectiveDividendRate() shouldBe 0.0002
+        }
+
+        "uses the configured period with a 24 hour floor" {
+            StockConfig.dividendPeriod = 3_600L
+            StockMarket.effectiveDividendPeriodSeconds() shouldBe 86_400L
+            StockConfig.dividendPeriod = 172_800L
+            StockMarket.effectiveDividendPeriodSeconds() shouldBe 172_800L
+        }
+
+        "hard-caps new order leverage and exposure" {
+            val stock = makeStock("AAPL").apply { maxLeverage = 1000 }
+            StockConfig.maxBuyPrice = 5_000_000.0
+            StockConfig.maxLeveragedPrice = 5_000_000.0
+
+            StockMarket.effectiveMaxLeverage(stock) shouldBe 10
+            StockMarket.effectiveMaxBuyPrice() shouldBe 100_000.0
+            StockMarket.effectiveMaxLeveragedPrice() shouldBe 1_000_000.0
         }
     }
 })

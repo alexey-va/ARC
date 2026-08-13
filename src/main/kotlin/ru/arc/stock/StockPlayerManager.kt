@@ -84,6 +84,7 @@ object StockPlayerManager {
     }
 
     @JvmStatic fun buyStock(stockPlayer: StockPlayer, stock: Stock, amount: Double, leverage: Int, lowerBound: Double, upperBound: Double) {
+        if (!validOrder(stock, amount, leverage, lowerBound, upperBound)) return
         val stockPositions = stockPlayer.positions(stock.symbol)
         val canHaveMore = stockPlayer.isBelowMaxStockAmount() && (stockPositions == null || stockPositions.size < 9)
         if (!canHaveMore || stockPlayer.positions().size >= 30) {
@@ -116,6 +117,7 @@ object StockPlayerManager {
     }
 
     @JvmStatic fun shortStock(stockPlayer: StockPlayer, stock: Stock, amount: Double, leverage: Int, lowerBound: Double, upperBound: Double) {
+        if (!validOrder(stock, amount, leverage, lowerBound, upperBound)) return
         val stockPositions = stockPlayer.positions(stock.symbol)
         val canHaveMore = stockPlayer.isBelowMaxStockAmount() && (stockPositions == null || stockPositions.size < 9)
         if (!canHaveMore || stockPlayer.positions().size >= 30) {
@@ -152,6 +154,11 @@ object StockPlayerManager {
             error("Could not find stock with symbol: $symbol")
             return
         }
+        val candidate = stockPlayer.find(symbol, positionUuid)
+        if (candidate != null && !validPosition(candidate, stock.price)) {
+            error("Refusing to close invalid stock position {}", positionUuid)
+            return
+        }
         val position = stockPlayer.remove(symbol, positionUuid)
         if (position != null) {
             val gains = position.gains(stock.price)
@@ -171,6 +178,7 @@ object StockPlayerManager {
     }
 
     @JvmStatic fun addToTradingBalanceFromVault(stockPlayer: StockPlayer, amount: Double): Boolean {
+        if (!amount.isFinite() || amount == 0.0) return false
         val offlinePlayer = Bukkit.getOfflinePlayer(stockPlayer.playerUuid)
         val econ: Economy = EconomyModule.getEconomy() ?: return false
 
@@ -200,9 +208,15 @@ object StockPlayerManager {
     data class EconomyCheckResponse(val success: Boolean, val totalPrice: Double, val lack: Double, val commission: Double)
 
     @JvmStatic fun economyCheck(player: StockPlayer, stock: Stock, amount: Double, leverage: Int): EconomyCheckResponse {
+        if (!validOrder(stock, amount, leverage, 0.0, 0.0)) {
+            return EconomyCheckResponse(false, 0.0, 0.0, 0.0)
+        }
         val cost = cost(stock, amount)
         val commission = commission(stock, amount, leverage)
         val balance = player.getBalance()
+        if (!balance.isFinite() || !cost.isFinite() || !commission.isFinite()) {
+            return EconomyCheckResponse(false, 0.0, 0.0, 0.0)
+        }
         return if (balance < cost + commission) {
             EconomyCheckResponse(false, cost + commission, cost + commission - balance, commission)
         } else {
@@ -218,4 +232,32 @@ object StockPlayerManager {
             else 1.0 + leverage.toDouble().pow(StockConfig.leveragePower) - 100.0.pow(StockConfig.leveragePower)
 
     private fun Double.pow(exp: Double): Double = Math.pow(this, exp)
+
+    private fun validOrder(
+        stock: Stock,
+        amount: Double,
+        leverage: Int,
+        lowerBound: Double,
+        upperBound: Double,
+    ): Boolean {
+        if (!StockMarket.isEnabledStock(stock)) return false
+        if (!amount.isFinite() || amount <= 0.0 || !stock.price.isFinite() || stock.price <= 0.0) return false
+        if (leverage < 1 || leverage > StockMarket.effectiveMaxLeverage(stock)) return false
+        if (!lowerBound.isFinite() || lowerBound < 0.0 || !upperBound.isFinite() || upperBound < 0.0) return false
+        val principal = stock.price * amount
+        val exposure = principal * leverage
+        return principal.isFinite() &&
+            exposure.isFinite() &&
+            principal <= StockMarket.effectiveMaxBuyPrice() &&
+            exposure <= StockMarket.effectiveMaxLeveragedPrice()
+    }
+
+    private fun validPosition(position: Position, currentPrice: Double): Boolean {
+        if (!position.amount.isFinite() || position.amount <= 0.0) return false
+        if (!position.startPrice.isFinite() || position.startPrice <= 0.0) return false
+        if (!position.leverage.isFinite() || position.leverage < 1.0) return false
+        val gains = position.gains(currentPrice)
+        val payout = gains + position.startPrice * position.amount
+        return gains.isFinite() && payout.isFinite()
+    }
 }

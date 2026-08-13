@@ -38,6 +38,7 @@ object StockConfig {
     @JvmField var historyLifetime: Long = 60L * 60 * 24 * 3
     @JvmField var dividendPeriod: Long = 60L * 60 * 4
     @JvmField var dividendPercentFromPrice: Double = 0.02
+    @JvmField var maxDividendPercentFromPrice: Double = 0.0002
     @JvmField var updateImagesRadius: Double = 50.0
 
     // ── Complex derived values (parsed on load) ──────────────────────────────
@@ -74,6 +75,7 @@ object StockConfig {
         historyLifetime = cfg.long("history-lifetime", 60L * 60 * 24 * 3)
         dividendPeriod = cfg.long("dividend-period", 60L * 60 * 4)
         dividendPercentFromPrice = cfg.double("dividend-percent-from-price", 0.02)
+        maxDividendPercentFromPrice = cfg.double("max-dividend-percent-from-price", 0.0002)
         updateImagesRadius = cfg.double("update-images-radius", 50.0)
 
         stockMarketLocation = parseLocation(cfg.string("stock-market-location", ""))

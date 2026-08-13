@@ -115,7 +115,7 @@ object StockMarket {
                 current.price = price
                 current.lastUpdated = System.currentTimeMillis()
                 if (current.type == Stock.Type.STOCK) {
-                    current.dividend = current.price * StockConfig.dividendPercentFromPrice
+                    current.dividend = effectiveDividendPerShare(current)
                     if (current.dividend > 10_000) {
                         error("Dividend for $upperSymbol is invalid: ${current.dividend}")
                         current.dividend = 0.0
@@ -132,18 +132,54 @@ object StockMarket {
 
     fun payDividends() {
         if (!StockConfig.mainServer) return
+        val now = System.currentTimeMillis()
         stocks()
-            .filter { it.dividend > 0.000001 }
-            .filter { System.currentTimeMillis() - it.lastTimeDividend >= 23 * 60 * 60 * 1000L }
+            .filter { effectiveDividendPerShare(it) > 0.000001 }
+            .filter { isDividendDue(it, now) }
             .forEach { stock ->
-                stock.lastTimeDividend = System.currentTimeMillis()
+                stock.lastTimeDividend = now
                 stockRepo.markDirty(stock)
                 StockPlayerManager.giveDividend(stock.symbol)
             }
     }
 
+    internal fun effectiveDividendRate(): Double {
+        val configured = StockConfig.dividendPercentFromPrice
+        val maximum = StockConfig.maxDividendPercentFromPrice.coerceAtMost(ABSOLUTE_MAX_DIVIDEND_RATE)
+        if (!configured.isFinite() || !maximum.isFinite()) return 0.0
+        return configured.coerceIn(0.0, maximum.coerceAtLeast(0.0))
+    }
+
+    internal fun effectiveDividendPeriodSeconds(): Long =
+        StockConfig.dividendPeriod.coerceAtLeast(MINIMUM_DIVIDEND_PERIOD_SECONDS)
+
+    internal fun effectiveDividendPerShare(stock: Stock): Double {
+        val dividend = stock.price * effectiveDividendRate()
+        return if (dividend.isFinite() && dividend > 0.0) dividend else 0.0
+    }
+
+    internal fun effectiveMaxLeverage(stock: Stock): Int = stock.maxLeverage.coerceIn(1, MAX_NEW_ORDER_LEVERAGE)
+
+    internal fun effectiveMaxBuyPrice(): Double =
+        finitePositiveLimit(StockConfig.maxBuyPrice, MAX_NEW_ORDER_PRINCIPAL)
+
+    internal fun effectiveMaxLeveragedPrice(): Double =
+        finitePositiveLimit(StockConfig.maxLeveragedPrice, MAX_NEW_ORDER_EXPOSURE)
+
+    internal fun isDividendDue(stock: Stock, now: Long): Boolean =
+        now - stock.lastTimeDividend >= effectiveDividendPeriodSeconds() * 1_000L
+
+    private fun finitePositiveLimit(configured: Double, absolute: Double): Double =
+        if (configured.isFinite() && configured > 0.0) configured.coerceAtMost(absolute) else absolute
+
     fun saveHistory() {
         info("Saving stock history")
         HistoryManager.saveHistory()
     }
+
+    private const val MINIMUM_DIVIDEND_PERIOD_SECONDS = 24L * 60L * 60L
+    private const val ABSOLUTE_MAX_DIVIDEND_RATE = 0.0002
+    private const val MAX_NEW_ORDER_LEVERAGE = 10
+    private const val MAX_NEW_ORDER_PRINCIPAL = 100_000.0
+    private const val MAX_NEW_ORDER_EXPOSURE = 1_000_000.0
 }

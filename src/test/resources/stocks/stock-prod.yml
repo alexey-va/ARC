@@ -9,10 +9,10 @@ default-max-stock-amount: 10
 stock-market-location: 0,0,0,sp11
 update-images-radius: 1000
 max-buy-price: 100000
-max-leveraged-price: 5000000
+max-leveraged-price: 1000000
 dividend-period: 86400
 history-lifetime: 259200
-dividend-percent-from-price: 0.02
+dividend-percent-from-price: 0.0002
 max-stock-permissions:
 - arc.invest.max.20:20
 - arc.invest.max.30:30
@@ -21,7 +21,7 @@ stocks:
   isStock: true
   display: '                 <gray><bold>Apple'
   icon: '{"material":"APPLE"}'
-  maxLeverage: 1000
+  maxLeverage: 10
   lore:
   - '                <gray><strikethrough>          '
   - ''
@@ -43,7 +43,7 @@ stocks:
   isStock: true
   display: '                 <green><bold>Nvidia'
   icon: '{"material":"EMERALD"}'
-  maxLeverage: 1000
+  maxLeverage: 10
   lore:
   - '                <gray><strikethrough>          '
   - ''
@@ -66,7 +66,7 @@ stocks:
   isStock: true
   display: '              <red><bold>Coca-Cola'
   icon: '{"material":"POTION"}'
-  maxLeverage: 1000
+  maxLeverage: 10
   lore:
   - '                <gray><strikethrough>          '
   - ''
@@ -89,7 +89,7 @@ stocks:
   isStock: true
   display: '                 <red><bold>Tesla'
   icon: '{"material":"MINECART"}'
-  maxLeverage: 1000
+  maxLeverage: 10
   lore:
   - '                <gray><strikethrough>          '
   - ''
@@ -110,7 +110,7 @@ stocks:
   type: stock
 - symbol: bitcoin
   display: '               <gold><bold>Биткоин'
-  maxLeverage: 100
+  maxLeverage: 10
   lore:
   - '                <gray><strikethrough>          '
   - ''
@@ -127,7 +127,7 @@ stocks:
   icon: '{"material":"COAL"}'
 - symbol: tron
   display: '                 <dark_red><bold>Tron'
-  maxLeverage: 100
+  maxLeverage: 10
   lore:
   - '                <gray><strikethrough>          '
   - ''
@@ -144,7 +144,7 @@ stocks:
   icon: '{"material":"REDSTONE"}'
 - symbol: ethereum
   display: '              <blue><bold>Ethereum'
-  maxLeverage: 100
+  maxLeverage: 10
   lore:
   - '                <gray><strikethrough>          '
   - ''
@@ -161,7 +161,7 @@ stocks:
   icon: '{"material":"HEART_OF_THE_SEA"}'
 - symbol: dogecoin
   display: '                 <gold><bold>Doge'
-  maxLeverage: 100
+  maxLeverage: 10
   lore:
   - '                <gray><strikethrough>          '
   - ''
@@ -177,7 +177,7 @@ stocks:
   type: crypto
   icon: '{"material":"BONE"}'
 - symbol: XBR/USD
-  maxLeverage: 100
+  maxLeverage: 10
   lore:
   - '                <gray><strikethrough>          '
   - ''

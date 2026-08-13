@@ -66,8 +66,9 @@ class PositionCreator(
             stock.price < 1000 -> 10
             else -> 1
         }
-        if (leverage > stock.maxLeverage) leverage = stock.maxLeverage
-        while (leverage * amount * stock.price > StockConfig.maxLeveragedPrice) {
+        val maxLeverage = StockMarket.effectiveMaxLeverage(stock)
+        if (leverage > maxLeverage) leverage = maxLeverage
+        while (leverage * amount * stock.price > StockMarket.effectiveMaxLeveragedPrice()) {
             if (leverage == 1) break
             leverage /= 10
             if (leverage < 1) leverage = 1
@@ -239,9 +240,9 @@ class PositionCreator(
     private fun getNewLeverage(click: InventoryClickEvent): Int {
         return if (click.isLeftClick) {
             if (click.isShiftClick) {
-                if (leverage == 1) 100 else min(leverage + 100, stock.maxLeverage)
+                if (leverage == 1) 100 else min(leverage + 100, StockMarket.effectiveMaxLeverage(stock))
             } else {
-                if (leverage == 1) 10 else min(leverage + 10, stock.maxLeverage)
+                if (leverage == 1) 10 else min(leverage + 10, StockMarket.effectiveMaxLeverage(stock))
             }
         } else if (click.isRightClick) {
             if (click.isShiftClick) max(1, leverage - 100) else max(1, leverage - 10)
@@ -267,7 +268,7 @@ class PositionCreator(
             .resolver(TagResolver.resolver("cost", Tag.inserting(mm(formatAmount(cost), true))))
             .resolver(TagResolver.resolver("leveraged_price", Tag.inserting(mm(formatAmount(leverage * amount * s.price), true))))
             .resolver(TagResolver.resolver("max_buy_price", Tag.inserting(mm(formatAmount(StockConfig.maxBuyPrice), true))))
-            .resolver(TagResolver.resolver("max_leveraged_price", Tag.inserting(mm(formatAmount(StockConfig.maxLeveragedPrice), true))))
+            .resolver(TagResolver.resolver("max_leveraged_price", Tag.inserting(mm(formatAmount(StockMarket.effectiveMaxLeveragedPrice()), true))))
             .resolver(TagResolver.resolver("upper", Tag.inserting(mm(if (upper > 1_000_000_000) "<red>Нет" else formatAmount(upper), true))))
             .resolver(TagResolver.resolver("lower", Tag.inserting(mm(if (lower > 1_000_000_000) "<red>Нет" else formatAmount(lower), true))))
             .resolver(TagResolver.resolver("close_at_low", Tag.inserting(mm(if (autoClosePrices.low == -1.0) "<red>Нет" else formatAmount(autoClosePrices.low), true))))
@@ -334,19 +335,19 @@ class PositionCreator(
         val newAmount = getNewAmount(click)
         if (newAmount <= 0) return
         val price = newAmount * stock.price
-        if (price > StockConfig.maxBuyPrice) {
+        if (price > StockMarket.effectiveMaxBuyPrice()) {
             amountTask = GuiUtils.temporaryChange(
                 amountItem.item,
-                mm(StockConfig.string("position-creator.too-expensive-position").replace("<max_buy_price>", formatAmount(StockConfig.maxBuyPrice))),
+                mm(StockConfig.string("position-creator.too-expensive-position").replace("<max_buy_price>", formatAmount(StockMarket.effectiveMaxBuyPrice()))),
                 null, 100L, ::update
             )
             this.update()
             return
         }
-        if (leverage * price > StockConfig.maxLeveragedPrice) {
+        if (leverage * price > StockMarket.effectiveMaxLeveragedPrice()) {
             amountTask = GuiUtils.temporaryChange(
                 amountItem.item,
-                mm(StockConfig.string("position-creator.too-much-leverage").replace("<max_leveraged_price>", formatAmount(StockConfig.maxLeveragedPrice))),
+                mm(StockConfig.string("position-creator.too-much-leverage").replace("<max_leveraged_price>", formatAmount(StockMarket.effectiveMaxLeveragedPrice()))),
                 null, 100L, ::update
             )
             this.update()
@@ -403,10 +404,10 @@ class PositionCreator(
     private fun acceptLeverageClick(click: InventoryClickEvent) {
         click.isCancelled = true
         val newLeverage = getNewLeverage(click)
-        if (newLeverage * amount * stock.price > StockConfig.maxLeveragedPrice) {
+        if (newLeverage > StockMarket.effectiveMaxLeverage(stock) || newLeverage * amount * stock.price > StockMarket.effectiveMaxLeveragedPrice()) {
             amountTask = GuiUtils.temporaryChange(
                 amountItem.item,
-                mm(StockConfig.string("position-creator.too-much-leverage").replace("<max_leveraged_price>", formatAmount(StockConfig.maxLeveragedPrice))),
+                mm(StockConfig.string("position-creator.too-much-leverage").replace("<max_leveraged_price>", formatAmount(StockMarket.effectiveMaxLeveragedPrice()))),
                 null, 100L, ::update
             )
             this.update()

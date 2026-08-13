@@ -3,6 +3,7 @@ package ru.arc.ops
 import ru.arc.audit.AuditManager
 import ru.arc.audit.autosell.AutoSellAuditModule
 import ru.arc.audit.bank.BankAuditModule
+import ru.arc.audit.stock.StockAuditModule
 import ru.arc.hooks.HookRegistry
 import java.util.concurrent.TimeUnit
 
@@ -14,6 +15,20 @@ object OpsEconomyAuditHandlers {
         result["autoSellAudit"] = AutoSellAuditModule.summary()
         val bankAudit = BankAuditModule.summary(safeLimit)
         result["bankAudit"] = bankAudit
+        val stockAudit = StockAuditModule.summary()
+        result["stockAudit"] = stockAudit
+        val bankKnownSupply = nestedNumber(bankAudit, "money", "knownSupply")
+        val stockLiability = nestedNumber(stockAudit, "money", "redeemableLiabilityOutsideBankAudit")
+        if (bankAudit["status"] == "ready" && stockAudit["status"] == "ready" && stockAudit["complete"] == true && bankKnownSupply != null && stockLiability != null) {
+            result["moneySupplyCoverage"] =
+                linkedMapOf(
+                    "walletAndBankKnownSupply" to bankKnownSupply,
+                    "stockRedeemableLiability" to stockLiability,
+                    "knownSupplyIncludingStockLiability" to bankKnownSupply + stockLiability,
+                    "stockLiabilityShare" to if (bankKnownSupply + stockLiability > 0.0) stockLiability / (bankKnownSupply + stockLiability) else 0.0,
+                    "scope" to "wallet + Bank + redeemable ARC stock account equity; other plugin-held currencies may still be absent",
+                )
+        }
         val hook = HookRegistry.redisEcoHook
         @Suppress("UNCHECKED_CAST")
         val bankTopBalances =
@@ -60,4 +75,7 @@ object OpsEconomyAuditHandlers {
         result["auditWeight"] = AuditManager.weight()
         return result
     }
+
+    private fun nestedNumber(root: Map<String, Any?>, section: String, key: String): Double? =
+        ((root[section] as? Map<*, *>)?.get(key) as? Number)?.toDouble()
 }

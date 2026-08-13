@@ -26,7 +26,7 @@ class Stock(
 
     fun tagResolver(): TagResolver {
         val hours = Duration.between(Instant.ofEpochMilli(lastTimeDividend), Instant.now()).toHours().toInt()
-        val dividendPeriodHours = (StockConfig.dividendPeriod / 60L / 60L).toInt()
+        val dividendPeriodHours = (StockMarket.effectiveDividendPeriodSeconds() / 60L / 60L).toInt()
         val hoursTill = dividendPeriodHours - hours
         val low = HistoryManager.low(symbol)
         val high = HistoryManager.high(symbol)
@@ -40,7 +40,7 @@ class Stock(
         }
         return TagResolver.builder()
             .resolver(TagResolver.resolver("stock_price", Tag.inserting(mm(formatAmount(price, 5), true))))
-            .resolver(TagResolver.resolver("max_leverage", Tag.inserting(mm(formatAmount(maxLeverage.toDouble()), true))))
+            .resolver(TagResolver.resolver("max_leverage", Tag.inserting(mm(formatAmount(StockMarket.effectiveMaxLeverage(this).toDouble()), true))))
             .resolver(TagResolver.resolver("lowest_recent_price",
                 Tag.inserting(mm(if (low == 0.0) "<red>Нет" else formatAmount(low), true))))
             .resolver(TagResolver.resolver("highest_recent_price",
@@ -49,7 +49,7 @@ class Stock(
             .resolver(TagResolver.resolver("hours_since_dividend", Tag.inserting(mm("$hours", true))))
             .resolver(TagResolver.resolver("hours_till_dividend", Tag.inserting(mm("${maxOf(0, hoursTill)}", true))))
             .resolver(TagResolver.resolver("dividends_period_hours", Tag.inserting(mm("$dividendPeriodHours", true))))
-            .resolver(TagResolver.resolver("stock_dividend", Tag.inserting(mm(formatAmount(dividend), true))))
+            .resolver(TagResolver.resolver("stock_dividend", Tag.inserting(mm(formatAmount(StockMarket.effectiveDividendPerShare(this)), true))))
             .build()
     }
 

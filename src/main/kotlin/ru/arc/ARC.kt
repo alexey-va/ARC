@@ -7,6 +7,7 @@ import org.bukkit.event.server.ServerCommandEvent
 import org.bukkit.plugin.java.JavaPlugin
 import ru.arc.audit.autosell.AutoSellAuditModule
 import ru.arc.audit.bank.BankAuditModule
+import ru.arc.audit.stock.StockAuditModule
 import ru.arc.commands.XCommand
 import ru.arc.commands.arc.ArcCommand
 import ru.arc.commands.arc.LegacySubCommandExecutor
@@ -193,6 +194,7 @@ open class ARC : JavaPlugin() {
             RestartModule,
             StockModule,
             StoreModule,
+            StockAuditModule,
             TreasureModule,
             EliteLootModule,
             LeafDecayModule,
