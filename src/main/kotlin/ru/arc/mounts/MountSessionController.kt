@@ -10,6 +10,7 @@ import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
+import org.bukkit.event.entity.CreatureSpawnEvent
 import org.bukkit.event.entity.EntityCombustEvent
 import org.bukkit.event.entity.EntityDamageEvent
 import org.bukkit.event.entity.EntityDismountEvent
@@ -121,8 +122,21 @@ class MountSessionController(
         val entityType = runCatching { org.bukkit.entity.EntityType.valueOf(definition.entityType) }.getOrNull()
             ?: return MountSpawnResult.INVALID_ENTITY
         if (!entityType.isAlive || !entityType.isSpawnable) return MountSpawnResult.INVALID_ENTITY
-        val spawned = runCatching { player.world.spawnEntity(player.location, entityType) }.getOrNull() as? LivingEntity
+        val spawned =
+            runCatching {
+                player.world.spawnEntity(
+                    player.location,
+                    entityType,
+                    CreatureSpawnEvent.SpawnReason.CUSTOM,
+                ) { entity ->
+                    (entity as? LivingEntity)?.let { tagEntity(it, definition, player) }
+                }
+            }.getOrNull() as? LivingEntity
             ?: return MountSpawnResult.SPAWN_FAILED
+        if (!spawned.isInWorld || !spawned.isValid) {
+            spawned.remove()
+            return MountSpawnResult.SPAWN_FAILED
+        }
 
         return try {
             configureEntity(spawned, definition, glow, player)
@@ -143,9 +157,13 @@ class MountSessionController(
             playerByEntity[spawned.uniqueId] = player.uniqueId
             player.world.spawnParticle(Particle.END_ROD, player.location, 10, 0.4, 0.4, 0.4, 0.01)
             player.world.playSound(player.location, Sound.ENTITY_HORSE_SADDLE, 1.0f, 1.0f)
-            if (definition.movement != MountMovement.WALKING) {
-                player.sendActionBar(TextUtil.mm(config.message("flight-controls", "<gray>Space — вверх, Shift — вниз, двойной Shift — спешиться"), true))
-            }
+            val (controlsKey, controlsFallback) =
+                if (definition.movement == MountMovement.WALKING) {
+                    "ground-controls" to "<gray>WASD — движение, Space — прыжок, Shift — спешиться"
+                } else {
+                    "flight-controls" to "<gray>WASD — движение, Space — вверх, Shift — вниз, двойной Shift — спешиться"
+                }
+            player.sendActionBar(TextUtil.mm(config.message(controlsKey, controlsFallback), true))
             MountSpawnResult.SUCCESS
         } catch (failure: Throwable) {
             spawned.remove()
@@ -200,6 +218,21 @@ class MountSessionController(
                 }
             }
             SneakGestureResult.NONE -> Unit
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    fun onCreatureSpawn(event: CreatureSpawnEvent) {
+        val data = event.entity.persistentDataContainer
+        if (
+            shouldAllowCancelledMountSpawn(
+                cancelled = event.isCancelled,
+                reason = event.spawnReason,
+                owner = data.get(ownerKey, PersistentDataType.STRING),
+                mountId = data.get(mountIdKey, PersistentDataType.STRING),
+            )
+        ) {
+            event.isCancelled = false
         }
     }
 
@@ -263,7 +296,10 @@ class MountSessionController(
                 session.definition.movement == MountMovement.SWIMMING && !entity.location.block.isLiquid -> {
                     remove(session.playerId, MountRemovalReason.LEFT_WATER)
                 }
-                else -> move(player, entity, session)
+                else -> {
+                    session.input = player.currentInput.toState()
+                    move(player, entity, session)
+                }
             }
         }
     }
@@ -331,11 +367,15 @@ class MountSessionController(
         entity.isGlowing = glow
         entity.isInvulnerable = false
         entity.setGravity(definition.movement == MountMovement.WALKING)
-        (entity as? Mob)?.let { mob ->
-            mob.setAI(false)
-            mob.canPickupItems = false
-            mob.removeWhenFarAway = false
-        }
+        (entity as? Mob)?.let(::configureMountMob)
+        tagEntity(entity, definition, player)
+    }
+
+    private fun tagEntity(
+        entity: LivingEntity,
+        definition: MountDefinition,
+        player: Player,
+    ) {
         entity.persistentDataContainer.set(ownerKey, PersistentDataType.STRING, player.uniqueId.toString())
         entity.persistentDataContainer.set(mountIdKey, PersistentDataType.STRING, definition.id)
     }
@@ -354,3 +394,21 @@ class MountSessionController(
     private fun Vector.toMotion() = MotionVector(x, y, z)
     private fun MotionVector.toBukkit() = Vector(x, y, z)
 }
+
+internal fun configureMountMob(mob: Mob) {
+    mob.setAware(false)
+    mob.canPickupItems = false
+    mob.removeWhenFarAway = false
+}
+
+internal fun shouldAllowCancelledMountSpawn(
+    cancelled: Boolean,
+    reason: CreatureSpawnEvent.SpawnReason,
+    owner: String?,
+    mountId: String?,
+): Boolean =
+    cancelled &&
+        reason == CreatureSpawnEvent.SpawnReason.CUSTOM &&
+        !mountId.isNullOrBlank() &&
+        owner != null &&
+        runCatching { UUID.fromString(owner) }.isSuccess

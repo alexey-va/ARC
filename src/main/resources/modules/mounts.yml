@@ -35,7 +35,8 @@ gui:
   back-command: m
 
 messages:
-  flight-controls: "<gray>Space — вверх, Shift — вниз, двойной Shift — спешиться"
+  ground-controls: "<gray>WASD — движение, Space — прыжок, Shift — спешиться"
+  flight-controls: "<gray>WASD — движение, Space — вверх, Shift — вниз, двойной Shift — спешиться"
   descending: "<aqua>Снижение… <gray>двойной Shift — спешиться"
   expired: "<gray>Время поездки на маунте закончилось."
   already-riding: "<red>Вы уже используете маунта."

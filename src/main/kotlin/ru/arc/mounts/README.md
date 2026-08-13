@@ -12,6 +12,9 @@ Native replacement for `Denizen/scripts/activities/rideable_mobs.dsc`.
   Double-press Shift to dismount; ARC cancels the first vanilla dismount event.
 - Mount and rider damage, logout, teleport, world change, expiry, invalid state,
   or leaving water removes the temporary entity.
+- ARC tags the technical entity before `CreatureSpawnEvent` and bypasses a
+  cancelled `CUSTOM` spawn only for that tagged mount. Region-level ordinary
+  mob-spawn restrictions therefore remain in force.
 
 Mount access and ownership use only the `arc.mounts.*` namespace. Menu access
 is `arc.mounts.use`; levels are `arc.mounts.<mount>.<level>`. Glow ownership
