@@ -1,36 +1,115 @@
 package ru.arc.audit
 
 import kotlin.math.abs
+import kotlin.math.ceil
 
-internal class MutableAuditStats {
+private const val ACTIVITY_BUCKET_MILLIS = 5 * 60 * 1000L
+private const val ACTIVITY_BUCKET_MINUTES = 5
+
+internal class MutableAuditStats(
+    private val trackBalanceProfile: Boolean = false,
+) {
     var income = 0.0
     var expense = 0.0
     var operations = 0L
     var records = 0L
     val players = linkedSetOf<String>()
     val flows = linkedMapOf<String, Long>()
+    private val mintByPlayer = linkedMapOf<String, Double>()
+    private val burnByPlayer = linkedMapOf<String, Double>()
+    private val mintPlayerBuckets = linkedSetOf<String>()
+    private val burnPlayerBuckets = linkedSetOf<String>()
 
-    fun add(player: String, transaction: Transaction) {
+    fun add(player: String, transaction: Transaction, since: Long) {
         if (transaction.amount > 0) income += transaction.amount else expense += transaction.absoluteAmount
         operations += transaction.occurrenceCount
         records++
         players += player
         flows.merge(transaction.normalizedFlow.label, transaction.occurrenceCount.toLong(), Long::plus)
+        if (!trackBalanceProfile) return
+        when (transaction.normalizedFlow) {
+            EconomyFlow.MINT -> {
+                val amount = transaction.amount.coerceAtLeast(0.0)
+                if (amount > 0.0) {
+                    mintByPlayer.merge(player, amount, Double::plus)
+                    addActivityBuckets(mintPlayerBuckets, player, transaction, since)
+                }
+            }
+            EconomyFlow.BURN -> {
+                val amount = (-transaction.amount).coerceAtLeast(0.0)
+                if (amount > 0.0) {
+                    burnByPlayer.merge(player, amount, Double::plus)
+                    addActivityBuckets(burnPlayerBuckets, player, transaction, since)
+                }
+            }
+            else -> Unit
+        }
     }
 
-    fun toMap(labelName: String, label: String): Map<String, Any?> =
-        linkedMapOf(
-            labelName to label,
-            "income" to income,
-            "expense" to expense,
-            "net" to income - expense,
-            "operations" to operations,
-            "records" to records,
-            "players" to players.size,
-            "flows" to flows.toSortedMap(),
-        )
+    fun toMap(labelName: String, label: String): Map<String, Any?> {
+        val result =
+            linkedMapOf<String, Any?>(
+                labelName to label,
+                "income" to income,
+                "expense" to expense,
+                "net" to income - expense,
+                "operations" to operations,
+                "records" to records,
+                "players" to players.size,
+                "flows" to flows.toSortedMap(),
+            )
+        if (trackBalanceProfile) {
+            result["mintDistribution"] = distribution(mintByPlayer.values)
+            result["burnDistribution"] = distribution(burnByPlayer.values)
+            result["activity"] =
+                linkedMapOf(
+                    "mintPlayerBuckets" to mintPlayerBuckets.size,
+                    "burnPlayerBuckets" to burnPlayerBuckets.size,
+                    "mintActivityPlayerHoursProxy" to playerHours(mintPlayerBuckets.size),
+                    "burnActivityPlayerHoursProxy" to playerHours(burnPlayerBuckets.size),
+                    "mintPerActivityPlayerHourProxy" to perPlayerHour(mintByPlayer.values.sum(), mintPlayerBuckets.size),
+                    "burnPerActivityPlayerHourProxy" to perPlayerHour(burnByPlayer.values.sum(), burnPlayerBuckets.size),
+                )
+        }
+        return result
+    }
 
     fun volume(): Double = income + expense
+
+    private fun addActivityBuckets(
+        buckets: MutableSet<String>,
+        player: String,
+        transaction: Transaction,
+        since: Long,
+    ) {
+        val first = transaction.timestamp / ACTIVITY_BUCKET_MILLIS
+        val last = transaction.timestamp2 / ACTIVITY_BUCKET_MILLIS
+        if (transaction.timestamp >= since) buckets += "$player|$first"
+        buckets += "$player|$last"
+    }
+
+    private fun distribution(values: Collection<Double>): Map<String, Any?> {
+        val sorted = values.filter { it.isFinite() && it > 0.0 }.sorted()
+        val total = sorted.sum()
+        return linkedMapOf(
+            "players" to sorted.size,
+            "topPlayerShare" to sorted.lastOrNull()?.takeIf { total > 0.0 }?.div(total),
+            "p50" to percentile(sorted, 0.50),
+            "p90" to percentile(sorted, 0.90),
+            "p99" to percentile(sorted, 0.99),
+        )
+    }
+
+    private fun percentile(sorted: List<Double>, percentile: Double): Double? {
+        if (sorted.isEmpty()) return null
+        val index = (ceil(percentile * sorted.size).toInt() - 1).coerceIn(sorted.indices)
+        return sorted[index]
+    }
+
+    private fun playerHours(bucketCount: Int): Double = bucketCount * ACTIVITY_BUCKET_MINUTES / 60.0
+
+    private fun perPlayerHour(amount: Double, bucketCount: Int): Double? =
+        playerHours(bucketCount).takeIf { it > 0.0 }?.let { amount / it }
 }
 
 private data class AdminShopItemKey(
@@ -267,14 +346,16 @@ internal fun buildAuditSummary(
             }
             val source = transaction.normalizedSource.label
             val action = transaction.normalizedAction.label
+            val accountKey = context?.accountId?.takeIf(String::isNotBlank) ?: auditData.name.lowercase()
             adminShopSales.add(auditData.name, transaction)
-            sources.computeIfAbsent(source) { MutableAuditStats() }.add(auditData.name, transaction)
-            actions.computeIfAbsent(EconomyActionKey(source, action)) { MutableAuditStats() }
-                .add(auditData.name, transaction)
-            players.computeIfAbsent(auditData.name) { MutableAuditStats() }.add(auditData.name, transaction)
+            sources.computeIfAbsent(source) { MutableAuditStats(trackBalanceProfile = true) }
+                .add(accountKey, transaction, since)
+            actions.computeIfAbsent(EconomyActionKey(source, action)) { MutableAuditStats(trackBalanceProfile = true) }
+                .add(accountKey, transaction, since)
+            players.computeIfAbsent(auditData.name) { MutableAuditStats() }.add(accountKey, transaction, since)
             if (transaction.normalizedSource == EconomySource.UNKNOWN) {
                 unknownOrigins.computeIfAbsent(transaction.origin.orEmpty().ifBlank { "unresolved" }) { MutableAuditStats() }
-                    .add(auditData.name, transaction)
+                    .add(accountKey, transaction, since)
             }
 
             when (transaction.normalizedFlow) {
@@ -293,8 +374,12 @@ internal fun buildAuditSummary(
         }
     }
 
-    fun ranked(stats: Map<String, MutableAuditStats>, labelName: String): List<Map<String, Any?>> =
-        stats.entries.sortedByDescending { it.value.volume() }.take(limit).map { it.value.toMap(labelName, it.key) }
+    fun ranked(
+        stats: Map<String, MutableAuditStats>,
+        labelName: String,
+    ): List<Map<String, Any?>> =
+        stats.entries.sortedByDescending { it.value.volume() }.take(limit)
+            .map { it.value.toMap(labelName, it.key) }
 
     val derivedAnomalies =
         derivePersistedAnomalies(
@@ -369,18 +454,18 @@ internal fun buildAuditSummary(
                 .sortedByDescending { it.value.volume() }
                 .take(limit)
                 .map { (key, stats) ->
-                    linkedMapOf<String, Any?>(
-                        "source" to key.source,
-                        "action" to key.action,
-                        "income" to stats.income,
-                        "expense" to stats.expense,
-                        "net" to stats.income - stats.expense,
-                        "operations" to stats.operations,
-                        "records" to stats.records,
-                        "players" to stats.players.size,
-                        "flows" to stats.flows.toSortedMap(),
-                    )
+                    LinkedHashMap(stats.toMap("source", key.source)).apply {
+                        put("action", key.action)
+                    }
                 },
+        "balanceProfileEvidence" to
+            linkedMapOf(
+                "distributionUnit" to "per_player_window_mint_or_burn_total",
+                "percentileMethod" to "nearest_rank",
+                "bucketMinutes" to ACTIVITY_BUCKET_MINUTES,
+                "unit" to "unique_player_source_or_action_bucket",
+                "interpretation" to "five_minute_presence_proxy_not_measured_session_duration",
+            ),
         "attempts" to
             linkedMapOf(
                 "total" to attempts,

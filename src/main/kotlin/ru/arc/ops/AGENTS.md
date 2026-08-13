@@ -209,7 +209,12 @@ surface is intentionally compact:
   evidence kind, and unattributed remainder for EconomyShopGUI and
   AutoSellChests sales. The response also ranks successful transactions by a
   bounded `source + action` classifier; arbitrary provider strings never become
-  metric labels. Internal-stock principal placement, short placement, close
+  metric labels. Every ranked source/action row includes per-player window
+  mint/burn p50/p90/p99, top-player share, unique five-minute player buckets,
+  and mint/burn per bucket-derived player-hour. The response explicitly marks
+  this as a presence proxy rather than measured session duration; transfers,
+  adjustments, and internal movements never contribute to that profile.
+  Internal-stock principal placement, short placement, close
   result, and dividend use the bounded actions `stock_buy`, `stock_short`,
   `stock_close`, and `stock_dividend`; Vault-to-trading transfers remain
   transfers rather than mint. Detailed

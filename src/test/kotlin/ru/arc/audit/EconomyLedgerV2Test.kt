@@ -316,6 +316,87 @@ class EconomyLedgerV2Test : FreeSpec({
             items.map { it["customItemId"] } shouldBe listOf(null, "CARBONADO", null)
         }
 
+        "profiles source and action concentration with bounded activity evidence" {
+            val metadata = AuditMetadata(EconomySource.JOBS, EconomyFlow.MINT, server = "survival")
+            val first = AuditData.create("First", "survival:first")
+            val second = AuditData.create("Second", "survival:second")
+            val third = AuditData.create("Third", "survival:third")
+            first.operation(100.0, Type.JOB, "Mining", metadata, at = 60_000)
+            first.operation(100.0, Type.JOB, "Mining", metadata, at = 360_000)
+            second.operation(200.0, Type.JOB, "Mining", metadata, at = 120_000)
+            third.operation(600.0, Type.JOB, "Mining", metadata, at = 660_000)
+            first.operation(
+                -100.0,
+                Type.SHOP,
+                "Purchase",
+                AuditMetadata(EconomySource.SHOP, EconomyFlow.BURN, server = "survival"),
+                at = 50_000,
+            )
+            second.operation(
+                -300.0,
+                Type.SHOP,
+                "Purchase",
+                AuditMetadata(EconomySource.SHOP, EconomyFlow.BURN, server = "survival"),
+                at = 350_000,
+            )
+            first.operation(
+                50.0,
+                Type.PAY,
+                "Friend",
+                AuditMetadata(EconomySource.PLAYER_TRANSFER, EconomyFlow.TRANSFER, server = "survival"),
+                at = 720_000,
+            )
+
+            val summary = buildAuditSummary(listOf(first, second, third), 900_000, 0, 20, null, emptyList())
+            val sources = (summary["sources"] as List<*>).map { it as Map<*, *> }
+            val actions = (summary["actions"] as List<*>).map { it as Map<*, *> }
+            val source = sources.single { it["source"] == "jobs" }
+            val action = actions.single { it["source"] == "jobs" }
+            val shop = sources.single { it["source"] == "shop" }
+            val transfer = sources.single { it["source"] == "player_transfer" }
+            val distribution = source["mintDistribution"] as Map<*, *>
+            val activity = source["activity"] as Map<*, *>
+            val evidence = summary["balanceProfileEvidence"] as Map<*, *>
+
+            distribution["players"] shouldBe 3
+            distribution["topPlayerShare"] shouldBe 0.6
+            distribution["p50"] shouldBe 200.0
+            distribution["p90"] shouldBe 600.0
+            distribution["p99"] shouldBe 600.0
+            activity["mintPlayerBuckets"] shouldBe 4
+            activity["mintActivityPlayerHoursProxy"] shouldBe (4.0 / 12.0)
+            activity["mintPerActivityPlayerHourProxy"] shouldBe 3_000.0
+            (action["mintDistribution"] as Map<*, *>)["topPlayerShare"] shouldBe 0.6
+            (action["activity"] as Map<*, *>)["mintPlayerBuckets"] shouldBe 4
+            (shop["burnDistribution"] as Map<*, *>)["players"] shouldBe 2
+            (shop["burnDistribution"] as Map<*, *>)["topPlayerShare"] shouldBe 0.75
+            (shop["burnDistribution"] as Map<*, *>)["p50"] shouldBe 100.0
+            (shop["burnDistribution"] as Map<*, *>)["p90"] shouldBe 300.0
+            (shop["activity"] as Map<*, *>)["burnPlayerBuckets"] shouldBe 2
+            (shop["activity"] as Map<*, *>)["burnPerActivityPlayerHourProxy"] shouldBe 2_400.0
+            (transfer["mintDistribution"] as Map<*, *>)["players"] shouldBe 0
+            (transfer["activity"] as Map<*, *>)["mintPlayerBuckets"] shouldBe 0
+            (transfer["activity"] as Map<*, *>)["mintPerActivityPlayerHourProxy"] shouldBe null
+            evidence["distributionUnit"] shouldBe "per_player_window_mint_or_burn_total"
+            evidence["percentileMethod"] shouldBe "nearest_rank"
+            evidence["bucketMinutes"] shouldBe 5
+            evidence["interpretation"] shouldBe "five_minute_presence_proxy_not_measured_session_duration"
+        }
+
+        "does not invent an activity bucket when an aggregate crosses the query cutoff" {
+            val data = AuditData.create("Player")
+            val metadata = AuditMetadata(EconomySource.JOBS, EconomyFlow.MINT, server = "survival")
+            data.operation(10.0, Type.JOB, "Mining", metadata, at = 299_990)
+            data.operation(10.0, Type.JOB, "Mining", metadata, at = 300_001)
+
+            val summary = buildAuditSummary(listOf(data), 600_000, 299_995, 20, null, emptyList())
+            val source = (summary["sources"] as List<*>).single() as Map<*, *>
+            val activity = source["activity"] as Map<*, *>
+
+            activity["mintPlayerBuckets"] shouldBe 1
+            activity["mintActivityPlayerHoursProxy"] shouldBe (1.0 / 12.0)
+        }
+
         "exports low-cardinality attempt outcomes and context coverage" {
             val registry = SimpleMeterRegistry()
             val clock = TestTimeProvider(1_000)
