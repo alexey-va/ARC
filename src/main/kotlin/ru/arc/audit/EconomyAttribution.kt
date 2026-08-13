@@ -61,6 +61,10 @@ enum class EconomyAction(val label: String) {
     ADMIN_GIVE("admin_give"),
     ADMIN_TAKE("admin_take"),
     BALANCE_SET("balance_set"),
+    STOCK_BUY("stock_buy"),
+    STOCK_SHORT("stock_short"),
+    STOCK_CLOSE("stock_close"),
+    STOCK_DIVIDEND("stock_dividend"),
     SOURCE_CREDIT("source_credit"),
     SOURCE_DEBIT("source_debit"),
     ZERO_CHANGE("zero_change"),
@@ -86,6 +90,10 @@ object EconomyActionClassifier {
                 return EconomyAction.AUTOSELL_SALE
             source == EconomySource.SHOP && action.startsWith("sell") -> return EconomyAction.SHOP_SELL
             source == EconomySource.SHOP && action.startsWith("buy") -> return EconomyAction.SHOP_BUY
+            source == EconomySource.INTERNAL_STOCK && action == "stock_buy" -> return EconomyAction.STOCK_BUY
+            source == EconomySource.INTERNAL_STOCK && action == "stock_short" -> return EconomyAction.STOCK_SHORT
+            source == EconomySource.INTERNAL_STOCK && action == "stock_close" -> return EconomyAction.STOCK_CLOSE
+            source == EconomySource.INTERNAL_STOCK && action == "stock_dividend" -> return EconomyAction.STOCK_DIVIDEND
         }
 
         if (amount == 0.0 || !amount.isFinite()) return EconomyAction.ZERO_CHANGE

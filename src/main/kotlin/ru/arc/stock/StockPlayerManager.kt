@@ -6,6 +6,7 @@ import org.bukkit.entity.Player
 import ru.arc.audit.AuditManager
 import ru.arc.audit.AuditMetadata
 import ru.arc.audit.EconomyFlow
+import ru.arc.audit.EconomyLedgerContext
 import ru.arc.audit.EconomySource
 import ru.arc.audit.Type
 import ru.arc.config.StockConfig
@@ -27,6 +28,8 @@ object StockPlayerManager {
             currency = "stock_balance",
             server = ru.arc.ARC.serverName ?: "unknown",
         )
+
+    private fun internalStockContext(action: String) = EconomyLedgerContext(action = action)
 
     lateinit var playerRepo: CachedRepository<StockPlayer>
 
@@ -69,7 +72,14 @@ object StockPlayerManager {
             val gave = stockPlayer.giveDividend(symbol)
             if (gave <= 0.1) continue
             playerRepo.markDirty(stockPlayer)
-            AuditManager.operation(stockPlayer.playerName, gave, Type.DIVIDEND, symbol, internalStockMetadata())
+            AuditManager.economyOperation(
+                stockPlayer.playerName,
+                gave,
+                Type.DIVIDEND,
+                symbol,
+                internalStockMetadata(),
+                internalStockContext("stock_dividend"),
+            )
             val message = StockConfig.string("message.received-dividend")
                 .replace("<amount>", formatAmount(gave))
                 .replace("<symbol>", symbol)
@@ -113,7 +123,14 @@ object StockPlayerManager {
         stockPlayer.addPosition(position)
         playerRepo.markDirty(stockPlayer)
 
-        AuditManager.operation(stockPlayer.playerName, -response.totalPrice, Type.STOCK, "Buy ${stock.symbol}", internalStockMetadata())
+        AuditManager.economyOperation(
+            stockPlayer.playerName,
+            -response.totalPrice,
+            Type.STOCK,
+            "Buy ${stock.symbol}",
+            internalStockMetadata(),
+            internalStockContext("stock_buy"),
+        )
     }
 
     @JvmStatic fun shortStock(stockPlayer: StockPlayer, stock: Stock, amount: Double, leverage: Int, lowerBound: Double, upperBound: Double) {
@@ -146,7 +163,14 @@ object StockPlayerManager {
         stockPlayer.addPosition(position)
         playerRepo.markDirty(stockPlayer)
 
-        AuditManager.operation(stockPlayer.playerName, -response.totalPrice, Type.STOCK, "Short ${stock.symbol}", internalStockMetadata())
+        AuditManager.economyOperation(
+            stockPlayer.playerName,
+            -response.totalPrice,
+            Type.STOCK,
+            "Short ${stock.symbol}",
+            internalStockMetadata(),
+            internalStockContext("stock_short"),
+        )
     }
 
     @JvmStatic fun closePosition(stockPlayer: StockPlayer, symbol: String, positionUuid: UUID, reason: Int) {
@@ -165,7 +189,14 @@ object StockPlayerManager {
             stockPlayer.addToBalance(gains + position.startPrice * position.amount, true)
             playerRepo.markDirty(stockPlayer)
 
-            AuditManager.operation(stockPlayer.playerName, gains, Type.STOCK, "Close $symbol", internalStockMetadata())
+            AuditManager.economyOperation(
+                stockPlayer.playerName,
+                gains,
+                Type.STOCK,
+                "Close $symbol",
+                internalStockMetadata(),
+                internalStockContext("stock_close"),
+            )
 
             val message = StockConfig.string("message.closed-$reason")
                 .replace("<gains>", formatAmount(gains - position.commission))

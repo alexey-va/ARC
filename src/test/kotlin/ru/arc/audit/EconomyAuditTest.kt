@@ -139,6 +139,10 @@ class EconomyAuditTest : FreeSpec({
             EconomyActionClassifier.classify(EconomySource.GAMBLING, -50.0) shouldBe EconomyAction.GAMBLING_WAGER
             EconomyActionClassifier.classify(EconomySource.GAMBLING, 75.0) shouldBe EconomyAction.GAMBLING_PAYOUT
             EconomyActionClassifier.classify(EconomySource.SHOP, 20.0, "auto_sell_chest") shouldBe EconomyAction.AUTOSELL_SALE
+            EconomyActionClassifier.classify(EconomySource.INTERNAL_STOCK, -100.0, "stock_buy") shouldBe EconomyAction.STOCK_BUY
+            EconomyActionClassifier.classify(EconomySource.INTERNAL_STOCK, -100.0, "stock_short") shouldBe EconomyAction.STOCK_SHORT
+            EconomyActionClassifier.classify(EconomySource.INTERNAL_STOCK, 100.0, "stock_close") shouldBe EconomyAction.STOCK_CLOSE
+            EconomyActionClassifier.classify(EconomySource.INTERNAL_STOCK, 100.0, "stock_dividend") shouldBe EconomyAction.STOCK_DIVIDEND
             EconomyActionClassifier.classify(EconomySource.DENIZEN, 20.0, "untrusted arbitrary script id") shouldBe
                 EconomyAction.SOURCE_CREDIT
         }

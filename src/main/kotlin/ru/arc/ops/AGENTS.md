@@ -209,7 +209,10 @@ surface is intentionally compact:
   evidence kind, and unattributed remainder for EconomyShopGUI and
   AutoSellChests sales. The response also ranks successful transactions by a
   bounded `source + action` classifier; arbitrary provider strings never become
-  metric labels. Detailed
+  metric labels. Internal-stock principal placement, short placement, close
+  result, and dividend use the bounded actions `stock_buy`, `stock_short`,
+  `stock_close`, and `stock_dividend`; Vault-to-trading transfers remain
+  transfers rather than mint. Detailed
   account, session, balance, item, counterparty, and correlation evidence stays
   in this authenticated response and must never become Prometheus labels.
   `autoSellAudit` is a local, read-only runtime diagnostic: loaded/eligible
