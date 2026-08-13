@@ -6,8 +6,11 @@ import ru.arc.core.TaskScheduler
 import ru.arc.core.Tasks
 import ru.arc.hooks.HookRegistry
 import ru.arc.metrics.MetricsModule
+import ru.arc.redis.activity.PlayerActivitySnapshot
+import ru.arc.redis.activity.PlayerActivityStore
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
@@ -48,6 +51,7 @@ object BankAuditModule : PluginModule {
     private var runner: BankAuditRunner? = null
     private var service: BankAuditService? = null
     private var config: BankAuditConfig? = null
+    private var playerActivityStore: PlayerActivityStore? = null
     private val sampling = AtomicBoolean(false)
     private val generation = AtomicLong()
 
@@ -78,6 +82,7 @@ object BankAuditModule : PluginModule {
         }
 
         service = BankAuditService(cfg)
+        playerActivityStore = ARC.redisManager?.let(::PlayerActivityStore)
         state = "warming_up"
         val activeGeneration = generation.incrementAndGet()
         runner =
@@ -106,6 +111,7 @@ object BankAuditModule : PluginModule {
             check(discovered.isNotEmpty()) { "RedisEconomy account cache is empty" }
             val capped = discovered.size > cfg.maxAccounts
             val candidates = discovered.take(cfg.maxAccounts)
+            val activity = loadPlayerActivity()
             var failed = 0
             val accounts =
                 candidates.mapNotNull { candidate ->
@@ -122,6 +128,7 @@ object BankAuditModule : PluginModule {
                             walletBalance = candidate.balance,
                             bankBalance = bankAccount.balance,
                             pendingInterest = bankAccount.pendingInterest,
+                            lastSeenAt = activity.lastSeen[candidate.uuid],
                         )
                     }.getOrElse {
                         failed++
@@ -136,6 +143,13 @@ object BankAuditModule : PluginModule {
                         accounts = accounts,
                         failedAccounts = failed,
                         capped = capped,
+                        activity =
+                            BankAuditActivityRead(
+                                collectionSucceeded = activity.collectionSucceeded,
+                                coverageStartedAt = activity.snapshot.coverageStartedAt,
+                                registryPlayers = activity.snapshot.lastSeen.size,
+                                invalidEntries = activity.snapshot.invalidEntries,
+                            ),
                     ),
                 )
             state = if (snapshot.complete) "ready" else "partial"
@@ -156,6 +170,19 @@ object BankAuditModule : PluginModule {
         }
     }
 
+    private fun loadPlayerActivity(): PlayerActivityRead {
+        val store = playerActivityStore ?: return PlayerActivityRead(collectionSucceeded = false)
+        return runCatching {
+            PlayerActivityRead(
+                snapshot = store.load().get(PLAYER_ACTIVITY_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS),
+                collectionSucceeded = true,
+            )
+        }.getOrElse { failure ->
+            warn("Bank audit could not read Velocity player activity: {}", failure.javaClass.simpleName)
+            PlayerActivityRead(collectionSucceeded = false)
+        }
+    }
+
     fun summary(limit: Int): Map<String, Any?> {
         val cfg = config
         val result = LinkedHashMap<String, Any?>()
@@ -163,7 +190,7 @@ object BankAuditModule : PluginModule {
         result["collectorServer"] = cfg?.collectorServer ?: "spawn"
         result["localServer"] = ARC.serverName ?: "unknown"
         result["singleLeader"] = true
-        result["source"] = "RedisEconomy account cache + Bank API on collector server"
+        result["source"] = "RedisEconomy account cache + Bank API + Velocity activity hash on collector server"
         result["expectedMaxLagSeconds"] = cfg?.expectedMaxLagSeconds ?: 600
         service?.summary(limit)?.forEach(result::put)
         result["status"] =
@@ -180,6 +207,16 @@ object BankAuditModule : PluginModule {
         runner = null
         service = null
         config = null
+        playerActivityStore = null
         state = "disabled"
     }
+
+    private data class PlayerActivityRead(
+        val snapshot: PlayerActivitySnapshot = PlayerActivitySnapshot(null, emptyMap(), 0),
+        val collectionSucceeded: Boolean,
+    ) {
+        val lastSeen get() = snapshot.lastSeen
+    }
+
+    private const val PLAYER_ACTIVITY_READ_TIMEOUT_SECONDS = 10L
 }

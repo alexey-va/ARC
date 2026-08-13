@@ -33,6 +33,68 @@ class BankAuditServiceTest :
             snapshot.bankSupplyDelta.shouldBeNull()
         }
 
+        "reports honest active-supply cohorts from Velocity activity evidence" {
+            val now = 100L * DAY_MILLIS
+            val service = BankAuditService(TestBankAuditConfig()) { now }
+
+            val snapshot =
+                service.accept(
+                    BankAuditReadResult(
+                        discoveredAccounts = 3,
+                        accounts =
+                            listOf(
+                                account("a", wallet = 100.0, bank = 100.0, lastSeenAt = now),
+                                account("b", wallet = 50.0, bank = 400.0, lastSeenAt = now - 10L * DAY_MILLIS),
+                                account("c", wallet = 50.0),
+                            ),
+                        activity =
+                            BankAuditActivityRead(
+                                collectionSucceeded = true,
+                                coverageStartedAt = now - 8L * DAY_MILLIS,
+                                registryPlayers = 2,
+                            ),
+                    ),
+                )
+
+            snapshot.activityCollectionSucceeded shouldBe true
+            snapshot.activityMatchedAccounts shouldBe 2
+            snapshot.activeSupplyCohorts.map(ActiveSupplyCohort::windowDays) shouldBe listOf(7, 30, 90)
+            snapshot.activeSupplyCohorts[0].let { cohort ->
+                cohort.accounts shouldBe 1
+                cohort.knownSupply shouldBeExactly 200.0
+                cohort.knownSupplyShare shouldBeExactly (200.0 / 700.0)
+                cohort.maturityRatio shouldBeExactly 1.0
+                cohort.complete shouldBe true
+            }
+            snapshot.activeSupplyCohorts[1].let { cohort ->
+                cohort.accounts shouldBe 2
+                cohort.knownSupply shouldBeExactly 650.0
+                cohort.maturityRatio shouldBeExactly (8.0 / 30.0)
+                cohort.complete shouldBe false
+            }
+
+            val points = service.metricPoints(snapshot)
+            points.first {
+                it.name == "arc_bank_active_supply_currency" &&
+                    it.tags == mapOf("window_days" to "7", "component" to "known_supply")
+            }.value shouldBeExactly 200.0
+            points.flatMap { it.tags.keys }.contains("player") shouldBe false
+        }
+
+        "keeps money snapshot complete while activity evidence is unavailable" {
+            val service = BankAuditService(TestBankAuditConfig()) { 10_000L }
+
+            val snapshot = service.accept(read(account("a", wallet = 100.0, lastSeenAt = 1_000_000L)))
+
+            snapshot.complete shouldBe true
+            snapshot.activityCollectionSucceeded shouldBe false
+            snapshot.activityInvalidEntries shouldBe 1
+            snapshot.activeSupplyCohorts.all { it.accounts == 0 && !it.complete } shouldBe true
+            service.metricPoints(snapshot)
+                .first { it.name == "arc_bank_activity_collection_success" }
+                .value shouldBeExactly 0.0
+        }
+
         "observes account movement and keeps player identity out of metric labels" {
             var now = 1_000L
             val service = BankAuditService(TestBankAuditConfig(minimumChange = 0.01)) { now }
@@ -221,12 +283,14 @@ class BankAuditServiceTest :
             wallet: Double = 0.0,
             bank: Double = 0.0,
             pending: Double = 0.0,
+            lastSeenAt: Long? = null,
         ) = BankAuditAccount(
             playerId = id,
             player = if (id == "a") "Alice" else "Bob",
             walletBalance = wallet,
             bankBalance = bank,
             pendingInterest = pending,
+            lastSeenAt = lastSeenAt,
         )
 
         private fun read(vararg accounts: BankAuditAccount) =
@@ -234,5 +298,7 @@ class BankAuditServiceTest :
                 discoveredAccounts = accounts.size,
                 accounts = accounts.toList(),
             )
+
+        private const val DAY_MILLIS = 86_400_000L
     }
 }
