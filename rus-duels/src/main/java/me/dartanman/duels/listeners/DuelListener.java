@@ -100,7 +100,9 @@ public final class DuelListener implements Listener {
         }
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST)
+    // Run before HuskSync/Graves so even a forced death fallback exposes the
+    // restored inventory and keep flags to downstream death listeners.
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onDeath(PlayerDeathEvent event) {
         Player player = event.getPlayer();
         if (!manager.isInDuel(player.getUniqueId())) return;

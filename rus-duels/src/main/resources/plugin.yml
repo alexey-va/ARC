@@ -4,7 +4,7 @@ main: me.dartanman.duels.Duels
 api-version: '1.21'
 authors: [Dartanman, RusCrafting]
 description: Safety-hardened RusCrafting fork of Dartanboy Duels
-loadbefore: [ARC, HuskSync]
+loadbefore: [ARC, HuskSync, GravesX]
 commands:
   duel:
     description: Вызвать игрока на дуэль или управлять текущей дуэлью
