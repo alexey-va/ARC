@@ -311,9 +311,78 @@ class EconomyLedgerV2Test : FreeSpec({
             items.map { it["income"] } shouldBe listOf(100.0, 75.0, 50.0)
             items.map { it["incomeEvidence"] } shouldBe listOf("exact", "allocated", "allocated")
             items.map { it["effectiveUnitPrice"] } shouldBe listOf(10.0, 15.0, 10.0)
+            items.map { it["firstTimestamp"] } shouldBe listOf(1_000L, 2_000L, 2_000L)
+            items.map { it["lastTimestamp"] } shouldBe listOf(1_000L, 2_000L, 2_000L)
             items.map { it["topPlayerIncomeShare"] } shouldBe listOf(1.0, 1.0, 1.0)
             items.map { it["topPlayerQuantityShare"] } shouldBe listOf(1.0, 1.0, 1.0)
             items.map { it["customItemId"] } shouldBe listOf(null, "CARBONADO", null)
+        }
+
+        "reports only post-activation Slimefun sales as policy violations" {
+            val data = AuditData.create("Seller", "survival:seller")
+            fun saleContext(providerTimestamp: Long) =
+                EconomyLedgerContext(
+                    recordKind = EconomyRecordKind.TRANSACTION,
+                    status = EconomyEventStatus.SUCCEEDED,
+                    providerTimestamp = providerTimestamp,
+                    action = "sell_all_command",
+                    shopId = "Slimefun",
+                    items =
+                        listOf(
+                            EconomyLedgerItem(
+                                "Slimefun.page2.items.49",
+                                "minecraft:activator_rail",
+                                1,
+                                165.0,
+                                customItemId = "BASIC_CIRCUIT_BOARD",
+                            ),
+                        ),
+                )
+            data.operation(
+                165.0,
+                Type.SHOP,
+                "pre-policy sale",
+                AuditMetadata(EconomySource.SHOP, EconomyFlow.MINT, server = "survival"),
+                saleContext(1_000),
+                at = 1_000,
+            )
+            data.operation(
+                330.0,
+                Type.SHOP,
+                "post-policy sale",
+                AuditMetadata(EconomySource.SHOP, EconomyFlow.MINT, server = "survival"),
+                saleContext(20_000),
+                at = 20_000,
+            )
+
+            val summary =
+                buildAuditSummary(
+                    data = listOf(data),
+                    generatedAt = 30_000,
+                    since = 0,
+                    limit = 20,
+                    serverFilter = null,
+                    anomalies = emptyList(),
+                    slimefunBuyOnlyPolicyEnabled = true,
+                    slimefunBuyOnlyPolicyActivatedAt = 10_000,
+                )
+            val policy = summary["policyViolations"] as Map<*, *>
+            val policySummary = (policy["policies"] as List<*>).single() as Map<*, *>
+            val recent = (policy["recent"] as List<*>).single() as Map<*, *>
+            val sale = ((summary["adminShopSales"] as Map<*, *>)["items"] as List<*>).single() as Map<*, *>
+
+            policySummary["policy"] shouldBe "slimefun_buy_only"
+            policySummary["enabled"] shouldBe true
+            policySummary["activatedAt"] shouldBe 10_000L
+            policySummary["records"] shouldBe 1
+            policySummary["operations"] shouldBe 1L
+            policySummary["income"] shouldBe 330.0
+            policySummary["players"] shouldBe 1
+            recent["amount"] shouldBe 330.0
+            recent["policy"] shouldBe "slimefun_buy_only"
+            recent["evidence"] shouldBe "persisted_admin_shop_sale_after_policy_activation"
+            sale["firstTimestamp"] shouldBe 1_000L
+            sale["lastTimestamp"] shouldBe 20_000L
         }
 
         "profiles source and action concentration with bounded activity evidence" {
@@ -433,6 +502,43 @@ class EconomyLedgerV2Test : FreeSpec({
             registry.get("arc_economy_context_total")
                 .tags("source", "shop", "field", "items", "present", "false")
                 .counter().count() shouldBeExactly 1.0
+        }
+
+        "counts active policy violations without player or item labels" {
+            val registry = SimpleMeterRegistry()
+            val clock = TestTimeProvider(20_000)
+            val config =
+                TestAuditConfig(
+                    slimefunBuyOnlyPolicyEnabled = true,
+                    slimefunBuyOnlyPolicyActivatedAt = 10_000,
+                )
+            val monitor = EconomyAuditMonitor(config, { registry }, clock)
+            val metadata = AuditMetadata(EconomySource.SHOP, EconomyFlow.MINT, server = "survival")
+            fun context(timestamp: Long) =
+                EconomyLedgerContext(
+                    recordKind = EconomyRecordKind.TRANSACTION,
+                    status = EconomyEventStatus.SUCCEEDED,
+                    providerTimestamp = timestamp,
+                    action = "sell_all_command",
+                    shopId = "Slimefun",
+                    items = listOf(EconomyLedgerItem("Slimefun.page2.items.49", quantity = 1)),
+                )
+
+            monitor.observe("Before", 165.0, metadata, "pre-policy", context(9_999))
+            monitor.observe("After", 165.0, metadata, "post-policy", context(10_000))
+
+            registry.get("arc_economy_policy_violations_total")
+                .tag("policy", "slimefun_buy_only")
+                .counter().count() shouldBeExactly 1.0
+            registry.get("arc_economy_policy_enabled")
+                .tag("policy", "slimefun_buy_only")
+                .gauge().value() shouldBeExactly 1.0
+            registry.get("arc_economy_policy_activation_timestamp_seconds")
+                .tag("policy", "slimefun_buy_only")
+                .gauge().value() shouldBeExactly 10.0
+            monitor.recent(20).single().kind shouldBe "policy_violation_slimefun_buy_only"
+            registry.meters.flatMap { it.id.tags }.map { it.key }.toSet()
+                .intersect(setOf("player", "item", "counterparty", "correlation")) shouldBe emptySet()
         }
     }
 })

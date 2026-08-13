@@ -38,6 +38,10 @@ class AuditConfigLoadTest {
               rapid-income-amount: 75000
               rapid-income-transactions: 12
               anomaly-cooldown-seconds: 60
+              policies:
+                slimefun-buy-only:
+                  enabled: true
+                  activated-at: 1786578327000
             messages:
               page-size: 10
               header-format: "<blue>Аудит %player_name%"
@@ -103,6 +107,8 @@ class AuditConfigLoadTest {
         assertEquals(75_000.0, cfg.rapidIncomeAmount)
         assertEquals(12, cfg.rapidIncomeTransactions)
         assertEquals(60, cfg.anomalyCooldownSeconds)
+        assertEquals(true, cfg.slimefunBuyOnlyPolicyEnabled)
+        assertEquals(1_786_578_327_000L, cfg.slimefunBuyOnlyPolicyActivatedAt)
     }
 
     @Test

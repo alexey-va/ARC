@@ -227,6 +227,8 @@ class AuditService(
             rapidAmount = config.rapidIncomeAmount,
             rapidTransactions = config.rapidIncomeTransactions,
             largeTransactionAmount = config.largeTransactionAmount,
+            slimefunBuyOnlyPolicyEnabled = config.slimefunBuyOnlyPolicyEnabled,
+            slimefunBuyOnlyPolicyActivatedAt = config.slimefunBuyOnlyPolicyActivatedAt,
         )
     }
 

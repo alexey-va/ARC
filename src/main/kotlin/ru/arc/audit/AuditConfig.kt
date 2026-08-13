@@ -62,6 +62,14 @@ open class AuditConfig(
     open val anomalyCooldownSeconds: Int
         get() = config.integer("monitoring.anomaly-cooldown-seconds", 300).coerceAtLeast(1)
 
+    /** Runtime/persisted guard for the owner policy that the admin shop never buys Slimefun items. */
+    open val slimefunBuyOnlyPolicyEnabled: Boolean
+        get() = config.bool("monitoring.policies.slimefun-buy-only.enabled", false)
+
+    /** Exact production activation boundary; older ledger events are not policy violations. */
+    open val slimefunBuyOnlyPolicyActivatedAt: Long
+        get() = config.long("monitoring.policies.slimefun-buy-only.activated-at", 0L).coerceAtLeast(0L)
+
     private val msgs get() = config.section("messages")
 
     /** Page size for audit display */
@@ -148,6 +156,8 @@ class TestAuditConfig(
     override val rapidIncomeAmount: Double = 250_000.0,
     override val rapidIncomeTransactions: Int = 40,
     override val anomalyCooldownSeconds: Int = 300,
+    override val slimefunBuyOnlyPolicyEnabled: Boolean = false,
+    override val slimefunBuyOnlyPolicyActivatedAt: Long = 0L,
     override val pageSize: Int = 20,
     override val headerFormat: String = "\n<gold>%player_name%'s Audit Data",
     override val transactionFormat: String = "<hover:<yellow>%comment%><gray>%counter%. <gray>[%date%] <white>%type% <gold>%amount%</hover>",
@@ -176,6 +186,8 @@ class TestAuditConfig(
         rapidIncomeAmount: Double = this.rapidIncomeAmount,
         rapidIncomeTransactions: Int = this.rapidIncomeTransactions,
         anomalyCooldownSeconds: Int = this.anomalyCooldownSeconds,
+        slimefunBuyOnlyPolicyEnabled: Boolean = this.slimefunBuyOnlyPolicyEnabled,
+        slimefunBuyOnlyPolicyActivatedAt: Long = this.slimefunBuyOnlyPolicyActivatedAt,
         pageSize: Int = this.pageSize,
         headerFormat: String = this.headerFormat,
         transactionFormat: String = this.transactionFormat,
@@ -201,6 +213,8 @@ class TestAuditConfig(
             rapidIncomeAmount,
             rapidIncomeTransactions,
             anomalyCooldownSeconds,
+            slimefunBuyOnlyPolicyEnabled,
+            slimefunBuyOnlyPolicyActivatedAt,
             pageSize,
             headerFormat,
             transactionFormat,

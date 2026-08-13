@@ -129,15 +129,26 @@ private class MutableAdminShopItemStats {
     var exactIncome = 0.0
     var allocatedIncome = 0.0
     var transactions = 0L
+    var firstTimestamp: Long? = null
+    var lastTimestamp: Long? = null
     private val quantityByPlayer = linkedMapOf<String, Long>()
     private val incomeByPlayer = linkedMapOf<String, Double>()
 
-    fun add(player: String, itemQuantity: Int, income: Double?, exact: Boolean) {
+    fun add(
+        player: String,
+        itemQuantity: Int,
+        income: Double?,
+        exact: Boolean,
+        firstObservedAt: Long,
+        lastObservedAt: Long,
+    ) {
         quantity += itemQuantity.toLong()
         if (income != null) {
             if (exact) exactIncome += income else allocatedIncome += income
         }
         transactions++
+        firstTimestamp = minOf(firstTimestamp ?: firstObservedAt, firstObservedAt)
+        lastTimestamp = maxOf(lastTimestamp ?: lastObservedAt, lastObservedAt)
         quantityByPlayer.merge(player, itemQuantity.toLong(), Long::plus)
         if (income != null) incomeByPlayer.merge(player, income, Double::plus)
     }
@@ -162,6 +173,8 @@ private class MutableAdminShopItemStats {
                     else -> "unattributed"
                 },
             "transactions" to transactions,
+            "firstTimestamp" to firstTimestamp,
+            "lastTimestamp" to lastTimestamp,
             "players" to quantityByPlayer.size,
             "topPlayerQuantityShare" to share(quantityByPlayer.values.maxOrNull()?.toDouble(), quantity.toDouble()),
             "topPlayerIncomeShare" to share(incomeByPlayer.values.maxOrNull(), exactIncome + allocatedIncome),
@@ -267,7 +280,14 @@ private class AdminShopSalesSummary {
                 customItemId = item.customItemId,
             )
         items.computeIfAbsent(key) { MutableAdminShopItemStats() }
-            .add(player, item.quantity!!, itemIncome, exact)
+            .add(
+                player,
+                item.quantity!!,
+                itemIncome,
+                exact,
+                transaction.timestamp,
+                transaction.timestamp2,
+            )
     }
 }
 
@@ -282,6 +302,8 @@ internal fun buildAuditSummary(
     rapidAmount: Double = 250_000.0,
     rapidTransactions: Int = 40,
     largeTransactionAmount: Double = 100_000.0,
+    slimefunBuyOnlyPolicyEnabled: Boolean = false,
+    slimefunBuyOnlyPolicyActivatedAt: Long = 0L,
 ): Map<String, Any?> {
     val sources = linkedMapOf<String, MutableAuditStats>()
     val actions = linkedMapOf<EconomyActionKey, MutableAuditStats>()
@@ -390,6 +412,13 @@ internal fun buildAuditSummary(
             largeTransactionAmount,
             limit,
         )
+    val policyViolations =
+        summarizePolicyViolations(
+            records = persistedRecords,
+            slimefunBuyOnlyEnabled = slimefunBuyOnlyPolicyEnabled,
+            slimefunBuyOnlyActivatedAt = slimefunBuyOnlyPolicyActivatedAt,
+            limit = limit,
+        )
 
     val contextCoverage =
         listOf("balance", "session", "world", "counterparty", "items", "correlation", "providerTimestamp", "action")
@@ -477,6 +506,7 @@ internal fun buildAuditSummary(
         "adminShopSales" to adminShopSales.toMap(limit),
         "topPlayers" to ranked(players, "player"),
         "unknownOrigins" to ranked(unknownOrigins, "origin"),
+        "policyViolations" to policyViolations,
         "recentAnomalies" to
             anomalies
                 .filter { anomaly ->
@@ -485,6 +515,50 @@ internal fun buildAuditSummary(
         "derivedAnomalies" to derivedAnomalies,
         "recentEvents" to recentEvents,
         "recentFailures" to recentFailures,
+    )
+}
+
+private fun summarizePolicyViolations(
+    records: List<Pair<String, Transaction>>,
+    slimefunBuyOnlyEnabled: Boolean,
+    slimefunBuyOnlyActivatedAt: Long,
+    limit: Int,
+): Map<String, Any?> {
+    val violations =
+        records.filter { (_, transaction) ->
+            EconomyPolicy.isSlimefunBuyOnlyViolation(
+                amount = transaction.amount,
+                source = transaction.normalizedSource,
+                flow = transaction.normalizedFlow,
+                context = transaction.context,
+                eventTimestamp = transaction.context?.providerTimestamp ?: transaction.timestamp2,
+                enabled = slimefunBuyOnlyEnabled,
+                activatedAt = slimefunBuyOnlyActivatedAt,
+            )
+        }
+    val recent =
+        violations.sortedByDescending { (_, transaction) -> transaction.timestamp2 }
+            .take(limit)
+            .map { entry ->
+                LinkedHashMap(ledgerEventMap(entry)).apply {
+                    put("policy", EconomyPolicy.SLIMEFUN_BUY_ONLY)
+                    put("evidence", "persisted_admin_shop_sale_after_policy_activation")
+                }
+            }
+    return linkedMapOf(
+        "policies" to
+            listOf(
+                linkedMapOf(
+                    "policy" to EconomyPolicy.SLIMEFUN_BUY_ONLY,
+                    "enabled" to slimefunBuyOnlyEnabled,
+                    "activatedAt" to slimefunBuyOnlyActivatedAt.takeIf { it > 0L },
+                    "records" to violations.size,
+                    "operations" to violations.sumOf { (_, transaction) -> transaction.occurrenceCount.toLong() },
+                    "income" to violations.sumOf { (_, transaction) -> transaction.amount.coerceAtLeast(0.0) },
+                    "players" to violations.map { (player, _) -> player.lowercase() }.toSet().size,
+                ),
+            ),
+        "recent" to recent,
     )
 }
 

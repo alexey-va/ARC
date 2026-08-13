@@ -1,6 +1,7 @@
 package ru.arc.audit
 
 import io.micrometer.core.instrument.Counter
+import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import ru.arc.core.SystemTimeProvider
 import ru.arc.core.TimeProvider
@@ -47,6 +48,8 @@ class EconomyAuditMonitor(
 
     private data class ActionMetricKey(val source: String, val action: String, val direction: String)
 
+    private data class PolicyMetricKey(val policy: String)
+
     private class IncomeWindow {
         val points = ArrayDeque<IncomePoint>()
         var total = 0.0
@@ -63,7 +66,12 @@ class EconomyAuditMonitor(
     private val contextCounters = ConcurrentHashMap<ContextMetricKey, Counter>()
     private val actionTransactionCounters = ConcurrentHashMap<ActionMetricKey, Counter>()
     private val actionAmountCounters = ConcurrentHashMap<ActionMetricKey, Counter>()
+    private val policyViolationCounters = ConcurrentHashMap<PolicyMetricKey, Counter>()
     private val observations = AtomicLong()
+
+    init {
+        registerPolicyMeters()
+    }
 
     fun observe(
         player: String,
@@ -78,6 +86,28 @@ class EconomyAuditMonitor(
         recordContextMetrics(metadata, context)
 
         val now = timeProvider.currentTimeMillis()
+        val policyTimestamp = context?.providerTimestamp ?: context?.capturedAt ?: now
+        if (
+            EconomyPolicy.isSlimefunBuyOnlyViolation(
+                amount = amount,
+                source = metadata.source,
+                flow = metadata.flow,
+                context = context,
+                eventTimestamp = policyTimestamp,
+                enabled = config.slimefunBuyOnlyPolicyEnabled,
+                activatedAt = config.slimefunBuyOnlyPolicyActivatedAt,
+            )
+        ) {
+            recordPolicyViolation(EconomyPolicy.SLIMEFUN_BUY_ONLY)
+            emit(
+                "policy_violation_${EconomyPolicy.SLIMEFUN_BUY_ONLY}",
+                player,
+                amount,
+                metadata,
+                reason,
+                now,
+            )
+        }
         if (abs(amount) >= config.largeTransactionAmount && config.largeTransactionAmount > 0.0) {
             emit("large_transaction", player, amount, metadata, reason, now)
         }
@@ -193,6 +223,40 @@ class EconomyAuditMonitor(
                     .register(registry)
             }.increment()
         }
+    }
+
+    private fun registerPolicyMeters() {
+        val registry = registryProvider() ?: return
+        val policy = EconomyPolicy.SLIMEFUN_BUY_ONLY
+        val key = PolicyMetricKey(policy)
+        policyViolationCounters.computeIfAbsent(key) {
+            Counter.builder("arc_economy_policy_violations_total")
+                .description("Observed economy operations that violate an active bounded policy")
+                .tag("policy", policy)
+                .register(registry)
+        }
+        Gauge.builder("arc_economy_policy_enabled") {
+            if (config.slimefunBuyOnlyPolicyEnabled) 1.0 else 0.0
+        }.description("Whether a bounded economy policy is enabled")
+            .tag("policy", policy)
+            .register(registry)
+        Gauge.builder("arc_economy_policy_activation_timestamp_seconds") {
+            config.slimefunBuyOnlyPolicyActivatedAt / 1000.0
+        }.description("Unix timestamp when a bounded economy policy became authoritative")
+            .baseUnit("seconds")
+            .tag("policy", policy)
+            .register(registry)
+    }
+
+    private fun recordPolicyViolation(policy: String) {
+        val registry = registryProvider() ?: return
+        val key = PolicyMetricKey(policy)
+        policyViolationCounters.computeIfAbsent(key) {
+            Counter.builder("arc_economy_policy_violations_total")
+                .description("Observed economy operations that violate an active bounded policy")
+                .tag("policy", policy)
+                .register(registry)
+        }.increment()
     }
 
     private fun normalizeMetricLabel(value: String?): String =
