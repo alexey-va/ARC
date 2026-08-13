@@ -33,6 +33,7 @@ HTTP ops API и ItemSpec для RusCrafting MCP. **Runtime configs:** `mcserver/
 | `OpsTreasurePoolHandlers` | Strict reward schema over native treasure pools |
 | `OpsContentHealthHandlers` | Isolated cross-catalog health summary |
 | `OpsEconomyAuditHandlers` | Read-only persisted economy ledger summary and top balances |
+| `OpsContractReconciliationHandlers` | Typed list/detail/preview/apply for Economy V2 manual-review evidence |
 | `BankAuditModule` | Single-leader Bank supply snapshots, aggregate metrics, and bounded account-change evidence |
 | `OpsNpcHandlers` | Citizens list/placement validation/gated mutations |
 | `BlueMapNpcMarkers` | Dynamic Citizens POI layer for each BlueMap world |
@@ -237,6 +238,14 @@ surface is intentionally compact:
   supply. It never returns player or position identifiers. When both collectors
   are ready, `moneySupplyCoverage` adds redeemable stock equity to wallet+Bank
   known supply without pretending that every possible plugin currency is covered.
+
+  The same MCP tool exposes `contract_action=list|get|preview|apply` for the
+  authenticated Economy V2 reconciliation routes. Reads and preview use
+  `contract-reconciliation-read-enabled`; apply is spawn-leader-only, requires
+  one exact journal revision, bounded operator evidence, idempotency key and
+  preview digest, and additionally requires
+  `contract-reconciliation-write-enabled`. Reconciliation records operator
+  evidence but never retries inventory removal/refund or provider payment.
 
 - `arc_ops_content_read` dispatches list/detail and preview;
 - `arc_ops_content_write` dispatches gated upsert/delete on one explicit node;

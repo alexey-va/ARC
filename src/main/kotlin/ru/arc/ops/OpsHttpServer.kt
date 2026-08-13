@@ -141,6 +141,23 @@ class OpsHttpServer(
             method == "GET" && segments == listOf("economy", "audit") ->
                 handleEconomyAudit(exchange, cfg, query)
 
+            method == "GET" && segments == listOf("economy", "contracts", "reconciliations") ->
+                handleContractReconciliationRead(exchange, cfg) {
+                    OpsContractReconciliationHandlers.list(query["limit"]?.toIntOrNull() ?: 20)
+                }
+
+            method == "GET" && segments.size == 4 &&
+                segments.take(3) == listOf("economy", "contracts", "reconciliations") ->
+                handleContractReconciliationRead(exchange, cfg) {
+                    OpsContractReconciliationHandlers.get(decodeSegment(segments[3]))
+                }
+
+            method == "POST" && segments == listOf("economy", "contracts", "reconciliations", "preview") ->
+                handleContractReconciliationPreview(exchange, cfg)
+
+            method == "POST" && segments == listOf("economy", "contracts", "reconciliations", "apply") ->
+                handleContractReconciliationApply(exchange, cfg)
+
             method == "GET" && segments == listOf("online") ->
                 respondOk(exchange, OpsHttpHandlers.onlinePlayers())
 
@@ -695,6 +712,62 @@ class OpsHttpServer(
             return
         }
         respondOk(exchange, OpsEconomyAuditHandlers.summary(hours, limit, server.takeUnless { it == "all" }))
+    }
+
+    private fun handleContractReconciliationRead(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        block: () -> Map<String, Any?>,
+    ) {
+        if (!cfg.contractReconciliationReadEnabled) {
+            respondError(exchange, 403, "Contract reconciliation read endpoint disabled in config")
+            return
+        }
+        try {
+            respondOk(exchange, block())
+        } catch (failure: IllegalArgumentException) {
+            respondError(exchange, 400, failure.message ?: "Bad request")
+        } catch (failure: NoSuchElementException) {
+            respondError(exchange, 404, failure.message ?: "Not found")
+        } catch (failure: IllegalStateException) {
+            respondError(exchange, 503, failure.message ?: "Contract reconciliation unavailable")
+        }
+    }
+
+    private fun handleContractReconciliationPreview(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+    ) {
+        if (!cfg.contractReconciliationReadEnabled) {
+            respondError(exchange, 403, "Contract reconciliation preview disabled in config")
+            return
+        }
+        val body = parseJsonBody(exchange) ?: return
+        try {
+            respondOk(exchange, OpsContractReconciliationHandlers.preview(body))
+        } catch (failure: IllegalArgumentException) {
+            respondError(exchange, 409, failure.message ?: "Reconciliation preview conflict")
+        } catch (failure: IllegalStateException) {
+            respondError(exchange, 503, failure.message ?: "Contract reconciliation unavailable")
+        }
+    }
+
+    private fun handleContractReconciliationApply(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+    ) {
+        if (!cfg.contractReconciliationWriteEnabled) {
+            respondError(exchange, 403, "Contract reconciliation apply disabled in config")
+            return
+        }
+        val body = parseJsonBody(exchange) ?: return
+        try {
+            respondOk(exchange, OpsContractReconciliationHandlers.apply(body))
+        } catch (failure: IllegalArgumentException) {
+            respondError(exchange, 409, failure.message ?: "Reconciliation apply conflict")
+        } catch (failure: IllegalStateException) {
+            respondError(exchange, 503, failure.message ?: "Contract reconciliation unavailable")
+        }
     }
 
     private fun handleEffect(
@@ -1614,6 +1687,14 @@ class OpsHttpServer(
             )
         if (cfg.economyAuditReadEnabled) {
             routes += "GET /ops/economy/audit?hours=&limit=&server=all|spawn|survival|parkour"
+        }
+        if (cfg.contractReconciliationReadEnabled) {
+            routes += "GET /ops/economy/contracts/reconciliations?limit="
+            routes += "GET /ops/economy/contracts/reconciliations/{submissionId}"
+            routes += "POST /ops/economy/contracts/reconciliations/preview"
+        }
+        if (cfg.contractReconciliationWriteEnabled) {
+            routes += "POST /ops/economy/contracts/reconciliations/apply"
         }
         if (cfg.messagesEnabled) {
             routes += "POST /ops/message {\"channel\":\"broadcast|player|ops\",\"text\":\"...\"}"

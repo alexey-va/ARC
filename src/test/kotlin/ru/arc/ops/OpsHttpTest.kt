@@ -164,6 +164,58 @@ class OpsHttpServerTest : FreeSpec({
             }
         }
 
+        "should expose contract reconciliation reads and hide apply behind its own gate" {
+            val readsOnly =
+                testConfig.copy(
+                    contractReconciliationReadEnabled = true,
+                    contractReconciliationWriteEnabled = false,
+                )
+            val server = OpsHttpServer { readsOnly }
+            server.start()
+            try {
+                val index = open("http://127.0.0.1:${server.actualPort}/ops/", token = readsOnly.token)
+                val routes = readBody(index)
+                routes shouldContain "GET /ops/economy/contracts/reconciliations"
+                routes shouldContain "POST /ops/economy/contracts/reconciliations/preview"
+                routes.contains("POST /ops/economy/contracts/reconciliations/apply") shouldBe false
+
+                val apply =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/economy/contracts/reconciliations/apply",
+                        method = "POST",
+                        token = readsOnly.token,
+                        body = "{}",
+                    )
+                apply.responseCode shouldBe 403
+                readBody(apply) shouldContain "apply disabled"
+            } finally {
+                server.stop()
+            }
+        }
+
+        "should reject malformed reconciliation preview before touching journal state" {
+            val readsOnly =
+                testConfig.copy(
+                    contractReconciliationReadEnabled = true,
+                    contractReconciliationWriteEnabled = false,
+                )
+            val server = OpsHttpServer { readsOnly }
+            server.start()
+            try {
+                val preview =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/economy/contracts/reconciliations/preview",
+                        method = "POST",
+                        token = readsOnly.token,
+                        body = """{"submissionId":"unsafe","expectedRevision":0,"resolution":"payment_confirmed","operatorId":"ops","operatorEvidence":"checked","idempotencyKey":"reconcile-safe","rawPath":"/ops/console"}""",
+                    )
+                preview.responseCode shouldBe 409
+                readBody(preview) shouldContain "unknown fields: rawPath"
+            } finally {
+                server.stop()
+            }
+        }
+
         "should discover LuckPerms routes and hide disabled writes" {
             val readsOnly =
                 testConfig.copy(

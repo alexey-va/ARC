@@ -147,6 +147,7 @@ data class ContractSubmissionJournalRecord(
     val reviewFromStatus: ContractSubmissionJournalStatus? = null,
     val reviewReason: ContractSubmissionReviewReason? = null,
     val reviewEvidence: String? = null,
+    val reconciliation: ContractSubmissionReconciliation? = null,
     val revision: Long = 0L,
 ) : Entity {
     init {
@@ -192,8 +193,10 @@ data class ContractSubmissionJournalRecord(
         validateOptionalText(providerTransactionId, "provider transaction id", MAX_PROVIDER_ID_LENGTH)
         validateOptionalText(paymentFailureCode, "payment failure code", MAX_EVIDENCE_LENGTH)
         validateOptionalText(reviewEvidence, "review evidence", MAX_EVIDENCE_LENGTH)
+        reconciliation?.validated()
         validateTimestampOrder()
         validateStatusShape()
+        validateReconciliationShape()
         return this
     }
 
@@ -230,7 +233,10 @@ data class ContractSubmissionJournalRecord(
         require(paidAt == null || paymentStartedAt != null) { "Paid state lacks payment start" }
         require(contractCommittedAt == null || paidAt != null) { "Contract commit lacks confirmed payment" }
         require(refundStartedAt == null || itemsEscrowedAt != null) { "Refund start lacks confirmed item escrow" }
-        require(refundedAt == null || refundStartedAt != null) { "Refund confirmation lacks refund start" }
+        require(
+            refundedAt == null || refundStartedAt != null ||
+                reconciliation?.resolution == ContractSubmissionReconciliationResolution.ITEMS_REFUNDED,
+        ) { "Refund confirmation lacks refund start or reconciliation evidence" }
         require(paidAt == null || refundStartedAt == null) { "Paid submission cannot enter item refund" }
         require(providerBalanceBeforeMinor == null || paymentStartedAt != null) { "Provider balance evidence lacks payment start" }
         require(providerBalanceAfterMinor == null || paymentStartedAt != null) { "Provider result evidence lacks payment start" }
@@ -241,7 +247,9 @@ data class ContractSubmissionJournalRecord(
         requireOrdered(paymentStartedAt, paidAt, "Payment confirmation predates payment start")
         requireOrdered(paidAt, contractCommittedAt, "Contract commit predates payment confirmation")
         requireOrdered(itemsEscrowedAt, refundStartedAt, "Refund predates item escrow")
-        requireOrdered(refundStartedAt, refundedAt, "Refund confirmation predates refund start")
+        if (reconciliation?.resolution != ContractSubmissionReconciliationResolution.ITEMS_REFUNDED) {
+            requireOrdered(refundStartedAt, refundedAt, "Refund confirmation predates refund start")
+        }
     }
 
     private fun validateStatusShape() {
@@ -292,8 +300,13 @@ data class ContractSubmissionJournalRecord(
             ContractSubmissionJournalStatus.REFUNDED -> {
                 require(refundedAt != null && paidAt == null) { "Invalid refunded journal state" }
                 validateOptionalPaymentFailure()
+                require(
+                    refundStartedAt != null ||
+                        reconciliation?.resolution == ContractSubmissionReconciliationResolution.ITEMS_REFUNDED,
+                ) { "Refunded journal lacks refund intent or reconciliation evidence" }
             }
             ContractSubmissionJournalStatus.MANUAL_REVIEW -> {
+                require(reconciliation == null) { "Unresolved manual review already contains reconciliation evidence" }
                 require(reviewFromStatus in AMBIGUOUS_STATES && reviewReason != null) {
                     "Manual review lacks an ambiguous source state"
                 }
@@ -317,25 +330,9 @@ data class ContractSubmissionJournalRecord(
                     }
                     else -> error("Unreachable manual-review source state")
                 }
-                val expectedReasons =
-                    when (reviewFromStatus) {
-                        ContractSubmissionJournalStatus.ITEM_REMOVAL_STARTED ->
-                            setOf(
-                                ContractSubmissionReviewReason.INTERRUPTED_ITEM_REMOVAL,
-                                ContractSubmissionReviewReason.INVENTORY_EVIDENCE_CONFLICT,
-                            )
-                        ContractSubmissionJournalStatus.PAYMENT_STARTED ->
-                            setOf(
-                                ContractSubmissionReviewReason.INTERRUPTED_PAYMENT,
-                                ContractSubmissionReviewReason.PROVIDER_EVIDENCE_CONFLICT,
-                            )
-                        ContractSubmissionJournalStatus.REFUND_STARTED ->
-                            setOf(
-                                ContractSubmissionReviewReason.INTERRUPTED_REFUND,
-                                ContractSubmissionReviewReason.REFUND_EVIDENCE_CONFLICT,
-                            )
-                    }
-                require(reviewReason in expectedReasons) { "Manual review reason does not match its source state" }
+                require(reviewReason in expectedReviewReasons(requireNotNull(reviewFromStatus))) {
+                    "Manual review reason does not match its source state"
+                }
             }
         }
         if (status != ContractSubmissionJournalStatus.MANUAL_REVIEW) {
@@ -346,6 +343,63 @@ data class ContractSubmissionJournalRecord(
         if (status != ContractSubmissionJournalStatus.CANCELLED) {
             require(cancelledAt == null && cancellationCode == null) {
                 "Non-cancelled journal contains cancellation fields"
+            }
+        }
+    }
+
+    private fun validateReconciliationShape() {
+        val resolved = reconciliation ?: return
+        require(resolved.reconciledAt in createdAt..updatedAt) { "Reconciliation timestamp is out of bounds" }
+        require(resolved.reviewedRevision < revision) { "Reconciliation does not precede the resolved journal revision" }
+        require(resolved.reviewReason in expectedReviewReasons(resolved.reviewFromStatus)) {
+            "Reconciliation reason does not match its source state"
+        }
+        when (resolved.resolution) {
+            ContractSubmissionReconciliationResolution.NO_ITEMS_REMOVED -> {
+                require(status == ContractSubmissionJournalStatus.CANCELLED) {
+                    "No-items reconciliation is not cancelled"
+                }
+                require(resolved.reviewFromStatus == ContractSubmissionJournalStatus.ITEM_REMOVAL_STARTED) {
+                    "No-items reconciliation has an invalid source state"
+                }
+                require(resolved.evidenceKind == ContractSubmissionReconciliationEvidenceKind.OPERATOR_INVENTORY_INSPECTION) {
+                    "No-items reconciliation has an invalid evidence kind"
+                }
+            }
+            ContractSubmissionReconciliationResolution.ITEMS_REFUNDED -> {
+                require(status == ContractSubmissionJournalStatus.REFUNDED) {
+                    "Item-refund reconciliation is not refunded"
+                }
+                val expectedKind =
+                    if (resolved.reviewFromStatus == ContractSubmissionJournalStatus.PAYMENT_STARTED) {
+                        ContractSubmissionReconciliationEvidenceKind.OPERATOR_INVENTORY_AND_PROVIDER
+                    } else {
+                        ContractSubmissionReconciliationEvidenceKind.OPERATOR_INVENTORY_INSPECTION
+                    }
+                require(resolved.evidenceKind == expectedKind) {
+                    "Item-refund reconciliation has an invalid evidence kind"
+                }
+                if (resolved.reviewFromStatus == ContractSubmissionJournalStatus.PAYMENT_STARTED) {
+                    require(providerBalanceAfterMinor == providerBalanceBeforeMinor && providerTransactionId == null) {
+                        "Item-refund reconciliation did not prove an unchanged provider balance"
+                    }
+                }
+            }
+            ContractSubmissionReconciliationResolution.PAYMENT_CONFIRMED -> {
+                require(
+                    status == ContractSubmissionJournalStatus.PAID ||
+                        status == ContractSubmissionJournalStatus.CONTRACT_COMMITTED,
+                ) { "Payment reconciliation is not paid or committed" }
+                require(resolved.reviewFromStatus == ContractSubmissionJournalStatus.PAYMENT_STARTED) {
+                    "Payment reconciliation has an invalid source state"
+                }
+                require(
+                    resolved.evidenceKind ==
+                        ContractSubmissionReconciliationEvidenceKind.OPERATOR_PROVIDER_BALANCE_AND_HISTORY,
+                ) { "Payment reconciliation has an invalid evidence kind" }
+                require(!providerTransactionId.isNullOrBlank()) {
+                    "Payment reconciliation lacks provider transaction evidence"
+                }
             }
         }
     }
@@ -399,6 +453,26 @@ data class ContractSubmissionJournalRecord(
                 ContractSubmissionJournalStatus.PAYMENT_STARTED,
                 ContractSubmissionJournalStatus.REFUND_STARTED,
             )
+
+        private fun expectedReviewReasons(status: ContractSubmissionJournalStatus): Set<ContractSubmissionReviewReason> =
+            when (status) {
+                ContractSubmissionJournalStatus.ITEM_REMOVAL_STARTED ->
+                    setOf(
+                        ContractSubmissionReviewReason.INTERRUPTED_ITEM_REMOVAL,
+                        ContractSubmissionReviewReason.INVENTORY_EVIDENCE_CONFLICT,
+                    )
+                ContractSubmissionJournalStatus.PAYMENT_STARTED ->
+                    setOf(
+                        ContractSubmissionReviewReason.INTERRUPTED_PAYMENT,
+                        ContractSubmissionReviewReason.PROVIDER_EVIDENCE_CONFLICT,
+                    )
+                ContractSubmissionJournalStatus.REFUND_STARTED ->
+                    setOf(
+                        ContractSubmissionReviewReason.INTERRUPTED_REFUND,
+                        ContractSubmissionReviewReason.REFUND_EVIDENCE_CONFLICT,
+                    )
+                else -> emptySet()
+            }
 
         fun payoutReason(submissionId: String): String = "arc-contract:$submissionId"
 

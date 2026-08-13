@@ -39,6 +39,12 @@ open class OpsHttpConfig(private val config: Config) {
     open val economyAuditReadEnabled: Boolean
         get() = config.bool("economy-audit-read-enabled", true)
 
+    open val contractReconciliationReadEnabled: Boolean
+        get() = config.bool("contract-reconciliation-read-enabled", true)
+
+    open val contractReconciliationWriteEnabled: Boolean
+        get() = config.bool("contract-reconciliation-write-enabled", false)
+
     open val itemsReadEnabled: Boolean
         get() = config.bool("items-read-enabled", true)
 
@@ -136,6 +142,8 @@ class TestOpsHttpConfig(
     override val reloadEnabled: Boolean = true,
     override val runAsEnabled: Boolean = false,
     override val economyAuditReadEnabled: Boolean = true,
+    override val contractReconciliationReadEnabled: Boolean = true,
+    override val contractReconciliationWriteEnabled: Boolean = false,
     override val itemsReadEnabled: Boolean = true,
     override val itemsGiveEnabled: Boolean = true,
     override val itemsGiveMaxStack: Int = 64,
@@ -164,6 +172,8 @@ class TestOpsHttpConfig(
         messagesEnabled: Boolean = this.messagesEnabled,
         runAsEnabled: Boolean = this.runAsEnabled,
         economyAuditReadEnabled: Boolean = this.economyAuditReadEnabled,
+        contractReconciliationReadEnabled: Boolean = this.contractReconciliationReadEnabled,
+        contractReconciliationWriteEnabled: Boolean = this.contractReconciliationWriteEnabled,
         itemsGiveEnabled: Boolean = this.itemsGiveEnabled,
         itemPresetsReadEnabled: Boolean = this.itemPresetsReadEnabled,
         itemPresetsWriteEnabled: Boolean = this.itemPresetsWriteEnabled,
@@ -195,6 +205,8 @@ class TestOpsHttpConfig(
             reloadEnabled = reloadEnabled,
             runAsEnabled = runAsEnabled,
             economyAuditReadEnabled = economyAuditReadEnabled,
+            contractReconciliationReadEnabled = contractReconciliationReadEnabled,
+            contractReconciliationWriteEnabled = contractReconciliationWriteEnabled,
             itemsReadEnabled = itemsReadEnabled,
             itemsGiveEnabled = itemsGiveEnabled,
             itemsGiveMaxStack = itemsGiveMaxStack,

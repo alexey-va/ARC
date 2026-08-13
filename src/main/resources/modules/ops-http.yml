@@ -34,6 +34,11 @@ run-as-enabled: false
 # GET /ops/economy/audit — persisted sources/sinks, top balances and anomalies.
 economy-audit-read-enabled: true
 
+# Authenticated Economy V2 manual-review evidence. Preview is read-only;
+# apply resolves one exact journal revision and stays disabled by default.
+contract-reconciliation-read-enabled: true
+contract-reconciliation-write-enabled: false
+
 # GET /ops/player/{name}/inventory — инвентарь онлайн-игрока (слоты 0-40)
 # GET /ops/player/{name}/item?slot= | ?hand=true — один слот / предмет в руке
 items-read-enabled: true

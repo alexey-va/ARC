@@ -66,9 +66,10 @@ object ContractsManager {
     // RedisEconomy 4.5.12 updates the balance before asynchronously recording
     // transaction history and exposes no idempotency key. The durable journal
     // now halts ambiguous crash windows and the disabled coordinator implements
-    // durable-before-side-effect ordering. Retention, authenticated operator
-    // reconciliation, and a production crash smoke are still required. No
-    // config value may unlock inventory or money mutations before those gates.
+    // durable-before-side-effect ordering. Bounded terminal retention and the
+    // authenticated operator reconciliation state machine are implemented;
+    // production crash injection and control-plane smoke are still required.
+    // No config value may unlock inventory or money mutations before that gate.
     private const val SUBMISSION_RUNTIME_READY = false
 
     private val configRef = AtomicReference<ContractsConfig>()
@@ -253,6 +254,7 @@ object ContractsManager {
         val currentScope = submissionScope
         val coordinator = submissionCoordinator
         val currentMutex = submissionMutex
+        val currentJournal = journalRepo
         if (!submissionsEnabled() || currentScope == null || coordinator == null) {
             return result.apply { complete(ContractSubmissionOutcome.Unavailable(submissionId)) }
         }
@@ -264,16 +266,25 @@ object ContractsManager {
             try {
                 val outcome =
                     currentMutex.withLock {
-                        if (!submissionsEnabled()) {
-                            ContractSubmissionOutcome.Unavailable(submissionId)
-                        } else {
-                            coordinator.submit(
-                                definition,
-                                submissionId,
-                                playerId.toString(),
-                                requestedQuantity,
-                            )
+                        val submitted =
+                            if (!submissionsEnabled()) {
+                                ContractSubmissionOutcome.Unavailable(submissionId)
+                            } else {
+                                coordinator.submit(
+                                    definition,
+                                    submissionId,
+                                    playerId.toString(),
+                                    requestedQuantity,
+                                )
+                            }
+                        if (currentJournal != null) {
+                            try {
+                                pruneTerminalJournals(currentJournal, System.currentTimeMillis())
+                            } catch (failure: Throwable) {
+                                error("Contract journal retention failed after submission", failure)
+                            }
                         }
+                        submitted
                     }
                 result.complete(outcome)
             } catch (failure: Throwable) {
@@ -347,6 +358,100 @@ object ContractsManager {
     fun journalSummary(now: Long = System.currentTimeMillis()): ContractSubmissionJournalSummary {
         val current = journalRepo ?: return ContractSubmissionJournalSummary.unavailable()
         return ContractSubmissionJournalAudit.summarize(current.allNow(), now)
+    }
+
+    @JvmStatic
+    fun reconciliationRecords(limit: Int = 20): List<ContractSubmissionJournalRecord> {
+        require(limit in 1..100) { "Reconciliation limit must be 1..100" }
+        val current = journalRepo ?: throw IllegalStateException("Contract submission journal is unavailable")
+        return current.allNow().asSequence()
+            .map { it.validated() }
+            .filter { it.status == ContractSubmissionJournalStatus.MANUAL_REVIEW || it.reconciliation != null }
+            .sortedWith(compareByDescending<ContractSubmissionJournalRecord> { it.updatedAt }.thenBy { it.submissionId })
+            .take(limit)
+            .toList()
+    }
+
+    @JvmStatic
+    fun reconciliationRecord(submissionId: String): ContractSubmissionJournalRecord? {
+        val current = journalRepo ?: throw IllegalStateException("Contract submission journal is unavailable")
+        return current.getNow(submissionId)?.validated()
+    }
+
+    @JvmStatic
+    @Synchronized
+    fun previewReconciliation(
+        request: ContractSubmissionReconciliationRequest,
+    ): ContractSubmissionReconciliationPreview {
+        require(isLeader()) { "Contract reconciliation is available only on the configured leader" }
+        val currentJournal = journalRepo ?: throw IllegalStateException("Contract submission journal is unavailable")
+        requireUniqueReconciliationKey(currentJournal, request)
+        val record = requireNotNull(currentJournal.getNow(request.submissionId)) { "Contract submission not found" }.validated()
+        val preview = ContractSubmissionReconciliationEngine.preview(record, request)
+        verifyReconciledPaymentCommit(record, preview)
+        return preview
+    }
+
+    @JvmStatic
+    @Synchronized
+    fun applyReconciliation(
+        request: ContractSubmissionReconciliationRequest,
+        reviewDigest: String,
+        now: Long = System.currentTimeMillis(),
+    ): ContractSubmissionReconciliationApplyResult {
+        require(isLeader()) { "Contract reconciliation is available only on the configured leader" }
+        val currentContract = repo ?: throw IllegalStateException("Contract state repository is unavailable")
+        val currentJournal = journalRepo ?: throw IllegalStateException("Contract submission journal is unavailable")
+        return runBlocking {
+            submissionMutex.withLock {
+                val before = requireNotNull(currentJournal.getNow(request.submissionId)) {
+                    "Contract submission not found"
+                }.validated()
+                requireUniqueReconciliationKey(currentJournal, request)
+                val preview = ContractSubmissionReconciliationEngine.preview(before, request)
+                verifyReconciledPaymentCommit(before, preview)
+                var resolved = ContractSubmissionReconciliationEngine.apply(before, request, reviewDigest, now)
+                val replayed = before.reconciliation != null
+                if (resolved != before) {
+                    currentJournal.markDirty(resolved)
+                    currentJournal.saveDirty().getOrThrow()
+                }
+
+                var receipt: ContractSubmissionReceipt? = null
+                if (resolved.status == ContractSubmissionJournalStatus.PAID) {
+                    val definition = reconciliationDefinition(resolved)
+                    val stateId = ResourceContractRecord.stateId(definition.id, definition.windowStartsAt)
+                    val state = requireNotNull(currentContract.getNow(stateId)) {
+                        "Missing state for reconciled paid contract ${definition.id}"
+                    }.validatedAgainst(definition).state
+                    val recovery = ContractSubmissionRecoveryEngine.recoverPaid(definition, state, resolved, now)
+                    if (recovery.commit.changed) {
+                        currentContract.markDirty(ResourceContractRecord(stateId, recovery.commit.state))
+                        currentContract.saveDirty().getOrThrow()
+                    }
+                    resolved = recovery.journal
+                    currentJournal.markDirty(resolved)
+                    currentJournal.saveDirty().getOrThrow()
+                    receipt = recovery.commit.receipt
+                }
+
+                try {
+                    pruneTerminalJournals(currentJournal, now)
+                } catch (failure: Throwable) {
+                    error("Contract journal retention failed after reconciliation", failure)
+                }
+                if (!replayed) {
+                    info(
+                        "Contract submission {} reconciled as {} by authenticated operator {}",
+                        resolved.submissionId,
+                        requireNotNull(resolved.reconciliation).resolution.label,
+                        resolved.reconciliation.operatorId,
+                    )
+                }
+                publishMetrics()
+                ContractSubmissionReconciliationApplyResult(preview, resolved, receipt, replayed)
+            }
+        }
     }
 
     @JvmStatic
@@ -431,6 +536,65 @@ object ContractsManager {
             journalRepository.markDirty(recovery.journal)
             runBlocking { journalRepository.saveDirty().getOrThrow() }
         }
+        runBlocking { pruneTerminalJournals(journalRepository, now) }
+    }
+
+    private fun verifyReconciledPaymentCommit(
+        record: ContractSubmissionJournalRecord,
+        preview: ContractSubmissionReconciliationPreview,
+    ) {
+        if (!preview.commitsContractState || record.status == ContractSubmissionJournalStatus.CONTRACT_COMMITTED) return
+        val definition = reconciliationDefinition(record)
+        val currentContract = repo ?: throw IllegalStateException("Contract state repository is unavailable")
+        val stateId = ResourceContractRecord.stateId(definition.id, definition.windowStartsAt)
+        val state = requireNotNull(currentContract.getNow(stateId)) {
+            "Missing state for reconciled paid contract ${definition.id}"
+        }.validatedAgainst(definition).state
+        ResourceContractEngine.commitReserved(
+            definition,
+            state,
+            requireNotNull(record.quotaReservation()),
+            System.currentTimeMillis(),
+        )
+    }
+
+    private fun reconciliationDefinition(record: ContractSubmissionJournalRecord): ResourceContractDefinition =
+        requireNotNull(
+            configRef.get()?.resourceOrders()?.firstOrNull {
+                it.id == record.contractId && it.windowStartsAt == record.contractWindowStartsAt
+            },
+        ) { "Configured contract policy for submission ${record.submissionId} is unavailable" }
+
+    private fun requireUniqueReconciliationKey(
+        journalRepository: CachedRepository<ContractSubmissionJournalRecord>,
+        request: ContractSubmissionReconciliationRequest,
+    ) {
+        val reused =
+            journalRepository.allNow().asSequence()
+                .map { it.validated() }
+                .firstOrNull {
+                    it.submissionId != request.submissionId &&
+                        it.reconciliation?.idempotencyKey == request.idempotencyKey
+                }
+        require(reused == null) { "Reconciliation idempotency key is already bound to another submission" }
+    }
+
+    private suspend fun pruneTerminalJournals(
+        journalRepository: CachedRepository<ContractSubmissionJournalRecord>,
+        now: Long,
+    ): ContractSubmissionRetentionPlan {
+        val plan = ContractSubmissionRetentionPolicy.plan(journalRepository.allNow(), now)
+        plan.deleteSubmissionIds.forEach { submissionId ->
+            journalRepository.deleteDurably(submissionId).getOrThrow()
+        }
+        if (plan.deleteSubmissionIds.isNotEmpty()) {
+            info(
+                "Contracts retained {} journal record(s) after deleting {} terminal record(s)",
+                plan.totalAfter,
+                plan.deleteSubmissionIds.size,
+            )
+        }
+        return plan
     }
 
     private fun activeReservations(
