@@ -432,6 +432,7 @@ internal fun buildAuditSummary(
     slimefunBuyOnlyPolicyEnabled: Boolean = false,
     slimefunBuyOnlyPolicyActivatedAt: Long = 0L,
     shopMaterials: Set<String> = emptySet(),
+    concentrationGroups: Map<String, Set<String>> = emptyMap(),
 ): Map<String, Any?> {
     val sources = linkedMapOf<String, MutableAuditStats>()
     val actions = linkedMapOf<EconomyActionKey, MutableAuditStats>()
@@ -465,6 +466,8 @@ internal fun buildAuditSummary(
     val contextPresent = linkedMapOf<String, Long>()
     val adminShopSales = AdminShopSalesSummary()
     val jobsRewards = JobsRewardsSummary()
+    val concentrationGroupStats =
+        concentrationGroups.mapValues { MutableAuditStats(trackBalanceProfile = true) }
     var contextEligible = 0L
 
     data.forEach { auditData ->
@@ -525,6 +528,11 @@ internal fun buildAuditSummary(
             jobsRewards.add(accountKey, transaction)
             sources.computeIfAbsent(source) { MutableAuditStats(trackBalanceProfile = true) }
                 .add(accountKey, transaction, since)
+            concentrationGroups.forEach { (groupId, groupSources) ->
+                if (source in groupSources) {
+                    concentrationGroupStats.getValue(groupId).add(accountKey, transaction, since)
+                }
+            }
             actions.computeIfAbsent(EconomyActionKey(source, action)) { MutableAuditStats(trackBalanceProfile = true) }
                 .add(accountKey, transaction, since)
             players.computeIfAbsent(auditData.name) { MutableAuditStats() }.add(accountKey, transaction, since)
@@ -642,6 +650,21 @@ internal fun buildAuditSummary(
                 "supplyCoverage" to "known_mint_burn_only; bank_interest_and_transfer_fees_require_separate_reconciliation",
             ),
         "sources" to ranked(sources, "source"),
+        "concentrationGroups" to
+            linkedMapOf(
+                "selection" to
+                    linkedMapOf(
+                        "requestedGroups" to
+                            concentrationGroups.toSortedMap().mapValues { (_, sources) -> sources.sorted() },
+                        "complete" to true,
+                    ),
+                "groups" to
+                    concentrationGroups.keys.sorted().map { groupId ->
+                        LinkedHashMap(concentrationGroupStats.getValue(groupId).toMap("group", groupId)).apply {
+                            put("sources", concentrationGroups.getValue(groupId).sorted())
+                        }
+                    },
+            ),
         "actions" to
             actions.entries
                 .sortedByDescending { it.value.volume() }

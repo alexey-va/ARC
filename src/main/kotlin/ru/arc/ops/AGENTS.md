@@ -215,6 +215,12 @@ surface is intentionally compact:
   counts, truncation and completeness. Callers using the result for balance
   compilation must fail closed unless the requested-material selection is
   complete and untruncated; the default remains a ranked diagnostic view.
+  Optional `concentration_groups=group=source,source;...` asks ARC to compute
+  exact aggregate per-player mint/burn concentration across up to 16 bounded
+  source groups before identities leave the process. The response echoes the
+  exact group-to-source selection and exposes only distributions. Consumers
+  must verify the echoed mapping and cannot reconstruct a cross-source
+  top-player share by summing or maximizing separate source aggregates.
   Economy ledger
   schema v2 also returns bounded `recentEvents`, `recentFailures`, attempt
   outcomes, context-field coverage, and `adminShopSales`: ranked item path,

@@ -219,10 +219,18 @@ class AuditService(
         limit: Int,
         serverFilter: String? = null,
         shopMaterials: Set<String> = emptySet(),
+        concentrationGroups: Map<String, Set<String>> = emptyMap(),
     ): Map<String, Any?> {
         val safeHours = hours.coerceIn(1, 24 * 31)
         val now = timeProvider.currentTimeMillis()
-        return economySummaryAt(now - safeHours * 60L * 60L * 1000L, now, limit, serverFilter, shopMaterials)
+        return economySummaryAt(
+            now - safeHours * 60L * 60L * 1000L,
+            now,
+            limit,
+            serverFilter,
+            shopMaterials,
+            concentrationGroups,
+        )
     }
 
     fun economySummarySince(
@@ -230,12 +238,13 @@ class AuditService(
         limit: Int,
         serverFilter: String? = null,
         shopMaterials: Set<String> = emptySet(),
+        concentrationGroups: Map<String, Set<String>> = emptyMap(),
     ): Map<String, Any?> {
         val now = timeProvider.currentTimeMillis()
         require(sinceEpochMs in (now - maximumEconomyWindowMillis)..<now) {
             "since_epoch_ms must be in the past and within the last 31 days"
         }
-        return economySummaryAt(sinceEpochMs, now, limit, serverFilter, shopMaterials)
+        return economySummaryAt(sinceEpochMs, now, limit, serverFilter, shopMaterials, concentrationGroups)
     }
 
     private fun economySummaryAt(
@@ -244,6 +253,7 @@ class AuditService(
         limit: Int,
         serverFilter: String?,
         shopMaterials: Set<String>,
+        concentrationGroups: Map<String, Set<String>>,
     ): Map<String, Any?> =
         buildAuditSummary(
             data = repository.all(),
@@ -259,6 +269,7 @@ class AuditService(
             slimefunBuyOnlyPolicyEnabled = config.slimefunBuyOnlyPolicyEnabled,
             slimefunBuyOnlyPolicyActivatedAt = config.slimefunBuyOnlyPolicyActivatedAt,
             shopMaterials = shopMaterials,
+            concentrationGroups = concentrationGroups,
         )
 
     // ==================== Clear ====================

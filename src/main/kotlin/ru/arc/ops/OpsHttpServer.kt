@@ -727,6 +727,32 @@ class OpsHttpServer(
                         shopMaterials.size == shopMaterialParts.size &&
                         shopMaterials.all { it.matches(Regex("[A-Z0-9_]{1,64}")) }
                 )
+        val rawConcentrationGroups = query["concentration_groups"]
+        val concentrationGroups = linkedMapOf<String, Set<String>>()
+        var concentrationGroupsValid = true
+        if (rawConcentrationGroups != null) {
+            val groupParts = rawConcentrationGroups.split(';')
+            if (groupParts.isEmpty() || groupParts.size > 16) concentrationGroupsValid = false
+            groupParts.forEach { groupPart ->
+                val separator = groupPart.indexOf('=')
+                val groupId = if (separator > 0) groupPart.substring(0, separator) else ""
+                val sourceParts =
+                    if (separator > 0) groupPart.substring(separator + 1).split(',') else emptyList()
+                val sources = sourceParts.toSet()
+                if (
+                    !groupId.matches(Regex("[a-z][a-z0-9_]{1,47}")) ||
+                    groupId in concentrationGroups ||
+                    sourceParts.isEmpty() ||
+                    sourceParts.size > 16 ||
+                    sourceParts.size != sources.size ||
+                    sources.any { !it.matches(Regex("[a-z][a-z0-9_]{1,47}")) }
+                ) {
+                    concentrationGroupsValid = false
+                } else {
+                    concentrationGroups[groupId] = sources
+                }
+            }
+        }
         val absoluteWindowValid =
             if (sinceEpochMs == null) {
                 rawSince == null
@@ -739,14 +765,16 @@ class OpsHttpServer(
             !absoluteWindowValid ||
             limit !in 1..100 ||
             server !in setOf("all", "spawn", "survival", "parkour") ||
-            !shopMaterialsValid
+            !shopMaterialsValid ||
+            !concentrationGroupsValid
         ) {
             val (code, body) =
                 OpsJson.error(
                     400,
                     "hours must be 1..744; since_epoch_ms must be in the past and within the last 31 days; " +
                         "limit 1..100; server all|spawn|survival|parkour; " +
-                        "shop_materials must contain 1..16 unique material names",
+                        "shop_materials must contain 1..16 unique material names; " +
+                        "concentration_groups must contain 1..16 group=source,source selectors",
                 )
             respond(exchange, code, body)
             return
@@ -760,6 +788,7 @@ class OpsHttpServer(
                     limit,
                     server.takeUnless { it == "all" },
                     shopMaterials,
+                    concentrationGroups,
                 ),
             )
         } catch (failure: IllegalArgumentException) {
@@ -1742,6 +1771,8 @@ class OpsHttpServer(
         if (cfg.economyAuditReadEnabled) {
             routes +=
                 "GET /ops/economy/audit?hours=|since_epoch_ms=&limit=&server=all|spawn|survival|parkour&shop_materials=STONE,OAK_LOG"
+            routes +=
+                "GET /ops/economy/audit?...&concentration_groups=services_preparation=cmi,advanced_enchantments"
         }
         if (cfg.contractReconciliationReadEnabled) {
             routes += "GET /ops/economy/contracts/reconciliations?limit="

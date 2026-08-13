@@ -16,14 +16,27 @@ object OpsEconomyAuditHandlers {
         limit: Int,
         serverFilter: String?,
         shopMaterials: Set<String> = emptySet(),
+        concentrationGroups: Map<String, Set<String>> = emptyMap(),
     ): Map<String, Any?> {
         val safeLimit = limit.coerceIn(1, 100)
         val result =
             LinkedHashMap(
                 if (sinceEpochMs != null) {
-                    AuditManager.economySummarySince(sinceEpochMs, safeLimit, serverFilter, shopMaterials)
+                    AuditManager.economySummarySince(
+                        sinceEpochMs,
+                        safeLimit,
+                        serverFilter,
+                        shopMaterials,
+                        concentrationGroups,
+                    )
                 } else {
-                    AuditManager.economySummary(hours ?: 24, safeLimit, serverFilter, shopMaterials)
+                    AuditManager.economySummary(
+                        hours ?: 24,
+                        safeLimit,
+                        serverFilter,
+                        shopMaterials,
+                        concentrationGroups,
+                    )
                 },
             )
         result["autoSellAudit"] = AutoSellAuditModule.summary()

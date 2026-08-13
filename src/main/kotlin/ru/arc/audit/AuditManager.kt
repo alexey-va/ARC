@@ -213,7 +213,9 @@ object AuditManager {
         limit: Int,
         serverFilter: String? = null,
         shopMaterials: Set<String> = emptySet(),
-    ): Map<String, Any?> = service.economySummary(hours, limit, serverFilter, shopMaterials)
+        concentrationGroups: Map<String, Set<String>> = emptyMap(),
+    ): Map<String, Any?> =
+        service.economySummary(hours, limit, serverFilter, shopMaterials, concentrationGroups)
 
     @JvmStatic
     fun economySummarySince(
@@ -221,7 +223,9 @@ object AuditManager {
         limit: Int,
         serverFilter: String? = null,
         shopMaterials: Set<String> = emptySet(),
-    ): Map<String, Any?> = service.economySummarySince(sinceEpochMs, limit, serverFilter, shopMaterials)
+        concentrationGroups: Map<String, Set<String>> = emptyMap(),
+    ): Map<String, Any?> =
+        service.economySummarySince(sinceEpochMs, limit, serverFilter, shopMaterials, concentrationGroups)
 
     @JvmStatic
     fun sendAudit(audience: Audience, playerName: String, page: Int, filter: AuditFilter) {

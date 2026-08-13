@@ -183,6 +183,30 @@ class OpsHttpServerTest : FreeSpec({
             }
         }
 
+        "should reject invalid economy concentration group selectors" {
+            val enabled = testConfig.copy(economyAuditReadEnabled = true)
+            val server = OpsHttpServer { enabled }
+            server.start()
+            try {
+                listOf(
+                    "bad=source,source",
+                    "bad-group=source",
+                    "group=BadSource",
+                    "group=source;group=other",
+                ).forEach { groups ->
+                    val conn =
+                        open(
+                            "http://127.0.0.1:${server.actualPort}/ops/economy/audit?hours=24&concentration_groups=$groups",
+                            token = enabled.token,
+                        )
+                    conn.responseCode shouldBe 400
+                    readBody(conn) shouldContain "concentration_groups"
+                }
+            } finally {
+                server.stop()
+            }
+        }
+
         "should reject mixed or invalid absolute economy audit windows" {
             val enabled = testConfig.copy(economyAuditReadEnabled = true)
             val server = OpsHttpServer { enabled }

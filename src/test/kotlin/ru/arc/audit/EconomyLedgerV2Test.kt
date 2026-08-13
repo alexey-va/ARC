@@ -485,6 +485,58 @@ class EconomyLedgerV2Test : FreeSpec({
             sale["topPlayerQuantityShare"] shouldBe 1.0
         }
 
+        "computes exact player concentration across requested source groups" {
+            val first = AuditData.create("First", "survival:first")
+            val second = AuditData.create("Second", "survival:second")
+            val contextFirst =
+                EconomyLedgerContext(
+                    recordKind = EconomyRecordKind.TRANSACTION,
+                    status = EconomyEventStatus.SUCCEEDED,
+                    accountId = "first",
+                )
+            val contextSecond = contextFirst.copy(accountId = "second")
+            first.operation(
+                -60.0,
+                Type.OTHER,
+                "cmi",
+                AuditMetadata(EconomySource.CMI, EconomyFlow.BURN, server = "survival"),
+                contextFirst,
+                at = 1_000,
+            )
+            second.operation(
+                -40.0,
+                Type.OTHER,
+                "enchant",
+                AuditMetadata(EconomySource.ADVANCED_ENCHANTMENTS, EconomyFlow.BURN, server = "survival"),
+                contextSecond,
+                at = 2_000,
+            )
+
+            val summary =
+                buildAuditSummary(
+                    data = listOf(first, second),
+                    generatedAt = 3_000,
+                    since = 0,
+                    limit = 20,
+                    serverFilter = null,
+                    anomalies = emptyList(),
+                    concentrationGroups =
+                        mapOf("services_preparation" to setOf("cmi", "advanced_enchantments")),
+                )
+            val block = summary["concentrationGroups"] as Map<*, *>
+            val selection = block["selection"] as Map<*, *>
+            val group = (block["groups"] as List<*>).single() as Map<*, *>
+            val burn = group["burnDistribution"] as Map<*, *>
+
+            selection["requestedGroups"] shouldBe
+                mapOf("services_preparation" to listOf("advanced_enchantments", "cmi"))
+            selection["complete"] shouldBe true
+            group["expense"] shouldBe 100.0
+            group["sources"] shouldBe listOf("advanced_enchantments", "cmi")
+            burn["players"] shouldBe 2
+            burn["topPlayerShare"] shouldBe 0.6
+        }
+
         "reports only post-activation Slimefun sales as policy violations" {
             val data = AuditData.create("Seller", "survival:seller")
             fun saleContext(providerTimestamp: Long) =
