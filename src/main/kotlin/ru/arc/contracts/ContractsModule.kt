@@ -56,18 +56,22 @@ data class ResourceContractView(
  */
 object ContractsManager {
     // RedisEconomy 4.5.12 updates the balance before asynchronously recording
-    // transaction history. Until ARC owns an atomic payout journal, no config
+    // transaction history and exposes no idempotency key. The durable journal
+    // now halts ambiguous crash windows, but live inventory/payment orchestration
+    // and operator reconciliation are still intentionally absent. No config
     // value may unlock inventory or money mutations.
     private const val SUBMISSION_RUNTIME_READY = false
 
     private val configRef = AtomicReference<ContractsConfig>()
     private var repo: CachedRepository<ResourceContractRecord>? = null
     private var scope: CoroutineScope? = null
+    private var journalRepo: CachedRepository<ContractSubmissionJournalRecord>? = null
+    private var journalScope: CoroutineScope? = null
 
     @JvmStatic
     @Synchronized
     fun init() {
-        if (repo != null) return
+        if (repo != null || journalRepo != null) return
         val loaded = ContractsConfig.load().validated()
         configRef.set(loaded)
         if (!loaded.enabled || loaded.mode == ContractsMode.DISABLED) {
@@ -97,13 +101,42 @@ object ContractsManager {
                 newScope.cancel()
                 throw failure
             }
+        val newJournalScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val newJournalRepo =
+            try {
+                redisRepo<ContractSubmissionJournalRecord>(
+                    id = "contract-submission-journal",
+                    storageKey = "arc.contract-submissions.v1",
+                    updateChannel = "arc.contract-submissions.v1.update",
+                    scope = newJournalScope,
+                ) {
+                    loadAllOnStart(true)
+                    enableCleanup(false)
+                    saveInterval(1.seconds)
+                }
+            } catch (failure: Throwable) {
+                runBlocking { newRepo.shutdown() }
+                newScope.cancel()
+                newJournalScope.cancel()
+                throw failure
+            }
         try {
             ensureCurrentStates(loaded, newRepo)
+            recoverInterruptedJournals(loaded, newJournalRepo)
             repo = newRepo
             scope = newScope
+            journalRepo = newJournalRepo
+            journalScope = newJournalScope
         } catch (failure: Throwable) {
-            runBlocking { newRepo.shutdown() }
+            runBlocking {
+                try {
+                    newJournalRepo.shutdown()
+                } finally {
+                    newRepo.shutdown()
+                }
+            }
             newScope.cancel()
+            newJournalScope.cancel()
             throw failure
         }
         info(
@@ -130,7 +163,10 @@ object ContractsManager {
             init()
             return
         }
-        if (currentRepo != null) ensureCurrentStates(loaded, currentRepo)
+        if (currentRepo != null) {
+            ensureCurrentStates(loaded, currentRepo)
+            journalRepo?.let { recoverInterruptedJournals(loaded, it) }
+        }
         publishMetrics()
     }
 
@@ -139,17 +175,28 @@ object ContractsManager {
     fun shutdown() {
         val currentRepo = repo
         val currentScope = scope
+        val currentJournalRepo = journalRepo
+        val currentJournalScope = journalScope
         repo = null
         scope = null
+        journalRepo = null
+        journalScope = null
         try {
-            if (currentRepo != null) runBlocking { currentRepo.shutdown() }
+            runBlocking {
+                try {
+                    currentJournalRepo?.shutdown()
+                } finally {
+                    currentRepo?.shutdown()
+                }
+            }
         } finally {
             currentScope?.cancel()
+            currentJournalScope?.cancel()
         }
     }
 
     @JvmStatic
-    fun isAvailable(): Boolean = repo != null
+    fun isAvailable(): Boolean = repo != null && journalRepo != null
 
     @JvmStatic
     fun mode(): ContractsMode = configRef.get()?.mode ?: ContractsMode.DISABLED
@@ -208,8 +255,15 @@ object ContractsManager {
             "submissionRuntimeReady" to SUBMISSION_RUNTIME_READY,
             "submissionsEnabled" to submissionsEnabled(),
             "serverWeeklyBudgetMinor" to (config?.serverWeeklyBudgetMinor ?: 0L),
+            "submissionJournal" to journalSummary(),
             "orders" to views,
         )
+    }
+
+    @JvmStatic
+    fun journalSummary(now: Long = System.currentTimeMillis()): ContractSubmissionJournalSummary {
+        val current = journalRepo ?: return ContractSubmissionJournalSummary.unavailable()
+        return ContractSubmissionJournalAudit.summarize(current.allNow(), now)
     }
 
     @JvmStatic
@@ -225,6 +279,7 @@ object ContractsManager {
                 submissionsEnabled = submissionsEnabled(),
                 serverWeeklyBudgetMinor = config?.serverWeeklyBudgetMinor ?: 0L,
                 views = currentViews(),
+                journal = journalSummary(),
             )
         }
     }
@@ -244,6 +299,28 @@ object ContractsManager {
             if (repository.getNow(stateId) == null) repository.markDirty(ResourceContractRecord.empty(definition))
         }
     }
+
+    private fun recoverInterruptedJournals(
+        config: ContractsConfig,
+        repository: CachedRepository<ContractSubmissionJournalRecord>,
+        now: Long = System.currentTimeMillis(),
+    ) {
+        val records = repository.allNow().onEach { it.validated() }
+        ContractSubmissionJournalAudit.summarize(records, now)
+        if (!config.leaderServer.equals(ARC.serverName, ignoreCase = true)) return
+        var changed = 0
+        records.forEach { record ->
+            val recovered = ContractSubmissionJournalEngine.recoverInterrupted(record, now)
+            if (recovered != record) {
+                repository.markDirty(recovered)
+                changed += 1
+            }
+        }
+        if (changed > 0) {
+            runBlocking { repository.saveDirty().getOrThrow() }
+            info("Contracts moved {} interrupted submission(s) to durable manual review", changed)
+        }
+    }
 }
 
 object ContractsMetrics {
@@ -256,6 +333,7 @@ object ContractsMetrics {
         submissionsEnabled: Boolean,
         serverWeeklyBudgetMinor: Long,
         views: List<ResourceContractView>,
+        journal: ContractSubmissionJournalSummary,
     ): List<MetricPoint> =
         buildList {
             add(point("arc_contracts_enabled", "Whether the Economy V2 contracts policy is enabled", enabled))
@@ -276,6 +354,69 @@ object ContractsMetrics {
                     "arc_contracts_server_weekly_budget_currency",
                     "Configured weekly server-funded contracts envelope",
                     serverWeeklyBudgetMinor / 100.0,
+                ),
+            )
+            add(point("arc_contract_journal_available", "Whether the durable contract submission journal is available", journal.available))
+            add(
+                MetricPoint(
+                    "arc_contract_journal_records",
+                    "Durable contract submission journal records by bounded state",
+                    journal.totalRecords.toDouble(),
+                    mapOf("state" to "all"),
+                ),
+            )
+            add(
+                MetricPoint(
+                    "arc_contract_journal_capacity_remaining",
+                    "Remaining bounded network record capacity before contract submissions must fail closed",
+                    journal.capacityRemaining.toDouble(),
+                ),
+            )
+            journal.stateCounts.forEach { (state, count) ->
+                add(
+                    MetricPoint(
+                        "arc_contract_journal_records",
+                        "Durable contract submission journal records by bounded state",
+                        count.toDouble(),
+                        mapOf("state" to state),
+                    ),
+                )
+            }
+            add(
+                MetricPoint(
+                    "arc_contract_journal_held_item_quantity",
+                    "Item quantity confirmed removed and not yet committed or refunded",
+                    journal.heldItemQuantity.toDouble(),
+                ),
+            )
+            add(
+                MetricPoint(
+                    "arc_contract_journal_payout_currency",
+                    "Contract payout exposure split into pending and ambiguous provider outcomes",
+                    journal.pendingPayoutMinor / 100.0,
+                    mapOf("component" to "pending"),
+                ),
+            )
+            add(
+                MetricPoint(
+                    "arc_contract_journal_payout_currency",
+                    "Contract payout exposure split into pending and ambiguous provider outcomes",
+                    journal.ambiguousPayoutMinor / 100.0,
+                    mapOf("component" to "ambiguous"),
+                ),
+            )
+            add(
+                MetricPoint(
+                    "arc_contract_journal_manual_review",
+                    "Contract submissions halted for manual reconciliation",
+                    journal.manualReviewCount.toDouble(),
+                ),
+            )
+            add(
+                MetricPoint(
+                    "arc_contract_journal_oldest_attention_age_seconds",
+                    "Age of the oldest non-terminal contract submission journal record",
+                    journal.oldestAttentionAgeSeconds.toDouble(),
                 ),
             )
             views.forEach { view ->
