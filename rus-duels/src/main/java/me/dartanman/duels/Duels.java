@@ -58,7 +58,7 @@ public class Duels extends JavaPlugin {
         } catch (Exception exception) {
             getLogger().log(Level.SEVERE, "Could not inspect recovery journal", exception);
         }
-        getLogger().info("RusCrafting Duels enabled: mode=" + duelsConfig.mode()
+        getLogger().info("Dartanboy Duels enabled: mode=" + duelsConfig.mode()
                 + ", arenas=" + duelsConfig.arenas().size()
                 + ", enabled=" + duelsConfig.enabled());
     }

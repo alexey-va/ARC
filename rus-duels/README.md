@@ -1,15 +1,15 @@
-# RusCrafting Duels
+# Dartanboy Duels
 
 Safety-hardened fork of [Dartanboy Duels](https://github.com/Dartanboy/Duels),
 kept under the upstream MIT license. The original arena/command idea remains,
 but match lifecycle, inventory recovery, challenge flow and statistics were
 rewritten for the RusCrafting network.
 
-The plugin intentionally keeps the Bukkit plugin id `Duels` and deployed JAR
-filename `Duels-Optimised-7.6.jar` so the supported Paper update workflow can
-replace the previous plugin recoverably. It ignores the previous plugin's
-`config.yml`, `lang.yml`, users and kits; only `rusduels.yml`,
-`rusduels-stats.yml` and `recovery/` belong to this fork.
+The plugin keeps the upstream Bukkit plugin id `Duels` for command, data-folder
+and integration compatibility. Its deployed JAR is named
+`Dartanboy-Duels.jar`. It ignores the previous plugin's `config.yml`,
+`lang.yml`, users and kits; only `rusduels.yml`, `rusduels-stats.yml` and
+`recovery/` belong to this fork.
 
 Safety invariants:
 

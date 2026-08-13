@@ -3,7 +3,9 @@ version: '${version}'
 main: me.dartanman.duels.Duels
 api-version: '1.21'
 authors: [Dartanman, RusCrafting]
-description: Safety-hardened RusCrafting fork of Dartanboy Duels
+prefix: Dartanboy Duels
+website: https://github.com/Dartanboy/Duels
+description: Dartanboy Duels, safety-hardened for the RusCrafting network
 loadbefore: [ARC, HuskSync, GravesX]
 commands:
   duel:

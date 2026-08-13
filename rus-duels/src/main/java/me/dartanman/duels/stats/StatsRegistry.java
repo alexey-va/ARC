@@ -30,7 +30,7 @@ public final class StatsRegistry {
     private final ArcStatsNotifier arcNotifier;
     private final Map<UUID, DuelStats> stats = new HashMap<>();
     private final ExecutorService writer = Executors.newSingleThreadExecutor(runnable -> {
-        Thread thread = new Thread(runnable, "RusDuels-stats-writer");
+        Thread thread = new Thread(runnable, "DartanboyDuels-stats-writer");
         thread.setDaemon(true);
         return thread;
     });

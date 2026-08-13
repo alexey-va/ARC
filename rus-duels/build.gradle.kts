@@ -3,13 +3,11 @@ plugins {
 }
 
 group = "ru.ruscrafting"
-version = "4.1.0-ruscrafting.1"
-description = "Safety-hardened RusCrafting fork of Dartanboy Duels"
+version = "4.1.0-ruscrafting.2"
+description = "Safety-hardened fork of Dartanboy Duels for RusCrafting"
 
 base {
-    // Keep the deployed filename stable so Paper's update directory replaces
-    // the currently active Duels Optimised JAR atomically.
-    archivesName.set("Duels-Optimised-7.6")
+    archivesName.set("Dartanboy-Duels")
 }
 
 java {
