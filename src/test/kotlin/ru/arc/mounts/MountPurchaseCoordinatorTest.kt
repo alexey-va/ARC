@@ -130,6 +130,36 @@ class MountPurchaseCoordinatorTest : StringSpec({
         fixture.journal.records().single().status shouldBe MountPurchaseJournalStatus.COMPLETED
         manual shouldBe emptyList()
     }
+
+    "manual review self-heals when the exact permission is later present" {
+        val fixture = PurchaseFixture()
+        val record = fixture.preparedRecord()
+        fixture.journal.persist(record) shouldBe true
+        fixture.journal.persist(
+            record.copy(
+                status = MountPurchaseJournalStatus.WITHDRAWAL_STARTED,
+                updatedAt = 2L,
+                balanceBeforeMinor = 10_000_000L,
+            ),
+        ) shouldBe true
+        fixture.journal.persist(
+            record.copy(
+                status = MountPurchaseJournalStatus.MANUAL_REVIEW,
+                updatedAt = 3L,
+                balanceBeforeMinor = 10_000_000L,
+                balanceAfterMinor = 5_000_000L,
+                evidence = "permission_verification_failed",
+            ),
+        ) shouldBe true
+        fixture.ownership.addDirect(record.permission)
+        val manual = mutableListOf<MountPurchaseJournalRecord>()
+
+        fixture.coordinator.recover(MountCatalog(listOf(fixture.mount)), manual::add)
+
+        fixture.journal.records().single().status shouldBe MountPurchaseJournalStatus.COMPLETED
+        fixture.wallet.withdrawals shouldBe 0
+        manual shouldBe emptyList()
+    }
 })
 
 private class PurchaseFixture {
@@ -171,6 +201,10 @@ private class MutableOwnership : MountOwnership {
     val skinPermissions = hashSetOf<String>()
     val activeSkinPermissions = hashSetOf<String>()
     private val directPermissions = hashSetOf<String>()
+
+    fun addDirect(permission: String) {
+        directPermissions += permission
+    }
 
     override fun profile(subject: MountPermissionSubject, mount: MountDefinition): MountProfile =
         MountProfile(

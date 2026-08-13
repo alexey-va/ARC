@@ -49,6 +49,32 @@ class MountPurchaseJournalTest : StringSpec({
 
         journal.hasOpenPurchase(UUID.fromString(prepared.playerId)) shouldBe true
     }
+
+    "manual review may advance only to a proven recovery state" {
+        val journal = FileMountPurchaseJournal(Files.createTempDirectory("arc-mount-journal-recovery-").resolve("journal.json"))
+        val prepared = journalRecord()
+        val review =
+            prepared.withdrawalStarted().copy(
+                status = MountPurchaseJournalStatus.MANUAL_REVIEW,
+                updatedAt = 3L,
+                evidence = "provider_threw",
+            )
+        journal.persist(prepared) shouldBe true
+        journal.persist(prepared.withdrawalStarted()) shouldBe true
+        journal.persist(review) shouldBe true
+
+        journal.persist(
+            review.copy(
+                status = MountPurchaseJournalStatus.FUNDS_WITHDRAWN,
+                updatedAt = 4L,
+                balanceAfterMinor = 5_000_000L,
+                evidence = "history_withdrawal:91234",
+            ),
+        ) shouldBe true
+        shouldThrow<IllegalArgumentException> {
+            journal.persist(review.copy(status = MountPurchaseJournalStatus.CANCELLED, updatedAt = 5L))
+        }
+    }
 })
 
 private fun journalRecord() =

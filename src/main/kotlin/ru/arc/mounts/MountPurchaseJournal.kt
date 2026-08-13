@@ -221,8 +221,13 @@ class FileMountPurchaseJournal(
             MountPurchaseJournalStatus.COMPLETED,
             MountPurchaseJournalStatus.CANCELLED,
             MountPurchaseJournalStatus.REFUNDED,
-            MountPurchaseJournalStatus.MANUAL_REVIEW,
             -> emptySet()
+            MountPurchaseJournalStatus.MANUAL_REVIEW ->
+                setOf(
+                    MountPurchaseJournalStatus.FUNDS_WITHDRAWN,
+                    MountPurchaseJournalStatus.COMPLETED,
+                    MountPurchaseJournalStatus.REFUNDED,
+                )
         }
 
     companion object {

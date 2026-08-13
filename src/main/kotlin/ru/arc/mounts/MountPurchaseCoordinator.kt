@@ -120,7 +120,7 @@ class MountPurchaseCoordinator(
     }
 
     fun recover(catalog: MountCatalog, onManualReview: (MountPurchaseJournalRecord) -> Unit) {
-        journal.records().filterNot { it.status.terminal }.forEach { record ->
+        journal.records().filter { !it.status.terminal || it.status == MountPurchaseJournalStatus.MANUAL_REVIEW }.forEach { record ->
             val mount = catalog[record.mountId]
             if (mount == null) {
                 markManualReview(record, "mount_missing")?.let(onManualReview)
@@ -133,10 +133,10 @@ class MountPurchaseCoordinator(
                 MountPurchaseJournalStatus.FUNDS_WITHDRAWN,
                 MountPurchaseJournalStatus.OWNERSHIP_STARTED,
                 -> recoverOwnership(record, mount, onManualReview)
+                MountPurchaseJournalStatus.MANUAL_REVIEW -> recoverManualReview(record, mount, onManualReview)
                 MountPurchaseJournalStatus.COMPLETED,
                 MountPurchaseJournalStatus.CANCELLED,
                 MountPurchaseJournalStatus.REFUNDED,
-                MountPurchaseJournalStatus.MANUAL_REVIEW,
                 -> Unit
             }
         }
@@ -330,6 +330,34 @@ class MountPurchaseCoordinator(
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+
+    private fun recoverManualReview(
+        record: MountPurchaseJournalRecord,
+        mount: MountDefinition,
+        onManualReview: (MountPurchaseJournalRecord) -> Unit,
+    ) {
+        val playerId = UUID.fromString(record.playerId)
+        ownership.hasDirectPermission(playerId, record.permission).whenComplete { owned, lookupFailure ->
+            runSync {
+                val withdrawalProven =
+                    record.balanceBeforeMinor != null &&
+                        record.balanceAfterMinor == record.balanceBeforeMinor - record.priceMinor
+                when {
+                    lookupFailure != null -> onManualReview(record)
+                    owned == true && record.refundBalanceBeforeMinor != null -> onManualReview(record)
+                    owned == true && withdrawalProven -> {
+                        if (!persist(record.advance(MountPurchaseJournalStatus.COMPLETED, "manual_permission_verified"))) {
+                            onManualReview(record)
+                        }
+                    }
+                    record.refundBalanceBeforeMinor != null -> recoverRefund(record, onManualReview)
+                    withdrawalProven -> recoverOwnership(record, mount, onManualReview)
+                    record.balanceBeforeMinor != null -> recoverWithdrawal(record, mount, onManualReview)
+                    else -> onManualReview(record)
                 }
             }
         }

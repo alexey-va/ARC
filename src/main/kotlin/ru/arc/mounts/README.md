@@ -58,6 +58,8 @@ checking the direct LuckPerms node and, for an ambiguous provider call, matching
 the transaction UUID, amount, currency and timestamp in RedisEconomy history.
 Unprovable outcomes fail closed in `MANUAL_REVIEW`, block duplicate purchases
 for that player and are exposed through logs and bounded Prometheus metrics.
+ARC rechecks those records on every start and automatically resumes only when
+the exact debit, refund or direct permission can be proven.
 
 ## Configuration and observability
 
