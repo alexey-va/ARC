@@ -703,15 +703,48 @@ class OpsHttpServer(
             respond(exchange, code, body)
             return
         }
-        val hours = query["hours"]?.toIntOrNull() ?: 24
-        val limit = query["limit"]?.toIntOrNull() ?: 20
-        val server = query["server"]?.trim()?.lowercase() ?: "all"
-        if (hours !in 1..(24 * 31) || limit !in 1..100 || server !in setOf("all", "spawn", "survival", "parkour")) {
-            val (code, body) = OpsJson.error(400, "hours must be 1..744, limit 1..100, server all|spawn|survival|parkour")
+        val rawHours = query["hours"]
+        val rawSince = query["since_epoch_ms"]
+        if (rawHours != null && rawSince != null) {
+            val (code, body) = OpsJson.error(400, "hours and since_epoch_ms are mutually exclusive")
             respond(exchange, code, body)
             return
         }
-        respondOk(exchange, OpsEconomyAuditHandlers.summary(hours, limit, server.takeUnless { it == "all" }))
+        val hours = rawHours?.toIntOrNull() ?: if (rawSince == null) 24 else null
+        val sinceEpochMs = rawSince?.toLongOrNull()
+        val limit = query["limit"]?.toIntOrNull() ?: 20
+        val server = query["server"]?.trim()?.lowercase() ?: "all"
+        val absoluteWindowValid =
+            if (sinceEpochMs == null) {
+                rawSince == null
+            } else {
+                val now = System.currentTimeMillis()
+                sinceEpochMs in (now - 31L * 24 * 60 * 60 * 1_000)..<now
+            }
+        if (
+            (rawHours != null && (hours == null || hours !in 1..(24 * 31))) ||
+            !absoluteWindowValid ||
+            limit !in 1..100 ||
+            server !in setOf("all", "spawn", "survival", "parkour")
+        ) {
+            val (code, body) =
+                OpsJson.error(
+                    400,
+                    "hours must be 1..744; since_epoch_ms must be in the past and within the last 31 days; " +
+                        "limit 1..100; server all|spawn|survival|parkour",
+                )
+            respond(exchange, code, body)
+            return
+        }
+        try {
+            respondOk(
+                exchange,
+                OpsEconomyAuditHandlers.summary(hours, sinceEpochMs, limit, server.takeUnless { it == "all" }),
+            )
+        } catch (failure: IllegalArgumentException) {
+            val (code, body) = OpsJson.error(400, failure.message ?: "Invalid economy audit window")
+            respond(exchange, code, body)
+        }
     }
 
     private fun handleContractReconciliationRead(
@@ -1686,7 +1719,7 @@ class OpsHttpServer(
                 "GET /ops/content/health",
             )
         if (cfg.economyAuditReadEnabled) {
-            routes += "GET /ops/economy/audit?hours=&limit=&server=all|spawn|survival|parkour"
+            routes += "GET /ops/economy/audit?hours=|since_epoch_ms=&limit=&server=all|spawn|survival|parkour"
         }
         if (cfg.contractReconciliationReadEnabled) {
             routes += "GET /ops/economy/contracts/reconciliations?limit="

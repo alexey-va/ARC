@@ -30,6 +30,7 @@ class AuditService(
     private val monitor: EconomyAuditMonitor? = null,
     private val localServer: String? = null,
 ) {
+    private val maximumEconomyWindowMillis = 31L * 24 * 60 * 60 * 1_000
     private var pruneTask: ScheduledTask? = null
 
     // ==================== Lifecycle ====================
@@ -216,10 +217,27 @@ class AuditService(
     fun economySummary(hours: Int, limit: Int, serverFilter: String? = null): Map<String, Any?> {
         val safeHours = hours.coerceIn(1, 24 * 31)
         val now = timeProvider.currentTimeMillis()
-        return buildAuditSummary(
+        return economySummaryAt(now - safeHours * 60L * 60L * 1000L, now, limit, serverFilter)
+    }
+
+    fun economySummarySince(sinceEpochMs: Long, limit: Int, serverFilter: String? = null): Map<String, Any?> {
+        val now = timeProvider.currentTimeMillis()
+        require(sinceEpochMs in (now - maximumEconomyWindowMillis)..<now) {
+            "since_epoch_ms must be in the past and within the last 31 days"
+        }
+        return economySummaryAt(sinceEpochMs, now, limit, serverFilter)
+    }
+
+    private fun economySummaryAt(
+        sinceEpochMs: Long,
+        generatedAt: Long,
+        limit: Int,
+        serverFilter: String?,
+    ): Map<String, Any?> =
+        buildAuditSummary(
             data = repository.all(),
-            generatedAt = now,
-            since = now - safeHours * 60L * 60L * 1000L,
+            generatedAt = generatedAt,
+            since = sinceEpochMs,
             limit = limit.coerceIn(1, 100),
             serverFilter = serverFilter?.trim()?.lowercase()?.takeIf { it.isNotEmpty() && it != "all" },
             anomalies = monitor?.recent(100).orEmpty(),
@@ -230,7 +248,6 @@ class AuditService(
             slimefunBuyOnlyPolicyEnabled = config.slimefunBuyOnlyPolicyEnabled,
             slimefunBuyOnlyPolicyActivatedAt = config.slimefunBuyOnlyPolicyActivatedAt,
         )
-    }
 
     // ==================== Clear ====================
 

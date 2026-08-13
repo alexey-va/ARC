@@ -1,6 +1,7 @@
 package ru.arc.audit
 
 import io.kotest.core.spec.style.FreeSpec
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.doubles.shouldBeExactly
 import io.kotest.matchers.shouldBe
@@ -428,6 +429,34 @@ class EconomyAuditTest : FreeSpec({
     }
 
     "summary" - {
+        "uses an exact absolute boundary without rounding to hours" {
+            val repository = InMemoryAuditRepository()
+            val clock = TestTimeProvider(10_000L)
+            val service = AuditService(repository, TestAuditConfig(), timeProvider = clock)
+            val jobs = AuditMetadata(EconomySource.JOBS, EconomyFlow.MINT, server = "survival")
+            service.economyOperation("Player1", 100.0, Type.JOB, "before", jobs)
+            clock.advance(1_001L)
+            service.economyOperation("Player1", 200.0, Type.JOB, "after", jobs)
+
+            val summary = service.economySummarySince(10_001L, 20)
+            val totals = summary["totals"] as Map<*, *>
+
+            summary["since"] shouldBe 10_001L
+            totals["minted"] shouldBe 200.0
+        }
+
+        "rejects future and over-retention absolute boundaries" {
+            val clock = TestTimeProvider(10_000L)
+            val service = AuditService(InMemoryAuditRepository(), TestAuditConfig(), timeProvider = clock)
+
+            shouldThrow<IllegalArgumentException> {
+                service.economySummarySince(10_000L, 20)
+            }
+            shouldThrow<IllegalArgumentException> {
+                service.economySummarySince(10_000L - 31L * 24 * 60 * 60 * 1_000 - 1, 20)
+            }
+        }
+
         "separates supply, transfer, unknown and internal flows" {
             val data = AuditData.create("Player")
             data.operation(200.0, Type.JOB, "Mining", AuditMetadata(EconomySource.JOBS, EconomyFlow.MINT), at = 1_000)

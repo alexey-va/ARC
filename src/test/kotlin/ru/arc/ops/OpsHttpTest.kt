@@ -164,6 +164,31 @@ class OpsHttpServerTest : FreeSpec({
             }
         }
 
+        "should reject mixed or invalid absolute economy audit windows" {
+            val enabled = testConfig.copy(economyAuditReadEnabled = true)
+            val server = OpsHttpServer { enabled }
+            server.start()
+            try {
+                val mixed =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/economy/audit?hours=24&since_epoch_ms=1",
+                        token = enabled.token,
+                    )
+                mixed.responseCode shouldBe 400
+                readBody(mixed) shouldContain "mutually exclusive"
+
+                val expired =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/economy/audit?since_epoch_ms=1",
+                        token = enabled.token,
+                    )
+                expired.responseCode shouldBe 400
+                readBody(expired) shouldContain "within the last 31 days"
+            } finally {
+                server.stop()
+            }
+        }
+
         "should expose contract reconciliation reads and hide apply behind its own gate" {
             val readsOnly =
                 testConfig.copy(

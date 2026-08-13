@@ -203,6 +203,10 @@ surface is intentionally compact:
 - `arc_ops_server` returns normal server status, or `GET /ops/economy/audit`
   when `economy_hours > 0`; the ledger read is gated by
   `economy-audit-read-enabled` and never mutates balances. Economy ledger
+  accepts either bounded `hours` or exact `since_epoch_ms`, never both. The
+  absolute boundary is useful for clean post-policy windows, stays inside the
+  same 31-day retention cap, and is echoed exactly as response `since`.
+  Economy ledger
   schema v2 also returns bounded `recentEvents`, `recentFailures`, attempt
   outcomes, context-field coverage, and `adminShopSales`: ranked item path,
   material, canonical Slimefun ID when available, exact sold quantity,

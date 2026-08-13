@@ -212,6 +212,10 @@ object AuditManager {
         service.economySummary(hours, limit, serverFilter)
 
     @JvmStatic
+    fun economySummarySince(sinceEpochMs: Long, limit: Int, serverFilter: String? = null): Map<String, Any?> =
+        service.economySummarySince(sinceEpochMs, limit, serverFilter)
+
+    @JvmStatic
     fun sendAudit(audience: Audience, playerName: String, page: Int, filter: AuditFilter) {
         service.sendAudit(audience, playerName, page, filter)
     }
