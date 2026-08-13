@@ -34,6 +34,7 @@ import ru.arc.core.modules.BoardModule
 import ru.arc.core.modules.BuildingModule
 import ru.arc.core.modules.ConfigModule
 import ru.arc.metrics.MetricsModule
+import ru.arc.mounts.MountModule
 import ru.arc.core.modules.CooldownModule
 import ru.arc.core.modules.EconomyModule
 import ru.arc.core.modules.EliteLootModule
@@ -204,6 +205,7 @@ open class ARC : JavaPlugin() {
             MobSpawnModule,
             JoinMessagesModule,
             ChatModeModule,
+            MountModule,
             CommandHideModule,
             // Building system (priority 90)
             BuildingModule,
@@ -302,6 +304,7 @@ open class ARC : JavaPlugin() {
                 "modules/auction.yml",
                 "modules/treasure-hunt.yml",
                 "modules/mobspawn.yml",
+                "modules/mounts.yml",
                 "modules/location-pools.yml",
                 "modules/elite-loot.yml",
                 "modules/auto-build.yml",

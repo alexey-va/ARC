@@ -38,6 +38,8 @@ softdepend:
   - RTP
   - My_Worlds
   - RedisEconomy
+  - LuckPerms
+  - Vault
 commands:
   arc:
     description: Main command
@@ -75,7 +77,24 @@ commands:
   eliteloot:
     description: Elite loot admin
     usage: /eliteloot [list|add]
+  mounts:
+    description: Open the mount collection
+    usage: /mounts
+  unlock-mount:
+    description: Unlock a mount level for a player
+    usage: /unlock-mount <mount> <level> <player>
+    permission: arc.mounts.admin
+  ride-mob:
+    description: Spawn a temporary test mount
+    usage: /ride-mob [mount] [speed]
+    permission: mcfine.ride-mob
 permissions:
   arc.hide.bypass:
     description: Bypass all CommandHide groups
+    default: op
+  arc.mounts.admin:
+    description: Unlock mount levels for players
+    default: op
+  mcfine.ride-mob:
+    description: Spawn temporary test mounts
     default: op

@@ -1,0 +1,151 @@
+# Native ARC mounts. Runtime mirrors may override allowed-worlds and enabled.
+enabled: false
+allowed-worlds: []
+session-duration: 10m
+admin-session-duration: 5s
+
+controls:
+  # Flying/swimming: hold Shift to descend, press it twice to dismount.
+  double-sneak-window: 450ms
+  hint-cooldown: 5s
+
+movement:
+  # Catalog speed values preserve the Denizen/Citizens progression; these scales
+  # convert them to Bukkit velocity while keeping the ride controllable.
+  walking-speed-scale: 0.16
+  flying-speed-scale: 0.55
+  swimming-speed-scale: 0.45
+  acceleration: 0.28
+  deceleration: 0.38
+  turn-smoothing: 0.32
+  sprint-multiplier: 1.15
+  jump-velocity: 0.5
+  vertical-speed-ratio: 0.75
+  maximum-vertical-speed: 0.5
+  flight-pitch-influence: 0.65
+  maximum-height-above-world: 32
+
+safety:
+  post-flight-slow-falling: 8s
+
+gui:
+  list-title: "<dark_gray><bold>Маунты"
+  detail-title: "<dark_gray><bold>Маунт: <mount>"
+  back-command: m
+
+# Read-only compatibility for glow purchases formerly stored as Denizen server
+# flags. New purchases and toggle state are persisted in LuckPerms.
+legacy-glow-owners: {}
+
+messages:
+  flight-controls: "<gray>Space — вверх, Shift — вниз, двойной Shift — спешиться"
+  descending: "<aqua>Снижение… <gray>двойной Shift — спешиться"
+  expired: "<gray>Время поездки на маунте закончилось."
+  already-riding: "<red>Вы уже используете маунта."
+  already-in-vehicle: "<red>Сначала покиньте текущее транспортное средство."
+  world-not-allowed: "<red>В этом мире маунты недоступны."
+  water-required: "<aqua>Водного маунта можно призвать только в воде."
+  spawn-failed: "<red>Не удалось призвать маунта."
+  purchase-success: "<green>Покупка успешна!"
+  setting-saved: "<green>Настройка сохранена."
+  purchase-busy: "<yellow>Предыдущая операция ещё выполняется."
+  already-owned: "<yellow>У вас уже есть это улучшение."
+  invalid-level: "<red>Сначала купите предыдущий уровень."
+  not-unlocked: "<red>Сначала разблокируйте маунта."
+  not-for-sale: "<red>Это улучшение нельзя купить."
+  economy-unavailable: "<red>Экономика временно недоступна."
+  not-enough-money: "<red>Недостаточно денег."
+  payment-failed: "<red>Платёж не прошёл. Деньги не списаны."
+  setting-failed: "<red>Не удалось сохранить настройку."
+  save-failed-refunded: "<red>Не удалось сохранить покупку. Деньги возвращены."
+  save-failed-refund-failed: "<dark_red>Ошибка покупки и возврата. Обратитесь к администрации."
+
+mounts:
+  zombie:
+    type: walking
+    item: ZOMBIE_SPAWN_EGG
+    entity: ZOMBIE
+    name: Зомби
+    speeds: [1.0, 1.6, 3.2]
+    prices: [20000, 60000, 250000]
+    buy-glow: 10000
+  skeleton:
+    type: walking
+    item: SKELETON_SPAWN_EGG
+    entity: SKELETON
+    name: Скелет
+    speeds: [1.0, 1.6, 3.2]
+    prices: [20000, 60000, 250000]
+    buy-glow: 10000
+  pig:
+    type: walking
+    item: PIG_SPAWN_EGG
+    entity: PIG
+    name: Скорен
+    speeds: [1.0, 1.6, 3.2]
+    prices: [20000, 60000, 250000]
+    buy-glow: 10000
+  enderman:
+    type: walking
+    item: ENDERMAN_SPAWN_EGG
+    entity: ENDERMAN
+    name: Эндермен
+    speeds: [1.0, 1.6, 3.2]
+    prices: [20000, 60000, 250000]
+    buy-glow: 10000
+  horse:
+    type: walking
+    item: HORSE_SPAWN_EGG
+    entity: HORSE
+    name: Лошадь
+    speeds: [1.0, 1.6, 3.2]
+    prices: [20000, 60000, 250000]
+    buy-glow: 10000
+  dolphin:
+    type: swimming
+    item: DOLPHIN_SPAWN_EGG
+    entity: DOLPHIN
+    name: Дельфин
+    speeds: [0.6, 0.7, 0.8]
+    prices: [20000, 60000, 250000]
+    buy-glow: 10000
+  bee:
+    type: flying
+    item: BEE_SPAWN_EGG
+    entity: BEE
+    name: Пчела
+    speeds: [0.4, 0.6, 0.9]
+    prices: [50000, 100000, 500000]
+    buy-glow: 10000
+  turtle:
+    type: flying
+    item: TURTLE_SPAWN_EGG
+    entity: TURTLE
+    name: Летающая черепаха
+    speeds: [0.1, 0.2, 0.3]
+    prices: [1000, 20000, 30000]
+    buy-glow: 10000
+  frog:
+    type: walking
+    item: FROG_SPAWN_EGG
+    entity: FROG
+    name: Лягушка
+    speeds: [0.9, 2.0, 4.2]
+    prices: [50000, 100000, 500000]
+    buy-glow: 10000
+  frog2:
+    type: flying
+    item: FROG_SPAWN_EGG
+    entity: FROG
+    name: Летающая лягушка
+    speeds: [0.9, 2.0, 4.2]
+    prices: [50000, 100000, 500000]
+    buy-glow: 10000
+  blaze:
+    type: flying
+    item: BLAZE_SPAWN_EGG
+    entity: BLAZE
+    name: Блэйз
+    speeds: [0.4, 0.6, 0.9]
+    prices: [null, null, null]
+    buy-glow: 10000
