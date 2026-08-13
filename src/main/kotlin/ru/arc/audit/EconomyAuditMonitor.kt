@@ -153,7 +153,7 @@ class EconomyAuditMonitor(
         val key =
             ActionMetricKey(
                 source = metadata.source.label,
-                action = EconomyActionClassifier.classify(metadata.source, amount, context?.action).label,
+                action = EconomyActionClassifier.classify(metadata.source, amount, context?.action, metadata.origin).label,
                 direction = if (amount > 0.0) "income" else "expense",
             )
         actionTransactionCounters.computeIfAbsent(key) {

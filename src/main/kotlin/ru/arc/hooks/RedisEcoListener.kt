@@ -112,6 +112,7 @@ class RedisEcoListener : Listener {
                 actor = transaction.actor,
                 reason = baseReason,
                 source = attribution.metadata.source,
+                providerOrigin = attribution.metadata.origin,
                 revertedWith = transaction.revertedWith,
                 action = adminCommand?.action,
                 forcedCorrelationId = adminCommand?.correlationId,
@@ -150,6 +151,7 @@ class RedisEcoListener : Listener {
         actor: dev.unnm3d.rediseconomy.transaction.AccountID,
         reason: String,
         source: EconomySource,
+        providerOrigin: String? = null,
         revertedWith: String?,
         action: String? = null,
         forcedCorrelationId: String? = null,
@@ -195,7 +197,10 @@ class RedisEcoListener : Listener {
             balanceAfter = balance?.after ?: pending?.balanceAfter ?: observedAfter,
             balanceEvidence = balance?.evidence ?: pending?.balanceEvidence,
             requestedAmount = pending?.requestedAmount ?: requestedAmount,
-            action = pending?.action ?: action ?: amount?.let { EconomyActionClassifier.classify(source, it).label },
+            action =
+                pending?.action ?: action ?: amount?.let {
+                    EconomyActionClassifier.classify(source, it, providerOrigin = providerOrigin).label
+                },
             revertedWith = revertedWith?.take(120),
             capturedAt = capturedAt,
         )

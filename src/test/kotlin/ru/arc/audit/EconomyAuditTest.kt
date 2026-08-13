@@ -143,12 +143,96 @@ class EconomyAuditTest : FreeSpec({
             EconomyActionClassifier.classify(EconomySource.INTERNAL_STOCK, -100.0, "stock_short") shouldBe EconomyAction.STOCK_SHORT
             EconomyActionClassifier.classify(EconomySource.INTERNAL_STOCK, 100.0, "stock_close") shouldBe EconomyAction.STOCK_CLOSE
             EconomyActionClassifier.classify(EconomySource.INTERNAL_STOCK, 100.0, "stock_dividend") shouldBe EconomyAction.STOCK_DIVIDEND
+            EconomyActionClassifier.classify(EconomySource.JOBS, 100.0) shouldBe EconomyAction.JOB_REWARD
+            EconomyActionClassifier.classify(EconomySource.QUESTS, 100.0) shouldBe EconomyAction.QUEST_REWARD
+            EconomyActionClassifier.classify(EconomySource.TREASURE, 100.0) shouldBe EconomyAction.TREASURE_REWARD
+            EconomyActionClassifier.classify(EconomySource.LANDS, -1_000.0) shouldBe EconomyAction.LAND_CHARGE
+            EconomyActionClassifier.classify(EconomySource.LANDS, 150.0) shouldBe EconomyAction.LAND_CREDIT
+            EconomyActionClassifier.classify(EconomySource.ADVANCED_ENCHANTMENTS, -1_000.0) shouldBe
+                EconomyAction.ENCHANTMENT_PURCHASE
+            EconomyActionClassifier.classify(
+                EconomySource.CMI,
+                -300.0,
+                providerOrigin = "com.Zrips.CMI.commands.list.repair",
+            ) shouldBe EconomyAction.CMI_REPAIR
+            EconomyActionClassifier.classify(
+                EconomySource.CMI,
+                -20_000.0,
+                providerOrigin = "com.Zrips.CMI.commands.list.flightcharge",
+            ) shouldBe EconomyAction.CMI_FLIGHT_CHARGE
+            EconomyActionClassifier.classify(
+                EconomySource.CMI,
+                -100.0,
+                providerOrigin = "com.Zrips.CMI.Modules.CmdCost.CMICommandCostManager",
+            ) shouldBe EconomyAction.CMI_COMMAND_COST
+            EconomyActionClassifier.classify(EconomySource.CMI, -50.0, providerOrigin = "untrusted.dynamic.Class") shouldBe
+                EconomyAction.CMI_SERVICE_CHARGE
+            EconomyActionClassifier.classify(EconomySource.CMI, -300.0, providerAction = "cmi_repair") shouldBe
+                EconomyAction.CMI_REPAIR
+            EconomyActionClassifier.classify(EconomySource.DENIZEN, -300.0, providerAction = "cmi_repair") shouldBe
+                EconomyAction.SOURCE_DEBIT
             EconomyActionClassifier.classify(EconomySource.DENIZEN, 20.0, "untrusted arbitrary script id") shouldBe
                 EconomyAction.SOURCE_CREDIT
+        }
+
+        "keeps CMI pay and cheque movements out of supply mint and burn" {
+            val payOut =
+                EconomyAttributionResolver.resolve(
+                    "Withdraw\nCall:com.Zrips.CMI.commands.list.pay",
+                    -1_000.0,
+                    "vault",
+                    "spawn",
+                )
+            val chequeRedeem =
+                EconomyAttributionResolver.resolve(
+                    "Deposit\nCall:com.Zrips.CMI.Modules.MoneyCheque.MoneyChequeListener",
+                    2_000.0,
+                    "vault",
+                    "spawn",
+                )
+
+            payOut.metadata.source shouldBe EconomySource.CMI
+            payOut.metadata.flow shouldBe EconomyFlow.TRANSFER
+            EconomyActionClassifier.classify(EconomySource.CMI, -1_000.0, providerOrigin = payOut.metadata.origin) shouldBe
+                EconomyAction.CMI_PAY_OUT
+            chequeRedeem.metadata.flow shouldBe EconomyFlow.INTERNAL
+            EconomyActionClassifier.classify(EconomySource.CMI, 2_000.0, providerOrigin = chequeRedeem.metadata.origin) shouldBe
+                EconomyAction.CMI_CHEQUE_REDEEM
+        }
+
+        "recognizes EliteMobs gambling only after the economy bridge is skipped" {
+            val gambling =
+                EconomyAttributionResolver.resolve(
+                    "Withdraw\nCall:com.magmaguy.elitemobs.economy.GamblingEconomyHandler",
+                    -500.0,
+                    "vault",
+                    "spawn",
+                )
+
+            gambling.metadata.source shouldBe EconomySource.GAMBLING
+            EconomyActionClassifier.classify(gambling.metadata.source, -500.0) shouldBe EconomyAction.GAMBLING_WAGER
         }
     }
 
     "monitor" - {
+        "preserves a trusted bounded CMI action in Prometheus labels" {
+            val registry = SimpleMeterRegistry()
+            val monitor = EconomyAuditMonitor(TestAuditConfig(), { registry })
+            val metadata = AuditMetadata(EconomySource.CMI, EconomyFlow.BURN, server = "spawn")
+
+            monitor.observe(
+                "Player",
+                -300.0,
+                metadata,
+                "Withdraw",
+                EconomyLedgerContext(action = "cmi_repair"),
+            )
+
+            registry.get("arc_economy_action_transactions_total")
+                .tags("source", "cmi", "action", "cmi_repair", "direction", "expense")
+                .counter().count() shouldBeExactly 1.0
+        }
+
         "records low-cardinality counters and rapid-income evidence" {
             val registry = SimpleMeterRegistry()
             val clock = TestTimeProvider(1_000)
@@ -169,10 +253,10 @@ class EconomyAuditTest : FreeSpec({
             registry.get("arc_economy_transactions_total").counter().count() shouldBeExactly 2.0
             registry.get("arc_economy_amount_total").counter().count() shouldBeExactly 110.0
             registry.get("arc_economy_action_transactions_total")
-                .tags("source", "jobs", "action", "source_credit", "direction", "income")
+                .tags("source", "jobs", "action", "job_reward", "direction", "income")
                 .counter().count() shouldBeExactly 2.0
             registry.get("arc_economy_action_amount_total")
-                .tags("source", "jobs", "action", "source_credit", "direction", "income")
+                .tags("source", "jobs", "action", "job_reward", "direction", "income")
                 .counter().count() shouldBeExactly 110.0
             monitor.recent(10).shouldHaveSize(1)
             monitor.recent(10).single().kind shouldBe "rapid_income"

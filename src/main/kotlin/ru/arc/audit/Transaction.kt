@@ -83,7 +83,7 @@ data class Transaction(
     val normalizedServer: String get() = server?.ifBlank { "unknown" } ?: "unknown"
 
     val normalizedAction: EconomyAction
-        get() = EconomyActionClassifier.classify(normalizedSource, amount, context?.action)
+        get() = EconomyActionClassifier.classify(normalizedSource, amount, context?.action, origin)
 
     val normalizedRecordKind: EconomyRecordKind get() = context?.normalizedRecordKind ?: EconomyRecordKind.TRANSACTION
 

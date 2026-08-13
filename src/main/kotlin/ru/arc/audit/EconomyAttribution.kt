@@ -65,6 +65,27 @@ enum class EconomyAction(val label: String) {
     STOCK_SHORT("stock_short"),
     STOCK_CLOSE("stock_close"),
     STOCK_DIVIDEND("stock_dividend"),
+    JOB_REWARD("job_reward"),
+    QUEST_REWARD("quest_reward"),
+    TREASURE_REWARD("treasure_reward"),
+    ELITEMOBS_REWARD("elitemobs_reward"),
+    LAND_CHARGE("land_charge"),
+    LAND_CREDIT("land_credit"),
+    ENCHANTMENT_PURCHASE("enchantment_purchase"),
+    ENCHANTMENT_CREDIT("enchantment_credit"),
+    CMI_REPAIR("cmi_repair"),
+    CMI_FLIGHT_CHARGE("cmi_flight_charge"),
+    CMI_COMMAND_COST("cmi_command_cost"),
+    CMI_RANKUP("cmi_rankup"),
+    CMI_SCAVENGE("cmi_scavenge"),
+    CMI_SHULKER_OPEN("cmi_shulker_open"),
+    CMI_SELL("cmi_sell"),
+    CMI_PAY_IN("cmi_pay_in"),
+    CMI_PAY_OUT("cmi_pay_out"),
+    CMI_CHEQUE_CREATE("cmi_cheque_create"),
+    CMI_CHEQUE_REDEEM("cmi_cheque_redeem"),
+    CMI_SERVICE_CHARGE("cmi_service_charge"),
+    CMI_SERVICE_CREDIT("cmi_service_credit"),
     SOURCE_CREDIT("source_credit"),
     SOURCE_DEBIT("source_debit"),
     ZERO_CHANGE("zero_change"),
@@ -80,8 +101,10 @@ object EconomyActionClassifier {
         source: EconomySource,
         amount: Double,
         providerAction: String? = null,
+        providerOrigin: String? = null,
     ): EconomyAction {
         val action = providerAction.orEmpty().trim().lowercase(Locale.ROOT)
+        val origin = providerOrigin.orEmpty().trim().lowercase(Locale.ROOT)
         when {
             action == "balance_set" || action == "set" -> return EconomyAction.BALANCE_SET
             source == EconomySource.ADMIN_COMMAND && action == "give" -> return EconomyAction.ADMIN_GIVE
@@ -97,11 +120,44 @@ object EconomyActionClassifier {
         }
 
         if (amount == 0.0 || !amount.isFinite()) return EconomyAction.ZERO_CHANGE
+
+        if (source == EconomySource.CMI) {
+            EconomyAction.entries
+                .firstOrNull { it.label == action && it.name.startsWith("CMI_") }
+                ?.let { return it }
+            if (origin.contains(".commands.list.pay")) {
+                return if (amount > 0.0) EconomyAction.CMI_PAY_IN else EconomyAction.CMI_PAY_OUT
+            }
+            if (origin.contains(".commands.list.cheque") || origin.contains(".modules.moneycheque.")) {
+                return if (amount > 0.0) EconomyAction.CMI_CHEQUE_REDEEM else EconomyAction.CMI_CHEQUE_CREATE
+            }
+            if (amount > 0.0 && origin.contains(".commands.list.sell")) return EconomyAction.CMI_SELL
+            if (amount < 0.0) {
+                return when {
+                    origin.contains(".commands.list.repair") -> EconomyAction.CMI_REPAIR
+                    origin.contains(".commands.list.flightcharge") -> EconomyAction.CMI_FLIGHT_CHARGE
+                    origin.contains(".modules.cmdcost.") -> EconomyAction.CMI_COMMAND_COST
+                    origin.contains(".modules.ranks.") || origin.contains(".commands.list.rankup") -> EconomyAction.CMI_RANKUP
+                    origin.contains(".modules.scavenger.") -> EconomyAction.CMI_SCAVENGE
+                    origin.contains(".modules.shulkerboxinventory.") -> EconomyAction.CMI_SHULKER_OPEN
+                    else -> EconomyAction.CMI_SERVICE_CHARGE
+                }
+            }
+            return EconomyAction.CMI_SERVICE_CREDIT
+        }
+
         return when (source) {
             EconomySource.BANK -> if (amount > 0.0) EconomyAction.BANK_TO_WALLET else EconomyAction.WALLET_TO_BANK
             EconomySource.GAMBLING -> if (amount > 0.0) EconomyAction.GAMBLING_PAYOUT else EconomyAction.GAMBLING_WAGER
             EconomySource.SHOP -> if (amount > 0.0) EconomyAction.SHOP_SELL else EconomyAction.SHOP_BUY
             EconomySource.AUTOSELL -> EconomyAction.AUTOSELL_SALE
+            EconomySource.JOBS -> if (amount > 0.0) EconomyAction.JOB_REWARD else EconomyAction.SOURCE_DEBIT
+            EconomySource.QUESTS -> if (amount > 0.0) EconomyAction.QUEST_REWARD else EconomyAction.SOURCE_DEBIT
+            EconomySource.TREASURE -> if (amount > 0.0) EconomyAction.TREASURE_REWARD else EconomyAction.SOURCE_DEBIT
+            EconomySource.ELITEMOBS -> if (amount > 0.0) EconomyAction.ELITEMOBS_REWARD else EconomyAction.SOURCE_DEBIT
+            EconomySource.LANDS -> if (amount > 0.0) EconomyAction.LAND_CREDIT else EconomyAction.LAND_CHARGE
+            EconomySource.ADVANCED_ENCHANTMENTS ->
+                if (amount > 0.0) EconomyAction.ENCHANTMENT_CREDIT else EconomyAction.ENCHANTMENT_PURCHASE
             EconomySource.PLAYER_TRANSFER,
             EconomySource.QUICKSHOP,
             EconomySource.AUCTION,
@@ -160,7 +216,7 @@ object EconomyAttributionResolver {
             ?.trim()
             .orEmpty()
         val source = source(reason, origin)
-        val flow = flow(reason, source, amount)
+        val flow = flow(reason, source, amount, origin)
         val metadata =
             AuditMetadata(
                 source = source,
@@ -193,7 +249,8 @@ object EconomyAttributionResolver {
             haystack.contains("angeschossen.lands") -> EconomySource.LANDS
             haystack.contains("olziedev.playerwarps") -> EconomySource.PLAYER_WARPS
             haystack.contains("leonardobishop.quests") -> EconomySource.QUESTS
-            haystack.contains("blackjack") || haystack.contains("roulette") || haystack.contains("slotmachine") -> EconomySource.GAMBLING
+            haystack.contains("blackjack") || haystack.contains("roulette") || haystack.contains("slotmachine") ||
+                haystack.contains("gambling") -> EconomySource.GAMBLING
             haystack.contains("zrips.cmi") -> EconomySource.CMI
             haystack.contains("ru.arc.stock") -> EconomySource.INTERNAL_STOCK
             haystack.contains("ru.arc.treasure.") -> EconomySource.TREASURE
@@ -209,10 +266,14 @@ object EconomyAttributionResolver {
         }
     }
 
-    private fun flow(reason: String, source: EconomySource, amount: Double): EconomyFlow =
+    private fun flow(reason: String, source: EconomySource, amount: Double, origin: String): EconomyFlow =
         when {
             source == EconomySource.BALANCE_SET -> EconomyFlow.ADJUSTMENT
             source in transferSources -> EconomyFlow.TRANSFER
+            source == EconomySource.CMI && origin.contains(".commands.list.pay", ignoreCase = true) -> EconomyFlow.TRANSFER
+            source == EconomySource.CMI &&
+                (origin.contains(".commands.list.cheque", ignoreCase = true) ||
+                    origin.contains(".modules.moneycheque.", ignoreCase = true)) -> EconomyFlow.INTERNAL
             reason.contains("set balance", ignoreCase = true) -> EconomyFlow.ADJUSTMENT
             amount > 0.0 -> EconomyFlow.MINT
             amount < 0.0 -> EconomyFlow.BURN
