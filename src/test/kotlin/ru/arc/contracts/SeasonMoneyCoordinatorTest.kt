@@ -140,6 +140,100 @@ class SeasonMoneyCoordinatorTest : StringSpec({
         persistence.current.admissionPasses.values.single().status shouldBe DungeonAdmissionPassStatus.CONSUMED
     }
 
+    "restart preserves one-time launch authorization and consumes it before native clone" {
+        val unlocked = completedRoadFoundation(catalog, playerId)
+        val plan =
+            SeasonMoneyActionEngine.plan(
+                catalog,
+                unlocked,
+                "action-coordinator-launch-pass",
+                playerId,
+                SeasonMoneyActionRequest.DungeonAdmission("mines_recon"),
+                now,
+            ) as SeasonMoneyActionPlan.Accepted
+        val persistence =
+            FakeSeasonMoneyPersistence(SeasonMoneyActionEngine.commit(catalog, unlocked, plan, now + 1).state)
+        val firstProcess =
+            SeasonMoneyCoordinator(
+                persistence,
+                FakeSeasonMoneyGateway(0L),
+                SeasonDungeonLaunchGate(
+                    tokenIdFactory = { "launch-coordinator-restart" },
+                    runIdFactory = { "run-coordinator-restart" },
+                ),
+            )
+        val reserved =
+            firstProcess.reserveDungeonLaunch(catalog, "mines_recon", setOf(playerId), now + 2)
+        persistence.current.dungeonLaunchTokens.keys shouldBe setOf(reserved.token.tokenId)
+
+        val restarted = SeasonMoneyCoordinator(persistence, FakeSeasonMoneyGateway(0L))
+        val authorized =
+            requireNotNull(
+                restarted.authorizeDungeonInstance(
+                    catalog,
+                    "em_id_the_mines",
+                    "em_id_the_mines_restart",
+                    now + 3,
+                ),
+            )
+        authorized.authorization.runId shouldBe reserved.token.runId
+        persistence.current.dungeonLaunchTokens shouldBe emptyMap()
+        persistence.current.authorizedDungeonRuns.keys shouldBe setOf("em_id_the_mines_restart")
+        restarted.authorizeDungeonInstance(
+            catalog,
+            "em_id_the_mines",
+            "em_id_the_mines_replay",
+            now + 4,
+        ) shouldBe null
+
+        restarted.consumeAdmissions(
+            catalog,
+            "mines_recon",
+            reserved.token.runId,
+            setOf(playerId),
+            now + 5,
+            "em_id_the_mines_restart",
+        )
+        persistence.current.authorizedDungeonRuns shouldBe emptyMap()
+        persistence.current.admissionPasses.values.single().status shouldBe DungeonAdmissionPassStatus.CONSUMED
+    }
+
+    "restart releases an expired launch without authorizing a clone" {
+        val unlocked = completedRoadFoundation(catalog, playerId)
+        val plan =
+            SeasonMoneyActionEngine.plan(
+                catalog,
+                unlocked,
+                "action-coordinator-expired-pass",
+                playerId,
+                SeasonMoneyActionRequest.DungeonAdmission("mines_recon"),
+                now,
+            ) as SeasonMoneyActionPlan.Accepted
+        val persistence =
+            FakeSeasonMoneyPersistence(SeasonMoneyActionEngine.commit(catalog, unlocked, plan, now + 1).state)
+        val firstProcess =
+            SeasonMoneyCoordinator(
+                persistence,
+                FakeSeasonMoneyGateway(0L),
+                SeasonDungeonLaunchGate(
+                    tokenTtlMillis = 10L,
+                    tokenIdFactory = { "launch-coordinator-expired" },
+                    runIdFactory = { "run-coordinator-expired" },
+                ),
+            )
+        firstProcess.reserveDungeonLaunch(catalog, "mines_recon", setOf(playerId), now + 2)
+
+        val restarted = SeasonMoneyCoordinator(persistence, FakeSeasonMoneyGateway(0L))
+        restarted.authorizeDungeonInstance(
+            catalog,
+            "em_id_the_mines",
+            "em_id_the_mines_expired",
+            now + 20_000,
+        ) shouldBe null
+        persistence.current.dungeonLaunchTokens shouldBe emptyMap()
+        persistence.current.admissionPasses.values.single().status shouldBe DungeonAdmissionPassStatus.AVAILABLE
+    }
+
     "commits reconciled funds without another provider call" {
         val persistence = FakeSeasonMoneyPersistence(SeasonRuntimeState.empty(catalog).copy(revision = 7L))
         val gateway = FakeSeasonMoneyGateway(99_000_00L)

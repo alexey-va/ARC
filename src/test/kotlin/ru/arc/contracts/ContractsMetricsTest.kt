@@ -19,6 +19,7 @@ class ContractsMetricsTest : StringSpec({
                 seasonCatalog = testSeasonCatalog(),
                 seasonState = null,
                 seasonMoneyJournal = SeasonMoneyJournalAudit.unavailable(),
+                seasonTrophyJournal = SeasonTrophyJournalSummary.unavailable(),
                 dungeonObservation =
                     DungeonContractObservationSnapshot(
                         catalogAvailable = true,
@@ -75,6 +76,7 @@ class ContractsMetricsTest : StringSpec({
         points.first { it.name == "arc_contracts_submissions_enabled" }.value shouldBeExactly 0.0
         points.first { it.name == "arc_season_mutation_runtime_ready" }.value shouldBeExactly 0.0
         points.first { it.name == "arc_season_catalog_available" }.value shouldBeExactly 1.0
+        points.first { it.name == "arc_season_trophy_journal_available" }.value shouldBeExactly 0.0
         points.first {
             it.name == "arc_season_project_resource_quantity" &&
                 it.tags["contract"] == "road_stone" && it.tags["component"] == "accepted"

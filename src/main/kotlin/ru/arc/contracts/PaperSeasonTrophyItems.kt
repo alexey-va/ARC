@@ -1,0 +1,157 @@
+package ru.arc.contracts
+
+import org.bukkit.Bukkit
+import org.bukkit.Material
+import org.bukkit.NamespacedKey
+import org.bukkit.entity.Player
+import org.bukkit.inventory.ItemStack
+import org.bukkit.persistence.PersistentDataType
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.NamedTextColor
+import ru.arc.ARC
+import java.util.UUID
+
+object PaperSeasonTrophyItems {
+    private val itemKey: NamespacedKey by lazy { NamespacedKey(ARC.instance, "season_trophy") }
+    private val ownerKey: NamespacedKey by lazy { NamespacedKey(ARC.instance, "season_trophy_owner") }
+
+    fun identity(stack: ItemStack?): String? =
+        stack?.itemMeta?.persistentDataContainer?.get(itemKey, PersistentDataType.STRING)
+            ?.takeIf { ResourceContractDefinition.normalizeItemKey(it) == it }
+
+    fun owner(stack: ItemStack?): UUID? =
+        stack?.itemMeta?.persistentDataContainer?.get(ownerKey, PersistentDataType.STRING)
+            ?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+
+    fun isBoundTrophy(stack: ItemStack?): Boolean = identity(stack) != null && owner(stack) != null
+
+    fun create(exactItemKey: String, owner: UUID, amount: Int = 1): ItemStack {
+        val design = requireNotNull(DESIGNS[exactItemKey]) { "Unknown season trophy item design" }
+        require(amount in 1..design.material.maxStackSize) { "Invalid season trophy stack amount" }
+        val stack = ItemStack(design.material, amount)
+        stack.editMeta { meta ->
+            meta.displayName(Component.text(design.displayName, NamedTextColor.GOLD))
+            meta.lore(
+                listOf(
+                    Component.text("Связанный трофей сезона", NamedTextColor.YELLOW),
+                    Component.text("Можно только передать в экспедиционный музей", NamedTextColor.GRAY),
+                ),
+            )
+        }
+        return bind(stack, exactItemKey, owner)
+    }
+
+    fun bind(stack: ItemStack, exactItemKey: String, owner: UUID): ItemStack {
+        require(ResourceContractDefinition.normalizeItemKey(exactItemKey) == exactItemKey) {
+            "Season trophy item key must be normalized"
+        }
+        val bound = stack.clone()
+        require(!bound.type.isAir && bound.amount > 0) { "Cannot bind an empty season trophy" }
+        bound.editMeta { meta ->
+            meta.persistentDataContainer.set(itemKey, PersistentDataType.STRING, exactItemKey)
+            meta.persistentDataContainer.set(ownerKey, PersistentDataType.STRING, owner.toString())
+        }
+        return bound
+    }
+
+    private data class TrophyDesign(val material: Material, val displayName: String)
+
+    private val DESIGNS =
+        mapOf(
+            "arc:road_revival/mines_core" to TrophyDesign(Material.ECHO_SHARD, "Сердце старой шахты"),
+            "arc:road_revival/bridge_relic" to TrophyDesign(Material.HEART_OF_THE_SEA, "Реликвия древнего моста"),
+            "arc:road_revival/quarry_permit" to TrophyDesign(Material.PAPER, "Печать каменоломни"),
+            "arc:road_revival/deep_mines_gear" to TrophyDesign(Material.NETHERITE_SCRAP, "Шестерня глубоких шахт"),
+        )
+}
+
+class PaperSeasonTrophyInventoryGateway(
+    private val playerLookup: (UUID) -> Player? = Bukkit::getPlayer,
+) : ContractInventoryGateway {
+    override suspend fun prepare(playerId: String, itemKey: String, quantity: Int): PreparedContractInventory? =
+        onBukkitMain {
+            val uuid = runCatching { UUID.fromString(playerId) }.getOrNull() ?: return@onBukkitMain null
+            val player = playerLookup(uuid)?.takeIf { it.isOnline } ?: return@onBukkitMain null
+            require(quantity in 1..EscrowedItemPayload.MAX_ITEM_QUANTITY) { "Invalid season trophy quantity" }
+            var remaining = quantity
+            val slots = mutableListOf<PaperSeasonTrophySlotPlan>()
+            player.inventory.storageContents.forEachIndexed { slot, stack ->
+                if (remaining == 0 || stack == null ||
+                    PaperSeasonTrophyItems.identity(stack) != itemKey || PaperSeasonTrophyItems.owner(stack) != uuid
+                ) return@forEachIndexed
+                val take = minOf(stack.amount, remaining)
+                val removed = stack.clone().also { it.amount = take }
+                slots +=
+                    PaperSeasonTrophySlotPlan(
+                        slot = slot,
+                        removeQuantity = take,
+                        beforeBytes = stack.serializeAsBytes(),
+                        payload = PaperContractItemPayloadCodec.captureVerified(itemKey, removed),
+                    )
+                remaining -= take
+            }
+            if (remaining != 0 || slots.isEmpty()) return@onBukkitMain null
+            PaperPreparedSeasonTrophyInventory(uuid, playerLookup, slots)
+        }
+}
+
+private data class PaperSeasonTrophySlotPlan(
+    val slot: Int,
+    val removeQuantity: Int,
+    val beforeBytes: ByteArray,
+    val payload: EscrowedItemPayload,
+)
+
+private class PaperPreparedSeasonTrophyInventory(
+    private val playerId: UUID,
+    private val playerLookup: (UUID) -> Player?,
+    private val slots: List<PaperSeasonTrophySlotPlan>,
+) : PreparedContractInventory {
+    override val payloads: List<EscrowedItemPayload> = slots.map { it.payload }
+    private var removed = false
+
+    override suspend fun removeExact(): ContractInventoryMutation =
+        onBukkitMain {
+            if (removed) return@onBukkitMain ContractInventoryMutation.Ambiguous
+            val player = playerLookup(playerId)?.takeIf { it.isOnline }
+                ?: return@onBukkitMain ContractInventoryMutation.NotPerformed("player_offline")
+            val inventory = player.inventory
+            if (slots.any { plan -> !sameBytes(inventory.getItem(plan.slot), plan.beforeBytes) }) {
+                return@onBukkitMain ContractInventoryMutation.NotPerformed("slot_changed")
+            }
+            try {
+                slots.forEach { plan ->
+                    val current = requireNotNull(inventory.getItem(plan.slot))
+                    val remainder = current.amount - plan.removeQuantity
+                    require(remainder >= 0) { "Season trophy inventory underflow" }
+                    inventory.setItem(
+                        plan.slot,
+                        if (remainder == 0) null else current.clone().also { it.amount = remainder },
+                    )
+                }
+                if (slots.any { plan -> !expectedAfterRemoval(inventory.getItem(plan.slot), plan) }) {
+                    return@onBukkitMain ContractInventoryMutation.Ambiguous
+                }
+                removed = true
+                ContractInventoryMutation.Confirmed
+            } catch (_: Throwable) {
+                ContractInventoryMutation.Ambiguous
+            }
+        }
+
+    /** Automatic trophy refunds are deliberately unsupported after process loss. */
+    override suspend fun restoreExact(): ContractInventoryMutation = ContractInventoryMutation.NotPerformed("unsupported")
+
+    private fun expectedAfterRemoval(stack: ItemStack?, plan: PaperSeasonTrophySlotPlan): Boolean {
+        val before = runCatching { ItemStack.deserializeBytes(plan.beforeBytes) }.getOrNull() ?: return false
+        val remainder = before.amount - plan.removeQuantity
+        return if (remainder == 0) {
+            stack == null || stack.type.isAir
+        } else {
+            sameBytes(stack, before.clone().also { it.amount = remainder }.serializeAsBytes())
+        }
+    }
+
+    private fun sameBytes(stack: ItemStack?, expected: ByteArray): Boolean =
+        stack != null && runCatching { stack.serializeAsBytes().contentEquals(expected) }.getOrDefault(false)
+}

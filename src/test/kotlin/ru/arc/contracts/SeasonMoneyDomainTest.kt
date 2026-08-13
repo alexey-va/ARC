@@ -1,5 +1,6 @@
 package ru.arc.contracts
 
+import com.google.gson.Gson
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
@@ -85,14 +86,36 @@ class SeasonMoneyDomainTest : StringSpec({
                 now + 2,
             )
         bound.boundPlayerIds shouldContainExactly setOf(playerId)
-        val consumed =
-            SeasonMoneyActionEngine.consumeBoundAdmissions(
+        val rebound =
+            SeasonMoneyActionEngine.bindAvailableAdmissions(
                 catalog,
                 bound.state,
                 "mines_recon",
                 "elite-runtime-1",
                 setOf(playerId),
                 now + 3,
+            )
+        rebound.boundPlayerIds shouldContainExactly setOf(playerId)
+        rebound.state shouldBe bound.state
+        val wrongRun =
+            SeasonMoneyActionEngine.bindAvailableAdmissions(
+                catalog,
+                rebound.state,
+                "mines_recon",
+                "elite-runtime-2",
+                setOf(playerId),
+                now + 4,
+            )
+        wrongRun.boundPlayerIds shouldBe emptySet()
+        wrongRun.state shouldBe bound.state
+        val consumed =
+            SeasonMoneyActionEngine.consumeBoundAdmissions(
+                catalog,
+                rebound.state,
+                "mines_recon",
+                "elite-runtime-1",
+                setOf(playerId),
+                now + 5,
             )
         consumed.boundPlayerIds shouldContainExactly setOf(playerId)
         consumed.state.admissionPasses.getValue(SeasonRuntimeState.admissionKey(playerId, "mines_recon")).status shouldBe
@@ -144,6 +167,18 @@ class SeasonMoneyDomainTest : StringSpec({
         val pass = completed.state.admissionPasses.values.single()
         pass.status shouldBe DungeonAdmissionPassStatus.CONSUMED
         pass.boundRunId shouldBe "native-run-race"
+    }
+
+    "legacy Redis JSON initializes collections added by newer runtime schemas" {
+        val gson = Gson()
+        val legacyJson = gson.toJsonTree(SeasonRuntimeState.empty(catalog)).asJsonObject
+        legacyJson.remove("dungeonLaunchTokens")
+        legacyJson.remove("authorizedDungeonRuns")
+        legacyJson.remove("recentTrophyReceipts")
+
+        val decoded = gson.fromJson(legacyJson, SeasonRuntimeState::class.java)
+
+        decoded.validatedAgainst(catalog) shouldBe SeasonRuntimeState.empty(catalog)
     }
 })
 

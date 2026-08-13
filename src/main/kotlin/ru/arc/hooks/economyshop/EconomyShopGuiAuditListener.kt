@@ -25,6 +25,7 @@ import ru.arc.audit.EconomySource
 import ru.arc.audit.Type
 import ru.arc.audit.autosell.AutoSellAuditModule
 import ru.arc.hooks.HookRegistry
+import ru.arc.contracts.PaperSeasonTrophyItems
 import java.util.UUID
 import kotlin.math.abs
 
@@ -36,6 +37,23 @@ internal class EconomyShopGuiAuditListener(
     private val correlationId: () -> String = { UUID.randomUUID().toString() },
     private val autoSellMultipliers: () -> Collection<Double> = ::configuredAutoSellMultipliers,
 ) : Listener {
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    fun guardBoundTrophySale(event: PreTransactionEvent) {
+        if (!event.transactionType.name.contains("SELL")) return
+        val saleMaterials =
+            buildSet {
+                event.shopItem?.itemToGive?.type?.let(::add)
+                event.items.keys.mapTo(this) { it.itemToGive.type }
+            }
+        if (saleMaterials.isEmpty()) return
+        if (event.player.inventory.storageContents.any { stack ->
+                stack?.type in saleMaterials && PaperSeasonTrophyItems.isBoundTrophy(stack)
+            }
+        ) {
+            event.isCancelled = true
+        }
+    }
+
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onPreTransaction(event: PreTransactionEvent) {
         if (event.transactionType.name != AUTO_SELL_ACTION.uppercase()) return

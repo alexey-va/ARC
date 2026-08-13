@@ -201,7 +201,7 @@ class RedisEconomyContractPaymentGateway(
     }
 }
 
-private suspend fun <T> onBukkitMain(block: () -> T): T {
+internal suspend fun <T> onBukkitMain(block: () -> T): T {
     if (Bukkit.isPrimaryThread()) return block()
     return suspendCancellableCoroutine { continuation ->
         try {

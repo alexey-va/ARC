@@ -60,6 +60,7 @@ data class SeasonMoneyRecoverySummary(
 class SeasonMoneyCoordinator(
     private val persistence: SeasonMoneyPersistence,
     private val money: SeasonMoneyGateway,
+    private val dungeonLaunchGate: SeasonDungeonLaunchGate = SeasonDungeonLaunchGate(),
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     suspend fun submit(
@@ -174,6 +175,11 @@ class SeasonMoneyCoordinator(
 
     suspend fun recover(catalog: ObserveSeasonCatalog): SeasonMoneyRecoverySummary {
         var state = loadState(catalog) ?: throw IllegalStateException("Season runtime state is unavailable")
+        val recoveredLaunches = dungeonLaunchGate.releaseExpired(catalog, state, clock())
+        if (recoveredLaunches != state) {
+            persistence.persistState(recoveredLaunches)
+            state = recoveredLaunches
+        }
         val loadedRecords = loadJournal() ?: throw IllegalStateException("Season money journal is unavailable")
         val records = pruneTerminalRecords(loadedRecords)
             ?: throw IllegalStateException("Season money journal retention failed")
@@ -263,12 +269,75 @@ class SeasonMoneyCoordinator(
         return result
     }
 
+    suspend fun reserveDungeonLaunch(
+        catalog: ObserveSeasonCatalog,
+        dungeonContractId: String,
+        participantIds: Set<String>,
+        now: Long,
+    ): SeasonDungeonLaunchReservation {
+        val loaded = loadState(catalog) ?: throw IllegalStateException("Season runtime state is unavailable")
+        val current = dungeonLaunchGate.releaseExpired(catalog, loaded, now)
+        val result = dungeonLaunchGate.reserve(catalog, current, dungeonContractId, participantIds, now)
+        persistence.persistState(result.state)
+        return result
+    }
+
+    /** Persists token consumption before the caller permits native world cloning. */
+    suspend fun authorizeDungeonInstance(
+        catalog: ObserveSeasonCatalog,
+        blueprintWorld: String,
+        instanceWorld: String,
+        now: Long,
+    ): SeasonDungeonInstanceAuthorizationResult? {
+        val loaded = loadState(catalog) ?: throw IllegalStateException("Season runtime state is unavailable")
+        val current = dungeonLaunchGate.releaseExpired(catalog, loaded, now)
+        if (current != loaded) persistence.persistState(current)
+        val result = dungeonLaunchGate.authorizeInstance(catalog, current, blueprintWorld, instanceWorld, now)
+            ?: return null
+        persistence.persistState(result.state)
+        return result
+    }
+
+    suspend fun cancelDungeonLaunch(
+        catalog: ObserveSeasonCatalog,
+        tokenId: String,
+        now: Long,
+    ): SeasonRuntimeState {
+        val current = loadState(catalog) ?: throw IllegalStateException("Season runtime state is unavailable")
+        val next = dungeonLaunchGate.cancel(catalog, current, tokenId, now)
+        if (next != current) persistence.persistState(next)
+        return next
+    }
+
+    suspend fun cancelAuthorizedDungeonInstance(
+        catalog: ObserveSeasonCatalog,
+        instanceWorld: String,
+    ): SeasonRuntimeState {
+        val current = loadState(catalog) ?: throw IllegalStateException("Season runtime state is unavailable")
+        val next = dungeonLaunchGate.cancelAuthorizedRun(catalog, current, instanceWorld)
+        if (next != current) persistence.persistState(next)
+        return next
+    }
+
+    suspend fun recoverDungeonLaunches(
+        catalog: ObserveSeasonCatalog,
+        activeInstanceWorlds: Set<String>,
+        now: Long,
+    ): SeasonRuntimeState {
+        val loaded = loadState(catalog) ?: throw IllegalStateException("Season runtime state is unavailable")
+        val withoutExpired = dungeonLaunchGate.releaseExpired(catalog, loaded, now)
+        val recovered = dungeonLaunchGate.releaseMissingAuthorizedRuns(catalog, withoutExpired, activeInstanceWorlds)
+        if (recovered != loaded) persistence.persistState(recovered)
+        return recovered
+    }
+
     suspend fun consumeAdmissions(
         catalog: ObserveSeasonCatalog,
         dungeonContractId: String,
         runId: String,
         playerIds: Set<String>,
         now: Long,
+        instanceWorld: String? = null,
     ): DungeonAdmissionBindingResult {
         val current = loadState(catalog) ?: throw IllegalStateException("Season runtime state is unavailable")
         val result =
@@ -280,8 +349,14 @@ class SeasonMoneyCoordinator(
                 playerIds,
                 now,
             )
-        if (result.state != current) persistence.persistState(result.state)
-        return result
+        val finalState =
+            if (instanceWorld == null) {
+                result.state
+            } else {
+                dungeonLaunchGate.finishAuthorizedRun(catalog, result.state, instanceWorld)
+            }
+        if (finalState != current) persistence.persistState(finalState)
+        return result.copy(state = finalState)
     }
 
     /** Commits already adjudicated provider evidence without making another provider call. */

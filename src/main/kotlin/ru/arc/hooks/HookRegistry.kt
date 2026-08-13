@@ -23,6 +23,7 @@ import ru.arc.hooks.viaversion.ViaVersionHook
 import ru.arc.hooks.worldguard.WGHook
 import ru.arc.hooks.yamipa.YamipaHook
 import ru.arc.hooks.zauction.AuctionHook
+import ru.arc.hooks.zauction.AuctionTrophyGuardListener
 import ru.arc.hooks.ztranslator.TranslatorHook
 import ru.arc.jobs.JobsModule
 import ru.arc.listeners.BlockListener
@@ -33,6 +34,7 @@ import ru.arc.listeners.JoinListener
 import ru.arc.listeners.PickupListener
 import ru.arc.listeners.RespawnListener
 import ru.arc.listeners.SpawnerListener
+import ru.arc.contracts.SeasonTrophyProtectionListener
 import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
@@ -51,6 +53,7 @@ class HookRegistry(
     var respawnListener: RespawnListener? = null
     var bsListener: BSListener? = null
     var emListener: EMListener? = null
+    var seasonTrophyProtectionListener: SeasonTrophyProtectionListener? = null
 
     private val registeredHooks = HashSet<String>()
     private val registeredListeners = LinkedHashSet<Listener>()
@@ -105,6 +108,8 @@ class HookRegistry(
 
         @JvmField var myWorldsHook: MyWorldsHook? = null
 
+        @JvmField var partiesHook: PartiesHook? = null
+
         internal var shopPurchaseService: ShopPurchaseService? = null
 
         private fun clearGlobalHooks() {
@@ -131,6 +136,7 @@ class HookRegistry(
             packetEventsHook = null
             aeHook = null
             myWorldsHook = null
+            partiesHook = null
             shopPurchaseService = null
         }
     }
@@ -198,6 +204,7 @@ class HookRegistry(
         respawnListener = null
         bsListener = null
         emListener = null
+        seasonTrophyProtectionListener = null
     }
 
     private fun register(
@@ -293,6 +300,7 @@ class HookRegistry(
                 val hook = AuctionHook()
                 try {
                     hook.start()
+                    registerListener(AuctionTrophyGuardListener())
                     auctionHook = hook
                 } catch (failure: Throwable) {
                     hook.close()
@@ -303,6 +311,7 @@ class HookRegistry(
             "zAuctionHouseV3",
         )
         register("Bank", true) { bankHook = BankHook() }
+        register("Parties", true) { partiesHook = PartiesHook() }
         register("RedisEconomy", true) {
             val hook = RedisEcoHook()
             registerListener(RedisEcoListener())
@@ -380,6 +389,9 @@ class HookRegistry(
         }
         if (commandListener == null) {
             commandListener = registerListener(CommandListener())
+        }
+        if (seasonTrophyProtectionListener == null) {
+            seasonTrophyProtectionListener = registerListener(SeasonTrophyProtectionListener())
         }
     }
 }

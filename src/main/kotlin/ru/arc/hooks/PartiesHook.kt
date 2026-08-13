@@ -1,6 +1,7 @@
 package ru.arc.hooks
 
 import com.alessiodp.parties.api.Parties
+import org.bukkit.Bukkit
 import java.util.UUID
 
 class PartiesHook {
@@ -34,5 +35,17 @@ class PartiesHook {
         val partyId = player.partyId ?: return ""
         val party = api.getParty(partyId) ?: return ""
         return party.color?.code ?: ""
+    }
+
+    /** Null means a party member other than the leader attempted a network launch. */
+    fun localLaunchParticipants(playerUuid: UUID): Set<UUID>? {
+        val player = api.getPartyPlayer(playerUuid) ?: return setOf(playerUuid)
+        if (!player.isInParty) return setOf(playerUuid)
+        val partyId = player.partyId ?: return setOf(playerUuid)
+        val party = api.getParty(partyId) ?: return setOf(playerUuid)
+        if (party.leader != playerUuid) return null
+        return party.members.mapNotNullTo(linkedSetOf()) { memberId ->
+            Bukkit.getPlayer(memberId)?.takeIf { it.isOnline }?.uniqueId
+        }.also { it += playerUuid }
     }
 }

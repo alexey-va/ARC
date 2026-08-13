@@ -117,9 +117,21 @@ data class SeasonRuntimeState(
     val project: SeasonProjectState,
     val projectContributors: Map<String, SeasonContributorProgress> = emptyMap(),
     val admissionPasses: Map<String, DungeonAdmissionPass> = emptyMap(),
+    val dungeonLaunchTokens: Map<String, SeasonDungeonLaunchToken> = emptyMap(),
+    val authorizedDungeonRuns: Map<String, SeasonDungeonRunAuthorization> = emptyMap(),
+    val recentTrophyReceipts: Map<String, SeasonTrophyContributionReceipt> = emptyMap(),
     val recentReceipts: Map<String, SeasonMoneyActionReceipt> = emptyMap(),
     val revision: Long = 0L,
 ) : Entity {
+    /** Keeps newly added collections initialized when Gson reads an older Redis payload. */
+    @Suppress("unused")
+    internal constructor() : this(
+        stateId = "uninitialized",
+        seasonId = "uninitialized",
+        catalogDigest = "0".repeat(64),
+        project = SeasonProjectState("uninitialized"),
+    )
+
     init {
         require(stateId.isNotBlank()) { "Season runtime state id must not be blank" }
     }
@@ -161,6 +173,84 @@ data class SeasonRuntimeState(
             }
         }
 
+        require(dungeonLaunchTokens.size <= MAX_DUNGEON_LAUNCH_TOKENS) {
+            "Season dungeon launch token capacity exceeded"
+        }
+        val tokenParticipants = mutableSetOf<String>()
+        val tokenBlueprints = mutableSetOf<String>()
+        val activeRunIds = mutableSetOf<String>()
+        dungeonLaunchTokens.forEach { (key, token) ->
+            token.validated()
+            require(key == token.tokenId) { "Season dungeon launch token key does not match its contents" }
+            require(token.catalogDigest == catalog.revisionDigest()) { "Season dungeon launch token uses another catalog" }
+            val dungeon = requireNotNull(catalog.dungeonContracts[token.dungeonContractId]) {
+                "Season dungeon launch token references an unknown dungeon"
+            }
+            require(token.blueprintWorld == dungeon.world) { "Season dungeon launch token world does not match catalog" }
+            require(token.participantIds.none(tokenParticipants::contains)) {
+                "Season dungeon launch participant is duplicated"
+            }
+            tokenParticipants.addAll(token.participantIds)
+            require(tokenBlueprints.add(token.blueprintWorld)) { "Season dungeon launch blueprint is duplicated" }
+            require(activeRunIds.add(token.runId)) { "Season dungeon launch run id is duplicated" }
+            token.participantIds.forEach { playerId ->
+                val pass = requireNotNull(admissionPasses[admissionKey(playerId, token.dungeonContractId)]) {
+                    "Season dungeon launch participant pass is missing"
+                }
+                require(pass.status == DungeonAdmissionPassStatus.BOUND_TO_RUN && pass.boundRunId == token.runId) {
+                    "Season dungeon launch participant pass is not bound to its run"
+                }
+            }
+        }
+
+        require(authorizedDungeonRuns.size <= MAX_AUTHORIZED_DUNGEON_RUNS) {
+            "Season authorized dungeon run capacity exceeded"
+        }
+        authorizedDungeonRuns.forEach { (key, authorization) ->
+            authorization.validated()
+            require(key == authorization.instanceWorld) { "Season authorized dungeon run key does not match its contents" }
+            require(authorization.catalogDigest == catalog.revisionDigest()) {
+                "Season authorized dungeon run uses another catalog"
+            }
+            val dungeon = requireNotNull(catalog.dungeonContracts[authorization.dungeonContractId]) {
+                "Season authorized dungeon run references an unknown dungeon"
+            }
+            require(authorization.blueprintWorld == dungeon.world) {
+                "Season authorized dungeon run world does not match catalog"
+            }
+            require(activeRunIds.add(authorization.runId)) { "Season dungeon launch run id is duplicated" }
+            require(authorization.participantIds.none(tokenParticipants::contains)) {
+                "Season dungeon launch participant is duplicated"
+            }
+            tokenParticipants.addAll(authorization.participantIds)
+            authorization.participantIds.forEach { playerId ->
+                val pass = requireNotNull(admissionPasses[admissionKey(playerId, authorization.dungeonContractId)]) {
+                    "Season authorized dungeon participant pass is missing"
+                }
+                require(
+                    pass.status == DungeonAdmissionPassStatus.BOUND_TO_RUN ||
+                        pass.status == DungeonAdmissionPassStatus.CONSUMED,
+                ) { "Season authorized dungeon participant pass has invalid status" }
+                require(pass.boundRunId == authorization.runId) {
+                    "Season authorized dungeon participant pass is bound to another run"
+                }
+            }
+        }
+
+        require(recentTrophyReceipts.size <= MAX_RECENT_TROPHY_RECEIPTS) {
+            "Season trophy receipt capacity exceeded"
+        }
+        recentTrophyReceipts.forEach { (contributionId, receipt) ->
+            receipt.validated()
+            require(contributionId == receipt.contributionId) { "Season trophy receipt key does not match its contents" }
+            val stage = requireNotNull(catalog.projectStages[receipt.stageId]) {
+                "Season trophy receipt references an unknown stage"
+            }
+            require(receipt.itemKey in stage.requiredBoundRewards) {
+                "Season trophy receipt references an unrelated item"
+            }
+        }
+
         require(recentReceipts.size <= MAX_RECENT_RECEIPTS) { "Season action receipt capacity exceeded" }
         recentReceipts.forEach { (actionId, receipt) ->
             receipt.validated()
@@ -173,6 +263,9 @@ data class SeasonRuntimeState(
     companion object {
         const val MAX_PROJECT_CONTRIBUTORS = 4_096
         const val MAX_ADMISSION_PASSES = 16_384
+        const val MAX_DUNGEON_LAUNCH_TOKENS = 64
+        const val MAX_AUTHORIZED_DUNGEON_RUNS = 128
+        const val MAX_RECENT_TROPHY_RECEIPTS = 512
         const val MAX_RECENT_RECEIPTS = 512
         const val MAX_ACTION_ID_LENGTH = 96
         const val MAX_TARGET_ID_LENGTH = 64
@@ -385,17 +478,25 @@ object SeasonMoneyActionEngine {
         participantIds.forEach { playerId ->
             val key = SeasonRuntimeState.admissionKey(playerId, dungeonContractId)
             val pass = passes[key] ?: return@forEach
-            if (pass.status != DungeonAdmissionPassStatus.AVAILABLE) return@forEach
-            passes[key] =
-                pass.copy(
-                    status = DungeonAdmissionPassStatus.BOUND_TO_RUN,
-                    boundRunId = runId,
-                    boundAt = now,
-                )
-            bound += playerId
+            when (pass.status) {
+                DungeonAdmissionPassStatus.AVAILABLE -> {
+                    passes[key] =
+                        pass.copy(
+                            status = DungeonAdmissionPassStatus.BOUND_TO_RUN,
+                            boundRunId = runId,
+                            boundAt = now,
+                        )
+                    bound += playerId
+                }
+                DungeonAdmissionPassStatus.BOUND_TO_RUN -> {
+                    if (pass.boundRunId == runId) bound += playerId
+                }
+                DungeonAdmissionPassStatus.CONSUMED -> Unit
+            }
         }
+        val changed = passes != state.admissionPasses
         val next =
-            if (bound.isEmpty()) {
+            if (!changed) {
                 state
             } else {
                 state.copy(

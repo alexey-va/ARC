@@ -8,6 +8,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeout
+import org.bukkit.Bukkit
 import ru.arc.ARC
 import ru.arc.core.PluginModule
 import ru.arc.metrics.MetricsModule
@@ -57,6 +59,20 @@ data class ResourceContractView(
     val contributors: Int,
 )
 
+sealed interface SeasonDungeonLaunchPreparationOutcome {
+    data class Ready(val reservation: SeasonDungeonLaunchReservation) : SeasonDungeonLaunchPreparationOutcome
+
+    data class Rejected(val code: String) : SeasonDungeonLaunchPreparationOutcome
+
+    data object Unavailable : SeasonDungeonLaunchPreparationOutcome
+}
+
+enum class SeasonDungeonInstanceDecision {
+    NOT_PROTECTED,
+    AUTHORIZED,
+    DENIED,
+}
+
 /**
  * Runtime owner for the bounded contract catalog and network-persisted state.
  * Mutating submissions remain disabled unless policy mode is explicitly
@@ -70,9 +86,10 @@ object ContractsManager {
     // authenticated operator reconciliation state machine are implemented;
     // production crash injection and control-plane smoke are still required.
     // Season money now has its own authenticated, replay-safe reconciliation.
-    // Season mutations remain gated until a cancellable pre-start admission
-    // guard and the bound-item contribution journal exist. Native events
-    // currently prove only start/completion.
+    // The bound-item contribution journal, transfer guards and EliteMobs
+    // pre-start admission guard are implemented. Season mutations remain
+    // gated until durable dungeon reward delivery and crash-injection smoke
+    // cover the final money-plus-item side effects.
     // No config value may unlock inventory or money mutations before that gate.
     private const val SUBMISSION_RUNTIME_READY = false
     private const val SEASON_MUTATION_RUNTIME_READY = false
@@ -89,6 +106,8 @@ object ContractsManager {
     private var seasonStateRepo: CachedRepository<SeasonRuntimeState>? = null
     private var seasonMoneyJournalRepo: CachedRepository<SeasonMoneyJournalRecord>? = null
     private var seasonMoneyCoordinator: SeasonMoneyCoordinator? = null
+    private var seasonTrophyJournalRepo: CachedRepository<SeasonTrophyJournalRecord>? = null
+    private var seasonTrophyCoordinator: SeasonTrophyContributionCoordinator? = null
     private var submissionMutex = Mutex()
     private val dungeonObserver = DungeonContractObserver()
 
@@ -172,6 +191,8 @@ object ContractsManager {
             seasonStateRepo = seasonRuntime?.stateRepository
             seasonMoneyJournalRepo = seasonRuntime?.journalRepository
             seasonMoneyCoordinator = seasonRuntime?.coordinator
+            seasonTrophyJournalRepo = seasonRuntime?.trophyJournalRepository
+            seasonTrophyCoordinator = seasonRuntime?.trophyCoordinator
         } catch (failure: Throwable) {
             runBlocking {
                 try {
@@ -241,6 +262,7 @@ object ContractsManager {
         val currentSeasonRepositoryScope = seasonRepositoryScope
         val currentSeasonStateRepo = seasonStateRepo
         val currentSeasonJournalRepo = seasonMoneyJournalRepo
+        val currentSeasonTrophyJournalRepo = seasonTrophyJournalRepo
         repo = null
         scope = null
         journalRepo = null
@@ -252,6 +274,8 @@ object ContractsManager {
         seasonStateRepo = null
         seasonMoneyJournalRepo = null
         seasonMoneyCoordinator = null
+        seasonTrophyJournalRepo = null
+        seasonTrophyCoordinator = null
         submissionMutex = Mutex()
         dungeonObserver.configure(null)
         currentSubmissionScope?.cancel()
@@ -260,7 +284,11 @@ object ContractsManager {
             runBlocking {
                 try {
                     try {
-                        currentSeasonJournalRepo?.shutdown()
+                        try {
+                            currentSeasonTrophyJournalRepo?.shutdown()
+                        } finally {
+                            currentSeasonJournalRepo?.shutdown()
+                        }
                     } finally {
                         currentSeasonStateRepo?.shutdown()
                     }
@@ -299,6 +327,15 @@ object ContractsManager {
             seasonMoneyCoordinator != null && isLeader() && mode() == ContractsMode.ENFORCE
 
     @JvmStatic
+    fun seasonTrophyEnabled(): Boolean =
+        seasonMoneyEnabled() && seasonTrophyJournalRepo != null && seasonTrophyCoordinator != null
+
+    @JvmStatic
+    fun seasonDungeonProtectionEnabled(): Boolean =
+        SEASON_MUTATION_RUNTIME_READY && seasonStateRepo != null && seasonMoneyCoordinator != null &&
+            mode() == ContractsMode.ENFORCE
+
+    @JvmStatic
     fun observeDungeonStarted(
         runId: String,
         world: String,
@@ -318,13 +355,14 @@ object ContractsManager {
         runId: String,
         world: String,
         participantIds: Set<String>,
+        instanceWorld: String? = null,
         now: Long = System.currentTimeMillis(),
     ): DungeonContractCompletionObservation? {
         val observation = dungeonObserver.completed(runId, world, participantIds, now)
         if (observation != null) {
             val completedPlayers =
                 observation.playerOutcomes.filterValues { it == DungeonCompletionPlayerOutcome.START_TO_FINISH }.keys
-            mutateDungeonAdmissions(runId, world, completedPlayers, now, consume = true)
+            mutateDungeonAdmissions(runId, world, completedPlayers, now, consume = true, instanceWorld = instanceWorld)
             publishMetrics()
         }
         return observation
@@ -336,6 +374,7 @@ object ContractsManager {
         playerIds: Set<String>,
         now: Long,
         consume: Boolean,
+        instanceWorld: String? = null,
     ) {
         if (!seasonMoneyEnabled()) return
         val currentScope = seasonScope ?: return
@@ -347,7 +386,7 @@ object ContractsManager {
                 submissionMutex.withLock {
                     if (!seasonMoneyEnabled()) return@withLock
                     if (consume) {
-                        coordinator.consumeAdmissions(catalog, dungeon.id, runId, playerIds, now)
+                        coordinator.consumeAdmissions(catalog, dungeon.id, runId, playerIds, now, instanceWorld)
                     } else {
                         coordinator.bindAdmissions(catalog, dungeon.id, runId, playerIds, now)
                     }
@@ -464,6 +503,207 @@ object ContractsManager {
     }
 
     @JvmStatic
+    fun submitSeasonTrophy(
+        playerId: UUID,
+        stageId: String,
+        itemKey: String,
+        requestedQuantity: Int,
+    ): CompletableFuture<SeasonTrophyContributionOutcome> {
+        val contributionId = "arc-${UUID.randomUUID()}"
+        val result = CompletableFuture<SeasonTrophyContributionOutcome>()
+        val currentScope = seasonScope
+        val coordinator = seasonTrophyCoordinator
+        if (!seasonTrophyEnabled() || currentScope == null || coordinator == null) {
+            return result.apply { complete(SeasonTrophyContributionOutcome.Unavailable(contributionId)) }
+        }
+        currentScope.launch {
+            try {
+                val outcome =
+                    submissionMutex.withLock {
+                        if (!seasonTrophyEnabled()) {
+                            SeasonTrophyContributionOutcome.Unavailable(contributionId)
+                        } else {
+                            reconcileSeasonResources()
+                            val catalog = requireNotNull(configRef.get()?.observeSeasonCatalog(SEASON_MUTATION_RUNTIME_READY))
+                            coordinator.submit(
+                                catalog,
+                                contributionId,
+                                stageId,
+                                itemKey,
+                                playerId.toString(),
+                                requestedQuantity,
+                            )
+                        }
+                    }
+                result.complete(outcome)
+            } catch (failure: Throwable) {
+                error("Season trophy contribution {} stopped unexpectedly", contributionId, failure)
+                result.complete(SeasonTrophyContributionOutcome.ManualReview(contributionId))
+            } finally {
+                publishMetrics()
+            }
+        }
+        return result
+    }
+
+    @JvmStatic
+    fun prepareSeasonDungeonLaunch(
+        dungeonContractId: String,
+        participantIds: Set<UUID>,
+    ): CompletableFuture<SeasonDungeonLaunchPreparationOutcome> {
+        val result = CompletableFuture<SeasonDungeonLaunchPreparationOutcome>()
+        val currentScope = seasonScope
+        val coordinator = seasonMoneyCoordinator
+        if (!seasonMoneyEnabled() || currentScope == null || coordinator == null) {
+            return result.apply { complete(SeasonDungeonLaunchPreparationOutcome.Unavailable) }
+        }
+        currentScope.launch {
+            val outcome =
+                try {
+                    submissionMutex.withLock {
+                        if (!seasonMoneyEnabled()) {
+                            SeasonDungeonLaunchPreparationOutcome.Unavailable
+                        } else {
+                            reconcileSeasonResources()
+                            val catalog = requireNotNull(configRef.get()?.observeSeasonCatalog(SEASON_MUTATION_RUNTIME_READY))
+                            SeasonDungeonLaunchPreparationOutcome.Ready(
+                                coordinator.reserveDungeonLaunch(
+                                    catalog,
+                                    dungeonContractId,
+                                    participantIds.mapTo(linkedSetOf()) { it.toString() },
+                                    System.currentTimeMillis(),
+                                ),
+                            )
+                        }
+                    }
+                } catch (failure: IllegalArgumentException) {
+                    SeasonDungeonLaunchPreparationOutcome.Rejected(
+                        failure.message?.lowercase()?.replace(Regex("[^a-z0-9]+"), "_")?.trim('_')?.take(80)
+                            ?.ifBlank { "invalid_launch" } ?: "invalid_launch",
+                    )
+                } catch (failure: Throwable) {
+                    error("Season dungeon launch preparation failed for {}", dungeonContractId, failure)
+                    SeasonDungeonLaunchPreparationOutcome.Unavailable
+                }
+            result.complete(outcome)
+            publishMetrics()
+        }
+        return result
+    }
+
+    @JvmStatic
+    fun cancelSeasonDungeonLaunch(tokenId: String): CompletableFuture<Boolean> {
+        val result = CompletableFuture<Boolean>()
+        val currentScope = seasonScope
+        val coordinator = seasonMoneyCoordinator
+        if (!seasonMoneyEnabled() || currentScope == null || coordinator == null) {
+            return result.apply { complete(false) }
+        }
+        currentScope.launch {
+            val changed =
+                try {
+                    submissionMutex.withLock {
+                        if (!seasonMoneyEnabled()) return@withLock false
+                        val catalog = requireNotNull(configRef.get()?.observeSeasonCatalog(SEASON_MUTATION_RUNTIME_READY))
+                        val before = coordinatorState(catalog)
+                        coordinator.cancelDungeonLaunch(catalog, tokenId, System.currentTimeMillis()) != before
+                    }
+                } catch (failure: Throwable) {
+                    error("Season dungeon launch cancellation failed for {}", tokenId, failure)
+                    false
+                }
+            result.complete(changed)
+            publishMetrics()
+        }
+        return result
+    }
+
+    @JvmStatic
+    fun seasonDungeonBlueprintWorld(dungeonContractId: String): String? =
+        configRef.get()?.observeSeasonCatalog(SEASON_MUTATION_RUNTIME_READY)
+            ?.dungeonContracts?.get(dungeonContractId.trim().lowercase())?.world
+
+    @JvmStatic
+    fun seasonDungeonContractIds(): List<String> =
+        configRef.get()?.observeSeasonCatalog(SEASON_MUTATION_RUNTIME_READY)
+            ?.dungeonContracts?.keys?.sorted().orEmpty()
+
+    @JvmStatic
+    fun seasonProjectStageIds(): List<String> =
+        configRef.get()?.observeSeasonCatalog(SEASON_MUTATION_RUNTIME_READY)
+            ?.projectStages?.keys?.sorted().orEmpty()
+
+    @JvmStatic
+    fun seasonCompletionStageId(): String? =
+        configRef.get()?.observeSeasonCatalog(SEASON_MUTATION_RUNTIME_READY)?.completionStage
+
+    /** Called synchronously by EliteMobs before its world clone side effect. */
+    @JvmStatic
+    fun authorizeSeasonDungeonInstance(
+        blueprintWorld: String,
+        instanceWorld: String,
+        now: Long = System.currentTimeMillis(),
+    ): SeasonDungeonInstanceDecision {
+        if (!seasonDungeonProtectionEnabled()) return SeasonDungeonInstanceDecision.NOT_PROTECTED
+        val catalog = configRef.get()?.observeSeasonCatalog(SEASON_MUTATION_RUNTIME_READY)
+            ?: return SeasonDungeonInstanceDecision.DENIED
+        if (catalog.dungeonContracts.values.none { it.world == blueprintWorld.trim().lowercase() }) {
+            return SeasonDungeonInstanceDecision.NOT_PROTECTED
+        }
+        if (!isLeader()) return SeasonDungeonInstanceDecision.DENIED
+        val coordinator = seasonMoneyCoordinator ?: return SeasonDungeonInstanceDecision.DENIED
+        return try {
+            val authorization =
+                runBlocking {
+                    withTimeout(DUNGEON_EVENT_PERSIST_TIMEOUT_MILLIS) {
+                        submissionMutex.withLock {
+                            coordinator.authorizeDungeonInstance(catalog, blueprintWorld, instanceWorld, now)
+                        }
+                    }
+                }
+            if (authorization == null) SeasonDungeonInstanceDecision.DENIED else SeasonDungeonInstanceDecision.AUTHORIZED
+        } catch (failure: Throwable) {
+            error("Season dungeon instance authorization failed for {}", instanceWorld, failure)
+            SeasonDungeonInstanceDecision.DENIED
+        }.also { publishMetrics() }
+    }
+
+    /** Called at MONITOR only if another listener cancelled the native clone. */
+    @JvmStatic
+    fun cancelAuthorizedSeasonDungeonInstance(instanceWorld: String): Boolean {
+        if (!seasonDungeonProtectionEnabled() || !isLeader()) return false
+        val catalog = configRef.get()?.observeSeasonCatalog(SEASON_MUTATION_RUNTIME_READY) ?: return false
+        val coordinator = seasonMoneyCoordinator ?: return false
+        return try {
+            runBlocking {
+                withTimeout(DUNGEON_EVENT_PERSIST_TIMEOUT_MILLIS) {
+                    submissionMutex.withLock {
+                        val before = coordinatorState(catalog)
+                        val after = coordinator.cancelAuthorizedDungeonInstance(catalog, instanceWorld)
+                        after != before
+                    }
+                }
+            }
+        } catch (failure: Throwable) {
+            error("Season dungeon instance cancellation recovery failed for {}", instanceWorld, failure)
+            false
+        }.also { publishMetrics() }
+    }
+
+    @JvmStatic
+    fun seasonDungeonRunAuthorization(instanceWorld: String): SeasonDungeonRunAuthorization? =
+        seasonState()?.authorizedDungeonRuns?.get(instanceWorld.trim().lowercase())?.validated()
+
+    /** null = ordinary world, true/false = protected instance admission decision. */
+    @JvmStatic
+    fun seasonDungeonPlayerAuthorized(instanceWorld: String, playerId: UUID): Boolean? {
+        if (!seasonDungeonProtectionEnabled()) return null
+        val authorization = seasonDungeonRunAuthorization(instanceWorld) ?: return null
+        if (!isLeader()) return false
+        return playerId.toString() in authorization.participantIds
+    }
+
+    @JvmStatic
     fun currentViews(now: Long = System.currentTimeMillis()): List<ResourceContractView> {
         val config = configRef.get() ?: return emptyList()
         val currentRepo = repo
@@ -517,6 +757,7 @@ object ContractsManager {
             "submissionsEnabled" to submissionsEnabled(),
             "seasonMutationRuntimeReady" to SEASON_MUTATION_RUNTIME_READY,
             "seasonMoneyEnabled" to seasonMoneyEnabled(),
+            "seasonTrophyEnabled" to seasonTrophyEnabled(),
             "serverWeeklyBudgetMinor" to (config?.serverWeeklyBudgetMinor ?: 0L),
             "seasonCatalog" to config?.observeSeasonCatalog(SEASON_MUTATION_RUNTIME_READY)?.summary(),
             "seasonState" to
@@ -529,10 +770,13 @@ object ContractsManager {
                             DungeonAdmissionPassStatus.entries.associate { status ->
                                 status.label to state.admissionPasses.values.count { it.status == status }
                             },
+                        "pendingDungeonLaunches" to state.dungeonLaunchTokens.size,
+                        "authorizedDungeonRuns" to state.authorizedDungeonRuns.size,
                         "revision" to state.revision,
                     )
                 },
             "seasonMoneyJournal" to seasonMoneyJournalSummary(),
+            "seasonTrophyJournal" to seasonTrophyJournalSummary(),
             "dungeonObservation" to dungeonObservationSnapshot(),
             "submissionJournal" to journalSummary(),
             "orders" to views,
@@ -551,10 +795,21 @@ object ContractsManager {
         return seasonStateRepo?.getNow(SeasonRuntimeState.stateId(catalog))?.validatedAgainst(catalog)
     }
 
+    private fun coordinatorState(catalog: ObserveSeasonCatalog): SeasonRuntimeState =
+        requireNotNull(seasonStateRepo?.getNow(SeasonRuntimeState.stateId(catalog))) {
+            "Season runtime state is unavailable"
+        }.validatedAgainst(catalog)
+
     @JvmStatic
     fun seasonMoneyJournalSummary(): SeasonMoneyJournalSummary {
         val current = seasonMoneyJournalRepo ?: return SeasonMoneyJournalAudit.unavailable()
         return SeasonMoneyJournalAudit.summarize(current.allNow())
+    }
+
+    @JvmStatic
+    fun seasonTrophyJournalSummary(): SeasonTrophyJournalSummary {
+        val current = seasonTrophyJournalRepo ?: return SeasonTrophyJournalSummary.unavailable()
+        return SeasonTrophyJournalAudit.summarize(current.allNow())
     }
 
     @JvmStatic
@@ -758,6 +1013,7 @@ object ContractsManager {
                 seasonCatalog = config?.observeSeasonCatalog(SEASON_MUTATION_RUNTIME_READY),
                 seasonState = seasonState(),
                 seasonMoneyJournal = seasonMoneyJournalSummary(),
+                seasonTrophyJournal = seasonTrophyJournalSummary(),
                 dungeonObservation = dungeonObservationSnapshot(),
             )
         }
@@ -769,7 +1025,11 @@ object ContractsManager {
         val stateRepository: CachedRepository<SeasonRuntimeState>,
         val journalRepository: CachedRepository<SeasonMoneyJournalRecord>,
         val coordinator: SeasonMoneyCoordinator,
+        val trophyJournalRepository: CachedRepository<SeasonTrophyJournalRecord>,
+        val trophyCoordinator: SeasonTrophyContributionCoordinator,
     )
+
+    private const val DUNGEON_EVENT_PERSIST_TIMEOUT_MILLIS = 3_000L
 
     private fun createSeasonRuntime(
         config: ContractsConfig,
@@ -813,13 +1073,48 @@ object ContractsManager {
                 repositoryScope.cancel()
                 throw failure
             }
+        val trophyJournalRepository =
+            try {
+                redisRepo<SeasonTrophyJournalRecord>(
+                    id = "season-trophy-journal",
+                    storageKey = "arc.season-trophy-journal.v1",
+                    updateChannel = "arc.season-trophy-journal.v1.update",
+                    scope = repositoryScope,
+                ) {
+                    loadAllOnStart(true)
+                    enableCleanup(false)
+                    saveInterval(1.seconds)
+                }
+            } catch (failure: Throwable) {
+                runBlocking {
+                    try {
+                        journalRepository.shutdown()
+                    } finally {
+                        stateRepository.shutdown()
+                    }
+                }
+                repositoryScope.cancel()
+                throw failure
+            }
         return try {
             val persistence = RedisSeasonMoneyPersistence(stateRepository, journalRepository)
+            val trophyPersistence = RedisSeasonTrophyPersistence(stateRepository, trophyJournalRepository)
             ensureSeasonState(catalog, stateRepository)
             SeasonMoneyJournalAudit.summarize(journalRepository.allNow())
+            SeasonTrophyJournalAudit.summarize(trophyJournalRepository.allNow())
             val coordinator = SeasonMoneyCoordinator(persistence, RedisEconomySeasonMoneyGateway())
+            val trophyCoordinator =
+                SeasonTrophyContributionCoordinator(trophyPersistence, PaperSeasonTrophyInventoryGateway())
             if (config.leaderServer.equals(ARC.serverName, ignoreCase = true)) {
                 runBlocking { coordinator.recover(catalog) }
+                runBlocking {
+                    coordinator.recoverDungeonLaunches(
+                        catalog,
+                        Bukkit.getWorlds().mapTo(linkedSetOf()) { it.name.lowercase() },
+                        System.currentTimeMillis(),
+                    )
+                }
+                runBlocking { trophyCoordinator.recover(catalog) }
                 runBlocking {
                     projectSeasonResources(catalog, config, contractRepository, stateRepository)
                 }
@@ -830,11 +1125,17 @@ object ContractsManager {
                 stateRepository,
                 journalRepository,
                 coordinator,
+                trophyJournalRepository,
+                trophyCoordinator,
             )
         } catch (failure: Throwable) {
             runBlocking {
                 try {
-                    journalRepository.shutdown()
+                    try {
+                        trophyJournalRepository.shutdown()
+                    } finally {
+                        journalRepository.shutdown()
+                    }
                 } finally {
                     stateRepository.shutdown()
                 }
@@ -1113,6 +1414,28 @@ object ContractsManager {
         }
     }
 
+    private class RedisSeasonTrophyPersistence(
+        private val stateRepository: CachedRepository<SeasonRuntimeState>,
+        private val journalRepository: CachedRepository<SeasonTrophyJournalRecord>,
+    ) : SeasonTrophyPersistence {
+        override fun state(catalog: ObserveSeasonCatalog): SeasonRuntimeState =
+            requireNotNull(stateRepository.getNow(SeasonRuntimeState.stateId(catalog))) {
+                "Season runtime state is not loaded"
+            }.validatedAgainst(catalog)
+
+        override fun journalRecords(): List<SeasonTrophyJournalRecord> = journalRepository.allNow()
+
+        override suspend fun persistState(state: SeasonRuntimeState) {
+            stateRepository.markDirty(state)
+            stateRepository.saveDirty().getOrThrow()
+        }
+
+        override suspend fun persistJournal(record: SeasonTrophyJournalRecord) {
+            journalRepository.markDirty(record.validated())
+            journalRepository.saveDirty().getOrThrow()
+        }
+    }
+
     private class RedisContractSubmissionPersistence(
         private val contractRepository: CachedRepository<ResourceContractRecord>,
         private val journalRepository: CachedRepository<ContractSubmissionJournalRecord>,
@@ -1162,6 +1485,7 @@ object ContractsMetrics {
         seasonCatalog: ObserveSeasonCatalog?,
         seasonState: SeasonRuntimeState?,
         seasonMoneyJournal: SeasonMoneyJournalSummary,
+        seasonTrophyJournal: SeasonTrophyJournalSummary,
         dungeonObservation: DungeonContractObservationSnapshot,
     ): List<MetricPoint> =
         buildList {
@@ -1187,7 +1511,64 @@ object ContractsMetrics {
             )
             add(point("arc_season_catalog_available", "Whether the exact Economy V2 season catalog is loaded", seasonCatalog != null))
             add(point("arc_season_state_available", "Whether durable season project and admission state is loaded", seasonState != null))
+            add(
+                MetricPoint(
+                    "arc_season_dungeon_launches",
+                    "Durable season dungeon launches grouped by bounded state",
+                    (seasonState?.dungeonLaunchTokens?.size ?: 0).toDouble(),
+                    mapOf("state" to "pending"),
+                ),
+            )
+            add(
+                MetricPoint(
+                    "arc_season_dungeon_launches",
+                    "Durable season dungeon launches grouped by bounded state",
+                    (seasonState?.authorizedDungeonRuns?.size ?: 0).toDouble(),
+                    mapOf("state" to "authorized"),
+                ),
+            )
             add(point("arc_season_money_journal_available", "Whether the durable season money journal is loaded", seasonMoneyJournal.available))
+            add(
+                point(
+                    "arc_season_trophy_journal_available",
+                    "Whether the durable bound trophy contribution journal is loaded",
+                    seasonTrophyJournal.available,
+                ),
+            )
+            add(
+                MetricPoint(
+                    "arc_season_trophy_journal_records",
+                    "Durable bound trophy contributions grouped by bounded state",
+                    seasonTrophyJournal.records.toDouble(),
+                    mapOf("state" to "all"),
+                ),
+            )
+            seasonTrophyJournal.statusCounts.forEach { (state, count) ->
+                add(
+                    MetricPoint(
+                        "arc_season_trophy_journal_records",
+                        "Durable bound trophy contributions grouped by bounded state",
+                        count.toDouble(),
+                        mapOf("state" to state),
+                    ),
+                )
+            }
+            add(
+                MetricPoint(
+                    "arc_season_trophy_journal_quantity",
+                    "Bound trophy quantity awaiting state commit or manual review",
+                    seasonTrophyJournal.removedPendingCommitQuantity.toDouble(),
+                    mapOf("state" to "removed_pending_commit"),
+                ),
+            )
+            add(
+                MetricPoint(
+                    "arc_season_trophy_journal_quantity",
+                    "Bound trophy quantity awaiting state commit or manual review",
+                    seasonTrophyJournal.manualReviewQuantity.toDouble(),
+                    mapOf("state" to "manual_review"),
+                ),
+            )
             add(
                 MetricPoint(
                     "arc_season_money_journal_records",

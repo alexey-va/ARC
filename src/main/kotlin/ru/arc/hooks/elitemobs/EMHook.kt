@@ -1,6 +1,9 @@
 package ru.arc.hooks.elitemobs
 
 import com.magmaguy.elitemobs.economy.EconomyHandler
+import com.magmaguy.elitemobs.config.contentpackages.ContentPackagesConfig
+import com.magmaguy.elitemobs.config.contentpackages.ContentPackagesConfigFields
+import com.magmaguy.elitemobs.instanced.dungeons.DynamicDungeonInstance
 import com.magmaguy.elitemobs.items.ScalableItemConstructor
 import com.magmaguy.elitemobs.items.customitems.CustomItem
 import com.magmaguy.elitemobs.items.itemconstructor.ItemConstructor
@@ -78,6 +81,36 @@ class EMHook internal constructor(
             ?.get(player.uniqueId)
             ?.getFullPlayerTier(false)
             ?: 1
+
+    fun canLaunchSeasonDungeon(player: Player, blueprintWorld: String): Boolean {
+        val packageEntry = seasonDungeonPackage(blueprintWorld) ?: return false
+        val fields = packageEntry.value
+        return fields.contentType == ContentPackagesConfigFields.ContentType.DYNAMIC_DUNGEON &&
+            fields.difficulties.any { difficulty -> difficulty["name"]?.toString() == "normal" } &&
+            (fields.permission.isNullOrBlank() || player.hasPermission(fields.permission))
+    }
+
+    fun launchSeasonDungeon(player: Player, blueprintWorld: String) {
+        val packageEntry = requireNotNull(seasonDungeonPackage(blueprintWorld)) {
+            "EliteMobs season dungeon package is unavailable"
+        }
+        val fields = packageEntry.value
+        require(fields.contentType == ContentPackagesConfigFields.ContentType.DYNAMIC_DUNGEON) {
+            "Season dungeon package is not dynamic"
+        }
+        require(fields.difficulties.any { difficulty -> difficulty["name"]?.toString() == "normal" }) {
+            "Season dungeon has no exact normal difficulty"
+        }
+        require(fields.permission.isNullOrBlank() || player.hasPermission(fields.permission)) {
+            "Player lacks the season dungeon permission"
+        }
+        DynamicDungeonInstance.setupDynamicDungeon(player, packageEntry.key, "normal", tier(player).coerceAtLeast(1))
+    }
+
+    private fun seasonDungeonPackage(blueprintWorld: String) =
+        ContentPackagesConfig.getDungeonPackages().entries.singleOrNull { (_, fields) ->
+            fields.worldName?.equals(blueprintWorld.trim(), ignoreCase = true) == true
+        }
 
     @Synchronized
     fun reload() {
