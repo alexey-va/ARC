@@ -16,6 +16,12 @@ class ContractsConfigTest : StringSpec({
         config.mode shouldBe ContractsMode.OBSERVE
         config.serverWeeklyBudgetMinor shouldBe 24_300_000L
         config.resourceOrders().shouldHaveSize(5)
+        val season = config.observeSeasonCatalog()
+        requireNotNull(season)
+        season.completionStage shouldBe "expedition_museum"
+        season.dungeonContracts.size shouldBe 4
+        season.projectStages.size shouldBe 4
+        season.dungeonContracts.getValue("bridge_recon").requiresProjectStage shouldBe "track_and_lighting"
     }
 
     "loads exact decimal money and explicit resource-order windows" {
@@ -156,5 +162,44 @@ class ContractsConfigTest : StringSpec({
         shouldThrow<IllegalArgumentException> {
             ContractsConfig.fromFile(root).validated()
         }.message shouldBe "Contract enum 'mode' must be one of disabled, observe, enforce"
+    }
+
+    "rejects an observe season catalog in enforce mode" {
+        val resource = requireNotNull(ContractsConfigTest::class.java.getResource("/contracts/modules/contracts.yml"))
+        val source = Path.of(resource.toURI())
+        val root = Files.createTempDirectory("arc-contract-season-enforce")
+        Files.createDirectories(root.resolve("modules"))
+        Files.writeString(
+            root.resolve("modules/contracts.yml"),
+            Files.readString(source).replace("mode: observe", "mode: enforce"),
+        )
+
+        shouldThrow<IllegalArgumentException> {
+            ContractsConfig.fromFile(root).validated()
+        }.message shouldBe "Season catalog is observe-only and cannot be loaded outside observe mode"
+    }
+
+    "rejects a season project locked behind its own dungeon reward" {
+        val resource = requireNotNull(ContractsConfigTest::class.java.getResource("/contracts/modules/contracts.yml"))
+        val source = Path.of(resource.toURI())
+        val root = Files.createTempDirectory("arc-contract-season-cycle")
+        Files.createDirectories(root.resolve("modules"))
+        val broken =
+            Files.readString(source)
+                .replace(
+                    "requires-project-stage: track_and_lighting\n      expected-active-minutes: 45",
+                    "requires-project-stage: expedition_museum\n      expected-active-minutes: 45",
+                ).replace(
+                    "        unlocks-dungeon-contracts:\n        - bridge_recon\n        unlock: visible_rail_and_lighting_milestone",
+                    "        unlocks-dungeon-contracts: []\n        unlock: visible_rail_and_lighting_milestone",
+                ).replace(
+                    "        unlocks-dungeon-contracts: []\n        unlock: season_museum_finale",
+                    "        unlocks-dungeon-contracts:\n        - bridge_recon\n        unlock: season_museum_finale",
+                )
+        Files.writeString(root.resolve("modules/contracts.yml"), broken)
+
+        shouldThrow<IllegalArgumentException> {
+            ContractsConfig.fromFile(root).validated()
+        }.message shouldBe "Season project progression is cyclic or reward-locked"
     }
 })

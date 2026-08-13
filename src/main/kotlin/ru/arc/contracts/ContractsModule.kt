@@ -349,6 +349,7 @@ object ContractsManager {
             "submissionRuntimeReady" to SUBMISSION_RUNTIME_READY,
             "submissionsEnabled" to submissionsEnabled(),
             "serverWeeklyBudgetMinor" to (config?.serverWeeklyBudgetMinor ?: 0L),
+            "seasonCatalog" to config?.observeSeasonCatalog()?.summary(),
             "submissionJournal" to journalSummary(),
             "orders" to views,
         )

@@ -14,6 +14,72 @@ enum class ContractsMode(val label: String) {
     ENFORCE("enforce"),
 }
 
+data class ObserveDungeonContractDefinition(
+    val id: String,
+    val displayName: String,
+    val world: String,
+    val requiresProjectStage: String,
+    val expectedActiveMinutes: Int,
+    val rewardCooldownMinutes: Int,
+    val payoutMinorPerPlayer: Long,
+    val entryBurnMinorPerPlayer: Long,
+    val minimumActiveShare: Double,
+    val weeklyQualifyingPlayerCap: Int,
+    val plannedBoundReward: String,
+)
+
+data class ObserveProjectStageDefinition(
+    val id: String,
+    val displayName: String,
+    val requiresProjectStages: Set<String>,
+    val cashContributionMinor: Long,
+    val requiredResources: Map<String, Long>,
+    val requiredBoundRewards: Map<String, Long>,
+    val unlocksDungeonContracts: Set<String>,
+    val unlock: String,
+)
+
+data class ObserveSeasonCatalog(
+    val id: String,
+    val title: String,
+    val completionStage: String,
+    val durationDays: Int,
+    val dungeonContracts: Map<String, ObserveDungeonContractDefinition>,
+    val projectId: String,
+    val projectTitle: String,
+    val projectStages: Map<String, ObserveProjectStageDefinition>,
+) {
+    fun summary(): Map<String, Any?> =
+        linkedMapOf(
+            "observeOnly" to true,
+            "id" to id,
+            "title" to title,
+            "completionStage" to completionStage,
+            "durationDays" to durationDays,
+            "dungeonContracts" to dungeonContracts.values,
+            "publicProject" to
+                linkedMapOf(
+                    "id" to projectId,
+                    "title" to projectTitle,
+                    "stages" to projectStages.values,
+                ),
+        )
+
+    fun validatedResourceLinks(resourceOrders: List<ResourceContractDefinition>): ObserveSeasonCatalog {
+        val quantities = mutableMapOf<String, Long>()
+        projectStages.values.forEach { stage ->
+            stage.requiredResources.forEach { (orderId, quantity) ->
+                quantities[orderId] = Math.addExact(quantities[orderId] ?: 0L, quantity)
+            }
+        }
+        val targets = resourceOrders.associate { it.id to it.targetQuantity }
+        require(quantities == targets) {
+            "Season project resource requirements must exactly consume configured resource-order targets"
+        }
+        return this
+    }
+}
+
 open class ContractsConfig(
     private val config: Config,
 ) {
@@ -31,7 +97,8 @@ open class ContractsConfig(
         mode
         require(SERVER_ID_PATTERN.matches(leaderServer)) { "Invalid contracts leader-server: $leaderServer" }
         serverWeeklyBudgetMinor
-        resourceOrders()
+        val orders = resourceOrders()
+        observeSeasonCatalog()?.validatedResourceLinks(orders)
         return this
     }
 
@@ -82,6 +149,131 @@ open class ContractsConfig(
         return definitions
     }
 
+    open fun observeSeasonCatalog(): ObserveSeasonCatalog? {
+        if (!config.exists("season-catalog")) return null
+        require(mode == ContractsMode.OBSERVE) {
+            "Season catalog is observe-only and cannot be loaded outside observe mode"
+        }
+        val root = "season-catalog"
+        val seasonId = normalizedId(config.string("$root.id", ""), "$root.id")
+        val completionStage = normalizedId(config.string("$root.completion-stage", ""), "$root.completion-stage")
+        val dungeonIds = normalizedKeys("$root.dungeon-contracts", MAX_SEASON_DUNGEONS)
+        val dungeons =
+            dungeonIds.associateWith { id ->
+                val path = "$root.dungeon-contracts.$id"
+                ObserveDungeonContractDefinition(
+                    id = id,
+                    displayName = printable(config.string("$path.display-name", ""), "$path.display-name"),
+                    world = normalizedId(config.string("$path.world", ""), "$path.world"),
+                    requiresProjectStage =
+                        normalizedId(config.string("$path.requires-project-stage", ""), "$path.requires-project-stage"),
+                    expectedActiveMinutes = positiveInt("$path.expected-active-minutes"),
+                    rewardCooldownMinutes = positiveInt("$path.reward-cooldown-minutes"),
+                    payoutMinorPerPlayer = moneyMinor(config.string("$path.payout-per-qualifying-player", ""), "$path.payout-per-qualifying-player"),
+                    entryBurnMinorPerPlayer = moneyMinor(config.string("$path.entry-burn-per-player", ""), "$path.entry-burn-per-player"),
+                    minimumActiveShare = strictShare("$path.minimum-active-share"),
+                    weeklyQualifyingPlayerCap = positiveInt("$path.weekly-qualifying-player-cap"),
+                    plannedBoundReward = namespacedKey(config.string("$path.planned-bound-reward", ""), "$path.planned-bound-reward"),
+                )
+            }
+        require(dungeons.values.map { it.world }.toSet().size == dungeons.size) {
+            "Season dungeon worlds must be unique"
+        }
+        require(dungeons.values.map { it.plannedBoundReward }.toSet().size == dungeons.size) {
+            "Season dungeon bound rewards must be unique"
+        }
+
+        val projectRoot = "$root.public-project"
+        val stageIds = normalizedKeys("$projectRoot.stages", MAX_PROJECT_STAGES)
+        val stages =
+            stageIds.associateWith { id ->
+                val path = "$projectRoot.stages.$id"
+                ObserveProjectStageDefinition(
+                    id = id,
+                    displayName = printable(config.string("$path.display-name", ""), "$path.display-name"),
+                    requiresProjectStages = normalizedList("$path.requires-project-stages"),
+                    cashContributionMinor =
+                        moneyMinor(config.string("$path.cash-contribution", ""), "$path.cash-contribution", allowZero = true),
+                    requiredResources = positiveQuantityMap("$path.required-resources"),
+                    requiredBoundRewards = positiveQuantityMap("$path.required-bound-rewards", namespacedKeys = true),
+                    unlocksDungeonContracts = normalizedList("$path.unlocks-dungeon-contracts"),
+                    unlock = normalizedId(config.string("$path.unlock", ""), "$path.unlock"),
+                ).also { stage ->
+                    require(id !in stage.requiresProjectStages) {
+                        "Season project stage '$id' cannot require itself"
+                    }
+                }
+            }
+        require(completionStage in stages) { "Season completion stage '$completionStage' is missing" }
+        require(stageIds.lastOrNull() == completionStage) { "Season completion stage must be declared last" }
+        val dungeonUnlocks = mutableMapOf<String, String>()
+        stages.values.forEach { stage ->
+            require(stage.requiresProjectStages.all(stages::containsKey)) {
+                "Season project stage '${stage.id}' references an unknown prerequisite"
+            }
+            stage.unlocksDungeonContracts.forEach { dungeonId ->
+                require(dungeonId in dungeons) { "Season project stage '${stage.id}' unlocks unknown dungeon '$dungeonId'" }
+                require(dungeonUnlocks.put(dungeonId, stage.id) == null) {
+                    "Season dungeon '$dungeonId' is unlocked by more than one stage"
+                }
+            }
+        }
+        require(dungeonUnlocks.keys == dungeons.keys) { "Every season dungeon must have exactly one project-stage unlock" }
+        dungeons.values.forEach { dungeon ->
+            require(dungeonUnlocks[dungeon.id] == dungeon.requiresProjectStage) {
+                "Season dungeon '${dungeon.id}' unlock does not match its required project stage"
+            }
+        }
+
+        val rewardsByDungeon = dungeons.values.associate { it.plannedBoundReward to it.id }
+        val reachable = mutableSetOf<String>()
+        do {
+            val next =
+                stages.values.filter { stage ->
+                    stage.id !in reachable &&
+                        stage.requiresProjectStages.all(reachable::contains) &&
+                        stage.requiredBoundRewards.keys.all { reward ->
+                            dungeons[rewardsByDungeon[reward]]?.requiresProjectStage in reachable
+                        }
+                }
+            reachable += next.map { it.id }
+        } while (next.isNotEmpty())
+        require(reachable == stages.keys) { "Season project progression is cyclic or reward-locked" }
+        val completion = stages.getValue(completionStage)
+        require(completion.requiredBoundRewards.keys == rewardsByDungeon.keys) {
+            "Season completion stage must consume every planned dungeon reward"
+        }
+        val rewardConsumptionCounts =
+            stages.values
+                .flatMap { it.requiredBoundRewards.keys }
+                .groupingBy { it }
+                .eachCount()
+        require(rewardConsumptionCounts == rewardsByDungeon.keys.associateWith { 1 }) {
+            "Every planned dungeon reward must be consumed by exactly one project stage"
+        }
+        val prerequisiteClosure = mutableSetOf<String>()
+        val pending = ArrayDeque<String>().apply { addAll(completion.requiresProjectStages) }
+        while (pending.isNotEmpty()) {
+            val stageId = pending.removeFirst()
+            if (!prerequisiteClosure.add(stageId)) continue
+            pending.addAll(stages.getValue(stageId).requiresProjectStages)
+        }
+        require(prerequisiteClosure == stages.keys - completionStage) {
+            "Season completion stage must depend on every earlier project stage"
+        }
+
+        return ObserveSeasonCatalog(
+            id = seasonId,
+            title = printable(config.string("$root.title", ""), "$root.title"),
+            completionStage = completionStage,
+            durationDays = positiveInt("$root.duration-days"),
+            dungeonContracts = dungeons,
+            projectId = normalizedId(config.string("$projectRoot.id", ""), "$projectRoot.id"),
+            projectTitle = printable(config.string("$projectRoot.title", ""), "$projectRoot.title"),
+            projectStages = stages,
+        )
+    }
+
     private inline fun <reified E : Enum<E>> strictEnum(path: String, default: E): E {
         val raw = config.stringOrNull(path)?.trim() ?: return default
         return enumValues<E>().firstOrNull { it.name.equals(raw, ignoreCase = true) }
@@ -90,9 +282,76 @@ open class ContractsConfig(
             )
     }
 
+    private fun normalizedKeys(path: String, maximum: Int): List<String> {
+        val keys = config.keys(path).toList()
+        require(keys.isNotEmpty() && keys.size <= maximum) { "$path must contain 1..$maximum entries" }
+        keys.forEach { require(normalizedId(it, path) == it) { "$path keys must already be normalized" } }
+        return keys
+    }
+
+    private fun normalizedList(path: String): Set<String> {
+        val values = config.stringListOrNull(path) ?: throw IllegalArgumentException("$path must be an explicit list")
+        val normalized = values.map { normalizedId(it, path) }
+        require(normalized.size == normalized.toSet().size) { "$path must not contain duplicates" }
+        return normalized.toSet()
+    }
+
+    private fun positiveQuantityMap(path: String, namespacedKeys: Boolean = false): Map<String, Long> =
+        config.keys(path).associateWith { key ->
+            val normalized = if (namespacedKeys) namespacedKey(key, path) else normalizedId(key, path)
+            require(normalized == key) { "$path keys must already be normalized" }
+            positiveLong("$path.$key")
+        }
+
+    private fun positiveInt(path: String): Int {
+        val value = positiveLong(path)
+        require(value <= Int.MAX_VALUE) { "$path exceeds the supported integer range" }
+        return value.toInt()
+    }
+
+    private fun positiveLong(path: String): Long {
+        val raw = config.stringOrNull(path) ?: throw IllegalArgumentException("$path must be present")
+        val value = raw.toLongOrNull() ?: throw IllegalArgumentException("$path must be an integer")
+        require(value > 0L) { "$path must be positive" }
+        return value
+    }
+
+    private fun strictShare(path: String): Double {
+        val raw = config.stringOrNull(path) ?: throw IllegalArgumentException("$path must be present")
+        val value = raw.toDoubleOrNull() ?: throw IllegalArgumentException("$path must be numeric")
+        require(value.isFinite() && value > 0.0 && value <= 1.0) { "$path must be in (0, 1]" }
+        return value
+    }
+
+    private fun normalizedId(raw: String, path: String): String {
+        val normalized = raw.trim().lowercase()
+        require(raw.trim() == normalized && ID_PATTERN.matches(normalized)) { "$path must be a normalized id" }
+        return normalized
+    }
+
+    private fun namespacedKey(raw: String, path: String): String {
+        val normalized = raw.trim().lowercase()
+        require(raw.trim() == normalized && NAMESPACED_KEY_PATTERN.matches(normalized)) {
+            "$path must be a normalized namespaced key"
+        }
+        return normalized
+    }
+
+    private fun printable(raw: String, path: String): String {
+        val value = raw.trim()
+        require(value.isNotBlank() && value.length <= 96 && value.none(Char::isISOControl)) {
+            "$path must be 1..96 printable characters"
+        }
+        return value
+    }
+
     companion object {
         const val MAX_CONFIGURED_ORDERS = 64
+        const val MAX_SEASON_DUNGEONS = 16
+        const val MAX_PROJECT_STAGES = 16
         private val SERVER_ID_PATTERN = Regex("[a-z0-9][a-z0-9_-]{2,31}")
+        private val ID_PATTERN = Regex("[a-z0-9][a-z0-9_-]{2,63}")
+        private val NAMESPACED_KEY_PATTERN = Regex("[a-z0-9_.-]+:[a-z0-9_./-]+")
 
         fun fromFile(dataPath: Path): ContractsConfig =
             ContractsConfig(ConfigManager.of(dataPath, "modules/contracts.yml"))
