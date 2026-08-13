@@ -119,6 +119,7 @@ data class SeasonRuntimeState(
     val admissionPasses: Map<String, DungeonAdmissionPass> = emptyMap(),
     val dungeonLaunchTokens: Map<String, SeasonDungeonLaunchToken> = emptyMap(),
     val authorizedDungeonRuns: Map<String, SeasonDungeonRunAuthorization> = emptyMap(),
+    val recentDungeonRewardReceipts: Map<String, SeasonDungeonRewardReceipt> = emptyMap(),
     val recentTrophyReceipts: Map<String, SeasonTrophyContributionReceipt> = emptyMap(),
     val recentReceipts: Map<String, SeasonMoneyActionReceipt> = emptyMap(),
     val revision: Long = 0L,
@@ -237,6 +238,24 @@ data class SeasonRuntimeState(
             }
         }
 
+        require(recentDungeonRewardReceipts.size <= MAX_RECENT_DUNGEON_REWARD_RECEIPTS) {
+            "Season dungeon reward receipt capacity exceeded"
+        }
+        recentDungeonRewardReceipts.forEach { (rewardId, receipt) ->
+            receipt.validated()
+            require(rewardId == receipt.rewardId) { "Season dungeon reward receipt key does not match its contents" }
+            require(receipt.catalogDigest == catalog.revisionDigest()) {
+                "Season dungeon reward receipt uses another catalog"
+            }
+            val dungeon = requireNotNull(catalog.dungeonContracts[receipt.dungeonContractId]) {
+                "Season dungeon reward receipt references an unknown dungeon"
+            }
+            require(
+                receipt.payoutMinor == dungeon.payoutMinorPerPlayer &&
+                    receipt.trophyItemKey == dungeon.plannedBoundReward,
+            ) { "Season dungeon reward receipt does not match its catalog policy" }
+        }
+
         require(recentTrophyReceipts.size <= MAX_RECENT_TROPHY_RECEIPTS) {
             "Season trophy receipt capacity exceeded"
         }
@@ -265,6 +284,7 @@ data class SeasonRuntimeState(
         const val MAX_ADMISSION_PASSES = 16_384
         const val MAX_DUNGEON_LAUNCH_TOKENS = 64
         const val MAX_AUTHORIZED_DUNGEON_RUNS = 128
+        const val MAX_RECENT_DUNGEON_REWARD_RECEIPTS = 512
         const val MAX_RECENT_TROPHY_RECEIPTS = 512
         const val MAX_RECENT_RECEIPTS = 512
         const val MAX_ACTION_ID_LENGTH = 96

@@ -9,6 +9,7 @@ import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerTeleportEvent
+import org.bukkit.event.player.PlayerJoinEvent
 import ru.arc.ARC
 import ru.arc.config.ConfigManager
 import ru.arc.contracts.ContractsManager
@@ -68,7 +69,13 @@ class EMListener : Listener {
             runId = runId,
             world = world,
             participantIds = participantIds(instance),
+            instanceWorld = instance.instancedWorldName,
         )
+    }
+
+    @EventHandler
+    fun resumePendingSeasonDungeonRewards(event: PlayerJoinEvent) {
+        ContractsManager.resumeSeasonDungeonRewards(event.player.uniqueId)
     }
 
     @EventHandler

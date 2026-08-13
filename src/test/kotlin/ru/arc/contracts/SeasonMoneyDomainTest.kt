@@ -174,6 +174,7 @@ class SeasonMoneyDomainTest : StringSpec({
         val legacyJson = gson.toJsonTree(SeasonRuntimeState.empty(catalog)).asJsonObject
         legacyJson.remove("dungeonLaunchTokens")
         legacyJson.remove("authorizedDungeonRuns")
+        legacyJson.remove("recentDungeonRewardReceipts")
         legacyJson.remove("recentTrophyReceipts")
 
         val decoded = gson.fromJson(legacyJson, SeasonRuntimeState::class.java)

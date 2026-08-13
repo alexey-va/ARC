@@ -267,6 +267,41 @@ class SeasonDungeonLaunchGate(
         return current
     }
 
+    /**
+     * A paid pass represents one entry, not one successful completion. Consume
+     * every authorized participant at the native start so leaving early cannot
+     * make the same burned admission reusable.
+     */
+    fun consumeAuthorizedRunAdmissions(
+        catalog: ObserveSeasonCatalog,
+        state: SeasonRuntimeState,
+        instanceWorld: String,
+        now: Long,
+    ): SeasonRuntimeState {
+        val current = state.validatedAgainst(catalog)
+        val normalized = instanceWorld.trim().lowercase()
+        val authorization = current.authorizedDungeonRuns[normalized] ?: return current
+        val passes = current.admissionPasses.toMutableMap()
+        var changed = false
+        authorization.participantIds.forEach { playerId ->
+            val key = SeasonRuntimeState.admissionKey(playerId, authorization.dungeonContractId)
+            val pass = requireNotNull(passes[key]) { "Authorized dungeon admission pass is missing" }
+            when {
+                pass.status == DungeonAdmissionPassStatus.CONSUMED && pass.boundRunId == authorization.runId -> Unit
+                pass.status == DungeonAdmissionPassStatus.BOUND_TO_RUN && pass.boundRunId == authorization.runId -> {
+                    passes[key] = pass.copy(status = DungeonAdmissionPassStatus.CONSUMED, consumedAt = now)
+                    changed = true
+                }
+                else -> throw IllegalArgumentException("Authorized dungeon admission is not bound to this run")
+            }
+        }
+        if (!changed) return current
+        return current.copy(
+            admissionPasses = passes,
+            revision = Math.addExact(current.revision, 1L),
+        ).validatedAgainst(catalog)
+    }
+
     fun finishAuthorizedRun(
         catalog: ObserveSeasonCatalog,
         state: SeasonRuntimeState,

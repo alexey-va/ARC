@@ -1,6 +1,7 @@
 package ru.arc.contracts
 
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.runBlocking
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.event.inventory.ClickType
@@ -49,5 +50,31 @@ class PaperSeasonTrophyItemsTest : TestBase() {
         val sell = PlayerCommandPreprocessEvent(player, "/sell hand")
         listener.onSellCommand(sell)
         sell.isCancelled shouldBe true
+    }
+
+    @Test
+    fun `dungeon reward delivery writes and verifies one exact owner bound trophy`() = runBlocking {
+        val player = server.addPlayer("DungeonWinner")
+        val gateway = PaperSeasonDungeonTrophyDeliveryGateway { uuid -> player.takeIf { it.uniqueId == uuid } }
+        val payload = gateway.createPayload(player.uniqueId.toString(), "arc:road_revival/mines_core")
+        val delivery = requireNotNull(gateway.prepareDelivery(player.uniqueId.toString(), payload))
+
+        delivery.deliverExact() shouldBe ContractInventoryMutation.Confirmed
+
+        val trophy = player.inventory.storageContents.filterNotNull().single()
+        PaperSeasonTrophyItems.identity(trophy) shouldBe "arc:road_revival/mines_core"
+        PaperSeasonTrophyItems.owner(trophy) shouldBe player.uniqueId
+    }
+
+    @Test
+    fun `dungeon reward delivery proves no mutation when its prepared slot changed`() = runBlocking {
+        val player = server.addPlayer("BusyDungeonWinner")
+        val gateway = PaperSeasonDungeonTrophyDeliveryGateway { uuid -> player.takeIf { it.uniqueId == uuid } }
+        val payload = gateway.createPayload(player.uniqueId.toString(), "arc:road_revival/mines_core")
+        val delivery = requireNotNull(gateway.prepareDelivery(player.uniqueId.toString(), payload))
+        player.inventory.setItem(0, org.bukkit.inventory.ItemStack(Material.STONE))
+
+        delivery.deliverExact() shouldBe ContractInventoryMutation.NotPerformed("slot_changed")
+        player.inventory.storageContents.any { PaperSeasonTrophyItems.isBoundTrophy(it) } shouldBe false
     }
 }

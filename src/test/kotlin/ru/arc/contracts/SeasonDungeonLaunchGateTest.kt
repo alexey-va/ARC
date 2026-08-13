@@ -68,9 +68,14 @@ class SeasonDungeonLaunchGateTest : StringSpec({
             now + 2,
         ) shouldBe null
 
-        val finished = gate.finishAuthorizedRun(catalog, result.state, "EM_ID_THE_MINES_1")
+        val started =
+            gate.consumeAuthorizedRunAdmissions(catalog, result.state, "em_id_the_mines_1", now + 3)
+        started.admissionPasses.values.single().status shouldBe DungeonAdmissionPassStatus.CONSUMED
+        gate.consumeAuthorizedRunAdmissions(catalog, started, "em_id_the_mines_1", now + 4) shouldBe started
+
+        val finished = gate.finishAuthorizedRun(catalog, started, "EM_ID_THE_MINES_1")
         finished.authorizedDungeonRuns shouldBe emptyMap()
-        finished.admissionPasses.values.single().status shouldBe DungeonAdmissionPassStatus.AVAILABLE
+        finished.admissionPasses.values.single().status shouldBe DungeonAdmissionPassStatus.CONSUMED
     }
 
     "native cancellation before clone releases authorization and passes" {

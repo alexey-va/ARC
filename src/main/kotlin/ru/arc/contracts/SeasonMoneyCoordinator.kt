@@ -331,6 +331,27 @@ class SeasonMoneyCoordinator(
         return recovered
     }
 
+    suspend fun consumeAuthorizedDungeonAdmissions(
+        catalog: ObserveSeasonCatalog,
+        instanceWorld: String,
+        now: Long,
+    ): SeasonRuntimeState {
+        val current = loadState(catalog) ?: throw IllegalStateException("Season runtime state is unavailable")
+        val next = dungeonLaunchGate.consumeAuthorizedRunAdmissions(catalog, current, instanceWorld, now)
+        if (next != current) persistence.persistState(next)
+        return next
+    }
+
+    suspend fun finishAuthorizedDungeonRun(
+        catalog: ObserveSeasonCatalog,
+        instanceWorld: String,
+    ): SeasonRuntimeState {
+        val current = loadState(catalog) ?: throw IllegalStateException("Season runtime state is unavailable")
+        val next = dungeonLaunchGate.finishAuthorizedRun(catalog, current, instanceWorld)
+        if (next != current) persistence.persistState(next)
+        return next
+    }
+
     suspend fun consumeAdmissions(
         catalog: ObserveSeasonCatalog,
         dungeonContractId: String,
