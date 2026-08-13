@@ -1,5 +1,7 @@
 rootProject.name = "ARC"
 
+include(":rus-duels")
+
 val arcCoreDir = sequenceOf(
     file("../arc-core"),
     file("../../IdeaProjects/arc-core"),

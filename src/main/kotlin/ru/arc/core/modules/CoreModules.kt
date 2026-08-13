@@ -45,6 +45,8 @@ import ru.arc.stock.StockMarket
 import ru.arc.stock.StockPlayer
 import ru.arc.stock.StockPlayerManager
 import ru.arc.sync.CMISync
+import ru.arc.sync.duels.DuelStatsBridge
+import ru.arc.sync.duels.DuelsSync
 import ru.arc.sync.EmSync
 import ru.arc.sync.SkillsSync
 import ru.arc.sync.SlimefunSync
@@ -675,10 +677,19 @@ object SyncModule : PluginModule {
             SyncManager.registerSync(SkillsSync::class.java, SkillsSync())
         }
 
+        if (config.bool("sync.duels", true)) {
+            DuelsSync.createOrNull()?.let { sync ->
+                info("Starting RusCrafting Duels stats sync")
+                SyncManager.registerSync(DuelsSync::class.java, sync)
+                DuelStatsBridge.install(sync)
+            }
+        }
+
         SyncManager.startSaveAllTasks()
     }
 
     override fun shutdown() {
+        DuelStatsBridge.uninstall()
         SyncManager.shutdown()
     }
 }

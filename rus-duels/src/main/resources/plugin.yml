@@ -1,0 +1,17 @@
+name: Duels
+version: '${version}'
+main: me.dartanman.duels.Duels
+api-version: '1.21'
+authors: [Dartanman, RusCrafting]
+description: Safety-hardened RusCrafting fork of Dartanboy Duels
+loadbefore: [ARC, HuskSync]
+commands:
+  duel:
+    description: Вызвать игрока на дуэль или управлять текущей дуэлью
+    usage: /duel <игрок|accept|deny|leave|stats>
+    aliases: [duels, 1v1]
+permissions:
+  duels.use:
+    default: true
+  duels.admin:
+    default: op
