@@ -74,6 +74,42 @@ class ContractSubmissionJournalTest : StringSpec({
         }.message shouldBe "Journal cannot advance from payment_started; expected items_escrowed"
     }
 
+    "uses every unfinished journal as the only durable quota reservation" {
+        val prepared = prepared("quota-one")
+        prepared.quotaReservation() shouldBe ContractQuotaReservation("quota-one", "player-1", 8L, 2_000L)
+
+        val cancelled = ContractSubmissionJournalEngine.cancelPrepared(prepared, "inventory_missing", 1_501L)
+        cancelled.status shouldBe ContractSubmissionJournalStatus.CANCELLED
+        cancelled.cancellationCode shouldBe "inventory_missing"
+        cancelled.isTerminal() shouldBe true
+        cancelled.quotaReservation() shouldBe null
+    }
+
+    "cancels an item-removal intent only when the adapter proved no mutation" {
+        val started = ContractSubmissionJournalEngine.beginItemRemoval(prepared("no-removal"), 1_501L)
+        val cancelled = ContractSubmissionJournalEngine.confirmNoItemsRemoved(started, "inventory_changed_before_remove", 1_502L)
+
+        cancelled.status shouldBe ContractSubmissionJournalStatus.CANCELLED
+        cancelled.itemRemovalStartedAt shouldBe 1_501L
+        cancelled.cancelledAt shouldBe 1_502L
+        cancelled.hasConfirmedItemEscrow() shouldBe false
+    }
+
+    "halts ambiguous inventory removal and refund evidence for manual review" {
+        val started = ContractSubmissionJournalEngine.beginItemRemoval(prepared("ambiguous-remove"), 1_501L)
+        val removalReview = ContractSubmissionJournalEngine.haltAmbiguousItemRemoval(started, 1_502L)
+        removalReview.reviewReason shouldBe ContractSubmissionReviewReason.INVENTORY_EVIDENCE_CONFLICT
+
+        val escrowed =
+            ContractSubmissionJournalEngine.confirmItemsEscrowed(
+                ContractSubmissionJournalEngine.beginItemRemoval(prepared("ambiguous-refund"), 1_501L),
+                1_502L,
+            )
+        val refundStarted = ContractSubmissionJournalEngine.beginRefund(escrowed, 1_503L)
+        val refundReview = ContractSubmissionJournalEngine.haltAmbiguousRefund(refundStarted, 1_504L)
+        refundReview.reviewReason shouldBe ContractSubmissionReviewReason.REFUND_EVIDENCE_CONFLICT
+    }
+
     "moves every interrupted non-idempotent boundary to manual review" {
         val removalStarted = ContractSubmissionJournalEngine.beginItemRemoval(prepared("remove-crash"), 1_501L)
         val removalReview = ContractSubmissionJournalEngine.recoverInterrupted(removalStarted, 2_000L)

@@ -100,6 +100,35 @@ data class ContractSubmissionReceipt(
     val committedAt: Long,
 )
 
+/**
+ * Quota held by a durable submission journal that has not reached a terminal
+ * state yet. Reservations are deliberately derived from that journal instead
+ * of persisted in a second Redis record, so one durable write reserves both
+ * item quantity and payout budget.
+ */
+data class ContractQuotaReservation(
+    val submissionId: String,
+    val playerId: String,
+    val quantity: Long,
+    val payoutMinor: Long,
+) {
+    init {
+        require(SUBMISSION_ID_PATTERN.matches(submissionId)) {
+            "Invalid contract reservation id"
+        }
+        require(playerId.isNotBlank() && playerId.length <= ResourceContractState.MAX_PLAYER_ID_LENGTH) {
+            "Invalid contract reservation player id"
+        }
+        require(playerId.none(Char::isISOControl)) { "Invalid contract reservation player id" }
+        require(quantity > 0L && payoutMinor > 0L) { "Contract reservation must be positive" }
+    }
+
+    companion object {
+        const val MAX_ACTIVE_RESERVATIONS = 4_096
+        private val SUBMISSION_ID_PATTERN = Regex("[A-Za-z0-9][A-Za-z0-9._-]{2,95}")
+    }
+}
+
 data class ResourceContractState(
     val contractId: String,
     val windowStartsAt: Long,
@@ -223,6 +252,8 @@ enum class SubmissionRejection(val label: String) {
     PLAYER_CAP_REACHED("player_cap_reached"),
     CONTRIBUTOR_LIMIT_REACHED("contributor_limit_reached"),
     BELOW_MINIMUM("below_minimum"),
+    INVENTORY_UNAVAILABLE("inventory_unavailable"),
+    JOURNAL_CAPACITY_REACHED("journal_capacity_reached"),
 }
 
 sealed interface ContractSubmissionPlan {
@@ -260,6 +291,7 @@ object ResourceContractEngine {
         playerId: String,
         requestedQuantity: Int,
         now: Long,
+        reservations: Collection<ContractQuotaReservation> = emptyList(),
     ): ContractSubmissionPlan {
         if (submissionId.isBlank() || submissionId.length > ResourceContractState.MAX_SUBMISSION_ID_LENGTH ||
             playerId.isBlank() || playerId.length > ResourceContractState.MAX_PLAYER_ID_LENGTH ||
@@ -280,22 +312,35 @@ object ResourceContractEngine {
         if (requestedQuantity < definition.minSubmissionQuantity) {
             return ContractSubmissionPlan.Rejected(SubmissionRejection.BELOW_MINIMUM)
         }
-        if (playerId !in state.perPlayerQuantity &&
-            state.perPlayerQuantity.size >= ResourceContractState.MAX_TRACKED_PLAYERS
+        val activeReservations = validatedReservations(definition, state, reservations)
+        if (activeReservations.any { it.submissionId == submissionId }) {
+            return ContractSubmissionPlan.Rejected(SubmissionRejection.STALE_STATE)
+        }
+        val contributors = state.perPlayerQuantity.keys + activeReservations.map { it.playerId }
+        if (playerId !in contributors &&
+            contributors.size >= ResourceContractState.MAX_TRACKED_PLAYERS
         ) {
             return ContractSubmissionPlan.Rejected(SubmissionRejection.CONTRIBUTOR_LIMIT_REACHED)
         }
 
-        val quantityRemaining = (definition.targetQuantity - state.acceptedQuantity).coerceAtLeast(0L)
+        val reservedQuantity = activeReservations.fold(0L) { total, reservation -> Math.addExact(total, reservation.quantity) }
+        val reservedPayout = activeReservations.fold(0L) { total, reservation -> Math.addExact(total, reservation.payoutMinor) }
+        val accountedQuantity = Math.addExact(state.acceptedQuantity, reservedQuantity)
+        val accountedPayout = Math.addExact(state.spentMinor, reservedPayout)
+        val quantityRemaining = (definition.targetQuantity - accountedQuantity).coerceAtLeast(0L)
         if (quantityRemaining == 0L) {
             return ContractSubmissionPlan.Rejected(SubmissionRejection.QUANTITY_EXHAUSTED)
         }
-        val budgetRemaining = (definition.budgetMinor - state.spentMinor).coerceAtLeast(0L)
+        val budgetRemaining = (definition.budgetMinor - accountedPayout).coerceAtLeast(0L)
         val budgetUnits = budgetRemaining / definition.payoutMinorPerUnit
         if (budgetUnits == 0L) {
             return ContractSubmissionPlan.Rejected(SubmissionRejection.BUDGET_EXHAUSTED)
         }
-        val playerAccepted = state.perPlayerQuantity[playerId].orZero()
+        val playerReserved =
+            activeReservations.asSequence()
+                .filter { it.playerId == playerId }
+                .fold(0L) { total, reservation -> Math.addExact(total, reservation.quantity) }
+        val playerAccepted = Math.addExact(state.perPlayerQuantity[playerId].orZero(), playerReserved)
         val playerRemaining = (definition.perPlayerQuantityCap - playerAccepted).coerceAtLeast(0L)
         if (playerRemaining == 0L) {
             return ContractSubmissionPlan.Rejected(SubmissionRejection.PLAYER_CAP_REACHED)
@@ -340,25 +385,86 @@ object ResourceContractEngine {
         committedAt: Long,
     ): ContractCommitResult {
         state.recentReceipts[plan.submissionId]?.let {
+            require(
+                it.playerId == plan.playerId &&
+                    it.quantity == plan.acceptedQuantity &&
+                    it.payoutMinor == plan.payoutMinor,
+            ) { "Committed submission replay disagrees with its receipt" }
             return ContractCommitResult(state, it, changed = false)
         }
         require(state.revision == plan.expectedRevision) { SubmissionRejection.STALE_STATE.label }
         require(state.contractId == definition.id) { SubmissionRejection.WINDOW_MISMATCH.label }
         require(plan.acceptedQuantity > 0L && plan.payoutMinor > 0L) { "Cannot commit an empty submission" }
 
-        val nextQuantity = Math.addExact(state.acceptedQuantity, plan.acceptedQuantity)
-        val nextSpent = Math.addExact(state.spentMinor, plan.payoutMinor)
+        return commitAccepted(
+            definition = definition,
+            state = state,
+            submissionId = plan.submissionId,
+            playerId = plan.playerId,
+            quantity = plan.acceptedQuantity,
+            payoutMinor = plan.payoutMinor,
+            committedAt = committedAt,
+        )
+    }
+
+    /**
+     * Commits a journal-backed reservation without requiring the state revision
+     * captured when it was planned. Other reserved submissions may have
+     * committed first; the durable quota reservation still prevents overspend.
+     */
+    fun commitReserved(
+        definition: ResourceContractDefinition,
+        state: ResourceContractState,
+        reservation: ContractQuotaReservation,
+        committedAt: Long,
+    ): ContractCommitResult {
+        state.recentReceipts[reservation.submissionId]?.let {
+            require(
+                it.playerId == reservation.playerId &&
+                    it.quantity == reservation.quantity &&
+                    it.payoutMinor == reservation.payoutMinor,
+            ) { "Committed reservation replay disagrees with its receipt" }
+            return ContractCommitResult(state, it, changed = false)
+        }
+        require(state.contractId == definition.id) { SubmissionRejection.WINDOW_MISMATCH.label }
+        require(Math.multiplyExact(reservation.quantity, definition.payoutMinorPerUnit) == reservation.payoutMinor) {
+            "Reservation payout does not match contract policy"
+        }
+        return commitAccepted(
+            definition = definition,
+            state = state,
+            submissionId = reservation.submissionId,
+            playerId = reservation.playerId,
+            quantity = reservation.quantity,
+            payoutMinor = reservation.payoutMinor,
+            committedAt = committedAt,
+        )
+    }
+
+    private fun commitAccepted(
+        definition: ResourceContractDefinition,
+        state: ResourceContractState,
+        submissionId: String,
+        playerId: String,
+        quantity: Long,
+        payoutMinor: Long,
+        committedAt: Long,
+    ): ContractCommitResult {
+        require(committedAt >= 0L) { "Contract commit timestamp must be non-negative" }
+
+        val nextQuantity = Math.addExact(state.acceptedQuantity, quantity)
+        val nextSpent = Math.addExact(state.spentMinor, payoutMinor)
         require(nextQuantity <= definition.targetQuantity) { "Submission exceeds contract quantity" }
         require(nextSpent <= definition.budgetMinor) { "Submission exceeds contract budget" }
-        val playerQuantity = Math.addExact(state.perPlayerQuantity[plan.playerId].orZero(), plan.acceptedQuantity)
+        val playerQuantity = Math.addExact(state.perPlayerQuantity[playerId].orZero(), quantity)
         require(playerQuantity <= definition.perPlayerQuantityCap) { "Submission exceeds player cap" }
 
         val receipt =
             ContractSubmissionReceipt(
-                submissionId = plan.submissionId,
-                playerId = plan.playerId,
-                quantity = plan.acceptedQuantity,
-                payoutMinor = plan.payoutMinor,
+                submissionId = submissionId,
+                playerId = playerId,
+                quantity = quantity,
+                payoutMinor = payoutMinor,
                 committedAt = committedAt,
             )
         val receipts = LinkedHashMap(state.recentReceipts)
@@ -379,11 +485,40 @@ object ResourceContractEngine {
                 status = nextStatus,
                 acceptedQuantity = nextQuantity,
                 spentMinor = nextSpent,
-                perPlayerQuantity = state.perPlayerQuantity + (plan.playerId to playerQuantity),
+                perPlayerQuantity = state.perPlayerQuantity + (playerId to playerQuantity),
                 recentReceipts = receipts,
                 revision = Math.addExact(state.revision, 1L),
             )
         return ContractCommitResult(nextState, receipt, changed = true)
+    }
+
+    private fun validatedReservations(
+        definition: ResourceContractDefinition,
+        state: ResourceContractState,
+        reservations: Collection<ContractQuotaReservation>,
+    ): List<ContractQuotaReservation> {
+        require(reservations.size <= ContractQuotaReservation.MAX_ACTIVE_RESERVATIONS) {
+            "Contract reservation set exceeds the journal limit"
+        }
+        reservations.forEach { reservation ->
+            state.recentReceipts[reservation.submissionId]?.let { receipt ->
+                require(
+                    receipt.playerId == reservation.playerId &&
+                        receipt.quantity == reservation.quantity &&
+                        receipt.payoutMinor == reservation.payoutMinor,
+                ) { "Contract reservation disagrees with its committed receipt" }
+            }
+        }
+        val active = reservations.filterNot { it.submissionId in state.recentReceipts }
+        require(active.map { it.submissionId }.toSet().size == active.size) {
+            "Contract reservation set contains duplicate ids"
+        }
+        active.forEach { reservation ->
+            require(Math.multiplyExact(reservation.quantity, definition.payoutMinorPerUnit) == reservation.payoutMinor) {
+                "Contract reservation payout does not match policy"
+            }
+        }
+        return active
     }
 }
 

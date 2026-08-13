@@ -41,9 +41,11 @@ class ContractsMetricsTest : StringSpec({
                             payoutMinorPerUnit = 250L,
                             budgetMinor = 50_000L,
                             spentMinor = 12_500L,
+                            reservedMinor = 1_250L,
                             targetQuantity = 200L,
                             acceptedQuantity = 50L,
-                            remainingQuantity = 150L,
+                            reservedQuantity = 5L,
+                            remainingQuantity = 145L,
                             contributors = 3,
                         ),
                     ),
@@ -60,7 +62,10 @@ class ContractsMetricsTest : StringSpec({
         }.value shouldBeExactly 20.0
         points.first {
             it.name == "arc_contract_quantity" && it.tags["component"] == "remaining"
-        }.value shouldBeExactly 150.0
+        }.value shouldBeExactly 145.0
+        points.first {
+            it.name == "arc_contract_quantity" && it.tags["component"] == "reserved"
+        }.value shouldBeExactly 5.0
         points.flatMap { it.tags.keys }.none { it.contains("player", ignoreCase = true) } shouldBe true
         points.flatMap { it.tags.values }.none { it.contains("player", ignoreCase = true) } shouldBe true
         points.flatMap { it.tags.values }.none { it.contains("submission", ignoreCase = true) } shouldBe true

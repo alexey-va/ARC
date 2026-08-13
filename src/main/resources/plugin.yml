@@ -37,6 +37,7 @@ softdepend:
   - BetterRTP
   - RTP
   - My_Worlds
+  - RedisEconomy
 commands:
   arc:
     description: Main command

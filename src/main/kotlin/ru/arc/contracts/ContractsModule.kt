@@ -4,7 +4,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import ru.arc.ARC
 import ru.arc.core.PluginModule
 import ru.arc.metrics.MetricsModule
@@ -12,7 +15,10 @@ import ru.arc.metrics.core.MetricPoint
 import ru.arc.repository.CachedRepository
 import ru.arc.repository.redisRepo
 import ru.arc.util.Logging.info
+import ru.arc.util.Logging.error
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.CompletableFuture
+import java.util.UUID
 import kotlin.time.Duration.Companion.seconds
 
 object ContractsModule : PluginModule {
@@ -43,8 +49,10 @@ data class ResourceContractView(
     val payoutMinorPerUnit: Long,
     val budgetMinor: Long,
     val spentMinor: Long,
+    val reservedMinor: Long,
     val targetQuantity: Long,
     val acceptedQuantity: Long,
+    val reservedQuantity: Long,
     val remainingQuantity: Long,
     val contributors: Int,
 )
@@ -57,9 +65,10 @@ data class ResourceContractView(
 object ContractsManager {
     // RedisEconomy 4.5.12 updates the balance before asynchronously recording
     // transaction history and exposes no idempotency key. The durable journal
-    // now halts ambiguous crash windows, but live inventory/payment orchestration
-    // and operator reconciliation are still intentionally absent. No config
-    // value may unlock inventory or money mutations.
+    // now halts ambiguous crash windows and the disabled coordinator implements
+    // durable-before-side-effect ordering. Retention, authenticated operator
+    // reconciliation, and a production crash smoke are still required. No
+    // config value may unlock inventory or money mutations before those gates.
     private const val SUBMISSION_RUNTIME_READY = false
 
     private val configRef = AtomicReference<ContractsConfig>()
@@ -67,6 +76,9 @@ object ContractsManager {
     private var scope: CoroutineScope? = null
     private var journalRepo: CachedRepository<ContractSubmissionJournalRecord>? = null
     private var journalScope: CoroutineScope? = null
+    private var submissionScope: CoroutineScope? = null
+    private var submissionCoordinator: ContractSubmissionCoordinator? = null
+    private var submissionMutex = Mutex()
 
     @JvmStatic
     @Synchronized
@@ -122,11 +134,25 @@ object ContractsManager {
             }
         try {
             ensureCurrentStates(loaded, newRepo)
-            recoverInterruptedJournals(loaded, newJournalRepo)
+            recoverInterruptedJournals(loaded, newRepo, newJournalRepo)
+            val newSubmissionScope =
+                if (SUBMISSION_RUNTIME_READY) CoroutineScope(Dispatchers.IO + SupervisorJob()) else null
+            val newSubmissionCoordinator =
+                if (SUBMISSION_RUNTIME_READY) {
+                    ContractSubmissionCoordinator(
+                        RedisContractSubmissionPersistence(newRepo, newJournalRepo),
+                        PaperContractInventoryGateway(),
+                        RedisEconomyContractPaymentGateway(),
+                    )
+                } else {
+                    null
+                }
             repo = newRepo
             scope = newScope
             journalRepo = newJournalRepo
             journalScope = newJournalScope
+            submissionScope = newSubmissionScope
+            submissionCoordinator = newSubmissionCoordinator
         } catch (failure: Throwable) {
             runBlocking {
                 try {
@@ -165,7 +191,9 @@ object ContractsManager {
         }
         if (currentRepo != null) {
             ensureCurrentStates(loaded, currentRepo)
-            journalRepo?.let { recoverInterruptedJournals(loaded, it) }
+            journalRepo?.let { current ->
+                ContractSubmissionJournalAudit.summarize(current.allNow().onEach { it.validated() }, System.currentTimeMillis())
+            }
         }
         publishMetrics()
     }
@@ -177,10 +205,15 @@ object ContractsManager {
         val currentScope = scope
         val currentJournalRepo = journalRepo
         val currentJournalScope = journalScope
+        val currentSubmissionScope = submissionScope
         repo = null
         scope = null
         journalRepo = null
         journalScope = null
+        submissionScope = null
+        submissionCoordinator = null
+        submissionMutex = Mutex()
+        currentSubmissionScope?.cancel()
         try {
             runBlocking {
                 try {
@@ -210,6 +243,50 @@ object ContractsManager {
         SUBMISSION_RUNTIME_READY && isAvailable() && isLeader() && mode() == ContractsMode.ENFORCE
 
     @JvmStatic
+    fun submit(
+        playerId: UUID,
+        contractId: String,
+        requestedQuantity: Int,
+    ): CompletableFuture<ContractSubmissionOutcome> {
+        val submissionId = "arc-${UUID.randomUUID()}"
+        val result = CompletableFuture<ContractSubmissionOutcome>()
+        val currentScope = submissionScope
+        val coordinator = submissionCoordinator
+        val currentMutex = submissionMutex
+        if (!submissionsEnabled() || currentScope == null || coordinator == null) {
+            return result.apply { complete(ContractSubmissionOutcome.Unavailable(submissionId)) }
+        }
+        val definition = configRef.get()?.resourceOrders()?.firstOrNull { it.id == contractId }
+            ?: return result.apply {
+                complete(ContractSubmissionOutcome.Rejected(SubmissionRejection.INVALID_REQUEST))
+            }
+        currentScope.launch {
+            try {
+                val outcome =
+                    currentMutex.withLock {
+                        if (!submissionsEnabled()) {
+                            ContractSubmissionOutcome.Unavailable(submissionId)
+                        } else {
+                            coordinator.submit(
+                                definition,
+                                submissionId,
+                                playerId.toString(),
+                                requestedQuantity,
+                            )
+                        }
+                    }
+                result.complete(outcome)
+            } catch (failure: Throwable) {
+                error("Contract submission {} stopped unexpectedly", submissionId, failure)
+                result.complete(ContractSubmissionOutcome.ManualReview(submissionId))
+            } finally {
+                publishMetrics()
+            }
+        }
+        return result
+    }
+
+    @JvmStatic
     fun currentViews(now: Long = System.currentTimeMillis()): List<ResourceContractView> {
         val config = configRef.get() ?: return emptyList()
         val currentRepo = repo
@@ -217,6 +294,9 @@ object ContractsManager {
             val record = currentRepo?.getNow(ResourceContractRecord.stateId(definition.id, definition.windowStartsAt))
                 ?: ResourceContractRecord.empty(definition)
             val state = record.validatedAgainst(definition).state
+            val reservations = activeReservations(definition, state)
+            val reservedQuantity = reservations.fold(0L) { total, reservation -> Math.addExact(total, reservation.quantity) }
+            val reservedMinor = reservations.fold(0L) { total, reservation -> Math.addExact(total, reservation.payoutMinor) }
             val effectiveStatus =
                 when {
                     now >= definition.windowEndsAt -> ContractStatus.EXPIRED
@@ -234,10 +314,13 @@ object ContractsManager {
                 payoutMinorPerUnit = definition.payoutMinorPerUnit,
                 budgetMinor = definition.budgetMinor,
                 spentMinor = state.spentMinor,
+                reservedMinor = reservedMinor,
                 targetQuantity = definition.targetQuantity,
                 acceptedQuantity = state.acceptedQuantity,
-                remainingQuantity = (definition.targetQuantity - state.acceptedQuantity).coerceAtLeast(0L),
-                contributors = state.perPlayerQuantity.size,
+                reservedQuantity = reservedQuantity,
+                remainingQuantity =
+                    (definition.targetQuantity - state.acceptedQuantity - reservedQuantity).coerceAtLeast(0L),
+                contributors = (state.perPlayerQuantity.keys + reservations.map { it.playerId }).size,
             )
         }
     }
@@ -302,23 +385,104 @@ object ContractsManager {
 
     private fun recoverInterruptedJournals(
         config: ContractsConfig,
-        repository: CachedRepository<ContractSubmissionJournalRecord>,
+        contractRepository: CachedRepository<ResourceContractRecord>,
+        journalRepository: CachedRepository<ContractSubmissionJournalRecord>,
         now: Long = System.currentTimeMillis(),
     ) {
-        val records = repository.allNow().onEach { it.validated() }
+        val records = journalRepository.allNow().onEach { it.validated() }
         ContractSubmissionJournalAudit.summarize(records, now)
         if (!config.leaderServer.equals(ARC.serverName, ignoreCase = true)) return
         var changed = 0
         records.forEach { record ->
-            val recovered = ContractSubmissionJournalEngine.recoverInterrupted(record, now)
+            val recovered =
+                if (record.status == ContractSubmissionJournalStatus.PREPARED) {
+                    ContractSubmissionJournalEngine.cancelPrepared(record, "restart_before_item_removal", now)
+                } else {
+                    ContractSubmissionJournalEngine.recoverInterrupted(record, now)
+                }
             if (recovered != record) {
-                repository.markDirty(recovered)
+                journalRepository.markDirty(recovered)
                 changed += 1
             }
         }
         if (changed > 0) {
-            runBlocking { repository.saveDirty().getOrThrow() }
-            info("Contracts moved {} interrupted submission(s) to durable manual review", changed)
+            runBlocking { journalRepository.saveDirty().getOrThrow() }
+            info("Contracts safely recovered {} pre-mutation or interrupted submission(s)", changed)
+        }
+
+        records.filter { it.status == ContractSubmissionJournalStatus.PAID }.forEach { paid ->
+            val definition =
+                config.resourceOrders().firstOrNull {
+                    it.id == paid.contractId && it.windowStartsAt == paid.contractWindowStartsAt
+                } ?: return@forEach
+            val stateId = ResourceContractRecord.stateId(definition.id, definition.windowStartsAt)
+            val current = requireNotNull(contractRepository.getNow(stateId)) { "Missing state for paid contract ${definition.id}" }
+            val recovery =
+                ContractSubmissionRecoveryEngine.recoverPaid(
+                    definition,
+                    current.validatedAgainst(definition).state,
+                    paid,
+                    now,
+                )
+            if (recovery.commit.changed) {
+                contractRepository.markDirty(ResourceContractRecord(stateId, recovery.commit.state))
+                runBlocking { contractRepository.saveDirty().getOrThrow() }
+            }
+            journalRepository.markDirty(recovery.journal)
+            runBlocking { journalRepository.saveDirty().getOrThrow() }
+        }
+    }
+
+    private fun activeReservations(
+        definition: ResourceContractDefinition,
+        state: ResourceContractState,
+    ): List<ContractQuotaReservation> =
+        journalRepo?.allNow().orEmpty().asSequence()
+            .filter { it.contractId == definition.id && it.contractWindowStartsAt == definition.windowStartsAt }
+            .map { it.validated() }
+            .mapNotNull { it.quotaReservation() }
+            .onEach { reservation ->
+                state.recentReceipts[reservation.submissionId]?.let { receipt ->
+                    require(
+                        receipt.playerId == reservation.playerId &&
+                            receipt.quantity == reservation.quantity &&
+                            receipt.payoutMinor == reservation.payoutMinor,
+                    ) { "Contract reservation disagrees with its committed receipt" }
+                }
+            }
+            .filterNot { it.submissionId in state.recentReceipts }
+            .toList()
+
+    private class RedisContractSubmissionPersistence(
+        private val contractRepository: CachedRepository<ResourceContractRecord>,
+        private val journalRepository: CachedRepository<ContractSubmissionJournalRecord>,
+    ) : ContractSubmissionPersistence {
+        override fun contractState(definition: ResourceContractDefinition): ResourceContractState =
+            requireNotNull(
+                contractRepository.getNow(ResourceContractRecord.stateId(definition.id, definition.windowStartsAt)),
+            ) { "Contract state is not loaded" }
+                .validatedAgainst(definition)
+                .state
+
+        override fun journalRecords(): List<ContractSubmissionJournalRecord> = journalRepository.allNow()
+
+        override suspend fun persistJournal(record: ContractSubmissionJournalRecord) {
+            journalRepository.markDirty(record.validated())
+            journalRepository.saveDirty().getOrThrow()
+        }
+
+        override suspend fun persistContract(
+            definition: ResourceContractDefinition,
+            state: ResourceContractState,
+        ) {
+            state.validatedAgainst(definition)
+            contractRepository.markDirty(
+                ResourceContractRecord(
+                    ResourceContractRecord.stateId(definition.id, definition.windowStartsAt),
+                    state,
+                ),
+            )
+            contractRepository.saveDirty().getOrThrow()
         }
     }
 }
@@ -422,10 +586,12 @@ object ContractsMetrics {
             views.forEach { view ->
                 add(quantity(view, "target", view.targetQuantity))
                 add(quantity(view, "accepted", view.acceptedQuantity))
+                add(quantity(view, "reserved", view.reservedQuantity))
                 add(quantity(view, "remaining", view.remainingQuantity))
                 add(money(view, "budget", view.budgetMinor))
                 add(money(view, "spent", view.spentMinor))
-                add(money(view, "remaining", (view.budgetMinor - view.spentMinor).coerceAtLeast(0L)))
+                add(money(view, "reserved", view.reservedMinor))
+                add(money(view, "remaining", (view.budgetMinor - view.spentMinor - view.reservedMinor).coerceAtLeast(0L)))
                 add(
                     MetricPoint(
                         "arc_contract_contributors",

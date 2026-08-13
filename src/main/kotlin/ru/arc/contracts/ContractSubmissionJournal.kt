@@ -6,6 +6,7 @@ import java.util.Base64
 
 enum class ContractSubmissionJournalStatus(val label: String) {
     PREPARED("prepared"),
+    CANCELLED("cancelled"),
     ITEM_REMOVAL_STARTED("item_removal_started"),
     ITEMS_ESCROWED("items_escrowed"),
     PAYMENT_STARTED("payment_started"),
@@ -21,6 +22,8 @@ enum class ContractSubmissionReviewReason(val label: String) {
     INTERRUPTED_ITEM_REMOVAL("interrupted_item_removal"),
     INTERRUPTED_PAYMENT("interrupted_payment"),
     INTERRUPTED_REFUND("interrupted_refund"),
+    INVENTORY_EVIDENCE_CONFLICT("inventory_evidence_conflict"),
+    REFUND_EVIDENCE_CONFLICT("refund_evidence_conflict"),
     PROVIDER_EVIDENCE_CONFLICT("provider_evidence_conflict"),
 }
 
@@ -128,6 +131,8 @@ data class ContractSubmissionJournalRecord(
     val status: ContractSubmissionJournalStatus = ContractSubmissionJournalStatus.PREPARED,
     val createdAt: Long,
     val updatedAt: Long = createdAt,
+    val cancelledAt: Long? = null,
+    val cancellationCode: String? = null,
     val itemRemovalStartedAt: Long? = null,
     val itemsEscrowedAt: Long? = null,
     val paymentStartedAt: Long? = null,
@@ -193,15 +198,24 @@ data class ContractSubmissionJournalRecord(
     }
 
     fun isTerminal(): Boolean =
-        status == ContractSubmissionJournalStatus.CONTRACT_COMMITTED ||
+        status == ContractSubmissionJournalStatus.CANCELLED ||
+            status == ContractSubmissionJournalStatus.CONTRACT_COMMITTED ||
             status == ContractSubmissionJournalStatus.REFUNDED
 
     fun hasConfirmedItemEscrow(): Boolean = itemsEscrowedAt != null
+
+    fun quotaReservation(): ContractQuotaReservation? =
+        if (isTerminal()) {
+            null
+        } else {
+            ContractQuotaReservation(submissionId, playerId, acceptedQuantity, payoutMinor)
+        }
 
     private fun validateTimestampOrder() {
         val timestamps =
             listOfNotNull(
                 itemRemovalStartedAt,
+                cancelledAt,
                 itemsEscrowedAt,
                 paymentStartedAt,
                 paidAt,
@@ -211,6 +225,7 @@ data class ContractSubmissionJournalRecord(
             )
         require(timestamps.all { it in createdAt..updatedAt }) { "Journal phase timestamp is out of bounds" }
         require(itemsEscrowedAt == null || itemRemovalStartedAt != null) { "Escrow confirmation lacks removal start" }
+        require(cancelledAt == null || itemsEscrowedAt == null) { "Cancelled journal already escrowed items" }
         require(paymentStartedAt == null || itemsEscrowedAt != null) { "Payment start lacks confirmed item escrow" }
         require(paidAt == null || paymentStartedAt != null) { "Paid state lacks payment start" }
         require(contractCommittedAt == null || paidAt != null) { "Contract commit lacks confirmed payment" }
@@ -231,8 +246,17 @@ data class ContractSubmissionJournalRecord(
 
     private fun validateStatusShape() {
         when (status) {
-            ContractSubmissionJournalStatus.PREPARED ->
+            ContractSubmissionJournalStatus.PREPARED -> {
                 require(itemRemovalStartedAt == null) { "Prepared journal already has a mutation start" }
+            }
+            ContractSubmissionJournalStatus.CANCELLED -> {
+                require(cancelledAt != null && itemsEscrowedAt == null && paymentStartedAt == null && refundStartedAt == null) {
+                    "Invalid cancelled journal state"
+                }
+                require(CANCELLATION_CODE_PATTERN.matches(cancellationCode.orEmpty())) {
+                    "Cancelled journal lacks a stable cancellation code"
+                }
+            }
             ContractSubmissionJournalStatus.ITEM_REMOVAL_STARTED -> {
                 require(itemRemovalStartedAt != null && itemsEscrowedAt == null) { "Invalid item-removal journal state" }
             }
@@ -276,7 +300,7 @@ data class ContractSubmissionJournalRecord(
                 require(!reviewEvidence.isNullOrBlank()) { "Manual review lacks bounded evidence" }
                 when (reviewFromStatus) {
                     ContractSubmissionJournalStatus.ITEM_REMOVAL_STARTED ->
-                        require(itemRemovalStartedAt != null && itemsEscrowedAt == null) {
+                        require(itemRemovalStartedAt != null && itemsEscrowedAt == null && cancelledAt == null) {
                             "Interrupted item-removal review contains a later phase"
                         }
                     ContractSubmissionJournalStatus.PAYMENT_STARTED ->
@@ -296,14 +320,20 @@ data class ContractSubmissionJournalRecord(
                 val expectedReasons =
                     when (reviewFromStatus) {
                         ContractSubmissionJournalStatus.ITEM_REMOVAL_STARTED ->
-                            setOf(ContractSubmissionReviewReason.INTERRUPTED_ITEM_REMOVAL)
+                            setOf(
+                                ContractSubmissionReviewReason.INTERRUPTED_ITEM_REMOVAL,
+                                ContractSubmissionReviewReason.INVENTORY_EVIDENCE_CONFLICT,
+                            )
                         ContractSubmissionJournalStatus.PAYMENT_STARTED ->
                             setOf(
                                 ContractSubmissionReviewReason.INTERRUPTED_PAYMENT,
                                 ContractSubmissionReviewReason.PROVIDER_EVIDENCE_CONFLICT,
                             )
                         ContractSubmissionJournalStatus.REFUND_STARTED ->
-                            setOf(ContractSubmissionReviewReason.INTERRUPTED_REFUND)
+                            setOf(
+                                ContractSubmissionReviewReason.INTERRUPTED_REFUND,
+                                ContractSubmissionReviewReason.REFUND_EVIDENCE_CONFLICT,
+                            )
                     }
                 require(reviewReason in expectedReasons) { "Manual review reason does not match its source state" }
             }
@@ -311,6 +341,11 @@ data class ContractSubmissionJournalRecord(
         if (status != ContractSubmissionJournalStatus.MANUAL_REVIEW) {
             require(reviewFromStatus == null && reviewReason == null && reviewEvidence == null) {
                 "Non-review journal contains manual-review fields"
+            }
+        }
+        if (status != ContractSubmissionJournalStatus.CANCELLED) {
+            require(cancelledAt == null && cancellationCode == null) {
+                "Non-cancelled journal contains cancellation fields"
             }
         }
     }
@@ -357,6 +392,7 @@ data class ContractSubmissionJournalRecord(
         private const val MAX_EVIDENCE_LENGTH = 256
         private val ID_PATTERN = Regex("[A-Za-z0-9][A-Za-z0-9._-]{2,95}")
         private val CONTRACT_ID_PATTERN = Regex("[a-z0-9][a-z0-9_-]{2,47}")
+        private val CANCELLATION_CODE_PATTERN = Regex("[a-z0-9][a-z0-9._-]{0,63}")
         private val AMBIGUOUS_STATES =
             setOf(
                 ContractSubmissionJournalStatus.ITEM_REMOVAL_STARTED,
@@ -383,6 +419,7 @@ object ContractSubmissionJournalEngine {
         now: Long,
     ): ContractSubmissionJournalRecord {
         require(plan.acceptedQuantity > 0L && plan.payoutMinor > 0L) { "Cannot journal an empty submission" }
+        require(now >= plan.plannedAt) { "Journal timestamp predates its submission plan" }
         require(definition.isOpenAt(plan.plannedAt)) { "Journal plan is outside the contract window" }
         require(
             plan.acceptedQuantity >= definition.minSubmissionQuantity &&
@@ -421,6 +458,20 @@ object ContractSubmissionJournalEngine {
                 revision = Math.addExact(revision, 1L),
             )
         }
+
+    fun cancelPrepared(
+        record: ContractSubmissionJournalRecord,
+        cancellationCode: String,
+        now: Long,
+    ): ContractSubmissionJournalRecord = cancel(record, ContractSubmissionJournalStatus.PREPARED, cancellationCode, now)
+
+    /** Safe only after the inventory adapter proved that it mutated no slot. */
+    fun confirmNoItemsRemoved(
+        record: ContractSubmissionJournalRecord,
+        cancellationCode: String,
+        now: Long,
+    ): ContractSubmissionJournalRecord =
+        cancel(record, ContractSubmissionJournalStatus.ITEM_REMOVAL_STARTED, cancellationCode, now)
 
     fun confirmItemsEscrowed(record: ContractSubmissionJournalRecord, now: Long): ContractSubmissionJournalRecord {
         if (record.status == ContractSubmissionJournalStatus.ITEMS_ESCROWED) return record.validated()
@@ -515,6 +566,22 @@ object ContractSubmissionJournalEngine {
             providerBalanceAfterMinor = observedProviderBalanceAfterMinor,
         )
 
+    fun haltAmbiguousItemRemoval(record: ContractSubmissionJournalRecord, now: Long): ContractSubmissionJournalRecord =
+        manualReview(
+            record,
+            ContractSubmissionReviewReason.INVENTORY_EVIDENCE_CONFLICT,
+            "Inventory adapter could not prove that item removal fully committed or did not start",
+            now,
+        )
+
+    fun haltAmbiguousRefund(record: ContractSubmissionJournalRecord, now: Long): ContractSubmissionJournalRecord =
+        manualReview(
+            record,
+            ContractSubmissionReviewReason.REFUND_EVIDENCE_CONFLICT,
+            "Inventory adapter could not prove that the exact escrow payload was fully restored",
+            now,
+        )
+
     fun confirmContractCommitted(record: ContractSubmissionJournalRecord, now: Long): ContractSubmissionJournalRecord {
         if (record.status == ContractSubmissionJournalStatus.CONTRACT_COMMITTED) return record.validated()
         return advance(record, ContractSubmissionJournalStatus.PAID, now) {
@@ -603,6 +670,25 @@ object ContractSubmissionJournalEngine {
                 revision = Math.addExact(revision, 1L),
             )
         }
+
+    private fun cancel(
+        record: ContractSubmissionJournalRecord,
+        expected: ContractSubmissionJournalStatus,
+        cancellationCode: String,
+        now: Long,
+    ): ContractSubmissionJournalRecord =
+        advance(record, expected, now) {
+            require(CANCELLATION_CODE_PATTERN.matches(cancellationCode)) { "Invalid journal cancellation code" }
+            copy(
+                status = ContractSubmissionJournalStatus.CANCELLED,
+                cancelledAt = now,
+                cancellationCode = cancellationCode,
+                updatedAt = now,
+                revision = Math.addExact(revision, 1L),
+            )
+        }
+
+    private val CANCELLATION_CODE_PATTERN = Regex("[a-z0-9][a-z0-9._-]{0,63}")
 
     private inline fun advance(
         record: ContractSubmissionJournalRecord,

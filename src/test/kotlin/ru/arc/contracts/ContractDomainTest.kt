@@ -151,6 +151,73 @@ class ContractDomainTest : StringSpec({
         }.message shouldBe SubmissionRejection.STALE_STATE.label
     }
 
+    "durable journal reservations hold quantity budget and player quota" {
+        val state = ResourceContractState.empty(definition)
+        val first = ContractQuotaReservation("reserved-1", "player-1", 32L, 8_000L)
+
+        val samePlayer =
+            ResourceContractEngine.plan(
+                definition,
+                state,
+                "reserved-2",
+                "player-1",
+                32,
+                1_500L,
+                reservations = listOf(first),
+            ) as ContractSubmissionPlan.Accepted
+        samePlayer.acceptedQuantity shouldBe 8L
+        samePlayer.payoutMinor shouldBe 2_000L
+
+        val otherPlayer =
+            ResourceContractEngine.plan(
+                definition,
+                state,
+                "reserved-3",
+                "player-2",
+                64,
+                1_500L,
+                reservations = listOf(first, ContractQuotaReservation("reserved-2", "player-1", 8L, 2_000L)),
+            ) as ContractSubmissionPlan.Accepted
+        otherPlayer.acceptedQuantity shouldBe 32L
+        otherPlayer.payoutMinor shouldBe 8_000L
+    }
+
+    "journal-backed reservations commit safely after another reservation advances the revision" {
+        val state = ResourceContractState.empty(definition)
+        val first = ContractQuotaReservation("reserved-1", "player-1", 8L, 2_000L)
+        val second = ContractQuotaReservation("reserved-2", "player-2", 8L, 2_000L)
+
+        val afterFirst = ResourceContractEngine.commitReserved(definition, state, first, 1_501L).state
+        val afterSecond = ResourceContractEngine.commitReserved(definition, afterFirst, second, 1_502L).state
+
+        afterSecond.acceptedQuantity shouldBe 16L
+        afterSecond.spentMinor shouldBe 4_000L
+        afterSecond.revision shouldBe 2L
+        ResourceContractEngine.commitReserved(definition, afterSecond, second, 1_503L).changed shouldBe false
+    }
+
+    "rejects a replay or reservation that disagrees with the committed receipt" {
+        val initial = ResourceContractState.empty(definition)
+        val plan = ResourceContractEngine.plan(definition, initial, "stable-receipt", "player-1", 8, 1_500L)
+            as ContractSubmissionPlan.Accepted
+        val committed = ResourceContractEngine.commit(definition, initial, plan, 1_501L).state
+
+        shouldThrow<IllegalArgumentException> {
+            ResourceContractEngine.commit(definition, committed, plan.copy(payoutMinor = 2_001L), 1_502L)
+        }.message shouldBe "Committed submission replay disagrees with its receipt"
+        shouldThrow<IllegalArgumentException> {
+            ResourceContractEngine.plan(
+                definition,
+                committed,
+                "another-id",
+                "player-2",
+                8,
+                1_503L,
+                reservations = listOf(ContractQuotaReservation("stable-receipt", "player-2", 8L, 2_000L)),
+            )
+        }.message shouldBe "Contract reservation disagrees with its committed receipt"
+    }
+
     "rejects submissions outside the configured window and minimum" {
         val state = ResourceContractState.empty(definition)
         ResourceContractEngine.plan(definition, state, "early", "player-1", 8, 999L) shouldBe
