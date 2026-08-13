@@ -12,6 +12,7 @@ data class DungeonInterestConfig(
     val enabled: Boolean = true,
     val worldGlobs: List<String> = DEFAULT_WORLD_GLOBS,
     val excludedWorlds: Set<String> = DEFAULT_EXCLUDED_WORLDS,
+    val instanceWorldBases: Set<String> = emptySet(),
     val maxTrackedWorlds: Int = 128,
 ) {
     private val normalizedExclusions =
@@ -29,18 +30,30 @@ data class DungeonInterestConfig(
             .take(MAX_CONFIG_ENTRIES)
             .map(::globRegex)
             .toList()
+    private val normalizedInstanceWorldBases =
+        instanceWorldBases
+            .asSequence()
+            .map(::normalizeWorldName)
+            .filter(WORLD_LABEL::matches)
+            .distinct()
+            .sortedByDescending(String::length)
+            .take(MAX_INSTANCE_WORLD_BASES)
+            .toList()
 
     fun dungeonWorld(worldName: String): String? {
         if (!enabled) return null
         val normalized = normalizeWorldName(worldName)
-        if (!WORLD_LABEL.matches(normalized) || normalized in normalizedExclusions) return null
-        return normalized.takeIf { worldPatterns.any { pattern -> pattern.matches(normalized) } }
+        if (!WORLD_LABEL.matches(normalized)) return null
+        val canonical = canonicalDungeonWorld(normalized)
+        if (canonical in normalizedExclusions) return null
+        return canonical.takeIf { worldPatterns.any { pattern -> pattern.matches(canonical) } }
     }
 
     companion object {
         private const val MAX_CONFIG_ENTRIES = 32
         private const val MAX_WORLD_NAME_LENGTH = 64
         private val WORLD_LABEL = Regex("[a-z0-9][a-z0-9_.-]{0,63}")
+        private val POSITIVE_INSTANCE_SUFFIX = Regex("[1-9][0-9]*")
         private val GLOB_PATTERN = Regex("[a-z0-9_.*-]+")
         val DEFAULT_WORLD_GLOBS = listOf("em_*", "spn_*", "otd_dungeon")
         val DEFAULT_EXCLUDED_WORLDS = setOf("em_adventurers_guild")
@@ -57,6 +70,11 @@ data class DungeonInterestConfig(
                         .stringList("dungeon-interest.excluded-worlds", DEFAULT_EXCLUDED_WORLDS.toList())
                         .take(MAX_CONFIG_ENTRIES)
                         .toSet(),
+                instanceWorldBases =
+                    config
+                        .stringList("dungeon-interest.instance-world-bases", emptyList())
+                        .take(MAX_INSTANCE_WORLD_BASES)
+                        .toSet(),
                 maxTrackedWorlds =
                     config
                         .integer("dungeon-interest.max-tracked-worlds", 128)
@@ -65,6 +83,8 @@ data class DungeonInterestConfig(
 
         private fun normalizeWorldName(value: String): String = value.trim().lowercase(Locale.ROOT)
 
+        private const val MAX_INSTANCE_WORLD_BASES = 128
+
         private fun globRegex(glob: String): Regex =
             Regex(
                 glob
@@ -72,6 +92,13 @@ data class DungeonInterestConfig(
                     .joinToString(separator = ".*", prefix = "^", postfix = "$") { Regex.escape(it) },
             )
     }
+
+    /** EliteMobs clones configured base worlds per run; expose the dungeon, not the technical clone. */
+    private fun canonicalDungeonWorld(normalized: String): String =
+        normalizedInstanceWorldBases.firstOrNull { base ->
+            normalized.startsWith("${base}_") &&
+                POSITIVE_INSTANCE_SUFFIX.matches(normalized.substring(base.length + 1))
+        } ?: normalized
 }
 
 /**

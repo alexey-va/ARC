@@ -11,9 +11,25 @@ import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 class DungeonInterestMetricsTest :
     StringSpec({
         "classifies declared dungeon worlds and excludes the EliteMobs hub" {
-            val config = DungeonInterestConfig()
+            val config =
+                DungeonInterestConfig(
+                    instanceWorldBases =
+                        setOf(
+                            "em_id_the_quarry",
+                            "em_id_the_bridge",
+                            "em_id_binder_of_worlds",
+                            "em_id_enchantment_challenge_10",
+                        ),
+                )
 
             config.dungeonWorld("EM_Invasion") shouldBe "em_invasion"
+            config.dungeonWorld("em_id_the_quarry_1") shouldBe "em_id_the_quarry"
+            config.dungeonWorld("em_id_the_bridge_27") shouldBe "em_id_the_bridge"
+            config.dungeonWorld("em_id_binder_of_worlds_15") shouldBe "em_id_binder_of_worlds"
+            config.dungeonWorld("em_id_enchantment_challenge_10") shouldBe "em_id_enchantment_challenge_10"
+            config.dungeonWorld("em_id_enchantment_challenge_10_3") shouldBe "em_id_enchantment_challenge_10"
+            config.dungeonWorld("em_yggdrasil_1") shouldBe "em_yggdrasil_1"
+            config.dungeonWorld("spn_the_hell_ring_25") shouldBe "spn_the_hell_ring_25"
             config.dungeonWorld("spn_the_skeleton_casttle") shouldBe "spn_the_skeleton_casttle"
             config.dungeonWorld("otd_dungeon") shouldBe "otd_dungeon"
             config.dungeonWorld("em_adventurers_guild").shouldBeNull()
@@ -44,6 +60,29 @@ class DungeonInterestMetricsTest :
 
             registry.get("arc_dungeon_player_time").tag("world", "em_invasion").counter().count() shouldBeExactly 10.0
             registry.get("arc_dungeon_session_duration").tag("world", "em_invasion").timer().count() shouldBe 1L
+        }
+
+        "aggregates separate EliteMobs instance worlds into one dungeon series" {
+            var now = 0L
+            val registry = SimpleMeterRegistry()
+            val metrics =
+                DungeonInterestMetrics(
+                    registry,
+                    DungeonInterestConfig(instanceWorldBases = setOf("em_id_the_quarry")),
+                    nanoTime = { now },
+                )
+
+            metrics.enter("player-one", "em_id_the_quarry_1")
+            now = 2_000_000_000L
+            metrics.leave("player-one")
+            metrics.enter("player-two", "em_id_the_quarry_2")
+            now = 5_000_000_000L
+            metrics.leave("player-two")
+
+            registry.get("arc_dungeon_visits").tag("world", "em_id_the_quarry").counter().count() shouldBeExactly 2.0
+            registry.get("arc_dungeon_player_time").tag("world", "em_id_the_quarry").counter().count() shouldBeExactly 5.0
+            registry.find("arc_dungeon_visits").tag("world", "em_id_the_quarry_1").counter().shouldBeNull()
+            registry.find("arc_dungeon_visits").tag("world", "em_id_the_quarry_2").counter().shouldBeNull()
         }
 
         "does not invent a visit when seeding an already-online player" {
