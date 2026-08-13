@@ -164,6 +164,25 @@ class OpsHttpServerTest : FreeSpec({
             }
         }
 
+        "should reject invalid or duplicate economy shop material selectors" {
+            val enabled = testConfig.copy(economyAuditReadEnabled = true)
+            val server = OpsHttpServer { enabled }
+            server.start()
+            try {
+                listOf("STONE,stone", "STONE,,OAK_LOG", "minecraft:stone").forEach { materials ->
+                    val conn =
+                        open(
+                            "http://127.0.0.1:${server.actualPort}/ops/economy/audit?hours=24&shop_materials=$materials",
+                            token = enabled.token,
+                        )
+                    conn.responseCode shouldBe 400
+                    readBody(conn) shouldContain "shop_materials"
+                }
+            } finally {
+                server.stop()
+            }
+        }
+
         "should reject mixed or invalid absolute economy audit windows" {
             val enabled = testConfig.copy(economyAuditReadEnabled = true)
             val server = OpsHttpServer { enabled }

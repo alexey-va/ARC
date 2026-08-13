@@ -214,18 +214,28 @@ class AuditService(
         }
     }
 
-    fun economySummary(hours: Int, limit: Int, serverFilter: String? = null): Map<String, Any?> {
+    fun economySummary(
+        hours: Int,
+        limit: Int,
+        serverFilter: String? = null,
+        shopMaterials: Set<String> = emptySet(),
+    ): Map<String, Any?> {
         val safeHours = hours.coerceIn(1, 24 * 31)
         val now = timeProvider.currentTimeMillis()
-        return economySummaryAt(now - safeHours * 60L * 60L * 1000L, now, limit, serverFilter)
+        return economySummaryAt(now - safeHours * 60L * 60L * 1000L, now, limit, serverFilter, shopMaterials)
     }
 
-    fun economySummarySince(sinceEpochMs: Long, limit: Int, serverFilter: String? = null): Map<String, Any?> {
+    fun economySummarySince(
+        sinceEpochMs: Long,
+        limit: Int,
+        serverFilter: String? = null,
+        shopMaterials: Set<String> = emptySet(),
+    ): Map<String, Any?> {
         val now = timeProvider.currentTimeMillis()
         require(sinceEpochMs in (now - maximumEconomyWindowMillis)..<now) {
             "since_epoch_ms must be in the past and within the last 31 days"
         }
-        return economySummaryAt(sinceEpochMs, now, limit, serverFilter)
+        return economySummaryAt(sinceEpochMs, now, limit, serverFilter, shopMaterials)
     }
 
     private fun economySummaryAt(
@@ -233,6 +243,7 @@ class AuditService(
         generatedAt: Long,
         limit: Int,
         serverFilter: String?,
+        shopMaterials: Set<String>,
     ): Map<String, Any?> =
         buildAuditSummary(
             data = repository.all(),
@@ -247,6 +258,7 @@ class AuditService(
             largeTransactionAmount = config.largeTransactionAmount,
             slimefunBuyOnlyPolicyEnabled = config.slimefunBuyOnlyPolicyEnabled,
             slimefunBuyOnlyPolicyActivatedAt = config.slimefunBuyOnlyPolicyActivatedAt,
+            shopMaterials = shopMaterials,
         )
 
     // ==================== Clear ====================

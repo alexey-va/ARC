@@ -14,6 +14,7 @@ import java.io.InputStream
 import java.net.InetSocketAddress
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
+import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -714,6 +715,18 @@ class OpsHttpServer(
         val sinceEpochMs = rawSince?.toLongOrNull()
         val limit = query["limit"]?.toIntOrNull() ?: 20
         val server = query["server"]?.trim()?.lowercase() ?: "all"
+        val rawShopMaterials = query["shop_materials"]
+        val shopMaterialParts = rawShopMaterials?.split(',')?.map(String::trim).orEmpty()
+        val shopMaterials = shopMaterialParts.map { it.uppercase(Locale.ROOT) }.toSortedSet()
+        val shopMaterialsValid =
+            rawShopMaterials == null ||
+                (
+                    shopMaterialParts.isNotEmpty() &&
+                        shopMaterialParts.size <= 16 &&
+                        shopMaterialParts.none(String::isEmpty) &&
+                        shopMaterials.size == shopMaterialParts.size &&
+                        shopMaterials.all { it.matches(Regex("[A-Z0-9_]{1,64}")) }
+                )
         val absoluteWindowValid =
             if (sinceEpochMs == null) {
                 rawSince == null
@@ -725,13 +738,15 @@ class OpsHttpServer(
             (rawHours != null && (hours == null || hours !in 1..(24 * 31))) ||
             !absoluteWindowValid ||
             limit !in 1..100 ||
-            server !in setOf("all", "spawn", "survival", "parkour")
+            server !in setOf("all", "spawn", "survival", "parkour") ||
+            !shopMaterialsValid
         ) {
             val (code, body) =
                 OpsJson.error(
                     400,
                     "hours must be 1..744; since_epoch_ms must be in the past and within the last 31 days; " +
-                        "limit 1..100; server all|spawn|survival|parkour",
+                        "limit 1..100; server all|spawn|survival|parkour; " +
+                        "shop_materials must contain 1..16 unique material names",
                 )
             respond(exchange, code, body)
             return
@@ -739,7 +754,13 @@ class OpsHttpServer(
         try {
             respondOk(
                 exchange,
-                OpsEconomyAuditHandlers.summary(hours, sinceEpochMs, limit, server.takeUnless { it == "all" }),
+                OpsEconomyAuditHandlers.summary(
+                    hours,
+                    sinceEpochMs,
+                    limit,
+                    server.takeUnless { it == "all" },
+                    shopMaterials,
+                ),
             )
         } catch (failure: IllegalArgumentException) {
             val (code, body) = OpsJson.error(400, failure.message ?: "Invalid economy audit window")
@@ -1719,7 +1740,8 @@ class OpsHttpServer(
                 "GET /ops/content/health",
             )
         if (cfg.economyAuditReadEnabled) {
-            routes += "GET /ops/economy/audit?hours=|since_epoch_ms=&limit=&server=all|spawn|survival|parkour"
+            routes +=
+                "GET /ops/economy/audit?hours=|since_epoch_ms=&limit=&server=all|spawn|survival|parkour&shop_materials=STONE,OAK_LOG"
         }
         if (cfg.contractReconciliationReadEnabled) {
             routes += "GET /ops/economy/contracts/reconciliations?limit="

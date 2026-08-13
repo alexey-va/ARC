@@ -10,14 +10,20 @@ import java.util.concurrent.TimeUnit
 
 /** Authenticated, read-only economy ledger summary for balancing and exploit triage. */
 object OpsEconomyAuditHandlers {
-    fun summary(hours: Int?, sinceEpochMs: Long?, limit: Int, serverFilter: String?): Map<String, Any?> {
+    fun summary(
+        hours: Int?,
+        sinceEpochMs: Long?,
+        limit: Int,
+        serverFilter: String?,
+        shopMaterials: Set<String> = emptySet(),
+    ): Map<String, Any?> {
         val safeLimit = limit.coerceIn(1, 100)
         val result =
             LinkedHashMap(
                 if (sinceEpochMs != null) {
-                    AuditManager.economySummarySince(sinceEpochMs, safeLimit, serverFilter)
+                    AuditManager.economySummarySince(sinceEpochMs, safeLimit, serverFilter, shopMaterials)
                 } else {
-                    AuditManager.economySummary(hours ?: 24, safeLimit, serverFilter)
+                    AuditManager.economySummary(hours ?: 24, safeLimit, serverFilter, shopMaterials)
                 },
             )
         result["autoSellAudit"] = AutoSellAuditModule.summary()

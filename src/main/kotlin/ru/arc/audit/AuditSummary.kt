@@ -1,5 +1,6 @@
 package ru.arc.audit
 
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.ceil
 
@@ -343,8 +344,28 @@ private class AdminShopSalesSummary {
         allocatedIncome += transaction.amount
     }
 
-    fun toMap(limit: Int): Map<String, Any?> =
-        linkedMapOf(
+    fun toMap(limit: Int, requestedMaterials: Set<String>): Map<String, Any?> {
+        val sortedEntries =
+            items.entries
+                .sortedWith(
+                    compareByDescending<Map.Entry<AdminShopItemKey, MutableAdminShopItemStats>> {
+                        it.value.exactIncome + it.value.allocatedIncome
+                    }.thenByDescending { it.value.quantity }
+                        .thenBy { it.key.item },
+                )
+        val normalizedRequested = requestedMaterials.map(::normalizeMaterial).toSortedSet()
+        val matchingEntries =
+            if (normalizedRequested.isEmpty()) {
+                sortedEntries
+            } else {
+                sortedEntries.filter { entry -> normalizeMaterial(entry.key.material) in normalizedRequested }
+            }
+        val matchedMaterials =
+            matchingEntries.mapNotNull { entry ->
+                entry.key.material?.let(::normalizeMaterial)?.takeIf(String::isNotEmpty)
+            }.toSortedSet()
+        val returnedEntries = matchingEntries.take(limit)
+        return linkedMapOf(
             "income" to income,
             "attributedIncome" to exactIncome + allocatedIncome,
             "exactIncome" to exactIncome,
@@ -353,16 +374,23 @@ private class AdminShopSalesSummary {
             "quantity" to quantity,
             "transactions" to transactions,
             "unattributedTransactions" to unattributedTransactions,
-            "items" to
-                items.entries
-                    .sortedWith(
-                        compareByDescending<Map.Entry<AdminShopItemKey, MutableAdminShopItemStats>> {
-                            it.value.exactIncome + it.value.allocatedIncome
-                        }.thenByDescending { it.value.quantity }
-                            .thenBy { it.key.item },
-                    ).take(limit)
-                    .map { it.value.toMap(it.key) },
+            "selection" to
+                linkedMapOf(
+                    "mode" to if (normalizedRequested.isEmpty()) "ranked" else "requested_materials",
+                    "requestedMaterials" to normalizedRequested.toList(),
+                    "matchedMaterials" to matchedMaterials.toList(),
+                    "missingMaterials" to (normalizedRequested - matchedMaterials).toList(),
+                    "matchingItemRows" to matchingEntries.size,
+                    "returnedItemRows" to returnedEntries.size,
+                    "truncated" to (matchingEntries.size > limit),
+                    "complete" to (matchingEntries.size <= limit),
+                ),
+            "items" to returnedEntries.map { it.value.toMap(it.key) },
         )
+    }
+
+    private fun normalizeMaterial(value: String?): String =
+        value.orEmpty().substringAfterLast(':').trim().uppercase(Locale.ROOT)
 
     private fun addItem(
         player: String,
@@ -403,6 +431,7 @@ internal fun buildAuditSummary(
     largeTransactionAmount: Double = 100_000.0,
     slimefunBuyOnlyPolicyEnabled: Boolean = false,
     slimefunBuyOnlyPolicyActivatedAt: Long = 0L,
+    shopMaterials: Set<String> = emptySet(),
 ): Map<String, Any?> {
     val sources = linkedMapOf<String, MutableAuditStats>()
     val actions = linkedMapOf<EconomyActionKey, MutableAuditStats>()
@@ -638,7 +667,7 @@ internal fun buildAuditSummary(
                 "bySource" to attemptsBySource.toSortedMap(),
             ),
         "contextCoverage" to contextCoverage,
-        "adminShopSales" to adminShopSales.toMap(limit),
+        "adminShopSales" to adminShopSales.toMap(limit, shopMaterials),
         "jobsRewards" to jobsRewards.toMap(limit),
         "topPlayers" to ranked(players, "player"),
         "unknownOrigins" to ranked(unknownOrigins, "origin"),

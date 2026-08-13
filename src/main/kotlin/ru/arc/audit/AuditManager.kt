@@ -208,12 +208,20 @@ object AuditManager {
     fun weight(): Long = service.totalWeight()
 
     @JvmStatic
-    fun economySummary(hours: Int, limit: Int, serverFilter: String? = null): Map<String, Any?> =
-        service.economySummary(hours, limit, serverFilter)
+    fun economySummary(
+        hours: Int,
+        limit: Int,
+        serverFilter: String? = null,
+        shopMaterials: Set<String> = emptySet(),
+    ): Map<String, Any?> = service.economySummary(hours, limit, serverFilter, shopMaterials)
 
     @JvmStatic
-    fun economySummarySince(sinceEpochMs: Long, limit: Int, serverFilter: String? = null): Map<String, Any?> =
-        service.economySummarySince(sinceEpochMs, limit, serverFilter)
+    fun economySummarySince(
+        sinceEpochMs: Long,
+        limit: Int,
+        serverFilter: String? = null,
+        shopMaterials: Set<String> = emptySet(),
+    ): Map<String, Any?> = service.economySummarySince(sinceEpochMs, limit, serverFilter, shopMaterials)
 
     @JvmStatic
     fun sendAudit(audience: Audience, playerName: String, page: Int, filter: AuditFilter) {

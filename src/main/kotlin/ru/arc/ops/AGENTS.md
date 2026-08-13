@@ -209,6 +209,12 @@ surface is intentionally compact:
   `windowBoundary.exact` is true only when no persisted aggregate crosses
   `since` and no record extends past `generatedAt`; ambiguous rows are excluded
   from totals and reported only through bounded crossing/future counters.
+  Optional `shop_materials=STONE,OAK_LOG` selects up to 16 exact material names
+  before the item-row limit is applied. `adminShopSales.selection` echoes the
+  canonical request plus matched/missing materials, returned/matching row
+  counts, truncation and completeness. Callers using the result for balance
+  compilation must fail closed unless the requested-material selection is
+  complete and untruncated; the default remains a ranked diagnostic view.
   Economy ledger
   schema v2 also returns bounded `recentEvents`, `recentFailures`, attempt
   outcomes, context-field coverage, and `adminShopSales`: ranked item path,

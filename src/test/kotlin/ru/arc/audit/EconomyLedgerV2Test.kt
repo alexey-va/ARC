@@ -355,6 +355,59 @@ class EconomyLedgerV2Test : FreeSpec({
             items.map { it["topPlayerIncomeShare"] } shouldBe listOf(1.0, 1.0, 1.0)
             items.map { it["topPlayerQuantityShare"] } shouldBe listOf(1.0, 1.0, 1.0)
             items.map { it["customItemId"] } shouldBe listOf(null, "CARBONADO", null)
+            val selection = sales["selection"] as Map<*, *>
+            selection["mode"] shouldBe "ranked"
+            selection["requestedMaterials"] shouldBe emptyList<String>()
+            selection["matchingItemRows"] shouldBe 3
+            selection["returnedItemRows"] shouldBe 3
+            selection["truncated"] shouldBe false
+            selection["complete"] shouldBe true
+        }
+
+        "selects requested admin shop materials before applying the item row limit" {
+            val data = AuditData.create("Seller", "survival:seller")
+            val metadata = AuditMetadata(EconomySource.SHOP, EconomyFlow.MINT, server = "survival")
+            fun sale(item: String, material: String, amount: Double, at: Long) {
+                data.operation(
+                    amount,
+                    Type.SHOP,
+                    "sale",
+                    metadata,
+                    EconomyLedgerContext(
+                        recordKind = EconomyRecordKind.TRANSACTION,
+                        status = EconomyEventStatus.SUCCEEDED,
+                        items = listOf(EconomyLedgerItem(item, material, 10, amount / 10)),
+                    ),
+                    at = at,
+                )
+            }
+            sale("blocks.diamond", "minecraft:diamond_block", 1_000.0, 1_000)
+            sale("blocks.stone", "minecraft:stone", 10.0, 2_000)
+            sale("blocks.oak", "minecraft:oak_log", 20.0, 3_000)
+
+            val summary =
+                buildAuditSummary(
+                    data = listOf(data),
+                    generatedAt = 4_000,
+                    since = 0,
+                    limit = 1,
+                    serverFilter = null,
+                    anomalies = emptyList(),
+                    shopMaterials = setOf("stone", "OAK_LOG", "LANTERN"),
+                )
+            val sales = summary["adminShopSales"] as Map<*, *>
+            val selection = sales["selection"] as Map<*, *>
+            val items = sales["items"] as List<*>
+
+            selection["mode"] shouldBe "requested_materials"
+            selection["requestedMaterials"] shouldBe listOf("LANTERN", "OAK_LOG", "STONE")
+            selection["matchedMaterials"] shouldBe listOf("OAK_LOG", "STONE")
+            selection["missingMaterials"] shouldBe listOf("LANTERN")
+            selection["matchingItemRows"] shouldBe 2
+            selection["returnedItemRows"] shouldBe 1
+            selection["truncated"] shouldBe true
+            selection["complete"] shouldBe false
+            (items.single() as Map<*, *>)["material"] shouldBe "minecraft:oak_log"
         }
 
         "excludes an aggregate crossing the exact since boundary and exposes ambiguity" {
