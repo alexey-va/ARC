@@ -123,6 +123,29 @@ class EconomyAuditTest : FreeSpec({
             dungeon.metadata.flow shouldBe EconomyFlow.BURN
         }
 
+        "classifies mount purchases as burns and compensating refunds as internal" {
+            val transactionId = "57f33e4f-17c6-4a91-85e1-29366ca1d13c"
+            val purchase =
+                EconomyAttributionResolver.resolve(
+                    "arc-mount:$transactionId\nCall:ru.arc.mounts.RedisEconomyMountWallet",
+                    -5_000_000.0,
+                    "vault",
+                    "spawn",
+                )
+            val refund =
+                EconomyAttributionResolver.resolve(
+                    "arc-mount-refund:$transactionId\nCall:ru.arc.mounts.RedisEconomyMountWallet",
+                    5_000_000.0,
+                    "vault",
+                    "spawn",
+                )
+
+            purchase.metadata.source shouldBe EconomySource.MOUNTS
+            purchase.metadata.flow shouldBe EconomyFlow.BURN
+            refund.metadata.source shouldBe EconomySource.MOUNTS
+            refund.metadata.flow shouldBe EconomyFlow.INTERNAL
+        }
+
         "classifies Vault movement to the internal stock wallet as a transfer" {
             val attribution =
                 EconomyAttributionResolver.resolve(

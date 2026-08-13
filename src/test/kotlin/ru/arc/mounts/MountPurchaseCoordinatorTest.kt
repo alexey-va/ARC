@@ -2,42 +2,47 @@ package ru.arc.mounts
 
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import java.nio.file.Files
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
 class MountPurchaseCoordinatorTest : StringSpec({
-    "successful level purchase charges once and persists the next level" {
+    "successful level purchase charges once and completes the durable journal" {
         val fixture = PurchaseFixture()
         var result: MountPurchaseResult? = null
 
         fixture.coordinator.purchaseLevel(fixture.subject(), fixture.mount, 1) { result = it }
 
         result shouldBe MountPurchaseResult.Success
-        fixture.wallet.balance shouldBe 50_000.0
+        fixture.wallet.balanceMinor shouldBe 5_000_000L
         fixture.ownership.level shouldBe 1
         fixture.wallet.withdrawals shouldBe 1
+        fixture.journal.records().single().status shouldBe MountPurchaseJournalStatus.COMPLETED
     }
 
-    "failed ownership persistence refunds the full purchase" {
+    "failed ownership persistence refunds the exact purchase once" {
         val fixture = PurchaseFixture().also { it.ownership.failWrites = true }
         var result: MountPurchaseResult? = null
 
         fixture.coordinator.purchaseLevel(fixture.subject(), fixture.mount, 1) { result = it }
 
         result shouldBe MountPurchaseResult.PersistenceFailedRefunded
-        fixture.wallet.balance shouldBe 100_000.0
+        fixture.wallet.balanceMinor shouldBe 10_000_000L
+        fixture.wallet.withdrawals shouldBe 1
         fixture.wallet.deposits shouldBe 1
+        fixture.journal.records().single().status shouldBe MountPurchaseJournalStatus.REFUNDED
     }
 
-    "non-sequential upgrade is rejected without charging" {
+    "non-sequential upgrade is rejected without charging or journaling" {
         val fixture = PurchaseFixture()
         var result: MountPurchaseResult? = null
 
         fixture.coordinator.purchaseLevel(fixture.subject(), fixture.mount, 2) { result = it }
 
         result shouldBe MountPurchaseResult.InvalidLevel
-        fixture.wallet.balance shouldBe 100_000.0
+        fixture.wallet.balanceMinor shouldBe 10_000_000L
         fixture.wallet.withdrawals shouldBe 0
+        fixture.journal.records() shouldBe emptyList()
     }
 
     "glow purchase requires an unlocked mount" {
@@ -49,52 +54,154 @@ class MountPurchaseCoordinatorTest : StringSpec({
         result shouldBe MountPurchaseResult.NotUnlocked
         fixture.wallet.withdrawals shouldBe 0
     }
+
+    "unavailable balance cancels the prepared record without blocking future purchases" {
+        val fixture = PurchaseFixture().also { it.wallet.balanceAvailable = false }
+        var result: MountPurchaseResult? = null
+
+        fixture.coordinator.purchaseLevel(fixture.subject(), fixture.mount, 1) { result = it }
+
+        result shouldBe MountPurchaseResult.EconomyUnavailable
+        fixture.journal.records().single().status shouldBe MountPurchaseJournalStatus.CANCELLED
+        fixture.journal.hasOpenPurchase(fixture.playerId) shouldBe false
+    }
+
+    "ambiguous withdrawal is quarantined and cannot be purchased twice" {
+        val fixture = PurchaseFixture().also { it.wallet.ambiguousWithdrawal = true }
+        var first: MountPurchaseResult? = null
+        var second: MountPurchaseResult? = null
+
+        fixture.coordinator.purchaseLevel(fixture.subject(), fixture.mount, 1) { first = it }
+        fixture.coordinator.purchaseLevel(fixture.subject(), fixture.mount, 1) { second = it }
+
+        first shouldBe MountPurchaseResult.ManualReview
+        second shouldBe MountPurchaseResult.ManualReview
+        fixture.wallet.withdrawals shouldBe 1
+        fixture.journal.records().single().status shouldBe MountPurchaseJournalStatus.MANUAL_REVIEW
+    }
+
+    "startup recovery reapplies permission after a proven withdrawal" {
+        val fixture = PurchaseFixture()
+        val record = fixture.preparedRecord()
+        fixture.journal.persist(record) shouldBe true
+        fixture.journal.persist(
+            record.copy(
+                status = MountPurchaseJournalStatus.WITHDRAWAL_STARTED,
+                updatedAt = 2L,
+                balanceBeforeMinor = 10_000_000L,
+            ),
+        ) shouldBe true
+        fixture.journal.persist(
+            record.copy(
+                status = MountPurchaseJournalStatus.FUNDS_WITHDRAWN,
+                updatedAt = 3L,
+                balanceBeforeMinor = 10_000_000L,
+                balanceAfterMinor = 5_000_000L,
+                evidence = "exact_balance_delta",
+            ),
+        ) shouldBe true
+        val manual = mutableListOf<MountPurchaseJournalRecord>()
+
+        fixture.coordinator.recover(MountCatalog(listOf(fixture.mount)), manual::add)
+
+        fixture.ownership.level shouldBe 1
+        fixture.journal.records().single().status shouldBe MountPurchaseJournalStatus.COMPLETED
+        manual shouldBe emptyList()
+        fixture.wallet.withdrawals shouldBe 0
+    }
+
+    "startup recovery uses exact provider history after an interrupted withdrawal call" {
+        val fixture = PurchaseFixture().also { it.wallet.historyTransactionId = "91234" }
+        val record = fixture.preparedRecord()
+        fixture.journal.persist(record) shouldBe true
+        fixture.journal.persist(
+            record.copy(
+                status = MountPurchaseJournalStatus.WITHDRAWAL_STARTED,
+                updatedAt = 2L,
+                balanceBeforeMinor = 10_000_000L,
+            ),
+        ) shouldBe true
+        val manual = mutableListOf<MountPurchaseJournalRecord>()
+
+        fixture.coordinator.recover(MountCatalog(listOf(fixture.mount)), manual::add)
+
+        fixture.wallet.historyReasons shouldBe listOf("arc-mount:${record.transactionId}")
+        fixture.ownership.level shouldBe 1
+        fixture.journal.records().single().status shouldBe MountPurchaseJournalStatus.COMPLETED
+        manual shouldBe emptyList()
+    }
 })
 
 private class PurchaseFixture {
     val playerId: UUID = UUID.randomUUID()
-    val mount: MountDefinition = purchaseTestMount()
+    val mount: MountDefinition = testMount()
     val ownership = MutableOwnership()
     val wallet = MutableWallet()
-    val coordinator = MountPurchaseCoordinator(ownership, wallet) { it() }
+    val journal = FileMountPurchaseJournal(Files.createTempDirectory("arc-mount-purchase-").resolve("journal.json"))
+    val coordinator = MountPurchaseCoordinator(ownership, wallet, journal, { true }, { it() }, clock = { 10L })
 
     fun subject() =
         MountPermissionSubject(playerId, "Rider") { permission ->
             permission == mount.levelPermission(ownership.level) && ownership.level > 0 ||
                 permission == mount.glowPermission && ownership.glow ||
-                permission == mount.glowDisabledPermission && ownership.glowDisabled
+                permission == mount.glowDisabledPermission && ownership.glowDisabled ||
+                permission in ownership.skinPermissions ||
+                permission in ownership.activeSkinPermissions
         }
-}
 
-private fun purchaseTestMount() =
-    MountDefinition(
-        id = "bee",
-        movement = MountMovement.FLYING,
-        entityType = "BEE",
-        iconMaterial = "BEE_SPAWN_EGG",
-        displayName = "Пчела",
-        speeds = listOf(0.4, 0.6, 0.9),
-        prices = listOf(50_000.0, 100_000.0, 500_000.0),
-        glowPrice = 10_000.0,
-    )
+    fun preparedRecord() =
+        MountPurchaseJournalRecord(
+            transactionId = UUID.randomUUID().toString(),
+            playerId = playerId.toString(),
+            mountId = mount.id,
+            kind = MountPurchaseKind.LEVEL,
+            target = "1",
+            permission = mount.levelPermission(1),
+            priceMinor = 5_000_000L,
+            createdAt = 1L,
+            updatedAt = 1L,
+        )
+}
 
 private class MutableOwnership : MountOwnership {
     var level = 0
     var glow = false
     var glowDisabled = false
     var failWrites = false
+    val skinPermissions = hashSetOf<String>()
+    val activeSkinPermissions = hashSetOf<String>()
+    private val directPermissions = hashSetOf<String>()
 
     override fun profile(subject: MountPermissionSubject, mount: MountDefinition): MountProfile =
-        MountProfile(level, glow, glowDisabled)
+        MountProfile(
+            level,
+            glow,
+            glowDisabled,
+            mount.skins.filter { mount.skinPermission(it.id) in skinPermissions }.mapTo(hashSetOf()) { it.id },
+            mount.skins.firstOrNull { mount.activeSkinPermission(it.id) in activeSkinPermissions }?.id
+                ?: MountDefinition.DEFAULT_SKIN_ID,
+        )
 
     override fun grantLevel(playerId: UUID, mount: MountDefinition, level: Int): CompletableFuture<Void> =
-        write { this.level = level }
+        write { this.level = level; directPermissions += mount.levelPermission(level) }
 
     override fun grantGlow(playerId: UUID, mount: MountDefinition): CompletableFuture<Void> =
-        write { glow = true; glowDisabled = false }
+        write { glow = true; glowDisabled = false; directPermissions += mount.glowPermission }
 
     override fun setGlowEnabled(playerId: UUID, mount: MountDefinition, enabled: Boolean): CompletableFuture<Void> =
         write { glowDisabled = !enabled }
+
+    override fun grantSkin(playerId: UUID, mount: MountDefinition, skin: MountSkinDefinition): CompletableFuture<Void> =
+        write { skinPermissions += mount.skinPermission(skin.id); directPermissions += mount.skinPermission(skin.id) }
+
+    override fun setActiveSkin(playerId: UUID, mount: MountDefinition, skinId: String): CompletableFuture<Void> =
+        write {
+            activeSkinPermissions.removeIf { it.startsWith("arc.mounts.${mount.id}.skin.active.") }
+            if (skinId != MountDefinition.DEFAULT_SKIN_ID) activeSkinPermissions += mount.activeSkinPermission(skinId)
+        }
+
+    override fun hasDirectPermission(playerId: UUID, permission: String): CompletableFuture<Boolean> =
+        CompletableFuture.completedFuture(permission in directPermissions)
 
     override fun resolveUniqueId(playerName: String): CompletableFuture<UUID?> = CompletableFuture.completedFuture(null)
 
@@ -106,23 +213,45 @@ private class MutableOwnership : MountOwnership {
 }
 
 private class MutableWallet : MountWallet {
-    var balance = 100_000.0
+    var balanceMinor = 10_000_000L
+    var balanceAvailable = true
+    var ambiguousWithdrawal = false
     var withdrawals = 0
     var deposits = 0
+    var historyTransactionId: String? = null
+    val historyReasons = mutableListOf<String>()
     override val available = true
 
-    override fun balance(playerId: UUID): Double = balance
+    override fun balanceMinor(playerId: UUID): Long? = balanceMinor.takeIf { balanceAvailable }
 
-    override fun withdraw(playerId: UUID, amount: Double): Boolean {
-        if (balance < amount) return false
-        balance -= amount
+    override fun withdraw(playerId: UUID, amountMinor: Long, reason: String, expectedBalanceBeforeMinor: Long): MountMoneyEvidence {
         withdrawals++
-        return true
+        if (ambiguousWithdrawal) return MountMoneyEvidence(null, true, null, "provider_threw")
+        if (balanceMinor != expectedBalanceBeforeMinor || balanceMinor < amountMinor) {
+            return MountMoneyEvidence(false, false, balanceMinor, "provider_rejected")
+        }
+        balanceMinor -= amountMinor
+        return MountMoneyEvidence(true, true, balanceMinor)
     }
 
-    override fun deposit(playerId: UUID, amount: Double): Boolean {
-        balance += amount
+    override fun deposit(playerId: UUID, amountMinor: Long, reason: String, expectedBalanceBeforeMinor: Long): MountMoneyEvidence {
         deposits++
-        return true
+        if (balanceMinor != expectedBalanceBeforeMinor) {
+            return MountMoneyEvidence(false, false, balanceMinor, "provider_rejected")
+        }
+        balanceMinor += amountMinor
+        return MountMoneyEvidence(true, true, balanceMinor)
+    }
+
+    override fun findTransaction(
+        playerId: UUID,
+        amountMinor: Long,
+        reason: String,
+        notBeforeMillis: Long,
+    ): CompletableFuture<MountProviderTransactionEvidence> {
+        historyReasons += reason
+        amountMinor shouldBe -5_000_000L
+        notBeforeMillis shouldBe 2L
+        return CompletableFuture.completedFuture(MountProviderTransactionEvidence(historyTransactionId, true))
     }
 }

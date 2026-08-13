@@ -4,6 +4,8 @@ import org.bukkit.Input
 import org.bukkit.NamespacedKey
 import org.bukkit.Particle
 import org.bukkit.Sound
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Mob
 import org.bukkit.entity.Player
@@ -37,6 +39,7 @@ enum class MountSpawnResult {
     ALREADY_IN_VEHICLE,
     WORLD_NOT_ALLOWED,
     WATER_REQUIRED,
+    COOLDOWN,
     INVALID_ENTITY,
     SPAWN_FAILED,
 }
@@ -48,6 +51,8 @@ enum class MountRemovalReason {
     EXPIRED,
     LEFT_WATER,
     HEIGHT_LIMIT,
+    WORLD_BORDER,
+    IDLE,
     TELEPORTED,
     CHANGED_WORLD,
     QUIT,
@@ -61,24 +66,34 @@ private data class MountSession(
     val entityId: UUID,
     val definition: MountDefinition,
     val speed: Double,
+    val handlingMultiplier: Double,
+    val sprintMultiplier: Double,
+    val skin: MountSkinDefinition?,
     val expiresAtMillis: Long,
     val sneakGesture: DoubleSneakGesture,
     var input: MountInputState = MountInputState(),
     var allowDismount: Boolean = false,
     var stopping: Boolean = false,
     var lastHintAtMillis: Long = Long.MIN_VALUE,
+    var lastActiveAtMillis: Long = System.currentTimeMillis(),
+    var ticks: Long = 0L,
 )
 
 class MountSessionController(
     private val plugin: JavaPlugin,
     private val scheduler: TaskScheduler,
     private val configProvider: () -> MountModuleConfig,
+    private val allowedMountIds: Set<String>,
     private val message: (Player, String, String) -> Unit,
+    private val onStateChanged: () -> Unit = {},
 ) : Listener {
     private val sessionsByPlayer = ConcurrentHashMap<UUID, MountSession>()
     private val playerByEntity = ConcurrentHashMap<UUID, UUID>()
     private val ownerKey = NamespacedKey(plugin, "mount_owner")
     private val mountIdKey = NamespacedKey(plugin, "mount_id")
+    private val spawnTokenKey = NamespacedKey(plugin, "mount_spawn_token")
+    private val pendingSpawnTokens = ConcurrentHashMap.newKeySet<UUID>()
+    private val lastSummonAt = ConcurrentHashMap<UUID, Long>()
     private var tickTask: ScheduledTask? = null
 
     fun start() {
@@ -91,6 +106,7 @@ class MountSessionController(
         sessionsByPlayer.keys.toList().forEach { remove(it, reason) }
         sessionsByPlayer.clear()
         playerByEntity.clear()
+        pendingSpawnTokens.clear()
     }
 
     fun shutdown() {
@@ -102,16 +118,25 @@ class MountSessionController(
 
     fun isRiding(playerId: UUID): Boolean = sessionsByPlayer.containsKey(playerId)
 
+    fun activeSessionCount(): Int = sessionsByPlayer.size
+
     fun spawn(
         player: Player,
         definition: MountDefinition,
         speed: Double,
+        handlingMultiplier: Double = 1.0,
+        sprintMultiplier: Double = 1.0,
         durationMillis: Long,
         glow: Boolean,
+        skin: MountSkinDefinition? = null,
     ): MountSpawnResult {
         val config = configProvider()
+        val now = System.currentTimeMillis()
+        lastSummonAt.entries.removeIf { now - it.value >= config.summonCooldown.toMillis() }
         if (sessionsByPlayer.containsKey(player.uniqueId)) return MountSpawnResult.ALREADY_RIDING
         if (player.vehicle != null) return MountSpawnResult.ALREADY_IN_VEHICLE
+        val lastSummon = lastSummonAt[player.uniqueId]
+        if (lastSummon != null && now - lastSummon < config.summonCooldown.toMillis()) return MountSpawnResult.COOLDOWN
         if (config.allowedWorlds.isNotEmpty() && player.world.name.lowercase(java.util.Locale.ROOT) !in config.allowedWorlds) {
             return MountSpawnResult.WORLD_NOT_ALLOWED
         }
@@ -122,16 +147,25 @@ class MountSessionController(
         val entityType = runCatching { org.bukkit.entity.EntityType.valueOf(definition.entityType) }.getOrNull()
             ?: return MountSpawnResult.INVALID_ENTITY
         if (!entityType.isAlive || !entityType.isSpawnable) return MountSpawnResult.INVALID_ENTITY
+        val spawnToken = UUID.randomUUID()
+        pendingSpawnTokens.add(spawnToken)
         val spawned =
-            runCatching {
+            try {
                 player.world.spawnEntity(
                     player.location,
                     entityType,
                     CreatureSpawnEvent.SpawnReason.CUSTOM,
                 ) { entity ->
-                    (entity as? LivingEntity)?.let { tagEntity(it, definition, player) }
+                    (entity as? LivingEntity)?.let {
+                        tagEntity(it, definition, player)
+                        it.persistentDataContainer.set(spawnTokenKey, PersistentDataType.STRING, spawnToken.toString())
+                    }
                 }
-            }.getOrNull() as? LivingEntity
+            } catch (_: Throwable) {
+                null
+            } finally {
+                pendingSpawnTokens.remove(spawnToken)
+            } as? LivingEntity
             ?: return MountSpawnResult.SPAWN_FAILED
         if (!spawned.isInWorld || !spawned.isValid) {
             spawned.remove()
@@ -139,7 +173,7 @@ class MountSessionController(
         }
 
         return try {
-            configureEntity(spawned, definition, glow, player)
+            configureEntity(spawned, definition, glow, player, skin)
             if (!spawned.addPassenger(player)) {
                 spawned.remove()
                 return MountSpawnResult.SPAWN_FAILED
@@ -150,11 +184,16 @@ class MountSessionController(
                     entityId = spawned.uniqueId,
                     definition = definition,
                     speed = speed,
+                    handlingMultiplier = handlingMultiplier,
+                    sprintMultiplier = sprintMultiplier,
+                    skin = skin,
                     expiresAtMillis = System.currentTimeMillis() + durationMillis.coerceAtLeast(1L),
                     sneakGesture = DoubleSneakGesture(config.doubleSneakWindow.toMillis()),
                 )
             sessionsByPlayer[player.uniqueId] = session
             playerByEntity[spawned.uniqueId] = player.uniqueId
+            lastSummonAt[player.uniqueId] = now
+            onStateChanged()
             player.world.spawnParticle(Particle.END_ROD, player.location, 10, 0.4, 0.4, 0.4, 0.01)
             player.world.playSound(player.location, Sound.ENTITY_HORSE_SADDLE, 1.0f, 1.0f)
             val (controlsKey, controlsFallback) =
@@ -176,6 +215,7 @@ class MountSessionController(
         val session = sessionsByPlayer.remove(playerId) ?: return
         if (session.stopping) return
         session.stopping = true
+        onStateChanged()
         playerByEntity.remove(session.entityId)
         val player = plugin.server.getPlayer(playerId)
         val entity = plugin.server.getEntity(session.entityId) as? LivingEntity
@@ -230,6 +270,9 @@ class MountSessionController(
                 reason = event.spawnReason,
                 owner = data.get(ownerKey, PersistentDataType.STRING),
                 mountId = data.get(mountIdKey, PersistentDataType.STRING),
+                spawnToken = data.get(spawnTokenKey, PersistentDataType.STRING),
+                expectedMountIds = allowedMountIds,
+                pendingSpawnTokens = pendingSpawnTokens,
             )
         ) {
             event.isCancelled = false
@@ -290,15 +333,27 @@ class MountSessionController(
                 player == null || !player.isOnline -> remove(session.playerId, MountRemovalReason.QUIT)
                 entity == null || !entity.isValid || !entity.passengers.contains(player) -> remove(session.playerId, MountRemovalReason.INVALID)
                 now >= session.expiresAtMillis -> remove(session.playerId, MountRemovalReason.EXPIRED)
+                now - session.lastActiveAtMillis >= configProvider().idleTimeout.toMillis() -> {
+                    remove(session.playerId, MountRemovalReason.IDLE)
+                }
                 entity.location.y > entity.world.maxHeight + configProvider().maximumHeightAboveWorld -> {
                     remove(session.playerId, MountRemovalReason.HEIGHT_LIMIT)
+                }
+                entity.location.y < entity.world.minHeight - configProvider().maximumHeightAboveWorld -> {
+                    remove(session.playerId, MountRemovalReason.HEIGHT_LIMIT)
+                }
+                !entity.world.worldBorder.isInside(entity.location) -> {
+                    remove(session.playerId, MountRemovalReason.WORLD_BORDER)
                 }
                 session.definition.movement == MountMovement.SWIMMING && !entity.location.block.isLiquid -> {
                     remove(session.playerId, MountRemovalReason.LEFT_WATER)
                 }
                 else -> {
                     session.input = player.currentInput.toState()
+                    if (session.input.hasMovementIntent) session.lastActiveAtMillis = now
+                    session.ticks++
                     move(player, entity, session)
+                    emitTrail(entity, session)
                 }
             }
         }
@@ -312,8 +367,8 @@ class MountSessionController(
                 MountMovement.FLYING -> config.flyingSpeedScale
                 MountMovement.SWIMMING -> config.swimmingSpeedScale
             }
-        val sprint = if (session.input.sprint) config.sprintMultiplier else 1.0
-        val maximumSpeed = session.speed * speedScale * sprint
+        val sprint = if (session.input.sprint) config.sprintMultiplier * session.sprintMultiplier else 1.0
+        val maximumSpeed = (session.speed * speedScale * sprint).coerceAtMost(config.maximumSpeedBlocksPerTick)
         val planar = MountMotion.planarDirection(player.location.yaw, session.input)
         val target =
             when (session.definition.movement) {
@@ -338,15 +393,20 @@ class MountSessionController(
                     MountMotion.smooth(
                         MotionVector(current.x, 0.0, current.z),
                         target,
-                        config.acceleration,
-                        config.deceleration,
+                        (config.acceleration * session.handlingMultiplier).coerceAtMost(1.0),
+                        (config.deceleration * session.handlingMultiplier).coerceAtMost(1.0),
                     )
                 val vertical =
                     if (session.input.jump && entity.isOnGround) config.jumpVelocity
                     else current.y
                 MotionVector(horizontal.x, vertical, horizontal.z)
             } else {
-                MountMotion.smooth(current, target, config.acceleration, config.deceleration)
+                MountMotion.smooth(
+                    current,
+                    target,
+                    (config.acceleration * session.handlingMultiplier).coerceAtMost(1.0),
+                    (config.deceleration * session.handlingMultiplier).coerceAtMost(1.0),
+                )
             }
 
         entity.velocity = velocity.toBukkit()
@@ -355,19 +415,29 @@ class MountSessionController(
         entity.setRotation(MountMotion.smoothYaw(entity.yaw, targetYaw, config.turnSmoothing), 0.0f)
     }
 
+    private fun emitTrail(entity: LivingEntity, session: MountSession) {
+        val trail = session.skin?.trail ?: return
+        if (session.ticks % trail.intervalTicks != 0L) return
+        val particle = runCatching { Particle.valueOf(trail.particle) }.getOrNull() ?: return
+        if (particle.dataType != Void::class.java && particle.dataType != java.lang.Void::class.java) return
+        entity.world.spawnParticle(particle, entity.location, trail.count, 0.12, 0.12, 0.12, 0.0)
+    }
+
     private fun configureEntity(
         entity: LivingEntity,
         definition: MountDefinition,
         glow: Boolean,
         player: Player,
+        skin: MountSkinDefinition?,
     ) {
-        entity.customName(TextUtil.mm("<gray>${player.name}", true))
+        entity.customName(Component.text(player.name, NamedTextColor.GRAY))
         entity.isCustomNameVisible = false
         entity.isPersistent = false
         entity.isGlowing = glow
         entity.isInvulnerable = false
         entity.setGravity(definition.movement == MountMovement.WALKING)
         (entity as? Mob)?.let(::configureMountMob)
+        MountAppearanceApplicator.apply(entity, skin?.appearance ?: definition.appearance)
         tagEntity(entity, definition, player)
     }
 
@@ -391,6 +461,9 @@ class MountSessionController(
             sprint = isSprint,
         )
 
+    private val MountInputState.hasMovementIntent: Boolean
+        get() = forward || backward || left || right || jump || sneak
+
     private fun Vector.toMotion() = MotionVector(x, y, z)
     private fun MotionVector.toBukkit() = Vector(x, y, z)
 }
@@ -406,9 +479,14 @@ internal fun shouldAllowCancelledMountSpawn(
     reason: CreatureSpawnEvent.SpawnReason,
     owner: String?,
     mountId: String?,
+    spawnToken: String?,
+    expectedMountIds: Set<String>,
+    pendingSpawnTokens: Set<UUID>,
 ): Boolean =
     cancelled &&
         reason == CreatureSpawnEvent.SpawnReason.CUSTOM &&
-        !mountId.isNullOrBlank() &&
+        mountId in expectedMountIds &&
         owner != null &&
-        runCatching { UUID.fromString(owner) }.isSuccess
+        runCatching { UUID.fromString(owner) }.isSuccess &&
+        spawnToken != null &&
+        runCatching { UUID.fromString(spawnToken) }.getOrNull() in pendingSpawnTokens

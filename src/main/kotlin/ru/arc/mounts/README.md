@@ -1,51 +1,77 @@
 # ARC mounts
 
-Native replacement for `Denizen/scripts/activities/rideable_mobs.dsc`.
+Native production replacement for `Denizen/scripts/activities/rideable_mobs.dsc`.
 
 ## Player behavior
 
-- `/mounts` opens the collection.
-- Left click summons an unlocked mount for the configured session duration.
-- Right click opens purchase, upgrade, summon, and glow controls.
-- Walking mounts use WASD, Space to jump, and Shift to dismount.
-- Flying and swimming mounts use WASD, Space to ascend, and Shift to descend.
-  Double-press Shift to dismount; ARC cancels the first vanilla dismount event.
-- Mount and rider damage, logout, teleport, world change, expiry, invalid state,
-  or leaving water removes the temporary entity.
-- ARC tags the technical entity before `CreatureSpawnEvent` and bypasses a
-  cancelled `CUSTOM` spawn only for that tagged mount. Region-level ordinary
-  mob-spawn restrictions therefore remain in force.
+- `/mounts` opens a paginated 30-mount collection with walking, flying and
+  swimming filters. Left click summons an owned mount; right click opens its
+  progression, glow and appearance controls.
+- Walking mounts use WASD, Space to jump, and Shift to dismount. Flying and
+  swimming mounts use WASD, Space to ascend, Shift to descend and double Shift
+  to dismount.
+- Every mount has three progression levels. The third level is the deliberately
+  expensive final sprint and improves speed, steering and sprint response.
+- Appearance is deterministic. ARC fixes age, scale and variants, clears random
+  entity equipment, then applies only the configured skin equipment. Zombie
+  baby, iron guard and diamond warlord are separate unlockable skins.
+- Damage, logout, teleport, world change, expiry, idle timeout, invalid state,
+  world-border/height escape, or leaving water removes the temporary entity.
+- A short summon cooldown and a hard server-side velocity cap protect against
+  duplicate entities and unsafe catalog values.
 
-Mount access and ownership use only the `arc.mounts.*` namespace. Menu access
-is `arc.mounts.use`; levels are `arc.mounts.<mount>.<level>`. Glow ownership
-uses `arc.mounts.<mount>.glow`; disabling it adds the separate positive marker
-`arc.mounts.<mount>.glow.disabled` so inherited ownership is not destroyed.
-Only a direct user marker counts as disabled, so an administrative wildcard
-does not accidentally switch glow off.
+## Permissions and commands
 
-## Extraction boundary
+All access, ownership and settings use only `arc.mounts.*`:
 
-The package is intentionally self-contained:
+- `arc.mounts.use` — open and use `/mounts`;
+- `arc.mounts.<mount>.<level>` — owned progression level;
+- `arc.mounts.<mount>.glow` and `.glow.disabled` — glow ownership and setting;
+- `arc.mounts.<mount>.skin.<skin>` — skin ownership;
+- `arc.mounts.<mount>.skin.active.<skin>` — selected skin marker;
+- `arc.mounts.admin` — `/unlock-mount` and test tooling;
+- `arc.mounts.ride` — `/ride-mob [mount] [speed] [skin]`.
 
-- `MountDomain.kt` contains the catalog, profiles, input, and motion math with
-  no Bukkit or ARC dependency.
-- `MountOwnership` and `MountWallet` are service-provider interfaces.
-- `LuckPermsMountOwnership` and `VaultMountWallet` are replaceable adapters.
-- `MountSessionController` and `MountGuiController` are the Paper layer.
-- `MountModule` is the only ARC lifecycle/bootstrap entry point.
+`/ride-mob zombie 4.8 baby` is an administrator smoke command. Normal players
+use `/mounts`; no legacy `mcfine.*` mount permission is consulted.
 
-To extract this as a plugin later, move `ru.arc.mounts`, replace `MountModule`
-with a small `JavaPlugin`, and provide a scheduler plus the same LuckPerms and
-Vault adapters. No other ARC gameplay module owns mount state.
+## Spawn and protection integration
 
-## Configuration
+ARC tags the entity inside Paper's spawn initializer and generates a one-time
+in-memory token before `CreatureSpawnEvent`. It uncancels only a cancelled
+`CUSTOM` event whose owner UUID, catalog ID and token all match the currently
+pending ARC summon. This lets mounts work at spawn while ordinary WorldGuard
+mob-spawn restrictions remain intact.
 
-The bundled and live file is `plugins/ARC/modules/mounts.yml`. Spawn and
-survival intentionally have separate tracked copies because their world policy
-differs. Catalog speed values preserve the former Denizen progression; type
-scales convert them into bounded Bukkit velocity.
+## Economy safety
 
-The versioned LuckPerms migration in the mcserver repository replaces legacy
-ownership nodes before this module is activated. Runtime configuration keeps
-`ownership-migration-complete: false` as a fail-closed activation gate until
-the reviewed migration has been applied and verified.
+Purchases are enabled only on the spawn node. Prices are converted to exact
+minor currency units and charged directly through the exact RedisEconomy
+4.5.12 API; the adapter refuses non-zero provider tax or a changed pre-call
+balance.
+
+Before any withdrawal, ARC atomically writes
+`plugins/ARC/data/mount-purchases.json`. The journal records the intended
+permission and exact before/after balance evidence. Permission failure triggers
+one exact compensating refund. On restart ARC recovers a proven withdrawal by
+checking the direct LuckPerms node and, for an ambiguous provider call, matching
+the transaction UUID, amount, currency and timestamp in RedisEconomy history.
+Unprovable outcomes fail closed in `MANUAL_REVIEW`, block duplicate purchases
+for that player and are exposed through logs and bounded Prometheus metrics.
+
+## Configuration and observability
+
+The bundled and live file is `plugins/ARC/modules/mounts.yml`. It owns the
+catalog, rarity, descriptions, three level price/speed/handling values,
+deterministic base appearance, skins, equipment and cosmetic trails. Spawn and
+survival keep separate tracked copies for their world and purchasing policies.
+
+Metrics use no player or transaction labels:
+
+- `arc_mounts_enabled`, `arc_mounts_purchases_enabled`;
+- `arc_mounts_catalog_entries`, `arc_mounts_active_sessions`;
+- `arc_mount_purchase_journal_unresolved`;
+- `arc_mount_purchase_journal_records{status=...}`.
+
+The package is self-contained behind `MountOwnership`, `MountWallet` and
+`MountPurchaseJournal`; `MountModule` is its only ARC lifecycle entry point.

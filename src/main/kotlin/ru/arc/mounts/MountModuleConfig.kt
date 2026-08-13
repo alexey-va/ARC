@@ -12,6 +12,9 @@ open class MountModuleConfig(private val config: Config) {
     open val allowedWorlds: Set<String> get() = config.stringList("allowed-worlds").map { it.lowercase(Locale.ROOT) }.toSet()
     open val sessionDuration: Duration get() = config.duration("session-duration", Duration.ofMinutes(10))
     open val adminSessionDuration: Duration get() = config.duration("admin-session-duration", Duration.ofSeconds(5))
+    open val purchasesEnabled: Boolean get() = config.bool("purchases-enabled", false)
+    open val idleTimeout: Duration get() = config.duration("safety.idle-timeout", Duration.ofMinutes(5))
+    open val summonCooldown: Duration get() = config.duration("safety.summon-cooldown", Duration.ofSeconds(2))
     open val doubleSneakWindow: Duration get() = config.duration("controls.double-sneak-window", Duration.ofMillis(450))
     open val descendingHintCooldown: Duration get() = config.duration("controls.hint-cooldown", Duration.ofSeconds(5))
     open val walkingSpeedScale: Double get() = config.double("movement.walking-speed-scale", 0.16)
@@ -25,11 +28,14 @@ open class MountModuleConfig(private val config: Config) {
     open val verticalSpeedRatio: Double get() = config.double("movement.vertical-speed-ratio", 0.75)
     open val maximumVerticalSpeed: Double get() = config.double("movement.maximum-vertical-speed", 0.5)
     open val flightPitchInfluence: Double get() = config.double("movement.flight-pitch-influence", 0.65)
+    open val maximumSpeedBlocksPerTick: Double get() = config.double("movement.maximum-speed-blocks-per-tick", 1.05)
+    open val maximumTestRawSpeed: Double get() = config.double("movement.maximum-test-raw-speed", 6.0)
     open val maximumHeightAboveWorld: Int get() = config.integer("movement.maximum-height-above-world", 32)
     open val postFlightSlowFalling: Duration get() = config.duration("safety.post-flight-slow-falling", Duration.ofSeconds(8))
     open val backCommand: String get() = config.string("gui.back-command", "m").trim().removePrefix("/")
     open val listTitle: String get() = config.string("gui.list-title", "<dark_gray><bold>Маунты")
     open val detailTitle: String get() = config.string("gui.detail-title", "<dark_gray><bold>Маунт: <mount>")
+    open val skinsTitle: String get() = config.string("gui.skins-title", "<dark_gray><bold>Облики: <mount>")
 
     open fun catalog(): MountCatalog {
         val definitions =
@@ -43,9 +49,13 @@ open class MountModuleConfig(private val config: Config) {
                     entityType = config.string("$root.entity", id).trim().uppercase(Locale.ROOT),
                     iconMaterial = config.string("$root.item", "PAPER").trim().uppercase(Locale.ROOT),
                     displayName = config.string("$root.name", id).trim(),
-                    speeds = numberList("$root.speeds", id, nullable = false).filterNotNull(),
-                    prices = numberList("$root.prices", id, nullable = true),
+                    description = config.stringList("$root.description").map(String::trim).filter(String::isNotEmpty),
+                    acquisition = config.string("$root.acquisition", "Магазин маунтов").trim(),
+                    rarity = strictRarity(config.string("$root.rarity", "common"), id),
+                    levels = levelList(root, id),
                     glowPrice = config.doubleOrNull("$root.buy-glow"),
+                    appearance = appearance("$root.appearance"),
+                    skins = skinList(root, id),
                 )
             }
         return MountCatalog(definitions)
@@ -55,6 +65,8 @@ open class MountModuleConfig(private val config: Config) {
         if (!enabled) return this
         require(!sessionDuration.isZero && !sessionDuration.isNegative) { "Mount session-duration must be positive" }
         require(!adminSessionDuration.isZero && !adminSessionDuration.isNegative) { "Mount admin-session-duration must be positive" }
+        require(!idleTimeout.isZero && !idleTimeout.isNegative) { "Mount idle-timeout must be positive" }
+        require(!summonCooldown.isNegative) { "Mount summon-cooldown cannot be negative" }
         require(!doubleSneakWindow.isZero && !doubleSneakWindow.isNegative) { "Mount double-sneak-window must be positive" }
         require(walkingSpeedScale > 0.0 && walkingSpeedScale.isFinite()) { "walking-speed-scale must be positive" }
         require(flyingSpeedScale > 0.0 && flyingSpeedScale.isFinite()) { "flying-speed-scale must be positive" }
@@ -69,6 +81,12 @@ open class MountModuleConfig(private val config: Config) {
             "Mount maximum-vertical-speed must be positive"
         }
         require(flightPitchInfluence in 0.0..1.0) { "Mount flight-pitch-influence must be between 0 and 1" }
+        require(maximumSpeedBlocksPerTick.isFinite() && maximumSpeedBlocksPerTick in 0.2..2.0) {
+            "Mount maximum-speed-blocks-per-tick must be between 0.2 and 2.0"
+        }
+        require(maximumTestRawSpeed.isFinite() && maximumTestRawSpeed in 0.1..12.0) {
+            "Mount maximum-test-raw-speed must be between 0.1 and 12.0"
+        }
         require(maximumHeightAboveWorld in 0..256) { "Mount maximum-height-above-world must be between 0 and 256" }
         catalog()
         return this
@@ -76,22 +94,95 @@ open class MountModuleConfig(private val config: Config) {
 
     open fun message(path: String, fallback: String): String = config.string("messages.$path", fallback)
 
-    private fun numberList(path: String, mountId: String, nullable: Boolean): List<Double?> {
-        if (!config.exists(path)) return emptyList()
-        return config.list<Any?>(path).mapIndexed { index, value ->
-            if (value == null || value.toString().equals("null", ignoreCase = true)) {
-                require(nullable) { "Mount '$mountId' $path level ${index + 1} cannot be null" }
-                null
-            } else {
-                value.toString().toDoubleOrNull()
-                    ?: throw IllegalArgumentException("Mount '$mountId' $path level ${index + 1} is not a number")
-            }
+    private fun levelList(root: String, mountId: String): List<MountLevelDefinition> =
+        config.list<Map<String, Any?>>("$root.levels").mapIndexed { index, raw ->
+            val level = index + 1
+            MountLevelDefinition(
+                speed = requiredDouble(raw["speed"], "Mount '$mountId' level $level speed"),
+                price = nullableDouble(raw["price"], "Mount '$mountId' level $level price"),
+                handlingMultiplier = optionalDouble(raw["handling"], 1.0, "Mount '$mountId' level $level handling"),
+                sprintMultiplier = optionalDouble(raw["sprint"], 1.0, "Mount '$mountId' level $level sprint"),
+            )
         }
+
+    private fun skinList(root: String, mountId: String): List<MountSkinDefinition> {
+        val baseAppearance = appearance("$root.appearance")
+        return config.keys("$root.skins").map { rawId ->
+            val id = rawId.lowercase(Locale.ROOT)
+            require(id == rawId && MountDefinition.validId(id)) { "Mount '$mountId' skin id '$rawId' must be normalized" }
+            val path = "$root.skins.$id"
+            val presetId = config.stringOrNull("$path.preset")?.trim()?.lowercase(Locale.ROOT)
+            if (presetId != null) require(MountDefinition.validId(presetId) && presetId in config.keys("cosmetics")) {
+                "Mount '$mountId' skin '$id' has unknown cosmetic preset '$presetId'"
+            }
+            val presetPath = presetId?.let { "cosmetics.$it" }
+            val presetAppearance = presetPath?.let { appearance("$it.appearance", baseAppearance) } ?: baseAppearance
+            MountSkinDefinition(
+                id = id,
+                displayName =
+                    config.stringOrNull("$path.name")?.trim()
+                        ?: presetPath?.let { config.string("$it.name", id).trim() }
+                        ?: id,
+                iconMaterial =
+                    (config.stringOrNull("$path.item")
+                        ?: presetPath?.let { config.string("$it.item", "LEATHER_HORSE_ARMOR") }
+                        ?: "LEATHER_HORSE_ARMOR").trim().uppercase(Locale.ROOT),
+                price = config.doubleOrNull("$path.price"),
+                appearance = appearance("$path.appearance", presetAppearance),
+                trail = trail("$path.trail") ?: presetPath?.let { trail("$it.trail") },
+            )
+        }
+    }
+
+    private fun appearance(path: String, fallback: MountAppearance = MountAppearance()): MountAppearance {
+        val equipment =
+            MountEquipmentSlot.entries.mapNotNull { slot ->
+                config.stringOrNull("$path.equipment.${slot.configKey}")
+                    ?.trim()
+                    ?.takeIf(String::isNotEmpty)
+                    ?.uppercase(Locale.ROOT)
+                    ?.let { slot to it }
+            }.toMap()
+        return MountAppearance(
+            baby = config.booleanOrNull("$path.baby") ?: fallback.baby,
+            scale = config.doubleOrNull("$path.scale") ?: fallback.scale,
+            variant = normalizedAppearanceValue(config.stringOrNull("$path.variant")) ?: fallback.variant,
+            secondaryVariant =
+                normalizedAppearanceValue(config.stringOrNull("$path.secondary-variant")) ?: fallback.secondaryVariant,
+            equipment = if (equipment.isEmpty()) fallback.equipment else equipment,
+        )
+    }
+
+    private fun trail(path: String): MountTrailDefinition? {
+        val particle = config.stringOrNull("$path.particle")?.trim()?.takeIf(String::isNotEmpty) ?: return null
+        return MountTrailDefinition(
+            particle = particle.uppercase(Locale.ROOT),
+            intervalTicks = config.integer("$path.interval-ticks", 4),
+            count = config.integer("$path.count", 1),
+        )
+    }
+
+    private fun normalizedAppearanceValue(raw: String?): String? =
+        raw?.trim()?.takeIf(String::isNotEmpty)?.uppercase(Locale.ROOT)
+
+    private fun requiredDouble(value: Any?, label: String): Double =
+        nullableDouble(value, label) ?: throw IllegalArgumentException("$label is required")
+
+    private fun optionalDouble(value: Any?, fallback: Double, label: String): Double =
+        if (value == null) fallback else requiredDouble(value, label)
+
+    private fun nullableDouble(value: Any?, label: String): Double? {
+        if (value == null || value.toString().equals("null", ignoreCase = true)) return null
+        return value.toString().toDoubleOrNull() ?: throw IllegalArgumentException("$label is not a number")
     }
 
     private fun strictMovement(raw: String, mountId: String): MountMovement =
         runCatching { MountMovement.valueOf(raw.trim().uppercase(Locale.ROOT)) }
             .getOrElse { throw IllegalArgumentException("Mount '$mountId' has invalid type '$raw'") }
+
+    private fun strictRarity(raw: String, mountId: String): MountRarity =
+        runCatching { MountRarity.valueOf(raw.trim().uppercase(Locale.ROOT)) }
+            .getOrElse { throw IllegalArgumentException("Mount '$mountId' has invalid rarity '$raw'") }
 
     companion object {
         fun load(dataPath: Path): MountModuleConfig =

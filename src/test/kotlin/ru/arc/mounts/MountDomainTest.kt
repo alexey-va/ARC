@@ -1,24 +1,39 @@
 package ru.arc.mounts
 
-import io.kotest.core.spec.style.StringSpec
-import io.kotest.matchers.doubles.shouldBeExactly
-import io.kotest.matchers.doubles.plusOrMinus
-import io.kotest.matchers.shouldBe
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.doubles.plusOrMinus
+import io.kotest.matchers.doubles.shouldBeExactly
+import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import net.luckperms.api.node.types.PermissionNode
+import java.util.UUID
+import java.util.concurrent.CompletableFuture
 
 class MountDomainTest : StringSpec({
-    "catalog preserves the highest unlocked permission level" {
+    "catalog preserves the highest unlocked permission level and selected skin" {
         val mount = testMount()
         val subject =
-            MountPermissionSubject(java.util.UUID.randomUUID(), "Rider") { permission ->
-                permission in setOf(mount.levelPermission(1), mount.levelPermission(3), mount.glowPermission)
+            MountPermissionSubject(UUID.randomUUID(), "Rider") { permission ->
+                permission in
+                    setOf(
+                        mount.levelPermission(1),
+                        mount.levelPermission(3),
+                        mount.glowPermission,
+                        mount.skinPermission("baby"),
+                        mount.activeSkinPermission("baby"),
+                    )
             }
-        val ownership = TestOwnership()
 
-        ownership.profile(subject, mount) shouldBe MountProfile(level = 3, glowOwned = true, glowDisabled = false)
+        TestOwnership().profile(subject, mount) shouldBe
+            MountProfile(
+                level = 3,
+                glowOwned = true,
+                glowDisabled = false,
+                ownedSkinIds = setOf("baby"),
+                activeSkinId = "baby",
+            )
     }
 
     "all mount ownership nodes use the ARC mounts namespace" {
@@ -27,12 +42,14 @@ class MountDomainTest : StringSpec({
         mount.levelPermission(2) shouldBe "arc.mounts.bee.2"
         mount.glowPermission shouldBe "arc.mounts.bee.glow"
         mount.glowDisabledPermission shouldBe "arc.mounts.bee.glow.disabled"
+        mount.skinPermission("baby") shouldBe "arc.mounts.bee.skin.baby"
+        mount.activeSkinPermission("baby") shouldBe "arc.mounts.bee.skin.active.baby"
     }
 
     "disabled glow permission wins after glow was purchased" {
         val mount = testMount()
         val subject =
-            MountPermissionSubject(java.util.UUID.randomUUID(), "Rider") { permission ->
+            MountPermissionSubject(UUID.randomUUID(), "Rider") { permission ->
                 permission == mount.levelPermission(1) ||
                     permission == mount.glowPermission ||
                     permission == mount.glowDisabledPermission
@@ -90,15 +107,14 @@ class MountDomainTest : StringSpec({
         gesture.update(true, 1_400) shouldBe SneakGestureResult.DOUBLE_PRESSED
     }
 
-    "mount definitions reject invalid prices and speeds" {
+    "mount definitions reject invalid level prices and speeds" {
         shouldThrow<IllegalArgumentException> {
-            testMount().copy(speeds = listOf(0.0))
+            testMount().copy(levels = listOf(MountLevelDefinition(speed = 0.0, price = 1.0)))
         }
         shouldThrow<IllegalArgumentException> {
-            testMount().copy(prices = listOf(-1.0))
+            testMount().copy(levels = listOf(MountLevelDefinition(speed = 1.0, price = -1.0)))
         }
     }
-
 })
 
 private fun airborne(input: MountInputState, planar: MotionVector, pitch: Float = 0f) =
@@ -118,34 +134,54 @@ private fun permissionNode(permissionName: String): PermissionNode =
         every { value } returns true
     }
 
-private fun testMount() =
+internal fun testMount() =
     MountDefinition(
         id = "bee",
         movement = MountMovement.FLYING,
         entityType = "BEE",
         iconMaterial = "BEE_SPAWN_EGG",
         displayName = "Пчела",
-        speeds = listOf(0.4, 0.6, 0.9),
-        prices = listOf(50_000.0, 100_000.0, 500_000.0),
+        description = listOf("Тестовый маунт"),
+        acquisition = "Тест",
+        rarity = MountRarity.COMMON,
+        levels =
+            listOf(
+                MountLevelDefinition(0.4, 50_000.0),
+                MountLevelDefinition(0.6, 100_000.0),
+                MountLevelDefinition(0.9, 5_000_000.0, 1.28, 1.12),
+            ),
         glowPrice = 10_000.0,
+        skins =
+            listOf(
+                MountSkinDefinition(
+                    id = "baby",
+                    displayName = "Малыш",
+                    iconMaterial = "BEE_SPAWN_EGG",
+                    price = 25_000.0,
+                    appearance = MountAppearance(baby = true),
+                ),
+            ),
     )
 
 private class TestOwnership : MountOwnership {
     override fun profile(subject: MountPermissionSubject, mount: MountDefinition): MountProfile {
         val level = (1..mount.maxLevel).filter { subject.hasPermission(mount.levelPermission(it)) }.maxOrNull() ?: 0
-        val glow = subject.hasPermission(mount.glowPermission)
-        return MountProfile(level, glow, subject.hasPermission(mount.glowDisabledPermission))
+        val ownedSkins = mount.skins.filter { subject.hasPermission(mount.skinPermission(it.id)) }.mapTo(hashSetOf()) { it.id }
+        val active = mount.skins.firstOrNull { it.id in ownedSkins && subject.hasPermission(mount.activeSkinPermission(it.id)) }?.id
+        return MountProfile(
+            level,
+            subject.hasPermission(mount.glowPermission),
+            subject.hasPermission(mount.glowDisabledPermission),
+            ownedSkins,
+            active ?: MountDefinition.DEFAULT_SKIN_ID,
+        )
     }
 
-    override fun grantLevel(playerId: java.util.UUID, mount: MountDefinition, level: Int) =
-        java.util.concurrent.CompletableFuture.completedFuture<Void>(null)
-
-    override fun grantGlow(playerId: java.util.UUID, mount: MountDefinition) =
-        java.util.concurrent.CompletableFuture.completedFuture<Void>(null)
-
-    override fun setGlowEnabled(playerId: java.util.UUID, mount: MountDefinition, enabled: Boolean) =
-        java.util.concurrent.CompletableFuture.completedFuture<Void>(null)
-
-    override fun resolveUniqueId(playerName: String) =
-        java.util.concurrent.CompletableFuture.completedFuture<java.util.UUID?>(null)
+    override fun grantLevel(playerId: UUID, mount: MountDefinition, level: Int) = CompletableFuture.completedFuture<Void>(null)
+    override fun grantGlow(playerId: UUID, mount: MountDefinition) = CompletableFuture.completedFuture<Void>(null)
+    override fun setGlowEnabled(playerId: UUID, mount: MountDefinition, enabled: Boolean) = CompletableFuture.completedFuture<Void>(null)
+    override fun grantSkin(playerId: UUID, mount: MountDefinition, skin: MountSkinDefinition) = CompletableFuture.completedFuture<Void>(null)
+    override fun setActiveSkin(playerId: UUID, mount: MountDefinition, skinId: String) = CompletableFuture.completedFuture<Void>(null)
+    override fun hasDirectPermission(playerId: UUID, permission: String) = CompletableFuture.completedFuture(false)
+    override fun resolveUniqueId(playerName: String) = CompletableFuture.completedFuture<UUID?>(null)
 }

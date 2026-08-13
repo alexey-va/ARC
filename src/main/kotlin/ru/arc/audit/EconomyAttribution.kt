@@ -23,6 +23,7 @@ enum class EconomySource(val label: String, val type: Type) {
     GAMBLING("gambling", Type.GAMBLING),
     PUBLIC_PROJECTS("public_projects", Type.ARC),
     DUNGEON_ENTRY("dungeon_entry", Type.ARC),
+    MOUNTS("mounts", Type.ARC),
     CMI("cmi", Type.CMI),
     ARC("arc", Type.ARC),
     HUSKHOMES("huskhomes", Type.OTHER),
@@ -236,6 +237,7 @@ object EconomyAttributionResolver {
             reason.equals("Payment", ignoreCase = true) -> EconomySource.PLAYER_TRANSFER
             haystack.contains("arc-season:public_projects:") -> EconomySource.PUBLIC_PROJECTS
             haystack.contains("arc-season:dungeon_entry:") -> EconomySource.DUNGEON_ENTRY
+            haystack.contains("arc-mount:") || haystack.contains("arc-mount-refund:") -> EconomySource.MOUNTS
             haystack.contains("reset balance") || haystack.contains("set balance") -> EconomySource.BALANCE_SET
             haystack.contains("commandgive") || haystack.contains("commandtake") -> EconomySource.ADMIN_COMMAND
             haystack.contains("gamingmesh.jobs") || haystack.contains("zrips.jobs") -> EconomySource.JOBS
@@ -273,6 +275,7 @@ object EconomyAttributionResolver {
     private fun flow(reason: String, source: EconomySource, amount: Double, origin: String): EconomyFlow =
         when {
             source == EconomySource.BALANCE_SET -> EconomyFlow.ADJUSTMENT
+            source == EconomySource.MOUNTS && reason.startsWith("arc-mount-refund:") -> EconomyFlow.INTERNAL
             source in transferSources -> EconomyFlow.TRANSFER
             source == EconomySource.CMI && origin.contains(".commands.list.pay", ignoreCase = true) -> EconomyFlow.TRANSFER
             source == EconomySource.CMI &&

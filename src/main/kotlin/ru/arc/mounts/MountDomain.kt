@@ -15,47 +15,155 @@ enum class MountMovement(val displayName: String) {
     SWIMMING("Водный"),
 }
 
+enum class MountRarity(val displayName: String, val color: String) {
+    COMMON("Обычный", "<white>"),
+    UNCOMMON("Необычный", "<green>"),
+    RARE("Редкий", "<aqua>"),
+    EPIC("Эпический", "<light_purple>"),
+    LEGENDARY("Легендарный", "<gold>"),
+}
+
+data class MountLevelDefinition(
+    val speed: Double,
+    val price: Double?,
+    val handlingMultiplier: Double = 1.0,
+    val sprintMultiplier: Double = 1.0,
+) {
+    init {
+        require(speed.isFinite() && speed > 0.0) { "Mount level speed must be positive and finite" }
+        require(price == null || price.isFinite() && price > 0.0) { "Mount level price must be positive and finite" }
+        require(handlingMultiplier.isFinite() && handlingMultiplier in 0.5..2.0) {
+            "Mount level handling multiplier must be between 0.5 and 2.0"
+        }
+        require(sprintMultiplier.isFinite() && sprintMultiplier in 1.0..2.0) {
+            "Mount level sprint multiplier must be between 1.0 and 2.0"
+        }
+    }
+}
+
+enum class MountEquipmentSlot(val configKey: String) {
+    HEAD("head"),
+    CHEST("chest"),
+    LEGS("legs"),
+    FEET("feet"),
+    MAIN_HAND("main-hand"),
+    OFF_HAND("off-hand"),
+    BODY("body"),
+    SADDLE("saddle"),
+}
+
+data class MountAppearance(
+    val baby: Boolean = false,
+    val scale: Double = 1.0,
+    val variant: String? = null,
+    val secondaryVariant: String? = null,
+    val equipment: Map<MountEquipmentSlot, String> = emptyMap(),
+) {
+    init {
+        require(scale.isFinite() && scale in 0.35..4.0) { "Mount appearance scale must be between 0.35 and 4.0" }
+        require(variant == null || APPEARANCE_VALUE_PATTERN.matches(variant)) { "Invalid mount appearance variant: $variant" }
+        require(secondaryVariant == null || APPEARANCE_VALUE_PATTERN.matches(secondaryVariant)) {
+            "Invalid mount appearance secondary variant: $secondaryVariant"
+        }
+        require(equipment.values.all { MATERIAL_PATTERN.matches(it) }) { "Invalid mount appearance equipment material" }
+    }
+
+    companion object {
+        private val APPEARANCE_VALUE_PATTERN = Regex("[A-Z0-9_]{1,48}")
+        private val MATERIAL_PATTERN = Regex("[A-Z0-9_]{2,64}")
+    }
+}
+
+data class MountTrailDefinition(
+    val particle: String,
+    val intervalTicks: Int = 4,
+    val count: Int = 1,
+) {
+    init {
+        require(PARTICLE_PATTERN.matches(particle)) { "Invalid mount trail particle: $particle" }
+        require(intervalTicks in 2..40) { "Mount trail interval must be between 2 and 40 ticks" }
+        require(count in 1..8) { "Mount trail count must be between 1 and 8" }
+    }
+
+    companion object {
+        private val PARTICLE_PATTERN = Regex("[A-Z0-9_]{2,64}")
+    }
+}
+
+data class MountSkinDefinition(
+    val id: String,
+    val displayName: String,
+    val iconMaterial: String,
+    val price: Double?,
+    val appearance: MountAppearance,
+    val trail: MountTrailDefinition? = null,
+) {
+    init {
+        require(MountDefinition.validId(id)) { "Invalid mount skin id: $id" }
+        require(displayName.isNotBlank()) { "Mount skin '$id' display name is blank" }
+        require(iconMaterial.isNotBlank()) { "Mount skin '$id' icon material is blank" }
+        require(price == null || price.isFinite() && price > 0.0) { "Mount skin '$id' price must be positive and finite" }
+    }
+}
+
 data class MountDefinition(
     val id: String,
     val movement: MountMovement,
     val entityType: String,
     val iconMaterial: String,
     val displayName: String,
-    val speeds: List<Double>,
-    val prices: List<Double?>,
+    val description: List<String>,
+    val acquisition: String,
+    val rarity: MountRarity,
+    val levels: List<MountLevelDefinition>,
     val glowPrice: Double?,
+    val appearance: MountAppearance = MountAppearance(),
+    val skins: List<MountSkinDefinition> = emptyList(),
 ) {
     init {
-        require(ID_PATTERN.matches(id)) { "Invalid mount id: $id" }
+        require(validId(id)) { "Invalid mount id: $id" }
         require(entityType.isNotBlank()) { "Mount '$id' entity type is blank" }
         require(iconMaterial.isNotBlank()) { "Mount '$id' icon material is blank" }
         require(displayName.isNotBlank()) { "Mount '$id' display name is blank" }
-        require(speeds.isNotEmpty()) { "Mount '$id' must have at least one speed level" }
-        require(speeds.size <= MAX_LEVELS) { "Mount '$id' has more than $MAX_LEVELS levels" }
-        require(speeds.all { it.isFinite() && it > 0.0 }) { "Mount '$id' speeds must be positive and finite" }
-        require(prices.size <= speeds.size) { "Mount '$id' has more prices than speed levels" }
-        require(prices.filterNotNull().all { it.isFinite() && it > 0.0 }) {
-            "Mount '$id' prices must be positive and finite"
-        }
+        require(displayName.length <= 64) { "Mount '$id' display name is too long" }
+        require(description.size <= 6 && description.all { it.length <= 120 }) { "Mount '$id' description is invalid" }
+        require(acquisition.isNotBlank() && acquisition.length <= 120) { "Mount '$id' acquisition text is invalid" }
+        require(levels.isNotEmpty()) { "Mount '$id' must have at least one level" }
+        require(levels.size <= MAX_LEVELS) { "Mount '$id' has more than $MAX_LEVELS levels" }
         require(glowPrice == null || glowPrice.isFinite() && glowPrice > 0.0) {
             "Mount '$id' glow price must be positive and finite"
         }
+        require(skins.size <= MAX_SKINS) { "Mount '$id' has more than $MAX_SKINS skins" }
+        require(skins.map(MountSkinDefinition::id).toSet().size == skins.size) { "Mount '$id' skin ids must be unique" }
+        require(skins.none { it.id == DEFAULT_SKIN_ID }) { "Mount '$id' cannot redefine the default skin" }
     }
 
-    val maxLevel: Int get() = speeds.size
+    val maxLevel: Int get() = levels.size
 
-    fun speed(level: Int): Double = speeds[(level.coerceIn(1, maxLevel)) - 1]
+    fun level(level: Int): MountLevelDefinition = levels[(level.coerceIn(1, maxLevel)) - 1]
 
-    fun price(level: Int): Double? = prices.getOrNull(level - 1)
+    fun speed(level: Int): Double = level(level).speed
+
+    fun price(level: Int): Double? = levels.getOrNull(level - 1)?.price
 
     fun levelPermission(level: Int): String = "arc.mounts.$id.$level"
 
     val glowPermission: String get() = "arc.mounts.$id.glow"
     val glowDisabledPermission: String get() = "arc.mounts.$id.glow.disabled"
 
+    fun skin(id: String?): MountSkinDefinition? = skins.firstOrNull { it.id == id }
+
+    fun skinPermission(skinId: String): String = "arc.mounts.$id.skin.$skinId"
+
+    fun activeSkinPermission(skinId: String): String = "arc.mounts.$id.skin.active.$skinId"
+
     companion object {
         private val ID_PATTERN = Regex("[a-z0-9][a-z0-9_-]{1,31}")
         private const val MAX_LEVELS = 16
+        private const val MAX_SKINS = 16
+        const val DEFAULT_SKIN_ID = "default"
+
+        fun validId(value: String): Boolean = ID_PATTERN.matches(value)
     }
 }
 
@@ -81,9 +189,13 @@ data class MountProfile(
     val level: Int,
     val glowOwned: Boolean,
     val glowDisabled: Boolean,
+    val ownedSkinIds: Set<String> = emptySet(),
+    val activeSkinId: String = MountDefinition.DEFAULT_SKIN_ID,
 ) {
     val unlocked: Boolean get() = level > 0
     val glowEnabled: Boolean get() = glowOwned && !glowDisabled
+
+    fun ownsSkin(skinId: String): Boolean = skinId == MountDefinition.DEFAULT_SKIN_ID || skinId in ownedSkinIds
 }
 
 interface MountOwnership {
@@ -95,17 +207,13 @@ interface MountOwnership {
 
     fun setGlowEnabled(playerId: UUID, mount: MountDefinition, enabled: Boolean): CompletableFuture<Void>
 
+    fun grantSkin(playerId: UUID, mount: MountDefinition, skin: MountSkinDefinition): CompletableFuture<Void>
+
+    fun setActiveSkin(playerId: UUID, mount: MountDefinition, skinId: String): CompletableFuture<Void>
+
+    fun hasDirectPermission(playerId: UUID, permission: String): CompletableFuture<Boolean>
+
     fun resolveUniqueId(playerName: String): CompletableFuture<UUID?>
-}
-
-interface MountWallet {
-    val available: Boolean
-
-    fun balance(playerId: UUID): Double
-
-    fun withdraw(playerId: UUID, amount: Double): Boolean
-
-    fun deposit(playerId: UUID, amount: Double): Boolean
 }
 
 data class MountInputState(

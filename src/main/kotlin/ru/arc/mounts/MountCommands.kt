@@ -111,17 +111,26 @@ class RideMobCommand(
             return true
         }
         val speed = args.getOrNull(1)?.toDoubleOrNull() ?: 0.5
-        if (!speed.isFinite() || speed <= 0.0) {
-            player.sendMessage(TextUtil.mm("<red>Скорость должна быть положительным числом.", true))
+        if (!speed.isFinite() || speed <= 0.0 || speed > config().maximumTestRawSpeed) {
+            player.sendMessage(
+                TextUtil.mm("<red>Скорость должна быть от 0 до ${config().maximumTestRawSpeed}.", true),
+            )
+            return true
+        }
+        val skinId = args.getOrNull(2)?.lowercase(Locale.ROOT)
+        val skin = skinId?.let(mount::skin)
+        if (skinId != null && skin == null) {
+            player.sendMessage(TextUtil.mm("<red>Неизвестный облик: <white>$skinId", true))
             return true
         }
         val result =
             sessions.spawn(
-                player,
-                mount,
-                speed,
-                config().adminSessionDuration.toMillis(),
+                player = player,
+                definition = mount,
+                speed = speed,
+                durationMillis = config().adminSessionDuration.toMillis(),
                 glow = false,
+                skin = skin,
             )
         if (result != MountSpawnResult.SUCCESS) {
             player.sendMessage(TextUtil.mm("<red>Не удалось призвать маунта: <white>${result.name.lowercase()}<red>.", true))
@@ -137,7 +146,11 @@ class RideMobCommand(
     ): List<String> =
         when (args.size) {
             1 -> catalog().all.map(MountDefinition::id).matching(args[0])
-            2 -> listOf("0.3", "0.5", "1.0").matching(args[1])
+            2 -> listOf("0.3", "0.5", "1.0", "2.0", "4.0").matching(args[1])
+            3 -> {
+                val mount = catalog()[args[0].lowercase(Locale.ROOT)]
+                mount?.skins?.map(MountSkinDefinition::id).orEmpty().matching(args[2])
+            }
             else -> emptyList()
         }
 }

@@ -87,7 +87,7 @@ commands:
     permission: arc.mounts.admin
   ride-mob:
     description: Spawn a temporary test mount
-    usage: /ride-mob [mount] [speed]
+    usage: /ride-mob [mount] [speed] [skin]
     permission: arc.mounts.ride
 permissions:
   arc.hide.bypass:

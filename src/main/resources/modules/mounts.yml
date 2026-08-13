@@ -1,18 +1,16 @@
-# Native ARC mounts. Runtime mirrors may override allowed-worlds and enabled.
+# Native ARC Mounts 1.0. Runtime mirrors override enabled, purchases-enabled and allowed-worlds.
 enabled: false
 ownership-migration-complete: false
+purchases-enabled: false
 allowed-worlds: []
-session-duration: 10m
-admin-session-duration: 5s
+session-duration: 12h
+admin-session-duration: 10s
 
 controls:
-  # Flying/swimming: hold Shift to descend, press it twice to dismount.
   double-sneak-window: 450ms
   hint-cooldown: 5s
 
 movement:
-  # Catalog speed values preserve the Denizen/Citizens progression; these scales
-  # convert them to Bukkit velocity while keeping the ride controllable.
   walking-speed-scale: 0.16
   flying-speed-scale: 0.55
   swimming-speed-scale: 0.45
@@ -22,128 +20,990 @@ movement:
   sprint-multiplier: 1.15
   jump-velocity: 0.5
   vertical-speed-ratio: 0.75
-  maximum-vertical-speed: 0.5
+  maximum-vertical-speed: 0.65
   flight-pitch-influence: 0.65
+  maximum-speed-blocks-per-tick: 1.05
+  maximum-test-raw-speed: 6.0
   maximum-height-above-world: 32
 
 safety:
   post-flight-slow-falling: 8s
+  idle-timeout: 5m
+  summon-cooldown: 2s
 
 gui:
-  list-title: "<dark_gray><bold>Маунты"
+  list-title: "<dark_gray><bold>Коллекция маунтов"
   detail-title: "<dark_gray><bold>Маунт: <mount>"
+  skins-title: "<dark_gray><bold>Облики: <mount>"
   back-command: m
 
 messages:
   ground-controls: "<gray>WASD — движение, Space — прыжок, Shift — спешиться"
   flight-controls: "<gray>WASD — движение, Space — вверх, Shift — вниз, двойной Shift — спешиться"
   descending: "<aqua>Снижение… <gray>двойной Shift — спешиться"
-  expired: "<gray>Время поездки на маунте закончилось."
+  expired: "<gray>Время поездки закончилось."
   already-riding: "<red>Вы уже используете маунта."
   already-in-vehicle: "<red>Сначала покиньте текущее транспортное средство."
   world-not-allowed: "<red>В этом мире маунты недоступны."
   water-required: "<aqua>Водного маунта можно призвать только в воде."
+  summon-cooldown: "<yellow>Подождите немного перед повторным призывом."
   spawn-failed: "<red>Не удалось призвать маунта."
-  purchase-success: "<green>Покупка успешна!"
+  purchases-disabled: "<yellow>Покупки маунтов доступны на спавне."
+  purchase-success: "<green>Покупка сохранена!"
   setting-saved: "<green>Настройка сохранена."
   purchase-busy: "<yellow>Предыдущая операция ещё выполняется."
-  already-owned: "<yellow>У вас уже есть это улучшение."
+  already-owned: "<yellow>Это уже выбрано или куплено."
   invalid-level: "<red>Сначала купите предыдущий уровень."
-  not-unlocked: "<red>Сначала разблокируйте маунта."
+  not-unlocked: "<red>Сначала разблокируйте маунта или облик."
   not-for-sale: "<red>Это улучшение нельзя купить."
   economy-unavailable: "<red>Экономика временно недоступна."
   not-enough-money: "<red>Недостаточно денег."
   payment-failed: "<red>Платёж не прошёл. Деньги не списаны."
+  journal-unavailable: "<red>Покупки временно приостановлены. Деньги не списаны."
   setting-failed: "<red>Не удалось сохранить настройку."
-  save-failed-refunded: "<red>Не удалось сохранить покупку. Деньги возвращены."
-  save-failed-refund-failed: "<dark_red>Ошибка покупки и возврата. Обратитесь к администрации."
+  save-failed-refunded: "<red>Покупка не сохранилась. Деньги полностью возвращены."
+  purchase-manual-review: "<dark_red>Покупка приостановлена для безопасной проверки. Повторно не покупайте; обратитесь к администрации."
+
+cosmetics:
+  starlight:
+    name: "Звёздный комплект"
+    item: AMETHYST_SHARD
+    trail:
+      particle: END_ROD
+      interval-ticks: 3
+      count: 2
+  shadow:
+    name: "Теневой комплект"
+    item: ECHO_SHARD
+    trail:
+      particle: SOUL
+      interval-ticks: 4
+      count: 2
+  flame:
+    name: "Огненный комплект"
+    item: BLAZE_POWDER
+    trail:
+      particle: FLAME
+      interval-ticks: 3
+      count: 2
+  soulfire:
+    name: "Пламя душ"
+    item: SOUL_LANTERN
+    trail:
+      particle: SOUL_FIRE_FLAME
+      interval-ticks: 3
+      count: 2
+  cloud:
+    name: "Облачный комплект"
+    item: WHITE_DYE
+    trail:
+      particle: CLOUD
+      interval-ticks: 3
+      count: 2
+  ocean:
+    name: "Океанический комплект"
+    item: NAUTILUS_SHELL
+    trail:
+      particle: NAUTILUS
+      interval-ticks: 3
+      count: 2
 
 mounts:
   zombie:
     type: walking
     item: ZOMBIE_SPAWN_EGG
     entity: ZOMBIE
-    name: Зомби
-    speeds: [1.0, 1.6, 3.2]
-    prices: [20000, 60000, 250000]
-    buy-glow: 10000
+    name: "Зомби"
+    rarity: common
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Надёжный городской ходок с полностью фиксируемой внешностью."
+    levels:
+      - {speed: 1.35, handling: 0.9, sprint: 1, price: 50000}
+      - {speed: 2.25, handling: 1, sprint: 1.03, price: 250000}
+      - {speed: 4.8, handling: 1.28, sprint: 1.12, price: 5000000}
+    buy-glow: 100000
+    appearance:
+      baby: false
+      scale: 1
+    skins:
+      baby:
+        name: "Малыш-зомби"
+        item: ZOMBIE_HEAD
+        preset: starlight
+        price: 350000
+        appearance:
+          baby: true
+          scale: 1
+      iron_guard:
+        name: "Железный страж"
+        item: IRON_CHESTPLATE
+        preset: shadow
+        price: 1500000
+        appearance:
+          baby: false
+          scale: 1
+          equipment:
+            head: IRON_HELMET
+            chest: IRON_CHESTPLATE
+            legs: IRON_LEGGINGS
+            feet: IRON_BOOTS
+            main-hand: IRON_SWORD
+      diamond_warlord:
+        name: "Алмазный воевода"
+        item: DIAMOND_CHESTPLATE
+        preset: soulfire
+        price: 5000000
+        appearance:
+          baby: false
+          scale: 1.08
+          equipment:
+            head: DIAMOND_HELMET
+            chest: DIAMOND_CHESTPLATE
+            legs: DIAMOND_LEGGINGS
+            feet: DIAMOND_BOOTS
+            main-hand: NETHERITE_SWORD
   skeleton:
     type: walking
     item: SKELETON_SPAWN_EGG
     entity: SKELETON
-    name: Скелет
-    speeds: [1.0, 1.6, 3.2]
-    prices: [20000, 60000, 250000]
-    buy-glow: 10000
+    name: "Скелет"
+    rarity: common
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Сухой, лёгкий и отзывчивый всадник для первых дальних поездок."
+    levels:
+      - {speed: 1.35, handling: 0.9, sprint: 1, price: 50000}
+      - {speed: 2.25, handling: 1, sprint: 1.03, price: 250000}
+      - {speed: 4.8, handling: 1.28, sprint: 1.12, price: 5000000}
+    buy-glow: 100000
+    appearance:
+      scale: 1
+    skins:
+      starlight:
+        name: "Звёздный комплект"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 350000
+      shadow:
+        name: "Теневой комплект"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 750000
   pig:
     type: walking
     item: PIG_SPAWN_EGG
     entity: PIG
-    name: Скорен
-    speeds: [1.0, 1.6, 3.2]
-    prices: [20000, 60000, 250000]
-    buy-glow: 10000
+    name: "Скорен"
+    rarity: common
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Тот самый Скорен. Маленький, но амбициозный."
+    levels:
+      - {speed: 1.35, handling: 0.9, sprint: 1, price: 50000}
+      - {speed: 2.25, handling: 1, sprint: 1.03, price: 250000}
+      - {speed: 4.8, handling: 1.28, sprint: 1.12, price: 5000000}
+    buy-glow: 100000
+    appearance:
+      baby: false
+      scale: 1.05
+      equipment:
+        saddle: SADDLE
+    skins:
+      starlight:
+        name: "Звёздный комплект"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 350000
+      shadow:
+        name: "Теневой комплект"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 750000
   enderman:
     type: walking
     item: ENDERMAN_SPAWN_EGG
     entity: ENDERMAN
-    name: Эндермен
-    speeds: [1.0, 1.6, 3.2]
-    prices: [20000, 60000, 250000]
-    buy-glow: 10000
+    name: "Эндермен"
+    rarity: rare
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Высокий странник Бездны с резким разгоном и теневыми обликами."
+    levels:
+      - {speed: 1.55, handling: 0.9, sprint: 1, price: 250000}
+      - {speed: 2.5, handling: 1, sprint: 1.03, price: 1200000}
+      - {speed: 5.2, handling: 1.28, sprint: 1.12, price: 12000000}
+    buy-glow: 350000
+    appearance:
+      scale: 0.92
+    skins:
+      starlight:
+        name: "Звёздный комплект"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 1200000
+      shadow:
+        name: "Теневой комплект"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 2800000
   horse:
     type: walking
     item: HORSE_SPAWN_EGG
     entity: HORSE
-    name: Лошадь
-    speeds: [1.0, 1.6, 3.2]
-    prices: [20000, 60000, 250000]
-    buy-glow: 10000
-  dolphin:
-    type: swimming
-    item: DOLPHIN_SPAWN_EGG
-    entity: DOLPHIN
-    name: Дельфин
-    speeds: [0.6, 0.7, 0.8]
-    prices: [20000, 60000, 250000]
-    buy-glow: 10000
-  bee:
-    type: flying
-    item: BEE_SPAWN_EGG
-    entity: BEE
-    name: Пчела
-    speeds: [0.4, 0.6, 0.9]
-    prices: [50000, 100000, 500000]
-    buy-glow: 10000
-  turtle:
-    type: flying
-    item: TURTLE_SPAWN_EGG
-    entity: TURTLE
-    name: Летающая черепаха
-    speeds: [0.1, 0.2, 0.3]
-    prices: [1000, 20000, 30000]
-    buy-glow: 10000
+    name: "Лошадь"
+    rarity: uncommon
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Классика путешествий: понятное управление и сильный поздний галоп."
+    levels:
+      - {speed: 1.45, handling: 0.9, sprint: 1, price: 100000}
+      - {speed: 2.35, handling: 1, sprint: 1.03, price: 500000}
+      - {speed: 5, handling: 1.28, sprint: 1.12, price: 8000000}
+    buy-glow: 200000
+    appearance:
+      baby: false
+      scale: 1
+      variant: BROWN
+      secondary-variant: NONE
+      equipment:
+        saddle: SADDLE
+    skins:
+      royal_white:
+        name: "Королевская белая"
+        item: DIAMOND_HORSE_ARMOR
+        preset: starlight
+        price: 1800000
+        appearance:
+          variant: WHITE
+          secondary-variant: WHITE_DOTS
+          equipment:
+            saddle: SADDLE
+            body: DIAMOND_HORSE_ARMOR
+      night_runner:
+        name: "Ночной скакун"
+        item: IRON_HORSE_ARMOR
+        preset: shadow
+        price: 1200000
+        appearance:
+          variant: BLACK
+          secondary-variant: BLACK_DOTS
+          equipment:
+            saddle: SADDLE
+            body: IRON_HORSE_ARMOR
+  camel:
+    type: walking
+    item: CAMEL_SPAWN_EGG
+    entity: CAMEL
+    name: "Верблюд"
+    rarity: uncommon
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Спокойный караванщик, созданный для долгих дорог и дорогих сбруй."
+    levels:
+      - {speed: 1.45, handling: 0.9, sprint: 1, price: 100000}
+      - {speed: 2.35, handling: 1, sprint: 1.03, price: 500000}
+      - {speed: 5, handling: 1.28, sprint: 1.12, price: 8000000}
+    buy-glow: 200000
+    appearance:
+      baby: false
+      scale: 1
+      equipment:
+        saddle: SADDLE
+    skins:
+      starlight:
+        name: "Звёздный комплект"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 650000
+      shadow:
+        name: "Теневой комплект"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 1400000
+  goat:
+    type: walking
+    item: GOAT_SPAWN_EGG
+    entity: GOAT
+    name: "Горный козёл"
+    rarity: uncommon
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Упрямый покоритель склонов с быстрым финальным темпом."
+    levels:
+      - {speed: 1.45, handling: 0.9, sprint: 1, price: 100000}
+      - {speed: 2.35, handling: 1, sprint: 1.03, price: 500000}
+      - {speed: 5, handling: 1.28, sprint: 1.12, price: 8000000}
+    buy-glow: 200000
+    appearance:
+      baby: false
+      scale: 1.15
+    skins:
+      starlight:
+        name: "Звёздный комплект"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 650000
+      shadow:
+        name: "Теневой комплект"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 1400000
+  fox:
+    type: walking
+    item: FOX_SPAWN_EGG
+    entity: FOX
+    name: "Лисица"
+    rarity: uncommon
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Юркая рыжая спутница, особенно приятная на узких улицах."
+    levels:
+      - {speed: 1.45, handling: 0.9, sprint: 1, price: 100000}
+      - {speed: 2.35, handling: 1, sprint: 1.03, price: 500000}
+      - {speed: 5, handling: 1.28, sprint: 1.12, price: 8000000}
+    buy-glow: 200000
+    appearance:
+      baby: false
+      scale: 1.35
+      variant: RED
+    skins:
+      snow_fox:
+        name: "Снежная лисица"
+        item: SNOWBALL
+        preset: starlight
+        price: 900000
+        appearance:
+          variant: SNOW
+      shadow_fox:
+        name: "Сумеречная лисица"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 1400000
   frog:
     type: walking
     item: FROG_SPAWN_EGG
     entity: FROG
-    name: Лягушка
-    speeds: [0.9, 2.0, 4.2]
-    prices: [50000, 100000, 500000]
-    buy-glow: 10000
+    name: "Лягушка"
+    rarity: uncommon
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Пружинистый ходок с отличным финальным разгоном."
+    levels:
+      - {speed: 1.45, handling: 0.9, sprint: 1, price: 100000}
+      - {speed: 2.35, handling: 1, sprint: 1.03, price: 500000}
+      - {speed: 5, handling: 1.28, sprint: 1.12, price: 8000000}
+    buy-glow: 200000
+    appearance:
+      baby: false
+      scale: 1.7
+      variant: TEMPERATE
+    skins:
+      cold:
+        name: "Морозная лягушка"
+        item: PACKED_ICE
+        preset: starlight
+        price: 800000
+        appearance:
+          variant: COLD
+      warm:
+        name: "Тропическая лягушка"
+        item: MAGMA_CREAM
+        preset: flame
+        price: 1100000
+        appearance:
+          variant: WARM
+  ravager:
+    type: walking
+    item: RAVAGER_SPAWN_EGG
+    entity: RAVAGER
+    name: "Разоритель"
+    rarity: epic
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Тяжёлый престижный таран: дорогой, грозный и удивительно быстрый."
+    levels:
+      - {speed: 1.65, handling: 0.9, sprint: 1, price: 500000}
+      - {speed: 2.65, handling: 1, sprint: 1.03, price: 2500000}
+      - {speed: 5.4, handling: 1.28, sprint: 1.12, price: 20000000}
+    buy-glow: 600000
+    appearance:
+      scale: 0.82
+    skins:
+      starlight:
+        name: "Звёздный комплект"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 2500000
+      shadow:
+        name: "Теневой комплект"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 5500000
+  sniffer:
+    type: walking
+    item: SNIFFER_SPAWN_EGG
+    entity: SNIFFER
+    name: "Нюхач"
+    rarity: rare
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Древний добряк для коллекционеров, любящих размеренный старт и мощный финиш."
+    levels:
+      - {speed: 1.55, handling: 0.9, sprint: 1, price: 250000}
+      - {speed: 2.5, handling: 1, sprint: 1.03, price: 1200000}
+      - {speed: 5.2, handling: 1.28, sprint: 1.12, price: 12000000}
+    buy-glow: 350000
+    appearance:
+      baby: false
+      scale: 0.85
+    skins:
+      starlight:
+        name: "Звёздный комплект"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 1200000
+      shadow:
+        name: "Теневой комплект"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 2800000
+  strider:
+    type: walking
+    item: STRIDER_SPAWN_EGG
+    entity: STRIDER
+    name: "Лавомерка"
+    rarity: rare
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Редкий спутник Нижнего мира с жаркими следами и уверенным форсажем."
+    levels:
+      - {speed: 1.55, handling: 0.9, sprint: 1, price: 250000}
+      - {speed: 2.5, handling: 1, sprint: 1.03, price: 1200000}
+      - {speed: 5.2, handling: 1.28, sprint: 1.12, price: 12000000}
+    buy-glow: 350000
+    appearance:
+      baby: false
+      scale: 1.1
+      equipment:
+        saddle: SADDLE
+    skins:
+      flame:
+        name: "Огненный комплект"
+        item: BLAZE_POWDER
+        preset: flame
+        price: 1200000
+      shadow:
+        name: "Теневой комплект"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 2800000
+  bee:
+    type: flying
+    item: BEE_SPAWN_EGG
+    entity: BEE
+    name: "Пчела"
+    rarity: common
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Дружелюбный первый воздушный маунт."
+    levels:
+      - {speed: 0.42, handling: 0.9, sprint: 1, price: 50000}
+      - {speed: 0.72, handling: 1, sprint: 1.03, price: 250000}
+      - {speed: 1.35, handling: 1.28, sprint: 1.12, price: 5000000}
+    buy-glow: 100000
+    appearance:
+      baby: false
+      scale: 1.55
+    skins:
+      starlight:
+        name: "Звёздный комплект"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 350000
+      cloud:
+        name: "Облачный комплект"
+        item: WHITE_DYE
+        preset: cloud
+        price: 750000
+  turtle:
+    type: flying
+    item: TURTLE_SPAWN_EGG
+    entity: TURTLE
+    name: "Летающая черепаха"
+    rarity: uncommon
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Невозможная черепаха, которая всё-таки летает."
+    levels:
+      - {speed: 0.45, handling: 0.9, sprint: 1, price: 100000}
+      - {speed: 0.76, handling: 1, sprint: 1.03, price: 500000}
+      - {speed: 1.45, handling: 1.28, sprint: 1.12, price: 8000000}
+    buy-glow: 200000
+    appearance:
+      baby: false
+      scale: 1.15
+    skins:
+      starlight:
+        name: "Звёздный комплект"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 650000
+      cloud:
+        name: "Облачный комплект"
+        item: WHITE_DYE
+        preset: cloud
+        price: 1400000
   frog2:
     type: flying
     item: FROG_SPAWN_EGG
     entity: FROG
-    name: Летающая лягушка
-    speeds: [0.9, 2.0, 4.2]
-    prices: [50000, 100000, 500000]
-    buy-glow: 10000
+    name: "Летающая лягушка"
+    rarity: rare
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Манёвренный воздушный собрат обычной лягушки."
+    levels:
+      - {speed: 0.48, handling: 0.9, sprint: 1, price: 250000}
+      - {speed: 0.8, handling: 1, sprint: 1.03, price: 1200000}
+      - {speed: 1.52, handling: 1.28, sprint: 1.12, price: 12000000}
+    buy-glow: 350000
+    appearance:
+      baby: false
+      scale: 1.7
+      variant: TEMPERATE
+    skins:
+      cold_sky:
+        name: "Полярный прыгун"
+        item: BLUE_ICE
+        preset: starlight
+        price: 2200000
+        appearance:
+          variant: COLD
+      fire_sky:
+        name: "Огненный прыгун"
+        item: BLAZE_POWDER
+        preset: flame
+        price: 3000000
+        appearance:
+          variant: WARM
   blaze:
     type: flying
     item: BLAZE_SPAWN_EGG
     entity: BLAZE
-    name: Блэйз
-    speeds: [0.4, 0.6, 0.9]
-    prices: [null, null, null]
-    buy-glow: 10000
+    name: "Блэйз"
+    rarity: legendary
+    acquisition: "Сезонная или событийная награда"
+    description:
+      - "Наследный сезонный маунт старой коллекции."
+    levels:
+      - {speed: 0.55, handling: 0.9, sprint: 1, price: null}
+      - {speed: 0.9, handling: 1, sprint: 1.03, price: null}
+      - {speed: 1.7, handling: 1.28, sprint: 1.12, price: null}
+    buy-glow: 1000000
+    appearance:
+      scale: 0.9
+    skins:
+      flame:
+        name: "Огненный комплект"
+        item: BLAZE_POWDER
+        preset: flame
+        price: 5000000
+      shadow:
+        name: "Теневой комплект"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 12000000
+  allay:
+    type: flying
+    item: ALLAY_SPAWN_EGG
+    entity: ALLAY
+    name: "Эллэй"
+    rarity: uncommon
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Лёгкий музыкальный проводник с мягкими поворотами в воздухе."
+    levels:
+      - {speed: 0.45, handling: 0.9, sprint: 1, price: 100000}
+      - {speed: 0.76, handling: 1, sprint: 1.03, price: 500000}
+      - {speed: 1.45, handling: 1.28, sprint: 1.12, price: 8000000}
+    buy-glow: 200000
+    appearance:
+      scale: 2
+    skins:
+      starlight:
+        name: "Звёздный комплект"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 650000
+      cloud:
+        name: "Облачный комплект"
+        item: WHITE_DYE
+        preset: cloud
+        price: 1400000
+  parrot:
+    type: flying
+    item: PARROT_SPAWN_EGG
+    entity: PARROT
+    name: "Попугай"
+    rarity: uncommon
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Яркий воздушный разведчик с несколькими фиксированными расцветками."
+    levels:
+      - {speed: 0.45, handling: 0.9, sprint: 1, price: 100000}
+      - {speed: 0.76, handling: 1, sprint: 1.03, price: 500000}
+      - {speed: 1.45, handling: 1.28, sprint: 1.12, price: 8000000}
+    buy-glow: 200000
+    appearance:
+      baby: false
+      scale: 2.25
+      variant: RED
+    skins:
+      blue:
+        name: "Синий ара"
+        item: LAPIS_LAZULI
+        preset: starlight
+        price: 850000
+        appearance:
+          variant: BLUE
+      green:
+        name: "Изумрудный ара"
+        item: EMERALD
+        preset: shadow
+        price: 1200000
+        appearance:
+          variant: GREEN
+  bat:
+    type: flying
+    item: BAT_SPAWN_EGG
+    entity: BAT
+    name: "Летучая мышь"
+    rarity: uncommon
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Компактный ночной пилот для пещер, башен и тесных пролётов."
+    levels:
+      - {speed: 0.45, handling: 0.9, sprint: 1, price: 100000}
+      - {speed: 0.76, handling: 1, sprint: 1.03, price: 500000}
+      - {speed: 1.45, handling: 1.28, sprint: 1.12, price: 8000000}
+    buy-glow: 200000
+    appearance:
+      scale: 2.1
+    skins:
+      starlight:
+        name: "Звёздный комплект"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 650000
+      cloud:
+        name: "Облачный комплект"
+        item: WHITE_DYE
+        preset: cloud
+        price: 1400000
+  vex:
+    type: flying
+    item: VEX_SPAWN_EGG
+    entity: VEX
+    name: "Вредина"
+    rarity: epic
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Эфирный боевой силуэт для тех, кому мало просто летать."
+    levels:
+      - {speed: 0.52, handling: 0.9, sprint: 1, price: 500000}
+      - {speed: 0.85, handling: 1, sprint: 1.03, price: 2500000}
+      - {speed: 1.6, handling: 1.28, sprint: 1.12, price: 20000000}
+    buy-glow: 600000
+    appearance:
+      scale: 1.85
+    skins:
+      starlight:
+        name: "Звёздный комплект"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 2500000
+      shadow:
+        name: "Теневой комплект"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 5500000
+  breeze:
+    type: flying
+    item: BREEZE_SPAWN_EGG
+    entity: BREEZE
+    name: "Вихрь"
+    rarity: epic
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Живой порыв ветра с резкой реакцией и облачными украшениями."
+    levels:
+      - {speed: 0.52, handling: 0.9, sprint: 1, price: 500000}
+      - {speed: 0.85, handling: 1, sprint: 1.03, price: 2500000}
+      - {speed: 1.6, handling: 1.28, sprint: 1.12, price: 20000000}
+    buy-glow: 600000
+    appearance:
+      scale: 0.9
+    skins:
+      starlight:
+        name: "Звёздный комплект"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 2500000
+      shadow:
+        name: "Теневой комплект"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 5500000
+  phantom:
+    type: flying
+    item: PHANTOM_SPAWN_EGG
+    entity: PHANTOM
+    name: "Фантом"
+    rarity: epic
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Ночной хищник с широким силуэтом и дорогим звёздным следом."
+    levels:
+      - {speed: 0.52, handling: 0.9, sprint: 1, price: 500000}
+      - {speed: 0.85, handling: 1, sprint: 1.03, price: 2500000}
+      - {speed: 1.6, handling: 1.28, sprint: 1.12, price: 20000000}
+    buy-glow: 600000
+    appearance:
+      scale: 0.85
+    skins:
+      starlight:
+        name: "Звёздный комплект"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 2500000
+      shadow:
+        name: "Теневой комплект"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 5500000
+  ghast:
+    type: flying
+    item: GHAST_SPAWN_EGG
+    entity: GHAST
+    name: "Гаст"
+    rarity: legendary
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Огромный престижный корабль Нижнего мира."
+    levels:
+      - {speed: 0.55, handling: 0.9, sprint: 1, price: 1000000}
+      - {speed: 0.9, handling: 1, sprint: 1.03, price: 5000000}
+      - {speed: 1.7, handling: 1.28, sprint: 1.12, price: 35000000}
+    buy-glow: 1000000
+    appearance:
+      scale: 0.58
+    skins:
+      starlight:
+        name: "Звёздный комплект"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 5000000
+      soulfire:
+        name: "Пламя душ"
+        item: SOUL_LANTERN
+        preset: soulfire
+        price: 12000000
+  happy_ghast:
+    type: flying
+    item: HAPPY_GHAST_SPAWN_EGG
+    entity: HAPPY_GHAST
+    name: "Счастливый гаст"
+    rarity: legendary
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Дружелюбный флагман воздушной коллекции."
+    levels:
+      - {speed: 0.55, handling: 0.9, sprint: 1, price: 1000000}
+      - {speed: 0.9, handling: 1, sprint: 1.03, price: 5000000}
+      - {speed: 1.7, handling: 1.28, sprint: 1.12, price: 35000000}
+    buy-glow: 1000000
+    appearance:
+      scale: 0.66
+      equipment:
+        body: WHITE_HARNESS
+    skins:
+      starlight:
+        name: "Звёздный комплект"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 5000000
+      soulfire:
+        name: "Пламя душ"
+        item: SOUL_LANTERN
+        preset: soulfire
+        price: 12000000
+  dolphin:
+    type: swimming
+    item: DOLPHIN_SPAWN_EGG
+    entity: DOLPHIN
+    name: "Дельфин"
+    rarity: common
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Быстрый и естественный водный маунт."
+    levels:
+      - {speed: 0.52, handling: 0.9, sprint: 1, price: 50000}
+      - {speed: 0.88, handling: 1, sprint: 1.03, price: 250000}
+      - {speed: 1.65, handling: 1.28, sprint: 1.12, price: 5000000}
+    buy-glow: 100000
+    appearance:
+      scale: 1.05
+    skins:
+      ocean:
+        name: "Океанический комплект"
+        item: NAUTILUS_SHELL
+        preset: ocean
+        price: 350000
+      starlight:
+        name: "Звёздный комплект"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 750000
+  axolotl:
+    type: swimming
+    item: AXOLOTL_SPAWN_EGG
+    entity: AXOLOTL
+    name: "Аксолотль"
+    rarity: uncommon
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Милый подводный спутник с редкими расцветками."
+    levels:
+      - {speed: 0.56, handling: 0.9, sprint: 1, price: 100000}
+      - {speed: 0.92, handling: 1, sprint: 1.03, price: 500000}
+      - {speed: 1.75, handling: 1.28, sprint: 1.12, price: 8000000}
+    buy-glow: 200000
+    appearance:
+      baby: false
+      scale: 1.7
+      variant: LUCY
+    skins:
+      gold:
+        name: "Золотой аксолотль"
+        item: GOLD_INGOT
+        preset: starlight
+        price: 1000000
+        appearance:
+          variant: GOLD
+      blue:
+        name: "Синий аксолотль"
+        item: HEART_OF_THE_SEA
+        preset: ocean
+        price: 1800000
+        appearance:
+          variant: BLUE
+  squid:
+    type: swimming
+    item: SQUID_SPAWN_EGG
+    entity: SQUID
+    name: "Спрут"
+    rarity: uncommon
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Мягкий подводный транспорт для тихих экспедиций и тёмных глубин."
+    levels:
+      - {speed: 0.56, handling: 0.9, sprint: 1, price: 100000}
+      - {speed: 0.92, handling: 1, sprint: 1.03, price: 500000}
+      - {speed: 1.75, handling: 1.28, sprint: 1.12, price: 8000000}
+    buy-glow: 200000
+    appearance:
+      scale: 1.05
+    skins:
+      ocean:
+        name: "Океанический комплект"
+        item: NAUTILUS_SHELL
+        preset: ocean
+        price: 650000
+      starlight:
+        name: "Звёздный комплект"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 1400000
+  glow_squid:
+    type: swimming
+    item: GLOW_SQUID_SPAWN_EGG
+    entity: GLOW_SQUID
+    name: "Светящийся спрут"
+    rarity: rare
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Редкий светящийся проводник, оставляющий заметный океанический след."
+    levels:
+      - {speed: 0.6, handling: 0.9, sprint: 1, price: 250000}
+      - {speed: 0.98, handling: 1, sprint: 1.03, price: 1200000}
+      - {speed: 1.85, handling: 1.28, sprint: 1.12, price: 12000000}
+    buy-glow: 350000
+    appearance:
+      scale: 1.05
+    skins:
+      ocean:
+        name: "Океанический комплект"
+        item: NAUTILUS_SHELL
+        preset: ocean
+        price: 1200000
+      starlight:
+        name: "Звёздный комплект"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 2800000
+  guardian:
+    type: swimming
+    item: GUARDIAN_SPAWN_EGG
+    entity: GUARDIAN
+    name: "Страж"
+    rarity: epic
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Бронированный властелин глубин с дорогой эпической отделкой."
+    levels:
+      - {speed: 0.65, handling: 0.9, sprint: 1, price: 500000}
+      - {speed: 1.05, handling: 1, sprint: 1.03, price: 2500000}
+      - {speed: 1.95, handling: 1.28, sprint: 1.12, price: 20000000}
+    buy-glow: 600000
+    appearance:
+      scale: 1.05
+    skins:
+      ocean:
+        name: "Океанический комплект"
+        item: NAUTILUS_SHELL
+        preset: ocean
+        price: 2500000
+      shadow:
+        name: "Теневой комплект"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 5500000
+  sea_turtle:
+    type: swimming
+    item: TURTLE_SPAWN_EGG
+    entity: TURTLE
+    name: "Морская черепаха"
+    rarity: rare
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Надёжная морская путешественница с плавным разгоном и сильным финалом."
+    levels:
+      - {speed: 0.6, handling: 0.9, sprint: 1, price: 250000}
+      - {speed: 0.98, handling: 1, sprint: 1.03, price: 1200000}
+      - {speed: 1.85, handling: 1.28, sprint: 1.12, price: 12000000}
+    buy-glow: 350000
+    appearance:
+      baby: false
+      scale: 1.2
+    skins:
+      ocean:
+        name: "Океанический комплект"
+        item: NAUTILUS_SHELL
+        preset: ocean
+        price: 1200000
+      starlight:
+        name: "Звёздный комплект"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 2800000

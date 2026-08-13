@@ -14,7 +14,14 @@ class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership
                 .maxOrNull() ?: 0
         val glowOwned = subject.hasPermission(mount.glowPermission)
         val glowDisabled = hasDirectPositivePermission(subject.uniqueId, mount.glowDisabledPermission)
-        return MountProfile(level, glowOwned, glowDisabled)
+        val ownedSkinIds = mount.skins.filter { subject.hasPermission(mount.skinPermission(it.id)) }.mapTo(linkedSetOf()) { it.id }
+        val activeSkinId =
+            mount.skins
+                .firstOrNull { hasDirectPositivePermission(subject.uniqueId, mount.activeSkinPermission(it.id)) }
+                ?.id
+                ?.takeIf { it in ownedSkinIds }
+                ?: MountDefinition.DEFAULT_SKIN_ID
+        return MountProfile(level, glowOwned, glowDisabled, ownedSkinIds, activeSkinId)
     }
 
     override fun grantLevel(playerId: UUID, mount: MountDefinition, level: Int): CompletableFuture<Void> {
@@ -35,6 +42,41 @@ class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership
             removePermission(user.data()::remove, user.nodes, mount.glowDisabledPermission)
             if (!enabled) user.data().add(permission(mount.glowDisabledPermission))
         }
+
+    override fun grantSkin(
+        playerId: UUID,
+        mount: MountDefinition,
+        skin: MountSkinDefinition,
+    ): CompletableFuture<Void> =
+        luckPerms.userManager.modifyUser(playerId) { user ->
+            user.data().add(permission(mount.skinPermission(skin.id)))
+        }
+
+    override fun setActiveSkin(
+        playerId: UUID,
+        mount: MountDefinition,
+        skinId: String,
+    ): CompletableFuture<Void> {
+        require(skinId == MountDefinition.DEFAULT_SKIN_ID || mount.skin(skinId) != null) {
+            "Unknown ${mount.id} skin: $skinId"
+        }
+        return luckPerms.userManager.modifyUser(playerId) { user ->
+            val activePermissions = mount.skins.map { mount.activeSkinPermission(it.id) }.toSet()
+            user.nodes
+                .filterIsInstance<PermissionNode>()
+                .filter { it.permission in activePermissions }
+                .forEach(user.data()::remove)
+            if (skinId != MountDefinition.DEFAULT_SKIN_ID) {
+                user.data().add(permission(mount.activeSkinPermission(skinId)))
+            }
+        }
+    }
+
+    override fun hasDirectPermission(playerId: UUID, permission: String): CompletableFuture<Boolean> {
+        val loaded = luckPerms.userManager.getUser(playerId)
+        if (loaded != null) return CompletableFuture.completedFuture(hasDirectPositivePermission(loaded.nodes, permission))
+        return luckPerms.userManager.loadUser(playerId).thenApply { hasDirectPositivePermission(it.nodes, permission) }
+    }
 
     override fun resolveUniqueId(playerName: String): CompletableFuture<UUID?> =
         luckPerms.userManager.lookupUniqueId(playerName)
