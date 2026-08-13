@@ -125,13 +125,17 @@ internal data class EconomyCommandOrigin(
  */
 internal object EconomyCommandOriginResolver {
     fun resolve(stackTrace: Array<StackTraceElement> = Thread.currentThread().stackTrace): EconomyCommandOrigin {
-        val denizenCaller = stackTrace.firstOrNull { it.className.startsWith(DENIZEN_PACKAGE) }
-        return if (denizenCaller != null) {
-            EconomyCommandOrigin(EconomySource.DENIZEN, denizenCaller.className.take(240))
-        } else {
-            EconomyCommandOrigin(EconomySource.ADMIN_COMMAND, "Server")
-        }
+        val gameplayCaller =
+            GAMEPLAY_PACKAGES.firstNotNullOfOrNull { (packageName, source) ->
+                stackTrace.firstOrNull { it.className.startsWith(packageName) }
+                    ?.let { EconomyCommandOrigin(source, it.className.take(240)) }
+            }
+        return gameplayCaller ?: EconomyCommandOrigin(EconomySource.ADMIN_COMMAND, "Server")
     }
 
-    private const val DENIZEN_PACKAGE = "com.denizenscript."
+    private val GAMEPLAY_PACKAGES =
+        listOf(
+            "com.denizenscript." to EconomySource.DENIZEN,
+            "com.leonardobishop.quests." to EconomySource.QUESTS,
+        )
 }

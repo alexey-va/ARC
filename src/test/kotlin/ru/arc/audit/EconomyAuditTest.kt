@@ -208,6 +208,24 @@ class EconomyAuditTest : FreeSpec({
             caller.origin shouldBe "com.denizenscript.denizen.scripts.commands.server.ExecuteCommand"
         }
 
+        "recognizes Quests reward commands dispatched through the console" {
+            val caller =
+                EconomyCommandOriginResolver.resolve(
+                    arrayOf(
+                        StackTraceElement("net.minecraft.commands.execution.tasks.ExecuteCommand", "execute", "ExecuteCommand.java", 1),
+                        StackTraceElement(
+                            "com.leonardobishop.quests.bukkit.util.DispatchUtils",
+                            "dispatchCommand",
+                            "DispatchUtils.java",
+                            2,
+                        ),
+                    ),
+                )
+
+            caller.source shouldBe EconomySource.QUESTS
+            caller.origin shouldBe "com.leonardobishop.quests.bukkit.util.DispatchUtils"
+        }
+
         "keeps ordinary console economy commands administrative" {
             val caller =
                 EconomyCommandOriginResolver.resolve(
