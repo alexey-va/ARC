@@ -80,6 +80,7 @@ commands:
   mounts:
     description: Open the mount collection
     usage: /mounts
+    permission: arc.mounts.use
   unlock-mount:
     description: Unlock a mount level for a player
     usage: /unlock-mount <mount> <level> <player>
@@ -87,7 +88,7 @@ commands:
   ride-mob:
     description: Spawn a temporary test mount
     usage: /ride-mob [mount] [speed]
-    permission: mcfine.ride-mob
+    permission: arc.mounts.ride
 permissions:
   arc.hide.bypass:
     description: Bypass all CommandHide groups
@@ -95,6 +96,12 @@ permissions:
   arc.mounts.admin:
     description: Unlock mount levels for players
     default: op
-  mcfine.ride-mob:
+    children:
+      arc.mounts.use: true
+      arc.mounts.ride: true
+  arc.mounts.use:
+    description: Open and use the mount collection
+    default: false
+  arc.mounts.ride:
     description: Spawn temporary test mounts
-    default: op
+    default: false

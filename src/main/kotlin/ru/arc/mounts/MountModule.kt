@@ -48,6 +48,10 @@ object MountModule : PluginModule {
             info("Mounts module disabled by configuration")
             return
         }
+        if (!loadedConfig.ownershipMigrationComplete) {
+            warn("Mounts module inactive until the ownership permission migration is complete")
+            return
+        }
 
         val loadedCatalog = loadedConfig.catalog()
         validatePaperTypes(loadedCatalog)
@@ -57,11 +61,7 @@ object MountModule : PluginModule {
             return
         }
 
-        val loadedOwnership =
-            LegacyAwareMountOwnership(
-                delegate = LuckPermsMountOwnership(luckPerms),
-                legacyGlowOwners = { requiredConfig().legacyGlowOwners() },
-            )
+        val loadedOwnership = LuckPermsMountOwnership(luckPerms)
         val wallet = VaultMountWallet(ARC.instance.server, EconomyModule.getEconomy())
         val controller =
             MountSessionController(

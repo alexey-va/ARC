@@ -8,6 +8,7 @@ import java.util.Locale
 
 open class MountModuleConfig(private val config: Config) {
     open val enabled: Boolean get() = config.bool("enabled", false)
+    open val ownershipMigrationComplete: Boolean get() = config.bool("ownership-migration-complete", false)
     open val allowedWorlds: Set<String> get() = config.stringList("allowed-worlds").map { it.lowercase(Locale.ROOT) }.toSet()
     open val sessionDuration: Duration get() = config.duration("session-duration", Duration.ofMinutes(10))
     open val adminSessionDuration: Duration get() = config.duration("admin-session-duration", Duration.ofSeconds(5))
@@ -29,12 +30,6 @@ open class MountModuleConfig(private val config: Config) {
     open val backCommand: String get() = config.string("gui.back-command", "m").trim().removePrefix("/")
     open val listTitle: String get() = config.string("gui.list-title", "<dark_gray><bold>Маунты")
     open val detailTitle: String get() = config.string("gui.detail-title", "<dark_gray><bold>Маунт: <mount>")
-
-    open fun legacyGlowOwners(): Map<String, Set<String>> =
-        config.keys("legacy-glow-owners").associate { playerName ->
-            playerName.lowercase(Locale.ROOT) to
-                config.stringList("legacy-glow-owners.$playerName").map { it.lowercase(Locale.ROOT) }.toSet()
-        }
 
     open fun catalog(): MountCatalog {
         val definitions =
@@ -75,12 +70,7 @@ open class MountModuleConfig(private val config: Config) {
         }
         require(flightPitchInfluence in 0.0..1.0) { "Mount flight-pitch-influence must be between 0 and 1" }
         require(maximumHeightAboveWorld in 0..256) { "Mount maximum-height-above-world must be between 0 and 256" }
-        val loadedCatalog = catalog()
-        val knownIds = loadedCatalog.all.map(MountDefinition::id).toSet()
-        legacyGlowOwners().forEach { (player, mounts) ->
-            require(player.isNotBlank()) { "Legacy glow owner name cannot be blank" }
-            require(mounts.all(knownIds::contains)) { "Legacy glow owner '$player' references an unknown mount" }
-        }
+        catalog()
         return this
     }
 

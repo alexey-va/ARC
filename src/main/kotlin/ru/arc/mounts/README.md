@@ -13,10 +13,10 @@ Native replacement for `Denizen/scripts/activities/rideable_mobs.dsc`.
 - Mount and rider damage, logout, teleport, world change, expiry, invalid state,
   or leaving water removes the temporary entity.
 
-Existing levels remain the LuckPerms nodes
-`mcfine.mount.<mount>.<level>`. New glow ownership uses
-`mcfine.mount.<mount>.glow`; disabling it adds the separate positive marker
-`mcfine.mount.<mount>.glow.disabled` so inherited ownership is not destroyed.
+Mount access and ownership use only the `arc.mounts.*` namespace. Menu access
+is `arc.mounts.use`; levels are `arc.mounts.<mount>.<level>`. Glow ownership
+uses `arc.mounts.<mount>.glow`; disabling it adds the separate positive marker
+`arc.mounts.<mount>.glow.disabled` so inherited ownership is not destroyed.
 Only a direct user marker counts as disabled, so an administrative wildcard
 does not accidentally switch glow off.
 
@@ -42,5 +42,7 @@ survival intentionally have separate tracked copies because their world policy
 differs. Catalog speed values preserve the former Denizen progression; type
 scales convert them into bounded Bukkit velocity.
 
-The optional `legacy-glow-owners` map is a read-only compatibility bridge for
-old Denizen server flags. New writes never go back to Denizen.
+The versioned LuckPerms migration in the mcserver repository replaces legacy
+ownership nodes before this module is activated. Runtime configuration keeps
+`ownership-migration-complete: false` as a fail-closed activation gate until
+the reviewed migration has been applied and verified.

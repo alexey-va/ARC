@@ -27,4 +27,13 @@ class MountModuleConfigTest : StringSpec({
         catalog["frog"]?.speeds shouldBe listOf(0.9, 2.0, 4.2)
         catalog.all.map(MountDefinition::glowPrice).toSet() shouldBe setOf(10_000.0)
     }
+
+    "bundled module keeps the ownership migration gate closed" {
+        val dataPath = Files.createTempDirectory("arc-mounts-migration-gate-")
+        val moduleDir = Files.createDirectories(dataPath.resolve("modules"))
+        val resource = checkNotNull(MountModuleConfigTest::class.java.getResourceAsStream("/modules/mounts.yml"))
+        resource.use { input -> Files.newOutputStream(moduleDir.resolve("mounts.yml")).use(input::copyTo) }
+
+        MountModuleConfig.load(dataPath).ownershipMigrationComplete shouldBe false
+    }
 })

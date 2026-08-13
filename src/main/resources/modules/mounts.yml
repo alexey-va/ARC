@@ -1,5 +1,6 @@
 # Native ARC mounts. Runtime mirrors may override allowed-worlds and enabled.
 enabled: false
+ownership-migration-complete: false
 allowed-worlds: []
 session-duration: 10m
 admin-session-duration: 5s
@@ -32,10 +33,6 @@ gui:
   list-title: "<dark_gray><bold>Маунты"
   detail-title: "<dark_gray><bold>Маунт: <mount>"
   back-command: m
-
-# Read-only compatibility for glow purchases formerly stored as Denizen server
-# flags. New purchases and toggle state are persisted in LuckPerms.
-legacy-glow-owners: {}
 
 messages:
   flight-controls: "<gray>Space — вверх, Shift — вниз, двойной Shift — спешиться"

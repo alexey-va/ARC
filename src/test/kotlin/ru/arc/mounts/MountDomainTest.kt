@@ -21,6 +21,14 @@ class MountDomainTest : StringSpec({
         ownership.profile(subject, mount) shouldBe MountProfile(level = 3, glowOwned = true, glowDisabled = false)
     }
 
+    "all mount ownership nodes use the ARC mounts namespace" {
+        val mount = testMount()
+
+        mount.levelPermission(2) shouldBe "arc.mounts.bee.2"
+        mount.glowPermission shouldBe "arc.mounts.bee.glow"
+        mount.glowDisabledPermission shouldBe "arc.mounts.bee.glow.disabled"
+    }
+
     "disabled glow permission wins after glow was purchased" {
         val mount = testMount()
         val subject =
@@ -91,18 +99,6 @@ class MountDomainTest : StringSpec({
         }
     }
 
-    "legacy glow ownership remains readable and respects the new disabled node" {
-        val mount = testMount()
-        val delegate = TestOwnership()
-        val ownership = LegacyAwareMountOwnership(delegate) { mapOf("rider" to setOf("bee")) }
-        val enabled = MountPermissionSubject(java.util.UUID.randomUUID(), "Rider") { false }
-        val disabled = MountPermissionSubject(java.util.UUID.randomUUID(), "Rider") {
-            it == mount.glowDisabledPermission
-        }
-
-        ownership.profile(enabled, mount) shouldBe MountProfile(0, glowOwned = true, glowDisabled = false)
-        ownership.profile(disabled, mount) shouldBe MountProfile(0, glowOwned = true, glowDisabled = true)
-    }
 })
 
 private fun airborne(input: MountInputState, planar: MotionVector, pitch: Float = 0f) =

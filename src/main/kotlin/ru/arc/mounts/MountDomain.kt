@@ -48,10 +48,10 @@ data class MountDefinition(
 
     fun price(level: Int): Double? = prices.getOrNull(level - 1)
 
-    fun levelPermission(level: Int): String = "mcfine.mount.$id.$level"
+    fun levelPermission(level: Int): String = "arc.mounts.$id.$level"
 
-    val glowPermission: String get() = "mcfine.mount.$id.glow"
-    val glowDisabledPermission: String get() = "mcfine.mount.$id.glow.disabled"
+    val glowPermission: String get() = "arc.mounts.$id.glow"
+    val glowDisabledPermission: String get() = "arc.mounts.$id.glow.disabled"
 
     companion object {
         private val ID_PATTERN = Regex("[a-z0-9][a-z0-9_-]{1,31}")
