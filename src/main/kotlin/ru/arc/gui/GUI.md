@@ -91,9 +91,10 @@ class EditMyGui(player: Player) : ChestGui(2, title), Inputable {
 - Серверные Material + `customModelData` хранятся только в tracked runtime
   mirror (`classic*/plugins/ARC/...`). Это overlay конкретного resource pack,
   а не часть переносимого ARC.
-- Один item-spec должен переопределять пару Material + model data вместе;
-  сверять её с активным ItemsAdder `contents/arc/configs/items.yml` и меню
-  Lands. Не угадывать ID по похожей иконке.
+- Один item-spec должен переопределять пару Material + model data вместе.
+  Источник истины — активный ItemsAdder `contents/arc/configs/items.yml`.
+  Lands можно смотреть только как пример потребителя уже объявленных общих
+  моделей: модели и ID не принадлежат Lands. Не угадывать ID по похожей иконке.
 - Spawn и survival получают одинаковый overlay, если используют один pack.
 - Образец: `guis/board.yml`, `guis/scheduled-commands.yml`.
 - Подключение: `fromConfig(cfg, "edit-menu.save")` в `guiItem { }`.
