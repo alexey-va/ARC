@@ -12,7 +12,6 @@ enum class MountGuiItemRole(val configKey: String) {
     BACK("back"),
     PREVIOUS("previous"),
     NEXT("next"),
-    FILTER("filter"),
     INFO("info"),
     BALANCE("balance"),
     CONFIRM("confirm"),
@@ -76,6 +75,7 @@ open class MountModuleConfig(private val config: Config) {
     }
 
     open fun catalog(): MountCatalog {
+        val abilityUpgrades = abilityUpgrades()
         val definitions =
             config.keys("mounts").map { rawId ->
                 val id = rawId.lowercase(Locale.ROOT)
@@ -92,7 +92,7 @@ open class MountModuleConfig(private val config: Config) {
                     rarity = strictRarity(config.string("$root.rarity", "common"), id),
                     levels = levelList(root, id),
                     glowPrice = config.doubleOrNull("$root.buy-glow"),
-                    abilities = abilities("$root.abilities"),
+                    abilities = abilities("$root.abilities", abilityUpgrades),
                     appearance = appearance("$root.appearance"),
                     skins = skinList(root, id),
                 )
@@ -193,15 +193,42 @@ open class MountModuleConfig(private val config: Config) {
         )
     }
 
-    private fun abilities(path: String): MountAbilities {
+    private fun abilityUpgrades(): Map<String, MountAbilityUpgradeDefinition> =
+        config.keys("ability-upgrades").associate { rawId ->
+            val id = rawId.lowercase(Locale.ROOT)
+            require(id == rawId && MountDefinition.validId(id)) { "Mount ability id '$rawId' must be normalized" }
+            val path = "ability-upgrades.$id"
+            val rawEffect = config.string("$path.effect", id).trim().uppercase(Locale.ROOT).replace('-', '_')
+            val effect = runCatching { MountAbilityEffect.valueOf(rawEffect) }
+                .getOrElse { throw IllegalArgumentException("Mount ability '$id' has invalid effect '$rawEffect'") }
+            id to
+                MountAbilityUpgradeDefinition(
+                    id = id,
+                    displayName = config.string("$path.name", id).trim(),
+                    description = config.stringList("$path.description").map(String::trim).filter(String::isNotEmpty),
+                    iconMaterial = config.string("$path.item", "PAPER").trim().uppercase(Locale.ROOT),
+                    price = config.doubleOrNull("$path.price")
+                        ?: throw IllegalArgumentException("Mount ability '$id' price is required"),
+                    effect = effect,
+                    speedMultiplier = config.double("$path.speed-multiplier", 1.0),
+                )
+        }
+
+    private fun abilities(path: String, availableUpgrades: Map<String, MountAbilityUpgradeDefinition>): MountAbilities {
         val abilityIds = config.keys(path)
-        require(abilityIds.all { it == "high-jump" }) { "Unknown mount abilities: ${abilityIds - setOf("high-jump")}" }
+        require(abilityIds.all { it == "high-jump" || it == "upgrades" }) {
+            "Unknown mount abilities: ${abilityIds - setOf("high-jump", "upgrades")}"
+        }
+        val upgrades = config.stringList("$path.upgrades").map { rawId ->
+            val id = rawId.trim().lowercase(Locale.ROOT)
+            availableUpgrades[id] ?: throw IllegalArgumentException("Unknown mount ability upgrade '$rawId'")
+        }
         val highJumpPath = "$path.high-jump"
-        if (config.keys(highJumpPath).isEmpty()) return MountAbilities()
+        if (config.keys(highJumpPath).isEmpty()) return MountAbilities(upgrades = upgrades)
         val displayName = config.stringOrNull("$highJumpPath.name")?.trim().orEmpty()
         val multiplier = config.doubleOrNull("$highJumpPath.multiplier")
             ?: throw IllegalArgumentException("Mount high-jump multiplier is required")
-        return MountAbilities(MountHighJumpAbility(displayName, multiplier))
+        return MountAbilities(MountHighJumpAbility(displayName, multiplier), upgrades)
     }
 
     private fun trail(path: String): MountTrailDefinition? {

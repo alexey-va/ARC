@@ -42,6 +42,7 @@ private sealed interface ConfirmAction {
     data class Level(val level: Int) : ConfirmAction
     data object Glow : ConfirmAction
     data class Skin(val skinId: String) : ConfirmAction
+    data class Ability(val abilityId: String) : ConfirmAction
 }
 
 private class MountMenuHolder(
@@ -52,6 +53,7 @@ private class MountMenuHolder(
     val ownedOnly: Boolean = false,
     val mountsBySlot: Map<Int, String> = emptyMap(),
     val skinsBySlot: Map<Int, String> = emptyMap(),
+    val abilitiesBySlot: Map<Int, String> = emptyMap(),
     val confirmAction: ConfirmAction? = null,
 ) : InventoryHolder {
     lateinit var backingInventory: Inventory
@@ -111,8 +113,7 @@ class MountGuiController(
         if (page + 1 < pageCount) inventory.setItem(LIST_NEXT_SLOT, styledItem(MountGuiItemRole.NEXT, Material.ARROW, "<aqua>Следующая страница", listOf("<gray>${page + 2}/${pageCount}")))
         inventory.setItem(
             LIST_FILTER_SLOT,
-            styledItem(
-                MountGuiItemRole.FILTER,
+            item(
                 filter.icon,
                 "<gold>Категория: <white>${filter.title}",
                 listOf(
@@ -149,7 +150,8 @@ class MountGuiController(
         val config = configProvider()
         val mount = catalogProvider()[mountId] ?: return openList(player)
         val profile = ownership.profile(subject(player), mount)
-        val holder = MountMenuHolder(MountScreen.DETAIL, mount.id)
+        val abilitySlots = DETAIL_ABILITY_SLOTS.zip(mount.abilities.upgrades.map(MountAbilityUpgradeDefinition::id)).toMap()
+        val holder = MountMenuHolder(MountScreen.DETAIL, mount.id, abilitiesBySlot = abilitySlots)
         val inventory = Bukkit.createInventory(holder, DETAIL_SIZE, component(config.detailTitle.replace("<mount>", escape(mount.displayName))))
         holder.backingInventory = inventory
         fill(inventory)
@@ -158,6 +160,9 @@ class MountGuiController(
         inventory.setItem(DETAIL_SUMMON_SLOT, summonItem(profile, config.sessionDuration))
         inventory.setItem(DETAIL_GLOW_SLOT, glowItem(mount, profile))
         inventory.setItem(DETAIL_SKINS_SLOT, skinsItem(mount, profile))
+        abilitySlots.forEach { (slot, abilityId) ->
+            mount.ability(abilityId)?.let { inventory.setItem(slot, abilityItem(profile, it)) }
+        }
         inventory.setItem(DETAIL_BACK_SLOT, styledItem(MountGuiItemRole.BACK, Material.BLUE_STAINED_GLASS_PANE, "<aqua>Назад", listOf("<gray>К списку маунтов")))
         player.openInventory(inventory)
         click(player)
@@ -238,6 +243,15 @@ class MountGuiController(
     private fun handleDetailClick(player: Player, holder: MountMenuHolder, slot: Int) {
         val mount = holder.mountId?.let(catalogProvider()::get) ?: return openList(player)
         val profile = ownership.profile(subject(player), mount)
+        holder.abilitiesBySlot[slot]?.let { abilityId ->
+            val ability = mount.ability(abilityId) ?: return
+            when {
+                !profile.unlocked || profile.ownsAbility(abilityId) -> bass(player)
+                !configProvider().purchasesEnabled -> purchasesDisabled(player)
+                else -> openConfirm(player, mount, ConfirmAction.Ability(abilityId))
+            }
+            return
+        }
         when (slot) {
             DETAIL_BACK_SLOT -> openList(player)
             DETAIL_SUMMON_SLOT -> if (profile.unlocked) summon(player, mount, profile) else bass(player)
@@ -292,6 +306,7 @@ class MountGuiController(
                     is ConfirmAction.Level -> purchases.purchaseLevel(subject(player), mount, action.level, callback)
                     ConfirmAction.Glow -> purchases.purchaseGlow(subject(player), mount, callback)
                     is ConfirmAction.Skin -> mount.skin(action.skinId)?.let { purchases.purchaseSkin(subject(player), mount, it, callback) }
+                    is ConfirmAction.Ability -> mount.ability(action.abilityId)?.let { purchases.purchaseAbility(subject(player), mount, it, callback) }
                 }
             }
         }
@@ -310,6 +325,7 @@ class MountGuiController(
                 durationMillis = configProvider().sessionDuration.toMillis(),
                 glow = profile.glowEnabled,
                 skin = skin,
+                abilityUpgrades = mount.abilities.upgrades.filter { profile.ownsAbility(it.id) },
             )
         if (result == MountSpawnResult.SUCCESS) {
             player.closeInventory()
@@ -451,6 +467,33 @@ class MountGuiController(
         if (!profile.unlocked) item(Material.GRAY_DYE, "<gray>Облики недоступны", listOf("<gray>Сначала получите маунта."))
         else item(Material.LEATHER_HORSE_ARMOR, "<light_purple>Облики и украшения", listOf("<gray>Выбран: <white>${escape(skinName(mount, profile.activeSkinId))}", "<gray>Получено: <white>${profile.ownedSkinIds.size + 1}/${mount.skins.size + 1}", "", "<green>Нажмите, чтобы открыть"), glint = profile.activeSkinId != MountDefinition.DEFAULT_SKIN_ID)
 
+    private fun abilityItem(
+        profile: MountProfile,
+        ability: MountAbilityUpgradeDefinition,
+    ): ItemStack {
+        val owned = profile.ownsAbility(ability.id)
+        return item(
+            Material.matchMaterial(ability.iconMaterial) ?: Material.PAPER,
+            if (owned) "<aqua>${escape(ability.displayName)}" else "<green>${escape(ability.displayName)}",
+            buildList {
+                ability.description.forEach { add("<gray>${escape(it)}") }
+                if (ability.speedMultiplier > 1.0) {
+                    add("<gray>Скорость маунта: <aqua>+${((ability.speedMultiplier - 1.0) * 100.0).roundToInt()}%")
+                }
+                add("")
+                when {
+                    !profile.unlocked -> add("<red>Сначала получите маунта")
+                    owned -> add("<green>Куплено навсегда")
+                    else -> {
+                        add("<gray>Цена: <yellow>${TextUtil.formatAmount(ability.price)}<white>💰")
+                        add(if (configProvider().purchasesEnabled) "<green>Нажмите для подтверждения" else "<yellow>Покупки доступны на спавне")
+                    }
+                }
+            },
+            glint = owned,
+        )
+    }
+
     private fun skinItem(mount: MountDefinition, profile: MountProfile, skinId: String): ItemStack {
         if (skinId == MountDefinition.DEFAULT_SKIN_ID) {
             return item(mount.appearance.equipment.values.firstOrNull()?.let(Material::matchMaterial) ?: Material.SADDLE, "<white>Классический", appearanceLore(mount.appearance) + listOf("", if (profile.activeSkinId == skinId) "<green>Выбран" else "<green>Нажмите, чтобы выбрать"), glint = profile.activeSkinId == skinId)
@@ -494,6 +537,14 @@ class MountGuiController(
             is ConfirmAction.Skin -> {
                 val skin = checkNotNull(mount.skin(action.skinId))
                 Triple("<light_purple>${escape(skin.displayName)}", checkNotNull(skin.price), listOf("<gray>${escape(mount.displayName)}", "<gray>Облик покупается навсегда"))
+            }
+            is ConfirmAction.Ability -> {
+                val ability = checkNotNull(mount.ability(action.abilityId))
+                Triple(
+                    "<aqua>${escape(ability.displayName)}",
+                    ability.price,
+                    listOf("<gray>${escape(mount.displayName)}") + ability.description.map { "<gray>${escape(it)}" },
+                )
             }
         }
 
@@ -573,11 +624,11 @@ class MountGuiController(
     companion object {
         private const val LIST_SIZE = 54
         private val LIST_CONTENT_SLOTS = listOf(10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43)
-        private const val LIST_PREVIOUS_SLOT = 45
-        private const val LIST_BACK_SLOT = 48
+        private const val LIST_PREVIOUS_SLOT = 48
+        private const val LIST_BACK_SLOT = 45
         private const val LIST_FILTER_SLOT = 49
-        private const val LIST_INFO_SLOT = 50
-        private const val LIST_NEXT_SLOT = 52
+        private const val LIST_INFO_SLOT = 4
+        private const val LIST_NEXT_SLOT = 50
         private const val LIST_BALANCE_SLOT = 53
 
         private const val DETAIL_SIZE = 45
@@ -586,11 +637,12 @@ class MountGuiController(
         private const val DETAIL_SUMMON_SLOT = 22
         private const val DETAIL_GLOW_SLOT = 24
         private const val DETAIL_SKINS_SLOT = 31
-        private const val DETAIL_BACK_SLOT = 40
+        private val DETAIL_ABILITY_SLOTS = listOf(29, 30, 32, 33)
+        private const val DETAIL_BACK_SLOT = 36
 
         private const val SKINS_SIZE = 54
         private val SKIN_CONTENT_SLOTS = listOf(10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34)
-        private const val SKINS_BACK_SLOT = 49
+        private const val SKINS_BACK_SLOT = 45
 
         private const val CONFIRM_SIZE = 27
         private const val CONFIRM_CANCEL_SLOT = 11

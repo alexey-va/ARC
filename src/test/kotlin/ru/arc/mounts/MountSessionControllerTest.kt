@@ -85,4 +85,10 @@ class MountSessionControllerTest : StringSpec({
         shouldAllowCancelledMountSpawn(true, CreatureSpawnEvent.SpawnReason.CUSTOM, owner, "bee", otherToken.toString(), mountIds, setOf(pendingToken)) shouldBe false
         shouldAllowCancelledMountSpawn(true, CreatureSpawnEvent.SpawnReason.CUSTOM, owner, "bee", null, mountIds, setOf(pendingToken)) shouldBe false
     }
+
+    "kelp and bubble columns keep an aquatic mount session alive" {
+        isAquaticEnvironment(inWaterOrBubbleColumn = true, blockIsLiquid = false) shouldBe true
+        isAquaticEnvironment(inWaterOrBubbleColumn = false, blockIsLiquid = true) shouldBe true
+        isAquaticEnvironment(inWaterOrBubbleColumn = false, blockIsLiquid = false) shouldBe false
+    }
 })

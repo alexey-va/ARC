@@ -162,6 +162,12 @@ object MountModule : PluginModule {
             MountAppearanceApplicator.validate(entityType, definition.appearance, "Mount '${definition.id}' appearance")
             definition.levels.forEach { level -> level.price?.toExactMinor() }
             definition.glowPrice?.toExactMinor()
+            definition.abilities.upgrades.forEach { ability ->
+                require(Material.matchMaterial(ability.iconMaterial) != null) {
+                    "Mount '${definition.id}' ability '${ability.id}' has unknown material '${ability.iconMaterial}'"
+                }
+                ability.price.toExactMinor()
+            }
             definition.skins.forEach { skin ->
                 require(Material.matchMaterial(skin.iconMaterial) != null) {
                     "Mount '${definition.id}' skin '${skin.id}' has unknown material '${skin.iconMaterial}'"

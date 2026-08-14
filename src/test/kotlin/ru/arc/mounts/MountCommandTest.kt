@@ -25,7 +25,7 @@ class MountCommandTest : StringSpec({
         fixture.command.onCommand(fixture.player, fixture.bukkitCommand, "mount", emptyArray()) shouldBe true
 
         verify(exactly = 1) { fixture.openMenu(fixture.player) }
-        verify(exactly = 0) { fixture.sessions.spawn(any(), any(), any(), any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { fixture.sessions.spawn(any(), any(), any(), any(), any(), any(), any(), any(), any()) }
     }
 
     "admin summon uses a configured level instead of arbitrary raw speed" {
@@ -40,6 +40,7 @@ class MountCommandTest : StringSpec({
                 durationMillis = 10_000L,
                 glow = false,
                 skin = mount.skin("baby"),
+                abilityUpgrades = mount.abilities.upgrades,
             )
         } returns MountSpawnResult.SUCCESS
 
@@ -60,6 +61,7 @@ class MountCommandTest : StringSpec({
                 durationMillis = 10_000L,
                 glow = false,
                 skin = mount.skin("baby"),
+                abilityUpgrades = mount.abilities.upgrades,
             )
         }
     }
@@ -74,21 +76,23 @@ class MountCommandTest : StringSpec({
             arrayOf("admin", "summon", "bee"),
         ) shouldBe true
 
-        verify(exactly = 0) { fixture.sessions.spawn(any(), any(), any(), any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { fixture.sessions.spawn(any(), any(), any(), any(), any(), any(), any(), any(), any()) }
         fixture.command.onTabComplete(fixture.player, fixture.bukkitCommand, "mount", arrayOf(""))
             .shouldContainExactly("help", "menu")
     }
 
-    "admin can grant and revoke levels, skins and glow" {
+    "admin can grant and revoke levels, skins, glow and abilities" {
         val fixture = commandFixture(catalog, admin = true)
 
         listOf(
             arrayOf("admin", "grant", "level", "Rider", "bee", "3"),
             arrayOf("admin", "grant", "skin", "Rider", "bee", "baby"),
             arrayOf("admin", "grant", "glow", "Rider", "bee"),
+            arrayOf("admin", "grant", "ability", "Rider", "bee", "night-vision"),
             arrayOf("admin", "revoke", "level", "Rider", "bee", "3"),
             arrayOf("admin", "revoke", "skin", "Rider", "bee", "baby"),
             arrayOf("admin", "revoke", "glow", "Rider", "bee"),
+            arrayOf("admin", "revoke", "ability", "Rider", "bee", "night-vision"),
         ).forEach { args ->
             fixture.command.onCommand(fixture.console, fixture.bukkitCommand, "mount", args) shouldBe true
         }
@@ -100,7 +104,9 @@ class MountCommandTest : StringSpec({
         verify(exactly = 1) { fixture.ownership.revokeLevel(fixture.playerId, mount, 3) }
         verify(exactly = 1) { fixture.ownership.revokeSkin(fixture.playerId, mount, mount.skin("baby")!!) }
         verify(exactly = 1) { fixture.ownership.revokeGlow(fixture.playerId, mount) }
-        verify(exactly = 6) { fixture.console.sendMessage(any<Component>()) }
+        verify(exactly = 1) { fixture.ownership.grantAbility(fixture.playerId, mount, mount.ability("night-vision")!!) }
+        verify(exactly = 1) { fixture.ownership.revokeAbility(fixture.playerId, mount, mount.ability("night-vision")!!) }
+        verify(exactly = 8) { fixture.console.sendMessage(any<Component>()) }
     }
 
     "admin completion follows the unified command tree" {
@@ -111,13 +117,19 @@ class MountCommandTest : StringSpec({
         fixture.command.onTabComplete(fixture.player, fixture.bukkitCommand, "mount", arrayOf("admin", ""))
             .shouldContainExactly("grant", "revoke", "summon")
         fixture.command.onTabComplete(fixture.player, fixture.bukkitCommand, "mount", arrayOf("admin", "grant", ""))
-            .shouldContainExactly("glow", "level", "skin")
+            .shouldContainExactly("ability", "glow", "level", "skin")
         fixture.command.onTabComplete(
             fixture.player,
             fixture.bukkitCommand,
             "mount",
             arrayOf("admin", "grant", "skin", "Rider", "bee", ""),
         ).shouldContainExactly("baby")
+        fixture.command.onTabComplete(
+            fixture.player,
+            fixture.bukkitCommand,
+            "mount",
+            arrayOf("admin", "grant", "ability", "Rider", "bee", ""),
+        ).shouldContainExactly("night-vision")
     }
 
     "admin mutations reject trailing arguments instead of applying a partial parse" {
@@ -179,6 +191,8 @@ private fun commandFixture(catalog: MountCatalog, admin: Boolean = false): Mount
         every { revokeLevel(any(), any(), any()) } returns CompletableFuture.completedFuture(null)
         every { revokeSkin(any(), any(), any()) } returns CompletableFuture.completedFuture(null)
         every { revokeGlow(any(), any()) } returns CompletableFuture.completedFuture(null)
+        every { grantAbility(any(), any(), any()) } returns CompletableFuture.completedFuture(null)
+        every { revokeAbility(any(), any(), any()) } returns CompletableFuture.completedFuture(null)
     }
     val config = mockk<MountModuleConfig> {
         every { adminSessionDuration } returns java.time.Duration.ofSeconds(10)

@@ -55,6 +55,20 @@ class MountPurchaseCoordinatorTest : StringSpec({
         fixture.wallet.withdrawals shouldBe 0
     }
 
+    "ability purchase charges once and persists its exact permission" {
+        val fixture = PurchaseFixture().also { it.ownership.level = 1 }
+        val ability = checkNotNull(fixture.mount.ability("night-vision"))
+        var result: MountPurchaseResult? = null
+
+        fixture.coordinator.purchaseAbility(fixture.subject(), fixture.mount, ability) { result = it }
+
+        result shouldBe MountPurchaseResult.Success
+        fixture.ownership.abilityPermissions shouldBe setOf(fixture.mount.abilityPermission(ability.id))
+        fixture.wallet.withdrawals shouldBe 1
+        fixture.journal.records().single().kind shouldBe MountPurchaseKind.ABILITY
+        fixture.journal.records().single().status shouldBe MountPurchaseJournalStatus.COMPLETED
+    }
+
     "unavailable balance cancels the prepared record without blocking future purchases" {
         val fixture = PurchaseFixture().also { it.wallet.balanceAvailable = false }
         var result: MountPurchaseResult? = null
@@ -271,7 +285,8 @@ private class PurchaseFixture {
                 permission == mount.glowPermission && ownership.glow ||
                 permission == mount.glowDisabledPermission && ownership.glowDisabled ||
                 permission in ownership.skinPermissions ||
-                permission in ownership.activeSkinPermissions
+                permission in ownership.activeSkinPermissions ||
+                permission in ownership.abilityPermissions
         }
 
     fun preparedRecord() =
@@ -295,6 +310,7 @@ private class MutableOwnership : MountOwnership {
     var failWrites = false
     val skinPermissions = hashSetOf<String>()
     val activeSkinPermissions = hashSetOf<String>()
+    val abilityPermissions = hashSetOf<String>()
     private val directPermissions = hashSetOf<String>()
 
     fun addDirect(permission: String) {
@@ -309,6 +325,9 @@ private class MutableOwnership : MountOwnership {
             mount.skins.filter { mount.skinPermission(it.id) in skinPermissions }.mapTo(hashSetOf()) { it.id },
             mount.skins.firstOrNull { mount.activeSkinPermission(it.id) in activeSkinPermissions }?.id
                 ?: MountDefinition.DEFAULT_SKIN_ID,
+            mount.abilities.upgrades
+                .filter { mount.abilityPermission(it.id) in abilityPermissions }
+                .mapTo(hashSetOf(), MountAbilityUpgradeDefinition::id),
         )
 
     override fun grantLevel(playerId: UUID, mount: MountDefinition, level: Int): CompletableFuture<Void> =
@@ -343,6 +362,26 @@ private class MutableOwnership : MountOwnership {
         write {
             activeSkinPermissions.removeIf { it.startsWith("arc.mounts.${mount.id}.skin.active.") }
             if (skinId != MountDefinition.DEFAULT_SKIN_ID) activeSkinPermissions += mount.activeSkinPermission(skinId)
+        }
+
+    override fun grantAbility(
+        playerId: UUID,
+        mount: MountDefinition,
+        ability: MountAbilityUpgradeDefinition,
+    ): CompletableFuture<Void> =
+        write {
+            abilityPermissions += mount.abilityPermission(ability.id)
+            directPermissions += mount.abilityPermission(ability.id)
+        }
+
+    override fun revokeAbility(
+        playerId: UUID,
+        mount: MountDefinition,
+        ability: MountAbilityUpgradeDefinition,
+    ): CompletableFuture<Void> =
+        write {
+            abilityPermissions -= mount.abilityPermission(ability.id)
+            directPermissions -= mount.abilityPermission(ability.id)
         }
 
     override fun hasDirectPermission(playerId: UUID, permission: String): CompletableFuture<Boolean> =

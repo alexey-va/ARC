@@ -90,6 +90,7 @@ class MountCommand(
                 durationMillis = config().adminSessionDuration.toMillis(),
                 glow = false,
                 skin = skin,
+                abilityUpgrades = mount.abilities.upgrades,
             )
         if (result != MountSpawnResult.SUCCESS) {
             player.sendMessage(TextUtil.mm("<red>Не удалось призвать маунта: <white>${result.name.lowercase()}<red>.", true))
@@ -182,6 +183,24 @@ class MountCommand(
                     )
                 }
             }
+            "ability" -> {
+                val abilityId = rawTarget?.lowercase(Locale.ROOT)
+                val ability = abilityId?.let(mount::ability)
+                if (ability == null) {
+                    sender.sendMessage(TextUtil.mm("<red>Укажите способность, доступную этому маунту.", true))
+                    null
+                } else {
+                    MountAdminMutation(
+                        successLabel =
+                            if (action == "grant") "Способность ${ability.displayName} выдана"
+                            else "Способность ${ability.displayName} отозвана",
+                        apply = { playerId, definition ->
+                            if (action == "grant") ownership.grantAbility(playerId, definition, ability)
+                            else ownership.revokeAbility(playerId, definition, ability)
+                        },
+                    )
+                }
+            }
             "glow" -> {
                 if (rawTarget != null) {
                     sendMutationHelp(sender, label, action)
@@ -212,12 +231,12 @@ class MountCommand(
 
     private fun sendAdminHelp(sender: CommandSender, label: String) {
         sender.sendMessage(TextUtil.mm("<yellow>/$label admin summon <маунт> [уровень] [облик]", true))
-        sender.sendMessage(TextUtil.mm("<yellow>/$label admin grant <level|skin|glow> <игрок> <маунт> [значение]", true))
-        sender.sendMessage(TextUtil.mm("<yellow>/$label admin revoke <level|skin|glow> <игрок> <маунт> [значение]", true))
+        sender.sendMessage(TextUtil.mm("<yellow>/$label admin grant <level|skin|glow|ability> <игрок> <маунт> [значение]", true))
+        sender.sendMessage(TextUtil.mm("<yellow>/$label admin revoke <level|skin|glow|ability> <игрок> <маунт> [значение]", true))
     }
 
     private fun sendMutationHelp(sender: CommandSender, label: String, action: String) {
-        sender.sendMessage(TextUtil.mm("<red>Использование: /$label admin $action <level|skin|glow> <игрок> <маунт> [значение]", true))
+        sender.sendMessage(TextUtil.mm("<red>Использование: /$label admin $action <level|skin|glow|ability> <игрок> <маунт> [значение]", true))
     }
 
     override fun onTabComplete(
@@ -267,6 +286,7 @@ class MountCommand(
                 when (args[2].lowercase(Locale.ROOT)) {
                     "level" -> (1..(mount?.maxLevel ?: 3)).map(Int::toString).matching(args[5])
                     "skin" -> mount?.skins.orEmpty().map(MountSkinDefinition::id).matching(args[5])
+                    "ability" -> mount?.abilities?.upgrades.orEmpty().map(MountAbilityUpgradeDefinition::id).matching(args[5])
                     else -> emptyList()
                 }
             }
@@ -282,7 +302,7 @@ class MountCommand(
 
     companion object {
         private const val ADMIN_PERMISSION = "arc.mounts.admin"
-        private val ADMIN_KINDS = listOf("glow", "level", "skin")
+        private val ADMIN_KINDS = listOf("ability", "glow", "level", "skin")
         private val PLAYER_NAME = Regex("[A-Za-z0-9_]{3,16}")
     }
 }

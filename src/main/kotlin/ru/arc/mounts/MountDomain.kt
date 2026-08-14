@@ -102,11 +102,42 @@ data class MountHighJumpAbility(
     }
 }
 
+enum class MountAbilityEffect {
+    WATER_BREATHING,
+    NIGHT_VISION,
+    FIRE_RESISTANCE,
+    DOLPHINS_GRACE,
+}
+
+data class MountAbilityUpgradeDefinition(
+    val id: String,
+    val displayName: String,
+    val description: List<String>,
+    val iconMaterial: String,
+    val price: Double,
+    val effect: MountAbilityEffect,
+    val speedMultiplier: Double = 1.0,
+) {
+    init {
+        require(MountDefinition.validId(id)) { "Invalid mount ability id: $id" }
+        require(displayName.isNotBlank() && displayName.length <= 64) { "Mount ability '$id' name is invalid" }
+        require(description.size <= 4 && description.all { it.isNotBlank() && it.length <= 120 }) {
+            "Mount ability '$id' description is invalid"
+        }
+        require(iconMaterial.isNotBlank()) { "Mount ability '$id' icon material is blank" }
+        require(price.isFinite() && price > 0.0) { "Mount ability '$id' price must be positive and finite" }
+        require(speedMultiplier.isFinite() && speedMultiplier in 1.0..1.5) {
+            "Mount ability '$id' speed multiplier must be between 1.0 and 1.5"
+        }
+    }
+}
+
 data class MountAbilities(
     val highJump: MountHighJumpAbility? = null,
+    val upgrades: List<MountAbilityUpgradeDefinition> = emptyList(),
 ) {
     val displayNames: List<String>
-        get() = listOfNotNull(highJump?.displayName)
+        get() = listOfNotNull(highJump?.displayName) + upgrades.map(MountAbilityUpgradeDefinition::displayName)
 }
 
 data class MountSkinDefinition(
@@ -156,6 +187,16 @@ data class MountDefinition(
         require(abilities.highJump == null || movement == MountMovement.WALKING) {
             "Mount '$id' high-jump ability requires walking movement"
         }
+        require(abilities.upgrades.map(MountAbilityUpgradeDefinition::id).toSet().size == abilities.upgrades.size) {
+            "Mount '$id' ability upgrade ids must be unique"
+        }
+        require(activeAbilitySpeedMultiplier(abilities.upgrades) <= 1.5) {
+            "Mount '$id' combined ability speed multiplier exceeds 1.5"
+        }
+        require(
+            movement == MountMovement.SWIMMING ||
+                abilities.upgrades.none { it.effect == MountAbilityEffect.WATER_BREATHING || it.effect == MountAbilityEffect.DOLPHINS_GRACE },
+        ) { "Mount '$id' aquatic abilities require swimming movement" }
         require(skins.size <= MAX_SKINS) { "Mount '$id' has more than $MAX_SKINS skins" }
         require(skins.map(MountSkinDefinition::id).toSet().size == skins.size) { "Mount '$id' skin ids must be unique" }
         require(skins.none { it.id == DEFAULT_SKIN_ID }) { "Mount '$id' cannot redefine the default skin" }
@@ -179,6 +220,10 @@ data class MountDefinition(
     fun skinPermission(skinId: String): String = "arc.mounts.$id.skin.$skinId"
 
     fun activeSkinPermission(skinId: String): String = "arc.mounts.$id.skin.active.$skinId"
+
+    fun ability(id: String): MountAbilityUpgradeDefinition? = abilities.upgrades.firstOrNull { it.id == id }
+
+    fun abilityPermission(abilityId: String): String = "arc.mounts.$id.ability.$abilityId"
 
     companion object {
         private val ID_PATTERN = Regex("[a-z0-9][a-z0-9_-]{1,31}")
@@ -214,11 +259,14 @@ data class MountProfile(
     val glowDisabled: Boolean,
     val ownedSkinIds: Set<String> = emptySet(),
     val activeSkinId: String = MountDefinition.DEFAULT_SKIN_ID,
+    val ownedAbilityIds: Set<String> = emptySet(),
 ) {
     val unlocked: Boolean get() = level > 0
     val glowEnabled: Boolean get() = glowOwned && !glowDisabled
 
     fun ownsSkin(skinId: String): Boolean = skinId == MountDefinition.DEFAULT_SKIN_ID || skinId in ownedSkinIds
+
+    fun ownsAbility(abilityId: String): Boolean = abilityId in ownedAbilityIds
 }
 
 interface MountOwnership {
@@ -239,6 +287,10 @@ interface MountOwnership {
     fun revokeSkin(playerId: UUID, mount: MountDefinition, skin: MountSkinDefinition): CompletableFuture<Void>
 
     fun setActiveSkin(playerId: UUID, mount: MountDefinition, skinId: String): CompletableFuture<Void>
+
+    fun grantAbility(playerId: UUID, mount: MountDefinition, ability: MountAbilityUpgradeDefinition): CompletableFuture<Void>
+
+    fun revokeAbility(playerId: UUID, mount: MountDefinition, ability: MountAbilityUpgradeDefinition): CompletableFuture<Void>
 
     fun hasDirectPermission(playerId: UUID, permission: String): CompletableFuture<Boolean>
 
@@ -362,3 +414,6 @@ internal fun walkingJumpVelocity(baseVelocity: Double, abilities: MountAbilities
     require(baseVelocity.isFinite() && baseVelocity > 0.0) { "Walking jump velocity must be positive and finite" }
     return baseVelocity * (abilities.highJump?.multiplier ?: 1.0)
 }
+
+internal fun activeAbilitySpeedMultiplier(abilities: Collection<MountAbilityUpgradeDefinition>): Double =
+    abilities.fold(1.0) { total, ability -> total * ability.speedMultiplier }

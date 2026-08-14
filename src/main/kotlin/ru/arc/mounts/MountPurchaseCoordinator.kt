@@ -96,6 +96,27 @@ class MountPurchaseCoordinator(
         ) { ownership.grantSkin(subject.uniqueId, mount, skin) }
     }
 
+    fun purchaseAbility(
+        subject: MountPermissionSubject,
+        mount: MountDefinition,
+        ability: MountAbilityUpgradeDefinition,
+        callback: (MountPurchaseResult) -> Unit,
+    ) {
+        val profile = ownership.profile(subject, mount)
+        if (!profile.unlocked) return callback(MountPurchaseResult.NotUnlocked)
+        if (mount.ability(ability.id) != ability) return callback(MountPurchaseResult.NotForSale)
+        if (profile.ownsAbility(ability.id)) return callback(MountPurchaseResult.AlreadyOwned)
+        purchase(
+            subject.uniqueId,
+            mount,
+            MountPurchaseKind.ABILITY,
+            ability.id,
+            mount.abilityPermission(ability.id),
+            ability.price,
+            callback,
+        ) { ownership.grantAbility(subject.uniqueId, mount, ability) }
+    }
+
     fun setGlowEnabled(
         subject: MountPermissionSubject,
         mount: MountDefinition,
@@ -431,6 +452,7 @@ class MountPurchaseCoordinator(
             MountPurchaseKind.LEVEL -> record.target.toIntOrNull()?.let { ownership.grantLevel(playerId, mount, it) }
             MountPurchaseKind.GLOW -> ownership.grantGlow(playerId, mount)
             MountPurchaseKind.SKIN -> mount.skin(record.target)?.let { ownership.grantSkin(playerId, mount, it) }
+            MountPurchaseKind.ABILITY -> mount.ability(record.target)?.let { ownership.grantAbility(playerId, mount, it) }
         }
     }
 

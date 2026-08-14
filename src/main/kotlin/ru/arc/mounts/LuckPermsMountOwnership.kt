@@ -21,7 +21,11 @@ class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership
                 ?.id
                 ?.takeIf { it in ownedSkinIds }
                 ?: MountDefinition.DEFAULT_SKIN_ID
-        return MountProfile(level, glowOwned, glowDisabled, ownedSkinIds, activeSkinId)
+        val ownedAbilityIds =
+            mount.abilities.upgrades
+                .filter { subject.hasPermission(mount.abilityPermission(it.id)) }
+                .mapTo(linkedSetOf(), MountAbilityUpgradeDefinition::id)
+        return MountProfile(level, glowOwned, glowDisabled, ownedSkinIds, activeSkinId, ownedAbilityIds)
     }
 
     override fun grantLevel(playerId: UUID, mount: MountDefinition, level: Int): CompletableFuture<Void> {
@@ -92,6 +96,28 @@ class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership
             if (skinId != MountDefinition.DEFAULT_SKIN_ID) {
                 user.data().add(permission(mount.activeSkinPermission(skinId)))
             }
+        }
+    }
+
+    override fun grantAbility(
+        playerId: UUID,
+        mount: MountDefinition,
+        ability: MountAbilityUpgradeDefinition,
+    ): CompletableFuture<Void> {
+        require(mount.ability(ability.id) == ability) { "Unknown ${mount.id} ability: ${ability.id}" }
+        return luckPerms.userManager.modifyUser(playerId) { user ->
+            user.data().add(permission(mount.abilityPermission(ability.id)))
+        }
+    }
+
+    override fun revokeAbility(
+        playerId: UUID,
+        mount: MountDefinition,
+        ability: MountAbilityUpgradeDefinition,
+    ): CompletableFuture<Void> {
+        require(mount.ability(ability.id) == ability) { "Unknown ${mount.id} ability: ${ability.id}" }
+        return luckPerms.userManager.modifyUser(playerId) { user ->
+            removePermission(user.data()::remove, user.nodes, mount.abilityPermission(ability.id))
         }
     }
 

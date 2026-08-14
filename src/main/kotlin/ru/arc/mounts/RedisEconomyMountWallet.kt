@@ -7,6 +7,8 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
+import kotlin.math.abs
+import kotlin.math.roundToLong
 
 data class MountMoneyEvidence(
     val providerAccepted: Boolean?,
@@ -57,7 +59,7 @@ class RedisEconomyMountWallet(
     override val available: Boolean get() = apiProvider()?.defaultCurrency != null
 
     override fun balanceMinor(playerId: UUID): Long? =
-        runCatching { apiProvider()?.defaultCurrency?.getBalance(playerId)?.toExactMinor() }.getOrNull()
+        runCatching { apiProvider()?.defaultCurrency?.getBalance(playerId)?.toProviderMinorOrNull() }.getOrNull()
 
     override fun withdraw(
         playerId: UUID,
@@ -97,7 +99,7 @@ class RedisEconomyMountWallet(
                         transaction.timestamp >= notBeforeMillis &&
                             transaction.currencyName == currency.currencyName &&
                             transaction.reason.orEmpty().lineSequence().firstOrNull() == reason &&
-                            runCatching { transaction.amount.toExactMinor() }.getOrNull() == amountMinor
+                            transaction.amount.toProviderMinorOrNull() == amountMinor
                     }
                 MountProviderTransactionEvidence(match?.key?.toString(), true)
             }
@@ -114,7 +116,7 @@ class RedisEconomyMountWallet(
         require(REASON_PATTERN.matches(reason)) { "Invalid mount money mutation reason" }
         val currency = apiProvider()?.defaultCurrency
             ?: return MountMoneyEvidence(false, false, null, "provider_unavailable")
-        val before = runCatching { currency.getBalance(playerId).toExactMinor() }.getOrNull()
+        val before = currency.getBalance(playerId).toProviderMinorOrNull()
             ?: return MountMoneyEvidence(false, false, null, "provider_balance_unavailable")
         if (before != expectedBalanceBeforeMinor) {
             return MountMoneyEvidence(false, false, before, "provider_balance_changed_before_call")
@@ -134,26 +136,16 @@ class RedisEconomyMountWallet(
                 return MountMoneyEvidence(
                     providerAccepted = null,
                     providerCallAttempted = true,
-                    balanceAfterMinor = runCatching { currency.getBalance(playerId).toExactMinor() }.getOrNull(),
+                    balanceAfterMinor = currency.getBalance(playerId).toProviderMinorOrNull(),
                     failureCode = "provider_threw",
                 )
             }
         return MountMoneyEvidence(
             providerAccepted = response.transactionSuccess(),
             providerCallAttempted = true,
-            balanceAfterMinor = runCatching { currency.getBalance(playerId).toExactMinor() }.getOrNull(),
+            balanceAfterMinor = currency.getBalance(playerId).toProviderMinorOrNull(),
             failureCode = if (response.transactionSuccess()) null else "provider_rejected",
         )
-    }
-
-    private fun Double.toExactMinor(): Long? {
-        if (!isFinite()) return null
-        return runCatching {
-            BigDecimal.valueOf(this)
-                .movePointRight(2)
-                .setScale(0, RoundingMode.UNNECESSARY)
-                .longValueExact()
-        }.getOrNull()
     }
 
     companion object {
@@ -161,6 +153,16 @@ class RedisEconomyMountWallet(
         private val REASON_PATTERN = Regex("arc-mount(?:-refund)?:[0-9a-f-]{36}")
     }
 }
+
+internal fun Double.toProviderMinorOrNull(): Long? {
+    if (!isFinite()) return null
+    val scaled = this * 100.0
+    if (!scaled.isFinite() || scaled < Long.MIN_VALUE.toDouble() || scaled > Long.MAX_VALUE.toDouble()) return null
+    val nearest = scaled.roundToLong()
+    return nearest.takeIf { abs(scaled - nearest.toDouble()) <= PROVIDER_MINOR_DRIFT_TOLERANCE }
+}
+
+private const val PROVIDER_MINOR_DRIFT_TOLERANCE = 0.05
 
 internal fun Double.toExactMinor(): Long =
     BigDecimal.valueOf(this)

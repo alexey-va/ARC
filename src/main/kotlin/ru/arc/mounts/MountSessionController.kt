@@ -70,6 +70,7 @@ private data class MountSession(
     val handlingMultiplier: Double,
     val sprintMultiplier: Double,
     val skin: MountSkinDefinition?,
+    val abilityUpgrades: List<MountAbilityUpgradeDefinition>,
     val expiresAtMillis: Long,
     val sneakGesture: DoubleSneakGesture,
     var input: MountInputState = MountInputState(),
@@ -130,6 +131,7 @@ class MountSessionController(
         durationMillis: Long,
         glow: Boolean,
         skin: MountSkinDefinition? = null,
+        abilityUpgrades: List<MountAbilityUpgradeDefinition> = emptyList(),
     ): MountSpawnResult {
         val config = configProvider()
         val now = System.currentTimeMillis()
@@ -141,9 +143,16 @@ class MountSessionController(
         if (config.allowedWorlds.isNotEmpty() && player.world.name.lowercase(java.util.Locale.ROOT) !in config.allowedWorlds) {
             return MountSpawnResult.WORLD_NOT_ALLOWED
         }
-        if (definition.movement == MountMovement.SWIMMING && !player.location.block.isLiquid) {
+        if (
+            definition.movement == MountMovement.SWIMMING &&
+            !isAquaticEnvironment(
+                player.isInWater || player.location.block.type == org.bukkit.Material.BUBBLE_COLUMN,
+                player.location.block.isLiquid,
+            )
+        ) {
             return MountSpawnResult.WATER_REQUIRED
         }
+        require(abilityUpgrades.all { definition.ability(it.id) == it }) { "Active mount ability is not configured for ${definition.id}" }
 
         val entityType = runCatching { org.bukkit.entity.EntityType.valueOf(definition.entityType) }.getOrNull()
             ?: return MountSpawnResult.INVALID_ENTITY
@@ -188,6 +197,7 @@ class MountSessionController(
                     handlingMultiplier = handlingMultiplier,
                     sprintMultiplier = sprintMultiplier,
                     skin = skin,
+                    abilityUpgrades = abilityUpgrades,
                     expiresAtMillis = System.currentTimeMillis() + durationMillis.coerceAtLeast(1L),
                     sneakGesture = DoubleSneakGesture(config.doubleSneakWindow.toMillis()),
                 )
@@ -363,7 +373,11 @@ class MountSessionController(
                 !entity.world.worldBorder.isInside(entity.location) -> {
                     remove(session.playerId, MountRemovalReason.WORLD_BORDER)
                 }
-                session.definition.movement == MountMovement.SWIMMING && !entity.location.block.isLiquid -> {
+                session.definition.movement == MountMovement.SWIMMING &&
+                    !isAquaticEnvironment(
+                        entity.isInWater || entity.location.block.type == org.bukkit.Material.BUBBLE_COLUMN,
+                        entity.location.block.isLiquid,
+                    ) -> {
                     remove(session.playerId, MountRemovalReason.LEFT_WATER)
                 }
                 else -> {
@@ -371,6 +385,9 @@ class MountSessionController(
                     if (session.input.hasMovementIntent) session.lastActiveAtMillis = now
                     session.ticks++
                     (entity as? Mob)?.let(::maintainMountMobState)
+                    if (session.ticks == 1L || session.ticks % ABILITY_REFRESH_TICKS == 0L) {
+                        refreshAbilityEffects(player, session.abilityUpgrades)
+                    }
                     move(player, entity, session)
                     emitTrail(entity, session)
                 }
@@ -387,7 +404,8 @@ class MountSessionController(
                 MountMovement.SWIMMING -> config.swimmingSpeedScale
             }
         val sprint = if (session.input.sprint) config.sprintMultiplier * session.sprintMultiplier else 1.0
-        val maximumSpeed = (session.speed * speedScale * sprint).coerceAtMost(config.maximumSpeedBlocksPerTick)
+        val abilitySpeed = activeAbilitySpeedMultiplier(session.abilityUpgrades)
+        val maximumSpeed = (session.speed * speedScale * sprint * abilitySpeed).coerceAtMost(config.maximumSpeedBlocksPerTick)
         val planar = MountMotion.planarDirection(player.location.yaw, session.input)
         val target =
             when (session.definition.movement) {
@@ -444,6 +462,21 @@ class MountSessionController(
         entity.world.spawnParticle(particle, entity.location, trail.count, 0.12, 0.12, 0.12, 0.0)
     }
 
+    private fun refreshAbilityEffects(player: Player, abilities: Collection<MountAbilityUpgradeDefinition>) {
+        abilities.forEach { ability ->
+            val effectType =
+                when (ability.effect) {
+                    MountAbilityEffect.WATER_BREATHING -> PotionEffectType.WATER_BREATHING
+                    MountAbilityEffect.NIGHT_VISION -> PotionEffectType.NIGHT_VISION
+                    MountAbilityEffect.FIRE_RESISTANCE -> PotionEffectType.FIRE_RESISTANCE
+                    MountAbilityEffect.DOLPHINS_GRACE -> PotionEffectType.DOLPHINS_GRACE
+                }
+            player.addPotionEffect(
+                PotionEffect(effectType, ABILITY_EFFECT_DURATION_TICKS, 0, false, false, true),
+            )
+        }
+    }
+
     private fun configureEntity(
         entity: LivingEntity,
         definition: MountDefinition,
@@ -487,6 +520,11 @@ class MountSessionController(
 
     private fun Vector.toMotion() = MotionVector(x, y, z)
     private fun MotionVector.toBukkit() = Vector(x, y, z)
+
+    companion object {
+        private const val ABILITY_REFRESH_TICKS = 20L
+        private const val ABILITY_EFFECT_DURATION_TICKS = 280
+    }
 }
 
 internal fun configureMountMob(mob: Mob) {
@@ -519,6 +557,9 @@ internal fun shouldCancelUnauthorizedDismount(allowDismount: Boolean, cancellabl
 
 internal fun shouldKnockRiderOff(finalDamage: Double, threshold: Double): Boolean =
     finalDamage.isFinite() && threshold.isFinite() && threshold > 0.0 && finalDamage >= threshold
+
+internal fun isAquaticEnvironment(inWaterOrBubbleColumn: Boolean, blockIsLiquid: Boolean): Boolean =
+    inWaterOrBubbleColumn || blockIsLiquid
 
 internal fun shouldAllowCancelledMountSpawn(
     cancelled: Boolean,

@@ -11,8 +11,11 @@ Native production replacement for `Denizen/scripts/activities/rideable_mobs.dsc`
   WASD, Space to ascend and Shift to descend. Every mount uses double Shift to
   dismount; a single Shift never ends the ride.
 - Typed per-mount abilities are configured under `abilities`. The mountain goat
-  exposes `Высокий прыжок` in the GUI and applies its configured jump multiplier
-  to the shared walking jump velocity.
+  and frog have inherent high jumps. Contextual permanent upgrades are bought
+  from the detail screen: water breathing and night vision for aquatic mounts,
+  fire resistance for Nether mounts, and a speed-enhancing dolphin grace for
+  the dolphin. Effects are refreshed while riding and expire naturally after
+  dismount without removing unrelated player effects.
 - Every mount has three progression levels. The third level is the deliberately
   expensive final sprint and improves speed, steering and sprint response.
 - Appearance is deterministic. ARC fixes age, scale and variants, clears random
@@ -24,8 +27,9 @@ Native production replacement for `Denizen/scripts/activities/rideable_mobs.dsc`
   mount on the next tick. Rider suffocation inside a block remains cancelled as
   a mount hitbox safety measure.
 - Rider death, logout, teleport, world change, expiry, idle timeout, invalid
-  state, world-border/height escape, or leaving water removes the temporary
-  entity.
+  state, world-border/height escape, or genuinely leaving water removes the
+  temporary entity. Kelp, seagrass and bubble columns remain valid aquatic
+  environments.
 - A short summon cooldown and a hard server-side velocity cap protect against
   duplicate entities and unsafe catalog values.
 
@@ -38,15 +42,16 @@ All access, ownership and settings use only `arc.mounts.*`:
 - `arc.mounts.<mount>.glow` and `.glow.disabled` — glow ownership and setting;
 - `arc.mounts.<mount>.skin.<skin>` — skin ownership;
 - `arc.mounts.<mount>.skin.active.<skin>` — selected skin marker;
+- `arc.mounts.<mount>.ability.<ability>` — permanent contextual ability;
 - `arc.mounts.admin` — all `/mount admin ...` operations.
 
 The command surface is deliberately unified:
 
 - `/mount admin summon <mount> [level] [skin]` — short test ride using the
   selected configured level, never an arbitrary raw speed;
-- `/mount admin grant <level|skin|glow> <player> <mount> [value]` — grant an
+- `/mount admin grant <level|skin|glow|ability> <player> <mount> [value]` — grant an
   exact ownership node;
-- `/mount admin revoke <level|skin|glow> <player> <mount> [value]` — revoke an
+- `/mount admin revoke <level|skin|glow|ability> <player> <mount> [value]` — revoke an
   exact ownership node and any dependent active skin/glow setting.
 
 `/mount admin summon zombie 3 baby` is the administrator smoke command. No
@@ -64,9 +69,11 @@ mob-spawn restrictions remain intact.
 ## Economy safety
 
 Purchases are enabled only on the spawn node. Prices are converted to exact
-minor currency units and charged directly through the exact RedisEconomy
-4.5.12 API; the adapter refuses non-zero provider tax or a changed pre-call
-balance.
+minor currency units and charged directly through the RedisEconomy 4.5.12 API.
+Historical provider doubles may contain a sub-cent binary tail; ARC accepts
+only a tiny drift within 0.05 of one minor unit, while real fractional-cent
+balances still fail closed. The adapter also refuses non-zero provider tax or a
+changed pre-call balance.
 
 Before any withdrawal, ARC atomically writes
 `plugins/ARC/data/mount-purchases.json`. The journal records the intended

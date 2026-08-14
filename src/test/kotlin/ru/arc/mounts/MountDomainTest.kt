@@ -44,6 +44,7 @@ class MountDomainTest : StringSpec({
         mount.glowDisabledPermission shouldBe "arc.mounts.bee.glow.disabled"
         mount.skinPermission("baby") shouldBe "arc.mounts.bee.skin.baby"
         mount.activeSkinPermission("baby") shouldBe "arc.mounts.bee.skin.active.baby"
+        mount.abilityPermission("night-vision") shouldBe "arc.mounts.bee.ability.night-vision"
     }
 
     "disabled glow permission wins after glow was purchased" {
@@ -131,6 +132,13 @@ class MountDomainTest : StringSpec({
         }
     }
 
+    "owned abilities contribute only their configured movement multiplier" {
+        val ability = checkNotNull(testMount().ability("night-vision"))
+
+        activeAbilitySpeedMultiplier(emptyList()) shouldBeExactly 1.0
+        activeAbilitySpeedMultiplier(listOf(ability)) shouldBeExactly 1.0
+    }
+
     "mount definitions reject invalid level prices and speeds" {
         shouldThrow<IllegalArgumentException> {
             testMount().copy(levels = listOf(MountLevelDefinition(speed = 0.0, price = 1.0)))
@@ -175,6 +183,20 @@ internal fun testMount() =
                 MountLevelDefinition(0.9, 5_000_000.0, 1.28, 1.12),
             ),
         glowPrice = 10_000.0,
+        abilities =
+            MountAbilities(
+                upgrades =
+                    listOf(
+                        MountAbilityUpgradeDefinition(
+                            id = "night-vision",
+                            displayName = "Ночное зрение",
+                            description = listOf("Видимость в темноте"),
+                            iconMaterial = "GLOW_INK_SAC",
+                            price = 25_000.0,
+                            effect = MountAbilityEffect.NIGHT_VISION,
+                        ),
+                    ),
+            ),
         skins =
             listOf(
                 MountSkinDefinition(
@@ -192,12 +214,14 @@ private class TestOwnership : MountOwnership {
         val level = (1..mount.maxLevel).filter { subject.hasPermission(mount.levelPermission(it)) }.maxOrNull() ?: 0
         val ownedSkins = mount.skins.filter { subject.hasPermission(mount.skinPermission(it.id)) }.mapTo(hashSetOf()) { it.id }
         val active = mount.skins.firstOrNull { it.id in ownedSkins && subject.hasPermission(mount.activeSkinPermission(it.id)) }?.id
+        val ownedAbilities = mount.abilities.upgrades.filter { subject.hasPermission(mount.abilityPermission(it.id)) }.mapTo(hashSetOf()) { it.id }
         return MountProfile(
             level,
             subject.hasPermission(mount.glowPermission),
             subject.hasPermission(mount.glowDisabledPermission),
             ownedSkins,
             active ?: MountDefinition.DEFAULT_SKIN_ID,
+            ownedAbilities,
         )
     }
 
@@ -209,6 +233,8 @@ private class TestOwnership : MountOwnership {
     override fun grantSkin(playerId: UUID, mount: MountDefinition, skin: MountSkinDefinition) = CompletableFuture.completedFuture<Void>(null)
     override fun revokeSkin(playerId: UUID, mount: MountDefinition, skin: MountSkinDefinition) = CompletableFuture.completedFuture<Void>(null)
     override fun setActiveSkin(playerId: UUID, mount: MountDefinition, skinId: String) = CompletableFuture.completedFuture<Void>(null)
+    override fun grantAbility(playerId: UUID, mount: MountDefinition, ability: MountAbilityUpgradeDefinition) = CompletableFuture.completedFuture<Void>(null)
+    override fun revokeAbility(playerId: UUID, mount: MountDefinition, ability: MountAbilityUpgradeDefinition) = CompletableFuture.completedFuture<Void>(null)
     override fun hasDirectPermission(playerId: UUID, permission: String) = CompletableFuture.completedFuture(false)
     override fun resolveUniqueId(playerName: String) = CompletableFuture.completedFuture<UUID?>(null)
 }

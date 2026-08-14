@@ -65,6 +65,37 @@ messages:
   save-failed-refunded: "<red>Покупка не сохранилась. Деньги полностью возвращены."
   purchase-manual-review: "<dark_red>Покупка приостановлена для безопасной проверки. Повторно не покупайте; обратитесь к администрации."
 
+ability-upgrades:
+  water-breathing:
+    name: "Дыхание глубин"
+    description:
+      - "Позволяет дышать под водой всё время поездки."
+    item: HEART_OF_THE_SEA
+    price: 400000
+    effect: WATER_BREATHING
+  night-vision:
+    name: "Зрение глубин"
+    description:
+      - "Освещает тёмные пещеры и океанские впадины."
+    item: GLOW_INK_SAC
+    price: 650000
+    effect: NIGHT_VISION
+  fire-resistance:
+    name: "Жаропрочная упряжь"
+    description:
+      - "Защищает всадника от огня и лавы во время поездки."
+    item: MAGMA_CREAM
+    price: 750000
+    effect: FIRE_RESISTANCE
+  dolphins-grace:
+    name: "Грация дельфина"
+    description:
+      - "Даёт дельфиний эффект и ускоряет маунта в воде."
+    item: NAUTILUS_SHELL
+    price: 1500000
+    effect: DOLPHINS_GRACE
+    speed-multiplier: 1.15
+
 cosmetics:
   starlight:
     name: "Звёздный комплект"
@@ -393,7 +424,11 @@ mounts:
     rarity: uncommon
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Пружинистый ходок с отличным финальным разгоном."
+      - "Пружинистый ходок с высоким прыжком и отличным финальным разгоном."
+    abilities:
+      high-jump:
+        name: "Пружинный прыжок"
+        multiplier: 1.55
     levels:
       - {speed: 1.45, handling: 0.9, sprint: 1, price: 100000}
       - {speed: 2.35, handling: 1, sprint: 1.03, price: 500000}
@@ -482,6 +517,8 @@ mounts:
     acquisition: "Магазин маунтов на спавне"
     description:
       - "Редкий спутник Нижнего мира с жаркими следами и уверенным форсажем."
+    abilities:
+      upgrades: [fire-resistance]
     levels:
       - {speed: 1.55, handling: 0.9, sprint: 1, price: 250000}
       - {speed: 2.5, handling: 1, sprint: 1.03, price: 1200000}
@@ -601,6 +638,8 @@ mounts:
     acquisition: "Сезонная или событийная награда"
     description:
       - "Наследный сезонный маунт старой коллекции."
+    abilities:
+      upgrades: [fire-resistance]
     levels:
       - {speed: 0.55, handling: 0.9, sprint: 1, price: null}
       - {speed: 0.9, handling: 1, sprint: 1.03, price: null}
@@ -688,6 +727,8 @@ mounts:
     acquisition: "Магазин маунтов на спавне"
     description:
       - "Компактный ночной пилот для пещер, башен и тесных пролётов."
+    abilities:
+      upgrades: [night-vision]
     levels:
       - {speed: 0.45, handling: 0.9, sprint: 1, price: 100000}
       - {speed: 0.76, handling: 1, sprint: 1.03, price: 500000}
@@ -769,6 +810,8 @@ mounts:
     acquisition: "Магазин маунтов на спавне"
     description:
       - "Ночной хищник с широким силуэтом и дорогим звёздным следом."
+    abilities:
+      upgrades: [night-vision]
     levels:
       - {speed: 0.52, handling: 0.9, sprint: 1, price: 500000}
       - {speed: 0.85, handling: 1, sprint: 1.03, price: 2500000}
@@ -796,6 +839,8 @@ mounts:
     acquisition: "Магазин маунтов на спавне"
     description:
       - "Огромный престижный корабль Нижнего мира."
+    abilities:
+      upgrades: [fire-resistance]
     levels:
       - {speed: 0.55, handling: 0.9, sprint: 1, price: 1000000}
       - {speed: 0.9, handling: 1, sprint: 1.03, price: 5000000}
@@ -823,6 +868,8 @@ mounts:
     acquisition: "Магазин маунтов на спавне"
     description:
       - "Дружелюбный флагман воздушной коллекции."
+    abilities:
+      upgrades: [fire-resistance]
     levels:
       - {speed: 0.55, handling: 0.9, sprint: 1, price: 1000000}
       - {speed: 0.9, handling: 1, sprint: 1.03, price: 5000000}
@@ -852,6 +899,8 @@ mounts:
     acquisition: "Магазин маунтов на спавне"
     description:
       - "Быстрый и естественный водный маунт."
+    abilities:
+      upgrades: [water-breathing, night-vision, dolphins-grace]
     levels:
       - {speed: 0.52, handling: 0.9, sprint: 1, price: 50000}
       - {speed: 0.88, handling: 1, sprint: 1.03, price: 250000}
@@ -879,6 +928,8 @@ mounts:
     acquisition: "Магазин маунтов на спавне"
     description:
       - "Милый подводный спутник с редкими расцветками."
+    abilities:
+      upgrades: [water-breathing, night-vision]
     levels:
       - {speed: 0.56, handling: 0.9, sprint: 1, price: 100000}
       - {speed: 0.92, handling: 1, sprint: 1.03, price: 500000}
@@ -912,6 +963,8 @@ mounts:
     acquisition: "Магазин маунтов на спавне"
     description:
       - "Мягкий подводный транспорт для тихих экспедиций и тёмных глубин."
+    abilities:
+      upgrades: [water-breathing, night-vision]
     levels:
       - {speed: 0.56, handling: 0.9, sprint: 1, price: 100000}
       - {speed: 0.92, handling: 1, sprint: 1.03, price: 500000}
@@ -939,6 +992,8 @@ mounts:
     acquisition: "Магазин маунтов на спавне"
     description:
       - "Редкий светящийся проводник, оставляющий заметный океанический след."
+    abilities:
+      upgrades: [water-breathing, night-vision]
     levels:
       - {speed: 0.6, handling: 0.9, sprint: 1, price: 250000}
       - {speed: 0.98, handling: 1, sprint: 1.03, price: 1200000}
@@ -966,6 +1021,8 @@ mounts:
     acquisition: "Магазин маунтов на спавне"
     description:
       - "Бронированный властелин глубин с дорогой эпической отделкой."
+    abilities:
+      upgrades: [water-breathing, night-vision]
     levels:
       - {speed: 0.65, handling: 0.9, sprint: 1, price: 500000}
       - {speed: 1.05, handling: 1, sprint: 1.03, price: 2500000}
@@ -993,6 +1050,8 @@ mounts:
     acquisition: "Магазин маунтов на спавне"
     description:
       - "Надёжная морская путешественница с плавным разгоном и сильным финалом."
+    abilities:
+      upgrades: [water-breathing, night-vision]
     levels:
       - {speed: 0.6, handling: 0.9, sprint: 1, price: 250000}
       - {speed: 0.98, handling: 1, sprint: 1.03, price: 1200000}

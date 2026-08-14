@@ -63,13 +63,22 @@ class MountModuleConfigTest : StringSpec({
         zombie.skinPermission("baby") shouldBe "arc.mounts.zombie.skin.baby"
     }
 
-    "mount abilities are explicit and the mountain goat has a high jump" {
+    "mount abilities are explicit and assigned only where they fit" {
         val catalog = bundledConfig("abilities").catalog()
         val goat = checkNotNull(catalog["goat"])
+        val frog = checkNotNull(catalog["frog"])
 
         goat.abilities.highJump?.displayName shouldBe "Высокий прыжок"
         goat.abilities.highJump?.multiplier shouldBe 1.8
-        catalog.all.filterNot { it.id == "goat" }.all { it.abilities.highJump == null } shouldBe true
+        frog.abilities.highJump?.multiplier shouldBe 1.55
+        catalog.all.filterNot { it.id in setOf("goat", "frog") }.all { it.abilities.highJump == null } shouldBe true
+        catalog.all.filter { it.movement == MountMovement.SWIMMING }.all { mount ->
+            mount.ability("water-breathing") != null && mount.ability("night-vision") != null
+        } shouldBe true
+        catalog["dolphin"]?.ability("dolphins-grace")?.speedMultiplier shouldBe 1.15
+        catalog["bat"]?.ability("night-vision")?.effect shouldBe MountAbilityEffect.NIGHT_VISION
+        catalog["phantom"]?.ability("night-vision")?.effect shouldBe MountAbilityEffect.NIGHT_VISION
+        setOf("strider", "blaze", "ghast", "happy_ghast").all { catalog[it]?.ability("fire-resistance") != null } shouldBe true
     }
 
     "every catalog appearance, material, entity and particle matches the exact Paper API" {

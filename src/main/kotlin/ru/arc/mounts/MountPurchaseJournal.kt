@@ -14,6 +14,7 @@ enum class MountPurchaseKind {
     LEVEL,
     GLOW,
     SKIN,
+    ABILITY,
 }
 
 enum class MountPurchaseJournalStatus {
