@@ -40,6 +40,13 @@ class MountSessionControllerTest : StringSpec({
         shouldCancelMountDamage(MountDamageTarget.RIDER, EntityDamageEvent.DamageCause.FALL) shouldBe false
     }
 
+    "a mounted rider is knocked off only by one hit reaching the configured final damage" {
+        shouldKnockRiderOff(finalDamage = 5.99, threshold = 6.0) shouldBe false
+        shouldKnockRiderOff(finalDamage = 6.0, threshold = 6.0) shouldBe true
+        shouldKnockRiderOff(finalDamage = 12.0, threshold = 6.0) shouldBe true
+        shouldKnockRiderOff(finalDamage = Double.NaN, threshold = 6.0) shouldBe false
+    }
+
     "only the exact pending ARC spawn token may bypass a cancelled spawn" {
         val owner = UUID.randomUUID().toString()
         val pendingToken = UUID.randomUUID()

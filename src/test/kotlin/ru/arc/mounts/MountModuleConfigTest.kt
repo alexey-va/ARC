@@ -72,6 +72,7 @@ class MountModuleConfigTest : StringSpec({
         config.enabled shouldBe false
         config.ownershipMigrationComplete shouldBe false
         config.purchasesEnabled shouldBe false
+        config.riderKnockoffDamage shouldBe 6.0
     }
 })
 

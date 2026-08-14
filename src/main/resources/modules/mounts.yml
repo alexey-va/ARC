@@ -29,6 +29,7 @@ safety:
   post-flight-slow-falling: 8s
   idle-timeout: 5m
   summon-cooldown: 2s
+  rider-knockoff-damage: 6.0
 
 gui:
   list-title: "<dark_gray><bold>Коллекция маунтов"

@@ -15,6 +15,7 @@ open class MountModuleConfig(private val config: Config) {
     open val purchasesEnabled: Boolean get() = config.bool("purchases-enabled", false)
     open val idleTimeout: Duration get() = config.duration("safety.idle-timeout", Duration.ofMinutes(5))
     open val summonCooldown: Duration get() = config.duration("safety.summon-cooldown", Duration.ofSeconds(2))
+    open val riderKnockoffDamage: Double get() = config.double("safety.rider-knockoff-damage", 6.0)
     open val doubleSneakWindow: Duration get() = config.duration("controls.double-sneak-window", Duration.ofMillis(450))
     open val descendingHintCooldown: Duration get() = config.duration("controls.hint-cooldown", Duration.ofSeconds(5))
     open val walkingSpeedScale: Double get() = config.double("movement.walking-speed-scale", 0.16)
@@ -66,6 +67,9 @@ open class MountModuleConfig(private val config: Config) {
         require(!adminSessionDuration.isZero && !adminSessionDuration.isNegative) { "Mount admin-session-duration must be positive" }
         require(!idleTimeout.isZero && !idleTimeout.isNegative) { "Mount idle-timeout must be positive" }
         require(!summonCooldown.isNegative) { "Mount summon-cooldown cannot be negative" }
+        require(riderKnockoffDamage > 0.0 && riderKnockoffDamage.isFinite()) {
+            "Mount rider-knockoff-damage must be positive"
+        }
         require(!doubleSneakWindow.isZero && !doubleSneakWindow.isNegative) { "Mount double-sneak-window must be positive" }
         require(walkingSpeedScale > 0.0 && walkingSpeedScale.isFinite()) { "walking-speed-scale must be positive" }
         require(flyingSpeedScale > 0.0 && flyingSpeedScale.isFinite()) { "flying-speed-scale must be positive" }

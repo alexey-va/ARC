@@ -56,6 +56,7 @@ enum class MountRemovalReason {
     CHANGED_WORLD,
     QUIT,
     DIED,
+    KNOCKED_OFF,
     RELOAD,
     INVALID,
 }
@@ -310,6 +311,15 @@ class MountSessionController(
         }
     }
 
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onRiderKnockoff(event: EntityDamageEvent) {
+        val player = event.entity as? Player ?: return
+        if (!sessionsByPlayer.containsKey(player.uniqueId)) return
+        if (!shouldKnockRiderOff(event.finalDamage, configProvider().riderKnockoffDamage)) return
+
+        scheduler.runLater(1L, Runnable { remove(player.uniqueId, MountRemovalReason.KNOCKED_OFF) })
+    }
+
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     fun onCombust(event: EntityCombustEvent) {
         if (playerByEntity.containsKey(event.entity.uniqueId)) event.isCancelled = true
@@ -489,6 +499,9 @@ internal fun shouldCancelMountDamage(
     target: MountDamageTarget,
     cause: EntityDamageEvent.DamageCause,
 ): Boolean = target == MountDamageTarget.MOUNT || cause == EntityDamageEvent.DamageCause.SUFFOCATION
+
+internal fun shouldKnockRiderOff(finalDamage: Double, threshold: Double): Boolean =
+    finalDamage.isFinite() && threshold.isFinite() && threshold > 0.0 && finalDamage >= threshold
 
 internal fun shouldAllowCancelledMountSpawn(
     cancelled: Boolean,
