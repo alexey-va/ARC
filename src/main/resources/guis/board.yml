@@ -22,3 +22,30 @@ board-menu:
   cannot-rate: "Вы не можете это оценить"
 
 not-enough-money: "<red>Недостаточно средств!"
+
+contracts:
+  order:
+    display: "<gold>Заказ сервера: <white><contract_name>"
+    lore:
+      - "<dark_gray>Системное объявление · <status>"
+      - ""
+      - "<gray>Ресурс: <white><item_key>"
+      - "<gray>Сдано: <white><accepted><gray>/<white><target> <dark_gray>(<progress>%)"
+      - "<gray>В обработке: <white><reserved>"
+      - "<gray>Осталось: <white><remaining>"
+      - "<gray>Награда: <green><payout><gray>/шт."
+      - "<gray>Остаток бюджета: <green><remaining_budget>"
+      - "<gray>До: <white><ends_at>"
+      - ""
+      - "<action>"
+  empty:
+    display: "<gold>Заказы сервера"
+    lore:
+      - "<gray>Статус: <state>"
+      - ""
+      - "<gray>Активных ресурсных заказов пока нет."
+      - "<gray>Недельный лимит: <green><weekly_budget>"
+      - ""
+      - "<dark_gray>Предметы и деньги не меняются."
+  submit-prompt: "<yellow>Нажми сюда, введи количество и отправь команду сдачи."
+  unavailable: "<yellow>Сдача предметов пока отключена"
