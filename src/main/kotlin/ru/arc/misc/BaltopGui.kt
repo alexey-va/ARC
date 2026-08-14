@@ -92,8 +92,7 @@ object BaltopGuiFactory {
 
                 // Sort button
                 button(4) {
-                    material(Material.BLUE_STAINED_GLASS_PANE)
-                    modelData(11021)
+                    material(Material.HOPPER)
 
                     val sortName =
                         when (sort) {

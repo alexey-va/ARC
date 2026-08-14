@@ -42,6 +42,16 @@ class OpsItemSpecTest :
                 stack.customModelDataOrNull shouldBe 11000
             }
 
+            it("should resolve canonical ARC menu icons") {
+                val category = OpsItemSpec.build(JsonObject().apply { addProperty("itemsadder", "arc:change_category") })
+                val sort = OpsItemSpec.build(JsonObject().apply { addProperty("itemsadder", "arc:sort") })
+
+                category.type shouldBe Material.COMPASS
+                category.customModelDataOrNull shouldBe 11019
+                sort.type shouldBe Material.HOPPER
+                sort.customModelDataOrNull shouldBe 11022
+            }
+
             it("should resolve iageneric bag_of_coins through canonical itemsadder field") {
                 val json =
                     JsonObject().apply {

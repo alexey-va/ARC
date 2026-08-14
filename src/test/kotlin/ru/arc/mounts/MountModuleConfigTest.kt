@@ -114,11 +114,17 @@ class MountModuleConfigTest : StringSpec({
                 back:
                   material: BLUE_STAINED_GLASS_PANE
                   customModelData: 11013
+                category:
+                  material: COMPASS
+                  customModelData: 11019
             """.trimIndent(),
         )
 
-        MountModuleConfig.load(dataPath).guiStyle(MountGuiItemRole.BACK) shouldBe
+        val config = MountModuleConfig.load(dataPath)
+        config.guiStyle(MountGuiItemRole.BACK) shouldBe
             MountGuiItemStyle(Material.BLUE_STAINED_GLASS_PANE, 11013)
+        config.guiStyle(MountGuiItemRole.CATEGORY) shouldBe
+            MountGuiItemStyle(Material.COMPASS, 11019)
     }
 })
 

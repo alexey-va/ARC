@@ -113,7 +113,8 @@ class MountGuiController(
         if (page + 1 < pageCount) inventory.setItem(LIST_NEXT_SLOT, styledItem(MountGuiItemRole.NEXT, Material.ARROW, "<aqua>Следующая страница", listOf("<gray>${page + 2}/${pageCount}")))
         inventory.setItem(
             LIST_FILTER_SLOT,
-            item(
+            styledItem(
+                MountGuiItemRole.CATEGORY,
                 filter.icon,
                 "<gold>Категория: <white>${filter.title}",
                 listOf(

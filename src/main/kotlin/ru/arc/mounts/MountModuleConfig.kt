@@ -12,6 +12,7 @@ enum class MountGuiItemRole(val configKey: String) {
     BACK("back"),
     PREVIOUS("previous"),
     NEXT("next"),
+    CATEGORY("category"),
     INFO("info"),
     BALANCE("balance"),
     CONFIRM("confirm"),
