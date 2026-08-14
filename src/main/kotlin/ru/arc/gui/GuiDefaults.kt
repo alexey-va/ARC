@@ -48,7 +48,7 @@ object GuiDefaults {
                     ?: Material.GRAY_STAINED_GLASS_PANE
 
         val modelData: Int
-            get() = itemSpec("background")?.modelData ?: 11000
+            get() = itemSpec("background")?.modelData ?: 0
 
         val contentMaterial: Material
             get() =
@@ -66,7 +66,7 @@ object GuiDefaults {
             get() = buttonSpec("back")?.material ?: Material.BLUE_STAINED_GLASS_PANE
 
         val modelData: Int
-            get() = buttonSpec("back")?.modelData ?: 11013
+            get() = buttonSpec("back")?.modelData ?: 0
 
         val defaultDisplay: String
             get() = buttonSpec("back")?.display ?: "<gray>« Назад"
@@ -82,7 +82,7 @@ object GuiDefaults {
             get() = buttonSpec("prev")?.material ?: Material.BLUE_STAINED_GLASS_PANE
 
         val modelData: Int
-            get() = buttonSpec("prev")?.modelData ?: 11009
+            get() = buttonSpec("prev")?.modelData ?: 0
 
         val defaultDisplay: String
             get() = buttonSpec("prev")?.display ?: "<gray>« Предыдущая"
@@ -95,7 +95,7 @@ object GuiDefaults {
             get() = buttonSpec("next")?.material ?: Material.BLUE_STAINED_GLASS_PANE
 
         val modelData: Int
-            get() = buttonSpec("next")?.modelData ?: 11008
+            get() = buttonSpec("next")?.modelData ?: 0
 
         val defaultDisplay: String
             get() = buttonSpec("next")?.display ?: "<gray>Следующая »"

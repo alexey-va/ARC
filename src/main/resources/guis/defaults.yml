@@ -7,32 +7,25 @@
 
 background:
   material: GRAY_STAINED_GLASS_PANE
-  customModelData: 11000
   content:
     material: LIGHT_GRAY_STAINED_GLASS_PANE
-    customModelData: 0
 
 buttons:
   back:
     material: BLUE_STAINED_GLASS_PANE
-    customModelData: 11013
     display: "<gray>« Назад"
     default-command: menu
   prev:
     material: BLUE_STAINED_GLASS_PANE
-    customModelData: 11009
     display: "<gray>« Предыдущая"
   next:
     material: BLUE_STAINED_GLASS_PANE
-    customModelData: 11008
     display: "<gray>Следующая »"
   confirm:
     material: LIME_STAINED_GLASS_PANE
-    customModelData: 0
     display: "<green>Подтвердить"
   cancel:
     material: RED_STAINED_GLASS_PANE
-    customModelData: 0
     display: "<red>Отмена"
 
 slots:

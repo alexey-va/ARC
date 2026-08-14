@@ -4,6 +4,7 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.mockk
 import io.mockk.verify
+import org.bukkit.entity.Bat
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Mob
 import org.bukkit.event.entity.CreatureSpawnEvent
@@ -18,6 +19,15 @@ class MountSessionControllerTest : StringSpec({
 
         verify(exactly = 1) { mob.setAware(false) }
         verify(exactly = 0) { mob.setAI(any()) }
+    }
+
+    "bat mounts are forced awake at spawn and during every movement tick" {
+        val bat = mockk<Bat>(relaxed = true)
+
+        configureMountMob(bat)
+        maintainMountMobState(bat)
+
+        verify(exactly = 2) { bat.setAwake(true) }
     }
 
     "temporary mount entities are invulnerable" {

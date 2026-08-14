@@ -27,8 +27,8 @@ class GuiDefaultsTest :
                 GuiDefaults.Background.material shouldBe Material.GRAY_STAINED_GLASS_PANE
             }
 
-            it("should return hardcoded default for background model data") {
-                GuiDefaults.Background.modelData shouldBe 11000
+            it("should return resource-pack-neutral background model data") {
+                GuiDefaults.Background.modelData shouldBe 0
             }
 
             it("should return hardcoded default for content material") {
@@ -37,20 +37,20 @@ class GuiDefaultsTest :
 
             it("should return hardcoded default for back button") {
                 GuiDefaults.BackButton.material shouldBe Material.BLUE_STAINED_GLASS_PANE
-                GuiDefaults.BackButton.modelData shouldBe 11013
+                GuiDefaults.BackButton.modelData shouldBe 0
                 GuiDefaults.BackButton.defaultDisplay shouldBe "<gray>« Назад"
                 GuiDefaults.BackButton.defaultCommand shouldBe "menu"
             }
 
             it("should return hardcoded default for prev button") {
                 GuiDefaults.PrevButton.material shouldBe Material.BLUE_STAINED_GLASS_PANE
-                GuiDefaults.PrevButton.modelData shouldBe 11009
+                GuiDefaults.PrevButton.modelData shouldBe 0
                 GuiDefaults.PrevButton.defaultDisplay shouldBe "<gray>« Предыдущая"
             }
 
             it("should return hardcoded default for next button") {
                 GuiDefaults.NextButton.material shouldBe Material.BLUE_STAINED_GLASS_PANE
-                GuiDefaults.NextButton.modelData shouldBe 11008
+                GuiDefaults.NextButton.modelData shouldBe 0
                 GuiDefaults.NextButton.defaultDisplay shouldBe "<gray>Следующая »"
             }
 

@@ -12,7 +12,7 @@
 fun buildListGui(player: Player): ChestGui {
     val cfg = ConfigManager.of(dataPath, "guis/my-feature.yml")
     return gui(cfg.string("list.title"), 6, player, cfg) {
-        // Светлый фон контента + тёмная полоска навигации (как board)
+        // Ванильные fallback-материалы; production overlay может добавить model data.
         contentBackground(Material.LIGHT_GRAY_STAINED_GLASS_PANE)
         navBackground()
 
@@ -47,9 +47,9 @@ fun buildListGui(player: Player): ChestGui {
 | Ряд | Слоты         | Содержимое                                                                    |
 |-----|---------------|-------------------------------------------------------------------------------|
 | 0   | 1, 3, 4, 5, 7 | Редактируемые поля (команда, расписание, тип, серверы, вкл/выкл)              |
-| 1   | 0             | **Назад** — `BLUE_STAINED_GLASS_PANE`, `customModelData: 11013`, `fromConfig` |
+| 1   | 0             | **Назад** — ванильный `BLUE_STAINED_GLASS_PANE`, затем `fromConfig`          |
 | 1   | 4             | Доп. действие (запуск сейчас, удаление)                                       |
-| 1   | 8             | **Сохранить** — `GREEN_STAINED_GLASS_PANE`, `customModelData: 11007`          |
+| 1   | 8             | **Сохранить** — ванильный `GREEN_STAINED_GLASS_PANE`, затем `fromConfig`      |
 
 ```kotlin
 class EditMyGui(player: Player) : ChestGui(2, title), Inputable {
@@ -81,19 +81,47 @@ class EditMyGui(player: Player) : ChestGui(2, title), Inputable {
 
 **Циклические поля** (тип, сервер, цвет) — `onClick` меняет enum и пересобирает `GuiItem`.
 
-## Конфиг `guis/*.yml`
+## Универсальный default и серверный overlay
 
-- Тексты и `customModelData` — в YAML, не хардкодить display/lore где возможно.
+- Bundled `src/main/resources` обязан работать с ванильным клиентом: обычные
+  `Material`, тексты и lore, без ItemsAdder ID и без ненулевого
+  `customModelData`.
+- Код задаёт безопасный ванильный fallback и читает item-spec из конфига. Не
+  хардкодить RusCrafting model data в Kotlin.
+- Серверные Material + `customModelData` хранятся только в tracked runtime
+  mirror (`classic*/plugins/ARC/...`). Это overlay конкретного resource pack,
+  а не часть переносимого ARC.
+- Один item-spec должен переопределять пару Material + model data вместе;
+  сверять её с активным ItemsAdder `contents/arc/configs/items.yml` и меню
+  Lands. Не угадывать ID по похожей иконке.
+- Spawn и survival получают одинаковый overlay, если используют один pack.
 - Образец: `guis/board.yml`, `guis/scheduled-commands.yml`.
 - Подключение: `fromConfig(cfg, "edit-menu.save")` в `guiItem { }`.
 - Bundled resource: добавить путь в `ARC.BUNDLED_RESOURCES`.
+
+Bundled default:
+
+```yaml
+list-menu:
+  back:
+    material: BLUE_STAINED_GLASS_PANE
+    display: "<gray>« Назад"
+```
+
+RusCrafting runtime overlay:
+
+```yaml
+list-menu:
+  back:
+    material: BLUE_STAINED_GLASS_PANE
+    customModelData: 11013
+```
 
 ## Кнопка «Назад» (обязательно как board)
 
 ```kotlin
 guiItem(Material.BLUE_STAINED_GLASS_PANE) {
     display("<gray>« Назад")
-    modelData(11013)
     fromConfig(cfg, "list-menu.back")
     onClick { /* вернуться на предыдущий GUI */ }
 }
@@ -105,11 +133,16 @@ guiItem(Material.BLUE_STAINED_GLASS_PANE) {
 
 ## Фон
 
-| Зона                   | Материал                                    | Где                             |
-|------------------------|---------------------------------------------|---------------------------------|
-| Контент (ряды 0…n-2)   | `LIGHT_GRAY_STAINED_GLASS_PANE`             | `contentBackground()`           |
-| Навбар (последний ряд) | `GRAY_STAINED_GLASS_PANE`                   | `navBackground()`               |
-| Форма 2 ряда           | `GuiUtils.background()` на весь OutlinePane | `AddBoardGui.setupBackground()` |
+| Зона                   | Универсальный fallback                  | RusCrafting overlay                         |
+|------------------------|------------------------------------------|---------------------------------------------|
+| Контент (ряды 0…n-2)   | `LIGHT_GRAY_STAINED_GLASS_PANE`          | только если pack объявляет отдельную модель |
+| Навбар / общий фон     | `GRAY_STAINED_GLASS_PANE`                | `arc:background`, CMD `11000`                |
+| Назад / страницы       | обычные панели или стрелки               | CMD `11013`, `11009`, `11008`                |
+
+Полный проверенный каталог кнопок находится в
+`classic/plugins/ItemsAdder/AGENTS.md`. Lands
+`Locale/definitions_gui.yml` — живой пример применения фона и навигации, но не
+источник новых ID.
 
 Пустые ряды только с фоном без кнопок — **ошибка UX**: редактируемые элементы должны быть в **верхнем ряду**,
 навигация — в **нижнем**.
@@ -131,14 +164,16 @@ lore(listOf("<white><command>", "<gray>Нажмите, чтобы изменит
 
 ## Чеклист нового GUI
 
-- [ ] `guis/<feature>.yml` с текстами и model data
+- [ ] Bundled `guis/<feature>.yml` с ванильными материалами и без pack-specific model data
+- [ ] Отдельный tracked production overlay с проверенными Material + CMD на каждом нужном узле
 - [ ] Список: `GuiDsl` + pagination + `LIGHT_GRAY` content
 - [ ] Редактор: 2 ряда, поля сверху, back/save снизу
-- [ ] Назад: blue pane 11013, не arrow
+- [ ] Назад: ванильный blue pane; RusCrafting overlay — CMD 11013, не хардкод в Kotlin
 - [ ] Текстовые поля: `TitleInput` + `Inputable`
 - [ ] Валидация в `satisfy()`; отмена ввода — `exit` через `isCancelInput` / `onInputCancel`
 - [ ] Показ: `GuiUtils.constructAndShowAsync`
 - [ ] Resource в `BUNDLED_RESOURCES`
+- [ ] Тест доказывает resource-pack-neutral bundled default и чтение runtime overlay
 - [ ] Тесты на бизнес-логику (draft, save, schedule) — GUI через MockBukkit по необходимости
 
 ## Ссылки в коде

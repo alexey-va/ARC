@@ -9,7 +9,6 @@ store:
   back:
     display: "<gray>« Назад"
     lore: []
-    customModelData: 11013
   back-command: "menu"
   cooldown:
     display: "<red>Подождите..."
@@ -28,5 +27,4 @@ store:
     display: "<red>Предмет исчез!"
     lore:
     - "<gray>Этот предмет больше не доступен."
-
 

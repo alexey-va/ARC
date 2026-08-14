@@ -3,6 +3,7 @@ package ru.arc.mounts
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
+import org.bukkit.Material
 import java.nio.file.Files
 
 class MountModuleConfigTest : StringSpec({
@@ -82,6 +83,33 @@ class MountModuleConfigTest : StringSpec({
         config.ownershipMigrationComplete shouldBe false
         config.purchasesEnabled shouldBe false
         config.riderKnockoffDamage shouldBe 6.0
+    }
+
+    "bundled GUI remains resource-pack neutral" {
+        val config = bundledConfig("generic-gui")
+
+        MountGuiItemRole.entries.forEach { role ->
+            config.guiStyle(role) shouldBe MountGuiItemStyle()
+        }
+    }
+
+    "runtime GUI overlay accepts material and custom model data" {
+        val dataPath = Files.createTempDirectory("arc-mounts-runtime-gui-")
+        val moduleDir = Files.createDirectories(dataPath.resolve("modules"))
+        Files.writeString(
+            moduleDir.resolve("mounts.yml"),
+            """
+            enabled: false
+            gui:
+              items:
+                back:
+                  material: BLUE_STAINED_GLASS_PANE
+                  customModelData: 11013
+            """.trimIndent(),
+        )
+
+        MountModuleConfig.load(dataPath).guiStyle(MountGuiItemRole.BACK) shouldBe
+            MountGuiItemStyle(Material.BLUE_STAINED_GLASS_PANE, 11013)
     }
 })
 

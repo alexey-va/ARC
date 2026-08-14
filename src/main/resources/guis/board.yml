@@ -5,13 +5,11 @@ board-menu:
   back:
     display: "<gray>« Назад"
     lore: [ ]
-    customModelData: 11013
 
   refresh:
     display: "<gray>Обновить"
     lore:
       - "<gray>Нажмите для обновления списка"
-    customModelData: 11010
 
   publish:
     display: "<green>Опубликовать объявление"
@@ -19,7 +17,6 @@ board-menu:
       - "<gray>Стоимость: <gold><cost>"
       - ""
       - "<yellow>Нажмите для создания"
-    customModelData: 11010
 
   cannot-edit: "Вы не можете это редактировать"
   cannot-rate: "Вы не можете это оценить"

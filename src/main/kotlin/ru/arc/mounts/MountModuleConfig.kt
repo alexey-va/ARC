@@ -1,10 +1,28 @@
 package ru.arc.mounts
 
+import org.bukkit.Material
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import java.nio.file.Path
 import java.time.Duration
 import java.util.Locale
+
+enum class MountGuiItemRole(val configKey: String) {
+    BACKGROUND("background"),
+    BACK("back"),
+    PREVIOUS("previous"),
+    NEXT("next"),
+    FILTER("filter"),
+    INFO("info"),
+    BALANCE("balance"),
+    CONFIRM("confirm"),
+    CANCEL("cancel"),
+}
+
+data class MountGuiItemStyle(
+    val material: Material? = null,
+    val customModelData: Int? = null,
+)
 
 open class MountModuleConfig(private val config: Config) {
     open val enabled: Boolean get() = config.bool("enabled", false)
@@ -36,6 +54,26 @@ open class MountModuleConfig(private val config: Config) {
     open val listTitle: String get() = config.string("gui.list-title", "<dark_gray><bold>Маунты")
     open val detailTitle: String get() = config.string("gui.detail-title", "<dark_gray><bold>Маунт: <mount>")
     open val skinsTitle: String get() = config.string("gui.skins-title", "<dark_gray><bold>Облики: <mount>")
+
+    open fun guiStyle(role: MountGuiItemRole): MountGuiItemStyle {
+        val path = "gui.items.${role.configKey}"
+        val rawMaterial = config.stringOrNull("$path.material")?.trim()?.takeIf(String::isNotEmpty)
+        val material =
+            rawMaterial?.let {
+                Material.matchMaterial(it)
+                    ?: Material.matchMaterial(it.uppercase(Locale.ROOT))
+                    ?: throw IllegalArgumentException("Mount GUI item '${role.configKey}' has invalid material '$it'")
+            }
+        val customModelData =
+            if (config.exists("$path.customModelData")) {
+                config.integer("$path.customModelData", 0).also {
+                    require(it > 0) { "Mount GUI item '${role.configKey}' customModelData must be positive" }
+                }
+            } else {
+                null
+            }
+        return MountGuiItemStyle(material, customModelData)
+    }
 
     open fun catalog(): MountCatalog {
         val definitions =
@@ -89,6 +127,7 @@ open class MountModuleConfig(private val config: Config) {
             "Mount maximum-speed-blocks-per-tick must be between 0.2 and 2.0"
         }
         require(maximumHeightAboveWorld in 0..256) { "Mount maximum-height-above-world must be between 0 and 256" }
+        MountGuiItemRole.entries.forEach(::guiStyle)
         catalog()
         return this
     }

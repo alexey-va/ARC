@@ -57,6 +57,7 @@ import ru.arc.core.modules.TreasureModule
 import ru.arc.core.modules.XActionModule
 import ru.arc.contracts.ContractsModule
 import ru.arc.hooks.HookRegistry
+import ru.arc.gui.GuiDefaults
 import ru.arc.network.NetworkRegistry
 import ru.arc.redis.RedisManager
 import ru.arc.ops.OpsHttpModule
@@ -95,6 +96,7 @@ open class ARC : JavaPlugin() {
     override fun onLoad() {
         plugin = this
         createDefaultConfigs()
+        GuiDefaults.init(dataPath)
         initLogging()
     }
 
@@ -142,6 +144,7 @@ open class ARC : JavaPlugin() {
         ModuleRegistry.shutdownAll()
         pluginMessenger?.shutdown()
         pluginMessenger = null
+        GuiDefaults.reset()
         Tasks.reset()
         info("ARC plugin disabled")
     }
@@ -316,6 +319,7 @@ open class ARC : JavaPlugin() {
                 "backpacks.yml",
                 "commands.yml",
                 "config/commands.yml",
+                "guis/defaults.yml",
                 "guis/scheduled-commands.yml",
             )
 

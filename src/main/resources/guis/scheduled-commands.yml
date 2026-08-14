@@ -1,11 +1,10 @@
-# Scheduled commands GUI — тексты и customModelData (как guis/board.yml)
+# Scheduled commands GUI — универсальные тексты и ванильные fallback-предметы.
 
 list-menu:
   title: "<gold>Расписание команд"
   back:
     display: "<gray>« Назад"
     lore: [ ]
-    customModelData: 11013
 
   refresh:
     display: "<yellow>Обновить"
@@ -58,7 +57,6 @@ edit-menu:
     display: "<green>Сохранить"
     lore:
       - "<gray>Записать в scheduled-commands.yml"
-    customModelData: 11007
 
   run-now:
     display: "<gold>Запустить сейчас"

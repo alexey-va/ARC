@@ -107,11 +107,12 @@ class MountGuiController(
             val mount = catalog[mountId] ?: return@forEach
             inventory.setItem(slot, mountIcon(mount, ownership.profile(subject(player), mount)))
         }
-        if (page > 0) inventory.setItem(LIST_PREVIOUS_SLOT, item(Material.ARROW, "<aqua>Предыдущая страница", listOf("<gray>${page}/${pageCount}")))
-        if (page + 1 < pageCount) inventory.setItem(LIST_NEXT_SLOT, item(Material.ARROW, "<aqua>Следующая страница", listOf("<gray>${page + 2}/${pageCount}")))
+        if (page > 0) inventory.setItem(LIST_PREVIOUS_SLOT, styledItem(MountGuiItemRole.PREVIOUS, Material.ARROW, "<aqua>Предыдущая страница", listOf("<gray>${page}/${pageCount}")))
+        if (page + 1 < pageCount) inventory.setItem(LIST_NEXT_SLOT, styledItem(MountGuiItemRole.NEXT, Material.ARROW, "<aqua>Следующая страница", listOf("<gray>${page + 2}/${pageCount}")))
         inventory.setItem(
             LIST_FILTER_SLOT,
-            item(
+            styledItem(
+                MountGuiItemRole.FILTER,
                 filter.icon,
                 "<gold>Категория: <white>${filter.title}",
                 listOf(
@@ -125,7 +126,8 @@ class MountGuiController(
         )
         inventory.setItem(
             LIST_INFO_SLOT,
-            item(
+            styledItem(
+                MountGuiItemRole.INFO,
                 Material.BOOK,
                 "<gold>Коллекция маунтов",
                 listOf(
@@ -138,7 +140,7 @@ class MountGuiController(
             ),
         )
         inventory.setItem(LIST_BALANCE_SLOT, balanceItem(player))
-        inventory.setItem(LIST_BACK_SLOT, item(Material.BLUE_STAINED_GLASS_PANE, "<aqua>Назад", listOf("<gray>Вернуться в главное меню")))
+        inventory.setItem(LIST_BACK_SLOT, styledItem(MountGuiItemRole.BACK, Material.BLUE_STAINED_GLASS_PANE, "<aqua>Назад", listOf("<gray>Вернуться в главное меню")))
         player.openInventory(inventory)
         click(player)
     }
@@ -156,7 +158,7 @@ class MountGuiController(
         inventory.setItem(DETAIL_SUMMON_SLOT, summonItem(profile, config.sessionDuration))
         inventory.setItem(DETAIL_GLOW_SLOT, glowItem(mount, profile))
         inventory.setItem(DETAIL_SKINS_SLOT, skinsItem(mount, profile))
-        inventory.setItem(DETAIL_BACK_SLOT, item(Material.BLUE_STAINED_GLASS_PANE, "<aqua>Назад", listOf("<gray>К списку маунтов")))
+        inventory.setItem(DETAIL_BACK_SLOT, styledItem(MountGuiItemRole.BACK, Material.BLUE_STAINED_GLASS_PANE, "<aqua>Назад", listOf("<gray>К списку маунтов")))
         player.openInventory(inventory)
         click(player)
     }
@@ -175,7 +177,7 @@ class MountGuiController(
         holder.backingInventory = inventory
         fill(inventory)
         slots.forEach { (slot, skinId) -> inventory.setItem(slot, skinItem(mount, profile, skinId)) }
-        inventory.setItem(SKINS_BACK_SLOT, item(Material.BLUE_STAINED_GLASS_PANE, "<aqua>Назад", listOf("<gray>К развитию маунта")))
+        inventory.setItem(SKINS_BACK_SLOT, styledItem(MountGuiItemRole.BACK, Material.BLUE_STAINED_GLASS_PANE, "<aqua>Назад", listOf("<gray>К развитию маунта")))
         player.openInventory(inventory)
         click(player)
     }
@@ -187,8 +189,8 @@ class MountGuiController(
         fill(inventory, Material.BLACK_STAINED_GLASS_PANE)
         val (name, price, description) = confirmationDetails(mount, action)
         inventory.setItem(CONFIRM_INFO_SLOT, item(Material.SUNFLOWER, name, description + listOf("", "<gray>Цена: <yellow>${TextUtil.formatAmount(price)}<white>💰")))
-        inventory.setItem(CONFIRM_CANCEL_SLOT, item(Material.RED_CONCRETE, "<red>Отмена", listOf("<gray>Вернуться без покупки")))
-        inventory.setItem(CONFIRM_ACCEPT_SLOT, item(Material.LIME_CONCRETE, "<green>Подтвердить", listOf("<gray>С баланса будет списано", "<yellow>${TextUtil.formatAmount(price)}<white>💰"), glint = true))
+        inventory.setItem(CONFIRM_CANCEL_SLOT, styledItem(MountGuiItemRole.CANCEL, Material.RED_CONCRETE, "<red>Отмена", listOf("<gray>Вернуться без покупки")))
+        inventory.setItem(CONFIRM_ACCEPT_SLOT, styledItem(MountGuiItemRole.CONFIRM, Material.LIME_CONCRETE, "<green>Подтвердить", listOf("<gray>С баланса будет списано", "<yellow>${TextUtil.formatAmount(price)}<white>💰"), glint = true))
         player.openInventory(inventory)
         click(player)
     }
@@ -497,7 +499,7 @@ class MountGuiController(
 
     private fun balanceItem(player: Player): ItemStack {
         val balance = wallet.balanceMinor(player.uniqueId)
-        return item(Material.SUNFLOWER, "<yellow>Баланс", listOf(if (balance != null) "<green>${TextUtil.formatAmount(balance.minorToDouble())}<white>💰" else "<red>Экономика недоступна"))
+        return styledItem(MountGuiItemRole.BALANCE, Material.SUNFLOWER, "<yellow>Баланс", listOf(if (balance != null) "<green>${TextUtil.formatAmount(balance.minorToDouble())}<white>💰" else "<red>Экономика недоступна"))
     }
 
     private fun purchasesDisabled(player: Player) {
@@ -505,18 +507,43 @@ class MountGuiController(
         bass(player)
     }
 
-    private fun fill(inventory: Inventory, material: Material = Material.GRAY_STAINED_GLASS_PANE) {
-        val background = item(material, " ", emptyList())
+    private fun fill(inventory: Inventory, fallbackMaterial: Material = Material.GRAY_STAINED_GLASS_PANE) {
+        val background = styledItem(MountGuiItemRole.BACKGROUND, fallbackMaterial, " ", emptyList(), hideTooltip = true)
         for (slot in 0 until inventory.size) inventory.setItem(slot, background)
     }
 
-    private fun item(material: Material, display: String, lore: List<String>, glint: Boolean = false): ItemStack =
+    private fun styledItem(
+        role: MountGuiItemRole,
+        fallbackMaterial: Material,
+        display: String,
+        lore: List<String>,
+        glint: Boolean = false,
+        hideTooltip: Boolean = false,
+    ): ItemStack {
+        val style = configProvider().guiStyle(role)
+        return item(style.material ?: fallbackMaterial, display, lore, glint, style.customModelData, hideTooltip)
+    }
+
+    private fun item(
+        material: Material,
+        display: String,
+        lore: List<String>,
+        glint: Boolean = false,
+        customModelData: Int? = null,
+        hideTooltip: Boolean = false,
+    ): ItemStack =
         ItemStack(material).also { stack ->
             stack.editMeta { meta ->
                 meta.displayName(component(display))
                 meta.lore(lore.map(::component))
                 meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_ADDITIONAL_TOOLTIP)
                 meta.setEnchantmentGlintOverride(glint)
+                meta.setHideTooltip(hideTooltip)
+                customModelData?.let { modelData ->
+                    val component = meta.customModelDataComponent
+                    component.floats = listOf(modelData.toFloat())
+                    meta.setCustomModelDataComponent(component)
+                }
             }
         }
 

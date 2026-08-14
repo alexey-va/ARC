@@ -6,6 +6,7 @@ import org.bukkit.Particle
 import org.bukkit.Sound
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
+import org.bukkit.entity.Bat
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Mob
 import org.bukkit.entity.Player
@@ -369,6 +370,7 @@ class MountSessionController(
                     session.input = player.currentInput.toState()
                     if (session.input.hasMovementIntent) session.lastActiveAtMillis = now
                     session.ticks++
+                    (entity as? Mob)?.let(::maintainMountMobState)
                     move(player, entity, session)
                     emitTrail(entity, session)
                 }
@@ -491,6 +493,11 @@ internal fun configureMountMob(mob: Mob) {
     mob.setAware(false)
     mob.canPickupItems = false
     mob.removeWhenFarAway = false
+    maintainMountMobState(mob)
+}
+
+internal fun maintainMountMobState(mob: Mob) {
+    (mob as? Bat)?.setAwake(true)
 }
 
 internal enum class MountDamageTarget {
