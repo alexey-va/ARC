@@ -16,9 +16,10 @@ Native production replacement for `Denizen/scripts/activities/rideable_mobs.dsc`
   entity equipment, then applies only the configured skin equipment. Zombie
   baby, iron guard and diamond warlord are separate unlockable skins.
 - The temporary vehicle entity is invulnerable and absorbs damage without
-  ending the ride. Ordinary rider damage still applies but no longer dismisses
-  the mount; only rider suffocation inside a block is cancelled as a mount
-  hitbox safety measure.
+  ending the ride. Ordinary rider damage still applies; one hit whose final
+  post-reduction damage reaches `safety.rider-knockoff-damage` dismisses the
+  mount on the next tick. Rider suffocation inside a block remains cancelled as
+  a mount hitbox safety measure.
 - Rider death, logout, teleport, world change, expiry, idle timeout, invalid
   state, world-border/height escape, or leaving water removes the temporary
   entity.
