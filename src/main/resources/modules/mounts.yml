@@ -23,7 +23,6 @@ movement:
   maximum-vertical-speed: 0.65
   flight-pitch-influence: 0.65
   maximum-speed-blocks-per-tick: 1.05
-  maximum-test-raw-speed: 6.0
   maximum-height-above-world: 32
 
 safety:

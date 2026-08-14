@@ -135,21 +135,19 @@ object MountModule : PluginModule {
         loadedOwnership: MountOwnership,
         controller: MountSessionController,
     ) {
-        val mountsCommand = MountsCommand(guiController)
-        val unlockCommand = UnlockMountCommand(::requiredCatalog, loadedOwnership, Tasks.scheduler)
-        val rideCommand = RideMobCommand(::requiredConfig, ::requiredCatalog, controller)
-        ARC.instance.getCommand("mounts")?.apply {
-            setExecutor(mountsCommand)
-            tabCompleter = mountsCommand
-        } ?: warn("Mounts command is missing from plugin.yml")
-        ARC.instance.getCommand("unlock-mount")?.apply {
-            setExecutor(unlockCommand)
-            tabCompleter = unlockCommand
-        } ?: warn("Unlock-mount command is missing from plugin.yml")
-        ARC.instance.getCommand("ride-mob")?.apply {
-            setExecutor(rideCommand)
-            tabCompleter = rideCommand
-        } ?: warn("Ride-mob command is missing from plugin.yml")
+        val mountCommand =
+            MountCommand(
+                config = ::requiredConfig,
+                catalog = ::requiredCatalog,
+                ownership = loadedOwnership,
+                sessions = controller,
+                scheduler = Tasks.scheduler,
+                openMenu = guiController::openList,
+            )
+        ARC.instance.getCommand("mount")?.apply {
+            setExecutor(mountCommand)
+            tabCompleter = mountCommand
+        } ?: warn("Mount command is missing from plugin.yml")
     }
 
     internal fun validatePaperTypes(loadedCatalog: MountCatalog) {
@@ -181,11 +179,9 @@ object MountModule : PluginModule {
     }
 
     private fun bindUnavailableCommands() {
-        listOf("mounts", "unlock-mount", "ride-mob").forEach { name ->
-            ARC.instance.getCommand(name)?.apply {
-                setExecutor(UnavailableMountCommand)
-                tabCompleter = UnavailableMountCommand
-            }
+        ARC.instance.getCommand("mount")?.apply {
+            setExecutor(UnavailableMountCommand)
+            tabCompleter = UnavailableMountCommand
         }
     }
 

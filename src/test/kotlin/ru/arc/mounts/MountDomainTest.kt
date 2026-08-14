@@ -178,9 +178,12 @@ private class TestOwnership : MountOwnership {
     }
 
     override fun grantLevel(playerId: UUID, mount: MountDefinition, level: Int) = CompletableFuture.completedFuture<Void>(null)
+    override fun revokeLevel(playerId: UUID, mount: MountDefinition, level: Int) = CompletableFuture.completedFuture<Void>(null)
     override fun grantGlow(playerId: UUID, mount: MountDefinition) = CompletableFuture.completedFuture<Void>(null)
+    override fun revokeGlow(playerId: UUID, mount: MountDefinition) = CompletableFuture.completedFuture<Void>(null)
     override fun setGlowEnabled(playerId: UUID, mount: MountDefinition, enabled: Boolean) = CompletableFuture.completedFuture<Void>(null)
     override fun grantSkin(playerId: UUID, mount: MountDefinition, skin: MountSkinDefinition) = CompletableFuture.completedFuture<Void>(null)
+    override fun revokeSkin(playerId: UUID, mount: MountDefinition, skin: MountSkinDefinition) = CompletableFuture.completedFuture<Void>(null)
     override fun setActiveSkin(playerId: UUID, mount: MountDefinition, skinId: String) = CompletableFuture.completedFuture<Void>(null)
     override fun hasDirectPermission(playerId: UUID, permission: String) = CompletableFuture.completedFuture(false)
     override fun resolveUniqueId(playerName: String) = CompletableFuture.completedFuture<UUID?>(null)

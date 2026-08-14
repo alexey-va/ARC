@@ -29,7 +29,6 @@ open class MountModuleConfig(private val config: Config) {
     open val maximumVerticalSpeed: Double get() = config.double("movement.maximum-vertical-speed", 0.5)
     open val flightPitchInfluence: Double get() = config.double("movement.flight-pitch-influence", 0.65)
     open val maximumSpeedBlocksPerTick: Double get() = config.double("movement.maximum-speed-blocks-per-tick", 1.05)
-    open val maximumTestRawSpeed: Double get() = config.double("movement.maximum-test-raw-speed", 6.0)
     open val maximumHeightAboveWorld: Int get() = config.integer("movement.maximum-height-above-world", 32)
     open val postFlightSlowFalling: Duration get() = config.duration("safety.post-flight-slow-falling", Duration.ofSeconds(8))
     open val backCommand: String get() = config.string("gui.back-command", "m").trim().removePrefix("/")
@@ -83,9 +82,6 @@ open class MountModuleConfig(private val config: Config) {
         require(flightPitchInfluence in 0.0..1.0) { "Mount flight-pitch-influence must be between 0 and 1" }
         require(maximumSpeedBlocksPerTick.isFinite() && maximumSpeedBlocksPerTick in 0.2..2.0) {
             "Mount maximum-speed-blocks-per-tick must be between 0.2 and 2.0"
-        }
-        require(maximumTestRawSpeed.isFinite() && maximumTestRawSpeed in 0.1..12.0) {
-            "Mount maximum-test-raw-speed must be between 0.1 and 12.0"
         }
         require(maximumHeightAboveWorld in 0..256) { "Mount maximum-height-above-world must be between 0 and 256" }
         catalog()

@@ -203,11 +203,17 @@ interface MountOwnership {
 
     fun grantLevel(playerId: UUID, mount: MountDefinition, level: Int): CompletableFuture<Void>
 
+    fun revokeLevel(playerId: UUID, mount: MountDefinition, level: Int): CompletableFuture<Void>
+
     fun grantGlow(playerId: UUID, mount: MountDefinition): CompletableFuture<Void>
+
+    fun revokeGlow(playerId: UUID, mount: MountDefinition): CompletableFuture<Void>
 
     fun setGlowEnabled(playerId: UUID, mount: MountDefinition, enabled: Boolean): CompletableFuture<Void>
 
     fun grantSkin(playerId: UUID, mount: MountDefinition, skin: MountSkinDefinition): CompletableFuture<Void>
+
+    fun revokeSkin(playerId: UUID, mount: MountDefinition, skin: MountSkinDefinition): CompletableFuture<Void>
 
     fun setActiveSkin(playerId: UUID, mount: MountDefinition, skinId: String): CompletableFuture<Void>
 

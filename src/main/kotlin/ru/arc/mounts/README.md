@@ -4,7 +4,7 @@ Native production replacement for `Denizen/scripts/activities/rideable_mobs.dsc`
 
 ## Player behavior
 
-- `/mounts` opens a paginated 30-mount collection with walking, flying and
+- `/mount` opens a paginated 30-mount collection with walking, flying and
   swimming filters. Left click summons an owned mount; right click opens its
   progression, glow and appearance controls.
 - Walking mounts use WASD, Space to jump, and Shift to dismount. Flying and
@@ -24,16 +24,25 @@ Native production replacement for `Denizen/scripts/activities/rideable_mobs.dsc`
 
 All access, ownership and settings use only `arc.mounts.*`:
 
-- `arc.mounts.use` — open and use `/mounts`;
+- `arc.mounts.use` — open and use `/mount`;
 - `arc.mounts.<mount>.<level>` — owned progression level;
 - `arc.mounts.<mount>.glow` and `.glow.disabled` — glow ownership and setting;
 - `arc.mounts.<mount>.skin.<skin>` — skin ownership;
 - `arc.mounts.<mount>.skin.active.<skin>` — selected skin marker;
-- `arc.mounts.admin` — `/unlock-mount` and test tooling;
-- `arc.mounts.ride` — `/ride-mob [mount] [speed] [skin]`.
+- `arc.mounts.admin` — all `/mount admin ...` operations.
 
-`/ride-mob zombie 4.8 baby` is an administrator smoke command. Normal players
-use `/mounts`; no legacy `mcfine.*` mount permission is consulted.
+The command surface is deliberately unified:
+
+- `/mount admin summon <mount> [level] [skin]` — short test ride using the
+  selected configured level, never an arbitrary raw speed;
+- `/mount admin grant <level|skin|glow> <player> <mount> [value]` — grant an
+  exact ownership node;
+- `/mount admin revoke <level|skin|glow> <player> <mount> [value]` — revoke an
+  exact ownership node and any dependent active skin/glow setting.
+
+`/mount admin summon zombie 3 baby` is the administrator smoke command. No
+legacy `/ride-mob`, `/unlock-mount`, `arc.mounts.ride` or `mcfine.*` mount
+permission is registered or consulted.
 
 ## Spawn and protection integration
 

@@ -7,127 +7,86 @@ import org.bukkit.entity.Player
 import ru.arc.core.TaskScheduler
 import ru.arc.util.TextUtil
 import java.util.Locale
+import java.util.UUID
+import java.util.concurrent.CompletableFuture
 
-class MountsCommand(private val gui: MountGuiController) : TabExecutor {
-    override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
-        val player = sender as? Player
-        if (player == null) {
-            sender.sendMessage(TextUtil.playerOnly())
-            return true
-        }
-        gui.openList(player)
-        return true
-    }
-
-    override fun onTabComplete(
-        sender: CommandSender,
-        command: Command,
-        alias: String,
-        args: Array<out String>,
-    ): List<String> = emptyList()
-}
-
-class UnlockMountCommand(
-    private val catalog: () -> MountCatalog,
-    private val ownership: MountOwnership,
-    private val scheduler: TaskScheduler,
-) : TabExecutor {
-    override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
-        if (args.size < 3) {
-            sender.sendMessage(TextUtil.mm("<red>Использование: /$label <маунт> <уровень> <игрок>", true))
-            return true
-        }
-        val mount = catalog()[args[0].lowercase(Locale.ROOT)]
-        if (mount == null) {
-            sender.sendMessage(TextUtil.mm("<red>Неизвестный маунт: <white>${args[0]}", true))
-            return true
-        }
-        val level = args[1].toIntOrNull()
-        if (level == null || level !in 1..mount.maxLevel) {
-            sender.sendMessage(TextUtil.mm("<red>Уровень должен быть от 1 до ${mount.maxLevel}.", true))
-            return true
-        }
-        val playerName = args[2]
-        val onlineId = sender.server.getPlayerExact(playerName)?.uniqueId
-        val resolved = onlineId?.let { java.util.concurrent.CompletableFuture.completedFuture(it) }
-            ?: ownership.resolveUniqueId(playerName)
-        resolved.whenComplete { playerId, lookupFailure ->
-            if (lookupFailure != null || playerId == null) {
-                scheduler.runSync(Runnable {
-                    sender.sendMessage(TextUtil.mm("<red>Игрок <white>$playerName <red>не найден.", true))
-                })
-                return@whenComplete
-            }
-            ownership.grantLevel(playerId, mount, level).whenComplete { _, saveFailure ->
-                scheduler.runSync(Runnable {
-                    if (saveFailure == null) {
-                        sender.sendMessage(
-                            TextUtil.mm(
-                                "<green>Маунт <white>${mount.displayName} <green>уровня <white>$level <green>разблокирован для <white>$playerName<green>.",
-                                true,
-                            ),
-                        )
-                    } else {
-                        sender.sendMessage(TextUtil.mm("<red>Не удалось сохранить разблокировку маунта.", true))
-                    }
-                })
-            }
-        }
-        return true
-    }
-
-    override fun onTabComplete(
-        sender: CommandSender,
-        command: Command,
-        alias: String,
-        args: Array<out String>,
-    ): List<String> =
-        when (args.size) {
-            1 -> catalog().all.map(MountDefinition::id).matching(args[0])
-            2 -> {
-                val mount = catalog()[args[0].lowercase(Locale.ROOT)]
-                (1..(mount?.maxLevel ?: 3)).map(Int::toString).matching(args[1])
-            }
-            3 -> sender.server.onlinePlayers.map(Player::getName).matching(args[2])
-            else -> emptyList()
-        }
-}
-
-class RideMobCommand(
+class MountCommand(
     private val config: () -> MountModuleConfig,
     private val catalog: () -> MountCatalog,
+    private val ownership: MountOwnership,
     private val sessions: MountSessionController,
+    private val scheduler: TaskScheduler,
+    private val openMenu: (Player) -> Unit,
 ) : TabExecutor {
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
+        when (args.firstOrNull()?.lowercase(Locale.ROOT)) {
+            null, "menu" -> openPlayerMenu(sender)
+            "help" -> sendHelp(sender, label)
+            "admin" -> {
+                if (!sender.hasPermission(ADMIN_PERMISSION)) {
+                    sender.sendMessage(TextUtil.noPermissions())
+                    return true
+                }
+                handleAdmin(sender, label, args.drop(1))
+            }
+            else -> sendHelp(sender, label)
+        }
+        return true
+    }
+
+    private fun openPlayerMenu(sender: CommandSender) {
         val player = sender as? Player
         if (player == null) {
             sender.sendMessage(TextUtil.playerOnly())
-            return true
+            return
         }
-        val mountId = args.getOrNull(0)?.lowercase(Locale.ROOT) ?: "bee"
+        openMenu(player)
+    }
+
+    private fun handleAdmin(sender: CommandSender, label: String, args: List<String>) {
+        when (args.firstOrNull()?.lowercase(Locale.ROOT)) {
+            "summon" -> summon(sender, label, args.drop(1))
+            "grant" -> mutateOwnership(sender, label, args.drop(1), granting = true)
+            "revoke" -> mutateOwnership(sender, label, args.drop(1), granting = false)
+            else -> sendAdminHelp(sender, label)
+        }
+    }
+
+    private fun summon(sender: CommandSender, label: String, args: List<String>) {
+        val player = sender as? Player
+        if (player == null) {
+            sender.sendMessage(TextUtil.playerOnly())
+            return
+        }
+        val mountId = args.getOrNull(0)?.lowercase(Locale.ROOT)
+        if (mountId == null || args.size > 3) {
+            sender.sendMessage(TextUtil.mm("<red>Использование: /$label admin summon <маунт> [уровень] [облик]", true))
+            return
+        }
         val mount = catalog()[mountId]
         if (mount == null) {
-            player.sendMessage(TextUtil.mm("<red>Неизвестный маунт: <white>$mountId", true))
-            return true
+            sender.sendMessage(TextUtil.mm("<red>Неизвестный маунт: <white>$mountId", true))
+            return
         }
-        val speed = args.getOrNull(1)?.toDoubleOrNull() ?: 0.5
-        if (!speed.isFinite() || speed <= 0.0 || speed > config().maximumTestRawSpeed) {
-            player.sendMessage(
-                TextUtil.mm("<red>Скорость должна быть от 0 до ${config().maximumTestRawSpeed}.", true),
-            )
-            return true
+        val level = args.getOrNull(1)?.toIntOrNull() ?: mount.maxLevel
+        if (level !in 1..mount.maxLevel) {
+            sender.sendMessage(TextUtil.mm("<red>Уровень должен быть от 1 до ${mount.maxLevel}.", true))
+            return
         }
-        val skinId = args.getOrNull(2)?.lowercase(Locale.ROOT)
-        val skin = skinId?.let(mount::skin)
-        if (skinId != null && skin == null) {
-            player.sendMessage(TextUtil.mm("<red>Неизвестный облик: <white>$skinId", true))
-            return true
+        val skinId = args.getOrNull(2)?.lowercase(Locale.ROOT) ?: MountDefinition.DEFAULT_SKIN_ID
+        val skin = skinId.takeUnless { it == MountDefinition.DEFAULT_SKIN_ID }?.let(mount::skin)
+        if (skinId != MountDefinition.DEFAULT_SKIN_ID && skin == null) {
+            sender.sendMessage(TextUtil.mm("<red>Неизвестный облик: <white>$skinId", true))
+            return
         }
+        val configuredLevel = mount.level(level)
         val result =
             sessions.spawn(
                 player = player,
                 definition = mount,
-                speed = speed,
+                speed = configuredLevel.speed,
+                handlingMultiplier = configuredLevel.handlingMultiplier,
+                sprintMultiplier = configuredLevel.sprintMultiplier,
                 durationMillis = config().adminSessionDuration.toMillis(),
                 glow = false,
                 skin = skin,
@@ -135,7 +94,130 @@ class RideMobCommand(
         if (result != MountSpawnResult.SUCCESS) {
             player.sendMessage(TextUtil.mm("<red>Не удалось призвать маунта: <white>${result.name.lowercase()}<red>.", true))
         }
-        return true
+    }
+
+    private fun mutateOwnership(sender: CommandSender, label: String, args: List<String>, granting: Boolean) {
+        val action = if (granting) "grant" else "revoke"
+        val kind = args.getOrNull(0)?.lowercase(Locale.ROOT)
+        val playerName = args.getOrNull(1)
+        val mountId = args.getOrNull(2)?.lowercase(Locale.ROOT)
+        val expectedArguments = if (kind == "glow") 3 else 4
+        if (
+            kind !in ADMIN_KINDS ||
+            args.size != expectedArguments ||
+            playerName == null ||
+            mountId == null ||
+            !PLAYER_NAME.matches(playerName)
+        ) {
+            sendMutationHelp(sender, label, action)
+            return
+        }
+        val mount = catalog()[mountId]
+        if (mount == null) {
+            sender.sendMessage(TextUtil.mm("<red>Неизвестный маунт: <white>$mountId", true))
+            return
+        }
+        val target = mutationTarget(sender, label, action, checkNotNull(kind), mount, args.getOrNull(3)) ?: return
+        resolvePlayer(sender, playerName).thenCompose { playerId ->
+            if (playerId == null) {
+                failedFuture(PlayerNotFoundException(playerName))
+            } else {
+                target.apply(playerId, mount)
+            }
+        }.whenComplete { _, failure ->
+            scheduler.runSync(Runnable {
+                when {
+                    failure == null -> sender.sendMessage(
+                        TextUtil.mm(
+                            "<green>${target.successLabel}: <white>${mount.displayName}<green>, игрок: <white>$playerName<green>.",
+                            true,
+                        ),
+                    )
+                    unwrap(failure) is PlayerNotFoundException -> sender.sendMessage(
+                        TextUtil.mm("<red>Игрок <white>$playerName <red>не найден.", true),
+                    )
+                    else -> sender.sendMessage(TextUtil.mm("<red>Не удалось изменить улучшение маунта.", true))
+                }
+            })
+        }
+    }
+
+    private fun mutationTarget(
+        sender: CommandSender,
+        label: String,
+        action: String,
+        kind: String,
+        mount: MountDefinition,
+        rawTarget: String?,
+    ): MountAdminMutation? =
+        when (kind) {
+            "level" -> {
+                val level = rawTarget?.toIntOrNull()
+                if (level == null || level !in 1..mount.maxLevel) {
+                    sender.sendMessage(TextUtil.mm("<red>Уровень должен быть от 1 до ${mount.maxLevel}.", true))
+                    null
+                } else {
+                    MountAdminMutation(
+                        successLabel = if (action == "grant") "Уровень $level выдан" else "Уровень $level отозван",
+                        apply = { playerId, definition ->
+                            if (action == "grant") ownership.grantLevel(playerId, definition, level)
+                            else ownership.revokeLevel(playerId, definition, level)
+                        },
+                    )
+                }
+            }
+            "skin" -> {
+                val skinId = rawTarget?.lowercase(Locale.ROOT)
+                val skin = skinId?.let(mount::skin)
+                if (skin == null) {
+                    sender.sendMessage(TextUtil.mm("<red>Укажите существующий платный облик.", true))
+                    null
+                } else {
+                    MountAdminMutation(
+                        successLabel = if (action == "grant") "Облик ${skin.displayName} выдан" else "Облик ${skin.displayName} отозван",
+                        apply = { playerId, definition ->
+                            if (action == "grant") ownership.grantSkin(playerId, definition, skin)
+                            else ownership.revokeSkin(playerId, definition, skin)
+                        },
+                    )
+                }
+            }
+            "glow" -> {
+                if (rawTarget != null) {
+                    sendMutationHelp(sender, label, action)
+                    null
+                } else {
+                    MountAdminMutation(
+                        successLabel = if (action == "grant") "Свечение выдано" else "Свечение отозвано",
+                        apply = { playerId, definition ->
+                            if (action == "grant") ownership.grantGlow(playerId, definition)
+                            else ownership.revokeGlow(playerId, definition)
+                        },
+                    )
+                }
+            }
+            else -> null
+        }
+
+    private fun resolvePlayer(sender: CommandSender, playerName: String): CompletableFuture<UUID?> {
+        val onlineId = sender.server.getPlayerExact(playerName)?.uniqueId
+        return onlineId?.let { CompletableFuture.completedFuture(it) } ?: ownership.resolveUniqueId(playerName)
+    }
+
+    private fun sendHelp(sender: CommandSender, label: String) {
+        sender.sendMessage(TextUtil.mm("<gold>/$label <gray>— открыть коллекцию маунтов", true))
+        sender.sendMessage(TextUtil.mm("<gold>/$label menu <gray>— открыть коллекцию", true))
+        if (sender.hasPermission(ADMIN_PERMISSION)) sendAdminHelp(sender, label)
+    }
+
+    private fun sendAdminHelp(sender: CommandSender, label: String) {
+        sender.sendMessage(TextUtil.mm("<yellow>/$label admin summon <маунт> [уровень] [облик]", true))
+        sender.sendMessage(TextUtil.mm("<yellow>/$label admin grant <level|skin|glow> <игрок> <маунт> [значение]", true))
+        sender.sendMessage(TextUtil.mm("<yellow>/$label admin revoke <level|skin|glow> <игрок> <маунт> [значение]", true))
+    }
+
+    private fun sendMutationHelp(sender: CommandSender, label: String, action: String) {
+        sender.sendMessage(TextUtil.mm("<red>Использование: /$label admin $action <level|skin|glow> <игрок> <маунт> [значение]", true))
     }
 
     override fun onTabComplete(
@@ -143,17 +225,75 @@ class RideMobCommand(
         command: Command,
         alias: String,
         args: Array<out String>,
-    ): List<String> =
+    ): List<String> {
+        if (args.isEmpty()) return emptyList()
+        if (args.size == 1) {
+            return buildList {
+                add("help")
+                add("menu")
+                if (sender.hasPermission(ADMIN_PERMISSION)) add("admin")
+            }.matching(args[0])
+        }
+        if (!args[0].equals("admin", ignoreCase = true) || !sender.hasPermission(ADMIN_PERMISSION)) return emptyList()
+        if (args.size == 2) return listOf("summon", "grant", "revoke").matching(args[1])
+        return when (args[1].lowercase(Locale.ROOT)) {
+            "summon" -> completeSummon(args)
+            "grant", "revoke" -> completeMutation(sender, args)
+            else -> emptyList()
+        }
+    }
+
+    private fun completeSummon(args: Array<out String>): List<String> =
         when (args.size) {
-            1 -> catalog().all.map(MountDefinition::id).matching(args[0])
-            2 -> listOf("0.3", "0.5", "1.0", "2.0", "4.0").matching(args[1])
-            3 -> {
-                val mount = catalog()[args[0].lowercase(Locale.ROOT)]
-                mount?.skins?.map(MountSkinDefinition::id).orEmpty().matching(args[2])
+            3 -> catalog().all.map(MountDefinition::id).matching(args[2])
+            4 -> {
+                val mount = catalog()[args[2].lowercase(Locale.ROOT)]
+                (1..(mount?.maxLevel ?: 3)).map(Int::toString).matching(args[3])
+            }
+            5 -> {
+                val mount = catalog()[args[2].lowercase(Locale.ROOT)]
+                (listOf(MountDefinition.DEFAULT_SKIN_ID) + mount?.skins.orEmpty().map(MountSkinDefinition::id)).matching(args[4])
             }
             else -> emptyList()
         }
+
+    private fun completeMutation(sender: CommandSender, args: Array<out String>): List<String> =
+        when (args.size) {
+            3 -> ADMIN_KINDS.matching(args[2])
+            4 -> sender.server.onlinePlayers.map(Player::getName).matching(args[3])
+            5 -> catalog().all.map(MountDefinition::id).matching(args[4])
+            6 -> {
+                val mount = catalog()[args[4].lowercase(Locale.ROOT)]
+                when (args[2].lowercase(Locale.ROOT)) {
+                    "level" -> (1..(mount?.maxLevel ?: 3)).map(Int::toString).matching(args[5])
+                    "skin" -> mount?.skins.orEmpty().map(MountSkinDefinition::id).matching(args[5])
+                    else -> emptyList()
+                }
+            }
+            else -> emptyList()
+        }
+
+    private data class MountAdminMutation(
+        val successLabel: String,
+        val apply: (UUID, MountDefinition) -> CompletableFuture<Void>,
+    )
+
+    private class PlayerNotFoundException(playerName: String) : RuntimeException(playerName)
+
+    companion object {
+        private const val ADMIN_PERMISSION = "arc.mounts.admin"
+        private val ADMIN_KINDS = listOf("glow", "level", "skin")
+        private val PLAYER_NAME = Regex("[A-Za-z0-9_]{3,16}")
+    }
 }
+
+private fun unwrap(failure: Throwable): Throwable {
+    var current = failure
+    while (current.cause != null && current.cause !== current) current = current.cause!!
+    return current
+}
+
+private fun <T> failedFuture(failure: Throwable): CompletableFuture<T> = CompletableFuture<T>().also { it.completeExceptionally(failure) }
 
 private fun Collection<String>.matching(prefix: String): List<String> =
     filter { it.startsWith(prefix, ignoreCase = true) }.sorted()

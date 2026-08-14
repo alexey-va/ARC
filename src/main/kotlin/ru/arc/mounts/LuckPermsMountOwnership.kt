@@ -31,9 +31,22 @@ class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership
         }
     }
 
+    override fun revokeLevel(playerId: UUID, mount: MountDefinition, level: Int): CompletableFuture<Void> {
+        require(level in 1..mount.maxLevel) { "Invalid ${mount.id} level: $level" }
+        return luckPerms.userManager.modifyUser(playerId) { user ->
+            removePermission(user.data()::remove, user.nodes, mount.levelPermission(level))
+        }
+    }
+
     override fun grantGlow(playerId: UUID, mount: MountDefinition): CompletableFuture<Void> =
         luckPerms.userManager.modifyUser(playerId) { user ->
             user.data().add(permission(mount.glowPermission))
+            removePermission(user.data()::remove, user.nodes, mount.glowDisabledPermission)
+        }
+
+    override fun revokeGlow(playerId: UUID, mount: MountDefinition): CompletableFuture<Void> =
+        luckPerms.userManager.modifyUser(playerId) { user ->
+            removePermission(user.data()::remove, user.nodes, mount.glowPermission)
             removePermission(user.data()::remove, user.nodes, mount.glowDisabledPermission)
         }
 
@@ -50,6 +63,16 @@ class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership
     ): CompletableFuture<Void> =
         luckPerms.userManager.modifyUser(playerId) { user ->
             user.data().add(permission(mount.skinPermission(skin.id)))
+        }
+
+    override fun revokeSkin(
+        playerId: UUID,
+        mount: MountDefinition,
+        skin: MountSkinDefinition,
+    ): CompletableFuture<Void> =
+        luckPerms.userManager.modifyUser(playerId) { user ->
+            removePermission(user.data()::remove, user.nodes, mount.skinPermission(skin.id))
+            removePermission(user.data()::remove, user.nodes, mount.activeSkinPermission(skin.id))
         }
 
     override fun setActiveSkin(

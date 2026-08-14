@@ -314,14 +314,30 @@ private class MutableOwnership : MountOwnership {
     override fun grantLevel(playerId: UUID, mount: MountDefinition, level: Int): CompletableFuture<Void> =
         write { this.level = level; directPermissions += mount.levelPermission(level) }
 
+    override fun revokeLevel(playerId: UUID, mount: MountDefinition, level: Int): CompletableFuture<Void> =
+        write {
+            directPermissions -= mount.levelPermission(level)
+            if (this.level == level) this.level = (level - 1).coerceAtLeast(0)
+        }
+
     override fun grantGlow(playerId: UUID, mount: MountDefinition): CompletableFuture<Void> =
         write { glow = true; glowDisabled = false; directPermissions += mount.glowPermission }
+
+    override fun revokeGlow(playerId: UUID, mount: MountDefinition): CompletableFuture<Void> =
+        write { glow = false; glowDisabled = false; directPermissions -= mount.glowPermission }
 
     override fun setGlowEnabled(playerId: UUID, mount: MountDefinition, enabled: Boolean): CompletableFuture<Void> =
         write { glowDisabled = !enabled }
 
     override fun grantSkin(playerId: UUID, mount: MountDefinition, skin: MountSkinDefinition): CompletableFuture<Void> =
         write { skinPermissions += mount.skinPermission(skin.id); directPermissions += mount.skinPermission(skin.id) }
+
+    override fun revokeSkin(playerId: UUID, mount: MountDefinition, skin: MountSkinDefinition): CompletableFuture<Void> =
+        write {
+            skinPermissions -= mount.skinPermission(skin.id)
+            directPermissions -= mount.skinPermission(skin.id)
+            activeSkinPermissions -= mount.activeSkinPermission(skin.id)
+        }
 
     override fun setActiveSkin(playerId: UUID, mount: MountDefinition, skinId: String): CompletableFuture<Void> =
         write {

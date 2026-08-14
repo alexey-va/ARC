@@ -77,31 +77,19 @@ commands:
   eliteloot:
     description: Elite loot admin
     usage: /eliteloot [list|add]
-  mounts:
-    description: Open the mount collection
-    usage: /mounts
+  mount:
+    description: Open and administer the mount collection
+    usage: /mount [menu|help|admin]
     permission: arc.mounts.use
-  unlock-mount:
-    description: Unlock a mount level for a player
-    usage: /unlock-mount <mount> <level> <player>
-    permission: arc.mounts.admin
-  ride-mob:
-    description: Spawn a temporary test mount
-    usage: /ride-mob [mount] [speed] [skin]
-    permission: arc.mounts.ride
 permissions:
   arc.hide.bypass:
     description: Bypass all CommandHide groups
     default: op
   arc.mounts.admin:
-    description: Unlock mount levels for players
+    description: Administer mount ownership and summon test mounts
     default: op
     children:
       arc.mounts.use: true
-      arc.mounts.ride: true
   arc.mounts.use:
     description: Open and use the mount collection
-    default: false
-  arc.mounts.ride:
-    description: Spawn temporary test mounts
     default: false
