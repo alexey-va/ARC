@@ -4,8 +4,10 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.mockk
 import io.mockk.verify
+import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Mob
 import org.bukkit.event.entity.CreatureSpawnEvent
+import org.bukkit.event.entity.EntityDamageEvent
 import java.util.UUID
 
 class MountSessionControllerTest : StringSpec({
@@ -16,6 +18,26 @@ class MountSessionControllerTest : StringSpec({
 
         verify(exactly = 1) { mob.setAware(false) }
         verify(exactly = 0) { mob.setAI(any()) }
+    }
+
+    "temporary mount entities are invulnerable" {
+        val entity = mockk<LivingEntity>(relaxed = true)
+
+        configureMountDurability(entity)
+
+        verify(exactly = 1) { entity.setInvulnerable(true) }
+    }
+
+    "active mount damage policy cancels every damage cause" {
+        EntityDamageEvent.DamageCause.entries.forEach { cause ->
+            shouldCancelMountDamage(MountDamageTarget.MOUNT, cause) shouldBe true
+        }
+    }
+
+    "mounted rider is protected only from hitbox suffocation" {
+        shouldCancelMountDamage(MountDamageTarget.RIDER, EntityDamageEvent.DamageCause.SUFFOCATION) shouldBe true
+        shouldCancelMountDamage(MountDamageTarget.RIDER, EntityDamageEvent.DamageCause.ENTITY_ATTACK) shouldBe false
+        shouldCancelMountDamage(MountDamageTarget.RIDER, EntityDamageEvent.DamageCause.FALL) shouldBe false
     }
 
     "only the exact pending ARC spawn token may bypass a cancelled spawn" {

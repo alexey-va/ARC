@@ -15,8 +15,13 @@ Native production replacement for `Denizen/scripts/activities/rideable_mobs.dsc`
 - Appearance is deterministic. ARC fixes age, scale and variants, clears random
   entity equipment, then applies only the configured skin equipment. Zombie
   baby, iron guard and diamond warlord are separate unlockable skins.
-- Damage, logout, teleport, world change, expiry, idle timeout, invalid state,
-  world-border/height escape, or leaving water removes the temporary entity.
+- The temporary vehicle entity is invulnerable and absorbs damage without
+  ending the ride. Ordinary rider damage still applies but no longer dismisses
+  the mount; only rider suffocation inside a block is cancelled as a mount
+  hitbox safety measure.
+- Rider death, logout, teleport, world change, expiry, idle timeout, invalid
+  state, world-border/height escape, or leaving water removes the temporary
+  entity.
 - A short summon cooldown and a hard server-side velocity cap protect against
   duplicate entities and unsafe catalog values.
 

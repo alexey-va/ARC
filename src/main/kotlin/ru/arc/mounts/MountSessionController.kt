@@ -47,7 +47,6 @@ enum class MountSpawnResult {
 enum class MountRemovalReason {
     DISMOUNTED,
     DOUBLE_SNEAK,
-    DAMAGED,
     EXPIRED,
     LEFT_WATER,
     HEIGHT_LIMIT,
@@ -294,18 +293,21 @@ class MountSessionController(
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     fun onMountDamage(event: EntityDamageEvent) {
-        val mountedPlayer = playerByEntity[event.entity.uniqueId]
-        if (mountedPlayer != null) {
+        if (
+            playerByEntity.containsKey(event.entity.uniqueId) &&
+            shouldCancelMountDamage(MountDamageTarget.MOUNT, event.cause)
+        ) {
             event.isCancelled = true
-            remove(mountedPlayer, MountRemovalReason.DAMAGED)
         }
     }
 
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     fun onRiderDamage(event: EntityDamageEvent) {
         val player = event.entity as? Player ?: return
         if (!sessionsByPlayer.containsKey(player.uniqueId)) return
-        scheduler.runLater(1L, Runnable { remove(player.uniqueId, MountRemovalReason.DAMAGED) })
+        if (shouldCancelMountDamage(MountDamageTarget.RIDER, event.cause)) {
+            event.isCancelled = true
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
@@ -434,7 +436,7 @@ class MountSessionController(
         entity.isCustomNameVisible = false
         entity.isPersistent = false
         entity.isGlowing = glow
-        entity.isInvulnerable = false
+        configureMountDurability(entity)
         entity.setGravity(definition.movement == MountMovement.WALKING)
         (entity as? Mob)?.let(::configureMountMob)
         MountAppearanceApplicator.apply(entity, skin?.appearance ?: definition.appearance)
@@ -473,6 +475,20 @@ internal fun configureMountMob(mob: Mob) {
     mob.canPickupItems = false
     mob.removeWhenFarAway = false
 }
+
+internal enum class MountDamageTarget {
+    MOUNT,
+    RIDER,
+}
+
+internal fun configureMountDurability(entity: LivingEntity) {
+    entity.isInvulnerable = true
+}
+
+internal fun shouldCancelMountDamage(
+    target: MountDamageTarget,
+    cause: EntityDamageEvent.DamageCause,
+): Boolean = target == MountDamageTarget.MOUNT || cause == EntityDamageEvent.DamageCause.SUFFOCATION
 
 internal fun shouldAllowCancelledMountSpawn(
     cancelled: Boolean,
