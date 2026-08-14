@@ -40,6 +40,12 @@ class MountSessionControllerTest : StringSpec({
         shouldCancelMountDamage(MountDamageTarget.RIDER, EntityDamageEvent.DamageCause.FALL) shouldBe false
     }
 
+    "vanilla dismount is blocked until double sneak authorizes it" {
+        shouldCancelUnauthorizedDismount(allowDismount = false, cancellable = true) shouldBe true
+        shouldCancelUnauthorizedDismount(allowDismount = true, cancellable = true) shouldBe false
+        shouldCancelUnauthorizedDismount(allowDismount = false, cancellable = false) shouldBe false
+    }
+
     "a mounted rider is knocked off only by one hit reaching the configured final damage" {
         shouldKnockRiderOff(finalDamage = 5.99, threshold = 6.0) shouldBe false
         shouldKnockRiderOff(finalDamage = 6.0, threshold = 6.0) shouldBe true

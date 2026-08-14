@@ -107,6 +107,30 @@ class MountDomainTest : StringSpec({
         gesture.update(true, 1_400) shouldBe SneakGestureResult.DOUBLE_PRESSED
     }
 
+    "high jump ability scales the walking jump velocity" {
+        val abilities =
+            MountAbilities(
+                highJump = MountHighJumpAbility(displayName = "Высокий прыжок", multiplier = 1.8),
+            )
+
+        walkingJumpVelocity(baseVelocity = 0.5, abilities = abilities) shouldBe (0.9 plusOrMinus 1.0e-9)
+        walkingJumpVelocity(baseVelocity = 0.5, MountAbilities()) shouldBeExactly 0.5
+    }
+
+    "high jump ability rejects unsafe multipliers" {
+        shouldThrow<IllegalArgumentException> {
+            MountHighJumpAbility(displayName = "Слишком высоко", multiplier = 3.1)
+        }
+        shouldThrow<IllegalArgumentException> {
+            testMount().copy(
+                abilities =
+                    MountAbilities(
+                        MountHighJumpAbility(displayName = "Высокий прыжок", multiplier = 1.8),
+                    ),
+            )
+        }
+    }
+
     "mount definitions reject invalid level prices and speeds" {
         shouldThrow<IllegalArgumentException> {
             testMount().copy(levels = listOf(MountLevelDefinition(speed = 0.0, price = 1.0)))

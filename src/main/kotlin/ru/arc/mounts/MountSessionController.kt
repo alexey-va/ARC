@@ -198,7 +198,7 @@ class MountSessionController(
             player.world.playSound(player.location, Sound.ENTITY_HORSE_SADDLE, 1.0f, 1.0f)
             val (controlsKey, controlsFallback) =
                 if (definition.movement == MountMovement.WALKING) {
-                    "ground-controls" to "<gray>WASD — движение, Space — прыжок, Shift — спешиться"
+                    "ground-controls" to "<gray>WASD — движение, Space — прыжок, двойной Shift — спешиться"
                 } else {
                     "flight-controls" to "<gray>WASD — движение, Space — вверх, Shift — вниз, двойной Shift — спешиться"
                 }
@@ -240,7 +240,6 @@ class MountSessionController(
         val session = sessionsByPlayer[event.player.uniqueId] ?: return
         val updated = event.input.toState()
         session.input = updated
-        if (session.definition.movement == MountMovement.WALKING) return
 
         when (session.sneakGesture.update(updated.sneak, System.currentTimeMillis())) {
             SneakGestureResult.DOUBLE_PRESSED -> {
@@ -252,8 +251,14 @@ class MountSessionController(
                 val now = System.currentTimeMillis()
                 if (session.lastHintAtMillis == Long.MIN_VALUE || now - session.lastHintAtMillis >= config.descendingHintCooldown.toMillis()) {
                     session.lastHintAtMillis = now
+                    val (messageKey, fallback) =
+                        if (session.definition.movement == MountMovement.WALKING) {
+                            "dismount-hint" to "<yellow>Ещё раз Shift — спешиться"
+                        } else {
+                            "descending" to "<aqua>Снижение… <gray>двойной Shift — спешиться"
+                        }
                     event.player.sendActionBar(
-                        TextUtil.mm(config.message("descending", "<aqua>Снижение… <gray>двойной Shift — спешиться"), true),
+                        TextUtil.mm(config.message(messageKey, fallback), true),
                     )
                 }
             }
@@ -285,7 +290,7 @@ class MountSessionController(
         val session = sessionsByPlayer[player.uniqueId] ?: return
         if (event.dismounted.uniqueId != session.entityId || session.stopping) return
 
-        if (session.definition.movement != MountMovement.WALKING && !session.allowDismount && event.isCancellable) {
+        if (shouldCancelUnauthorizedDismount(session.allowDismount, event.isCancellable)) {
             event.isCancelled = true
             return
         }
@@ -409,7 +414,9 @@ class MountSessionController(
                         (config.deceleration * session.handlingMultiplier).coerceAtMost(1.0),
                     )
                 val vertical =
-                    if (session.input.jump && entity.isOnGround) config.jumpVelocity
+                    if (session.input.jump && entity.isOnGround) {
+                        walkingJumpVelocity(config.jumpVelocity, session.definition.abilities)
+                    }
                     else current.y
                 MotionVector(horizontal.x, vertical, horizontal.z)
             } else {
@@ -499,6 +506,9 @@ internal fun shouldCancelMountDamage(
     target: MountDamageTarget,
     cause: EntityDamageEvent.DamageCause,
 ): Boolean = target == MountDamageTarget.MOUNT || cause == EntityDamageEvent.DamageCause.SUFFOCATION
+
+internal fun shouldCancelUnauthorizedDismount(allowDismount: Boolean, cancellable: Boolean): Boolean =
+    !allowDismount && cancellable
 
 internal fun shouldKnockRiderOff(finalDamage: Double, threshold: Double): Boolean =
     finalDamage.isFinite() && threshold.isFinite() && threshold > 0.0 && finalDamage >= threshold

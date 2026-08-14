@@ -90,6 +90,25 @@ data class MountTrailDefinition(
     }
 }
 
+data class MountHighJumpAbility(
+    val displayName: String,
+    val multiplier: Double,
+) {
+    init {
+        require(displayName.isNotBlank() && displayName.length <= 64) { "Mount high-jump display name is invalid" }
+        require(multiplier.isFinite() && multiplier in 1.05..3.0) {
+            "Mount high-jump multiplier must be between 1.05 and 3.0"
+        }
+    }
+}
+
+data class MountAbilities(
+    val highJump: MountHighJumpAbility? = null,
+) {
+    val displayNames: List<String>
+        get() = listOfNotNull(highJump?.displayName)
+}
+
 data class MountSkinDefinition(
     val id: String,
     val displayName: String,
@@ -117,6 +136,7 @@ data class MountDefinition(
     val rarity: MountRarity,
     val levels: List<MountLevelDefinition>,
     val glowPrice: Double?,
+    val abilities: MountAbilities = MountAbilities(),
     val appearance: MountAppearance = MountAppearance(),
     val skins: List<MountSkinDefinition> = emptyList(),
 ) {
@@ -132,6 +152,9 @@ data class MountDefinition(
         require(levels.size <= MAX_LEVELS) { "Mount '$id' has more than $MAX_LEVELS levels" }
         require(glowPrice == null || glowPrice.isFinite() && glowPrice > 0.0) {
             "Mount '$id' glow price must be positive and finite"
+        }
+        require(abilities.highJump == null || movement == MountMovement.WALKING) {
+            "Mount '$id' high-jump ability requires walking movement"
         }
         require(skins.size <= MAX_SKINS) { "Mount '$id' has more than $MAX_SKINS skins" }
         require(skins.map(MountSkinDefinition::id).toSet().size == skins.size) { "Mount '$id' skin ids must be unique" }
@@ -333,4 +356,9 @@ class DoubleSneakGesture(private val doublePressWindowMillis: Long) {
         lastPressAt = if (isDouble) Long.MIN_VALUE else nowMillis
         return if (isDouble) SneakGestureResult.DOUBLE_PRESSED else SneakGestureResult.PRESSED
     }
+}
+
+internal fun walkingJumpVelocity(baseVelocity: Double, abilities: MountAbilities): Double {
+    require(baseVelocity.isFinite() && baseVelocity > 0.0) { "Walking jump velocity must be positive and finite" }
+    return baseVelocity * (abilities.highJump?.multiplier ?: 1.0)
 }

@@ -62,6 +62,15 @@ class MountModuleConfigTest : StringSpec({
         zombie.skinPermission("baby") shouldBe "arc.mounts.zombie.skin.baby"
     }
 
+    "mount abilities are explicit and the mountain goat has a high jump" {
+        val catalog = bundledConfig("abilities").catalog()
+        val goat = checkNotNull(catalog["goat"])
+
+        goat.abilities.highJump?.displayName shouldBe "Высокий прыжок"
+        goat.abilities.highJump?.multiplier shouldBe 1.8
+        catalog.all.filterNot { it.id == "goat" }.all { it.abilities.highJump == null } shouldBe true
+    }
+
     "every catalog appearance, material, entity and particle matches the exact Paper API" {
         MountModule.validatePaperTypes(bundledConfig("paper-types").catalog())
     }

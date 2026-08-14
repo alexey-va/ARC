@@ -54,6 +54,7 @@ open class MountModuleConfig(private val config: Config) {
                     rarity = strictRarity(config.string("$root.rarity", "common"), id),
                     levels = levelList(root, id),
                     glowPrice = config.doubleOrNull("$root.buy-glow"),
+                    abilities = abilities("$root.abilities"),
                     appearance = appearance("$root.appearance"),
                     skins = skinList(root, id),
                 )
@@ -151,6 +152,17 @@ open class MountModuleConfig(private val config: Config) {
                 normalizedAppearanceValue(config.stringOrNull("$path.secondary-variant")) ?: fallback.secondaryVariant,
             equipment = if (equipment.isEmpty()) fallback.equipment else equipment,
         )
+    }
+
+    private fun abilities(path: String): MountAbilities {
+        val abilityIds = config.keys(path)
+        require(abilityIds.all { it == "high-jump" }) { "Unknown mount abilities: ${abilityIds - setOf("high-jump")}" }
+        val highJumpPath = "$path.high-jump"
+        if (config.keys(highJumpPath).isEmpty()) return MountAbilities()
+        val displayName = config.stringOrNull("$highJumpPath.name")?.trim().orEmpty()
+        val multiplier = config.doubleOrNull("$highJumpPath.multiplier")
+            ?: throw IllegalArgumentException("Mount high-jump multiplier is required")
+        return MountAbilities(MountHighJumpAbility(displayName, multiplier))
     }
 
     private fun trail(path: String): MountTrailDefinition? {

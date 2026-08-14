@@ -373,6 +373,9 @@ class MountGuiController(
         val lore = buildList {
             add("${mount.rarity.color}${mount.rarity.displayName}")
             add("<dark_gray>● <gray>Тип: ${movementColor(mount.movement)}${mount.movement.displayName}")
+            mount.abilities.displayNames.forEach { ability ->
+                add("<dark_gray>● <gray>Особенность: <light_purple>${escape(ability)}")
+            }
             add("<dark_gray>● <gray>Получение: <white>${escape(mount.acquisition)}")
             add(if (profile.unlocked) "<dark_gray>● <gray>Уровень: <yellow>${profile.level}<gray>/${mount.maxLevel}" else "<dark_gray>● <gray>Статус: <red>не получен")
             if (profile.unlocked) {

@@ -7,9 +7,12 @@ Native production replacement for `Denizen/scripts/activities/rideable_mobs.dsc`
 - `/mount` opens a paginated 30-mount collection with walking, flying and
   swimming filters. Left click summons an owned mount; right click opens its
   progression, glow and appearance controls.
-- Walking mounts use WASD, Space to jump, and Shift to dismount. Flying and
-  swimming mounts use WASD, Space to ascend, Shift to descend and double Shift
-  to dismount.
+- Walking mounts use WASD and Space to jump. Flying and swimming mounts use
+  WASD, Space to ascend and Shift to descend. Every mount uses double Shift to
+  dismount; a single Shift never ends the ride.
+- Typed per-mount abilities are configured under `abilities`. The mountain goat
+  exposes `Высокий прыжок` in the GUI and applies its configured jump multiplier
+  to the shared walking jump velocity.
 - Every mount has three progression levels. The third level is the deliberately
   expensive final sprint and improves speed, steering and sprint response.
 - Appearance is deterministic. ARC fixes age, scale and variants, clears random

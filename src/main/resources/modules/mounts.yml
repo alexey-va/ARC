@@ -38,8 +38,9 @@ gui:
   back-command: m
 
 messages:
-  ground-controls: "<gray>WASD — движение, Space — прыжок, Shift — спешиться"
+  ground-controls: "<gray>WASD — движение, Space — прыжок, двойной Shift — спешиться"
   flight-controls: "<gray>WASD — движение, Space — вверх, Shift — вниз, двойной Shift — спешиться"
+  dismount-hint: "<yellow>Ещё раз Shift — спешиться"
   descending: "<aqua>Снижение… <gray>двойной Shift — спешиться"
   expired: "<gray>Время поездки закончилось."
   already-riding: "<red>Вы уже используете маунта."
@@ -329,7 +330,11 @@ mounts:
     rarity: uncommon
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Упрямый покоритель склонов с быстрым финальным темпом."
+      - "Упрямый покоритель склонов с особенно высоким прыжком."
+    abilities:
+      high-jump:
+        name: "Высокий прыжок"
+        multiplier: 1.8
     levels:
       - {speed: 1.45, handling: 0.9, sprint: 1, price: 100000}
       - {speed: 2.35, handling: 1, sprint: 1.03, price: 500000}
