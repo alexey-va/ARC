@@ -109,7 +109,6 @@ dependencies {
     compileOnly(libs.dev.aurelium.auraskills.api.bukkit)
     compileOnly(libs.com.github.zrips.cmilib)
     // These are optional runtime plugins - provided by server at runtime
-    // compileOnly("com.meteordevelopments:duels-api:1.0.0")
     // compileOnly("me.ulrich:uclans-api:1.0.0")
     compileOnly("commons-lang:commons-lang:2.6")
 
