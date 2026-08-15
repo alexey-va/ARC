@@ -190,7 +190,7 @@ class TreasureManager {
         info("Scanning treasure directory '${directory.name}': found ${files.size} yml file(s)")
 
         if (files.isEmpty()) {
-            warn("No treasure pool files found in ${directory.absolutePath}")
+            info("No treasure pool files found in ${directory.absolutePath}")
             return
         }
 

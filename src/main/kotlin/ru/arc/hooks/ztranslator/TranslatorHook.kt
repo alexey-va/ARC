@@ -6,7 +6,7 @@ import org.bukkit.Material
 import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
 import ru.arc.util.Logging.error
-import ru.arc.util.Logging.warn
+import ru.arc.util.Logging.info
 import java.nio.file.Files
 
 class TranslatorHook {
@@ -17,7 +17,7 @@ class TranslatorHook {
     init {
         val path = ARC.instance.dataPath.resolve("lang.json")
         if (!Files.exists(path)) {
-            warn("lang.json is not present in ARC folder! Disabling translating materials...")
+            info("lang.json is not present in ARC folder; material translation is disabled")
             map = emptyMap()
         } else {
             var loaded: Map<String, String> = emptyMap()
