@@ -20,10 +20,10 @@ class MountGuiControllerTest : TestBase() {
         val tuning =
             MountTuningDefinition(
                 speedPercentages = listOf(50, 65, 80, 90, 100),
-                walkingStepHeightsHundredths = listOf(60, 80, 110, 125, 140),
-                walkingMaxStepHeightByLevelHundredths = listOf(110, 125, 140),
+                walkingStepHeightsHundredths = listOf(110, 150, 200, 300, 400),
+                walkingMaxStepHeightByLevelHundredths = listOf(110, 200, 400),
             )
-        val profile = MountProfile(level = 2, glowOwned = false, glowDisabled = false, selectedSpeedPercentage = 65, selectedStepHeightHundredths = 80)
+        val profile = MountProfile(level = 2, glowOwned = false, glowDisabled = false, selectedSpeedPercentage = 65, selectedStepHeightHundredths = 150)
         val ownership = mockk<MountOwnership> {
             every { profile(any(), mount) } returns profile
         }
@@ -60,9 +60,9 @@ class MountGuiControllerTest : TestBase() {
 
             plainName(player.openInventory.topInventory.getItem(21)) shouldBe "Скорость: 65%"
             player.openInventory.topInventory.getItem(21)?.itemMeta?.enchantmentGlintOverride shouldBe true
-            plainName(player.openInventory.topInventory.getItem(30)) shouldBe "Подъём: 0.80 блока"
+            plainName(player.openInventory.topInventory.getItem(30)) shouldBe "Подъём: 1.50 блока"
             player.openInventory.topInventory.getItem(30)?.itemMeta?.enchantmentGlintOverride shouldBe true
-            plainName(player.openInventory.topInventory.getItem(33)) shouldBe "Подъём: 1.40 блока"
+            plainName(player.openInventory.topInventory.getItem(33)) shouldBe "Подъём: 4.00 блока"
 
             controller.onClick(clickEvent(player.openInventory, 33))
             verify(exactly = 0) { purchases.setStepHeightTuning(any(), any(), any(), any(), any()) }

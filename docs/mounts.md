@@ -12,6 +12,8 @@ Each configured level unlocks a maximum base speed. Walking levels also unlock a
 
 With no saved choice, the maximum unlocked value is active. A saved lower choice persists after an upgrade. If a level is revoked, an out-of-range step height is clamped to the new ceiling at runtime.
 
+The production scale is `1.10 / 1.50 / 2.00 / 3.00 / 4.00` blocks. Level 1 always clears ordinary one-block terrain, level 2 unlocks up to two blocks, and level 3 unlocks up to four. Values from an older configuration below `1.10` resolve safely to the new minimum. Heights of three and four blocks intentionally behave like wall climbing and can be less convenient under low ceilings, so the player can select a lower unlocked value.
+
 ## Permission state
 
 Ownership and player settings use only the `arc.mounts.*` namespace. Tuning is stored as one direct positive LuckPerms node per setting:

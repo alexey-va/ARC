@@ -28,10 +28,10 @@ movement:
 tuning:
   # Free player-selected percentage of the maximum speed unlocked by the current level.
   speed-percentages: [50, 65, 80, 90, 100]
-  # Walking mounts only. Values are native block heights and are intentionally below fences.
-  walking-step-heights: [0.60, 0.80, 1.10, 1.25, 1.40]
-  # Level 1 opens full blocks; later levels open smoother traversal over taller terrain.
-  walking-max-step-height-by-level: [1.10, 1.25, 1.40]
+  # Walking mounts only. Higher values intentionally let mounts climb walls.
+  walking-step-heights: [1.10, 1.50, 2.00, 3.00, 4.00]
+  # Level 1 clears ordinary blocks; levels 2 and 3 unlock two- and four-block climbing.
+  walking-max-step-height-by-level: [1.10, 2.00, 4.00]
 
 safety:
   post-flight-slow-falling: 8s

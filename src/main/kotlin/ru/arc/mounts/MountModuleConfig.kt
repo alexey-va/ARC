@@ -61,9 +61,9 @@ open class MountModuleConfig(private val config: Config) {
             MountTuningDefinition(
                 speedPercentages = intList("tuning.speed-percentages", listOf(50, 65, 80, 90, 100)),
                 walkingStepHeightsHundredths =
-                    decimalHundredthsList("tuning.walking-step-heights", listOf("0.60", "0.80", "1.10", "1.25", "1.40")),
+                    decimalHundredthsList("tuning.walking-step-heights", listOf("1.10", "1.50", "2.00", "3.00", "4.00")),
                 walkingMaxStepHeightByLevelHundredths =
-                    decimalHundredthsList("tuning.walking-max-step-height-by-level", listOf("1.10", "1.25", "1.40")),
+                    decimalHundredthsList("tuning.walking-max-step-height-by-level", listOf("1.10", "2.00", "4.00")),
             )
 
     open fun guiStyle(role: MountGuiItemRole): MountGuiItemStyle {

@@ -138,8 +138,8 @@ class MountSessionController(
         abilityUpgrades: List<MountAbilityUpgradeDefinition> = emptyList(),
     ): MountSpawnResult {
         val config = configProvider()
-        require(walkingStepHeight.isFinite() && walkingStepHeight in 0.6..1.5) {
-            "Walking mount step height must be between 0.60 and 1.50 blocks"
+        require(walkingStepHeight.isFinite() && walkingStepHeight in 0.6..4.0) {
+            "Walking mount step height must be between 0.60 and 4.00 blocks"
         }
         val now = System.currentTimeMillis()
         lastSummonAt.entries.removeIf { now - it.value >= config.summonCooldown.toMillis() }

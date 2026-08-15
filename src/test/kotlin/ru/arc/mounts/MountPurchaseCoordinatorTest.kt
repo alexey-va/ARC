@@ -71,7 +71,7 @@ class MountPurchaseCoordinatorTest : StringSpec({
 
     "speed tuning is free and persists independently from the unlocked level" {
         val fixture = PurchaseFixture().also { it.ownership.level = 2 }
-        val tuning = MountTuningDefinition(listOf(50, 65, 80, 90, 100), listOf(60, 80, 100, 110, 125), listOf(100, 110, 125))
+        val tuning = MountTuningDefinition(listOf(50, 65, 80, 90, 100), listOf(110, 150, 200, 300, 400), listOf(110, 200, 400))
         var result: MountPurchaseResult? = null
 
         fixture.coordinator.setSpeedTuning(fixture.subject(), fixture.mount, tuning, 65) { result = it }
@@ -84,17 +84,17 @@ class MountPurchaseCoordinatorTest : StringSpec({
 
     "walking step tuning enforces the current level ceiling without charging" {
         val walkingMount = testMount().copy(movement = MountMovement.WALKING)
-        val fixture = PurchaseFixture(walkingMount).also { it.ownership.level = 1 }
-        val tuning = MountTuningDefinition(listOf(50, 100), listOf(60, 80, 100, 110, 125), listOf(100, 110, 125))
+        val fixture = PurchaseFixture(walkingMount).also { it.ownership.level = 2 }
+        val tuning = MountTuningDefinition(listOf(50, 100), listOf(110, 150, 200, 300, 400), listOf(110, 200, 400))
         var lockedResult: MountPurchaseResult? = null
         var selectedResult: MountPurchaseResult? = null
 
-        fixture.coordinator.setStepHeightTuning(fixture.subject(), walkingMount, tuning, 110) { lockedResult = it }
-        fixture.coordinator.setStepHeightTuning(fixture.subject(), walkingMount, tuning, 80) { selectedResult = it }
+        fixture.coordinator.setStepHeightTuning(fixture.subject(), walkingMount, tuning, 300) { lockedResult = it }
+        fixture.coordinator.setStepHeightTuning(fixture.subject(), walkingMount, tuning, 150) { selectedResult = it }
 
         lockedResult shouldBe MountPurchaseResult.NotForSale
         selectedResult shouldBe MountPurchaseResult.Success
-        fixture.ownership.selectedStepHeightHundredths shouldBe 80
+        fixture.ownership.selectedStepHeightHundredths shouldBe 150
         fixture.wallet.withdrawals shouldBe 0
     }
 

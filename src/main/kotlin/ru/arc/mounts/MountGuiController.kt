@@ -672,6 +672,10 @@ class MountGuiController(
             buildList {
                 add("<gray>Маунт автоматически заходит")
                 add("<gray>на препятствия этой высоты.")
+                if (hundredths >= 300) {
+                    add("<yellow>Высокий подъём работает как карабканье")
+                    add("<yellow>и может быть неудобен под низким потолком.")
+                }
                 add("")
                 when {
                     !profile.unlocked -> add("<red>Сначала получите маунта")

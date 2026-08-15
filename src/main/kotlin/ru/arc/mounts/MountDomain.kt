@@ -59,8 +59,8 @@ data class MountTuningDefinition(
         require(walkingStepHeightsHundredths == walkingStepHeightsHundredths.distinct().sorted()) {
             "Mount tuning step heights must be unique and sorted"
         }
-        require(walkingStepHeightsHundredths.all { it in 60..150 }) {
-            "Mount tuning step heights must be between 0.60 and 1.50 blocks"
+        require(walkingStepHeightsHundredths.all { it in 60..400 }) {
+            "Mount tuning step heights must be between 0.60 and 4.00 blocks"
         }
         require(walkingStepHeightsHundredths.size <= 5) { "Mount tuning supports at most five step-height options" }
         require(walkingMaxStepHeightByLevelHundredths.isNotEmpty()) {

@@ -35,7 +35,7 @@ class MountCommandTest : StringSpec({
                 player = fixture.player,
                 definition = mount,
                 speed = mount.level(3).speed,
-                walkingStepHeight = 1.4,
+                walkingStepHeight = 4.0,
                 handlingMultiplier = mount.level(3).handlingMultiplier,
                 sprintMultiplier = mount.level(3).sprintMultiplier,
                 durationMillis = 10_000L,
@@ -57,7 +57,7 @@ class MountCommandTest : StringSpec({
                 player = fixture.player,
                 definition = mount,
                 speed = 0.9,
-                walkingStepHeight = 1.4,
+                walkingStepHeight = 4.0,
                 handlingMultiplier = 1.28,
                 sprintMultiplier = 1.12,
                 durationMillis = 10_000L,
@@ -198,7 +198,7 @@ private fun commandFixture(catalog: MountCatalog, admin: Boolean = false): Mount
     }
     val config = mockk<MountModuleConfig> {
         every { adminSessionDuration } returns java.time.Duration.ofSeconds(10)
-        every { tuning } returns MountTuningDefinition(listOf(50, 65, 80, 90, 100), listOf(60, 80, 110, 125, 140), listOf(110, 125, 140))
+        every { tuning } returns MountTuningDefinition(listOf(50, 65, 80, 90, 100), listOf(110, 150, 200, 300, 400), listOf(110, 200, 400))
     }
     val sessions = mockk<MountSessionController>(relaxed = true)
     val openMenu = mockk<(Player) -> Unit>(relaxed = true)
