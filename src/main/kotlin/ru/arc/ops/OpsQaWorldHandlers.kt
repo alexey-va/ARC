@@ -1,6 +1,7 @@
 package ru.arc.ops
 
 import com.jeff_media.customblockdata.CustomBlockData
+import net.kyori.adventure.text.Component
 import org.bukkit.Bukkit
 import org.bukkit.Difficulty
 import org.bukkit.GameRule
@@ -12,6 +13,7 @@ import org.bukkit.WorldCreator
 import org.bukkit.WorldType
 import org.bukkit.block.Block
 import org.bukkit.event.player.PlayerTeleportEvent
+import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import ru.arc.ARC
 import java.nio.file.AtomicMoveNotSupportedException
@@ -30,6 +32,13 @@ object OpsQaWorldHandlers {
             QaFixtureBlock("dirt_sample", 0, FLOOR_Y, 3, Material.DIRT),
             QaFixtureBlock("coarse_dirt_sample", 3, FLOOR_Y, 3, Material.COARSE_DIRT),
             QaFixtureBlock("dirt_path_sample", 6, FLOOR_Y, 3, Material.DIRT_PATH),
+        )
+
+    internal val toolSlots =
+        linkedMapOf(
+            5 to QaToolSpec("ordinary_stick", Material.STICK, null),
+            6 to QaToolSpec("inspect", Material.STICK, "inspect"),
+            7 to QaToolSpec("advance", Material.IRON_SHOVEL, "advance"),
         )
 
     fun status(): Map<String, Any?> = OpsBukkitSync.call { statusSync(Bukkit.getWorld(WORLD_NAME)) }
@@ -68,6 +77,39 @@ object OpsQaWorldHandlers {
                 "player" to player.name,
                 "teleported" to true,
                 "position" to locationSummary(player.location),
+            )
+        }
+
+    fun equip(
+        playerName: String,
+        config: OpsHttpConfig,
+    ): Map<String, Any?> =
+        OpsBukkitSync.call {
+            requireAllowedPlayer(playerName, config)
+            val world = Bukkit.getWorld(WORLD_NAME) ?: throw IllegalStateException("QA world is not loaded; prepare it first")
+            verifyMarker(world)
+            val player = onlinePlayer(playerName)
+            check(player.world.uid == world.uid) { "Player '$playerName' must be inside '$WORLD_NAME' before equipping QA tools" }
+            val occupied = toolSlots.keys.filter { slot -> player.inventory.getItem(slot)?.type?.isAir == false }
+            check(occupied.isEmpty()) { "QA hotbar slots are occupied: ${occupied.sorted().joinToString()}" }
+            val trailsPlugin =
+                Bukkit.getPluginManager().getPlugin("Trails")
+                    ?.takeIf { it.isEnabled }
+                    ?: throw IllegalStateException("Trails is not enabled")
+            toolSlots.forEach { (slot, spec) -> player.inventory.setItem(slot, qaTool(spec, trailsPlugin)) }
+            mapOf(
+                "world" to WORLD_NAME,
+                "player" to player.name,
+                "equipped" to true,
+                "items" to
+                    toolSlots.map { (slot, spec) ->
+                        mapOf(
+                            "id" to spec.id,
+                            "quickbarSlot" to slot,
+                            "material" to spec.material.name,
+                            "taggedKind" to spec.taggedKind,
+                        )
+                    },
             )
         }
 
@@ -194,6 +236,24 @@ object OpsQaWorldHandlers {
     private fun onlinePlayer(name: String) =
         Bukkit.getPlayerExact(name) ?: throw NoSuchElementException("Player '$name' is not online on this server")
 
+    private fun qaTool(
+        spec: QaToolSpec,
+        trailsPlugin: org.bukkit.plugin.Plugin,
+    ): ItemStack =
+        ItemStack(spec.material).apply {
+            val kind = spec.taggedKind ?: return@apply
+            itemMeta =
+                itemMeta.apply {
+                    itemName(Component.text("Trails QA: $kind"))
+                    persistentDataContainer.set(
+                        NamespacedKey(trailsPlugin, "trail_tool_kind"),
+                        PersistentDataType.STRING,
+                        kind,
+                    )
+                    setEnchantmentGlintOverride(true)
+                }
+        }
+
     private fun teleport(
         player: org.bukkit.entity.Player,
         world: World,
@@ -257,3 +317,9 @@ internal data class QaFixtureBlock(
 ) {
     fun block(world: World): Block = world.getBlockAt(x, y, z)
 }
+
+internal data class QaToolSpec(
+    val id: String,
+    val material: Material,
+    val taggedKind: String?,
+)

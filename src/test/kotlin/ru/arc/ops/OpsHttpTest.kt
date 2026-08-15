@@ -147,6 +147,7 @@ class OpsHttpServerTest : FreeSpec({
                     body.contains("GET /ops/qa-world") shouldBe !writesExpected
                     body.contains("POST /ops/qa-world/prepare") shouldBe writesExpected
                     body.contains("POST /ops/qa-world/teleport") shouldBe writesExpected
+                    body.contains("POST /ops/qa-world/equip") shouldBe writesExpected
                 } finally {
                     server.stop()
                 }

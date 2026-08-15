@@ -280,7 +280,7 @@ surface is intentionally compact:
 - `arc_ops_hologram_read` covers CMI list/detail/preview;
 - `arc_ops_hologram_write` covers gated CMI presence-aware upsert/delete;
 - `arc_ops_world_snapshot` wraps the ready-made BlueMap renderer.
-- `arc_ops_qa_world` combines read-only status with gated prepare/teleport for
+- `arc_ops_qa_world` combines read-only status with gated prepare/teleport/equip for
   the fixed QA fixture; it never accepts arbitrary worlds, blocks, coordinates,
   commands, deletion, or players outside `qa-world-allowed-players`.
 
@@ -290,14 +290,20 @@ surface is intentionally compact:
 GET  /ops/qa-world
 POST /ops/qa-world/prepare  {"player":"CodexQA_728"}  # player optional
 POST /ops/qa-world/teleport {"player":"CodexQA_728"}
+POST /ops/qa-world/equip    {"player":"CodexQA_728"}
 ```
 
 The only world identity is `arc_qa_flat`. ARC refuses a pre-existing folder
 without its private ownership marker and never exposes world deletion. Prepare
 rebuilds only the fixed bounded platform, clears Trails metadata on the five
 fixture blocks, and optionally teleports one allowlisted online player. Reads
-require `qa-world-read-enabled`; both mutations require
+require `qa-world-read-enabled`; all three mutations require
 `qa-world-write-enabled` and the exact configured player allowlist.
+
+Equip requires the player to already be inside `arc_qa_flat` and fixed hotbar
+slots 5-7 to be empty. It installs exactly one ordinary stick plus the Trails
+`inspect` and `advance` PDC-tagged tools; it has no arbitrary item, slot,
+command, or NBT surface.
 
 Do not expose one MCP tool per HTTP verb/catalog, and do not add native content
 APIs for ordinary YAML such as `announce.yml`. Simple configs stay in the

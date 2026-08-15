@@ -28,4 +28,11 @@ class OpsQaWorldHandlersTest :
                 OpsQaWorldHandlers.requireAllowedPlayer("../../world", config)
             }
         }
+
+        "QA tool loadout uses fixed hotbar slots and only two Trails tags" {
+            OpsQaWorldHandlers.toolSlots.keys.toList() shouldBe listOf(5, 6, 7)
+            OpsQaWorldHandlers.toolSlots.values.map { it.material } shouldBe
+                listOf(Material.STICK, Material.STICK, Material.IRON_SHOVEL)
+            OpsQaWorldHandlers.toolSlots.values.mapNotNull { it.taggedKind } shouldBe listOf("inspect", "advance")
+        }
     })

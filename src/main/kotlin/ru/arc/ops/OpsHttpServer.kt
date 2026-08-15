@@ -148,6 +148,9 @@ class OpsHttpServer(
             method == "POST" && segments == listOf("qa-world", "teleport") ->
                 handleQaWorldTeleport(exchange, cfg)
 
+            method == "POST" && segments == listOf("qa-world", "equip") ->
+                handleQaWorldEquip(exchange, cfg)
+
             method == "GET" && segments == listOf("economy", "audit") ->
                 handleEconomyAudit(exchange, cfg, query)
 
@@ -489,6 +492,19 @@ class OpsHttpServer(
         }
         handleQaWorldErrors(exchange) {
             OpsQaWorldHandlers.teleport(checkNotNull(parseQaWorldPlayer(exchange, required = true)), cfg)
+        }
+    }
+
+    private fun handleQaWorldEquip(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+    ) {
+        if (!cfg.qaWorldWriteEnabled) {
+            respondError(exchange, 403, "QA world writes are disabled")
+            return
+        }
+        handleQaWorldErrors(exchange) {
+            OpsQaWorldHandlers.equip(checkNotNull(parseQaWorldPlayer(exchange, required = true)), cfg)
         }
     }
 
@@ -2024,6 +2040,7 @@ class OpsHttpServer(
         if (cfg.qaWorldWriteEnabled) {
             routes += "POST /ops/qa-world/prepare {player?}"
             routes += "POST /ops/qa-world/teleport {player}"
+            routes += "POST /ops/qa-world/equip {player}"
         }
         if (cfg.luckpermsGroupsReadEnabled) {
             routes += "GET /ops/luckperms/groups"
