@@ -18,6 +18,7 @@ movement:
   deceleration: 0.38
   turn-smoothing: 0.32
   sprint-multiplier: 1.15
+  walking-step-height: 1.1
   jump-velocity: 0.5
   vertical-speed-ratio: 0.75
   maximum-vertical-speed: 0.65
@@ -39,6 +40,7 @@ gui:
 
 messages:
   ground-controls: "<gray>WASD — движение, Space — прыжок, двойной Shift — спешиться"
+  horse-controls: "<gray>WASD — движение, удерживайте Space и отпустите — прыжок, двойной Shift — спешиться"
   flight-controls: "<gray>WASD — движение, Space — вверх, Shift — вниз, двойной Shift — спешиться"
   dismount-hint: "<yellow>Ещё раз Shift — спешиться"
   descending: "<aqua>Снижение… <gray>двойной Shift — спешиться"

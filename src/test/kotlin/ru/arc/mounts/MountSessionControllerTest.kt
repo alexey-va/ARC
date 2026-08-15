@@ -1,12 +1,18 @@
 package ru.arc.mounts
 
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.doubles.plusOrMinus
 import io.kotest.matchers.shouldBe
+import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import org.bukkit.attribute.Attribute
+import org.bukkit.attribute.AttributeInstance
 import org.bukkit.entity.Bat
+import org.bukkit.entity.Horse
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Mob
+import org.bukkit.entity.Player
 import org.bukkit.event.entity.CreatureSpawnEvent
 import org.bukkit.event.entity.EntityDamageEvent
 import java.util.UUID
@@ -28,6 +34,36 @@ class MountSessionControllerTest : StringSpec({
         maintainMountMobState(bat)
 
         verify(exactly = 2) { bat.setAwake(true) }
+    }
+
+    "walking mounts step over a full block without a manual jump" {
+        val entity = mockk<LivingEntity>(relaxed = true)
+        val stepHeight = mockk<AttributeInstance>(relaxed = true)
+        every { entity.getAttribute(Attribute.STEP_HEIGHT) } returns stepHeight
+
+        configureWalkingStepHeight(entity, 1.1)
+
+        verify(exactly = 1) { stepHeight.baseValue = 1.1 }
+    }
+
+    "horses use native ridden physics with ARC speed and jump values" {
+        val horse = mockk<Horse>(relaxed = true)
+        val player = mockk<Player>(relaxed = true)
+        val movementSpeed = mockk<AttributeInstance>(relaxed = true)
+        val stepHeight = mockk<AttributeInstance>(relaxed = true)
+        every { horse.getAttribute(Attribute.MOVEMENT_SPEED) } returns movementSpeed
+        every { horse.getAttribute(Attribute.STEP_HEIGHT) } returns stepHeight
+
+        configureNativeHorse(horse, player)
+        configureNativeHorseMotion(horse, maximumSpeedBlocksPerTick = 0.42, jumpVelocity = 0.5, stepHeight = 1.1)
+
+        verify(exactly = 1) { horse.setAware(true) }
+        verify(exactly = 1) { horse.isTamed = true }
+        verify(exactly = 1) { horse.owner = player }
+        verify(exactly = 1) { movementSpeed.baseValue = nativeHorseMovementAttribute(0.42) }
+        verify(exactly = 1) { horse.jumpStrength = 0.5 }
+        verify(exactly = 1) { stepHeight.baseValue = 1.1 }
+        nativeHorseMovementAttribute(1.05) shouldBe (0.5 plusOrMinus 1.0e-9)
     }
 
     "temporary mount entities are invulnerable" {

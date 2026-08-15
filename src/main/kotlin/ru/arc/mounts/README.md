@@ -7,9 +7,11 @@ Native production replacement for `Denizen/scripts/activities/rideable_mobs.dsc`
 - `/mount` opens a paginated 30-mount collection with walking, flying and
   swimming filters. Left click summons an owned mount; right click opens its
   progression, glow and appearance controls.
-- Walking mounts use WASD and Space to jump. Flying and swimming mounts use
-  WASD, Space to ascend and Shift to descend. Every mount uses double Shift to
-  dismount; a single Shift never ends the ride.
+- Walking mounts use WASD, automatically step over one-block terrain and use
+  Space to jump. Horses retain native ridden physics so gravity and terrain
+  transitions remain correct; hold and release Space for their charged jump.
+  Flying and swimming mounts use WASD, Space to ascend and Shift to descend.
+  Every mount uses double Shift to dismount; a single Shift never ends the ride.
 - Typed per-mount abilities are configured under `abilities`. The mountain goat
   and frog have inherent high jumps. Contextual permanent upgrades are bought
   from the detail screen: water breathing and night vision for aquatic mounts,

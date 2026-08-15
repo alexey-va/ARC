@@ -43,6 +43,7 @@ open class MountModuleConfig(private val config: Config) {
     open val deceleration: Double get() = config.double("movement.deceleration", 0.38)
     open val turnSmoothing: Double get() = config.double("movement.turn-smoothing", 0.32)
     open val sprintMultiplier: Double get() = config.double("movement.sprint-multiplier", 1.15)
+    open val walkingStepHeight: Double get() = config.double("movement.walking-step-height", 1.1)
     open val jumpVelocity: Double get() = config.double("movement.jump-velocity", 0.5)
     open val verticalSpeedRatio: Double get() = config.double("movement.vertical-speed-ratio", 0.75)
     open val maximumVerticalSpeed: Double get() = config.double("movement.maximum-vertical-speed", 0.5)
@@ -118,6 +119,9 @@ open class MountModuleConfig(private val config: Config) {
         require(deceleration in 0.0..1.0) { "Mount deceleration must be between 0 and 1" }
         require(turnSmoothing in 0.0..1.0) { "Mount turn-smoothing must be between 0 and 1" }
         require(sprintMultiplier >= 1.0 && sprintMultiplier.isFinite()) { "Mount sprint-multiplier must be at least 1" }
+        require(walkingStepHeight.isFinite() && walkingStepHeight in 0.6..1.5) {
+            "Mount walking-step-height must be between 0.6 and 1.5"
+        }
         require(jumpVelocity > 0.0 && jumpVelocity.isFinite()) { "Mount jump-velocity must be positive" }
         require(verticalSpeedRatio > 0.0 && verticalSpeedRatio.isFinite()) { "Mount vertical-speed-ratio must be positive" }
         require(maximumVerticalSpeed > 0.0 && maximumVerticalSpeed.isFinite()) {

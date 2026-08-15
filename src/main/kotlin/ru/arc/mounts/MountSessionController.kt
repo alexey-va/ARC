@@ -6,7 +6,9 @@ import org.bukkit.Particle
 import org.bukkit.Sound
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
+import org.bukkit.attribute.Attribute
 import org.bukkit.entity.Bat
+import org.bukkit.entity.Horse
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Mob
 import org.bukkit.entity.Player
@@ -208,10 +210,15 @@ class MountSessionController(
             player.world.spawnParticle(Particle.END_ROD, player.location, 10, 0.4, 0.4, 0.4, 0.01)
             player.world.playSound(player.location, Sound.ENTITY_HORSE_SADDLE, 1.0f, 1.0f)
             val (controlsKey, controlsFallback) =
-                if (definition.movement == MountMovement.WALKING) {
-                    "ground-controls" to "<gray>WASD — движение, Space — прыжок, двойной Shift — спешиться"
-                } else {
-                    "flight-controls" to "<gray>WASD — движение, Space — вверх, Shift — вниз, двойной Shift — спешиться"
+                when {
+                    spawned is Horse ->
+                        "horse-controls" to
+                            "<gray>WASD — движение, удерживайте Space и отпустите — прыжок, двойной Shift — спешиться"
+                    definition.movement == MountMovement.WALKING ->
+                        "ground-controls" to "<gray>WASD — движение, Space — прыжок, двойной Shift — спешиться"
+                    else ->
+                        "flight-controls" to
+                            "<gray>WASD — движение, Space — вверх, Shift — вниз, двойной Shift — спешиться"
                 }
             player.sendActionBar(TextUtil.mm(config.message(controlsKey, controlsFallback), true))
             MountSpawnResult.SUCCESS
@@ -406,6 +413,16 @@ class MountSessionController(
         val sprint = if (session.input.sprint) config.sprintMultiplier * session.sprintMultiplier else 1.0
         val abilitySpeed = activeAbilitySpeedMultiplier(session.abilityUpgrades)
         val maximumSpeed = (session.speed * speedScale * sprint * abilitySpeed).coerceAtMost(config.maximumSpeedBlocksPerTick)
+        if (session.definition.movement == MountMovement.WALKING && entity is Horse) {
+            configureNativeHorseMotion(
+                horse = entity,
+                maximumSpeedBlocksPerTick = maximumSpeed,
+                jumpVelocity = walkingJumpVelocity(config.jumpVelocity, session.definition.abilities),
+                stepHeight = config.walkingStepHeight,
+            )
+            entity.fallDistance = 0.0f
+            return
+        }
         val planar = MountMotion.planarDirection(player.location.yaw, session.input)
         val target =
             when (session.definition.movement) {
@@ -490,7 +507,11 @@ class MountSessionController(
         entity.isGlowing = glow
         configureMountDurability(entity)
         entity.setGravity(definition.movement == MountMovement.WALKING)
+        if (definition.movement == MountMovement.WALKING) {
+            configureWalkingStepHeight(entity, configProvider().walkingStepHeight)
+        }
         (entity as? Mob)?.let(::configureMountMob)
+        (entity as? Horse)?.let { configureNativeHorse(it, player) }
         MountAppearanceApplicator.apply(entity, skin?.appearance ?: definition.appearance)
         tagEntity(entity, definition, player)
     }
@@ -533,6 +554,30 @@ internal fun configureMountMob(mob: Mob) {
     mob.removeWhenFarAway = false
     maintainMountMobState(mob)
 }
+
+internal fun configureWalkingStepHeight(entity: LivingEntity, stepHeight: Double) {
+    entity.getAttribute(Attribute.STEP_HEIGHT)?.baseValue = stepHeight
+}
+
+internal fun configureNativeHorse(horse: Horse, player: Player) {
+    horse.setAware(true)
+    horse.isTamed = true
+    horse.owner = player
+}
+
+internal fun configureNativeHorseMotion(
+    horse: Horse,
+    maximumSpeedBlocksPerTick: Double,
+    jumpVelocity: Double,
+    stepHeight: Double,
+) {
+    horse.getAttribute(Attribute.MOVEMENT_SPEED)?.baseValue = nativeHorseMovementAttribute(maximumSpeedBlocksPerTick)
+    horse.jumpStrength = jumpVelocity
+    configureWalkingStepHeight(horse, stepHeight)
+}
+
+internal fun nativeHorseMovementAttribute(maximumSpeedBlocksPerTick: Double): Double =
+    (maximumSpeedBlocksPerTick / HORSE_ATTRIBUTE_BLOCKS_PER_TICK).coerceIn(0.01, 1.0)
 
 internal fun maintainMountMobState(mob: Mob) {
     (mob as? Bat)?.setAwake(true)
@@ -577,3 +622,5 @@ internal fun shouldAllowCancelledMountSpawn(
         runCatching { UUID.fromString(owner) }.isSuccess &&
         spawnToken != null &&
         runCatching { UUID.fromString(spawnToken) }.getOrNull() in pendingSpawnTokens
+
+private const val HORSE_ATTRIBUTE_BLOCKS_PER_TICK = 2.1
