@@ -41,6 +41,64 @@ data class MountLevelDefinition(
     }
 }
 
+data class MountTuningDefinition(
+    val speedPercentages: List<Int>,
+    val walkingStepHeightsHundredths: List<Int>,
+    val walkingMaxStepHeightByLevelHundredths: List<Int>,
+) {
+    init {
+        require(speedPercentages.isNotEmpty()) { "Mount tuning speed percentages cannot be empty" }
+        require(speedPercentages == speedPercentages.distinct().sorted()) {
+            "Mount tuning speed percentages must be unique and sorted"
+        }
+        require(speedPercentages.all { it in 25..100 } && 100 in speedPercentages) {
+            "Mount tuning speed percentages must be between 25 and 100 and include 100"
+        }
+        require(speedPercentages.size <= 5) { "Mount tuning supports at most five speed options" }
+        require(walkingStepHeightsHundredths.isNotEmpty()) { "Mount tuning step heights cannot be empty" }
+        require(walkingStepHeightsHundredths == walkingStepHeightsHundredths.distinct().sorted()) {
+            "Mount tuning step heights must be unique and sorted"
+        }
+        require(walkingStepHeightsHundredths.all { it in 60..150 }) {
+            "Mount tuning step heights must be between 0.60 and 1.50 blocks"
+        }
+        require(walkingStepHeightsHundredths.size <= 5) { "Mount tuning supports at most five step-height options" }
+        require(walkingMaxStepHeightByLevelHundredths.isNotEmpty()) {
+            "Mount tuning step-height level ceilings cannot be empty"
+        }
+        require(
+            walkingMaxStepHeightByLevelHundredths ==
+                walkingMaxStepHeightByLevelHundredths.sorted(),
+        ) { "Mount tuning step-height level ceilings must be non-decreasing" }
+        require(walkingMaxStepHeightByLevelHundredths.all { it in walkingStepHeightsHundredths }) {
+            "Every mount tuning step-height level ceiling must be a configured step height"
+        }
+        require(walkingMaxStepHeightByLevelHundredths.last() == walkingStepHeightsHundredths.last()) {
+            "The final mount tuning level must unlock the highest configured step height"
+        }
+    }
+
+    fun speedPercentage(selected: Int?): Int = resolveSelection(selected, speedPercentages)
+
+    fun speed(baseSpeed: Double, selected: Int?): Double = baseSpeed * speedPercentage(selected) / 100.0
+
+    fun maximumStepHeightHundredths(level: Int): Int =
+        walkingMaxStepHeightByLevelHundredths[(level.coerceAtLeast(1) - 1).coerceAtMost(walkingMaxStepHeightByLevelHundredths.lastIndex)]
+
+    fun availableStepHeightsHundredths(level: Int): List<Int> =
+        walkingStepHeightsHundredths.filter { it <= maximumStepHeightHundredths(level) }
+
+    fun stepHeightHundredths(level: Int, selected: Int?): Int =
+        resolveSelection(selected, availableStepHeightsHundredths(level))
+
+    fun stepHeight(level: Int, selected: Int?): Double = stepHeightHundredths(level, selected) / 100.0
+
+    private fun resolveSelection(selected: Int?, available: List<Int>): Int {
+        if (selected == null) return available.last()
+        return available.lastOrNull { it <= selected } ?: available.first()
+    }
+}
+
 enum class MountEquipmentSlot(val configKey: String) {
     HEAD("head"),
     CHEST("chest"),
@@ -212,6 +270,13 @@ data class MountDefinition(
 
     fun levelPermission(level: Int): String = "arc.mounts.$id.$level"
 
+    val speedTuningPermissionPrefix: String get() = "arc.mounts.$id.tuning.speed."
+    val stepHeightTuningPermissionPrefix: String get() = "arc.mounts.$id.tuning.step-height."
+
+    fun speedTuningPermission(percentage: Int): String = "$speedTuningPermissionPrefix$percentage"
+
+    fun stepHeightTuningPermission(hundredths: Int): String = "$stepHeightTuningPermissionPrefix$hundredths"
+
     val glowPermission: String get() = "arc.mounts.$id.glow"
     val glowDisabledPermission: String get() = "arc.mounts.$id.glow.disabled"
 
@@ -260,6 +325,8 @@ data class MountProfile(
     val ownedSkinIds: Set<String> = emptySet(),
     val activeSkinId: String = MountDefinition.DEFAULT_SKIN_ID,
     val ownedAbilityIds: Set<String> = emptySet(),
+    val selectedSpeedPercentage: Int? = null,
+    val selectedStepHeightHundredths: Int? = null,
 ) {
     val unlocked: Boolean get() = level > 0
     val glowEnabled: Boolean get() = glowOwned && !glowDisabled
@@ -291,6 +358,10 @@ interface MountOwnership {
     fun grantAbility(playerId: UUID, mount: MountDefinition, ability: MountAbilityUpgradeDefinition): CompletableFuture<Void>
 
     fun revokeAbility(playerId: UUID, mount: MountDefinition, ability: MountAbilityUpgradeDefinition): CompletableFuture<Void>
+
+    fun setSpeedTuning(playerId: UUID, mount: MountDefinition, percentage: Int): CompletableFuture<Void>
+
+    fun setStepHeightTuning(playerId: UUID, mount: MountDefinition, hundredths: Int): CompletableFuture<Void>
 
     fun hasDirectPermission(playerId: UUID, permission: String): CompletableFuture<Boolean>
 

@@ -69,6 +69,7 @@ private data class MountSession(
     val entityId: UUID,
     val definition: MountDefinition,
     val speed: Double,
+    val walkingStepHeight: Double,
     val handlingMultiplier: Double,
     val sprintMultiplier: Double,
     val skin: MountSkinDefinition?,
@@ -128,6 +129,7 @@ class MountSessionController(
         player: Player,
         definition: MountDefinition,
         speed: Double,
+        walkingStepHeight: Double,
         handlingMultiplier: Double = 1.0,
         sprintMultiplier: Double = 1.0,
         durationMillis: Long,
@@ -136,6 +138,9 @@ class MountSessionController(
         abilityUpgrades: List<MountAbilityUpgradeDefinition> = emptyList(),
     ): MountSpawnResult {
         val config = configProvider()
+        require(walkingStepHeight.isFinite() && walkingStepHeight in 0.6..1.5) {
+            "Walking mount step height must be between 0.60 and 1.50 blocks"
+        }
         val now = System.currentTimeMillis()
         lastSummonAt.entries.removeIf { now - it.value >= config.summonCooldown.toMillis() }
         if (sessionsByPlayer.containsKey(player.uniqueId)) return MountSpawnResult.ALREADY_RIDING
@@ -185,7 +190,7 @@ class MountSessionController(
         }
 
         return try {
-            configureEntity(spawned, definition, glow, player, skin)
+            configureEntity(spawned, definition, glow, player, skin, walkingStepHeight)
             if (!spawned.addPassenger(player)) {
                 spawned.remove()
                 return MountSpawnResult.SPAWN_FAILED
@@ -196,6 +201,7 @@ class MountSessionController(
                     entityId = spawned.uniqueId,
                     definition = definition,
                     speed = speed,
+                    walkingStepHeight = walkingStepHeight,
                     handlingMultiplier = handlingMultiplier,
                     sprintMultiplier = sprintMultiplier,
                     skin = skin,
@@ -418,7 +424,7 @@ class MountSessionController(
                 horse = entity,
                 maximumSpeedBlocksPerTick = maximumSpeed,
                 jumpVelocity = walkingJumpVelocity(config.jumpVelocity, session.definition.abilities),
-                stepHeight = config.walkingStepHeight,
+                stepHeight = session.walkingStepHeight,
             )
             entity.fallDistance = 0.0f
             return
@@ -500,6 +506,7 @@ class MountSessionController(
         glow: Boolean,
         player: Player,
         skin: MountSkinDefinition?,
+        walkingStepHeight: Double,
     ) {
         entity.customName(Component.text(player.name, NamedTextColor.GRAY))
         entity.isCustomNameVisible = false
@@ -508,7 +515,7 @@ class MountSessionController(
         configureMountDurability(entity)
         entity.setGravity(definition.movement == MountMovement.WALKING)
         if (definition.movement == MountMovement.WALKING) {
-            configureWalkingStepHeight(entity, configProvider().walkingStepHeight)
+            configureWalkingStepHeight(entity, walkingStepHeight)
         }
         (entity as? Mob)?.let(::configureMountMob)
         (entity as? Horse)?.let { configureNativeHorse(it, player) }

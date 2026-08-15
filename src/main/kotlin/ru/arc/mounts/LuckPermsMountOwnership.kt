@@ -25,7 +25,19 @@ class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership
             mount.abilities.upgrades
                 .filter { subject.hasPermission(mount.abilityPermission(it.id)) }
                 .mapTo(linkedSetOf(), MountAbilityUpgradeDefinition::id)
-        return MountProfile(level, glowOwned, glowDisabled, ownedSkinIds, activeSkinId, ownedAbilityIds)
+        val directNodes = luckPerms.userManager.getUser(subject.uniqueId)?.nodes.orEmpty()
+        val selectedSpeedPercentage = directPositiveNumericSuffix(directNodes, mount.speedTuningPermissionPrefix)
+        val selectedStepHeightHundredths = directPositiveNumericSuffix(directNodes, mount.stepHeightTuningPermissionPrefix)
+        return MountProfile(
+            level,
+            glowOwned,
+            glowDisabled,
+            ownedSkinIds,
+            activeSkinId,
+            ownedAbilityIds,
+            selectedSpeedPercentage,
+            selectedStepHeightHundredths,
+        )
     }
 
     override fun grantLevel(playerId: UUID, mount: MountDefinition, level: Int): CompletableFuture<Void> {
@@ -121,6 +133,24 @@ class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership
         }
     }
 
+    override fun setSpeedTuning(
+        playerId: UUID,
+        mount: MountDefinition,
+        percentage: Int,
+    ): CompletableFuture<Void> =
+        setExclusiveStatePermission(playerId, mount.speedTuningPermissionPrefix, mount.speedTuningPermission(percentage))
+
+    override fun setStepHeightTuning(
+        playerId: UUID,
+        mount: MountDefinition,
+        hundredths: Int,
+    ): CompletableFuture<Void> =
+        setExclusiveStatePermission(
+            playerId,
+            mount.stepHeightTuningPermissionPrefix,
+            mount.stepHeightTuningPermission(hundredths),
+        )
+
     override fun hasDirectPermission(playerId: UUID, permission: String): CompletableFuture<Boolean> {
         val loaded = luckPerms.userManager.getUser(playerId)
         if (loaded != null) return CompletableFuture.completedFuture(hasDirectPositivePermission(loaded.nodes, permission))
@@ -136,6 +166,19 @@ class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership
             .forEach(remove)
     }
 
+    private fun setExclusiveStatePermission(
+        playerId: UUID,
+        prefix: String,
+        permission: String,
+    ): CompletableFuture<Void> =
+        luckPerms.userManager.modifyUser(playerId) { user ->
+            user.nodes
+                .filterIsInstance<PermissionNode>()
+                .filter { it.permission.startsWith(prefix) }
+                .forEach(user.data()::remove)
+            user.data().add(permission(permission))
+        }
+
     private fun hasDirectPositivePermission(playerId: UUID, permission: String): Boolean =
         hasDirectPositivePermission(luckPerms.userManager.getUser(playerId)?.nodes.orEmpty(), permission)
 
@@ -144,3 +187,11 @@ class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership
 
 internal fun hasDirectPositivePermission(nodes: Collection<Node>, permission: String): Boolean =
     nodes.filterIsInstance<PermissionNode>().any { it.permission == permission && it.value }
+
+internal fun directPositiveNumericSuffix(nodes: Collection<Node>, prefix: String): Int? =
+    nodes.filterIsInstance<PermissionNode>()
+        .asSequence()
+        .filter { it.value && it.permission.startsWith(prefix) }
+        .mapNotNull { it.permission.removePrefix(prefix).takeIf(String::isNotEmpty)?.toIntOrNull() }
+        .filter { it > 0 }
+        .minOrNull()

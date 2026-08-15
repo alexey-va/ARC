@@ -69,6 +69,35 @@ class MountPurchaseCoordinatorTest : StringSpec({
         fixture.journal.records().single().status shouldBe MountPurchaseJournalStatus.COMPLETED
     }
 
+    "speed tuning is free and persists independently from the unlocked level" {
+        val fixture = PurchaseFixture().also { it.ownership.level = 2 }
+        val tuning = MountTuningDefinition(listOf(50, 65, 80, 90, 100), listOf(60, 80, 100, 110, 125), listOf(100, 110, 125))
+        var result: MountPurchaseResult? = null
+
+        fixture.coordinator.setSpeedTuning(fixture.subject(), fixture.mount, tuning, 65) { result = it }
+
+        result shouldBe MountPurchaseResult.Success
+        fixture.ownership.selectedSpeedPercentage shouldBe 65
+        fixture.wallet.withdrawals shouldBe 0
+        fixture.journal.records() shouldBe emptyList()
+    }
+
+    "walking step tuning enforces the current level ceiling without charging" {
+        val walkingMount = testMount().copy(movement = MountMovement.WALKING)
+        val fixture = PurchaseFixture(walkingMount).also { it.ownership.level = 1 }
+        val tuning = MountTuningDefinition(listOf(50, 100), listOf(60, 80, 100, 110, 125), listOf(100, 110, 125))
+        var lockedResult: MountPurchaseResult? = null
+        var selectedResult: MountPurchaseResult? = null
+
+        fixture.coordinator.setStepHeightTuning(fixture.subject(), walkingMount, tuning, 110) { lockedResult = it }
+        fixture.coordinator.setStepHeightTuning(fixture.subject(), walkingMount, tuning, 80) { selectedResult = it }
+
+        lockedResult shouldBe MountPurchaseResult.NotForSale
+        selectedResult shouldBe MountPurchaseResult.Success
+        fixture.ownership.selectedStepHeightHundredths shouldBe 80
+        fixture.wallet.withdrawals shouldBe 0
+    }
+
     "unavailable balance cancels the prepared record without blocking future purchases" {
         val fixture = PurchaseFixture().also { it.wallet.balanceAvailable = false }
         var result: MountPurchaseResult? = null
@@ -271,9 +300,8 @@ class MountPurchaseCoordinatorTest : StringSpec({
     }
 })
 
-private class PurchaseFixture {
+private class PurchaseFixture(val mount: MountDefinition = testMount()) {
     val playerId: UUID = UUID.randomUUID()
-    val mount: MountDefinition = testMount()
     val ownership = MutableOwnership()
     val wallet = MutableWallet()
     val journal = FileMountPurchaseJournal(Files.createTempDirectory("arc-mount-purchase-").resolve("journal.json"))
@@ -307,6 +335,8 @@ private class MutableOwnership : MountOwnership {
     var level = 0
     var glow = false
     var glowDisabled = false
+    var selectedSpeedPercentage: Int? = null
+    var selectedStepHeightHundredths: Int? = null
     var failWrites = false
     val skinPermissions = hashSetOf<String>()
     val activeSkinPermissions = hashSetOf<String>()
@@ -328,6 +358,8 @@ private class MutableOwnership : MountOwnership {
             mount.abilities.upgrades
                 .filter { mount.abilityPermission(it.id) in abilityPermissions }
                 .mapTo(hashSetOf(), MountAbilityUpgradeDefinition::id),
+            selectedSpeedPercentage,
+            selectedStepHeightHundredths,
         )
 
     override fun grantLevel(playerId: UUID, mount: MountDefinition, level: Int): CompletableFuture<Void> =
@@ -382,6 +414,20 @@ private class MutableOwnership : MountOwnership {
         write {
             abilityPermissions -= mount.abilityPermission(ability.id)
             directPermissions -= mount.abilityPermission(ability.id)
+        }
+
+    override fun setSpeedTuning(playerId: UUID, mount: MountDefinition, percentage: Int): CompletableFuture<Void> =
+        write {
+            selectedSpeedPercentage = percentage
+            directPermissions.removeIf { it.startsWith(mount.speedTuningPermissionPrefix) }
+            directPermissions += mount.speedTuningPermission(percentage)
+        }
+
+    override fun setStepHeightTuning(playerId: UUID, mount: MountDefinition, hundredths: Int): CompletableFuture<Void> =
+        write {
+            selectedStepHeightHundredths = hundredths
+            directPermissions.removeIf { it.startsWith(mount.stepHeightTuningPermissionPrefix) }
+            directPermissions += mount.stepHeightTuningPermission(hundredths)
         }
 
     override fun hasDirectPermission(playerId: UUID, permission: String): CompletableFuture<Boolean> =

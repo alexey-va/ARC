@@ -43,7 +43,6 @@ open class MountModuleConfig(private val config: Config) {
     open val deceleration: Double get() = config.double("movement.deceleration", 0.38)
     open val turnSmoothing: Double get() = config.double("movement.turn-smoothing", 0.32)
     open val sprintMultiplier: Double get() = config.double("movement.sprint-multiplier", 1.15)
-    open val walkingStepHeight: Double get() = config.double("movement.walking-step-height", 1.1)
     open val jumpVelocity: Double get() = config.double("movement.jump-velocity", 0.5)
     open val verticalSpeedRatio: Double get() = config.double("movement.vertical-speed-ratio", 0.75)
     open val maximumVerticalSpeed: Double get() = config.double("movement.maximum-vertical-speed", 0.5)
@@ -54,7 +53,18 @@ open class MountModuleConfig(private val config: Config) {
     open val backCommand: String get() = config.string("gui.back-command", "m").trim().removePrefix("/")
     open val listTitle: String get() = config.string("gui.list-title", "<dark_gray><bold>Маунты")
     open val detailTitle: String get() = config.string("gui.detail-title", "<dark_gray><bold>Маунт: <mount>")
+    open val progressionTitle: String get() = config.string("gui.progression-title", "<dark_gray><bold>Развитие: <mount>")
     open val skinsTitle: String get() = config.string("gui.skins-title", "<dark_gray><bold>Облики: <mount>")
+
+    open val tuning: MountTuningDefinition
+        get() =
+            MountTuningDefinition(
+                speedPercentages = intList("tuning.speed-percentages", listOf(50, 65, 80, 90, 100)),
+                walkingStepHeightsHundredths =
+                    decimalHundredthsList("tuning.walking-step-heights", listOf("0.60", "0.80", "1.10", "1.25", "1.40")),
+                walkingMaxStepHeightByLevelHundredths =
+                    decimalHundredthsList("tuning.walking-max-step-height-by-level", listOf("1.10", "1.25", "1.40")),
+            )
 
     open fun guiStyle(role: MountGuiItemRole): MountGuiItemStyle {
         val path = "gui.items.${role.configKey}"
@@ -119,9 +129,6 @@ open class MountModuleConfig(private val config: Config) {
         require(deceleration in 0.0..1.0) { "Mount deceleration must be between 0 and 1" }
         require(turnSmoothing in 0.0..1.0) { "Mount turn-smoothing must be between 0 and 1" }
         require(sprintMultiplier >= 1.0 && sprintMultiplier.isFinite()) { "Mount sprint-multiplier must be at least 1" }
-        require(walkingStepHeight.isFinite() && walkingStepHeight in 0.6..1.5) {
-            "Mount walking-step-height must be between 0.6 and 1.5"
-        }
         require(jumpVelocity > 0.0 && jumpVelocity.isFinite()) { "Mount jump-velocity must be positive" }
         require(verticalSpeedRatio > 0.0 && verticalSpeedRatio.isFinite()) { "Mount vertical-speed-ratio must be positive" }
         require(maximumVerticalSpeed > 0.0 && maximumVerticalSpeed.isFinite()) {
@@ -132,6 +139,7 @@ open class MountModuleConfig(private val config: Config) {
             "Mount maximum-speed-blocks-per-tick must be between 0.2 and 2.0"
         }
         require(maximumHeightAboveWorld in 0..256) { "Mount maximum-height-above-world must be between 0 and 256" }
+        tuning
         MountGuiItemRole.entries.forEach(::guiStyle)
         catalog()
         return this
@@ -247,6 +255,19 @@ open class MountModuleConfig(private val config: Config) {
 
     private fun normalizedAppearanceValue(raw: String?): String? =
         raw?.trim()?.takeIf(String::isNotEmpty)?.uppercase(Locale.ROOT)
+
+    private fun intList(path: String, fallback: List<Int>): List<Int> =
+        config.stringList(path, fallback.map(Int::toString)).map { raw ->
+            raw.trim().toIntOrNull() ?: throw IllegalArgumentException("Mount '$path' contains invalid integer '$raw'")
+        }
+
+    private fun decimalHundredthsList(path: String, fallback: List<String>): List<Int> =
+        config.stringList(path, fallback).map { raw ->
+            val value = raw.trim().toBigDecimalOrNull()
+                ?: throw IllegalArgumentException("Mount '$path' contains invalid decimal '$raw'")
+            runCatching { value.movePointRight(2).intValueExact() }
+                .getOrElse { throw IllegalArgumentException("Mount '$path' value '$raw' must use at most two decimal places") }
+        }
 
     private fun requiredDouble(value: Any?, label: String): Double =
         nullableDouble(value, label) ?: throw IllegalArgumentException("$label is required")

@@ -140,6 +140,46 @@ class MountPurchaseCoordinator(
         runSetting(subject.uniqueId, callback) { ownership.setActiveSkin(subject.uniqueId, mount, skinId) }
     }
 
+    fun setSpeedTuning(
+        subject: MountPermissionSubject,
+        mount: MountDefinition,
+        tuning: MountTuningDefinition,
+        percentage: Int,
+        callback: (MountPurchaseResult) -> Unit,
+    ) {
+        val profile = ownership.profile(subject, mount)
+        if (!profile.unlocked) return callback(MountPurchaseResult.NotUnlocked)
+        if (percentage !in tuning.speedPercentages) return callback(MountPurchaseResult.NotForSale)
+        if (tuning.speedPercentage(profile.selectedSpeedPercentage) == percentage) {
+            return callback(MountPurchaseResult.AlreadyOwned)
+        }
+        runSetting(subject.uniqueId, callback) {
+            ownership.setSpeedTuning(subject.uniqueId, mount, percentage)
+        }
+    }
+
+    fun setStepHeightTuning(
+        subject: MountPermissionSubject,
+        mount: MountDefinition,
+        tuning: MountTuningDefinition,
+        hundredths: Int,
+        callback: (MountPurchaseResult) -> Unit,
+    ) {
+        val profile = ownership.profile(subject, mount)
+        if (!profile.unlocked || mount.movement != MountMovement.WALKING) {
+            return callback(MountPurchaseResult.NotUnlocked)
+        }
+        if (hundredths !in tuning.availableStepHeightsHundredths(profile.level)) {
+            return callback(MountPurchaseResult.NotForSale)
+        }
+        if (tuning.stepHeightHundredths(profile.level, profile.selectedStepHeightHundredths) == hundredths) {
+            return callback(MountPurchaseResult.AlreadyOwned)
+        }
+        runSetting(subject.uniqueId, callback) {
+            ownership.setStepHeightTuning(subject.uniqueId, mount, hundredths)
+        }
+    }
+
     fun recover(catalog: MountCatalog, onManualReview: (MountPurchaseJournalRecord) -> Unit) {
         journal.records().filter { !it.status.terminal || it.status == MountPurchaseJournalStatus.MANUAL_REVIEW }.forEach { record ->
             val mount = catalog[record.mountId]

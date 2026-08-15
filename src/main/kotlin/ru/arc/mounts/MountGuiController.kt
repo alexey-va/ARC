@@ -20,7 +20,7 @@ import java.time.Duration
 import kotlin.math.ceil
 import kotlin.math.roundToInt
 
-private enum class MountScreen { LIST, DETAIL, SKINS, CONFIRM }
+private enum class MountScreen { LIST, DETAIL, PROGRESSION, SKINS, CONFIRM }
 
 private enum class MountFilter(val title: String, val icon: Material) {
     ALL("Все", Material.COMPASS),
@@ -54,6 +54,8 @@ private class MountMenuHolder(
     val mountsBySlot: Map<Int, String> = emptyMap(),
     val skinsBySlot: Map<Int, String> = emptyMap(),
     val abilitiesBySlot: Map<Int, String> = emptyMap(),
+    val speedPercentagesBySlot: Map<Int, Int> = emptyMap(),
+    val stepHeightsBySlot: Map<Int, Int> = emptyMap(),
     val confirmAction: ConfirmAction? = null,
 ) : InventoryHolder {
     lateinit var backingInventory: Inventory
@@ -169,6 +171,59 @@ class MountGuiController(
         click(player)
     }
 
+    private fun openProgression(player: Player, mount: MountDefinition) {
+        val config = configProvider()
+        val tuning = config.tuning
+        val profile = ownership.profile(subject(player), mount)
+        val speedSlots = TUNING_SPEED_SLOTS.zip(tuning.speedPercentages).toMap()
+        val stepSlots =
+            if (mount.movement == MountMovement.WALKING) {
+                TUNING_STEP_SLOTS.zip(tuning.walkingStepHeightsHundredths).toMap()
+            } else {
+                emptyMap()
+            }
+        val holder =
+            MountMenuHolder(
+                MountScreen.PROGRESSION,
+                mount.id,
+                speedPercentagesBySlot = speedSlots,
+                stepHeightsBySlot = stepSlots,
+            )
+        val inventory =
+            Bukkit.createInventory(
+                holder,
+                TUNING_SIZE,
+                component(config.progressionTitle.replace("<mount>", escape(mount.displayName))),
+            )
+        holder.backingInventory = inventory
+        fill(inventory)
+        inventory.setItem(TUNING_INFO_SLOT, progressionInfoItem(mount, profile, tuning))
+        inventory.setItem(TUNING_LEVEL_SLOT, levelUpgradeItem(mount, profile))
+        speedSlots.forEach { (slot, percentage) ->
+            inventory.setItem(slot, speedTuningItem(mount, profile, tuning, percentage))
+        }
+        if (mount.movement == MountMovement.WALKING) {
+            stepSlots.forEach { (slot, hundredths) ->
+                inventory.setItem(slot, stepHeightTuningItem(profile, tuning, hundredths))
+            }
+        } else {
+            inventory.setItem(
+                TUNING_NOT_APPLICABLE_SLOT,
+                item(
+                    if (mount.movement == MountMovement.FLYING) Material.FEATHER else Material.HEART_OF_THE_SEA,
+                    "<gray>Высота шага не используется",
+                    listOf("<gray>Эта настройка доступна только пешим маунтам."),
+                ),
+            )
+        }
+        inventory.setItem(
+            TUNING_BACK_SLOT,
+            styledItem(MountGuiItemRole.BACK, Material.BLUE_STAINED_GLASS_PANE, "<aqua>Назад", listOf("<gray>К маунту")),
+        )
+        player.openInventory(inventory)
+        click(player)
+    }
+
     private fun openSkins(player: Player, mount: MountDefinition) {
         val profile = ownership.profile(subject(player), mount)
         val allSkinIds = listOf(MountDefinition.DEFAULT_SKIN_ID) + mount.skins.map(MountSkinDefinition::id)
@@ -210,6 +265,7 @@ class MountGuiController(
         when (holder.screen) {
             MountScreen.LIST -> handleListClick(player, holder, event)
             MountScreen.DETAIL -> handleDetailClick(player, holder, event.rawSlot)
+            MountScreen.PROGRESSION -> handleProgressionClick(player, holder, event.rawSlot)
             MountScreen.SKINS -> handleSkinClick(player, holder, event.rawSlot)
             MountScreen.CONFIRM -> handleConfirmClick(player, holder, event.rawSlot)
         }
@@ -258,10 +314,7 @@ class MountGuiController(
             DETAIL_SUMMON_SLOT -> if (profile.unlocked) summon(player, mount, profile) else bass(player)
             DETAIL_SKINS_SLOT -> if (profile.unlocked) openSkins(player, mount) else bass(player)
             DETAIL_UPGRADE_SLOT -> {
-                val target = profile.level + 1
-                if (target > mount.maxLevel || mount.price(target) == null) bass(player)
-                else if (!configProvider().purchasesEnabled) purchasesDisabled(player)
-                else openConfirm(player, mount, ConfirmAction.Level(target))
+                openProgression(player, mount)
             }
             DETAIL_GLOW_SLOT -> {
                 when {
@@ -277,12 +330,48 @@ class MountGuiController(
         }
     }
 
+    private fun handleProgressionClick(player: Player, holder: MountMenuHolder, slot: Int) {
+        val mount = holder.mountId?.let(catalogProvider()::get) ?: return openList(player)
+        val profile = ownership.profile(subject(player), mount)
+        val tuning = configProvider().tuning
+        when (slot) {
+            TUNING_BACK_SLOT -> openDetail(player, mount.id)
+            TUNING_LEVEL_SLOT -> {
+                val target = profile.level + 1
+                when {
+                    target > mount.maxLevel || mount.price(target) == null -> bass(player)
+                    !configProvider().purchasesEnabled -> purchasesDisabled(player)
+                    else -> openConfirm(player, mount, ConfirmAction.Level(target))
+                }
+            }
+            else -> {
+                holder.speedPercentagesBySlot[slot]?.let { percentage ->
+                    purchases.setSpeedTuning(subject(player), mount, tuning, percentage) {
+                        handlePurchaseResult(player, mount, it, purchase = false, reopen = MountScreen.PROGRESSION)
+                    }
+                    return
+                }
+                holder.stepHeightsBySlot[slot]?.let { hundredths ->
+                    if (!profile.unlocked || hundredths !in tuning.availableStepHeightsHundredths(profile.level)) {
+                        bass(player)
+                        return
+                    }
+                    purchases.setStepHeightTuning(subject(player), mount, tuning, hundredths) {
+                        handlePurchaseResult(player, mount, it, purchase = false, reopen = MountScreen.PROGRESSION)
+                    }
+                }
+            }
+        }
+    }
+
     private fun handleSkinClick(player: Player, holder: MountMenuHolder, slot: Int) {
         val mount = holder.mountId?.let(catalogProvider()::get) ?: return openList(player)
         val skinId = holder.skinsBySlot[slot] ?: if (slot == SKINS_BACK_SLOT) return openDetail(player, mount.id) else return
         val profile = ownership.profile(subject(player), mount)
         if (profile.ownsSkin(skinId)) {
-            purchases.setActiveSkin(subject(player), mount, skinId) { handlePurchaseResult(player, mount, it, purchase = false, reopenSkins = true) }
+            purchases.setActiveSkin(subject(player), mount, skinId) {
+                handlePurchaseResult(player, mount, it, purchase = false, reopen = MountScreen.SKINS)
+            }
             return
         }
         val skin = mount.skin(skinId) ?: return
@@ -297,11 +386,22 @@ class MountGuiController(
         when (slot) {
             CONFIRM_CANCEL_SLOT -> when (action) {
                 is ConfirmAction.Skin -> openSkins(player, mount)
+                is ConfirmAction.Level -> openProgression(player, mount)
                 else -> openDetail(player, mount.id)
             }
             CONFIRM_ACCEPT_SLOT -> {
                 val callback: (MountPurchaseResult) -> Unit = { result ->
-                    handlePurchaseResult(player, mount, result, reopenSkins = action is ConfirmAction.Skin)
+                    handlePurchaseResult(
+                        player,
+                        mount,
+                        result,
+                        reopen =
+                            when (action) {
+                                is ConfirmAction.Skin -> MountScreen.SKINS
+                                is ConfirmAction.Level -> MountScreen.PROGRESSION
+                                else -> MountScreen.DETAIL
+                            },
+                    )
                 }
                 when (action) {
                     is ConfirmAction.Level -> purchases.purchaseLevel(subject(player), mount, action.level, callback)
@@ -315,12 +415,14 @@ class MountGuiController(
 
     private fun summon(player: Player, mount: MountDefinition, profile: MountProfile) {
         val level = mount.level(profile.level)
+        val tuning = configProvider().tuning
         val skin = mount.skin(profile.activeSkinId)
         val result =
             sessions.spawn(
                 player = player,
                 definition = mount,
-                speed = level.speed,
+                speed = tuning.speed(level.speed, profile.selectedSpeedPercentage),
+                walkingStepHeight = tuning.stepHeight(profile.level, profile.selectedStepHeightHundredths),
                 handlingMultiplier = level.handlingMultiplier,
                 sprintMultiplier = level.sprintMultiplier,
                 durationMillis = configProvider().sessionDuration.toMillis(),
@@ -353,20 +455,19 @@ class MountGuiController(
         mount: MountDefinition,
         result: MountPurchaseResult,
         purchase: Boolean = true,
-        reopenSkins: Boolean = false,
+        reopen: MountScreen = MountScreen.DETAIL,
     ) {
         if (!active || !player.isOnline) return
         when (result) {
             MountPurchaseResult.Success -> {
                 send(player, if (purchase) "purchase-success" else "setting-saved", if (purchase) "<green>Покупка сохранена!" else "<green>Настройка сохранена.")
                 click(player)
-                if (reopenSkins) openSkins(player, mount) else openDetail(player, mount.id)
+                reopen(player, mount, reopen)
             }
             MountPurchaseResult.Busy -> send(player, "purchase-busy", "<yellow>Предыдущая операция ещё выполняется.")
             MountPurchaseResult.AlreadyOwned -> {
                 send(player, "already-owned", "<yellow>Это уже выбрано или куплено.")
-                if (reopenSkins) openSkins(player, mount)
-                else openDetail(player, mount.id)
+                reopen(player, mount, reopen)
             }
             MountPurchaseResult.InvalidLevel -> send(player, "invalid-level", "<red>Сначала купите предыдущий уровень.")
             MountPurchaseResult.NotUnlocked -> send(player, "not-unlocked", "<red>Сначала разблокируйте маунта или облик.")
@@ -388,6 +489,14 @@ class MountGuiController(
         if (result != MountPurchaseResult.Success && result != MountPurchaseResult.AlreadyOwned) bass(player)
     }
 
+    private fun reopen(player: Player, mount: MountDefinition, screen: MountScreen) {
+        when (screen) {
+            MountScreen.PROGRESSION -> openProgression(player, mount)
+            MountScreen.SKINS -> openSkins(player, mount)
+            else -> openDetail(player, mount.id)
+        }
+    }
+
     private fun mountIcon(mount: MountDefinition, profile: MountProfile, detailed: Boolean = false): ItemStack {
         val lore = buildList {
             add("${mount.rarity.color}${mount.rarity.displayName}")
@@ -398,7 +507,12 @@ class MountGuiController(
             add("<dark_gray>● <gray>Получение: <white>${escape(mount.acquisition)}")
             add(if (profile.unlocked) "<dark_gray>● <gray>Уровень: <yellow>${profile.level}<gray>/${mount.maxLevel}" else "<dark_gray>● <gray>Статус: <red>не получен")
             if (profile.unlocked) {
-                add("<dark_gray>● <gray>Скорость: <white>${formatSpeed(mount.speed(profile.level))}")
+                val tuning = configProvider().tuning
+                val selectedSpeed = tuning.speedPercentage(profile.selectedSpeedPercentage)
+                add("<dark_gray>● <gray>Скорость: <white>${formatSpeed(tuning.speed(mount.speed(profile.level), profile.selectedSpeedPercentage))} <dark_gray>($selectedSpeed%)")
+                if (mount.movement == MountMovement.WALKING) {
+                    add("<dark_gray>● <gray>Высота шага: <white>${formatHeight(tuning.stepHeight(profile.level, profile.selectedStepHeightHundredths))} блока")
+                }
                 add("<dark_gray>● <gray>Облик: <white>${escape(skinName(mount, profile.activeSkinId))}")
             }
             if (detailed && mount.description.isNotEmpty()) {
@@ -422,12 +536,36 @@ class MountGuiController(
     }
 
     private fun upgradeItem(mount: MountDefinition, profile: MountProfile): ItemStack {
+        val tuning = configProvider().tuning
+        return item(
+            Material.COMPARATOR,
+            "<gold>Развитие и тюнинг",
+            buildList {
+                add("<gray>Уровень: <yellow>${profile.level}<gray>/${mount.maxLevel}")
+                if (profile.unlocked) {
+                    add("<gray>Скорость: <white>${tuning.speedPercentage(profile.selectedSpeedPercentage)}% <dark_gray>от доступной")
+                    if (mount.movement == MountMovement.WALKING) {
+                        add("<gray>Высота шага: <white>${formatHeight(tuning.stepHeight(profile.level, profile.selectedStepHeightHundredths))} блока")
+                    }
+                }
+                add("")
+                add("<gray>Повышайте уровень и настраивайте")
+                add("<gray>характеристики под себя.")
+                add("")
+                add("<green>Нажмите, чтобы открыть")
+            },
+            glint = profile.level >= mount.maxLevel,
+        )
+    }
+
+    private fun levelUpgradeItem(mount: MountDefinition, profile: MountProfile): ItemStack {
         val next = profile.level + 1
         return when {
-            profile.level >= mount.maxLevel -> item(Material.NETHER_STAR, "<gold><bold>Финальный уровень достигнут", listOf("<gray>Маунт раскрыт на полную скорость.", "<white>${formatSpeed(mount.speed(mount.maxLevel))} <gray>ед. скорости"), glint = true)
+            profile.level >= mount.maxLevel -> item(Material.NETHER_STAR, "<gold><bold>Максимальный уровень", listOf("<gray>Все пределы характеристик открыты.", "<gray>Текущие значения можно менять ниже."), glint = true)
             mount.price(next) == null -> item(Material.BARRIER, if (profile.unlocked) "<red>Особое улучшение" else "<red>Особый маунт", listOf("<gray>Этот уровень получается другим способом.", "<white>${escape(mount.acquisition)}"))
             else -> {
                 val level = mount.level(next)
+                val tuning = configProvider().tuning
                 val previousSpeed = if (profile.level > 0) mount.speed(profile.level) else null
                 val delta = previousSpeed?.let { (((level.speed / it) - 1.0) * 100.0).roundToInt() }
                 val final = next == mount.maxLevel
@@ -440,6 +578,15 @@ class MountGuiController(
                         if (delta != null) add("<gray>Прирост: <${if (final) "gold" else "green"}>+$delta%")
                         add("<gray>Управляемость: <white>×${formatMultiplier(level.handlingMultiplier)}")
                         if (level.sprintMultiplier > 1.0) add("<gray>Форсаж: <white>×${formatMultiplier(level.sprintMultiplier)}")
+                        if (mount.movement == MountMovement.WALKING) {
+                            val previousHeight = if (profile.level > 0) tuning.maximumStepHeightHundredths(profile.level) else null
+                            val nextHeight = tuning.maximumStepHeightHundredths(next)
+                            if (previousHeight == null) {
+                                add("<gray>Макс. подъём: <white>${formatHeight(nextHeight / 100.0)} блока")
+                            } else if (previousHeight != nextHeight) {
+                                add("<gray>Макс. подъём: <white>${formatHeight(previousHeight / 100.0)} <dark_gray>→ <green>${formatHeight(nextHeight / 100.0)} блока")
+                            }
+                        }
                         add("")
                         add("<gray>Цена: <yellow>${TextUtil.formatAmount(checkNotNull(level.price))}<white>💰")
                         if (final) add("<gold>Дорогая престижная цель — и реально быстрый маунт.")
@@ -450,6 +597,91 @@ class MountGuiController(
                 )
             }
         }
+    }
+
+    private fun progressionInfoItem(
+        mount: MountDefinition,
+        profile: MountProfile,
+        tuning: MountTuningDefinition,
+    ): ItemStack =
+        item(
+            Material.RECOVERY_COMPASS,
+            "<gold>Профиль движения",
+            buildList {
+                add("<gray>Уровень открывает максимум характеристик.")
+                add("<gray>Вы сами выбираете значение внутри предела.")
+                add("")
+                if (!profile.unlocked) {
+                    add("<red>Сначала получите маунта ниже.")
+                } else {
+                    val levelSpeed = mount.speed(profile.level)
+                    add("<gray>Скорость: <white>${formatSpeed(tuning.speed(levelSpeed, profile.selectedSpeedPercentage))} <dark_gray>/ ${formatSpeed(levelSpeed)}")
+                    if (mount.movement == MountMovement.WALKING) {
+                        add("<gray>Высота шага: <white>${formatHeight(tuning.stepHeight(profile.level, profile.selectedStepHeightHundredths))} <dark_gray>/ ${formatHeight(tuning.maximumStepHeightHundredths(profile.level) / 100.0)} блока")
+                    }
+                    add("")
+                    add("<dark_gray>Тюнинг бесплатный и сохраняется между серверами.")
+                }
+            },
+        )
+
+    private fun speedTuningItem(
+        mount: MountDefinition,
+        profile: MountProfile,
+        tuning: MountTuningDefinition,
+        percentage: Int,
+    ): ItemStack {
+        val selected = profile.unlocked && tuning.speedPercentage(profile.selectedSpeedPercentage) == percentage
+        val material =
+            if (!profile.unlocked) Material.GRAY_DYE
+            else SPEED_TUNING_MATERIALS[tuning.speedPercentages.indexOf(percentage).coerceAtLeast(0)]
+        return item(
+            material,
+            if (selected) "<green>Скорость: $percentage%" else "<aqua>Скорость: $percentage%",
+            buildList {
+                if (profile.unlocked) {
+                    add("<gray>Фактически: <white>${formatSpeed(mount.speed(profile.level) * percentage / 100.0)}")
+                    add("<gray>От максимума уровня: <white>$percentage%")
+                    add("")
+                    add(if (selected) "<green>Выбрано" else "<green>Нажмите, чтобы выбрать")
+                } else {
+                    add("<red>Сначала получите маунта")
+                }
+            },
+            glint = selected,
+        )
+    }
+
+    private fun stepHeightTuningItem(
+        profile: MountProfile,
+        tuning: MountTuningDefinition,
+        hundredths: Int,
+    ): ItemStack {
+        val available = profile.unlocked && hundredths <= tuning.maximumStepHeightHundredths(profile.level)
+        val selected = available && tuning.stepHeightHundredths(profile.level, profile.selectedStepHeightHundredths) == hundredths
+        val requiredLevel =
+            tuning.walkingMaxStepHeightByLevelHundredths.indexOfFirst { it >= hundredths }
+                .takeIf { it >= 0 }
+                ?.plus(1)
+        val material =
+            if (!available) Material.BARRIER
+            else STEP_TUNING_MATERIALS[tuning.walkingStepHeightsHundredths.indexOf(hundredths).coerceAtLeast(0)]
+        return item(
+            material,
+            if (selected) "<green>Подъём: ${formatHeight(hundredths / 100.0)} блока" else "<yellow>Подъём: ${formatHeight(hundredths / 100.0)} блока",
+            buildList {
+                add("<gray>Маунт автоматически заходит")
+                add("<gray>на препятствия этой высоты.")
+                add("")
+                when {
+                    !profile.unlocked -> add("<red>Сначала получите маунта")
+                    !available -> add("<red>Откроется на уровне ${requiredLevel ?: "выше"}")
+                    selected -> add("<green>Выбрано")
+                    else -> add("<green>Нажмите, чтобы выбрать")
+                }
+            },
+            glint = selected,
+        )
     }
 
     private fun summonItem(profile: MountProfile, duration: Duration): ItemStack =
@@ -532,7 +764,17 @@ class MountGuiController(
         when (action) {
             is ConfirmAction.Level -> {
                 val level = mount.level(action.level)
-                Triple(if (action.level == mount.maxLevel) "<gold><bold>ФИНАЛЬНЫЙ РЫВОК" else "<green>Уровень ${action.level}", checkNotNull(level.price), listOf("<gray>${escape(mount.displayName)}", "<gray>Новая скорость: <white>${formatSpeed(level.speed)}"))
+                Triple(
+                    if (action.level == mount.maxLevel) "<gold><bold>ФИНАЛЬНЫЙ РЫВОК" else "<green>Уровень ${action.level}",
+                    checkNotNull(level.price),
+                    buildList {
+                        add("<gray>${escape(mount.displayName)}")
+                        add("<gray>Максимальная скорость: <white>${formatSpeed(level.speed)}")
+                        if (mount.movement == MountMovement.WALKING) {
+                            add("<gray>Максимальный подъём: <white>${formatHeight(configProvider().tuning.maximumStepHeightHundredths(action.level) / 100.0)} блока")
+                        }
+                    },
+                )
             }
             ConfirmAction.Glow -> Triple("<green>Свечение", checkNotNull(mount.glowPrice), listOf("<gray>${escape(mount.displayName)}", "<gray>Косметика покупается навсегда"))
             is ConfirmAction.Skin -> {
@@ -612,6 +854,7 @@ class MountGuiController(
     }
     private fun skinName(mount: MountDefinition, skinId: String): String = if (skinId == MountDefinition.DEFAULT_SKIN_ID) "Классический" else mount.skin(skinId)?.displayName ?: "Классический"
     private fun formatSpeed(value: Double): String = "%.2f".format(java.util.Locale.ROOT, value).trimEnd('0').trimEnd('.')
+    private fun formatHeight(value: Double): String = "%.2f".format(java.util.Locale.ROOT, value)
     private fun formatMultiplier(value: Double): String = "%.2f".format(java.util.Locale.ROOT, value).trimEnd('0').trimEnd('.')
     private fun formatDuration(duration: Duration): String {
         val seconds = duration.seconds.coerceAtLeast(1L)
@@ -640,6 +883,30 @@ class MountGuiController(
         private const val DETAIL_SKINS_SLOT = 31
         private val DETAIL_ABILITY_SLOTS = listOf(29, 30, 32, 33)
         private const val DETAIL_BACK_SLOT = 36
+
+        private const val TUNING_SIZE = 54
+        private const val TUNING_INFO_SLOT = 4
+        private const val TUNING_LEVEL_SLOT = 13
+        private val TUNING_SPEED_SLOTS = listOf(20, 21, 22, 23, 24)
+        private val TUNING_STEP_SLOTS = listOf(29, 30, 31, 32, 33)
+        private const val TUNING_NOT_APPLICABLE_SLOT = 31
+        private const val TUNING_BACK_SLOT = 45
+        private val SPEED_TUNING_MATERIALS =
+            listOf(
+                Material.LEATHER_BOOTS,
+                Material.CHAINMAIL_BOOTS,
+                Material.IRON_BOOTS,
+                Material.GOLDEN_BOOTS,
+                Material.DIAMOND_BOOTS,
+            )
+        private val STEP_TUNING_MATERIALS =
+            listOf(
+                Material.OAK_SLAB,
+                Material.OAK_STAIRS,
+                Material.GRASS_BLOCK,
+                Material.PISTON,
+                Material.GOAT_HORN,
+            )
 
         private const val SKINS_SIZE = 54
         private val SKIN_CONTENT_SLOTS = listOf(10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34)

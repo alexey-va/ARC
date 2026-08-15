@@ -1,0 +1,28 @@
+# ARC mounts
+
+The native mounts module is configured in `plugins/ARC/modules/mounts.yml`. The bundled resource is server-neutral; RusCrafting-specific ItemsAdder GUI models stay only in the runtime mirrors.
+
+## Progression and tuning
+
+Each configured level unlocks a maximum base speed. Walking levels also unlock a maximum automatic step height. Players can freely select a lower active value in `/mount` → mount details → **Развитие и тюнинг**:
+
+- `tuning.speed-percentages` selects a percentage of the current level speed;
+- `tuning.walking-step-heights` contains exact selectable native step heights in blocks;
+- `tuning.walking-max-step-height-by-level` defines the non-decreasing ceiling unlocked by each level.
+
+With no saved choice, the maximum unlocked value is active. A saved lower choice persists after an upgrade. If a level is revoked, an out-of-range step height is clamped to the new ceiling at runtime.
+
+## Permission state
+
+Ownership and player settings use only the `arc.mounts.*` namespace. Tuning is stored as one direct positive LuckPerms node per setting:
+
+```text
+arc.mounts.<mount>.tuning.speed.<percentage>
+arc.mounts.<mount>.tuning.step-height.<hundredths>
+```
+
+For example, 65% speed and a 1.10-block step height are `arc.mounts.horse.tuning.speed.65` and `arc.mounts.horse.tuning.step-height.110`. Setters remove older nodes with the same exact prefix before writing the new state, so spawn and survival resolve one shared choice.
+
+## Runtime behavior
+
+The resolved speed and step height are copied into the mount session at summon time. Non-horse walking mounts use ARC velocity plus the native `STEP_HEIGHT` attribute. Horses retain native ridden movement and charged jumping, while ARC applies the configured speed, jump strength, and selected step height continuously.

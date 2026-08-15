@@ -92,7 +92,9 @@ class MountModuleConfigTest : StringSpec({
         config.ownershipMigrationComplete shouldBe false
         config.purchasesEnabled shouldBe false
         config.riderKnockoffDamage shouldBe 6.0
-        config.walkingStepHeight shouldBe 1.1
+        config.tuning.speedPercentages shouldBe listOf(50, 65, 80, 90, 100)
+        config.tuning.walkingStepHeightsHundredths shouldBe listOf(60, 80, 110, 125, 140)
+        config.tuning.walkingMaxStepHeightByLevelHundredths shouldBe listOf(110, 125, 140)
     }
 
     "bundled GUI remains resource-pack neutral" {

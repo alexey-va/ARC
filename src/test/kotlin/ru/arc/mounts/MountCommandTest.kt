@@ -25,7 +25,7 @@ class MountCommandTest : StringSpec({
         fixture.command.onCommand(fixture.player, fixture.bukkitCommand, "mount", emptyArray()) shouldBe true
 
         verify(exactly = 1) { fixture.openMenu(fixture.player) }
-        verify(exactly = 0) { fixture.sessions.spawn(any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { fixture.sessions.spawn(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) }
     }
 
     "admin summon uses a configured level instead of arbitrary raw speed" {
@@ -35,6 +35,7 @@ class MountCommandTest : StringSpec({
                 player = fixture.player,
                 definition = mount,
                 speed = mount.level(3).speed,
+                walkingStepHeight = 1.4,
                 handlingMultiplier = mount.level(3).handlingMultiplier,
                 sprintMultiplier = mount.level(3).sprintMultiplier,
                 durationMillis = 10_000L,
@@ -56,6 +57,7 @@ class MountCommandTest : StringSpec({
                 player = fixture.player,
                 definition = mount,
                 speed = 0.9,
+                walkingStepHeight = 1.4,
                 handlingMultiplier = 1.28,
                 sprintMultiplier = 1.12,
                 durationMillis = 10_000L,
@@ -76,7 +78,7 @@ class MountCommandTest : StringSpec({
             arrayOf("admin", "summon", "bee"),
         ) shouldBe true
 
-        verify(exactly = 0) { fixture.sessions.spawn(any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { fixture.sessions.spawn(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) }
         fixture.command.onTabComplete(fixture.player, fixture.bukkitCommand, "mount", arrayOf(""))
             .shouldContainExactly("help", "menu")
     }
@@ -196,6 +198,7 @@ private fun commandFixture(catalog: MountCatalog, admin: Boolean = false): Mount
     }
     val config = mockk<MountModuleConfig> {
         every { adminSessionDuration } returns java.time.Duration.ofSeconds(10)
+        every { tuning } returns MountTuningDefinition(listOf(50, 65, 80, 90, 100), listOf(60, 80, 110, 125, 140), listOf(110, 125, 140))
     }
     val sessions = mockk<MountSessionController>(relaxed = true)
     val openMenu = mockk<(Player) -> Unit>(relaxed = true)

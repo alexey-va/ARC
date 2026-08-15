@@ -85,6 +85,7 @@ class MountCommand(
                 player = player,
                 definition = mount,
                 speed = configuredLevel.speed,
+                walkingStepHeight = config().tuning.stepHeight(level, null),
                 handlingMultiplier = configuredLevel.handlingMultiplier,
                 sprintMultiplier = configuredLevel.sprintMultiplier,
                 durationMillis = config().adminSessionDuration.toMillis(),

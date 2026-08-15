@@ -45,6 +45,8 @@ class MountDomainTest : StringSpec({
         mount.skinPermission("baby") shouldBe "arc.mounts.bee.skin.baby"
         mount.activeSkinPermission("baby") shouldBe "arc.mounts.bee.skin.active.baby"
         mount.abilityPermission("night-vision") shouldBe "arc.mounts.bee.ability.night-vision"
+        mount.speedTuningPermission(65) shouldBe "arc.mounts.bee.tuning.speed.65"
+        mount.stepHeightTuningPermission(110) shouldBe "arc.mounts.bee.tuning.step-height.110"
     }
 
     "disabled glow permission wins after glow was purchased" {
@@ -64,6 +66,43 @@ class MountDomainTest : StringSpec({
 
         hasDirectPositivePermission(listOf(permissionNode("*")), disabled) shouldBe false
         hasDirectPositivePermission(listOf(permissionNode(disabled)), disabled) shouldBe true
+    }
+
+    "direct tuning state accepts only positive exact numeric suffixes and resolves duplicates conservatively" {
+        val prefix = testMount().speedTuningPermissionPrefix
+
+        directPositiveNumericSuffix(
+            listOf(
+                permissionNode("$prefix${90}"),
+                permissionNode("$prefix${65}"),
+                permissionNode("arc.mounts.bee.tuning.speed.fast"),
+                permissionNode("arc.mounts.bee.tuning.step-height.100"),
+            ),
+            prefix,
+        ) shouldBe 65
+    }
+
+    "level ceilings unlock step height while player tuning can stay below the maximum" {
+        val tuning = MountTuningDefinition(listOf(50, 65, 80, 90, 100), listOf(60, 80, 100, 110, 125), listOf(100, 110, 125))
+
+        tuning.speed(4.8, 65) shouldBe (3.12 plusOrMinus 1.0e-9)
+        tuning.speedPercentage(null) shouldBe 100
+        tuning.stepHeight(1, null) shouldBeExactly 1.0
+        tuning.stepHeight(2, 80) shouldBeExactly 0.8
+        tuning.stepHeight(2, 125) shouldBeExactly 1.1
+        tuning.stepHeight(3, null) shouldBeExactly 1.25
+    }
+
+    "tuning rejects unordered or unsafe GUI options" {
+        shouldThrow<IllegalArgumentException> {
+            MountTuningDefinition(listOf(100, 65), listOf(60, 100), listOf(100))
+        }
+        shouldThrow<IllegalArgumentException> {
+            MountTuningDefinition(listOf(50, 100), listOf(60, 100), listOf(110))
+        }
+        shouldThrow<IllegalArgumentException> {
+            MountTuningDefinition(listOf(50, 100), listOf(60, 100, 125), listOf(100))
+        }
     }
 
     "planar input is normalized so diagonal movement is not faster" {
@@ -235,6 +274,8 @@ private class TestOwnership : MountOwnership {
     override fun setActiveSkin(playerId: UUID, mount: MountDefinition, skinId: String) = CompletableFuture.completedFuture<Void>(null)
     override fun grantAbility(playerId: UUID, mount: MountDefinition, ability: MountAbilityUpgradeDefinition) = CompletableFuture.completedFuture<Void>(null)
     override fun revokeAbility(playerId: UUID, mount: MountDefinition, ability: MountAbilityUpgradeDefinition) = CompletableFuture.completedFuture<Void>(null)
+    override fun setSpeedTuning(playerId: UUID, mount: MountDefinition, percentage: Int) = CompletableFuture.completedFuture<Void>(null)
+    override fun setStepHeightTuning(playerId: UUID, mount: MountDefinition, hundredths: Int) = CompletableFuture.completedFuture<Void>(null)
     override fun hasDirectPermission(playerId: UUID, permission: String) = CompletableFuture.completedFuture(false)
     override fun resolveUniqueId(playerName: String) = CompletableFuture.completedFuture<UUID?>(null)
 }

@@ -29,7 +29,9 @@ cd ~/mcserver && ./scripts/mc arc classic classic_survival
 
 ## Features
 
-Treasure hunts, auto-building, stock simulation, auction (Redis pub/sub), x-server announcements, farms/mines.
+Treasure hunts, auto-building, stock simulation, auction (Redis pub/sub), x-server announcements, farms/mines, and native cross-server mounts with progression, cosmetics, abilities, and player tuning.
+
+Mount configuration and permission-state contract: [`docs/mounts.md`](docs/mounts.md).
 
 ## Dependencies
 
