@@ -135,12 +135,22 @@ commands:
     permission: arc.give
     player-only: false
     usage: /arc give <player|list> <preset> [amount]
+  pouch:
+    name: pouch
+    aliases: [мешочек]
+    permission: arc.pouch
+    player-only: false
+    usage: /arc pouch <list|player> [pouch] [amount]
   soundfollow:
     name: soundfollow
     aliases: [sound-follow]
     permission: arc.sound-follow
     usage: /arc soundfollow <player> <namespace:sound>
 messages:
+  pouch:
+    unknown: '<red>Неизвестный мешочек: <white>%pouch%<gray>. Список: <white>/arc pouch list'
+    invalid: '<red>Мешочек <white>%pouch%<red> временно недоступен из-за ошибки настройки.'
+    success: '<green>Выдано <white>%count%<green> мешочков <white>%pouch%<green> игроку <white>%player%'
   contracts:
     header: '<gold>═══ Доска контрактов ═══'
     calibration: '<gray>Идёт калибровка экономики. Первые ресурсные заказы появятся после чистого периода наблюдений.'

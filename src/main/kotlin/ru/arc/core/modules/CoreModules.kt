@@ -52,6 +52,7 @@ import ru.arc.sync.SkillsSync
 import ru.arc.sync.SlimefunSync
 import ru.arc.sync.SyncManager
 import ru.arc.treasure.core.Treasures
+import ru.arc.treasure.pouch.Pouches
 import ru.arc.treasurechests.HuntFurnitureJanitor
 import ru.arc.treasurechests.HuntFurnitureRegistry
 import ru.arc.treasurechests.TreasureHuntManager
@@ -505,6 +506,7 @@ object TreasureModule : PluginModule {
 
     override fun init() {
         Treasures.init()
+        Pouches.init()
         TreasureHuntRegistry.init()
         HuntFurnitureRegistry.init()
         HuntFurnitureJanitor.init(Tasks.scheduler)
@@ -512,6 +514,7 @@ object TreasureModule : PluginModule {
 
     override fun reload() {
         Treasures.reload()
+        Pouches.reload()
         TreasureHuntManager.loadTreasureHuntTypes()
     }
 

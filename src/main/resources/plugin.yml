@@ -83,6 +83,9 @@ commands:
     usage: /mount [menu|help|admin]
     permission: arc.mounts.use
 permissions:
+  arc.pouch:
+    description: Give YAML-defined ARC reward pouches
+    default: op
   arc.hide.bypass:
     description: Bypass all CommandHide groups
     default: op

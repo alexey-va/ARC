@@ -1,0 +1,208 @@
+# Большие мешочки ARC. chance принимает 0..1 или проценты.
+# custom_data `arc:pouch_id` добавляется автоматически.
+pouches:
+  supplies:
+    description: Еда, материалы и небольшой денежный бонус
+    item:
+      material: BUNDLE
+      display: '<gold><bold>Мешочек припасов'
+      lore:
+        - '<gray>Внутри несколько независимых наград'
+        - '<white>• <green>3–5 <gray>припасов'
+        - '<white>• <aqua>1 <gray>находка исследователя'
+        - '<white>• <yellow>35% <gray>монеты'
+        - ''
+        - '<yellow>ПКМ — открыть'
+      glowing: true
+    rewards:
+      - { pool: vanilla_food, rolls: 3-5 }
+      - { pool: vanilla_exploration, rolls: 1 }
+      - { pool: smallmoney, rolls: 1, chance: 35% }
+    open:
+      message: '<green>Мешочек припасов открыт! <gray>Получено наград: <white>%rewards%'
+      sound: entity.item.pickup
+      pitch: 0.8
+
+  builder:
+    description: Строительные блоки, декор и редстоун
+    item:
+      material: CHEST
+      display: '<aqua><bold>Мешочек архитектора'
+      lore:
+        - '<white>• <aqua>4–6 <gray>строительных наград'
+        - '<white>• <red>1–2 <gray>редстоун-награды'
+        - '<white>• <yellow>25% <gray>монеты'
+        - ''
+        - '<yellow>ПКМ — открыть'
+      glowing: true
+    rewards:
+      - { pool: vanilla_building, rolls: 4-6 }
+      - { pool: vanilla_redstone, rolls: 1-2 }
+      - { pool: smallmoney, rolls: 1, chance: 25% }
+
+  miner:
+    description: Руды, шахтёрские расходники и шанс зачарования
+    item:
+      material: RAW_GOLD_BLOCK
+      display: '<yellow><bold>Мешочек шахтёра'
+      lore:
+        - '<white>• <gold>4–6 <gray>шахтёрских наград'
+        - '<white>• <light_purple>30% <gray>зачарованные книги'
+        - '<white>• <yellow>35% <gray>монеты'
+        - ''
+        - '<yellow>ПКМ — открыть'
+      glowing: true
+    rewards:
+      - { pool: vanilla_mining, rolls: 4-6 }
+      - { pool: vanillaenchant, rolls: 1, chance: 30% }
+      - { pool: smallmoney, rolls: 1, chance: 35% }
+
+  explorer:
+    description: Трофеи из разных измерений и боевые припасы
+    item:
+      material: ENDER_CHEST
+      display: '<light_purple><bold>Мешочек исследователя'
+      lore:
+        - '<white>• <aqua>3–4 <gray>редкие находки'
+        - '<white>• <red>1–2 <gray>боевые награды'
+        - '<white>• <light_purple>35% <gray>случайные зелья'
+        - ''
+        - '<yellow>ПКМ — открыть'
+      glowing: true
+    rewards:
+      - { pool: vanilla_exploration, rolls: 3-4 }
+      - { pool: vanilla_combat, rolls: 1-2 }
+      - { pool: vanillapotion, rolls: 1, chance: 35% }
+
+  slimefun_starter:
+    description: Базовые материалы и еда Slimefun
+    item:
+      material: IRON_INGOT
+      display: '<green><bold>Мешочек Slimefun: Старт'
+      lore:
+        - '<white>• <green>3–5 <gray>SF-материалов'
+        - '<white>• <yellow>1–2 <gray>SF-расходника'
+        - '<white>• <gold>30% <gray>монеты'
+        - ''
+        - '<yellow>ПКМ — открыть'
+      glowing: true
+    rewards:
+      - { pool: sf_materials, rolls: 3-5 }
+      - { pool: sf_supplies, rolls: 1-2 }
+      - { pool: smallmoney, rolls: 1, chance: 30% }
+
+  slimefun_engineer:
+    description: Компоненты, энергия и шанс улучшенной машины
+    item:
+      material: BLAST_FURNACE
+      display: '<aqua><bold>Мешочек Slimefun: Инженер'
+      lore:
+        - '<white>• <aqua>3–5 <gray>электрокомпонентов'
+        - '<white>• <yellow>1–2 <gray>энергетические награды'
+        - '<white>• <light_purple>12% <gray>улучшенная машина'
+        - ''
+        - '<yellow>ПКМ — открыть'
+      glowing: true
+    rewards:
+      - { pool: sf_components, rolls: 3-5 }
+      - { pool: sf_energy, rolls: 1-2 }
+      - { pool: sf_advanced, rolls: 1, chance: 12% }
+
+  slimefun_logistics:
+    description: Cargo, Networks и компоненты автоматизации
+    item:
+      material: HOPPER
+      display: '<blue><bold>Мешочек Slimefun: Логист'
+      lore:
+        - '<white>• <blue>3–5 <gray>логистических наград'
+        - '<white>• <aqua>2 <gray>компонента'
+        - '<white>• <light_purple>12% <gray>улучшенная машина'
+        - ''
+        - '<yellow>ПКМ — открыть'
+      glowing: true
+    rewards:
+      - { pool: sf_logistics, rolls: 3-5 }
+      - { pool: sf_components, rolls: 2 }
+      - { pool: sf_advanced, rolls: 1, chance: 12% }
+
+  slimefun_mystic:
+    description: Руны, магия и редкие Slimefun-материалы
+    item:
+      material: ENCHANTED_BOOK
+      display: '<light_purple><bold>Мешочек Slimefun: Мистик'
+      lore:
+        - '<white>• <light_purple>3–5 <gray>магических наград'
+        - '<white>• <green>2 <gray>SF-материала'
+        - '<white>• <gold>15% <gray>продвинутая награда'
+        - ''
+        - '<yellow>ПКМ — открыть'
+      glowing: true
+    rewards:
+      - { pool: sf_magic, rolls: 3-5 }
+      - { pool: sf_materials, rolls: 2 }
+      - { pool: sf_advanced, rolls: 1, chance: 15% }
+
+  slimefun_master:
+    description: Продвинутые механизмы с редким джекпотом
+    item:
+      material: NETHER_STAR
+      display: '<gradient:#55ffff:#ff55ff><bold>Мешочек Slimefun: Мастер'
+      lore:
+        - '<white>• <light_purple>2–3 <gray>продвинутые награды'
+        - '<white>• <aqua>3–4 <gray>компонента'
+        - '<white>• <gold>5% <gray>SF-джекпот'
+        - '<white>• <yellow>50% <gray>крупная сумма'
+        - ''
+        - '<yellow>ПКМ — открыть'
+      glowing: true
+    rewards:
+      - { pool: sf_advanced, rolls: 2-3 }
+      - { pool: sf_components, rolls: 3-4 }
+      - { pool: sf_jackpot, rolls: 1, chance: 5% }
+      - { pool: bigmoney, rolls: 1, chance: 50% }
+    open:
+      message: '<gradient:#55ffff:#ff55ff>Мастер-мешочек открыт! <gray>Наград: <white>%rewards%'
+      sound: ui.toast.challenge_complete
+      pitch: 1.1
+
+  festival:
+    description: Праздничный микс ванильных и серверных наград
+    item:
+      material: FIREWORK_ROCKET
+      display: '<gradient:#ff5555:#ffff55><bold>Праздничный мешочек'
+      lore:
+        - '<white>• <green>2 <gray>универсальные награды'
+        - '<white>• <gold>1 <gray>редкая ванильная награда'
+        - '<white>• <light_purple>1 <gray>особое зелье'
+        - '<white>• <yellow>40% <gray>монеты'
+        - ''
+        - '<yellow>ПКМ — открыть'
+      glowing: true
+    rewards:
+      - { pool: generic, rolls: 2 }
+      - { pool: vanilla_rare, rolls: 1 }
+      - { pool: potions, rolls: 1 }
+      - { pool: mediummoney, rolls: 1, chance: 40% }
+
+  royal:
+    description: Редкий призовой мешочек для событий и сложных достижений
+    item:
+      material: HEAVY_CORE
+      display: '<gradient:#ffaa00:#ffff55><bold>Королевский мешочек'
+      lore:
+        - '<white>• <gold>2 <gray>редкие ванильные награды'
+        - '<white>• <light_purple>2 <gray>продвинутые SF-награды'
+        - '<white>• <yellow>1 <gray>крупная сумма'
+        - '<white>• <red>20% <gray>SF-джекпот'
+        - ''
+        - '<yellow>ПКМ — открыть'
+      glowing: true
+    rewards:
+      - { pool: vanilla_rare, rolls: 2 }
+      - { pool: sf_advanced, rolls: 2 }
+      - { pool: bigmoney, rolls: 1 }
+      - { pool: sf_jackpot, rolls: 1, chance: 20% }
+    open:
+      message: '<gold><bold>Королевский мешочек открыт! <gray>Получено наград: <white>%rewards%'
+      sound: entity.player.levelup
+      pitch: 0.8

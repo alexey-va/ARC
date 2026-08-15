@@ -314,6 +314,7 @@ open class ARC : JavaPlugin() {
                 "modules/leafdecay.yml",
                 "modules/personalloot.yml",
                 "modules/item-presets.yml",
+                "modules/pouches.yml",
                 "stocks/stock.yml",
                 "misc.yml",
                 "backpacks.yml",

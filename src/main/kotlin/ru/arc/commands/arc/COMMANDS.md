@@ -232,6 +232,9 @@ treasure-hunt-types:
 /arc treasures epic addsubpool legendary -weight:1
 ```
 
+Если предмет из руки или сундука распознан Slimefun, ARC сохраняет в YAML
+канонический `type: slimefun` и `item-id`, а не сырой ItemStack/NBT.
+
 ### Флаги
 
 | Флаг          | Описание                           | Пример        |
@@ -245,6 +248,45 @@ treasure-hunt-types:
 /arc treasures common give        # выдать себе
 /arc treasures common give Steve  # выдать игроку Steve
 ```
+
+---
+
+## /arc pouch
+
+Выдаёт большой YAML-мешочек. Один мешочек может гарантированно прокрутить
+несколько treasure-пулов несколько раз и дополнительно проверить шанс-бонусы.
+
+| Параметр         | Значение      |
+|------------------|---------------|
+| **Право**        | `arc.pouch`   |
+| **Только игрок** | Нет           |
+
+```bash
+/arc pouch list
+/arc pouch Steve slimefun_starter
+/arc pouch Steve royal 3
+```
+
+Каталог находится в `plugins/ARC/modules/pouches.yml`. Дизайн предмета использует
+ItemSpec (`material`, `display`, `lore`, `customModelData`, `glowing`, enchants и
+скалярный `customData`). `arc:pouch_id` ARC добавляет автоматически.
+
+```yaml
+pouches:
+  engineer:
+    item:
+      material: BLAST_FURNACE
+      display: '<aqua><bold>Мешочек инженера'
+      lore: ['<yellow>ПКМ — открыть']
+      glowing: true
+    rewards:
+      - { pool: sf_components, rolls: 3-5 }
+      - { pool: sf_energy, rolls: 2 }
+      - { pool: sf_advanced, rolls: 1, chance: 12% }
+```
+
+У каждого мешочка должен быть хотя бы один гарантированный источник (`chance`
+не задан или равен `100%`). Общий максимум — 64 прокрутки за одно открытие.
 
 ---
 
@@ -813,6 +855,7 @@ lp group admin permission set arc.x true
 | `arc.admin`               | `/arc reload`, `/arc repo`, `/arc logger`, `/arc emshop`, `/arc test` | Админ     |
 | `arc.admin.givejobsboost` | `/arc giveboost`                                                      | Админ     |
 | `arc.treasures.admin`     | `/arc treasures`                                                      | Админ     |
+| `arc.pouch`               | `/arc pouch`                                                          | Админ     |
 | `arc.locpool.admin`       | `/arc locationpool`                                                    | Админ     |
 | `arc.eliteloot`           | `/arc eliteloot`                                                      | Админ     |
 | `arc.x`                   | `/x`                                                                  | Админ     |

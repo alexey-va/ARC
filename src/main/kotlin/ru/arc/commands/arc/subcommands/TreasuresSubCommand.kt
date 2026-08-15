@@ -3,12 +3,15 @@ package ru.arc.commands.arc.subcommands
 import org.bukkit.Bukkit
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
+import org.bukkit.inventory.ItemStack
 import ru.arc.commands.arc.CommandConfig
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.player
 import ru.arc.commands.arc.tabComplete
 import ru.arc.commands.arc.tabCompletePlayers
+import ru.arc.hooks.HookRegistry
 import ru.arc.treasure.core.Treasure
+import ru.arc.treasure.core.TreasureItems
 import ru.arc.treasure.core.TreasurePool
 import ru.arc.treasure.core.Treasures
 import ru.arc.treasure.core.gui.MainTreasuresGui
@@ -178,14 +181,9 @@ object TreasuresSubCommand : SubCommand {
         val flags = parseFlagsAsInt(args)
         val quantity: Int = flags["quantity"] ?: item.amount
         val weight: Int = flags["weight"] ?: 1
+        val slimefunId = slimefunIdResolver(player) ?: return
 
-        val treasure =
-            Treasure.Item(
-                stack = item,
-                min = quantity,
-                max = quantity,
-                weight = weight,
-            )
+        val treasure = TreasureItems.fromStack(item, quantity, weight, slimefunId)
 
         Treasures.addTreasure(poolId, treasure)
         player.sendMessage(CommandConfig.treasuresItemAdded(poolId, item.type.name))
@@ -202,6 +200,7 @@ object TreasuresSubCommand : SubCommand {
 
         val flags = parseFlagsAsInt(args)
         val weight: Int = flags["weight"] ?: 1
+        val slimefunId = slimefunIdResolver(player) ?: return
 
         val items = ItemUtils.connectedChests(block)
             .flatMap { ItemUtils.extractItems(it) }
@@ -211,18 +210,22 @@ object TreasuresSubCommand : SubCommand {
 
         var added = 0
         for (item in items) {
-            val treasure =
-                Treasure.Item(
-                    stack = item,
-                    min = item.amount,
-                    max = item.amount,
-                    weight = weight,
-                )
+            val treasure = TreasureItems.fromStack(item, item.amount, weight, slimefunId)
             Treasures.addTreasure(poolId, treasure)
             added++
         }
 
         player.sendMessage(CommandConfig.treasuresItemsAdded(poolId, added))
+    }
+
+    private fun slimefunIdResolver(sender: CommandSender): ((ItemStack) -> String?)? {
+        val hook = HookRegistry.sfHook
+        if (hook != null) return hook::getSlimefunItemId
+        if (Bukkit.getPluginManager().isPluginEnabled("Slimefun")) {
+            sender.sendMessage(CommandConfig.hookNotLoaded("Slimefun"))
+            return null
+        }
+        return { null }
     }
 
     private fun addSubpool(sender: CommandSender, pool: TreasurePool, poolId: String, args: Array<String>) {

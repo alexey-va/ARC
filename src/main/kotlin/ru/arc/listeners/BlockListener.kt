@@ -25,6 +25,7 @@ import ru.arc.config.ConfigManager
 import ru.arc.farm.FarmManager
 import ru.arc.leafdecay.LeafDecayManager
 import ru.arc.treasure.core.Treasures
+import ru.arc.treasure.pouch.Pouches
 import ru.arc.treasurechests.TreasureHuntManager
 import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
@@ -87,6 +88,20 @@ class BlockListener : Listener {
         }
 
         NBT.get<Unit>(item) { data ->
+            if (data.hasTag("arc:pouch_id")) {
+                val pouchId = data.getString("arc:pouch_id")
+                event.isCancelled = true
+                val result = Pouches.open(pouchId, event.player)
+                if (result.shouldConsume) {
+                    consumeOneFromMainHand(event.player)
+                    TREASURE_USE_COOLDOWN[playerId] = now
+                } else {
+                    debug("[pouch] {} could not be opened for player {}: {}", pouchId, event.player.name, result.failures)
+                    event.player.sendMessage(TextUtil.mm("<red>Мешочек сейчас не открывается. Сообщите администрации."))
+                }
+                return@get
+            }
+
             if (!data.hasTag("arc:treasure_key")) return@get
             val treasureKey = data.getString("arc:treasure_key")
             val pool = Treasures.getPool(treasureKey)
@@ -103,19 +118,20 @@ class BlockListener : Listener {
             val handItem = event.player.inventory.itemInMainHand
             if (handItem.type == Material.AIR || handItem.amount < 1) return@get
 
-            TREASURE_USE_COOLDOWN[playerId] = now
             event.isCancelled = true
-
-            if (handItem.amount > 1) {
-                handItem.amount -= 1
-            } else {
-                event.player.inventory.setItemInMainHand(null)
-            }
-
             val treasure = pool.random()
-            if (treasure != null) Treasures.service.give(treasure, event.player)
-            event.player.playSound(event.player.location, "ui.loom.take_result", 1f, 1f)
+            if (treasure != null && Treasures.service.give(treasure, event.player).isSuccess) {
+                consumeOneFromMainHand(event.player)
+                TREASURE_USE_COOLDOWN[playerId] = now
+                event.player.playSound(event.player.location, "ui.loom.take_result", 1f, 1f)
+            }
         }
+    }
+
+    private fun consumeOneFromMainHand(player: org.bukkit.entity.Player) {
+        val handItem = player.inventory.itemInMainHand
+        if (handItem.type == Material.AIR || handItem.amount < 1) return
+        if (handItem.amount > 1) handItem.amount -= 1 else player.inventory.setItemInMainHand(null)
     }
 
     private fun processPlaceBees(event: BlockPlaceEvent) {
