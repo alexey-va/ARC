@@ -4,6 +4,7 @@ import io.github.thebusybiscuit.slimefun4.api.events.PlayerRightClickEvent
 import io.github.thebusybiscuit.slimefun4.api.items.SlimefunItem
 import io.github.thebusybiscuit.slimefun4.implementation.Slimefun
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.block.Block
 import org.bukkit.event.EventHandler
@@ -28,8 +29,15 @@ class SFHook : Listener {
         SyncManager.processEvent(event)
     }
 
-    fun isSlimefunBlock(block: Block): Boolean =
-        Slimefun.getBlockDataService().getBlockData(block).isPresent
+    fun isSlimefunBlock(block: Block): Boolean = getSlimefunBlockId(block) != null
+
+    fun getSlimefunBlockId(block: Block): String? =
+        Slimefun.getBlockDataService().getBlockData(block).orElse(null)
+
+    internal fun registerOptionalDenizenTags(): Set<String> {
+        if (!Bukkit.getPluginManager().isPluginEnabled("Denizen")) return emptySet()
+        return SlimefunDenizenTags.register(::getSlimefunBlockId)
+    }
 
     fun isSlimefunItem(stack: ItemStack): Boolean =
         SlimefunItem.getByItem(stack) != null

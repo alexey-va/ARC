@@ -270,6 +270,15 @@ class HookRegistry(
             val hook = registerListener(SFHook())
             registerListener(BackpackBlockListener)
             sfHook = hook
+            runCatching { hook.registerOptionalDenizenTags() }
+                .onSuccess { tags ->
+                    if (tags.isNotEmpty()) {
+                        info("Registered optional Denizen Slimefun tags: {}", tags.joinToString())
+                    }
+                }
+                .onFailure { failure ->
+                    error("Unable to register optional Denizen Slimefun tags", failure)
+                }
         }
         register("AdvancedEnchantments", true) {
             aeHook = registerListener(AEHook())

@@ -71,6 +71,7 @@ dependencies {
     // Both are provided by the shaded EliteMobs runtime and must never be shaded into ARC.
     compileOnly(libs.ru.ruscrafting.thirdparty.elitemobs.api)
     compileOnly(libs.ru.ruscrafting.thirdparty.magmacore)
+    compileOnly(libs.com.denizenscript.denizen) { isTransitive = false }
     compileOnly(libs.com.github.slimefun.slimefun4)
     compileOnly(libs.com.magmaguy.betterstructures)
     compileOnly(libs.betterrtp.betterrtp)
@@ -157,6 +158,7 @@ dependencies {
     testImplementation("commons-lang:commons-lang:2.6")
     testImplementation(libs.com.zrips.cmi.api)
     testImplementation(libs.net.citizensnpcs.citizens.main) { exclude(group = "*", module = "*") }
+    testImplementation(libs.com.denizenscript.denizen) { isTransitive = false }
     testImplementation(libs.ru.ruscrafting.thirdparty.elitemobs.api)
     testImplementation(libs.ru.ruscrafting.thirdparty.magmacore)
     testImplementation(libs.com.github.zrips.cmilib)
