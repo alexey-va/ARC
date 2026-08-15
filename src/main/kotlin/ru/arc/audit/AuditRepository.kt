@@ -9,6 +9,7 @@ import ru.arc.ARC
 import ru.arc.config.ConfigManager
 import ru.arc.repository.CachedRepository
 import ru.arc.repository.redisRepo
+import ru.arc.repository.redis.RedisSyncMode
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration.Companion.seconds
@@ -94,8 +95,9 @@ class RedisAuditRepository private constructor(
                 redisRepo<AuditData>(
                     id = "audit",
                     storageKey = "arc.audits",
-                    updateChannel = "arc.audit-update",
+                    updateChannel = "arc.audit-invalidate.v2",
                     scope = scope,
+                    syncMode = RedisSyncMode.INVALIDATION,
                 ) {
                     // Weight, pruning and clear-all operate on the complete audit set.
                     loadAllOnStart(true)

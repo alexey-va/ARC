@@ -2,6 +2,7 @@ package ru.arc.repository
 
 import kotlinx.coroutines.CoroutineScope
 import ru.arc.ARC
+import ru.arc.repository.redis.RedisSyncMode
 import ru.arc.util.Common
 
 /**
@@ -12,6 +13,7 @@ inline fun <reified T : Entity> redisRepo(
     storageKey: String,
     updateChannel: String,
     scope: CoroutineScope,
+    syncMode: RedisSyncMode = RedisSyncMode.ENTITY,
     configure: RepoConfig.Builder<T>.() -> Unit = {},
 ): CachedRepository<T> {
     val redis = ARC.redisManager
@@ -23,6 +25,7 @@ inline fun <reified T : Entity> redisRepo(
         storageKey = storageKey,
         updateChannel = updateChannel,
         scope = scope,
+        syncMode = syncMode,
         configure = configure,
     )
 }
