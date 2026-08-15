@@ -301,7 +301,8 @@ teleports one allowlisted online player. Status reports bounded surface mismatch
 and Trails-metadata counts so road preview, commit, and undo can be asserted
 without an arbitrary block-read API. Reads require `qa-world-read-enabled`; all
 three mutations require `qa-world-write-enabled` and the exact configured
-player allowlist.
+player allowlist. The world runs with random block ticks disabled so material
+samples remain deterministic between prepare and readback.
 
 Equip requires the player to already be inside `arc_qa_flat` and fixed hotbar
 slots 5-7 to be empty. It installs exactly one ordinary stick plus the Trails

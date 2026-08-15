@@ -164,6 +164,7 @@ object OpsQaWorldHandlers {
         world.setGameRule(GameRule.DO_WEATHER_CYCLE, false)
         world.setGameRule(GameRule.DO_MOB_SPAWNING, false)
         world.setGameRule(GameRule.KEEP_INVENTORY, true)
+        world.setGameRule(GameRule.RANDOM_TICK_SPEED, 0)
         world.worldBorder.setCenter(0.0, 0.0)
         world.worldBorder.size = 64.0
         world.setSpawnLocation(spawnLocation(world))
