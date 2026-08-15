@@ -22,8 +22,11 @@ import java.nio.file.StandardCopyOption
 
 object OpsQaWorldHandlers {
     const val WORLD_NAME = "arc_qa_flat"
-    const val FIXTURE_VERSION = 1
+    const val FIXTURE_VERSION = 2
     const val FLOOR_Y = 63
+    private const val MARKER_SCHEMA = 1
+    internal val platformX = -8..8
+    internal val platformZ = -5..5
 
     internal val fixtureBlocks =
         listOf(
@@ -40,6 +43,8 @@ object OpsQaWorldHandlers {
             6 to QaToolSpec("inspect", Material.STICK, "inspect"),
             7 to QaToolSpec("advance", Material.IRON_SHOVEL, "advance"),
         )
+
+    private val fixturesByCoordinate = fixtureBlocks.associateBy { it.x to it.z }
 
     fun status(): Map<String, Any?> = OpsBukkitSync.call { statusSync(Bukkit.getWorld(WORLD_NAME)) }
 
@@ -165,19 +170,16 @@ object OpsQaWorldHandlers {
     }
 
     private fun resetFixture(world: World) {
-        for (x in -8..8) {
-            for (z in -5..5) {
-                world.getBlockAt(x, FLOOR_Y, z).setType(Material.SMOOTH_STONE, false)
+        val trailsPlugin = Bukkit.getPluginManager().getPlugin("Trails")
+        for (x in platformX) {
+            for (z in platformZ) {
+                val block = world.getBlockAt(x, FLOOR_Y, z)
+                if (trailsPlugin != null) CustomBlockData(block, trailsPlugin).clear()
+                block.setType(expectedSurfaceMaterial(x, z), false)
                 for (y in FLOOR_Y + 1..FLOOR_Y + 4) {
                     world.getBlockAt(x, y, z).setType(Material.AIR, false)
                 }
             }
-        }
-        val trailsPlugin = Bukkit.getPluginManager().getPlugin("Trails")
-        fixtureBlocks.forEach { fixture ->
-            val block = fixture.block(world)
-            if (trailsPlugin != null) CustomBlockData(block, trailsPlugin).clear()
-            block.setType(fixture.material, false)
         }
     }
 
@@ -195,16 +197,54 @@ object OpsQaWorldHandlers {
         }
         verifyMarker(world)
         val blocks = fixtureBlocks.map { fixture -> fixtureSummary(world, fixture) }
+        val surfaceBlocks =
+            platformX.flatMap { x ->
+                platformZ.map { z ->
+                    val block = world.getBlockAt(x, FLOOR_Y, z)
+                    QaSurfaceBlock(x, z, expectedSurfaceMaterial(x, z), block.type, trailData(block))
+                }
+            }
+        val materialMismatches = surfaceBlocks.filter { it.material != it.expectedMaterial }
+        val trailDataBlocks = surfaceBlocks.filter { it.trailData != null }
         return mapOf(
             "world" to WORLD_NAME,
             "fixtureVersion" to FIXTURE_VERSION,
             "loaded" to true,
             "owned" to true,
-            "prepared" to blocks.all { it["matchesExpected"] == true && it["trailData"] == null },
+            "prepared" to (materialMismatches.isEmpty() && trailDataBlocks.isEmpty()),
             "spawn" to locationSummary(spawnLocation(world)),
+            "surface" to
+                mapOf(
+                    "xMin" to platformX.first,
+                    "xMax" to platformX.last,
+                    "zMin" to platformZ.first,
+                    "zMax" to platformZ.last,
+                    "floorY" to FLOOR_Y,
+                    "defaultMaterial" to Material.GRASS_BLOCK.name,
+                    "blockCount" to surfaceBlocks.size,
+                    "materialMismatchCount" to materialMismatches.size,
+                    "trailDataBlockCount" to trailDataBlocks.size,
+                    "mismatchSamples" to materialMismatches.take(12).map(::surfaceSummary),
+                    "trailDataSamples" to trailDataBlocks.take(12).map(::surfaceSummary),
+                ),
             "blocks" to blocks,
         )
     }
+
+    internal fun expectedSurfaceMaterial(
+        x: Int,
+        z: Int,
+    ): Material = fixturesByCoordinate[x to z]?.material ?: Material.GRASS_BLOCK
+
+    private fun surfaceSummary(block: QaSurfaceBlock): Map<String, Any?> =
+        mapOf(
+            "x" to block.x,
+            "y" to FLOOR_Y,
+            "z" to block.z,
+            "expectedMaterial" to block.expectedMaterial.name,
+            "material" to block.material.name,
+            "trailData" to block.trailData,
+        )
 
     private fun fixtureSummary(
         world: World,
@@ -282,7 +322,7 @@ object OpsQaWorldHandlers {
         Files.createDirectories(target.parent)
         val temporary = Files.createTempFile(target.parent, ".$WORLD_NAME-", ".tmp")
         try {
-            Files.writeString(temporary, "schema=$FIXTURE_VERSION\nuuid=${world.uid}\n")
+            Files.writeString(temporary, "schema=$MARKER_SCHEMA\nuuid=${world.uid}\n")
             try {
                 Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
             } catch (_: AtomicMoveNotSupportedException) {
@@ -300,7 +340,7 @@ object OpsQaWorldHandlers {
             Files.readAllLines(marker)
                 .mapNotNull { line -> line.indexOf('=').takeIf { it > 0 }?.let { line.substring(0, it) to line.substring(it + 1) } }
                 .toMap()
-        check(fields["schema"] == FIXTURE_VERSION.toString() && fields["uuid"] == world.uid.toString()) {
+        check(fields["schema"] == MARKER_SCHEMA.toString() && fields["uuid"] == world.uid.toString()) {
             "QA world '$WORLD_NAME' ownership marker does not match the loaded world"
         }
     }
@@ -322,4 +362,12 @@ internal data class QaToolSpec(
     val id: String,
     val material: Material,
     val taggedKind: String?,
+)
+
+private data class QaSurfaceBlock(
+    val x: Int,
+    val z: Int,
+    val expectedMaterial: Material,
+    val material: Material,
+    val trailData: Map<String, Any?>?,
 )

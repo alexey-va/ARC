@@ -295,10 +295,13 @@ POST /ops/qa-world/equip    {"player":"CodexQA_728"}
 
 The only world identity is `arc_qa_flat`. ARC refuses a pre-existing folder
 without its private ownership marker and never exposes world deletion. Prepare
-rebuilds only the fixed bounded platform, clears Trails metadata on the five
-fixture blocks, and optionally teleports one allowlisted online player. Reads
-require `qa-world-read-enabled`; all three mutations require
-`qa-world-write-enabled` and the exact configured player allowlist.
+rebuilds only the fixed bounded 17x11 grass platform, clears Trails metadata on
+every surface block, restores the five material samples, and optionally
+teleports one allowlisted online player. Status reports bounded surface mismatch
+and Trails-metadata counts so road preview, commit, and undo can be asserted
+without an arbitrary block-read API. Reads require `qa-world-read-enabled`; all
+three mutations require `qa-world-write-enabled` and the exact configured
+player allowlist.
 
 Equip requires the player to already be inside `arc_qa_flat` and fixed hotbar
 slots 5-7 to be empty. It installs exactly one ordinary stick plus the Trails

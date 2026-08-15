@@ -10,11 +10,16 @@ class OpsQaWorldHandlersTest :
     FreeSpec({
         "Trails fixture is fixed, bounded and has unique coordinates" {
             OpsQaWorldHandlers.WORLD_NAME shouldBe "arc_qa_flat"
+            OpsQaWorldHandlers.FIXTURE_VERSION shouldBe 2
+            OpsQaWorldHandlers.platformX shouldBe (-8..8)
+            OpsQaWorldHandlers.platformZ shouldBe (-5..5)
             OpsQaWorldHandlers.fixtureBlocks.map { it.id } shouldContainExactlyInAnyOrder
                 listOf("trail_target", "grass_sample", "dirt_sample", "coarse_dirt_sample", "dirt_path_sample")
             OpsQaWorldHandlers.fixtureBlocks.map { Triple(it.x, it.y, it.z) }.distinct().size shouldBe
                 OpsQaWorldHandlers.fixtureBlocks.size
             OpsQaWorldHandlers.fixtureBlocks.single { it.id == "trail_target" }.material shouldBe Material.GRASS_BLOCK
+            OpsQaWorldHandlers.expectedSurfaceMaterial(-2, 0) shouldBe Material.GRASS_BLOCK
+            OpsQaWorldHandlers.expectedSurfaceMaterial(3, 3) shouldBe Material.COARSE_DIRT
         }
 
         "player allowlist is exact and case-insensitive" {
