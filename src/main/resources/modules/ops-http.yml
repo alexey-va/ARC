@@ -85,6 +85,13 @@ treasure-pools-write-enabled: false
 npcs-read-enabled: true
 npcs-write-enabled: false
 
+# Fixed ARC-owned flat QA world. The write surface can only prepare the built-in
+# fixture and teleport allowlisted online players; it cannot run raw commands,
+# choose arbitrary worlds/materials, or delete world data.
+qa-world-read-enabled: false
+qa-world-write-enabled: false
+qa-world-allowed-players: []
+
 # Native LuckPerms API. Reads are safe on every Paper instance.
 luckperms-groups-read-enabled: true
 luckperms-users-read-enabled: true

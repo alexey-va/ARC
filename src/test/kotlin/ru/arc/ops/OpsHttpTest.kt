@@ -135,6 +135,47 @@ class OpsHttpServerTest : FreeSpec({
             }
         }
 
+        "should advertise QA world routes only through their independent gates" {
+            val readsOnly = testConfig.copy(qaWorldReadEnabled = true, qaWorldWriteEnabled = false)
+            val writesOnly = testConfig.copy(qaWorldReadEnabled = false, qaWorldWriteEnabled = true)
+
+            listOf(readsOnly to false, writesOnly to true).forEach { (config, writesExpected) ->
+                val server = OpsHttpServer { config }
+                server.start()
+                try {
+                    val body = readBody(open("http://127.0.0.1:${server.actualPort}/ops/", token = config.token))
+                    body.contains("GET /ops/qa-world") shouldBe !writesExpected
+                    body.contains("POST /ops/qa-world/prepare") shouldBe writesExpected
+                    body.contains("POST /ops/qa-world/teleport") shouldBe writesExpected
+                } finally {
+                    server.stop()
+                }
+            }
+        }
+
+        "should reject QA world reads and writes before Bukkit access when gates are closed" {
+            val locked = testConfig.copy(qaWorldReadEnabled = false, qaWorldWriteEnabled = false)
+            val server = OpsHttpServer { locked }
+            server.start()
+            try {
+                val read = open("http://127.0.0.1:${server.actualPort}/ops/qa-world", token = locked.token)
+                read.responseCode shouldBe 403
+                readBody(read) shouldContain "QA world reads are disabled"
+
+                val prepare =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/qa-world/prepare",
+                        method = "POST",
+                        token = locked.token,
+                        body = "{}",
+                    )
+                prepare.responseCode shouldBe 403
+                readBody(prepare) shouldContain "QA world writes are disabled"
+            } finally {
+                server.stop()
+            }
+        }
+
         "should expose the economy audit route only when its read gate is enabled" {
             val enabled = testConfig.copy(economyAuditReadEnabled = true)
             val disabled = testConfig.copy(economyAuditReadEnabled = false)

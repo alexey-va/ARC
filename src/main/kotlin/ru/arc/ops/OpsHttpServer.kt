@@ -139,6 +139,15 @@ class OpsHttpServer(
             method == "GET" && segments == listOf("server") ->
                 respondOk(exchange, OpsHttpHandlers.serverInfo())
 
+            method == "GET" && segments == listOf("qa-world") ->
+                handleQaWorldStatus(exchange, cfg)
+
+            method == "POST" && segments == listOf("qa-world", "prepare") ->
+                handleQaWorldPrepare(exchange, cfg)
+
+            method == "POST" && segments == listOf("qa-world", "teleport") ->
+                handleQaWorldTeleport(exchange, cfg)
+
             method == "GET" && segments == listOf("economy", "audit") ->
                 handleEconomyAudit(exchange, cfg, query)
 
@@ -443,6 +452,77 @@ class OpsHttpServer(
                 val (code, body) = OpsJson.error(404, "Not found", mapOf("path" to exchange.requestURI.path))
                 respond(exchange, code, body)
             }
+        }
+    }
+
+    private fun handleQaWorldStatus(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+    ) {
+        if (!cfg.qaWorldReadEnabled) {
+            respondError(exchange, 403, "QA world reads are disabled")
+            return
+        }
+        handleQaWorldErrors(exchange) { OpsQaWorldHandlers.status() }
+    }
+
+    private fun handleQaWorldPrepare(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+    ) {
+        if (!cfg.qaWorldWriteEnabled) {
+            respondError(exchange, 403, "QA world writes are disabled")
+            return
+        }
+        handleQaWorldErrors(exchange) {
+            OpsQaWorldHandlers.prepare(parseQaWorldPlayer(exchange, required = false), cfg)
+        }
+    }
+
+    private fun handleQaWorldTeleport(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+    ) {
+        if (!cfg.qaWorldWriteEnabled) {
+            respondError(exchange, 403, "QA world writes are disabled")
+            return
+        }
+        handleQaWorldErrors(exchange) {
+            OpsQaWorldHandlers.teleport(checkNotNull(parseQaWorldPlayer(exchange, required = true)), cfg)
+        }
+    }
+
+    private fun parseQaWorldPlayer(
+        exchange: HttpExchange,
+        required: Boolean,
+    ): String? {
+        val raw = readRequestBody(exchange).trim()
+        if (raw.isEmpty()) {
+            require(!required) { "player is required" }
+            return null
+        }
+        val body =
+            runCatching { com.google.gson.JsonParser.parseString(raw).asJsonObject }
+                .getOrElse { throw IllegalArgumentException("Request body must be a JSON object") }
+        val extras = body.keySet() - setOf("player")
+        require(extras.isEmpty()) { "Unknown QA world fields: ${extras.sorted().joinToString()}" }
+        val player = body.get("player")?.takeUnless { it.isJsonNull }?.asString?.trim().orEmpty()
+        if (required) require(player.isNotEmpty()) { "player is required" }
+        return player.ifEmpty { null }
+    }
+
+    private fun handleQaWorldErrors(
+        exchange: HttpExchange,
+        block: () -> Map<String, Any?>,
+    ) {
+        try {
+            respondOk(exchange, block())
+        } catch (e: NoSuchElementException) {
+            respondError(exchange, 404, e.message ?: "Player is not online")
+        } catch (e: IllegalArgumentException) {
+            respondError(exchange, 422, e.message ?: "Invalid QA world request")
+        } catch (e: IllegalStateException) {
+            respondError(exchange, 409, e.message ?: "QA world state conflict")
         }
     }
 
@@ -1937,6 +2017,13 @@ class OpsHttpServer(
         if (cfg.npcsWriteEnabled) {
             routes += "PUT /ops/npcs[/{id}] NpcSpec (create without id; patch existing with id)"
             routes += "DELETE /ops/npcs/{id}"
+        }
+        if (cfg.qaWorldReadEnabled) {
+            routes += "GET /ops/qa-world"
+        }
+        if (cfg.qaWorldWriteEnabled) {
+            routes += "POST /ops/qa-world/prepare {player?}"
+            routes += "POST /ops/qa-world/teleport {player}"
         }
         if (cfg.luckpermsGroupsReadEnabled) {
             routes += "GET /ops/luckperms/groups"

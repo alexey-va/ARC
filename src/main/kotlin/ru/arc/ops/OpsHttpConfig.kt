@@ -93,6 +93,15 @@ open class OpsHttpConfig(private val config: Config) {
     open val npcsWriteEnabled: Boolean
         get() = config.bool("npcs-write-enabled", false)
 
+    open val qaWorldReadEnabled: Boolean
+        get() = config.bool("qa-world-read-enabled", false)
+
+    open val qaWorldWriteEnabled: Boolean
+        get() = config.bool("qa-world-write-enabled", false)
+
+    open val qaWorldAllowedPlayers: Set<String>
+        get() = config.stringList("qa-world-allowed-players").map { it.lowercase() }.toSet()
+
     open val luckpermsGroupsReadEnabled: Boolean
         get() = config.bool("luckperms-groups-read-enabled", true)
 
@@ -160,6 +169,9 @@ class TestOpsHttpConfig(
     override val treasurePoolsWriteEnabled: Boolean = false,
     override val npcsReadEnabled: Boolean = true,
     override val npcsWriteEnabled: Boolean = false,
+    override val qaWorldReadEnabled: Boolean = true,
+    override val qaWorldWriteEnabled: Boolean = false,
+    override val qaWorldAllowedPlayers: Set<String> = setOf("codexqa_728"),
     override val luckpermsGroupsReadEnabled: Boolean = true,
     override val luckpermsGroupsWriteEnabled: Boolean = false,
     override val luckpermsUsersReadEnabled: Boolean = true,
@@ -188,6 +200,9 @@ class TestOpsHttpConfig(
         treasurePoolsWriteEnabled: Boolean = this.treasurePoolsWriteEnabled,
         npcsReadEnabled: Boolean = this.npcsReadEnabled,
         npcsWriteEnabled: Boolean = this.npcsWriteEnabled,
+        qaWorldReadEnabled: Boolean = this.qaWorldReadEnabled,
+        qaWorldWriteEnabled: Boolean = this.qaWorldWriteEnabled,
+        qaWorldAllowedPlayers: Set<String> = this.qaWorldAllowedPlayers,
         luckpermsGroupsReadEnabled: Boolean = this.luckpermsGroupsReadEnabled,
         luckpermsGroupsWriteEnabled: Boolean = this.luckpermsGroupsWriteEnabled,
         luckpermsUsersReadEnabled: Boolean = this.luckpermsUsersReadEnabled,
@@ -223,6 +238,9 @@ class TestOpsHttpConfig(
             treasurePoolsWriteEnabled = treasurePoolsWriteEnabled,
             npcsReadEnabled = npcsReadEnabled,
             npcsWriteEnabled = npcsWriteEnabled,
+            qaWorldReadEnabled = qaWorldReadEnabled,
+            qaWorldWriteEnabled = qaWorldWriteEnabled,
+            qaWorldAllowedPlayers = qaWorldAllowedPlayers,
             luckpermsGroupsReadEnabled = luckpermsGroupsReadEnabled,
             luckpermsGroupsWriteEnabled = luckpermsGroupsWriteEnabled,
             luckpermsUsersReadEnabled = luckpermsUsersReadEnabled,

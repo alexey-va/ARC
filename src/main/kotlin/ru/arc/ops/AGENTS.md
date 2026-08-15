@@ -14,6 +14,7 @@ HTTP ops API и ItemSpec для RusCrafting MCP. **Runtime configs:** `mcserver/
 - Treasure/reward-pool read/preview/write/delete through native `TreasureManager`
 - Citizens NPC list/preview/upsert/delete through the native Citizens API
 - Citizens marker publication into BlueMap through BlueMap API 2.7.7
+- Fixed ARC-owned flat QA world with bounded fixtures and allowlisted player teleport
 - One read-only health overview across every managed content catalog
 - Native LuckPerms group/user reads, effective checks, reviewed point changes,
   and journaled migrations without console commands or direct storage writes
@@ -38,6 +39,7 @@ HTTP ops API и ItemSpec для RusCrafting MCP. **Runtime configs:** `mcserver/
 | `BankAuditModule` | Single-leader Bank supply snapshots, aggregate metrics, and bounded account-change evidence |
 | `OpsNpcHandlers` | Citizens list/placement validation/gated mutations |
 | `BlueMapNpcMarkers` | Dynamic Citizens POI layer for each BlueMap world |
+| `OpsQaWorldHandlers` | Fixed `arc_qa_flat` ownership, Trails fixture reset/readback, allowlisted teleport |
 | `OpsItemSpec` | JSON → ItemStack (MiniMessage, NBT, customData) |
 | `ItemPresets` | Native runtime and atomic persistence for `item-presets.yml` |
 | `OpsItemPresetHandlers` | Strict catalog/preview/upsert/delete/give boundary |
@@ -278,6 +280,24 @@ surface is intentionally compact:
 - `arc_ops_hologram_read` covers CMI list/detail/preview;
 - `arc_ops_hologram_write` covers gated CMI presence-aware upsert/delete;
 - `arc_ops_world_snapshot` wraps the ready-made BlueMap renderer.
+- `arc_ops_qa_world` combines read-only status with gated prepare/teleport for
+  the fixed QA fixture; it never accepts arbitrary worlds, blocks, coordinates,
+  commands, deletion, or players outside `qa-world-allowed-players`.
+
+## Gameplay QA world
+
+```
+GET  /ops/qa-world
+POST /ops/qa-world/prepare  {"player":"CodexQA_728"}  # player optional
+POST /ops/qa-world/teleport {"player":"CodexQA_728"}
+```
+
+The only world identity is `arc_qa_flat`. ARC refuses a pre-existing folder
+without its private ownership marker and never exposes world deletion. Prepare
+rebuilds only the fixed bounded platform, clears Trails metadata on the five
+fixture blocks, and optionally teleports one allowlisted online player. Reads
+require `qa-world-read-enabled`; both mutations require
+`qa-world-write-enabled` and the exact configured player allowlist.
 
 Do not expose one MCP tool per HTTP verb/catalog, and do not add native content
 APIs for ordinary YAML such as `announce.yml`. Simple configs stay in the
