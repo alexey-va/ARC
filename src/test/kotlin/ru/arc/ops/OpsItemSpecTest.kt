@@ -221,6 +221,39 @@ class OpsItemSpecTest :
                 definition.commands shouldBe listOf("asConsole! dm open main_menu [playerName]")
             }
 
+            it("should preserve CMI unlimited max usages sentinel") {
+                val body =
+                    JsonParser.parseString(
+                        """
+                        {
+                          "display": "Стартовый",
+                          "icon": {"material": "AIR"},
+                          "items": {"26": {"material": "BOOK"}},
+                          "maxUsages": -1
+                        }
+                        """.trimIndent(),
+                    ).asJsonObject
+
+                OpsCmiKitHandlers.parseDefinition("start", body).maxUsages shouldBe -1
+            }
+
+            it("should reject CMI max usages values below the unlimited sentinel") {
+                val body =
+                    JsonParser.parseString(
+                        """
+                        {
+                          "display": "Broken",
+                          "icon": {"material": "AIR"},
+                          "items": {"26": {"material": "BOOK"}},
+                          "maxUsages": -2
+                        }
+                        """.trimIndent(),
+                    ).asJsonObject
+
+                runCatching { OpsCmiKitHandlers.parseDefinition("broken", body) }
+                    .exceptionOrNull()?.message shouldBe "maxUsages must be -1 (unlimited) or non-negative"
+            }
+
             it("should reject preview-only empty kits") {
                 val body =
                     JsonParser.parseString(

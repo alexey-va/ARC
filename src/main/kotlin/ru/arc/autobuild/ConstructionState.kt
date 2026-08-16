@@ -4,6 +4,7 @@ import ru.arc.core.ScheduledTask
 import ru.arc.core.delayed
 import ru.arc.core.ticks
 import ru.arc.util.CooldownManager
+import ru.arc.onboarding.OnboardingService
 import ru.arc.util.Logging.debug
 
 /**
@@ -106,8 +107,12 @@ sealed class ConstructionState {
             site.forceloadChunks()
             site.construction?.startBuilding()
 
-            if (!site.player.hasPermission("arc.buildings.bypass-cooldown")) {
-                CooldownManager.addCooldown(site.player.uniqueId, "building_cooldown", 20 * 60 * 60L)
+            if (site.cooldownSeconds > 0 && !site.player.hasPermission("arc.buildings.bypass-cooldown")) {
+                CooldownManager.addCooldown(
+                    site.player.uniqueId,
+                    "building_cooldown",
+                    BuildCooldownPolicy.toTicks(site.cooldownSeconds),
+                )
             }
 
             site.player.sendMessage(BuildConfig.Messages.startBuild())
@@ -120,6 +125,9 @@ sealed class ConstructionState {
     data object Done : ConstructionState() {
         override fun enter(site: ConstructionSite) {
             site.player.sendMessage(BuildConfig.Messages.finished())
+            if (site.completionCause == ConstructionSite.CompletionCause.NATURAL) {
+                OnboardingService.recordAutoBuildComplete(site.player)
+            }
             site.launchFireworks()
             delayed(60.ticks) { site.construction?.destroyNpc() }
             site.cleanup(60)

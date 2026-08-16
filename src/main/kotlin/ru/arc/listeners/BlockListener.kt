@@ -188,9 +188,11 @@ class BlockListener : Listener {
 
         val rotation = if (nbt.hasTag("arc:rotation")) nbt.getString("arc:rotation") else null
         val yOff = if (nbt.hasTag("arc:y_offset")) nbt.getString("arc:y_offset") else null
+        val cooldownSeconds =
+            if (nbt.hasTag("arc:cooldown_seconds")) nbt.getString("arc:cooldown_seconds") else null
 
         event.isCancelled = true
-        BuildingManager.processPlayerClick(event.player, center, buildingId, rotation, yOff)
+        BuildingManager.processPlayerClick(event.player, center, buildingId, rotation, yOff, cooldownSeconds)
     }
 
     private fun processFarmBreak(event: BlockBreakEvent) {

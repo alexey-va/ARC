@@ -164,7 +164,9 @@ object OpsCmiKitHandlers {
         ).also {
             require(it.cost >= 0.0) { "cost must be non-negative" }
             require(it.expCost >= 0) { "expCost must be non-negative" }
-            require(it.maxUsages >= 0) { "maxUsages must be non-negative" }
+            // CMI uses -1 for an unlimited kit. Existing live kits must round-trip
+            // through the native API without silently becoming single-use.
+            require(it.maxUsages >= -1) { "maxUsages must be -1 (unlimited) or non-negative" }
         }
     }
 

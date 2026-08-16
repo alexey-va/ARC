@@ -20,6 +20,12 @@ routing and Discord/Telegram bridges, but must never replace the Velocity
 
 ## Runtime & deploy
 
+- Production `plugins/ARC/schematics` is a root symlink, not a per-server
+  directory. Inspect it with `mc_remote_list(..., follow_symlink=true)`; a
+  normal listing can falsely report it as empty. Spawn and survival resolve to
+  the shared catalog, while parkour can resolve to a different/empty target.
+  Re-list the intended node before issuing a BuildBook.
+
 | Doc | Purpose |
 |-----|---------|
 | `~/mcserver/TASKS.md` | Current tasks |

@@ -6,6 +6,7 @@ import org.bukkit.entity.Player
 import ru.arc.ARC
 import ru.arc.config.ConfigManager
 import ru.arc.core.Tasks
+import ru.arc.onboarding.OnboardingService
 import ru.arc.util.Logging.error
 
 /**
@@ -33,6 +34,7 @@ object RtpRespawnCompletion {
                         error("Could not persist completed first RTP for {}", player.name, failure)
                     }
                 }
+                OnboardingService.recordFirstRtp(player)
                 if (!request.setRespawn || !player.isOnline) return@Runnable
 
                 player.setRespawnLocation(location(), true)

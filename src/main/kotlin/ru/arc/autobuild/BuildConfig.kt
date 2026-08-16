@@ -41,6 +41,10 @@ object BuildConfig {
 
     val blocksPerTick: Int get() = construction.int("blocks-per-tick", 3)
     val cycleDurationTicks: Long get() = construction.int("cycle-duration-ticks", 10).toLong()
+    val defaultCooldownSeconds: Long
+        get() = BuildCooldownPolicy.resolveSeconds(
+            construction.int("default-cooldown-seconds", BuildCooldownPolicy.DEFAULT_SECONDS.toInt()).toString(),
+        )
     val playSounds: Boolean get() = construction.boolean("play-sounds", true)
     val showParticles: Boolean get() = construction.boolean("show-particles", false)
     val placeParticle: Particle get() = construction.particle("place-particle", Particle.FLAME)
@@ -165,4 +169,3 @@ object BuildConfig {
         "&6Агадиль" to "https://minesk.in/e8eae58c095949de87ff9c9b5b7c17f2"
     )
 }
-

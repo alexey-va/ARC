@@ -1,0 +1,45 @@
+# Контекстный онбординг безопасной базы. Не wizard и не меню: шаги срабатывают
+# один раз только после подтвержденного результата RTP/CMI/Lands/ARC BuildBook.
+# Управляет только контекстными подсказками и их состоянием. Product telemetry
+# результатов RTP/CMI/Lands/BuildBook пишется независимо от этого переключателя.
+enabled: false
+
+# Мир проверяется в момент результата и перед отложенной доставкой подсказки.
+worlds:
+  - survival
+  - mining
+  - vanilla
+
+delivery:
+  # Первая подсказка после результата.
+  first-delay-ticks: 30
+  # Повторная доставка недоставленной подсказки после входа/смены мира.
+  resume-delay-ticks: 60
+  # Не склеивать два быстрых результата в чат-спам.
+  between-messages-ticks: 100
+
+steps:
+  first-rtp:
+    enabled: true
+    message: '<green>Место найдено. <gray>Сохрани возврат через <white>/sethome<gray> и защити участок claim-блоками из <white>/kit start<gray>.'
+  home-created:
+    enabled: true
+    message: '<green>Точка возврата сохранена. <gray>Теперь защити участок claim-блоком из <white>/kit start<gray>.'
+  land-claimed:
+    enabled: true
+    message: '<green>Участок защищён. <gray>Теперь поставь <white>/sethome<gray>, чтобы вернуться сюда после смерти или выхода.'
+  foothold-complete:
+    enabled: true
+    message: '<green>База закреплена. <gray>В <white>/kit start <gray>есть книга «Первый дом»: возьми её в руку и нажми ПКМ по земле.'
+  build-book-missing-home:
+    enabled: true
+    message: '<yellow>Макет дома открыт. <gray>Перед стройкой поставь здесь <white>/sethome<gray>, чтобы не потерять базу.'
+  build-book-missing-land:
+    enabled: true
+    message: '<yellow>Макет дома открыт. <gray>Перед стройкой защити участок claim-блоком из <white>/kit start<gray>.'
+  build-book-missing-both:
+    enabled: true
+    message: '<yellow>Макет дома открыт, но место ещё не закреплено. <gray>Поставь <white>/sethome <gray>и защити участок claim-блоком.'
+  autobuild-complete:
+    enabled: true
+    message: '<green>Первый дом готов. <gray>Дальше добывай и строй; излишки продавай в <white>/shop <gray>или выставляй на <white>/ah<gray>.'

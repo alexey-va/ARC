@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test
 import org.mockbukkit.mockbukkit.entity.PlayerMock
 import org.mockbukkit.mockbukkit.world.WorldMock
 import ru.arc.TestBase
+import ru.arc.util.CooldownManager
 
 /**
  * Comprehensive tests for the construction flow lifecycle.
@@ -75,6 +76,28 @@ class ConstructionFlowTest : TestBase() {
 
             assertTrue(site.startBuild())
             assertEquals(ConstructionState.Building, site.state)
+        }
+
+        @Test
+        @DisplayName("A zero-cooldown book does not start the global build cooldown")
+        fun testZeroCooldownBook() {
+            val site = ConstructionSite(building, centerBlock, player, 0, world, 0, 0, cooldownSeconds = 0)
+            site.startDisplayingBorder()
+            site.startConfirmation()
+
+            assertTrue(site.startBuild())
+            assertEquals(0L, CooldownManager.cooldown(player.uniqueId, "building_cooldown"))
+        }
+
+        @Test
+        @DisplayName("A limited book starts its configured cooldown")
+        fun testConfiguredBookCooldown() {
+            val site = ConstructionSite(building, centerBlock, player, 0, world, 0, 0, cooldownSeconds = 120)
+            site.startDisplayingBorder()
+            site.startConfirmation()
+
+            assertTrue(site.startBuild())
+            assertEquals(2_400L, CooldownManager.cooldown(player.uniqueId, "building_cooldown"))
         }
 
         @Test
@@ -550,4 +573,3 @@ class ConstructionFlowTest : TestBase() {
         assertTrue(site.toString().contains("DisplayingOutline"))
     }
 }
-

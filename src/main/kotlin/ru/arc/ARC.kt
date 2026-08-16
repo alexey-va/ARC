@@ -61,6 +61,7 @@ import ru.arc.gui.GuiDefaults
 import ru.arc.network.NetworkRegistry
 import ru.arc.redis.RedisManager
 import ru.arc.ops.OpsHttpModule
+import ru.arc.onboarding.OnboardingModule
 import ru.arc.restart.RestartModule
 import ru.arc.rtp.RtpPlayerRegistry
 import ru.arc.scheduled.ScheduledCommandsModule
@@ -210,6 +211,7 @@ open class ARC : JavaPlugin() {
             ChatModeModule,
             MountModule,
             CommandHideModule,
+            OnboardingModule,
             // Building system (priority 90)
             BuildingModule,
             // Sync systems (priority 100)
@@ -311,6 +313,7 @@ open class ARC : JavaPlugin() {
                 "modules/location-pools.yml",
                 "modules/elite-loot.yml",
                 "modules/auto-build.yml",
+                "modules/onboarding.yml",
                 "modules/leafdecay.yml",
                 "modules/personalloot.yml",
                 "modules/item-presets.yml",

@@ -37,14 +37,20 @@ class ConstructionSite(
     val rotation: Int,
     val world: World,
     val subRotation: Int,
-    val yOffset: Int
+    val yOffset: Int,
+    val cooldownSeconds: Long = BuildCooldownPolicy.DEFAULT_SECONDS,
 ) {
+    enum class CompletionCause { NATURAL, FORCED }
+
     /** Corner coordinates for the building area */
     data class Corners(val corner1: BlockVector3, val corner2: BlockVector3)
 
     // ==================== State Management ====================
 
     var state: ConstructionState = ConstructionState.Created
+        private set
+
+    var completionCause: CompletionCause = CompletionCause.NATURAL
         private set
 
     /**
@@ -139,12 +145,16 @@ class ConstructionSite(
     fun cancel() = transitionTo(ConstructionState.Cancelled)
 
     /** Mark as done */
-    fun complete() = transitionTo(ConstructionState.Done)
+    fun complete(): Boolean {
+        completionCause = CompletionCause.NATURAL
+        return transitionTo(ConstructionState.Done)
+    }
 
     /** Finish building instantly (admin command). Returns true if successful. */
     fun finishInstantly(): Boolean {
         if (state != ConstructionState.Building) return false
         construction?.finishInstantly()
+        completionCause = CompletionCause.FORCED
         return transitionTo(ConstructionState.Done)
     }
 

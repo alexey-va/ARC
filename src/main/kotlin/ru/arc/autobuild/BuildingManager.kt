@@ -10,6 +10,7 @@ import ru.arc.core.ScheduledTask
 import ru.arc.core.repeating
 import ru.arc.core.ticks
 import ru.arc.hooks.HookRegistry
+import ru.arc.onboarding.OnboardingService
 import ru.arc.util.CooldownManager
 import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
@@ -116,14 +117,23 @@ object BuildingManager {
      * Creates outline -> confirmation -> building flow.
      */
     @JvmStatic
-    fun processPlayerClick(player: Player, rawLocation: Location, buildingId: String, rot: String?, yOff: String?) {
+    fun processPlayerClick(
+        player: Player,
+        rawLocation: Location,
+        buildingId: String,
+        rot: String?,
+        yOff: String?,
+        cooldownSecondsRaw: String?,
+    ) {
+        val cooldownSeconds = BuildCooldownPolicy.resolveSeconds(cooldownSecondsRaw, BuildConfig.defaultCooldownSeconds)
         debug(
-            "[autobuild] processPlayerClick player={} loc={} building={} rot={} yOff={} disabled={}",
+            "[autobuild] processPlayerClick player={} loc={} building={} rot={} yOff={} cooldownSeconds={} disabled={}",
             player.name,
             rawLocation,
             buildingId,
             rot,
             yOff,
+            cooldownSeconds,
             BuildConfig.isDisabled,
         )
         if (BuildConfig.isDisabled && !player.hasPermission("arc.admin")) {
@@ -151,10 +161,11 @@ object BuildingManager {
 
         when {
             // No existing site - start new outline
-            existingSite == null -> createConstruction(player, location, building, subRotation, yOffset)
+            existingSite == null -> createConstruction(player, location, building, subRotation, yOffset, cooldownSeconds)
 
             // Same location clicked while showing outline - advance to confirmation
             existingSite.state == ConstructionState.DisplayingOutline &&
+                    existingSite.cooldownSeconds == cooldownSeconds &&
                     existingSite.same(player, location, building) -> existingSite.startConfirmation()
 
             // Already building
@@ -165,7 +176,7 @@ object BuildingManager {
             // Different location or building - cancel old and start new
             else -> {
                 existingSite.cancel()
-                createConstruction(player, location, building, subRotation, yOffset)
+                createConstruction(player, location, building, subRotation, yOffset, cooldownSeconds)
             }
         }
     }
@@ -207,9 +218,16 @@ object BuildingManager {
     // ==================== Construction Flow ====================
 
     @JvmStatic
-    fun createConstruction(player: Player, center: Location, building: Building, subRotation: Int, yOffset: Int) {
+    fun createConstruction(
+        player: Player,
+        center: Location,
+        building: Building,
+        subRotation: Int,
+        yOffset: Int,
+        cooldownSeconds: Long,
+    ) {
         val cooldown = CooldownManager.cooldown(player.uniqueId, "building_cooldown")
-        if (cooldown > 0 && !player.hasPermission("arc.admin")) {
+        if (cooldownSeconds > 0 && cooldown > 0 && !player.hasPermission("arc.admin")) {
             player.sendMessage(BuildConfig.Messages.cooldown(cooldown))
             return
         }
@@ -220,7 +238,7 @@ object BuildingManager {
         }
 
         val rotation = rotationFromYaw(player.yaw)
-        val site = ConstructionSite(building, center, player, rotation, world, subRotation, yOffset)
+        val site = ConstructionSite(building, center, player, rotation, world, subRotation, yOffset, cooldownSeconds)
 
         if (!site.canBuild() && !player.hasPermission("arc.admin")) {
             debug(
@@ -236,22 +254,25 @@ object BuildingManager {
         pendingSites[player.uniqueId] = site
         site.startDisplayingBorder()
         debug(
-            "[autobuild] createConstruction player={} building={} center={} rotation={} subRotation={} yOffset={} volume={}",
+            "[autobuild] createConstruction player={} building={} center={} rotation={} subRotation={} yOffset={} cooldownSeconds={} volume={}",
             player.name,
             building.fileName,
             center,
             rotation,
             subRotation,
             yOffset,
+            cooldownSeconds,
             building.volume,
         )
         player.sendMessage(BuildConfig.Messages.startOutline())
+        OnboardingService.recordBuildBookOpened(player)
     }
 
     @JvmStatic
     fun startConstruction(site: ConstructionSite) {
-        site.startBuild()
+        if (!site.startBuild()) return
         moveToActive(site)
+        OnboardingService.recordAutoBuildStarted(site.player)
     }
 
     @JvmStatic
