@@ -76,6 +76,10 @@ object FirstRtpService {
             return FirstRtpResult.Rejected("плагин ${provider.pluginName} не включён")
         }
 
+        if ((setRespawn || persist) && RtpRespawnTracker.hasPending(player.name)) {
+            return FirstRtpResult.Rejected("предыдущий запрос RTP ещё выполняется")
+        }
+
         val command = buildCommand(provider, player, world)
         if (setRespawn || persist) {
             RtpRespawnTracker.mark(

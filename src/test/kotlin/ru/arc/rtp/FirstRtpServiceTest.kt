@@ -128,6 +128,35 @@ class FirstRtpServiceTest :
             RtpRespawnTracker.consume("Steve", RtpProvider.BETTERRTP).shouldBeFalse()
         }
 
+        test("rejects a duplicate first RTP while provider completion is pending") {
+            RtpRespawnTracker.mark(
+                playerName = "Steve",
+                provider = RtpProvider.BETTERRTP,
+                setRespawn = true,
+                persistPlayerId = player.uniqueId,
+                persistWorldName = "survival",
+            )
+            var dispatched = false
+
+            val result =
+                FirstRtpService.start(
+                    provider = RtpProvider.BETTERRTP,
+                    player = player,
+                    world = world,
+                    setRespawn = true,
+                    persist = true,
+                    isPluginEnabled = { true },
+                    dispatch = {
+                        dispatched = true
+                        true
+                    },
+                )
+
+            result shouldBe FirstRtpResult.Rejected("предыдущий запрос RTP ещё выполняется")
+            dispatched.shouldBeFalse()
+            RtpRespawnTracker.hasPending("Steve").shouldBeTrue()
+        }
+
         test("does not mark respawn for a first visit to an additional world") {
             FirstRtpService.start(
                 provider = RtpProvider.BETTERRTP,

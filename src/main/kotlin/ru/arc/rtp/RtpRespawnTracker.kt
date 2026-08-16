@@ -40,6 +40,8 @@ object RtpRespawnTracker {
         pending.invalidate(playerName)
     }
 
+    fun hasPending(playerName: String): Boolean = pending.getIfPresent(playerName) != null
+
     fun consume(
         playerName: String,
         provider: RtpProvider,

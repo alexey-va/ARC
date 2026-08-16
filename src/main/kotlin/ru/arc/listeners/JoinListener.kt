@@ -14,6 +14,7 @@ import ru.arc.config.ConfigManager
 import ru.arc.core.delayed
 import ru.arc.core.ticks
 import ru.arc.jobs.JobsModule
+import ru.arc.rtp.RtpRespawnTracker
 import ru.arc.sync.SyncManager
 import ru.arc.treasurechests.TreasureHuntManager
 import ru.arc.util.Logging.info
@@ -38,6 +39,7 @@ class JoinListener : Listener {
 
     @EventHandler(priority = EventPriority.LOW)
     fun onPlayerLeave(event: PlayerQuitEvent) {
+        RtpRespawnTracker.cancel(event.player.name)
         ChatModeService.untrack(event.player.uniqueId)
         JobsModule.untrackPlayer(event.player.uniqueId)
         SyncManager.playerQuit(event.player.uniqueId)
@@ -48,6 +50,7 @@ class JoinListener : Listener {
 
     @EventHandler(ignoreCancelled = true)
     fun onPlayerKick(event: PlayerKickEvent) {
+        RtpRespawnTracker.cancel(event.player.name)
         ChatModeService.untrack(event.player.uniqueId)
         JobsModule.untrackPlayer(event.player.uniqueId)
         SyncManager.playerQuit(event.player.uniqueId)

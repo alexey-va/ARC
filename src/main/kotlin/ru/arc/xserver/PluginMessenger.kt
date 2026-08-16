@@ -14,8 +14,11 @@ import ru.arc.rtp.BackendRtpReady
 import ru.arc.rtp.FirstRtpCoordinator
 import ru.arc.rtp.FirstRtpRouteResult
 import ru.arc.rtp.FirstRtpResult
+import ru.arc.rtp.NetworkRtpMode
 import ru.arc.rtp.NetworkRtpRequest
+import ru.arc.rtp.PlayerRtpState
 import ru.arc.rtp.RegularRtpService
+import ru.arc.rtp.RtpPlayerRegistry
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
@@ -112,10 +115,14 @@ class PluginMessenger : PluginMessageListener {
             )
         }
 
-        if (request.mode.onlyIfFirst) {
-            handleFirstEntryRtp(player, request, world, worldName)
-        } else {
-            handleRegularRtp(player, request, world, worldName)
+        val dispatch =
+            selectNetworkRtpDispatch(
+                request.mode,
+                RtpPlayerRegistry.state(player.uniqueId, world.name),
+            )
+        when (dispatch) {
+            NetworkRtpDispatch.FIRST_ENTRY -> handleFirstEntryRtp(player, request, world, worldName)
+            NetworkRtpDispatch.REGULAR -> handleRegularRtp(player, request, world, worldName)
         }
     }
 
@@ -247,6 +254,22 @@ internal fun resolveNetworkRtpWorld(
         playerWorld.trim().lowercase(Locale.ROOT)
     } else {
         requestedWorld
+    }
+
+internal enum class NetworkRtpDispatch {
+    FIRST_ENTRY,
+    REGULAR,
+}
+
+/** Public RTP starts the tracked first flow once per world, then stays regular. */
+internal fun selectNetworkRtpDispatch(
+    mode: NetworkRtpMode,
+    state: PlayerRtpState,
+): NetworkRtpDispatch =
+    if (mode.onlyIfFirst || !state.hasTeleportedToWorld) {
+        NetworkRtpDispatch.FIRST_ENTRY
+    } else {
+        NetworkRtpDispatch.REGULAR
     }
 
 internal fun firstEntryPlayerMessage(result: FirstRtpRouteResult): Component? =

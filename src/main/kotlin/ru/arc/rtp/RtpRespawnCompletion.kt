@@ -24,6 +24,10 @@ object RtpRespawnCompletion {
         val action =
             Runnable {
                 val request = RtpRespawnTracker.take(player.name, provider) ?: return@Runnable
+                val completedLocation =
+                    runCatching(location).onFailure { failure ->
+                        error("Could not resolve completed first RTP location for {}", player.name, failure)
+                    }.getOrNull() ?: return@Runnable
                 if (request.persistPlayerId != null && request.persistWorldName != null) {
                     runCatching {
                         RtpPlayerRegistry.markTeleported(
@@ -34,10 +38,6 @@ object RtpRespawnCompletion {
                         error("Could not persist completed first RTP for {}", player.name, failure)
                     }
                 }
-                val completedLocation =
-                    runCatching(location).onFailure { failure ->
-                        error("Could not resolve completed first RTP location for {}", player.name, failure)
-                    }.getOrNull() ?: return@Runnable
                 OnboardingService.recordFirstRtp(player, completedLocation)
                 if (!request.setRespawn || !player.isOnline) return@Runnable
 
