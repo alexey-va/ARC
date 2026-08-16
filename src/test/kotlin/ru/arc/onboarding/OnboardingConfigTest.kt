@@ -68,7 +68,7 @@ class OnboardingConfigTest : FreeSpec({
         val plainText = PlainTextComponentSerializer.plainText()
 
         OnboardingHint.entries.forEach { hint ->
-            plainText.serialize(config.message(hint)).shouldStartWith("База • ")
+            plainText.serialize(config.message(hint)).shouldStartWith("Начало • ")
         }
         config.validate()
     }

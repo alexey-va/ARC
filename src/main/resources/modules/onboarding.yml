@@ -21,31 +21,31 @@ delivery:
 steps:
   first-rtp:
     enabled: true
-    message: '<#92bed8>База <#666666>• <#2bba43>Место найдено.<#e6fff3> Поставьте <#92bed8>/sethome<#e6fff3>.'
+    message: '<#92bed8>Начало <#666666>• <#2bba43>Место найдено.<#e6fff3> Поставьте <#92bed8>/sethome<#e6fff3>.'
   home-created:
     enabled: true
-    message: '<#92bed8>База <#666666>• <#2bba43>Дом сохранён.<#e6fff3> Получите блоки привата: <#92bed8>/kit start<#e6fff3>.'
+    message: '<#92bed8>Начало <#666666>• <#2bba43>Дом сохранён.<#e6fff3> Получите блоки привата: <#92bed8>/kit start<#e6fff3>.'
   land-claimed:
     enabled: true
-    message: '<#92bed8>База <#666666>• <#2bba43>Участок защищён.<#e6fff3> Поставьте внутри <#92bed8>/sethome<#e6fff3>.'
+    message: '<#92bed8>Начало <#666666>• <#2bba43>Участок защищён.<#e6fff3> Поставьте внутри <#92bed8>/sethome<#e6fff3>.'
   foothold-mismatch:
     enabled: true
-    message: '<#92bed8>База <#666666>• <#ff9f0f>Дом вне привата.<#e6fff3> Поставьте <#92bed8>/sethome <#e6fff3>внутри участка.'
+    message: '<#92bed8>Начало <#666666>• <#ff9f0f>Дом вне привата.<#e6fff3> Поставьте <#92bed8>/sethome <#e6fff3>внутри участка.'
   foothold-complete:
     enabled: true
-    message: '<#92bed8>База <#666666>• <#2bba43>Место закреплено.<#e6fff3> Книга «Первый дом» ждёт в <#92bed8>/kit start<#e6fff3>.'
+    message: '<#92bed8>Начало <#666666>• <#2bba43>Место закреплено.<#e6fff3> Книга «Первый дом» ждёт в <#92bed8>/kit start<#e6fff3>.'
   build-book-missing-home:
     enabled: true
-    message: '<#92bed8>База <#666666>• <#ff9f0f>Нет точки дома.<#e6fff3> Поставьте здесь <#92bed8>/sethome<#e6fff3>.'
+    message: '<#92bed8>Начало <#666666>• <#ff9f0f>Нет точки дома.<#e6fff3> Поставьте здесь <#92bed8>/sethome<#e6fff3>.'
   build-book-missing-land:
     enabled: true
-    message: '<#92bed8>База <#666666>• <#ff9f0f>Участок не защищён.<#e6fff3> Поставьте блок привата.'
+    message: '<#92bed8>Начало <#666666>• <#ff9f0f>Участок не защищён.<#e6fff3> Поставьте блок привата.'
   build-book-missing-both:
     enabled: true
-    message: '<#92bed8>База <#666666>• <#ff9f0f>Место не закреплено.<#e6fff3> Нужны <#92bed8>/sethome <#e6fff3>и блок привата.'
+    message: '<#92bed8>Начало <#666666>• <#ff9f0f>Место не закреплено.<#e6fff3> Нужны <#92bed8>/sethome <#e6fff3>и блок привата.'
   build-book-outside-foothold:
     enabled: true
-    message: '<#92bed8>База <#666666>• <#ff9f0f>Макет вне базы.<#e6fff3> Нужны <#92bed8>/sethome <#e6fff3>и приват.'
+    message: '<#92bed8>Начало <#666666>• <#ff9f0f>Макет вне базы.<#e6fff3> Нужны <#92bed8>/sethome <#e6fff3>и приват.'
   autobuild-complete:
     enabled: true
-    message: '<#92bed8>База <#666666>• <#2bba43>Дом построен.<#e6fff3> Продать излишки: <#92bed8>/shop <#e6fff3>или <#92bed8>/ah<#e6fff3>.'
+    message: '<#92bed8>Начало <#666666>• <#2bba43>Дом построен.<#e6fff3> Продать излишки: <#92bed8>/shop <#e6fff3>или <#92bed8>/ah<#e6fff3>.'
