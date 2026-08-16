@@ -24,6 +24,7 @@ import ru.arc.commands.arc.subcommands.JoinMessageSubCommand
 import ru.arc.commands.arc.subcommands.LocationPoolSubCommand
 import ru.arc.commands.arc.subcommands.LoggerSubCommand
 import ru.arc.commands.arc.subcommands.PouchSubCommand
+import ru.arc.commands.arc.subcommands.ProductPathSubCommand
 import ru.arc.commands.arc.subcommands.QuitMessageSubCommand
 import ru.arc.commands.arc.subcommands.ReloadSubCommand
 import ru.arc.commands.arc.subcommands.RepoSubCommand
@@ -70,6 +71,7 @@ class ArcCommand :
             LocationPoolSubCommand,
             HuntSubCommand,
             TreasuresSubCommand,
+            ProductPathSubCommand,
             // New subcommands
             TestSubCommand,
             BuildBookSubCommand,

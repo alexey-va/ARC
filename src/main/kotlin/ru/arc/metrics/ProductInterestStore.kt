@@ -66,6 +66,12 @@ class ProductInterestStore private constructor(
         val actionCounts: MutableMap<String, Long> = linkedMapOf(),
         val details: MutableMap<String, MutableMap<String, DetailRecord>> = linkedMapOf(),
         val exits: MutableMap<String, ExitRecord> = linkedMapOf(),
+        val recentTrail: MutableList<TrailRecord> = mutableListOf(),
+    )
+
+    private data class TrailRecord(
+        val occurredAt: Long,
+        val step: String,
     )
 
     private data class DetailRecord(
@@ -77,6 +83,7 @@ class ProductInterestStore private constructor(
 
     private data class ExitRecord(
         val source: String,
+        val server: String? = null,
         val world: String? = null,
         val command: String? = null,
         val npcId: String? = null,
@@ -85,6 +92,7 @@ class ProductInterestStore private constructor(
         val activity: String? = null,
         val stage: String,
         val teleportCause: String? = null,
+        val connection: String? = null,
         val trail: List<String> = emptyList(),
         var count: Long = 0,
     )
@@ -122,6 +130,12 @@ class ProductInterestStore private constructor(
         val actionCounts: Map<String, Long>? = null,
         val details: Map<String, List<PersistedDetail>>? = null,
         val exits: List<PersistedExit>? = null,
+        val recentTrail: List<PersistedTrail>? = null,
+    )
+
+    private data class PersistedTrail(
+        val occurredAt: Long = 0,
+        val step: String? = null,
     )
 
     private data class PersistedDetail(
@@ -133,6 +147,7 @@ class ProductInterestStore private constructor(
 
     private data class PersistedExit(
         val source: String? = null,
+        val server: String? = null,
         val world: String? = null,
         val command: String? = null,
         val npcId: String? = null,
@@ -141,6 +156,7 @@ class ProductInterestStore private constructor(
         val activity: String? = null,
         val stage: String? = null,
         val teleportCause: String? = null,
+        val connection: String? = null,
         val trail: List<String>? = null,
         val count: Long = 0,
     )
@@ -171,6 +187,7 @@ class ProductInterestStore private constructor(
         if (signal.occurredAt > record.lastSeenAt) markDirty()
         record.lastSeenAt = maxOf(record.lastSeenAt, signal.occurredAt)
         val day = record.day(dayKey(signal.occurredAt))
+        val trailChanged = day.recordTrail(signal)
         var changed = false
         when (signal.kind) {
             ProductEventKind.SESSION_START -> {
@@ -235,11 +252,18 @@ class ProductInterestStore private constructor(
                 changed = signal.sessionSeconds > 0
                 signal.systems.forEach { changed = day.systems.add(it) || changed }
                 if (signal.kind == ProductEventKind.SESSION_END) {
-                    signal.exit?.let { changed = day.recordExit(signal.source, it, config.maxDetailValuesPerPlayerDay) || changed }
+                    signal.exit?.let {
+                        changed = day.recordExit(signal.source, it, config.maxDetailValuesPerPlayerDay) || changed
+                    }
+                }
+                if (day.recentTrail.isNotEmpty()) {
+                    day.recentTrail.clear()
+                    changed = true
                 }
             }
         }
-        if (changed) markDirty()
+        val mutated = changed || trailChanged
+        if (mutated) markDirty()
         return ProductStoreApplyResult(changed, before)
     }
 
@@ -508,6 +532,7 @@ class ProductInterestStore private constructor(
 
     private data class ReportExit(
         val source: String,
+        val server: String?,
         val world: String?,
         val command: String?,
         val npcId: String?,
@@ -516,12 +541,14 @@ class ProductInterestStore private constructor(
         val activity: String?,
         val stage: String,
         val teleportCause: String?,
+        val connection: String?,
         val trail: List<String>,
         var sessions: Long = 0,
         val players: MutableSet<String> = linkedSetOf(),
     ) {
         constructor(exit: ExitRecord) : this(
             source = exit.source,
+            server = exit.server,
             world = exit.world,
             command = exit.command,
             npcId = exit.npcId,
@@ -530,12 +557,14 @@ class ProductInterestStore private constructor(
             activity = exit.activity,
             stage = exit.stage,
             teleportCause = exit.teleportCause,
+            connection = exit.connection,
             trail = exit.trail,
         )
 
         fun asMap(): Map<String, Any?> =
             linkedMapOf<String, Any?>(
-                "server" to source,
+                "server" to (server ?: source),
+                "source" to source,
                 "world" to world,
                 "command" to command,
                 "npcId" to npcId,
@@ -544,6 +573,7 @@ class ProductInterestStore private constructor(
                 "activity" to activity,
                 "stage" to stage,
                 "teleportCause" to teleportCause,
+                "connection" to connection,
                 "trail" to trail.takeIf { it.isNotEmpty() },
                 "sessions" to sessions,
                 "uniquePlayers" to players.size,
@@ -657,6 +687,58 @@ class ProductInterestStore private constructor(
         return true
     }
 
+    private fun DailyRecord.recordTrail(signal: ProductSignal): Boolean {
+        val terminalConnection =
+            signal.detail
+                ?.takeIf { signal.kind == ProductEventKind.DETAIL && it.type == ProductDetailType.CONNECTION }
+                ?.key
+                ?.let { key -> TERMINAL_CONNECTIONS.any { it.label == key } }
+                ?: false
+        if (terminalConnection) {
+            val changed = recentTrail.isNotEmpty()
+            recentTrail.clear()
+            return changed
+        }
+        val raw =
+            when (signal.kind) {
+                ProductEventKind.MENU_OPEN -> "menu" to ProductFeature.MAIN_MENU.label
+                ProductEventKind.HELP_OPEN -> "help" to ProductFeature.HELP.label
+                ProductEventKind.PATH_INTEREST -> "path_interest" to signal.path.label
+                ProductEventKind.PATH_CHOICE -> "path" to signal.path.label
+                ProductEventKind.ACTIVITY -> signal.activity?.let { "activity" to it.label }
+                ProductEventKind.FEATURE_INTEREST -> signal.feature?.let { "feature" to it.label }
+                ProductEventKind.MEANINGFUL_OUTCOME -> signal.outcome?.let { "outcome" to it.label }
+                ProductEventKind.DETAIL ->
+                    signal.detail?.let { detail ->
+                        when (detail.type) {
+                            ProductDetailType.COMMAND -> "command"
+                            ProductDetailType.WORLD -> "world"
+                            ProductDetailType.TELEPORT_WORLD -> "teleport"
+                            ProductDetailType.NPC -> "npc"
+                            ProductDetailType.TELEPORT_CAUSE -> "cause"
+                            ProductDetailType.SERVER -> "server"
+                            ProductDetailType.SERVER_TARGET -> "server_target"
+                            ProductDetailType.CONNECTION -> "connection"
+                        } to detail.key
+                    }
+                else -> null
+            } ?: return false
+        val step = ProductWireCodec.trailStep(raw.first, raw.second) ?: return false
+        val candidate = TrailRecord(signal.occurredAt, step)
+        if (recentTrail.lastOrNull() == candidate) return false
+        recentTrail += candidate
+        // Kotlin's stable sort preserves publication order for signals emitted
+        // inside the same millisecond (for example server then connection).
+        recentTrail.sortBy(TrailRecord::occurredAt)
+        val compact = recentTrail.fold(mutableListOf<TrailRecord>()) { result, record ->
+            if (result.lastOrNull()?.step != record.step) result += record
+            result
+        }
+        recentTrail.clear()
+        recentTrail += compact.takeLast(MAX_TRAIL_STEPS)
+        return true
+    }
+
     private fun DailyRecord.recordDetail(
         source: String,
         detail: ProductDetail,
@@ -685,8 +767,14 @@ class ProductInterestStore private constructor(
         exit: ProductExitContext,
         maxValues: Int,
     ): Boolean {
+        val aggregateTrail =
+            recentTrail
+                .map(TrailRecord::step)
+                .takeIf { it.isNotEmpty() }
+                ?: exit.trail.takeLast(MAX_TRAIL_STEPS)
         val record = ExitRecord(
             source = source,
+            server = exit.server,
             world = exit.world,
             command = exit.command,
             npcId = exit.npcId,
@@ -695,7 +783,8 @@ class ProductInterestStore private constructor(
             activity = exit.activity?.label,
             stage = exit.stage.label,
             teleportCause = exit.teleportCause,
-            trail = exit.trail,
+            connection = exit.connection?.label,
+            trail = aggregateTrail,
         )
         var id = exitId(record)
         if (id !in exits && details.values.sumOf { it.size } + exits.size >= maxValues) {
@@ -804,6 +893,7 @@ class ProductInterestStore private constructor(
                 day.exits.values.sortedWith(compareBy<ExitRecord> { it.source }.thenBy { it.stage }.thenBy { it.world }).map { exit ->
                     PersistedExit(
                         source = exit.source,
+                        server = exit.server,
                         world = exit.world,
                         command = exit.command,
                         npcId = exit.npcId,
@@ -812,10 +902,12 @@ class ProductInterestStore private constructor(
                         activity = exit.activity,
                         stage = exit.stage,
                         teleportCause = exit.teleportCause,
+                        connection = exit.connection,
                         trail = exit.trail,
                         count = exit.count,
                     )
                 },
+            recentTrail = day.recentTrail.map { PersistedTrail(it.occurredAt, it.step) },
         )
 
     private fun localDate(timestamp: Long): LocalDate = Instant.ofEpochMilli(timestamp).atZone(config.zoneId).toLocalDate()
@@ -838,6 +930,16 @@ class ProductInterestStore private constructor(
         const val VERSION = 1
         private const val MAX_FILE_BYTES = 16L * 1024 * 1024
         private const val MAX_CLOCK_SKEW_MILLIS = 5 * 60 * 1_000L
+        private const val MAX_TRAIL_STEPS = 12
+        private val TERMINAL_CONNECTIONS =
+            setOf(
+                ProductConnection.DISCONNECT_ACTIVE,
+                ProductConnection.LOGIN_CONFLICT,
+                ProductConnection.LOGIN_CANCELLED_USER,
+                ProductConnection.LOGIN_CANCELLED_PROXY,
+                ProductConnection.LOGIN_CANCELLED_EARLY,
+                ProductConnection.PRE_SERVER_DISCONNECT,
+            )
         private val PSEUDONYM = Regex("[a-f0-9]{64}")
         private val SOURCE = Regex("[a-z0-9_.-]{1,32}")
         private const val OTHER_DETAIL = "__other__"
@@ -881,7 +983,7 @@ class ProductInterestStore private constructor(
                     val oldest = today.minusDays(config.retentionDays.toLong() - 1)
                     persisted.days.orEmpty()
                         .asSequence()
-                        .mapNotNull { restore(it, config.maxDetailValuesPerPlayerDay) }
+                        .mapNotNull { restore(it, config.maxDetailValuesPerPlayerDay, config.zoneId) }
                         .filter { day -> LocalDate.parse(day.date).let { !it.isBefore(oldest) && !it.isAfter(today) } }
                         .distinctBy(DailyRecord::date)
                         .take(config.retentionDays)
@@ -899,6 +1001,7 @@ class ProductInterestStore private constructor(
         private fun restore(
             day: PersistedDay,
             maxDetailValues: Int,
+            zoneId: java.time.ZoneId,
         ): DailyRecord? {
             val date = day.date?.takeIf { runCatching { LocalDate.parse(it) }.isSuccess } ?: return null
             if (day.sessions < 0 || day.sessionSeconds < 0 || day.activeSeconds !in 0..day.sessionSeconds) return null
@@ -929,6 +1032,7 @@ class ProductInterestStore private constructor(
             day.exits.orEmpty().take(maxStoredRows).forEach { persisted ->
                 val source = persisted.source?.takeIf(SOURCE::matches) ?: return@forEach
                 val stage = ProductExitStage.entries.firstOrNull { it.label == persisted.stage } ?: return@forEach
+                val server = persisted.server?.takeIf { ProductWireCodec.isValidDetailKey(ProductDetailType.SERVER, it) } ?: persisted.server?.let { return@forEach }
                 val world = persisted.world?.takeIf { ProductWireCodec.isValidDetailKey(ProductDetailType.WORLD, it) } ?: persisted.world?.let { return@forEach }
                 val command = persisted.command?.takeIf { ProductWireCodec.isValidDetailKey(ProductDetailType.COMMAND, it) } ?: persisted.command?.let { return@forEach }
                 val npcId = persisted.npcId?.takeIf { ProductWireCodec.isValidDetailKey(ProductDetailType.NPC, it) } ?: persisted.npcId?.let { return@forEach }
@@ -936,12 +1040,13 @@ class ProductInterestStore private constructor(
                     persisted.teleportCause?.takeIf {
                         ProductWireCodec.isValidDetailKey(ProductDetailType.TELEPORT_CAUSE, it)
                     } ?: persisted.teleportCause?.let { return@forEach }
+                val connection = persisted.connection?.takeIf { ProductWireCodec.isValidDetailKey(ProductDetailType.CONNECTION, it) } ?: persisted.connection?.let { return@forEach }
                 if (persisted.count <= 0) return@forEach
-                val trail = persisted.trail.orEmpty().mapNotNull { step -> ProductWireCodec.trailStep(step.substringBefore('='), step.substringAfter('=', "")) }.take(12)
+                val trail = persisted.trail.orEmpty().mapNotNull { step -> ProductWireCodec.trailStep(step.substringBefore('='), step.substringAfter('=', "")) }.take(MAX_TRAIL_STEPS)
                 val overflow =
                     source == OVERFLOW_SOURCE &&
                         stage == ProductExitStage.ENGAGED &&
-                        listOf(world, command, npcId, teleportCause, persisted.feature, persisted.activity, persisted.npcName).all { it == null } &&
+                        listOf(server, world, command, npcId, teleportCause, connection, persisted.feature, persisted.activity, persisted.npcName).all { it == null } &&
                         trail.isEmpty()
                 if (overflow) {
                     if (!overflowDimensions.add("exit")) return@forEach
@@ -952,6 +1057,7 @@ class ProductInterestStore private constructor(
                 }
                 val record = ExitRecord(
                     source = source,
+                    server = server,
                     world = world,
                     command = command,
                     npcId = npcId,
@@ -960,11 +1066,25 @@ class ProductInterestStore private constructor(
                     activity = persisted.activity?.takeIf { value -> ProductActivity.entries.any { it.label == value } },
                     stage = stage.label,
                     teleportCause = teleportCause,
+                    connection = connection,
                     trail = trail,
                     count = persisted.count.coerceAtMost(1_000_000),
                 )
                 exits[exitId(record)] = record
             }
+            val recentTrail =
+                day.recentTrail.orEmpty()
+                    .mapNotNull { persisted ->
+                        val step = persisted.step ?: return@mapNotNull null
+                        val normalized = ProductWireCodec.trailStep(step.substringBefore('='), step.substringAfter('=', "")) ?: return@mapNotNull null
+                        if (persisted.occurredAt <= 0 || Instant.ofEpochMilli(persisted.occurredAt).atZone(zoneId).toLocalDate().toString() != date) {
+                            return@mapNotNull null
+                        }
+                        TrailRecord(persisted.occurredAt, normalized)
+                    }
+                    .sortedBy(TrailRecord::occurredAt)
+                    .takeLast(MAX_TRAIL_STEPS)
+                    .toMutableList()
             return DailyRecord(
                 date = date,
                 sessions = day.sessions,
@@ -989,6 +1109,7 @@ class ProductInterestStore private constructor(
                         .toMutableMap(),
                 details = details,
                 exits = exits,
+                recentTrail = recentTrail,
             )
         }
 
@@ -1000,6 +1121,7 @@ class ProductInterestStore private constructor(
         private fun exitId(exit: ExitRecord): String =
             listOf(
                 exit.source,
+                exit.server.orEmpty(),
                 exit.world.orEmpty(),
                 exit.command.orEmpty(),
                 exit.npcId.orEmpty(),
@@ -1007,6 +1129,7 @@ class ProductInterestStore private constructor(
                 exit.activity.orEmpty(),
                 exit.stage,
                 exit.teleportCause.orEmpty(),
+                exit.connection.orEmpty(),
                 exit.trail.joinToString(">"),
             ).joinToString("\u001f")
     }

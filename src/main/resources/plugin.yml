@@ -83,6 +83,9 @@ commands:
     usage: /mount [menu|help|admin]
     permission: arc.mounts.use
 permissions:
+  arc.product.path:
+    description: Choose a recommended RusCrafting starter path
+    default: true
   arc.pouch:
     description: Give YAML-defined ARC reward pouches
     default: op

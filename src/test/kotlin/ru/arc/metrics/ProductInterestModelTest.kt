@@ -38,6 +38,7 @@ class ProductInterestModelTest :
                     detail = null,
                     exit =
                         ProductExitContext(
+                            server = "classic_survival",
                             world = "vanilla",
                             command = "rtp",
                             npcId = "17",
@@ -46,6 +47,7 @@ class ProductInterestModelTest :
                             activity = ProductActivity.EXPLORATION,
                             stage = ProductExitStage.BEFORE_OUTCOME,
                             teleportCause = "plugin",
+                            connection = ProductConnection.DISCONNECT_ACTIVE,
                             trail = listOf("world=vanilla", "npc=17", "command=rtp"),
                         ),
                     sessionSeconds = 120,

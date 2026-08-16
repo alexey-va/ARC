@@ -12,7 +12,6 @@ import ru.arc.util.Common
 import java.nio.file.Path
 import java.util.ArrayDeque
 import java.util.LinkedHashMap
-import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.sqrt
 
@@ -742,6 +741,7 @@ class ProductInterestTelemetry(
                 exit =
                     if (organic) {
                         ProductExitContext(
+                            server = serverName,
                             world = session.lastWorldName,
                             command = session.lastCommand,
                             npcId = session.lastNpcId,
@@ -877,19 +877,17 @@ class ProductInterestTelemetry(
         trail.addLast(step)
     }
 
-    private fun normalizeServer(value: String): String =
-        value.trim().lowercase(Locale.ROOT).takeIf { SERVER.matches(it) } ?: "unknown"
+    private fun normalizeServer(value: String): String = ProductWireCodec.normalizeServer(value) ?: "unknown"
 
     private fun normalizedWorld(value: String): String = ProductWireCodec.normalizeWorld(value) ?: "unknown"
 
     companion object {
-        const val CHANNEL = "arc-product-interest-v1"
+        const val CHANNEL = ProductWireCodec.CHANNEL
         private const val MAX_SEEN_EVENTS = 8_192
         private const val MAX_SAMPLE_GAP_MILLIS = 60_000L
         private const val MAX_MOVEMENT_SAMPLE_BLOCKS = 128.0
         private const val MAX_SESSION_SECONDS = 24 * 60 * 60L
         private const val MAX_FUNNEL_LATENCY_MILLIS = 7 * 24 * 60 * 60 * 1_000L
         private const val MAX_TRAIL_STEPS = 12
-        private val SERVER = Regex("[a-z0-9_.-]{1,32}")
     }
 }
