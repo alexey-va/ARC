@@ -35,6 +35,7 @@ import ru.arc.metrics.core.MetricsConfig
 import ru.arc.metrics.core.MetricsIdentity
 import ru.arc.metrics.core.RedisMetricsBinder
 import ru.arc.metrics.paper.PaperMetricsCollector
+import ru.arc.product.ProductOnboardingHint
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import kotlin.time.Duration.Companion.seconds
@@ -89,6 +90,13 @@ object MetricsModule : PluginModule {
         entry: ProductEntryPoint = ProductEntryPoint.API,
     ) {
         productInterest?.outcome(playerId, outcome, feature, entry)
+    }
+
+    fun recordProductOnboardingHint(
+        player: Player,
+        hint: ProductOnboardingHint,
+    ) {
+        productInterest?.onboardingHint(player.uniqueId.toString(), hint)
     }
 
     fun productInterestReport(

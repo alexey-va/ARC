@@ -210,7 +210,9 @@ The route is authenticated and read-only, gated by
 `MetricsModule`; standby nodes must mark the result incomplete. The response
 may contain bounded exact world names, command roots, source-qualified Citizens
 NPC IDs/names, teleport causes and aggregate exit contexts with at most 12
-ordered sanitized final steps. It must never
+ordered sanitized final steps. The `onboarding_hint` dimension records only a
+fixed enum after the message is actually sent; `foothold_recovered` is emitted
+only for the first foothold completed after a delivered recovery hint. It must never
 return UUIDs, internal pseudonyms, command arguments, chat text or coordinates.
 Dynamic values remain in this response and never become Prometheus labels.
 

@@ -5,6 +5,7 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.maps.shouldContainKey
 import io.kotest.matchers.shouldBe
+import ru.arc.product.ProductOnboardingHint
 import java.nio.file.Files
 import java.time.Instant
 import java.time.ZoneId
@@ -26,6 +27,12 @@ class ProductInterestStoreTest :
                 signal(player, now + 1_000, ProductEventKind.DETAIL, detail = ProductDetail(ProductDetailType.COMMAND, "rtp")),
                 signal(player, now + 2_000, ProductEventKind.DETAIL, detail = ProductDetail(ProductDetailType.WORLD, "vanilla")),
                 signal(player, now + 3_000, ProductEventKind.DETAIL, detail = ProductDetail(ProductDetailType.NPC, "17", "Проводник")),
+                signal(
+                    player,
+                    now + 4_000,
+                    ProductEventKind.DETAIL,
+                    detail = ProductDetail(ProductDetailType.ONBOARDING_HINT, ProductOnboardingHint.FOOTHOLD_MISMATCH.label),
+                ),
                 signal(
                     player,
                     now + 60_000,
@@ -60,6 +67,7 @@ class ProductInterestStoreTest :
             dimensions.getValue("npc").first()["display"] shouldBe "Проводник"
             dimensions.getValue("server").first()["value"] shouldBe "classic_survival"
             dimensions.getValue("connection").first()["value"] shouldBe "server_connect"
+            dimensions.getValue("onboarding_hint").first()["value"] shouldBe "foothold_mismatch"
 
             @Suppress("UNCHECKED_CAST")
             val exits = report["exitContexts"] as List<Map<String, Any?>>
@@ -67,7 +75,14 @@ class ProductInterestStoreTest :
             exits.first()["command"] shouldBe "rtp"
             exits.first()["uniquePlayers"] shouldBe 1
             exits.first()["trail"] shouldBe
-                listOf("server=classic_survival", "connection=server_connect", "command=rtp", "world=vanilla", "npc=17")
+                listOf(
+                    "server=classic_survival",
+                    "connection=server_connect",
+                    "command=rtp",
+                    "world=vanilla",
+                    "npc=17",
+                    "onboarding_hint=foothold_mismatch",
+                )
 
             store.flush(now + 62_000, force = true) shouldBe true
             val restored = ProductInterestStore.open(path, config, now + 63_000)

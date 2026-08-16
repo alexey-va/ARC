@@ -8,6 +8,7 @@ import io.micrometer.prometheusmetrics.PrometheusConfig
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import ru.arc.redis.InMemoryRedis
 import ru.arc.redis.ServerIdentity
+import ru.arc.product.ProductOnboardingHint
 import java.nio.file.Files
 import java.time.Instant
 import java.time.ZoneId
@@ -32,6 +33,7 @@ class ProductInterestTelemetryTest :
             telemetry.command(playerId, "/rtp secret-player 100 200", now)
             telemetry.npcClick(playerId, 17, "<gold>Проводник</gold>", now)
             telemetry.teleport(playerId, ProductWorldType.SURVIVAL, ProductWorldType.RESOURCE, "mining", "PLUGIN", now)
+            telemetry.onboardingHint(playerId, ProductOnboardingHint.FOOTHOLD_MISMATCH, now)
             telemetry.action(playerId, ProductAction.BLOCK_PLACE, now)
             telemetry.action(playerId, ProductAction.BLOCK_PLACE, now)
             now += 60_000
@@ -45,6 +47,7 @@ class ProductInterestTelemetryTest :
             report.toString().contains("mining") shouldBe true
             report.toString().contains("world=vanilla") shouldBe true
             report.toString().contains("npc=17") shouldBe true
+            report.toString().contains("onboarding_hint=foothold_mismatch") shouldBe true
             report.toString().contains(playerId) shouldBe false
 
             val scrape = registry.scrape()
@@ -53,6 +56,7 @@ class ProductInterestTelemetryTest :
             scrape shouldNotContain "vanilla"
             registry.get("arc_product_meaningful_outcomes").tag("outcome", "building_threshold").counter().count() shouldBeExactly 1.0
             registry.get("arc_product_detail_events").tag("dimension", "command").counter().count() shouldBeExactly 1.0
+            registry.get("arc_product_detail_events").tag("dimension", "onboarding_hint").counter().count() shouldBeExactly 1.0
             registry
                 .get("arc_product_teleports")
                 .tags("cause", "plugin", "from", "survival", "to", "resource")

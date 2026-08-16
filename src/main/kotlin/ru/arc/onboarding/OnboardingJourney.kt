@@ -1,5 +1,6 @@
 package ru.arc.onboarding
 
+import ru.arc.product.ProductOnboardingHint
 import java.util.LinkedHashSet
 import java.util.Locale
 
@@ -19,17 +20,20 @@ internal enum class OnboardingMilestone(val id: String) {
     }
 }
 
-internal enum class OnboardingHint(val id: String) {
-    FIRST_RTP("first-rtp"),
-    HOME_CREATED("home-created"),
-    LAND_CLAIMED("land-claimed"),
-    FOOTHOLD_MISMATCH("foothold-mismatch"),
-    FOOTHOLD_COMPLETE("foothold-complete"),
-    BUILD_BOOK_MISSING_HOME("build-book-missing-home"),
-    BUILD_BOOK_MISSING_LAND("build-book-missing-land"),
-    BUILD_BOOK_MISSING_BOTH("build-book-missing-both"),
-    BUILD_BOOK_OUTSIDE_FOOTHOLD("build-book-outside-foothold"),
-    AUTOBUILD_COMPLETE("autobuild-complete");
+internal enum class OnboardingHint(
+    val id: String,
+    val productHint: ProductOnboardingHint,
+) {
+    FIRST_RTP("first-rtp", ProductOnboardingHint.FIRST_RTP),
+    HOME_CREATED("home-created", ProductOnboardingHint.HOME_CREATED),
+    LAND_CLAIMED("land-claimed", ProductOnboardingHint.LAND_CLAIMED),
+    FOOTHOLD_MISMATCH("foothold-mismatch", ProductOnboardingHint.FOOTHOLD_MISMATCH),
+    FOOTHOLD_COMPLETE("foothold-complete", ProductOnboardingHint.FOOTHOLD_COMPLETE),
+    BUILD_BOOK_MISSING_HOME("build-book-missing-home", ProductOnboardingHint.BUILD_BOOK_MISSING_HOME),
+    BUILD_BOOK_MISSING_LAND("build-book-missing-land", ProductOnboardingHint.BUILD_BOOK_MISSING_LAND),
+    BUILD_BOOK_MISSING_BOTH("build-book-missing-both", ProductOnboardingHint.BUILD_BOOK_MISSING_BOTH),
+    BUILD_BOOK_OUTSIDE_FOOTHOLD("build-book-outside-foothold", ProductOnboardingHint.BUILD_BOOK_OUTSIDE_FOOTHOLD),
+    AUTOBUILD_COMPLETE("autobuild-complete", ProductOnboardingHint.AUTOBUILD_COMPLETE);
 
     companion object {
         fun fromId(id: String): OnboardingHint =
@@ -124,6 +128,7 @@ internal data class OnboardingJourneyUpdate(
     val changed: Boolean,
     val addedMilestones: Set<OnboardingMilestone> = emptySet(),
     val queuedHints: List<OnboardingHint> = emptyList(),
+    val recoveredFoothold: Boolean = false,
 )
 
 /** Pure, non-linear onboarding state transitions. Plugin listeners only provide verified outcomes. */
@@ -241,10 +246,14 @@ internal object OnboardingJourney {
         if (!changed) return OnboardingJourneyUpdate(changed = false)
 
         progress.updatedAt = now
+        val addedMilestones = progress.milestones - before.milestones
         return OnboardingJourneyUpdate(
             changed = true,
-            addedMilestones = progress.milestones - before.milestones,
+            addedMilestones = addedMilestones,
             queuedHints = progress.pendingHints.filterNot(before.pendingHints::contains),
+            recoveredFoothold =
+                OnboardingMilestone.FOOTHOLD_COMPLETE in addedMilestones &&
+                    before.deliveredHints.any(FOOTHOLD_RECOVERY_HINTS::contains),
         )
     }
 
@@ -294,4 +303,12 @@ internal object OnboardingJourney {
         milestone: OnboardingMilestone,
         place: OnboardingPlace?,
     ): OnboardingPlace = requireNotNull(place) { "${milestone.id} requires a chunk location" }
+
+    private val FOOTHOLD_RECOVERY_HINTS =
+        setOf(
+            OnboardingHint.FOOTHOLD_MISMATCH,
+            OnboardingHint.BUILD_BOOK_MISSING_HOME,
+            OnboardingHint.BUILD_BOOK_MISSING_LAND,
+            OnboardingHint.BUILD_BOOK_MISSING_BOTH,
+        )
 }

@@ -171,6 +171,14 @@ object OnboardingService {
                 ProductEntryPoint.GAMEPLAY,
             )
         }
+        if (update.recoveredFoothold) {
+            MetricsModule.recordProductOutcome(
+                player,
+                ProductOutcome.FOOTHOLD_RECOVERED,
+                ProductFeature.LANDS,
+                ProductEntryPoint.GAMEPLAY,
+            )
+        }
         if (update.queuedHints.isNotEmpty()) {
             schedule(player.uniqueId, current.config.firstDelayTicks)
         }
@@ -223,6 +231,7 @@ object OnboardingService {
             if (message == null) continue
 
             player.sendMessage(message)
+            MetricsModule.recordProductOnboardingHint(player, hint.productHint)
             if (current.store.nextHint(playerId) != null) {
                 schedule(playerId, current.config.betweenMessagesTicks)
             }

@@ -42,6 +42,21 @@ class OnboardingStoreTest : FreeSpec({
         Files.exists(path).shouldBeFalse()
     }
 
+    "retains delivered recovery evidence across a restart" {
+        val path = Files.createTempDirectory("arc-onboarding-").resolve("data/onboarding-v2.json")
+        val playerId = UUID.randomUUID()
+        val otherChunk = OnboardingPlace.fromChunk("survival", 11, 20)
+        val store = OnboardingStore.open(path)
+        store.observe(playerId, OnboardingMilestone.FIRST_RTP, 10L)
+        store.observe(playerId, OnboardingMilestone.HOME_CREATED, 20L, homeChunk)
+        store.observe(playerId, OnboardingMilestone.LAND_CLAIMED, 30L, otherChunk)
+        store.markDelivered(playerId, OnboardingHint.FOOTHOLD_MISMATCH, 40L).shouldBeTrue()
+
+        val recovered = OnboardingStore.open(path).observe(playerId, OnboardingMilestone.LAND_CLAIMED, 50L, homeChunk)
+
+        recovered.recoveredFoothold.shouldBeTrue()
+    }
+
     "rejects an unknown schema instead of resetting and spamming players" {
         val path = Files.createTempDirectory("arc-onboarding-").resolve("onboarding-v2.json")
         Files.writeString(path, """{"version":99,"players":{}}""")

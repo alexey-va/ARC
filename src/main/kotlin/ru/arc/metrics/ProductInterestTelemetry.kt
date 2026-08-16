@@ -6,6 +6,7 @@ import io.micrometer.core.instrument.DistributionSummary
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import ru.arc.metrics.core.MetricPoint
+import ru.arc.product.ProductOnboardingHint
 import ru.arc.redis.ChannelListener
 import ru.arc.redis.RedisOperations
 import ru.arc.util.Common
@@ -201,7 +202,20 @@ class ProductInterestTelemetry(
                 .register(registry)
         }
     private val qaCounters =
-        listOf("session_start", "first_join", "command", "world", "teleport", "npc", "action", "feature", "outcome", "session_end", "session_censored")
+        listOf(
+            "session_start",
+            "first_join",
+            "command",
+            "world",
+            "teleport",
+            "npc",
+            "action",
+            "feature",
+            "outcome",
+            "onboarding_hint",
+            "session_end",
+            "session_censored",
+        )
             .associateWith { event ->
                 Counter
                     .builder("arc_product_qa_events")
@@ -432,6 +446,25 @@ class ProductInterestTelemetry(
             recordLocal(signal(player, now, ProductEventKind.PATH_INTEREST, path = feature.path, activity = feature.activity))
         }
         recordLocal(signal(player, now, ProductEventKind.FEATURE_INTEREST, path = feature.path, feature = feature, activity = feature.activity))
+    }
+
+    @Synchronized
+    fun onboardingHint(
+        playerId: String,
+        hint: ProductOnboardingHint,
+        now: Long = clockMillis(),
+    ) {
+        val player = ProductPseudonym.of(playerId)
+        val session = sessions[player]
+        session?.apply {
+            lastActiveAt = now
+            addTrail("onboarding_hint", hint.label)
+        }
+        if (session?.qa == true) {
+            qa("onboarding_hint")
+            return
+        }
+        detail(player, now, ProductDetailType.ONBOARDING_HINT, hint.label)
     }
 
     @Synchronized

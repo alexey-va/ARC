@@ -73,7 +73,22 @@ class OnboardingJourneyTest : FreeSpec({
         val recovered = OnboardingJourney.observe(progress, OnboardingMilestone.LAND_CLAIMED, 4L, homeChunk)
 
         recovered.addedMilestones shouldBe setOf(OnboardingMilestone.FOOTHOLD_COMPLETE)
+        recovered.recoveredFoothold shouldBe false
         progress.footholdPlaces shouldBe setOf(homeChunk)
+        progress.pendingHints.shouldContainExactly(OnboardingHint.FOOTHOLD_COMPLETE)
+    }
+
+    "records successful recovery only after the mismatch hint was shown" {
+        val progress = OnboardingPlayerProgress()
+        OnboardingJourney.observe(progress, OnboardingMilestone.FIRST_RTP, 1L)
+        OnboardingJourney.observe(progress, OnboardingMilestone.HOME_CREATED, 2L, homeChunk)
+        OnboardingJourney.observe(progress, OnboardingMilestone.LAND_CLAIMED, 3L, otherChunk)
+        progress.pendingHints.remove(OnboardingHint.FOOTHOLD_MISMATCH)
+        progress.deliveredHints += OnboardingHint.FOOTHOLD_MISMATCH
+
+        val recovered = OnboardingJourney.observe(progress, OnboardingMilestone.LAND_CLAIMED, 4L, homeChunk)
+
+        recovered.recoveredFoothold shouldBe true
         progress.pendingHints.shouldContainExactly(OnboardingHint.FOOTHOLD_COMPLETE)
     }
 

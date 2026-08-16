@@ -719,6 +719,7 @@ class ProductInterestStore private constructor(
                             ProductDetailType.SERVER -> "server"
                             ProductDetailType.SERVER_TARGET -> "server_target"
                             ProductDetailType.CONNECTION -> "connection"
+                            ProductDetailType.ONBOARDING_HINT -> "onboarding_hint"
                         } to detail.key
                     }
                 else -> null
