@@ -157,6 +157,7 @@ dependencies {
     testImplementation(libs.org.eclipse.jetty.websocket.websocket.client)
     testImplementation("commons-lang:commons-lang:2.6")
     testImplementation(libs.com.zrips.cmi.api)
+    testImplementation(libs.net.william278.huskhomes)
     testImplementation(libs.net.citizensnpcs.citizens.main) { exclude(group = "*", module = "*") }
     testImplementation(libs.com.denizenscript.denizen) { isTransitive = false }
     testImplementation(libs.ru.ruscrafting.thirdparty.elitemobs.api)

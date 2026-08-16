@@ -3,6 +3,8 @@ package ru.arc.onboarding
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldStartWith
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import ru.arc.config.Config
 import java.nio.file.Files
 
@@ -56,5 +58,18 @@ class OnboardingConfigTest : FreeSpec({
         val config = OnboardingConfig.load(Config(root, "modules/onboarding.yml"))
 
         shouldThrow<IllegalArgumentException> { config.validate() }
+    }
+
+    "default messages use the compact base identity and parse as MiniMessage" {
+        val root = Files.createTempDirectory("arc-onboarding-config-")
+        Files.createDirectories(root.resolve("modules"))
+        Files.writeString(root.resolve("modules/onboarding.yml"), "enabled: false\n")
+        val config = OnboardingConfig.load(Config(root, "modules/onboarding.yml"))
+        val plainText = PlainTextComponentSerializer.plainText()
+
+        OnboardingHint.entries.forEach { hint ->
+            plainText.serialize(config.message(hint)).shouldStartWith("База • ")
+        }
+        config.validate()
     }
 })

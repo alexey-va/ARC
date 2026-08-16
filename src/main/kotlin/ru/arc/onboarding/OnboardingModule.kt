@@ -17,7 +17,6 @@ object OnboardingModule : PluginModule {
     override fun init() {
         OnboardingService.init()
         register(OnboardingPlayerListener())
-        registerOptional("CMI") { OnboardingCmiListener() }
         registerOptional("Lands") { OnboardingLandsListener() }
         if (OnboardingService.isEnabled()) {
             Bukkit.getOnlinePlayers().forEach(OnboardingService::resume)

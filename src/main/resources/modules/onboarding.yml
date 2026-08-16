@@ -1,7 +1,7 @@
 # Контекстный онбординг безопасной базы. Не wizard и не меню: шаги срабатывают
-# один раз только после подтвержденного результата RTP/CMI/Lands/ARC BuildBook.
+# один раз только после подтвержденного результата RTP/HuskHomes/Lands/ARC BuildBook.
 # Управляет только контекстными подсказками и их состоянием. Product telemetry
-# результатов RTP/CMI/Lands/BuildBook пишется независимо от этого переключателя.
+# результатов RTP/HuskHomes/Lands/BuildBook пишется независимо от этого переключателя.
 enabled: false
 
 # Мир проверяется в момент результата и перед отложенной доставкой подсказки.
@@ -21,31 +21,31 @@ delivery:
 steps:
   first-rtp:
     enabled: true
-    message: '<green>Место найдено. <gray>Сохрани возврат через <white>/sethome<gray> и защити участок claim-блоками из <white>/kit start<gray>.'
+    message: '<#92bed8>База <#666666>• <#2bba43>Место найдено.<#e6fff3> Поставьте <#92bed8>/sethome<#e6fff3>.'
   home-created:
     enabled: true
-    message: '<green>Точка возврата сохранена. <gray>Теперь защити участок claim-блоком из <white>/kit start<gray>.'
+    message: '<#92bed8>База <#666666>• <#2bba43>Дом сохранён.<#e6fff3> Получите блоки привата: <#92bed8>/kit start<#e6fff3>.'
   land-claimed:
     enabled: true
-    message: '<green>Участок защищён. <gray>Теперь поставь <white>/sethome<gray>, чтобы вернуться сюда после смерти или выхода.'
+    message: '<#92bed8>База <#666666>• <#2bba43>Участок защищён.<#e6fff3> Поставьте внутри <#92bed8>/sethome<#e6fff3>.'
   foothold-mismatch:
     enabled: true
-    message: '<yellow>Дом и приват пока не совпадают. <gray>Поставь <white>/sethome <gray>внутри защищённого участка — тогда это будет безопасная база.'
+    message: '<#92bed8>База <#666666>• <#ff9f0f>Дом вне привата.<#e6fff3> Поставьте <#92bed8>/sethome <#e6fff3>внутри участка.'
   foothold-complete:
     enabled: true
-    message: '<green>База закреплена. <gray>В <white>/kit start <gray>есть книга «Первый дом»: возьми её в руку и нажми ПКМ по земле.'
+    message: '<#92bed8>База <#666666>• <#2bba43>Место закреплено.<#e6fff3> Книга «Первый дом» ждёт в <#92bed8>/kit start<#e6fff3>.'
   build-book-missing-home:
     enabled: true
-    message: '<yellow>Макет дома открыт. <gray>Перед стройкой поставь здесь <white>/sethome<gray>, чтобы не потерять базу.'
+    message: '<#92bed8>База <#666666>• <#ff9f0f>Нет точки дома.<#e6fff3> Поставьте здесь <#92bed8>/sethome<#e6fff3>.'
   build-book-missing-land:
     enabled: true
-    message: '<yellow>Макет дома открыт. <gray>Перед стройкой защити участок claim-блоком из <white>/kit start<gray>.'
+    message: '<#92bed8>База <#666666>• <#ff9f0f>Участок не защищён.<#e6fff3> Поставьте блок привата.'
   build-book-missing-both:
     enabled: true
-    message: '<yellow>Макет дома открыт, но место ещё не закреплено. <gray>Поставь <white>/sethome <gray>и защити участок claim-блоком.'
+    message: '<#92bed8>База <#666666>• <#ff9f0f>Место не закреплено.<#e6fff3> Нужны <#92bed8>/sethome <#e6fff3>и блок привата.'
   build-book-outside-foothold:
     enabled: true
-    message: '<yellow>Макет открыт вне безопасной базы. <gray>Строй там, где <white>/sethome <gray>находится внутри Lands-привата, либо сначала закрепи это место.'
+    message: '<#92bed8>База <#666666>• <#ff9f0f>Макет вне базы.<#e6fff3> Нужны <#92bed8>/sethome <#e6fff3>и приват.'
   autobuild-complete:
     enabled: true
-    message: '<green>Первый дом готов. <gray>Дальше добывай и строй; излишки продавай в <white>/shop <gray>или выставляй на <white>/ah<gray>.'
+    message: '<#92bed8>База <#666666>• <#2bba43>Дом построен.<#e6fff3> Продать излишки: <#92bed8>/shop <#e6fff3>или <#92bed8>/ah<#e6fff3>.'
