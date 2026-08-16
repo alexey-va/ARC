@@ -379,6 +379,14 @@ object ContractsManager {
         if (observation != null) {
             val completedPlayers =
                 observation.playerOutcomes.filterValues { it == DungeonCompletionPlayerOutcome.START_TO_FINISH }.keys
+            completedPlayers.forEach { playerId ->
+                ru.arc.metrics.MetricsModule.recordProductOutcome(
+                    playerId,
+                    ru.arc.metrics.ProductOutcome.DUNGEON_COMPLETE,
+                    ru.arc.metrics.ProductFeature.DUNGEONS,
+                    ru.arc.metrics.ProductEntryPoint.GAMEPLAY,
+                )
+            }
             if (instanceWorld != null) {
                 deliverSeasonDungeonRewards(observation, completedPlayers, instanceWorld, now)
             }

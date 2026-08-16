@@ -332,6 +332,13 @@ class TreasureHuntService(
             stopHunt(hunt)
         }
 
+        ru.arc.metrics.MetricsModule.recordProductOutcome(
+            player,
+            ru.arc.metrics.ProductOutcome.TREASURE_CLAIM,
+            ru.arc.metrics.ProductFeature.TREASURE,
+            ru.arc.metrics.ProductEntryPoint.GAMEPLAY,
+        )
+
         debug("Player ${player.name} claimed chest at $centerLoc")
         return true
     }

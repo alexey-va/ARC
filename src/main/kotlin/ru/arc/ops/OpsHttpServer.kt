@@ -154,6 +154,9 @@ class OpsHttpServer(
             method == "GET" && segments == listOf("economy", "audit") ->
                 handleEconomyAudit(exchange, cfg, query)
 
+            method == "GET" && segments == listOf("product", "interest") ->
+                handleProductInterest(exchange, cfg, query)
+
             method == "GET" && segments == listOf("economy", "contracts", "reconciliations") ->
                 handleContractReconciliationRead(exchange, cfg) {
                     OpsContractReconciliationHandlers.list(query["limit"]?.toIntOrNull() ?: 20)
@@ -907,6 +910,24 @@ class OpsHttpServer(
         } catch (failure: IllegalArgumentException) {
             val (code, body) = OpsJson.error(400, failure.message ?: "Invalid economy audit window")
             respond(exchange, code, body)
+        }
+    }
+
+    private fun handleProductInterest(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        query: Map<String, String>,
+    ) {
+        if (!cfg.productInterestReadEnabled) {
+            respondError(exchange, 403, "Product-interest read endpoint disabled in config")
+            return
+        }
+        val days = query["days"]?.toIntOrNull() ?: 7
+        val limit = query["limit"]?.toIntOrNull() ?: 20
+        try {
+            respondOk(exchange, OpsProductInterestHandlers.summary(days, limit))
+        } catch (failure: IllegalArgumentException) {
+            respondError(exchange, 400, failure.message ?: "Bad request")
         }
     }
 
@@ -1942,6 +1963,9 @@ class OpsHttpServer(
                 "GET /ops/economy/audit?hours=|since_epoch_ms=&limit=&server=all|spawn|survival|parkour&shop_materials=STONE,OAK_LOG"
             routes +=
                 "GET /ops/economy/audit?...&concentration_groups=services_preparation=cmi,advanced_enchantments"
+        }
+        if (cfg.productInterestReadEnabled) {
+            routes += "GET /ops/product/interest?days=1..35&limit=1..100"
         }
         if (cfg.contractReconciliationReadEnabled) {
             routes += "GET /ops/economy/contracts/reconciliations?limit="

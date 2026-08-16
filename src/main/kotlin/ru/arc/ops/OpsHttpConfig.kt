@@ -39,6 +39,9 @@ open class OpsHttpConfig(private val config: Config) {
     open val economyAuditReadEnabled: Boolean
         get() = config.bool("economy-audit-read-enabled", true)
 
+    open val productInterestReadEnabled: Boolean
+        get() = config.bool("product-interest-read-enabled", true)
+
     open val contractReconciliationReadEnabled: Boolean
         get() = config.bool("contract-reconciliation-read-enabled", true)
 
@@ -151,6 +154,7 @@ class TestOpsHttpConfig(
     override val reloadEnabled: Boolean = true,
     override val runAsEnabled: Boolean = false,
     override val economyAuditReadEnabled: Boolean = true,
+    override val productInterestReadEnabled: Boolean = true,
     override val contractReconciliationReadEnabled: Boolean = true,
     override val contractReconciliationWriteEnabled: Boolean = false,
     override val itemsReadEnabled: Boolean = true,
@@ -184,6 +188,7 @@ class TestOpsHttpConfig(
         messagesEnabled: Boolean = this.messagesEnabled,
         runAsEnabled: Boolean = this.runAsEnabled,
         economyAuditReadEnabled: Boolean = this.economyAuditReadEnabled,
+        productInterestReadEnabled: Boolean = this.productInterestReadEnabled,
         contractReconciliationReadEnabled: Boolean = this.contractReconciliationReadEnabled,
         contractReconciliationWriteEnabled: Boolean = this.contractReconciliationWriteEnabled,
         itemsGiveEnabled: Boolean = this.itemsGiveEnabled,
@@ -220,6 +225,7 @@ class TestOpsHttpConfig(
             reloadEnabled = reloadEnabled,
             runAsEnabled = runAsEnabled,
             economyAuditReadEnabled = economyAuditReadEnabled,
+            productInterestReadEnabled = productInterestReadEnabled,
             contractReconciliationReadEnabled = contractReconciliationReadEnabled,
             contractReconciliationWriteEnabled = contractReconciliationWriteEnabled,
             itemsReadEnabled = itemsReadEnabled,

@@ -111,6 +111,7 @@ class DungeonInterestMetrics(
     private val registry: MeterRegistry,
     private val config: DungeonInterestConfig,
     private val nanoTime: () -> Long = System::nanoTime,
+    private val onVisit: (playerId: String, world: String) -> Unit = { _, _ -> },
 ) {
     private data class Session(
         val world: String,
@@ -177,7 +178,10 @@ class DungeonInterestMetrics(
         if (world == null) return
         val worldMeters = metersFor(world) ?: return
         sessions[playerId] = Session(world, now, now)
-        if (countVisit) worldMeters.visits.increment()
+        if (countVisit) {
+            worldMeters.visits.increment()
+            onVisit(playerId, world)
+        }
     }
 
     private fun finishSession(

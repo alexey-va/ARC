@@ -34,6 +34,7 @@ HTTP ops API и ItemSpec для RusCrafting MCP. **Runtime configs:** `mcserver/
 | `OpsTreasurePoolHandlers` | Strict reward schema over native treasure pools |
 | `OpsContentHealthHandlers` | Isolated cross-catalog health summary |
 | `OpsEconomyAuditHandlers` | Read-only persisted economy ledger summary and top balances |
+| `OpsProductInterestHandlers` | Read-only bounded product journey and exit-context report |
 | `OpsContractReconciliationHandlers` | Typed list/detail/preview/apply for Economy V2 manual-review evidence |
 | `OpsSeasonMoneyReconciliationHandlers` | Typed provider-history adjudication for ambiguous season burns |
 | `BankAuditModule` | Single-leader Bank supply snapshots, aggregate metrics, and bounded account-change evidence |
@@ -197,6 +198,21 @@ It respects every component's existing read gate, isolates startup/integration
 failures, and reports `complete`, `healthy`, issue counts, unavailable
 components, unhealthy pools, and intentionally disabled kits/schedules. Do not
 turn it into a write, repair, reload, draw, or execution endpoint.
+
+## Product-interest report (canonical)
+
+```
+GET /ops/product/interest?days=1..35&limit=1..100
+```
+
+The route is authenticated and read-only, gated by
+`product-interest-read-enabled`. Spawn returns network rolling detail from
+`MetricsModule`; standby nodes must mark the result incomplete. The response
+may contain bounded exact world names, command roots, source-qualified Citizens
+NPC IDs/names, teleport causes and aggregate exit contexts with at most 12
+ordered sanitized final steps. It must never
+return UUIDs, internal pseudonyms, command arguments, chat text or coordinates.
+Dynamic values remain in this response and never become Prometheus labels.
 
 ## MCP surface budget
 

@@ -193,6 +193,38 @@ class OpsHttpServerTest : FreeSpec({
             }
         }
 
+        "should expose and gate the product-interest report independently" {
+            val enabled = testConfig.copy(productInterestReadEnabled = true)
+            val disabled = testConfig.copy(productInterestReadEnabled = false)
+
+            listOf(enabled to true, disabled to false).forEach { (config, expected) ->
+                val server = OpsHttpServer { config }
+                server.start()
+                try {
+                    val index = open("http://127.0.0.1:${server.actualPort}/ops/", token = config.token)
+                    readBody(index).contains("/ops/product/interest") shouldBe expected
+                    val report = open("http://127.0.0.1:${server.actualPort}/ops/product/interest", token = config.token)
+                    report.responseCode shouldBe if (expected) 200 else 403
+                } finally {
+                    server.stop()
+                }
+            }
+        }
+
+        "should validate product-interest report bounds before reading telemetry" {
+            val config = testConfig.copy(productInterestReadEnabled = true)
+            val server = OpsHttpServer { config }
+            server.start()
+            try {
+                listOf("days=0", "days=36", "limit=0", "limit=101").forEach { query ->
+                    val response = open("http://127.0.0.1:${server.actualPort}/ops/product/interest?$query", token = config.token)
+                    response.responseCode shouldBe 400
+                }
+            } finally {
+                server.stop()
+            }
+        }
+
         "should validate economy audit query before reading the ledger" {
             val enabled = testConfig.copy(economyAuditReadEnabled = true)
             val server = OpsHttpServer { enabled }

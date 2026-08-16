@@ -98,6 +98,18 @@ class DungeonInterestMetricsTest :
             registry.get("arc_dungeon_player_time").tag("world", "spn_the_jungle").counter().count() shouldBeExactly 3.0
         }
 
+        "notifies product telemetry only for counted dungeon visits" {
+            val visits = mutableListOf<Pair<String, String>>()
+            val metrics =
+                DungeonInterestMetrics(SimpleMeterRegistry(), DungeonInterestConfig(), onVisit = { player, world -> visits += player to world })
+
+            metrics.trackExisting("existing", "em_invasion")
+            metrics.enter("existing", "em_invasion")
+            metrics.enter("new", "em_invasion")
+
+            visits shouldBe listOf("new" to "em_invasion")
+        }
+
         "bounds world-label cardinality" {
             val registry = SimpleMeterRegistry()
             val config = DungeonInterestConfig(maxTrackedWorlds = 1)

@@ -227,6 +227,12 @@ class MountSessionController(
                             "<gray>WASD — движение, Space — вверх, Shift — вниз, двойной Shift — спешиться"
                 }
             player.sendActionBar(TextUtil.mm(config.message(controlsKey, controlsFallback), true))
+            ru.arc.metrics.MetricsModule.recordProductOutcome(
+                player,
+                ru.arc.metrics.ProductOutcome.MOUNT_RIDE,
+                ru.arc.metrics.ProductFeature.MOUNTS,
+                ru.arc.metrics.ProductEntryPoint.GAMEPLAY,
+            )
             MountSpawnResult.SUCCESS
         } catch (failure: Throwable) {
             spawned.remove()

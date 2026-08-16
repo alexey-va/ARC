@@ -21,6 +21,28 @@ include-system: true
 include-disk: true
 include-platform-heavy: true
 
+# Network product journey telemetry. Dynamic values (worlds, command roots and
+# NPC IDs) stay in the authenticated ops report and never become metric labels.
+product-interest:
+  enabled: true
+  network-enabled: true
+  timezone: "Europe/Moscow"
+  retention-days: 35
+  active-window-seconds: 300
+  movement-threshold-blocks: 2.0
+  persist-interval-seconds: 30
+  max-tracked-players: 10000
+  max-detail-values-per-player-day: 128
+  qa-player-names:
+    - "CodexQA_728"
+    - "GrocerMC"
+  meaningful-thresholds:
+    block-break: 64
+    block-place: 32
+    craft: 8
+    mob-kill: 5
+    chat: 3
+
 # Product metrics for EliteMobs/OTD dungeon worlds. Player identity is never a label.
 dungeon-interest:
   enabled: true
