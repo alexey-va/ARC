@@ -48,11 +48,16 @@ object BuildingManager {
 
     private fun loadBuildings() {
         val schematicsPath = Paths.get(ARC.instance.dataFolder.toString(), "schematics")
-        Files.createDirectories(schematicsPath)
 
         try {
+            Files.createDirectories(schematicsPath)
+            // Production uses plugins/ARC/schematics as a root symlink to the
+            // shared McFine catalog. Resolve that one boundary explicitly;
+            // Files.walk does not follow a root symlink by default. Its normal
+            // no-follow traversal for nested directory links remains intact.
+            val scanRoot = schematicsPath.toRealPath()
             val loaded = HashMap<String, Building>()
-            Files.walk(schematicsPath, 3)
+            Files.walk(scanRoot, 3)
                 .use { stream ->
                     stream.filter { Files.isRegularFile(it) }
                         .map { Building(it.name) }
@@ -60,7 +65,12 @@ object BuildingManager {
                 }
             buildings.clear()
             buildings.putAll(loaded)
-            debug("[autobuild] Loaded {} schematics from {}", buildings.size, schematicsPath)
+            debug(
+                "[autobuild] Loaded {} schematics from {} (resolved root {})",
+                buildings.size,
+                schematicsPath,
+                scanRoot,
+            )
         } catch (e: Exception) {
             error("Error loading buildings", e)
         }
