@@ -265,14 +265,14 @@ object BuildingManager {
             building.volume,
         )
         player.sendMessage(BuildConfig.Messages.startOutline())
-        OnboardingService.recordBuildBookOpened(player)
+        OnboardingService.recordBuildBookOpened(player, site.centerBlock)
     }
 
     @JvmStatic
     fun startConstruction(site: ConstructionSite) {
         if (!site.startBuild()) return
         moveToActive(site)
-        OnboardingService.recordAutoBuildStarted(site.player)
+        OnboardingService.recordAutoBuildStarted(site.player, site.centerBlock)
     }
 
     @JvmStatic

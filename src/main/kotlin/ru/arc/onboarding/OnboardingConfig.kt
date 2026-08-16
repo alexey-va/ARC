@@ -58,6 +58,8 @@ internal class OnboardingConfig private constructor(
                     "<green>Точка возврата сохранена. <gray>Теперь защити участок claim-блоком из <white>/kit start<gray>.",
                 OnboardingHint.LAND_CLAIMED to
                     "<green>Участок защищён. <gray>Теперь поставь <white>/sethome<gray>, чтобы вернуться сюда после смерти или выхода.",
+                OnboardingHint.FOOTHOLD_MISMATCH to
+                    "<yellow>Дом и приват пока не совпадают. <gray>Поставь <white>/sethome <gray>внутри защищённого участка — тогда это будет безопасная база.",
                 OnboardingHint.FOOTHOLD_COMPLETE to
                     "<green>База закреплена. <gray>В <white>/kit start <gray>есть книга «Первый дом»: возьми её в руку и нажми ПКМ по земле.",
                 OnboardingHint.BUILD_BOOK_MISSING_HOME to
@@ -66,6 +68,8 @@ internal class OnboardingConfig private constructor(
                     "<yellow>Макет дома открыт. <gray>Перед стройкой защити участок claim-блоком из <white>/kit start<gray>.",
                 OnboardingHint.BUILD_BOOK_MISSING_BOTH to
                     "<yellow>Макет дома открыт, но место ещё не закреплено. <gray>Поставь <white>/sethome <gray>и защити участок claim-блоком.",
+                OnboardingHint.BUILD_BOOK_OUTSIDE_FOOTHOLD to
+                    "<yellow>Макет открыт вне безопасной базы. <gray>Строй там, где <white>/sethome <gray>находится внутри Lands-привата, либо сначала закрепи это место.",
                 OnboardingHint.AUTOBUILD_COMPLETE to
                     "<green>Первый дом готов. <gray>Дальше добывай и строй; излишки продавай в <white>/shop <gray>или выставляй на <white>/ah<gray>.",
             )

@@ -11,6 +11,8 @@ import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerJoinEvent
 import ru.arc.core.Tasks
 import ru.arc.core.delayed
+import ru.arc.hooks.HookRegistry
+import ru.arc.util.Logging.error
 
 internal class OnboardingPlayerListener : Listener {
     @EventHandler(priority = EventPriority.MONITOR)
@@ -32,8 +34,20 @@ internal class OnboardingCmiListener : Listener {
         delayed(1L) {
             val player = Bukkit.getPlayer(playerId)?.takeIf { it.isOnline } ?: return@delayed
             val user = CMI.getInstance().playerManager.getUser(playerId) ?: return@delayed
-            if (user.getHome(homeName) == null) return@delayed
-            OnboardingService.recordHomeCreated(player)
+            val home = user.getHome(homeName) ?: return@delayed
+            val location = home.loc
+            val verifiedFoothold =
+                runCatching { HookRegistry.landsHook?.isProtectedFor(player, location) == true }
+                    .onFailure { failure ->
+                        error("Could not verify Lands protection for new CMI home of {}", player.name, failure)
+                    }.getOrDefault(false)
+            OnboardingService.recordHomeCreated(
+                player,
+                location.worldName,
+                location.blockX,
+                location.blockZ,
+                verifiedFoothold,
+            )
         }
     }
 }
@@ -42,10 +56,13 @@ internal class OnboardingLandsListener : Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     fun onChunkClaimed(event: ChunkPostClaimEvent) {
         val playerId = event.playerUID ?: return
+        val worldName = event.world.name
+        val chunkX = event.x
+        val chunkZ = event.z
         val action =
             Runnable {
                 val player = Bukkit.getPlayer(playerId)?.takeIf { it.isOnline } ?: return@Runnable
-                OnboardingService.recordLandClaimed(player)
+                OnboardingService.recordLandClaimed(player, worldName, chunkX, chunkZ)
             }
         if (Bukkit.isPrimaryThread()) action.run() else Tasks.scheduler.runSync(action)
     }

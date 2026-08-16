@@ -1,6 +1,7 @@
 package ru.arc.onboarding
 
 import org.bukkit.Bukkit
+import org.bukkit.Location
 import org.bukkit.entity.Player
 import ru.arc.ARC
 import ru.arc.core.ScheduledTask
@@ -31,7 +32,7 @@ object OnboardingService {
             return
         }
         config.validate()
-        val store = OnboardingStore.open(ARC.instance.dataPath.resolve("data/onboarding-v1.json"))
+        val store = OnboardingStore.open(ARC.instance.dataPath.resolve("data/onboarding-v2.json"))
         runtime = Runtime(config, store)
         info("Configurable onboarding enabled for {} worlds; {} player states loaded", config.worlds.size, store.playerCount())
     }
@@ -44,61 +45,91 @@ object OnboardingService {
 
     fun isEnabled(): Boolean = runtime != null
 
-    fun recordFirstRtp(player: Player) {
+    fun recordFirstRtp(
+        player: Player,
+        location: Location,
+    ) {
         MetricsModule.recordProductOutcome(
             player,
             ProductOutcome.FIRST_RTP_COMPLETE,
             ProductFeature.RTP,
             ProductEntryPoint.GAMEPLAY,
         )
-        observe(player, OnboardingMilestone.FIRST_RTP)
+        val place = place(player, location.world?.name, location.blockX, location.blockZ) ?: return
+        observe(player, OnboardingMilestone.FIRST_RTP, place)
     }
 
-    fun recordHomeCreated(player: Player) {
+    fun recordHomeCreated(
+        player: Player,
+        worldName: String,
+        blockX: Int,
+        blockZ: Int,
+        verifiedFoothold: Boolean,
+    ) {
         MetricsModule.recordProductOutcome(
             player,
             ProductOutcome.HOME_CREATED,
             ProductFeature.HOMES,
             ProductEntryPoint.GAMEPLAY,
         )
-        observe(player, OnboardingMilestone.HOME_CREATED)
+        val place = place(player, worldName, blockX, blockZ) ?: return
+        observe(player, OnboardingMilestone.HOME_CREATED, place, verifiedFoothold)
     }
 
-    fun recordLandClaimed(player: Player) {
+    fun recordLandClaimed(
+        player: Player,
+        worldName: String,
+        chunkX: Int,
+        chunkZ: Int,
+    ) {
         MetricsModule.recordProductOutcome(
             player,
             ProductOutcome.LAND_CLAIMED,
             ProductFeature.LANDS,
             ProductEntryPoint.GAMEPLAY,
         )
-        observe(player, OnboardingMilestone.LAND_CLAIMED)
+        val place =
+            runCatching { OnboardingPlace.fromChunk(worldName, chunkX, chunkZ) }
+                .onFailure { failure -> error("Could not normalize Lands onboarding place for {}", player.name, failure) }
+                .getOrNull() ?: return
+        observe(player, OnboardingMilestone.LAND_CLAIMED, place)
     }
 
-    fun recordBuildBookOpened(player: Player) {
+    fun recordBuildBookOpened(
+        player: Player,
+        location: Location,
+    ) {
         MetricsModule.recordProductFeatureInterest(player, ProductFeature.AUTOBUILD, ProductEntryPoint.GAMEPLAY)
-        val current = runtime ?: return
-        if (!current.config.allowsWorld(player.world.name)) return
-        observe(player, OnboardingMilestone.BUILD_BOOK_OPENED)
+        val place = place(player, location.world?.name, location.blockX, location.blockZ) ?: return
+        observe(player, OnboardingMilestone.BUILD_BOOK_OPENED, place)
     }
 
-    fun recordAutoBuildStarted(player: Player) {
+    fun recordAutoBuildStarted(
+        player: Player,
+        location: Location,
+    ) {
         MetricsModule.recordProductOutcome(
             player,
             ProductOutcome.AUTOBUILD_STARTED,
             ProductFeature.AUTOBUILD,
             ProductEntryPoint.GAMEPLAY,
         )
-        observe(player, OnboardingMilestone.AUTOBUILD_STARTED)
+        val place = place(player, location.world?.name, location.blockX, location.blockZ) ?: return
+        observe(player, OnboardingMilestone.AUTOBUILD_STARTED, place)
     }
 
-    fun recordAutoBuildComplete(player: Player) {
+    fun recordAutoBuildComplete(
+        player: Player,
+        location: Location,
+    ) {
         MetricsModule.recordProductOutcome(
             player,
             ProductOutcome.AUTOBUILD_COMPLETE,
             ProductFeature.AUTOBUILD,
             ProductEntryPoint.GAMEPLAY,
         )
-        observe(player, OnboardingMilestone.AUTOBUILD_COMPLETE)
+        val place = place(player, location.world?.name, location.blockX, location.blockZ) ?: return
+        observe(player, OnboardingMilestone.AUTOBUILD_COMPLETE, place)
     }
 
     fun resume(player: Player) {
@@ -112,13 +143,22 @@ object OnboardingService {
     private fun observe(
         player: Player,
         milestone: OnboardingMilestone,
+        place: OnboardingPlace? = null,
+        verifiedFoothold: Boolean = false,
     ) {
         val current = runtime ?: return
-        if (!current.config.allowsWorld(player.world.name)) return
+        val worldName = place?.world ?: player.world.name
+        if (!current.config.allowsWorld(worldName)) return
 
         val update =
             runCatching {
-                current.store.observe(player.uniqueId, milestone, System.currentTimeMillis())
+                current.store.observe(
+                    player.uniqueId,
+                    milestone,
+                    System.currentTimeMillis(),
+                    place,
+                    verifiedFoothold,
+                )
             }.onFailure { failure ->
                 error("Could not persist onboarding milestone {} for {}", milestone.id, player.name, failure)
             }.getOrNull() ?: return
@@ -135,6 +175,18 @@ object OnboardingService {
             schedule(player.uniqueId, current.config.firstDelayTicks)
         }
     }
+
+    private fun place(
+        player: Player,
+        worldName: String?,
+        blockX: Int,
+        blockZ: Int,
+    ): OnboardingPlace? =
+        runCatching {
+            OnboardingPlace.fromBlock(requireNotNull(worldName) { "world is unavailable" }, blockX, blockZ)
+        }.onFailure { failure ->
+            error("Could not normalize onboarding place for {}", player.name, failure)
+        }.getOrNull()
 
     private fun schedule(
         playerId: UUID,

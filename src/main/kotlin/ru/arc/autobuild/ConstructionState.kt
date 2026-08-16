@@ -126,7 +126,7 @@ sealed class ConstructionState {
         override fun enter(site: ConstructionSite) {
             site.player.sendMessage(BuildConfig.Messages.finished())
             if (site.completionCause == ConstructionSite.CompletionCause.NATURAL) {
-                OnboardingService.recordAutoBuildComplete(site.player)
+                OnboardingService.recordAutoBuildComplete(site.player, site.centerBlock)
             }
             site.launchFireworks()
             delayed(60.ticks) { site.construction?.destroyNpc() }

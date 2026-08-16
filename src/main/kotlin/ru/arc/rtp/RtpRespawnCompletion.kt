@@ -34,10 +34,14 @@ object RtpRespawnCompletion {
                         error("Could not persist completed first RTP for {}", player.name, failure)
                     }
                 }
-                OnboardingService.recordFirstRtp(player)
+                val completedLocation =
+                    runCatching(location).onFailure { failure ->
+                        error("Could not resolve completed first RTP location for {}", player.name, failure)
+                    }.getOrNull() ?: return@Runnable
+                OnboardingService.recordFirstRtp(player, completedLocation)
                 if (!request.setRespawn || !player.isOnline) return@Runnable
 
-                player.setRespawnLocation(location(), true)
+                player.setRespawnLocation(completedLocation, true)
                 val config = ConfigManager.of(ARC.instance.dataPath, "misc.yml")
                 player.sendMessage(
                     config.component(

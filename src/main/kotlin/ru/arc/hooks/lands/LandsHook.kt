@@ -31,4 +31,17 @@ class LandsHook {
         val landWorld = integration.getWorld(location.world) ?: return false
         return landWorld.getArea(location) != null
     }
+
+    /** True only when the exact location is inside claimed land where this player can build. */
+    fun isProtectedFor(
+        player: Player,
+        location: Location,
+    ): Boolean {
+        val world = location.world ?: return false
+        val landWorld = integration.getWorld(world) ?: return false
+        if (landWorld.getArea(location) == null) return false
+        val landPlayer = integration.getLandPlayer(player.uniqueId) ?: return false
+        return landWorld.hasRoleFlag(landPlayer, location, Flags.BLOCK_BREAK, Material.STONE, false) &&
+            landWorld.hasRoleFlag(landPlayer, location, Flags.BLOCK_PLACE, Material.STONE, false)
+    }
 }
