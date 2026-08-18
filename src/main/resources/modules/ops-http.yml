@@ -80,6 +80,11 @@ location-pools-read-enabled: true
 # PUT/DELETE persist through LocationPoolManager using atomic file replacement.
 location-pools-write-enabled: false
 
+# Idempotent vanilla block + ItemsAdder furniture scene reconciliation.
+# Read includes preview and live readback; mutations require a fresh reviewDigest.
+world-scenes-read-enabled: true
+world-scenes-write-enabled: false
+
 # Native ARC treasure/reward pools. Preview never grants rewards or runs commands.
 treasure-pools-read-enabled: true
 # Production mutation: enable only for an explicitly authorized content operation.

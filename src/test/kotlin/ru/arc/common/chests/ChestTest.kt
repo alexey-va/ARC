@@ -261,7 +261,7 @@ class ChestTest :
                     verify { mockFurnitureProvider.remove(mockFurniture, false) }
                 }
 
-                it("should cleanup stored and neighbor barrier blocks on destroy") {
+                it("should cleanup only exact stored barrier blocks on destroy") {
                     val world = server.addSimpleWorld("test")
                     val block = world.getBlockAt(0, 64, 0)
 
@@ -283,12 +283,12 @@ class ChestTest :
                         )
                     chest.destroy()
 
-                    block.getRelative(0, 1, 0).type shouldBe Material.AIR
+                    block.getRelative(0, 1, 0).type shouldBe Material.BARRIER
                     block.getRelative(5, 2, 0).type shouldBe Material.AIR
                 }
 
                 @Suppress("DEPRECATION")
-                it("should cleanup invisible item frames with custom model data") {
+                it("should preserve untracked invisible item frames with custom model data") {
                     val world = server.addSimpleWorld("test")
                     val block = world.getBlockAt(0, 64, 0)
 
@@ -316,8 +316,8 @@ class ChestTest :
                         )
                     chest.destroy()
 
-                    // Рамка должна быть удалена
-                    frame.isDead shouldBe true
+                    // Cleanup no longer guesses ownership from invisibility/model data.
+                    frame.isDead shouldBe false
                 }
 
                 @Suppress("DEPRECATION")
@@ -353,7 +353,7 @@ class ChestTest :
                     frame.isDead shouldBe false
                 }
 
-                it("should cleanup display entities nearby") {
+                it("should preserve untracked display entities nearby") {
                     val world = server.addSimpleWorld("test")
                     val block = world.getBlockAt(0, 64, 0)
 
@@ -376,8 +376,7 @@ class ChestTest :
                         )
                     chest.destroy()
 
-                    // Display entity должна быть удалена
-                    display.isDead shouldBe true
+                    display.isDead shouldBe false
                 }
             }
         }

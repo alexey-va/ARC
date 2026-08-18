@@ -83,6 +83,9 @@ commands:
     usage: /mount [menu|help|admin]
     permission: arc.mounts.use
 permissions:
+  arc.furniture.admin:
+    description: Preview and confirm ItemsAdder furniture cleanup
+    default: op
   arc.product.path:
     description: Choose a recommended RusCrafting starter path
     default: true

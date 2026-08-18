@@ -81,6 +81,12 @@ commands:
     name: locationpool
     aliases: [ ]
     permission: arc.locpool.admin
+  furniture:
+    name: furniture
+    aliases: [мебель]
+    permission: arc.furniture.admin
+    player-only: true
+    usage: /arc furniture cleanup <1-24> [confirm <token>]
   hunt:
     name: hunt
     aliases: [ ]

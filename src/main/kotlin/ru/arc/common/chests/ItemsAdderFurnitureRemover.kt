@@ -8,16 +8,15 @@ import org.bukkit.entity.Entity
 import ru.arc.treasurechests.HuntFurnitureAnchor
 import ru.arc.treasurechests.HuntFurnitureRegistry
 import ru.arc.util.Logging.debug
-import ru.arc.util.cleanupCustomItemFrames
-import ru.arc.util.cleanupDisplayEntities
+import ru.arc.worldcontent.BlockPosition
+import ru.arc.worldcontent.FurnitureCleanupService
+import ru.arc.worldcontent.ItemsAdderFurnitureRuntime
 import java.util.UUID
 
 /**
- * Удаление IA-мебели охоты: по сохранённым UUID, fallback через IA API, barrier/frame cleanup.
+ * Удаление IA-мебели охоты через общее cleanup-ядро: сохранённые UUID и точные barrier-позиции.
  */
 object ItemsAdderFurnitureRemover {
-    private const val FRAME_SEARCH_RADIUS = 2.5
-
     /**
      * @return число удалённых entity
      */
@@ -29,31 +28,34 @@ object ItemsAdderFurnitureRemover {
         furnitureProvider: FurnitureProvider = FurnitureProvider.default,
     ): Int {
         val storedEntityIds = anchor?.entityUuids() ?: HuntFurnitureRegistry.entityIdsAt(block)
-        var removed = removeTrackedEntities(storedEntityIds, furnitureProvider)
-
-        if (removed == 0) {
-            removed = removeViaFurnitureApi(cachedFurniture, block, furnitureProvider)
-        }
-
-        cleanupVisuals(block, anchor?.barrierBlocks.orEmpty())
-        return removed
+        return removeThroughSharedCleanup(
+            block = block,
+            entityIds = storedEntityIds,
+            storedBarriers = anchor?.barrierBlocks.orEmpty(),
+            cachedFurniture = cachedFurniture,
+            furnitureProvider = furnitureProvider,
+        )
     }
 
     /** Полная очистка записи из JSON-реестра. */
     fun removeAnchor(anchor: HuntFurnitureAnchor): Int {
         val world = Bukkit.getWorld(anchor.world)
         val block = anchor.anchorBlock(world)
-        val removed = removeTrackedEntities(anchor.entityUuids(), FurnitureProvider.default)
         if (block != null) {
-            if (removed == 0) {
-                removeViaFurnitureApi(null, block, FurnitureProvider.default)
-            }
-            cleanupVisuals(block, anchor.barrierBlocks)
+            val removed =
+                removeThroughSharedCleanup(
+                    block = block,
+                    entityIds = anchor.entityUuids(),
+                    storedBarriers = anchor.barrierBlocks,
+                    cachedFurniture = null,
+                    furnitureProvider = FurnitureProvider.default,
+                )
             clearMarkers(block)
+            return removed
         } else {
             cleanupBarrierBlocks(world, anchor.barrierBlocks)
         }
-        return removed
+        return 0
     }
 
     fun clearMarkers(
@@ -105,6 +107,47 @@ object ItemsAdderFurnitureRemover {
         return removed
     }
 
+    private fun removeThroughSharedCleanup(
+        block: Block,
+        entityIds: Collection<UUID>,
+        storedBarriers: Collection<BlockPos>,
+        cachedFurniture: Any?,
+        furnitureProvider: FurnitureProvider,
+    ): Int {
+        val exactEntityIds = entityIds.toMutableSet()
+        var resolvedFurniture = cachedFurniture
+        cachedFurniture?.let(furnitureProvider::getEntity)?.takeIf { it.isValid }?.let { exactEntityIds += it.uniqueId }
+        if (exactEntityIds.isEmpty()) {
+            resolvedFurniture = resolveFurniture(null, block, furnitureProvider)
+            resolvedFurniture
+                ?.let { resolved ->
+                    when (resolved) {
+                        is Entity -> resolved
+                        else -> furnitureProvider.getEntity(resolved)?.takeIf { it.isValid }
+                    }
+                }?.let { exactEntityIds += it.uniqueId }
+        }
+
+        if (furnitureProvider !== FurnitureProvider.default || !ItemsAdderFurnitureRuntime.available) {
+            val removed =
+                if (exactEntityIds.isNotEmpty()) {
+                    removeTrackedEntities(exactEntityIds.toList(), furnitureProvider)
+                } else {
+                    removeViaFurnitureApi(resolvedFurniture, block, furnitureProvider)
+                }
+            cleanupBarrierBlocks(block.world, storedBarriers.toList())
+            return removed
+        }
+
+        val barriers =
+            storedBarriers.map { pos ->
+                BlockPosition(block.world.name, pos.x, pos.y, pos.z)
+            }
+        return FurnitureCleanupService
+            .executeKnown(block.location, exactEntityIds, barriers)
+            .removedFurniture
+    }
+
     private fun removeViaFurnitureApi(
         cachedFurniture: Any?,
         block: Block,
@@ -135,34 +178,6 @@ object ItemsAdderFurnitureRemover {
         cachedFurniture?.let { return it }
         furnitureProvider.getByBlock(block)?.let { return it }
         return furnitureProvider.findNearEntities(block)
-    }
-
-    fun cleanupVisuals(
-        block: Block,
-        storedBarriers: List<BlockPos> = emptyList(),
-    ) {
-        block.location.cleanupCustomItemFrames(FRAME_SEARCH_RADIUS)
-        block.location.cleanupDisplayEntities(FRAME_SEARCH_RADIUS)
-        cleanupBarrierBlocks(block.world, storedBarriers)
-        cleanupBarrierNeighbors(block)
-    }
-
-    private fun cleanupBarrierNeighbors(block: Block) {
-        val neighbors =
-            listOf(
-                block,
-                block.getRelative(0, 1, 0),
-                block.getRelative(0, -1, 0),
-                block.getRelative(1, 0, 0),
-                block.getRelative(-1, 0, 0),
-                block.getRelative(0, 0, 1),
-                block.getRelative(0, 0, -1),
-            )
-        for (b in neighbors) {
-            if (b.type == Material.BARRIER) {
-                b.type = Material.AIR
-            }
-        }
     }
 
     private fun cleanupBarrierBlocks(

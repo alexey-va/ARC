@@ -757,6 +757,33 @@ class OpsHttpServerTest : FreeSpec({
             }
         }
 
+        "should expose world scene previews while keeping mutations behind a separate gate" {
+            val readsOnly =
+                testConfig.copy(
+                    worldScenesReadEnabled = true,
+                    worldScenesWriteEnabled = false,
+                )
+            val server = OpsHttpServer { readsOnly }
+            server.start()
+            try {
+                val index = readBody(open("http://127.0.0.1:${server.actualPort}/ops/", token = readsOnly.token))
+                index shouldContain "POST /ops/world-scenes/preview"
+                index.contains("PUT /ops/world-scenes/{id}") shouldBe false
+
+                val write =
+                    open(
+                        "http://127.0.0.1:${server.actualPort}/ops/world-scenes/spawn_decor",
+                        method = "PUT",
+                        token = readsOnly.token,
+                        body = "{}",
+                    )
+                write.responseCode shouldBe 403
+                readBody(write) shouldContain "World scene writes disabled"
+            } finally {
+                server.stop()
+            }
+        }
+
         "should gate item preset reads and writes independently" {
             val locked =
                 testConfig.copy(

@@ -1,5 +1,6 @@
 package ru.arc.ops
 
+import com.google.gson.JsonObject
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import ru.arc.ARC
@@ -411,6 +412,46 @@ class OpsHttpServer(
 
             method == "DELETE" && segments.size == 2 && segments[0] == "location-pools" ->
                 handleLocationPoolDelete(exchange, cfg, segments[1])
+
+            method == "GET" && segments == listOf("world-scenes") ->
+                handleWorldScene(exchange, cfg, write = false, requireBody = false) {
+                    OpsWorldSceneHandlers.list()
+                }
+
+            method == "GET" && segments.size == 2 && segments[0] == "world-scenes" ->
+                handleWorldScene(exchange, cfg, write = false, requireBody = false) {
+                    OpsWorldSceneHandlers.list(decodeSegment(segments[1]))
+                }
+
+            method == "POST" && segments == listOf("world-scenes", "preview") ->
+                handleWorldScene(exchange, cfg, write = false, requireBody = true) { body ->
+                    OpsWorldSceneHandlers.preview(requireNotNull(body))
+                }
+
+            method == "POST" && segments.size == 3 && segments[0] == "world-scenes" && segments[2] == "delete-preview" ->
+                handleWorldScene(exchange, cfg, write = false, requireBody = false) {
+                    OpsWorldSceneHandlers.previewDelete(decodeSegment(segments[1]))
+                }
+
+            method == "POST" && segments.size == 3 && segments[0] == "world-scenes" && segments[2] == "rollback-preview" ->
+                handleWorldScene(exchange, cfg, write = false, requireBody = false) {
+                    OpsWorldSceneHandlers.previewRollback(decodeSegment(segments[1]))
+                }
+
+            method == "PUT" && segments.size == 2 && segments[0] == "world-scenes" ->
+                handleWorldScene(exchange, cfg, write = true, requireBody = true) { body ->
+                    OpsWorldSceneHandlers.apply(decodeSegment(segments[1]), requireNotNull(body))
+                }
+
+            method == "DELETE" && segments.size == 2 && segments[0] == "world-scenes" ->
+                handleWorldScene(exchange, cfg, write = true, requireBody = true) { body ->
+                    OpsWorldSceneHandlers.delete(decodeSegment(segments[1]), requireNotNull(body))
+                }
+
+            method == "POST" && segments.size == 3 && segments[0] == "world-scenes" && segments[2] == "rollback" ->
+                handleWorldScene(exchange, cfg, write = true, requireBody = true) { body ->
+                    OpsWorldSceneHandlers.rollback(decodeSegment(segments[1]), requireNotNull(body))
+                }
 
             method == "GET" && segments == listOf("treasure-pools") ->
                 handleTreasurePoolsList(exchange, cfg, null)
@@ -1568,6 +1609,38 @@ class OpsHttpServer(
         }
     }
 
+    private fun handleWorldScene(
+        exchange: HttpExchange,
+        cfg: OpsHttpConfig,
+        write: Boolean,
+        requireBody: Boolean,
+        action: (JsonObject?) -> Map<String, Any?>,
+    ) {
+        val enabled = if (write) cfg.worldScenesWriteEnabled else cfg.worldScenesReadEnabled
+        if (!enabled) {
+            val operation = if (write) "writes" else "reads"
+            val (code, body) = OpsJson.error(403, "World scene $operation disabled in config")
+            respond(exchange, code, body)
+            return
+        }
+        val body = if (requireBody) parseJsonBody(exchange) ?: return else null
+        try {
+            respondOk(exchange, action(body))
+        } catch (e: IllegalArgumentException) {
+            val (code, json) = OpsJson.error(400, e.message ?: "Bad request")
+            respond(exchange, code, json)
+        } catch (e: NoSuchElementException) {
+            val (code, json) = OpsJson.error(404, e.message ?: "World scene not found")
+            respond(exchange, code, json)
+        } catch (e: ru.arc.worldcontent.SceneReviewConflictException) {
+            val (code, json) = OpsJson.error(409, e.message ?: "World scene review conflict")
+            respond(exchange, code, json)
+        } catch (e: IllegalStateException) {
+            val (code, json) = OpsJson.error(503, e.message ?: "World scene operation unavailable")
+            respond(exchange, code, json)
+        }
+    }
+
     private fun handleTreasurePoolsList(
         exchange: HttpExchange,
         cfg: OpsHttpConfig,
@@ -2041,6 +2114,17 @@ class OpsHttpServer(
         if (cfg.locationPoolsWriteEnabled) {
             routes += "PUT /ops/location-pools/{id} {locations:[{server,world,x,y,z,yaw,pitch,weight}]}"
             routes += "DELETE /ops/location-pools/{id}"
+        }
+        if (cfg.worldScenesReadEnabled) {
+            routes += "GET /ops/world-scenes[/{id}]"
+            routes += "POST /ops/world-scenes/preview {id,objects:[...]}"
+            routes += "POST /ops/world-scenes/{id}/delete-preview"
+            routes += "POST /ops/world-scenes/{id}/rollback-preview"
+        }
+        if (cfg.worldScenesWriteEnabled) {
+            routes += "PUT /ops/world-scenes/{id} {id,objects:[...],reviewDigest}"
+            routes += "DELETE /ops/world-scenes/{id} {reviewDigest}"
+            routes += "POST /ops/world-scenes/{id}/rollback {reviewDigest}"
         }
         if (cfg.treasurePoolsReadEnabled) {
             routes += "GET /ops/treasure-pools[/{id}]"

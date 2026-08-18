@@ -84,6 +84,12 @@ open class OpsHttpConfig(private val config: Config) {
     open val locationPoolsWriteEnabled: Boolean
         get() = config.bool("location-pools-write-enabled", false)
 
+    open val worldScenesReadEnabled: Boolean
+        get() = config.bool("world-scenes-read-enabled", true)
+
+    open val worldScenesWriteEnabled: Boolean
+        get() = config.bool("world-scenes-write-enabled", false)
+
     open val treasurePoolsReadEnabled: Boolean
         get() = config.bool("treasure-pools-read-enabled", true)
 
@@ -169,6 +175,8 @@ class TestOpsHttpConfig(
     override val scheduledCommandsWriteEnabled: Boolean = false,
     override val locationPoolsReadEnabled: Boolean = true,
     override val locationPoolsWriteEnabled: Boolean = false,
+    override val worldScenesReadEnabled: Boolean = true,
+    override val worldScenesWriteEnabled: Boolean = false,
     override val treasurePoolsReadEnabled: Boolean = true,
     override val treasurePoolsWriteEnabled: Boolean = false,
     override val npcsReadEnabled: Boolean = true,
@@ -201,6 +209,8 @@ class TestOpsHttpConfig(
         scheduledCommandsWriteEnabled: Boolean = this.scheduledCommandsWriteEnabled,
         locationPoolsReadEnabled: Boolean = this.locationPoolsReadEnabled,
         locationPoolsWriteEnabled: Boolean = this.locationPoolsWriteEnabled,
+        worldScenesReadEnabled: Boolean = this.worldScenesReadEnabled,
+        worldScenesWriteEnabled: Boolean = this.worldScenesWriteEnabled,
         treasurePoolsReadEnabled: Boolean = this.treasurePoolsReadEnabled,
         treasurePoolsWriteEnabled: Boolean = this.treasurePoolsWriteEnabled,
         npcsReadEnabled: Boolean = this.npcsReadEnabled,
@@ -240,6 +250,8 @@ class TestOpsHttpConfig(
             scheduledCommandsWriteEnabled = scheduledCommandsWriteEnabled,
             locationPoolsReadEnabled = locationPoolsReadEnabled,
             locationPoolsWriteEnabled = locationPoolsWriteEnabled,
+            worldScenesReadEnabled = worldScenesReadEnabled,
+            worldScenesWriteEnabled = worldScenesWriteEnabled,
             treasurePoolsReadEnabled = treasurePoolsReadEnabled,
             treasurePoolsWriteEnabled = treasurePoolsWriteEnabled,
             npcsReadEnabled = npcsReadEnabled,

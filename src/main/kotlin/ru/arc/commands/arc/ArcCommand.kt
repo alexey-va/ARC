@@ -14,6 +14,7 @@ import ru.arc.commands.arc.subcommands.ContractsSubCommand
 import ru.arc.commands.arc.subcommands.EliteLootSubCommand
 import ru.arc.commands.arc.subcommands.EmshopSubCommand
 import ru.arc.commands.arc.subcommands.FirstRtpSubCommand
+import ru.arc.commands.arc.subcommands.FurnitureSubCommand
 import ru.arc.commands.arc.subcommands.GiveBoostSubCommand
 import ru.arc.commands.arc.subcommands.GiveSubCommand
 import ru.arc.commands.arc.subcommands.HelpSubCommand
@@ -69,6 +70,7 @@ class ArcCommand :
             FirstRtpSubCommand,
             RtpSubCommand,
             LocationPoolSubCommand,
+            FurnitureSubCommand,
             HuntSubCommand,
             TreasuresSubCommand,
             ProductPathSubCommand,
