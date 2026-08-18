@@ -23,6 +23,7 @@ import org.bukkit.World
 import org.bukkit.entity.EntityType
 import org.bukkit.event.player.PlayerTeleportEvent
 import org.bukkit.inventory.ItemStack
+import java.security.MessageDigest
 import java.time.Duration
 import kotlin.math.floor
 
@@ -229,10 +230,13 @@ object OpsNpcHandlers {
             "navigation" to navigationSummary(npc),
         )
         npc.getTraitNullable(SkinTrait::class.java)?.let { trait ->
+            val texture = trait.texture
             spec["skin"] =
                 mapOf(
                     "name" to trait.skinName,
                     "update" to trait.shouldUpdateSkins(),
+                    "persistent" to (texture != null && trait.signature != null),
+                    "textureSha256" to texture?.sha256(),
                 )
         }
         npc.getTraitNullable(LookClose::class.java)?.let { spec["lookClose"] = lookCloseSummary(it) }
@@ -342,7 +346,7 @@ object OpsNpcHandlers {
         applyNavigation(npc, spec.navigation)
     }
 
-    private fun applySkin(
+    internal fun applySkin(
         npc: NPC,
         patch: NpcPatch<SkinSpec>,
     ) {
@@ -361,7 +365,14 @@ object OpsNpcHandlers {
                     (patch.value.update as? NpcPatch.Set)?.value
                         ?: existing?.shouldUpdateSkins()
                         ?: false
-                npc.getOrAddTrait(SkinTrait::class.java).setSkinName(name, update)
+                val texture = (patch.value.texture as? NpcPatch.Set)?.value
+                val signature = (patch.value.signature as? NpcPatch.Set)?.value
+                val trait = npc.getOrAddTrait(SkinTrait::class.java)
+                if (texture != null && signature != null) {
+                    trait.setSkinPersistent(name, signature, texture)
+                } else {
+                    trait.setSkinName(name, update)
+                }
             }
         }
     }
@@ -817,3 +828,9 @@ object OpsNpcHandlers {
     }
 
 }
+
+private fun String.sha256(): String =
+    MessageDigest
+        .getInstance("SHA-256")
+        .digest(toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }

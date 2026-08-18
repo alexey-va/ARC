@@ -2,9 +2,12 @@ package ru.arc.ops
 
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import net.citizensnpcs.api.trait.trait.Equipment.EquipmentSlot
 import net.citizensnpcs.trait.CommandTrait
 import org.bukkit.entity.EntityType
+import java.nio.charset.StandardCharsets
+import java.util.Base64
 
 internal sealed interface NpcPatch<out T> {
     data object Absent : NpcPatch<Nothing>
@@ -116,6 +119,8 @@ internal data class LocationSpec(
 internal data class SkinSpec(
     val name: NpcPatch<String>,
     val update: NpcPatch<Boolean>,
+    val texture: NpcPatch<String>,
+    val signature: NpcPatch<String>,
 )
 
 internal data class LookCloseSpec(
@@ -221,11 +226,55 @@ private fun parseLocation(element: JsonElement): LocationSpec {
 
 private fun parseSkin(element: JsonElement): SkinSpec {
     val body = objectValue(element, "skin")
-    requireKnownFields(body, setOf("name", "update"), "skin")
-    return SkinSpec(
+    requireKnownFields(body, setOf("name", "update", "texture", "signature"), "skin")
+    val spec = SkinSpec(
         name = field(body, "name", clearable = false) { validatedString(it, "skin.name", 64) },
         update = field(body, "update", clearable = false) { boolean(it, "skin.update") },
+        texture =
+            field(body, "texture", clearable = false) {
+                validatedString(it, "skin.texture", 8_192)
+            },
+        signature =
+            field(body, "signature", clearable = false) {
+                validatedString(it, "skin.signature", 2_048)
+            },
     )
+    val texture = (spec.texture as? NpcPatch.Set)?.value
+    val signature = (spec.signature as? NpcPatch.Set)?.value
+    require((texture == null) == (signature == null)) {
+        "skin.texture and skin.signature must be provided together"
+    }
+    if (texture != null && signature != null) {
+        require(spec.name is NpcPatch.Set) {
+            "skin.name required for a persistent MineSkin texture"
+        }
+        require((spec.update as? NpcPatch.Set)?.value != true) {
+            "skin.update must be false or omitted for a persistent MineSkin texture"
+        }
+        validatePersistentTexture(texture)
+        require(runCatching { Base64.getDecoder().decode(signature) }.getOrNull()?.isNotEmpty() == true) {
+            "skin.signature must be valid base64"
+        }
+    }
+    return spec
+}
+
+private fun validatePersistentTexture(texture: String) {
+    val decoded =
+        runCatching { Base64.getDecoder().decode(texture) }
+            .getOrElse { throw IllegalArgumentException("skin.texture must be valid base64", it) }
+    val root =
+        runCatching {
+            JsonParser.parseString(String(decoded, StandardCharsets.UTF_8)).asJsonObject
+        }.getOrElse { throw IllegalArgumentException("skin.texture must contain a JSON object", it) }
+    val skinUrl =
+        root
+            .getAsJsonObject("textures")
+            ?.getAsJsonObject("SKIN")
+            ?.get("url")
+            ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
+            ?.asString
+    require(!skinUrl.isNullOrBlank()) { "skin.texture must contain textures.SKIN.url" }
 }
 
 private fun parseLookClose(element: JsonElement): LookCloseSpec {

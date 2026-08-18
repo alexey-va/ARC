@@ -13,10 +13,12 @@ import io.mockk.verifyOrder
 import net.citizensnpcs.api.npc.NPC
 import net.citizensnpcs.api.ai.Navigator
 import net.citizensnpcs.api.ai.NavigatorParameters
+import net.citizensnpcs.api.trait.trait.MobType
 import net.citizensnpcs.api.trait.Trait
 import net.citizensnpcs.api.util.MemoryDataKey
 import net.citizensnpcs.trait.CurrentLocation
 import net.citizensnpcs.trait.CommandTrait
+import net.citizensnpcs.trait.SkinTrait
 import net.citizensnpcs.trait.waypoint.LinearWaypointProvider
 import net.citizensnpcs.trait.waypoint.Waypoints
 import org.bukkit.entity.Entity
@@ -67,6 +69,54 @@ class OpsNpcHandlersTest : FreeSpec({
 
             skin.name shouldBe NpcPatch.Absent
             (skin.update as NpcPatch.Set).value shouldBe true
+        }
+
+        "should accept a complete persistent MineSkin payload" {
+            val texture =
+                java.util.Base64
+                    .getEncoder()
+                    .encodeToString(
+                        """{"textures":{"SKIN":{"url":"https://textures.minecraft.net/texture/example"}}}"""
+                            .toByteArray(),
+                    )
+            val spec =
+                OpsNpcSpec.parse(
+                    JsonParser
+                        .parseString(
+                            """{"skin":{"name":"rc-smith","texture":"$texture","signature":"c2lnbmF0dXJl"}}""",
+                        ).asJsonObject,
+                )
+            val skin = (spec.skin as NpcPatch.Set).value
+
+            (skin.name as NpcPatch.Set).value shouldBe "rc-smith"
+            (skin.texture as NpcPatch.Set).value shouldBe texture
+            (skin.signature as NpcPatch.Set).value shouldBe "c2lnbmF0dXJl"
+        }
+
+        "should reject incomplete or refreshable persistent MineSkin payloads" {
+            val texture =
+                java.util.Base64
+                    .getEncoder()
+                    .encodeToString(
+                        """{"textures":{"SKIN":{"url":"https://textures.minecraft.net/texture/example"}}}"""
+                            .toByteArray(),
+                    )
+
+            shouldThrow<IllegalArgumentException> {
+                OpsNpcSpec.parse(
+                    JsonParser
+                        .parseString("""{"skin":{"name":"rc-smith","texture":"$texture"}}""")
+                        .asJsonObject,
+                )
+            }
+            shouldThrow<IllegalArgumentException> {
+                OpsNpcSpec.parse(
+                    JsonParser
+                        .parseString(
+                            """{"skin":{"name":"rc-smith","texture":"$texture","signature":"c2lnbmF0dXJl","update":true}}""",
+                        ).asJsonObject,
+                )
+            }
         }
 
         "should preserve omitted coordinates in a location patch" {
@@ -173,6 +223,34 @@ class OpsNpcHandlersTest : FreeSpec({
 
             location["x"] shouldBe 379.0
             location["z"] shouldBe 272.0
+        }
+    }
+
+    "persistent MineSkin application" - {
+        "should call the Citizens direct signed-texture API" {
+            val npc = mockk<NPC>()
+            val entity = mockk<Entity>()
+            val trait = mockk<SkinTrait>()
+            every { entity.type } returns EntityType.PLAYER
+            every { npc.entity } returns entity
+            every { npc.getTraitNullable(MobType::class.java) } returns null
+            every { npc.getTraitNullable(SkinTrait::class.java) } returns null
+            every { npc.getOrAddTrait(SkinTrait::class.java) } returns trait
+            every { trait.setSkinPersistent("rc-smith", "signature", "texture") } just runs
+            val patch =
+                NpcPatch.Set(
+                    SkinSpec(
+                        name = NpcPatch.Set("rc-smith"),
+                        update = NpcPatch.Absent,
+                        texture = NpcPatch.Set("texture"),
+                        signature = NpcPatch.Set("signature"),
+                    ),
+                )
+
+            OpsNpcHandlers.applySkin(npc, patch)
+
+            verify(exactly = 1) { trait.setSkinPersistent("rc-smith", "signature", "texture") }
+            verify(exactly = 0) { trait.setSkinName(any(), any()) }
         }
     }
 
