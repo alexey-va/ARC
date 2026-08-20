@@ -18,7 +18,9 @@ import net.citizensnpcs.api.trait.Trait
 import net.citizensnpcs.api.util.MemoryDataKey
 import net.citizensnpcs.trait.CurrentLocation
 import net.citizensnpcs.trait.CommandTrait
+import net.citizensnpcs.trait.LookClose
 import net.citizensnpcs.trait.SkinTrait
+import net.citizensnpcs.trait.text.Text
 import net.citizensnpcs.trait.waypoint.LinearWaypointProvider
 import net.citizensnpcs.trait.waypoint.Waypoints
 import org.bukkit.entity.Entity
@@ -328,6 +330,41 @@ class OpsNpcHandlersTest : FreeSpec({
             command["runAs"] shouldBe "player"
             command["cooldownSeconds"] shouldBe 3
             command["permissions"] shouldBe listOf("ruscrafting.guide")
+        }
+    }
+
+    "desired-state trait summary" - {
+        "should expose per-player look-close persistence" {
+            val trait = mockk<LookClose>()
+            every { trait.isEnabled } returns true
+            every { trait.range } returns 7.5
+            every { trait.useRealisticLooking() } returns true
+            every { trait.isRandomLook } returns false
+            every { trait.disableWhileNavigating() } returns true
+            every { trait.targetNPCs() } returns false
+            val key = MemoryDataKey()
+            key.setBoolean("perplayer", true)
+
+            val summary = OpsNpcHandlers.lookCloseSummary(trait, key)
+
+            summary["perPlayer"] shouldBe true
+        }
+
+        "should expose text delay and range persistence" {
+            val trait = mockk<Text>()
+            every { trait.texts } returns listOf("Привет")
+            every { trait.shouldTalkClose() } returns true
+            every { trait.isRandomTalker } returns false
+            every { trait.useRealisticLooking() } returns true
+            every { trait.useSpeechBubbles() } returns false
+            val key = MemoryDataKey()
+            key.setInt("delay", 80)
+            key.setDouble("range", 4.5)
+
+            val summary = OpsNpcHandlers.textSummary(trait, key)
+
+            summary["delayTicks"] shouldBe 80
+            summary["range"] shouldBe 4.5
         }
     }
 })

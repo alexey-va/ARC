@@ -1,6 +1,7 @@
 package ru.arc.ops
 
 import com.google.gson.JsonObject
+import net.citizensnpcs.Settings.Setting
 import net.citizensnpcs.api.CitizensAPI
 import net.citizensnpcs.api.npc.NPC
 import net.citizensnpcs.api.persistence.PersistenceLoader
@@ -599,7 +600,17 @@ object OpsNpcHandlers {
         )
     }
 
-    private fun lookCloseSummary(trait: LookClose): Map<String, Any?> =
+    private fun lookCloseSummary(trait: LookClose): Map<String, Any?> {
+        val key = MemoryDataKey()
+        PersistenceLoader.save(trait, key)
+        trait.save(key)
+        return lookCloseSummary(trait, key)
+    }
+
+    internal fun lookCloseSummary(
+        trait: LookClose,
+        key: MemoryDataKey,
+    ): Map<String, Any?> =
         linkedMapOf(
             "enabled" to trait.isEnabled,
             "range" to trait.range,
@@ -607,6 +618,7 @@ object OpsNpcHandlers {
             "randomLook" to trait.isRandomLook,
             "disableWhileNavigating" to trait.disableWhileNavigating(),
             "targetNpcs" to trait.targetNPCs(),
+            "perPlayer" to key.getBoolean("perplayer", false),
         )
 
     /**
@@ -696,13 +708,25 @@ object OpsNpcHandlers {
         return result
     }
 
-    private fun textSummary(trait: Text): Map<String, Any?> =
+    private fun textSummary(trait: Text): Map<String, Any?> {
+        val key = MemoryDataKey()
+        PersistenceLoader.save(trait, key)
+        trait.save(key)
+        return textSummary(trait, key)
+    }
+
+    internal fun textSummary(
+        trait: Text,
+        key: MemoryDataKey,
+    ): Map<String, Any?> =
         linkedMapOf(
             "lines" to trait.texts,
             "talkClose" to trait.shouldTalkClose(),
             "randomTalker" to trait.isRandomTalker,
             "realisticLooking" to trait.useRealisticLooking(),
             "speechBubbles" to trait.useSpeechBubbles(),
+            "delayTicks" to key.getInt("delay", -1),
+            "range" to key.getDouble("range", Setting.DEFAULT_TALK_CLOSE_RANGE.asDouble()),
         )
 
     private fun resolveLocation(
