@@ -1814,7 +1814,13 @@ class OpsHttpServer(
             return
         }
         val body = parseJsonBody(exchange) ?: return
-        handleNpcErrors(exchange) { OpsNpcHandlers.upsert(rawId?.let(::parseNpcId), body) }
+        handleNpcErrors(exchange) {
+            OpsNpcHandlers.upsert(
+                rawId?.let(::parseNpcId),
+                body,
+                loadUnloadedChunks = cfg.npcsLoadChunksEnabled,
+            )
+        }
     }
 
     private fun handleNpcDelete(

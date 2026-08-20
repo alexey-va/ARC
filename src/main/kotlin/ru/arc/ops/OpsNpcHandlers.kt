@@ -138,6 +138,7 @@ object OpsNpcHandlers {
     fun upsert(
         id: Int?,
         body: JsonObject,
+        loadUnloadedChunks: Boolean = false,
     ): Map<String, Any?> =
         OpsBukkitSync.call {
             val spec = OpsNpcSpec.parse(body)
@@ -150,7 +151,7 @@ object OpsNpcHandlers {
                 } else {
                     registry.getById(id) ?: throw NoSuchElementException("NPC not found: $id")
                 }
-            val prepared = prepare(spec, existing)
+            val prepared = prepare(spec, existing, loadUnloadedChunks)
             val npc =
                 existing ?: run {
                     val name = (spec.name as NpcPatch.Set).value
@@ -267,11 +268,12 @@ object OpsNpcHandlers {
     private fun prepare(
         spec: OpsNpcSpec,
         existing: NPC?,
+        loadUnloadedChunks: Boolean,
     ): PreparedNpcSpec {
         val location =
             (spec.location as? NpcPatch.Set)?.value?.let {
                 resolveLocation(it, existing?.let(::persistentLocation), allowSurfaceY = true)
-                    .also(::requireLoadedSafePlacement)
+                    .also { location -> requireLoadedSafePlacement(location, loadUnloadedChunks) }
             }
         val equipment =
             (spec.equipment as? NpcPatch.Set)?.value?.slots?.mapValues { (_, item) ->
@@ -783,12 +785,22 @@ object OpsNpcHandlers {
         return Placement(world, Location(world, x, y, z, yaw, pitch))
     }
 
-    private fun requireLoadedSafePlacement(location: Location) {
+    private fun requireLoadedSafePlacement(
+        location: Location,
+        loadUnloadedChunks: Boolean,
+    ) {
         val world = location.world ?: throw IllegalArgumentException("world required")
         val blockX = floor(location.x).toInt()
         val blockY = floor(location.y).toInt()
         val blockZ = floor(location.z).toInt()
-        require(world.isChunkLoaded(blockX shr 4, blockZ shr 4)) { "Target chunk is not loaded" }
+        val chunkX = blockX shr 4
+        val chunkZ = blockZ shr 4
+        if (!world.isChunkLoaded(chunkX, chunkZ)) {
+            require(loadUnloadedChunks) { "Target chunk is not loaded" }
+            require(world.loadChunk(chunkX, chunkZ, false)) {
+                "Target chunk does not exist and generation is not allowed"
+            }
+        }
         require(world.worldBorder.isInside(location)) { "Target is outside world border" }
         require(world.getBlockAt(blockX, blockY, blockZ).isPassable) { "NPC feet position is blocked" }
         require(world.getBlockAt(blockX, blockY + 1, blockZ).isPassable) { "NPC head position is blocked" }

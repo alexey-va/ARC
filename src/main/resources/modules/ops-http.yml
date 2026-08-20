@@ -93,6 +93,7 @@ treasure-pools-write-enabled: false
 # Native Citizens API. Preview/list are read-only; create/move/delete stay gated.
 npcs-read-enabled: true
 npcs-write-enabled: false
+npcs-load-chunks-enabled: false
 
 # Fixed ARC-owned flat QA world. The write surface can only prepare the built-in
 # fixture and teleport allowlisted online players; it cannot run raw commands,

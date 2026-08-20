@@ -102,6 +102,9 @@ open class OpsHttpConfig(private val config: Config) {
     open val npcsWriteEnabled: Boolean
         get() = config.bool("npcs-write-enabled", false)
 
+    open val npcsLoadChunksEnabled: Boolean
+        get() = config.bool("npcs-load-chunks-enabled", false)
+
     open val qaWorldReadEnabled: Boolean
         get() = config.bool("qa-world-read-enabled", false)
 
@@ -181,6 +184,7 @@ class TestOpsHttpConfig(
     override val treasurePoolsWriteEnabled: Boolean = false,
     override val npcsReadEnabled: Boolean = true,
     override val npcsWriteEnabled: Boolean = false,
+    override val npcsLoadChunksEnabled: Boolean = false,
     override val qaWorldReadEnabled: Boolean = true,
     override val qaWorldWriteEnabled: Boolean = false,
     override val qaWorldAllowedPlayers: Set<String> = setOf("codexqa_728"),
@@ -215,6 +219,7 @@ class TestOpsHttpConfig(
         treasurePoolsWriteEnabled: Boolean = this.treasurePoolsWriteEnabled,
         npcsReadEnabled: Boolean = this.npcsReadEnabled,
         npcsWriteEnabled: Boolean = this.npcsWriteEnabled,
+        npcsLoadChunksEnabled: Boolean = this.npcsLoadChunksEnabled,
         qaWorldReadEnabled: Boolean = this.qaWorldReadEnabled,
         qaWorldWriteEnabled: Boolean = this.qaWorldWriteEnabled,
         qaWorldAllowedPlayers: Set<String> = this.qaWorldAllowedPlayers,
@@ -256,6 +261,7 @@ class TestOpsHttpConfig(
             treasurePoolsWriteEnabled = treasurePoolsWriteEnabled,
             npcsReadEnabled = npcsReadEnabled,
             npcsWriteEnabled = npcsWriteEnabled,
+            npcsLoadChunksEnabled = npcsLoadChunksEnabled,
             qaWorldReadEnabled = qaWorldReadEnabled,
             qaWorldWriteEnabled = qaWorldWriteEnabled,
             qaWorldAllowedPlayers = qaWorldAllowedPlayers,
