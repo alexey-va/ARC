@@ -1,19 +1,16 @@
 package ru.arc.ai
 
 import com.google.common.cache.CacheBuilder
-import ru.arc.ai.config.LlmModuleConfig
 import ru.arc.ai.config.NpcChatConfig
-import ru.arc.ai.llm.ChatTurn
-import ru.arc.ai.llm.SimpleChatService
-import ru.arc.util.Logging.error
+import ru.arc.ai.npc.NpcChatRpcClient
+import ru.arc.ai.npc.NpcChatTurn
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 
 class GPTEntity(
     private val npcChatConfig: NpcChatConfig,
-    private val llmConfig: LlmModuleConfig,
-    private val chatService: SimpleChatService,
+    private val rpcClient: NpcChatRpcClient,
     val archetype: String,
     private val id: String,
     useHistory: Boolean,
@@ -33,38 +30,31 @@ class GPTEntity(
         playerName: String,
         message: String,
     ): CompletableFuture<String?> {
-        if (!llmConfig.llmEnabled) {
-            error("API key is not set")
-            return CompletableFuture.completedFuture(null)
-        }
-
-        val model = npcChatConfig.model(archetype, llmConfig.moderationModel)
-        val maxTokens = npcChatConfig.maxTokens(archetype, llmConfig.moderationMaxTokens)
-        val temperature = npcChatConfig.temperature(archetype, llmConfig.moderationTemperature)
-
-        val system = npcChatConfig.systemPrompt(archetype).replace("%player_name%", playerName)
-
-        val history = mutableListOf<ChatTurn>()
+        val history = mutableListOf<NpcChatTurn>()
         val chatHistory =
             chatHistoryCache?.let { cache ->
                 val h =
                     cache.get(playerUuid) {
-                        ChatHistory(playerUuid, npcChatConfig.maxHistoryLength(archetype))
+                        ChatHistory(playerUuid, npcChatConfig.maxHistoryTurns)
                     }
-                h.addPlayerMessage(message)
                 h.entries().forEach { entry ->
-                    history.add(ChatTurn(if (entry.isPlayer) "user" else "assistant", entry.text))
+                    history.add(NpcChatTurn(if (entry.isPlayer) "user" else "assistant", entry.text))
                 }
                 h
             }
 
-        if (chatHistory == null) {
-            history.add(ChatTurn("user", message))
-        }
-
-        return chatService.complete(model, system, history, maxTokens, temperature).thenApply { response ->
+        return rpcClient.complete(
+            playerUuid = playerUuid,
+            playerName = playerName,
+            personaId = archetype,
+            message = message,
+            history = history,
+            maxOutputChars = npcChatConfig.maxOutputChars,
+        ).thenApply { response ->
             response?.also {
+                chatHistory?.addPlayerMessage(message)
                 chatHistory?.addBotMessage(it)
+                chatHistory?.clean(System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(10))
             }
         }
     }

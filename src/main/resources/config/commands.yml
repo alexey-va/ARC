@@ -28,6 +28,12 @@ commands:
     permission: ''
     player-only: true
     usage: /arc chat <local|global>
+  npc-chat:
+    name: npc-chat
+    aliases: [ ]
+    permission: ''
+    player-only: true
+    usage: /arc npc-chat <start <роль>|stop [разговор|all]>
   buy:
     name: buy
     aliases: [ ]
@@ -169,6 +175,10 @@ messages:
     local-already: '<gray>Вы уже в <white>локальном<gray> режиме чата. Переключить: <white>/g'
     global-already: '<gray>Вы уже в <white>глобальном<gray> режиме чата. Переключить: <white>/l'
     error: '<red>Не удалось переключить режим чата. Попробуйте ещё раз.'
+  npc-chat:
+    origin-only: '<gray>Этот разговор доступен только в Origin.'
+    unknown-persona: '<gray>Этот житель сейчас не разговаривает.'
+    too-far: '<gray>Подойди ближе к жителю, чтобы поговорить.'
   buy:
     unavailable: '<red>Покупка командой недоступна на этом сервере: магазин не загружен.'
     invalid-amount: '<red>Количество должно быть целым числом от <white>1<red> до <white>%max%<red>.'

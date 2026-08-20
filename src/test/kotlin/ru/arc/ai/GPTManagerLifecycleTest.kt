@@ -9,8 +9,10 @@ import org.junit.jupiter.api.Test
 import ru.arc.ai.config.NpcChatConfig
 import ru.arc.ai.config.TestLlmModuleConfig
 import ru.arc.ai.llm.OpenRouterLlmClient
+import ru.arc.ai.npc.NpcChatRpcClient
 import ru.arc.core.Tasks
 import ru.arc.core.TestTaskScheduler
+import ru.arc.redis.InMemoryRedis
 
 class GPTManagerLifecycleTest {
     @AfterEach
@@ -23,10 +25,12 @@ class GPTManagerLifecycleTest {
         val scheduler = TestTaskScheduler()
         Tasks.withScheduler(scheduler) {
             val config = TestLlmModuleConfig(apiKey = "none")
+            val rpc = NpcChatRpcClient(InMemoryRedis(), config).also { it.start() }
             GPTManager.init(
                 llmConfig = config,
                 npcChatConfig = mockk<NpcChatConfig>(relaxed = true),
                 llmClient = OpenRouterLlmClient.create(config),
+                npcChatRpcClient = rpc,
             )
 
             assertTrue(GPTManager.isRunning())
@@ -37,6 +41,7 @@ class GPTManagerLifecycleTest {
             assertFalse(GPTManager.isRunning())
             assertFalse(GPTManager.hasActiveExecutor())
             assertNull(GPTManager.moderationResponse("text").join())
+            rpc.close()
         }
     }
 
@@ -47,12 +52,14 @@ class GPTManagerLifecycleTest {
             val config = TestLlmModuleConfig(apiKey = "none")
             val npcConfig = mockk<NpcChatConfig>(relaxed = true)
             val client = OpenRouterLlmClient.create(config)
+            val rpc = NpcChatRpcClient(InMemoryRedis(), config).also { it.start() }
 
-            GPTManager.init(config, npcConfig, client)
-            GPTManager.init(config, npcConfig, client)
+            GPTManager.init(config, npcConfig, client, rpc)
+            GPTManager.init(config, npcConfig, client, rpc)
 
             assertTrue(GPTManager.isRunning())
             assertTrue(GPTManager.hasActiveExecutor())
+            rpc.close()
         }
     }
 }

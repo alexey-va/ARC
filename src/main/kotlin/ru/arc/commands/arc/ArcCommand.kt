@@ -23,6 +23,7 @@ import ru.arc.commands.arc.subcommands.InvestSubCommand
 import ru.arc.commands.arc.subcommands.JobsboostsSubCommand
 import ru.arc.commands.arc.subcommands.JoinMessageSubCommand
 import ru.arc.commands.arc.subcommands.LocationPoolSubCommand
+import ru.arc.commands.arc.subcommands.NpcChatSubCommand
 import ru.arc.commands.arc.subcommands.LoggerSubCommand
 import ru.arc.commands.arc.subcommands.PouchSubCommand
 import ru.arc.commands.arc.subcommands.ProductPathSubCommand
@@ -74,6 +75,7 @@ class ArcCommand :
             HuntSubCommand,
             TreasuresSubCommand,
             ProductPathSubCommand,
+            NpcChatSubCommand,
             // New subcommands
             TestSubCommand,
             BuildBookSubCommand,

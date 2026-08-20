@@ -22,6 +22,12 @@ class CitizensHook : AutoCloseable {
 
     enum class Animation { ARM_SWING, SIT, STOP_SITTING }
 
+    data class NearbyNpc(
+        val id: Int,
+        val name: String,
+        val location: Location,
+    )
+
     private val linesCache = CacheBuilder.newBuilder()
         .expireAfterAccess(10, TimeUnit.MINUTES)
         .build<Int, ConcurrentLinkedDeque<InsertedHologramLine>>()
@@ -62,6 +68,26 @@ class CitizensHook : AutoCloseable {
             warn("Failed to create NPC {} at {}", name, location, e)
             -1
         }
+    }
+
+    fun findNearestNpc(
+        origin: Location,
+        expectedName: String,
+        maxDistance: Double,
+    ): NearbyNpc? {
+        val world = origin.world ?: return null
+        return CitizensAPI.getNPCRegistry()
+            .asSequence()
+            .filter { it.isSpawned && it.name == expectedName }
+            .mapNotNull { npc ->
+                val location = npc.entity?.location ?: return@mapNotNull null
+                if (location.world?.uid != world.uid) return@mapNotNull null
+                val distanceSquared = location.distanceSquared(origin)
+                if (distanceSquared > maxDistance * maxDistance) return@mapNotNull null
+                Triple(npc, location, distanceSquared)
+            }
+            .minByOrNull { it.third }
+            ?.let { (npc, location) -> NearbyNpc(npc.id, npc.name, location.clone()) }
     }
 
     fun deleteWithNames(npcNames: Set<String>) {

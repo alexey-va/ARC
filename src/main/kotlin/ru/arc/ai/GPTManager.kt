@@ -7,7 +7,7 @@ import ru.arc.ai.config.NpcChatConfig
 import ru.arc.ai.llm.ModerationOutcome
 import ru.arc.ai.llm.ModerationService
 import ru.arc.ai.llm.OpenRouterLlmClient
-import ru.arc.ai.llm.SimpleChatService
+import ru.arc.ai.npc.NpcChatRpcClient
 import ru.arc.core.ScheduledTask
 import ru.arc.core.Tasks
 import ru.arc.core.repeatingAsync
@@ -18,6 +18,7 @@ import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
+import ru.arc.util.TextUtils
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
@@ -32,25 +33,26 @@ object GPTManager {
     private val entities = ConcurrentHashMap<String, GPTEntity>()
     private val conversations = ConcurrentHashMap<UUID, CopyOnWriteArrayList<Conversation>>()
     private val responseGate = AwaitingResponseGate()
+    private val lastRequestAt = ConcurrentHashMap<UUID, Long>()
     private val threadNumber = AtomicInteger()
     private var cleanupTask: ScheduledTask? = null
     private var requestExecutor: ExecutorService? = null
     private var running = false
 
-    private lateinit var llmConfig: LlmModuleConfig
     private lateinit var npcChatConfig: NpcChatConfig
     private lateinit var moderationService: ModerationService
-    private lateinit var chatService: SimpleChatService
+    private lateinit var npcChatRpcClient: NpcChatRpcClient
 
     @JvmStatic
     fun init(
         llmConfig: LlmModuleConfig,
         npcChatConfig: NpcChatConfig,
         llmClient: OpenRouterLlmClient,
+        npcChatRpcClient: NpcChatRpcClient,
     ) {
         shutdown()
-        this.llmConfig = llmConfig
         this.npcChatConfig = npcChatConfig
+        this.npcChatRpcClient = npcChatRpcClient
         val executor =
             Executors.newFixedThreadPool(LLM_THREADS) { runnable ->
                 Thread(runnable, "arc-gpt-${threadNumber.incrementAndGet()}").apply {
@@ -59,7 +61,6 @@ object GPTManager {
             }
         requestExecutor = executor
         moderationService = ModerationService(llmClient, llmConfig, executor)
-        chatService = SimpleChatService(llmClient, executor)
 
         try {
             cleanupTask =
@@ -86,6 +87,7 @@ object GPTManager {
         entities.clear()
         conversations.clear()
         responseGate.clear()
+        lastRequestAt.clear()
         requestExecutor?.shutdownNow()
         requestExecutor = null
     }
@@ -133,7 +135,7 @@ object GPTManager {
     }
 
     private fun createEntity(archetype: String, id: String, useHistory: Boolean): GPTEntity =
-        GPTEntity(npcChatConfig, llmConfig, chatService, archetype, id, useHistory)
+        GPTEntity(npcChatConfig, npcChatRpcClient, archetype, id, useHistory)
 
     @JvmStatic
     fun processMessage(
@@ -154,6 +156,15 @@ object GPTManager {
             } ?: return CompletableFuture.completedFuture(null)
 
         val actualMessage = if (message.startsWith("!")) message.substring(1) else message
+        if (actualMessage.length > npcChatConfig.maxInputChars) {
+            player.sendMessage(npcChatConfig.tooLongMessage)
+            return CompletableFuture.completedFuture(null)
+        }
+        val previousRequest = lastRequestAt[player.uniqueId]
+        if (previousRequest != null && now - previousRequest < npcChatConfig.cooldownMillis) {
+            return CompletableFuture.completedFuture(null)
+        }
+        lastRequestAt[player.uniqueId] = now
         return getResponseAndSend(player, actualMessage, conversation, appendCancel)
     }
 
@@ -174,12 +185,17 @@ object GPTManager {
                 )
             } ?: return CompletableFuture.completedFuture(null)
 
-        return responseFuture.thenAccept { response ->
+        return responseFuture.handle { response, failure ->
             conversation.lastMessageTime = System.currentTimeMillis()
-            response ?: return@thenAccept
-            val responseMessage = formatMessage(response, conversation, appendCancel)
             Tasks.scheduler.runSync(
                 Runnable {
+                    if (!player.isOnline) return@Runnable
+                    if (failure != null || response == null) {
+                        warn("NPC dialogue failed for player={} persona={}", player.name, conversation.archetype, failure)
+                        player.sendMessage(npcChatConfig.fallbackMessage)
+                        return@Runnable
+                    }
+                    val responseMessage = formatMessage(response, conversation, appendCancel)
                     displayChatBubble(response, conversation)
                     if (conversation.privateConversation) {
                         player.sendMessage(responseMessage)
@@ -190,16 +206,16 @@ object GPTManager {
                     }
                 },
             )
+            null
         }
     }
 
     private fun displayChatBubble(message: String, conversation: Conversation) {
         if (HookRegistry.citizensHook == null || conversation.npcId == null) return
         if (message.length > npcChatConfig.maxBubbleLength) return
-        val s = TextUtil.mmToLegacy(message)
         val list =
-            s.split("\n").map {
-                CitizensHook.HologramLine(it, npcChatConfig.bubbleDurationTicks)
+            message.split("\n").map {
+                CitizensHook.HologramLine("&f$it", npcChatConfig.bubbleDurationTicks)
             }
         HookRegistry.citizensHook?.addChatBubble(conversation.npcId, list)
     }
@@ -208,16 +224,17 @@ object GPTManager {
         message: String,
         conversation: Conversation,
         appendCancel: Boolean,
-    ) = TextUtil.mm(
-        buildString {
-            append(npcChatConfig.messageFormat)
-            if (appendCancel) {
-                append(npcChatConfig.cancelAppendix)
-            }
-        }.replace("%gpt_name%", conversation.talkerName ?: "")
-            .replace("%message%", message)
-            .replace("%id%", conversation.gptId ?: ""),
-    )
+    ) =
+        TextUtil.mm(
+            buildString {
+                append(npcChatConfig.messageFormat)
+                if (appendCancel) {
+                    append(npcChatConfig.cancelAppendix)
+                }
+            }.replace("%gpt_name%", TextUtils.escapeMM(conversation.talkerName ?: ""))
+                .replace("%message%", TextUtils.escapeMM(message))
+                .replace("%id%", TextUtils.escapeMM(conversation.gptId ?: "")),
+        )
 
     @JvmStatic
     fun startConversation(
@@ -257,7 +274,9 @@ object GPTManager {
             )
         convs.add(conv)
         if (initialMessage != null) {
-            getResponseAndSend(player, initialMessage, conv, appendCancel = false)
+            val responseMessage = formatMessage(initialMessage, conv, appendCancel = true)
+            displayChatBubble(initialMessage, conv)
+            player.sendMessage(responseMessage)
         }
     }
 
@@ -266,17 +285,18 @@ object GPTManager {
         val convs = conversations[player.uniqueId] ?: return
         val conversation = convs.find { it.gptId == id } ?: return
         if (conversation.endMessage != null) {
-            processMessage(conversation.endMessage, player, appendCancel = false)
-                .thenAccept { player.sendMessage(npcChatConfig.endMessage) }
-        } else {
-            player.sendMessage(npcChatConfig.endMessage)
+            val responseMessage = formatMessage(conversation.endMessage, conversation, appendCancel = false)
+            displayChatBubble(conversation.endMessage, conversation)
+            player.sendMessage(responseMessage)
         }
         convs.remove(conversation)
+        player.sendMessage(npcChatConfig.endMessage)
     }
 
     @JvmStatic
     fun endAllConversations(player: Player) {
         conversations.remove(player.uniqueId)
+        lastRequestAt.remove(player.uniqueId)
         player.sendMessage(npcChatConfig.endAllMessage)
     }
 

@@ -1,24 +1,136 @@
 # NPC chat UI + model params. System prompts: prompts/npc/*.txt
 
-message-format: <gray><gold>%gpt_name%<gray> » <white>%message%
+message-format: '<dark_gray>│ <white>%gpt_name% <gray>— <white>%message%'
 cancel-appendix: |2-
 
-  <red><hover:show_text:'Нажмите, чтобы закончить'><click:run_command:/arc ai stop %id%>[Нажмите, чтобы закончить разговор]</click></hover>
-end-message: <red>Вы закончили разговор
-end-all-message: <red>Вы закончили все разговоры
-max-bubble-length: 500
+  <dark_gray><hover:show_text:'Закончить разговор'><click:run_command:/arc npc-chat stop %id%>[закончить разговор]</click></hover>
+end-message: '<gray>Разговор закончен.'
+end-all-message: '<gray>Все разговоры закончены.'
+fallback-message: '<gray>Сейчас связь барахлит. Спроси ещё раз чуть позже.'
+too-long-message: '<gray>Скажи короче — до 240 символов.'
+max-input-chars: 240
+max-output-chars: 280
+max-history-turns: 6
+cooldown-seconds: 4
+max-bubble-length: 280
 bubble-duration-ticks: 200
+
+personas:
+  arrival_host:
+    npc-name: Встречающий
+    display-name: Встречающий
+    opening-line: Осмотрись сначала. Если потеряешься — спрашивай.
+    closing-line: Ладно. Не пропусти указатели у площади.
+    radius: 5
+    lifetime-seconds: 180
+    private: true
+  cartographer:
+    npc-name: Помощник картографа
+    display-name: Помощник картографа
+    opening-line: Могу проложить путь по заметным местам, без координатной каши.
+    closing-line: Держись главных улиц — так ориентиры не потеряешь.
+    radius: 5
+    lifetime-seconds: 180
+    private: true
+  pathfinder:
+    npc-name: Следопыт
+    display-name: Следопыт
+    opening-line: Нужен короткий путь или хочешь понять, куда ведёт дорога?
+    closing-line: Смотри на развилки и свет — они здесь полезнее спешки.
+    radius: 5
+    lifetime-seconds: 180
+    private: true
+  florist:
+    npc-name: Цветочник
+    display-name: Цветочник
+    opening-line: За цветами или просто ищешь нужный прилавок?
+    closing-line: Если что, я остаюсь у цветов.
+    radius: 5
+    lifetime-seconds: 180
+    private: true
+  market_clerk:
+    npc-name: Счётчик
+    display-name: Счётчик
+    opening-line: По рынку спрашивай конкретно — так быстрее разберёмся.
+    closing-line: С лотами дальше поможет Аукционист.
+    radius: 5
+    lifetime-seconds: 180
+    private: true
+  auditor:
+    npc-name: Аудитор
+    display-name: Аудитор
+    opening-line: Суммы люблю точные. В чём вопрос?
+    closing-line: Хорошо. За операциями обращайся к нужному окну.
+    radius: 5
+    lifetime-seconds: 180
+    private: true
+  draftsman:
+    npc-name: Чертёжник
+    display-name: Чертёжник
+    opening-line: Показывай идею. Разложим её на понятные части.
+    closing-line: Сначала схема, потом материалы — так меньше переделок.
+    radius: 5
+    lifetime-seconds: 180
+    private: true
+  armorer:
+    npc-name: Бронник
+    display-name: Бронник
+    opening-line: Что готовишь: дорогу, бой или спуск в данж?
+    closing-line: Проверь снаряжение ещё раз перед выходом.
+    radius: 5
+    lifetime-seconds: 180
+    private: true
+  stable_instructor:
+    npc-name: Инструктор
+    display-name: Инструктор
+    opening-line: С лошадьми торопиться не стоит. Что хочешь узнать?
+    closing-line: Спокойное движение работает лучше резкого.
+    radius: 5
+    lifetime-seconds: 180
+    private: true
+  expedition_scout:
+    npc-name: Разведчик
+    display-name: Разведчик
+    opening-line: Перед выходом лучше найти слабое место в плане.
+    closing-line: Оставь место для добычи и путь для отхода.
+    radius: 5
+    lifetime-seconds: 180
+    private: true
+  training_assistant:
+    npc-name: Помощник тренера
+    display-name: Помощник тренера
+    opening-line: Опиши, что не получается. Дам один нормальный совет.
+    closing-line: Повтори движение спокойно, без лишней суеты.
+    radius: 5
+    lifetime-seconds: 180
+    private: true
+  beekeeper:
+    npc-name: Пчеловод
+    display-name: Пчеловод
+    opening-line: Только не заходи в посевы. Про пчёл можешь спросить здесь.
+    closing-line: Держись края поля и не мешай ульям.
+    radius: 5
+    lifetime-seconds: 180
+    private: true
+  harbormaster:
+    npc-name: Начальник причала
+    display-name: Начальник причала
+    opening-line: Не стой на грузовом проходе. Что тебе нужно у воды?
+    closing-line: Смотри под ноги на настиле.
+    radius: 5
+    lifetime-seconds: 180
+    private: true
 
 archetypes:
   default:
     cache-ttl-minutes: 10
-    max-history-length: 100
+    max-history-length: 6
     model: openai/gpt-4o-mini
-    max-tokens: 250
+    max-tokens: 120
     temperature: 0.7
   joker:
     cache-ttl-minutes: 10
-    max-history-length: 100
+    max-history-length: 6
     model: openai/gpt-4o-mini
-    max-tokens: 250
+    max-tokens: 120
     temperature: 0.7

@@ -5,6 +5,7 @@ import ru.arc.ai.GPTManager
 import ru.arc.ai.config.LlmModuleConfig
 import ru.arc.ai.config.NpcChatConfig
 import ru.arc.ai.llm.OpenRouterLlmClient
+import ru.arc.ai.npc.NpcChatRpcClient
 import ru.arc.ai.tools.PaperAiToolExecutors
 import ru.arc.ai.tools.ToolRpcServer
 import ru.arc.config.Config
@@ -24,6 +25,7 @@ object AiModule : PluginModule {
         )
 
     private var toolRpcServer: ToolRpcServer? = null
+    private var npcChatRpcClient: NpcChatRpcClient? = null
 
     override fun init() {
         val dataPath = ARC.instance.dataPath
@@ -33,9 +35,18 @@ object AiModule : PluginModule {
         val llmConfig = LlmModuleConfig.load(dataPath)
         val npcChatConfig = NpcChatConfig.load(dataPath)
         val llmClient = OpenRouterLlmClient.create(llmConfig)
-        GPTManager.init(llmConfig, npcChatConfig, llmClient)
+        val redis = checkNotNull(ARC.redisManager) { "Redis is required for ProxyARC NPC dialogue" }
+        val npcRpc = NpcChatRpcClient(redis, llmConfig)
+        npcRpc.start()
+        npcChatRpcClient = npcRpc
+        try {
+            GPTManager.init(llmConfig, npcChatConfig, llmClient, npcRpc)
+        } catch (error: Exception) {
+            npcRpc.close()
+            npcChatRpcClient = null
+            throw error
+        }
 
-        val redis = ARC.redisManager ?: return
         val serverName = ARC.serverName ?: ru.arc.redis.RedisModuleConfig.load(dataPath).serverName
         val server =
             ToolRpcServer(
@@ -51,6 +62,8 @@ object AiModule : PluginModule {
 
     override fun shutdown() {
         GPTManager.shutdown()
+        npcChatRpcClient?.close()
+        npcChatRpcClient = null
         toolRpcServer?.close()
         toolRpcServer = null
     }
