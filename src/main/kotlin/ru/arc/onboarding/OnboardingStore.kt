@@ -65,6 +65,13 @@ internal class OnboardingStore private constructor(
     @Synchronized
     fun playerCount(): Int = players.size
 
+    @Synchronized
+    fun reset(playerId: UUID): Boolean {
+        val removed = players.remove(playerId) ?: return false
+        runCatching(::save).onFailure { players[playerId] = removed }.getOrThrow()
+        return true
+    }
+
     private fun save() {
         Files.createDirectories(path.parent)
         val snapshot =

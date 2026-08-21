@@ -114,4 +114,21 @@ class OnboardingStoreTest : FreeSpec({
 
         store.markDelivered(UUID.randomUUID(), OnboardingHint.FIRST_RTP, 10L).shouldBeFalse()
     }
+
+    "resets only the selected player and persists the removal" {
+        val path = Files.createTempDirectory("arc-onboarding-").resolve("data/onboarding-v2.json")
+        val resetPlayer = UUID.randomUUID()
+        val retainedPlayer = UUID.randomUUID()
+        val store = OnboardingStore.open(path)
+        store.observe(resetPlayer, OnboardingMilestone.FIRST_RTP, 10L)
+        store.observe(retainedPlayer, OnboardingMilestone.FIRST_RTP, 20L)
+
+        store.reset(resetPlayer).shouldBeTrue()
+        store.reset(resetPlayer).shouldBeFalse()
+
+        val restored = OnboardingStore.open(path)
+        restored.playerCount() shouldBe 1
+        restored.nextHint(resetPlayer) shouldBe null
+        restored.nextHint(retainedPlayer) shouldBe OnboardingHint.FIRST_RTP
+    }
 })

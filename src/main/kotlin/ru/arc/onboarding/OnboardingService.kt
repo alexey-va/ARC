@@ -14,6 +14,12 @@ import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import java.util.UUID
 
+enum class OnboardingResetResult {
+    DISABLED,
+    NOT_FOUND,
+    RESET,
+}
+
 object OnboardingService {
     private data class Runtime(
         val config: OnboardingConfig,
@@ -44,6 +50,16 @@ object OnboardingService {
     }
 
     fun isEnabled(): Boolean = runtime != null
+
+    fun reset(playerId: UUID): OnboardingResetResult {
+        val current = runtime ?: return OnboardingResetResult.DISABLED
+        return if (current.store.reset(playerId)) {
+            deliveryTasks.remove(playerId)?.cancel()
+            OnboardingResetResult.RESET
+        } else {
+            OnboardingResetResult.NOT_FOUND
+        }
+    }
 
     fun recordFirstRtp(
         player: Player,
