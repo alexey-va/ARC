@@ -53,9 +53,9 @@ internal class OnboardingConfig private constructor(
         private val DEFAULT_MESSAGES =
             mapOf(
                 OnboardingHint.FIRST_RTP to
-                    "<#92bed8>Начало <#666666>• <#2bba43>Место найдено.<#e6fff3> Поставьте <#92bed8>/sethome<#e6fff3>.",
+                    "<#92bed8>Начало <#666666>• <#2bba43>Место найдено.<#e6fff3> Сохраните точку возвращения: <#92bed8>/sethome<#e6fff3>.",
                 OnboardingHint.HOME_CREATED to
-                    "<#92bed8>Начало <#666666>• <#2bba43>Дом сохранён.<#e6fff3> Получите блоки привата: <#92bed8>/kit start<#e6fff3>.",
+                    "<#92bed8>Начало <#666666>• <#2bba43>Дом сохранён.<#e6fff3> Возврат: <#92bed8>/home<#e6fff3>. Блоки привата: <#92bed8>/kit start<#e6fff3>.",
                 OnboardingHint.LAND_CLAIMED to
                     "<#92bed8>Начало <#666666>• <#2bba43>Участок защищён.<#e6fff3> Поставьте внутри <#92bed8>/sethome<#e6fff3>.",
                 OnboardingHint.FOOTHOLD_MISMATCH to

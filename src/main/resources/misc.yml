@@ -379,4 +379,4 @@ rtp-respawn:
   - survival
   - mining
   - vanilla
-  set-spawn-message: <green>Ваша точка возрождения установлена здесь! <gray>Чтобы изменить ее, используйте команду /sethome
+  set-spawn-message: <green>Ваша точка возрождения установлена здесь! <gray>После смерти вы вернётесь сюда.

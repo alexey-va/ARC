@@ -70,6 +70,10 @@ class OnboardingConfigTest : FreeSpec({
         OnboardingHint.entries.forEach { hint ->
             plainText.serialize(config.message(hint)).shouldStartWith("Начало • ")
         }
+        plainText.serialize(config.message(OnboardingHint.FIRST_RTP)) shouldBe
+            "Начало • Место найдено. Сохраните точку возвращения: /sethome."
+        plainText.serialize(config.message(OnboardingHint.HOME_CREATED)) shouldBe
+            "Начало • Дом сохранён. Возврат: /home. Блоки привата: /kit start."
         config.validate()
     }
 })

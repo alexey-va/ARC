@@ -16,6 +16,9 @@ import ru.arc.util.Logging.error
  * state must not be read before this action reaches the main thread.
  */
 object RtpRespawnCompletion {
+    internal const val DEFAULT_SET_SPAWN_MESSAGE =
+        "<green>Ваша точка возрождения установлена здесь! <gray>После смерти вы вернётесь сюда."
+
     fun complete(
         player: Player,
         provider: RtpProvider,
@@ -46,8 +49,7 @@ object RtpRespawnCompletion {
                 player.sendMessage(
                     config.component(
                         "rtp-respawn.set-spawn-message",
-                        "<green>Ваша точка возрождения установлена здесь! " +
-                            "<gray>Чтобы изменить ее, используйте команду /sethome",
+                        DEFAULT_SET_SPAWN_MESSAGE,
                     ),
                 )
             }
