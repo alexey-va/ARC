@@ -12,7 +12,8 @@ HTTP ops API и ItemSpec для RusCrafting MCP. **Runtime configs:** `mcserver/
 - Scheduled-command read/preview/write/delete through ARC's native manager
 - Location-pool read/preview/write/delete through native ARC storage
 - Treasure/reward-pool read/preview/write/delete through native `TreasureManager`
-- Citizens NPC list/preview/upsert/delete through the native Citizens API
+- Citizens NPC list/preview/upsert/delete through the native Citizens API,
+  including persistent `visible|hidden|hover` nameplate state
 - Citizens marker publication into BlueMap through BlueMap API 2.7.7
 - Fixed ARC-owned flat QA world with bounded fixtures and allowlisted player teleport
 - One read-only health overview across every managed content catalog

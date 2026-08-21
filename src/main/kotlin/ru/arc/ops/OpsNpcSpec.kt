@@ -21,6 +21,7 @@ internal sealed interface NpcPatch<out T> {
 
 internal data class OpsNpcSpec(
     val name: NpcPatch<String>,
+    val nameplate: NpcPatch<NameplateMode>,
     val type: NpcPatch<EntityType>,
     val protectedState: NpcPatch<Boolean>,
     val location: NpcPatch<LocationSpec>,
@@ -38,6 +39,7 @@ internal data class OpsNpcSpec(
         get() =
             listOf(
                 "name" to name,
+                "nameplate" to nameplate,
                 "type" to type,
                 "protected" to protectedState,
                 "location" to location,
@@ -62,6 +64,7 @@ internal data class OpsNpcSpec(
         private val rootFields =
             setOf(
                 "name",
+                "nameplate",
                 "type",
                 "protected",
                 "location",
@@ -81,6 +84,7 @@ internal data class OpsNpcSpec(
             require(body.size() > 0) { "NpcSpec must contain at least one field" }
             return OpsNpcSpec(
                 name = field(body, "name", clearable = false) { validatedString(it, "name", 64) },
+                nameplate = field(body, "nameplate", clearable = false, ::parseNameplate),
                 type = field(body, "type", clearable = false) { parseEntityType(string(it, "type")) },
                 protectedState = field(body, "protected", clearable = false) { boolean(it, "protected") },
                 location = field(body, "location", clearable = false, ::parseLocation),
@@ -99,6 +103,14 @@ internal data class OpsNpcSpec(
             )
         }
     }
+}
+
+internal enum class NameplateMode(
+    val storageValue: Any,
+) {
+    VISIBLE(true),
+    HIDDEN(false),
+    HOVER("hover"),
 }
 
 internal data class LocationSpec(
@@ -664,6 +676,9 @@ private inline fun <reified T : Enum<T>> enumValue(
                 "$path must be one of ${enumValues<T>().joinToString(", ") { value -> value.name.lowercase() }}",
             )
         }
+
+private fun parseNameplate(element: JsonElement): NameplateMode =
+    enumValue(string(element, "nameplate"), "nameplate")
 
 private fun parseEntityType(raw: String): EntityType {
     val type = enumValue<EntityType>(raw, "type")

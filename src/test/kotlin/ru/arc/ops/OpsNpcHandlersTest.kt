@@ -11,6 +11,7 @@ import io.mockk.runs
 import io.mockk.verify
 import io.mockk.verifyOrder
 import net.citizensnpcs.api.npc.NPC
+import net.citizensnpcs.api.npc.MetadataStore
 import net.citizensnpcs.api.ai.Navigator
 import net.citizensnpcs.api.ai.NavigatorParameters
 import net.citizensnpcs.api.trait.trait.MobType
@@ -37,6 +38,7 @@ class OpsNpcHandlersTest : FreeSpec({
             val spec = OpsNpcSpec.parse(JsonParser.parseString("""{"name":"Новое имя"}""").asJsonObject)
 
             (spec.name as NpcPatch.Set).value shouldBe "Новое имя"
+            spec.nameplate shouldBe NpcPatch.Absent
             spec.location shouldBe NpcPatch.Absent
             spec.skin shouldBe NpcPatch.Absent
             spec.lookClose shouldBe NpcPatch.Absent
@@ -47,6 +49,25 @@ class OpsNpcHandlersTest : FreeSpec({
             spec.text shouldBe NpcPatch.Absent
             spec.navigation shouldBe NpcPatch.Absent
             spec.changedFields shouldBe listOf("name")
+        }
+
+        "should parse an explicit nameplate mode" {
+            val spec =
+                OpsNpcSpec.parse(
+                    JsonParser.parseString("""{"nameplate":"hidden"}""").asJsonObject,
+                )
+
+            (spec.nameplate as NpcPatch.Set).value shouldBe NameplateMode.HIDDEN
+            spec.changedFields shouldBe listOf("nameplate")
+        }
+
+        "should reject booleans and unknown nameplate modes" {
+            shouldThrow<IllegalArgumentException> {
+                OpsNpcSpec.parse(JsonParser.parseString("""{"nameplate":false}""").asJsonObject)
+            }
+            shouldThrow<IllegalArgumentException> {
+                OpsNpcSpec.parse(JsonParser.parseString("""{"nameplate":"sometimes"}""").asJsonObject)
+            }
         }
 
         "should preserve command entries when only their mode is patched" {
@@ -176,6 +197,37 @@ class OpsNpcHandlersTest : FreeSpec({
         }
     }
 
+    "nameplate persistence" - {
+        "should store the Citizens metadata and schedule a packet refresh" {
+            val metadata = mockk<MetadataStore>()
+            val npc = mockk<NPC>()
+            every { npc.data() } returns metadata
+            every { metadata.setPersistent("nameplate-visible", false) } just runs
+            every { npc.scheduleUpdate(NPC.NPCUpdate.PACKET) } just runs
+
+            OpsNpcHandlers.applyNameplate(npc, NpcPatch.Set(NameplateMode.HIDDEN))
+
+            verifyOrder {
+                metadata.setPersistent("nameplate-visible", false)
+                npc.scheduleUpdate(NPC.NPCUpdate.PACKET)
+            }
+        }
+
+        "should normalize Citizens boolean and hover storage values" {
+            val metadata = mockk<MetadataStore>()
+            val npc = mockk<NPC>()
+            every { npc.data() } returns metadata
+            every { metadata.get<Any>("nameplate-visible", true) } returns false
+            OpsNpcHandlers.nameplateSummary(npc) shouldBe "hidden"
+
+            every { metadata.get<Any>("nameplate-visible", true) } returns "hover"
+            OpsNpcHandlers.nameplateSummary(npc) shouldBe "hover"
+
+            every { metadata.get<Any>("nameplate-visible", true) } returns true
+            OpsNpcHandlers.nameplateSummary(npc) shouldBe "visible"
+        }
+    }
+
     "move persistence" - {
         "should update CurrentLocation before the registry is saved" {
             val world = mockk<World>()
@@ -218,6 +270,9 @@ class OpsNpcHandlersTest : FreeSpec({
             every { npc.getStoredLocation() } returns oldLocation
             every { npc.navigator } returns navigator
             every { npc.useMinecraftAI() } returns false
+            val metadata = mockk<MetadataStore>()
+            every { metadata.get<Any>("nameplate-visible", true) } returns true
+            every { npc.data() } returns metadata
             every { npc.getTraitNullable(any<Class<out Trait>>()) } returns null
 
             val response = OpsNpcHandlers.summary(npc, target)

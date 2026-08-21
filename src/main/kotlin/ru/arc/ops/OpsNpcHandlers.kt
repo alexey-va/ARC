@@ -4,6 +4,7 @@ import com.google.gson.JsonObject
 import net.citizensnpcs.Settings.Setting
 import net.citizensnpcs.api.CitizensAPI
 import net.citizensnpcs.api.npc.NPC
+import net.citizensnpcs.api.npc.NPC.NPCUpdate
 import net.citizensnpcs.api.persistence.PersistenceLoader
 import net.citizensnpcs.api.trait.trait.Equipment
 import net.citizensnpcs.api.trait.trait.MobType
@@ -37,6 +38,10 @@ import kotlin.math.floor
  */
 object OpsNpcHandlers {
     private const val MAX_LIST_LIMIT = 500
+    // Citizens 2.0.42 NPC.Metadata.NAMEPLATE_VISIBLE persistent key. Use the
+    // string overload because Citizens also persists the non-Boolean "hover"
+    // mode through this same key.
+    private const val NAMEPLATE_VISIBLE_KEY = "nameplate-visible"
 
     fun list(
         id: Int? = null,
@@ -225,6 +230,7 @@ object OpsNpcHandlers {
         val type = npc.getTraitNullable(MobType::class.java)?.type ?: npc.entity?.type
         val spec = linkedMapOf<String, Any?>(
             "name" to npc.name,
+            "nameplate" to nameplateSummary(npc),
             "type" to type?.name,
             "protected" to npc.isProtected,
             "location" to locationMap(location),
@@ -322,6 +328,7 @@ object OpsNpcHandlers {
         created: Boolean,
     ) {
         (spec.name as? NpcPatch.Set)?.let { npc.name = it.value }
+        applyNameplate(npc, spec.nameplate)
         (spec.type as? NpcPatch.Set)?.let { npc.setBukkitEntityType(it.value) }
         when (val value = spec.protectedState) {
             is NpcPatch.Set -> npc.isProtected = value.value
@@ -348,6 +355,22 @@ object OpsNpcHandlers {
         applyText(npc, spec.text)
         applyNavigation(npc, spec.navigation)
     }
+
+    internal fun applyNameplate(
+        npc: NPC,
+        patch: NpcPatch<NameplateMode>,
+    ) {
+        val mode = (patch as? NpcPatch.Set)?.value ?: return
+        npc.data().setPersistent(NAMEPLATE_VISIBLE_KEY, mode.storageValue)
+        npc.scheduleUpdate(NPCUpdate.PACKET)
+    }
+
+    internal fun nameplateSummary(npc: NPC): String =
+        when (npc.data().get<Any>(NAMEPLATE_VISIBLE_KEY, true).toString().lowercase()) {
+            "false" -> "hidden"
+            "hover" -> "hover"
+            else -> "visible"
+        }
 
     internal fun applySkin(
         npc: NPC,
