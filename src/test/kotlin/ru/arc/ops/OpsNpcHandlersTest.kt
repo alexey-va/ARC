@@ -202,13 +202,13 @@ class OpsNpcHandlersTest : FreeSpec({
             val metadata = mockk<MetadataStore>()
             val npc = mockk<NPC>()
             every { npc.data() } returns metadata
-            every { metadata.setPersistent("nameplate-visible", false) } just runs
+            every { metadata.setPersistent(NPC.Metadata.NAMEPLATE_VISIBLE, false) } just runs
             every { npc.scheduleUpdate(NPC.NPCUpdate.PACKET) } just runs
 
             OpsNpcHandlers.applyNameplate(npc, NpcPatch.Set(NameplateMode.HIDDEN))
 
             verifyOrder {
-                metadata.setPersistent("nameplate-visible", false)
+                metadata.setPersistent(NPC.Metadata.NAMEPLATE_VISIBLE, false)
                 npc.scheduleUpdate(NPC.NPCUpdate.PACKET)
             }
         }
@@ -217,13 +217,13 @@ class OpsNpcHandlersTest : FreeSpec({
             val metadata = mockk<MetadataStore>()
             val npc = mockk<NPC>()
             every { npc.data() } returns metadata
-            every { metadata.get<Any>("nameplate-visible", true) } returns false
+            every { metadata.get<Any>(NPC.Metadata.NAMEPLATE_VISIBLE, true) } returns false
             OpsNpcHandlers.nameplateSummary(npc) shouldBe "hidden"
 
-            every { metadata.get<Any>("nameplate-visible", true) } returns "hover"
+            every { metadata.get<Any>(NPC.Metadata.NAMEPLATE_VISIBLE, true) } returns "hover"
             OpsNpcHandlers.nameplateSummary(npc) shouldBe "hover"
 
-            every { metadata.get<Any>("nameplate-visible", true) } returns true
+            every { metadata.get<Any>(NPC.Metadata.NAMEPLATE_VISIBLE, true) } returns true
             OpsNpcHandlers.nameplateSummary(npc) shouldBe "visible"
         }
     }
@@ -271,7 +271,7 @@ class OpsNpcHandlersTest : FreeSpec({
             every { npc.navigator } returns navigator
             every { npc.useMinecraftAI() } returns false
             val metadata = mockk<MetadataStore>()
-            every { metadata.get<Any>("nameplate-visible", true) } returns true
+            every { metadata.get<Any>(NPC.Metadata.NAMEPLATE_VISIBLE, true) } returns true
             every { npc.data() } returns metadata
             every { npc.getTraitNullable(any<Class<out Trait>>()) } returns null
 

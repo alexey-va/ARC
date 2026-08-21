@@ -38,10 +38,9 @@ import kotlin.math.floor
  */
 object OpsNpcHandlers {
     private const val MAX_LIST_LIMIT = 500
-    // Citizens 2.0.42 NPC.Metadata.NAMEPLATE_VISIBLE persistent key. Use the
-    // string overload because Citizens also persists the non-Boolean "hover"
-    // mode through this same key.
-    private const val NAMEPLATE_VISIBLE_KEY = "nameplate-visible"
+    // Citizens reloads known metadata keys into its enum-keyed store. Always
+    // use the enum overload so readback survives save/load; its value may still
+    // be Boolean or the supported "hover" string.
 
     fun list(
         id: Int? = null,
@@ -361,12 +360,12 @@ object OpsNpcHandlers {
         patch: NpcPatch<NameplateMode>,
     ) {
         val mode = (patch as? NpcPatch.Set)?.value ?: return
-        npc.data().setPersistent(NAMEPLATE_VISIBLE_KEY, mode.storageValue)
+        npc.data().setPersistent(NPC.Metadata.NAMEPLATE_VISIBLE, mode.storageValue)
         npc.scheduleUpdate(NPCUpdate.PACKET)
     }
 
     internal fun nameplateSummary(npc: NPC): String =
-        when (npc.data().get<Any>(NAMEPLATE_VISIBLE_KEY, true).toString().lowercase()) {
+        when (npc.data().get<Any>(NPC.Metadata.NAMEPLATE_VISIBLE, true).toString().lowercase()) {
             "false" -> "hidden"
             "hover" -> "hover"
             else -> "visible"
