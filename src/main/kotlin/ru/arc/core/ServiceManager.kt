@@ -6,15 +6,15 @@ package ru.arc.core
  *
  * Usage:
  * ```kotlin
- * object FarmManager : ServiceManager<FarmService>() {
- *     override fun createService(): FarmService {
- *         val config = FarmModuleConfig.load(ARC.instance.dataPath)
- *         return FarmService(config, ...)
+ * object FeatureManager : ServiceManager<FeatureService>() {
+ *     override fun createService(): FeatureService {
+ *         val config = FeatureConfig.load(ARC.instance.dataPath)
+ *         return FeatureService(config, ...)
  *     }
  *
  *     // Add domain-specific methods
  *     @JvmStatic
- *     fun processEvent(event: BlockBreakEvent) {
+ *     fun processEvent(event: FeatureEvent) {
  *         service?.processEvent(event)
  *     }
  * }

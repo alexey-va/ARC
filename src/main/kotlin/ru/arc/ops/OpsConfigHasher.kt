@@ -40,7 +40,7 @@ object OpsConfigHasher {
         paths: List<String>,
     ): Map<String, Any?> {
         if (paths.isEmpty()) {
-            return mapOf("error" to "Query param path or prefix required", "example" to "/ops/config/hash?path=plugins/ARC/modules/farms.yml")
+            return mapOf("error" to "Query param path or prefix required", "example" to "/ops/config/hash?path=plugins/ARC/modules/announce.yml")
         }
         if (paths.size > maxPaths) {
             return mapOf("error" to "Too many paths (max $maxPaths)")

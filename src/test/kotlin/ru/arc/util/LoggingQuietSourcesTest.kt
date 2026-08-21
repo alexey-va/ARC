@@ -14,7 +14,7 @@ class LoggingQuietSourcesTest : FreeSpec({
         }
 
         "should not match unrelated packages" {
-            Logging.matchesQuietSource("ru.arc.farm.FarmManager", sources) shouldBe false
+            Logging.matchesQuietSource("ru.arc.treasure.TreasureManager", sources) shouldBe false
             Logging.matchesQuietSource("ru.arc.ops.OpsHttpHandlers", sources) shouldBe false
         }
 

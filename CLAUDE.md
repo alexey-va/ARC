@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-ARC — McFine Paper plugin (Kotlin/Java 25). Treasure hunts, stock, board, farms, cross-server via Redis.
+ARC — McFine Paper plugin (Kotlin/Java 25). Treasure hunts, stock, board, cross-server via Redis.
 
 **Architecture, boundaries, migration:** [`AGENTS.md`](AGENTS.md) → [`arc-core/AGENTS.md`](../arc-core/AGENTS.md)
 

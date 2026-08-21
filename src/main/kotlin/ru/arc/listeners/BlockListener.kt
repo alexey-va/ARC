@@ -22,7 +22,6 @@ import ru.arc.autobuild.ConstructionState
 import ru.arc.bschests.PersonalLootModule
 import ru.arc.common.locationpools.LocationPoolManager
 import ru.arc.config.ConfigManager
-import ru.arc.farm.FarmManager
 import ru.arc.leafdecay.LeafDecayManager
 import ru.arc.treasure.core.Treasures
 import ru.arc.treasure.pouch.Pouches
@@ -59,7 +58,6 @@ class BlockListener : Listener {
 
     @EventHandler(priority = EventPriority.LOW)
     fun onBlockBreakLow(event: BlockBreakEvent) {
-        processFarmBreak(event)
         PersonalLootModule.processChestBreak(event)
     }
 
@@ -193,10 +191,6 @@ class BlockListener : Listener {
 
         event.isCancelled = true
         BuildingManager.processPlayerClick(event.player, center, buildingId, rotation, yOff, cooldownSeconds)
-    }
-
-    private fun processFarmBreak(event: BlockBreakEvent) {
-        FarmManager.processEvent(event)
     }
 
     private fun processTreasureHunt(event: PlayerInteractEvent) {

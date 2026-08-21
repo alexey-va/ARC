@@ -25,7 +25,6 @@ import ru.arc.core.repeating
 import ru.arc.core.ticks
 import ru.arc.chat.ChatModeService
 import ru.arc.eliteloot.EliteLootManager
-import ru.arc.farm.FarmManager
 import ru.arc.hooks.HookRegistry
 import ru.arc.leafdecay.LeafDecayManager
 import ru.arc.misc.JoinMessagesManager
@@ -312,22 +311,6 @@ object AuditModule : PluginModule {
 }
 
 // ==================== Priority 70-90: Game Features ====================
-
-/**
- * Farm management system.
- */
-object FarmModule : PluginModule {
-    override val name = "Farms"
-    override val priority = 70
-
-    override fun init() {
-        FarmManager.init()
-    }
-
-    override fun shutdown() {
-        FarmManager.cancelTasks()
-    }
-}
 
 /**
  * Announcement system.

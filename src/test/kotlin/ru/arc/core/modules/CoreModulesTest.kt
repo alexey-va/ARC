@@ -99,7 +99,6 @@ class CoreModulesTest : TestBase() {
             CooldownModule,
             HeadCacheModule,
             AuditModule,
-            FarmModule,
             AnnounceModule,
             ScheduledCommandsModule,
             XActionModule,
@@ -135,17 +134,8 @@ class CoreModulesTest : TestBase() {
         }
 
         @Test
-        @DisplayName("Configuration modules come before game features")
-        fun testConfigBeforeGameFeatures() {
-            assertTrue(ConfigModule.priority < FarmModule.priority)
-            assertTrue(LocationPoolModule.priority < FarmModule.priority)
-            assertTrue(BoardModule.priority < FarmModule.priority)
-        }
-
-        @Test
         @DisplayName("Building module comes after game features")
         fun testBuildingAfterGameFeatures() {
-            assertTrue(BuildingModule.priority > FarmModule.priority)
             assertTrue(BuildingModule.priority > StockModule.priority)
             assertTrue(BuildingModule.priority > TreasureModule.priority)
         }
@@ -250,7 +240,6 @@ class CoreModulesTest : TestBase() {
             CooldownModule,
             HeadCacheModule,
             AuditModule,
-            FarmModule,
             AnnounceModule,
             ScheduledCommandsModule,
             XActionModule,
@@ -287,7 +276,7 @@ class CoreModulesTest : TestBase() {
     // ==================== Module Count Test ====================
 
     @Test
-    @DisplayName("Total module count is 27")
+    @DisplayName("Total module count is 26")
     fun testTotalModuleCount() {
         val allModules = listOf(
             RedisModule,
@@ -302,7 +291,6 @@ class CoreModulesTest : TestBase() {
             CooldownModule,
             HeadCacheModule,
             AuditModule,
-            FarmModule,
             AnnounceModule,
             ScheduledCommandsModule,
             XActionModule,
@@ -319,6 +307,6 @@ class CoreModulesTest : TestBase() {
             SyncModule
         )
 
-        assertEquals(27, allModules.size, "Should have 27 modules")
+        assertEquals(26, allModules.size, "Should have 26 modules")
     }
 }

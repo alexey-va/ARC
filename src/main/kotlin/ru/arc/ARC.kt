@@ -38,7 +38,6 @@ import ru.arc.mounts.MountModule
 import ru.arc.core.modules.CooldownModule
 import ru.arc.core.modules.EconomyModule
 import ru.arc.core.modules.EliteLootModule
-import ru.arc.core.modules.FarmModule
 import ru.arc.core.modules.HeadCacheModule
 import ru.arc.core.modules.HooksModule
 import ru.arc.core.modules.JoinMessagesModule
@@ -193,7 +192,6 @@ open class ARC : JavaPlugin() {
             AutoSellAuditModule,
             BankAuditModule,
             // Game features (priority 70-89)
-            FarmModule,
             AnnounceModule,
             ScheduledCommandsModule,
             XActionModule,
@@ -305,7 +303,6 @@ open class ARC : JavaPlugin() {
                 "modules/board.yml",
                 "modules/command-hide.yml",
                 "modules/contracts.yml",
-                "modules/farms.yml",
                 "modules/auction.yml",
                 "modules/treasure-hunt.yml",
                 "modules/mobspawn.yml",
