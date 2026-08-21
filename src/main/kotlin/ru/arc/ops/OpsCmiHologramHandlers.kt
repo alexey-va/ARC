@@ -64,6 +64,7 @@ object OpsCmiHologramHandlers {
             if (existing == null) spec.requireCreateFields()
             val location = resolveLocation(existing, spec.location)
             validateNativeFields(spec)
+            validateRangePatch(existing, spec)
 
             mapOf(
                 "provider" to "CMI",
@@ -90,6 +91,7 @@ object OpsCmiHologramHandlers {
             if (existing == null) spec.requireCreateFields()
             val location = resolveLocation(existing, spec.location)
             validateNativeFields(spec)
+            validateRangePatch(existing, spec)
             val hologram = existing ?: CMIHologram(safeName, location)
 
             if (existing == null) {
@@ -156,8 +158,14 @@ object OpsCmiHologramHandlers {
 
         spec.lines.applyIfSet(hologram.pages::setLines)
         spec.enabled.applyIfSet(hologram::setEnabled)
-        spec.showRange.applyIfSet(settings::setVisibilityRange)
-        spec.updateRange.applyIfSet(settings::setUpdateRange)
+        applyCmiRangePatch(
+            currentShowRange = settings.visibilityRange,
+            currentUpdateRange = settings.updateRange,
+            showRange = spec.showRange,
+            updateRange = spec.updateRange,
+            setShowRange = settings::setVisibilityRange,
+            setUpdateRange = settings::setUpdateRange,
+        )
         spec.updateIntervalSeconds.applyIfSet {
             settings.setUpdateIntervalTicks((it * 20.0).roundToInt())
         }
@@ -259,6 +267,21 @@ object OpsCmiHologramHandlers {
             ?.effect
             ?.valueOrNull()
             ?.let(::buildEffect)
+    }
+
+    private fun validateRangePatch(
+        existing: CMIHologram?,
+        spec: OpsCmiHologramSpec,
+    ) {
+        val currentShowRange = existing?.settings?.visibilityRange
+        val currentUpdateRange = existing?.settings?.updateRange
+        val desiredShowRange = spec.showRange.valueOrNull() ?: currentShowRange
+        val desiredUpdateRange = spec.updateRange.valueOrNull() ?: currentUpdateRange
+        if (desiredShowRange != null && desiredUpdateRange != null) {
+            require(desiredShowRange >= desiredUpdateRange) {
+                "showRange must be greater than or equal to updateRange"
+            }
+        }
     }
 
     private fun resolveColor(raw: String): CMIChatColor =
@@ -492,6 +515,34 @@ object OpsCmiHologramHandlers {
 
 private inline fun <T> CmiHologramPatch<T>.applyIfSet(block: (T) -> Unit) {
     if (this is CmiHologramPatch.Set) block(value)
+}
+
+/**
+ * CMI keeps update range inside visibility range. Lowering both values must
+ * therefore lower update range first; raising both must widen visibility
+ * first. Calling the setters in one fixed order silently leaves one old value.
+ */
+internal fun applyCmiRangePatch(
+    currentShowRange: Int,
+    currentUpdateRange: Int,
+    showRange: CmiHologramPatch<Int>,
+    updateRange: CmiHologramPatch<Int>,
+    setShowRange: (Int) -> Unit,
+    setUpdateRange: (Int) -> Unit,
+) {
+    val desiredShowRange = showRange.valueOrNull() ?: currentShowRange
+    val desiredUpdateRange = updateRange.valueOrNull() ?: currentUpdateRange
+    require(desiredShowRange >= desiredUpdateRange) {
+        "showRange must be greater than or equal to updateRange"
+    }
+
+    if (showRange is CmiHologramPatch.Set && desiredShowRange < currentUpdateRange) {
+        updateRange.applyIfSet(setUpdateRange)
+        showRange.applyIfSet(setShowRange)
+    } else {
+        showRange.applyIfSet(setShowRange)
+        updateRange.applyIfSet(setUpdateRange)
+    }
 }
 
 private fun <T> CmiHologramPatch<T>?.valueOrNull(): T? =

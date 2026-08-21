@@ -11,6 +11,43 @@ import io.kotest.matchers.shouldBe
 class OpsCmiHologramSpecTest : FreeSpec({
 
     "presence-aware CMI HologramSpec" - {
+        "orders coupled range changes around CMI's visibility invariant" {
+            val shrinkingCalls = mutableListOf<String>()
+            applyCmiRangePatch(
+                currentShowRange = 40,
+                currentUpdateRange = 40,
+                showRange = CmiHologramPatch.Set(18),
+                updateRange = CmiHologramPatch.Set(18),
+                setShowRange = { shrinkingCalls += "show:$it" },
+                setUpdateRange = { shrinkingCalls += "update:$it" },
+            )
+            shrinkingCalls shouldBe listOf("update:18", "show:18")
+
+            val growingCalls = mutableListOf<String>()
+            applyCmiRangePatch(
+                currentShowRange = 18,
+                currentUpdateRange = 18,
+                showRange = CmiHologramPatch.Set(40),
+                updateRange = CmiHologramPatch.Set(40),
+                setShowRange = { growingCalls += "show:$it" },
+                setUpdateRange = { growingCalls += "update:$it" },
+            )
+            growingCalls shouldBe listOf("show:40", "update:40")
+        }
+
+        "rejects a range patch CMI cannot represent" {
+            shouldThrow<IllegalArgumentException> {
+                applyCmiRangePatch(
+                    currentShowRange = 40,
+                    currentUpdateRange = 40,
+                    showRange = CmiHologramPatch.Set(12),
+                    updateRange = CmiHologramPatch.Set(18),
+                    setShowRange = {},
+                    setUpdateRange = {},
+                )
+            }.message shouldBe "showRange must be greater than or equal to updateRange"
+        }
+
         "preserves omitted fields in a lines-only patch" {
             val spec =
                 OpsCmiHologramSpec.parse(
