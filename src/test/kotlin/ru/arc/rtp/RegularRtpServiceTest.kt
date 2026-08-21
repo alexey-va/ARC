@@ -22,6 +22,6 @@ class RegularRtpServiceTest :
         "uses the permanent LeafRTP region for a regular player request" {
             every { world.name } returns "vanilla"
             RegularRtpService.buildCommand(RtpProvider.LEAFRTP, player, world) shouldBe
-                "rtp region:vanilla"
+                "rtp region=vanilla"
         }
     })

@@ -40,7 +40,7 @@ object RegularRtpService {
             RtpProvider.BETTERRTP -> "betterrtp world ${world.name}"
             RtpProvider.LEAFRTP ->
                 FirstRtpService.leafRegion(player, world)
-                    ?.let { "rtp region:$it" }
-                    ?: "rtp world:${world.name}"
+                    ?.let { "rtp region=$it" }
+                    ?: "rtp world=${world.name}"
         }
 }

@@ -118,12 +118,13 @@ object FirstRtpService {
 
             RtpProvider.LEAFRTP -> {
                 val region = leafRegion(player, world)
+                // LeafRTP 3.2.x exposes named command parameters as name=value.
                 buildString {
-                    append("rtp player:${player.name}")
+                    append("rtp player=${player.name}")
                     if (region != null) {
-                        append(" region:$region")
+                        append(" region=$region")
                     } else {
-                        append(" world:${world.name}")
+                        append(" world=${world.name}")
                     }
                 }
             }
