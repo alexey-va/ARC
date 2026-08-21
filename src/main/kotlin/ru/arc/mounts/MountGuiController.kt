@@ -22,11 +22,15 @@ import kotlin.math.roundToInt
 
 private enum class MountScreen { LIST, DETAIL, PROGRESSION, SKINS, CONFIRM }
 
-private enum class MountFilter(val title: String, val icon: Material) {
-    ALL("Все", Material.COMPASS),
-    FLYING("Воздушные", Material.FEATHER),
-    WALKING("Наземные", Material.SADDLE),
-    SWIMMING("Водные", Material.HEART_OF_THE_SEA),
+private enum class MountFilter(
+    val title: String,
+    val icon: Material,
+    val styleRole: MountGuiItemRole,
+) {
+    ALL("Все", Material.COMPASS, MountGuiItemRole.CATEGORY_ALL),
+    FLYING("Воздушные", Material.FEATHER, MountGuiItemRole.CATEGORY_FLYING),
+    WALKING("Наземные", Material.SADDLE, MountGuiItemRole.CATEGORY_WALKING),
+    SWIMMING("Водные", Material.HEART_OF_THE_SEA, MountGuiItemRole.CATEGORY_SWIMMING),
     ;
 
     fun matches(mount: MountDefinition): Boolean =
@@ -118,7 +122,7 @@ class MountGuiController(
         inventory.setItem(
             LIST_FILTER_SLOT,
             styledItem(
-                MountGuiItemRole.CATEGORY,
+                filter.styleRole,
                 filter.icon,
                 "<#92bed8>Каталог — <white>${filter.title}",
                 listOf(

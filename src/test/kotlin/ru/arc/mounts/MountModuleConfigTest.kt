@@ -121,17 +121,32 @@ class MountModuleConfigTest : StringSpec({
                 back:
                   material: BLUE_STAINED_GLASS_PANE
                   customModelData: 11013
-                category:
+                category-all:
                   material: COMPASS
-                  customModelData: 11019
+                  customModelData: 11023
+                category-flying:
+                  material: FEATHER
+                  customModelData: 11024
+                category-walking:
+                  material: SADDLE
+                  customModelData: 11025
+                category-swimming:
+                  material: HEART_OF_THE_SEA
+                  customModelData: 11026
             """.trimIndent(),
         )
 
         val config = MountModuleConfig.load(dataPath)
         config.guiStyle(MountGuiItemRole.BACK) shouldBe
             MountGuiItemStyle(Material.BLUE_STAINED_GLASS_PANE, 11013)
-        config.guiStyle(MountGuiItemRole.CATEGORY) shouldBe
-            MountGuiItemStyle(Material.COMPASS, 11019)
+        config.guiStyle(MountGuiItemRole.CATEGORY_ALL) shouldBe
+            MountGuiItemStyle(Material.COMPASS, 11023)
+        config.guiStyle(MountGuiItemRole.CATEGORY_FLYING) shouldBe
+            MountGuiItemStyle(Material.FEATHER, 11024)
+        config.guiStyle(MountGuiItemRole.CATEGORY_WALKING) shouldBe
+            MountGuiItemStyle(Material.SADDLE, 11025)
+        config.guiStyle(MountGuiItemRole.CATEGORY_SWIMMING) shouldBe
+            MountGuiItemStyle(Material.HEART_OF_THE_SEA, 11026)
     }
 })
 

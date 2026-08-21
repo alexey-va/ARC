@@ -7,12 +7,14 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import org.bukkit.Material
 import org.bukkit.event.inventory.ClickType
 import org.bukkit.event.inventory.InventoryAction
 import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.event.inventory.InventoryType
 import org.junit.jupiter.api.Test
 import ru.arc.TestBase
+import ru.arc.util.customModelDataOrNull
 import java.time.Duration
 
 class MountGuiControllerTest : TestBase() {
@@ -83,6 +85,63 @@ class MountGuiControllerTest : TestBase() {
         } finally {
             controller.shutdown()
         }
+    }
+
+    @Test
+    fun `category switch uses a distinct resource-pack icon for every mount type`() {
+        val walking = testMount().copy(id = "walking", movement = MountMovement.WALKING)
+        val flying = testMount().copy(id = "flying", movement = MountMovement.FLYING)
+        val swimming = testMount().copy(id = "swimming", movement = MountMovement.SWIMMING)
+        val tuning =
+            MountTuningDefinition(
+                speedPercentages = listOf(50, 65, 80, 90, 100),
+                walkingStepHeightsHundredths = listOf(110, 150, 200, 300, 400),
+                walkingMaxStepHeightByLevelHundredths = listOf(110, 200, 400),
+            )
+        val styles =
+            mapOf(
+                MountGuiItemRole.CATEGORY_ALL to MountGuiItemStyle(Material.COMPASS, 11023),
+                MountGuiItemRole.CATEGORY_FLYING to MountGuiItemStyle(Material.FEATHER, 11024),
+                MountGuiItemRole.CATEGORY_WALKING to MountGuiItemStyle(Material.SADDLE, 11025),
+                MountGuiItemRole.CATEGORY_SWIMMING to MountGuiItemStyle(Material.HEART_OF_THE_SEA, 11026),
+            )
+        val ownership = mockk<MountOwnership> {
+            every { profile(any(), any()) } returns MountProfile(1, false, false)
+        }
+        val config = mockk<MountModuleConfig> {
+            every { listTitle } returns "Коллекция маунтов"
+            every { this@mockk.tuning } returns tuning
+            every { guiStyle(any()) } answers { styles[firstArg()] ?: MountGuiItemStyle() }
+        }
+        val controller =
+            MountGuiController(
+                plugin = plugin,
+                configProvider = { config },
+                catalogProvider = { MountCatalog(listOf(walking, flying, swimming)) },
+                ownership = ownership,
+                wallet = mockk { every { balanceMinor(any()) } returns 1_000_000L },
+                purchases = mockk(relaxed = true),
+                sessions = mockk(relaxed = true),
+            )
+        val player = server.addPlayer("IconRider")
+
+        fun categoryIcon() = checkNotNull(player.openInventory.topInventory.getItem(49))
+
+        controller.openList(player)
+        categoryIcon().type shouldBe Material.COMPASS
+        categoryIcon().customModelDataOrNull shouldBe 11023
+
+        controller.onClick(clickEvent(player.openInventory, 49))
+        categoryIcon().type shouldBe Material.FEATHER
+        categoryIcon().customModelDataOrNull shouldBe 11024
+
+        controller.onClick(clickEvent(player.openInventory, 49))
+        categoryIcon().type shouldBe Material.SADDLE
+        categoryIcon().customModelDataOrNull shouldBe 11025
+
+        controller.onClick(clickEvent(player.openInventory, 49))
+        categoryIcon().type shouldBe Material.HEART_OF_THE_SEA
+        categoryIcon().customModelDataOrNull shouldBe 11026
     }
 
     @Test
