@@ -46,9 +46,44 @@ class MountCommand(
     private fun handleAdmin(sender: CommandSender, label: String, args: List<String>) {
         when (args.firstOrNull()?.lowercase(Locale.ROOT)) {
             "summon" -> summon(sender, label, args.drop(1))
+            "grant-all" -> grantAll(sender, label, args.drop(1))
             "grant" -> mutateOwnership(sender, label, args.drop(1), granting = true)
             "revoke" -> mutateOwnership(sender, label, args.drop(1), granting = false)
             else -> sendAdminHelp(sender, label)
+        }
+    }
+
+    private fun grantAll(sender: CommandSender, label: String, args: List<String>) {
+        val playerName = args.singleOrNull()
+        if (playerName == null || !PLAYER_NAME.matches(playerName)) {
+            sender.sendMessage(TextUtil.mm("<red>Использование: /$label admin grant-all <игрок>", true))
+            return
+        }
+        val mounts = catalog().all
+        resolvePlayer(sender, playerName).thenCompose { playerId ->
+            if (playerId == null) {
+                failedFuture(PlayerNotFoundException(playerName))
+            } else {
+                mounts.fold(CompletableFuture.completedFuture<Void>(null)) { previous, mount ->
+                    previous.thenCompose { ownership.grantLevel(playerId, mount, mount.maxLevel) }
+                }
+            }
+        }.whenComplete { _, failure ->
+            scheduler.runSync(
+                Runnable {
+                    val text =
+                        when {
+                            failure == null ->
+                                config().message(
+                                    "admin-grant-all-success",
+                                    "<green>Все маунты максимального уровня выданы игроку <white><player><green>. Всего: <white><count><green>.",
+                                ).replace("<player>", playerName).replace("<count>", mounts.size.toString())
+                            unwrap(failure) is PlayerNotFoundException -> "<red>Игрок <white>$playerName <red>не найден."
+                            else -> "<red>Не удалось выдать все маунты. Часть изменений могла сохраниться."
+                        }
+                    sender.sendMessage(TextUtil.mm(text, true))
+                },
+            )
         }
     }
 
@@ -232,6 +267,7 @@ class MountCommand(
 
     private fun sendAdminHelp(sender: CommandSender, label: String) {
         sender.sendMessage(TextUtil.mm("<yellow>/$label admin summon <маунт> [уровень] [облик]", true))
+        sender.sendMessage(TextUtil.mm("<yellow>/$label admin grant-all <игрок> <gray>— выдать всех маунтов максимального уровня", true))
         sender.sendMessage(TextUtil.mm("<yellow>/$label admin grant <level|skin|glow|ability> <игрок> <маунт> [значение]", true))
         sender.sendMessage(TextUtil.mm("<yellow>/$label admin revoke <level|skin|glow|ability> <игрок> <маунт> [значение]", true))
     }
@@ -255,9 +291,10 @@ class MountCommand(
             }.matching(args[0])
         }
         if (!args[0].equals("admin", ignoreCase = true) || !sender.hasPermission(ADMIN_PERMISSION)) return emptyList()
-        if (args.size == 2) return listOf("summon", "grant", "revoke").matching(args[1])
+        if (args.size == 2) return listOf("summon", "grant-all", "grant", "revoke").matching(args[1])
         return when (args[1].lowercase(Locale.ROOT)) {
             "summon" -> completeSummon(args)
+            "grant-all" -> if (args.size == 3) sender.server.onlinePlayers.map(Player::getName).matching(args[2]) else emptyList()
             "grant", "revoke" -> completeMutation(sender, args)
             else -> emptyList()
         }

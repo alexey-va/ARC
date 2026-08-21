@@ -66,7 +66,10 @@ dependencies {
     // server-provided
     compileOnly(libs.io.papermc.paper.paper.api)
     compileOnly(libs.net.advancedplugins.advancedenchantments)
-    compileOnly(libs.com.github.retrooper.packetevents.spigot)
+    compileOnly(libs.com.github.retrooper.packetevents.spigot) {
+        // PacketEvents is server-provided; its legacy netty-all graph is not part of ARC compilation.
+        exclude(group = "io.netty")
+    }
     // Immutable private mirrors of the exact EliteMobs API and its mutable MagmaCore snapshot.
     // Both are provided by the shaded EliteMobs runtime and must never be shaded into ARC.
     compileOnly(libs.ru.ruscrafting.thirdparty.elitemobs.api)

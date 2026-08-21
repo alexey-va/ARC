@@ -10,6 +10,7 @@ import ru.arc.ARC
 import ru.arc.core.PluginModule
 import ru.arc.core.Tasks
 import ru.arc.metrics.MetricsModule
+import ru.arc.hooks.HookRegistry
 import ru.arc.metrics.core.MetricPoint
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
@@ -54,6 +55,9 @@ object MountModule : PluginModule {
             warn("Mounts module inactive until the ownership permission migration is complete")
             return
         }
+        if (loadedConfig.hideFlyingMountFromRider && HookRegistry.packetEventsHook == null) {
+            warn("Rider-only flying mount visibility is unavailable because PacketEvents is not active")
+        }
 
         val loadedCatalog = loadedConfig.catalog()
         validatePaperTypes(loadedCatalog)
@@ -75,6 +79,9 @@ object MountModule : PluginModule {
                 allowedMountIds = loadedCatalog.all.mapTo(hashSetOf(), MountDefinition::id),
                 message = { player, path, fallback -> player.sendMessage(TextUtil.mm(requiredConfig().message(path, fallback), true)) },
                 onStateChanged = ::publishMetrics,
+                setRiderMountHidden = { player, entity, hidden ->
+                    HookRegistry.packetEventsHook?.setEntityInvisibleFor(entity, player, hidden)
+                },
             )
         val coordinator =
             MountPurchaseCoordinator(

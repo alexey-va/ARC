@@ -10,6 +10,12 @@ controls:
   double-sneak-window: 450ms
   hint-cooldown: 5s
 
+rider-view:
+  # Hide only from the rider, with hysteresis to prevent flicker near the threshold.
+  hide-flying-mount: true
+  hide-at-pitch: 35
+  show-at-pitch: 20
+
 movement:
   walking-speed-scale: 0.16
   flying-speed-scale: 0.55
@@ -24,6 +30,8 @@ movement:
   flight-pitch-influence: 0.65
   maximum-speed-blocks-per-tick: 1.05
   maximum-height-above-world: 32
+  # Cancels Minecraft's 0.2 airborne block-breaking multiplier while flying.
+  compensate-airborne-mining: true
 
 tuning:
   # Free player-selected percentage of the maximum speed unlocked by the current level.
@@ -74,6 +82,7 @@ messages:
   setting-failed: "<red>Не удалось сохранить настройку."
   save-failed-refunded: "<red>Покупка не сохранилась. Деньги полностью возвращены."
   purchase-manual-review: "<dark_red>Покупка приостановлена для безопасной проверки. Повторно не покупайте; обратитесь к администрации."
+  admin-grant-all-success: "<green>Все маунты максимального уровня выданы игроку <white><player><green>. Всего: <white><count><green>."
 
 ability-upgrades:
   water-breathing:

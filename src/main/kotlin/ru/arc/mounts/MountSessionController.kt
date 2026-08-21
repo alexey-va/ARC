@@ -7,6 +7,7 @@ import org.bukkit.Sound
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.attribute.Attribute
+import org.bukkit.attribute.AttributeModifier
 import org.bukkit.entity.Bat
 import org.bukkit.entity.Horse
 import org.bukkit.entity.LivingEntity
@@ -82,6 +83,7 @@ private data class MountSession(
     var lastHintAtMillis: Long = Long.MIN_VALUE,
     var lastActiveAtMillis: Long = System.currentTimeMillis(),
     var ticks: Long = 0L,
+    var riderMountHidden: Boolean = false,
 )
 
 class MountSessionController(
@@ -91,12 +93,19 @@ class MountSessionController(
     private val allowedMountIds: Set<String>,
     private val message: (Player, String, String) -> Unit,
     private val onStateChanged: () -> Unit = {},
+    private val setRiderMountHidden: (Player, LivingEntity, Boolean) -> Unit = { _, _, _ -> },
 ) : Listener {
     private val sessionsByPlayer = ConcurrentHashMap<UUID, MountSession>()
     private val playerByEntity = ConcurrentHashMap<UUID, UUID>()
     private val ownerKey = NamespacedKey(plugin, "mount_owner")
     private val mountIdKey = NamespacedKey(plugin, "mount_id")
     private val spawnTokenKey = NamespacedKey(plugin, "mount_spawn_token")
+    private val airborneMiningModifier =
+        AttributeModifier(
+            NamespacedKey(plugin, "mount_airborne_mining"),
+            airborneMiningCompensationAmount(),
+            AttributeModifier.Operation.MULTIPLY_SCALAR_1,
+        )
     private val pendingSpawnTokens = ConcurrentHashMap.newKeySet<UUID>()
     private val lastSummonAt = ConcurrentHashMap<UUID, Long>()
     private var tickTask: ScheduledTask? = null
@@ -211,6 +220,11 @@ class MountSessionController(
                 )
             sessionsByPlayer[player.uniqueId] = session
             playerByEntity[spawned.uniqueId] = player.uniqueId
+            setAirborneMiningCompensation(
+                player,
+                airborneMiningModifier,
+                definition.movement == MountMovement.FLYING && config.compensateAirborneMining,
+            )
             lastSummonAt[player.uniqueId] = now
             onStateChanged()
             player.world.spawnParticle(Particle.END_ROD, player.location, 10, 0.4, 0.4, 0.4, 0.01)
@@ -235,6 +249,9 @@ class MountSessionController(
             )
             MountSpawnResult.SUCCESS
         } catch (failure: Throwable) {
+            sessionsByPlayer.remove(player.uniqueId)
+            playerByEntity.remove(spawned.uniqueId)
+            setAirborneMiningCompensation(player, airborneMiningModifier, enabled = false)
             spawned.remove()
             warn("Unable to spawn mount {} for {}: {}", definition.id, player.name, failure.javaClass.simpleName)
             MountSpawnResult.SPAWN_FAILED
@@ -251,6 +268,12 @@ class MountSessionController(
         val entity = plugin.server.getEntity(session.entityId) as? LivingEntity
         val effectLocation = entity?.location ?: player?.location
 
+        if (player != null) {
+            if (entity != null && session.riderMountHidden) {
+                runCatching { setRiderMountHidden(player, entity, false) }
+            }
+            setAirborneMiningCompensation(player, airborneMiningModifier, enabled = false)
+        }
         runCatching { entity?.remove() }
         if (effectLocation != null && effectLocation.world != null) {
             effectLocation.world.spawnParticle(Particle.SOUL, effectLocation, 20, 0.6, 0.6, 0.6, 0.02)
@@ -407,11 +430,29 @@ class MountSessionController(
                     if (session.ticks == 1L || session.ticks % ABILITY_REFRESH_TICKS == 0L) {
                         refreshAbilityEffects(player, session.abilityUpgrades)
                     }
+                    updateRiderMountVisibility(player, entity, session)
                     move(player, entity, session)
                     emitTrail(entity, session)
                 }
             }
         }
+    }
+
+    private fun updateRiderMountVisibility(player: Player, entity: LivingEntity, session: MountSession) {
+        val config = configProvider()
+        val hidden =
+            config.hideFlyingMountFromRider &&
+                nextRiderMountHidden(
+                    session.definition.movement,
+                    session.riderMountHidden,
+                    player.location.pitch,
+                    config.hideFlyingMountPitch.toFloat(),
+                    config.showFlyingMountPitch.toFloat(),
+                )
+        if (hidden == session.riderMountHidden) return
+        session.riderMountHidden = hidden
+        runCatching { setRiderMountHidden(player, entity, hidden) }
+            .onFailure { warn("Unable to update rider-only mount visibility for {}: {}", player.name, it.javaClass.simpleName) }
     }
 
     private fun move(player: Player, entity: LivingEntity, session: MountSession) {
@@ -618,6 +659,30 @@ internal fun shouldKnockRiderOff(finalDamage: Double, threshold: Double): Boolea
 
 internal fun isAquaticEnvironment(inWaterOrBubbleColumn: Boolean, blockIsLiquid: Boolean): Boolean =
     inWaterOrBubbleColumn || blockIsLiquid
+
+internal fun nextRiderMountHidden(
+    movement: MountMovement,
+    currentlyHidden: Boolean,
+    pitch: Float,
+    hideAtPitch: Float,
+    showAtPitch: Float,
+): Boolean {
+    if (movement != MountMovement.FLYING || !pitch.isFinite()) return false
+    return if (currentlyHidden) pitch > showAtPitch else pitch >= hideAtPitch
+}
+
+internal fun airborneMiningCompensationAmount(): Double = 4.0
+
+internal fun setAirborneMiningCompensation(
+    player: Player,
+    modifier: AttributeModifier,
+    enabled: Boolean,
+) {
+    player.getAttribute(Attribute.BLOCK_BREAK_SPEED)?.let { attribute ->
+        attribute.removeModifier(modifier.key)
+        if (enabled) attribute.addTransientModifier(modifier)
+    }
+}
 
 internal fun shouldAllowCancelledMountSpawn(
     cancelled: Boolean,

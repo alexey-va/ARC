@@ -95,10 +95,12 @@ class MountGuiController(
         ownedOnly: Boolean,
     ) {
         val catalog = catalogProvider()
-        val visible =
+        val profiles = catalog.all.associateWith { mount -> ownership.profile(subject(player), mount) }
+        val matching =
             catalog.all.filter { mount ->
-                filter.matches(mount) && (!ownedOnly || ownership.profile(subject(player), mount).unlocked)
+                filter.matches(mount) && (!ownedOnly || checkNotNull(profiles[mount]).unlocked)
             }
+        val visible = prioritizeUnlockedMounts(matching) { mount -> checkNotNull(profiles[mount]) }
         val pageCount = maxOf(1, ceil(visible.size.toDouble() / LIST_CONTENT_SLOTS.size).toInt())
         val page = requestedPage.coerceIn(0, pageCount - 1)
         val pageMounts = visible.drop(page * LIST_CONTENT_SLOTS.size).take(LIST_CONTENT_SLOTS.size)
@@ -109,21 +111,21 @@ class MountGuiController(
         fill(inventory)
         slots.forEach { (slot, mountId) ->
             val mount = catalog[mountId] ?: return@forEach
-            inventory.setItem(slot, mountIcon(mount, ownership.profile(subject(player), mount)))
+            inventory.setItem(slot, mountIcon(mount, checkNotNull(profiles[mount])))
         }
-        if (page > 0) inventory.setItem(LIST_PREVIOUS_SLOT, styledItem(MountGuiItemRole.PREVIOUS, Material.ARROW, "<aqua>Предыдущая страница", listOf("<gray>${page}/${pageCount}")))
-        if (page + 1 < pageCount) inventory.setItem(LIST_NEXT_SLOT, styledItem(MountGuiItemRole.NEXT, Material.ARROW, "<aqua>Следующая страница", listOf("<gray>${page + 2}/${pageCount}")))
+        if (page > 0) inventory.setItem(LIST_PREVIOUS_SLOT, styledItem(MountGuiItemRole.PREVIOUS, Material.ARROW, "<#92bed8>Предыдущая страница", listOf("<#969696>${page}/${pageCount}")))
+        if (page + 1 < pageCount) inventory.setItem(LIST_NEXT_SLOT, styledItem(MountGuiItemRole.NEXT, Material.ARROW, "<#92bed8>Следующая страница", listOf("<#969696>${page + 2}/${pageCount}")))
         inventory.setItem(
             LIST_FILTER_SLOT,
             styledItem(
                 MountGuiItemRole.CATEGORY,
                 filter.icon,
-                "<gold>Категория: <white>${filter.title}",
+                "<#92bed8>Каталог — <white>${filter.title}",
                 listOf(
-                    "<gray>ЛКМ — сменить категорию",
-                    "<gray>ПКМ — ${if (ownedOnly) "показать всю коллекцию" else "показать только полученных"}",
+                    "<#e6fff3>ЛКМ <#8c8c8c>сменить категорию",
+                    "<#e6fff3>ПКМ <#8c8c8c>${if (ownedOnly) "показать всю коллекцию" else "оставить только полученных"}",
                     "",
-                    "<dark_gray>Показано: ${visible.size}/${catalog.all.size}",
+                    "<#969696>Показано <white>${visible.size}<#969696> из <white>${catalog.all.size}",
                 ),
                 glint = ownedOnly,
             ),
@@ -133,18 +135,22 @@ class MountGuiController(
             styledItem(
                 MountGuiItemRole.INFO,
                 Material.BOOK,
-                "<gold>Коллекция маунтов",
+                "<#92bed8>Путеводитель по коллекции",
                 listOf(
-                    "<gray>ЛКМ — призвать полученного",
-                    "<gray>ПКМ — развитие и облики",
+                    "<#e6fff3>ЛКМ <#8c8c8c>призвать полученного маунта",
+                    "<#e6fff3>ПКМ <#8c8c8c>открыть развитие и облики",
                     "",
-                    "<gray>Полёт: Space вверх, Shift вниз",
-                    "<gray>Двойной Shift — спешиться",
+                    "<#92bed8>Полёт",
+                    "<#8c8c8c>Space — вверх",
+                    "<#8c8c8c>Shift — вниз",
+                    "<#8c8c8c>Взгляд вниз скрывает маунта из кадра",
+                    "",
+                    "<#ffacd5>Двойной Shift <#8c8c8c>спешиться",
                 ),
             ),
         )
         inventory.setItem(LIST_BALANCE_SLOT, balanceItem(player))
-        inventory.setItem(LIST_BACK_SLOT, styledItem(MountGuiItemRole.BACK, Material.BLUE_STAINED_GLASS_PANE, "<aqua>Назад", listOf("<gray>Вернуться в главное меню")))
+        inventory.setItem(LIST_BACK_SLOT, styledItem(MountGuiItemRole.BACK, Material.BLUE_STAINED_GLASS_PANE, "<#92bed8>Назад", listOf("<#8c8c8c>Вернуться в главное меню")))
         player.openInventory(inventory)
         click(player)
     }
@@ -499,37 +505,45 @@ class MountGuiController(
 
     private fun mountIcon(mount: MountDefinition, profile: MountProfile, detailed: Boolean = false): ItemStack {
         val lore = buildList {
+            add(if (profile.unlocked) "<green>✔ Получен" else "<red>✘ Пока не получен")
             add("${mount.rarity.color}${mount.rarity.displayName}")
-            add("<dark_gray>● <gray>Тип: ${movementColor(mount.movement)}${mount.movement.displayName}")
-            mount.abilities.displayNames.forEach { ability ->
-                add("<dark_gray>● <gray>Особенность: <light_purple>${escape(ability)}")
+            if (detailed && mount.description.isNotEmpty()) {
+                add("")
+                mount.description.forEach { add("<#e6fff3>${escape(it)}") }
             }
-            add("<dark_gray>● <gray>Получение: <white>${escape(mount.acquisition)}")
-            add(if (profile.unlocked) "<dark_gray>● <gray>Уровень: <yellow>${profile.level}<gray>/${mount.maxLevel}" else "<dark_gray>● <gray>Статус: <red>не получен")
+            add("")
+            add("<#92bed8>Характер")
+            add("<#8c8c8c>Тип  ${movementColor(mount.movement)}${mount.movement.displayName}")
+            mount.abilities.displayNames.forEach { ability ->
+                add("<#8c8c8c>Особенность  <#ffacd5>${escape(ability)}")
+            }
             if (profile.unlocked) {
                 val tuning = configProvider().tuning
                 val selectedSpeed = tuning.speedPercentage(profile.selectedSpeedPercentage)
-                add("<dark_gray>● <gray>Скорость: <white>${formatSpeed(tuning.speed(mount.speed(profile.level), profile.selectedSpeedPercentage))} <dark_gray>($selectedSpeed%)")
-                if (mount.movement == MountMovement.WALKING) {
-                    add("<dark_gray>● <gray>Высота шага: <white>${formatHeight(tuning.stepHeight(profile.level, profile.selectedStepHeightHundredths))} блока")
-                }
-                add("<dark_gray>● <gray>Облик: <white>${escape(skinName(mount, profile.activeSkinId))}")
-            }
-            if (detailed && mount.description.isNotEmpty()) {
                 add("")
-                mount.description.forEach { add("<gray>${escape(it)}") }
+                add("<#92bed8>Ваш профиль")
+                add("<#8c8c8c>Уровень  <white>${profile.level}<#969696>/${mount.maxLevel}")
+                add("<#8c8c8c>Скорость  <white>${formatSpeed(tuning.speed(mount.speed(profile.level), profile.selectedSpeedPercentage))} <#969696>($selectedSpeed%)")
+                if (mount.movement == MountMovement.WALKING) {
+                    add("<#8c8c8c>Подъём  <white>${formatHeight(tuning.stepHeight(profile.level, profile.selectedStepHeightHundredths))} блока")
+                }
+                add("<#8c8c8c>Облик  <white>${escape(skinName(mount, profile.activeSkinId))}")
+            } else {
+                add("")
+                add("<#92bed8>Как получить")
+                add("<#e6fff3>${escape(mount.acquisition)}")
             }
             if (!detailed) {
                 add("")
                 if (profile.unlocked) {
-                    add("<green>ЛКМ <gray>— призвать")
-                    add("<aqua>ПКМ <gray>— развитие и облики")
-                } else add("<green>Нажмите, чтобы узнать способ получения")
+                    add("<#e6fff3>ЛКМ <#8c8c8c>призвать")
+                    add("<#92bed8>ПКМ <#8c8c8c>развитие и облики")
+                } else add("<#e6fff3>Нажмите <#8c8c8c>изучить маунта")
             }
         }
         return item(
             Material.matchMaterial(mount.iconMaterial) ?: Material.PAPER,
-            if (profile.unlocked) "<gold>${escape(mount.displayName)}" else "<gray>${escape(mount.displayName)}",
+            if (profile.unlocked) "<#ffacd5>${escape(mount.displayName)}" else "<#969696>${escape(mount.displayName)}",
             lore,
             glint = profile.unlocked,
         )
@@ -797,7 +811,7 @@ class MountGuiController(
 
     private fun balanceItem(player: Player): ItemStack {
         val balance = wallet.balanceMinor(player.uniqueId)
-        return styledItem(MountGuiItemRole.BALANCE, Material.SUNFLOWER, "<yellow>Баланс", listOf(if (balance != null) "<green>${TextUtil.formatAmount(balance.minorToDouble())}<white>💰" else "<red>Экономика недоступна"))
+        return styledItem(MountGuiItemRole.BALANCE, Material.SUNFLOWER, "<#ffacd5>Баланс", listOf(if (balance != null) "<white>${TextUtil.formatAmount(balance.minorToDouble())}<#ffacd5>💰" else "<red>Экономика недоступна"))
     }
 
     private fun purchasesDisabled(player: Player) {
@@ -921,4 +935,12 @@ class MountGuiController(
         private const val CONFIRM_INFO_SLOT = 13
         private const val CONFIRM_ACCEPT_SLOT = 15
     }
+}
+
+internal fun prioritizeUnlockedMounts(
+    mounts: List<MountDefinition>,
+    profile: (MountDefinition) -> MountProfile,
+): List<MountDefinition> {
+    val (unlocked, locked) = mounts.partition { mount -> profile(mount).unlocked }
+    return unlocked + locked
 }

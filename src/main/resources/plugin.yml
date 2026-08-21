@@ -41,6 +41,7 @@ softdepend:
   - RedisEconomy
   - LuckPerms
   - Vault
+  - packetevents
 commands:
   arc:
     description: Main command

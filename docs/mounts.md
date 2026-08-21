@@ -28,3 +28,14 @@ For example, 65% speed and a 1.10-block step height are `arc.mounts.horse.tuning
 ## Runtime behavior
 
 The resolved speed and step height are copied into the mount session at summon time. Non-horse walking mounts use ARC velocity plus the native `STEP_HEIGHT` attribute. Horses retain native ridden movement and charged jumping, while ARC applies the configured speed, jump strength, and selected step height continuously.
+
+Flying sessions have two rider comfort features enabled by default:
+
+- `rider-view.hide-flying-mount` sends rider-only invisibility metadata after the camera reaches `hide-at-pitch`; `show-at-pitch` is a lower return threshold that prevents flicker. Other players continue to see the mount, and the client keeps the vehicle relationship.
+- `movement.compensate-airborne-mining` adds a transient `BLOCK_BREAK_SPEED` modifier only for the duration of a flying session. Its ×5 result cancels Minecraft's ×0.2 airborne mining penalty without affecting the player's ground speed after dismount.
+
+The collection list always places unlocked mounts before locked mounts while preserving catalog order inside both groups. Menu lore uses real empty lore rows between state, characteristics, profile/acquisition, and action sections.
+
+## Administration
+
+`/mount admin grant-all <player>` grants the maximum configured level of every catalog mount. It does not grant glow, skins, or ability upgrades; those remain independent ownership records.

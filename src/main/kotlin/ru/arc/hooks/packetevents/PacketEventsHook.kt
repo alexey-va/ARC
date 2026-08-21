@@ -8,7 +8,9 @@ import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerDe
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityMetadata
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSpawnEntity
 import io.github.retrooper.packetevents.util.SpigotConversionUtil
+import net.kyori.adventure.util.TriState
 import org.bukkit.Bukkit
+import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
 import ru.arc.core.sync
 import ru.arc.util.Logging.debug
@@ -17,6 +19,19 @@ import java.util.UUID
 import java.util.concurrent.ThreadLocalRandom
 
 class PacketEventsHook {
+
+    /** Sends common entity flags to one viewer without changing server-side entity state. */
+    fun setEntityInvisibleFor(entity: LivingEntity, player: Player, invisible: Boolean) {
+        runOnMainThread {
+            if (!player.isOnline || !entity.isValid) return@runOnMainThread
+            val metadata =
+                WrapperPlayServerEntityMetadata(
+                    entity.entityId,
+                    listOf(EntityData(0, EntityDataTypes.BYTE, commonEntityFlags(entity, invisible))),
+                )
+            PacketEvents.getAPI().playerManager.sendPacket(player, metadata)
+        }
+    }
 
     fun createDisplayBlocks(requests: List<BlockDisplayReq>, player: Player): List<Int> {
         if (requests.isEmpty()) return emptyList()
@@ -63,4 +78,15 @@ class PacketEventsHook {
         if (Bukkit.isPrimaryThread()) action()
         else sync(action)
     }
+}
+
+internal fun commonEntityFlags(entity: LivingEntity, invisibleForViewer: Boolean): Byte {
+    var flags = 0
+    if (entity.fireTicks > 0 || entity.visualFire == TriState.TRUE) flags = flags or 0x01
+    if (entity.isSneaking) flags = flags or 0x02
+    if (entity.isSwimming) flags = flags or 0x10
+    if (invisibleForViewer || entity.isInvisible) flags = flags or 0x20
+    if (!invisibleForViewer && entity.isGlowing) flags = flags or 0x40
+    if (entity.isGliding) flags = flags or 0x80
+    return flags.toByte()
 }

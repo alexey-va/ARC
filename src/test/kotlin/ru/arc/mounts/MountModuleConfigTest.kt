@@ -92,6 +92,10 @@ class MountModuleConfigTest : StringSpec({
         config.ownershipMigrationComplete shouldBe false
         config.purchasesEnabled shouldBe false
         config.riderKnockoffDamage shouldBe 6.0
+        config.hideFlyingMountFromRider shouldBe true
+        config.hideFlyingMountPitch shouldBe 35.0
+        config.showFlyingMountPitch shouldBe 20.0
+        config.compensateAirborneMining shouldBe true
         config.tuning.speedPercentages shouldBe listOf(50, 65, 80, 90, 100)
         config.tuning.walkingStepHeightsHundredths shouldBe listOf(110, 150, 200, 300, 400)
         config.tuning.walkingMaxStepHeightByLevelHundredths shouldBe listOf(110, 200, 400)

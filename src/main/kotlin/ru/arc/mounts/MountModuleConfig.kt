@@ -36,6 +36,9 @@ open class MountModuleConfig(private val config: Config) {
     open val riderKnockoffDamage: Double get() = config.double("safety.rider-knockoff-damage", 6.0)
     open val doubleSneakWindow: Duration get() = config.duration("controls.double-sneak-window", Duration.ofMillis(450))
     open val descendingHintCooldown: Duration get() = config.duration("controls.hint-cooldown", Duration.ofSeconds(5))
+    open val hideFlyingMountFromRider: Boolean get() = config.bool("rider-view.hide-flying-mount", true)
+    open val hideFlyingMountPitch: Double get() = config.double("rider-view.hide-at-pitch", 35.0)
+    open val showFlyingMountPitch: Double get() = config.double("rider-view.show-at-pitch", 20.0)
     open val walkingSpeedScale: Double get() = config.double("movement.walking-speed-scale", 0.16)
     open val flyingSpeedScale: Double get() = config.double("movement.flying-speed-scale", 0.55)
     open val swimmingSpeedScale: Double get() = config.double("movement.swimming-speed-scale", 0.45)
@@ -49,6 +52,7 @@ open class MountModuleConfig(private val config: Config) {
     open val flightPitchInfluence: Double get() = config.double("movement.flight-pitch-influence", 0.65)
     open val maximumSpeedBlocksPerTick: Double get() = config.double("movement.maximum-speed-blocks-per-tick", 1.05)
     open val maximumHeightAboveWorld: Int get() = config.integer("movement.maximum-height-above-world", 32)
+    open val compensateAirborneMining: Boolean get() = config.bool("movement.compensate-airborne-mining", true)
     open val postFlightSlowFalling: Duration get() = config.duration("safety.post-flight-slow-falling", Duration.ofSeconds(8))
     open val backCommand: String get() = config.string("gui.back-command", "m").trim().removePrefix("/")
     open val listTitle: String get() = config.string("gui.list-title", "<dark_gray><bold>Маунты")
@@ -122,6 +126,12 @@ open class MountModuleConfig(private val config: Config) {
             "Mount rider-knockoff-damage must be positive"
         }
         require(!doubleSneakWindow.isZero && !doubleSneakWindow.isNegative) { "Mount double-sneak-window must be positive" }
+        require(hideFlyingMountPitch.isFinite() && hideFlyingMountPitch in -90.0..90.0) {
+            "Mount hide-at-pitch must be between -90 and 90"
+        }
+        require(showFlyingMountPitch.isFinite() && showFlyingMountPitch in -90.0..hideFlyingMountPitch) {
+            "Mount show-at-pitch must be between -90 and hide-at-pitch"
+        }
         require(walkingSpeedScale > 0.0 && walkingSpeedScale.isFinite()) { "walking-speed-scale must be positive" }
         require(flyingSpeedScale > 0.0 && flyingSpeedScale.isFinite()) { "flying-speed-scale must be positive" }
         require(swimmingSpeedScale > 0.0 && swimmingSpeedScale.isFinite()) { "swimming-speed-scale must be positive" }

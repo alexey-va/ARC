@@ -8,6 +8,7 @@ import io.mockk.mockk
 import io.mockk.verify
 import org.bukkit.attribute.Attribute
 import org.bukkit.attribute.AttributeInstance
+import org.bukkit.attribute.AttributeModifier
 import org.bukkit.entity.Bat
 import org.bukkit.entity.Horse
 import org.bukkit.entity.LivingEntity
@@ -126,5 +127,28 @@ class MountSessionControllerTest : StringSpec({
         isAquaticEnvironment(inWaterOrBubbleColumn = true, blockIsLiquid = false) shouldBe true
         isAquaticEnvironment(inWaterOrBubbleColumn = false, blockIsLiquid = true) shouldBe true
         isAquaticEnvironment(inWaterOrBubbleColumn = false, blockIsLiquid = false) shouldBe false
+    }
+
+    "only a flying mount is hidden after the rider looks clearly downward" {
+        nextRiderMountHidden(MountMovement.FLYING, false, 34.9f, 35.0f, 20.0f) shouldBe false
+        nextRiderMountHidden(MountMovement.FLYING, false, 35.0f, 35.0f, 20.0f) shouldBe true
+        nextRiderMountHidden(MountMovement.FLYING, true, 20.1f, 35.0f, 20.0f) shouldBe true
+        nextRiderMountHidden(MountMovement.FLYING, true, 20.0f, 35.0f, 20.0f) shouldBe false
+        nextRiderMountHidden(MountMovement.WALKING, true, 90.0f, 35.0f, 20.0f) shouldBe false
+        nextRiderMountHidden(MountMovement.SWIMMING, true, 90.0f, 35.0f, 20.0f) shouldBe false
+    }
+
+    "flying mount mining compensation is transient and exactly cancels the airborne penalty" {
+        val player = mockk<Player>(relaxed = true)
+        val blockBreakSpeed = mockk<AttributeInstance>(relaxed = true)
+        val modifier = mockk<AttributeModifier>(relaxed = true)
+        every { player.getAttribute(Attribute.BLOCK_BREAK_SPEED) } returns blockBreakSpeed
+
+        setAirborneMiningCompensation(player, modifier, enabled = true)
+        setAirborneMiningCompensation(player, modifier, enabled = false)
+
+        verify(exactly = 1) { blockBreakSpeed.addTransientModifier(modifier) }
+        verify(exactly = 2) { blockBreakSpeed.removeModifier(modifier.key) }
+        airborneMiningCompensationAmount() shouldBe 4.0
     }
 })

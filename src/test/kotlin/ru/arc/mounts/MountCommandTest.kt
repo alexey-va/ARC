@@ -117,7 +117,7 @@ class MountCommandTest : StringSpec({
         fixture.command.onTabComplete(fixture.player, fixture.bukkitCommand, "mount", arrayOf(""))
             .shouldContainExactly("admin", "help", "menu")
         fixture.command.onTabComplete(fixture.player, fixture.bukkitCommand, "mount", arrayOf("admin", ""))
-            .shouldContainExactly("grant", "revoke", "summon")
+            .shouldContainExactly("grant", "grant-all", "revoke", "summon")
         fixture.command.onTabComplete(fixture.player, fixture.bukkitCommand, "mount", arrayOf("admin", "grant", ""))
             .shouldContainExactly("ability", "glow", "level", "skin")
         fixture.command.onTabComplete(
@@ -132,6 +132,23 @@ class MountCommandTest : StringSpec({
             "mount",
             arrayOf("admin", "grant", "ability", "Rider", "bee", ""),
         ).shouldContainExactly("night-vision")
+    }
+
+    "admin can grant every mount at its maximum level in one command" {
+        val secondMount = testMount().copy(id = "bat", displayName = "Летучая мышь")
+        val fixture = commandFixture(MountCatalog(listOf(mount, secondMount)), admin = true)
+
+        fixture.command.onCommand(
+            fixture.console,
+            fixture.bukkitCommand,
+            "mount",
+            arrayOf("admin", "grant-all", "Rider"),
+        ) shouldBe true
+        fixture.scheduler.executeImmediate()
+
+        verify(exactly = 1) { fixture.ownership.grantLevel(fixture.playerId, mount, mount.maxLevel) }
+        verify(exactly = 1) { fixture.ownership.grantLevel(fixture.playerId, secondMount, secondMount.maxLevel) }
+        verify(exactly = 1) { fixture.console.sendMessage(any<Component>()) }
     }
 
     "admin mutations reject trailing arguments instead of applying a partial parse" {
@@ -199,6 +216,7 @@ private fun commandFixture(catalog: MountCatalog, admin: Boolean = false): Mount
     val config = mockk<MountModuleConfig> {
         every { adminSessionDuration } returns java.time.Duration.ofSeconds(10)
         every { tuning } returns MountTuningDefinition(listOf(50, 65, 80, 90, 100), listOf(110, 150, 200, 300, 400), listOf(110, 200, 400))
+        every { message(any(), any()) } answers { secondArg() }
     }
     val sessions = mockk<MountSessionController>(relaxed = true)
     val openMenu = mockk<(Player) -> Unit>(relaxed = true)
