@@ -437,6 +437,7 @@ class MountGuiController(
                 sprintMultiplier = level.sprintMultiplier,
                 durationMillis = configProvider().sessionDuration.toMillis(),
                 glow = profile.glowEnabled,
+                scaleMultiplier = level.scaleMultiplier,
                 skin = skin,
                 abilityUpgrades = mount.abilities.upgrades.filter { profile.ownsAbility(it.id) },
             )

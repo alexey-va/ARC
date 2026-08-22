@@ -13,6 +13,7 @@ import org.bukkit.entity.Horse
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Mob
 import org.bukkit.entity.Player
+import org.bukkit.entity.Vex
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
@@ -143,6 +144,7 @@ class MountSessionController(
         sprintMultiplier: Double = 1.0,
         durationMillis: Long,
         glow: Boolean,
+        scaleMultiplier: Double = 1.0,
         skin: MountSkinDefinition? = null,
         abilityUpgrades: List<MountAbilityUpgradeDefinition> = emptyList(),
     ): MountSpawnResult {
@@ -199,7 +201,7 @@ class MountSessionController(
         }
 
         return try {
-            configureEntity(spawned, definition, glow, player, skin, walkingStepHeight)
+            configureEntity(spawned, definition, glow, player, skin, walkingStepHeight, scaleMultiplier)
             if (!spawned.addPassenger(player)) {
                 spawned.remove()
                 return MountSpawnResult.SPAWN_FAILED
@@ -518,7 +520,7 @@ class MountSessionController(
                 )
             }
 
-        entity.velocity = velocity.toBukkit()
+        entity.velocity = constrainPhasingVelocity(entity, velocity).toBukkit()
         entity.fallDistance = 0.0f
         val targetYaw = MountMotion.facingYaw(target, entity.yaw)
         entity.setRotation(MountMotion.smoothYaw(entity.yaw, targetYaw, config.turnSmoothing), 0.0f)
@@ -554,6 +556,7 @@ class MountSessionController(
         player: Player,
         skin: MountSkinDefinition?,
         walkingStepHeight: Double,
+        scaleMultiplier: Double,
     ) {
         entity.customName(Component.text(player.name, NamedTextColor.GRAY))
         entity.isCustomNameVisible = false
@@ -566,7 +569,7 @@ class MountSessionController(
         }
         (entity as? Mob)?.let(::configureMountMob)
         (entity as? Horse)?.let { configureNativeHorse(it, player) }
-        MountAppearanceApplicator.apply(entity, skin?.appearance ?: definition.appearance)
+        MountAppearanceApplicator.apply(entity, definition.effectiveAppearance(scaleMultiplier, skin))
         tagEntity(entity, definition, player)
     }
 
@@ -635,6 +638,34 @@ internal fun nativeHorseMovementAttribute(maximumSpeedBlocksPerTick: Double): Do
 
 internal fun maintainMountMobState(mob: Mob) {
     (mob as? Bat)?.setAwake(true)
+}
+
+internal fun constrainPhasingVelocity(entity: LivingEntity, desired: MotionVector): MotionVector {
+    if (entity !is Vex && !entity.hasNoPhysics()) return desired
+    return constrainVelocity(desired) { delta ->
+        entity.wouldCollideUsing(
+            entity.boundingBox.clone().expandDirectional(delta.x, delta.y, delta.z),
+        )
+    }
+}
+
+internal fun constrainVelocity(
+    desired: MotionVector,
+    collidesAlong: (MotionVector) -> Boolean,
+): MotionVector {
+    if (!collidesAlong(desired)) return desired
+    var accepted = MotionVector.ZERO
+    listOf(
+        MotionVector(desired.x, 0.0, 0.0),
+        MotionVector(0.0, desired.y, 0.0),
+        MotionVector(0.0, 0.0, desired.z),
+    ).filter { it.length > 1.0e-9 }
+        .sortedByDescending(MotionVector::length)
+        .forEach { axis ->
+            val candidate = accepted + axis
+            if (!collidesAlong(candidate)) accepted = candidate
+        }
+    return accepted
 }
 
 internal enum class MountDamageTarget {

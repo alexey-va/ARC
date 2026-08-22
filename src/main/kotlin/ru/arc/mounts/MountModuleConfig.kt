@@ -168,6 +168,7 @@ open class MountModuleConfig(private val config: Config) {
                 price = nullableDouble(raw["price"], "Mount '$mountId' level $level price"),
                 handlingMultiplier = optionalDouble(raw["handling"], 1.0, "Mount '$mountId' level $level handling"),
                 sprintMultiplier = optionalDouble(raw["sprint"], 1.0, "Mount '$mountId' level $level sprint"),
+                scaleMultiplier = optionalDouble(raw["scale"], 1.0, "Mount '$mountId' level $level scale"),
             )
         }
 

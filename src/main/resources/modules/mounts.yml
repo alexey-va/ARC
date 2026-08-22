@@ -160,6 +160,7 @@ cosmetics:
       count: 2
 
 mounts:
+  # Optional level scale multiplies appearance.scale; omit it to keep 1.0.
   zombie:
     type: walking
     item: ZOMBIE_SPAWN_EGG
@@ -776,9 +777,9 @@ mounts:
     description:
       - "Эфирный боевой силуэт для тех, кому мало просто летать."
     levels:
-      - {speed: 0.52, handling: 0.9, sprint: 1, price: 500000}
-      - {speed: 0.85, handling: 1, sprint: 1.03, price: 2500000}
-      - {speed: 1.6, handling: 1.28, sprint: 1.12, price: 20000000}
+      - {speed: 0.52, handling: 0.9, sprint: 1, scale: 1, price: 500000}
+      - {speed: 0.85, handling: 1, sprint: 1.03, scale: 1, price: 2500000}
+      - {speed: 1.6, handling: 1.28, sprint: 1.12, scale: 1, price: 20000000}
     buy-glow: 600000
     appearance:
       scale: 1.85

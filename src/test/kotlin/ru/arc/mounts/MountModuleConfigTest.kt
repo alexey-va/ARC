@@ -18,6 +18,7 @@ class MountModuleConfigTest : StringSpec({
         catalog["blaze"]?.price(1) shouldBe null
         catalog["happy_ghast"]?.movement shouldBe MountMovement.FLYING
         catalog["dolphin"]?.movement shouldBe MountMovement.SWIMMING
+        catalog["vex"]?.levels?.map(MountLevelDefinition::scaleMultiplier) shouldBe listOf(1.0, 1.0, 1.0)
         catalog.all.all { it.levels.size == 3 } shouldBe true
         catalog.all.all { it.skins.size >= 2 } shouldBe true
     }
@@ -147,6 +148,30 @@ class MountModuleConfigTest : StringSpec({
             MountGuiItemStyle(Material.SADDLE, 11025)
         config.guiStyle(MountGuiItemRole.CATEGORY_SWIMMING) shouldBe
             MountGuiItemStyle(Material.HEART_OF_THE_SEA, 11026)
+    }
+
+    "level scale is parsed explicitly and defaults to one when omitted" {
+        val dataPath = Files.createTempDirectory("arc-mounts-level-scale-")
+        val moduleDir = Files.createDirectories(dataPath.resolve("modules"))
+        Files.writeString(
+            moduleDir.resolve("mounts.yml"),
+            """
+            enabled: false
+            mounts:
+              bee:
+                type: flying
+                entity: BEE
+                item: BEE_SPAWN_EGG
+                name: Bee
+                acquisition: Test
+                levels:
+                  - {speed: 1.0, scale: 0.8, price: 1}
+                  - {speed: 1.2, price: 2}
+            """.trimIndent(),
+        )
+
+        val levels = checkNotNull(MountModuleConfig.load(dataPath).catalog()["bee"]).levels
+        levels.map(MountLevelDefinition::scaleMultiplier) shouldBe listOf(0.8, 1.0)
     }
 })
 

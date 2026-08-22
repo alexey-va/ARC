@@ -28,6 +28,7 @@ data class MountLevelDefinition(
     val price: Double?,
     val handlingMultiplier: Double = 1.0,
     val sprintMultiplier: Double = 1.0,
+    val scaleMultiplier: Double = 1.0,
 ) {
     init {
         require(speed.isFinite() && speed > 0.0) { "Mount level speed must be positive and finite" }
@@ -37,6 +38,9 @@ data class MountLevelDefinition(
         }
         require(sprintMultiplier.isFinite() && sprintMultiplier in 1.0..2.0) {
             "Mount level sprint multiplier must be between 1.0 and 2.0"
+        }
+        require(scaleMultiplier.isFinite() && scaleMultiplier in 0.35..4.0) {
+            "Mount level scale multiplier must be between 0.35 and 4.0"
         }
     }
 }
@@ -129,6 +133,11 @@ data class MountAppearance(
     companion object {
         private val APPEARANCE_VALUE_PATTERN = Regex("[A-Z0-9_]{1,48}")
         private val MATERIAL_PATTERN = Regex("[A-Z0-9_]{2,64}")
+    }
+
+    fun scaledBy(multiplier: Double): MountAppearance {
+        require(multiplier.isFinite() && multiplier > 0.0) { "Mount appearance scale multiplier must be positive and finite" }
+        return copy(scale = scale * multiplier)
     }
 }
 
@@ -258,6 +267,10 @@ data class MountDefinition(
         require(skins.size <= MAX_SKINS) { "Mount '$id' has more than $MAX_SKINS skins" }
         require(skins.map(MountSkinDefinition::id).toSet().size == skins.size) { "Mount '$id' skin ids must be unique" }
         require(skins.none { it.id == DEFAULT_SKIN_ID }) { "Mount '$id' cannot redefine the default skin" }
+        val appearances = listOf(appearance) + skins.map(MountSkinDefinition::appearance)
+        require(levels.all { level -> appearances.all { base -> base.scale * level.scaleMultiplier in 0.35..4.0 } }) {
+            "Mount '$id' level scale produces an appearance outside 0.35..4.0"
+        }
     }
 
     val maxLevel: Int get() = levels.size
@@ -267,6 +280,9 @@ data class MountDefinition(
     fun speed(level: Int): Double = level(level).speed
 
     fun price(level: Int): Double? = levels.getOrNull(level - 1)?.price
+
+    fun effectiveAppearance(scaleMultiplier: Double, skin: MountSkinDefinition?): MountAppearance =
+        (skin?.appearance ?: appearance).scaledBy(scaleMultiplier)
 
     fun levelPermission(level: Int): String = "arc.mounts.$id.$level"
 

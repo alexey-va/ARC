@@ -19,7 +19,9 @@ Native production replacement for `Denizen/scripts/activities/rideable_mobs.dsc`
   the dolphin. Effects are refreshed while riding and expire naturally after
   dismount without removing unrelated player effects.
 - Every mount has three progression levels. The third level is the deliberately
-  expensive final sprint and improves speed, steering and sprint response.
+  expensive final sprint and improves speed, steering and sprint response. An
+  optional per-level `scale` multiplies the selected base or skin appearance;
+  omitted values remain `1.0` for backward-compatible visuals.
 - Appearance is deterministic. ARC fixes age, scale and variants, clears random
   entity equipment, then applies only the configured skin equipment. Zombie
   baby, iron guard and diamond warlord are separate unlockable skins.
@@ -34,6 +36,9 @@ Native production replacement for `Denizen/scripts/activities/rideable_mobs.dsc`
   environments.
 - A short summon cooldown and a hard server-side velocity cap protect against
   duplicate entities and unsafe catalog values.
+- Native phasing entities such as the Vex use a swept Paper collision check
+  before ARC applies velocity. Blocked axes stop while free axes keep moving,
+  so the mount slides along a wall instead of carrying its rider through it.
 
 ## Permissions and commands
 
@@ -91,7 +96,7 @@ the exact debit, refund or direct permission can be proven.
 ## Configuration and observability
 
 The bundled and live file is `plugins/ARC/modules/mounts.yml`. It owns the
-catalog, rarity, descriptions, three level price/speed/handling values,
+catalog, rarity, descriptions, three level price/speed/handling/scale values,
 deterministic base appearance, skins, equipment and cosmetic trails. Spawn and
 survival keep separate tracked copies for their world and purchasing policies.
 

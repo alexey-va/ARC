@@ -193,6 +193,25 @@ class MountDomainTest : StringSpec({
             testMount().copy(levels = listOf(MountLevelDefinition(speed = 1.0, price = -1.0)))
         }
     }
+
+    "level scale multiplies the selected appearance without exceeding safe entity bounds" {
+        val mount =
+            testMount().copy(
+                levels = listOf(MountLevelDefinition(speed = 1.0, price = 1.0, scaleMultiplier = 0.75)),
+                appearance = MountAppearance(scale = 1.2),
+            )
+
+        mount.effectiveAppearance(scaleMultiplier = mount.level(1).scaleMultiplier, skin = null).scale shouldBe (0.9 plusOrMinus 1.0e-9)
+        shouldThrow<IllegalArgumentException> {
+            MountLevelDefinition(speed = 1.0, price = 1.0, scaleMultiplier = 0.0)
+        }
+        shouldThrow<IllegalArgumentException> {
+            mount.copy(
+                levels = listOf(MountLevelDefinition(speed = 1.0, price = 1.0, scaleMultiplier = 2.0)),
+                appearance = MountAppearance(scale = 2.1),
+            )
+        }
+    }
 })
 
 private fun airborne(input: MountInputState, planar: MotionVector, pitch: Float = 0f) =

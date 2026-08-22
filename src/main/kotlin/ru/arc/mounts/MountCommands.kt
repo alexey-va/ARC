@@ -125,6 +125,7 @@ class MountCommand(
                 sprintMultiplier = configuredLevel.sprintMultiplier,
                 durationMillis = config().adminSessionDuration.toMillis(),
                 glow = false,
+                scaleMultiplier = configuredLevel.scaleMultiplier,
                 skin = skin,
                 abilityUpgrades = mount.abilities.upgrades,
             )

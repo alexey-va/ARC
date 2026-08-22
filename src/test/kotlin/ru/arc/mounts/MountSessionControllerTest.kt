@@ -14,8 +14,10 @@ import org.bukkit.entity.Horse
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Mob
 import org.bukkit.entity.Player
+import org.bukkit.entity.Vex
 import org.bukkit.event.entity.CreatureSpawnEvent
 import org.bukkit.event.entity.EntityDamageEvent
+import org.bukkit.util.BoundingBox
 import java.util.UUID
 
 class MountSessionControllerTest : StringSpec({
@@ -35,6 +37,16 @@ class MountSessionControllerTest : StringSpec({
         maintainMountMobState(bat)
 
         verify(exactly = 2) { bat.setAwake(true) }
+    }
+
+    "vex mount sweeps its full path and slides along a wall instead of phasing through it" {
+        val vex = mockk<Vex>(relaxed = true)
+        every { vex.boundingBox } returns BoundingBox(0.0, 0.0, 0.0, 0.4, 0.8, 0.4)
+        every { vex.wouldCollideUsing(any()) } answers {
+            firstArg<BoundingBox>().maxX > 1.0
+        }
+
+        constrainPhasingVelocity(vex, MotionVector(1.2, 0.0, 0.4)) shouldBe MotionVector(0.0, 0.0, 0.4)
     }
 
     "walking mounts step over a full block without a manual jump" {
