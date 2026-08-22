@@ -4,6 +4,8 @@ import io.papermc.paper.event.player.AsyncChatCommandDecorateEvent
 import io.papermc.paper.event.player.AsyncChatDecorateEvent
 import io.papermc.paper.event.player.AsyncChatEvent
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.TextReplacementConfig
+import net.kyori.adventure.text.format.TextColor
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
@@ -16,12 +18,15 @@ import ru.arc.core.sync
 import ru.arc.util.Logging.debug
 import ru.arc.util.TextUtils
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 class ChatListener internal constructor(
     private val npcMessageHandler: (String, Player) -> Unit,
     private val modeProvider: (UUID) -> ChatMode,
     private val titleInputProvider: (Player) -> Boolean,
 ) : Listener {
+    private val pendingChannels = ConcurrentHashMap<UUID, ChatMode>()
+
     internal constructor(npcMessageHandler: (String, Player) -> Unit) :
         this(npcMessageHandler, ChatModeService::getMode, TitleInput::hasInput)
 
@@ -39,7 +44,12 @@ class ChatListener internal constructor(
         if (event is AsyncChatCommandDecorateEvent) return
         val player = event.player() ?: return
         if (titleInputProvider(player)) return
-        applyChatMode(player, event.result()) { event.result(it) }
+        val message = event.result()
+        val mode = modeProvider(player.uniqueId)
+        val hadPrefix = TextUtils.plain(message).startsWith("!")
+        pendingChannels[player.uniqueId] =
+            if (mode == ChatMode.GLOBAL || hadPrefix) ChatMode.GLOBAL else ChatMode.LOCAL
+        applyChatMode(player, message, mode, hadPrefix) { event.result(it) }
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -52,13 +62,30 @@ class ChatListener internal constructor(
         }
     }
 
+    // ARC soft-depends on CMI, so this HIGHEST listener wraps CMI's renderer after it is installed.
+    @EventHandler(priority = EventPriority.HIGHEST)
+    fun applyChatPalette(event: AsyncChatEvent) {
+        val channel =
+            pendingChannels.remove(event.player.uniqueId)
+                ?: modeProvider(event.player.uniqueId)
+        if (event.isCancelled) return
+        val renderer = event.renderer()
+        event.renderer { source, sourceDisplayName, message, viewer ->
+            colorSenderName(
+                renderer.render(source, sourceDisplayName, message, viewer),
+                source.name,
+                channel,
+            )
+        }
+    }
+
     private fun applyChatMode(
         player: Player,
         message: Component,
+        mode: ChatMode,
+        hadPrefix: Boolean,
         setResult: (Component) -> Unit,
     ) {
-        val mode = modeProvider(player.uniqueId)
-        val hadPrefix = TextUtils.plain(message).startsWith("!")
         if (mode != ChatMode.GLOBAL || hadPrefix) {
             debug(
                 "[ChatMode] backend player={} mode={} had-prefix={} prefix-added=false prefix-owner=backend-decoration",
@@ -77,6 +104,19 @@ class ChatListener internal constructor(
         )
     }
 
+    internal fun colorSenderName(
+        component: Component,
+        senderName: String,
+        channel: ChatMode,
+    ): Component =
+        component.replaceText(
+            TextReplacementConfig.builder()
+                .matchLiteral(senderName)
+                .once()
+                .replacement { _, matched -> matched.color(NAME_COLORS.getValue(channel)) }
+                .build(),
+        )
+
     private fun processTitleInput(event: AsyncChatEvent): Boolean {
         if (!event.isAsynchronous || !TitleInput.hasInput(event.player)) return false
         event.isCancelled = true
@@ -85,5 +125,13 @@ class ChatListener internal constructor(
             TitleInput.processMessage(event.player, message)
         }
         return true
+    }
+
+    private companion object {
+        val NAME_COLORS =
+            mapOf(
+                ChatMode.LOCAL to TextColor.color(0xD6A85F),
+                ChatMode.GLOBAL to TextColor.color(0x72B8E6),
+            )
     }
 }

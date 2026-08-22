@@ -7,9 +7,13 @@ import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
 import io.mockk.verify
+import io.papermc.paper.chat.ChatRenderer
 import io.papermc.paper.event.player.AsyncChatCommandDecorateEvent
 import io.papermc.paper.event.player.AsyncChatDecorateEvent
+import io.papermc.paper.event.player.AsyncChatEvent
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.TextComponent
+import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.command.Command
 import org.bukkit.entity.Player
@@ -49,6 +53,29 @@ class ChatModeFeatureTest : FreeSpec({
                     .getAnnotation(EventHandler::class.java)
 
             handler.priority shouldBe EventPriority.LOWEST
+        }
+
+        "applies the player palette at the final formatting priority after CMI" {
+            val handler =
+                ChatListener::class.java
+                    .getDeclaredMethod("applyChatPalette", AsyncChatEvent::class.java)
+                    .getAnnotation(EventHandler::class.java)
+
+            handler.priority shouldBe EventPriority.HIGHEST
+            handler.ignoreCancelled shouldBe false
+        }
+
+        "does not replace the renderer for cancelled chat" {
+            val player = player(UUID.randomUUID())
+            val event =
+                mockk<AsyncChatEvent>(relaxed = true) {
+                    every { this@mockk.player } returns player
+                    every { isCancelled } returns true
+                }
+
+            ChatListener({ _, _ -> }, { ChatMode.LOCAL }).applyChatPalette(event)
+
+            verify(exactly = 0) { event.renderer(any()) }
         }
 
         "prefixes an unprefixed message in global mode during decoration" {
@@ -111,6 +138,40 @@ class ChatModeFeatureTest : FreeSpec({
 
             plainText.serialize(message) shouldBe "Привет"
         }
+
+        "colors only the first sender name for local chat" {
+            val playerId = UUID.randomUUID()
+            val player = player(playerId, "GrocerMC")
+            val listener = ChatListener({ _, _ -> }, { ChatMode.LOCAL })
+            var decorated: Component = Component.text("Привет")
+            listener.onChatDecorate(decorateEvent(player, { decorated }, { decorated = it }))
+            val rendered = applyPalette(listener, player)
+
+            coloredText(rendered, "GrocerMC").first().color() shouldBe TextColor.color(0xD6A85F)
+            coloredText(rendered, "GrocerMC").drop(1).all { it.color() == null } shouldBe true
+        }
+
+        "uses the global name color for an explicit shout from local mode" {
+            val playerId = UUID.randomUUID()
+            val player = player(playerId, "GrocerMC")
+            val listener = ChatListener({ _, _ -> }, { ChatMode.LOCAL })
+            var decorated: Component = Component.text("!Привет")
+            listener.onChatDecorate(decorateEvent(player, { decorated }, { decorated = it }))
+
+            coloredText(applyPalette(listener, player), "GrocerMC").first().color() shouldBe
+                TextColor.color(0x72B8E6)
+        }
+
+        "uses the global name color for persisted global mode" {
+            val playerId = UUID.randomUUID()
+            val player = player(playerId, "GrocerMC")
+            val listener = ChatListener({ _, _ -> }, { ChatMode.GLOBAL })
+            var decorated: Component = Component.text("Привет")
+            listener.onChatDecorate(decorateEvent(player, { decorated }, { decorated = it }))
+
+            coloredText(applyPalette(listener, player), "GrocerMC").first().color() shouldBe
+                TextColor.color(0x72B8E6)
+        }
     }
 
     "commands" - {
@@ -170,9 +231,13 @@ class ChatModeFeatureTest : FreeSpec({
     }
 })
 
-private fun player(playerId: UUID): Player =
+private fun player(
+    playerId: UUID,
+    playerName: String = "Player",
+): Player =
     mockk(relaxed = true) {
         every { uniqueId } returns playerId
+        every { name } returns playerName
         every { isOnline } returns true
     }
 
@@ -185,4 +250,32 @@ private fun decorateEvent(
         every { this@mockk.player() } returns player
         every { result() } answers { getResult() }
         every { result(any()) } answers { setResult(firstArg()) }
+    }
+
+private fun applyPalette(
+    listener: ChatListener,
+    player: Player,
+): Component {
+    var renderer =
+        ChatRenderer { source, _, _, _ ->
+            Component.text("icon | ${source.name} [KXE] ${source.name}")
+        }
+    val event =
+        mockk<AsyncChatEvent>(relaxed = true) {
+            every { this@mockk.player } returns player
+            every { renderer() } answers { renderer }
+            every { renderer(any()) } answers { renderer = firstArg() }
+        }
+
+    listener.applyChatPalette(event)
+    return renderer.render(player, Component.text(player.name), Component.text("Привет"), player)
+}
+
+private fun coloredText(
+    component: Component,
+    text: String,
+): List<TextComponent> =
+    buildList {
+        if (component is TextComponent && component.content() == text) add(component)
+        component.children().forEach { addAll(coloredText(it, text)) }
     }
