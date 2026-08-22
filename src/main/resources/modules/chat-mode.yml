@@ -1,0 +1,5 @@
+# Gives each player a stable, subtle body-text tint inside the active chat channel palette.
+message-color-variation:
+  enabled: true
+  # Deterministic hue shift range. Runtime values are clamped to 0..30 degrees.
+  hue-amplitude-degrees: 12.0

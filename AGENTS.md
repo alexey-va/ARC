@@ -21,9 +21,12 @@ routing and Discord/Telegram bridges, but must never replace the Velocity
 CMI 9.8.9.8 builds its channel prefix and the `{name}`/message as sibling
 Adventure components, so color cannot flow reliably between them. ARC wraps
 CMI's renderer at `HIGHEST`: it colors the first raw sender-name component and
-the final message child by the resolved local/global channel. Keep the CMI
-local-body fallback and ARC `MESSAGE_COLORS` aligned; preserve explicit colors
-inside a player message when they differ from the fallback body color.
+the final message child by the resolved local/global channel. The message body
+may receive a stable nickname-derived hue offset configured in
+`modules/chat-mode.yml`; keep that offset subtle and preserve the channel's
+base saturation and brightness. Keep the CMI local-body fallback and ARC
+`MESSAGE_COLORS` aligned; preserve explicit colors inside a player message when
+they differ from the fallback body color.
 
 ## Runtime & deploy
 

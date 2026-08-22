@@ -10,9 +10,13 @@ import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.entity.Player
+import ru.arc.ARC
 import ru.arc.TitleInput
 import ru.arc.ai.GPTManager
+import ru.arc.chat.ChatMessageColorVariation
+import ru.arc.chat.ChatMessageColorizer
 import ru.arc.chat.ChatMode
+import ru.arc.chat.ChatModeConfig
 import ru.arc.chat.ChatModeService
 import ru.arc.core.sync
 import ru.arc.util.Logging.debug
@@ -24,20 +28,54 @@ class ChatListener internal constructor(
     private val npcMessageHandler: (String, Player) -> Unit,
     private val modeProvider: (UUID) -> ChatMode,
     private val titleInputProvider: (Player) -> Boolean,
+    private val messageColorVariationProvider: () -> ChatMessageColorVariation,
 ) : Listener {
     private val pendingChannels = ConcurrentHashMap<UUID, ChatMode>()
 
     internal constructor(npcMessageHandler: (String, Player) -> Unit) :
-        this(npcMessageHandler, ChatModeService::getMode, TitleInput::hasInput)
+        this(
+            npcMessageHandler,
+            ChatModeService::getMode,
+            TitleInput::hasInput,
+            { ChatMessageColorVariation.DISABLED },
+        )
 
     internal constructor(
         npcMessageHandler: (String, Player) -> Unit,
         modeProvider: (UUID) -> ChatMode,
-    ) : this(npcMessageHandler, modeProvider, TitleInput::hasInput)
+    ) : this(
+        npcMessageHandler,
+        modeProvider,
+        TitleInput::hasInput,
+        { ChatMessageColorVariation.DISABLED },
+    )
+
+    internal constructor(
+        npcMessageHandler: (String, Player) -> Unit,
+        modeProvider: (UUID) -> ChatMode,
+        titleInputProvider: (Player) -> Boolean,
+    ) : this(
+        npcMessageHandler,
+        modeProvider,
+        titleInputProvider,
+        { ChatMessageColorVariation.DISABLED },
+    )
+
+    internal constructor(
+        npcMessageHandler: (String, Player) -> Unit,
+        modeProvider: (UUID) -> ChatMode,
+        titleInputProvider: (Player) -> Boolean,
+        messageColorVariation: ChatMessageColorVariation,
+    ) : this(
+        npcMessageHandler,
+        modeProvider,
+        titleInputProvider,
+        { messageColorVariation },
+    )
 
     constructor() : this({ message, player ->
         GPTManager.processMessage(message, player, appendCancel = true)
-    }, ChatModeService::getMode, TitleInput::hasInput)
+    }, ChatModeService::getMode, TitleInput::hasInput, productionVariationProvider())
 
     @EventHandler(priority = EventPriority.LOWEST)
     fun onChatDecorate(event: AsyncChatDecorateEvent) {
@@ -74,6 +112,7 @@ class ChatListener internal constructor(
             colorSenderName(
                 colorMessageBody(
                     renderer.render(source, sourceDisplayName, message, viewer),
+                    source.name,
                     channel,
                 ),
                 source.name,
@@ -122,6 +161,7 @@ class ChatListener internal constructor(
 
     internal fun colorMessageBody(
         component: Component,
+        senderName: String,
         channel: ChatMode,
     ): Component {
         val children = component.children()
@@ -129,7 +169,14 @@ class ChatListener internal constructor(
 
         // CMI 9.8.9.8 Paper_ChatFormatListener.visual appends the formatted message last.
         val updated = children.toMutableList()
-        updated[updated.lastIndex] = replaceDefaultMessageColor(updated.last(), MESSAGE_COLORS.getValue(channel))
+        val baseColor = MESSAGE_COLORS.getValue(channel)
+        val speakerColor =
+            ChatMessageColorizer.colorFor(
+                base = baseColor,
+                playerName = senderName,
+                variation = messageColorVariationProvider(),
+            )
+        updated[updated.lastIndex] = replaceDefaultMessageColor(updated.last(), speakerColor)
         return component.children(updated)
     }
 
@@ -154,6 +201,11 @@ class ChatListener internal constructor(
     }
 
     private companion object {
+        fun productionVariationProvider(): () -> ChatMessageColorVariation {
+            val config = ChatModeConfig.load(ARC.instance.dataPath)
+            return { config.messageColorVariation }
+        }
+
         val NAME_COLORS =
             mapOf(
                 ChatMode.LOCAL to TextColor.color(0xD6A85F),

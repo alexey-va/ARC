@@ -203,6 +203,18 @@ class ChatModeFeatureTest : FreeSpec({
             coloredText(rendered, "Обычно").single().color() shouldBe TextColor.color(0xCFE7FF)
             coloredText(rendered, "Особо").single().color() shouldBe TextColor.color(0x55FF55)
         }
+
+        "applies the configured deterministic speaker tint to the message body" {
+            val playerId = UUID.randomUUID()
+            val player = player(playerId, "GrocerMC")
+            val variation = ChatMessageColorVariation(enabled = true, hueAmplitudeDegrees = 12.0)
+            val listener = ChatListener({ _, _ -> }, { ChatMode.GLOBAL }, { false }, variation)
+
+            val rendered = applyPalette(listener, player)
+
+            coloredText(rendered, "Привет").single().color() shouldBe
+                ChatMessageColorizer.colorFor(TextColor.color(0xCFE7FF), "GrocerMC", variation)
+        }
     }
 
     "commands" - {

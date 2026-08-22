@@ -302,6 +302,7 @@ open class ARC : JavaPlugin() {
                 "modules/restart.yml",
                 "modules/board.yml",
                 "modules/command-hide.yml",
+                "modules/chat-mode.yml",
                 "modules/contracts.yml",
                 "modules/auction.yml",
                 "modules/treasure-hunt.yml",
