@@ -172,6 +172,37 @@ class ChatModeFeatureTest : FreeSpec({
             coloredText(applyPalette(listener, player), "GrocerMC").first().color() shouldBe
                 TextColor.color(0x72B8E6)
         }
+
+        "uses a warm body for local chat and a cool body for global chat" {
+            val playerId = UUID.randomUUID()
+            val player = player(playerId, "GrocerMC")
+
+            val local = applyPalette(ChatListener({ _, _ -> }, { ChatMode.LOCAL }), player)
+            val global = applyPalette(ChatListener({ _, _ -> }, { ChatMode.GLOBAL }), player)
+
+            coloredText(local, "Привет").single().color() shouldBe TextColor.color(0xE8D7B7)
+            coloredText(global, "Привет").single().color() shouldBe TextColor.color(0xCFE7FF)
+        }
+
+        "keeps a non-default player message color while changing the channel default" {
+            val playerId = UUID.randomUUID()
+            val player = player(playerId, "GrocerMC")
+            val message =
+                Component.text()
+                    .append(Component.text("Обычно").color(TextColor.color(0xE8D7B7)))
+                    .append(Component.text("Особо").color(TextColor.color(0x55FF55)))
+                    .build()
+
+            val rendered =
+                applyPalette(
+                    ChatListener({ _, _ -> }, { ChatMode.GLOBAL }),
+                    player,
+                    message,
+                )
+
+            coloredText(rendered, "Обычно").single().color() shouldBe TextColor.color(0xCFE7FF)
+            coloredText(rendered, "Особо").single().color() shouldBe TextColor.color(0x55FF55)
+        }
     }
 
     "commands" - {
@@ -255,10 +286,18 @@ private fun decorateEvent(
 private fun applyPalette(
     listener: ChatListener,
     player: Player,
+    message: Component = Component.text("Привет").color(TextColor.color(0xE8D7B7)),
 ): Component {
     var renderer =
-        ChatRenderer { source, _, _, _ ->
-            Component.text("icon | ${source.name} [KXE] ${source.name}")
+        ChatRenderer { source, _, renderedMessage, _ ->
+            Component.text()
+                .append(Component.text("icon | "))
+                .append(Component.text(source.name))
+                .append(Component.text(" [KXE] "))
+                .append(Component.text(source.name))
+                .append(Component.space())
+                .append(renderedMessage)
+                .build()
         }
     val event =
         mockk<AsyncChatEvent>(relaxed = true) {
@@ -268,7 +307,7 @@ private fun applyPalette(
         }
 
     listener.applyChatPalette(event)
-    return renderer.render(player, Component.text(player.name), Component.text("Привет"), player)
+    return renderer.render(player, Component.text(player.name), message, player)
 }
 
 private fun coloredText(

@@ -72,7 +72,10 @@ class ChatListener internal constructor(
         val renderer = event.renderer()
         event.renderer { source, sourceDisplayName, message, viewer ->
             colorSenderName(
-                renderer.render(source, sourceDisplayName, message, viewer),
+                colorMessageBody(
+                    renderer.render(source, sourceDisplayName, message, viewer),
+                    channel,
+                ),
                 source.name,
                 channel,
             )
@@ -117,6 +120,29 @@ class ChatListener internal constructor(
                 .build(),
         )
 
+    internal fun colorMessageBody(
+        component: Component,
+        channel: ChatMode,
+    ): Component {
+        val children = component.children()
+        if (children.isEmpty()) return component
+
+        // CMI 9.8.9.8 Paper_ChatFormatListener.visual appends the formatted message last.
+        val updated = children.toMutableList()
+        updated[updated.lastIndex] = replaceDefaultMessageColor(updated.last(), MESSAGE_COLORS.getValue(channel))
+        return component.children(updated)
+    }
+
+    private fun replaceDefaultMessageColor(
+        component: Component,
+        color: TextColor,
+    ): Component {
+        val recolored =
+            if (component.color() == CMI_DEFAULT_MESSAGE_COLOR) component.color(color) else component
+        if (recolored.children().isEmpty()) return recolored
+        return recolored.children(recolored.children().map { replaceDefaultMessageColor(it, color) })
+    }
+
     private fun processTitleInput(event: AsyncChatEvent): Boolean {
         if (!event.isAsynchronous || !TitleInput.hasInput(event.player)) return false
         event.isCancelled = true
@@ -133,5 +159,11 @@ class ChatListener internal constructor(
                 ChatMode.LOCAL to TextColor.color(0xD6A85F),
                 ChatMode.GLOBAL to TextColor.color(0x72B8E6),
             )
+        val MESSAGE_COLORS =
+            mapOf(
+                ChatMode.LOCAL to TextColor.color(0xE8D7B7),
+                ChatMode.GLOBAL to TextColor.color(0xCFE7FF),
+            )
+        val CMI_DEFAULT_MESSAGE_COLOR: TextColor = MESSAGE_COLORS.getValue(ChatMode.LOCAL)
     }
 }
