@@ -2,6 +2,8 @@ package ru.arc.hooks.luckperms
 
 import net.luckperms.api.LuckPermsProvider
 import net.luckperms.api.model.group.Group
+import net.luckperms.api.model.user.User
+import net.luckperms.api.model.user.UserManager
 import net.luckperms.api.node.types.MetaNode
 import net.luckperms.api.query.Flag
 import net.luckperms.api.query.QueryMode
@@ -15,12 +17,20 @@ import ru.arc.util.Logging.warn
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
-class LuckPermsHook {
+class LuckPermsHook(
+    private val userManager: UserManager = LuckPermsProvider.get().userManager,
+    private val isPrimaryThread: () -> Boolean = Bukkit::isPrimaryThread,
+    private val queryOptions: () -> QueryOptions = {
+        QueryOptions
+            .builder(QueryMode.NON_CONTEXTUAL)
+            .flag(Flag.RESOLVE_INHERITANCE, true)
+            .build()
+    },
+) {
     fun hasPermission(
         offlinePlayer: OfflinePlayer,
         perm: String,
     ): Boolean {
-        val userManager = LuckPermsProvider.get().userManager
         if (offlinePlayer is Player) return offlinePlayer.hasPermission(perm)
         return try {
             if (Bukkit.isPrimaryThread()) {
@@ -39,24 +49,20 @@ class LuckPermsHook {
     }
 
     fun getGroups(offlinePlayer: OfflinePlayer): List<String> {
-        val userManager = LuckPermsProvider.get().userManager
         return try {
-            if (Bukkit.isPrimaryThread()) {
-                error("Loading groups data from main thread!!!")
-            }
-            userManager
-                .loadUser(offlinePlayer.uniqueId)
-                .get()
-                .getInheritedGroups(
-                    QueryOptions
-                        .builder(QueryMode.NON_CONTEXTUAL)
-                        .flag(Flag.RESOLVE_INHERITANCE, true)
-                        .build(),
-                ).map(Group::getName)
+            resolveUserForRead(offlinePlayer)?.getInheritedGroups(
+                queryOptions(),
+            )?.map(Group::getName).orEmpty()
         } catch (e: Exception) {
             error("Error while getting groups", e)
             emptyList()
         }
+    }
+
+    private fun resolveUserForRead(offlinePlayer: OfflinePlayer): User? {
+        userManager.getUser(offlinePlayer.uniqueId)?.let { return it }
+        if (isPrimaryThread()) return null
+        return userManager.loadUser(offlinePlayer.uniqueId).get()
     }
 
     fun setMeta(
