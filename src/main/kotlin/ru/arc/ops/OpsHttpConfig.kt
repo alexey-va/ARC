@@ -100,10 +100,10 @@ open class OpsHttpConfig(private val config: Config) {
         get() = config.bool("npcs-read-enabled", true)
 
     open val npcsWriteEnabled: Boolean
-        get() = config.bool("npcs-write-enabled", false)
+        get() = config.bool("npcs-write-enabled", true)
 
     open val npcsLoadChunksEnabled: Boolean
-        get() = config.bool("npcs-load-chunks-enabled", false)
+        get() = config.bool("npcs-load-chunks-enabled", true)
 
     open val qaWorldReadEnabled: Boolean
         get() = config.bool("qa-world-read-enabled", false)
