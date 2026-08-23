@@ -14,19 +14,19 @@ class FurnitureCleanupSafetyTest :
                 val root = UUID.fromString("00000000-0000-0000-0000-000000000216")
                 val plan =
                     FurnitureCleanupPlan.create(
-                        center = CleanupCenter("rc_origin_spawn", -136, 73, -124),
+                        center = CleanupCenter("spawn", 10, 65, 10),
                         radius = 8,
                         candidates =
                             listOf(
                                 CleanupTarget.Furniture(root, FurnitureFamily.SIMPLE, "iasurvival:bench"),
                                 CleanupTarget.Furniture(root, FurnitureFamily.SIMPLE, "iasurvival:bench"),
-                                CleanupTarget.Barrier(BlockPosition("rc_origin_spawn", -135, 73, -124)),
+                                CleanupTarget.Barrier(BlockPosition("spawn", 11, 65, 10)),
                             ),
                     )
 
                 plan.targets.shouldContainExactly(
                     CleanupTarget.Furniture(root, FurnitureFamily.SIMPLE, "iasurvival:bench"),
-                    CleanupTarget.Barrier(BlockPosition("rc_origin_spawn", -135, 73, -124)),
+                    CleanupTarget.Barrier(BlockPosition("spawn", 11, 65, 10)),
                 )
                 plan.furnitureCount shouldBe 1
                 plan.barrierCount shouldBe 1
@@ -52,7 +52,7 @@ class FurnitureCleanupSafetyTest :
                     tokenFactory = { "AB12CD" },
                 )
             val owner = UUID.fromString("00000000-0000-0000-0000-000000000001")
-            val center = CleanupCenter("rc_origin_spawn", -136, 73, -124)
+            val center = CleanupCenter("spawn", 10, 65, 10)
 
             it("accepts only the exact fresh plan once") {
                 val confirmation = registry.issue(owner, center, 8, "digest-v1")

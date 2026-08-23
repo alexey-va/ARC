@@ -22,15 +22,15 @@ class WorldSceneSpecTest :
                                 {
                                   "id":"forge_floor",
                                   "kind":"minecraft_block",
-                                  "world":"rc_origin_spawn",
-                                  "x":-136,"y":72,"z":-124,
+                                  "world":"spawn",
+                                  "x":10,"y":65,"z":10,
                                   "blockData":"minecraft:polished_andesite"
                                 },
                                 {
                                   "id":"forge_bench",
                                   "kind":"itemsadder_furniture",
-                                  "world":"rc_origin_spawn",
-                                  "x":-135,"y":73,"z":-124,
+                                  "world":"spawn",
+                                  "x":11,"y":65,"z":10,
                                   "namespacedId":"iasurvival:forge_bench",
                                   "placement":"block"
                                 }

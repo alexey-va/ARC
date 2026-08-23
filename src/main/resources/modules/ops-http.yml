@@ -39,9 +39,10 @@ economy-audit-read-enabled: true
 product-interest-read-enabled: true
 
 # Authenticated Economy V2 manual-review evidence. Preview is read-only;
-# apply resolves one exact journal revision and stays disabled by default.
+# apply resolves one exact journal revision. Typed writes stay enabled; policy
+# and the exact preview digest remain the authorization boundary.
 contract-reconciliation-read-enabled: true
-contract-reconciliation-write-enabled: false
+contract-reconciliation-write-enabled: true
 
 # GET /ops/player/{name}/inventory — инвентарь онлайн-игрока (слоты 0-40)
 # GET /ops/player/{name}/item?slot= | ?hand=true — один слот / предмет в руке
@@ -55,44 +56,43 @@ items-give-max-stack: 64
 # GET/preview read the live ARC item-presets catalog.
 item-presets-read-enabled: true
 # PUT/DELETE atomically persist modules/item-presets.yml.
-# Production mutation: enable only for an explicitly authorized operation.
-item-presets-write-enabled: false
+# Typed writes stay enabled; production policy still authorizes each operation.
+item-presets-write-enabled: true
 
 # GET/preview используют CMI Java API и обычные ItemSpec JSON.
 # PUT /ops/cmi/kits/{name} меняет runtime CMI kit и вызывает KitsManager.safeSave().
-# По умолчанию запрещено: включать только для явно авторизованной content-операции.
-cmi-kits-write-enabled: false
+# Typed writes stay enabled; production policy still authorizes each operation.
+cmi-kits-write-enabled: true
 
 # Native CMI hologram API. Read/preview never modify Saves/Holograms.yml.
 cmi-holograms-read-enabled: true
-# PUT/DELETE update CMI runtime state and persistence. Enable only for an
-# explicitly authorized production content operation.
-cmi-holograms-write-enabled: false
+# PUT/DELETE update CMI runtime state and persistence. Typed writes stay enabled.
+cmi-holograms-write-enabled: true
 
 # GET/preview для modules/scheduled-commands.yml.
 scheduled-commands-read-enabled: true
 # PUT/DELETE сохраняют расписание через ScheduledCommandsManager.
-# Production mutation: включать только для явно авторизованной операции.
-scheduled-commands-write-enabled: false
+# Typed writes stay enabled; production policy still authorizes each operation.
+scheduled-commands-write-enabled: true
 
 # GET/preview expose normalized weighted coordinates, not internal persistence JSON.
 location-pools-read-enabled: true
 # PUT/DELETE persist through LocationPoolManager using atomic file replacement.
-location-pools-write-enabled: false
+location-pools-write-enabled: true
 
 # Idempotent vanilla block + ItemsAdder furniture scene reconciliation.
 # Read includes preview and live readback; mutations require a fresh reviewDigest.
 world-scenes-read-enabled: true
-world-scenes-write-enabled: false
+world-scenes-write-enabled: true
 
 # Native ARC treasure/reward pools. Preview never grants rewards or runs commands.
 treasure-pools-read-enabled: true
-# Production mutation: enable only for an explicitly authorized content operation.
-treasure-pools-write-enabled: false
+# Typed writes stay enabled; production policy still authorizes each operation.
+treasure-pools-write-enabled: true
 
-# Native Citizens API. Preview/list are read-only; create/move/delete stay gated.
+# Native Citizens API. Preview/list are read-only; typed mutations stay enabled.
 npcs-read-enabled: true
-npcs-write-enabled: false
+npcs-write-enabled: true
 npcs-load-chunks-enabled: false
 
 # Fixed ARC-owned flat QA world. The write surface can only prepare the built-in
