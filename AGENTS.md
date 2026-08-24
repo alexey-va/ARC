@@ -7,6 +7,7 @@
 - **Bootstrap:** `PaperArcRuntime.installScheduling(this)` in `ARC.kt` **before** `ModuleRegistry.initAll()`
 - **Event DSL** — `EventDsl.kt`, Bukkit listeners, gameplay modules
 - **GuiDsl** — [`src/main/kotlin/ru/arc/gui/GUI.md`](src/main/kotlin/ru/arc/gui/GUI.md)
+- **ItemsAdder catalog** — [`src/main/kotlin/ru/arc/itemcatalog/README.md`](src/main/kotlin/ru/arc/itemcatalog/README.md)
 - **Commands** — [`src/main/kotlin/ru/arc/commands/arc/COMMANDS.md`](src/main/kotlin/ru/arc/commands/arc/COMMANDS.md)
 - **Ops HTTP** — [`src/main/kotlin/ru/arc/ops/AGENTS.md`](src/main/kotlin/ru/arc/ops/AGENTS.md)
 

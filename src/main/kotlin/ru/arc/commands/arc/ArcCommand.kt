@@ -20,6 +20,7 @@ import ru.arc.commands.arc.subcommands.GiveSubCommand
 import ru.arc.commands.arc.subcommands.HelpSubCommand
 import ru.arc.commands.arc.subcommands.HuntSubCommand
 import ru.arc.commands.arc.subcommands.InvestSubCommand
+import ru.arc.commands.arc.subcommands.ItemsCatalogSubCommand
 import ru.arc.commands.arc.subcommands.JobsboostsSubCommand
 import ru.arc.commands.arc.subcommands.JoinMessageSubCommand
 import ru.arc.commands.arc.subcommands.LocationPoolSubCommand
@@ -84,6 +85,7 @@ class ArcCommand :
             EliteLootSubCommand,
             InvestSubCommand,
             StoreSubCommand,
+            ItemsCatalogSubCommand,
             GiveBoostSubCommand,
             GiveSubCommand,
             PouchSubCommand,

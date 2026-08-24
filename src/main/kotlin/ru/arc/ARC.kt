@@ -57,6 +57,7 @@ import ru.arc.core.modules.XActionModule
 import ru.arc.contracts.ContractsModule
 import ru.arc.hooks.HookRegistry
 import ru.arc.gui.GuiDefaults
+import ru.arc.itemcatalog.ItemsCatalogModule
 import ru.arc.network.NetworkRegistry
 import ru.arc.redis.RedisManager
 import ru.arc.ops.OpsHttpModule
@@ -210,6 +211,7 @@ open class ARC : JavaPlugin() {
             ChatModeModule,
             CrossServerSpyModule,
             MountModule,
+            ItemsCatalogModule,
             CommandHideModule,
             OnboardingModule,
             // Building system (priority 90)
@@ -318,6 +320,7 @@ open class ARC : JavaPlugin() {
                 "modules/leafdecay.yml",
                 "modules/personalloot.yml",
                 "modules/item-presets.yml",
+                "modules/items-catalog.yml",
                 "modules/pouches.yml",
                 "stocks/stock.yml",
                 "misc.yml",

@@ -1,0 +1,86 @@
+# ARC read-only catalog over the live ItemsAdder registry.
+# Bundled default stays disabled; enable it only on nodes that run ItemsAdder.
+enabled: false
+
+hidden-categories: []
+hidden-items:
+  - "_iainternal:*"
+
+all-items:
+  enabled: true
+  name: "Все предметы"
+  description:
+    - "Полный реестр предметов ItemsAdder."
+  permission: arc.items-catalog.all
+  icon:
+    material: CHEST
+    customModelData: 0
+
+groups:
+  furniture:
+    order: 10
+    name: "Мебель"
+    description:
+      - "Мебель, декор и элементы окружения."
+    icon:
+      material: OAK_STAIRS
+      customModelData: 0
+    categories:
+      - "fu_*"
+      - "*furniture*"
+      - "*decoration*"
+      - "park_plus"
+      - "itemshopplus"
+      - "royal"
+      - "graves"
+      - "stones"
+      - "branches"
+
+  gui-icons:
+    order: 20
+    name: "Иконки интерфейса"
+    description:
+      - "Кнопки, маркеры и служебная графика GUI."
+    icon:
+      material: ITEM_FRAME
+      customModelData: 0
+    categories:
+      - "arc_icons"
+      - "arc_other"
+      - "mcicons_catalog"
+      - "boxpixstudio_icons"
+      - "mccomputericons_numbers"
+      - "advancedenchantments_controls"
+      - "spectra_shopgui_plus"
+
+gui:
+  root-title: "<dark_gray><bold>Каталог предметов"
+  group-title: "<dark_gray><bold><group>"
+  category-title: "<dark_gray><bold><category>"
+  all-title: "<dark_gray><bold>Все предметы"
+
+  category-fallback:
+    material: CHEST
+    customModelData: 0
+  page-indicator:
+    material: PAPER
+    customModelData: 0
+
+  items:
+    back:
+      material: BLUE_STAINED_GLASS_PANE
+      display: "<#92bed8><bold>Назад"
+      lore:
+        - "<#e6fff3>Вернуться на предыдущий экран."
+        - ""
+        - "<#8c8c8c>• <#92bed8>Нажмите<#e6fff3>, чтобы вернуться <#8c8c8c>•"
+    previous:
+      material: BLUE_STAINED_GLASS_PANE
+      display: "<#92bed8><bold>Предыдущая страница"
+    next:
+      material: BLUE_STAINED_GLASS_PANE
+      display: "<#92bed8><bold>Следующая страница"
+
+messages:
+  loading: "<gray>Каталог предметов ещё загружается. Попробуйте через несколько секунд."
+  unavailable: "<red>Каталог предметов сейчас недоступен."

@@ -22,6 +22,12 @@ commands:
     name: board
     aliases: [ ]
     permission: arc.board
+  items:
+    name: items
+    aliases: [предметы, каталог]
+    permission: arc.items-catalog.use
+    player-only: true
+    usage: /arc items
   chat:
     name: chat
     aliases: [ ]

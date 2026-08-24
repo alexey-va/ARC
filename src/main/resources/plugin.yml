@@ -84,6 +84,12 @@ commands:
     usage: /mount [menu|help|admin]
     permission: arc.mounts.use
 permissions:
+  arc.items-catalog.use:
+    description: Open the read-only ItemsAdder item catalog
+    default: true
+  arc.items-catalog.all:
+    description: View the complete ItemsAdder registry in the ARC catalog
+    default: op
   arc.furniture.admin:
     description: Preview and confirm ItemsAdder furniture cleanup
     default: op
