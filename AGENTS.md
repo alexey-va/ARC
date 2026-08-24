@@ -28,6 +28,12 @@ base saturation and brightness. Keep the CMI local-body fallback and ARC
 `MESSAGE_COLORS` aligned; preserve explicit colors inside a player message when
 they differ from the fallback body color.
 
+CMI may also leave its prefix colors as literal legacy `§` codes inside the
+rendered component (`§f<glyph> §8| ...`). When checking whether CMI already
+rendered the channel prefix, use the local/global glyph before the raw sender
+name as the stable identity. Do not match the literal `<glyph> | ` sequence:
+that false-negative causes ARC to prepend a duplicate prefix.
+
 Cross-server CMI ChatSpy/CommandSpy is owned by
 `src/main/kotlin/ru/arc/spy/` and `modules/cross-server-spy.yml`. Source Paper
 nodes publish bounded, versioned observations to `arc.spy.v1`; destination
