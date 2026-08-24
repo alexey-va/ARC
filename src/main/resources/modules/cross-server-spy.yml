@@ -1,0 +1,48 @@
+# Extends CMI ChatSpy and CommandSpy across the Paper network through ARC Redis.
+enabled: true
+channel: arc.spy.v1
+
+# Redis wire origins outside this allowlist are ignored.
+allowed-servers:
+  - spawn
+  - survival
+  - parkour
+
+# Compact labels shown only on remote spy lines.
+server-labels:
+  - spawn=Спавн
+  - survival=Выживание
+  - parkour=Паркур
+
+limits:
+  max-payload-bytes: 8192
+  max-content-length: 1000
+  max-message-age-millis: 15000
+  max-future-skew-millis: 2000
+
+private-messages:
+  # Direct CMI/private-message aliases accepted from a non-cancelled player command.
+  direct-commands:
+    - msg
+    - tell
+    - w
+    - whisper
+    - pm
+  reply-commands:
+    - reply
+    - r
+
+security:
+  # These commands never leave their source server. CMI's own Spy.BlackListed
+  # list is also enforced and cannot be bypassed for a cross-server relay.
+  sensitive-commands:
+    - l
+    - login
+    - register
+    - reg
+    - changepassword
+    - changepass
+    - password
+    - unregister
+    - 2fa
+    - totp

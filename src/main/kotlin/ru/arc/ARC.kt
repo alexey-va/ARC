@@ -64,6 +64,7 @@ import ru.arc.onboarding.OnboardingModule
 import ru.arc.restart.RestartModule
 import ru.arc.rtp.RtpPlayerRegistry
 import ru.arc.scheduled.ScheduledCommandsModule
+import ru.arc.spy.CrossServerSpyModule
 import ru.arc.util.HeadTextureCache
 import ru.arc.util.Logging
 import ru.arc.util.Logging.consoleLog
@@ -207,6 +208,7 @@ open class ARC : JavaPlugin() {
             MobSpawnModule,
             JoinMessagesModule,
             ChatModeModule,
+            CrossServerSpyModule,
             MountModule,
             CommandHideModule,
             OnboardingModule,
@@ -303,6 +305,7 @@ open class ARC : JavaPlugin() {
                 "modules/board.yml",
                 "modules/command-hide.yml",
                 "modules/chat-mode.yml",
+                "modules/cross-server-spy.yml",
                 "modules/contracts.yml",
                 "modules/auction.yml",
                 "modules/treasure-hunt.yml",

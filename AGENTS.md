@@ -28,6 +28,15 @@ base saturation and brightness. Keep the CMI local-body fallback and ARC
 `MESSAGE_COLORS` aligned; preserve explicit colors inside a player message when
 they differ from the fallback body color.
 
+Cross-server CMI ChatSpy/CommandSpy is owned by
+`src/main/kotlin/ru/arc/spy/` and `modules/cross-server-spy.yml`. Source Paper
+nodes publish bounded, versioned observations to `arc.spy.v1`; destination
+nodes deliver only to UUIDs currently present in CMI's local social-spy or
+command-spy sets. Keep local spy delivery in CMI, skip same-origin Redis events,
+and never relay CMI-blacklisted or authentication commands. The bridge renders
+player content as literal Adventure text, not MiniMessage, and its Redis
+listener must marshal Bukkit access to the Paper main thread.
+
 ## Runtime & deploy
 
 - Production `plugins/ARC/schematics` is a root symlink, not a per-server
