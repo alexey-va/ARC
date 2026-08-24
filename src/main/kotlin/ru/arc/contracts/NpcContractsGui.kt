@@ -75,6 +75,8 @@ object NpcContractsGui {
                         val available = PaperContractItems.countPlain(player, view.contract.itemKey)
                         val selectable = ContractQuantitySelector.select(view, available)
                         item(x, y) {
+                            // Keep the per-contract material dynamic. A shared fromConfig path would
+                            // persist the first material it sees and turn every later order into it.
                             material(PaperContractItems.material(view.contract.itemKey) ?: Material.PAPER)
                             tags(
                                 mapOf(
@@ -100,7 +102,6 @@ object NpcContractsGui {
                                     "<action>",
                                 ),
                             )
-                            fromConfig(contractGuiConfig, "list.order")
                             onClick {
                                 if (selectable.canSubmit && view.contract.status == ContractStatus.OPEN.label) {
                                     openDetail(player, group, view.contract.id)
@@ -169,7 +170,6 @@ object NpcContractsGui {
                             "<dark_gray>без имени, чар и особых данных.",
                         ),
                     )
-                    fromConfig(contractGuiConfig, "detail.resource")
                 }
                 item(4, 0) {
                     material(Material.PAPER)
@@ -240,7 +240,6 @@ object NpcContractsGui {
                             "<gray>Сейчас доступно: <white><maximum>",
                         ),
                     )
-                    fromConfig(contractGuiConfig, "detail.quantity")
                 }
                 item(6, 1) {
                     material(Material.BLUE_STAINED_GLASS_PANE)
