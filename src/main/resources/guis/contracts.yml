@@ -1,0 +1,52 @@
+# Generic NPC contract GUI. NPC identity and copy are selected by contract group.
+defaults:
+  list:
+    title: "<dark_gray>Книга заказов"
+    heading: "<gold><bold>Книга заказов"
+    description-1: "<gray>Здесь принимают нужные ресурсы"
+    description-2: "<gray>за указанную награду."
+    empty-lore: "<gray>Загляните сюда позже."
+  detail:
+    title: "<dark_gray>Сдать ресурсы"
+    info-heading: "<gold><bold>Общий заказ"
+  messages:
+    rejections: { }
+
+boards:
+  forge_orders:
+    speaker: "Мила"
+    list:
+      title: "<dark_gray>Заказы кузницы"
+      heading: "<gold><bold>Книга заказов кузницы"
+      description-1: "<gray>Нужны руда, уголь"
+      description-2: "<gray>и готовый металл."
+      empty-lore: "<gray>Новые заказы появятся позже."
+    detail:
+      title: "<dark_gray>Сдать заказ кузнице"
+      info-heading: "<gold><bold>Заказ кузницы"
+
+list:
+  info:
+    material: PAPER
+  empty:
+    material: BARRIER
+  refresh:
+    material: BLACK_STAINED_GLASS_PANE
+  close:
+    material: RED_STAINED_GLASS_PANE
+
+detail:
+  info:
+    material: PAPER
+  payout:
+    material: GOLD_NUGGET
+  decrease:
+    material: BLUE_STAINED_GLASS_PANE
+  increase:
+    material: BLUE_STAINED_GLASS_PANE
+  back:
+    material: BLUE_STAINED_GLASS_PANE
+  maximum:
+    material: BLACK_STAINED_GLASS_PANE
+  confirm:
+    material: GREEN_STAINED_GLASS_PANE

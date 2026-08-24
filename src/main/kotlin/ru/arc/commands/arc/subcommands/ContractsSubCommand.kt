@@ -8,6 +8,7 @@ import ru.arc.commands.arc.tabComplete
 import ru.arc.contracts.ContractsManager
 import ru.arc.contracts.ContractsMode
 import ru.arc.contracts.ContractSubmissionOutcome
+import ru.arc.contracts.NpcContractsGui
 import ru.arc.contracts.SubmissionRejection
 import ru.arc.contracts.PaperSeasonTrophyItems
 import ru.arc.contracts.SeasonDungeonLaunchPreparationOutcome
@@ -25,14 +26,14 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-/** Read-only public contract board while Economy V2 is in calibration. */
+/** Public contract status plus NPC-owned grouped resource menus. */
 object ContractsSubCommand : SubCommand {
     override val configKey = "contracts"
     override val defaultName = "contracts"
     override val defaultPermission: String? = null
     override val defaultDescription = "Открыть доску ресурсных контрактов"
     override val defaultUsage =
-        "/arc contracts [status|submit <id> <количество>|donate <этап> <сумма>|pass <данж>|launch <данж>|trophy <количество>]"
+        "/arc contracts [status|open <группа>|submit <id> <количество>|donate <этап> <сумма>|pass <данж>|launch <данж>|trophy <количество>]"
     override val defaultPlayerOnly = false
 
     override fun isAvailable(): Boolean = ContractsManager.mode() != ContractsMode.DISABLED
@@ -41,6 +42,7 @@ object ContractsSubCommand : SubCommand {
         val action = args.firstOrNull()?.lowercase() ?: "status"
         when (action) {
             "status", "list" -> showBoard(sender)
+            "open", "menu", "меню" -> openBoard(sender, args)
             "submit", "сдать" -> submit(sender, args)
             "donate", "вклад" -> donateCash(sender, args)
             "pass", "пропуск" -> buyPass(sender, args)
@@ -53,9 +55,10 @@ object ContractsSubCommand : SubCommand {
 
     override fun tabComplete(sender: CommandSender, args: Array<String>): List<String>? =
         when (args.size) {
-            1 -> listOf("status", "submit", "donate", "pass", "launch", "trophy").tabComplete(args[0])
+            1 -> listOf("status", "open", "submit", "donate", "pass", "launch", "trophy").tabComplete(args[0])
             2 ->
                 when (args[0].lowercase()) {
+                    "open" -> ContractsManager.currentViews().map { it.group }.distinct().tabComplete(args[1])
                     "submit" -> ContractsManager.currentViews().map { it.id }.tabComplete(args[1])
                     "donate" -> ContractsManager.seasonProjectStageIds().tabComplete(args[1])
                     "pass", "launch" -> ContractsManager.seasonDungeonContractIds().tabComplete(args[1])
@@ -63,6 +66,20 @@ object ContractsSubCommand : SubCommand {
                 }
             else -> null
         }
+
+    private fun openBoard(sender: CommandSender, args: Array<String>) {
+        val player = sender as? Player
+        if (player == null) {
+            sender.sendMessage(TextUtil.mm("<red>Открыть книгу заказов может только игрок."))
+            return
+        }
+        val group = args.getOrNull(1)?.trim()?.lowercase()
+        if (group == null || ContractsManager.currentViews().none { it.group == group }) {
+            player.sendActionBar(TextUtil.mm("<yellow>Эта книга заказов сейчас пуста."))
+            return
+        }
+        NpcContractsGui.openList(player, group)
+    }
 
     private fun showBoard(sender: CommandSender) {
         val views = ContractsManager.currentViews()
@@ -326,6 +343,7 @@ object ContractsSubCommand : SubCommand {
             SubmissionRejection.PROJECT_STAGE_LOCKED -> "этот этап общего проекта ещё не открыт"
             SubmissionRejection.INVENTORY_UNAVAILABLE -> "нет нужного количества обычных предметов без модификаций"
             SubmissionRejection.JOURNAL_CAPACITY_REACHED -> "журнал заявок заполнен; нужна проверка администратора"
+            SubmissionRejection.SUBMISSION_IN_PROGRESS -> "предыдущая сдача ещё обрабатывается"
         }
 
     private fun money(minor: Long): String = "${minor / 100}.${(minor % 100).toString().padStart(2, '0')}"

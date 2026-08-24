@@ -329,6 +329,7 @@ open class ARC : JavaPlugin() {
                 "config/commands.yml",
                 "guis/defaults.yml",
                 "guis/board.yml",
+                "guis/contracts.yml",
                 "guis/scheduled-commands.yml",
             )
 

@@ -40,6 +40,7 @@ class ContractsConfigTest : StringSpec({
             orders:
               road_stone:
                 enabled: true
+                group: forge_orders
                 kind: resource
                 display-name: "Камень для тракта"
                 item: STONE
@@ -65,6 +66,7 @@ class ContractsConfigTest : StringSpec({
         order.payoutMinorPerUnit shouldBe 250L
         order.budgetMinor shouldBe 5_000_000L
         order.targetQuantity shouldBe 20_000L
+        order.group shouldBe "forge_orders"
     }
 
     "rejects aggregate order budgets above the network envelope" {

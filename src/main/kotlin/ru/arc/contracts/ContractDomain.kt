@@ -44,6 +44,7 @@ data class ResourceContractDefinition(
     val minSubmissionQuantity: Int = 1,
     val maxSubmissionQuantity: Int = 2_304,
     val kind: ContractKind = ContractKind.RESOURCE,
+    val group: String = DEFAULT_GROUP,
 ) {
     init {
         require(ID_PATTERN.matches(id)) { "Invalid contract id: $id" }
@@ -55,6 +56,7 @@ data class ResourceContractDefinition(
         require(itemKey.length <= MAX_ITEM_KEY_LENGTH && ITEM_KEY_PATTERN.matches(itemKey)) {
             "Invalid namespaced contract itemKey: $itemKey"
         }
+        require(GROUP_PATTERN.matches(group)) { "Invalid contract group: $group" }
         require(windowStartsAt >= 0L) { "Contract windowStartsAt must be non-negative" }
         require(windowEndsAt > windowStartsAt) { "Contract window must be positive" }
         require(payoutMinorPerUnit > 0L) { "Contract payout must be positive" }
@@ -79,10 +81,12 @@ data class ResourceContractDefinition(
 
     companion object {
         private val ID_PATTERN = Regex("[a-z0-9][a-z0-9_-]{2,47}")
+        private val GROUP_PATTERN = Regex("[a-z0-9][a-z0-9_-]{2,47}")
         private val ITEM_KEY_PATTERN = Regex("[a-z0-9_.-]+:[a-z0-9_./-]+")
         private const val MAX_DISPLAY_NAME_LENGTH = 96
         private const val MAX_ITEM_KEY_LENGTH = 128
         private const val MAX_SUBMISSION_QUANTITY = 2_304
+        const val DEFAULT_GROUP = "general"
 
         fun normalizeItemKey(raw: String): String {
             val normalized = raw.trim().lowercase(Locale.ROOT)
@@ -255,6 +259,7 @@ enum class SubmissionRejection(val label: String) {
     PROJECT_STAGE_LOCKED("project_stage_locked"),
     INVENTORY_UNAVAILABLE("inventory_unavailable"),
     JOURNAL_CAPACITY_REACHED("journal_capacity_reached"),
+    SUBMISSION_IN_PROGRESS("submission_in_progress"),
 }
 
 sealed interface ContractSubmissionPlan {

@@ -9,7 +9,7 @@ commands:
     aliases: [заказы]
     permission: ''
     player-only: false
-    usage: /arc contracts [status|submit <id> <количество>]
+    usage: /arc contracts [status|open <группа>|submit <id> <количество>]
   help:
     name: help
     aliases: [ ]

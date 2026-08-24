@@ -80,6 +80,19 @@ class PaperContractSubmissionGatewaysTest : StringSpec({
         }
     }
 
+    "counts only plain matching stacks for a contract menu" {
+        val player = server.addPlayer("CountingMiner")
+        player.inventory.setItem(0, ItemStack(Material.RAW_IRON, 32))
+        player.inventory.setItem(1, ItemStack(Material.RAW_IRON, 7))
+        val named = ItemStack(Material.RAW_IRON, 64)
+        named.itemMeta = named.itemMeta.also { it.displayName(Component.text("Отмеченная руда")) }
+        player.inventory.setItem(2, named)
+        player.inventory.setItem(3, ItemStack(Material.COAL, 64))
+
+        PaperContractItems.countPlain(player, "minecraft:raw_iron") shouldBe 39
+        PaperContractItems.countPlain(player, "slimefun:raw_iron") shouldBe 0
+    }
+
     "uses RedisEconomy 4_5_12 reason API and returns exact balance evidence" {
         runTest {
             val playerId = java.util.UUID.randomUUID()

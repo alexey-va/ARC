@@ -30,13 +30,15 @@ class PaperContractInventoryGateway(
         onBukkitMain {
             val uuid = runCatching { UUID.fromString(playerId) }.getOrNull() ?: return@onBukkitMain null
             val player = playerLookup(uuid)?.takeIf { it.isOnline } ?: return@onBukkitMain null
-            val material = vanillaMaterial(itemKey) ?: return@onBukkitMain null
+            val material = PaperContractItems.material(itemKey) ?: return@onBukkitMain null
             require(quantity in 1..EscrowedItemPayload.MAX_ITEM_QUANTITY) { "Invalid contract inventory quantity" }
 
             var remaining = quantity
             val slots = mutableListOf<PaperContractSlotPlan>()
             player.inventory.storageContents.forEachIndexed { slot, stack ->
-                if (remaining == 0 || stack == null || !isPlainExact(stack, material, itemKey)) return@forEachIndexed
+                if (remaining == 0 || stack == null || !PaperContractItems.isPlainExact(stack, material, itemKey)) {
+                    return@forEachIndexed
+                }
                 val take = minOf(stack.amount, remaining)
                 val removed = stack.clone().also { it.amount = take }
                 slots +=
@@ -52,16 +54,29 @@ class PaperContractInventoryGateway(
             PaperPreparedContractInventory(uuid, playerLookup, slots)
         }
 
-    private fun vanillaMaterial(itemKey: String): Material? {
+}
+
+internal object PaperContractItems {
+    fun material(itemKey: String): Material? {
         if (!itemKey.startsWith("minecraft:")) return null
         val material = Material.matchMaterial(itemKey.substringAfter(':')) ?: return null
         return material.takeIf { it.isItem && !it.isAir }
     }
 
-    private fun isPlainExact(stack: ItemStack, material: Material, itemKey: String): Boolean =
+    fun isPlainExact(stack: ItemStack, material: Material, itemKey: String): Boolean =
         stack.type == material &&
             stack.type.key.toString() == itemKey &&
             stack.isSimilar(ItemStack(material, stack.amount))
+
+    fun countPlain(player: Player, itemKey: String): Int {
+        check(Bukkit.isPrimaryThread()) { "Contract inventory count must run on the Bukkit main thread" }
+        val material = material(itemKey) ?: return 0
+        return player.inventory.storageContents
+            .asSequence()
+            .filterNotNull()
+            .filter { isPlainExact(it, material, itemKey) }
+            .sumOf(ItemStack::getAmount)
+    }
 }
 
 private data class PaperContractSlotPlan(

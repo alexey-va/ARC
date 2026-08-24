@@ -20,6 +20,7 @@ import ru.arc.util.Logging.info
 import ru.arc.util.Logging.error
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentHashMap
 import java.util.UUID
 import kotlin.time.Duration.Companion.seconds
 
@@ -57,6 +58,17 @@ data class ResourceContractView(
     val reservedQuantity: Long,
     val remainingQuantity: Long,
     val contributors: Int,
+    val group: String = ResourceContractDefinition.DEFAULT_GROUP,
+)
+
+data class ResourceContractPlayerView(
+    val contract: ResourceContractView,
+    val minSubmissionQuantity: Int,
+    val maxSubmissionQuantity: Int,
+    val perPlayerQuantityCap: Long,
+    val playerAcceptedQuantity: Long,
+    val playerReservedQuantity: Long,
+    val playerRemainingQuantity: Long,
 )
 
 sealed interface SeasonDungeonLaunchPreparationOutcome {
@@ -76,23 +88,23 @@ enum class SeasonDungeonInstanceDecision {
 /**
  * Runtime owner for the bounded contract catalog and network-persisted state.
  * Mutating submissions remain disabled unless policy mode is explicitly
- * `enforce`; the initial production config uses `observe` with no prices.
+ * `enforce`; each active NPC board filters this catalog by a validated group.
  */
 object ContractsManager {
-    // RedisEconomy 4.5.12 updates the balance before asynchronously recording
-    // transaction history and exposes no idempotency key. The durable journal
-    // now halts ambiguous crash windows and the disabled coordinator implements
-    // durable-before-side-effect ordering. Bounded terminal retention and the
-    // authenticated operator reconciliation state machine are implemented;
-    // production crash injection and control-plane smoke are still required.
-    // Season money now has its own authenticated, replay-safe reconciliation.
+    // RedisEconomy 4.5.12 exposes no idempotency key. Resource submissions use
+    // durable-before-side-effect journaling, exact inventory escrow, bounded
+    // terminal retention and authenticated manual reconciliation. Ambiguous
+    // provider or inventory outcomes halt without retrying the valuable effect.
+    // Season money has a separate authenticated, replay-safe reconciliation.
     // The bound-item contribution journal, transfer guards, EliteMobs
     // pre-start admission guard and durable money-plus-bound-trophy reward
     // delivery are implemented. Season mutations remain gated until production
     // crash injection, manual reward reconciliation and control-plane smoke
     // cover the final operational boundary.
-    // No config value may unlock inventory or money mutations before that gate.
-    private const val SUBMISSION_RUNTIME_READY = false
+    // Resource submissions completed their durable journal, exact-inventory,
+    // provider-evidence, restart-recovery and authenticated reconciliation
+    // gates. Season mutations remain independently disabled below.
+    private const val SUBMISSION_RUNTIME_READY = true
     private const val SEASON_MUTATION_RUNTIME_READY = false
 
     private val configRef = AtomicReference<ContractsConfig>()
@@ -102,6 +114,7 @@ object ContractsManager {
     private var journalScope: CoroutineScope? = null
     private var submissionScope: CoroutineScope? = null
     private var submissionCoordinator: ContractSubmissionCoordinator? = null
+    private val submissionsInFlight = ConcurrentHashMap.newKeySet<UUID>()
     private var seasonScope: CoroutineScope? = null
     private var seasonRepositoryScope: CoroutineScope? = null
     private var seasonStateRepo: CachedRepository<SeasonRuntimeState>? = null
@@ -275,6 +288,7 @@ object ContractsManager {
         journalScope = null
         submissionScope = null
         submissionCoordinator = null
+        submissionsInFlight.clear()
         seasonScope = null
         seasonRepositoryScope = null
         seasonStateRepo = null
@@ -493,8 +507,14 @@ object ContractsManager {
         if (!submissionsEnabled() || currentScope == null || coordinator == null) {
             return result.apply { complete(ContractSubmissionOutcome.Unavailable(submissionId)) }
         }
+        if (!submissionsInFlight.add(playerId)) {
+            return result.apply {
+                complete(ContractSubmissionOutcome.Rejected(SubmissionRejection.SUBMISSION_IN_PROGRESS))
+            }
+        }
         val definition = configRef.get()?.resourceOrders()?.firstOrNull { it.id == contractId }
             ?: return result.apply {
+                submissionsInFlight.remove(playerId)
                 complete(ContractSubmissionOutcome.Rejected(SubmissionRejection.INVALID_REQUEST))
             }
         currentScope.launch {
@@ -536,6 +556,7 @@ object ContractsManager {
                 error("Contract submission {} stopped unexpectedly", submissionId, failure)
                 result.complete(ContractSubmissionOutcome.ManualReview(submissionId))
             } finally {
+                submissionsInFlight.remove(playerId)
                 publishMetrics()
             }
         }
@@ -780,11 +801,51 @@ object ContractsManager {
 
     @JvmStatic
     fun currentViews(now: Long = System.currentTimeMillis()): List<ResourceContractView> {
+        return currentRuntimeViews(now).map { it.view }
+    }
+
+    @JvmStatic
+    fun currentPlayerViews(
+        playerId: UUID,
+        group: String? = null,
+        now: Long = System.currentTimeMillis(),
+    ): List<ResourceContractPlayerView> =
+        currentRuntimeViews(now)
+            .asSequence()
+            .filter { group == null || it.definition.group == group }
+            .map { runtime ->
+                val playerKey = playerId.toString()
+                val accepted = runtime.state.perPlayerQuantity[playerKey] ?: 0L
+                val reserved =
+                    runtime.reservations.asSequence()
+                        .filter { it.playerId == playerKey }
+                        .fold(0L) { total, reservation -> Math.addExact(total, reservation.quantity) }
+                ResourceContractPlayerView(
+                    contract = runtime.view,
+                    minSubmissionQuantity = runtime.definition.minSubmissionQuantity,
+                    maxSubmissionQuantity = runtime.definition.maxSubmissionQuantity,
+                    perPlayerQuantityCap = runtime.definition.perPlayerQuantityCap,
+                    playerAcceptedQuantity = accepted,
+                    playerReservedQuantity = reserved,
+                    playerRemainingQuantity =
+                        (runtime.definition.perPlayerQuantityCap - accepted - reserved).coerceAtLeast(0L),
+                )
+            }.toList()
+
+    private data class RuntimeResourceContractView(
+        val definition: ResourceContractDefinition,
+        val state: ResourceContractState,
+        val reservations: List<ContractQuotaReservation>,
+        val view: ResourceContractView,
+    )
+
+    private fun currentRuntimeViews(now: Long): List<RuntimeResourceContractView> {
         val config = configRef.get() ?: return emptyList()
         val currentRepo = repo
         return config.resourceOrders().map { definition ->
-            val record = currentRepo?.getNow(ResourceContractRecord.stateId(definition.id, definition.windowStartsAt))
-                ?: ResourceContractRecord.empty(definition)
+            val record =
+                currentRepo?.getNow(ResourceContractRecord.stateId(definition.id, definition.windowStartsAt))
+                    ?: ResourceContractRecord.empty(definition)
             val state = record.validatedAgainst(definition).state
             val reservations = activeReservations(definition, state)
             val reservedQuantity = reservations.fold(0L) { total, reservation -> Math.addExact(total, reservation.quantity) }
@@ -795,25 +856,28 @@ object ContractsManager {
                     !definition.isOpenAt(now) && state.status == ContractStatus.OPEN -> ContractStatus.PAUSED
                     else -> state.status
                 }
-            ResourceContractView(
-                id = definition.id,
-                displayName = definition.displayName,
-                itemKey = definition.itemKey,
-                funding = definition.funding.label,
-                status = effectiveStatus.label,
-                windowStartsAt = definition.windowStartsAt,
-                windowEndsAt = definition.windowEndsAt,
-                payoutMinorPerUnit = definition.payoutMinorPerUnit,
-                budgetMinor = definition.budgetMinor,
-                spentMinor = state.spentMinor,
-                reservedMinor = reservedMinor,
-                targetQuantity = definition.targetQuantity,
-                acceptedQuantity = state.acceptedQuantity,
-                reservedQuantity = reservedQuantity,
-                remainingQuantity =
-                    (definition.targetQuantity - state.acceptedQuantity - reservedQuantity).coerceAtLeast(0L),
-                contributors = (state.perPlayerQuantity.keys + reservations.map { it.playerId }).size,
-            )
+            val view =
+                ResourceContractView(
+                    id = definition.id,
+                    displayName = definition.displayName,
+                    itemKey = definition.itemKey,
+                    funding = definition.funding.label,
+                    status = effectiveStatus.label,
+                    windowStartsAt = definition.windowStartsAt,
+                    windowEndsAt = definition.windowEndsAt,
+                    payoutMinorPerUnit = definition.payoutMinorPerUnit,
+                    budgetMinor = definition.budgetMinor,
+                    spentMinor = state.spentMinor,
+                    reservedMinor = reservedMinor,
+                    targetQuantity = definition.targetQuantity,
+                    acceptedQuantity = state.acceptedQuantity,
+                    reservedQuantity = reservedQuantity,
+                    remainingQuantity =
+                        (definition.targetQuantity - state.acceptedQuantity - reservedQuantity).coerceAtLeast(0L),
+                    contributors = (state.perPlayerQuantity.keys + reservations.map { it.playerId }).size,
+                    group = definition.group,
+                )
+            RuntimeResourceContractView(definition, state, reservations, view)
         }
     }
 

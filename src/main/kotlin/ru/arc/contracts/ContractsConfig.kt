@@ -200,6 +200,11 @@ open class ContractsConfig(
                     minSubmissionQuantity = config.integer("$root.min-submission-quantity", 1),
                     maxSubmissionQuantity = config.integer("$root.max-submission-quantity", 2_304),
                     kind = kind,
+                    group =
+                        normalizedId(
+                            config.string("$root.group", ResourceContractDefinition.DEFAULT_GROUP),
+                            "$root.group",
+                        ),
                 ).also { definition ->
                     require(definition.perPlayerQuantityCap <= definition.targetQuantity) {
                         "Contract '$id' per-player cap exceeds target quantity"
