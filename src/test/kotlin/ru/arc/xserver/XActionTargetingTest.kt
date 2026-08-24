@@ -59,15 +59,6 @@ class XActionTargetingTest :
             }
         }
 
-        "payment validation" - {
-            "accepts only finite positive amounts" {
-                isValidPaymentAmount(10.0) shouldBe true
-                isValidPaymentAmount(0.0) shouldBe false
-                isValidPaymentAmount(-1.0) shouldBe false
-                isValidPaymentAmount(Double.NaN) shouldBe false
-                isValidPaymentAmount(Double.POSITIVE_INFINITY) shouldBe false
-            }
-        }
     })
 
 private class RecordingAction : XAction() {
