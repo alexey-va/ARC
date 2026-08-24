@@ -17,6 +17,7 @@ object AdminEconomyCommandTracker {
         val amount: Double,
         val actor: String,
         val action: String,
+        val currency: String,
         val source: EconomySource,
         val origin: String,
         val correlationId: String,
@@ -41,11 +42,19 @@ object AdminEconomyCommandTracker {
         return true
     }
 
-    fun consumeDelta(player: String, amount: Double, now: Long = System.currentTimeMillis()): Pending? =
-        consume(player, Kind.DELTA, amount, now)
+    fun consumeDelta(
+        player: String,
+        amount: Double,
+        now: Long = System.currentTimeMillis(),
+        currency: String = "vault",
+    ): Pending? = consume(player, Kind.DELTA, amount, currency, now)
 
-    fun consumeSet(player: String, absoluteBalance: Double, now: Long = System.currentTimeMillis()): Pending? =
-        consume(player, Kind.SET, absoluteBalance, now)
+    fun consumeSet(
+        player: String,
+        absoluteBalance: Double,
+        now: Long = System.currentTimeMillis(),
+        currency: String = "vault",
+    ): Pending? = consume(player, Kind.SET, absoluteBalance, currency, now)
 
     internal fun clear() = pending.clear()
 
@@ -59,14 +68,15 @@ object AdminEconomyCommandTracker {
         val command = args.firstOrNull()?.removePrefix("/")?.lowercase(Locale.ROOT) ?: return null
         val parsed =
             when {
-                command == "money" && args.size == 5 && args[2].equals("vault", ignoreCase = true) ->
-                    Triple(args[1], args[3], args[4])
+                command == "money" && args.size == 5 ->
+                    ParsedCommand(args[1], args[3], args[4], args[2])
                 command == "cmi" && args.size >= 5 && args[1].equals("money", ignoreCase = true) ->
-                    Triple(args[3], args[2], args[4])
+                    ParsedCommand(args[3], args[2], args[4], "vault")
                 else -> return null
             }
-        val rawAmount = parsed.third.toDoubleOrNull()?.takeIf(Double::isFinite) ?: return null
-        val action = parsed.second.lowercase(Locale.ROOT)
+        val rawAmount = parsed.amount.toDoubleOrNull()?.takeIf(Double::isFinite) ?: return null
+        val action = parsed.action.lowercase(Locale.ROOT)
+        val currency = parsed.currency.lowercase(Locale.ROOT).takeIf { it.matches(CURRENCY_PATTERN) } ?: return null
         val kind = if (action == "set") Kind.SET else Kind.DELTA
         val signedAmount =
             when (action) {
@@ -74,12 +84,13 @@ object AdminEconomyCommandTracker {
                 "take" -> -rawAmount
                 else -> return null
             }
-        return parsed.first.lowercase(Locale.ROOT) to
+        return parsed.player.lowercase(Locale.ROOT) to
             Pending(
                 kind = kind,
                 amount = signedAmount,
                 actor = actor.take(80),
                 action = action,
+                currency = currency,
                 source = source,
                 origin = origin.take(240),
                 correlationId = UUID.randomUUID().toString(),
@@ -87,11 +98,16 @@ object AdminEconomyCommandTracker {
             )
     }
 
-    private fun consume(player: String, kind: Kind, amount: Double, now: Long): Pending? {
+    private fun consume(player: String, kind: Kind, amount: Double, currency: String, now: Long): Pending? {
         val key = player.lowercase(Locale.ROOT)
         val queue = pending[key] ?: return null
         queue.removeIf { it.expiresAt < now }
-        val match = queue.firstOrNull { it.kind == kind && approximatelyEqual(it.amount, amount) }
+        val match =
+            queue.firstOrNull {
+                it.kind == kind &&
+                    it.currency.equals(currency, ignoreCase = true) &&
+                    approximatelyEqual(it.amount, amount)
+            }
         if (match != null) queue.remove(match)
         if (queue.isEmpty()) pending.remove(key, queue)
         return match
@@ -110,6 +126,14 @@ object AdminEconomyCommandTracker {
     private const val TTL_MILLIS = 5_000L
     private const val CLEANUP_INTERVAL = 256L
     private const val MAX_PENDING_PER_PLAYER = 16
+    private val CURRENCY_PATTERN = Regex("[a-z0-9_-]{1,64}")
+
+    private data class ParsedCommand(
+        val player: String,
+        val action: String,
+        val amount: String,
+        val currency: String,
+    )
 }
 
 internal data class EconomyCommandOrigin(

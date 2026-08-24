@@ -44,7 +44,7 @@ class RedisEcoListener : Listener {
         }
 
         if (baseReason.equals("Set balance", ignoreCase = true)) {
-            if (AdminEconomyCommandTracker.consumeSet(playerName, amount) == null) {
+            if (AdminEconomyCommandTracker.consumeSet(playerName, amount, currency = transaction.currencyName) == null) {
                 val metadata =
                     EconomyAttributionResolver.resolve(transaction.reason, amount, transaction.currencyName, ARC.serverName).metadata
                 AuditManager.unresolvedBalanceSet(
@@ -69,7 +69,7 @@ class RedisEcoListener : Listener {
         }
         if (amount == 0.0) return
 
-        val adminCommand = AdminEconomyCommandTracker.consumeDelta(playerName, amount)
+        val adminCommand = AdminEconomyCommandTracker.consumeDelta(playerName, amount, currency = transaction.currencyName)
         val resolved =
             EconomyAttributionResolver.resolve(
                 rawReason = transaction.reason,

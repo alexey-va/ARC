@@ -2,6 +2,7 @@ package ru.arc.listeners
 
 internal const val LEGACY_MONEY_ALIAS_ENABLED_PATH = "economy.legacy-money-alias.enabled"
 internal const val LEGACY_MONEY_ADMIN_PERMISSION = "rediseconomy.admin"
+internal const val LEGACY_MONEY_DEFAULT_CURRENCY = "vault"
 
 internal enum class LegacyMoneyAction(val token: String) {
     GIVE("give"),
@@ -21,6 +22,7 @@ internal enum class LegacyMoneyCommandError {
     USAGE,
     INVALID_TARGET,
     INVALID_AMOUNT,
+    INVALID_CURRENCY,
     NEGATIVE_AMOUNT,
     GIVE_ALL_REQUIRES_GIVE,
 }
@@ -37,12 +39,14 @@ internal data class LegacyMoneyCommand(
     val action: LegacyMoneyAction,
     val target: String,
     val amount: Double,
+    val currency: String = LEGACY_MONEY_DEFAULT_CURRENCY,
 ) {
     val canonical: String
-        get() = "money $target vault ${action.token} $amount"
+        get() = "money $target $currency ${action.token} $amount"
 }
 
 private val playerNamePattern = Regex("\\.?[A-Za-z0-9_]{1,16}")
+private val currencyNamePattern = Regex("[A-Za-z0-9_-]{1,64}")
 private val commandWhitespace = Regex("\\s+")
 private val amountExamples = listOf("100", "1000", "10000")
 
@@ -52,12 +56,15 @@ internal fun tokenizeCommand(commandLine: String): List<String> {
     return normalized.split(commandWhitespace)
 }
 
-internal fun parseLegacyMoneyCommand(commandLine: String): LegacyMoneyCommandResult {
+internal fun parseLegacyMoneyCommand(
+    commandLine: String,
+    currencyNames: Collection<String> = listOf(LEGACY_MONEY_DEFAULT_CURRENCY),
+): LegacyMoneyCommandResult {
     val args = tokenizeCommand(commandLine)
     if (!args.firstOrNull().isMoneyRoot()) return LegacyMoneyCommandResult.NotLegacy
 
     val action = LegacyMoneyAction.parse(args.getOrNull(1)) ?: return LegacyMoneyCommandResult.NotLegacy
-    if (args.size != 4) return LegacyMoneyCommandResult.Invalid(LegacyMoneyCommandError.USAGE)
+    if (args.size !in 4..5) return LegacyMoneyCommandResult.Invalid(LegacyMoneyCommandError.USAGE)
 
     val target = args[2]
     if (target == "*" && action != LegacyMoneyAction.GIVE) {
@@ -67,7 +74,21 @@ internal fun parseLegacyMoneyCommand(commandLine: String): LegacyMoneyCommandRes
         return LegacyMoneyCommandResult.Invalid(LegacyMoneyCommandError.INVALID_TARGET)
     }
 
-    val amount = args[3].toDoubleOrNull()
+    val currencies = normalizedCurrencyNames(currencyNames)
+    val (amountToken, currency) =
+        if (args.size == 4) {
+            args[3] to LEGACY_MONEY_DEFAULT_CURRENCY
+        } else {
+            val currencyBeforeAmount = currencies.resolve(args[3])
+            val currencyAfterAmount = currencies.resolve(args[4])
+            when {
+                currencyBeforeAmount != null -> args[4] to currencyBeforeAmount
+                currencyAfterAmount != null -> args[3] to currencyAfterAmount
+                else -> return LegacyMoneyCommandResult.Invalid(LegacyMoneyCommandError.INVALID_CURRENCY)
+            }
+        }
+
+    val amount = amountToken.toDoubleOrNull()
     if (amount == null || !amount.isFinite()) {
         return LegacyMoneyCommandResult.Invalid(LegacyMoneyCommandError.INVALID_AMOUNT)
     }
@@ -75,7 +96,7 @@ internal fun parseLegacyMoneyCommand(commandLine: String): LegacyMoneyCommandRes
         return LegacyMoneyCommandResult.Invalid(LegacyMoneyCommandError.NEGATIVE_AMOUNT)
     }
 
-    return LegacyMoneyCommandResult.Valid(LegacyMoneyCommand(action, target, amount))
+    return LegacyMoneyCommandResult.Valid(LegacyMoneyCommand(action, target, amount, currency))
 }
 
 /**
@@ -87,6 +108,7 @@ internal fun legacyMoneyCompletions(
     nativeCompletions: List<String>,
     playerNames: Collection<String>,
     allowGiveAll: Boolean,
+    currencyNames: Collection<String> = listOf(LEGACY_MONEY_DEFAULT_CURRENCY),
 ): List<String>? {
     val args = tokenizeCompletion(buffer)
     if (!args.firstOrNull().isMoneyRoot() || args.size == 1) return null
@@ -98,6 +120,7 @@ internal fun legacyMoneyCompletions(
     }
 
     val action = LegacyMoneyAction.parse(args[1]) ?: return null
+    val currencies = normalizedCurrencyNames(currencyNames)
     return when (args.size) {
         3 -> {
             val targets =
@@ -108,7 +131,17 @@ internal fun legacyMoneyCompletions(
             distinctCompletions(targets.filterByPrefix(args[2]))
         }
 
-        4 -> amountExamples.filterByPrefix(args[3])
+        4 -> distinctCompletions((currencies + amountExamples).filterByPrefix(args[3]))
+        5 -> {
+            val previous = args[3]
+            if (currencies.resolve(previous) != null) {
+                amountExamples.filterByPrefix(args[4])
+            } else if (previous.toDoubleOrNull()?.isFinite() == true) {
+                currencies.filterByPrefix(args[4])
+            } else {
+                emptyList()
+            }
+        }
         else -> emptyList()
     }
 }
@@ -126,6 +159,14 @@ private fun String?.isMoneyRoot(): Boolean = this?.removePrefix("/")?.equals("mo
 
 private fun Iterable<String>.filterByPrefix(prefix: String): List<String> =
     filter { it.startsWith(prefix, ignoreCase = true) }
+
+private fun normalizedCurrencyNames(currencyNames: Collection<String>): List<String> =
+    distinctCompletions(
+        listOf(LEGACY_MONEY_DEFAULT_CURRENCY) + currencyNames.filter(currencyNamePattern::matches),
+    )
+
+private fun Collection<String>.resolve(value: String): String? =
+    firstOrNull { it.equals(value, ignoreCase = true) }
 
 private fun distinctCompletions(values: Iterable<String>): List<String> =
     values.distinctBy(String::lowercase)

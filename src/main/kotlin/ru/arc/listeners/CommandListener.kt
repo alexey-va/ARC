@@ -1,5 +1,6 @@
 package ru.arc.listeners
 
+import dev.unnm3d.rediseconomy.api.RedisEconomyAPI
 import org.bukkit.command.ConsoleCommandSender
 import org.bukkit.entity.Player
 import org.bukkit.event.Cancellable
@@ -28,7 +29,6 @@ import ru.arc.audit.Type
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import ru.arc.core.Tasks
-import ru.arc.core.modules.EconomyModule
 import ru.arc.hooks.HookRegistry
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
@@ -41,6 +41,7 @@ import java.util.UUID
 class CommandListener internal constructor(
     private val commandConfig: Config = ConfigManager.of(ARC.instance.dataPath, "misc.yml"),
     private val networkPlayerNames: () -> Collection<String> = PlayerManager::getPlayerNames,
+    private val moneyCurrencyNames: () -> Collection<String> = ::activeRedisEconomyCurrencyNames,
 ) : Listener {
 
     private var suppressCanonicalSetAudit = false
@@ -96,6 +97,7 @@ class CommandListener internal constructor(
                 buffer = event.buffer,
                 nativeCompletions = event.completions,
                 playerNames = networkPlayerNames(),
+                currencyNames = moneyCurrencyNames(),
                 allowGiveAll = player.hasPermission("rediseconomy.admin.giveall"),
             ) ?: return
         event.completions = completions
@@ -103,7 +105,7 @@ class CommandListener internal constructor(
 
     private fun moneyCommand(player: Player, ev: Cancellable, commandLine: String) {
         if (!legacyMoneyAliasEnabled()) return
-        val result = parseLegacyMoneyCommand(commandLine)
+        val result = parseLegacyMoneyCommand(commandLine, moneyCurrencyNames())
         if (result == LegacyMoneyCommandResult.NotLegacy) return
 
         ev.isCancelled = true
@@ -122,18 +124,19 @@ class CommandListener internal constructor(
             return
         }
         try {
-            val before = balanceBeforeSet(command.action.token, command.target)
+            val before = balanceBeforeSet(command.action.token, command.target, command.currency)
             val dispatched = rerouteMoneyCommand { player.performCommand(command.canonical) }
             if (!dispatched) {
                 error("RedisEconomy rejected the rerouted legacy money command")
                 player.sendMessage(mm("<red>Не удалось выполнить команду экономики."))
                 return
             }
-            scheduleSetDelta(command.action.token, command.target, player.name, before)
+            scheduleSetDelta(command.action.token, command.target, command.currency, player.name, before)
             info(
-                "Rerouted legacy money command action={} target={} amount={}",
+                "Rerouted legacy money command action={} target={} currency={} amount={}",
                 command.action.token,
                 command.target,
+                command.currency,
                 command.amount,
             )
         } catch (e: Exception) {
@@ -144,7 +147,7 @@ class CommandListener internal constructor(
 
     private fun moneyCommandServer(ev: ServerCommandEvent, commandLine: String) {
         if (!legacyMoneyAliasEnabled()) return
-        val result = parseLegacyMoneyCommand(commandLine)
+        val result = parseLegacyMoneyCommand(commandLine, moneyCurrencyNames())
         if (result == LegacyMoneyCommandResult.NotLegacy) return
 
         ev.isCancelled = true
@@ -163,13 +166,14 @@ class CommandListener internal constructor(
             return
         }
         try {
-            val before = balanceBeforeSet(command.action.token, command.target)
+            val before = balanceBeforeSet(command.action.token, command.target, command.currency)
             rerouteMoneyCommand { ARC.trySeverCommand(command.canonical) }
-            scheduleSetDelta(command.action.token, command.target, "Server", before)
+            scheduleSetDelta(command.action.token, command.target, command.currency, "Server", before)
             info(
-                "Rerouted legacy server money command action={} target={} amount={}",
+                "Rerouted legacy server money command action={} target={} currency={} amount={}",
                 command.action.token,
                 command.target,
+                command.currency,
                 command.amount,
             )
         } catch (e: Exception) {
@@ -179,17 +183,16 @@ class CommandListener internal constructor(
 
     private fun legacyMoneyAliasEnabled(): Boolean = commandConfig.bool(LEGACY_MONEY_ALIAS_ENABLED_PATH, false)
 
-    private fun balanceBeforeSet(action: String, target: String): Double? {
+    private fun balanceBeforeSet(action: String, target: String, currency: String): Double? {
         if (!action.equals("set", ignoreCase = true)) return null
-        val economy = EconomyModule.getEconomy() ?: return null
-        return economy.getBalance(org.bukkit.Bukkit.getOfflinePlayer(target))
+        val playerId = org.bukkit.Bukkit.getOfflinePlayer(target).uniqueId
+        return HookRegistry.redisEcoHook?.getCachedBalance(playerId, currency)
     }
 
-    private fun auditSetDelta(action: String, target: String, actor: String, before: Double?) {
+    private fun auditSetDelta(action: String, target: String, currency: String, actor: String, before: Double?) {
         if (!action.equals("set", ignoreCase = true) || before == null) return
-        val economy = EconomyModule.getEconomy() ?: return
         val offlinePlayer = org.bukkit.Bukkit.getOfflinePlayer(target)
-        val after = economy.getBalance(offlinePlayer)
+        val after = HookRegistry.redisEcoHook?.getCachedBalance(offlinePlayer.uniqueId, currency) ?: return
         val delta = after - before
         if (delta == 0.0) return
         val targetId = offlinePlayer.uniqueId
@@ -211,6 +214,7 @@ class CommandListener internal constructor(
             AuditMetadata(
                 source = EconomySource.BALANCE_SET,
                 flow = EconomyFlow.ADJUSTMENT,
+                currency = currency,
                 server = ARC.serverName ?: "unknown",
                 origin = actor,
             ),
@@ -238,17 +242,17 @@ class CommandListener internal constructor(
         val command = args.firstOrNull()?.removePrefix("/")?.lowercase() ?: return
         val target =
             when {
-                command == "money" && args.size == 5 && args[2].equals("vault", ignoreCase = true) && args[3].equals("set", ignoreCase = true) -> args[1]
-                command == "cmi" && args.size == 5 && args[1].equals("money", ignoreCase = true) && args[2].equals("set", ignoreCase = true) -> args[3]
+                command == "money" && args.size == 5 && args[3].equals("set", ignoreCase = true) -> args[1] to args[2]
+                command == "cmi" && args.size == 5 && args[1].equals("money", ignoreCase = true) && args[2].equals("set", ignoreCase = true) -> args[3] to LEGACY_MONEY_DEFAULT_CURRENCY
                 else -> return
             }
-        val before = balanceBeforeSet("set", target) ?: return
-        scheduleSetDelta("set", target, actor, before)
+        val before = balanceBeforeSet("set", target.first, target.second) ?: return
+        scheduleSetDelta("set", target.first, target.second, actor, before)
     }
 
-    private fun scheduleSetDelta(action: String, target: String, actor: String, before: Double?) {
+    private fun scheduleSetDelta(action: String, target: String, currency: String, actor: String, before: Double?) {
         if (!action.equals("set", ignoreCase = true) || before == null) return
-        Tasks.scheduler.runLater(1) { auditSetDelta(action, target, actor, before) }
+        Tasks.scheduler.runLater(1) { auditSetDelta(action, target, currency, actor, before) }
     }
 
     private inline fun <T> rerouteMoneyCommand(block: () -> T): T {
@@ -263,11 +267,13 @@ class CommandListener internal constructor(
     private fun LegacyMoneyCommandError.playerMessage(): String =
         when (this) {
             LegacyMoneyCommandError.USAGE ->
-                "<red>Использование: <gray>/money <give|take|set> <игрок> <сумма>"
+                "<red>Использование: <gray>/money <give|take|set> <игрок> [валюта] <сумма>"
             LegacyMoneyCommandError.INVALID_TARGET ->
                 "<red>Укажите корректное имя игрока."
             LegacyMoneyCommandError.INVALID_AMOUNT ->
                 "<red>Сумма должна быть конечным числом."
+            LegacyMoneyCommandError.INVALID_CURRENCY ->
+                "<red>Укажите существующую валюту RedisEconomy."
             LegacyMoneyCommandError.NEGATIVE_AMOUNT ->
                 "<red>Сумма выдачи или списания не может быть отрицательной."
             LegacyMoneyCommandError.GIVE_ALL_REQUIRES_GIVE ->
@@ -301,3 +307,6 @@ class CommandListener internal constructor(
         ev.isCancelled = true
     }
 }
+
+private fun activeRedisEconomyCurrencyNames(): Collection<String> =
+    runCatching { RedisEconomyAPI.getAPI()?.currenciesWithNames?.keys.orEmpty() }.getOrDefault(emptyList())

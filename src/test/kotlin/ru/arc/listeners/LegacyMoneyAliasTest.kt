@@ -26,6 +26,33 @@ class LegacyMoneyAliasTest :
                     "money Player_1 vault give 100.0"
             }
 
+            "routes an explicit active currency in either compatible position" {
+                val currencies = listOf("vault", "tokens")
+
+                parseLegacyMoneyCommand("/money give Player_1 tokens 25", currencies) shouldBe
+                    LegacyMoneyCommandResult.Valid(
+                        LegacyMoneyCommand(LegacyMoneyAction.GIVE, "Player_1", 25.0, "tokens"),
+                    )
+                val amountFirst = parseLegacyMoneyCommand("/money give Player_1 25 tokens", currencies)
+                amountFirst shouldBe
+                    LegacyMoneyCommandResult.Valid(
+                        LegacyMoneyCommand(LegacyMoneyAction.GIVE, "Player_1", 25.0, "tokens"),
+                    )
+                (amountFirst as LegacyMoneyCommandResult.Valid).command.canonical shouldBe
+                    "money Player_1 tokens give 25.0"
+            }
+
+            "rejects an unknown currency before dispatch" {
+                parseLegacyMoneyCommand(
+                    "/money give Player_1 tokenz 25",
+                    listOf("vault", "tokens"),
+                ) shouldBe LegacyMoneyCommandResult.Invalid(LegacyMoneyCommandError.INVALID_CURRENCY)
+                parseLegacyMoneyCommand(
+                    "/money give Player_1 tokens;op 25",
+                    listOf("vault", "tokens"),
+                ) shouldBe LegacyMoneyCommandResult.Invalid(LegacyMoneyCommandError.INVALID_CURRENCY)
+            }
+
             "normalizes case, whitespace, and finite scientific notation" {
                 parseLegacyMoneyCommand("  MoNeY   TAKE   Player   1e3  ") shouldBe
                     LegacyMoneyCommandResult.Valid(
@@ -122,10 +149,38 @@ class LegacyMoneyAliasTest :
                     listOf("Alice")
             }
 
-            "suggests bounded amount examples and stops after the amount" {
-                legacyMoneyCompletions("/money take Alice 10", emptyList(), emptyList(), false) shouldContainExactly
+            "suggests active currencies and bounded amounts for both compatible orders" {
+                val currencies = listOf("vault", "tokens")
+
+                legacyMoneyCompletions(
+                    "/money take Alice ",
+                    emptyList(),
+                    emptyList(),
+                    false,
+                    currencies,
+                ) shouldContainExactly listOf("vault", "tokens", "100", "1000", "10000")
+                legacyMoneyCompletions(
+                    "/money take Alice 10",
+                    emptyList(),
+                    emptyList(),
+                    false,
+                    currencies,
+                ) shouldContainExactly
                     listOf("100", "1000", "10000")
-                legacyMoneyCompletions("/money take Alice 100 ", emptyList(), emptyList(), false)!!.shouldBeEmpty()
+                legacyMoneyCompletions(
+                    "/money take Alice tokens ",
+                    emptyList(),
+                    emptyList(),
+                    false,
+                    currencies,
+                ) shouldContainExactly listOf("100", "1000", "10000")
+                legacyMoneyCompletions(
+                    "/money take Alice 100 ",
+                    emptyList(),
+                    emptyList(),
+                    false,
+                    currencies,
+                ) shouldContainExactly listOf("vault", "tokens")
             }
 
             "listener preserves native completion while the feature flag is disabled" {
@@ -153,6 +208,15 @@ class LegacyMoneyAliasTest :
                 listener(enabled = true).onTabComplete(event)
 
                 event.completions shouldContainExactly listOf("give", "take", "set")
+            }
+
+            "listener publishes the live token currency after a legacy target" {
+                val player = player(admin = true)
+                val event = TabCompleteEvent(player, "/money give Alice t", emptyList())
+
+                listener(enabled = true).onTabComplete(event)
+
+                event.completions shouldContainExactly listOf("tokens")
             }
         }
 
@@ -188,6 +252,17 @@ class LegacyMoneyAliasTest :
                 verify(exactly = 1) { player.performCommand("money Alice vault give 100.0") }
             }
 
+            "dispatches an explicit active currency through the canonical grammar" {
+                val player = player(admin = true)
+                every { player.performCommand(any()) } returns true
+                val event = PlayerCommandPreprocessEvent(player, "/money give Alice tokens 25")
+
+                listener(enabled = true).onPlayerCommand(event)
+
+                event.isCancelled shouldBe true
+                verify(exactly = 1) { player.performCommand("money Alice tokens give 25.0") }
+            }
+
             "rejects give-all before dispatch without its dedicated permission" {
                 val player = player(admin = true, giveAll = false)
                 val event = PlayerCommandPreprocessEvent(player, "/money give * 100")
@@ -213,7 +288,7 @@ class LegacyMoneyAliasTest :
 private fun listener(enabled: Boolean): CommandListener {
     val config = mockk<Config>()
     every { config.bool(LEGACY_MONEY_ALIAS_ENABLED_PATH, false) } returns enabled
-    return CommandListener(config) { listOf("Alice") }
+    return CommandListener(config, { listOf("Alice") }, { listOf("vault", "tokens") })
 }
 
 private fun player(admin: Boolean, giveAll: Boolean = false): Player {

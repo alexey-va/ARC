@@ -21,7 +21,7 @@ paths:
 # --- Совместимость старых интеграций с RedisEconomy ---
 economy:
   legacy-money-alias:
-    # /money give|take|set <игрок> <сумма> -> нативная команда RedisEconomy.
+    # /money give|take|set <игрок> [валюта] <сумма> -> нативная команда RedisEconomy.
     # Отключено по умолчанию; включайте только пока есть старые Quest/GUI/скрипты.
     enabled: false
 

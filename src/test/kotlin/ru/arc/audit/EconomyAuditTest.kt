@@ -471,6 +471,10 @@ class EconomyAuditTest : FreeSpec({
 
             AdminEconomyCommandTracker.track(listOf("money", "Player", "vault", "set", "500"), "Admin", 3_000) shouldBe true
             AdminEconomyCommandTracker.consumeSet("Player", 500.0, 3_001)?.kind shouldBe AdminEconomyCommandTracker.Kind.SET
+
+            AdminEconomyCommandTracker.track(listOf("money", "Player", "tokens", "give", "10"), "Admin", 4_000) shouldBe true
+            AdminEconomyCommandTracker.consumeDelta("Player", 10.0, 4_001, currency = "vault") shouldBe null
+            AdminEconomyCommandTracker.consumeDelta("Player", 10.0, 4_002, currency = "tokens")?.currency shouldBe "tokens"
             AdminEconomyCommandTracker.clear()
         }
     }
