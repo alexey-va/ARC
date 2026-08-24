@@ -136,18 +136,21 @@ class ItemsCatalogGuiController(
     private fun rootEntries(
         player: Player,
         snapshot: ItemsCatalogSnapshot,
-    ): List<RootEntry> =
-        buildList {
-            if (settings.showAll && player.canSee(settings.allPermission) && snapshot.registryItemIds.isNotEmpty()) {
-                add(RootEntry.All)
-            }
+    ): List<RootEntry> {
+        val groups =
             snapshot.groups
                 .filter { group -> group.categories.any { player.canSee(it.permissions) } }
-                .forEach { add(RootEntry.Group(it)) }
+                .map(RootEntry::Group)
+        val categories =
             snapshot.ungroupedCategories
                 .filter { player.canSee(it.permissions) }
-                .forEach { add(RootEntry.Category(it)) }
-        }
+                .map(RootEntry::Category)
+        val all =
+            RootEntry.All.takeIf {
+                settings.showAll && player.canSee(settings.allPermission) && snapshot.registryItemIds.isNotEmpty()
+            }
+        return catalogRootOrder(groups, categories, all)
+    }
 
     private fun rootEntryItem(
         player: Player,

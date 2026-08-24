@@ -36,8 +36,49 @@ groups:
       - "stones"
       - "branches"
 
-  gui-icons:
+  sets:
     order: 20
+    name: "Сеты"
+    description:
+      - "Тематические комплекты брони и оружия."
+    icon:
+      material: NETHERITE_CHESTPLATE
+      customModelData: 0
+    categories:
+      - "*set*"
+      - "autumn_festival"
+      - "darkworldpack"
+      - "dreadknight"
+      - "halloween23"
+      - "vinland_animated_weapon"
+      - "vladimir_pack"
+      - "voxelspawns_lich"
+      - "voxelspawns_thorns"
+
+  food:
+    order: 30
+    name: "Еда"
+    description:
+      - "Блюда, напитки, продукты и ингредиенты."
+    icon:
+      material: BREAD
+      customModelData: 0
+    categories:
+      - "ff_*"
+
+  alchemy:
+    order: 40
+    name: "Алхимия"
+    description:
+      - "Алхимические материалы и зелья."
+    icon:
+      material: BREWING_STAND
+      customModelData: 0
+    categories:
+      - "al_*"
+
+  gui-icons:
+    order: 50
     name: "Иконки интерфейса"
     description:
       - "Кнопки, маркеры и служебная графика GUI."
@@ -46,12 +87,24 @@ groups:
       customModelData: 0
     categories:
       - "arc_icons"
-      - "arc_other"
       - "mcicons_catalog"
       - "boxpixstudio_icons"
       - "mccomputericons_numbers"
       - "advancedenchantments_controls"
       - "spectra_shopgui_plus"
+
+  technical:
+    order: 60
+    name: "Техническое"
+    description:
+      - "Служебные предметы, подсказки и заготовки."
+    icon:
+      material: REDSTONE
+      customModelData: 0
+    categories:
+      - "generic_items"
+      - "arc_other"
+      - "lztooltips_items"
 
 gui:
   root-title: "<dark_gray><bold>Каталог предметов"

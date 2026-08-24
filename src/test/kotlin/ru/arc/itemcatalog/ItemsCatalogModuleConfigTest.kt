@@ -14,9 +14,14 @@ class ItemsCatalogModuleConfigTest : StringSpec({
             val settings = ItemsCatalogModuleConfig.load(root).snapshot()
 
             settings.enabled shouldBe false
-            settings.groups.map { it.id } shouldContainExactly listOf("furniture", "gui-icons")
+            settings.groups.map { it.id } shouldContainExactly
+                listOf("furniture", "sets", "food", "alchemy", "gui-icons", "technical")
             settings.groups.first().categoryPatterns.toSet().contains("*furniture*") shouldBe true
-            settings.groups.last().categoryPatterns.toSet().contains("arc_icons") shouldBe true
+            settings.groups.single { it.id == "sets" }.categoryPatterns.toSet().contains("*set*") shouldBe true
+            settings.groups.single { it.id == "food" }.categoryPatterns.toSet().contains("ff_*") shouldBe true
+            settings.groups.single { it.id == "alchemy" }.categoryPatterns.toSet().contains("al_*") shouldBe true
+            settings.groups.single { it.id == "gui-icons" }.categoryPatterns.toSet().contains("arc_icons") shouldBe true
+            settings.groups.last().categoryPatterns.toSet().contains("generic_items") shouldBe true
             settings.allPermission shouldBe "arc.items-catalog.all"
             settings.allIcon.customModelData shouldBe 0
             settings.categoryFallbackIcon.customModelData shouldBe 0
@@ -50,13 +55,17 @@ class ItemsCatalogModuleConfigTest : StringSpec({
         }
     }
 
-    "curated rules include every current furniture and GUI category family" {
+    "curated rules include every current grouped category family" {
         val root = Files.createTempDirectory("arc-items-catalog-current-groups")
         try {
             ConfigManager.clear()
             val settings = ItemsCatalogModuleConfig.load(root).snapshot()
             val furniture = settings.groups.single { it.id == "furniture" }.categoryPatterns
+            val sets = settings.groups.single { it.id == "sets" }.categoryPatterns
+            val food = settings.groups.single { it.id == "food" }.categoryPatterns
+            val alchemy = settings.groups.single { it.id == "alchemy" }.categoryPatterns
             val gui = settings.groups.single { it.id == "gui-icons" }.categoryPatterns
+            val technical = settings.groups.single { it.id == "technical" }.categoryPatterns
             val currentFurniture =
                 setOf(
                     "fu_casino_decoration_v1",
@@ -85,16 +94,65 @@ class ItemsCatalogModuleConfigTest : StringSpec({
             val currentGui =
                 setOf(
                     "arc_icons",
-                    "arc_other",
                     "mcicons_catalog",
                     "boxpixstudio_icons",
                     "mccomputericons_numbers",
                     "advancedenchantments_controls",
                     "spectra_shopgui_plus",
                 )
+            val currentSets =
+                setOf(
+                    "akiraset",
+                    "autumn_festival",
+                    "bear_set",
+                    "bloody_emperor_animated_weapon_set",
+                    "bonekeeper_set",
+                    "darkworldpack",
+                    "deceaseset",
+                    "discordnitroset",
+                    "dragonsoulset",
+                    "dreadknight",
+                    "easterbunny_animated_weapon_set",
+                    "ender_eye_set",
+                    "fallenset",
+                    "fiendskullset",
+                    "galaxy_set",
+                    "halloween23",
+                    "karozset",
+                    "littlecatset",
+                    "malikaset",
+                    "shogunset",
+                    "sweetheartset",
+                    "thunderboltset",
+                    "valerieset",
+                    "vinland_animated_weapon",
+                    "vladimir_pack",
+                    "voxelspawns_lich",
+                    "voxelspawns_thorns",
+                    "xmasset",
+                )
+            val currentFood =
+                setOf(
+                    "ff_baked",
+                    "ff_beverages",
+                    "ff_cookedfood",
+                    "ff_cupscontainers",
+                    "ff_deserts",
+                    "ff_farming",
+                    "ff_fruitvegi",
+                    "ff_ingredients",
+                    "ff_packaging",
+                    "ff_rawfood",
+                )
+            val currentAlchemy = setOf("al_alchemy_items", "al_potions", "al_splash_potions")
+            val currentTechnical = setOf("generic_items", "arc_other", "lztooltips_items")
 
             currentFurniture.all { id -> furniture.any { ItemsCatalogPlanner.matchesPattern(it, id) } } shouldBe true
+            currentSets.all { id -> sets.any { ItemsCatalogPlanner.matchesPattern(it, id) } } shouldBe true
+            currentFood.all { id -> food.any { ItemsCatalogPlanner.matchesPattern(it, id) } } shouldBe true
+            currentAlchemy.all { id -> alchemy.any { ItemsCatalogPlanner.matchesPattern(it, id) } } shouldBe true
             currentGui.all { id -> gui.any { ItemsCatalogPlanner.matchesPattern(it, id) } } shouldBe true
+            currentTechnical.all { id -> technical.any { ItemsCatalogPlanner.matchesPattern(it, id) } } shouldBe true
         } finally {
             ConfigManager.clear()
             root.toFile().deleteRecursively()

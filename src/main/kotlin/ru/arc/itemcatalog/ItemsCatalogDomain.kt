@@ -67,6 +67,17 @@ data class CatalogPage<T>(
     val entries: List<T>,
 )
 
+internal fun <T> catalogRootOrder(
+    groups: List<T>,
+    categories: List<T>,
+    all: T?,
+): List<T> =
+    buildList {
+        addAll(groups)
+        addAll(categories)
+        all?.let(::add)
+    }
+
 internal fun <T> catalogPage(
     entries: List<T>,
     requestedPage: Int,

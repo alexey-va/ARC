@@ -6,6 +6,14 @@ import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
 
 class ItemsCatalogPlannerTest : StringSpec({
+    "places the complete registry after groups and individual categories" {
+        catalogRootOrder(
+            groups = listOf("furniture", "sets"),
+            categories = listOf("weapons", "vehicles"),
+            all = "all",
+        ) shouldContainExactly listOf("furniture", "sets", "weapons", "vehicles", "all")
+    }
+
     "keeps 45 entries on the first page and clamps later pages" {
         val entries = (1..46).toList()
 
