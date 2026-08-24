@@ -172,7 +172,11 @@ class ChatListener internal constructor(
         val senderIndex = visible.indexOf(senderName)
         val prefixArea =
             if (senderIndex >= 0) visible.substring(0, senderIndex) else visible.take(64)
-        if (prefixArea.contains(CHAT_PREFIX_MARKERS.getValue(channel))) return component
+        // CMI can leave legacy section color codes between the glyph and separator
+        // (for example: `§f<glyph> §8|`). The channel glyph itself is the stable
+        // part of the rendered prefix, regardless of whether CMI emitted native
+        // Adventure styling or legacy-encoded text.
+        if (prefixArea.contains(CHAT_GLYPHS.getValue(channel))) return component
 
         val styledComponent =
             if (component.color() == null) component.color(NAME_COLORS.getValue(channel)) else component
@@ -241,7 +245,6 @@ class ChatListener internal constructor(
                 ChatMode.LOCAL to "",
                 ChatMode.GLOBAL to "",
             )
-        val CHAT_PREFIX_MARKERS = CHAT_GLYPHS.mapValues { (_, glyph) -> "$glyph | " }
         val CMI_DEFAULT_MESSAGE_COLOR: TextColor = MESSAGE_COLORS.getValue(ChatMode.LOCAL)
 
         fun channelPrefix(channel: ChatMode): Component =

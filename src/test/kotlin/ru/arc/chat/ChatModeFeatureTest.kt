@@ -219,6 +219,29 @@ class ChatModeFeatureTest : FreeSpec({
             plainText.serialize(rendered).count { it == '' } shouldBe 1
         }
 
+        "does not duplicate legacy-encoded CMI prefixes across sequential messages" {
+            var currentChannel = ChatMode.LOCAL
+            val listener = ChatListener({ _, _ -> }, { currentChannel })
+            val messages =
+                listOf(
+                    Triple(player(UUID.randomUUID(), "yarostuf"), ChatMode.GLOBAL, "§f §8| §x§7§2§B§8§E§6"),
+                    Triple(player(UUID.randomUUID(), "GrocerMC"), ChatMode.LOCAL, "§f §8| §x§D§6§A§8§5§F"),
+                    Triple(player(UUID.randomUUID(), "yarostuf"), ChatMode.GLOBAL, "§f §8| §x§7§2§B§8§E§6"),
+                )
+
+            messages.forEach { (sender, channel, cmiPrefix) ->
+                currentChannel = channel
+                val rendered =
+                    applyPalette(
+                        listener,
+                        sender,
+                        renderedPrefix = Component.text(cmiPrefix),
+                    )
+
+                plainText.serialize(rendered).count { it == if (channel == ChatMode.GLOBAL) '' else '' } shouldBe 1
+            }
+        }
+
         "uses a warm body for local chat and a cool body for global chat" {
             val playerId = UUID.randomUUID()
             val player = player(playerId, "GrocerMC")
