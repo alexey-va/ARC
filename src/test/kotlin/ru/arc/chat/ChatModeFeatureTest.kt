@@ -173,6 +173,52 @@ class ChatModeFeatureTest : FreeSpec({
                 TextColor.color(0x72B8E6)
         }
 
+        "restores the global prefix when CMI expires its formatting package" {
+            val player = player(UUID.randomUUID(), "GrocerMC")
+            val listener = ChatListener({ _, _ -> }, { ChatMode.LOCAL })
+            var decorated: Component = Component.text("!Привет")
+            listener.onChatDecorate(decorateEvent(player, { decorated }, { decorated = it }))
+
+            val rendered = applyPalette(listener, player, renderedPrefix = Component.empty())
+
+            plainText.serialize(rendered).startsWith(" | GrocerMC") shouldBe true
+            coloredText(rendered, "").single().color() shouldBe TextColor.color(0xFFFFFF)
+            coloredText(rendered, "|").single().color() shouldBe TextColor.color(0x555555)
+        }
+
+        "restores the local prefix when CMI expires its formatting package" {
+            val player = player(UUID.randomUUID(), "GrocerMC")
+
+            val rendered =
+                applyPalette(
+                    ChatListener({ _, _ -> }, { ChatMode.LOCAL }),
+                    player,
+                    renderedPrefix = Component.empty(),
+                )
+
+            plainText.serialize(rendered).startsWith(" | GrocerMC") shouldBe true
+        }
+
+        "does not duplicate an intact CMI channel prefix" {
+            val player = player(UUID.randomUUID(), "GrocerMC")
+            val cmiPrefix =
+                Component.text()
+                    .append(Component.text("", TextColor.color(0xFFFFFF)))
+                    .append(Component.space())
+                    .append(Component.text("|", TextColor.color(0x555555)))
+                    .append(Component.space())
+                    .build()
+
+            val rendered =
+                applyPalette(
+                    ChatListener({ _, _ -> }, { ChatMode.GLOBAL }),
+                    player,
+                    renderedPrefix = cmiPrefix,
+                )
+
+            plainText.serialize(rendered).count { it == '' } shouldBe 1
+        }
+
         "uses a warm body for local chat and a cool body for global chat" {
             val playerId = UUID.randomUUID()
             val player = player(playerId, "GrocerMC")
@@ -299,11 +345,12 @@ private fun applyPalette(
     listener: ChatListener,
     player: Player,
     message: Component = Component.text("Привет").color(TextColor.color(0xE8D7B7)),
+    renderedPrefix: Component = Component.text("icon | "),
 ): Component {
     var renderer =
         ChatRenderer { source, _, renderedMessage, _ ->
             Component.text()
-                .append(Component.text("icon | "))
+                .append(renderedPrefix)
                 .append(Component.text(source.name))
                 .append(Component.text(" [KXE] "))
                 .append(Component.text(source.name))

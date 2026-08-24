@@ -109,9 +109,13 @@ class ChatListener internal constructor(
         if (event.isCancelled) return
         val renderer = event.renderer()
         event.renderer { source, sourceDisplayName, message, viewer ->
-            colorSenderName(
-                colorMessageBody(
-                    renderer.render(source, sourceDisplayName, message, viewer),
+            ensureChannelPrefix(
+                colorSenderName(
+                    colorMessageBody(
+                        renderer.render(source, sourceDisplayName, message, viewer),
+                        source.name,
+                        channel,
+                    ),
                     source.name,
                     channel,
                 ),
@@ -158,6 +162,22 @@ class ChatListener internal constructor(
                 .replacement { _, matched -> matched.color(NAME_COLORS.getValue(channel)) }
                 .build(),
         )
+
+    internal fun ensureChannelPrefix(
+        component: Component,
+        senderName: String,
+        channel: ChatMode,
+    ): Component {
+        val visible = TextUtils.plain(component)
+        val senderIndex = visible.indexOf(senderName)
+        val prefixArea =
+            if (senderIndex >= 0) visible.substring(0, senderIndex) else visible.take(64)
+        if (prefixArea.contains(CHAT_PREFIX_MARKERS.getValue(channel))) return component
+
+        val styledComponent =
+            if (component.color() == null) component.color(NAME_COLORS.getValue(channel)) else component
+        return channelPrefix(channel).append(styledComponent)
+    }
 
     internal fun colorMessageBody(
         component: Component,
@@ -216,6 +236,20 @@ class ChatListener internal constructor(
                 ChatMode.LOCAL to TextColor.color(0xE8D7B7),
                 ChatMode.GLOBAL to TextColor.color(0xCFE7FF),
             )
+        val CHAT_GLYPHS =
+            mapOf(
+                ChatMode.LOCAL to "",
+                ChatMode.GLOBAL to "",
+            )
+        val CHAT_PREFIX_MARKERS = CHAT_GLYPHS.mapValues { (_, glyph) -> "$glyph | " }
         val CMI_DEFAULT_MESSAGE_COLOR: TextColor = MESSAGE_COLORS.getValue(ChatMode.LOCAL)
+
+        fun channelPrefix(channel: ChatMode): Component =
+            Component.text()
+                .append(Component.text(CHAT_GLYPHS.getValue(channel), TextColor.color(0xFFFFFF)))
+                .append(Component.space())
+                .append(Component.text("|", TextColor.color(0x555555)))
+                .append(Component.space())
+                .build()
     }
 }
