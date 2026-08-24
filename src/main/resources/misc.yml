@@ -18,6 +18,13 @@ paths:
   # Каталог с per-module *.yml относительно папки плагина
   feature-config-directory: modules
 
+# --- Совместимость старых интеграций с RedisEconomy ---
+economy:
+  legacy-money-alias:
+    # /money give|take|set <игрок> <сумма> -> нативная команда RedisEconomy.
+    # Отключено по умолчанию; включайте только пока есть старые Quest/GUI/скрипты.
+    enabled: false
+
 # --- Вход игрока: краткая неуязвимость и полное здоровье ---
 join:
   # Временная неуязвимость при входе
