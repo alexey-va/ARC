@@ -2,7 +2,10 @@
 # Bundled default stays disabled; enable it only on nodes that run ItemsAdder.
 enabled: false
 
-hidden-categories: []
+categories:
+  arc_shields:
+    hidden: true
+
 hidden-items:
   - "_iainternal:*"
 
@@ -90,7 +93,6 @@ groups:
       - "mcicons_catalog"
       - "boxpixstudio_icons"
       - "mccomputericons_numbers"
-      - "advancedenchantments_controls"
       - "spectra_shopgui_plus"
 
   technical:
@@ -105,6 +107,9 @@ groups:
       - "generic_items"
       - "arc_other"
       - "lztooltips_items"
+      - "lemon_vfxdrop"
+      - "advancedenchantments_controls"
+      - "advancedenchantments_books"
 
 gui:
   root-title: "<dark_gray><bold>Каталог предметов"

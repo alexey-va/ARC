@@ -48,7 +48,20 @@ class ItemsCatalogModuleConfig(private val config: Config) {
             }.sortedWith(compareBy<CatalogGroupDefinition> { it.order }.thenBy { it.id })
         require(groups.size <= 32) { "Items catalog supports at most 32 custom groups" }
 
-        val hidden = config.stringList("hidden-categories").map { it.trim().lowercase(Locale.ROOT) }.filter(::validId).toSet()
+        val configuredCategoryIds = config.keys("categories")
+        require(configuredCategoryIds.size <= 1_000) { "Items catalog has too many configured categories" }
+        val configuredHidden =
+            configuredCategoryIds.mapNotNull { rawId ->
+                val id = rawId.trim().lowercase(Locale.ROOT)
+                require(id == rawId && validId(id)) { "Items catalog category id '$rawId' must be normalized" }
+                id.takeIf { config.bool("categories.$id.hidden", false) }
+            }.toSet()
+        val legacyHidden =
+            config.stringList("hidden-categories")
+                .map { it.trim().lowercase(Locale.ROOT) }
+                .filter(::validId)
+                .toSet()
+        val hidden = configuredHidden + legacyHidden
         require(hidden.size <= 1_000) { "Items catalog has too many hidden categories" }
         val hiddenItems = config.stringList("hidden-items").map(String::trim).filter(String::isNotEmpty)
         require(hiddenItems.size <= 1_000) { "Items catalog has too many hidden item patterns" }

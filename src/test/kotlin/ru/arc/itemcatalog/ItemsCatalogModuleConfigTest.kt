@@ -22,6 +22,7 @@ class ItemsCatalogModuleConfigTest : StringSpec({
             settings.groups.single { it.id == "alchemy" }.categoryPatterns.toSet().contains("al_*") shouldBe true
             settings.groups.single { it.id == "gui-icons" }.categoryPatterns.toSet().contains("arc_icons") shouldBe true
             settings.groups.last().categoryPatterns.toSet().contains("generic_items") shouldBe true
+            settings.hiddenCategoryIds shouldContainExactly setOf("arc_shields")
             settings.allPermission shouldBe "arc.items-catalog.all"
             settings.allIcon.customModelData shouldBe 0
             settings.categoryFallbackIcon.customModelData shouldBe 0
@@ -49,6 +50,33 @@ class ItemsCatalogModuleConfigTest : StringSpec({
             ConfigManager.clear()
 
             runCatching { ItemsCatalogModuleConfig.load(root).snapshot() }.isFailure shouldBe true
+        } finally {
+            ConfigManager.clear()
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    "reads per-category hidden flags and keeps the legacy list compatible" {
+        val root = Files.createTempDirectory("arc-items-catalog-category-flags")
+        try {
+            val modules = Files.createDirectories(root.resolve("modules"))
+            Files.writeString(
+                modules.resolve("items-catalog.yml"),
+                """
+                categories:
+                  arc_shields:
+                    hidden: true
+                  arc_bows:
+                    hidden: false
+                hidden-categories:
+                  - legacy_category
+                groups: {}
+                """.trimIndent(),
+            )
+            ConfigManager.clear()
+
+            ItemsCatalogModuleConfig.load(root).snapshot().hiddenCategoryIds shouldBe
+                setOf("arc_shields", "legacy_category")
         } finally {
             ConfigManager.clear()
             root.toFile().deleteRecursively()
@@ -97,7 +125,6 @@ class ItemsCatalogModuleConfigTest : StringSpec({
                     "mcicons_catalog",
                     "boxpixstudio_icons",
                     "mccomputericons_numbers",
-                    "advancedenchantments_controls",
                     "spectra_shopgui_plus",
                 )
             val currentSets =
@@ -145,7 +172,15 @@ class ItemsCatalogModuleConfigTest : StringSpec({
                     "ff_rawfood",
                 )
             val currentAlchemy = setOf("al_alchemy_items", "al_potions", "al_splash_potions")
-            val currentTechnical = setOf("generic_items", "arc_other", "lztooltips_items")
+            val currentTechnical =
+                setOf(
+                    "generic_items",
+                    "arc_other",
+                    "lztooltips_items",
+                    "lemon_vfxdrop",
+                    "advancedenchantments_controls",
+                    "advancedenchantments_books",
+                )
 
             currentFurniture.all { id -> furniture.any { ItemsCatalogPlanner.matchesPattern(it, id) } } shouldBe true
             currentSets.all { id -> sets.any { ItemsCatalogPlanner.matchesPattern(it, id) } } shouldBe true

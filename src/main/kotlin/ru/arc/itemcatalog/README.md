@@ -20,10 +20,12 @@ that enable `plugins/ARC/modules/items-catalog.yml` and run ItemsAdder.
 - Category names from third-party YAML are normalized and inserted as literal
   Adventure text. MiniMessage is used only for ARC-owned configuration.
 
-The curated hierarchy, hidden-category list, titles, messages, and portable
-vanilla icon fallbacks live in `modules/items-catalog.yml`. RusCrafting enables
-the same tracked profile on spawn and survival. A new ItemsAdder category that
-does not match a curated group appears automatically as a root category.
+The curated hierarchy, per-category overrides, titles, messages, and portable
+vanilla icon fallbacks live in `modules/items-catalog.yml`. A category can be
+hidden with `categories.<id>.hidden: true`; the legacy `hidden-categories` list
+is accepted only for compatibility. RusCrafting enables the same tracked
+profile on spawn and survival. A new ItemsAdder category that does not match a
+curated group appears automatically as a root category.
 
 ## Verification
 
