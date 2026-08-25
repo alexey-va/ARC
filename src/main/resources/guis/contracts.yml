@@ -36,13 +36,7 @@ detail:
     material: PAPER
   payout:
     material: GOLD_NUGGET
-  decrease:
-    material: BLUE_STAINED_GLASS_PANE
-  increase:
-    material: BLUE_STAINED_GLASS_PANE
   back:
     material: BLUE_STAINED_GLASS_PANE
-  maximum:
-    material: BLACK_STAINED_GLASS_PANE
   confirm:
     material: GREEN_STAINED_GLASS_PANE

@@ -55,4 +55,15 @@ object ContractQuantitySelector {
         } else {
             (selection.selected + selection.minimum).coerceAtMost(selection.maximum)
         }
+
+    fun adjust(
+        selection: ContractQuantitySelection,
+        decrease: Boolean,
+        jumpToBoundary: Boolean,
+    ): Int =
+        if (decrease) {
+            decrease(selection, jumpToBoundary)
+        } else {
+            increase(selection, jumpToBoundary)
+        }
 }

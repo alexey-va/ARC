@@ -187,27 +187,6 @@ object NpcContractsGui {
                     lore(listOf("<gray>Ставка: <gold><per_unit> <gray>за единицу."))
                     fromConfig(contractGuiConfig, "detail.payout")
                 }
-                item(2, 1) {
-                    material(Material.BLUE_STAINED_GLASS_PANE)
-                    display("<yellow><bold>Уменьшить")
-                    lore(
-                        listOf(
-                            "<gray>ЛКМ: убрать минимальную партию.",
-                            "<gray>Shift + ЛКМ: выбрать минимум.",
-                        ),
-                    )
-                    fromConfig(contractGuiConfig, "detail.decrease")
-                    onClick { event ->
-                        if (selection.canSubmit) {
-                            openDetail(
-                                player,
-                                group,
-                                contractId,
-                                ContractQuantitySelector.decrease(selection, event.isShiftClick),
-                            )
-                        }
-                    }
-                }
                 item(4, 1) {
                     material(material)
                     tags(
@@ -220,29 +199,30 @@ object NpcContractsGui {
                     display("<white><bold>Сдать: <selected>")
                     lore(
                         listOf(
-                            "<gray>Минимум: <white><minimum>",
-                            "<gray>Сейчас доступно: <white><maximum>",
+                            "<gray>Минимальная партия: <white><minimum>",
+                            "<gray>Доступно сейчас: <white><maximum>",
+                            "",
+                            "<yellow>ЛКМ <gray>— добавить партию",
+                            "<yellow>ПКМ <gray>— убрать партию",
+                            "<yellow>Shift + ЛКМ <gray>— выбрать максимум",
+                            "<yellow>Shift + ПКМ <gray>— выбрать минимум",
                         ),
                     )
-                }
-                item(6, 1) {
-                    material(Material.BLUE_STAINED_GLASS_PANE)
-                    display("<yellow><bold>Увеличить")
-                    lore(
-                        listOf(
-                            "<gray>ЛКМ: добавить минимальную партию.",
-                            "<gray>Shift + ЛКМ: выбрать максимум.",
-                        ),
-                    )
-                    fromConfig(contractGuiConfig, "detail.increase")
                     onClick { event ->
+                        if (!event.isLeftClick && !event.isRightClick) return@onClick
                         if (selection.canSubmit) {
                             openDetail(
                                 player,
                                 group,
                                 contractId,
-                                ContractQuantitySelector.increase(selection, event.isShiftClick),
+                                ContractQuantitySelector.adjust(
+                                    selection,
+                                    decrease = event.isRightClick,
+                                    jumpToBoundary = event.isShiftClick,
+                                ),
                             )
+                        } else {
+                            player.sendActionBar(unavailableReason(group, view, selection, available))
                         }
                     }
                 }
@@ -255,15 +235,6 @@ object NpcContractsGui {
                     fromConfig(contractGuiConfig, "detail.back")
                     onClick { openList(player, group) }
                 }
-                button(4) {
-                    material(Material.BLACK_STAINED_GLASS_PANE)
-                    display("<yellow><bold>Выбрать максимум")
-                    lore(listOf("<gray>Сдать всё доступное в пределах заказа."))
-                    fromConfig(contractGuiConfig, "detail.maximum")
-                    onClick {
-                        if (selection.canSubmit) openDetail(player, group, contractId, selection.maximum)
-                    }
-                }
                 button(8) {
                     material(Material.GREEN_STAINED_GLASS_PANE)
                     tags(
@@ -272,7 +243,7 @@ object NpcContractsGui {
                             "payout" to money(selection.payoutMinor),
                         ),
                     )
-                    display(if (selection.canSubmit) "<green><bold>Сдать <selected>" else "<red><bold>Сдача недоступна")
+                    display(if (selection.canSubmit) "<green><bold>Подтвердить" else "<red><bold>Сдача недоступна")
                     lore(
                         if (selection.canSubmit) {
                             listOf(

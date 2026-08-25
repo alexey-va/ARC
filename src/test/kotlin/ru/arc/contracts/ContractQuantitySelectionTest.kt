@@ -40,6 +40,15 @@ class ContractQuantitySelectionTest : StringSpec({
         ContractQuantitySelector.increase(selection, jumpToMaximum = false) shouldBe 96
         ContractQuantitySelector.increase(selection, jumpToMaximum = true) shouldBe 100
     }
+
+    "single quantity item maps normal and shift clicks to both boundaries" {
+        val selection = ContractQuantitySelector.select(view(maxSubmission = 100), availableItems = 100, requested = 64)
+
+        ContractQuantitySelector.adjust(selection, decrease = false, jumpToBoundary = false) shouldBe 96
+        ContractQuantitySelector.adjust(selection, decrease = false, jumpToBoundary = true) shouldBe 100
+        ContractQuantitySelector.adjust(selection, decrease = true, jumpToBoundary = false) shouldBe 32
+        ContractQuantitySelector.adjust(selection, decrease = true, jumpToBoundary = true) shouldBe 32
+    }
 })
 
 private fun view(
