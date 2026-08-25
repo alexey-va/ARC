@@ -84,6 +84,9 @@ commands:
     usage: /mount [menu|help|admin]
     permission: arc.mounts.use
 permissions:
+  arc.portal.origin-gate:
+    description: Use the experimental ItemsAdder origin-gate portal animation
+    default: op
   arc.items-catalog.use:
     description: Open the ItemsAdder item catalog
     default: true

@@ -143,6 +143,7 @@ open class ARC : JavaPlugin() {
 
     override fun onDisable() {
         info("Stopping ARC plugin")
+        Portal.removeAll()
         ModuleRegistry.shutdownAll()
         pluginMessenger?.shutdown()
         pluginMessenger = null
@@ -156,6 +157,7 @@ open class ARC : JavaPlugin() {
     /** Reload all plugin configuration and modules. Called by /arc reload. */
     fun reload() {
         info("Reloading ARC plugin")
+        Portal.removeAll()
         // Reload YAML from disk before modules re-read configs (announce delay, etc.).
         ConfigManager.reloadAll()
         ModuleRegistry.reloadAll()

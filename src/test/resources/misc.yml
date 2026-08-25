@@ -8,6 +8,10 @@ join:
 
 portal:
   enabled: false
+  origin-gate:
+    enabled: false
+    astral-item: ""
+    chaos-item: ""
 
 bees:
   enabled: false

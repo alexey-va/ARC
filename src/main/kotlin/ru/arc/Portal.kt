@@ -84,10 +84,12 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
 
     private val phase = AtomicInteger()
     private val success = AtomicBoolean()
+    private val removed = AtomicBoolean()
 
     private var centerBlock: Block? = null
     private val player: Player?
     private var task: ScheduledTask? = null
+    private var originGate: PortalOriginGateController? = null
 
     companion object {
         private val occupiedBlocks = ConcurrentHashMap.newKeySet<Block>()
@@ -96,6 +98,13 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
 
         @JvmStatic
         fun isOccupied(block: Block): Boolean = occupiedBlocks.contains(block)
+
+        @JvmStatic
+        fun removeAll() {
+            portals.values.toList().forEach(Portal::removePortal)
+            portals.clear()
+            occupiedBlocks.clear()
+        }
     }
 
     init {
@@ -111,6 +120,7 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
             } else {
                 portals[player.uniqueId]?.removePortal()
                 reservePortal(centerBlock!!)
+                createOriginGate(player, centerBlock!!)
                 task = createTask()
                 portals[player.uniqueId] = this
                 player.sendMessage(config.component("portal.message", "<green>Портал создан!"))
@@ -132,7 +142,12 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
     private fun createTask(): ScheduledTask {
         val cb = centerBlock!!
         return repeating(1.ticks, delay = 1.ticks) {
-            if (phase.get() > 400 || success.get()) {
+            if (phase.get() > 400 || player?.isOnline != true) {
+                removePortal()
+                return@repeating
+            }
+            if (success.get()) {
+                if (originGate?.tickClosing() == true) return@repeating
                 removePortal()
                 return@repeating
             }
@@ -156,13 +171,31 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
             if (phase.get() == 58) cb.world.playSound(cb.location, org.bukkit.Sound.BLOCK_END_PORTAL_SPAWN, 1f, 1f)
 
             displayParticles(nearbyPlayers)
-            if (phase.get() >= 58 && (phase.get() == 58 || phase.get() % 10 == 0)) placeBlocksPackets(nearbyPlayers)
+            val originGateActive = originGate?.tickOpening(phase.get()) == true
+            if (!originGateActive && phase.get() >= 58 && (phase.get() == 58 || phase.get() % 10 == 0)) {
+                placeBlocksPackets(nearbyPlayers)
+            }
             if (phase.get() >= 61) {
                 val enteredPlayer = getEnteredPlayer(nearbyPlayers)
-                if (enteredPlayer != null && !success.getAndSet(true)) executeAction(enteredPlayer)
+                if (enteredPlayer != null && !success.getAndSet(true)) {
+                    originGate?.beginClosing()
+                    executeAction(enteredPlayer)
+                }
             }
             phase.incrementAndGet()
         }
+    }
+
+    private fun createOriginGate(
+        owner: Player,
+        base: Block,
+    ) {
+        val settings = PortalOriginGateSettings.load(config) ?: return
+        if (!shouldUseOriginGate(enabled = true, hasPermission = owner.hasPermission(ORIGIN_GATE_PERMISSION))) return
+        originGate =
+            PortalOriginGateController(settings) {
+                BukkitPortalOriginGate.spawn(base, settings)
+            }
     }
 
     private fun getEnteredPlayer(nearby: Collection<Player>): Player? {
@@ -353,9 +386,12 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
     }
 
     private fun removePortal() {
+        if (!removed.compareAndSet(false, true)) return
         task?.takeUnless { it.isCancelled }?.cancel()
+        originGate?.remove()
+        originGate = null
         centerBlock?.let(::releasePortal)
-        player?.let { portals.remove(it.uniqueId) }
+        player?.let { portals.remove(it.uniqueId, this) }
         clearBlockPackets()
     }
 
