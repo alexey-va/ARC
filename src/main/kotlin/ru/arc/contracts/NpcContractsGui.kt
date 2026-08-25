@@ -45,9 +45,9 @@ object NpcContractsGui {
         val views =
             ContractsManager.currentPlayerViews(player.uniqueId, group)
                 .filter { it.contract.status != ContractStatus.EXPIRED.label }
-        return gui(boardString(group, "list.title", "<dark_gray>Книга заказов"), 5, player, contractGuiConfig) {
+        return gui(boardString(group, "list.title", "<dark_gray>Книга заказов"), 3, player, contractGuiConfig) {
             background()
-            staticPane(width = 9, height = 4) {
+            staticPane(width = 9, height = 3) {
                 item(4, 0) {
                     material(Material.PAPER)
                     display(boardString(group, "list.heading", "<gold><bold>Книга заказов"))
@@ -111,22 +111,6 @@ object NpcContractsGui {
                             }
                         }
                     }
-                }
-            }
-            navBar {
-                button(4) {
-                    material(Material.BLACK_STAINED_GLASS_PANE)
-                    display("<yellow><bold>Обновить")
-                    lore(listOf("<gray>Перечитать книгу заказов."))
-                    fromConfig(contractGuiConfig, "list.refresh")
-                    onClick { openList(player, group) }
-                }
-                button(8) {
-                    material(Material.RED_STAINED_GLASS_PANE)
-                    display("<red><bold>Закрыть")
-                    lore(emptyList())
-                    fromConfig(contractGuiConfig, "list.close")
-                    onClick { player.closeInventory() }
                 }
             }
         }

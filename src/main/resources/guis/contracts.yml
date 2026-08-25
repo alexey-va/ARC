@@ -30,10 +30,6 @@ list:
     material: PAPER
   empty:
     material: BARRIER
-  refresh:
-    material: BLACK_STAINED_GLASS_PANE
-  close:
-    material: RED_STAINED_GLASS_PANE
 
 detail:
   info:
