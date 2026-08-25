@@ -19,10 +19,13 @@ import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.nio.file.attribute.BasicFileAttributes
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 class ItemsAdderHook internal constructor(
     private val scheduler: TaskScheduler,
+    private val generatedPack: GeneratedPackPublicationGate,
     private val publishResourcePack: () -> Boolean,
 ) : Listener {
     internal constructor(
@@ -31,6 +34,7 @@ class ItemsAdderHook internal constructor(
         config: ResourcePackSyncConfig,
     ) : this(
         scheduler = Tasks.scheduler,
+        generatedPack = GeneratedPackPublicationGate(resourcePackZip),
         publishResourcePack = {
             if (!config.enabled) {
                 debug("ItemsAdder resource pack publication is disabled")
@@ -54,21 +58,117 @@ class ItemsAdderHook internal constructor(
             return
         }
 
+        val attempt = generatedPack.beginAttempt()
+        info("Waiting for ItemsAdder to replace generated.zip before publication")
+        val scheduled = AtomicReference<ru.arc.core.ScheduledTask?>()
         try {
-            scheduler.runAsync {
-                try {
-                    publishResourcePack()
-                } catch (failure: Throwable) {
-                    error("Unexpected error publishing the ItemsAdder resource pack", failure)
-                } finally {
-                    publishing.set(false)
-                }
-            }
+            scheduled.set(
+                scheduler.runTimerAsync(
+                    generatedPack.pollIntervalTicks,
+                    generatedPack.pollIntervalTicks,
+                ) {
+                    when (generatedPack.poll(attempt)) {
+                        GeneratedPackPoll.WAITING -> Unit
+                        GeneratedPackPoll.READY -> {
+                            scheduled.get()?.cancel()
+                            publishAndFinish()
+                        }
+                        GeneratedPackPoll.TIMED_OUT -> {
+                            scheduled.get()?.cancel()
+                            warn(
+                                "ItemsAdder did not replace generated.zip after its finalization event; publication skipped",
+                            )
+                            publishing.set(false)
+                        }
+                    }
+                },
+            )
         } catch (failure: Throwable) {
+            scheduled.get()?.cancel()
             publishing.set(false)
-            error("Unable to schedule ItemsAdder resource pack publication", failure)
+            error("Unable to schedule ItemsAdder generated.zip readiness check", failure)
         }
     }
+
+    private fun publishAndFinish() {
+        try {
+            publishResourcePack()
+        } catch (failure: Throwable) {
+            error("Unexpected error publishing the ItemsAdder resource pack", failure)
+        } finally {
+            publishing.set(false)
+        }
+    }
+}
+
+internal enum class GeneratedPackPoll {
+    WAITING,
+    READY,
+    TIMED_OUT,
+}
+
+internal class GeneratedPackPublicationGate(
+    private val path: Path,
+    val pollIntervalTicks: Long = 20L,
+    private val requiredStablePolls: Int = 2,
+    private val maximumPolls: Int = 120,
+) {
+    init {
+        require(pollIntervalTicks > 0) { "pollIntervalTicks must be positive" }
+        require(requiredStablePolls > 0) { "requiredStablePolls must be positive" }
+        require(maximumPolls >= requiredStablePolls) { "maximumPolls must cover the stability window" }
+    }
+
+    fun beginAttempt(): Attempt = Attempt(baseline = snapshot())
+
+    fun poll(attempt: Attempt): GeneratedPackPoll {
+        attempt.polls++
+        val current = snapshot()
+        if (current != null && current != attempt.baseline) {
+            if (current == attempt.lastChangedSnapshot) {
+                attempt.stablePolls++
+            } else {
+                attempt.lastChangedSnapshot = current
+                attempt.stablePolls = 1
+            }
+            if (attempt.stablePolls >= requiredStablePolls) {
+                return GeneratedPackPoll.READY
+            }
+        } else {
+            attempt.lastChangedSnapshot = null
+            attempt.stablePolls = 0
+        }
+        return if (attempt.polls >= maximumPolls) GeneratedPackPoll.TIMED_OUT else GeneratedPackPoll.WAITING
+    }
+
+    internal class Attempt internal constructor(
+        internal val baseline: Snapshot?,
+        internal var lastChangedSnapshot: Snapshot? = null,
+        internal var stablePolls: Int = 0,
+        internal var polls: Int = 0,
+    )
+
+    internal data class Snapshot(
+        val size: Long,
+        val modifiedMillis: Long,
+        val fileKey: String?,
+    )
+
+    private fun snapshot(): Snapshot? =
+        try {
+            val attributes = Files.readAttributes(path, BasicFileAttributes::class.java)
+            if (!attributes.isRegularFile) {
+                null
+            } else {
+                Snapshot(
+                    size = attributes.size(),
+                    modifiedMillis = attributes.lastModifiedTime().toMillis(),
+                    fileKey = attributes.fileKey()?.toString(),
+                )
+            }
+        } catch (_: IOException) {
+            null
+        }
 }
 
 internal class ResourcePackSyncScript(

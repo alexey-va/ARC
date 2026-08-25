@@ -10,6 +10,8 @@ import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.shouldBe
 import ru.arc.core.TestTaskScheduler
 import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.util.zip.CRC32
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
@@ -19,11 +21,22 @@ import kotlin.io.path.writeText
 class ItemsAdderHookTest :
     FreeSpec({
         "pack-compressed handling" - {
-            "publishes asynchronously" {
+            "publishes only after generated zip is replaced and stable" {
                 val scheduler = TestTaskScheduler()
+                val directory = Files.createTempDirectory("arc-resourcepack-publication-gate")
+                val generatedZip = directory.resolve("generated.zip")
+                generatedZip.writeText("old")
                 var publications = 0
                 val hook =
-                    ItemsAdderHook(scheduler) {
+                    ItemsAdderHook(
+                        scheduler,
+                        GeneratedPackPublicationGate(
+                            generatedZip,
+                            pollIntervalTicks = 1,
+                            requiredStablePolls = 2,
+                            maximumPolls = 4,
+                        ),
+                    ) {
                         publications++
                         true
                     }
@@ -31,42 +44,101 @@ class ItemsAdderHookTest :
                 hook.requestPublish()
 
                 publications shouldBeExactly 0
-                scheduler.pendingCount() shouldBeExactly 1
+                scheduler.timerCount() shouldBeExactly 1
 
-                scheduler.executeImmediate()
+                val replacement = directory.resolve("generated-new.zip")
+                replacement.writeText("new-pack")
+                Files.move(replacement, generatedZip, StandardCopyOption.REPLACE_EXISTING)
+
+                scheduler.tick()
+                publications shouldBeExactly 0
+
+                scheduler.tick()
 
                 publications shouldBeExactly 1
+                scheduler.timerCount() shouldBeExactly 0
+            }
+
+            "does not publish when ItemsAdder leaves the previous zip in place" {
+                val scheduler = TestTaskScheduler()
+                val generatedZip = Files.createTempFile("arc-resourcepack-unchanged", ".zip")
+                generatedZip.writeText("old")
+                var publications = 0
+                val hook =
+                    ItemsAdderHook(
+                        scheduler,
+                        GeneratedPackPublicationGate(
+                            generatedZip,
+                            pollIntervalTicks = 1,
+                            requiredStablePolls = 2,
+                            maximumPolls = 3,
+                        ),
+                    ) {
+                        publications++
+                        true
+                    }
+
+                hook.requestPublish()
+                scheduler.tick(3)
+
+                publications shouldBeExactly 0
+                scheduler.timerCount() shouldBeExactly 0
             }
 
             "does not schedule a duplicate publication while one is pending" {
                 val scheduler = TestTaskScheduler()
+                val directory = Files.createTempDirectory("arc-resourcepack-duplicate")
+                val generatedZip = directory.resolve("generated.zip")
+                generatedZip.writeText("old")
                 var publications = 0
                 val hook =
-                    ItemsAdderHook(scheduler) {
+                    ItemsAdderHook(
+                        scheduler,
+                        GeneratedPackPublicationGate(
+                            generatedZip,
+                            pollIntervalTicks = 1,
+                            requiredStablePolls = 1,
+                            maximumPolls = 3,
+                        ),
+                    ) {
                         publications++
                         true
                     }
 
                 hook.requestPublish()
                 hook.requestPublish()
-                scheduler.executeImmediate()
+                generatedZip.writeText("new-pack")
+                scheduler.tick()
 
                 publications shouldBeExactly 1
             }
 
             "allows a later publication after the previous task fails" {
                 val scheduler = TestTaskScheduler()
+                val directory = Files.createTempDirectory("arc-resourcepack-retry")
+                val generatedZip = directory.resolve("generated.zip")
+                generatedZip.writeText("old")
                 var attempts = 0
                 val hook =
-                    ItemsAdderHook(scheduler) {
+                    ItemsAdderHook(
+                        scheduler,
+                        GeneratedPackPublicationGate(
+                            generatedZip,
+                            pollIntervalTicks = 1,
+                            requiredStablePolls = 1,
+                            maximumPolls = 3,
+                        ),
+                    ) {
                         attempts++
                         error("test failure")
                     }
 
                 hook.requestPublish()
-                scheduler.executeImmediate()
+                generatedZip.writeText("first-new-pack")
+                scheduler.tick()
                 hook.requestPublish()
-                scheduler.executeImmediate()
+                generatedZip.writeText("second-new-pack-with-different-size")
+                scheduler.tick()
 
                 attempts shouldBeExactly 2
             }
@@ -102,6 +174,55 @@ class ItemsAdderHookTest :
         }
 
         "resource pack sync script" - {
+            "refuses a zip with a corrupted payload before upload" {
+                val directory = Files.createTempDirectory("arc-resourcepack-sync-corrupt")
+                val resourcePackZip = directory.resolve("generated.zip")
+                val uploadedZip = directory.resolve("uploaded.zip")
+                val fakeAws = directory.resolve("fake-aws.sh")
+                val script = BundledResourcePackSyncScript.install(directory.resolve("arc-data"))
+                val payload = "CRC-CHECK-PAYLOAD".toByteArray()
+
+                ZipOutputStream(Files.newOutputStream(resourcePackZip)).use { output ->
+                    output.putNextEntry(ZipEntry("pack.mcmeta"))
+                    output.write(
+                        """{"pack":{"description":"ready","min_format":75,"max_format":75}}"""
+                            .toByteArray(),
+                    )
+                    output.closeEntry()
+                    val checksum = CRC32().apply { update(payload) }
+                    output.putNextEntry(
+                        ZipEntry("assets/test/payload.txt").apply {
+                            method = ZipEntry.STORED
+                            size = payload.size.toLong()
+                            compressedSize = payload.size.toLong()
+                            crc = checksum.value
+                        },
+                    )
+                    output.write(payload)
+                    output.closeEntry()
+                }
+                val archiveBytes = Files.readAllBytes(resourcePackZip)
+                val payloadOffset = archiveBytes.indexOf(payload)
+                (payloadOffset >= 0) shouldBe true
+                archiveBytes[payloadOffset] = (archiveBytes[payloadOffset].toInt() xor 0x01).toByte()
+                Files.write(resourcePackZip, archiveBytes)
+                fakeAws.writeText(fakeAwsUploaderScript())
+                fakeAws.toFile().setExecutable(true).shouldBeTrue()
+
+                ResourcePackSyncScript(
+                    script,
+                    processEnvironment = {
+                        testEnvironment() +
+                            mapOf(
+                                "AWS_CLI" to fakeAws.toAbsolutePath().toString(),
+                                "CAPTURED_UPLOAD" to uploadedZip.toAbsolutePath().toString(),
+                                "RP_NOTIFY_ENABLED" to "0",
+                            )
+                    },
+                ).publish(resourcePackZip).shouldBeFalse()
+                Files.exists(uploadedZip).shouldBeFalse()
+            }
+
             "leaves an archive byte-identical when modern metadata already exists" {
                 val directory = Files.createTempDirectory("arc-resourcepack-sync-existing-metadata")
                 val resourcePackZip = directory.resolve("generated.zip")
@@ -517,6 +638,14 @@ private fun fakeAwsUploaderScript(): String =
     |fi
     |cp "${'$'}3" "${'$'}CAPTURED_UPLOAD"
     """.trimMargin()
+
+private fun ByteArray.indexOf(needle: ByteArray): Int {
+    if (needle.isEmpty() || needle.size > size) return -1
+    for (offset in 0..size - needle.size) {
+        if (needle.indices.all { index -> this[offset + index] == needle[index] }) return offset
+    }
+    return -1
+}
 
 private fun notificationEnvironment(
     fakeRedis: java.nio.file.Path,

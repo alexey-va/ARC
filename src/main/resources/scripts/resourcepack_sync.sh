@@ -236,9 +236,7 @@ PY
   fi
 fi
 
-if [[ "${archive_patched}" == "1" ]]; then
-  unzip -tq "${upload_path}" >/dev/null || die "Patched resource pack failed ZIP integrity check"
-fi
+unzip -tq "${upload_path}" >/dev/null || die "Resource pack failed ZIP integrity check"
 
 local_sha="$(sha256sum "${upload_path}" | awk '{print $1}')"
 remote_sha=""
