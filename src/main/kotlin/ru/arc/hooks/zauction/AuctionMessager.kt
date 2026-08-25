@@ -8,6 +8,7 @@ import ru.arc.util.Logging.error
 class AuctionMessager(
     val channel: String,
     val channelAll: String,
+    val saleChannel: String,
     private val redis: RedisOperations,
 ) : ChannelListener {
 
@@ -18,6 +19,14 @@ class AuctionMessager(
             redis.publish(channel, Common.gson.toJson(itemDtoList))
         } catch (e: Exception) {
             error("Error sending auction items", e)
+        }
+    }
+
+    fun sendSale(event: AuctionSaleEventDto) {
+        try {
+            redis.publish(saleChannel, Common.gson.toJson(event))
+        } catch (e: Exception) {
+            error("Error sending auction sale event", e)
         }
     }
 }

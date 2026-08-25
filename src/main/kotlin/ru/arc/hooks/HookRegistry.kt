@@ -24,6 +24,7 @@ import ru.arc.hooks.worldguard.WGHook
 import ru.arc.hooks.yamipa.YamipaHook
 import ru.arc.hooks.zauction.AuctionHook
 import ru.arc.hooks.zauction.AuctionTrophyGuardListener
+import ru.arc.hooks.zauction.AuctionSaleNotifier
 import ru.arc.hooks.ztranslator.TranslatorHook
 import ru.arc.jobs.JobsModule
 import ru.arc.listeners.BlockListener
@@ -310,6 +311,7 @@ class HookRegistry(
                 try {
                     hook.start()
                     registerListener(AuctionTrophyGuardListener())
+                    registerListener(AuctionSaleNotifier(hook))
                     auctionHook = hook
                 } catch (failure: Throwable) {
                     hook.close()

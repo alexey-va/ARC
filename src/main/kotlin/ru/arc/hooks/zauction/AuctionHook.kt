@@ -128,6 +128,23 @@ class AuctionHook : AutoCloseable {
         )
     }
 
+    internal fun saleEvent(item: Item): AuctionSaleEventDto? {
+        val buyer = item.buyerName?.trim()?.takeIf { it.matches(Regex("[A-Za-z0-9_]{1,16}")) } ?: return null
+        val seller = item.sellerName.trim().takeIf { it.matches(Regex("[A-Za-z0-9_]{1,16}")) } ?: return null
+        val dto = fromAuctionItem(resolveCategory(item), item) ?: return null
+        val price = dto.price?.takeIf { it.isNotBlank() }?.take(100) ?: return null
+        return AuctionSaleEventDto(
+            listingId = item.id.toString(),
+            sellerUuid = item.sellerUniqueId?.toString(),
+            sellerName = seller,
+            buyerName = buyer,
+            itemDisplay = dto.display?.takeIf { it.isNotBlank() }?.take(200) ?: "предмет",
+            amount = item.amount.coerceIn(1, 1_000_000),
+            price = price,
+            occurredAt = System.currentTimeMillis(),
+        )
+    }
+
     private fun resolveApi() {
         val plugin = Bukkit.getPluginManager().getPlugin("zAuctionHouse")
             ?: Bukkit.getPluginManager().getPlugin("zAuctionHouseV3")

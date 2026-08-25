@@ -42,7 +42,13 @@ class NetworkRegistry(
             HistoryManager.setMessager(history)
 
             HookRegistry.auctionHook?.let { hook ->
-                val auction = AuctionMessager("arc.auction_items", "arc.auction_items_all", redis)
+                val auction =
+                    AuctionMessager(
+                        "arc.auction_items",
+                        "arc.auction_items_all",
+                        "arc.auction_sale_events",
+                        redis,
+                    )
                 auctionBridge = auction
                 register(auction.channel, auction)
                 register(auction.channelAll, auction)
