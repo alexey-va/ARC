@@ -9,9 +9,12 @@ import java.util.Locale
 data class ItemsCatalogSettings(
     val enabled: Boolean,
     val config: Config,
+    val categoryOverrides: Map<String, CatalogCategoryOverride>,
     val hiddenCategoryIds: Set<String>,
     val hiddenItemPatterns: List<String>,
     val groups: List<CatalogGroupDefinition>,
+    val givePermission: String,
+    val recipeClicksEnabled: Boolean,
     val showAll: Boolean,
     val allDisplayName: String,
     val allDescription: List<String>,
@@ -21,6 +24,10 @@ data class ItemsCatalogSettings(
     val pageIndicatorIcon: CatalogIconStyle,
     val loadingMessage: String,
     val unavailableMessage: String,
+    val givenMessage: String,
+    val inventoryFullMessage: String,
+    val noActionMessage: String,
+    val actionFailedMessage: String,
 )
 
 class ItemsCatalogModuleConfig(private val config: Config) {
@@ -44,18 +51,24 @@ class ItemsCatalogModuleConfig(private val config: Config) {
                     description = boundedLines(config.stringList("$root.description"), "group '$id' description"),
                     categoryPatterns = patterns,
                     icon = icon("$root.icon", Material.CHEST),
+                    itemAction = clickAction("$root.item-action", "group '$id' item action"),
                 )
             }.sortedWith(compareBy<CatalogGroupDefinition> { it.order }.thenBy { it.id })
         require(groups.size <= 32) { "Items catalog supports at most 32 custom groups" }
 
         val configuredCategoryIds = config.keys("categories")
         require(configuredCategoryIds.size <= 1_000) { "Items catalog has too many configured categories" }
-        val configuredHidden =
-            configuredCategoryIds.mapNotNull { rawId ->
+        val categoryOverrides =
+            configuredCategoryIds.associate { rawId ->
                 val id = rawId.trim().lowercase(Locale.ROOT)
                 require(id == rawId && validId(id)) { "Items catalog category id '$rawId' must be normalized" }
-                id.takeIf { config.bool("categories.$id.hidden", false) }
-            }.toSet()
+                id to
+                    CatalogCategoryOverride(
+                        hidden = config.bool("categories.$id.hidden", false),
+                        itemAction = clickAction("categories.$id.item-action", "category '$id' item action"),
+                    )
+            }
+        val configuredHidden = categoryOverrides.filterValues(CatalogCategoryOverride::hidden).keys
         val legacyHidden =
             config.stringList("hidden-categories")
                 .map { it.trim().lowercase(Locale.ROOT) }
@@ -73,9 +86,12 @@ class ItemsCatalogModuleConfig(private val config: Config) {
         return ItemsCatalogSettings(
             enabled = config.bool("enabled", false),
             config = config,
+            categoryOverrides = categoryOverrides,
             hiddenCategoryIds = hidden,
             hiddenItemPatterns = hiddenItems,
             groups = groups,
+            givePermission = permission("clicks.give-permission", "arc.items-catalog.give"),
+            recipeClicksEnabled = config.bool("clicks.recipes-enabled", true),
             showAll = config.bool("all-items.enabled", true),
             allDisplayName = bounded(config.string("all-items.name", "Все предметы"), 48, "all-items name"),
             allDescription = boundedLines(config.stringList("all-items.description"), "all-items description"),
@@ -85,7 +101,31 @@ class ItemsCatalogModuleConfig(private val config: Config) {
             pageIndicatorIcon = icon("gui.page-indicator", Material.PAPER),
             loadingMessage = bounded(config.string("messages.loading", "<gray>Каталог предметов ещё загружается."), 180, "loading message"),
             unavailableMessage = bounded(config.string("messages.unavailable", "<red>Каталог предметов сейчас недоступен."), 180, "unavailable message"),
+            givenMessage = bounded(config.string("messages.given", "<#92bed8>Предмет <white>%item% <#92bed8>добавлен в инвентарь."), 180, "given message"),
+            inventoryFullMessage = bounded(config.string("messages.inventory-full", "<red>В инвентаре нет свободного места."), 180, "inventory-full message"),
+            noActionMessage = bounded(config.string("messages.no-action", "<gray>У этого предмета нет доступного рецепта или действия."), 180, "no-action message"),
+            actionFailedMessage = bounded(config.string("messages.action-failed", "<red>Действие сейчас недоступно."), 180, "action-failed message"),
         )
+    }
+
+    private fun clickAction(path: String, field: String): CatalogClickAction? {
+        val type = config.string("$path.type", "").trim().lowercase(Locale.ROOT)
+        if (type.isEmpty()) return null
+        require(type == "player-command") { "Items catalog $field has unsupported type '$type'" }
+        val command = config.string("$path.command", "").trim().removePrefix("/")
+        require(validCatalogPlayerCommand(command)) {
+            "Items catalog $field has an unsafe player command"
+        }
+        val hint = bounded(config.string("$path.hint", "выполнить действие"), 80, "$field hint")
+        return CatalogClickAction.PlayerCommand(command, hint)
+    }
+
+    private fun permission(path: String, fallback: String): String {
+        val value = config.string(path, fallback).trim()
+        require(value.length in 1..160 && value.all { it.isLetterOrDigit() || it in "._-*" }) {
+            "Items catalog permission '$path' is invalid"
+        }
+        return value
     }
 
     private fun icon(path: String, fallback: Material): CatalogIconStyle {

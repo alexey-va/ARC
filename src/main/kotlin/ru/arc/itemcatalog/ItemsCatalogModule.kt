@@ -65,6 +65,7 @@ object ItemsCatalogModule : PluginModule {
     }
 
     private fun shutdownRuntime() {
+        controller?.shutdown()
         controller = null
         service?.shutdown()
         service = null

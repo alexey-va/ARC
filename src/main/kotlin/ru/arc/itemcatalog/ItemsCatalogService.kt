@@ -105,6 +105,7 @@ class ItemsCatalogService(
                     activeSettings.groups,
                     activeSettings.hiddenCategoryIds,
                     activeSettings.hiddenItemPatterns,
+                    scan.recipeResultItemIds,
                 )
             } catch (_: Exception) {
                 warn("Items catalog refresh failed while planning categories; previous snapshot retained")
@@ -115,9 +116,10 @@ class ItemsCatalogService(
         val published = plan.snapshot.copy(issues = (scan.issues + plan.snapshot.issues).distinct())
         snapshot.set(published)
         info(
-            "Items catalog refreshed from {} file(s): {} item(s), {} category(ies), {} group(s), {} issue(s); reason={}",
+            "Items catalog refreshed from {} file(s): {} item(s), {} recipe result(s), {} category(ies), {} group(s), {} issue(s); reason={}",
             scan.scannedFiles,
             published.registryItemIds.size,
+            published.recipeResultItemIds.size,
             published.categoryCount,
             published.groups.size,
             published.issues.size,

@@ -28,7 +28,22 @@ data class CatalogGroupDefinition(
     val description: List<String>,
     val categoryPatterns: List<String>,
     val icon: CatalogIconStyle,
+    val itemAction: CatalogClickAction? = null,
 )
+
+data class CatalogCategoryOverride(
+    val hidden: Boolean,
+    val itemAction: CatalogClickAction?,
+)
+
+sealed interface CatalogClickAction {
+    val hint: String
+
+    data class PlayerCommand(
+        val command: String,
+        override val hint: String,
+    ) : CatalogClickAction
+}
 
 data class CatalogGroup(
     val definition: CatalogGroupDefinition,
@@ -49,6 +64,7 @@ data class CatalogBuildIssue(
 
 data class ItemsCatalogSnapshot(
     val registryItemIds: List<String>,
+    val recipeResultItemIds: Set<String>,
     val groups: List<CatalogGroup>,
     val ungroupedCategories: List<CatalogCategory>,
     val issues: List<CatalogBuildIssue>,
@@ -104,6 +120,7 @@ object ItemsCatalogPlanner {
         groupDefinitions: List<CatalogGroupDefinition>,
         hiddenCategoryIds: Set<String> = emptySet(),
         hiddenItemPatterns: List<String> = emptyList(),
+        recipeResultItemIds: Set<String> = emptySet(),
     ): CatalogPlan {
         val issues = mutableListOf<CatalogBuildIssue>()
         val hiddenItemMatchers =
@@ -187,6 +204,7 @@ object ItemsCatalogPlanner {
         return CatalogPlan(
             ItemsCatalogSnapshot(
                 registryItemIds = normalizedRegistry,
+                recipeResultItemIds = recipeResultItemIds.filterTo(linkedSetOf()) { it in registrySet },
                 groups = groups,
                 ungroupedCategories = ungrouped,
                 issues = issues.distinct(),
@@ -270,6 +288,34 @@ object ItemsCatalogPlanner {
     private fun validPermission(value: String): Boolean =
         value.length in 1..160 && value.all { it.isLetterOrDigit() || it in "._-*" }
 }
+
+internal sealed interface CatalogItemClick {
+    data object Give : CatalogItemClick
+
+    data object Recipe : CatalogItemClick
+
+    data class Action(val value: CatalogClickAction) : CatalogItemClick
+
+    data object Unavailable : CatalogItemClick
+}
+
+internal fun catalogItemClick(
+    canGive: Boolean,
+    hasRecipe: Boolean,
+    fallback: CatalogClickAction?,
+): CatalogItemClick =
+    when {
+        canGive -> CatalogItemClick.Give
+        hasRecipe -> CatalogItemClick.Recipe
+        fallback != null -> CatalogItemClick.Action(fallback)
+        else -> CatalogItemClick.Unavailable
+    }
+
+internal fun validCatalogPlayerCommand(command: String): Boolean =
+    command.length in 1..160 && SAFE_CATALOG_PLAYER_COMMAND.matches(command)
+
+private val SAFE_CATALOG_PLAYER_COMMAND =
+    Regex("[A-Za-z0-9_][A-Za-z0-9_.:-]*( [A-Za-z0-9_][A-Za-z0-9_./:-]*)*")
 
 object ItemsCatalogText {
     private val legacyCode = Regex("(?i)[&§][0-9A-FK-ORX]")

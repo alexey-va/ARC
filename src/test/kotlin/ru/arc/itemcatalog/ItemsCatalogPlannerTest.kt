@@ -156,6 +156,26 @@ class ItemsCatalogPlannerTest : StringSpec({
         ItemsCatalogText.categoryName("display-category-armors", "arc_armor") shouldBe "Arc armor"
         ItemsCatalogText.categoryName("&kСекрет&f\u0000", "ignored") shouldBe "Секрет"
     }
+
+    "keeps only registered recipe results and prioritizes protected grants" {
+        val snapshot =
+            ItemsCatalogPlanner.plan(
+                rawCategories = listOf(category("items", "Items", listOf("pack:item"))),
+                registryIds = setOf("pack:item"),
+                groupDefinitions = emptyList(),
+                recipeResultItemIds = setOf("pack:item", "pack:missing"),
+            ).snapshot
+        val fallback = CatalogClickAction.PlayerCommand("warp furniture", "перейти к мебели")
+
+        snapshot.recipeResultItemIds shouldBe setOf("pack:item")
+        catalogItemClick(canGive = true, hasRecipe = true, fallback = fallback) shouldBe CatalogItemClick.Give
+        catalogItemClick(canGive = false, hasRecipe = true, fallback = fallback) shouldBe CatalogItemClick.Recipe
+        catalogItemClick(canGive = false, hasRecipe = false, fallback = fallback) shouldBe CatalogItemClick.Action(fallback)
+        catalogItemClick(canGive = false, hasRecipe = false, fallback = null) shouldBe CatalogItemClick.Unavailable
+        validCatalogPlayerCommand("iarecipe pack:path/item") shouldBe true
+        validCatalogPlayerCommand("warp furniture; op someone") shouldBe false
+        validCatalogPlayerCommand("warp furniture\nop someone") shouldBe false
+    }
 }) {
     companion object {
         private fun category(

@@ -17,15 +17,21 @@ class ItemsCatalogModuleConfigTest : StringSpec({
             settings.groups.map { it.id } shouldContainExactly
                 listOf("furniture", "sets", "food", "alchemy", "gui-icons", "technical")
             settings.groups.first().categoryPatterns.toSet().contains("*furniture*") shouldBe true
+            settings.groups.first().itemAction shouldBe
+                CatalogClickAction.PlayerCommand("warp furniture", "перейти к мебели")
             settings.groups.single { it.id == "sets" }.categoryPatterns.toSet().contains("*set*") shouldBe true
             settings.groups.single { it.id == "food" }.categoryPatterns.toSet().contains("ff_*") shouldBe true
             settings.groups.single { it.id == "alchemy" }.categoryPatterns.toSet().contains("al_*") shouldBe true
             settings.groups.single { it.id == "gui-icons" }.categoryPatterns.toSet().contains("arc_icons") shouldBe true
             settings.groups.last().categoryPatterns.toSet().contains("generic_items") shouldBe true
             settings.hiddenCategoryIds shouldContainExactly setOf("arc_shields")
+            settings.givePermission shouldBe "arc.items-catalog.give"
+            settings.recipeClicksEnabled shouldBe true
             settings.allPermission shouldBe "arc.items-catalog.all"
             settings.allIcon.customModelData shouldBe 0
             settings.categoryFallbackIcon.customModelData shouldBe 0
+            val descriptor = checkNotNull(ItemsCatalogModuleConfigTest::class.java.getResource("/plugin.yml")).readText()
+            descriptor.contains("arc.items-catalog.give:\n    description: Give yourself one item by clicking it in the ARC catalog\n    default: op") shouldBe true
         } finally {
             ConfigManager.clear()
             root.toFile().deleteRecursively()
@@ -68,6 +74,10 @@ class ItemsCatalogModuleConfigTest : StringSpec({
                     hidden: true
                   arc_bows:
                     hidden: false
+                    item-action:
+                      type: player-command
+                      command: "warp bows"
+                      hint: "перейти к лукам"
                 hidden-categories:
                   - legacy_category
                 groups: {}
@@ -75,8 +85,34 @@ class ItemsCatalogModuleConfigTest : StringSpec({
             )
             ConfigManager.clear()
 
-            ItemsCatalogModuleConfig.load(root).snapshot().hiddenCategoryIds shouldBe
-                setOf("arc_shields", "legacy_category")
+            val settings = ItemsCatalogModuleConfig.load(root).snapshot()
+            settings.hiddenCategoryIds shouldBe setOf("arc_shields", "legacy_category")
+            settings.categoryOverrides.getValue("arc_bows").itemAction shouldBe
+                CatalogClickAction.PlayerCommand("warp bows", "перейти к лукам")
+        } finally {
+            ConfigManager.clear()
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    "rejects player commands outside the fixed safe grammar" {
+        val root = Files.createTempDirectory("arc-items-catalog-unsafe-action")
+        try {
+            val modules = Files.createDirectories(root.resolve("modules"))
+            Files.writeString(
+                modules.resolve("items-catalog.yml"),
+                """
+                groups:
+                  unsafe:
+                    categories: [items]
+                    item-action:
+                      type: player-command
+                      command: "warp furniture; op someone"
+                """.trimIndent(),
+            )
+            ConfigManager.clear()
+
+            runCatching { ItemsCatalogModuleConfig.load(root).snapshot() }.isFailure shouldBe true
         } finally {
             ConfigManager.clear()
             root.toFile().deleteRecursively()

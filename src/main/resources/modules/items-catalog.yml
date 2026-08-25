@@ -1,6 +1,12 @@
-# ARC read-only catalog over the live ItemsAdder registry.
+# ARC interactive catalog over the live ItemsAdder registry.
 # Bundled default stays disabled; enable it only on nodes that run ItemsAdder.
 enabled: false
+
+clicks:
+  # Admin-style item grants are always protected by this explicit permission.
+  give-permission: arc.items-catalog.give
+  # Uses ItemsAdder's supported /iarecipe <item> player command for indexed recipes.
+  recipes-enabled: true
 
 categories:
   arc_shields:
@@ -28,6 +34,10 @@ groups:
     icon:
       material: OAK_STAIRS
       customModelData: 0
+    item-action:
+      type: player-command
+      command: "warp furniture"
+      hint: "перейти к мебели"
     categories:
       - "fu_*"
       - "*furniture*"
@@ -142,3 +152,7 @@ gui:
 messages:
   loading: "<gray>Каталог предметов ещё загружается. Попробуйте через несколько секунд."
   unavailable: "<red>Каталог предметов сейчас недоступен."
+  given: "<#92bed8>Предмет <white>%item% <#92bed8>добавлен в инвентарь."
+  inventory-full: "<red>В инвентаре нет свободного места."
+  no-action: "<gray>У этого предмета нет доступного рецепта или действия."
+  action-failed: "<red>Действие сейчас недоступно."

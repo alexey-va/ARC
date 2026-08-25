@@ -24,6 +24,23 @@ class ItemsAdderCategoryScannerTest : StringSpec({
                     items:
                       - pack:chair
                       - "pack:*"
+                recipes:
+                  crafting_table:
+                    chair:
+                      enabled: true
+                      result:
+                        item: pack:chair
+                    local_table:
+                      enabled: true
+                      result:
+                        item: table
+                    disabled_lamp:
+                      enabled: false
+                      result:
+                        item: pack:lamp
+                    vanilla_result:
+                      result:
+                        item: STONE
                 """.trimIndent(),
             )
 
@@ -31,6 +48,7 @@ class ItemsAdderCategoryScannerTest : StringSpec({
 
             result.scannedFiles shouldBe 1
             result.issues shouldBe emptyList()
+            result.recipeResultItemIds shouldContainExactly setOf("pack:chair", "pack:table")
             result.categories.single().let { category ->
                 category.id shouldBe "furniture"
                 category.itemPatterns shouldContainExactly listOf("pack:chair", "pack:*")
@@ -93,6 +111,29 @@ class ItemsAdderCategoryScannerTest : StringSpec({
 
             result.categories.single().itemPatterns shouldContainExactly listOf("pack:one")
             result.issues.map { it.code } shouldContainExactly listOf("total_pattern_limit_reached")
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    "bounds indexed recipe results" {
+        val root = Files.createTempDirectory("arc-items-catalog-recipes")
+        try {
+            Files.writeString(
+                root.resolve("recipes.yml"),
+                """
+                info: {namespace: pack}
+                recipes:
+                  crafting_table:
+                    one: {result: {item: pack:one}}
+                    two: {result: {item: pack:two}}
+                """.trimIndent(),
+            )
+
+            val result = ItemsAdderCategoryScanner(maxRecipeResults = 1).scan(root)
+
+            result.recipeResultItemIds shouldContainExactly setOf("pack:one")
+            result.issues.map { it.code } shouldContainExactly listOf("recipe_result_limit_reached")
         } finally {
             root.toFile().deleteRecursively()
         }
