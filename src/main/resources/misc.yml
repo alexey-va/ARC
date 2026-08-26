@@ -87,6 +87,8 @@ portal:
     chaos-item: ""
     opening-start-tick: 0
     opening-duration-ticks: 66
+    # smooth — равномерно; dramatic — заряд и резкое раскрытие.
+    opening-curve: dramatic
     closing-duration-ticks: 12
     width: 6.0
     height: 8.4
@@ -95,6 +97,8 @@ portal:
     view-range: 1.0
     sound:
       enabled: true
+      # 20 тиков = 1 секунда; отсчитывается от начала анимации.
+      delay-ticks: 40
       id: minecraft:block.end_portal.spawn
       volume: 1.35
       pitch: 0.9

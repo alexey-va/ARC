@@ -30,11 +30,22 @@ internal fun shouldUseOriginGate(
     hasPermission: Boolean,
 ): Boolean = enabled && hasPermission
 
+internal enum class OriginGateOpeningCurve {
+    SMOOTH,
+    DRAMATIC;
+
+    companion object {
+        fun parse(value: String): OriginGateOpeningCurve? =
+            entries.firstOrNull { curve -> curve.name.equals(value.trim(), ignoreCase = true) }
+    }
+}
+
 internal data class PortalOriginGateSettings(
     val astralItemId: String,
     val chaosItemId: String,
     val openingStartTick: Int,
     val openingDurationTicks: Int,
+    val openingCurve: OriginGateOpeningCurve,
     val closingDurationTicks: Int,
     val width: Float,
     val height: Float,
@@ -42,6 +53,7 @@ internal data class PortalOriginGateSettings(
     val yawOffsetDegrees: Float,
     val viewRange: Float,
     val openingSoundEnabled: Boolean,
+    val openingSoundDelayTicks: Int,
     val openingSoundId: String,
     val openingSoundVolume: Float,
     val openingSoundPitch: Float,
@@ -71,6 +83,7 @@ internal data class PortalOriginGateSettings(
                 chaosItemId = config.string("$path.chaos-item", ""),
                 openingStartTick = config.integer("$path.opening-start-tick", 0),
                 openingDurationTicks = config.integer("$path.opening-duration-ticks", 66),
+                openingCurve = config.string("$path.opening-curve", "dramatic"),
                 closingDurationTicks = config.integer("$path.closing-duration-ticks", 12),
                 width = config.real("$path.width", 6.0).toFloat(),
                 height = config.real("$path.height", 8.4).toFloat(),
@@ -78,6 +91,7 @@ internal data class PortalOriginGateSettings(
                 yawOffsetDegrees = config.real("$path.yaw-offset-degrees", 180.0).toFloat(),
                 viewRange = config.real("$path.view-range", 1.0).toFloat(),
                 openingSoundEnabled = config.bool("$path.sound.enabled", true),
+                openingSoundDelayTicks = config.integer("$path.sound.delay-ticks", 40),
                 openingSoundId = config.string("$path.sound.id", "minecraft:block.end_portal.spawn"),
                 openingSoundVolume = config.real("$path.sound.volume", 1.35).toFloat(),
                 openingSoundPitch = config.real("$path.sound.pitch", 0.9).toFloat(),
@@ -103,6 +117,7 @@ internal data class PortalOriginGateSettings(
             chaosItemId: String,
             openingStartTick: Int,
             openingDurationTicks: Int,
+            openingCurve: String,
             closingDurationTicks: Int,
             width: Float,
             height: Float,
@@ -110,6 +125,7 @@ internal data class PortalOriginGateSettings(
             yawOffsetDegrees: Float,
             viewRange: Float,
             openingSoundEnabled: Boolean,
+            openingSoundDelayTicks: Int,
             openingSoundId: String,
             openingSoundVolume: Float,
             openingSoundPitch: Float,
@@ -127,10 +143,12 @@ internal data class PortalOriginGateSettings(
             val normalizedAstral = astralItemId.trim().lowercase()
             val normalizedChaos = chaosItemId.trim().lowercase()
             val normalizedSound = openingSoundId.trim().lowercase()
+            val normalizedOpeningCurve = OriginGateOpeningCurve.parse(openingCurve) ?: return null
             if (normalizedAstral.length !in 3..128 || !namespacedId.matches(normalizedAstral)) return null
             if (normalizedChaos.length !in 3..128 || !namespacedId.matches(normalizedChaos)) return null
             if (openingStartTick !in 0..58) return null
             if (openingDurationTicks !in 1..200 || closingDurationTicks !in 1..60) return null
+            if (openingSoundDelayTicks !in 0..openingDurationTicks) return null
             if (!width.isFinite() || width !in 0.1f..12.0f) return null
             if (!height.isFinite() || height !in 0.1f..12.0f) return null
             if (!verticalOffset.isFinite() || verticalOffset !in 0.5..12.0) return null
@@ -161,6 +179,7 @@ internal data class PortalOriginGateSettings(
                 chaosItemId = normalizedChaos,
                 openingStartTick = openingStartTick,
                 openingDurationTicks = openingDurationTicks,
+                openingCurve = normalizedOpeningCurve,
                 closingDurationTicks = closingDurationTicks,
                 width = width,
                 height = height,
@@ -168,6 +187,7 @@ internal data class PortalOriginGateSettings(
                 yawOffsetDegrees = yawOffsetDegrees,
                 viewRange = viewRange,
                 openingSoundEnabled = openingSoundEnabled,
+                openingSoundDelayTicks = openingSoundDelayTicks,
                 openingSoundId = normalizedSound,
                 openingSoundVolume = openingSoundVolume,
                 openingSoundPitch = openingSoundPitch,
@@ -189,6 +209,8 @@ internal data class PortalOriginGateSettings(
 internal interface PortalOriginGateHandle {
     fun updateScale(multiplier: Float)
 
+    fun playOpeningSound()
+
     fun prepareClosing()
 
     fun remove()
@@ -200,6 +222,7 @@ internal class PortalOriginGateController(
 ) {
     private var handle: PortalOriginGateHandle? = null
     private var spawnAttempted = false
+    private var openingSoundPlayed = false
     private var closing = false
     private var closingTicks = 0
     private var removed = false
@@ -217,7 +240,13 @@ internal class PortalOriginGateController(
 
         val activeHandle = handle ?: return false
         val elapsedTicks = (phase - settings.openingStartTick).coerceAtLeast(0)
-        activeHandle.updateScale(originGateOpeningScale(elapsedTicks, settings.openingDurationTicks))
+        activeHandle.updateScale(
+            originGateOpeningScale(elapsedTicks, settings.openingDurationTicks, settings.openingCurve),
+        )
+        if (!openingSoundPlayed && elapsedTicks >= settings.openingSoundDelayTicks) {
+            openingSoundPlayed = true
+            activeHandle.playOpeningSound()
+        }
         return true
     }
 
@@ -249,14 +278,33 @@ internal class PortalOriginGateController(
 internal fun originGateOpeningScale(
     elapsedTicks: Int,
     durationTicks: Int,
+    curve: OriginGateOpeningCurve,
 ): Float {
     if (elapsedTicks <= durationTicks) {
         val progress = (elapsedTicks.toFloat() / durationTicks).coerceIn(0f, 1f)
-        val eased = progress * progress * (3f - 2f * progress)
+        val eased =
+            when (curve) {
+                OriginGateOpeningCurve.SMOOTH -> progress * progress * (3f - 2f * progress)
+                OriginGateOpeningCurve.DRAMATIC -> dramaticOriginGateOpening(progress)
+            }
         return TINY_SCALE_MULTIPLIER + ((1f - TINY_SCALE_MULTIPLIER) * eased)
     }
     val idleTicks = elapsedTicks - durationTicks
     return 1f + (sin(idleTicks * 0.18f) * 0.035f)
+}
+
+private fun dramaticOriginGateOpening(progress: Float): Float {
+    if (progress <= DRAMATIC_SNAP_PROGRESS) {
+        val charge = (progress / DRAMATIC_SNAP_PROGRESS).coerceIn(0f, 1f)
+        val easedCharge = charge * charge * (3f - 2f * charge)
+        return DRAMATIC_CHARGE_SCALE * easedCharge
+    }
+
+    val snap =
+        ((progress - DRAMATIC_SNAP_PROGRESS) / (1f - DRAMATIC_SNAP_PROGRESS))
+            .coerceIn(0f, 1f)
+    val easedSnap = 1f - (1f - snap).pow(3)
+    return DRAMATIC_CHARGE_SCALE + ((1f - DRAMATIC_CHARGE_SCALE) * easedSnap)
 }
 
 internal fun originGateClosingScale(
@@ -366,8 +414,7 @@ internal object BukkitPortalOriginGate {
             val created = base.world.spawn(location, ItemDisplay::class.java)
             display = created
             configure(created, astral, settings)
-            playOpeningSound(location, settings)
-            BukkitPortalOriginGateHandle(created, chaos, settings)
+            BukkitPortalOriginGateHandle(created, chaos, location, settings)
         } catch (failure: Exception) {
             display?.remove()
             warn(
@@ -523,6 +570,7 @@ internal object BukkitPortalOriginGate {
     private class BukkitPortalOriginGateHandle(
         private val display: ItemDisplay,
         private val chaos: ItemStack,
+        private val soundLocation: Location,
         private val settings: PortalOriginGateSettings,
     ) : PortalOriginGateHandle {
         override fun updateScale(multiplier: Float) {
@@ -532,6 +580,10 @@ internal object BukkitPortalOriginGate {
                 settings.height * multiplier,
                 1f,
             )
+        }
+
+        override fun playOpeningSound() {
+            if (display.isValid) playOpeningSound(soundLocation, settings)
         }
 
         override fun prepareClosing() {
@@ -551,6 +603,8 @@ internal object BukkitPortalOriginGate {
 }
 
 private const val TINY_SCALE_MULTIPLIER = 0.02f
+private const val DRAMATIC_SNAP_PROGRESS = 0.60f
+private const val DRAMATIC_CHARGE_SCALE = 0.12f
 private const val SUCTION_CYCLE_TICKS = 24
 private const val SUCTION_TRAIL_SPACING = 0.055
 private const val MAX_SUCTION_PARTICLES_PER_TICK = 64

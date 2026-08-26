@@ -36,6 +36,8 @@ class PortalOriginGateTest : FreeSpec({
             settings.shouldNotBeNull()
             settings.astralItemId shouldBe "origin_gate_portals:astral_portal"
             settings.chaosItemId shouldBe "origin_gate_portals:chaos_portal"
+            settings.openingCurve shouldBe OriginGateOpeningCurve.DRAMATIC
+            settings.openingSoundDelayTicks shouldBe 40
             settings.openingSoundId shouldBe "minecraft:block.end_portal.spawn"
         }
 
@@ -43,6 +45,8 @@ class PortalOriginGateTest : FreeSpec({
             settings(astral = "not namespaced").shouldBeNull()
             settings(openingDuration = 0).shouldBeNull()
             settings(openingDuration = 201).shouldBeNull()
+            settings(openingCurve = "linear").shouldBeNull()
+            settings(openingDuration = 39, openingSoundDelayTicks = 40).shouldBeNull()
             settings(closingDuration = 61).shouldBeNull()
             settings(width = Float.NaN).shouldBeNull()
             settings(height = 12.1f).shouldBeNull()
@@ -79,14 +83,19 @@ class PortalOriginGateTest : FreeSpec({
 
             controller.tickOpening(0).shouldBeTrue()
             controller.tickOpening(33).shouldBeTrue()
+            controller.tickOpening(39).shouldBeTrue()
+            handle.playOpeningSoundCount shouldBe 0
+            controller.tickOpening(40).shouldBeTrue()
+            handle.playOpeningSoundCount shouldBe 1
             controller.tickOpening(66).shouldBeTrue()
             controller.tickOpening(67).shouldBeTrue()
             spawnCount shouldBe 1
             handle.scales.first() shouldBe 0.02f
             (handle.scales[1] > handle.scales.first()).shouldBeTrue()
             (handle.scales[1] < 1f).shouldBeTrue()
-            handle.scales[2] shouldBe 1f
-            (handle.scales[3] > 1f).shouldBeTrue()
+            handle.scales[4] shouldBe 1f
+            (handle.scales[5] > 1f).shouldBeTrue()
+            handle.playOpeningSoundCount shouldBe 1
 
             controller.beginClosing()
             controller.beginClosing()
@@ -150,6 +159,15 @@ class PortalOriginGateTest : FreeSpec({
             settings().shouldNotBeNull().entryTick shouldBe 66
             settings(openingDuration = 96).shouldNotBeNull().entryTick shouldBe 96
         }
+
+        "supports a sharp charge-and-snap opening while retaining the smooth option" {
+            val dramaticMidpoint = originGateOpeningScale(33, 66, OriginGateOpeningCurve.DRAMATIC)
+            val smoothMidpoint = originGateOpeningScale(33, 66, OriginGateOpeningCurve.SMOOTH)
+
+            (dramaticMidpoint in 0.1f..0.2f).shouldBeTrue()
+            smoothMidpoint shouldBe 0.51f
+            originGateOpeningScale(66, 66, OriginGateOpeningCurve.DRAMATIC) shouldBe 1f
+        }
     }
 })
 
@@ -157,12 +175,14 @@ private fun settings(
     astral: String = "origin_gate_portals:astral_portal",
     chaos: String = "origin_gate_portals:chaos_portal",
     openingDuration: Int = 66,
+    openingCurve: String = "dramatic",
     closingDuration: Int = 12,
     width: Float = 6.0f,
     height: Float = 8.4f,
     yawOffsetDegrees: Float = 180f,
     viewRange: Float = 1f,
     openingSoundId: String = "minecraft:block.end_portal.spawn",
+    openingSoundDelayTicks: Int = 40,
     openingSoundVolume: Float = 1.35f,
     suctionStreams: Int = 10,
     reducedSuctionStreams: Int = 4,
@@ -175,6 +195,7 @@ private fun settings(
         chaosItemId = chaos,
         openingStartTick = 0,
         openingDurationTicks = openingDuration,
+        openingCurve = openingCurve,
         closingDurationTicks = closingDuration,
         width = width,
         height = height,
@@ -182,6 +203,7 @@ private fun settings(
         yawOffsetDegrees = yawOffsetDegrees,
         viewRange = viewRange,
         openingSoundEnabled = true,
+        openingSoundDelayTicks = openingSoundDelayTicks,
         openingSoundId = openingSoundId,
         openingSoundVolume = openingSoundVolume,
         openingSoundPitch = 0.9f,
@@ -199,11 +221,16 @@ private fun settings(
 
 private class RecordingOriginGateHandle : PortalOriginGateHandle {
     val scales = mutableListOf<Float>()
+    var playOpeningSoundCount = 0
     var prepareClosingCount = 0
     var removeCount = 0
 
     override fun updateScale(multiplier: Float) {
         scales += multiplier
+    }
+
+    override fun playOpeningSound() {
+        playOpeningSoundCount++
     }
 
     override fun prepareClosing() {
