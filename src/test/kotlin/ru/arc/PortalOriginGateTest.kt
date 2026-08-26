@@ -178,7 +178,7 @@ private fun settings(
         closingDurationTicks = closingDuration,
         width = width,
         height = height,
-        verticalOffset = 4.45,
+        verticalOffset = 2.75,
         yawOffsetDegrees = yawOffsetDegrees,
         viewRange = viewRange,
         openingSoundEnabled = true,

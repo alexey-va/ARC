@@ -74,7 +74,7 @@ internal data class PortalOriginGateSettings(
                 closingDurationTicks = config.integer("$path.closing-duration-ticks", 12),
                 width = config.real("$path.width", 6.0).toFloat(),
                 height = config.real("$path.height", 8.4).toFloat(),
-                verticalOffset = config.real("$path.vertical-offset", 4.45),
+                verticalOffset = config.real("$path.vertical-offset", 2.75),
                 yawOffsetDegrees = config.real("$path.yaw-offset-degrees", 180.0).toFloat(),
                 viewRange = config.real("$path.view-range", 1.0).toFloat(),
                 openingSoundEnabled = config.bool("$path.sound.enabled", true),
@@ -505,20 +505,6 @@ internal object BukkitPortalOriginGate {
                 .offset(settings.width * 0.22, settings.height * 0.32, settings.width * 0.22)
                 .extra(0.08)
                 .spawn()
-        }
-        if (fullQuality && tick % 5 == 0) {
-            val innerOffsets = offsets.filter { offset ->
-                (offset.x * offset.x) + (offset.z * offset.z) <= (settings.suctionRadius * 0.18).pow(2)
-            }
-            for (offset in innerOffsets.take(4)) {
-                ParticleBuilder(Particle.END_ROD)
-                    .count(1)
-                    .location(center.clone().add(offset.x, offset.y, offset.z))
-                    .receivers(receivers)
-                    .offset(0.04, 0.04, 0.04)
-                    .extra(0.01)
-                    .spawn()
-            }
         }
     }
 

@@ -90,7 +90,7 @@ portal:
     closing-duration-ticks: 12
     width: 6.0
     height: 8.4
-    vertical-offset: 4.45
+    vertical-offset: 2.75
     yaw-offset-degrees: 180.0
     view-range: 1.0
     sound:
