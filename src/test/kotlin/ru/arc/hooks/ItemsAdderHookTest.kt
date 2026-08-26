@@ -15,6 +15,7 @@ import java.util.zip.CRC32
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
+import kotlin.io.path.readLines
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
 
@@ -506,6 +507,9 @@ class ItemsAdderHookTest :
                 sourceItemsAdder.resolve("storage").let { path ->
                     Files.createDirectories(path)
                     path.resolve("items_ids_cache.yml").writeText("PAPER:\n  demo:item: 42\n")
+                    path.resolve("font_images_unicode_cache.yml").writeText(
+                        "demo:first: \ndemo:second: \n",
+                    )
                 }
                 targetItemsAdder.resolve("contents/legacy").let { path ->
                     Files.createDirectories(path)
@@ -537,6 +541,7 @@ class ItemsAdderHookTest :
                     |    ;;
                     |  send-keys)
                     |    printf '%s\n' "${'$'}*" > "${'$'}CAPTURED_TMUX"
+                    |    printf '%s\n' 'demo:second: ' 'demo:first: ' > "${'$'}FAKE_TARGET_STORAGE/font_images_unicode_cache.yml"
                     |    printf '%s\n' '[00:00:01] [Server thread/WARN]: Ресурсы • Reload completed.' >> "${'$'}FAKE_TARGET_LOG"
                     |    ;;
                     |  *)
@@ -559,6 +564,8 @@ class ItemsAdderHookTest :
                                 "IA_MIRROR_TMUX_CLI" to fakeTmux.toAbsolutePath().toString(),
                                 "CAPTURED_TMUX" to capturedTmux.toAbsolutePath().toString(),
                                 "FAKE_TARGET_LOG" to targetLog.toAbsolutePath().toString(),
+                                "FAKE_TARGET_STORAGE" to
+                                    targetItemsAdder.resolve("storage").toAbsolutePath().toString(),
                             )
                     },
                 ).publish(resourcePackZip).shouldBeTrue()
@@ -567,6 +574,8 @@ class ItemsAdderHookTest :
                 Files.exists(targetItemsAdder.resolve("contents/legacy")).shouldBeFalse()
                 targetItemsAdder.resolve("storage/items_ids_cache.yml").readText() shouldBe
                     "PAPER:\n  demo:item: 42\n"
+                targetItemsAdder.resolve("storage/font_images_unicode_cache.yml").readLines() shouldBe
+                    listOf("demo:second: ", "demo:first: ")
                 capturedTmux.readText() shouldContain "send-keys -t survival iareload Enter"
 
                 val backupRoot = networkRoot.resolve(".mc-ops/itemsadder-mirror")

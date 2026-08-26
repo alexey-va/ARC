@@ -22,8 +22,10 @@ content authority. A completed `iazip` stages and checksum-verifies exact copies
 of `contents/` and the active `storage/` cache, publishes the shared client ZIP,
 then atomically swaps those two trees into the sibling survival runtime and
 sends `iareload` to its tmux console. The script waits for ItemsAdder's
-`Reload completed.` log marker and verifies that neither tree drifted during
-reload. The previous survival trees are retained below the repository-ignored
+`Reload completed.` log marker, verifies `contents/` byte-for-byte, and verifies
+the active cache mappings semantically because ItemsAdder may reorder YAML
+entries while loading them. A changed key or value still fails the publication.
+The previous survival trees are retained below the repository-ignored
 `.mc-ops/itemsadder-mirror/` root; `survival-mirror.backup-keep` controls bounded
 retention.
 

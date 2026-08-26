@@ -124,7 +124,7 @@ prepare_itemsadder_mirror() {
     mkdir -p -- "${mirror_staging_dir}/${tree}"
     "${rsync_bin}" -a --delete \
       "${mirror_source_itemsadder}/${tree}/" "${mirror_staging_dir}/${tree}/"
-    if [[ -n "$("${rsync_bin}" -anic --delete \
+    if [[ -n "$("${rsync_bin}" -rlcni --delete \
       "${mirror_source_itemsadder}/${tree}/" "${mirror_staging_dir}/${tree}/")" ]]; then
       die "Staged ItemsAdder ${tree} failed checksum verification"
     fi
@@ -205,12 +205,52 @@ activate_itemsadder_mirror() {
   [[ "${reload_complete}" == "1" ]] ||
     die "ItemsAdder reload did not complete on ${IA_MIRROR_TARGET_SESSION} within ${IA_MIRROR_RELOAD_TIMEOUT_SECONDS}s"
 
-  for tree in contents storage; do
-    if [[ -n "$("${IA_MIRROR_RSYNC_CLI:-rsync}" -anic --delete \
-      "${mirror_source_itemsadder}/${tree}/" "${mirror_target_itemsadder}/${tree}/")" ]]; then
-      die "Survival ItemsAdder ${tree} drifted during reload"
-    fi
-  done
+  if [[ -n "$("${IA_MIRROR_RSYNC_CLI:-rsync}" -rlcni --delete \
+    "${mirror_source_itemsadder}/contents/" "${mirror_target_itemsadder}/contents/")" ]]; then
+    die "Survival ItemsAdder contents drifted during reload"
+  fi
+  if [[ -n "$("${IA_MIRROR_RSYNC_CLI:-rsync}" -rlcni --delete \
+    "${mirror_source_itemsadder}/storage/" "${mirror_target_itemsadder}/storage/")" ]]; then
+    python3 - "${mirror_source_itemsadder}/storage" "${mirror_target_itemsadder}/storage" <<'PY' ||
+      die "Survival ItemsAdder storage drifted semantically during reload"
+import sys
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError as exc:
+    raise RuntimeError("PyYAML is required to verify reordered ItemsAdder caches") from exc
+
+source_root = Path(sys.argv[1]).resolve()
+target_root = Path(sys.argv[2]).resolve()
+
+
+def files(root):
+    return {
+        path.relative_to(root)
+        for path in root.rglob("*")
+        if path.is_file() and not path.is_symlink()
+    }
+
+
+source_files = files(source_root)
+target_files = files(target_root)
+if source_files != target_files:
+    raise RuntimeError("ItemsAdder storage file sets differ after reload")
+
+for relative_path in sorted(source_files):
+    source = source_root / relative_path
+    target = target_root / relative_path
+    if relative_path.suffix.lower() in {".yml", ".yaml"}:
+        source_value = yaml.safe_load(source.read_text(encoding="utf-8"))
+        target_value = yaml.safe_load(target.read_text(encoding="utf-8"))
+        if source_value != target_value:
+            raise RuntimeError(f"ItemsAdder YAML cache differs: {relative_path}")
+    elif source.read_bytes() != target.read_bytes():
+        raise RuntimeError(f"ItemsAdder cache differs: {relative_path}")
+PY
+    log "ItemsAdder storage was reordered during reload; semantic cache mappings remain identical"
+  fi
   log "ItemsAdder reload completed on ${IA_MIRROR_TARGET_SESSION}"
 
   python3 - "${mirror_backup_root}" "${IA_MIRROR_BACKUP_KEEP}" <<'PY'
