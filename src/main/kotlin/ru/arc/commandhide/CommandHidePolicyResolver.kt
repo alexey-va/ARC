@@ -112,7 +112,7 @@ internal class CommandHideSnapshot private constructor(
             )
         }
 
-        const val PERMISSION_PREFIX = "arc.hide."
+        const val PERMISSION_PREFIX = "arc.command.hide."
     }
 }
 

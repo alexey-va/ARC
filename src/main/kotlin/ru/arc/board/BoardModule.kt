@@ -296,7 +296,7 @@ data class BoardEntryData(
     /**
      * Check if a player can rate this entry.
      */
-    fun canRate(player: Player): Boolean = player.uniqueId != playerUuid || player.hasPermission("arc.rate-own")
+    fun canRate(player: Player): Boolean = player.uniqueId != playerUuid || player.hasPermission("arc.board.rate.own")
 
     /**
      * Rate this entry.

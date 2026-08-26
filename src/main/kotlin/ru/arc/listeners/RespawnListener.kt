@@ -16,7 +16,7 @@ import ru.arc.util.Logging.info
 
 class RespawnListener : Listener {
 
-    private val config = ConfigManager.of(ARC.instance.dataPath, "misc.yml")
+    private val config = ConfigManager.of(ARC.instance.dataPath, "modules/misc.yml")
 
     @EventHandler
     fun onRespawn(event: PlayerRespawnEvent) {

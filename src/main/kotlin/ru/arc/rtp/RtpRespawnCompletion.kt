@@ -45,7 +45,7 @@ object RtpRespawnCompletion {
                 if (!request.setRespawn || !player.isOnline) return@Runnable
 
                 player.setRespawnLocation(completedLocation, true)
-                val config = ConfigManager.of(ARC.instance.dataPath, "misc.yml")
+                val config = ConfigManager.of(ARC.instance.dataPath, "modules/misc.yml")
                 player.sendMessage(
                     config.component(
                         "rtp-respawn.set-spawn-message",

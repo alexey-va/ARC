@@ -365,7 +365,7 @@ object JobsModule {
 
         info("Jobs hook enabled")
 
-        val newConfig = ConfigManager.of(ARC.instance.dataFolder.toPath(), "jobs.yml")
+        val newConfig = ConfigManager.of(ARC.instance.dataFolder.toPath(), "modules/jobs.yml")
         val newScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         val newRepo =
             try {

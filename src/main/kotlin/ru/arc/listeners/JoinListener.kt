@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 class JoinListener : Listener {
 
-    private val config = ConfigManager.of(ARC.instance.dataFolder.toPath(), "misc.yml")
+    private val config = ConfigManager.of(ARC.instance.dataFolder.toPath(), "modules/misc.yml")
     private val invMap: MutableMap<UUID, String> = ConcurrentHashMap()
 
     @EventHandler
@@ -62,7 +62,7 @@ class JoinListener : Listener {
     private fun invulnerable(player: Player) {
         if (!config.bool("join.invulnerable-enabled", true)) return
         if (!player.isOnline) return
-        if (player.hasPermission("arc.bypass-invulnerable")) return
+        if (player.hasPermission("arc.join.invulnerability.bypass")) return
         player.isInvulnerable = true
         invMap[player.uniqueId] = player.name
         info("Player {} is invulnerable", player.name)

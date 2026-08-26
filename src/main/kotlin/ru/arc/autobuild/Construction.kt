@@ -130,12 +130,7 @@ class Construction(private val site: ConstructionSite) {
             if (index >= blocks.size) return true
 
             val vec = blocks[index]
-            val location = Location(
-                site.world,
-                site.centerBlock.x + vec.x(),
-                site.centerBlock.y + vec.y() + site.yOffset,
-                site.centerBlock.z + vec.z()
-            )
+            val location = site.worldLocation(vec)
 
             val blockData = BukkitAdapter.adapt(site.building.getBlock(vec, site.fullRotation)).also {
                 rotateBlockData(it, site.fullRotation)

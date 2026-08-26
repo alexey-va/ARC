@@ -12,7 +12,7 @@ import ru.arc.xserver.playerlist.PlayerManager
 class PAPIHook : PlaceholderExpansion() {
 
     companion object {
-        private val config = ConfigManager.of(ARC.instance.dataPath, "misc.yml")
+        private val config = ConfigManager.of(ARC.instance.dataPath, "modules/misc.yml")
     }
 
     fun parse(str: String, player: OfflinePlayer): String =

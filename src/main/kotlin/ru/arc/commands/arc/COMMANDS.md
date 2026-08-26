@@ -133,7 +133,7 @@ balance сверяется в точных minor units. Неоднозначны
 
 | Параметр         | Значение            |
 |------------------|---------------------|
-| **Право**        | `arc.treasure-hunt` |
+| **Право**        | `arc.treasure.hunt.admin` |
 | **Только игрок** | Нет                 |
 
 ### Базовые команды
@@ -197,7 +197,7 @@ treasure-hunt-types:
 
 | Параметр         | Значение                     |
 |------------------|------------------------------|
-| **Право**        | `arc.treasures.admin`        |
+| **Право**        | `arc.treasure.pool.admin`        |
 | **Только игрок** | Нет (GUI только для игроков) |
 
 ### Базовые команды
@@ -256,7 +256,7 @@ treasure-hunt-types:
 
 | Параметр         | Значение      |
 |------------------|---------------|
-| **Право**        | `arc.pouch`   |
+| **Право**        | `arc.pouch.give`   |
 | **Только игрок** | Нет           |
 
 ```bash
@@ -294,7 +294,7 @@ pouches:
 
 | Параметр         | Значение            |
 |------------------|---------------------|
-| **Право**        | `arc.locpool.admin` |
+| **Право**        | `arc.location.pool.admin` |
 | **Только игрок** | Да                  |
 
 ### Базовые команды
@@ -350,18 +350,21 @@ pouches:
 
 ## /arc buildbook
 
-Выдача книги строительства для системы auto-build.
+Административная выдача книги для существующей серверной схемы. Игроки создают
+свои материалоёмкие книги из безопасной копии через `/builder copy`, затем
+`/builder book [название]`.
 
 | Параметр         | Значение        |
 |------------------|-----------------|
-| **Право**        | `arc.buildbook` |
+| **Право**        | `arc.build.book.give` |
 | **Только игрок** | Да              |
 
 ### Использование
 
 ```bash
-/arc buildbook <building_id>  # выдать книгу строения
-/arc buildbook house_small    # пример
+/arc buildbook <building_id> <model-id> [rotation] [y-offset] [name...]
+/builder copy
+/builder book Дом у озера
 ```
 
 ---
@@ -372,7 +375,7 @@ pouches:
 
 | Параметр         | Значение        |
 |------------------|-----------------|
-| **Право**        | `arc.eliteloot` |
+| **Право**        | `arc.elite.loot.admin` |
 | **Только игрок** | Да              |
 
 ### Использование
@@ -475,7 +478,7 @@ pouches:
 
 | Параметр          | Значение         |
 |-------------------|------------------|
-| **Право**         | `arc.jobsboosts` |
+| **Право**         | `arc.jobs.boost.use` |
 | **Reset требует** | `arc.admin`      |
 
 ```bash
@@ -490,7 +493,7 @@ pouches:
 
 | Параметр  | Значение                  |
 |-----------|---------------------------|
-| **Право** | `arc.admin.givejobsboost` |
+| **Право** | `arc.jobs.boost.give` |
 
 ```bash
 /arc giveboost <player> <job|all> <multiplier> <type> <duration>
@@ -512,7 +515,7 @@ pouches:
 
 | Параметр  | Значение          |
 |-----------|-------------------|
-| **Право** | `arc.rtp-respawn` |
+| **Право** | `arc.rtp.respawn` |
 
 ```bash
 /arc respawnonrtp Steve
@@ -524,7 +527,7 @@ pouches:
 ProxyARC: после перехода игрока на survival он передаёт типизированный
 `ruscrafting:rtp` plugin message в ARC. ARC хранит в
 `data/rtp-players.json` UUID игроков, уже прошедших RTP, и отдельные списки по
-мирам. При первом посещении мира выбирает BetterRTP или LeafRTP по `misc.yml`;
+мирам. При первом посещении мира выбирает BetterRTP или LeafRTP по `modules/misc.yml`;
 при повторном — возвращает игрока на spawn мира.
 
 ```bash
@@ -583,9 +586,9 @@ ProxyARC: после перехода игрока на survival он перед
 | Команда               | Право                  | Описание                       |
 |-----------------------|------------------------|--------------------------------|
 | `/arc board`          | `arc.board`            | Настройки скорборда            |
-| `/arc baltop`         | `arc.baltop`           | Таблица лидеров по балансу     |
-| `/arc joinmessage`    | `arc.join-message-gui` | Настроить сообщение при входе  |
-| `/arc quitmessage`    | `arc.join-message-gui` | Настроить сообщение при выходе |
+| `/arc baltop`         | `arc.balance.top`           | Таблица лидеров по балансу     |
+| `/arc joinmessage`    | `arc.join.message.gui` | Настроить сообщение при входе  |
+| `/arc quitmessage`    | `arc.join.message.gui` | Настроить сообщение при выходе |
 | `/arc store [player]` | `arc.store`            | Открыть магазин игрока         |
 
 `/arc store` не регистрируется как отдельная команда `/arcstore` и недоступна
@@ -616,7 +619,7 @@ ProxyARC: после перехода игрока на survival он перед
 
 | Параметр  | Значение           |
 |-----------|--------------------|
-| **Право** | `arc.sound-follow` |
+| **Право** | `arc.sound.follow` |
 
 ```bash
 /arc soundfollow Steve block.note_block.harp
@@ -678,7 +681,7 @@ ProxyARC: после перехода игрока на survival он перед
 commands:
   hunt:
     name: "hunt"                              # название команды
-    permission: "arc.treasure-hunt"           # право (пусто = для всех)
+    permission: "arc.treasure.hunt.admin"           # право (пусто = для всех)
     description: "Управление охотой"          # описание для /arc help
     usage: "/arc hunt [status|types|start|stop|stopall]"
     player-only: false                        # требуется ли игрок
@@ -761,8 +764,8 @@ commands:
 | Право                  | Описание                      |
 |------------------------|-------------------------------|
 | `arc.board`            | Настройки скорборда           |
-| `arc.baltop`           | Таблица лидеров               |
-| `arc.join-message-gui` | Настройка join/quit сообщений |
+| `arc.balance.top`           | Таблица лидеров               |
+| `arc.join.message.gui` | Настройка join/quit сообщений |
 | `arc.invest`           | Доступ к бирже                |
 | `arc.store`            | Открытие магазина             |
 
@@ -770,8 +773,8 @@ commands:
 
 ```bash
 lp group default permission set arc.board true
-lp group default permission set arc.baltop true
-lp group default permission set arc.join-message-gui true
+lp group default permission set arc.balance.top true
+lp group default permission set arc.join.message.gui true
 lp group default permission set arc.invest true
 lp group default permission set arc.store true
 ```
@@ -784,15 +787,19 @@ lp group default permission set arc.store true
 
 | Право            | Описание                     |
 |------------------|------------------------------|
-| `arc.jobsboosts` | Просмотр своих бустов работ  |
-| `arc.buildbook`  | Получение книг строительства |
+| `arc.jobs.boost.use` | Просмотр своих бустов работ  |
+| `arc.build.book.create` | Создание книги из собственного безопасного чертежа |
+| `arc.build.book.edit` | Настройка поворота и смещения книги |
+| `arc.build.book.use` | Превью и материалоёмкая постройка по книге |
 
 **LuckPerms команда:**
 
 ```bash
 lp group vip parent add default
-lp group vip permission set arc.jobsboosts true
-lp group vip permission set arc.buildbook true
+lp group vip permission set arc.jobs.boost.use true
+lp group vip permission set arc.build.book.create true
+lp group vip permission set arc.build.book.edit true
+lp group vip permission set arc.build.book.use true
 ```
 
 ---
@@ -804,18 +811,18 @@ lp group vip permission set arc.buildbook true
 | Право               | Описание                       |
 |---------------------|--------------------------------|
 | `arc.audit`         | Просмотр экономического аудита |
-| `arc.treasure-hunt` | Управление охотами             |
-| `arc.sound-follow`  | Воспроизведение звуков         |
-| `arc.rtp-respawn`   | RTP при респауне               |
+| `arc.treasure.hunt.admin` | Управление охотами             |
+| `arc.sound.follow`  | Воспроизведение звуков         |
+| `arc.rtp.respawn`   | RTP при респауне               |
 
 **LuckPerms команда:**
 
 ```bash
 lp group moderator parent add vip
 lp group moderator permission set arc.audit true
-lp group moderator permission set arc.treasure-hunt true
-lp group moderator permission set arc.sound-follow true
-lp group moderator permission set arc.rtp-respawn true
+lp group moderator permission set arc.treasure.hunt.admin true
+lp group moderator permission set arc.sound.follow true
+lp group moderator permission set arc.rtp.respawn true
 ```
 
 ---
@@ -827,10 +834,10 @@ lp group moderator permission set arc.rtp-respawn true
 | Право                     | Описание                           |
 |---------------------------|------------------------------------|
 | `arc.admin`               | Reload, repo, logger, emshop, test |
-| `arc.admin.givejobsboost` | Выдача бустов                      |
-| `arc.treasures.admin`     | Управление наградами               |
-| `arc.locpool.admin`       | Управление пулами локаций          |
-| `arc.eliteloot`           | Управление Elite Loot              |
+| `arc.jobs.boost.give` | Выдача бустов                      |
+| `arc.treasure.pool.admin`     | Управление наградами               |
+| `arc.location.pool.admin`       | Управление пулами локаций          |
+| `arc.elite.loot.admin`           | Управление Elite Loot              |
 | `arc.x`                   | Кросс-серверные команды            |
 
 **LuckPerms команда:**
@@ -838,10 +845,10 @@ lp group moderator permission set arc.rtp-respawn true
 ```bash
 lp group admin parent add moderator
 lp group admin permission set arc.admin true
-lp group admin permission set arc.admin.givejobsboost true
-lp group admin permission set arc.treasures.admin true
-lp group admin permission set arc.locpool.admin true
-lp group admin permission set arc.eliteloot true
+lp group admin permission set arc.jobs.boost.give true
+lp group admin permission set arc.treasure.pool.admin true
+lp group admin permission set arc.location.pool.admin true
+lp group admin permission set arc.elite.loot.admin true
 lp group admin permission set arc.x true
 ```
 
@@ -853,22 +860,22 @@ lp group admin permission set arc.x true
 |---------------------------|-----------------------------------------------------------------------|-----------|
 | -                         | `/arc help`                                                           | Все       |
 | `arc.board`               | `/arc board`                                                          | Игрок     |
-| `arc.baltop`              | `/arc baltop`                                                         | Игрок     |
-| `arc.join-message-gui`    | `/arc joinmessage`, `/arc quitmessage`                                | Игрок     |
+| `arc.balance.top`              | `/arc baltop`                                                         | Игрок     |
+| `arc.join.message.gui`    | `/arc joinmessage`, `/arc quitmessage`                                | Игрок     |
 | `arc.invest`              | `/arc invest`                                                         | Игрок     |
 | `arc.store`               | `/arc store`                                                          | Игрок     |
-| `arc.jobsboosts`          | `/arc jobsboosts`                                                     | VIP       |
-| `arc.buildbook`           | `/arc buildbook`                                                      | VIP       |
+| `arc.jobs.boost.use`          | `/arc jobsboosts`                                                     | VIP       |
+| `arc.build.book.give`     | `/arc buildbook`                                                      | Админ     |
 | `arc.audit`               | `/arc audit`                                                          | Модератор |
-| `arc.treasure-hunt`       | `/arc hunt`                                                           | Модератор |
-| `arc.sound-follow`        | `/arc soundfollow`                                                    | Модератор |
-| `arc.rtp-respawn`         | `/arc respawnonrtp`                                                   | Модератор |
+| `arc.treasure.hunt.admin`       | `/arc hunt`                                                           | Модератор |
+| `arc.sound.follow`        | `/arc soundfollow`                                                    | Модератор |
+| `arc.rtp.respawn`         | `/arc respawnonrtp`                                                   | Модератор |
 | `arc.admin`               | `/arc reload`, `/arc repo`, `/arc logger`, `/arc emshop`, `/arc test` | Админ     |
-| `arc.admin.givejobsboost` | `/arc giveboost`                                                      | Админ     |
-| `arc.treasures.admin`     | `/arc treasures`                                                      | Админ     |
-| `arc.pouch`               | `/arc pouch`                                                          | Админ     |
-| `arc.locpool.admin`       | `/arc locationpool`                                                    | Админ     |
-| `arc.eliteloot`           | `/arc eliteloot`                                                      | Админ     |
+| `arc.jobs.boost.give` | `/arc giveboost`                                                      | Админ     |
+| `arc.treasure.pool.admin`     | `/arc treasures`                                                      | Админ     |
+| `arc.pouch.give`               | `/arc pouch`                                                          | Админ     |
+| `arc.location.pool.admin`       | `/arc locationpool`                                                    | Админ     |
+| `arc.elite.loot.admin`           | `/arc eliteloot`                                                      | Админ     |
 | `arc.x`                   | `/x`                                                                  | Админ     |
 
 ---

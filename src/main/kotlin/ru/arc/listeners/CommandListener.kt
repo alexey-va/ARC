@@ -39,7 +39,7 @@ import ru.arc.xserver.playerlist.PlayerManager
 import java.util.UUID
 
 class CommandListener internal constructor(
-    private val commandConfig: Config = ConfigManager.of(ARC.instance.dataPath, "misc.yml"),
+    private val commandConfig: Config = ConfigManager.of(ARC.instance.dataPath, "modules/misc.yml"),
     private val networkPlayerNames: () -> Collection<String> = PlayerManager::getPlayerNames,
     private val moneyCurrencyNames: () -> Collection<String> = ::activeRedisEconomyCurrencyNames,
 ) : Listener {
@@ -281,7 +281,7 @@ class CommandListener internal constructor(
         }
 
     private fun warpCommand(ev: PlayerCommandPreprocessEvent, args: List<String>) {
-        if (ev.player.hasPermission("arc.bypass-portal")) return
+        if (ev.player.hasPermission("arc.portal.bypass")) return
         if (!commandConfig.bool("portal.command-portals", true)) return
         if (args.size < 2) return
 

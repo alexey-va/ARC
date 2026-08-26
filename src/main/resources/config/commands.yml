@@ -25,7 +25,7 @@ commands:
   items:
     name: items
     aliases: [предметы, каталог]
-    permission: arc.items-catalog.use
+    permission: arc.items.catalog.use
     player-only: true
     usage: /arc items
   chat:
@@ -50,7 +50,7 @@ commands:
   baltop:
     name: baltop
     aliases: [ ]
-    permission: arc.baltop
+    permission: arc.balance.top
     player-only: true
   audit:
     name: audit
@@ -67,7 +67,7 @@ commands:
   jobsboosts:
     name: jobsboosts
     aliases: [ ]
-    permission: arc.jobsboosts
+    permission: arc.jobs.boost.use
   logger:
     name: logger
     aliases: [ ]
@@ -75,19 +75,19 @@ commands:
   joinmessage:
     name: joinmessage
     aliases: [ ]
-    permission: arc.join-message-gui
+    permission: arc.join.message.gui
   quitmessage:
     name: quitmessage
     aliases: [ ]
-    permission: arc.join-message-gui
+    permission: arc.join.message.gui
   respawnonrtp:
     name: respawnonrtp
     aliases: [ ]
-    permission: arc.rtp-respawn
+    permission: arc.rtp.respawn
   firstrtp:
     name: firstrtp
     aliases: [ ]
-    permission: arc.rtp-respawn
+    permission: arc.rtp.respawn
     usage: /arc firstrtp <player> <world> | reset <player|uuid> [world|all]
   onboarding:
     name: onboarding
@@ -97,7 +97,7 @@ commands:
   locpool:
     name: locationpool
     aliases: [ ]
-    permission: arc.locpool.admin
+    permission: arc.location.pool.admin
   furniture:
     name: furniture
     aliases: [мебель]
@@ -107,7 +107,7 @@ commands:
   hunt:
     name: hunt
     aliases: [ ]
-    permission: arc.treasure-hunt
+    permission: arc.treasure.hunt.admin
     player-only: false
   schedules:
     name: schedules
@@ -124,7 +124,7 @@ commands:
   treasures:
     name: treasures
     aliases: [ ]
-    permission: arc.treasures.admin
+    permission: arc.treasure.pool.admin
     player-only: false
   test:
     name: test
@@ -133,13 +133,13 @@ commands:
   buildbook:
     name: buildbook
     aliases: [ ]
-    permission: arc.command.buildbook
+    permission: arc.build.book.give
     player-only: true
     usage: /arc buildbook <building> <model-id> [rotation] [y-offset] [name...]
   eliteloot:
     name: eliteloot
     aliases: [ ]
-    permission: arc.eliteloot
+    permission: arc.elite.loot.admin
   invest:
     name: invest
     aliases: [ ]
@@ -151,23 +151,23 @@ commands:
   giveboost:
     name: giveboost
     aliases: [ ]
-    permission: arc.admin.givejobsboost
+    permission: arc.jobs.boost.give
   give:
     name: give
     aliases: [ ]
-    permission: arc.give
+    permission: arc.item.give
     player-only: false
     usage: /arc give <player|list> <preset> [amount]
   pouch:
     name: pouch
     aliases: [мешочек]
-    permission: arc.pouch
+    permission: arc.pouch.give
     player-only: false
     usage: /arc pouch <list|player> [pouch] [amount]
   soundfollow:
     name: soundfollow
     aliases: [sound-follow]
-    permission: arc.sound-follow
+    permission: arc.sound.follow
     usage: /arc soundfollow <player> <namespace:sound>
 messages:
   pouch:
@@ -209,6 +209,11 @@ messages:
     success-no-price: '<green>Куплено <white>%amount% шт.<green> товара <white>%item%<green>.'
   buildbook:
     not-found: <red>Строение <white>%name%<red> не найдено!
+    invalid-model: '<red>Неверный model-id: <white>%value%'
+    invalid-transform: '<red>Поворот должен быть 0°, 90°, 180° или 270°, а смещение — в допустимом диапазоне.'
+    invalid-name: '<red>Название книги должно содержать от 1 до 48 обычных символов.'
+    inventory-full: '<red>В инвентаре нет места для книги.'
+    received: '<green>Книга строительства создана для <white>%building%'
   hunt:
     no-types: <gray>Нет настроенных пресетов охот
     types-header: <gold>═══ Пресеты охот ═══

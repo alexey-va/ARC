@@ -24,7 +24,7 @@ import ru.arc.core.sync
  */
 object JoinMessageGuiFactory {
     private val config: Config by lazy {
-        ConfigManager.of(ARC.instance.dataFolder.toPath(), "misc.yml")
+        ConfigManager.of(ARC.instance.dataFolder.toPath(), "modules/misc.yml")
     }
 
     /**

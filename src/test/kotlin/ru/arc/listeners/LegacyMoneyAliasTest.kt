@@ -294,7 +294,7 @@ private fun listener(enabled: Boolean): CommandListener {
 private fun player(admin: Boolean, giveAll: Boolean = false): Player {
     val player = mockk<Player>(relaxed = true)
     every { player.name } returns "Admin"
-    every { player.hasPermission("arc.bypass-portal") } returns true
+    every { player.hasPermission("arc.portal.bypass") } returns true
     every { player.hasPermission(LEGACY_MONEY_ADMIN_PERMISSION) } returns admin
     every { player.hasPermission("rediseconomy.admin.giveall") } returns giveAll
     return player

@@ -446,8 +446,8 @@ class ConstructionFlowTest : TestBase() {
         @Test
         @DisplayName("fullRotation combines rotation and subRotation")
         fun testFullRotation() {
-            val site = ConstructionSite(building, centerBlock, player, 90, world, 45, 0)
-            assertEquals(135, site.fullRotation)
+            val site = ConstructionSite(building, centerBlock, player, 90, world, 90, 0)
+            assertEquals(180, site.fullRotation)
         }
 
         @Test
@@ -501,15 +501,18 @@ class ConstructionFlowTest : TestBase() {
         }
 
         @Test
-        @DisplayName("Corners Y is affected by yOffset")
+        @DisplayName("Offset changes the anchor exactly once, not schematic coordinates")
         fun testCornersWithYOffset() {
             val yOffset = 5
             val siteNoOffset = ConstructionSite(building, centerBlock, player, 0, world, 0, 0)
             val siteWithOffset = ConstructionSite(building, centerBlock, player, 0, world, 0, yOffset)
 
+            assertEquals(siteNoOffset.corners.corner1.y(), siteWithOffset.corners.corner1.y())
+            val relative = siteWithOffset.corners.corner1
             assertEquals(
-                siteNoOffset.corners.corner1.y() + yOffset,
-                siteWithOffset.corners.corner1.y()
+                siteNoOffset.worldLocation(relative).y + yOffset,
+                siteWithOffset.worldLocation(relative).y,
+                0.001,
             )
         }
 

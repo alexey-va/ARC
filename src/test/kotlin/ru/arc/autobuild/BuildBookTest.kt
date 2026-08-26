@@ -1,0 +1,124 @@
+package ru.arc.autobuild
+
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.bukkit.Material
+import org.bukkit.NamespacedKey
+import org.bukkit.inventory.ItemStack
+import org.bukkit.persistence.PersistentDataType
+import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
+import ru.arc.TestBase
+import ru.arc.buildertools.BuilderClipboard
+import ru.arc.buildertools.BuilderClipboardBlock
+import ru.arc.buildertools.BuilderInventory
+import ru.arc.buildertools.BuilderItemCodec
+import java.util.UUID
+
+class BuildBookTest : TestBase() {
+    @Test
+    fun `cardinal rotation and local offsets share one transform`() {
+        val transform = BuildBookTransform(rotation = 90, offsetX = 2, offsetY = -1, offsetZ = 3).validated()
+
+        assertEquals(Triple(-3, -1, 2), transform.rotatedOffset(90))
+        assertEquals(180, transform.rotate(90).rotation)
+        assertEquals(0, transform.rotate(-90).rotation)
+    }
+
+    @Test
+    fun `non-cardinal rotations are rejected`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            BuildBookTransform(rotation = 45).validated()
+        }
+    }
+
+    @Test
+    fun `offset editing is bounded by configuration`() {
+        val maximum = BuildBookSettings.maxOffset
+        val transform = BuildBookTransform(offsetX = maximum).offset(dx = 5)
+
+        assertEquals(maximum, transform.offsetX)
+    }
+
+    @Test
+    fun `book metadata round trips through PDC`() {
+        val expected = BuildBookData(
+            buildingId = "player-0123456789abcdef0123456789abcdef-0123456789abcdef0123.schem",
+            title = "Дом у озера",
+            transform = BuildBookTransform(270, 2, -1, 4),
+            playerCreated = true,
+            creatorId = UUID.randomUUID(),
+            blockCount = 37,
+            cooldownSeconds = 0,
+        ).validated()
+
+        val item = BuildBookItems.create(expected)
+
+        assertEquals(expected, BuildBookCodec.read(item))
+        assertTrue(item.itemMeta.lore().orEmpty().isNotEmpty())
+    }
+
+    @Test
+    fun `PDC book without current schema is rejected`() {
+        val item = ItemStack(Material.BOOK)
+        item.editMeta { meta ->
+            meta.persistentDataContainer.set(
+                NamespacedKey(plugin, "build_book_id"),
+                PersistentDataType.STRING,
+                "house.schem",
+            )
+        }
+
+        assertNull(BuildBookCodec.read(item))
+    }
+
+    @Test
+    fun `material transaction requires and consumes the exact build book`() {
+        val player = server.addPlayer("BookBuilder")
+        val data = BuildBookData(
+            buildingId = "house.schem",
+            title = "Дом",
+            playerCreated = true,
+            creatorId = player.uniqueId,
+            blockCount = 2,
+            cooldownSeconds = 0,
+        ).validated()
+        val buildBook = BuildBookItems.create(data)
+        val costs = BuilderItemCodec.aggregate(listOf(buildBook, ItemStack(Material.STONE, 2)))
+
+        player.inventory.addItem(ItemStack(Material.BOOK), ItemStack(Material.STONE, 2))
+        assertFalse(BuilderInventory.canApply(player, costs, emptyList(), null, 0))
+
+        player.inventory.clear()
+        player.inventory.addItem(buildBook, ItemStack(Material.STONE, 2))
+        assertTrue(BuilderInventory.canApply(player, costs, emptyList(), null, 0))
+        assertTrue(BuilderInventory.removeCosts(player.inventory, costs))
+        assertTrue(player.inventory.storageContents.filterNotNull().none { BuildBookCodec.matches(it, data) })
+        assertFalse(player.inventory.contains(Material.STONE))
+    }
+
+    @Test
+    fun `content addressed player schematic names are stable and owner scoped`() {
+        val owner = UUID.randomUUID()
+        val now = System.currentTimeMillis()
+        val first = clipboard(now, "minecraft:stone")
+        val same = clipboard(now + 1, "minecraft:stone")
+        val changed = clipboard(now, "minecraft:oak_planks")
+
+        assertEquals(PlayerBuildBookStore.fileName(owner, first), PlayerBuildBookStore.fileName(owner, same))
+        assertNotEquals(PlayerBuildBookStore.fileName(owner, first), PlayerBuildBookStore.fileName(owner, changed))
+        assertNotEquals(PlayerBuildBookStore.fileName(owner, first), PlayerBuildBookStore.fileName(UUID.randomUUID(), first))
+    }
+
+    private fun clipboard(now: Long, blockData: String) = BuilderClipboard(
+        blocks = listOf(BuilderClipboardBlock(0, 0, 0, blockData)),
+        sizeX = 2,
+        sizeY = 1,
+        sizeZ = 1,
+        createdAtMillis = now,
+        expiresAtMillis = now + 60_000,
+    ).validated(100)
+}

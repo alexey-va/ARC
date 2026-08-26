@@ -25,13 +25,13 @@ class ItemsCatalogModuleConfigTest : StringSpec({
             settings.groups.single { it.id == "gui-icons" }.categoryPatterns.toSet().contains("arc_icons") shouldBe true
             settings.groups.last().categoryPatterns.toSet().contains("generic_items") shouldBe true
             settings.hiddenCategoryIds shouldContainExactly setOf("arc_shields")
-            settings.givePermission shouldBe "arc.items-catalog.give"
+            settings.givePermission shouldBe "arc.items.catalog.give"
             settings.recipeClicksEnabled shouldBe true
-            settings.allPermission shouldBe "arc.items-catalog.all"
+            settings.allPermission shouldBe "arc.items.catalog.all"
             settings.allIcon.customModelData shouldBe 0
             settings.categoryFallbackIcon.customModelData shouldBe 0
             val descriptor = checkNotNull(ItemsCatalogModuleConfigTest::class.java.getResource("/plugin.yml")).readText()
-            descriptor.contains("arc.items-catalog.give:\n    description: Give yourself one item by clicking it in the ARC catalog\n    default: op") shouldBe true
+            descriptor.contains("arc.items.catalog.give:\n    description: Give yourself one item by clicking it in the ARC catalog\n    default: op") shouldBe true
         } finally {
             ConfigManager.clear()
             root.toFile().deleteRecursively()

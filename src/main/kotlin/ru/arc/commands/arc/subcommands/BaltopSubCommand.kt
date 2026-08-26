@@ -14,14 +14,14 @@ object BaltopSubCommand : SubCommand {
 
     override val configKey = "baltop"
     override val defaultName = "baltop"
-    override val defaultPermission = "arc.baltop"
+    override val defaultPermission = "arc.balance.top"
     override val defaultDescription = "Открыть таблицу лидеров по балансу"
     override val defaultUsage = "/arc baltop"
     override val defaultPlayerOnly = true
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
         val player = sender.player ?: return true
-        val config = ConfigManager.of(ARC.instance.dataFolder.toPath(), "baltop.yml")
+        val config = ConfigManager.of(ARC.instance.dataFolder.toPath(), "modules/baltop.yml")
         BaltopGuiFactory.showAsync(config, player)
         return true
     }

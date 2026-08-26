@@ -59,9 +59,9 @@ class ConstructionSiteTest : TestBase() {
     @Test
     fun testConstructionSiteWithSubRotation() {
 
-        val site = ConstructionSite(building, centerBlock, player, 0, world, 45, 0)
+        val site = ConstructionSite(building, centerBlock, player, 0, world, 90, 0)
 
-        assertEquals(45, site.subRotation, "SubRotation should be 45")
+        assertEquals(90, site.subRotation, "SubRotation should be cardinal")
     }
 
     @Test

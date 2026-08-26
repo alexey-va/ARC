@@ -39,6 +39,8 @@ class ConstructionSite(
     val subRotation: Int,
     val yOffset: Int,
     val cooldownSeconds: Long = BuildCooldownPolicy.DEFAULT_SECONDS,
+    bookData: BuildBookData? = null,
+    initialTransform: BuildBookTransform? = null,
 ) {
     enum class CompletionCause { NATURAL, FORCED }
 
@@ -102,14 +104,25 @@ class ConstructionSite(
     private val chunks = mutableSetOf<Chunk>()
     internal var display: Display? = null
     internal var construction: Construction? = null
+    private var transform: BuildBookTransform =
+        (initialTransform ?: BuildBookTransform(rotation = subRotation, offsetY = yOffset)).validated()
+    var bookData: BuildBookData? = bookData
+        private set
+    internal var suppressCancelMessage: Boolean = false
 
     // ==================== Computed Properties ====================
 
     /** Combined rotation from player direction and sub-rotation */
-    val fullRotation: Int get() = (rotation + subRotation) % 360
+    val fullRotation: Int get() = BuildBookTransform.normalizeRotation(rotation + transform.rotation)
 
-    /** Center location adjusted for Y offset */
-    val adjustedCenter: Location get() = centerBlock.clone().add(0.0, yOffset.toDouble(), 0.0)
+    /** Anchor adjusted in the book's local axes, then rotated with the structure. */
+    val adjustedCenter: Location
+        get() {
+            val (x, y, z) = transform.rotatedOffset(fullRotation)
+            return centerBlock.clone().add(x.toDouble(), y.toDouble(), z.toDouble())
+        }
+
+    val bookTransform: BuildBookTransform get() = transform
 
     /** Bounding box corners of the construction area */
     val corners: Corners
@@ -117,8 +130,8 @@ class ConstructionSite(
             val c1 = building.getCorner1(fullRotation)
             val c2 = building.getCorner2(fullRotation)
             return Corners(
-                BlockVector3.at(minOf(c1.x(), c2.x()), minOf(c1.y(), c2.y()) + yOffset, minOf(c1.z(), c2.z())),
-                BlockVector3.at(maxOf(c1.x(), c2.x()), maxOf(c1.y(), c2.y()) + yOffset, maxOf(c1.z(), c2.z()))
+                BlockVector3.at(minOf(c1.x(), c2.x()), minOf(c1.y(), c2.y()), minOf(c1.z(), c2.z())),
+                BlockVector3.at(maxOf(c1.x(), c2.x()), maxOf(c1.y(), c2.y()), maxOf(c1.z(), c2.z()))
             )
         }
 
@@ -234,7 +247,8 @@ class ConstructionSite(
         checkPoints.add(Triple(midX, midY, midZ))
 
         for ((x, y, z) in checkPoints) {
-            val loc = Location(world, centerBlock.x + x, centerBlock.y + y, centerBlock.z + z)
+            val anchor = adjustedCenter
+            val loc = Location(world, anchor.x + x, anchor.y + y, anchor.z + z)
             if (!wg.canBuild(player, loc)) {
                 warn(
                     "[autobuild] WorldGuard denied build for {} at {} {} {} building {}",
@@ -257,9 +271,10 @@ class ConstructionSite(
     private fun calculateChunks() {
         if (chunks.isNotEmpty()) return
         val c = corners
-        for (x in c.corner1.x() until c.corner2.x()) {
-            for (z in c.corner1.z() until c.corner2.z()) {
-                val loc = Location(world, (x + centerBlock.x), 1.0, (z + centerBlock.z))
+        val anchor = adjustedCenter
+        for (x in c.corner1.x()..c.corner2.x()) {
+            for (z in c.corner1.z()..c.corner2.z()) {
+                val loc = Location(world, x + anchor.x, anchor.y, z + anchor.z)
                 chunks.add(loc.chunk)
             }
         }
@@ -278,10 +293,47 @@ class ConstructionSite(
     // ==================== Utilities ====================
 
     /** Checks if this site matches the given parameters (for click confirmation) */
-    fun same(player: Player, location: Location, building: Building): Boolean =
+    fun same(player: Player, location: Location, building: Building, book: BuildBookData? = null): Boolean =
         location.toCenterLocation() == centerBlock.toCenterLocation() &&
             building.fileName == this.building.fileName &&
-            rotation == BuildingManager.rotationFromYaw(player.yaw)
+            rotation == BuildingManager.rotationFromYaw(player.yaw) &&
+            (book == null || book.transform == transform)
+
+    fun relativePositionsBottomUp(): Sequence<BlockVector3> = sequence {
+        val c = corners
+        for (y in c.corner1.y()..c.corner2.y()) {
+            for (x in c.corner1.x()..c.corner2.x()) {
+                for (z in c.corner1.z()..c.corner2.z()) yield(BlockVector3.at(x, y, z))
+            }
+        }
+    }
+
+    fun worldLocation(relative: BlockVector3): Location = adjustedCenter.clone().add(
+        relative.x().toDouble(),
+        relative.y().toDouble(),
+        relative.z().toDouble(),
+    )
+
+    fun refreshPreview(next: BuildBookData): Boolean {
+        if (state != ConstructionState.DisplayingOutline || next.buildingId != building.fileName) return false
+        val previous = transform
+        transform = next.transform.validated()
+        chunks.clear()
+        if (!canBuild() && !player.hasPermission("arc.admin")) {
+            transform = previous
+            chunks.clear()
+            return false
+        }
+        bookData = next
+        display?.stop()
+        display = Display(this).also { it.showBorder(displaySeconds) }
+        return true
+    }
+
+    fun cancelSilently(): Boolean {
+        suppressCancelMessage = true
+        return cancel()
+    }
 
     /** Gets particle locations for the center block highlight */
     fun getCenterLocations(): List<Location> {

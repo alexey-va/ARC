@@ -33,6 +33,8 @@ Treasure hunts, auto-building, survival-safe transactional builder tools, stock 
 
 Mount configuration and permission-state contract: [`docs/mounts.md`](docs/mounts.md).
 
+Canonical ARC permission namespace and migration map: [`docs/permissions.md`](docs/permissions.md).
+
 Builder tools player and recovery contract: [`src/main/kotlin/ru/arc/buildertools/README.md`](src/main/kotlin/ru/arc/buildertools/README.md).
 
 ## Dependencies

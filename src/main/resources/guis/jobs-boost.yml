@@ -131,7 +131,7 @@ boosts:
       price: 50000
       boost-amount: 0.5
       seconds: 3600
-      permission: "arc.boost.large"
+      permission: "arc.jobs.boost.large"
       material: GOLD_BLOCK
       model-data: 0
       currency: MONEY

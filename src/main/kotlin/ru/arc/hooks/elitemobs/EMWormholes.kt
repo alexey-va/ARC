@@ -28,7 +28,7 @@ class EMWormholes internal constructor(
     private val scheduleWormholes: (periodTicks: Long, task: () -> Unit) -> ScheduledTask,
 ) : AutoCloseable {
     constructor() : this(
-        config = ConfigManager.of(ARC.instance.dataPath, "elitemobs.yml"),
+        config = ConfigManager.of(ARC.instance.dataPath, "modules/elitemobs.yml"),
         scheduleWormholes = { periodTicks, task ->
             repeating(periodTicks.ticks, delay = 20.ticks) {
                 task()

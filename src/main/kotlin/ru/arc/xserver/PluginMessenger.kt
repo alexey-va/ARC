@@ -88,7 +88,7 @@ class PluginMessenger : PluginMessageListener {
         request: NetworkRtpRequest,
     ) {
         if (!player.isOnline) return
-        val config = ConfigManager.of(ARC.instance.dataPath, "misc.yml")
+        val config = ConfigManager.of(ARC.instance.dataPath, "modules/misc.yml")
         val allowedWorlds =
             config
                 .stringList("rtp-respawn.allowed-worlds", listOf("survival", "mining", "vanilla"))

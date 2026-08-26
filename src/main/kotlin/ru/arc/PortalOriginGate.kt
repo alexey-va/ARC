@@ -23,7 +23,7 @@ import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.sin
 
-internal const val ORIGIN_GATE_PERMISSION = "arc.portal.origin-gate"
+internal const val ORIGIN_GATE_PERMISSION = "arc.portal.origin.gate"
 
 internal fun shouldUseOriginGate(
     enabled: Boolean,

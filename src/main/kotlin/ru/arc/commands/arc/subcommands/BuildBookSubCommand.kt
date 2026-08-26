@@ -1,161 +1,96 @@
 package ru.arc.commands.arc.subcommands
 
-import de.tr7zw.changeme.nbtapi.NBT
-import net.kyori.adventure.text.Component
-import net.kyori.adventure.text.format.NamedTextColor
-import net.kyori.adventure.text.minimessage.MiniMessage
-import net.kyori.adventure.text.minimessage.tag.Tag
-import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
-import org.bukkit.Material
 import org.bukkit.command.CommandSender
-import org.bukkit.inventory.ItemStack
-import ru.arc.ARC
+import ru.arc.autobuild.BuildBookData
+import ru.arc.autobuild.BuildBookItems
+import ru.arc.autobuild.BuildBookTransform
 import ru.arc.autobuild.BuildingManager
 import ru.arc.commands.arc.CommandConfig
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.tabComplete
-import ru.arc.config.ConfigManager
-import ru.arc.util.TextUtil.strip
-import java.util.Collections
 
-/**
- * /arc buildbook - создание книги строительства.
- *
- * Использование: /arc buildbook <building> <model-id> [rotation] [y-offset] [name]
- */
+/** Administrative creation of a book backed by an existing schematic. */
 object BuildBookSubCommand : SubCommand {
-
     override val configKey = "buildbook"
     override val defaultName = "buildbook"
-    override val defaultPermission = "arc.command.buildbook"
+    override val defaultPermission = "arc.build.book.give"
     override val defaultDescription = "Создать книгу строительства"
     override val defaultUsage = "/arc buildbook <building> <model-id> [rotation] [y-offset] [name...]"
     override val defaultPlayerOnly = true
 
-    private val config get() = ConfigManager.ofModule(ARC.instance.dataPath, "auto-build.yml")
-
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
         val player = requirePlayer(sender) ?: return true
-
         if (args.size < 2) {
             sendUsage(sender)
             return true
         }
 
-        val fileName = args[0]
-        val building = BuildingManager.getBuilding(fileName)
+        val building = BuildingManager.getBuilding(args[0])
         if (building == null) {
             sender.sendMessage(
                 CommandConfig.get(
                     "buildbook.not-found",
                     "<red>Строение <white>%name%<red> не найдено!",
                     "%name%",
-                    fileName
-                )
+                    args[0],
+                ),
             )
             return true
         }
 
-        val modelId = args[1].toIntOrNull() ?: run {
+        val modelId = args[1].toIntOrNull()?.takeIf { it >= 0 }
+        if (modelId == null) {
             sender.sendMessage(
                 CommandConfig.get(
                     "buildbook.invalid-model",
                     "<red>Неверный model-id: <white>%value%",
                     "%value%",
-                    args[1]
-                )
+                    args[1],
+                ),
             )
             return true
         }
 
-        // Собираем имя из оставшихся аргументов (начиная с 5-го)
-        val name = if (args.size > 4) {
-            "&7" + args.drop(4).joinToString(" ")
-        } else {
-            "&7" + config.string("build-book.default-name", "Дом")
+        val transform = BuildBookTransform.parseLegacy(args.getOrNull(2), args.getOrNull(3))
+        if (transform == null) {
+            sender.sendMessage(CommandConfig.get("buildbook.invalid-transform", "<red>Поворот или смещение книги вне допустимого диапазона."))
+            return true
+        }
+        val title = args.drop(4).joinToString(" ").trim().ifEmpty { building.fileName }
+        if (title.length > 48 || title.any(Char::isISOControl)) {
+            sender.sendMessage(CommandConfig.get("buildbook.invalid-name", "<red>Название книги должно содержать от 1 до 48 обычных символов."))
+            return true
         }
 
-        // Создаём предмет
-        val stack = ItemStack(Material.BOOK)
-
-        NBT.modify(stack) { nbt ->
-            nbt.setString("arc:building_key", fileName)
-            if (args.size >= 3) {
-                nbt.setString("arc:rotation", args[2])
-            }
-            if (args.size >= 4) {
-                nbt.setString("arc:y_offset", args[3])
-            }
+        val volume = building.volume
+        val data = BuildBookData(
+            buildingId = building.fileName,
+            title = title,
+            transform = transform,
+            blockCount = volume.toInt().takeIf { volume <= 10_000 },
+        ).validated()
+        val leftovers = player.inventory.addItem(BuildBookItems.create(data, modelId))
+        if (leftovers.isNotEmpty()) {
+            sender.sendMessage(CommandConfig.get("buildbook.inventory-full", "<red>В инвентаре нет места для книги."))
+            return true
         }
-
-        // Настраиваем мету
-        val meta = stack.itemMeta ?: return true
-        val longName = createLongName(name)
-
-        val display = config.component(
-            "build-book.display-name",
-            "     <gray>\uD83D\uDEE0 <gold>Книга строительства <gray>\uD83D\uDEE0",
-        ) { tag("building", Component.text(fileName, NamedTextColor.GOLD)) }
-
-        val lore = config.stringList(
-            "build-book.lore", listOf(
-                " ",
-                "      <gray>Эта книга позволяет вам",
-                "    <gray>возвести готовое строение    ",
-                " ",
-                "<long_name>",
-                " ",
-                "        <gray>Нажмите <green>ПКМ <gray>по земле"
-            )
-        ).map { str ->
-            MiniMessage.miniMessage().deserialize(
-                str, TagResolver.builder()
-                    .tag("name", Tag.inserting(LegacyComponentSerializer.legacyAmpersand().deserialize(name)))
-                    .tag("long_name", Tag.inserting(longName))
-                    .build()
-            )
-        }.map { strip(it) }
-
-        meta.displayName(display)
-        meta.lore(lore)
-        @Suppress("DEPRECATION")
-        if (modelId != 0) meta.setCustomModelData(modelId)
-        stack.itemMeta = meta
-
-        player.inventory.addItem(stack)
-
-        val message = config.component(
-            "build-book.received", "<green>Вы получили книгу для <building>",
-        ) { tag("building", Component.text(fileName, NamedTextColor.GOLD)) }
-        sender.sendMessage(message)
-
+        sender.sendMessage(
+            CommandConfig.get(
+                "buildbook.received",
+                "<green>Вы получили книгу для <white>%building%",
+                "%building%",
+                building.fileName,
+            ),
+        )
         return true
     }
 
-    private fun createLongName(name: String): Component {
-        val bName = LegacyComponentSerializer.legacyAmpersand().deserialize(name)
-        val length = bName.content().length
-        var len2 = maxOf(0, (37 - length - 4) / 2)
-        if (length < 9) len2 += 1
-        if (length < 13) len2 += 1
-
-        return strip(
-            Component.text(Collections.nCopies(len2, " ").joinToString(""))
-                .append(Component.text("\uD83D\uDEE0 ", NamedTextColor.GREEN))
-                .append(bName)
-                .append(Component.text(" \uD83D\uDEE0", NamedTextColor.GREEN))
-        ) ?: Component.empty()
-    }
-
-    override fun tabComplete(sender: CommandSender, args: Array<String>): List<String>? {
-        return when (args.size) {
-            1 -> BuildingManager.getBuildings().map { it.fileName }.tabComplete(args[0])
-            2 -> listOf("0", "1", "2").tabComplete(args[1])
-            3 -> listOf("0", "90", "180", "270").tabComplete(args[2])
-            4 -> listOf("-1", "0", "1").tabComplete(args[3])
-            5 -> listOf("[name]")
-            else -> null
-        }
+    override fun tabComplete(sender: CommandSender, args: Array<String>): List<String>? = when (args.size) {
+        1 -> BuildingManager.getBuildings().map { it.fileName }.tabComplete(args[0])
+        2 -> listOf("0", "1", "2").tabComplete(args[1])
+        3 -> listOf("0", "90", "180", "270").tabComplete(args[2])
+        4 -> listOf("-1", "0", "1").tabComplete(args[3])
+        5 -> listOf("[name]")
+        else -> null
     }
 }

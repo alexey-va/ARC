@@ -27,7 +27,7 @@ class XCommand(
     override fun runInternal() {
         info("[XCommand] runInternal — server={}, servers={}, command={}, sender={}, player={}, uuid={}",
             ARC.serverName, servers, command, sender, playerName, playerUuid)
-        val miscConfig = ConfigManager.of(ARC.instance.dataFolder.toPath(), "misc.yml")
+        val miscConfig = ConfigManager.of(ARC.instance.dataFolder.toPath(), "modules/misc.yml")
         if (!targetsCurrentServer(servers, ARC.serverName)) {
             info("[XCommand] Skipping — this server ({}) is not in target list: {}", ARC.serverName, servers)
             return

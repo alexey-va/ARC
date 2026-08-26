@@ -27,14 +27,16 @@ class BuilderToolsDomainTest : FunSpec({
 
         val override = Config(temporaryDirectory, "modules/builder-tools-runtime.yml")
         override.setBoolean("enabled", true)
-        override.setStringList("allowed-worlds", listOf("*"))
+        override.setStringList("allowed-worlds", listOf("world"))
         val configured = BuilderToolsConfig(base, override).validated()
         configured.enabled shouldBe true
-        configured.allowedWorlds shouldBe setOf("*")
+        configured.allowedWorlds shouldBe setOf("world")
         configured.shopMaxQuotedMaterials shouldBe 64
-        configured.allowsWorld("world") shouldBe true
-        configured.allowsWorld("world_nether") shouldBe true
-        configured.allowsWorld("resource-end") shouldBe true
+        configured.allowsWorld("WORLD") shouldBe true
+
+        override.setStringList("allowed-worlds", listOf("*"))
+        val wildcard = BuilderToolsConfig(base, override).validated()
+        wildcard.allowsWorld("rc_survival_nether") shouldBe true
 
         override.setStringList("allowed-worlds", listOf("*", "world"))
         shouldThrow<IllegalArgumentException> { BuilderToolsConfig(base, override).validated() }
@@ -51,25 +53,24 @@ class BuilderToolsDomainTest : FunSpec({
         pluginDescriptor.contains("aliases: [buildtools]") shouldBe false
     }
 
-    test("permission policy accepts feature grants and both migration namespaces") {
+    test("permission policy accepts only canonical feature nodes") {
         fun permissions(vararg nodes: String): (String) -> Boolean = nodes.toSet()::contains
 
-        BuilderPermissionPolicy.canUse(BuilderFeature.FILL, permissions("arc.buildertools.fill")) shouldBe true
+        BuilderPermissionPolicy.canUse(BuilderFeature.FILL, permissions("arc.builder.tools.fill")) shouldBe true
         BuilderPermissionPolicy.canUse(BuilderFeature.COPY, permissions("arc.builder.tools.copy")) shouldBe true
-        BuilderPermissionPolicy.canUse(BuilderFeature.PASTE, permissions("arc.deconstruction")) shouldBe true
-        BuilderPermissionPolicy.canUse(BuilderFeature.CROWN, permissions("arc.crown")) shouldBe true
-        BuilderPermissionPolicy.canUse(BuilderFeature.CROWN, permissions("arc.deconstruction")) shouldBe false
+        BuilderPermissionPolicy.canUse(BuilderFeature.PASTE, permissions("arc.buildertools.paste")) shouldBe false
+        BuilderPermissionPolicy.canUse(BuilderFeature.CROWN, permissions("arc.crown")) shouldBe false
         BuilderPermissionPolicy.canUseAny(permissions("arc.builder.tools.deconstruct")) shouldBe true
         BuilderPermissionPolicy.canUseAny(permissions()) shouldBe false
     }
 
-    test("permission policy preserves old selection and hourly tiers under absolute bounds") {
+    test("permission policy applies canonical selection and hourly tiers under absolute bounds") {
         fun permissions(vararg nodes: String): (String) -> Boolean = nodes.toSet()::contains
 
-        BuilderPermissionPolicy.maximumAxis(permissions("arc.deconstruction.size.100"), 48) shouldBe 48
+        BuilderPermissionPolicy.maximumAxis(permissions("arc.builder.tools.selection.size.100"), 48) shouldBe 48
         BuilderPermissionPolicy.maximumAxis(permissions("arc.builder.tools.selection.size.40"), 48) shouldBe 40
         BuilderPermissionPolicy.maximumAxis(permissions(), 48) shouldBe 20
-        BuilderPermissionPolicy.hourlyChanges(permissions("arc.deconstruction.hourly.150000"), 20_000) shouldBe 150_000
+        BuilderPermissionPolicy.hourlyChanges(permissions("arc.builder.tools.hourly.150000"), 20_000) shouldBe 150_000
         BuilderPermissionPolicy.hourlyChanges(permissions("arc.builder.tools.hourly.50000"), 20_000) shouldBe 50_000
         BuilderPermissionPolicy.hourlyChanges(permissions(), 20_000) shouldBe 20_000
     }

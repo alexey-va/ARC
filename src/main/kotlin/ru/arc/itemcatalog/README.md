@@ -17,7 +17,7 @@ that enable `plugins/ARC/modules/items-catalog.yml` and run ItemsAdder.
   the catalog root.
 - `ItemsCatalogGuiController` renders only one 45-entry page at a time. Every
   inventory click and drag path is cancelled. An item click grants one fresh
-  clone only to players with `arc.items-catalog.give` (default: op). A full
+  clone only to players with `arc.items.catalog.give` (default: op). A full
   inventory fails without dropping the item.
 - For ordinary players an indexed enabled recipe opens through ItemsAdder's
   supported player command `/iarecipe <item>`. If no recipe exists, ARC uses

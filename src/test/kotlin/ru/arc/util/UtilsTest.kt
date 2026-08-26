@@ -2,7 +2,9 @@ package ru.arc.util
 
 import org.bukkit.Location
 import org.bukkit.Material
+import org.bukkit.Bukkit
 import org.bukkit.block.BlockFace
+import org.bukkit.block.data.Directional
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -318,6 +320,15 @@ class UtilsTest : TestBase() {
             facing = BlockUtils.rotateFacingClockwise(facing)
         }
         assertEquals(BlockFace.NORTH, facing, "4 clockwise rotations should return to original")
+    }
+
+    @Test
+    fun testRotateBlockDataUsesClockwiseStructureRotation() {
+        val stairs = Bukkit.createBlockData("minecraft:oak_stairs[facing=north]") as Directional
+
+        BlockUtils.rotateBlockData(stairs, 90)
+
+        assertEquals(BlockFace.EAST, stairs.facing)
     }
 
     // ========== GetLine Tests ==========

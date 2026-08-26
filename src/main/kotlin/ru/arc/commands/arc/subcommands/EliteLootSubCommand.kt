@@ -24,7 +24,7 @@ object EliteLootSubCommand : SubCommand {
 
     override val configKey = "eliteloot"
     override val defaultName = "eliteloot"
-    override val defaultPermission = "arc.eliteloot"
+    override val defaultPermission = "arc.elite.loot.admin"
     override val defaultDescription = "Просмотр и добавление декоративного лута EliteMobs из предмета в руке"
     override val defaultUsage = "/arc eliteloot [list|add [weight]]"
     override val defaultPlayerOnly = true
@@ -126,4 +126,3 @@ object EliteLootSubCommand : SubCommand {
         }
     }
 }
-

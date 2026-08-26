@@ -107,7 +107,7 @@ sealed class ConstructionState {
             site.forceloadChunks()
             site.construction?.startBuilding()
 
-            if (site.cooldownSeconds > 0 && !site.player.hasPermission("arc.buildings.bypass-cooldown")) {
+            if (site.cooldownSeconds > 0 && !site.player.hasPermission("arc.buildings.cooldown.bypass")) {
                 CooldownManager.addCooldown(
                     site.player.uniqueId,
                     "building_cooldown",
@@ -141,7 +141,7 @@ sealed class ConstructionState {
         override fun enter(site: ConstructionSite) {
             site.display?.stop()
             site.construction?.destroyNpc()
-            site.player.sendMessage(BuildConfig.Messages.cancelled())
+            if (!site.suppressCancelMessage) site.player.sendMessage(BuildConfig.Messages.cancelled())
             site.cleanup(0)
         }
 

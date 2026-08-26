@@ -4,7 +4,7 @@ enabled: false
 
 clicks:
   # Admin-style item grants are always protected by this explicit permission.
-  give-permission: arc.items-catalog.give
+  give-permission: arc.items.catalog.give
   # Uses ItemsAdder's supported /iarecipe <item> player command for indexed recipes.
   recipes-enabled: true
 
@@ -20,7 +20,7 @@ all-items:
   name: "Все предметы"
   description:
     - "Полный реестр предметов ItemsAdder."
-  permission: arc.items-catalog.all
+  permission: arc.items.catalog.all
   icon:
     material: CHEST
     customModelData: 0

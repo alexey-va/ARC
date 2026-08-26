@@ -18,8 +18,8 @@ class PortalOriginGateTest : FreeSpec({
 
         "is declared as an operator-only experimental permission" {
             val descriptor = checkNotNull(PortalOriginGateTest::class.java.getResource("/plugin.yml")).readText()
-            descriptor.contains("arc.portal.origin-gate:").shouldBeTrue()
-            descriptor.substringAfter("arc.portal.origin-gate:").substringBefore("arc.items-catalog.use:")
+            descriptor.contains("arc.portal.origin.gate:").shouldBeTrue()
+            descriptor.substringAfter("arc.portal.origin.gate:").substringBefore("arc.items.catalog.use:")
                 .contains("default: op")
                 .shouldBeTrue()
         }
@@ -63,7 +63,7 @@ class PortalOriginGateTest : FreeSpec({
         }
 
         "keeps the bundled portable profile disabled" {
-            val defaults = checkNotNull(PortalOriginGateTest::class.java.getResource("/misc.yml")).readText()
+            val defaults = checkNotNull(PortalOriginGateTest::class.java.getResource("/modules/misc.yml")).readText()
             val originGate = defaults.substringAfter("origin-gate:").substringBefore("# DUST_COLOR_TRANSITION")
             originGate.contains("enabled: false").shouldBeTrue()
             originGate.contains("astral-item: \"\"").shouldBeTrue()

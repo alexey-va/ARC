@@ -150,6 +150,7 @@ class AuditConfigLoadTest {
     }
 
     private fun writeAuditYaml(content: String) {
-        Files.writeString(tempDir.resolve("audit.yml"), content)
+        val modules = Files.createDirectories(tempDir.resolve("modules"))
+        Files.writeString(modules.resolve("audit.yml"), content)
     }
 }

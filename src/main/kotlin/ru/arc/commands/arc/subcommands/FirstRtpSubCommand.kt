@@ -21,7 +21,7 @@ import java.util.UUID
 object FirstRtpSubCommand : SubCommand {
     override val configKey = "firstrtp"
     override val defaultName = "firstrtp"
-    override val defaultPermission = "arc.rtp-respawn"
+    override val defaultPermission = "arc.rtp.respawn"
     override val defaultDescription = "Перевести игрока в мир, при первом посещении запустить RTP"
     override val defaultUsage =
         "/arc firstrtp <player> <world> | reset <player|uuid> [world|all]"

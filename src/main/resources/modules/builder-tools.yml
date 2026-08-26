@@ -52,6 +52,7 @@ locales:
       - "<prefix><white>/builder wand <gray>— настроить селектор из осколка эха"
       - "<prefix><white>/builder fill [блок] <gray>— заполнить воздух за ваши материалы"
       - "<prefix><white>/builder copy <gray>и <white>/builder paste <gray>— временный чертёж"
+      - "<prefix><white>/builder book [название] <gray>— настроить обычную книгу как постоянный чертёж"
       - "<prefix><white>/builder deconstruct <gray>— разобрать область текущим инструментом"
       - "<prefix><white>/builder crown [листва] [3–10] <gray>— построить крону"
       - "<prefix><white>/builder confirm <gray>— применить план из своих материалов"
@@ -93,8 +94,8 @@ locales:
         - "<gray>ПКМ по блоку — точка 2"
         - "<dark_gray>Сам по себе ничего не изменяет"
       received: "<prefix><green>Осколок эха настроен как селектор."
-      inventory-full: "<prefix><yellow>Освободите один слот для селектора."
-      material-required: "<prefix><yellow>Держите осколок эха в основной руке."
+      inventory-full: "<prefix><yellow>Освободите один слот или возьмите в руку один осколок эха."
+      material-required: "<prefix><yellow>Возьмите в основную руку обычный осколок эха. Он не создаётся бесплатно."
     crown-brush:
       name: "<aqua><bold>Кисть крон"
       lore:
@@ -102,8 +103,8 @@ locales:
         - "<gray>ПКМ — подтвердить показанный план"
         - "<dark_gray>Каждый лист расходуется из инвентаря"
       received: "<prefix><green>Обычная кисть настроена для создания крон."
-      inventory-full: "<prefix><yellow>Освободите один слот для кисти крон."
-      material-required: "<prefix><yellow>Держите кисть в основной руке."
+      inventory-full: "<prefix><yellow>Освободите один слот или возьмите в руку одну кисть."
+      material-required: "<prefix><yellow>Возьмите в основную руку обычную кисть. Она не создаётся бесплатно."
     crown:
       same-face: "<prefix><yellow>Подтвердите ПКМ по той же грани."
       settings-updated: "<prefix><green>Настройка <white><setting></white>: <white><value></white>."
@@ -125,7 +126,16 @@ locales:
         - "<dark_gray>  • <gray>Густота: <aqua><density></aqua>; край: <aqua><noise></aqua>"
         - "<dark_gray>  • <gray>Палитра:"
     clipboard:
-      saved: "<prefix><green>Скопирован безопасный чертёж: <white><count></white> блоков. Он хранится 15 минут."
+      saved: "<prefix><green>Скопирован безопасный чертёж: <white><count></white> блоков. <gray>Вставьте его или создайте книгу командой <white>/builder book</white> в течение 15 минут."
+    book:
+      created: "<prefix><green>Книга <white><name></white> создана из чертежа на <white><count></white> блоков."
+      material-required: "<prefix><yellow>Возьмите в основную руку обычную книгу. Она станет книгой строительства."
+      inventory-full: "<prefix><yellow>Освободите один слот или возьмите в руку одну обычную книгу."
+      invalid-name: "<prefix><red>Название книги должно содержать от 1 до 48 обычных символов."
+      limit: "<prefix><yellow>Достигнут лимит постоянных чертежей. Повторная книга из той же копии всё ещё доступна."
+      failed: "<prefix><red>Книгу не удалось сохранить. Мир и инвентарь не изменены."
+      invalid: "<prefix><red>Эта пользовательская книга повреждена или больше недоступна."
+      missing: "<prefix><yellow>Положите в инвентарь ту же книгу, для которой открыто превью."
     plan:
       ready: "<prefix><green>План <white><kind></white>: <white><count></white> блоков. <gray>Расход: <white><cost></white>; результат: <white><reward></white>. Проверьте частицы и введите <click:run_command:'/builder confirm'><aqua>/builder confirm</aqua></click> за <seconds> с."
       market:
@@ -156,6 +166,7 @@ locales:
       - "<prefix><white>/builder wand <gray>— bind an echo shard as the selector"
       - "<prefix><white>/builder fill [block] <gray>— fill space using your materials"
       - "<prefix><white>/builder copy <gray>and <white>/builder paste <gray>— temporary blueprint"
+      - "<prefix><white>/builder book [name] <gray>— bind a plain book to a permanent blueprint"
       - "<prefix><white>/builder deconstruct <gray>— dismantle with your current tool"
       - "<prefix><white>/builder crown [leaves] [3–10] <gray>— build a leaf crown"
       - "<prefix><white>/builder confirm <gray>— build with materials you own"
@@ -197,8 +208,8 @@ locales:
         - "<gray>Right-click a block — position 2"
         - "<dark_gray>The selector never changes blocks"
       received: "<prefix><green>Your echo shard is now the builder selector."
-      inventory-full: "<prefix><yellow>Free one slot for the selector."
-      material-required: "<prefix><yellow>Hold a plain echo shard in your main hand."
+      inventory-full: "<prefix><yellow>Free one slot or hold a single echo shard."
+      material-required: "<prefix><yellow>Hold a plain echo shard in your main hand. ARC never creates one for free."
     crown-brush:
       name: "<aqua><bold>Crown brush"
       lore:
@@ -206,8 +217,8 @@ locales:
         - "<gray>Right-click to confirm the shown plan"
         - "<dark_gray>Every leaf is consumed from inventory"
       received: "<prefix><green>Your plain brush is now the crown brush."
-      inventory-full: "<prefix><yellow>Free one slot for the crown brush."
-      material-required: "<prefix><yellow>Hold a plain brush in your main hand."
+      inventory-full: "<prefix><yellow>Free one slot or hold a single brush."
+      material-required: "<prefix><yellow>Hold a plain brush in your main hand. ARC never creates one for free."
     crown:
       same-face: "<prefix><yellow>Confirm on the same face with right-click."
       settings-updated: "<prefix><green><white><setting></white> is now <white><value></white>."
@@ -229,7 +240,16 @@ locales:
         - "<dark_gray>  • <gray>Density: <aqua><density></aqua>; edge: <aqua><noise></aqua>"
         - "<dark_gray>  • <gray>Palette:"
     clipboard:
-      saved: "<prefix><green>Copied a safe <white><count></white>-block blueprint for 15 minutes."
+      saved: "<prefix><green>Copied a safe <white><count></white>-block blueprint. <gray>Paste it or run <white>/builder book</white> within 15 minutes."
+    book:
+      created: "<prefix><green>Created <white><name></white> from a <white><count></white>-block blueprint."
+      material-required: "<prefix><yellow>Hold a plain book in your main hand. It will become the build book."
+      inventory-full: "<prefix><yellow>Free one slot or hold a single plain book."
+      invalid-name: "<prefix><red>A book name must contain 1 to 48 ordinary characters."
+      limit: "<prefix><yellow>You reached the permanent-blueprint limit. You can still bind the same copied design again."
+      failed: "<prefix><red>The book could not be saved. The world and inventory were not changed."
+      invalid: "<prefix><red>This player build book is damaged or unavailable."
+      missing: "<prefix><yellow>Keep the exact book used for this preview in your inventory."
     plan:
       ready: "<prefix><green><white><kind></white> plan: <white><count></white> blocks. <gray>Cost: <white><cost></white>; result: <white><reward></white>. Check the particles and enter <click:run_command:'/builder confirm'><aqua>/builder confirm</aqua></click> within <seconds> seconds."
       market:

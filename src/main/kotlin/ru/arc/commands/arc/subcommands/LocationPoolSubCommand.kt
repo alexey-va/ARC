@@ -23,7 +23,7 @@ object LocationPoolSubCommand : SubCommand {
 
     override val configKey = "locpool"
     override val defaultName = "locationpool"
-    override val defaultPermission = "arc.locpool.admin"
+    override val defaultPermission = "arc.location.pool.admin"
     override val defaultDescription = "Редактирование пулов локаций: добавление/удаление точек кликом на блок"
     override val defaultUsage = "/arc locationpool [list|delete <pool>|<pool>]  — <pool> переключает режим редактирования"
     override val defaultPlayerOnly = true

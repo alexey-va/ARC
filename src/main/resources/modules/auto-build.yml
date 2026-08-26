@@ -6,16 +6,75 @@
 # Тик интервала очистки «зависших» построек
 cleanup-interval: 20
 build-book:
-  display-name: '     <gray>🛠 <gold>Книга строительства <gray>🛠'
+  display-name: '<#92bed8><bold>Книга строительства'
   lore:
-    - ' '
-    - '      <gray>Эта книга позволяет вам'
-    - '    <gray>возвести готовое строение    '
-    - ' '
-    - <long_name>
-    - ' '
-    - '        <gray>Нажмите <green>ПКМ <gray>по земле'
-  received: <green>Вы получили книгу для <building>
+    - '<#e6fff3><name>'
+    - ''
+    - '<#8c8c8c>Блоков: <#92bed8><blocks>'
+    - '<#8c8c8c>Поворот: <#92bed8><rotation>°'
+    - '<#8c8c8c>Смещение: <#92bed8><offset_x>, <offset_y>, <offset_z>'
+    - ''
+    - '<#8c8c8c>• <#92bed8>ПКМ по земле<#e6fff3> — показать'
+    - '<#8c8c8c>• <#92bed8>ПКМ в воздух<#e6fff3> — настроить'
+  received: '<#2bba43>Книга строительства создана: <#92bed8><building>'
+  player-copy:
+    max-offset: 16
+    max-per-player: 24
+    custom-model-data: 0
+    default-name: 'Моя постройка'
+  editor:
+    title: '<dark_gray>Настройка книги'
+    invalid: '<#c42323>Книга строительства повреждена или её схема недоступна.'
+    no-permission: '<#c42323>У вас нет доступа к настройке книг строительства.'
+    preview-blocked: '<#ff9f0f>Это смещение выходит за границы доступной для строительства области.'
+    overview:
+      name: '<#92bed8><bold><name>'
+      lore:
+        - '<#e6fff3>Настройте положение будущей постройки.'
+        - ''
+        - '<#8c8c8c>Поворот: <#92bed8><rotation>°'
+        - '<#8c8c8c>Смещение: <#92bed8><offset_x>, <offset_y>, <offset_z>'
+        - ''
+        - '<#969696>Открытое превью обновляется сразу.'
+    axis-x:
+      name: '<#92bed8><bold>Смещение X'
+      lore:
+        - '<#8c8c8c>Текущее значение: <#92bed8><value>'
+        - ''
+        - '<#8c8c8c>• <#e6fff3>ЛКМ: −1 <#8c8c8c>• <#e6fff3>ПКМ: +1'
+        - '<#969696>С Shift шаг равен 5 блокам.'
+    axis-y:
+      name: '<#92bed8><bold>Высота Y'
+      lore:
+        - '<#8c8c8c>Текущее значение: <#92bed8><value>'
+        - ''
+        - '<#8c8c8c>• <#e6fff3>ЛКМ: −1 <#8c8c8c>• <#e6fff3>ПКМ: +1'
+        - '<#969696>С Shift шаг равен 5 блокам.'
+    axis-z:
+      name: '<#92bed8><bold>Смещение Z'
+      lore:
+        - '<#8c8c8c>Текущее значение: <#92bed8><value>'
+        - ''
+        - '<#8c8c8c>• <#e6fff3>ЛКМ: −1 <#8c8c8c>• <#e6fff3>ПКМ: +1'
+        - '<#969696>С Shift шаг равен 5 блокам.'
+    rotation:
+      name: '<#92bed8><bold>Поворот'
+      lore:
+        - '<#8c8c8c>Текущее значение: <#92bed8><value>°'
+        - ''
+        - '<#8c8c8c>• <#e6fff3>ЛКМ: −90° <#8c8c8c>• <#e6fff3>ПКМ: +90°'
+    reset:
+      name: '<#ff9f0f><bold>Сбросить настройку'
+      lore:
+        - '<#e6fff3>Вернуть нулевое смещение и поворот.'
+        - ''
+        - '<#8c8c8c>• <#92bed8>Нажмите<#e6fff3>, чтобы сбросить <#8c8c8c>•'
+    close:
+      name: '<#2bba43><bold>Готово'
+      lore:
+        - '<#e6fff3>Сохранить настройку в книге.'
+        - ''
+        - '<#8c8c8c>• <#92bed8>ПКМ по земле<#e6fff3> — открыть превью <#8c8c8c>•'
 # На classic (спавн/данжи): true. На survival: false.
 disable-building: false
 cant-build-message: <dark_gray>🛠 <red>Вы не можете строить здесь.

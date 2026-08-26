@@ -16,7 +16,7 @@ object RespawnOnRtpSubCommand : SubCommand {
 
     override val configKey = "respawnonrtp"
     override val defaultName = "respawnonrtp"
-    override val defaultPermission = "arc.rtp-respawn"
+    override val defaultPermission = "arc.rtp.respawn"
     override val defaultDescription = "Установить респавн после следующего RTP игрока (действует 1 мин)"
     override val defaultUsage = "/arc respawnonrtp <player>"
 

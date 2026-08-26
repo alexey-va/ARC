@@ -23,7 +23,7 @@ object JobsboostsSubCommand : SubCommand {
 
     override val configKey = "jobsboosts"
     override val defaultName = "jobsboosts"
-    override val defaultPermission = "arc.jobsboosts"
+    override val defaultPermission = "arc.jobs.boost.use"
     override val defaultDescription = "Открыть GUI бустов работ (своих или другого игрока); сбросить — reset"
     override val defaultUsage = "/arc jobsboosts [<player>|reset <player>]"
 

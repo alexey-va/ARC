@@ -85,7 +85,7 @@ class RedisAuditRepository private constructor(
          * Create repository with default configuration.
          */
         fun create(): RedisAuditRepository {
-            val config = ConfigManager.of(ARC.instance.dataPath, "audit.yml")
+            val config = ConfigManager.of(ARC.instance.dataPath, "modules/audit.yml")
             val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
             val saveIntervalTicks = config.integer("save-interval", 20).toLong()

@@ -100,7 +100,7 @@ object TextUtil {
 
     @JvmStatic
     fun time(l: Long, timeUnit: TimeUnit): String {
-        val config = ConfigManager.of(ARC.instance.dataPath, "config.yml")
+        val config = ConfigManager.of(ARC.instance.dataPath, "modules/text.yml")
         val format = config.string("time-format", "dd HH mm ss")
         val names =
             mapOf(

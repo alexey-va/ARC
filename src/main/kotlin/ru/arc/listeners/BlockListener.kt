@@ -18,7 +18,8 @@ import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.persistence.PersistentDataType
 import ru.arc.ARC
 import ru.arc.autobuild.BuildingManager
-import ru.arc.autobuild.ConstructionState
+import ru.arc.autobuild.BuildBookCodec
+import ru.arc.autobuild.gui.BuildBookEditorGui
 import ru.arc.bschests.PersonalLootModule
 import ru.arc.common.locationpools.LocationPoolManager
 import ru.arc.config.ConfigManager
@@ -39,7 +40,7 @@ class BlockListener : Listener {
         private val BEE_KEY = NamespacedKey(ARC.instance, "bee")
     }
 
-    private val beeConfig = ConfigManager.of(ARC.instance.dataFolder.toPath(), "misc.yml")
+    private val beeConfig = ConfigManager.of(ARC.instance.dataFolder.toPath(), "modules/misc.yml")
 
     @EventHandler
     fun onBlockPlace(event: BlockPlaceEvent) {
@@ -50,8 +51,8 @@ class BlockListener : Listener {
 
     @EventHandler(priority = EventPriority.LOWEST)
     fun onBlockInteract(event: PlayerInteractEvent) {
+        if (processBuildingEvent(event)) return
         processTreasureHunt(event)
-        processBuildingEvent(event)
         processBees(event)
         processTreasureItemUse(event)
     }
@@ -158,39 +159,35 @@ class BlockListener : Listener {
 
     private fun processPlaceForLeaves(event: BlockPlaceEvent) {
         if (event.isCancelled) return
-        if (event.player.hasPermission("arc.leafdecay.bypass")) return
+        if (event.player.hasPermission("arc.leaf.decay.bypass")) return
         LeafDecayManager.markAsPlayerPlaced(event.block)
     }
 
     @Suppress("DEPRECATION")
-    private fun processBuildingEvent(event: PlayerInteractEvent) {
-        if (!event.hasItem()) return
-        val hand = event.item ?: return
-        if (hand.type != Material.BOOK) return
-        if (!event.player.hasPermission("arc.buildings.build")) {
-            event.player.sendMessage(TextUtil.noPermissions())
-            return
-        }
-        if (!event.hasBlock() || event.action != Action.RIGHT_CLICK_BLOCK) {
-            val site = BuildingManager.getPendingConstruction(event.player.uniqueId)
-            if (site != null && site.state == ConstructionState.DisplayingOutline) {
-                BuildingManager.cancelConstruction(site)
-            }
-            return
-        }
-        val clickedBlock = event.clickedBlock ?: return
-        val center = clickedBlock.location.add(0.0, 1.0, 0.0)
-        val nbt = NBT.readNbt(hand)
-        val buildingId = nbt.getString("arc:building_key")
-        if (buildingId.isNullOrEmpty()) return
+    private fun processBuildingEvent(event: PlayerInteractEvent): Boolean {
+        if (!event.hasItem()) return false
+        val hand = event.item ?: return false
+        if (hand.type != Material.BOOK) return false
+        val book = BuildBookCodec.read(hand) ?: return false
+        if (event.hand != EquipmentSlot.HAND) return false
+        if (event.action != Action.RIGHT_CLICK_AIR && event.action != Action.RIGHT_CLICK_BLOCK) return false
 
-        val rotation = if (nbt.hasTag("arc:rotation")) nbt.getString("arc:rotation") else null
-        val yOff = if (nbt.hasTag("arc:y_offset")) nbt.getString("arc:y_offset") else null
-        val cooldownSeconds =
-            if (nbt.hasTag("arc:cooldown_seconds")) nbt.getString("arc:cooldown_seconds") else null
+        if (event.action == Action.RIGHT_CLICK_AIR || event.player.isSneaking) {
+            event.isCancelled = true
+            BuildBookEditorGui.open(event.player)
+            return true
+        }
+        if (!event.player.hasPermission("arc.build.book.use")) {
+            event.isCancelled = true
+            event.player.sendMessage(TextUtil.noPermissions())
+            return true
+        }
+        val clickedBlock = event.clickedBlock ?: return false
+        val center = clickedBlock.location.add(0.0, 1.0, 0.0)
 
         event.isCancelled = true
-        BuildingManager.processPlayerClick(event.player, center, buildingId, rotation, yOff, cooldownSeconds)
+        BuildingManager.processPlayerClick(event.player, center, book)
+        return true
     }
 
     private fun processTreasureHunt(event: PlayerInteractEvent) {

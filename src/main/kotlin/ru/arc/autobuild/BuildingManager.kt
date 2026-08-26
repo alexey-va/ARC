@@ -41,6 +41,7 @@ object BuildingManager {
 
     @JvmStatic
     fun init() {
+        BuildBookSettings.validate()
         loadBuildings()
         startCleanupTask()
         cleanupOldNpcs()
@@ -89,7 +90,13 @@ object BuildingManager {
     }
 
     @JvmStatic
-    fun getBuilding(fileName: String): Building? = buildings[fileName]
+    fun getBuilding(fileName: String): Building? {
+        buildings[fileName]?.let { return it }
+        if (!fileName.matches(Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,159}"))) return null
+        val candidate = Paths.get(ARC.instance.dataFolder.toString(), "schematics", fileName)
+        if (!Files.isRegularFile(candidate)) return null
+        return Building(fileName).also { buildings.putIfAbsent(fileName, it) }
+    }
 
     @JvmStatic
     fun getBuildings(): Collection<Building> = buildings.values
@@ -135,14 +142,36 @@ object BuildingManager {
         yOff: String?,
         cooldownSecondsRaw: String?,
     ) {
-        val cooldownSeconds = BuildCooldownPolicy.resolveSeconds(cooldownSecondsRaw, BuildConfig.defaultCooldownSeconds)
+        val transform = BuildBookTransform.parseLegacy(rot, yOff) ?: BuildBookTransform()
+        processPlayerClick(
+            player,
+            rawLocation,
+            BuildBookData(
+                buildingId = buildingId,
+                title = buildingId,
+                transform = transform,
+                cooldownSeconds = BuildCooldownPolicy.resolveSeconds(cooldownSecondsRaw, BuildConfig.defaultCooldownSeconds),
+            ),
+        )
+    }
+
+    @JvmStatic
+    fun processPlayerClick(
+        player: Player,
+        rawLocation: Location,
+        bookData: BuildBookData,
+    ) {
+        val checkedBook = runCatching { bookData.validated() }.getOrElse {
+            player.sendMessage(BuildConfig.Messages.invalidBook())
+            return
+        }
+        val cooldownSeconds = checkedBook.cooldownSeconds ?: BuildConfig.defaultCooldownSeconds
         debug(
-            "[autobuild] processPlayerClick player={} loc={} building={} rot={} yOff={} cooldownSeconds={} disabled={}",
+            "[autobuild] processPlayerClick player={} loc={} building={} transform={} cooldownSeconds={} disabled={}",
             player.name,
             rawLocation,
-            buildingId,
-            rot,
-            yOff,
+            checkedBook.buildingId,
+            checkedBook.transform,
             cooldownSeconds,
             BuildConfig.isDisabled,
         )
@@ -156,11 +185,8 @@ object BuildingManager {
             rawLocation.clone().add(0.0, -1.0, 0.0)
         } else rawLocation
 
-        val yOffset = yOff?.toDoubleOrNull()?.toInt() ?: 0
-        val subRotation = rot?.toDoubleOrNull()?.toInt() ?: 0
-
-        val building = getBuilding(buildingId) ?: run {
-            error("Building with id {} not found for player {} at {}", buildingId, player.name, location)
+        val building = getBuilding(checkedBook.buildingId) ?: run {
+            error("Building with id {} not found for player {} at {}", checkedBook.buildingId, player.name, location)
             player.sendMessage(BuildConfig.Messages.notFound())
             return
         }
@@ -171,12 +197,12 @@ object BuildingManager {
 
         when {
             // No existing site - start new outline
-            existingSite == null -> createConstruction(player, location, building, subRotation, yOffset, cooldownSeconds)
+            existingSite == null -> createConstruction(player, location, building, checkedBook, cooldownSeconds)
 
             // Same location clicked while showing outline - advance to confirmation
             existingSite.state == ConstructionState.DisplayingOutline &&
                     existingSite.cooldownSeconds == cooldownSeconds &&
-                    existingSite.same(player, location, building) -> existingSite.startConfirmation()
+                    existingSite.same(player, location, building, checkedBook) -> existingSite.startConfirmation()
 
             // Already building
             existingSite.state == ConstructionState.Building -> {
@@ -186,7 +212,7 @@ object BuildingManager {
             // Different location or building - cancel old and start new
             else -> {
                 existingSite.cancel()
-                createConstruction(player, location, building, subRotation, yOffset, cooldownSeconds)
+                createConstruction(player, location, building, checkedBook, cooldownSeconds)
             }
         }
     }
@@ -236,6 +262,27 @@ object BuildingManager {
         yOffset: Int,
         cooldownSeconds: Long,
     ) {
+        createConstruction(
+            player,
+            center,
+            building,
+            BuildBookData(
+                buildingId = building.fileName,
+                title = building.fileName,
+                transform = BuildBookTransform(rotation = BuildBookTransform.normalizeRotation(subRotation), offsetY = yOffset),
+                cooldownSeconds = cooldownSeconds,
+            ),
+            cooldownSeconds,
+        )
+    }
+
+    private fun createConstruction(
+        player: Player,
+        center: Location,
+        building: Building,
+        bookData: BuildBookData,
+        cooldownSeconds: Long,
+    ) {
         val cooldown = CooldownManager.cooldown(player.uniqueId, "building_cooldown")
         if (cooldownSeconds > 0 && cooldown > 0 && !player.hasPermission("arc.admin")) {
             player.sendMessage(BuildConfig.Messages.cooldown(cooldown))
@@ -248,7 +295,19 @@ object BuildingManager {
         }
 
         val rotation = rotationFromYaw(player.yaw)
-        val site = ConstructionSite(building, center, player, rotation, world, subRotation, yOffset, cooldownSeconds)
+        val transform = bookData.transform.validated()
+        val site = ConstructionSite(
+            building,
+            center,
+            player,
+            rotation,
+            world,
+            transform.rotation,
+            transform.offsetY,
+            cooldownSeconds,
+            bookData,
+            transform,
+        )
 
         if (!site.canBuild() && !player.hasPermission("arc.admin")) {
             debug(
@@ -264,13 +323,12 @@ object BuildingManager {
         pendingSites[player.uniqueId] = site
         site.startDisplayingBorder()
         debug(
-            "[autobuild] createConstruction player={} building={} center={} rotation={} subRotation={} yOffset={} cooldownSeconds={} volume={}",
+            "[autobuild] createConstruction player={} building={} center={} rotation={} transform={} cooldownSeconds={} volume={}",
             player.name,
             building.fileName,
             center,
             rotation,
-            subRotation,
-            yOffset,
+            transform,
             cooldownSeconds,
             building.volume,
         )
@@ -358,6 +416,12 @@ object BuildingManager {
         cleanupTask?.takeIf { !it.isCancelled }?.cancel()
     }
 
+    @JvmStatic
+    fun updatePendingTransform(player: Player, next: BuildBookData): Boolean? {
+        val site = pendingSites[player.uniqueId] ?: return null
+        return site.refreshPreview(next)
+    }
+
     // ==================== Utilities ====================
 
     /**
@@ -366,7 +430,7 @@ object BuildingManager {
      */
     @JvmStatic
     fun rotationFromYaw(yaw: Float): Int {
-        val adjusted = yaw + 180
+        val adjusted = (((yaw + 180f) % 360f) + 360f) % 360f
         return when {
             adjusted > 315 || adjusted <= 45 -> 0
             adjusted <= 135 -> 90

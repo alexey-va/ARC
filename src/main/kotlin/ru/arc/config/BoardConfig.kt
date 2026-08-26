@@ -17,7 +17,7 @@ object BoardConfig {
     val mainServer: Boolean get() = config.bool("main-server", false)
     val secondsLifetime: Int get() = config.integer("entry-lifetime-seconds", 86400)
     val secondsAnnounce: Int get() = config.integer("seconds-announce", 600)
-    val receivePermission: String get() = config.string("receive-permission", "arc.board-announce")
+    val receivePermission: String get() = config.string("receive-permission", "arc.board.announce")
     val mainMenuBackCommand: String get() = config.string("main-menu-back-command", "menu")
 
     // ── Item fields ───────────────────────────────────────────────────────────

@@ -1,0 +1,6 @@
+# Human-readable duration formatting used by legacy ARC surfaces.
+time-format: dd HH mm ss
+days: ' дней'
+hours: ' часов'
+minutes: ' минут'
+seconds: ' секунд'

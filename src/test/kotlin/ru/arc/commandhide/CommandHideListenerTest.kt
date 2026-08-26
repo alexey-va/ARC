@@ -14,7 +14,7 @@ import java.util.UUID
 class CommandHideListenerTest :
     FreeSpec({
         "blocks execution only for players assigned to a hide group" {
-            val restricted = playerWithPermissions("arc.hide.player")
+            val restricted = playerWithPermissions("arc.command.hide.player")
             val unrestricted = playerWithPermissions()
             val listener = listener("plugins **")
             val blocked = PlayerCommandPreprocessEvent(restricted, "/bukkit:plugins extra")
@@ -28,7 +28,7 @@ class CommandHideListenerTest :
         }
 
         "filters matching server completions" {
-            val player = playerWithPermissions("arc.hide.player")
+            val player = playerWithPermissions("arc.command.hide.player")
             val listener = listener("example admin **")
             val event = TabCompleteEvent(player, "/example ", listOf("admin", "help"))
 
@@ -38,7 +38,7 @@ class CommandHideListenerTest :
         }
 
         "removes completely blocked roots from the player command list" {
-            val player = playerWithPermissions("arc.hide.player")
+            val player = playerWithPermissions("arc.command.hide.player")
             val listener = listener("plugins **", "pl **")
             val commands = linkedSetOf("plugins", "pl", "help")
             val event = PlayerCommandSendEvent(player, commands)

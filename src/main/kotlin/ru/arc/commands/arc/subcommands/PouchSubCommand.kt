@@ -13,7 +13,7 @@ import ru.arc.util.TextUtil
 object PouchSubCommand : SubCommand {
     override val configKey = "pouch"
     override val defaultName = "pouch"
-    override val defaultPermission = "arc.pouch"
+    override val defaultPermission = "arc.pouch.give"
     override val defaultDescription = "Выдать большой мешочек с серией наград"
     override val defaultUsage = "/arc pouch <list|player> [pouch] [amount]"
 

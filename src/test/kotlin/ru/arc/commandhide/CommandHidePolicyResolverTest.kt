@@ -17,7 +17,7 @@ class CommandHidePolicyResolverTest :
                         ),
                     )
 
-                val policy = resolver.policy(UUID.randomUUID()) { it == "arc.hide.player" }
+                val policy = resolver.policy(UUID.randomUUID()) { it == "arc.command.hide.player" }
 
                 policy.blocks("/plugins") shouldBe true
                 policy.blocks("/version") shouldBe true
@@ -32,7 +32,7 @@ class CommandHidePolicyResolverTest :
                         ),
                     )
 
-                val policy = resolver.policy(UUID.randomUUID()) { it in setOf("arc.hide.first", "arc.hide.second") }
+                val policy = resolver.policy(UUID.randomUUID()) { it in setOf("arc.command.hide.first", "arc.command.hide.second") }
 
                 policy.blocks("/one") shouldBe true
                 policy.blocks("/two") shouldBe true
@@ -43,7 +43,7 @@ class CommandHidePolicyResolverTest :
                     CommandHidePolicyResolver(
                         config(
                             group("player", commands = listOf("plugins **")),
-                            bypassPermission = "arc.hide.bypass",
+                            bypassPermission = "arc.command.hide.bypass",
                         ),
                     )
 
@@ -83,7 +83,7 @@ class CommandHidePolicyResolverTest :
                 val playerId = UUID.randomUUID()
                 val checker: (String) -> Boolean = {
                     permissionChecks++
-                    it == "arc.hide.player"
+                    it == "arc.command.hide.player"
                 }
 
                 resolver.policy(playerId, checker)
@@ -99,7 +99,7 @@ class CommandHidePolicyResolverTest :
                 var hidden = true
                 val resolver = CommandHidePolicyResolver(config(group("player", commands = listOf("plugins **"))))
                 val playerId = UUID.randomUUID()
-                val checker: (String) -> Boolean = { hidden && it == "arc.hide.player" }
+                val checker: (String) -> Boolean = { hidden && it == "arc.command.hide.player" }
 
                 resolver.policy(playerId, checker).blocks("/plugins") shouldBe true
                 hidden = false
@@ -109,7 +109,7 @@ class CommandHidePolicyResolverTest :
             "reload compiles a replacement before clearing the old cache" {
                 val resolver = CommandHidePolicyResolver(config(group("player", commands = listOf("plugins **"))))
                 val playerId = UUID.randomUUID()
-                val checker: (String) -> Boolean = { it == "arc.hide.player" }
+                val checker: (String) -> Boolean = { it == "arc.command.hide.player" }
 
                 resolver.policy(playerId, checker).blocks("/plugins") shouldBe true
                 resolver.reload(config(group("player", commands = listOf("version **"))))

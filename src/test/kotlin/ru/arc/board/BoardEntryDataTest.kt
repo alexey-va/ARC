@@ -174,10 +174,10 @@ class BoardEntryDataTest : KotestTestBase({
             entry.canRate(owner) shouldBe false
         }
 
-        it("should allow owner to rate own entry with arc.rate-own permission") {
+        it("should allow owner to rate own entry with arc.board.rate.own permission") {
             val owner = server.addPlayer("Owner")
             val entry = makeEntry(playerUuid = owner.uniqueId)
-            owner.addAttachment(plugin, "arc.rate-own", true)
+            owner.addAttachment(plugin, "arc.board.rate.own", true)
 
             entry.canRate(owner) shouldBe true
         }

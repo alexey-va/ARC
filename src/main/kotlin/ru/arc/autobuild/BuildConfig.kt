@@ -109,6 +109,10 @@ object BuildConfig {
     object Messages {
         fun disabled() = config.component("disabled-message", "<gray>\uD83D\uDEE0 <red>Постройка здесь отключена!")
         fun notFound() = config.component("building-not-found-message", "<gray>\uD83D\uDEE0 <red>Здание не найдено!")
+        fun invalidBook() = config.component(
+            "build-book.editor.invalid",
+            "<red>Эта книга повреждена или больше недоступна.",
+        )
         fun alreadyBuilding() =
             config.component("already-building-message", "<gray>\uD83D\uDEE0 <red>Вы уже строите одно здание!")
 

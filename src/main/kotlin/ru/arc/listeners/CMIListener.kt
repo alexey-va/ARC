@@ -17,17 +17,17 @@ import ru.arc.util.Logging.info
 
 class CMIListener : Listener {
 
-    private val commandConfig = ConfigManager.of(ARC.instance.dataPath, "misc.yml")
+    private val commandConfig = ConfigManager.of(ARC.instance.dataPath, "modules/misc.yml")
 
     @EventHandler
     fun onPlayerJoin(event: PlayerJoinEvent) {
         if (!commandConfig.bool("portal.cmi-command-only-on-join", false)) return
         val player = event.player
-        if (player.hasPermission("arc.bypass-portal")) return
+        if (player.hasPermission("arc.portal.bypass")) return
         val initialPortalName = commandOnlyPortalAt(player.location)?.name ?: return
 
         delayed(1.ticks) {
-            if (!player.isOnline || player.hasPermission("arc.bypass-portal")) return@delayed
+            if (!player.isOnline || player.hasPermission("arc.portal.bypass")) return@delayed
             val portal = commandOnlyPortalAt(player.location) ?: return@delayed
             if (portal.name != initialPortalName) return@delayed
             val triggered = portal.teleport(player)
@@ -42,7 +42,7 @@ class CMIListener : Listener {
 
     @EventHandler
     fun onCMITp(event: CMIAsyncPlayerTeleportEvent) {
-        if (event.sender.hasPermission("arc.bypass-portal")) return
+        if (event.sender.hasPermission("arc.portal.bypass")) return
         if (event.type == null || event.to == null || event.player == null) return
         val types = commandConfig.stringList("portal.cmi-tp-types").map { it.lowercase() }.toSet()
         if (!types.contains(event.type.toString().lowercase())) return

@@ -66,7 +66,7 @@ object InvestSubCommand : SubCommand {
         // Admin commands
         when (type) {
             "update" -> {
-                if (!sender.hasPermission("arc.stocks.update-images")) return true
+                if (!sender.hasPermission("arc.stocks.images.update")) return true
                 val marketLocation = StockConfig.stockMarketLocation
                 if (HookRegistry.yamipaHook == null || marketLocation == null) return true
                 val list = marketLocation
@@ -85,7 +85,7 @@ object InvestSubCommand : SubCommand {
             }
 
             "prune-history" -> {
-                if (!sender.hasPermission("arc.stocks.prunehistory")) return true
+                if (!sender.hasPermission("arc.stocks.history.prune")) return true
                 HistoryManager.pruneHistory(params["s"] ?: return true)
                 return true
             }

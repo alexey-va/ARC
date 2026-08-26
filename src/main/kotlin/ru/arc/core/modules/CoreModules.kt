@@ -641,7 +641,7 @@ object SyncModule : PluginModule {
     override val priority = 100
 
     override fun init() {
-        val config: Config = ConfigManager.of(ARC.instance.dataPath, "misc.yml")
+        val config: Config = ConfigManager.of(ARC.instance.dataPath, "modules/misc.yml")
 
         if (HookRegistry.sfHook != null && config.bool("sync.slimefun", true)) {
             info("Starting slimefun sync")

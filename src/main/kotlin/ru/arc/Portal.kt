@@ -95,7 +95,7 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
     companion object {
         private val occupiedBlocks = ConcurrentHashMap.newKeySet<Block>()
         private val portals = ConcurrentHashMap<UUID, Portal>()
-        private val config = ConfigManager.of(ARC.instance.dataPath, "misc.yml")
+        private val config = ConfigManager.of(ARC.instance.dataPath, "modules/misc.yml")
 
         @JvmStatic
         fun isOccupied(block: Block): Boolean = occupiedBlocks.contains(block)
@@ -224,8 +224,8 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
             when (
                 evaluatePortalAccess(
                     isOwner = p == owner,
-                    visitorAllowsForeignPortals = p.hasPermission("arc.portal.tp-by-other"),
-                    ownerAllowsVisitors = owner.hasPermission("arc.portal.tp-other"),
+                    visitorAllowsForeignPortals = p.hasPermission("arc.portal.teleport.by.other"),
+                    ownerAllowsVisitors = owner.hasPermission("arc.portal.teleport.other"),
                 )
             ) {
                 PortalAccess.ALLOWED -> return p

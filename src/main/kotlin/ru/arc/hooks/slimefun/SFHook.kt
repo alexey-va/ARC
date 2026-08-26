@@ -20,7 +20,7 @@ import java.util.UUID
 
 class SFHook : Listener {
 
-    private val config = ConfigManager.of(ARC.instance.dataPath, "backpacks.yml")
+    private val config = ConfigManager.of(ARC.instance.dataPath, "modules/backpacks.yml")
 
     @EventHandler(priority = EventPriority.LOWEST)
     fun onUseBackpack(event: PlayerRightClickEvent) {

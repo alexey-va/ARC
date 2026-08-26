@@ -48,6 +48,12 @@ import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import ru.arc.ARC
+import ru.arc.autobuild.BuildBookCodec
+import ru.arc.autobuild.BuildBookItems
+import ru.arc.autobuild.BuildBookSettings
+import ru.arc.autobuild.ConstructionSite
+import ru.arc.autobuild.PlayerBuildBookLimitException
+import ru.arc.autobuild.PlayerBuildBookStore
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.hooks.HookRegistry
 import ru.arc.observability.StructuredDebugLine
@@ -57,6 +63,8 @@ import ru.arc.text.LocalizedMiniMessage
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
+import ru.arc.util.BlockUtils.rotateBlockData
+import com.sk89q.worldedit.bukkit.BukkitAdapter
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ExecutorService
@@ -150,7 +158,7 @@ internal class BuilderToolsRuntime(
         if (sender !is Player) return emptyList()
         if (args.size == 1) {
             return filterPrefix(
-                listOf("help", "wand", "pos1", "pos2", "fill", "copy", "paste", "deconstruct", "crown", "confirm", "cancel", "undo", "status"),
+                listOf("help", "wand", "pos1", "pos2", "fill", "copy", "book", "paste", "deconstruct", "crown", "confirm", "cancel", "undo", "status"),
                 args[0],
             )
         }
@@ -189,6 +197,7 @@ internal class BuilderToolsRuntime(
             "pos2" -> setCommandPosition(player, first = false)
             "fill" -> preparePlan(player, planFill(player, materialArgument(player, args.getOrNull(1))))
             "copy" -> copySelection(player)
+            "book" -> createBuildBook(player, args.drop(1))
             "paste" -> preparePlan(player, planPaste(player))
             "deconstruct" -> preparePlan(player, planDeconstruct(player))
             "crown" -> handleBuilderCrown(player, args.drop(1))
@@ -307,6 +316,15 @@ internal class BuilderToolsRuntime(
 
     private fun ensureAvailable(player: Player) {
         if (!hasUsePermission(player)) throw UserFailure("errors.no-permission")
+        ensureOperationalContext(player)
+    }
+
+    private fun ensureBuildBookAvailable(player: Player) {
+        if (!player.hasPermission("arc.build.book.use")) throw UserFailure("errors.no-permission")
+        ensureOperationalContext(player)
+    }
+
+    private fun ensureOperationalContext(player: Player) {
         if (recovering || recoveryBlocked || player.uniqueId in recoveryByPlayer) throw UserFailure("errors.recovering")
         if (player.gameMode != GameMode.SURVIVAL) throw UserFailure("errors.survival-only")
         if (!config.allowsWorld(player.world.name)) throw UserFailure("errors.world-not-allowed")
@@ -448,8 +466,57 @@ internal class BuilderToolsRuntime(
         }
         if (blocks.isEmpty()) throw UserFailure("errors.plan-failed", mapOf("reason" to messages.literal("empty copy")))
         val now = System.currentTimeMillis()
-        clipboards[player.uniqueId] = BuilderClipboard(blocks, now, now + config.clipboardTtl.toMillis()).validated(config.maxClipboardBlocks)
+        clipboards[player.uniqueId] = BuilderClipboard(
+            blocks = blocks,
+            sizeX = selection.sizeX,
+            sizeY = selection.sizeY,
+            sizeZ = selection.sizeZ,
+            createdAtMillis = now,
+            expiresAtMillis = now + config.clipboardTtl.toMillis(),
+        ).validated(config.maxClipboardBlocks)
         send(player, "clipboard.saved", mapOf("count" to messages.literal(blocks.size)))
+    }
+
+    private fun createBuildBook(player: Player, rawTitle: List<String>) {
+        ensureFeaturePermission(player, BuilderFeature.COPY)
+        if (!player.hasPermission("arc.build.book.create")) throw UserFailure("errors.no-permission")
+        val clipboard = clipboards[player.uniqueId]?.takeIf { it.expiresAtMillis > System.currentTimeMillis() }
+            ?: throw UserFailure("errors.expired")
+        val held = player.inventory.itemInMainHand
+        if (!isPlainBook(held)) throw UserFailure("book.material-required")
+        if (held.amount > 1 && player.inventory.firstEmpty() == -1) throw UserFailure("book.inventory-full")
+        val title = rawTitle.joinToString(" ").trim().ifEmpty { BuildBookSettings.defaultTitle }
+        if (title.length > 48 || title.any(Char::isISOControl)) throw UserFailure("book.invalid-name")
+        val data = try {
+            PlayerBuildBookStore.create(player.uniqueId, clipboard, title)
+        } catch (_: PlayerBuildBookLimitException) {
+            throw UserFailure("book.limit")
+        } catch (failure: Throwable) {
+            error("Could not persist player build book for ${player.name}", failure)
+            throw UserFailure("book.failed")
+        }
+        val book = BuildBookItems.create(data)
+        replaceOneHeldBook(player, held, book)
+        send(
+            player,
+            "book.created",
+            mapOf("name" to messages.literal(title), "count" to messages.literal(clipboard.blocks.size)),
+        )
+    }
+
+    private fun isPlainBook(item: ItemStack): Boolean {
+        if (item.type != Material.BOOK || item.amount <= 0) return false
+        return item.clone().also { it.amount = 1 }.isSimilar(ItemStack(Material.BOOK))
+    }
+
+    private fun replaceOneHeldBook(player: Player, held: ItemStack, replacement: ItemStack) {
+        if (held.amount == 1) {
+            player.inventory.setItemInMainHand(replacement)
+            return
+        }
+        if (player.inventory.firstEmpty() == -1) throw UserFailure("book.inventory-full")
+        player.inventory.setItemInMainHand(held.clone().also { it.amount = held.amount - 1 })
+        check(player.inventory.addItem(replacement).isEmpty()) { "Owned build book did not fit after preflight" }
     }
 
     private fun planPaste(player: Player): BuilderPlan {
@@ -472,6 +539,36 @@ internal class BuilderToolsRuntime(
         }
         requireChanges(changes)
         return newPlan(player, BuilderPlanKind.PASTE, changes, BuilderItemCodec.aggregate(costs), emptyList())
+    }
+
+    private fun planBuildBook(player: Player, site: ConstructionSite, book: ItemStack): BuilderPlan {
+        if (!player.hasPermission("arc.build.book.use")) throw UserFailure("errors.no-permission")
+        val data = site.bookData?.takeIf { it.playerCreated } ?: throw UserFailure("book.invalid")
+        if (!BuildBookCodec.matches(book, data)) throw UserFailure("book.missing")
+        if (site.building.volume > config.maxScanVolume) throw UserFailure("errors.selection-too-large")
+
+        val costs = mutableListOf<ItemStack>()
+        val changes = site.relativePositionsBottomUp().mapNotNull { relative ->
+            val after = BukkitAdapter.adapt(site.building.getBlock(relative, site.fullRotation)).also { blockData ->
+                rotateBlockData(blockData, site.fullRotation)
+            }
+            if (after.material.isAir) return@mapNotNull null
+            val location = site.worldLocation(relative)
+            val block = location.block
+            if (!safety.isSafePlacement(after)) throw unsafeBlock(block)
+            if (block.blockData.asString == after.asString) return@mapNotNull null
+            if (!safety.isReplaceable(block)) throw unsafeBlock(block)
+            ensureMutable(player, block)
+            costs += BuilderPlacementCost.item(after)
+            BuilderBlockChange(
+                BuilderBlockPos(site.world.uid, block.x, block.y, block.z).validated(),
+                block.blockData.asString,
+                after.asString,
+            )
+        }.take(config.maxChanges + 1).toList()
+        requireChanges(changes)
+        costs += book.clone().also { it.amount = 1 }
+        return newPlan(player, BuilderPlanKind.BUILD_BOOK, changes, BuilderItemCodec.aggregate(costs), emptyList())
     }
 
     private fun planDeconstruct(player: Player): BuilderPlan {
@@ -580,29 +677,7 @@ internal class BuilderToolsRuntime(
     }
 
     private fun preparePlan(player: Player, plan: BuilderPlan) {
-        if (player.uniqueId in activeOperations) throw UserFailure("errors.busy")
-        val used = hourlyUsage(player.uniqueId, System.currentTimeMillis())
-        if (plan.kind != BuilderPlanKind.UNDO && used + plan.changes.size > hourlyLimit(player)) {
-            throw UserFailure("errors.plan-failed", mapOf("reason" to messages.literal("hourly change limit")))
-        }
-        val canApplyNow = BuilderInventory.canApply(player, plan.costs, plan.rewards, plan.toolFingerprintBase64, plan.toolDamage)
-        if (!canApplyNow) {
-            if (!BuilderShopEstimateRules.supportsAutoBuy(plan.kind)) throw UserFailure("errors.inventory")
-            val missing = BuilderInventory.missingCosts(player, plan.costs)
-            if (
-                missing.isEmpty() ||
-                !BuilderInventory.canApplyAfterReceiving(
-                    player,
-                    missing,
-                    plan.costs,
-                    plan.rewards,
-                    plan.toolFingerprintBase64,
-                    plan.toolDamage,
-                )
-            ) {
-                throw UserFailure("errors.inventory")
-            }
-        }
+        preflightPlan(player, plan)
         crownBrushAnchors.remove(player.uniqueId)
         pendingPlans[player.uniqueId] = plan
         showPlanParticles(player, plan)
@@ -628,8 +703,55 @@ internal class BuilderToolsRuntime(
         }
     }
 
-    private fun confirm(player: Player, buyMissing: Boolean = false) {
-        ensureAvailable(player)
+    private fun preflightPlan(player: Player, plan: BuilderPlan) {
+        if (player.uniqueId in activeOperations) throw UserFailure("errors.busy")
+        val used = hourlyUsage(player.uniqueId, System.currentTimeMillis())
+        if (plan.kind != BuilderPlanKind.UNDO && used + plan.changes.size > hourlyLimit(player)) {
+            throw UserFailure("errors.plan-failed", mapOf("reason" to messages.literal("hourly change limit")))
+        }
+        val canApplyNow = BuilderInventory.canApply(player, plan.costs, plan.rewards, plan.toolFingerprintBase64, plan.toolDamage)
+        if (!canApplyNow) {
+            if (!BuilderShopEstimateRules.supportsAutoBuy(plan.kind)) throw UserFailure("errors.inventory")
+            val missing = BuilderInventory.missingCosts(player, plan.costs)
+            if (
+                missing.isEmpty() ||
+                !BuilderInventory.canApplyAfterReceiving(
+                    player,
+                    missing,
+                    plan.costs,
+                    plan.rewards,
+                    plan.toolFingerprintBase64,
+                    plan.toolDamage,
+                )
+            ) {
+                throw UserFailure("errors.inventory")
+            }
+        }
+    }
+
+    fun startPlayerBuildBook(player: Player, site: ConstructionSite, book: ItemStack): Boolean = try {
+        ensureBuildBookAvailable(player)
+        val plan = planBuildBook(player, site, book)
+        preflightPlan(player, plan)
+        pendingPlans[player.uniqueId] = plan
+        confirm(player, buildBook = true)
+        site.cancelSilently()
+        true
+    } catch (failure: UserFailure) {
+        send(player, failure.path, failure.values)
+        false
+    } catch (failure: IllegalArgumentException) {
+        warn("Player build-book plan was rejected for {}: {}", player.name, failure.message)
+        send(player, "book.failed")
+        false
+    } catch (failure: Throwable) {
+        error("Player build-book start failed for ${player.name}", failure)
+        send(player, "book.failed")
+        false
+    }
+
+    private fun confirm(player: Player, buyMissing: Boolean = false, buildBook: Boolean = false) {
+        if (buildBook) ensureBuildBookAvailable(player) else ensureAvailable(player)
         if (player.uniqueId in activeOperations) throw UserFailure("errors.busy")
         val plan = pendingPlans[player.uniqueId] ?: throw UserFailure("errors.expired")
         if (plan.expiresAtMillis <= System.currentTimeMillis()) throw UserFailure("errors.expired")

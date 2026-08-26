@@ -26,7 +26,7 @@ object SoundFollowSubCommand : SubCommand {
 
     override val configKey = "soundfollow"
     override val defaultName = "soundfollow"
-    override val defaultPermission = "arc.sound-follow"
+    override val defaultPermission = "arc.sound.follow"
     override val defaultDescription = "Проиграть звук игроку (следует за ним; источник: MUSIC)"
     override val defaultUsage = "/arc soundfollow <player> <namespace:sound>  — напр. minecraft:music.game"
 

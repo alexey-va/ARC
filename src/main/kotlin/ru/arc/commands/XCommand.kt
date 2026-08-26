@@ -32,7 +32,7 @@ import ru.arc.xserver.XCommand as XServerCommand
  * Пример: /x -servers:survival -player:Steve give %player% diamond 64
  */
 object XCommand : CommandExecutor, TabCompleter {
-    private val config get() = ConfigManager.of(ARC.instance.dataPath, "commands.yml")
+    private val config get() = ConfigManager.of(ARC.instance.dataPath, "modules/commands.yml")
 
     override fun onCommand(
         sender: CommandSender,

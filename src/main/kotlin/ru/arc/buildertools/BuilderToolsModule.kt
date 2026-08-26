@@ -4,7 +4,10 @@ import org.bukkit.command.Command
 import org.bukkit.command.CommandExecutor
 import org.bukkit.command.CommandSender
 import org.bukkit.command.TabCompleter
+import org.bukkit.entity.Player
+import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
+import ru.arc.autobuild.ConstructionSite
 import ru.arc.core.PluginModule
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
@@ -46,6 +49,9 @@ object BuilderToolsModule : PluginModule, CommandExecutor, TabCompleter {
         alias: String,
         args: Array<out String>,
     ): List<String> = runtime?.onTabComplete(sender, command, alias, args).orEmpty()
+
+    fun startPlayerBuildBook(player: Player, site: ConstructionSite, book: ItemStack): Boolean =
+        runtime?.startPlayerBuildBook(player, site, book) ?: false
 
     private fun bindCommands() {
         val command = ARC.instance.getCommand("builder")

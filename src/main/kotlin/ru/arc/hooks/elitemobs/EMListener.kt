@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 class EMListener : Listener {
 
-    private val config = ConfigManager.of(ARC.instance.dataPath, "elitemobs.yml")
+    private val config = ConfigManager.of(ARC.instance.dataPath, "modules/elitemobs.yml")
     private val dungeonRunIds = WeakHashMap<DungeonInstance, String>()
     private val nextDungeonRunId = AtomicLong()
 

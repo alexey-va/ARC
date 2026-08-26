@@ -8,7 +8,7 @@ import ru.arc.itemcatalog.ItemsCatalogModule
 object ItemsCatalogSubCommand : SubCommand {
     override val configKey = "items"
     override val defaultName = "items"
-    override val defaultPermission = "arc.items-catalog.use"
+    override val defaultPermission = "arc.items.catalog.use"
     override val defaultDescription = "Открыть каталог предметов"
     override val defaultUsage = "/arc items"
     override val defaultPlayerOnly = true

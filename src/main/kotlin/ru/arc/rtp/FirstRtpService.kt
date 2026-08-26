@@ -44,7 +44,7 @@ object FirstRtpService {
     ): FirstRtpResult {
         val configuredProvider =
             ConfigManager
-                .of(ARC.instance.dataPath, "misc.yml")
+                .of(ARC.instance.dataPath, "modules/misc.yml")
                 .string("rtp-respawn.provider", "betterrtp")
         val provider =
             RtpProvider.parse(configuredProvider)

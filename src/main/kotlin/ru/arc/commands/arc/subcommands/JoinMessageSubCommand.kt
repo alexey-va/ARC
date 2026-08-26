@@ -12,7 +12,7 @@ object JoinMessageSubCommand : SubCommand {
 
     override val configKey = "joinmessage"
     override val defaultName = "joinmessage"
-    override val defaultPermission = "arc.join-message-gui"
+    override val defaultPermission = "arc.join.message.gui"
     override val defaultDescription = "Настроить сообщение при входе"
     override val defaultUsage = "/arc joinmessage"
     override val defaultPlayerOnly = true

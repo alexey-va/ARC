@@ -115,7 +115,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Without permission - sends no permission message")
         fun testNoPermission() {
-            assertFalse(player.hasPermission("arc.rtp-respawn"))
+            assertFalse(player.hasPermission("arc.rtp.respawn"))
 
             arcCommand.onCommand(player, mockCommand, "arc", arrayOf("respawnonrtp", "TestPlayer"))
 
@@ -125,7 +125,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("With permission but no player arg - sends not enough args")
         fun testNoPlayerArg() {
-            player.addAttachment(plugin, "arc.rtp-respawn", true)
+            player.addAttachment(plugin, "arc.rtp.respawn", true)
 
             arcCommand.onCommand(player, mockCommand, "arc", arrayOf("respawnonrtp"))
 
@@ -135,7 +135,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("With permission and player - adds to RTP list and confirms")
         fun testAddToRtpList() {
-            player.addAttachment(plugin, "arc.rtp-respawn", true)
+            player.addAttachment(plugin, "arc.rtp.respawn", true)
             val targetPlayer = "TargetPlayer"
 
             // Verify not in cache before
@@ -165,7 +165,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Without permission - sends no permission message")
         fun testNoPermission() {
-            assertFalse(player.hasPermission("arc.locpool.admin"))
+            assertFalse(player.hasPermission("arc.location.pool.admin"))
 
             val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("locationpool"))
 
@@ -176,7 +176,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("With permission - shows pools list message")
         fun testListPools() {
-            player.addAttachment(plugin, "arc.locpool.admin", true)
+            player.addAttachment(plugin, "arc.location.pool.admin", true)
 
             val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("locationpool"))
 
@@ -188,7 +188,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Edit without current editing - shows not editing message")
         fun testEditNoPoolId() {
-            player.addAttachment(plugin, "arc.locpool.admin", true)
+            player.addAttachment(plugin, "arc.location.pool.admin", true)
 
             val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("locationpool", "edit"))
 
@@ -199,7 +199,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Delete without pool id - shows specify message")
         fun testDeleteNoPoolId() {
-            player.addAttachment(plugin, "arc.locpool.admin", true)
+            player.addAttachment(plugin, "arc.location.pool.admin", true)
 
             val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("locationpool", "delete"))
 
@@ -210,7 +210,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Legacy locpool subcommand and standalone command are not registered")
         fun testLegacyLocpoolIsNotRegistered() {
-            player.addAttachment(plugin, "arc.locpool.admin", true)
+            player.addAttachment(plugin, "arc.location.pool.admin", true)
 
             assertNull(arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("locpool", "")))
             assertFalse(plugin.description.commands.containsKey("locpool"))
@@ -309,7 +309,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Without permission - sends no permission message")
         fun testNoPermission() {
-            assertFalse(player.hasPermission("arc.treasure-hunt"))
+            assertFalse(player.hasPermission("arc.treasure.hunt.admin"))
 
             arcCommand.onCommand(player, mockCommand, "arc", arrayOf("hunt", "start", "test"))
 
@@ -319,7 +319,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("With permission but invalid command - shows usage")
         fun testInvalidCommand() {
-            player.addAttachment(plugin, "arc.treasure-hunt", true)
+            player.addAttachment(plugin, "arc.treasure.hunt.admin", true)
 
             arcCommand.onCommand(player, mockCommand, "arc", arrayOf("hunt", "invalid"))
 
@@ -335,19 +335,19 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Without permission - command is gated")
         fun testNoPermission() {
-            assertFalse(player.hasPermission("arc.treasures.admin"))
+            assertFalse(player.hasPermission("arc.treasure.pool.admin"))
 
             val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("treasures"))
 
             assertTrue(result)
-            // The treasures command checks arc.admin first, then arc.treasures.admin
+            // The treasures command checks arc.admin first, then arc.treasure.pool.admin
             // Without both, behavior may vary
         }
 
         @Test
         @DisplayName("Reload reloads treasures and confirms")
         fun testReload() {
-            player.addAttachment(plugin, "arc.treasures.admin", true)
+            player.addAttachment(plugin, "arc.treasure.pool.admin", true)
 
             val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("treasures", "reload"))
 
@@ -490,7 +490,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("joinmessage without permission - sends no permission message")
         fun testJoinMessageNoPermission() {
-            assertFalse(player.hasPermission("arc.join-message-gui"))
+            assertFalse(player.hasPermission("arc.join.message.gui"))
 
             val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("joinmessage"))
 
@@ -502,7 +502,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("quitmessage without permission - sends no permission message")
         fun testQuitMessageNoPermission() {
-            assertFalse(player.hasPermission("arc.join-message-gui"))
+            assertFalse(player.hasPermission("arc.join.message.gui"))
 
             val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("quitmessage"))
 
@@ -514,8 +514,8 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("joinmessage with permission - opens GUI")
         fun testJoinMessageWithPermission() {
-            player.addAttachment(plugin, "arc.join-message-gui", true)
-            assertTrue(player.hasPermission("arc.join-message-gui"))
+            player.addAttachment(plugin, "arc.join.message.gui", true)
+            assertTrue(player.hasPermission("arc.join.message.gui"))
 
             val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("joinmessage"))
 
@@ -526,8 +526,8 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("quitmessage with permission - opens GUI")
         fun testQuitMessageWithPermission() {
-            player.addAttachment(plugin, "arc.join-message-gui", true)
-            assertTrue(player.hasPermission("arc.join-message-gui"))
+            player.addAttachment(plugin, "arc.join.message.gui", true)
+            assertTrue(player.hasPermission("arc.join.message.gui"))
 
             val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("quitmessage"))
 
@@ -548,21 +548,21 @@ class ArcCommandTest : TestBase() {
             // Give permissions for all subcommands
             player.addAttachment(plugin, "arc.admin", true)
             player.addAttachment(plugin, "arc.audit", true)
-            player.addAttachment(plugin, "arc.locpool.admin", true)
-            player.addAttachment(plugin, "arc.treasure-hunt", true)
-            player.addAttachment(plugin, "arc.treasures.admin", true)
-            player.addAttachment(plugin, "arc.rtp-respawn", true)
-            player.addAttachment(plugin, "arc.join-message-gui", true)
+            player.addAttachment(plugin, "arc.location.pool.admin", true)
+            player.addAttachment(plugin, "arc.treasure.hunt.admin", true)
+            player.addAttachment(plugin, "arc.treasure.pool.admin", true)
+            player.addAttachment(plugin, "arc.rtp.respawn", true)
+            player.addAttachment(plugin, "arc.join.message.gui", true)
             player.addAttachment(plugin, "arc.board", true)
-            player.addAttachment(plugin, "arc.baltop", true)
-            player.addAttachment(plugin, "arc.jobsboosts", true)
+            player.addAttachment(plugin, "arc.balance.top", true)
+            player.addAttachment(plugin, "arc.jobs.boost.use", true)
             player.addAttachment(plugin, "arc.test", true)
-            player.addAttachment(plugin, "arc.command.buildbook", true)
-            player.addAttachment(plugin, "arc.eliteloot", true)
+            player.addAttachment(plugin, "arc.build.book.give", true)
+            player.addAttachment(plugin, "arc.elite.loot.admin", true)
             player.addAttachment(plugin, "arc.stocks.buy", true)
             player.addAttachment(plugin, "arc.store", true)
-            player.addAttachment(plugin, "arc.admin.givejobsboost", true)
-            player.addAttachment(plugin, "arc.sound-follow", true)
+            player.addAttachment(plugin, "arc.jobs.boost.give", true)
+            player.addAttachment(plugin, "arc.sound.follow", true)
 
             val completions = arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf(""))
 
@@ -616,7 +616,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("LocationPool subcommand shows list/delete")
         fun testLocationPoolTabCompletion() {
-            player.addAttachment(plugin, "arc.locpool.admin", true)
+            player.addAttachment(plugin, "arc.location.pool.admin", true)
 
             val completions = arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("locationpool", ""))
 
@@ -628,7 +628,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Hunt subcommand shows status/types/start/stop/stopall")
         fun testHuntTabCompletion() {
-            player.addAttachment(plugin, "arc.treasure-hunt", true)
+            player.addAttachment(plugin, "arc.treasure.hunt.admin", true)
 
             val completions = arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("hunt", ""))
 
@@ -643,7 +643,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Treasures subcommand shows reload")
         fun testTreasuresTabCompletion() {
-            player.addAttachment(plugin, "arc.treasures.admin", true)
+            player.addAttachment(plugin, "arc.treasure.pool.admin", true)
 
             val completions = arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("treasures", ""))
 
@@ -654,7 +654,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Treasures pool shows 4 actions")
         fun testTreasuresPoolActions() {
-            player.addAttachment(plugin, "arc.treasures.admin", true)
+            player.addAttachment(plugin, "arc.treasure.pool.admin", true)
 
             val completions =
                 arcCommand.onTabComplete(
@@ -755,7 +755,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Jobsboosts shows online player names")
         fun testJobsboostsPlayerNames() {
-            player.addAttachment(plugin, "arc.jobsboosts", true)
+            player.addAttachment(plugin, "arc.jobs.boost.use", true)
             val player2 = server.addPlayer("OtherPlayer")
 
             val completions = arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("jobsboosts", ""))
@@ -895,7 +895,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Without permission - sends no permission message")
         fun testNoPermission() {
-            assertFalse(player.hasPermission("arc.command.buildbook"))
+            assertFalse(player.hasPermission("arc.build.book.give"))
 
             val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("buildbook", "test", "1"))
 
@@ -906,7 +906,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Too few args - shows usage")
         fun testTooFewArgs() {
-            player.addAttachment(plugin, "arc.command.buildbook", true)
+            player.addAttachment(plugin, "arc.build.book.give", true)
 
             val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("buildbook"))
 
@@ -917,7 +917,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Invalid building - shows not found message")
         fun testBuildingNotFound() {
-            player.addAttachment(plugin, "arc.command.buildbook", true)
+            player.addAttachment(plugin, "arc.build.book.give", true)
 
             val result =
                 arcCommand.onCommand(player, mockCommand, "arc", arrayOf("buildbook", "nonexistent_building", "1"))
@@ -929,7 +929,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Tab completion shows buildings on first arg")
         fun testTabCompletionBuildings() {
-            player.addAttachment(plugin, "arc.command.buildbook", true)
+            player.addAttachment(plugin, "arc.build.book.give", true)
 
             val completions = arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("buildbook", ""))
 
@@ -940,7 +940,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Tab completion shows model IDs on second arg")
         fun testTabCompletionModelIds() {
-            player.addAttachment(plugin, "arc.command.buildbook", true)
+            player.addAttachment(plugin, "arc.build.book.give", true)
 
             val completions = arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("buildbook", "test", ""))
 
@@ -952,7 +952,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Tab completion shows rotations on third arg")
         fun testTabCompletionRotations() {
-            player.addAttachment(plugin, "arc.command.buildbook", true)
+            player.addAttachment(plugin, "arc.build.book.give", true)
 
             val completions =
                 arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("buildbook", "test", "1", ""))
@@ -973,7 +973,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Without permission - sends no permission message")
         fun testNoPermission() {
-            assertFalse(player.hasPermission("arc.eliteloot"))
+            assertFalse(player.hasPermission("arc.elite.loot.admin"))
 
             val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("eliteloot"))
 
@@ -984,7 +984,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Tab completion shows list and add")
         fun testTabCompletion() {
-            player.addAttachment(plugin, "arc.eliteloot", true)
+            player.addAttachment(plugin, "arc.elite.loot.admin", true)
 
             val completions = arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("eliteloot", ""))
 
@@ -996,7 +996,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Add tab completion shows weight options")
         fun testAddWeightCompletion() {
-            player.addAttachment(plugin, "arc.eliteloot", true)
+            player.addAttachment(plugin, "arc.elite.loot.admin", true)
 
             val completions = arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("eliteloot", "add", ""))
 
@@ -1067,7 +1067,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Without permission - sends no permission message")
         fun testNoPermission() {
-            assertFalse(player.hasPermission("arc.admin.givejobsboost"))
+            assertFalse(player.hasPermission("arc.jobs.boost.give"))
 
             val result =
                 arcCommand.onCommand(
@@ -1084,7 +1084,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Too few args - shows usage")
         fun testTooFewArgs() {
-            player.addAttachment(plugin, "arc.admin.givejobsboost", true)
+            player.addAttachment(plugin, "arc.jobs.boost.give", true)
 
             val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("giveboost"))
 
@@ -1095,7 +1095,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Player not found - shows error")
         fun testPlayerNotFound() {
-            player.addAttachment(plugin, "arc.admin.givejobsboost", true)
+            player.addAttachment(plugin, "arc.jobs.boost.give", true)
 
             val result =
                 arcCommand.onCommand(
@@ -1112,7 +1112,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Invalid duration - shows error")
         fun testInvalidDuration() {
-            player.addAttachment(plugin, "arc.admin.givejobsboost", true)
+            player.addAttachment(plugin, "arc.jobs.boost.give", true)
 
             val result =
                 arcCommand.onCommand(
@@ -1129,7 +1129,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Tab completion shows players on first arg")
         fun testTabCompletionPlayers() {
-            player.addAttachment(plugin, "arc.admin.givejobsboost", true)
+            player.addAttachment(plugin, "arc.jobs.boost.give", true)
 
             val completions = arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("giveboost", ""))
 
@@ -1140,7 +1140,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Tab completion shows job options on second arg")
         fun testTabCompletionJobs() {
-            player.addAttachment(plugin, "arc.admin.givejobsboost", true)
+            player.addAttachment(plugin, "arc.jobs.boost.give", true)
 
             val completions =
                 arcCommand.onTabComplete(
@@ -1157,7 +1157,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Tab completion shows boost types on fourth arg")
         fun testTabCompletionBoostTypes() {
-            player.addAttachment(plugin, "arc.admin.givejobsboost", true)
+            player.addAttachment(plugin, "arc.jobs.boost.give", true)
 
             val completions =
                 arcCommand.onTabComplete(
@@ -1175,7 +1175,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Tab completion shows duration options on fifth arg")
         fun testTabCompletionDurations() {
-            player.addAttachment(plugin, "arc.admin.givejobsboost", true)
+            player.addAttachment(plugin, "arc.jobs.boost.give", true)
 
             val completions =
                 arcCommand.onTabComplete(
@@ -1199,7 +1199,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Without permission - sends no permission message")
         fun testNoPermission() {
-            assertFalse(player.hasPermission("arc.sound-follow"))
+            assertFalse(player.hasPermission("arc.sound.follow"))
 
             val result =
                 arcCommand.onCommand(
@@ -1216,7 +1216,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Wrong number of args - shows usage")
         fun testWrongArgs() {
-            player.addAttachment(plugin, "arc.sound-follow", true)
+            player.addAttachment(plugin, "arc.sound.follow", true)
 
             val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("soundfollow"))
 
@@ -1227,7 +1227,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Player not found - shows error")
         fun testPlayerNotFound() {
-            player.addAttachment(plugin, "arc.sound-follow", true)
+            player.addAttachment(plugin, "arc.sound.follow", true)
 
             val result =
                 arcCommand.onCommand(
@@ -1244,7 +1244,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Valid command plays sound and confirms")
         fun testValidCommand() {
-            player.addAttachment(plugin, "arc.sound-follow", true)
+            player.addAttachment(plugin, "arc.sound.follow", true)
 
             val result =
                 arcCommand.onCommand(
@@ -1261,7 +1261,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Tab completion shows players on first arg")
         fun testTabCompletionPlayers() {
-            player.addAttachment(plugin, "arc.sound-follow", true)
+            player.addAttachment(plugin, "arc.sound.follow", true)
 
             val completions = arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("soundfollow", ""))
 
@@ -1272,7 +1272,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Tab completion shows sounds on second arg")
         fun testTabCompletionSounds() {
-            player.addAttachment(plugin, "arc.sound-follow", true)
+            player.addAttachment(plugin, "arc.sound.follow", true)
 
             val completions =
                 arcCommand.onTabComplete(
@@ -1397,7 +1397,7 @@ class ArcCommandTest : TestBase() {
         }
 
         @Test
-        @DisplayName("arc.rtp-respawn permission gates respawnonrtp")
+        @DisplayName("arc.rtp.respawn permission gates respawnonrtp")
         fun testRtpRespawnPermission() {
             // Without permission - should get denied
             arcCommand.onCommand(player, mockCommand, "arc", arrayOf("respawnonrtp", "Test"))
@@ -1405,7 +1405,7 @@ class ArcCommandTest : TestBase() {
             assertNull(RespawnOnRtpSubCommand.playersForRtp.getIfPresent("Test"))
 
             // With permission - should work
-            player.addAttachment(plugin, "arc.rtp-respawn", true)
+            player.addAttachment(plugin, "arc.rtp.respawn", true)
             arcCommand.onCommand(player, mockCommand, "arc", arrayOf("respawnonrtp", "Test2"))
             assertTrue(player.hasReceivedMessage())
             assertNotNull(RespawnOnRtpSubCommand.playersForRtp.getIfPresent("Test2"))
@@ -1415,14 +1415,14 @@ class ArcCommandTest : TestBase() {
         }
 
         @Test
-        @DisplayName("arc.locpool.admin permission gates locationpool")
+        @DisplayName("arc.location.pool.admin permission gates locationpool")
         fun testLocationPoolPermission() {
-            assertFalse(player.hasPermission("arc.locpool.admin"))
+            assertFalse(player.hasPermission("arc.location.pool.admin"))
 
             arcCommand.onCommand(player, mockCommand, "arc", arrayOf("locationpool"))
             assertTrue(player.hasReceivedMessage(), "Should deny without permission")
 
-            player.addAttachment(plugin, "arc.locpool.admin", true)
+            player.addAttachment(plugin, "arc.location.pool.admin", true)
             arcCommand.onCommand(player, mockCommand, "arc", arrayOf("locationpool"))
             assertTrue(player.hasReceivedMessage(), "Should show pools with permission")
         }
@@ -1442,27 +1442,27 @@ class ArcCommandTest : TestBase() {
         }
 
         @Test
-        @DisplayName("arc.treasure-hunt permission gates hunt command")
+        @DisplayName("arc.treasure.hunt.admin permission gates hunt command")
         fun testHuntPermission() {
-            assertFalse(player.hasPermission("arc.treasure-hunt"))
+            assertFalse(player.hasPermission("arc.treasure.hunt.admin"))
 
             arcCommand.onCommand(player, mockCommand, "arc", arrayOf("hunt", "start"))
             assertTrue(player.hasReceivedMessage(), "Should deny without permission")
         }
 
         @Test
-        @DisplayName("arc.treasures.admin permission gates treasures command")
+        @DisplayName("arc.treasure.pool.admin permission gates treasures command")
         fun testTreasuresPermission() {
-            assertFalse(player.hasPermission("arc.treasures.admin"))
+            assertFalse(player.hasPermission("arc.treasure.pool.admin"))
 
             arcCommand.onCommand(player, mockCommand, "arc", arrayOf("treasures"))
             assertTrue(player.hasReceivedMessage(), "Should deny without permission")
         }
 
         @Test
-        @DisplayName("arc.join-message-gui permission gates message commands")
+        @DisplayName("arc.join.message.gui permission gates message commands")
         fun testJoinMessagePermission() {
-            assertFalse(player.hasPermission("arc.join-message-gui"))
+            assertFalse(player.hasPermission("arc.join.message.gui"))
 
             arcCommand.onCommand(player, mockCommand, "arc", arrayOf("joinmessage"))
             val msg1 = player.nextMessage()
@@ -1513,7 +1513,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Special characters in args don't break command")
         fun testSpecialCharactersInArgs() {
-            player.addAttachment(plugin, "arc.treasure-hunt", true)
+            player.addAttachment(plugin, "arc.treasure.hunt.admin", true)
 
             val result =
                 arcCommand.onCommand(
@@ -1656,7 +1656,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("RespawnOnRtp caches player correctly")
         fun testRespawnOnRtpCache() {
-            player.addAttachment(plugin, "arc.rtp-respawn", true)
+            player.addAttachment(plugin, "arc.rtp.respawn", true)
             server.addPlayer("TargetPlayer")
 
             arcCommand.onCommand(player, mockCommand, "arc", arrayOf("respawnonrtp", "TargetPlayer"))
@@ -1679,7 +1679,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Hunt stopall works")
         fun testHuntStopall() {
-            player.addAttachment(plugin, "arc.treasure-hunt", true)
+            player.addAttachment(plugin, "arc.treasure.hunt.admin", true)
 
             val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("hunt", "stopall"))
 
@@ -1690,7 +1690,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Hunt status works without args")
         fun testHuntStatusNoArgs() {
-            player.addAttachment(plugin, "arc.treasure-hunt", true)
+            player.addAttachment(plugin, "arc.treasure.hunt.admin", true)
 
             val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("hunt"))
 
@@ -1712,7 +1712,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("LocationPool list works")
         fun testLocationPoolList() {
-            player.addAttachment(plugin, "arc.locpool.admin", true)
+            player.addAttachment(plugin, "arc.location.pool.admin", true)
 
             val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("locationpool", "list"))
 
@@ -1723,7 +1723,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Treasures list works")
         fun testTreasuresList() {
-            player.addAttachment(plugin, "arc.treasures.admin", true)
+            player.addAttachment(plugin, "arc.treasure.pool.admin", true)
 
             val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("treasures", "list"))
 
@@ -1734,7 +1734,7 @@ class ArcCommandTest : TestBase() {
         @Test
         @DisplayName("Treasures reload works")
         fun testTreasuresReload() {
-            player.addAttachment(plugin, "arc.treasures.admin", true)
+            player.addAttachment(plugin, "arc.treasure.pool.admin", true)
 
             val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("treasures", "reload"))
 

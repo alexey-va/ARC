@@ -24,7 +24,7 @@ import ru.arc.util.TextUtil
 object GiveSubCommand : SubCommand {
     override val configKey = "give"
     override val defaultName = "give"
-    override val defaultPermission = "arc.give"
+    override val defaultPermission = "arc.item.give"
     override val defaultDescription = "Выдать предмет по пресету (лутбоксы, токены, наборы)"
     override val defaultUsage = "/arc give <player|list> <preset> [amount]"
 

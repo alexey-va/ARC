@@ -17,7 +17,7 @@ class HuntSubCommandTabCompleteTest : KotestTestBase({
 
     beforeTest {
         player = server.addPlayer("HuntTabTester")
-        player.addAttachment(plugin, "arc.treasure-hunt", true)
+        player.addAttachment(plugin, "arc.treasure.hunt.admin", true)
     }
 
     describe("HuntSubCommand tabComplete") {

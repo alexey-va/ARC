@@ -8,13 +8,18 @@
 
 - `/builder wand`: binds one plain echo shard already owned by the player as
   the selector; left click sets position 1 and right click sets position 2.
-  `/builder crown wand` similarly binds one owned plain brush. ARC never mints
-  the tool materials. Particles are visual-only and never fake client-side blocks.
+  `/builder crown wand` similarly binds one owned plain brush. ARC never mints the
+  tool materials. Particles are visual-only and never fake client-side blocks.
 - `/builder fill [material]`: changes only configured replaceable blocks and
   consumes exact plain vanilla items.
 - `/builder copy` and `/builder paste`: retain only safe non-air vanilla
   BlockData for 15 minutes. Paste uses position 1 as its minimum-corner anchor
   and consumes every placed block (including two items for a double slab).
+- `/builder book [name]`: binds one ordinary book to the current safe copy and
+  stores a bounded, content-addressed schematic. Right click in air opens the
+  transform GUI; right click a block previews it. Player-created books are
+  consumed together with every exact placement material by this transaction
+  engine, so a copied valuable block can never become a free duplication path.
 - `/builder deconstruct`: requires one preferred held tool for the whole
   selection, checks worst-case remaining durability, calculates drops once,
   damages the real tool, and requires all exact drops to fit the inventory.
@@ -40,16 +45,14 @@
 
 `/builder` is the only public command root. The former `/deconstruction`,
 `/crown`, and `/buildtools` roots are deliberately not registered. Existing
-named Denizen selector and crown-brush items are still
-recognized as migration inputs; the brush anchors a crown in the block outside
-the clicked face and confirms only on that same face, while all writes pass the
-ARC plan/confirm path.
+named Denizen selector and crown-brush items are still recognized as migration
+inputs; the brush anchors a crown in the block outside the clicked face and
+confirms only on that same face, while all writes pass the ARC plan/confirm
+path.
 
-ARC accepts both `arc.buildertools.*` and the migrated
-`arc.builder.tools.*` permission namespaces. The former Denizen
-`arc.deconstruction*` and `arc.crown` nodes remain migration aliases,
-including selection-size and hourly tiers, until LuckPerms has converged on
-every server.
+Permissions use only the canonical `arc.builder.tools.*` namespace. The former
+`arc.buildertools.*`, `arc.deconstruction*`, and `arc.crown` nodes, including
+their selection-size and hourly tiers, are not accepted by the runtime.
 
 ## Safety and recovery
 
@@ -87,8 +90,7 @@ CoreProtect API.
 
 The bundled `modules/builder-tools.yml` is disabled by default and refreshed
 from the active JAR on startup so schema/locale additions cannot leave a stale
-base file. Node policy never edits it: survival opts in for all of its worlds
-through `allowed-worlds: ["*"]` in `modules/builder-tools-runtime.yml`; spawn
-and parkour remain off.
+base file. Node policy never edits it: survival opts in through
+`modules/builder-tools-runtime.yml`; spawn and parkour remain off.
 Journal records live below `plugins/ARC/data/builder-tools-journal/` and are
 server-owned runtime state, never configuration deployment input.

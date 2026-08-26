@@ -21,7 +21,7 @@ open class CommandHideModuleConfig(
         get() = config.bool("strip-command-namespace", true)
 
     open val bypassPermission: String
-        get() = config.string("bypass-permission", "arc.hide.bypass")
+        get() = config.string("bypass-permission", "arc.command.hide.bypass")
 
     open val policyCacheMillis: Long
         get() = config.durationMillis("policy-cache", 5_000L).coerceAtLeast(0L)

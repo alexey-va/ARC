@@ -15,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 class ShopHolder {
 
-    private val config = ConfigManager.of(ARC.instance.dataPath, "elitemobs.yml")
+    private val config = ConfigManager.of(ARC.instance.dataPath, "modules/elitemobs.yml")
     private val items = ConcurrentHashMap<UUID, Shop>()
 
     fun getShop(player: Player, emHook: EMHook): Shop {

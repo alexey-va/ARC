@@ -24,7 +24,7 @@ import java.util.UUID
 object GiveBoostSubCommand : SubCommand {
     override val configKey = "giveboost"
     override val defaultName = "giveboost"
-    override val defaultPermission = "arc.admin.givejobsboost"
+    override val defaultPermission = "arc.jobs.boost.give"
     override val defaultDescription = "Выдать буст Jobs игроку (типы: EXP/MONEY/POINTS, длительность: 1s/1m/1h/1d)"
     override val defaultUsage = "/arc giveboost <player> <job|all> <multiplier> <EXP|MONEY|POINTS> <duration> [id]"
 

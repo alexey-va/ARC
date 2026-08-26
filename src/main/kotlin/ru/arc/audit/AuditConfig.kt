@@ -122,7 +122,7 @@ open class AuditConfig(
          * Load config from file.
          */
         fun fromFile(dataPath: Path): AuditConfig {
-            val config = ConfigManager.of(dataPath, "audit.yml")
+            val config = ConfigManager.of(dataPath, "modules/audit.yml")
             return AuditConfig(config)
         }
 

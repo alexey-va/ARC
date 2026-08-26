@@ -29,7 +29,7 @@ class EMHook internal constructor(
     private val scheduleShopReset: (intervalTicks: Long, reset: () -> Unit) -> ScheduledTask,
 ) : AutoCloseable {
     constructor() : this(
-        config = ConfigManager.of(ARC.instance.dataPath, "elitemobs.yml"),
+        config = ConfigManager.of(ARC.instance.dataPath, "modules/elitemobs.yml"),
         wormholesFactory = ::EMWormholes,
         shopHolderFactory = ::ShopHolder,
         scheduleShopReset = { intervalTicks, reset ->

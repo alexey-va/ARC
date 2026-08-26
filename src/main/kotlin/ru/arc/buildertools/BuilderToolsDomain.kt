@@ -11,6 +11,7 @@ import kotlin.math.min
 enum class BuilderPlanKind {
     FILL,
     PASTE,
+    BUILD_BOOK,
     DECONSTRUCT,
     CROWN,
     UNDO,
@@ -277,14 +278,18 @@ data class BuilderClipboardBlock(
 
 data class BuilderClipboard(
     val blocks: List<BuilderClipboardBlock>,
+    val sizeX: Int,
+    val sizeY: Int,
+    val sizeZ: Int,
     val createdAtMillis: Long,
     val expiresAtMillis: Long,
 ) {
     fun validated(maxBlocks: Int): BuilderClipboard = apply {
         require(blocks.size in 1..maxBlocks) { "clipboard-size" }
+        require(sizeX in 1..256 && sizeY in 1..256 && sizeZ in 1..256) { "clipboard-dimensions" }
         require(blocks.map { Triple(it.dx, it.dy, it.dz) }.toSet().size == blocks.size) { "clipboard-duplicates" }
         blocks.forEach {
-            require(abs(it.dx) <= 256 && abs(it.dy) <= 256 && abs(it.dz) <= 256) { "clipboard-offset" }
+            require(it.dx in 0 until sizeX && it.dy in 0 until sizeY && it.dz in 0 until sizeZ) { "clipboard-offset" }
             require(it.blockData.length in 3..512 && it.blockData.startsWith("minecraft:")) { "clipboard-block-data" }
         }
         require(createdAtMillis > 0L && expiresAtMillis > createdAtMillis) { "clipboard-lifetime" }

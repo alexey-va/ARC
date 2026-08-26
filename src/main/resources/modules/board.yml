@@ -12,7 +12,7 @@ publish-cost: 5000
 # Интервал напоминания / анонса (секунды)
 seconds-announce: 600
 # Право видеть входящие объявления
-receive-permission: arc.board-announce
+receive-permission: arc.board.announce
 # Стоимость редактирования
 edit-cost: 1000
 main-server: true

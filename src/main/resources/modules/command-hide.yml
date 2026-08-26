@@ -1,9 +1,9 @@
 # Скрытие и блокировка команд по наследуемым permission-группам.
 #
-# Игрок получает ограничения группы, когда у него есть arc.hide.<group>.
-# arc.hide.bypass отключает все ограничения для сотрудника.
+# Игрок получает ограничения группы, когда у него есть arc.command.hide.<group>.
+# arc.command.hide.bypass отключает все ограничения для сотрудника.
 enabled: true
-bypass-permission: "arc.hide.bypass"
+bypass-permission: "arc.command.hide.bypass"
 
 # Один namespace-шаблон закрывает также namespaced-варианты команды:
 # plugins -> bukkit:plugins, paper:plugins и т. п.

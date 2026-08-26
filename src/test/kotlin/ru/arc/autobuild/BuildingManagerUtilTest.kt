@@ -69,8 +69,12 @@ class BuildingManagerUtilTest {
 
     @Test
     fun testRotationFromYawLarge() {
-        // Yaw 360 + 180 = 540, which is > 315 -> rotation 0
-        assertEquals(0, BuildingManager.rotationFromYaw(360f), "Yaw 360 should be rotation 0")
+        assertEquals(180, BuildingManager.rotationFromYaw(360f), "Yaw 360 should equal yaw 0")
+    }
+
+    @Test
+    fun testRotationFromYawWrapsNegativeTurns() {
+        assertEquals(270, BuildingManager.rotationFromYaw(-270f), "Yaw -270 should equal yaw 90")
     }
 
     // ========== Default Skins Map Tests ==========
@@ -88,4 +92,3 @@ class BuildingManagerUtilTest {
         }
     }
 }
-

@@ -12,7 +12,7 @@ object QuitMessageSubCommand : SubCommand {
     
     override val configKey = "quitmessage"
     override val defaultName = "quitmessage"
-    override val defaultPermission = "arc.join-message-gui"
+    override val defaultPermission = "arc.join.message.gui"
     override val defaultDescription = "Настроить сообщение при выходе"
     override val defaultUsage = "/arc quitmessage"
     override val defaultPlayerOnly = true
