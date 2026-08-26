@@ -163,8 +163,21 @@ internal object BuilderInventory {
         rewards: List<BuilderItemAmount>,
         toolFingerprintBase64: String?,
         toolDamage: Int,
+    ): Boolean = canApplyAfterReceiving(player, emptyList(), costs, rewards, toolFingerprintBase64, toolDamage)
+
+    fun canApplyAfterReceiving(
+        player: Player,
+        received: List<BuilderItemAmount>,
+        costs: List<BuilderItemAmount>,
+        rewards: List<BuilderItemAmount>,
+        toolFingerprintBase64: String?,
+        toolDamage: Int,
     ): Boolean {
         val simulated = player.inventory.storageContents.map { it?.clone() }.toMutableList()
+        for (addition in received) {
+            val (prototype, amount) = BuilderItemCodec.decode(addition)
+            if (!insert(simulated, prototype, amount)) return false
+        }
         if (toolFingerprintBase64 != null) {
             val expected = BuilderItemCodec.decodePrototype(toolFingerprintBase64)
             val held = simulated[player.inventory.heldItemSlot]
@@ -182,6 +195,32 @@ internal object BuilderInventory {
             if (!insert(simulated, prototype, amount)) return false
         }
         return true
+    }
+
+    fun missingCosts(player: Player, costs: List<BuilderItemAmount>): List<BuilderItemAmount> {
+        val simulated = player.inventory.storageContents.map { it?.clone() }.toMutableList()
+        return costs.mapNotNull { cost ->
+            val (prototype, amount) = BuilderItemCodec.decode(cost)
+            val remaining = removeAvailable(simulated, prototype, amount)
+            if (remaining == 0) null else cost.copy(amount = remaining).validated()
+        }
+    }
+
+    fun plainMaterial(amount: BuilderItemAmount): Material? {
+        val prototype = BuilderItemCodec.decodePrototype(amount.itemBase64)
+        val material = prototype.type
+        return material.takeIf {
+            it.isItem && !it.isAir && it.key.toString() == amount.materialKey && prototype.isSimilar(ItemStack(it))
+        }
+    }
+
+    fun countExact(player: Player, amount: BuilderItemAmount): Int {
+        val prototype = BuilderItemCodec.decodePrototype(amount.itemBase64)
+        return player.inventory.storageContents
+            .asSequence()
+            .filterNotNull()
+            .filter { it.isSimilar(prototype) }
+            .sumOf(ItemStack::getAmount)
     }
 
     fun removeCosts(inventory: PlayerInventory, costs: List<BuilderItemAmount>): Boolean {
@@ -205,6 +244,10 @@ internal object BuilderInventory {
     }
 
     private fun remove(contents: MutableList<ItemStack?>, prototype: ItemStack, requested: Int): Boolean {
+        return removeAvailable(contents, prototype, requested) == 0
+    }
+
+    private fun removeAvailable(contents: MutableList<ItemStack?>, prototype: ItemStack, requested: Int): Int {
         var remaining = requested
         for (index in contents.indices) {
             val current = contents[index] ?: continue
@@ -213,9 +256,9 @@ internal object BuilderInventory {
             current.amount -= taken
             remaining -= taken
             if (current.amount <= 0) contents[index] = null
-            if (remaining == 0) return true
+            if (remaining == 0) return 0
         }
-        return false
+        return remaining
     }
 
     private fun insert(contents: MutableList<ItemStack?>, prototype: ItemStack, requested: Int): Boolean {

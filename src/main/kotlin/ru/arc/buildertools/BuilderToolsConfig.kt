@@ -25,6 +25,11 @@ class BuilderToolsConfig(
     val blocksPerTick: Int get() = config.integer("limits.blocks-per-tick", 16)
     val baseHourlyChanges: Int get() = config.integer("limits.base-hourly-changes", 20_000)
     val maximumRange: Double get() = config.double("limits.maximum-range", 64.0)
+    val shopEnabled: Boolean get() = config.bool("shop.enabled", true)
+    val shopMaxQuotedMaterials: Int get() = config.integer("shop.max-quoted-materials", 64)
+    val shopMaxAutoBuyItems: Int get() = config.integer("shop.max-auto-buy-items", 4_096)
+    val shopMaxAutoBuyPrice: Double get() = config.double("shop.max-auto-buy-price", 250_000.0)
+    val shopPriceIncreaseTolerance: Double get() = config.double("shop.price-increase-tolerance", 0.01)
     val planTtl: Duration get() = config.duration("timers.plan-ttl", Duration.ofSeconds(30))
     val clipboardTtl: Duration get() = config.duration("timers.clipboard-ttl", Duration.ofMinutes(15))
     val undoTtl: Duration get() = config.duration("timers.undo-ttl", Duration.ofMinutes(30))
@@ -53,6 +58,16 @@ class BuilderToolsConfig(
         require(blocksPerTick in 1..256) { "Builder-tools blocks-per-tick is invalid" }
         require(baseHourlyChanges in maxChanges..200_000) { "Builder-tools hourly limit is invalid" }
         require(maximumRange.isFinite() && maximumRange in 8.0..128.0) { "Builder-tools maximum range is invalid" }
+        require(shopMaxAutoBuyItems in 1..BuilderPlan.ABSOLUTE_MAX_ITEMS.toInt()) {
+            "Builder-tools shop item limit is invalid"
+        }
+        require(shopMaxQuotedMaterials in 1..256) { "Builder-tools quoted material limit is invalid" }
+        require(shopMaxAutoBuyPrice.isFinite() && shopMaxAutoBuyPrice in 1.0..1_000_000_000.0) {
+            "Builder-tools shop price limit is invalid"
+        }
+        require(shopPriceIncreaseTolerance.isFinite() && shopPriceIncreaseTolerance in 0.0..1.0) {
+            "Builder-tools shop price tolerance is invalid"
+        }
         require(planTtl in Duration.ofSeconds(10)..Duration.ofMinutes(2)) { "Builder-tools plan TTL is invalid" }
         require(clipboardTtl in Duration.ofMinutes(1)..Duration.ofHours(2)) { "Builder-tools clipboard TTL is invalid" }
         require(undoTtl in Duration.ofMinutes(1)..Duration.ofHours(2)) { "Builder-tools undo TTL is invalid" }
@@ -93,6 +108,14 @@ class BuilderToolsConfig(
                 "errors.tool",
                 "errors.recovering",
                 "errors.undo-missing",
+                "errors.shop-unavailable",
+                "errors.shop-not-supported",
+                "errors.shop-material-unavailable",
+                "errors.shop-limit",
+                "errors.shop-insufficient-funds",
+                "errors.shop-estimate-changed",
+                "errors.shop-purchase-failed",
+                "errors.shop-purchase-ambiguous",
                 "selection.first",
                 "selection.second",
                 "selection.complete",
@@ -110,7 +133,12 @@ class BuilderToolsConfig(
                 "crown.palette-row",
                 "clipboard.saved",
                 "plan.ready",
+                "plan.market-item",
+                "plan.market-unavailable",
+                "plan.market-more",
                 "plan.cancelled",
+                "shop.purchased",
+                "shop.world-untouched",
                 "operation.started",
                 "operation.completed",
                 "operation.rolled-back",
@@ -118,7 +146,15 @@ class BuilderToolsConfig(
                 "status.plan",
                 "status.idle",
             ),
-            listPaths = setOf("help", "wand.lore", "crown-brush.lore", "crown.help", "crown.status"),
+            listPaths = setOf(
+                "help",
+                "wand.lore",
+                "crown-brush.lore",
+                "crown.help",
+                "crown.status",
+                "plan.market",
+                "shop.purchase-detail",
+            ),
         )
 
         fun load(): BuilderToolsConfig {

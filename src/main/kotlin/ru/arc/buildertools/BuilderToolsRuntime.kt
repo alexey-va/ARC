@@ -81,6 +81,7 @@ internal class BuilderToolsRuntime(
     private class UserFailure(val path: String, val values: Map<String, Component> = emptyMap()) : RuntimeException(path)
 
     private val messages: LocalizedMiniMessage = config.messages()
+    private val shop = BuilderShopCoordinator(config, messages)
     private val safety = BuilderBlockSafety(plugin, config.replaceableMaterials)
     private val coreProtect = BuilderCoreProtectBridge.resolve()
     private val journal = BuilderJournalStore(plugin.dataPath, config.maxChanges)
@@ -153,6 +154,7 @@ internal class BuilderToolsRuntime(
                 args[0],
             )
         }
+        if (args.size == 2 && args[0].equals("confirm", true)) return filterPrefix(listOf("buy"), args[1])
         if (args.firstOrNull().equals("crown", true)) {
             if (args.size == 2) {
                 return filterPrefix(
@@ -190,7 +192,11 @@ internal class BuilderToolsRuntime(
             "paste" -> preparePlan(player, planPaste(player))
             "deconstruct" -> preparePlan(player, planDeconstruct(player))
             "crown" -> handleBuilderCrown(player, args.drop(1))
-            "confirm" -> confirm(player)
+            "confirm" -> when (args.getOrNull(1)?.lowercase(Locale.ROOT)) {
+                null -> confirm(player)
+                "buy" -> confirm(player, buyMissing = true)
+                else -> messages.renderLines("help", locale(player)).forEach(player::sendMessage)
+            }
             "cancel", "stop" -> cancelPlan(player)
             "undo" -> prepareUndo(player)
             "status" -> showStatus(player)
@@ -579,8 +585,23 @@ internal class BuilderToolsRuntime(
         if (plan.kind != BuilderPlanKind.UNDO && used + plan.changes.size > hourlyLimit(player)) {
             throw UserFailure("errors.plan-failed", mapOf("reason" to messages.literal("hourly change limit")))
         }
-        if (!BuilderInventory.canApply(player, plan.costs, plan.rewards, plan.toolFingerprintBase64, plan.toolDamage)) {
-            throw UserFailure("errors.inventory")
+        val canApplyNow = BuilderInventory.canApply(player, plan.costs, plan.rewards, plan.toolFingerprintBase64, plan.toolDamage)
+        if (!canApplyNow) {
+            if (!BuilderShopEstimateRules.supportsAutoBuy(plan.kind)) throw UserFailure("errors.inventory")
+            val missing = BuilderInventory.missingCosts(player, plan.costs)
+            if (
+                missing.isEmpty() ||
+                !BuilderInventory.canApplyAfterReceiving(
+                    player,
+                    missing,
+                    plan.costs,
+                    plan.rewards,
+                    plan.toolFingerprintBase64,
+                    plan.toolDamage,
+                )
+            ) {
+                throw UserFailure("errors.inventory")
+            }
         }
         crownBrushAnchors.remove(player.uniqueId)
         pendingPlans[player.uniqueId] = plan
@@ -596,26 +617,39 @@ internal class BuilderToolsRuntime(
                 "seconds" to messages.literal(config.planTtl.seconds),
             ),
         )
+        shop.preview(player, plan)
         val planId = plan.id
         taskScope.runLater(config.planTtl.toTicks()) {
             if (pendingPlans[player.uniqueId]?.id == planId) {
                 pendingPlans.remove(player.uniqueId)
+                shop.clear(player.uniqueId)
                 crownBrushAnchors.remove(player.uniqueId)
             }
         }
     }
 
-    private fun confirm(player: Player) {
+    private fun confirm(player: Player, buyMissing: Boolean = false) {
         ensureAvailable(player)
         if (player.uniqueId in activeOperations) throw UserFailure("errors.busy")
-        val plan = pendingPlans.remove(player.uniqueId) ?: throw UserFailure("errors.expired")
-        crownBrushAnchors.remove(player.uniqueId)
+        val plan = pendingPlans[player.uniqueId] ?: throw UserFailure("errors.expired")
         if (plan.expiresAtMillis <= System.currentTimeMillis()) throw UserFailure("errors.expired")
         revalidatePlan(player, plan)
+        if (buyMissing) {
+            when (val result = shop.procure(player, plan)) {
+                BuilderShopConfirmation.Ready -> Unit
+                is BuilderShopConfirmation.Rejected -> throw UserFailure(
+                    result.messagePath,
+                    result.values.mapValues { (_, value) -> messages.literal(value) },
+                )
+            }
+        }
         if (!BuilderInventory.canApply(player, plan.costs, plan.rewards, plan.toolFingerprintBase64, plan.toolDamage)) {
             throw UserFailure("errors.inventory")
         }
         if (!lock(plan)) throw UserFailure("errors.busy")
+        pendingPlans.remove(player.uniqueId, plan)
+        shop.clear(player.uniqueId)
+        crownBrushAnchors.remove(player.uniqueId)
         val now = System.currentTimeMillis()
         val record = BuilderJournalRecord(
             operationId = plan.id,
@@ -829,6 +863,7 @@ internal class BuilderToolsRuntime(
             return
         }
         if (pendingPlans.remove(player.uniqueId) != null) {
+            shop.clear(player.uniqueId)
             crownBrushAnchors.remove(player.uniqueId)
             send(player, "plan.cancelled")
         } else {
@@ -1153,6 +1188,7 @@ internal class BuilderToolsRuntime(
     @EventHandler(priority = EventPriority.MONITOR)
     fun onQuit(event: PlayerQuitEvent) {
         pendingPlans.remove(event.player.uniqueId)
+        shop.clear(event.player.uniqueId)
         crownBrushAnchors.remove(event.player.uniqueId)
         selections.remove(event.player.uniqueId)
         clipboards.remove(event.player.uniqueId)
@@ -1294,6 +1330,7 @@ internal class BuilderToolsRuntime(
         }
         storageExecutor.shutdownNow()
         pendingPlans.clear()
+        shop.close()
         crownBrushAnchors.clear()
         selections.clear()
         clipboards.clear()

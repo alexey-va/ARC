@@ -25,9 +25,18 @@
   `smooth|natural|wild` edge noise, and an explicit `reroll`; palette weights
   are deterministic and every selected leaf type is charged exactly.
 - Every mutation first creates an immutable particle preview. `/builder
-  confirm` is required within 30 seconds. `/builder undo` creates and confirms
+  confirm` is required within 30 seconds. For `fill`, `paste`, and `crown`, the
+  preview also quotes the complete build and the current inventory deficit from
+  EconomyShopGUI's active admin-shop prices. `/builder confirm buy` explicitly
+  buys only missing exact plain vanilla materials through the native shop API,
+  then enters the same journaled confirmation path. A plain `/builder confirm`
+  never spends money. Command products, custom items, composite currencies,
+  unavailable requirements, and re-quoted price increases fail closed. If one of several
+  purchases fails, the world remains untouched and completed purchases stay in
+  the player's inventory for a safe retry. `/builder undo` creates and confirms
   an inverse material transaction; deconstruction undo returns blocks only
-  after the exact collected drops are surrendered and never repairs tool wear.
+  after the exact collected drops are surrendered, never repairs tool wear, and
+  never buys replacement drops.
 
 `/builder` is the only public command root. The former `/deconstruction`,
 `/crown`, and `/buildtools` roots are deliberately not registered. Existing

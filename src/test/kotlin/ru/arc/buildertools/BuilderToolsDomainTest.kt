@@ -31,6 +31,7 @@ class BuilderToolsDomainTest : FunSpec({
         val configured = BuilderToolsConfig(base, override).validated()
         configured.enabled shouldBe true
         configured.allowedWorlds shouldBe setOf("*")
+        configured.shopMaxQuotedMaterials shouldBe 64
         configured.allowsWorld("world") shouldBe true
         configured.allowsWorld("world_nether") shouldBe true
         configured.allowsWorld("resource-end") shouldBe true
@@ -109,6 +110,29 @@ class BuilderToolsDomainTest : FunSpec({
             BuilderOwnedToolExchange.replaceOnePlainHeld(player, Material.ECHO_SHARD, replacement) shouldBe
                 BuilderOwnedToolExchangeResult.INVENTORY_FULL
             player.inventory.itemInMainHand.amount shouldBe 2
+        }
+    }
+
+    test("inventory procurement computes only exact deficits and simulates delivery before construction") {
+        MockBukkitTestRuntime.open().use { paper ->
+            val player = paper.server.addPlayer("ShopBuilder")
+            player.inventory.addItem(ItemStack(Material.STONE, 20))
+            val costs = BuilderItemCodec.aggregate(listOf(ItemStack(Material.STONE, 64), ItemStack(Material.OAK_PLANKS, 16)))
+
+            BuilderInventory.missingCosts(player, costs).map { it.materialKey to it.amount } shouldBe listOf(
+                "minecraft:stone" to 44,
+                "minecraft:oak_planks" to 16,
+            )
+            BuilderInventory.canApply(player, costs, emptyList(), null, 0) shouldBe false
+            BuilderInventory.canApplyAfterReceiving(
+                player,
+                BuilderInventory.missingCosts(player, costs),
+                costs,
+                emptyList(),
+                null,
+                0,
+            ) shouldBe true
+            costs.all { BuilderInventory.plainMaterial(it) != null } shouldBe true
         }
     }
 

@@ -3,7 +3,9 @@ package ru.arc.hooks.economyshop
 import me.gypopo.economyshopgui.api.EconomyShopGUIHook
 import me.gypopo.economyshopgui.objects.ShopItem
 import me.gypopo.economyshopgui.util.EcoType
+import me.gypopo.economyshopgui.util.EconomyType
 import me.gypopo.economyshopgui.util.Transaction
+import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 
@@ -51,6 +53,74 @@ internal class EconomyShopGuiPurchaseService(
             itemName = itemName,
         )
     }
+
+    override fun quotePlainMaterial(
+        player: Player,
+        material: Material,
+        amount: Int,
+    ): ShopMaterialQuote? {
+        if (!material.isItem || material.isAir || amount <= 0) return null
+        val candidates = allItems().mapNotNull { item ->
+            runCatching { quoteCandidate(player, material, amount, item) }.getOrNull()
+        }
+        val selected = ShopMaterialOfferSelector.cheapest(candidates.map { it.first }) ?: return null
+        return candidates.first { it.first == selected }.second
+    }
+
+    override fun vaultBalance(player: Player): Double? =
+        vaultProvider()
+            ?.let { provider -> runCatching { provider.getBalance(player) }.getOrNull() }
+            ?.takeIf { it.isFinite() && it >= 0.0 }
+
+    override fun formatVaultPrice(amount: Double): String? {
+        if (!amount.isFinite() || amount < 0.0) return null
+        return vaultProvider()
+            ?.let { provider -> runCatching { provider.formatPrice(amount) }.getOrNull() }
+            ?.takeIf(String::isNotBlank)
+    }
+
+    private fun quoteCandidate(
+        player: Player,
+        material: Material,
+        amount: Int,
+        item: ShopItem,
+    ): Pair<ShopMaterialOffer, ShopMaterialQuote>? {
+        if (
+            item.hasItemError() || item.isHidden || item.isDisplayItem || !item.isBuyAble ||
+            item.isBuyCommand || item.isABuyPricing ||
+            item.ecoType.type != EconomyType.VAULT ||
+            item.isMinBuy(amount) || item.isMaxBuy(amount)
+        ) {
+            return null
+        }
+        if (!EconomyShopGUIHook.hasPermissions(item, player)) return null
+        // The true flag suppresses native "requirement not met" chat while this
+        // read-only quote is being assembled.
+        if (!runCatching { item.meetsRequirements(player, true) }.getOrDefault(false)) return null
+        if (item.limitedStockMode > 0) {
+            val stock = runCatching { EconomyShopGUIHook.getItemStock(item, player.uniqueId) }.getOrNull() ?: return null
+            if (stock < amount) return null
+        }
+        val given = runCatching { item.itemToGive }.getOrNull() ?: return null
+        val plain = ItemStack(material)
+        if (given.type != material || given.amount != 1 || !given.isSimilar(plain)) return null
+
+        val total = runCatching { item.getBuyPrice(player, amount) }.getOrNull()
+            ?.takeIf { it.isFinite() && it > 0.0 }
+            ?: return null
+        val formatted = runCatching {
+            EconomyShopGUIHook.getEcon(item.ecoType)?.formatPrice(total)
+        }.getOrNull()?.takeIf(String::isNotBlank) ?: return null
+        val offer = ShopMaterialOffer(item.itemPath, total)
+        return offer to ShopMaterialQuote(material, item.itemPath, amount, total, formatted)
+    }
+
+    private fun vaultProvider() =
+        allItems()
+            .asSequence()
+            .mapNotNull { item -> runCatching { item.ecoType }.getOrNull() }
+            .firstOrNull { it.type == EconomyType.VAULT }
+            ?.let(EconomyShopGUIHook::getEcon)
 
     private fun translatedName(item: ShopItem): String? =
         runCatching { translateItem(item.shopItem) }

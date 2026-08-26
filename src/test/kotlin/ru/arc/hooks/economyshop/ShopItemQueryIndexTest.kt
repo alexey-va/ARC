@@ -29,6 +29,18 @@ class ShopItemQueryIndexTest :
         "rejects ambiguous material aliases" {
             ShopItemQueryIndex.resolve("Furniture.PAPER", items) shouldBe null
         }
+
+        "selects the cheapest finite positive offer with a stable path tie break" {
+            ShopMaterialOfferSelector.cheapest(
+                listOf(
+                    ShopMaterialOffer("Blocks.z", 15.0),
+                    ShopMaterialOffer("Blocks.b", 10.0),
+                    ShopMaterialOffer("Blocks.a", 10.0),
+                    ShopMaterialOffer("Blocks.free", 0.0),
+                    ShopMaterialOffer("Blocks.nan", Double.NaN),
+                ),
+            ) shouldBe ShopMaterialOffer("Blocks.a", 10.0)
+        }
     }) {
     companion object {
         private fun descriptor(section: String, location: String, material: String) =

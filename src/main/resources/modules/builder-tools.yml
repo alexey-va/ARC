@@ -18,6 +18,15 @@ timers:
   undo-ttl: 30m
   journal-retention: 2h
 
+# Read-only estimates and explicit procurement through EconomyShopGUI Premium.
+# A normal /builder confirm never spends money.
+shop:
+  enabled: true
+  max-quoted-materials: 64
+  max-auto-buy-items: 4096
+  max-auto-buy-price: 250000
+  price-increase-tolerance: 0.01
+
 safety:
   require-lands: true
   require-worldguard: true
@@ -45,7 +54,9 @@ locales:
       - "<prefix><white>/builder copy <gray>и <white>/builder paste <gray>— временный чертёж"
       - "<prefix><white>/builder deconstruct <gray>— разобрать область текущим инструментом"
       - "<prefix><white>/builder crown [листва] [3–10] <gray>— построить крону"
-      - "<prefix><white>/builder confirm <gray>— применить план; <white>/builder undo <gray>— откатить"
+      - "<prefix><white>/builder confirm <gray>— применить план из своих материалов"
+      - "<prefix><white>/builder confirm buy <gray>— докупить недостающее и строить"
+      - "<prefix><white>/builder undo <gray>— откатить последнюю операцию"
     errors:
       no-permission: "<prefix><red>У вас нет доступа к этому инструменту."
       survival-only: "<prefix><yellow>Инструменты строителя работают только в режиме выживания."
@@ -63,6 +74,14 @@ locales:
       tool: "<prefix><red>Возьмите подходящий инструмент с запасом прочности для каждого блока."
       recovering: "<prefix><yellow>Модуль завершает безопасное восстановление. Попробуйте чуть позже."
       undo-missing: "<prefix><yellow>Нет подходящей завершённой операции для отката."
+      shop-unavailable: "<prefix><yellow>Админшоп недоступен. Принесите блоки."
+      shop-not-supported: "<prefix><yellow>Докупка: только fill, paste и crown."
+      shop-material-unavailable: "<prefix><yellow>Не всё продаётся. Добавьте вручную."
+      shop-limit: "<prefix><red>Лимит: <white><items></white> шт. • <white><price></white>."
+      shop-insufficient-funds: "<prefix><yellow>Цена <white><price></white> • у вас <white><balance></white>."
+      shop-estimate-changed: "<prefix><yellow>Оценка обновлена. Подтвердите ещё раз."
+      shop-purchase-failed: "<prefix><red>Не куплено: <white><material></white>."
+      shop-purchase-ambiguous: "<prefix><red>Нет ответа: <white><material></white>."
     selection:
       first: "<prefix><green>Точка 1: <white><x> <y> <z>"
       second: "<prefix><green>Точка 2: <white><x> <y> <z>"
@@ -109,7 +128,20 @@ locales:
       saved: "<prefix><green>Скопирован безопасный чертёж: <white><count></white> блоков. Он хранится 15 минут."
     plan:
       ready: "<prefix><green>План <white><kind></white>: <white><count></white> блоков. <gray>Расход: <white><cost></white>; результат: <white><reward></white>. Проверьте частицы и введите <click:run_command:'/builder confirm'><aqua>/builder confirm</aqua></click> за <seconds> с."
+      market:
+        - "<prefix><gray>Рынок • вся постройка ≈ <white><full_price></white>."
+        - "<prefix><gray>Рынок • докупить ≈ <white><missing_price></white>."
+        - "<prefix><click:run_command:'/builder confirm buy'><aqua>/builder confirm buy</aqua></click> <gray>— купить и строить."
+      market-item: "<dark_gray>    • <gray>Нужно <white><amount>×<material></white>"
+      market-unavailable: "<prefix><yellow>Не купить: <white><material></white>."
+      market-more: "<prefix><gray>Ещё строк: <white><count></white>."
       cancelled: "<prefix><gray>План отменён; мир и инвентарь не изменены."
+    shop:
+      purchased: "<prefix><green>Куплено <white><items></white> шт. • <white><price></white>."
+      purchase-detail:
+        - "<prefix><gray>Причина: <white><status></white>."
+        - "<prefix><gray>Куплено ранее: <white><purchased></white>."
+      world-untouched: "<prefix><gray>Купленное у вас; мир не изменён."
     operation:
       started: "<prefix><yellow>Зафиксирован план на <white><count></white> блоков. Инвентарь временно защищён."
       completed: "<prefix><green>Операция <white><kind></white> завершена: <white><count></white> блоков."
@@ -126,7 +158,9 @@ locales:
       - "<prefix><white>/builder copy <gray>and <white>/builder paste <gray>— temporary blueprint"
       - "<prefix><white>/builder deconstruct <gray>— dismantle with your current tool"
       - "<prefix><white>/builder crown [leaves] [3–10] <gray>— build a leaf crown"
-      - "<prefix><white>/builder confirm <gray>— apply the plan; <white>/builder undo <gray>— revert it"
+      - "<prefix><white>/builder confirm <gray>— build with materials you own"
+      - "<prefix><white>/builder confirm buy <gray>— buy missing materials and build"
+      - "<prefix><white>/builder undo <gray>— revert the latest operation"
     errors:
       no-permission: "<prefix><red>You do not have access to this tool."
       survival-only: "<prefix><yellow>Builder tools work only in survival mode."
@@ -144,6 +178,14 @@ locales:
       tool: "<prefix><red>Hold the preferred tool with enough durability for every selected block."
       recovering: "<prefix><yellow>The module is finishing safe recovery. Try again shortly."
       undo-missing: "<prefix><yellow>There is no completed operation available to undo."
+      shop-unavailable: "<prefix><yellow>Admin shop unavailable. Bring the materials."
+      shop-not-supported: "<prefix><yellow>Procurement: fill, paste, and crown only."
+      shop-material-unavailable: "<prefix><yellow>Some items are not sold. Add them manually."
+      shop-limit: "<prefix><red>Limit exceeded: <white><items></white> items or <white><price></white>."
+      shop-insufficient-funds: "<prefix><yellow>Need <white><price></white> • balance <white><balance></white>."
+      shop-estimate-changed: "<prefix><yellow>Estimate updated. Confirm again."
+      shop-purchase-failed: "<prefix><red>Not purchased: <white><material></white>."
+      shop-purchase-ambiguous: "<prefix><red>No response: <white><material></white>."
     selection:
       first: "<prefix><green>Position 1: <white><x> <y> <z>"
       second: "<prefix><green>Position 2: <white><x> <y> <z>"
@@ -190,7 +232,20 @@ locales:
       saved: "<prefix><green>Copied a safe <white><count></white>-block blueprint for 15 minutes."
     plan:
       ready: "<prefix><green><white><kind></white> plan: <white><count></white> blocks. <gray>Cost: <white><cost></white>; result: <white><reward></white>. Check the particles and enter <click:run_command:'/builder confirm'><aqua>/builder confirm</aqua></click> within <seconds> seconds."
+      market:
+        - "<prefix><gray>Market • whole build ≈ <white><full_price></white>."
+        - "<prefix><gray>Market • missing ≈ <white><missing_price></white>."
+        - "<prefix><click:run_command:'/builder confirm buy'><aqua>/builder confirm buy</aqua></click> <gray>— buy and build."
+      market-item: "<dark_gray>    • <gray>Need <white><amount>×<material></white>"
+      market-unavailable: "<prefix><yellow>Shop: unavailable <white><material></white>."
+      market-more: "<prefix><gray>More lines: <white><count></white>."
       cancelled: "<prefix><gray>Plan cancelled; the world and inventory were not changed."
+    shop:
+      purchased: "<prefix><green>Bought <white><items></white> items • <white><price></white>."
+      purchase-detail:
+        - "<prefix><gray>Reason: <white><status></white>."
+        - "<prefix><gray>Bought earlier: <white><purchased></white>."
+      world-untouched: "<prefix><gray>Bought items stay yours; world unchanged."
     operation:
       started: "<prefix><yellow>Locked a <white><count></white>-block plan. Your inventory is briefly protected."
       completed: "<prefix><green><white><kind></white> completed: <white><count></white> blocks."
