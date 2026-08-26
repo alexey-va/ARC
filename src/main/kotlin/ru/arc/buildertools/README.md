@@ -29,9 +29,9 @@
   an inverse material transaction; deconstruction undo returns blocks only
   after the exact collected drops are surrendered and never repairs tool wear.
 
-`/builder` (with the compatibility alias `/buildtools`) is the only public
-command root. The former `/deconstruction` and `/crown` roots are deliberately
-not registered. Existing named Denizen selector and crown-brush items are still
+`/builder` is the only public command root. The former `/deconstruction`,
+`/crown`, and `/buildtools` roots are deliberately not registered. Existing
+named Denizen selector and crown-brush items are still
 recognized as migration inputs; the brush anchors a crown in the block outside
 the clicked face and confirms only on that same face, while all writes pass the
 ARC plan/confirm path.

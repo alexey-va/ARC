@@ -47,6 +47,7 @@ class BuilderToolsDomainTest : FunSpec({
         pluginDescriptor.contains("\n  builder:\n") shouldBe true
         pluginDescriptor.contains("\n  deconstruction:\n") shouldBe false
         pluginDescriptor.contains("\n  crown:\n") shouldBe false
+        pluginDescriptor.contains("aliases: [buildtools]") shouldBe false
     }
 
     test("permission policy accepts feature grants and both migration namespaces") {

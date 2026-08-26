@@ -87,7 +87,6 @@ commands:
   builder:
     description: Survival-friendly builder tools
     usage: /builder [help|wand|fill|copy|paste|deconstruct|crown|confirm|cancel|undo|status]
-    aliases: [buildtools]
 permissions:
   arc.portal.origin-gate:
     description: Use the experimental ItemsAdder origin-gate portal animation

@@ -1197,7 +1197,7 @@ internal class BuilderToolsRuntime(
     fun onCommandDuringOperation(event: PlayerCommandPreprocessEvent) {
         if (event.player.uniqueId !in activeOperations) return
         val normalized = event.message.trim().lowercase(Locale.ROOT).split(Regex("\\s+"))
-        val safeControl = normalized.firstOrNull() in setOf("/builder", "/buildtools") &&
+        val safeControl = normalized.firstOrNull() == "/builder" &&
             normalized.getOrNull(1) in setOf("status", "cancel", "stop")
         if (!safeControl) event.isCancelled = true
     }
