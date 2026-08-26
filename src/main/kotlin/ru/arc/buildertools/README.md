@@ -8,6 +8,8 @@
 
 - `/builder wand`: binds one plain echo shard already owned by the player as
   the selector; left click sets position 1 and right click sets position 2.
+  While the selector is held, its clipped particle outline refreshes twice per
+  second. Prepared plans refresh their bounded preview for the whole TTL.
   `/builder crown wand` similarly binds one owned plain brush. ARC never mints
   the tool materials. Particles are visual-only and never fake client-side blocks.
 - `/builder fill [material]`: changes only configured replaceable blocks and
@@ -37,6 +39,10 @@
   an inverse material transaction; deconstruction undo returns blocks only
   after the exact collected drops are surrendered, never repairs tool wear, and
   never buys replacement drops.
+- Survival consumes and returns the exact material transaction described
+  above. Creative is also supported for staff/build testing, but neither
+  consumes nor produces items and never damages a tool. Changing game mode
+  after preview invalidates the plan.
 
 `/builder` is the only public command root. The former `/deconstruction`,
 `/crown`, and `/buildtools` roots are deliberately not registered. Existing
@@ -53,9 +59,11 @@ every server.
 
 ## Safety and recovery
 
-The module is survival-only, world-allowlisted, range-bounded, and one-operation
-per player. Every changed coordinate is checked against an active Lands claim
-and WorldGuard both while planning and immediately before mutation. Tile
+The module is enabled only on survival nodes, world-allowlisted, range-bounded,
+and one-operation per player. Every changed coordinate must be inside an active
+Lands claim where the player has both place and break access, checked while
+planning and immediately before mutation. WorldGuard is not a Builder Tools
+dependency. Tile
 entities, Slimefun blocks, ItemsAdder custom blocks, ARC custom block data,
 falling blocks, technical blocks, redstone controls, and multi-block hazards are
 rejected. Waterlogged, lit, and powered states are never reproduced for free;

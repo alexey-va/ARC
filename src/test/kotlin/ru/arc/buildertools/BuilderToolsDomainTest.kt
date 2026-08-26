@@ -4,6 +4,9 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.TextDecoration
+import org.bukkit.GameMode
 import org.bukkit.Material
 import org.bukkit.block.data.Waterlogged
 import org.bukkit.block.data.type.Slab
@@ -11,6 +14,8 @@ import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.Plugin
 import org.mockito.kotlin.mock
 import ru.arc.config.Config
+import ru.arc.core.LifecycleTaskScope
+import ru.arc.core.TestTaskScheduler
 import ru.arc.paper.playerstate.PaperPlayerStateEnvelope
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.nio.file.Files
@@ -32,12 +37,83 @@ class BuilderToolsDomainTest : FunSpec({
         configured.enabled shouldBe true
         configured.allowedWorlds shouldBe setOf("*")
         configured.shopMaxQuotedMaterials shouldBe 64
+        configured.previewPeriodTicks shouldBe 10L
+        configured.previewRadius shouldBe 32.0
         configured.allowsWorld("world") shouldBe true
         configured.allowsWorld("world_nether") shouldBe true
         configured.allowsWorld("resource-end") shouldBe true
 
         override.setStringList("allowed-worlds", listOf("*", "world"))
         shouldThrow<IllegalArgumentException> { BuilderToolsConfig(base, override).validated() }
+    }
+
+    test("bundled policy supports survival and creative without opening spectator modes") {
+        BuilderGameModePolicy.allows(GameMode.SURVIVAL) shouldBe true
+        BuilderGameModePolicy.allows(GameMode.CREATIVE) shouldBe true
+        BuilderGameModePolicy.allows(GameMode.ADVENTURE) shouldBe false
+        BuilderGameModePolicy.allows(GameMode.SPECTATOR) shouldBe false
+        BuilderGameModePolicy.usesInventory(GameMode.SURVIVAL) shouldBe true
+        BuilderGameModePolicy.usesInventory(GameMode.CREATIVE) shouldBe false
+    }
+
+    test("builder item presentation explicitly disables vanilla italic styling") {
+        MockBukkitTestRuntime.open().use {
+            val item = ItemStack(Material.ECHO_SHARD)
+            item.editMeta { meta ->
+                BuilderItemPresentation.apply(
+                    meta,
+                    Component.text("Инструмент строителя"),
+                    listOf(Component.text("Первая точка"), Component.empty()),
+                )
+            }
+            val meta = checkNotNull(item.itemMeta)
+            checkNotNull(meta.displayName()).decoration(TextDecoration.ITALIC) shouldBe TextDecoration.State.FALSE
+            checkNotNull(meta.lore()).all {
+                it.decoration(TextDecoration.ITALIC) == TextDecoration.State.FALSE
+            } shouldBe true
+        }
+    }
+
+    test("preview loop refreshes continuously and is cancelled with its lifecycle") {
+        val scheduler = TestTaskScheduler()
+        val scope = LifecycleTaskScope(scheduler)
+        var renders = 0
+        BuilderPreviewLoop(scope, 10L) { renders++ }
+
+        scheduler.tick(1)
+        renders shouldBe 1
+        scheduler.tick(9)
+        renders shouldBe 1
+        scheduler.tick(1)
+        renders shouldBe 2
+        scope.close()
+        scheduler.tick(20)
+        renders shouldBe 2
+    }
+
+    test("selection preview is clipped around the viewer and remains bounded") {
+        val selection = BuilderSelection(
+            BuilderBlockPos(worldId, -100, 60, -100),
+            BuilderBlockPos(worldId, 100, 100, 100),
+        )
+        val points = BuilderSelectionPreviewGeometry.visibleOutline(
+            selection = selection,
+            viewerX = -100.0,
+            viewerY = 60.0,
+            viewerZ = -100.0,
+            radius = 32.0,
+            spacing = 0.75,
+            maximumPoints = 128,
+        )
+
+        points.isNotEmpty() shouldBe true
+        (points.size <= 128) shouldBe true
+        points.all { point ->
+            val dx = point.x + 100.0
+            val dy = point.y - 60.0
+            val dz = point.z + 100.0
+            dx * dx + dy * dy + dz * dz <= 32.0 * 32.0
+        } shouldBe true
     }
 
     test("plugin descriptor exposes only the unified builder command root") {
@@ -49,6 +125,17 @@ class BuilderToolsDomainTest : FunSpec({
         pluginDescriptor.contains("\n  deconstruction:\n") shouldBe false
         pluginDescriptor.contains("\n  crown:\n") shouldBe false
         pluginDescriptor.contains("aliases: [buildtools]") shouldBe false
+    }
+
+    test("bundled builder safety is Lands-first and has no WorldGuard requirement") {
+        val bundled = checkNotNull(javaClass.classLoader.getResourceAsStream("modules/builder-tools.yml"))
+            .bufferedReader()
+            .use { it.readText() }
+
+        bundled.contains("require-lands: true") shouldBe true
+        bundled.contains("require-worldguard") shouldBe false
+        bundled.contains("allowed by WorldGuard") shouldBe false
+        bundled.contains("разрешена WorldGuard") shouldBe false
     }
 
     test("permission policy accepts feature grants and both migration namespaces") {

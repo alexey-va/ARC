@@ -62,7 +62,6 @@ import java.util.UUID
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
-import kotlin.math.ceil
 
 internal class BuilderToolsRuntime(
     private val plugin: ARC,
@@ -72,6 +71,7 @@ internal class BuilderToolsRuntime(
 
     private data class ActiveOperation(
         var record: BuilderJournalRecord,
+        val gameMode: GameMode,
         var appliedChanges: Int = 0,
         var inventoryMutated: Boolean = false,
         var cancelled: Boolean = false,
@@ -99,11 +99,13 @@ internal class BuilderToolsRuntime(
     private val crownSessions = BuilderCrownSessions()
     private val crownBrushAnchors = mutableMapOf<UUID, BuilderBlockPos>()
     private val pendingPlans = mutableMapOf<UUID, BuilderPlan>()
+    private val pendingPlanModes = mutableMapOf<UUID, GameMode>()
     private val activeOperations = mutableMapOf<UUID, ActiveOperation>()
     private val lockedBlocks = mutableMapOf<BuilderBlockPos, UUID>()
     private val committedRecords = mutableMapOf<UUID, BuilderJournalRecord>()
     private val recoveryByPlayer = mutableMapOf<UUID, BuilderJournalRecord>()
     private val consumedUndoSources = mutableSetOf<UUID>()
+    private val previewFailurePlayers = mutableSetOf<UUID>()
     private var recovering = true
     private var recoveryBlocked = false
     private var closed = false
@@ -112,13 +114,11 @@ internal class BuilderToolsRuntime(
         require(!config.requireLands || HookRegistry.landsHook != null) {
             "Builder-tools requires the active Lands integration"
         }
-        require(!config.requireWorldGuard || HookRegistry.wgHook != null) {
-            "Builder-tools requires the active WorldGuard integration"
-        }
         require(!config.requireCoreProtect || coreProtect != null) {
             "Builder-tools requires the active CoreProtect API"
         }
         Bukkit.getPluginManager().registerEvents(this, plugin)
+        BuilderPreviewLoop(taskScope, config.previewPeriodTicks, ::renderPreviews)
         loadRecoveryState()
     }
 
@@ -281,8 +281,7 @@ internal class BuilderToolsRuntime(
     private fun storeCrownSettings(player: Player, updated: BuilderCrownSettings) {
         crownSessions.update(player.uniqueId, updated)
         pendingPlans[player.uniqueId]?.takeIf { it.kind == BuilderPlanKind.CROWN }?.let {
-            pendingPlans.remove(player.uniqueId)
-            crownBrushAnchors.remove(player.uniqueId)
+            discardPendingPlan(player.uniqueId)
         }
     }
 
@@ -308,7 +307,7 @@ internal class BuilderToolsRuntime(
     private fun ensureAvailable(player: Player) {
         if (!hasUsePermission(player)) throw UserFailure("errors.no-permission")
         if (recovering || recoveryBlocked || player.uniqueId in recoveryByPlayer) throw UserFailure("errors.recovering")
-        if (player.gameMode != GameMode.SURVIVAL) throw UserFailure("errors.survival-only")
+        if (!BuilderGameModePolicy.allows(player.gameMode)) throw UserFailure("errors.game-mode")
         if (!config.allowsWorld(player.world.name)) throw UserFailure("errors.world-not-allowed")
     }
 
@@ -323,15 +322,11 @@ internal class BuilderToolsRuntime(
 
     private fun giveWand(player: Player) {
         if (isSelector(player.inventory.itemInMainHand)) {
+            player.inventory.setItemInMainHand(styleWand(player.inventory.itemInMainHand.clone(), player))
             send(player, "wand.received")
             return
         }
-        val wand = ItemStack(Material.ECHO_SHARD)
-        wand.editMeta { meta ->
-            meta.displayName(messages.render("wand.name", locale(player)))
-            meta.lore(messages.renderLines("wand.lore", locale(player)))
-            meta.persistentDataContainer.set(wandKey, PersistentDataType.BYTE, 1)
-        }
+        val wand = styleWand(ItemStack(Material.ECHO_SHARD), player)
         when (BuilderOwnedToolExchange.replaceOnePlainHeld(player, Material.ECHO_SHARD, wand)) {
             BuilderOwnedToolExchangeResult.REPLACED -> Unit
             BuilderOwnedToolExchangeResult.WRONG_ITEM -> throw UserFailure("wand.material-required")
@@ -342,21 +337,39 @@ internal class BuilderToolsRuntime(
 
     private fun giveCrownBrush(player: Player) {
         if (isCrownBrush(player.inventory.itemInMainHand)) {
+            player.inventory.setItemInMainHand(styleCrownBrush(player.inventory.itemInMainHand.clone(), player))
             send(player, "crown-brush.received")
             return
         }
-        val brush = ItemStack(Material.BRUSH)
-        brush.editMeta { meta ->
-            meta.displayName(messages.render("crown-brush.name", locale(player)))
-            meta.lore(messages.renderLines("crown-brush.lore", locale(player)))
-            meta.persistentDataContainer.set(crownBrushKey, PersistentDataType.BYTE, 1)
-        }
+        val brush = styleCrownBrush(ItemStack(Material.BRUSH), player)
         when (BuilderOwnedToolExchange.replaceOnePlainHeld(player, Material.BRUSH, brush)) {
             BuilderOwnedToolExchangeResult.REPLACED -> Unit
             BuilderOwnedToolExchangeResult.WRONG_ITEM -> throw UserFailure("crown-brush.material-required")
             BuilderOwnedToolExchangeResult.INVENTORY_FULL -> throw UserFailure("crown-brush.inventory-full")
         }
         send(player, "crown-brush.received")
+    }
+
+    private fun styleWand(item: ItemStack, player: Player): ItemStack = item.apply {
+        editMeta { meta ->
+            BuilderItemPresentation.apply(
+                meta,
+                messages.render("wand.name", locale(player)),
+                messages.renderLines("wand.lore", locale(player)),
+            )
+            meta.persistentDataContainer.set(wandKey, PersistentDataType.BYTE, 1)
+        }
+    }
+
+    private fun styleCrownBrush(item: ItemStack, player: Player): ItemStack = item.apply {
+        editMeta { meta ->
+            BuilderItemPresentation.apply(
+                meta,
+                messages.render("crown-brush.name", locale(player)),
+                messages.renderLines("crown-brush.lore", locale(player)),
+            )
+            meta.persistentDataContainer.set(crownBrushKey, PersistentDataType.BYTE, 1)
+        }
     }
 
     private fun setCommandPosition(player: Player, first: Boolean) {
@@ -424,7 +437,11 @@ internal class BuilderToolsRuntime(
             BuilderBlockChange(position, block.blockData.asString, data.asString)
         }.take(config.maxChanges + 1).toList()
         requireChanges(changes)
-        val cost = BuilderItemCodec.aggregate(listOf(ItemStack(material, changes.size)))
+        val cost = if (BuilderGameModePolicy.usesInventory(player.gameMode)) {
+            BuilderItemCodec.aggregate(listOf(ItemStack(material, changes.size)))
+        } else {
+            emptyList()
+        }
         return newPlan(player, BuilderPlanKind.FILL, changes, cost, emptyList())
     }
 
@@ -467,7 +484,7 @@ internal class BuilderToolsRuntime(
             if (block.blockData.asString == after.asString) return@mapNotNull null
             if (!safety.isReplaceable(block)) throw unsafeBlock(block)
             ensureMutable(player, block)
-            costs += BuilderPlacementCost.item(after)
+            if (BuilderGameModePolicy.usesInventory(player.gameMode)) costs += BuilderPlacementCost.item(after)
             BuilderBlockChange(position, block.blockData.asString, after.asString)
         }
         requireChanges(changes)
@@ -478,8 +495,9 @@ internal class BuilderToolsRuntime(
         ensureFeaturePermission(player, BuilderFeature.DECONSTRUCT)
         val selection = requiredSelection(player)
         val world = requireWorld(selection.worldId)
-        val tool = player.inventory.itemInMainHand.clone()
-        if (tool.type.isAir || tool.type.maxDurability <= 0) throw UserFailure("errors.tool")
+        val usesInventory = BuilderGameModePolicy.usesInventory(player.gameMode)
+        val tool = player.inventory.itemInMainHand.clone().takeIf { usesInventory }
+        if (usesInventory && (tool == null || tool.type.isAir || tool.type.maxDurability <= 0)) throw UserFailure("errors.tool")
         val drops = mutableListOf<ItemStack>()
         val air = Material.AIR.createBlockData().asString
         val changes = selection.positionsTopDown().mapNotNull { position ->
@@ -487,15 +505,16 @@ internal class BuilderToolsRuntime(
             if (block.type.isAir) return@mapNotNull null
             if (safety.isReplaceable(block)) return@mapNotNull null
             if (!safety.isSafeExisting(block)) throw unsafeBlock(block)
-            if (!block.isPreferredTool(tool)) throw UserFailure("errors.tool")
+            if (usesInventory && !block.isPreferredTool(checkNotNull(tool))) throw UserFailure("errors.tool")
             ensureMutable(player, block)
-            drops += block.getDrops(tool, player).map(ItemStack::clone)
+            if (usesInventory) drops += block.getDrops(checkNotNull(tool), player).map(ItemStack::clone)
             BuilderBlockChange(position, block.blockData.asString, air)
         }.take(config.maxChanges + 1).toList()
         requireChanges(changes)
-        val fingerprint = BuilderItemCodec.encodePrototype(tool)
+        val fingerprint = tool?.let(BuilderItemCodec::encodePrototype)
         val rewards = BuilderItemCodec.aggregate(drops)
-        if (!BuilderInventory.canApply(player, emptyList(), rewards, fingerprint, changes.size)) throw UserFailure("errors.inventory")
+        val toolDamage = if (usesInventory) changes.size else 0
+        if (!BuilderInventory.canApply(player, emptyList(), rewards, fingerprint, toolDamage)) throw UserFailure("errors.inventory")
         return newPlan(
             player = player,
             kind = BuilderPlanKind.DECONSTRUCT,
@@ -503,7 +522,7 @@ internal class BuilderToolsRuntime(
             costs = emptyList(),
             rewards = rewards,
             toolFingerprint = fingerprint,
-            toolDamage = changes.size,
+            toolDamage = toolDamage,
         )
     }
 
@@ -536,7 +555,7 @@ internal class BuilderToolsRuntime(
             if (block.blockData.asString == data.asString) return@mapNotNull null
             if (!safety.isReplaceable(block)) return@mapNotNull null
             ensureMutable(player, block)
-            costs += ItemStack(material)
+            if (BuilderGameModePolicy.usesInventory(player.gameMode)) costs += ItemStack(material)
             BuilderBlockChange(position, block.blockData.asString, data.asString)
         }.take(config.maxChanges + 1).toList()
         requireChanges(changes)
@@ -605,12 +624,13 @@ internal class BuilderToolsRuntime(
         }
         crownBrushAnchors.remove(player.uniqueId)
         pendingPlans[player.uniqueId] = plan
+        pendingPlanModes[player.uniqueId] = player.gameMode
         showPlanParticles(player, plan)
         send(
             player,
             "plan.ready",
             mapOf(
-                "kind" to messages.literal(plan.kind.name.lowercase(Locale.ROOT)),
+                "kind" to kindLabel(player, plan.kind),
                 "count" to messages.literal(plan.changes.size),
                 "cost" to messages.literal(itemsSummary(plan.costs)),
                 "reward" to messages.literal(itemsSummary(plan.rewards)),
@@ -622,6 +642,7 @@ internal class BuilderToolsRuntime(
         taskScope.runLater(config.planTtl.toTicks()) {
             if (pendingPlans[player.uniqueId]?.id == planId) {
                 pendingPlans.remove(player.uniqueId)
+                pendingPlanModes.remove(player.uniqueId)
                 shop.clear(player.uniqueId)
                 crownBrushAnchors.remove(player.uniqueId)
             }
@@ -632,7 +653,15 @@ internal class BuilderToolsRuntime(
         ensureAvailable(player)
         if (player.uniqueId in activeOperations) throw UserFailure("errors.busy")
         val plan = pendingPlans[player.uniqueId] ?: throw UserFailure("errors.expired")
-        if (plan.expiresAtMillis <= System.currentTimeMillis()) throw UserFailure("errors.expired")
+        if (plan.expiresAtMillis <= System.currentTimeMillis()) {
+            discardPendingPlan(player.uniqueId)
+            throw UserFailure("errors.expired")
+        }
+        val plannedMode = pendingPlanModes[player.uniqueId] ?: throw UserFailure("errors.expired")
+        if (player.gameMode != plannedMode) {
+            discardPendingPlan(player.uniqueId)
+            throw UserFailure("errors.game-mode-changed")
+        }
         revalidatePlan(player, plan)
         if (buyMissing) {
             when (val result = shop.procure(player, plan)) {
@@ -648,6 +677,7 @@ internal class BuilderToolsRuntime(
         }
         if (!lock(plan)) throw UserFailure("errors.busy")
         pendingPlans.remove(player.uniqueId, plan)
+        pendingPlanModes.remove(player.uniqueId)
         shop.clear(player.uniqueId)
         crownBrushAnchors.remove(player.uniqueId)
         val now = System.currentTimeMillis()
@@ -661,7 +691,7 @@ internal class BuilderToolsRuntime(
             createdAtMillis = plan.createdAtMillis,
             updatedAtMillis = now,
         ).validated(config.maxChanges)
-        val operation = ActiveOperation(record)
+        val operation = ActiveOperation(record, plannedMode)
         activeOperations[player.uniqueId] = operation
         send(player, "operation.started", mapOf("count" to messages.literal(plan.changes.size)))
         writeAsync(
@@ -688,6 +718,10 @@ internal class BuilderToolsRuntime(
 
     private fun beginMutation(player: Player, operation: ActiveOperation) {
         val record = operation.record
+        if (player.gameMode != operation.gameMode) {
+            rollback(player, operation, "game mode changed before apply")
+            return
+        }
         if (!BuilderInventory.snapshotInventoryMatches(player, record.inventoryBefore)) {
             rollback(player, operation, "inventory changed before apply")
             return
@@ -708,6 +742,10 @@ internal class BuilderToolsRuntime(
     private fun runMutationBatch(player: Player, operation: ActiveOperation) {
         if (operation.cancelled || !player.isOnline) {
             rollback(player, operation, "player disconnected")
+            return
+        }
+        if (player.gameMode != operation.gameMode) {
+            rollback(player, operation, "game mode changed during apply")
             return
         }
         try {
@@ -766,7 +804,7 @@ internal class BuilderToolsRuntime(
                 send(
                     player,
                     "operation.completed",
-                    mapOf("kind" to messages.literal(durable.plan.kind.name.lowercase(Locale.ROOT)), "count" to messages.literal(durable.plan.changes.size)),
+                    mapOf("kind" to kindLabel(player, durable.plan.kind), "count" to messages.literal(durable.plan.changes.size)),
                 )
                 info(debugLine.line("event" to "committed", "operation" to durable.operationId, "player" to durable.playerId, "kind" to durable.plan.kind, "blocks" to durable.plan.changes.size))
                 durable.plan.sourceRecordId?.let { markSourceUndone(it) }
@@ -862,9 +900,8 @@ internal class BuilderToolsRuntime(
             else send(player, "plan.cancelled")
             return
         }
-        if (pendingPlans.remove(player.uniqueId) != null) {
-            shop.clear(player.uniqueId)
-            crownBrushAnchors.remove(player.uniqueId)
+        if (pendingPlans.containsKey(player.uniqueId)) {
+            discardPendingPlan(player.uniqueId)
             send(player, "plan.cancelled")
         } else {
             throw UserFailure("errors.expired")
@@ -900,8 +937,8 @@ internal class BuilderToolsRuntime(
         val plan = pendingPlans[player.uniqueId]
         val selection = selectionOrNull(player)
         when {
-            active != null -> send(player, "status.plan", mapOf("kind" to messages.literal(active.record.plan.kind), "count" to messages.literal(active.appliedChanges), "total" to messages.literal(active.record.plan.changes.size)))
-            plan != null -> send(player, "status.plan", mapOf("kind" to messages.literal(plan.kind), "count" to messages.literal(0), "total" to messages.literal(plan.changes.size)))
+            active != null -> send(player, "status.plan", mapOf("kind" to kindLabel(player, active.record.plan.kind), "count" to messages.literal(active.appliedChanges), "total" to messages.literal(active.record.plan.changes.size)))
+            plan != null -> send(player, "status.plan", mapOf("kind" to kindLabel(player, plan.kind), "count" to messages.literal(0), "total" to messages.literal(plan.changes.size)))
             selection != null -> send(player, "status.selection", mapOf("x" to messages.literal(selection.sizeX), "y" to messages.literal(selection.sizeY), "z" to messages.literal(selection.sizeZ), "volume" to messages.literal(selection.volume)))
             else -> send(player, "status.idle")
         }
@@ -925,7 +962,6 @@ internal class BuilderToolsRuntime(
         if ((lands != null && !lands.isProtectedFor(player, block.location)) || (lands == null && config.requireLands)) {
             throw UserFailure("errors.protection")
         }
-        if (HookRegistry.wgHook?.canBuild(player, block.location) == false) throw UserFailure("errors.protection")
     }
 
     private fun block(world: World, position: BuilderBlockPos): Block = world.getBlockAt(position.x, position.y, position.z)
@@ -958,36 +994,64 @@ internal class BuilderToolsRuntime(
             if (items.size > 5) " +${items.size - 5}" else ""
     }
 
+    private fun kindLabel(player: Player, kind: BuilderPlanKind): Component =
+        messages.render("kinds.${kind.name.lowercase(Locale.ROOT)}", locale(player))
+
+    private fun discardPendingPlan(playerId: UUID) {
+        pendingPlans.remove(playerId)
+        pendingPlanModes.remove(playerId)
+        shop.clear(playerId)
+        crownBrushAnchors.remove(playerId)
+    }
+
+    private fun renderPreviews() {
+        val now = System.currentTimeMillis()
+        Bukkit.getOnlinePlayers().forEach { player ->
+            if (!BuilderGameModePolicy.allows(player.gameMode) || !config.allowsWorld(player.world.name)) return@forEach
+            try {
+                val playerId = player.uniqueId
+                pendingPlans[playerId]?.takeIf { it.expiresAtMillis > now }?.let { showPlanParticles(player, it) }
+                val holdingSelector = isSelector(player.inventory.itemInMainHand) || isSelector(player.inventory.itemInOffHand)
+                if (holdingSelector) selectionOrNull(player)?.let { showSelectionOutline(player, it, Particle.FLAME) }
+                previewFailurePlayers.remove(playerId)
+            } catch (failure: RuntimeException) {
+                if (previewFailurePlayers.add(player.uniqueId)) {
+                    warn("Builder-tools preview failed for {}: {}", player.name, failure.message)
+                }
+            }
+        }
+    }
+
     private fun showPlanParticles(player: Player, plan: BuilderPlan) {
-        val step = ceil(plan.changes.size / 180.0).toInt().coerceAtLeast(1)
-        plan.changes.asSequence().filterIndexed { index, _ -> index % step == 0 }.take(180).forEach { change ->
+        if (plan.changes.firstOrNull()?.position?.worldId != player.world.uid) return
+        val eye = player.eyeLocation
+        val radiusSquared = config.previewRadius * config.previewRadius
+        val visible = plan.changes.asSequence().filter { change ->
+            val dx = change.position.x + 0.5 - eye.x
+            val dy = change.position.y + 0.5 - eye.y
+            val dz = change.position.z + 0.5 - eye.z
+            dx * dx + dy * dy + dz * dz <= radiusSquared
+        }.toList()
+        val step = kotlin.math.ceil(visible.size / config.previewMaxPlanParticles.toDouble()).toInt().coerceAtLeast(1)
+        visible.asSequence().filterIndexed { index, _ -> index % step == 0 }.take(config.previewMaxPlanParticles).forEach { change ->
             player.spawnParticle(Particle.END_ROD, change.position.x + 0.5, change.position.y + 0.5, change.position.z + 0.5, 1, 0.0, 0.0, 0.0, 0.0)
         }
     }
 
     private fun showSelectionOutline(player: Player, selection: BuilderSelection, particle: Particle) {
-        val minX = selection.minX.toDouble()
-        val maxX = selection.maxX + 1.0
-        val minY = selection.minY.toDouble()
-        val maxY = selection.maxY + 1.0
-        val minZ = selection.minZ.toDouble()
-        val maxZ = selection.maxZ + 1.0
-        val points = mutableSetOf<Triple<Double, Double, Double>>()
-        fun edge(a: Double, b: Double, fixed1: Double, fixed2: Double, axis: Int) {
-            val steps = ceil((b - a) * 2).toInt().coerceAtLeast(1)
-            for (index in 0..steps) {
-                val value = a + (b - a) * index / steps
-                points += when (axis) {
-                    0 -> Triple(value, fixed1, fixed2)
-                    1 -> Triple(fixed1, value, fixed2)
-                    else -> Triple(fixed1, fixed2, value)
-                }
-            }
+        if (selection.worldId != player.world.uid) return
+        val eye = player.eyeLocation
+        BuilderSelectionPreviewGeometry.visibleOutline(
+            selection = selection,
+            viewerX = eye.x,
+            viewerY = eye.y,
+            viewerZ = eye.z,
+            radius = config.previewRadius,
+            spacing = config.previewSpacing,
+            maximumPoints = config.previewMaxSelectionParticles,
+        ).forEach { point ->
+            player.spawnParticle(particle, point.x, point.y, point.z, 1, 0.0, 0.0, 0.0, 0.0)
         }
-        for (y in listOf(minY, maxY)) for (z in listOf(minZ, maxZ)) edge(minX, maxX, y, z, 0)
-        for (x in listOf(minX, maxX)) for (z in listOf(minZ, maxZ)) edge(minY, maxY, x, z, 1)
-        for (x in listOf(minX, maxX)) for (y in listOf(minY, maxY)) edge(minZ, maxZ, x, y, 2)
-        points.take(300).forEach { (x, y, z) -> player.spawnParticle(particle, x, y, z, 1, 0.0, 0.0, 0.0, 0.0) }
     }
 
     private fun loadRecoveryState() {
@@ -1187,9 +1251,7 @@ internal class BuilderToolsRuntime(
 
     @EventHandler(priority = EventPriority.MONITOR)
     fun onQuit(event: PlayerQuitEvent) {
-        pendingPlans.remove(event.player.uniqueId)
-        shop.clear(event.player.uniqueId)
-        crownBrushAnchors.remove(event.player.uniqueId)
+        discardPendingPlan(event.player.uniqueId)
         selections.remove(event.player.uniqueId)
         clipboards.remove(event.player.uniqueId)
         crownSessions.clear(event.player.uniqueId)
@@ -1330,10 +1392,12 @@ internal class BuilderToolsRuntime(
         }
         storageExecutor.shutdownNow()
         pendingPlans.clear()
+        pendingPlanModes.clear()
         shop.close()
         crownBrushAnchors.clear()
         selections.clear()
         clipboards.clear()
         crownSessions.clear()
+        previewFailurePlayers.clear()
     }
 }
