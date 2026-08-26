@@ -21,6 +21,11 @@ internal sealed interface CommandTreeToken {
     data object Argument : CommandTreeToken
 }
 
+internal data class CommandTreeMatch(
+    val blocksSubtree: Boolean,
+    val blocksExactPath: Boolean,
+)
+
 internal data class CommandPattern(
     val tokens: List<PatternToken>,
 ) {
@@ -32,9 +37,6 @@ internal data class CommandPattern(
                 PatternToken.RemainingWords -> "**"
             }
         }
-
-    val subtreePrefix: List<PatternToken>?
-        get() = if (tokens.lastOrNull() == PatternToken.RemainingWords) tokens.dropLast(1) else null
 
     companion object {
         fun parse(
@@ -76,8 +78,6 @@ internal data class CommandPattern(
  */
 internal class CommandPatternIndex private constructor(
     private val root: Node,
-    private val subtreePrefixes: List<List<PatternToken>>,
-    private val exactTreePatterns: List<List<PatternToken>>,
     val patternCount: Int,
 ) {
     fun matches(tokens: List<String>): Boolean {
@@ -87,40 +87,58 @@ internal class CommandPatternIndex private constructor(
         for (token in tokens) {
             if (active.any(Node::remainingWords)) return true
 
-            val next = LinkedHashSet<Node>(active.size * 2)
+            val next = ArrayList<Node>(active.size * 2)
             for (node in active) {
                 node.literalChildren[token]?.let(next::add)
                 node.singleWordChild?.let(next::add)
             }
             if (next.isEmpty()) return false
-            active = next.toList()
+            active = next
         }
 
         return active.any { it.terminal || it.remainingWords }
     }
 
     /**
-     * Returns true only when every command below [path] is blocked by a pattern ending in `**`.
-     * This makes it safe to remove the corresponding Brigadier node and all of its descendants.
+     * Matches one Brigadier path through the compiled trie. The old implementation
+     * scanned every configured pattern for every node in the command tree, which
+     * made command refresh cost grow with both tree size and policy size.
      */
-    fun blocksSubtree(path: List<CommandTreeToken>): Boolean =
-        subtreePrefixes.any { prefix ->
-            if (prefix.size > path.size) return@any false
-            prefix.indices.all { index -> prefix[index].covers(path[index]) }
+    fun matchTreePath(path: List<CommandTreeToken>): CommandTreeMatch {
+        var active = listOf(root)
+        if (root.remainingWords) return CommandTreeMatch(blocksSubtree = true, blocksExactPath = false)
+
+        for (token in path) {
+            val next = ArrayList<Node>(active.size * 2)
+            for (node in active) {
+                when (token) {
+                    is CommandTreeToken.Literal -> node.literalChildren[token.value]?.let(next::add)
+                    CommandTreeToken.Argument -> Unit
+                }
+                node.singleWordChild?.let(next::add)
+            }
+            if (next.isEmpty()) return CommandTreeMatch(blocksSubtree = false, blocksExactPath = false)
+            if (next.any(Node::remainingWords)) {
+                return CommandTreeMatch(blocksSubtree = true, blocksExactPath = false)
+            }
+            active = next
         }
 
-    /** Returns true when the exact tree path is blocked for every value represented by argument nodes. */
-    fun blocksExactTreePath(path: List<CommandTreeToken>): Boolean =
-        exactTreePatterns.any { pattern ->
-            pattern.size == path.size && pattern.indices.all { index -> pattern[index].covers(path[index]) }
-        }
+        return CommandTreeMatch(
+            blocksSubtree = false,
+            blocksExactPath = active.any(Node::terminal),
+        )
+    }
 
-    private fun PatternToken.covers(treeToken: CommandTreeToken): Boolean =
-        when (this) {
-            is PatternToken.Literal -> treeToken is CommandTreeToken.Literal && value == treeToken.value
-            PatternToken.SingleWord -> true
-            PatternToken.RemainingWords -> true
-        }
+    fun blocksSubtree(path: List<CommandTreeToken>): Boolean = matchTreePath(path).blocksSubtree
+
+    fun blocksExactTreePath(path: List<CommandTreeToken>): Boolean = matchTreePath(path).blocksExactPath
+
+    fun blocksRootSubtree(commandLabel: String): Boolean {
+        if (root.remainingWords) return true
+        return root.literalChildren[commandLabel]?.remainingWords == true ||
+            root.singleWordChild?.remainingWords == true
+    }
 
     private class Node {
         val literalChildren = HashMap<String, Node>()
@@ -130,7 +148,7 @@ internal class CommandPatternIndex private constructor(
     }
 
     companion object {
-        val EMPTY = CommandPatternIndex(Node(), emptyList(), emptyList(), 0)
+        val EMPTY = CommandPatternIndex(Node(), 0)
 
         fun compile(patterns: Collection<CommandPattern>): CommandPatternIndex {
             val distinct = patterns.distinctBy(CommandPattern::canonical)
@@ -157,8 +175,6 @@ internal class CommandPatternIndex private constructor(
 
             return CommandPatternIndex(
                 root = root,
-                subtreePrefixes = distinct.mapNotNull(CommandPattern::subtreePrefix),
-                exactTreePatterns = distinct.filter { it.subtreePrefix == null }.map(CommandPattern::tokens),
                 patternCount = distinct.size,
             )
         }
@@ -184,12 +200,10 @@ internal class CommandHidePolicy(
 
     fun blocksExactTreePath(path: List<CommandTreeToken>): Boolean = index.blocksExactTreePath(path)
 
+    fun matchTreePath(path: List<CommandTreeToken>): CommandTreeMatch = index.matchTreePath(path)
+
     fun hidesRoot(commandLabel: String): Boolean =
-        blocksSubtree(
-            listOf(
-                CommandTreeToken.Literal(normalizeLiteral(commandLabel, stripCommandNamespace)),
-            ),
-        )
+        index.blocksRootSubtree(normalizeLiteral(commandLabel, stripCommandNamespace))
 
     fun filterCompletions(
         buffer: String,

@@ -113,6 +113,23 @@ class CommandPatternTest :
                 ) shouldBe true
                 policy.blocksSubtree(treePath("example", "anything")) shouldBe true
             }
+
+            "production-sized catalogs keep root and deep lookups exact" {
+                val patterns = (0 until 290).map { index -> "hidden$index **" } + "arc admin **" + "example * leaf"
+                val policy = policy(*patterns.toTypedArray())
+
+                policy.hidesRoot("hidden289") shouldBe true
+                policy.hidesRoot("public") shouldBe false
+                policy.blocksSubtree(treePath("arc", "admin")) shouldBe true
+                policy.blocksSubtree(treePath("arc", "public")) shouldBe false
+                policy.blocksExactTreePath(
+                    listOf(
+                        CommandTreeToken.Literal("example"),
+                        CommandTreeToken.Argument,
+                        CommandTreeToken.Literal("leaf"),
+                    ),
+                ) shouldBe true
+            }
         }
     })
 

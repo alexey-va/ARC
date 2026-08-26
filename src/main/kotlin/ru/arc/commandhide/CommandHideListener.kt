@@ -42,13 +42,11 @@ class CommandHideListener internal constructor(
 
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onBrigadierCommandTree(event: AsyncPlayerSendCommandsEvent<*>) {
-        val policy =
-            if (event.isAsynchronous) {
-                policies.cached(event.player.uniqueId) ?: return
-            } else {
-                refresh(event.player)
-            }
-        CommandTreePruner.prune(event.commandNode, policy)
+        // Paper normally fires this event once asynchronously and once synchronously
+        // for the same command tree. Permission checks are not async-safe, so handle
+        // only the synchronous pass instead of traversing the tree twice.
+        if (event.isAsynchronous) return
+        CommandTreePruner.prune(event.commandNode, refresh(event.player))
     }
 
     @EventHandler

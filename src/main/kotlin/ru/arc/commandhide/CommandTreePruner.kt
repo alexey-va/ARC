@@ -10,12 +10,12 @@ internal object CommandTreePruner {
         policy: CommandHidePolicy,
     ) {
         if (policy.isEmpty) return
-        pruneChildren(root, emptyList(), policy)
+        pruneChildren(root, ArrayList(4), policy)
     }
 
     private fun pruneChildren(
         node: CommandNode<*>,
-        path: List<CommandTreeToken>,
+        path: MutableList<CommandTreeToken>,
         policy: CommandHidePolicy,
     ) {
         val iterator = node.children.iterator()
@@ -33,18 +33,20 @@ internal object CommandTreePruner {
                 } else {
                     CommandTreeToken.Argument
                 }
-            val childPath = path + treeToken
+            path += treeToken
+            val match = policy.matchTreePath(path)
             val exactBlockedLeaf =
                 child.children.isEmpty() &&
                     child.redirect == null &&
-                    policy.blocksExactTreePath(childPath)
-            if (policy.blocksSubtree(childPath) || exactBlockedLeaf) {
+                    match.blocksExactPath
+            if (match.blocksSubtree || exactBlockedLeaf) {
                 // Brigadier 1.3.10 exposes the backing children values view. Removing from
                 // this generated per-player tree keeps the blocked branch out of serialization.
                 iterator.remove()
             } else {
-                pruneChildren(child, childPath, policy)
+                pruneChildren(child, path, policy)
             }
+            path.removeAt(path.lastIndex)
         }
     }
 }
