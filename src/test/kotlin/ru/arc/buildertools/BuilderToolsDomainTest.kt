@@ -62,6 +62,30 @@ class BuilderToolsDomainTest : FunSpec({
         BuilderGameModePolicy.usesInventory(GameMode.CREATIVE) shouldBe false
     }
 
+    test("pending plans bind their confirmation game mode atomically") {
+        val now = 1_800_000_000_000L
+        val plan = BuilderPlan(
+            id = UUID.fromString("33333333-3333-3333-3333-333333333334"),
+            playerId = playerId,
+            kind = BuilderPlanKind.BUILD_BOOK,
+            changes = listOf(
+                BuilderBlockChange(
+                    BuilderBlockPos(worldId, 4, 70, 8),
+                    "minecraft:air",
+                    "minecraft:stone",
+                ),
+            ),
+            costs = emptyList(),
+            rewards = emptyList(),
+            createdAtMillis = now,
+            expiresAtMillis = now + 30_000,
+        ).validated()
+
+        val pending = BuilderPendingPlan(plan, GameMode.SURVIVAL)
+        pending.plan shouldBe plan
+        pending.gameMode shouldBe GameMode.SURVIVAL
+    }
+
     test("builder item presentation explicitly disables vanilla italic styling") {
         MockBukkitTestRuntime.open().use {
             val item = ItemStack(Material.ECHO_SHARD)

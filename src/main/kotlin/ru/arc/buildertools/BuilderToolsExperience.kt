@@ -14,6 +14,11 @@ internal object BuilderGameModePolicy {
     fun usesInventory(gameMode: GameMode): Boolean = gameMode == GameMode.SURVIVAL
 }
 
+internal data class BuilderPendingPlan(
+    val plan: BuilderPlan,
+    val gameMode: GameMode,
+)
+
 internal object BuilderItemPresentation {
     fun apply(meta: ItemMeta, name: Component, lore: List<Component>) {
         meta.displayName(nonItalic(name))

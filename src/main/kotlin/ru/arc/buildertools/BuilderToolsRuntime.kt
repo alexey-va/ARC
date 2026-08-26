@@ -106,8 +106,7 @@ internal class BuilderToolsRuntime(
     private val clipboards = mutableMapOf<UUID, BuilderClipboard>()
     private val crownSessions = BuilderCrownSessions()
     private val crownBrushAnchors = mutableMapOf<UUID, BuilderBlockPos>()
-    private val pendingPlans = mutableMapOf<UUID, BuilderPlan>()
-    private val pendingPlanModes = mutableMapOf<UUID, GameMode>()
+    private val pendingPlans = mutableMapOf<UUID, BuilderPendingPlan>()
     private val activeOperations = mutableMapOf<UUID, ActiveOperation>()
     private val lockedBlocks = mutableMapOf<BuilderBlockPos, UUID>()
     private val committedRecords = mutableMapOf<UUID, BuilderJournalRecord>()
@@ -289,7 +288,7 @@ internal class BuilderToolsRuntime(
 
     private fun storeCrownSettings(player: Player, updated: BuilderCrownSettings) {
         crownSessions.update(player.uniqueId, updated)
-        pendingPlans[player.uniqueId]?.takeIf { it.kind == BuilderPlanKind.CROWN }?.let {
+        pendingPlans[player.uniqueId]?.plan?.takeIf { it.kind == BuilderPlanKind.CROWN }?.let {
             discardPendingPlan(player.uniqueId)
         }
     }
@@ -698,8 +697,7 @@ internal class BuilderToolsRuntime(
     private fun preparePlan(player: Player, plan: BuilderPlan) {
         preflightPlan(player, plan)
         crownBrushAnchors.remove(player.uniqueId)
-        pendingPlans[player.uniqueId] = plan
-        pendingPlanModes[player.uniqueId] = player.gameMode
+        pendingPlans[player.uniqueId] = BuilderPendingPlan(plan, player.gameMode)
         showPlanParticles(player, plan)
         send(
             player,
@@ -715,9 +713,8 @@ internal class BuilderToolsRuntime(
         shop.preview(player, plan)
         val planId = plan.id
         taskScope.runLater(config.planTtl.toTicks()) {
-            if (pendingPlans[player.uniqueId]?.id == planId) {
+            if (pendingPlans[player.uniqueId]?.plan?.id == planId) {
                 pendingPlans.remove(player.uniqueId)
-                pendingPlanModes.remove(player.uniqueId)
                 shop.clear(player.uniqueId)
                 crownBrushAnchors.remove(player.uniqueId)
             }
@@ -754,7 +751,7 @@ internal class BuilderToolsRuntime(
         ensureBuildBookAvailable(player)
         val plan = planBuildBook(player, site, book)
         preflightPlan(player, plan)
-        pendingPlans[player.uniqueId] = plan
+        pendingPlans[player.uniqueId] = BuilderPendingPlan(plan, player.gameMode)
         confirm(player, buildBook = true)
         site.cancelSilently()
         true
@@ -774,12 +771,13 @@ internal class BuilderToolsRuntime(
     private fun confirm(player: Player, buyMissing: Boolean = false, buildBook: Boolean = false) {
         if (buildBook) ensureBuildBookAvailable(player) else ensureAvailable(player)
         if (player.uniqueId in activeOperations) throw UserFailure("errors.busy")
-        val plan = pendingPlans[player.uniqueId] ?: throw UserFailure("errors.expired")
+        val pending = pendingPlans[player.uniqueId] ?: throw UserFailure("errors.expired")
+        val plan = pending.plan
         if (plan.expiresAtMillis <= System.currentTimeMillis()) {
             discardPendingPlan(player.uniqueId)
             throw UserFailure("errors.expired")
         }
-        val plannedMode = pendingPlanModes[player.uniqueId] ?: throw UserFailure("errors.expired")
+        val plannedMode = pending.gameMode
         if (player.gameMode != plannedMode) {
             discardPendingPlan(player.uniqueId)
             throw UserFailure("errors.game-mode-changed")
@@ -798,8 +796,7 @@ internal class BuilderToolsRuntime(
             throw UserFailure("errors.inventory")
         }
         if (!lock(plan)) throw UserFailure("errors.busy")
-        pendingPlans.remove(player.uniqueId, plan)
-        pendingPlanModes.remove(player.uniqueId)
+        pendingPlans.remove(player.uniqueId, pending)
         shop.clear(player.uniqueId)
         crownBrushAnchors.remove(player.uniqueId)
         val now = System.currentTimeMillis()
@@ -1056,7 +1053,7 @@ internal class BuilderToolsRuntime(
 
     private fun showStatus(player: Player) {
         val active = activeOperations[player.uniqueId]
-        val plan = pendingPlans[player.uniqueId]
+        val plan = pendingPlans[player.uniqueId]?.plan
         val selection = selectionOrNull(player)
         when {
             active != null -> send(player, "status.plan", mapOf("kind" to kindLabel(player, active.record.plan.kind), "count" to messages.literal(active.appliedChanges), "total" to messages.literal(active.record.plan.changes.size)))
@@ -1121,7 +1118,6 @@ internal class BuilderToolsRuntime(
 
     private fun discardPendingPlan(playerId: UUID) {
         pendingPlans.remove(playerId)
-        pendingPlanModes.remove(playerId)
         shop.clear(playerId)
         crownBrushAnchors.remove(playerId)
     }
@@ -1132,7 +1128,7 @@ internal class BuilderToolsRuntime(
             if (!BuilderGameModePolicy.allows(player.gameMode) || !config.allowsWorld(player.world.name)) return@forEach
             try {
                 val playerId = player.uniqueId
-                pendingPlans[playerId]?.takeIf { it.expiresAtMillis > now }?.let { showPlanParticles(player, it) }
+                pendingPlans[playerId]?.plan?.takeIf { it.expiresAtMillis > now }?.let { showPlanParticles(player, it) }
                 val holdingSelector = isSelector(player.inventory.itemInMainHand) || isSelector(player.inventory.itemInOffHand)
                 if (holdingSelector) selectionOrNull(player)?.let { showSelectionOutline(player, it, Particle.FLAME) }
                 previewFailurePlayers.remove(playerId)
@@ -1514,7 +1510,6 @@ internal class BuilderToolsRuntime(
         }
         storageExecutor.shutdownNow()
         pendingPlans.clear()
-        pendingPlanModes.clear()
         shop.close()
         crownBrushAnchors.clear()
         selections.clear()
