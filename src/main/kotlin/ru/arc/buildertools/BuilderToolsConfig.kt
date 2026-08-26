@@ -25,6 +25,11 @@ class BuilderToolsConfig(
     val blocksPerTick: Int get() = config.integer("limits.blocks-per-tick", 16)
     val baseHourlyChanges: Int get() = config.integer("limits.base-hourly-changes", 20_000)
     val maximumRange: Double get() = config.double("limits.maximum-range", 64.0)
+    val previewPeriodTicks: Long get() = config.long("preview.period-ticks", 10L)
+    val previewRadius: Double get() = config.double("preview.radius", 32.0)
+    val previewSpacing: Double get() = config.double("preview.outline-spacing", 0.75)
+    val previewMaxSelectionParticles: Int get() = config.integer("preview.max-selection-particles", 512)
+    val previewMaxPlanParticles: Int get() = config.integer("preview.max-plan-particles", 180)
     val shopEnabled: Boolean get() = config.bool("shop.enabled", true)
     val shopMaxQuotedMaterials: Int get() = config.integer("shop.max-quoted-materials", 64)
     val shopMaxAutoBuyItems: Int get() = config.integer("shop.max-auto-buy-items", 4_096)
@@ -35,7 +40,6 @@ class BuilderToolsConfig(
     val undoTtl: Duration get() = config.duration("timers.undo-ttl", Duration.ofMinutes(30))
     val journalRetention: Duration get() = config.duration("timers.journal-retention", Duration.ofHours(2))
     val requireLands: Boolean get() = config.bool("safety.require-lands", true)
-    val requireWorldGuard: Boolean get() = config.bool("safety.require-worldguard", true)
     val requireCoreProtect: Boolean get() = config.bool("safety.require-coreprotect", true)
     val replaceableMaterials: Set<String>
         get() = config.stringList("safety.replaceable-materials").map { it.uppercase(Locale.ROOT) }.toSet()
@@ -58,6 +62,11 @@ class BuilderToolsConfig(
         require(blocksPerTick in 1..256) { "Builder-tools blocks-per-tick is invalid" }
         require(baseHourlyChanges in maxChanges..200_000) { "Builder-tools hourly limit is invalid" }
         require(maximumRange.isFinite() && maximumRange in 8.0..128.0) { "Builder-tools maximum range is invalid" }
+        require(previewPeriodTicks in 5L..40L) { "Builder-tools preview period is invalid" }
+        require(previewRadius.isFinite() && previewRadius in 8.0..64.0) { "Builder-tools preview radius is invalid" }
+        require(previewSpacing.isFinite() && previewSpacing in 0.25..2.0) { "Builder-tools preview spacing is invalid" }
+        require(previewMaxSelectionParticles in 48..1_024) { "Builder-tools selection preview limit is invalid" }
+        require(previewMaxPlanParticles in 32..512) { "Builder-tools plan preview limit is invalid" }
         require(shopMaxAutoBuyItems in 1..BuilderPlan.ABSOLUTE_MAX_ITEMS.toInt()) {
             "Builder-tools shop item limit is invalid"
         }
@@ -93,7 +102,8 @@ class BuilderToolsConfig(
             scalarPaths = setOf(
                 "prefix",
                 "errors.no-permission",
-                "errors.survival-only",
+                "errors.game-mode",
+                "errors.game-mode-changed",
                 "errors.world-not-allowed",
                 "errors.selection-missing",
                 "errors.selection-too-large",
@@ -153,6 +163,11 @@ class BuilderToolsConfig(
                 "status.selection",
                 "status.plan",
                 "status.idle",
+                "kinds.fill",
+                "kinds.paste",
+                "kinds.deconstruct",
+                "kinds.crown",
+                "kinds.undo",
             ),
             listPaths = setOf(
                 "help",

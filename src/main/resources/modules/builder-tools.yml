@@ -18,6 +18,14 @@ timers:
   undo-ttl: 30m
   journal-retention: 2h
 
+preview:
+  # Refresh twice per second, matching the persistent feel of the old Denizen outline.
+  period-ticks: 10
+  radius: 32
+  outline-spacing: 0.75
+  max-selection-particles: 512
+  max-plan-particles: 180
+
 # Read-only estimates and explicit procurement through EconomyShopGUI Premium.
 # A normal /builder confirm never spends money.
 shop:
@@ -29,7 +37,6 @@ shop:
 
 safety:
   require-lands: true
-  require-worldguard: true
   require-coreprotect: true
   # Filling and pasting may replace only non-valuable vegetation/air.
   replaceable-materials:
@@ -47,32 +54,50 @@ safety:
 
 locales:
   ru:
-    prefix: "<dark_gray>Строитель <gray>• "
+    prefix: "<#92bed8>◇ "
     help:
-      - "<prefix><white>/builder wand <gray>— настроить селектор из осколка эха"
-      - "<prefix><white>/builder fill [блок] <gray>— заполнить воздух за ваши материалы"
-      - "<prefix><white>/builder copy <gray>и <white>/builder paste <gray>— временный чертёж"
-      - "<prefix><white>/builder book [название] <gray>— настроить обычную книгу как постоянный чертёж"
-      - "<prefix><white>/builder deconstruct <gray>— разобрать область текущим инструментом"
-      - "<prefix><white>/builder crown [листва] [3–10] <gray>— построить крону"
-      - "<prefix><white>/builder confirm <gray>— применить план из своих материалов"
-      - "<prefix><white>/builder confirm buy <gray>— докупить недостающее и строить"
-      - "<prefix><white>/builder undo <gray>— откатить последнюю операцию"
+      - "<prefix><#e6fff3>Инструменты строителя"
+      - "<#8c8c8c>  • <#92bed8>/builder wand <#e6fff3>— выделить область"
+      - "<#8c8c8c>  • <#92bed8>/builder fill [блок] <#e6fff3>— заполнить пустоты"
+      - "<#8c8c8c>  • <#92bed8>/builder copy <#e6fff3>и <#92bed8>/builder paste <#e6fff3>— временный чертёж"
+      - "<#8c8c8c>  • <#92bed8>/builder book [имя] <#e6fff3>— сохранить чертёж в книге"
+      - "<#8c8c8c>  • <#92bed8>/builder deconstruct <#e6fff3>— разобрать область"
+      - "<#8c8c8c>  • <#92bed8>/builder crown <#e6fff3>— создать крону"
+      - "<#8c8c8c>  • <#92bed8>/builder confirm <#e6fff3>— применить показанный план"
+      - "<#8c8c8c>  • <#92bed8>/builder confirm buy <#e6fff3>— докупить недостающее"
+      - "<#8c8c8c>  • <#92bed8>/builder undo <#e6fff3>— подготовить отмену"
     errors:
-      no-permission: "<prefix><red>У вас нет доступа к этому инструменту."
-      survival-only: "<prefix><yellow>Инструменты строителя работают только в режиме выживания."
-      world-not-allowed: "<prefix><yellow>В этом мире инструменты строителя отключены."
-      selection-missing: "<prefix><yellow>Сначала отметьте точки 1 и 2. Для кроны нужна точка 1."
-      selection-too-large: "<prefix><red>Область превышает безопасный лимит размера или числа блоков."
-      plan-failed: "<prefix><red>План не создан: <reason>."
-      busy: "<prefix><yellow>У вас или в этой области уже выполняется операция."
-      expired: "<prefix><yellow>План или буфер устарел. Создайте его заново."
-      inventory: "<prefix><red>Не хватает точных материалов, места или прочности инструмента."
-      protection: "<prefix><red>Вся область должна быть в вашем привате Lands и разрешена WorldGuard."
+      no-permission: "<prefix><#c42323>У вас нет доступа к этому инструменту."
+      game-mode: |-
+        <prefix><#c42323>Режим недоступен для инструментов строителя.
+        <#8c8c8c>  • <#e6fff3>Переключитесь в выживание или creative.
+      game-mode-changed: |-
+        <prefix><#ff9f0f>Режим игры изменился после предпросмотра.
+        <#8c8c8c>  • <#e6fff3>Повторите план — расход зависит от режима.
+      world-not-allowed: "<prefix><#ff9f0f>В этом мире инструменты строителя отключены."
+      selection-missing: |-
+        <prefix><#ff9f0f>Область ещё не выделена.
+        <#8c8c8c>  • <#e6fff3>Возьмите инструмент: <#92bed8>/builder wand
+      selection-too-large: "<prefix><#c42323>Область превышает ваш безопасный лимит."
+      plan-failed: |-
+        <prefix><#c42323>Не удалось подготовить план.
+        <#8c8c8c>  • <#969696><reason>
+      busy: "<prefix><#ff9f0f>Другая операция здесь ещё не завершена."
+      expired: |-
+        <prefix><#ff9f0f>Предпросмотр устарел.
+        <#8c8c8c>  • <#e6fff3>Создайте план ещё раз; мир не изменён.
+      inventory: |-
+        <prefix><#c42323>Операцию пока нельзя выполнить.
+        <#8c8c8c>  • <#e6fff3>Проверьте материалы, свободное место и прочность инструмента.
+      protection: |-
+        <prefix><#c42323>Здесь нельзя использовать инструменты строителя.
+        <#8c8c8c>  • <#e6fff3>Нужен приват Lands с правом строительства.
       unsafe-block: "<prefix><red>Небезопасный блок <white><material></white> в точке <white><x> <y> <z></white>. Контейнеры, механизмы и кастомные блоки не переносятся."
       material: "<prefix><red>Этот материал нельзя использовать. Для кроны выберите обычную листву."
       crown-setting: "<prefix><red>Неверный параметр. <aqua>/builder crown help</aqua>."
-      tool: "<prefix><red>Возьмите подходящий инструмент с запасом прочности для каждого блока."
+      tool: |-
+        <prefix><#c42323>Для демонтажа нужен подходящий инструмент.
+        <#8c8c8c>  • <#e6fff3>В выживании держите его в основной руке с запасом прочности.
       recovering: "<prefix><yellow>Модуль завершает безопасное восстановление. Попробуйте чуть позже."
       undo-missing: "<prefix><yellow>Нет подходящей завершённой операции для отката."
       shop-unavailable: "<prefix><yellow>Админшоп недоступен. Принесите блоки."
@@ -84,32 +109,48 @@ locales:
       shop-purchase-failed: "<prefix><red>Не куплено: <white><material></white>."
       shop-purchase-ambiguous: "<prefix><red>Нет ответа: <white><material></white>."
     selection:
-      first: "<prefix><green>Точка 1: <white><x> <y> <z>"
-      second: "<prefix><green>Точка 2: <white><x> <y> <z>"
-      complete: "<prefix><gray>Область: <white><x>×<y>×<z></white>, объём <white><volume></white>."
+      first: |-
+        <prefix><#2bba43>Первая точка выбрана.
+        <#8c8c8c>  • Координаты: <#92bed8><x>, <y>, <z>
+      second: |-
+        <prefix><#2bba43>Вторая точка выбрана.
+        <#8c8c8c>  • Координаты: <#92bed8><x>, <y>, <z>
+      complete: |-
+        <#8c8c8c>  • <#e6fff3>Область: <#92bed8><x> × <y> × <z> <#8c8c8c>• <#e6fff3>объём: <#92bed8><volume>
+        <#8c8c8c>  • <#969696>Контур виден постоянно, пока инструмент в руке.
     wand:
-      name: "<aqua><bold>Селектор строителя"
+      name: "<#92bed8><bold>Инструмент строителя"
       lore:
-        - "<gray>ЛКМ по блоку — точка 1"
-        - "<gray>ПКМ по блоку — точка 2"
-        - "<dark_gray>Сам по себе ничего не изменяет"
-      received: "<prefix><green>Осколок эха настроен как селектор."
-      inventory-full: "<prefix><yellow>Освободите один слот или возьмите в руку один осколок эха."
-      material-required: "<prefix><yellow>Возьмите в основную руку обычный осколок эха. Он не создаётся бесплатно."
+        - "<#e6fff3>ЛКМ по блоку — первая точка."
+        - "<#e6fff3>ПКМ по блоку — вторая точка."
+        - "<#969696>Контур обновляется, пока инструмент в руке."
+        - "<#969696>Размер области зависит от ваших прав."
+        - "<reset>"
+        - "<#8c8c8c>• <#92bed8>/builder <#e6fff3>— команды строителя."
+      received: |-
+        <prefix><#2bba43>Инструмент строителя готов.
+        <#8c8c8c>  • <#e6fff3>ЛКМ — первая точка; ПКМ — вторая.
+      inventory-full: "<prefix><yellow>Освободите один слот для селектора."
+      material-required: "<prefix><yellow>Держите осколок эха в основной руке."
     crown-brush:
-      name: "<aqua><bold>Кисть крон"
+      name: "<#92bed8><bold>Кисть крон"
       lore:
-        - "<gray>ЛКМ по грани — показать крону"
-        - "<gray>ПКМ — подтвердить показанный план"
-        - "<dark_gray>Каждый лист расходуется из инвентаря"
-      received: "<prefix><green>Обычная кисть настроена для создания крон."
-      inventory-full: "<prefix><yellow>Освободите один слот или возьмите в руку одну кисть."
-      material-required: "<prefix><yellow>Возьмите в основную руку обычную кисть. Она не создаётся бесплатно."
+        - "<#e6fff3>ЛКМ по грани — показать крону."
+        - "<#e6fff3>ПКМ — построить показанный вариант."
+        - "<#969696>В выживании листва берётся из инвентаря."
+        - "<#969696>В creative материалы не расходуются."
+        - "<reset>"
+        - "<#8c8c8c>• <#92bed8>/builder crown help <#e6fff3>— настройки."
+      received: |-
+        <prefix><#2bba43>Кисть крон готова.
+        <#8c8c8c>  • <#e6fff3>ЛКМ по грани — предпросмотр; ПКМ — построить.
+      inventory-full: "<prefix><yellow>Освободите один слот для кисти крон."
+      material-required: "<prefix><yellow>Держите кисть в основной руке."
     crown:
-      same-face: "<prefix><yellow>Подтвердите ПКМ по той же грани."
-      settings-updated: "<prefix><green>Настройка <white><setting></white>: <white><value></white>."
-      palette-updated: "<prefix><green>Палитра обновлена: <white><count></white> видов листвы."
-      palette-row: "<dark_gray>    • <gray><material>: <aqua><weight>"
+      same-face: "<prefix><#ff9f0f>Подтвердите ПКМ по той же грани."
+      settings-updated: "<prefix><#2bba43>Настройка изменена: <#92bed8><setting> — <value>"
+      palette-updated: "<prefix><#2bba43>Палитра сохранена: <#92bed8><count> <#e6fff3>видов листвы."
+      palette-row: "<#8c8c8c>    • <#e6fff3><material>: <#92bed8><weight>"
       help:
         - "<prefix><white>Кроны строятся только из вашей обычной листвы."
         - "<dark_gray>  • <aqua>/builder crown wand <gray>— настроить обычную кисть"
@@ -126,26 +167,37 @@ locales:
         - "<dark_gray>  • <gray>Густота: <aqua><density></aqua>; край: <aqua><noise></aqua>"
         - "<dark_gray>  • <gray>Палитра:"
     clipboard:
-      saved: "<prefix><green>Скопирован безопасный чертёж: <white><count></white> блоков. <gray>Вставьте его или создайте книгу командой <white>/builder book</white> в течение 15 минут."
+      saved: |-
+        <prefix><#2bba43>Чертёж скопирован.
+        <#8c8c8c>  • <#e6fff3>Блоков: <#92bed8><count> <#8c8c8c>• <#969696>хранится 15 минут
+        <#8c8c8c>  • <#e6fff3>Сохранить навсегда: <#92bed8>/builder book [имя]
     book:
-      created: "<prefix><green>Книга <white><name></white> создана из чертежа на <white><count></white> блоков."
-      material-required: "<prefix><yellow>Возьмите в основную руку обычную книгу. Она станет книгой строительства."
-      inventory-full: "<prefix><yellow>Освободите один слот или возьмите в руку одну обычную книгу."
-      invalid-name: "<prefix><red>Название книги должно содержать от 1 до 48 обычных символов."
-      limit: "<prefix><yellow>Достигнут лимит постоянных чертежей. Повторная книга из той же копии всё ещё доступна."
-      failed: "<prefix><red>Книгу не удалось сохранить. Мир и инвентарь не изменены."
-      invalid: "<prefix><red>Эта пользовательская книга повреждена или больше недоступна."
-      missing: "<prefix><yellow>Положите в инвентарь ту же книгу, для которой открыто превью."
+      created: |-
+        <prefix><#2bba43>Книга строительства готова: <#92bed8><name>
+        <#8c8c8c>  • <#e6fff3>Сохранено блоков: <#92bed8><count>
+      material-required: "<prefix><#ff9f0f>Держите обычную книгу в основной руке."
+      inventory-full: "<prefix><#ff9f0f>Освободите один слот для книги строительства."
+      invalid-name: "<prefix><#c42323>Название: от 1 до 48 обычных символов."
+      limit: "<prefix><#ff9f0f>Достигнут лимит постоянных чертежей."
+      failed: |-
+        <prefix><#c42323>Книгу не удалось сохранить.
+        <#8c8c8c>  • <#969696>Мир и инвентарь не изменены.
+      invalid: "<prefix><#c42323>Эта книга повреждена или её чертёж недоступен."
+      missing: "<prefix><#ff9f0f>Положите нужную книгу в инвентарь."
     plan:
-      ready: "<prefix><green>План <white><kind></white>: <white><count></white> блоков. <gray>Расход: <white><cost></white>; результат: <white><reward></white>. Проверьте частицы и введите <click:run_command:'/builder confirm'><aqua>/builder confirm</aqua></click> за <seconds> с."
+      ready: |-
+        <prefix><#2bba43>Предпросмотр готов: <#92bed8><kind>
+        <#8c8c8c>  • <#e6fff3>Изменится: <#92bed8><count> блоков
+        <#8c8c8c>  • <#e6fff3>Расход: <#92bed8><cost> <#8c8c8c>• <#e6fff3>результат: <#92bed8><reward>
+        <#8c8c8c>  • <#e6fff3>Подтвердить за <#92bed8><seconds> с: <click:run_command:'/builder confirm'><#92bed8>/builder confirm</#92bed8></click>
       market:
-        - "<prefix><gray>Рынок • вся постройка ≈ <white><full_price></white>."
-        - "<prefix><gray>Рынок • докупить ≈ <white><missing_price></white>."
-        - "<prefix><click:run_command:'/builder confirm buy'><aqua>/builder confirm buy</aqua></click> <gray>— купить и строить."
-      market-item: "<dark_gray>    • <gray>Нужно <white><amount>×<material></white>"
-      market-unavailable: "<prefix><yellow>Не купить: <white><material></white>."
-      market-more: "<prefix><gray>Ещё строк: <white><count></white>."
-      cancelled: "<prefix><gray>План отменён; мир и инвентарь не изменены."
+        - "<#8c8c8c>  • <#e6fff3>Стоимость всей постройки: <#92bed8>≈ <full_price>"
+        - "<#8c8c8c>  • <#e6fff3>Докупить недостающее: <#92bed8>≈ <missing_price>"
+        - "<#8c8c8c>  • <click:run_command:'/builder confirm buy'><#92bed8>/builder confirm buy</#92bed8></click> <#e6fff3>— купить и построить"
+      market-item: "<#8c8c8c>    • <#e6fff3><amount>× <material>"
+      market-unavailable: "<prefix><#ff9f0f>В админшопе нет: <#92bed8><material>"
+      market-more: "<#8c8c8c>    • <#969696>Ещё материалов: <count>"
+      cancelled: "<prefix><#ff9f0f>Предпросмотр отменён. <#969696>Мир и инвентарь не изменены."
     shop:
       purchased: "<prefix><green>Куплено <white><items></white> шт. • <white><price></white>."
       purchase-detail:
@@ -153,15 +205,27 @@ locales:
         - "<prefix><gray>Куплено ранее: <white><purchased></white>."
       world-untouched: "<prefix><gray>Купленное у вас; мир не изменён."
     operation:
-      started: "<prefix><yellow>Зафиксирован план на <white><count></white> блоков. Инвентарь временно защищён."
-      completed: "<prefix><green>Операция <white><kind></white> завершена: <white><count></white> блоков."
-      rolled-back: "<prefix><red>Операция безопасно отменена и полностью восстановлена: <reason>."
+      started: |-
+        <prefix><#ff9f0f>Строительство начато.
+        <#8c8c8c>  • <#e6fff3>Блоков: <#92bed8><count> <#8c8c8c>• <#969696>инвентарь временно защищён
+      completed: |-
+        <prefix><#2bba43>Операция завершена: <#92bed8><kind>
+        <#8c8c8c>  • <#e6fff3>Изменено блоков: <#2bba43><count>
+      rolled-back: |-
+        <prefix><#c42323>Операция отменена и полностью восстановлена.
+        <#8c8c8c>  • <#969696>Причина: <reason>
     status:
-      selection: "<prefix><gray>Выбрано <white><x>×<y>×<z></white> (объём <white><volume></white>); готового плана нет."
-      plan: "<prefix><yellow>План <white><kind></white>: <white><count>/<total></white> блоков."
-      idle: "<prefix><gray>Нет выбора или активного плана. Начните с <white>/builder wand</white>."
+      selection: "<prefix><#e6fff3>Выделено: <#92bed8><x> × <y> × <z> <#8c8c8c>• <#e6fff3>объём: <#92bed8><volume>"
+      plan: "<prefix><#e6fff3><kind>: <#92bed8><count>/<total> <#e6fff3>блоков."
+      idle: "<prefix><#e6fff3>Нет выделения. <#8c8c8c>• <#92bed8>/builder wand"
+    kinds:
+      fill: "заполнение"
+      paste: "вставка чертежа"
+      deconstruct: "демонтаж"
+      crown: "крона"
+      undo: "отмена"
   en:
-    prefix: "<dark_gray>Builder <gray>• "
+    prefix: "<#92bed8>◇ "
     help:
       - "<prefix><white>/builder wand <gray>— bind an echo shard as the selector"
       - "<prefix><white>/builder fill [block] <gray>— fill space using your materials"
@@ -174,7 +238,8 @@ locales:
       - "<prefix><white>/builder undo <gray>— revert the latest operation"
     errors:
       no-permission: "<prefix><red>You do not have access to this tool."
-      survival-only: "<prefix><yellow>Builder tools work only in survival mode."
+      game-mode: "<prefix><red>Builder tools are available only in survival or creative mode."
+      game-mode-changed: "<prefix><yellow>Your game mode changed after preview. Create the plan again."
       world-not-allowed: "<prefix><yellow>Builder tools are disabled in this world."
       selection-missing: "<prefix><yellow>Select positions 1 and 2 first. A crown needs position 1."
       selection-too-large: "<prefix><red>The selection exceeds your safe size or block limit."
@@ -182,7 +247,7 @@ locales:
       busy: "<prefix><yellow>You or this area already has an operation in progress."
       expired: "<prefix><yellow>The plan or clipboard expired. Create it again."
       inventory: "<prefix><red>You lack exact materials, inventory space, or tool durability."
-      protection: "<prefix><red>Every changed block must be in your Lands claim and allowed by WorldGuard."
+      protection: "<prefix><red>Every changed block must be in Lands where you can build."
       unsafe-block: "<prefix><red>Unsafe <white><material></white> at <white><x> <y> <z></white>. Containers, mechanisms, and custom blocks are excluded."
       material: "<prefix><red>That material is not supported. Crowns require ordinary leaves."
       crown-setting: "<prefix><red>Invalid setting. See <aqua>/builder crown help</aqua>."
@@ -274,3 +339,9 @@ locales:
       selection: "<prefix><gray>Selected <white><x>×<y>×<z></white> (volume <white><volume></white>); no plan is ready."
       plan: "<prefix><yellow><white><kind></white> plan: <white><count>/<total></white> blocks."
       idle: "<prefix><gray>No selection or active plan. Start with <white>/builder wand</white>."
+    kinds:
+      fill: "fill"
+      paste: "blueprint paste"
+      deconstruct: "deconstruction"
+      crown: "crown"
+      undo: "undo"

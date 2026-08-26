@@ -1,6 +1,7 @@
 package ru.arc.commands
 
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -12,6 +13,7 @@ import ru.arc.hooks.HookRegistry
 import ru.arc.hooks.economyshop.ShopPurchaseOutcome
 import ru.arc.hooks.economyshop.ShopPurchaseService
 import ru.arc.hooks.economyshop.ShopPurchaseStatus
+import ru.arc.hooks.economyshop.ShopMaterialQuote
 
 class BuyCommandTest : TestBase() {
     private val purchases = mutableListOf<Pair<String, Int>>()
@@ -52,6 +54,12 @@ class BuyCommandTest : TestBase() {
             object : ShopPurchaseService {
                 override fun itemQueries(player: Player) = listOf("Blocks.CALCITE")
 
+                override fun quotePlainMaterial(player: Player, material: Material, amount: Int): ShopMaterialQuote? = null
+
+                override fun vaultBalance(player: Player): Double? = null
+
+                override fun formatVaultPrice(amount: Double): String? = null
+
                 override fun purchase(player: Player, itemPath: String, amount: Int) =
                     ShopPurchaseOutcome(
                         ShopPurchaseStatus.SUCCESS,
@@ -75,6 +83,12 @@ class BuyCommandTest : TestBase() {
     private fun fakeService() =
         object : ShopPurchaseService {
             override fun itemQueries(player: Player) = listOf("Blocks.TNT", "Redstone.RAIL")
+
+            override fun quotePlainMaterial(player: Player, material: Material, amount: Int): ShopMaterialQuote? = null
+
+            override fun vaultBalance(player: Player): Double? = null
+
+            override fun formatVaultPrice(amount: Double): String? = null
 
             override fun purchase(player: Player, itemPath: String, amount: Int): ShopPurchaseOutcome {
                 purchases += itemPath to amount
