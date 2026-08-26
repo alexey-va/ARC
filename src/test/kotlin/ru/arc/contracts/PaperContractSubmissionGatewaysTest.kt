@@ -114,13 +114,33 @@ class PaperContractSubmissionGatewaysTest : StringSpec({
         }
     }
 
-    "fails closed when provider balance cannot be represented in cents" {
+    "normalizes provider subcent balances without losing an exact cent payout delta" {
         runTest {
             val playerId = java.util.UUID.randomUUID()
             val currency = mockk<Currency>()
             val api = mockk<RedisEconomyAPI>()
             every { api.defaultCurrency } returns currency
-            every { currency.getBalance(playerId) } returns 10.001
+            every { currency.currencyName } returns "vault"
+            every { currency.getBalance(playerId) } returnsMany
+                listOf(100_002_403.42407733, 100_002_418.42407733)
+            every { currency.depositPlayer(playerId, "vault", 15.0, "arc-contract:submission-fractional") } returns
+                EconomyResponse(15.0, 100_002_418.42407733, EconomyResponse.ResponseType.SUCCESS, null)
+
+            val gateway = RedisEconomyContractPaymentGateway { api }
+
+            gateway.balanceMinor(playerId.toString()) shouldBe 10_000_240_342L
+            gateway.deposit(playerId.toString(), 1_500L, "arc-contract:submission-fractional") shouldBe
+                ContractPaymentEvidence(true, 10_000_241_842L)
+        }
+    }
+
+    "rejects non-finite provider balances" {
+        runTest {
+            val playerId = java.util.UUID.randomUUID()
+            val currency = mockk<Currency>()
+            val api = mockk<RedisEconomyAPI>()
+            every { api.defaultCurrency } returns currency
+            every { currency.getBalance(playerId) } returns Double.NaN
 
             RedisEconomyContractPaymentGateway { api }.balanceMinor(playerId.toString()) shouldBe null
         }

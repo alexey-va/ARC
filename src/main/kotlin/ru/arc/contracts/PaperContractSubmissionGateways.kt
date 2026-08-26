@@ -167,14 +167,14 @@ private class PaperPreparedContractInventory(
 private fun ItemStack?.sameBytes(expected: ByteArray): Boolean =
     this != null && runCatching { serializeAsBytes().contentEquals(expected) }.getOrDefault(false)
 
-/** Exact RedisEconomy 4.5.12 adapter; the provider call is never retried. */
+/** RedisEconomy adapter; the provider call is never retried. */
 class RedisEconomyContractPaymentGateway(
     private val apiProvider: () -> RedisEconomyAPI? = RedisEconomyAPI::getAPI,
 ) : ContractPaymentGateway {
     override suspend fun balanceMinor(playerId: String): Long? {
         val uuid = runCatching { UUID.fromString(playerId) }.getOrNull() ?: return null
         val currency = apiProvider()?.defaultCurrency ?: return null
-        return runCatching { currency.getBalance(uuid).toExactMinor() }.getOrNull()
+        return runCatching { currency.getBalance(uuid).toContractEvidenceMinor() }.getOrNull()
     }
 
     override suspend fun deposit(
@@ -194,26 +194,32 @@ class RedisEconomyContractPaymentGateway(
             } catch (_: Throwable) {
                 return ContractPaymentEvidence(
                     providerAccepted = null,
-                    balanceAfterMinor = runCatching { currency.getBalance(uuid).toExactMinor() }.getOrNull(),
+                    balanceAfterMinor = runCatching { currency.getBalance(uuid).toContractEvidenceMinor() }.getOrNull(),
                 )
             }
-        val after = runCatching { currency.getBalance(uuid).toExactMinor() }.getOrNull()
+        val after = runCatching { currency.getBalance(uuid).toContractEvidenceMinor() }.getOrNull()
         return ContractPaymentEvidence(
             providerAccepted = response.transactionSuccess(),
             balanceAfterMinor = after,
             failureCode = if (response.transactionSuccess()) null else "provider_rejected",
         )
     }
+}
 
-    private fun Double.toExactMinor(): Long? {
-        if (!isFinite()) return null
-        return runCatching {
-            BigDecimal.valueOf(this)
-                .movePointRight(2)
-                .setScale(0, RoundingMode.UNNECESSARY)
-                .longValueExact()
-        }.getOrNull()
-    }
+/**
+ * RedisEconomy stores balances as doubles, and other earners can leave a
+ * legitimate sub-cent remainder. Contract payouts are still integer cents, so
+ * rounding both balance snapshots preserves their exact payout delta without
+ * rejecting the player's pre-existing remainder.
+ */
+private fun Double.toContractEvidenceMinor(): Long? {
+    if (!isFinite()) return null
+    return runCatching {
+        BigDecimal.valueOf(this)
+            .movePointRight(2)
+            .setScale(0, RoundingMode.HALF_UP)
+            .longValueExact()
+    }.getOrNull()
 }
 
 internal suspend fun <T> onBukkitMain(block: () -> T): T {
