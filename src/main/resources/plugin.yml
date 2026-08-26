@@ -42,6 +42,7 @@ softdepend:
   - LuckPerms
   - Vault
   - packetevents
+  - CoreProtect
 commands:
   arc:
     description: Main command
@@ -83,6 +84,16 @@ commands:
     description: Open and administer the mount collection
     usage: /mount [menu|help|admin]
     permission: arc.mounts.use
+  builder:
+    description: Survival-friendly builder tools
+    usage: /builder [wand|fill|copy|paste|deconstruct|crown|confirm|undo|status]
+    aliases: [buildtools]
+  deconstruction:
+    description: Legacy alias for the ARC deconstruction tool
+    usage: /deconstruction [wand|start|confirm|stop|status]
+  crown:
+    description: Legacy alias for the ARC crown builder
+    usage: /crown [leaves] [radius]
 permissions:
   arc.portal.origin-gate:
     description: Use the experimental ItemsAdder origin-gate portal animation
@@ -115,4 +126,28 @@ permissions:
       arc.mounts.use: true
   arc.mounts.use:
     description: Open and use the mount collection
+    default: false
+  arc.buildertools.use:
+    description: Use survival-friendly ARC builder tools
+    default: false
+    children:
+      arc.buildertools.fill: true
+      arc.buildertools.copy: true
+      arc.buildertools.paste: true
+      arc.buildertools.deconstruct: true
+      arc.buildertools.crown: true
+  arc.buildertools.fill:
+    description: Plan and confirm bounded material-backed fills
+    default: false
+  arc.buildertools.copy:
+    description: Copy bounded safe block selections to a temporary clipboard
+    default: false
+  arc.buildertools.paste:
+    description: Paste a temporary clipboard while paying exact materials
+    default: false
+  arc.buildertools.deconstruct:
+    description: Deconstruct bounded selections with a real tool and exact drops
+    default: false
+  arc.buildertools.crown:
+    description: Build bounded material-backed leaf crowns
     default: false

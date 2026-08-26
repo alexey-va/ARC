@@ -32,19 +32,29 @@ val ItemStack.customModelDataOrZero: Int
  * Gets the custom model data, or null if not set.
  */
 val ItemMeta.customModelDataOrNull: Int?
-    get() = if (hasCustomModelDataSafe()) customModelData else null
+    get() {
+        if (runCatching { hasCustomModelData() }.getOrDefault(false)) {
+            runCatching { customModelData }.getOrNull()?.let { return it }
+        }
+        val firstFloat = runCatching {
+            customModelDataComponent.floats.firstOrNull()
+        }.getOrNull() ?: return null
+        if (!firstFloat.isFinite() || firstFloat % 1.0f != 0.0f || firstFloat !in Int.MIN_VALUE.toFloat()..Int.MAX_VALUE.toFloat()) {
+            return null
+        }
+        return firstFloat.toInt()
+    }
 
 /**
  * Checks if the item has custom model data.
  * Uses new API with fallback to deprecated for compatibility.
  */
 fun ItemMeta.hasCustomModelDataSafe(): Boolean =
-    try {
-        hasCustomModelDataComponent()
-    } catch (_: Exception) {
-        // Fallback for older versions or MockBukkit
-        hasCustomModelData()
-    }
+    customModelDataOrNull != null ||
+        runCatching {
+            val component = customModelDataComponent
+            component.flags.isNotEmpty() || component.strings.isNotEmpty() || component.colors.isNotEmpty()
+        }.getOrDefault(false)
 
 /**
  * Checks if the item stack has custom model data.

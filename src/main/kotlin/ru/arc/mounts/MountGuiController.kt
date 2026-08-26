@@ -856,11 +856,8 @@ class MountGuiController(
                 meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_ADDITIONAL_TOOLTIP)
                 meta.setEnchantmentGlintOverride(glint)
                 meta.setHideTooltip(hideTooltip)
-                customModelData?.let { modelData ->
-                    val component = meta.customModelDataComponent
-                    component.floats = listOf(modelData.toFloat())
-                    meta.setCustomModelDataComponent(component)
-                }
+                @Suppress("DEPRECATION")
+                customModelData?.let(meta::setCustomModelData)
             }
         }
 

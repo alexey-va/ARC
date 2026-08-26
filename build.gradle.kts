@@ -121,7 +121,7 @@ dependencies {
     testImplementation(libs.org.junit.jupiter.junit.jupiter.engine)
     testImplementation(libs.org.junit.jupiter.junit.jupiter.params)
     testImplementation(libs.com.thedeanda.lorem)
-    testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v1.21:4.98.0")
+    testImplementation("ru.arc:arc-core-paper-testing:1.0-SNAPSHOT")
     testImplementation("org.mockito:mockito-core:5.14.2")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
@@ -142,12 +142,6 @@ dependencies {
     "integrationTestImplementation"(sourceSets.test.get().output)
     configurations["integrationTestImplementation"].extendsFrom(configurations["testImplementation"])
 
-    // Add compileOnly dependencies to test classpath so tests can run
-    // These are server-provided at runtime, but needed for testing
-    // Use a compatible Paper API version for tests to avoid service loader issues
-    testImplementation("io.papermc.paper:paper-api:1.21.10-R0.1-SNAPSHOT") {
-        exclude(group = "org.bukkit", module = "bukkit")
-    }
     testImplementation(libs.com.github.milkbowl.vaultapi) {
         exclude(group = "org.bukkit", module = "bukkit")
     }

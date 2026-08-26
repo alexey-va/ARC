@@ -1,0 +1,160 @@
+# ARC Builder Tools. Runtime mirrors opt in explicitly; disabled elsewhere by default.
+enabled: false
+allowed-worlds: []
+default-locale: ru
+
+limits:
+  max-changes: 4096
+  max-clipboard-blocks: 4096
+  max-scan-volume: 8192
+  absolute-max-axis: 48
+  blocks-per-tick: 16
+  base-hourly-changes: 20000
+  maximum-range: 64
+
+timers:
+  plan-ttl: 30s
+  clipboard-ttl: 15m
+  undo-ttl: 30m
+  journal-retention: 2h
+
+safety:
+  require-lands: true
+  require-worldguard: true
+  require-coreprotect: true
+  # Filling and pasting may replace only non-valuable vegetation/air.
+  replaceable-materials:
+    - AIR
+    - CAVE_AIR
+    - VOID_AIR
+    - SHORT_GRASS
+    - TALL_GRASS
+    - FERN
+    - LARGE_FERN
+    - DEAD_BUSH
+    - VINE
+    - GLOW_LICHEN
+    - SNOW
+
+locales:
+  ru:
+    prefix: "<dark_gray>Строитель <gray>• "
+    help:
+      - "<prefix><white>/builder wand <gray>— получить селектор (ЛКМ/ПКМ)"
+      - "<prefix><white>/builder fill [блок] <gray>— заполнить воздух за ваши материалы"
+      - "<prefix><white>/builder copy <gray>и <white>/builder paste <gray>— временный чертёж"
+      - "<prefix><white>/builder deconstruct <gray>— разобрать область текущим инструментом"
+      - "<prefix><white>/builder crown [листва] [3–10] <gray>— построить крону"
+      - "<prefix><white>/builder confirm <gray>— применить план; <white>/builder undo <gray>— откатить"
+    errors:
+      no-permission: "<prefix><red>У вас нет доступа к этому инструменту."
+      survival-only: "<prefix><yellow>Инструменты строителя работают только в режиме выживания."
+      world-not-allowed: "<prefix><yellow>В этом мире инструменты строителя отключены."
+      selection-missing: "<prefix><yellow>Сначала отметьте точки 1 и 2. Для кроны нужна точка 1."
+      selection-too-large: "<prefix><red>Область превышает безопасный лимит размера или числа блоков."
+      plan-failed: "<prefix><red>План не создан: <reason>."
+      busy: "<prefix><yellow>У вас или в этой области уже выполняется операция."
+      expired: "<prefix><yellow>План или буфер устарел. Создайте его заново."
+      inventory: "<prefix><red>Не хватает точных материалов, места или прочности инструмента."
+      protection: "<prefix><red>Вся область должна быть в вашем привате Lands и разрешена WorldGuard."
+      unsafe-block: "<prefix><red>Небезопасный блок <white><material></white> в точке <white><x> <y> <z></white>. Контейнеры, механизмы и кастомные блоки не переносятся."
+      material: "<prefix><red>Этот материал нельзя использовать. Для кроны выберите обычную листву."
+      tool: "<prefix><red>Возьмите подходящий инструмент с запасом прочности для каждого блока."
+      recovering: "<prefix><yellow>Модуль завершает безопасное восстановление. Попробуйте чуть позже."
+      undo-missing: "<prefix><yellow>Нет подходящей завершённой операции для отката."
+    selection:
+      first: "<prefix><green>Точка 1: <white><x> <y> <z>"
+      second: "<prefix><green>Точка 2: <white><x> <y> <z>"
+      complete: "<prefix><gray>Область: <white><x>×<y>×<z></white>, объём <white><volume></white>."
+    wand:
+      name: "<aqua><bold>Селектор строителя"
+      lore:
+        - "<gray>ЛКМ по блоку — точка 1"
+        - "<gray>ПКМ по блоку — точка 2"
+        - "<dark_gray>Сам по себе ничего не изменяет"
+      received: "<prefix><green>Селектор добавлен в инвентарь."
+      inventory-full: "<prefix><yellow>Освободите один слот для селектора."
+    crown-brush:
+      name: "<aqua><bold>Кисть крон"
+      lore:
+        - "<gray>ЛКМ по грани — показать крону"
+        - "<gray>ПКМ — подтвердить показанный план"
+        - "<dark_gray>Каждый лист расходуется из инвентаря"
+      received: "<prefix><green>Кисть крон добавлена в инвентарь."
+      inventory-full: "<prefix><yellow>Освободите один слот для кисти крон."
+    clipboard:
+      saved: "<prefix><green>Скопирован безопасный чертёж: <white><count></white> блоков. Он хранится 15 минут."
+    plan:
+      ready: "<prefix><green>План <white><kind></white>: <white><count></white> блоков. <gray>Расход: <white><cost></white>; результат: <white><reward></white>. Проверьте частицы и введите <click:run_command:'/builder confirm'><aqua>/builder confirm</aqua></click> за <seconds> с."
+      cancelled: "<prefix><gray>План отменён; мир и инвентарь не изменены."
+    operation:
+      started: "<prefix><yellow>Зафиксирован план на <white><count></white> блоков. Инвентарь временно защищён."
+      completed: "<prefix><green>Операция <white><kind></white> завершена: <white><count></white> блоков."
+      rolled-back: "<prefix><red>Операция безопасно отменена и полностью восстановлена: <reason>."
+    status:
+      selection: "<prefix><gray>Выбрано <white><x>×<y>×<z></white> (объём <white><volume></white>); готового плана нет."
+      plan: "<prefix><yellow>План <white><kind></white>: <white><count>/<total></white> блоков."
+      idle: "<prefix><gray>Нет выбора или активного плана. Начните с <white>/builder wand</white>."
+    legacy:
+      atomic: "<prefix><gray>Новая операция атомарна и занимает несколько секунд; пауза больше не требуется."
+
+  en:
+    prefix: "<dark_gray>Builder <gray>• "
+    help:
+      - "<prefix><white>/builder wand <gray>— get the left/right-click selector"
+      - "<prefix><white>/builder fill [block] <gray>— fill space using your materials"
+      - "<prefix><white>/builder copy <gray>and <white>/builder paste <gray>— temporary blueprint"
+      - "<prefix><white>/builder deconstruct <gray>— dismantle with your current tool"
+      - "<prefix><white>/builder crown [leaves] [3–10] <gray>— build a leaf crown"
+      - "<prefix><white>/builder confirm <gray>— apply the plan; <white>/builder undo <gray>— revert it"
+    errors:
+      no-permission: "<prefix><red>You do not have access to this tool."
+      survival-only: "<prefix><yellow>Builder tools work only in survival mode."
+      world-not-allowed: "<prefix><yellow>Builder tools are disabled in this world."
+      selection-missing: "<prefix><yellow>Select positions 1 and 2 first. A crown needs position 1."
+      selection-too-large: "<prefix><red>The selection exceeds your safe size or block limit."
+      plan-failed: "<prefix><red>Could not create the plan: <reason>."
+      busy: "<prefix><yellow>You or this area already has an operation in progress."
+      expired: "<prefix><yellow>The plan or clipboard expired. Create it again."
+      inventory: "<prefix><red>You lack exact materials, inventory space, or tool durability."
+      protection: "<prefix><red>Every changed block must be in your Lands claim and allowed by WorldGuard."
+      unsafe-block: "<prefix><red>Unsafe <white><material></white> at <white><x> <y> <z></white>. Containers, mechanisms, and custom blocks are excluded."
+      material: "<prefix><red>That material is not supported. Crowns require ordinary leaves."
+      tool: "<prefix><red>Hold the preferred tool with enough durability for every selected block."
+      recovering: "<prefix><yellow>The module is finishing safe recovery. Try again shortly."
+      undo-missing: "<prefix><yellow>There is no completed operation available to undo."
+    selection:
+      first: "<prefix><green>Position 1: <white><x> <y> <z>"
+      second: "<prefix><green>Position 2: <white><x> <y> <z>"
+      complete: "<prefix><gray>Selection: <white><x>×<y>×<z></white>, volume <white><volume></white>."
+    wand:
+      name: "<aqua><bold>Builder selector"
+      lore:
+        - "<gray>Left-click a block — position 1"
+        - "<gray>Right-click a block — position 2"
+        - "<dark_gray>The selector never changes blocks"
+      received: "<prefix><green>The selector was added to your inventory."
+      inventory-full: "<prefix><yellow>Free one inventory slot for the selector."
+    crown-brush:
+      name: "<aqua><bold>Crown brush"
+      lore:
+        - "<gray>Left-click a face to preview a crown"
+        - "<gray>Right-click to confirm the shown plan"
+        - "<dark_gray>Every leaf is consumed from inventory"
+      received: "<prefix><green>The crown brush was added to your inventory."
+      inventory-full: "<prefix><yellow>Free one inventory slot for the crown brush."
+    clipboard:
+      saved: "<prefix><green>Copied a safe <white><count></white>-block blueprint for 15 minutes."
+    plan:
+      ready: "<prefix><green><white><kind></white> plan: <white><count></white> blocks. <gray>Cost: <white><cost></white>; result: <white><reward></white>. Check the particles and enter <click:run_command:'/builder confirm'><aqua>/builder confirm</aqua></click> within <seconds> seconds."
+      cancelled: "<prefix><gray>Plan cancelled; the world and inventory were not changed."
+    operation:
+      started: "<prefix><yellow>Locked a <white><count></white>-block plan. Your inventory is briefly protected."
+      completed: "<prefix><green><white><kind></white> completed: <white><count></white> blocks."
+      rolled-back: "<prefix><red>The operation was safely rolled back and fully restored: <reason>."
+    status:
+      selection: "<prefix><gray>Selected <white><x>×<y>×<z></white> (volume <white><volume></white>); no plan is ready."
+      plan: "<prefix><yellow><white><kind></white> plan: <white><count>/<total></white> blocks."
+      idle: "<prefix><gray>No selection or active plan. Start with <white>/builder wand</white>."
+    legacy:
+      atomic: "<prefix><gray>The operation is atomic and completes in seconds, so pausing is not needed."

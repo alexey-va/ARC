@@ -21,6 +21,7 @@ import ru.arc.commands.arc.subcommands.TestSubCommand
 import ru.arc.commands.arc.subcommands.TreasuresSubCommand
 import ru.arc.commands.chat.ChatModeAliasCommand
 import ru.arc.commandhide.CommandHideModule
+import ru.arc.buildertools.BuilderToolsModule
 import ru.arc.config.ConfigManager
 import ru.arc.config.LocationPoolConfig
 import ru.arc.core.ModuleRegistry
@@ -218,6 +219,7 @@ open class ARC : JavaPlugin() {
             OnboardingModule,
             // Building system (priority 90)
             BuildingModule,
+            BuilderToolsModule,
             // Sync systems (priority 100)
             SyncModule,
         )
@@ -277,7 +279,11 @@ open class ARC : JavaPlugin() {
 
         for (resource in BUNDLED_RESOURCES) {
             val file = File(dataFolder, resource)
-            if (!file.exists()) {
+            if (resource in AUTHORITATIVE_BUNDLED_RESOURCES) {
+                file.parentFile.mkdirs()
+                saveResource(resource, true)
+                debug("Refreshed authoritative bundled resource: {}", resource)
+            } else if (!file.exists()) {
                 file.parentFile.mkdirs()
                 saveResource(resource, false)
                 debug("Saved bundled resource: {}", resource)
@@ -323,6 +329,7 @@ open class ARC : JavaPlugin() {
                 "modules/personalloot.yml",
                 "modules/item-presets.yml",
                 "modules/items-catalog.yml",
+                "modules/builder-tools.yml",
                 "modules/pouches.yml",
                 "stocks/stock.yml",
                 "misc.yml",
@@ -334,6 +341,9 @@ open class ARC : JavaPlugin() {
                 "guis/contracts.yml",
                 "guis/scheduled-commands.yml",
             )
+
+        /** Feature defaults refreshed from the JAR; mutable node policy lives in separate runtime overlays. */
+        private val AUTHORITATIVE_BUNDLED_RESOURCES = setOf("modules/builder-tools.yml")
 
         @JvmField var plugin: ARC? = null
 

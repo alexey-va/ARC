@@ -29,9 +29,11 @@ cd ~/mcserver && ./scripts/mc arc classic classic_survival
 
 ## Features
 
-Treasure hunts, auto-building, stock simulation, auction (Redis pub/sub), x-server announcements, and native cross-server mounts with progression, cosmetics, abilities, and player tuning.
+Treasure hunts, auto-building, survival-safe transactional builder tools, stock simulation, auction (Redis pub/sub), x-server announcements, and native cross-server mounts with progression, cosmetics, abilities, and player tuning.
 
 Mount configuration and permission-state contract: [`docs/mounts.md`](docs/mounts.md).
+
+Builder tools player and recovery contract: [`src/main/kotlin/ru/arc/buildertools/README.md`](src/main/kotlin/ru/arc/buildertools/README.md).
 
 ## Dependencies
 

@@ -1,0 +1,134 @@
+package ru.arc.buildertools
+
+import ru.arc.ARC
+import ru.arc.config.Config
+import ru.arc.config.ConfigManager
+import ru.arc.text.LocaleCatalog
+import ru.arc.text.LocaleRequirements
+import ru.arc.text.LocalizedMiniMessage
+import java.time.Duration
+import java.util.Locale
+
+class BuilderToolsConfig(
+    private val config: Config,
+    private val runtimeOverride: Config? = null,
+) {
+    val enabled: Boolean get() = runtimeOverride?.bool("enabled", config.bool("enabled", false)) ?: config.bool("enabled", false)
+    val allowedWorlds: Set<String>
+        get() = (runtimeOverride?.stringListOrNull("allowed-worlds") ?: config.stringList("allowed-worlds"))
+            .map { it.lowercase(Locale.ROOT) }
+            .toSet()
+    val maxChanges: Int get() = config.integer("limits.max-changes", 4_096)
+    val maxClipboardBlocks: Int get() = config.integer("limits.max-clipboard-blocks", 4_096)
+    val maxScanVolume: Long get() = config.long("limits.max-scan-volume", 8_192L)
+    val absoluteMaxAxis: Int get() = config.integer("limits.absolute-max-axis", 48)
+    val blocksPerTick: Int get() = config.integer("limits.blocks-per-tick", 16)
+    val baseHourlyChanges: Int get() = config.integer("limits.base-hourly-changes", 20_000)
+    val maximumRange: Double get() = config.double("limits.maximum-range", 64.0)
+    val planTtl: Duration get() = config.duration("timers.plan-ttl", Duration.ofSeconds(30))
+    val clipboardTtl: Duration get() = config.duration("timers.clipboard-ttl", Duration.ofMinutes(15))
+    val undoTtl: Duration get() = config.duration("timers.undo-ttl", Duration.ofMinutes(30))
+    val journalRetention: Duration get() = config.duration("timers.journal-retention", Duration.ofHours(2))
+    val requireLands: Boolean get() = config.bool("safety.require-lands", true)
+    val requireWorldGuard: Boolean get() = config.bool("safety.require-worldguard", true)
+    val requireCoreProtect: Boolean get() = config.bool("safety.require-coreprotect", true)
+    val replaceableMaterials: Set<String>
+        get() = config.stringList("safety.replaceable-materials").map { it.uppercase(Locale.ROOT) }.toSet()
+
+    fun validated(): BuilderToolsConfig = apply {
+        if (!enabled) return@apply
+        require(allowedWorlds.isNotEmpty() && allowedWorlds.all(WORLD_NAME::matches)) {
+            "Builder-tools allowed-worlds must contain safe world names"
+        }
+        require(maxChanges in 1..BuilderPlan.ABSOLUTE_MAX_CHANGES) { "Builder-tools max-changes is invalid" }
+        require(maxClipboardBlocks in 1..BuilderPlan.ABSOLUTE_MAX_CHANGES) { "Builder-tools clipboard limit is invalid" }
+        require(maxScanVolume in maxChanges.toLong()..1_000_000L) { "Builder-tools scan volume limit is invalid" }
+        require(absoluteMaxAxis in 3..100) { "Builder-tools maximum axis is invalid" }
+        require(blocksPerTick in 1..256) { "Builder-tools blocks-per-tick is invalid" }
+        require(baseHourlyChanges in maxChanges..200_000) { "Builder-tools hourly limit is invalid" }
+        require(maximumRange.isFinite() && maximumRange in 8.0..128.0) { "Builder-tools maximum range is invalid" }
+        require(planTtl in Duration.ofSeconds(10)..Duration.ofMinutes(2)) { "Builder-tools plan TTL is invalid" }
+        require(clipboardTtl in Duration.ofMinutes(1)..Duration.ofHours(2)) { "Builder-tools clipboard TTL is invalid" }
+        require(undoTtl in Duration.ofMinutes(1)..Duration.ofHours(2)) { "Builder-tools undo TTL is invalid" }
+        require(journalRetention >= undoTtl && journalRetention <= Duration.ofDays(1)) {
+            "Builder-tools journal retention must cover undo and remain bounded"
+        }
+        require(replaceableMaterials.isNotEmpty()) { "Builder-tools replaceable material list cannot be empty" }
+        messages().validate(MESSAGE_REQUIREMENTS)
+    }
+
+    fun messages(): LocalizedMiniMessage {
+        val catalogs = config.keys("locales").associateWith { locale -> PrefixLocaleCatalog(config, "locales.$locale") }
+        return LocalizedMiniMessage(
+            catalogs = catalogs,
+            defaultLocale = { config.string("default-locale", "ru") },
+            missingMessage = { "<red>Missing builder-tools message: $it" },
+        )
+    }
+
+    companion object {
+        private val WORLD_NAME = Regex("[A-Za-z0-9_./-]{1,128}")
+        private val MESSAGE_REQUIREMENTS = LocaleRequirements(
+            scalarPaths = setOf(
+                "prefix",
+                "errors.no-permission",
+                "errors.survival-only",
+                "errors.world-not-allowed",
+                "errors.selection-missing",
+                "errors.selection-too-large",
+                "errors.plan-failed",
+                "errors.busy",
+                "errors.expired",
+                "errors.inventory",
+                "errors.protection",
+                "errors.unsafe-block",
+                "errors.material",
+                "errors.tool",
+                "errors.recovering",
+                "errors.undo-missing",
+                "selection.first",
+                "selection.second",
+                "selection.complete",
+                "wand.name",
+                "wand.received",
+                "wand.inventory-full",
+                "crown-brush.name",
+                "crown-brush.received",
+                "crown-brush.inventory-full",
+                "clipboard.saved",
+                "plan.ready",
+                "plan.cancelled",
+                "operation.started",
+                "operation.completed",
+                "operation.rolled-back",
+                "status.selection",
+                "status.plan",
+                "status.idle",
+                "legacy.atomic",
+            ),
+            listPaths = setOf("help", "wand.lore", "crown-brush.lore"),
+        )
+
+        fun load(): BuilderToolsConfig {
+            val dataRoot = ARC.instance.dataPath
+            val overridePath = ConfigManager.moduleYamlPath(dataRoot, "builder-tools-runtime.yml")
+            val override = if (java.nio.file.Files.isRegularFile(overridePath)) {
+                ConfigManager.ofModule(dataRoot, "builder-tools-runtime.yml")
+            } else {
+                null
+            }
+            return BuilderToolsConfig(
+                config = ConfigManager.ofModule(dataRoot, "builder-tools.yml"),
+                runtimeOverride = override,
+            )
+        }
+    }
+}
+
+private class PrefixLocaleCatalog(
+    private val config: Config,
+    private val root: String,
+) : LocaleCatalog {
+    override fun scalar(path: String): String? = config.stringOrNull("$root.$path")
+    override fun lines(path: String): List<String>? = config.stringListOrNull("$root.$path")
+}
