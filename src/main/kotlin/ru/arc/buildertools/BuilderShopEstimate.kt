@@ -32,7 +32,6 @@ internal data class BuilderShopEstimate(
 internal enum class BuilderShopEstimateComparison {
     ACCEPT,
     REQUEST_CHANGED,
-    PRICE_INCREASED,
 }
 
 internal object BuilderShopEstimateRules {
@@ -43,19 +42,13 @@ internal object BuilderShopEstimateRules {
     fun compareMissing(
         preview: BuilderShopEstimate,
         current: BuilderShopEstimate,
-        tolerance: Double,
     ): BuilderShopEstimateComparison {
-        require(tolerance.isFinite() && tolerance >= 0.0) { "Builder shop price tolerance is invalid" }
         if (preview.planId != current.planId) return BuilderShopEstimateComparison.REQUEST_CHANGED
         val previewRequests = preview.missing.map { it.material to it.amount }.sortedBy { it.first.key.toString() }
         val currentRequests = current.missing.map { it.material to it.amount }.sortedBy { it.first.key.toString() }
         if (previewRequests != currentRequests || preview.missingUnavailable.isNotEmpty() || current.missingUnavailable.isNotEmpty()) {
             return BuilderShopEstimateComparison.REQUEST_CHANGED
         }
-        return if (current.missingTotal > preview.missingTotal + tolerance) {
-            BuilderShopEstimateComparison.PRICE_INCREASED
-        } else {
-            BuilderShopEstimateComparison.ACCEPT
-        }
+        return BuilderShopEstimateComparison.ACCEPT
     }
 }

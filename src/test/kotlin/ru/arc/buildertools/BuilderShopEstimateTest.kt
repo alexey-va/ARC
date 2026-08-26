@@ -23,33 +23,32 @@ class BuilderShopEstimateTest : FunSpec({
         BuilderShopEstimateRules.supportsAutoBuy(BuilderPlanKind.UNDO) shouldBe false
     }
 
-    test("same request accepts an equal or lower refreshed total") {
+    test("same request accepts any refreshed admin-shop total") {
         MockBukkitTestRuntime.open().use {
             val preview = estimate(planId, line(Material.STONE, 64, 320.0), line(Material.OAK_PLANKS, 16, 80.0))
             val lower = estimate(planId, line(Material.STONE, 64, 300.0), line(Material.OAK_PLANKS, 16, 80.0))
+            val higher = estimate(planId, line(Material.STONE, 64, 500.0), line(Material.OAK_PLANKS, 16, 120.0))
 
-            BuilderShopEstimateRules.compareMissing(preview, lower, 0.01) shouldBe
+            BuilderShopEstimateRules.compareMissing(preview, lower) shouldBe
+                BuilderShopEstimateComparison.ACCEPT
+            BuilderShopEstimateRules.compareMissing(preview, higher) shouldBe
                 BuilderShopEstimateComparison.ACCEPT
         }
     }
 
-    test("price increase, changed deficit, and unavailable product require a new confirmation") {
+    test("changed deficit and unavailable product require a new confirmation") {
         MockBukkitTestRuntime.open().use {
             val preview = estimate(planId, line(Material.STONE, 64, 320.0))
-            val increased = estimate(planId, line(Material.STONE, 64, 320.02))
             val changed = estimate(planId, line(Material.STONE, 63, 315.0))
             val unavailable = estimate(planId, BuilderShopEstimateLine(Material.STONE, 64, null))
 
-            BuilderShopEstimateRules.compareMissing(preview, increased, 0.01) shouldBe
-                BuilderShopEstimateComparison.PRICE_INCREASED
-            BuilderShopEstimateRules.compareMissing(preview, changed, 0.01) shouldBe
+            BuilderShopEstimateRules.compareMissing(preview, changed) shouldBe
                 BuilderShopEstimateComparison.REQUEST_CHANGED
-            BuilderShopEstimateRules.compareMissing(preview, unavailable, 0.01) shouldBe
+            BuilderShopEstimateRules.compareMissing(preview, unavailable) shouldBe
                 BuilderShopEstimateComparison.REQUEST_CHANGED
             BuilderShopEstimateRules.compareMissing(
                 preview,
                 estimate(UUID.fromString("88888888-8888-8888-8888-888888888888"), line(Material.STONE, 64, 320.0)),
-                0.01,
             ) shouldBe BuilderShopEstimateComparison.REQUEST_CHANGED
         }
     }
@@ -66,8 +65,8 @@ class BuilderShopEstimateTest : FunSpec({
                 BuilderShopProcurementRequest(cost, quote)
             }
 
-            BuilderShopProcurementExecutor(service, 0.01).execute(player, requests) shouldBe
-                BuilderShopProcurementResult.Success(6, listOf("8 coins", "4 coins"))
+            BuilderShopProcurementExecutor(service).execute(player, requests) shouldBe
+                BuilderShopProcurementResult.Success(6, listOf("8.0 coins", "4.0 coins"))
             BuilderInventory.missingCosts(player, costs) shouldBe emptyList()
         }
     }
@@ -84,14 +83,14 @@ class BuilderShopEstimateTest : FunSpec({
                 BuilderShopProcurementRequest(cost, quote)
             }
 
-            BuilderShopProcurementExecutor(service, 0.01).execute(player, requests) shouldBe
+            BuilderShopProcurementExecutor(service).execute(player, requests) shouldBe
                 BuilderShopProcurementResult.Failed(4, Material.OAK_PLANKS, ShopPurchaseStatus.OUT_OF_STOCK)
             BuilderInventory.countExact(player, costs.first()) shouldBe 4
             BuilderInventory.countExact(player, costs.last()) shouldBe 0
         }
     }
 
-    test("a price increase aborts before the first withdrawal") {
+    test("purchase uses the current admin-shop price without another confirmation") {
         MockBukkitTestRuntime.open().use { paper ->
             val player = paper.server.addPlayer("PriceGuard")
             val service = FakeShopPurchaseService()
@@ -99,12 +98,12 @@ class BuilderShopEstimateTest : FunSpec({
             val preview = quote(Material.STONE, 4, 8.0)
             service.quotes[Material.STONE] = quote(Material.STONE, 4, 8.02)
 
-            BuilderShopProcurementExecutor(service, 0.01).execute(
+            BuilderShopProcurementExecutor(service).execute(
                 player,
                 listOf(BuilderShopProcurementRequest(cost, preview)),
-            ) shouldBe BuilderShopProcurementResult.EstimateChanged(0, Material.STONE)
-            BuilderInventory.countExact(player, cost) shouldBe 0
-            service.purchaseCalls shouldBe 0
+            ) shouldBe BuilderShopProcurementResult.Success(4, listOf("8.02 coins"))
+            BuilderInventory.countExact(player, cost) shouldBe 4
+            service.purchaseCalls shouldBe 1
         }
     }
 
@@ -116,7 +115,7 @@ class BuilderShopEstimateTest : FunSpec({
             val expected = quote(Material.STONE, 4, 8.0)
             service.quotes[Material.STONE] = expected
 
-            BuilderShopProcurementExecutor(service, 0.01).execute(
+            BuilderShopProcurementExecutor(service).execute(
                 player,
                 listOf(BuilderShopProcurementRequest(cost, expected)),
             ) shouldBe BuilderShopProcurementResult.Ambiguous(0, Material.STONE)
@@ -162,7 +161,7 @@ private class FakeShopPurchaseService(
             ShopPurchaseStatus.SUCCESS,
             itemPath,
             amount,
-            formattedPrice = "${quote.totalPrice.toInt()} coins",
+            formattedPrice = "${quote.totalPrice} coins",
         )
     }
 

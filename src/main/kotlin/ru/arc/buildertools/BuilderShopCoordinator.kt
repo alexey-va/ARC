@@ -68,7 +68,7 @@ internal class BuilderShopCoordinator(
         val comparison = if (preview == null) {
             BuilderShopEstimateComparison.REQUEST_CHANGED
         } else {
-            BuilderShopEstimateRules.compareMissing(preview, current, config.shopPriceIncreaseTolerance)
+            BuilderShopEstimateRules.compareMissing(preview, current)
         }
         if (comparison != BuilderShopEstimateComparison.ACCEPT) {
             estimates[player.uniqueId] = current
@@ -83,7 +83,7 @@ internal class BuilderShopCoordinator(
             )
         }
         val balance = service.vaultBalance(player) ?: return rejected("errors.shop-unavailable")
-        if (balance + config.shopPriceIncreaseTolerance < current.missingTotal) {
+        if (balance < current.missingTotal) {
             return rejected(
                 "errors.shop-insufficient-funds",
                 "price" to formatTotal(service, current.missingTotal, true),
@@ -106,21 +106,13 @@ internal class BuilderShopCoordinator(
         val requests = missing.zip(current.missing).map { (cost, line) ->
             BuilderShopProcurementRequest(cost, checkNotNull(line.quote))
         }
-        val procurement = BuilderShopProcurementExecutor(service, config.shopPriceIncreaseTolerance).execute(player, requests)
+        val procurement = BuilderShopProcurementExecutor(service).execute(player, requests)
         val purchasedItems: Int
         val purchasedPrices: List<String>
         when (procurement) {
             is BuilderShopProcurementResult.Success -> {
                 purchasedItems = procurement.purchasedItems
                 purchasedPrices = procurement.formattedPrices.map(::plainPrice)
-            }
-            is BuilderShopProcurementResult.EstimateChanged -> {
-                refresh(player, plan)
-                if (procurement.purchasedItems == 0) {
-                    estimates[player.uniqueId]?.let { sendEstimate(player, it) }
-                    return rejected("errors.shop-estimate-changed")
-                }
-                return partialFailure(player, procurement.material.key.value(), procurement.purchasedItems, "price changed")
             }
             is BuilderShopProcurementResult.Failed -> {
                 refresh(player, plan)

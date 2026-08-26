@@ -33,7 +33,6 @@ shop:
   max-quoted-materials: 64
   max-auto-buy-items: 4096
   max-auto-buy-price: 250000
-  price-increase-tolerance: 0.01
 
 safety:
   require-lands: true
@@ -105,7 +104,7 @@ locales:
       shop-material-unavailable: "<prefix><yellow>Не всё продаётся. Добавьте вручную."
       shop-limit: "<prefix><red>Лимит: <white><items></white> шт. • <white><price></white>."
       shop-insufficient-funds: "<prefix><yellow>Цена <white><price></white> • у вас <white><balance></white>."
-      shop-estimate-changed: "<prefix><yellow>Оценка обновлена. Подтвердите ещё раз."
+      shop-estimate-changed: "<prefix><yellow>Состав покупки изменился. Повторите команду."
       shop-purchase-failed: "<prefix><red>Не куплено: <white><material></white>."
       shop-purchase-ambiguous: "<prefix><red>Нет ответа: <white><material></white>."
     selection:
@@ -260,7 +259,7 @@ locales:
       shop-material-unavailable: "<prefix><yellow>Some items are not sold. Add them manually."
       shop-limit: "<prefix><red>Limit exceeded: <white><items></white> items or <white><price></white>."
       shop-insufficient-funds: "<prefix><yellow>Need <white><price></white> • balance <white><balance></white>."
-      shop-estimate-changed: "<prefix><yellow>Estimate updated. Confirm again."
+      shop-estimate-changed: "<prefix><yellow>The purchase contents changed. Try the command again."
       shop-purchase-failed: "<prefix><red>Not purchased: <white><material></white>."
       shop-purchase-ambiguous: "<prefix><red>No response: <white><material></white>."
     selection:

@@ -34,7 +34,6 @@ class BuilderToolsConfig(
     val shopMaxQuotedMaterials: Int get() = config.integer("shop.max-quoted-materials", 64)
     val shopMaxAutoBuyItems: Int get() = config.integer("shop.max-auto-buy-items", 4_096)
     val shopMaxAutoBuyPrice: Double get() = config.double("shop.max-auto-buy-price", 250_000.0)
-    val shopPriceIncreaseTolerance: Double get() = config.double("shop.price-increase-tolerance", 0.01)
     val planTtl: Duration get() = config.duration("timers.plan-ttl", Duration.ofSeconds(30))
     val clipboardTtl: Duration get() = config.duration("timers.clipboard-ttl", Duration.ofMinutes(15))
     val undoTtl: Duration get() = config.duration("timers.undo-ttl", Duration.ofMinutes(30))
@@ -73,9 +72,6 @@ class BuilderToolsConfig(
         require(shopMaxQuotedMaterials in 1..256) { "Builder-tools quoted material limit is invalid" }
         require(shopMaxAutoBuyPrice.isFinite() && shopMaxAutoBuyPrice in 1.0..1_000_000_000.0) {
             "Builder-tools shop price limit is invalid"
-        }
-        require(shopPriceIncreaseTolerance.isFinite() && shopPriceIncreaseTolerance in 0.0..1.0) {
-            "Builder-tools shop price tolerance is invalid"
         }
         require(planTtl in Duration.ofSeconds(10)..Duration.ofMinutes(2)) { "Builder-tools plan TTL is invalid" }
         require(clipboardTtl in Duration.ofMinutes(1)..Duration.ofHours(2)) { "Builder-tools clipboard TTL is invalid" }

@@ -38,9 +38,11 @@
   buys only missing exact plain vanilla materials through the native shop API,
   then enters the same journaled confirmation path. A plain `/builder confirm`
   never spends money. Command products, custom items, composite currencies,
-  unavailable requirements, and re-quoted price increases fail closed. If one of several
-  purchases fails, the world remains untouched and completed purchases stay in
-  the player's inventory for a safe retry. `/builder undo` creates and confirms
+  and unavailable requirements fail closed. The estimate is informational;
+  purchase uses the admin shop's current price without an extra confirmation
+  for price drift. If one of several purchases fails, the world remains untouched
+  and completed purchases stay in the player's inventory for a safe retry.
+  `/builder undo` creates and confirms
   an inverse material transaction; deconstruction undo returns blocks only
   after the exact collected drops are surrendered, never repairs tool wear, and
   never buys replacement drops.

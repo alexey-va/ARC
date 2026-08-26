@@ -29,11 +29,6 @@ internal sealed interface BuilderShopProcurementResult {
         override val material: Material? = null
     }
 
-    data class EstimateChanged(
-        override val purchasedItems: Int,
-        override val material: Material,
-    ) : BuilderShopProcurementResult
-
     data class Failed(
         override val purchasedItems: Int,
         override val material: Material,
@@ -55,14 +50,7 @@ internal sealed interface BuilderShopProcurementResult {
  */
 internal class BuilderShopProcurementExecutor(
     private val service: ShopPurchaseService,
-    private val priceIncreaseTolerance: Double,
 ) {
-    init {
-        require(priceIncreaseTolerance.isFinite() && priceIncreaseTolerance >= 0.0) {
-            "Builder procurement price tolerance is invalid"
-        }
-    }
-
     fun execute(
         player: Player,
         requests: List<BuilderShopProcurementRequest>,
@@ -71,16 +59,9 @@ internal class BuilderShopProcurementExecutor(
         val formattedPrices = mutableListOf<String>()
         for (request in requests) {
             val expected = request.expected
-            val live = runCatching { service.quotePlainMaterial(player, expected.material, expected.amount) }.getOrNull()
-            if (
-                live == null || live.material != expected.material || live.amount != expected.amount ||
-                live.totalPrice > expected.totalPrice + priceIncreaseTolerance
-            ) {
-                return BuilderShopProcurementResult.EstimateChanged(purchasedItems, expected.material)
-            }
             val before = BuilderInventory.countExact(player, request.cost)
             val outcome = try {
-                service.purchase(player, live.itemPath, live.amount)
+                service.purchase(player, expected.itemPath, expected.amount)
             } catch (failure: Throwable) {
                 return BuilderShopProcurementResult.Ambiguous(purchasedItems, expected.material, failure)
             }
@@ -91,11 +72,11 @@ internal class BuilderShopProcurementExecutor(
                 }
                 return BuilderShopProcurementResult.Failed(purchasedItems, expected.material, outcome.status)
             }
-            if (delivered != live.amount) {
+            if (delivered != expected.amount) {
                 return BuilderShopProcurementResult.Ambiguous(purchasedItems, expected.material)
             }
-            purchasedItems += live.amount
-            formattedPrices += outcome.formattedPrice.orEmpty().ifBlank { live.formattedPrice }
+            purchasedItems += expected.amount
+            formattedPrices += outcome.formattedPrice.orEmpty().ifBlank { expected.formattedPrice }
         }
         return BuilderShopProcurementResult.Success(purchasedItems, formattedPrices)
     }
