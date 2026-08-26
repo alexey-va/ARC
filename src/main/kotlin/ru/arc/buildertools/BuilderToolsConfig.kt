@@ -163,13 +163,9 @@ class BuilderToolsConfig(
                 "status.selection",
                 "status.plan",
                 "status.idle",
-                "kinds.fill",
-                "kinds.paste",
-                "kinds.deconstruct",
-                "kinds.crown",
-                "kinds.undo",
-                "kinds.build_book",
-            ),
+            ) + BuilderPlanKind.entries.map { kind ->
+                "kinds.${kind.name.lowercase(Locale.ROOT)}"
+            },
             listPaths = setOf(
                 "help",
                 "wand.lore",

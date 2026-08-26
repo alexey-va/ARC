@@ -62,6 +62,21 @@ class BuilderToolsDomainTest : FunSpec({
         BuilderGameModePolicy.usesInventory(GameMode.CREATIVE) shouldBe false
     }
 
+    test("every builder plan kind requires a localized label") {
+        val temporaryDirectory = Files.createTempDirectory("arc-builder-tools-locales-")
+        val config = BuilderToolsConfig(Config(temporaryDirectory, "modules/builder-tools.yml"))
+        val bundled = Config(temporaryDirectory, "modules/builder-tools.yml")
+        val missing = bundled.keys("locales").flatMap { locale ->
+            BuilderPlanKind.entries.mapNotNull { kind ->
+                val path = "locales.$locale.kinds.${kind.name.lowercase()}"
+                path.takeIf { bundled.stringOrNull(path).isNullOrBlank() }
+            }
+        }
+
+        config.validated()
+        missing shouldBe emptyList()
+    }
+
     test("pending plans bind their confirmation game mode atomically") {
         val now = 1_800_000_000_000L
         val plan = BuilderPlan(

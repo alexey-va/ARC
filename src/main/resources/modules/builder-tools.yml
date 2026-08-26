@@ -221,10 +221,10 @@ locales:
     kinds:
       fill: "заполнение"
       paste: "вставка чертежа"
+      build_book: "постройка по книге"
       deconstruct: "демонтаж"
       crown: "крона"
       undo: "отмена"
-      build_book: "постройка по книге"
   en:
     prefix: "<#92bed8>◇ "
     help:
@@ -343,7 +343,7 @@ locales:
     kinds:
       fill: "fill"
       paste: "blueprint paste"
+      build_book: "book construction"
       deconstruct: "deconstruction"
       crown: "crown"
       undo: "undo"
-      build_book: "build book"
