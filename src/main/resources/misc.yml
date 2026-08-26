@@ -84,13 +84,19 @@ portal:
     enabled: false
     astral-item: ""
     chaos-item: ""
-    opening-start-tick: 32
-    opening-duration-ticks: 24
+    opening-start-tick: 0
+    opening-duration-ticks: 36
     closing-duration-ticks: 12
-    width: 1.2
-    height: 2.2
-    vertical-offset: 2.0
+    width: 2.0
+    height: 2.8
+    vertical-offset: 1.65
     view-range: 1.0
+    suction:
+      enabled: true
+      streams: 8
+      reduced-streams: 3
+      radius: 2.25
+      particle-size: 0.8
   # DUST_COLOR_TRANSITION: цвета и размер рамки
   border:
     color:

@@ -6,6 +6,7 @@ import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import kotlin.math.sqrt
 
 class PortalOriginGateTest : FreeSpec({
     "origin-gate permission" - {
@@ -40,6 +41,9 @@ class PortalOriginGateTest : FreeSpec({
             settings(width = Float.NaN).shouldBeNull()
             settings(height = 4.1f).shouldBeNull()
             settings(viewRange = 0f).shouldBeNull()
+            settings(suctionStreams = 17).shouldBeNull()
+            settings(reducedSuctionStreams = 9).shouldBeNull()
+            settings(suctionRadius = 5.1).shouldBeNull()
         }
 
         "keeps the bundled portable profile disabled" {
@@ -52,7 +56,7 @@ class PortalOriginGateTest : FreeSpec({
     }
 
     "origin-gate controller" - {
-        "opens once, closes for the configured duration, and removes idempotently" {
+        "renders server-driven opening, idle pulse, closing, and idempotent cleanup" {
             val handle = RecordingOriginGateHandle()
             var spawnCount = 0
             val controller =
@@ -61,18 +65,23 @@ class PortalOriginGateTest : FreeSpec({
                     handle
                 }
 
-            controller.tickOpening(31).shouldBeFalse()
-            controller.tickOpening(32).shouldBeTrue()
-            controller.tickOpening(33).shouldBeTrue()
-            controller.tickOpening(58).shouldBeTrue()
+            controller.tickOpening(0).shouldBeTrue()
+            controller.tickOpening(18).shouldBeTrue()
+            controller.tickOpening(36).shouldBeTrue()
+            controller.tickOpening(37).shouldBeTrue()
             spawnCount shouldBe 1
-            handle.openDurations shouldBe listOf(24)
+            handle.scales.first() shouldBe 0.02f
+            (handle.scales[1] > handle.scales.first()).shouldBeTrue()
+            (handle.scales[1] < 1f).shouldBeTrue()
+            handle.scales[2] shouldBe 1f
+            (handle.scales[3] > 1f).shouldBeTrue()
 
             controller.beginClosing()
             controller.beginClosing()
-            handle.closeDurations shouldBe listOf(12)
+            handle.prepareClosingCount shouldBe 1
             repeat(12) { controller.tickClosing().shouldBeTrue() }
             controller.tickClosing().shouldBeFalse()
+            handle.scales.last() shouldBe 0.02f
 
             controller.remove()
             controller.remove()
@@ -88,12 +97,28 @@ class PortalOriginGateTest : FreeSpec({
                     null
                 }
 
-            controller.tickOpening(32).shouldBeFalse()
-            controller.tickOpening(33).shouldBeFalse()
+            controller.tickOpening(0).shouldBeFalse()
+            controller.tickOpening(1).shouldBeFalse()
             controller.tickOpening(58).shouldBeFalse()
             spawnCount shouldBe 1
             controller.isActive.shouldBeFalse()
             controller.tickClosing().shouldBeFalse()
+        }
+    }
+
+    "origin-gate visual math" - {
+        "faces the creator with a fixed billboard" {
+            originGateFacingYaw(0.0, 0.0, 0.0, 5.0) shouldBe 0f
+            originGateFacingYaw(0.0, 0.0, 5.0, 0.0) shouldBe -90f
+            originGateFacingYaw(0.0, 0.0, -5.0, 0.0) shouldBe 90f
+        }
+
+        "generates a bounded spiral converging on the portal center" {
+            val offsets = originGateParticleOffsets(tick = 0, streams = 8, radius = 2.25)
+
+            offsets.size shouldBe 8
+            offsets.all { sqrt((it.x * it.x) + (it.z * it.z)) <= 2.25 }.shouldBeTrue()
+            offsets.any { sqrt((it.x * it.x) + (it.z * it.z)) < 0.5 }.shouldBeTrue()
         }
     }
 })
@@ -101,35 +126,43 @@ class PortalOriginGateTest : FreeSpec({
 private fun settings(
     astral: String = "origin_gate_portals:astral_portal",
     chaos: String = "origin_gate_portals:chaos_portal",
-    openingDuration: Int = 24,
+    openingDuration: Int = 36,
     closingDuration: Int = 12,
-    width: Float = 1.2f,
-    height: Float = 2.2f,
+    width: Float = 2.0f,
+    height: Float = 2.8f,
     viewRange: Float = 1f,
+    suctionStreams: Int = 8,
+    reducedSuctionStreams: Int = 3,
+    suctionRadius: Double = 2.25,
 ): PortalOriginGateSettings? =
     PortalOriginGateSettings.validated(
         astralItemId = astral,
         chaosItemId = chaos,
-        openingStartTick = 32,
+        openingStartTick = 0,
         openingDurationTicks = openingDuration,
         closingDurationTicks = closingDuration,
         width = width,
         height = height,
-        verticalOffset = 2.0,
+        verticalOffset = 1.65,
         viewRange = viewRange,
+        suctionEnabled = true,
+        suctionStreams = suctionStreams,
+        reducedSuctionStreams = reducedSuctionStreams,
+        suctionRadius = suctionRadius,
+        suctionParticleSize = 0.8f,
     )
 
 private class RecordingOriginGateHandle : PortalOriginGateHandle {
-    val openDurations = mutableListOf<Int>()
-    val closeDurations = mutableListOf<Int>()
+    val scales = mutableListOf<Float>()
+    var prepareClosingCount = 0
     var removeCount = 0
 
-    override fun beginOpening(durationTicks: Int) {
-        openDurations += durationTicks
+    override fun updateScale(multiplier: Float) {
+        scales += multiplier
     }
 
-    override fun beginClosing(durationTicks: Int) {
-        closeDurations += durationTicks
+    override fun prepareClosing() {
+        prepareClosingCount++
     }
 
     override fun remove() {

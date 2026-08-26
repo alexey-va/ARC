@@ -90,6 +90,7 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
     private val player: Player?
     private var task: ScheduledTask? = null
     private var originGate: PortalOriginGateController? = null
+    private var originGateSettings: PortalOriginGateSettings? = null
 
     companion object {
         private val occupiedBlocks = ConcurrentHashMap.newKeySet<Block>()
@@ -147,15 +148,15 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
                 return@repeating
             }
             if (success.get()) {
-                if (originGate?.tickClosing() == true) return@repeating
+                if (originGate?.tickClosing() == true) {
+                    originGateSettings?.let { displayOriginGateParticles(nearbyPlayers(cb), it) }
+                    phase.incrementAndGet()
+                    return@repeating
+                }
                 removePortal()
                 return@repeating
             }
-            val particleDistance = config.real("portal.particle-distance", 50.0)
-            val nearbyPlayers = HashSet<Player>()
-            for (p in cb.world.players) {
-                if (p.location.distance(cb.location) < particleDistance) nearbyPlayers.add(p)
-            }
+            val nearbyPlayers = nearbyPlayers(cb)
             if (phase.get() >= 58 && config.bool("portal.blindness", true)) {
                 val radius = config.real("portal.blindness-radius", 2.0)
                 val duration = config.integer("portal.blindness-duration", 40)
@@ -167,13 +168,17 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
                     if (!p.hasPotionEffect(BLINDNESS)) p.addPotionEffect(potionEffect)
                 }
             }
-            addLocations()
             if (phase.get() == 58) cb.world.playSound(cb.location, org.bukkit.Sound.BLOCK_END_PORTAL_SPAWN, 1f, 1f)
 
-            displayParticles(nearbyPlayers)
             val originGateActive = originGate?.tickOpening(phase.get()) == true
-            if (!originGateActive && phase.get() >= 58 && (phase.get() == 58 || phase.get() % 10 == 0)) {
-                placeBlocksPackets(nearbyPlayers)
+            if (originGateActive) {
+                originGateSettings?.let { displayOriginGateParticles(nearbyPlayers, it) }
+            } else {
+                addLocations()
+                displayParticles(nearbyPlayers)
+                if (phase.get() >= 58 && (phase.get() == 58 || phase.get() % 10 == 0)) {
+                    placeBlocksPackets(nearbyPlayers)
+                }
             }
             if (phase.get() >= 61) {
                 val enteredPlayer = getEnteredPlayer(nearbyPlayers)
@@ -192,10 +197,20 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
     ) {
         val settings = PortalOriginGateSettings.load(config) ?: return
         if (!shouldUseOriginGate(enabled = true, hasPermission = owner.hasPermission(ORIGIN_GATE_PERMISSION))) return
+        originGateSettings = settings
         originGate =
             PortalOriginGateController(settings) {
-                BukkitPortalOriginGate.spawn(base, settings)
+                BukkitPortalOriginGate.spawn(base, settings, owner.location.clone())
             }
+    }
+
+    private fun nearbyPlayers(base: Block): HashSet<Player> {
+        val particleDistance = config.real("portal.particle-distance", 50.0)
+        val nearby = HashSet<Player>()
+        for (candidate in base.world.players) {
+            if (candidate.location.distance(base.location) < particleDistance) nearby.add(candidate)
+        }
+        return nearby
     }
 
     private fun getEnteredPlayer(nearby: Collection<Player>): Player? {
@@ -381,6 +396,22 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
         }
     }
 
+    private fun displayOriginGateParticles(
+        nearbyPlayers: Collection<Player>,
+        settings: PortalOriginGateSettings,
+    ) {
+        val cb = centerBlock ?: return
+        val fullPlayers = ArrayList<Player>()
+        val reducedPlayers = ArrayList<Player>()
+        for (candidate in nearbyPlayers) {
+            if (!candidate.isOnline || candidate.world != cb.world) continue
+            if (candidate.hasPermission("myhome.reduce-particles")) reducedPlayers.add(candidate)
+            else fullPlayers.add(candidate)
+        }
+        val center = cb.location.clone().add(0.5, settings.verticalOffset, 0.5)
+        BukkitPortalOriginGate.renderSuction(center, phase.get(), settings, fullPlayers, reducedPlayers)
+    }
+
     private fun inPortal(player: Player, location: Location): Boolean {
         return touchesPortalEntrance(player.location, player.boundingBox, location)
     }
@@ -390,6 +421,7 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
         task?.takeUnless { it.isCancelled }?.cancel()
         originGate?.remove()
         originGate = null
+        originGateSettings = null
         centerBlock?.let(::releasePortal)
         player?.let { portals.remove(it.uniqueId, this) }
         clearBlockPackets()
