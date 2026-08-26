@@ -17,6 +17,23 @@ The script uploads:
 - `RusCraftingResource.zip.sha256` — checksum used to skip unchanged packs;
 - `archive/YYYYMMDD-HHMMSS-RusCraftingResource.zip` — versioned archive.
 
+On the production spawn node it also treats spawn ItemsAdder as the only
+content authority. A completed `iazip` stages and checksum-verifies exact copies
+of `contents/` and the active `storage/` cache, publishes the shared client ZIP,
+then atomically swaps those two trees into the sibling survival runtime and
+sends `iareload` to its tmux console. The script waits for ItemsAdder's
+`Reload completed.` log marker, verifies `contents/` byte-for-byte, and verifies
+the active cache mappings semantically because ItemsAdder may reorder YAML
+entries while loading them. A changed key or value still fails the publication.
+The previous survival trees are retained below the repository-ignored
+`.mc-ops/itemsadder-mirror/` root; `survival-mirror.backup-keep` controls bounded
+retention.
+
+The mirror is disabled by default and enabled only in the private spawn
+`resourcepack-sync.yml`. Source/target directory names and the tmux session are
+strictly bounded, the target must remain below the same network root, and a
+directory lock rejects concurrent mirror attempts.
+
 After the archive and public object uploads succeed, the script publishes a
 versioned event containing only the staged ZIP SHA-256 and a random request ID
 to `arc.resourcepack.published` through the existing Redis connection. ProxyARC
@@ -45,4 +62,5 @@ modified. The ZIP is integrity-checked before publication. Already-correct
 metadata and atlas content are left byte-identical.
 
 The hook passes the current ItemsAdder instance's `output/generated.zip` as
-`RP_SOURCE`, so spawn and survival publish their own generated pack.
+`RP_SOURCE`. Production pack generation and publication run on spawn only;
+survival consumes the mirrored registry and the same published pack.

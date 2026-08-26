@@ -258,6 +258,14 @@ internal class ResourcePackSyncConfig(
             "S3_RP_MANIFEST_KEY" to config.string("s3.manifest-key", "RusCraftingResource.zip.sha256"),
             "S3_RP_ARCHIVE_PREFIX" to config.string("s3.archive-prefix", "archive"),
             "FORCE_UPLOAD" to if (config.bool("force-upload", false)) "1" else "0",
+            "IA_MIRROR_ENABLED" to if (config.bool("survival-mirror.enabled", false)) "1" else "0",
+            "IA_MIRROR_SOURCE_SERVER" to config.string("survival-mirror.source-server-dir", "classic"),
+            "IA_MIRROR_TARGET_SERVER" to
+                config.string("survival-mirror.target-server-dir", "classic_survival"),
+            "IA_MIRROR_TARGET_SESSION" to config.string("survival-mirror.target-tmux-session", "survival"),
+            "IA_MIRROR_BACKUP_KEEP" to config.int("survival-mirror.backup-keep", 3).toString(),
+            "IA_MIRROR_RELOAD_TIMEOUT_SECONDS" to
+                config.int("survival-mirror.reload-timeout-seconds", 120).toString(),
             "RP_NOTIFY_ENABLED" to
                 if (config.bool("publish-notification.enabled", true) && redisConfig.enabled) "1" else "0",
             "REDIS_CLI" to config.string("publish-notification.redis-cli", "redis-cli"),

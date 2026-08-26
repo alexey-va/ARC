@@ -25,13 +25,13 @@ internal interface ShopPurchaseService {
         player: Player,
         material: Material,
         amount: Int,
-    ): ShopMaterialQuote?
+    ): ShopMaterialQuote? = null
 
     /** Current balance in the same Vault currency used by [quotePlainMaterial]. */
-    fun vaultBalance(player: Player): Double?
+    fun vaultBalance(player: Player): Double? = null
 
     /** Formats an aggregate Vault amount with the active shop provider. */
-    fun formatVaultPrice(amount: Double): String?
+    fun formatVaultPrice(amount: Double): String? = null
 }
 
 internal data class ShopMaterialQuote(
