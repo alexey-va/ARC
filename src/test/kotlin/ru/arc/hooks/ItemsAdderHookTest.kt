@@ -170,6 +170,8 @@ class ItemsAdderHookTest :
                 environment["AWS_ACCESS_KEY_ID"] shouldBe ""
                 environment["AWS_SECRET_ACCESS_KEY"] shouldBe ""
                 environment["S3_BUCKET"] shouldBe "ruscraftinresources"
+                environment["IA_MIRROR_ENABLED"] shouldBe "0"
+                environment["IA_MIRROR_BACKUP_KEEP"] shouldBe "3"
             }
         }
 
@@ -482,6 +484,144 @@ class ItemsAdderHookTest :
                         }
                     atlas.getAsJsonArray("sources").size() shouldBeExactly 1
                 }
+            }
+
+            "mirrors spawn content and caches to survival before reloading it" {
+                val directory = Files.createTempDirectory("arc-resourcepack-sync-survival-mirror")
+                val networkRoot = directory.resolve("network")
+                val sourceItemsAdder = networkRoot.resolve("classic/plugins/ItemsAdder")
+                val targetItemsAdder = networkRoot.resolve("classic_survival/plugins/ItemsAdder")
+                val resourcePackZip = sourceItemsAdder.resolve("output/generated.zip")
+                val uploadedZip = directory.resolve("uploaded.zip")
+                val fakeAws = directory.resolve("fake-aws.sh")
+                val fakeTmux = directory.resolve("fake-tmux.sh")
+                val capturedTmux = directory.resolve("tmux-command.txt")
+                val targetLog = networkRoot.resolve("classic_survival/logs/latest.log")
+                val script = BundledResourcePackSyncScript.install(directory.resolve("arc-data"))
+
+                sourceItemsAdder.resolve("contents/demo").let { path ->
+                    Files.createDirectories(path)
+                    path.resolve("source.txt").writeText("spawn-content")
+                }
+                sourceItemsAdder.resolve("storage").let { path ->
+                    Files.createDirectories(path)
+                    path.resolve("items_ids_cache.yml").writeText("PAPER:\n  demo:item: 42\n")
+                }
+                targetItemsAdder.resolve("contents/legacy").let { path ->
+                    Files.createDirectories(path)
+                    path.resolve("survival-only.txt").writeText("legacy-content")
+                }
+                targetItemsAdder.resolve("storage").let { path ->
+                    Files.createDirectories(path)
+                    path.resolve("items_ids_cache.yml").writeText("PAPER:\n  legacy:item: 99\n")
+                }
+                Files.createDirectories(resourcePackZip.parent)
+                Files.createDirectories(targetLog.parent)
+                targetLog.writeText("[00:00:00] server ready\n")
+                ZipOutputStream(Files.newOutputStream(resourcePackZip)).use { output ->
+                    output.putNextEntry(ZipEntry("pack.mcmeta"))
+                    output.write(
+                        """{"pack":{"description":"ready","min_format":75,"max_format":75}}"""
+                            .toByteArray(),
+                    )
+                    output.closeEntry()
+                }
+                fakeAws.writeText(fakeAwsUploaderScript())
+                fakeAws.toFile().setExecutable(true).shouldBeTrue()
+                fakeTmux.writeText(
+                    """
+                    |#!/bin/sh
+                    |case "${'$'}1" in
+                    |  list-sessions)
+                    |    printf '%s\n' survival
+                    |    ;;
+                    |  send-keys)
+                    |    printf '%s\n' "${'$'}*" > "${'$'}CAPTURED_TMUX"
+                    |    printf '%s\n' '[00:00:01] [Server thread/WARN]: Ресурсы • Reload completed.' >> "${'$'}FAKE_TARGET_LOG"
+                    |    ;;
+                    |  *)
+                    |    exit 2
+                    |    ;;
+                    |esac
+                    """.trimMargin(),
+                )
+                fakeTmux.toFile().setExecutable(true).shouldBeTrue()
+
+                ResourcePackSyncScript(
+                    script,
+                    processEnvironment = {
+                        testEnvironment() +
+                            mapOf(
+                                "AWS_CLI" to fakeAws.toAbsolutePath().toString(),
+                                "CAPTURED_UPLOAD" to uploadedZip.toAbsolutePath().toString(),
+                                "RP_NOTIFY_ENABLED" to "0",
+                                "IA_MIRROR_ENABLED" to "1",
+                                "IA_MIRROR_TMUX_CLI" to fakeTmux.toAbsolutePath().toString(),
+                                "CAPTURED_TMUX" to capturedTmux.toAbsolutePath().toString(),
+                                "FAKE_TARGET_LOG" to targetLog.toAbsolutePath().toString(),
+                            )
+                    },
+                ).publish(resourcePackZip).shouldBeTrue()
+
+                targetItemsAdder.resolve("contents/demo/source.txt").readText() shouldBe "spawn-content"
+                Files.exists(targetItemsAdder.resolve("contents/legacy")).shouldBeFalse()
+                targetItemsAdder.resolve("storage/items_ids_cache.yml").readText() shouldBe
+                    "PAPER:\n  demo:item: 42\n"
+                capturedTmux.readText() shouldContain "send-keys -t survival iareload Enter"
+
+                val backupRoot = networkRoot.resolve(".mc-ops/itemsadder-mirror")
+                val backups = Files.list(backupRoot).use { paths ->
+                    paths.iterator().asSequence()
+                        .filter { Files.isDirectory(it) && it.fileName.toString() != ".lock" }
+                        .toList()
+                }
+                backups.size shouldBeExactly 1
+                backups.single().resolve("contents/legacy/survival-only.txt").readText() shouldBe
+                    "legacy-content"
+                Files.exists(backupRoot.resolve(".lock")).shouldBeFalse()
+            }
+
+            "rejects a survival mirror target that is not a server directory name" {
+                val directory = Files.createTempDirectory("arc-resourcepack-sync-mirror-traversal")
+                val sourceItemsAdder = directory.resolve("network/classic/plugins/ItemsAdder")
+                val targetItemsAdder = directory.resolve("network/classic_survival/plugins/ItemsAdder")
+                val resourcePackZip = sourceItemsAdder.resolve("output/generated.zip")
+                val fakeAws = directory.resolve("fake-aws.sh")
+                val uploadedZip = directory.resolve("uploaded.zip")
+                val script = BundledResourcePackSyncScript.install(directory.resolve("arc-data"))
+
+                Files.createDirectories(sourceItemsAdder.resolve("contents"))
+                Files.createDirectories(sourceItemsAdder.resolve("storage"))
+                Files.createDirectories(targetItemsAdder.resolve("contents"))
+                Files.createDirectories(targetItemsAdder.resolve("storage"))
+                Files.createDirectories(resourcePackZip.parent)
+                ZipOutputStream(Files.newOutputStream(resourcePackZip)).use { output ->
+                    output.putNextEntry(ZipEntry("pack.mcmeta"))
+                    output.write(
+                        """{"pack":{"description":"ready","min_format":75,"max_format":75}}"""
+                            .toByteArray(),
+                    )
+                    output.closeEntry()
+                }
+                fakeAws.writeText(fakeAwsUploaderScript())
+                fakeAws.toFile().setExecutable(true).shouldBeTrue()
+
+                ResourcePackSyncScript(
+                    script,
+                    processEnvironment = {
+                        testEnvironment() +
+                            mapOf(
+                                "AWS_CLI" to fakeAws.toAbsolutePath().toString(),
+                                "CAPTURED_UPLOAD" to uploadedZip.toAbsolutePath().toString(),
+                                "RP_NOTIFY_ENABLED" to "0",
+                                "IA_MIRROR_ENABLED" to "1",
+                                "IA_MIRROR_TARGET_SERVER" to "../outside",
+                            )
+                    },
+                ).publish(resourcePackZip).shouldBeFalse()
+
+                Files.exists(uploadedZip).shouldBeFalse()
+                Files.exists(directory.resolve("network/.mc-ops")).shouldBeFalse()
             }
 
             "fails publication when Velocity has no notification subscriber" {

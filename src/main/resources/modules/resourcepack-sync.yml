@@ -20,4 +20,12 @@ publish-notification:
   enabled: true
   redis-cli: "redis-cli"
 
+survival-mirror:
+  enabled: false
+  source-server-dir: classic
+  target-server-dir: classic_survival
+  target-tmux-session: survival
+  backup-keep: 3
+  reload-timeout-seconds: 120
+
 force-upload: false
