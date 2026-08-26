@@ -95,6 +95,8 @@ internal class BuilderToolsRuntime(
     private val crownBrushKey = org.bukkit.NamespacedKey(plugin, "crown_brush")
     private val selections = mutableMapOf<UUID, SelectionDraft>()
     private val clipboards = mutableMapOf<UUID, BuilderClipboard>()
+    private val crownSessions = BuilderCrownSessions()
+    private val crownBrushAnchors = mutableMapOf<UUID, BuilderBlockPos>()
     private val pendingPlans = mutableMapOf<UUID, BuilderPlan>()
     private val activeOperations = mutableMapOf<UUID, ActiveOperation>()
     private val lockedBlocks = mutableMapOf<BuilderBlockPos, UUID>()
@@ -125,11 +127,7 @@ internal class BuilderToolsRuntime(
             return true
         }
         try {
-            when (command.name.lowercase(Locale.ROOT)) {
-                "deconstruction" -> handleLegacyDeconstruction(player, args)
-                "crown" -> handleLegacyCrown(player, args)
-                else -> handleBuilder(player, args)
-            }
+            handleBuilder(player, args)
         } catch (failure: UserFailure) {
             send(player, failure.path, failure.values)
         } catch (failure: IllegalArgumentException) {
@@ -149,22 +147,34 @@ internal class BuilderToolsRuntime(
         args: Array<out String>,
     ): List<String> {
         if (sender !is Player) return emptyList()
-        if (command.name.equals("deconstruction", true)) {
-            return filterPrefix(listOf("wand", "start", "confirm", "stop", "status", "pause", "resume"), args.lastOrNull())
-        }
-        if (command.name.equals("crown", true)) {
-            if (args.size <= 1) return filterPrefix(leafNames(), args.lastOrNull())
-            return if (args.size == 2) filterPrefix((3..10).map(Int::toString), args.last()) else emptyList()
-        }
         if (args.size == 1) {
             return filterPrefix(
                 listOf("help", "wand", "pos1", "pos2", "fill", "copy", "paste", "deconstruct", "crown", "confirm", "cancel", "undo", "status"),
                 args[0],
             )
         }
+        if (args.firstOrNull().equals("crown", true)) {
+            if (args.size == 2) {
+                return filterPrefix(
+                    listOf("help", "wand", "palette", "shape", "radius", "density", "noise", "reroll", "place", "undo", "cancel", "status") + leafNames(),
+                    args.lastOrNull(),
+                )
+            }
+            if (args.size != 3) return emptyList()
+            return when (args[1].lowercase(Locale.ROOT)) {
+                "shape" -> filterPrefix(BuilderCrownShape.entries.map { it.name.lowercase(Locale.ROOT) }, args.last())
+                "radius" -> filterPrefix((3..10).map(Int::toString), args.last())
+                "density" -> filterPrefix(BuilderCrownDensity.entries.map { it.name.lowercase(Locale.ROOT) }, args.last())
+                "noise" -> filterPrefix(BuilderCrownNoise.entries.map { it.name.lowercase(Locale.ROOT) }, args.last())
+                "palette" -> filterPrefix(leafNames(), args.last())
+                else -> if (args[1].lowercase(Locale.ROOT) in leafNames()) {
+                    filterPrefix((3..10).map(Int::toString), args.last())
+                } else {
+                    emptyList()
+                }
+            }
+        }
         if (args.size == 2 && args[0].equals("fill", true)) return filterPrefix(safeMaterialNames(), args[1])
-        if (args.size == 2 && args[0].equals("crown", true)) return filterPrefix(leafNames(), args[1])
-        if (args.size == 3 && args[0].equals("crown", true)) return filterPrefix((3..10).map(Int::toString), args[2])
         return emptyList()
     }
 
@@ -179,12 +189,7 @@ internal class BuilderToolsRuntime(
             "copy" -> copySelection(player)
             "paste" -> preparePlan(player, planPaste(player))
             "deconstruct" -> preparePlan(player, planDeconstruct(player))
-            "crown" -> {
-                ensureFeaturePermission(player, "arc.buildertools.crown", "arc.crown")
-                val material = args.getOrNull(1)?.let { materialArgument(player, it) } ?: Material.OAK_LEAVES
-                val radius = args.getOrNull(2)?.toIntOrNull() ?: 5
-                preparePlan(player, planCrown(player, material, radius))
-            }
+            "crown" -> handleBuilderCrown(player, args.drop(1))
             "confirm" -> confirm(player)
             "cancel", "stop" -> cancelPlan(player)
             "undo" -> prepareUndo(player)
@@ -193,76 +198,158 @@ internal class BuilderToolsRuntime(
         }
     }
 
-    private fun handleLegacyDeconstruction(player: Player, args: Array<out String>) {
-        ensureAvailable(player)
-        ensureFeaturePermission(player, "arc.buildertools.deconstruct", "arc.deconstruction")
-        when (args.firstOrNull()?.lowercase(Locale.ROOT) ?: "status") {
-            "wand" -> giveWand(player)
-            "start" -> preparePlan(player, planDeconstruct(player))
-            "confirm" -> confirm(player)
-            "stop" -> cancelPlan(player)
-            "status" -> showStatus(player)
-            "pause", "resume" -> send(player, "legacy.atomic")
-            else -> showStatus(player)
-        }
-    }
-
-    private fun handleLegacyCrown(player: Player, args: Array<out String>) {
-        ensureAvailable(player)
-        ensureFeaturePermission(player, "arc.buildertools.crown", "arc.crown")
+    private fun handleBuilderCrown(player: Player, args: List<String>) {
+        ensureFeaturePermission(player, BuilderFeature.CROWN)
         when (args.firstOrNull()?.lowercase(Locale.ROOT)) {
-            "confirm" -> return confirm(player)
+            "confirm", "place" -> return confirm(player)
             "undo" -> return prepareUndo(player)
             "cancel", "stop" -> return cancelPlan(player)
-            "status" -> return showStatus(player)
+            "status" -> return showCrownStatus(player)
             "brush", "wand" -> return giveCrownBrush(player)
-            "help", "settings", "palette", "shape", "radius", "density", "noise" -> {
-                messages.renderLines("help", locale(player)).forEach(player::sendMessage)
+            "palette" -> return updateCrownPalette(player, args.getOrNull(1))
+            "shape" -> return updateCrownEnum<BuilderCrownShape>(player, "shape", args.getOrNull(1)) { settings, value -> settings.copy(shape = value) }
+            "radius" -> {
+                val radius = crownRadius(args.getOrNull(1))
+                return updateCrownSettings(player, "radius", radius.toString(), crownSettings(player).copy(radius = radius))
+            }
+            "density" -> return updateCrownEnum<BuilderCrownDensity>(player, "density", args.getOrNull(1)) { settings, value -> settings.copy(density = value) }
+            "noise" -> return updateCrownEnum<BuilderCrownNoise>(player, "noise", args.getOrNull(1)) { settings, value -> settings.copy(noise = value) }
+            "reroll" -> return prepareCrownPlan(player, crownSettings(player), reroll = true)
+            "help", "settings" -> {
+                messages.renderLines("crown.help", locale(player)).forEach(player::sendMessage)
                 return
             }
         }
-        val material = if (args.isEmpty()) Material.OAK_LEAVES else materialArgument(player, args[0])
-        val radius = args.getOrNull(1)?.toIntOrNull() ?: 5
-        preparePlan(player, planCrown(player, material, radius))
+        val current = crownSettings(player)
+        val requested = if (args.isEmpty()) {
+            current
+        } else {
+            val material = materialArgument(player, args[0])
+            if (!safety.isLeaf(material)) throw UserFailure("errors.material")
+            current.copy(
+                palette = listOf(BuilderCrownPaletteEntry(material.name.lowercase(Locale.ROOT), 1)),
+                radius = args.getOrNull(1)?.let(::crownRadius) ?: current.radius,
+            )
+        }
+        prepareCrownPlan(player, requested)
+    }
+
+    private fun crownRadius(raw: String?): Int {
+        val radius = raw?.toIntOrNull() ?: throw UserFailure("errors.crown-setting")
+        if (radius !in 3..10) throw UserFailure("errors.crown-setting")
+        return radius
+    }
+
+    private fun crownSettings(player: Player): BuilderCrownSettings =
+        crownSessions.settings(player.uniqueId)
+
+    private fun updateCrownPalette(player: Player, raw: String?) {
+        val parsed = try {
+            BuilderCrownPaletteParser.parse(raw ?: throw IllegalArgumentException("missing palette"))
+        } catch (_: IllegalArgumentException) {
+            throw UserFailure("errors.crown-setting")
+        }
+        parsed.forEach { entry ->
+            val material = Material.matchMaterial(entry.materialName) ?: throw UserFailure("errors.material")
+            if (!safety.isLeaf(material)) throw UserFailure("errors.material")
+        }
+        storeCrownSettings(player, crownSettings(player).copy(palette = parsed))
+        send(player, "crown.palette-updated", mapOf("count" to messages.literal(parsed.size)))
+    }
+
+    private inline fun <reified T : Enum<T>> updateCrownEnum(
+        player: Player,
+        key: String,
+        raw: String?,
+        update: (BuilderCrownSettings, T) -> BuilderCrownSettings,
+    ) {
+        val value = enumValues<T>().firstOrNull { it.name.equals(raw, true) } ?: throw UserFailure("errors.crown-setting")
+        updateCrownSettings(player, key, value.name.lowercase(Locale.ROOT), update(crownSettings(player), value))
+    }
+
+    private fun updateCrownSettings(player: Player, key: String, value: String, updated: BuilderCrownSettings) {
+        storeCrownSettings(player, updated)
+        send(player, "crown.settings-updated", mapOf("setting" to messages.literal(key), "value" to messages.literal(value)))
+    }
+
+    private fun storeCrownSettings(player: Player, updated: BuilderCrownSettings) {
+        crownSessions.update(player.uniqueId, updated)
+        pendingPlans[player.uniqueId]?.takeIf { it.kind == BuilderPlanKind.CROWN }?.let {
+            pendingPlans.remove(player.uniqueId)
+            crownBrushAnchors.remove(player.uniqueId)
+        }
+    }
+
+    private fun showCrownStatus(player: Player) {
+        val settings = crownSettings(player)
+        val values = mapOf(
+            "shape" to messages.literal(settings.shape.name.lowercase(Locale.ROOT)),
+            "radius" to messages.literal(settings.radius),
+            "density" to messages.literal(settings.density.name.lowercase(Locale.ROOT)),
+            "noise" to messages.literal(settings.noise.name.lowercase(Locale.ROOT)),
+        )
+        messages.renderLines("crown.status", locale(player), values).forEach(player::sendMessage)
+        settings.palette.forEach { entry ->
+            send(
+                player,
+                "crown.palette-row",
+                mapOf("material" to messages.literal(entry.materialName), "weight" to messages.literal(entry.weight)),
+            )
+        }
+        showStatus(player)
     }
 
     private fun ensureAvailable(player: Player) {
         if (!hasUsePermission(player)) throw UserFailure("errors.no-permission")
         if (recovering || recoveryBlocked || player.uniqueId in recoveryByPlayer) throw UserFailure("errors.recovering")
         if (player.gameMode != GameMode.SURVIVAL) throw UserFailure("errors.survival-only")
-        if (player.world.name.lowercase(Locale.ROOT) !in config.allowedWorlds) throw UserFailure("errors.world-not-allowed")
+        if (!config.allowsWorld(player.world.name)) throw UserFailure("errors.world-not-allowed")
     }
 
-    private fun ensureFeaturePermission(player: Player, modern: String, legacy: String) {
-        if (!player.hasPermission(modern) && !player.hasPermission(legacy) && !player.hasPermission("arc.buildertools.use")) {
+    private fun ensureFeaturePermission(player: Player, feature: BuilderFeature) {
+        if (!BuilderPermissionPolicy.canUse(feature, player::hasPermission)) {
             throw UserFailure("errors.no-permission")
         }
     }
 
     private fun hasUsePermission(player: Player): Boolean =
-        player.hasPermission("arc.buildertools.use") || player.hasPermission("arc.deconstruction") || player.hasPermission("arc.crown")
+        BuilderPermissionPolicy.canUseAny(player::hasPermission)
 
     private fun giveWand(player: Player) {
-        if (player.inventory.firstEmpty() == -1) throw UserFailure("wand.inventory-full")
+        if (isSelector(player.inventory.itemInMainHand)) {
+            send(player, "wand.received")
+            return
+        }
         val wand = ItemStack(Material.ECHO_SHARD)
         wand.editMeta { meta ->
             meta.displayName(messages.render("wand.name", locale(player)))
             meta.lore(messages.renderLines("wand.lore", locale(player)))
             meta.persistentDataContainer.set(wandKey, PersistentDataType.BYTE, 1)
         }
-        player.inventory.addItem(wand)
+        when (BuilderOwnedToolExchange.replaceOnePlainHeld(player, Material.ECHO_SHARD, wand)) {
+            BuilderOwnedToolExchangeResult.REPLACED -> Unit
+            BuilderOwnedToolExchangeResult.WRONG_ITEM -> throw UserFailure("wand.material-required")
+            BuilderOwnedToolExchangeResult.INVENTORY_FULL -> throw UserFailure("wand.inventory-full")
+        }
         send(player, "wand.received")
     }
 
     private fun giveCrownBrush(player: Player) {
-        if (player.inventory.firstEmpty() == -1) throw UserFailure("crown-brush.inventory-full")
+        if (isCrownBrush(player.inventory.itemInMainHand)) {
+            send(player, "crown-brush.received")
+            return
+        }
         val brush = ItemStack(Material.BRUSH)
         brush.editMeta { meta ->
             meta.displayName(messages.render("crown-brush.name", locale(player)))
             meta.lore(messages.renderLines("crown-brush.lore", locale(player)))
             meta.persistentDataContainer.set(crownBrushKey, PersistentDataType.BYTE, 1)
         }
-        player.inventory.addItem(brush)
+        when (BuilderOwnedToolExchange.replaceOnePlainHeld(player, Material.BRUSH, brush)) {
+            BuilderOwnedToolExchangeResult.REPLACED -> Unit
+            BuilderOwnedToolExchangeResult.WRONG_ITEM -> throw UserFailure("crown-brush.material-required")
+            BuilderOwnedToolExchangeResult.INVENTORY_FULL -> throw UserFailure("crown-brush.inventory-full")
+        }
         send(player, "crown-brush.received")
     }
 
@@ -315,12 +402,11 @@ internal class BuilderToolsRuntime(
     }
 
     private fun maxAxis(player: Player): Int {
-        val permissionLimit = listOf(100, 80, 60, 40, 20).firstOrNull { player.hasPermission("arc.deconstruction.size.$it") } ?: 20
-        return minOf(permissionLimit, config.absoluteMaxAxis)
+        return BuilderPermissionPolicy.maximumAxis(player::hasPermission, config.absoluteMaxAxis)
     }
 
     private fun planFill(player: Player, material: Material): BuilderPlan {
-        ensureFeaturePermission(player, "arc.buildertools.fill", "arc.deconstruction")
+        ensureFeaturePermission(player, BuilderFeature.FILL)
         val data = placementData(material)
         val selection = requiredSelection(player)
         val world = requireWorld(selection.worldId)
@@ -337,7 +423,7 @@ internal class BuilderToolsRuntime(
     }
 
     private fun copySelection(player: Player) {
-        ensureFeaturePermission(player, "arc.buildertools.copy", "arc.deconstruction")
+        ensureFeaturePermission(player, BuilderFeature.COPY)
         val selection = requiredSelection(player)
         val world = requireWorld(selection.worldId)
         val blocks = mutableListOf<BuilderClipboardBlock>()
@@ -361,7 +447,7 @@ internal class BuilderToolsRuntime(
     }
 
     private fun planPaste(player: Player): BuilderPlan {
-        ensureFeaturePermission(player, "arc.buildertools.paste", "arc.deconstruction")
+        ensureFeaturePermission(player, BuilderFeature.PASTE)
         val clipboard = clipboards[player.uniqueId]?.takeIf { it.expiresAtMillis > System.currentTimeMillis() }
             ?: throw UserFailure("errors.expired")
         val anchor = selections[player.uniqueId]?.first ?: throw UserFailure("errors.selection-missing")
@@ -383,7 +469,7 @@ internal class BuilderToolsRuntime(
     }
 
     private fun planDeconstruct(player: Player): BuilderPlan {
-        ensureFeaturePermission(player, "arc.buildertools.deconstruct", "arc.deconstruction")
+        ensureFeaturePermission(player, BuilderFeature.DECONSTRUCT)
         val selection = requiredSelection(player)
         val world = requireWorld(selection.worldId)
         val tool = player.inventory.itemInMainHand.clone()
@@ -415,23 +501,40 @@ internal class BuilderToolsRuntime(
         )
     }
 
-    private fun planCrown(player: Player, material: Material, radius: Int): BuilderPlan {
-        if (!safety.isLeaf(material) || radius !in 3..10) throw UserFailure("errors.material")
+    private fun prepareCrownPlan(player: Player, rawSettings: BuilderCrownSettings, reroll: Boolean = false) {
+        val settings = try {
+            rawSettings.validated()
+        } catch (_: IllegalArgumentException) {
+            throw UserFailure("errors.crown-setting")
+        }
+        val center = selections[player.uniqueId]?.first ?: throw UserFailure("errors.selection-missing")
+        val seed = crownSessions.seed(player.uniqueId, center, settings, reroll)
+        preparePlan(player, planCrown(player, settings, seed))
+    }
+
+    private fun planCrown(player: Player, settings: BuilderCrownSettings, seed: Long): BuilderPlan {
         val center = selections[player.uniqueId]?.first ?: throw UserFailure("errors.selection-missing")
         val world = requireWorld(center.worldId)
-        val data = placementData(material)
-        val seed = player.uniqueId.mostSignificantBits xor player.uniqueId.leastSignificantBits xor center.x.toLong().shl(32) xor center.z.toLong()
-        val changes = BuilderCrownGeometry.offsets(radius, seed).mapNotNull { (dx, dy, dz) ->
+        val materialByName = settings.palette.associate { entry ->
+            val material = Material.matchMaterial(entry.materialName) ?: throw UserFailure("errors.material")
+            if (!safety.isLeaf(material)) throw UserFailure("errors.material")
+            entry.materialName to material
+        }
+        val dataByMaterial = materialByName.values.associateWith(::placementData)
+        val costs = mutableListOf<ItemStack>()
+        val changes = BuilderCrownGeometry.offsets(settings, seed).mapNotNull { (dx, dy, dz) ->
             val position = BuilderBlockPos(center.worldId, center.x + dx, center.y + dy, center.z + dz).validated()
             val block = block(world, position)
+            val material = materialByName.getValue(settings.materialAt(dx, dy, dz, seed))
+            val data = dataByMaterial.getValue(material)
             if (block.blockData.asString == data.asString) return@mapNotNull null
             if (!safety.isReplaceable(block)) return@mapNotNull null
             ensureMutable(player, block)
+            costs += ItemStack(material)
             BuilderBlockChange(position, block.blockData.asString, data.asString)
         }.take(config.maxChanges + 1).toList()
         requireChanges(changes)
-        val costs = BuilderItemCodec.aggregate(listOf(ItemStack(material, changes.size)))
-        return newPlan(player, BuilderPlanKind.CROWN, changes, costs, emptyList())
+        return newPlan(player, BuilderPlanKind.CROWN, changes, BuilderItemCodec.aggregate(costs), emptyList())
     }
 
     private fun placementData(material: Material) = material.createBlockData().also { data ->
@@ -479,6 +582,7 @@ internal class BuilderToolsRuntime(
         if (!BuilderInventory.canApply(player, plan.costs, plan.rewards, plan.toolFingerprintBase64, plan.toolDamage)) {
             throw UserFailure("errors.inventory")
         }
+        crownBrushAnchors.remove(player.uniqueId)
         pendingPlans[player.uniqueId] = plan
         showPlanParticles(player, plan)
         send(
@@ -494,7 +598,10 @@ internal class BuilderToolsRuntime(
         )
         val planId = plan.id
         taskScope.runLater(config.planTtl.toTicks()) {
-            if (pendingPlans[player.uniqueId]?.id == planId) pendingPlans.remove(player.uniqueId)
+            if (pendingPlans[player.uniqueId]?.id == planId) {
+                pendingPlans.remove(player.uniqueId)
+                crownBrushAnchors.remove(player.uniqueId)
+            }
         }
     }
 
@@ -502,6 +609,7 @@ internal class BuilderToolsRuntime(
         ensureAvailable(player)
         if (player.uniqueId in activeOperations) throw UserFailure("errors.busy")
         val plan = pendingPlans.remove(player.uniqueId) ?: throw UserFailure("errors.expired")
+        crownBrushAnchors.remove(player.uniqueId)
         if (plan.expiresAtMillis <= System.currentTimeMillis()) throw UserFailure("errors.expired")
         revalidatePlan(player, plan)
         if (!BuilderInventory.canApply(player, plan.costs, plan.rewards, plan.toolFingerprintBase64, plan.toolDamage)) {
@@ -720,7 +828,12 @@ internal class BuilderToolsRuntime(
             else send(player, "plan.cancelled")
             return
         }
-        if (pendingPlans.remove(player.uniqueId) != null) send(player, "plan.cancelled") else throw UserFailure("errors.expired")
+        if (pendingPlans.remove(player.uniqueId) != null) {
+            crownBrushAnchors.remove(player.uniqueId)
+            send(player, "plan.cancelled")
+        } else {
+            throw UserFailure("errors.expired")
+        }
     }
 
     private fun prepareUndo(player: Player) {
@@ -801,12 +914,7 @@ internal class BuilderToolsRuntime(
         .sumOf { it.plan.changes.size }
 
     private fun hourlyLimit(player: Player): Int =
-        listOf(200_000, 150_000, 100_000, 50_000, 20_000)
-            .firstOrNull {
-                player.hasPermission("arc.deconstruction.hourly.$it") || player.hasPermission("arc.deconstruction.limit.$it")
-            }
-            ?.coerceAtMost(200_000)
-            ?: config.baseHourlyChanges
+        BuilderPermissionPolicy.hourlyChanges(player::hasPermission, config.baseHourlyChanges)
 
     private fun itemsSummary(items: List<BuilderItemAmount>): String = if (items.isEmpty()) {
         "—"
@@ -990,13 +1098,19 @@ internal class BuilderToolsRuntime(
             event.isCancelled = true
             try {
                 ensureAvailable(player)
-                ensureFeaturePermission(player, "arc.buildertools.crown", "arc.crown")
+                ensureFeaturePermission(player, BuilderFeature.CROWN)
                 when (event.action) {
                     org.bukkit.event.block.Action.LEFT_CLICK_BLOCK -> {
                         setPosition(player, clicked.getRelative(event.blockFace).location, first = true)
-                        preparePlan(player, planCrown(player, Material.OAK_LEAVES, 5))
+                        prepareCrownPlan(player, crownSettings(player))
+                        crownBrushAnchors[player.uniqueId] = checkNotNull(selections[player.uniqueId]?.first)
                     }
-                    org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK -> confirm(player)
+                    org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK -> {
+                        val relative = clicked.getRelative(event.blockFace)
+                        val actual = BuilderBlockPos(relative.world.uid, relative.x, relative.y, relative.z)
+                        if (actual != crownBrushAnchors[player.uniqueId]) throw UserFailure("crown.same-face")
+                        confirm(player)
+                    }
                     else -> Unit
                 }
             } catch (failure: UserFailure) {
@@ -1039,6 +1153,10 @@ internal class BuilderToolsRuntime(
     @EventHandler(priority = EventPriority.MONITOR)
     fun onQuit(event: PlayerQuitEvent) {
         pendingPlans.remove(event.player.uniqueId)
+        crownBrushAnchors.remove(event.player.uniqueId)
+        selections.remove(event.player.uniqueId)
+        clipboards.remove(event.player.uniqueId)
+        crownSessions.clear(event.player.uniqueId)
         val operation = activeOperations[event.player.uniqueId] ?: return
         if (operation.uncertainCommit) return
         operation.cancelled = true
@@ -1079,7 +1197,7 @@ internal class BuilderToolsRuntime(
     fun onCommandDuringOperation(event: PlayerCommandPreprocessEvent) {
         if (event.player.uniqueId !in activeOperations) return
         val normalized = event.message.trim().lowercase(Locale.ROOT).split(Regex("\\s+"))
-        val safeControl = normalized.firstOrNull() in setOf("/builder", "/buildtools", "/deconstruction") &&
+        val safeControl = normalized.firstOrNull() in setOf("/builder", "/buildtools") &&
             normalized.getOrNull(1) in setOf("status", "cancel", "stop")
         if (!safeControl) event.isCancelled = true
     }
@@ -1176,7 +1294,9 @@ internal class BuilderToolsRuntime(
         }
         storageExecutor.shutdownNow()
         pendingPlans.clear()
+        crownBrushAnchors.clear()
         selections.clear()
         clipboards.clear()
+        crownSessions.clear()
     }
 }

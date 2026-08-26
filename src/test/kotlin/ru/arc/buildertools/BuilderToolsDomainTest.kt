@@ -7,6 +7,7 @@ import io.kotest.matchers.shouldNotBe
 import org.bukkit.Material
 import org.bukkit.block.data.Waterlogged
 import org.bukkit.block.data.type.Slab
+import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.Plugin
 import org.mockito.kotlin.mock
 import ru.arc.config.Config
@@ -26,10 +27,88 @@ class BuilderToolsDomainTest : FunSpec({
 
         val override = Config(temporaryDirectory, "modules/builder-tools-runtime.yml")
         override.setBoolean("enabled", true)
-        override.setStringList("allowed-worlds", listOf("world"))
+        override.setStringList("allowed-worlds", listOf("*"))
         val configured = BuilderToolsConfig(base, override).validated()
         configured.enabled shouldBe true
-        configured.allowedWorlds shouldBe setOf("world")
+        configured.allowedWorlds shouldBe setOf("*")
+        configured.allowsWorld("world") shouldBe true
+        configured.allowsWorld("world_nether") shouldBe true
+        configured.allowsWorld("resource-end") shouldBe true
+
+        override.setStringList("allowed-worlds", listOf("*", "world"))
+        shouldThrow<IllegalArgumentException> { BuilderToolsConfig(base, override).validated() }
+    }
+
+    test("plugin descriptor exposes only the unified builder command root") {
+        val pluginDescriptor = checkNotNull(javaClass.classLoader.getResourceAsStream("plugin.yml"))
+            .bufferedReader()
+            .use { it.readText() }
+
+        pluginDescriptor.contains("\n  builder:\n") shouldBe true
+        pluginDescriptor.contains("\n  deconstruction:\n") shouldBe false
+        pluginDescriptor.contains("\n  crown:\n") shouldBe false
+    }
+
+    test("permission policy accepts feature grants and both migration namespaces") {
+        fun permissions(vararg nodes: String): (String) -> Boolean = nodes.toSet()::contains
+
+        BuilderPermissionPolicy.canUse(BuilderFeature.FILL, permissions("arc.buildertools.fill")) shouldBe true
+        BuilderPermissionPolicy.canUse(BuilderFeature.COPY, permissions("arc.builder.tools.copy")) shouldBe true
+        BuilderPermissionPolicy.canUse(BuilderFeature.PASTE, permissions("arc.deconstruction")) shouldBe true
+        BuilderPermissionPolicy.canUse(BuilderFeature.CROWN, permissions("arc.crown")) shouldBe true
+        BuilderPermissionPolicy.canUse(BuilderFeature.CROWN, permissions("arc.deconstruction")) shouldBe false
+        BuilderPermissionPolicy.canUseAny(permissions("arc.builder.tools.deconstruct")) shouldBe true
+        BuilderPermissionPolicy.canUseAny(permissions()) shouldBe false
+    }
+
+    test("permission policy preserves old selection and hourly tiers under absolute bounds") {
+        fun permissions(vararg nodes: String): (String) -> Boolean = nodes.toSet()::contains
+
+        BuilderPermissionPolicy.maximumAxis(permissions("arc.deconstruction.size.100"), 48) shouldBe 48
+        BuilderPermissionPolicy.maximumAxis(permissions("arc.builder.tools.selection.size.40"), 48) shouldBe 40
+        BuilderPermissionPolicy.maximumAxis(permissions(), 48) shouldBe 20
+        BuilderPermissionPolicy.hourlyChanges(permissions("arc.deconstruction.hourly.150000"), 20_000) shouldBe 150_000
+        BuilderPermissionPolicy.hourlyChanges(permissions("arc.builder.tools.hourly.50000"), 20_000) shouldBe 50_000
+        BuilderPermissionPolicy.hourlyChanges(permissions(), 20_000) shouldBe 20_000
+    }
+
+    test("builder tool exchange transforms one owned item without minting its base material") {
+        MockBukkitTestRuntime.open().use { paper ->
+            val player = paper.server.addPlayer("ToolOwner")
+            player.inventory.setItemInMainHand(ItemStack(Material.ECHO_SHARD, 3))
+            val replacement = ItemStack(Material.ECHO_SHARD).also { item ->
+                item.editMeta { meta -> meta.setCustomModelData(1) }
+            }
+
+            BuilderOwnedToolExchange.replaceOnePlainHeld(player, Material.ECHO_SHARD, replacement) shouldBe
+                BuilderOwnedToolExchangeResult.REPLACED
+            player.inventory.contents.filterNotNull().sumOf { item ->
+                if (item.type == Material.ECHO_SHARD) item.amount else 0
+            } shouldBe 3
+            player.inventory.contents.filterNotNull().count(replacement::isSimilar) shouldBe 1
+        }
+    }
+
+    test("builder tool exchange rejects custom inputs and a full split inventory without mutation") {
+        MockBukkitTestRuntime.open().use { paper ->
+            val player = paper.server.addPlayer("ToolGuard")
+            val customInput = ItemStack(Material.ECHO_SHARD).also { item ->
+                item.editMeta { meta -> meta.setCustomModelData(9) }
+            }
+            player.inventory.setItemInMainHand(customInput)
+            val replacement = ItemStack(Material.ECHO_SHARD).also { item ->
+                item.editMeta { meta -> meta.setCustomModelData(1) }
+            }
+            BuilderOwnedToolExchange.replaceOnePlainHeld(player, Material.ECHO_SHARD, replacement) shouldBe
+                BuilderOwnedToolExchangeResult.WRONG_ITEM
+            player.inventory.itemInMainHand shouldBe customInput
+
+            player.inventory.contents.indices.forEach { index -> player.inventory.setItem(index, ItemStack(Material.STONE)) }
+            player.inventory.setItemInMainHand(ItemStack(Material.ECHO_SHARD, 2))
+            BuilderOwnedToolExchange.replaceOnePlainHeld(player, Material.ECHO_SHARD, replacement) shouldBe
+                BuilderOwnedToolExchangeResult.INVENTORY_FULL
+            player.inventory.itemInMainHand.amount shouldBe 2
+        }
     }
 
     test("block safety admits ordinary structure blocks and rejects technical or unstable blocks") {
@@ -86,6 +165,63 @@ class BuilderToolsDomainTest : FunSpec({
         first.isNotEmpty() shouldBe true
         first.all { (x, y, z) -> x in -5..5 && y in -5..5 && z in -5..5 } shouldBe true
         first.size shouldBe first.toSet().size
+    }
+
+    test("crown palette parser preserves exact bounded weights") {
+        BuilderCrownPaletteParser.parse("oak_leaves90%,birch_leaves10%") shouldBe listOf(
+            BuilderCrownPaletteEntry("oak_leaves", 90),
+            BuilderCrownPaletteEntry("birch_leaves", 10),
+        )
+        BuilderCrownPaletteParser.parse("oak_leaves,birch_leaves") shouldBe listOf(
+            BuilderCrownPaletteEntry("oak_leaves", 1),
+            BuilderCrownPaletteEntry("birch_leaves", 1),
+        )
+        shouldThrow<IllegalArgumentException> { BuilderCrownPaletteParser.parse("oak_leaves80%,birch_leaves10%") }
+        shouldThrow<IllegalArgumentException> { BuilderCrownPaletteParser.parse("oak_leaves,oak_leaves") }
+        shouldThrow<IllegalArgumentException> { BuilderCrownPaletteParser.parse("oak_leaves50%,birch_leaves") }
+    }
+
+    test("crown palette assignment is deterministic and approximately weighted") {
+        val settings = BuilderCrownSettings(
+            palette = listOf(
+                BuilderCrownPaletteEntry("oak_leaves", 80),
+                BuilderCrownPaletteEntry("birch_leaves", 20),
+            ),
+        ).validated()
+        val first = (0 until 2_000).map { index -> settings.materialAt(index, index % 17, index % 31, 99L) }
+        val repeated = (0 until 2_000).map { index -> settings.materialAt(index, index % 17, index % 31, 99L) }
+        first shouldBe repeated
+        (first.count { it == "oak_leaves" } in 1_500..1_700) shouldBe true
+    }
+
+    test("crown settings produce distinct bounded shapes and monotonic density") {
+        val wide = BuilderCrownGeometry.offsets(BuilderCrownSettings(shape = BuilderCrownShape.WIDE), 73L)
+        val tall = BuilderCrownGeometry.offsets(BuilderCrownSettings(shape = BuilderCrownShape.TALL), 73L)
+        val wideX = wide.maxOf { kotlin.math.abs(it.first) }
+        val wideY = wide.maxOf { kotlin.math.abs(it.second) }
+        val tallX = tall.maxOf { kotlin.math.abs(it.first) }
+        val tallY = tall.maxOf { kotlin.math.abs(it.second) }
+        (wideX > wideY) shouldBe true
+        (tallY > tallX) shouldBe true
+
+        val airy = BuilderCrownGeometry.offsets(BuilderCrownSettings(density = BuilderCrownDensity.AIRY), 73L)
+        val natural = BuilderCrownGeometry.offsets(BuilderCrownSettings(density = BuilderCrownDensity.NATURAL), 73L)
+        val dense = BuilderCrownGeometry.offsets(BuilderCrownSettings(density = BuilderCrownDensity.DENSE), 73L)
+        (airy.size <= natural.size) shouldBe true
+        (natural.size <= dense.size) shouldBe true
+        dense.all { (x, y, z) -> x in -6..6 && y in -6..6 && z in -6..6 } shouldBe true
+    }
+
+    test("crown sessions keep a stable preview seed and advance only on reroll") {
+        val sessions = BuilderCrownSessions()
+        val center = BuilderBlockPos(worldId, 12, 80, -7)
+        val settings = BuilderCrownSettings(shape = BuilderCrownShape.ROUND)
+        sessions.update(playerId, settings)
+        val first = sessions.seed(playerId, center, settings, reroll = false)
+        sessions.seed(playerId, center, settings, reroll = false) shouldBe first
+        sessions.seed(playerId, center, settings, reroll = true) shouldNotBe first
+        sessions.clear(playerId)
+        sessions.settings(playerId) shouldBe BuilderCrownSettings()
     }
 
     test("journal enforces plan identity phase and undo linkage") {

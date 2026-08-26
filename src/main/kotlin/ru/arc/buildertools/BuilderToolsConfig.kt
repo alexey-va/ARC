@@ -35,10 +35,16 @@ class BuilderToolsConfig(
     val replaceableMaterials: Set<String>
         get() = config.stringList("safety.replaceable-materials").map { it.uppercase(Locale.ROOT) }.toSet()
 
+    fun allowsWorld(worldName: String): Boolean =
+        "*" in allowedWorlds || worldName.lowercase(Locale.ROOT) in allowedWorlds
+
     fun validated(): BuilderToolsConfig = apply {
         if (!enabled) return@apply
-        require(allowedWorlds.isNotEmpty() && allowedWorlds.all(WORLD_NAME::matches)) {
-            "Builder-tools allowed-worlds must contain safe world names"
+        require(allowedWorlds.isNotEmpty() && allowedWorlds.all { it == "*" || WORLD_NAME.matches(it) }) {
+            "Builder-tools allowed-worlds must contain safe world names or a wildcard"
+        }
+        require("*" !in allowedWorlds || allowedWorlds.size == 1) {
+            "Builder-tools world wildcard must be the only allowed-worlds entry"
         }
         require(maxChanges in 1..BuilderPlan.ABSOLUTE_MAX_CHANGES) { "Builder-tools max-changes is invalid" }
         require(maxClipboardBlocks in 1..BuilderPlan.ABSOLUTE_MAX_CHANGES) { "Builder-tools clipboard limit is invalid" }
@@ -83,6 +89,7 @@ class BuilderToolsConfig(
                 "errors.protection",
                 "errors.unsafe-block",
                 "errors.material",
+                "errors.crown-setting",
                 "errors.tool",
                 "errors.recovering",
                 "errors.undo-missing",
@@ -92,9 +99,15 @@ class BuilderToolsConfig(
                 "wand.name",
                 "wand.received",
                 "wand.inventory-full",
+                "wand.material-required",
                 "crown-brush.name",
                 "crown-brush.received",
                 "crown-brush.inventory-full",
+                "crown-brush.material-required",
+                "crown.same-face",
+                "crown.settings-updated",
+                "crown.palette-updated",
+                "crown.palette-row",
                 "clipboard.saved",
                 "plan.ready",
                 "plan.cancelled",
@@ -104,9 +117,8 @@ class BuilderToolsConfig(
                 "status.selection",
                 "status.plan",
                 "status.idle",
-                "legacy.atomic",
             ),
-            listPaths = setOf("help", "wand.lore", "crown-brush.lore"),
+            listPaths = setOf("help", "wand.lore", "crown-brush.lore", "crown.help", "crown.status"),
         )
 
         fun load(): BuilderToolsConfig {

@@ -48,14 +48,12 @@ object BuilderToolsModule : PluginModule, CommandExecutor, TabCompleter {
     ): List<String> = runtime?.onTabComplete(sender, command, alias, args).orEmpty()
 
     private fun bindCommands() {
-        for (name in listOf("builder", "deconstruction", "crown")) {
-            val command = ARC.instance.getCommand(name)
-            if (command == null) {
-                warn("Builder-tools command '{}' is missing from plugin.yml", name)
-            } else {
-                command.setExecutor(this)
-                command.tabCompleter = this
-            }
+        val command = ARC.instance.getCommand("builder")
+        if (command == null) {
+            warn("Builder-tools command 'builder' is missing from plugin.yml")
+        } else {
+            command.setExecutor(this)
+            command.tabCompleter = this
         }
     }
 }

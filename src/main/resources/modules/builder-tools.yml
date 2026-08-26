@@ -40,7 +40,7 @@ locales:
   ru:
     prefix: "<dark_gray>Строитель <gray>• "
     help:
-      - "<prefix><white>/builder wand <gray>— получить селектор (ЛКМ/ПКМ)"
+      - "<prefix><white>/builder wand <gray>— настроить селектор из осколка эха"
       - "<prefix><white>/builder fill [блок] <gray>— заполнить воздух за ваши материалы"
       - "<prefix><white>/builder copy <gray>и <white>/builder paste <gray>— временный чертёж"
       - "<prefix><white>/builder deconstruct <gray>— разобрать область текущим инструментом"
@@ -59,6 +59,7 @@ locales:
       protection: "<prefix><red>Вся область должна быть в вашем привате Lands и разрешена WorldGuard."
       unsafe-block: "<prefix><red>Небезопасный блок <white><material></white> в точке <white><x> <y> <z></white>. Контейнеры, механизмы и кастомные блоки не переносятся."
       material: "<prefix><red>Этот материал нельзя использовать. Для кроны выберите обычную листву."
+      crown-setting: "<prefix><red>Неверный параметр. <aqua>/builder crown help</aqua>."
       tool: "<prefix><red>Возьмите подходящий инструмент с запасом прочности для каждого блока."
       recovering: "<prefix><yellow>Модуль завершает безопасное восстановление. Попробуйте чуть позже."
       undo-missing: "<prefix><yellow>Нет подходящей завершённой операции для отката."
@@ -72,16 +73,38 @@ locales:
         - "<gray>ЛКМ по блоку — точка 1"
         - "<gray>ПКМ по блоку — точка 2"
         - "<dark_gray>Сам по себе ничего не изменяет"
-      received: "<prefix><green>Селектор добавлен в инвентарь."
+      received: "<prefix><green>Осколок эха настроен как селектор."
       inventory-full: "<prefix><yellow>Освободите один слот для селектора."
+      material-required: "<prefix><yellow>Держите осколок эха в основной руке."
     crown-brush:
       name: "<aqua><bold>Кисть крон"
       lore:
         - "<gray>ЛКМ по грани — показать крону"
         - "<gray>ПКМ — подтвердить показанный план"
         - "<dark_gray>Каждый лист расходуется из инвентаря"
-      received: "<prefix><green>Кисть крон добавлена в инвентарь."
+      received: "<prefix><green>Обычная кисть настроена для создания крон."
       inventory-full: "<prefix><yellow>Освободите один слот для кисти крон."
+      material-required: "<prefix><yellow>Держите кисть в основной руке."
+    crown:
+      same-face: "<prefix><yellow>Подтвердите ПКМ по той же грани."
+      settings-updated: "<prefix><green>Настройка <white><setting></white>: <white><value></white>."
+      palette-updated: "<prefix><green>Палитра обновлена: <white><count></white> видов листвы."
+      palette-row: "<dark_gray>    • <gray><material>: <aqua><weight>"
+      help:
+        - "<prefix><white>Кроны строятся только из вашей обычной листвы."
+        - "<dark_gray>  • <aqua>/builder crown wand <gray>— настроить обычную кисть"
+        - "<dark_gray>  • <aqua>/builder crown palette oak_leaves,birch_leaves"
+        - "<dark_gray>  • <aqua>/builder crown shape natural|round|wide|tall"
+        - "<dark_gray>  • <aqua>/builder crown radius 3–10 <gray>— размер кроны"
+        - "<dark_gray>  • <aqua>/builder crown density airy|natural|dense"
+        - "<dark_gray>  • <aqua>/builder crown noise smooth|natural|wild"
+        - "<dark_gray>  • <aqua>/builder crown reroll <gray>— новый вариант"
+        - "<dark_gray>  • <aqua>/builder crown place <gray>— подтвердить"
+      status:
+        - "<prefix><white>Настройки кроны:"
+        - "<dark_gray>  • <gray>Форма: <aqua><shape></aqua>; радиус: <aqua><radius></aqua>"
+        - "<dark_gray>  • <gray>Густота: <aqua><density></aqua>; край: <aqua><noise></aqua>"
+        - "<dark_gray>  • <gray>Палитра:"
     clipboard:
       saved: "<prefix><green>Скопирован безопасный чертёж: <white><count></white> блоков. Он хранится 15 минут."
     plan:
@@ -95,13 +118,10 @@ locales:
       selection: "<prefix><gray>Выбрано <white><x>×<y>×<z></white> (объём <white><volume></white>); готового плана нет."
       plan: "<prefix><yellow>План <white><kind></white>: <white><count>/<total></white> блоков."
       idle: "<prefix><gray>Нет выбора или активного плана. Начните с <white>/builder wand</white>."
-    legacy:
-      atomic: "<prefix><gray>Новая операция атомарна и занимает несколько секунд; пауза больше не требуется."
-
   en:
     prefix: "<dark_gray>Builder <gray>• "
     help:
-      - "<prefix><white>/builder wand <gray>— get the left/right-click selector"
+      - "<prefix><white>/builder wand <gray>— bind an echo shard as the selector"
       - "<prefix><white>/builder fill [block] <gray>— fill space using your materials"
       - "<prefix><white>/builder copy <gray>and <white>/builder paste <gray>— temporary blueprint"
       - "<prefix><white>/builder deconstruct <gray>— dismantle with your current tool"
@@ -120,6 +140,7 @@ locales:
       protection: "<prefix><red>Every changed block must be in your Lands claim and allowed by WorldGuard."
       unsafe-block: "<prefix><red>Unsafe <white><material></white> at <white><x> <y> <z></white>. Containers, mechanisms, and custom blocks are excluded."
       material: "<prefix><red>That material is not supported. Crowns require ordinary leaves."
+      crown-setting: "<prefix><red>Invalid setting. See <aqua>/builder crown help</aqua>."
       tool: "<prefix><red>Hold the preferred tool with enough durability for every selected block."
       recovering: "<prefix><yellow>The module is finishing safe recovery. Try again shortly."
       undo-missing: "<prefix><yellow>There is no completed operation available to undo."
@@ -133,16 +154,38 @@ locales:
         - "<gray>Left-click a block — position 1"
         - "<gray>Right-click a block — position 2"
         - "<dark_gray>The selector never changes blocks"
-      received: "<prefix><green>The selector was added to your inventory."
-      inventory-full: "<prefix><yellow>Free one inventory slot for the selector."
+      received: "<prefix><green>Your echo shard is now the builder selector."
+      inventory-full: "<prefix><yellow>Free one slot for the selector."
+      material-required: "<prefix><yellow>Hold a plain echo shard in your main hand."
     crown-brush:
       name: "<aqua><bold>Crown brush"
       lore:
         - "<gray>Left-click a face to preview a crown"
         - "<gray>Right-click to confirm the shown plan"
         - "<dark_gray>Every leaf is consumed from inventory"
-      received: "<prefix><green>The crown brush was added to your inventory."
-      inventory-full: "<prefix><yellow>Free one inventory slot for the crown brush."
+      received: "<prefix><green>Your plain brush is now the crown brush."
+      inventory-full: "<prefix><yellow>Free one slot for the crown brush."
+      material-required: "<prefix><yellow>Hold a plain brush in your main hand."
+    crown:
+      same-face: "<prefix><yellow>Confirm on the same face with right-click."
+      settings-updated: "<prefix><green><white><setting></white> is now <white><value></white>."
+      palette-updated: "<prefix><green>Palette updated: <white><count></white> leaf types."
+      palette-row: "<dark_gray>    • <gray><material>: <aqua><weight>"
+      help:
+        - "<prefix><white>Crowns use only ordinary leaves from your inventory."
+        - "<dark_gray>  • <aqua>/builder crown wand <gray>— bind a plain brush"
+        - "<dark_gray>  • <aqua>/builder crown palette oak_leaves,birch_leaves"
+        - "<dark_gray>  • <aqua>/builder crown shape natural|round|wide|tall"
+        - "<dark_gray>  • <aqua>/builder crown radius 3–10 <gray>— crown size"
+        - "<dark_gray>  • <aqua>/builder crown density airy|natural|dense"
+        - "<dark_gray>  • <aqua>/builder crown noise smooth|natural|wild"
+        - "<dark_gray>  • <aqua>/builder crown reroll <gray>— new variant"
+        - "<dark_gray>  • <aqua>/builder crown place <gray>— confirm"
+      status:
+        - "<prefix><white>Crown settings:"
+        - "<dark_gray>  • <gray>Shape: <aqua><shape></aqua>; radius: <aqua><radius></aqua>"
+        - "<dark_gray>  • <gray>Density: <aqua><density></aqua>; edge: <aqua><noise></aqua>"
+        - "<dark_gray>  • <gray>Palette:"
     clipboard:
       saved: "<prefix><green>Copied a safe <white><count></white>-block blueprint for 15 minutes."
     plan:
@@ -156,5 +199,3 @@ locales:
       selection: "<prefix><gray>Selected <white><x>×<y>×<z></white> (volume <white><volume></white>); no plan is ready."
       plan: "<prefix><yellow><white><kind></white> plan: <white><count>/<total></white> blocks."
       idle: "<prefix><gray>No selection or active plan. Start with <white>/builder wand</white>."
-    legacy:
-      atomic: "<prefix><gray>The operation is atomic and completes in seconds, so pausing is not needed."

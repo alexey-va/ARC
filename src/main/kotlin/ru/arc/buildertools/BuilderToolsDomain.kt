@@ -3,6 +3,8 @@ package ru.arc.buildertools
 import ru.arc.paper.playerstate.PaperPlayerStateEnvelope
 import java.util.UUID
 import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 
@@ -289,28 +291,133 @@ data class BuilderClipboard(
     }
 }
 
+enum class BuilderCrownShape { NATURAL, ROUND, WIDE, TALL }
+
+enum class BuilderCrownDensity { AIRY, NATURAL, DENSE }
+
+enum class BuilderCrownNoise { SMOOTH, NATURAL, WILD }
+
+data class BuilderCrownPaletteEntry(
+    val materialName: String,
+    val weight: Int,
+) {
+    fun validated(): BuilderCrownPaletteEntry = apply {
+        require(materialName.matches(Regex("[a-z0-9_]{1,64}"))) { "Crown palette material is invalid" }
+        require(weight in 1..10_000) { "Crown palette weight is invalid" }
+    }
+}
+
+data class BuilderCrownSettings(
+    val radius: Int = 5,
+    val shape: BuilderCrownShape = BuilderCrownShape.NATURAL,
+    val density: BuilderCrownDensity = BuilderCrownDensity.NATURAL,
+    val noise: BuilderCrownNoise = BuilderCrownNoise.NATURAL,
+    val palette: List<BuilderCrownPaletteEntry> = listOf(BuilderCrownPaletteEntry("oak_leaves", 1)),
+) {
+    fun validated(): BuilderCrownSettings = apply {
+        require(radius in 3..10) { "Crown radius must be between 3 and 10" }
+        require(palette.size in 1..8) { "Crown palette must contain between 1 and 8 materials" }
+        palette.forEach(BuilderCrownPaletteEntry::validated)
+        require(palette.map { it.materialName }.toSet().size == palette.size) { "Crown palette contains duplicates" }
+        require(palette.sumOf { it.weight } in 1..10_000) { "Crown palette total weight is invalid" }
+    }
+
+    fun materialAt(x: Int, y: Int, z: Int, seed: Long): String {
+        val total = palette.sumOf { it.weight }
+        require(total in 1..10_000) { "Crown palette must be validated before material selection" }
+        var slot = (BuilderCrownGeometry.unitNoise(x, y, z, seed xor PALETTE_SALT) * total)
+            .toInt()
+            .coerceIn(0, total - 1)
+        palette.forEach { entry ->
+            if (slot < entry.weight) return entry.materialName
+            slot -= entry.weight
+        }
+        error("Validated crown palette did not resolve a material")
+    }
+
+    private companion object {
+        const val PALETTE_SALT = 0x4c65616650414cL
+    }
+}
+
+object BuilderCrownPaletteParser {
+    /** Parses `oak_leaves90%,birch_leaves10%` or an equally weighted name list. */
+    fun parse(raw: String): List<BuilderCrownPaletteEntry> {
+        require(raw.length in 1..256) { "Crown palette text is outside its size bound" }
+        val tokens = raw.split(',').map(String::trim)
+        require(tokens.size in 1..8 && tokens.none(String::isBlank)) { "Crown palette entry count is invalid" }
+        val weighted = tokens.any { it.endsWith('%') }
+        require(!weighted || tokens.all { it.endsWith('%') }) { "Crown palette cannot mix weighted and equal entries" }
+        val entries = if (!weighted) {
+            tokens.map { token -> BuilderCrownPaletteEntry(token.lowercase(), 1).validated() }
+        } else {
+            tokens.map { token ->
+                val body = token.dropLast(1)
+                val digitStart = body.indexOfLast { !it.isDigit() } + 1
+                require(digitStart in 1 until body.length) { "Crown palette percentage is invalid" }
+                BuilderCrownPaletteEntry(
+                    materialName = body.substring(0, digitStart).lowercase(),
+                    weight = body.substring(digitStart).toInt(),
+                ).validated()
+            }.also { parsed ->
+                require(parsed.sumOf { it.weight } == 100) { "Crown palette percentages must total 100" }
+            }
+        }
+        require(entries.map { it.materialName }.toSet().size == entries.size) { "Crown palette contains duplicates" }
+        return entries
+    }
+}
+
 object BuilderCrownGeometry {
-    /** Deterministic organic ellipsoid. It changes no world state and is stable across restarts. */
-    fun offsets(radius: Int, seed: Long): List<Triple<Int, Int, Int>> {
-        require(radius in 3..12) { "Crown radius must be between 3 and 12" }
-        val verticalRadius = radius * 0.82
+    /** Backwards-compatible default crown geometry. */
+    fun offsets(radius: Int, seed: Long): List<Triple<Int, Int, Int>> =
+        offsets(BuilderCrownSettings(radius = radius), seed)
+
+    /** Deterministic coherent-noise crown. It changes no world state and is stable across restarts. */
+    fun offsets(settings: BuilderCrownSettings, seed: Long): List<Triple<Int, Int, Int>> {
+        val checked = settings.validated()
+        val (radiusX, radiusY, radiusZ) = when (checked.shape) {
+            BuilderCrownShape.NATURAL -> Triple(checked.radius.toDouble(), checked.radius * 0.70, checked.radius * 0.90)
+            BuilderCrownShape.ROUND -> Triple(checked.radius.toDouble(), checked.radius * 0.78, checked.radius.toDouble())
+            BuilderCrownShape.WIDE -> Triple(checked.radius * 1.20, checked.radius * 0.58, checked.radius * 1.20)
+            BuilderCrownShape.TALL -> Triple(checked.radius * 0.78, checked.radius * 1.10, checked.radius * 0.78)
+        }
+        val (roughness, scale) = when (checked.noise) {
+            BuilderCrownNoise.SMOOTH -> 0.10 to 5.5
+            BuilderCrownNoise.NATURAL -> 0.24 to 3.5
+            BuilderCrownNoise.WILD -> 0.38 to 2.4
+        }
+        val holeThreshold = when (checked.density) {
+            BuilderCrownDensity.AIRY -> -0.05
+            BuilderCrownDensity.NATURAL -> -0.45
+            BuilderCrownDensity.DENSE -> -0.80
+        }
+        val boundX = ceil(radiusX).toInt()
+        val boundY = ceil(radiusY).toInt()
+        val boundZ = ceil(radiusZ).toInt()
         val result = ArrayList<Triple<Int, Int, Int>>()
-        for (x in -radius..radius) {
-            for (y in -radius..radius) {
-                for (z in -radius..radius) {
-                    val nx = x / (radius + 0.35)
-                    val ny = (y + radius * 0.08) / verticalRadius
-                    val nz = z / (radius + 0.35)
+        for (x in -boundX..boundX) {
+            for (y in -boundY..boundY) {
+                for (z in -boundZ..boundZ) {
+                    val nx = x / radiusX
+                    val ny = (y + radiusY * 0.08) / radiusY
+                    val nz = z / radiusZ
                     val distance = nx * nx + ny * ny + nz * nz
-                    val jitter = (stableNoise(x, y, z, seed) - 0.5) * 0.22
-                    if (distance <= 1.0 + jitter) result += Triple(x, y, z)
+                    if (distance > 1.5) continue
+                    val edge = 1.0 + coherentNoise(x / scale, y / scale, z / scale, seed) * roughness
+                    if (distance > edge) continue
+                    if (distance > 0.38) {
+                        val hole = coherentNoise(x / 1.7, y / 1.7, z / 1.7, seed xor HOLE_SALT)
+                        if (hole < holeThreshold) continue
+                    }
+                    result += Triple(x, y, z)
                 }
             }
         }
         return result.sortedWith(compareBy<Triple<Int, Int, Int>> { it.second }.thenBy { it.first }.thenBy { it.third })
     }
 
-    private fun stableNoise(x: Int, y: Int, z: Int, seed: Long): Double {
+    internal fun unitNoise(x: Int, y: Int, z: Int, seed: Long): Double {
         var value = seed xor (x.toLong() * -7046029254386353131L)
         value = value xor (y.toLong() * -4658895280553007687L)
         value = value xor (z.toLong() * -7723592293110705685L)
@@ -319,4 +426,25 @@ object BuilderCrownGeometry {
         value = value xor (value ushr 31)
         return (value ushr 11).toDouble() / (1L shl 53).toDouble()
     }
+
+    private fun coherentNoise(x: Double, y: Double, z: Double, seed: Long): Double {
+        val x0 = floor(x).toInt()
+        val y0 = floor(y).toInt()
+        val z0 = floor(z).toInt()
+        val tx = smooth(x - x0)
+        val ty = smooth(y - y0)
+        val tz = smooth(z - z0)
+        fun sample(dx: Int, dy: Int, dz: Int): Double = unitNoise(x0 + dx, y0 + dy, z0 + dz, seed) * 2.0 - 1.0
+        val x00 = lerp(sample(0, 0, 0), sample(1, 0, 0), tx)
+        val x10 = lerp(sample(0, 1, 0), sample(1, 1, 0), tx)
+        val x01 = lerp(sample(0, 0, 1), sample(1, 0, 1), tx)
+        val x11 = lerp(sample(0, 1, 1), sample(1, 1, 1), tx)
+        return lerp(lerp(x00, x10, ty), lerp(x01, x11, ty), tz)
+    }
+
+    private fun smooth(value: Double): Double = value * value * (3.0 - 2.0 * value)
+
+    private fun lerp(first: Double, second: Double, amount: Double): Double = first + (second - first) * amount
+
+    private const val HOLE_SALT = 0x484f4c455f3337L
 }
