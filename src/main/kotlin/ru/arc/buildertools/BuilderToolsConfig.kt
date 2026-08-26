@@ -168,6 +168,7 @@ class BuilderToolsConfig(
                 "kinds.deconstruct",
                 "kinds.crown",
                 "kinds.undo",
+                "kinds.build_book",
             ),
             listPaths = setOf(
                 "help",

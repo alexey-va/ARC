@@ -224,6 +224,7 @@ locales:
       deconstruct: "демонтаж"
       crown: "крона"
       undo: "отмена"
+      build_book: "постройка по книге"
   en:
     prefix: "<#92bed8>◇ "
     help:
@@ -345,3 +346,4 @@ locales:
       deconstruct: "deconstruction"
       crown: "crown"
       undo: "undo"
+      build_book: "build book"
