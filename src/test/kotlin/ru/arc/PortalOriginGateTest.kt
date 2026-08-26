@@ -27,23 +27,35 @@ class PortalOriginGateTest : FreeSpec({
 
     "origin-gate settings" - {
         "normalizes valid ItemsAdder ids and accepts bounded animation values" {
-            val settings = settings(astral = " Origin_Gate_Portals:Astral_Portal ")
+            val settings =
+                settings(
+                    astral = " Origin_Gate_Portals:Astral_Portal ",
+                    openingSoundId = " Minecraft:Block.End_Portal.Spawn ",
+                )
 
             settings.shouldNotBeNull()
             settings.astralItemId shouldBe "origin_gate_portals:astral_portal"
             settings.chaosItemId shouldBe "origin_gate_portals:chaos_portal"
+            settings.openingSoundId shouldBe "minecraft:block.end_portal.spawn"
         }
 
         "fails closed for invalid ids and resource-heavy bounds" {
             settings(astral = "not namespaced").shouldBeNull()
             settings(openingDuration = 0).shouldBeNull()
+            settings(openingDuration = 201).shouldBeNull()
             settings(closingDuration = 61).shouldBeNull()
             settings(width = Float.NaN).shouldBeNull()
-            settings(height = 4.1f).shouldBeNull()
+            settings(height = 12.1f).shouldBeNull()
+            settings(yawOffsetDegrees = Float.NaN).shouldBeNull()
             settings(viewRange = 0f).shouldBeNull()
+            settings(openingSoundId = "not namespaced").shouldBeNull()
+            settings(openingSoundVolume = 4.1f).shouldBeNull()
             settings(suctionStreams = 17).shouldBeNull()
-            settings(reducedSuctionStreams = 9).shouldBeNull()
-            settings(suctionRadius = 5.1).shouldBeNull()
+            settings(reducedSuctionStreams = 11).shouldBeNull()
+            settings(suctionPointsPerStream = 7).shouldBeNull()
+            settings(suctionStreams = 16, suctionPointsPerStream = 6).shouldBeNull()
+            settings(suctionRadius = 12.1).shouldBeNull()
+            settings(suctionTurns = 4.1).shouldBeNull()
         }
 
         "keeps the bundled portable profile disabled" {
@@ -66,9 +78,9 @@ class PortalOriginGateTest : FreeSpec({
                 }
 
             controller.tickOpening(0).shouldBeTrue()
-            controller.tickOpening(18).shouldBeTrue()
-            controller.tickOpening(36).shouldBeTrue()
-            controller.tickOpening(37).shouldBeTrue()
+            controller.tickOpening(33).shouldBeTrue()
+            controller.tickOpening(66).shouldBeTrue()
+            controller.tickOpening(67).shouldBeTrue()
             spawnCount shouldBe 1
             handle.scales.first() shouldBe 0.02f
             (handle.scales[1] > handle.scales.first()).shouldBeTrue()
@@ -107,18 +119,36 @@ class PortalOriginGateTest : FreeSpec({
     }
 
     "origin-gate visual math" - {
-        "faces the creator with a fixed billboard" {
+        "turns the model front toward the creator with a configurable offset" {
             originGateFacingYaw(0.0, 0.0, 0.0, 5.0) shouldBe 0f
             originGateFacingYaw(0.0, 0.0, 5.0, 0.0) shouldBe -90f
             originGateFacingYaw(0.0, 0.0, -5.0, 0.0) shouldBe 90f
+            originGateDisplayYaw(0.0, 0.0, 0.0, 5.0, 180f) shouldBe 180f
+            originGateDisplayYaw(0.0, 0.0, 5.0, 0.0, 180f) shouldBe 90f
         }
 
-        "generates a bounded spiral converging on the portal center" {
-            val offsets = originGateParticleOffsets(tick = 0, streams = 8, radius = 2.25)
+        "generates bounded multi-point ribbons converging on the portal center" {
+            val offsets =
+                originGateParticleOffsets(
+                    tick = 0,
+                    streams = 10,
+                    pointsPerStream = 3,
+                    radius = 6.0,
+                    height = 7.0,
+                    turns = 2.25,
+                )
 
-            offsets.size shouldBe 8
-            offsets.all { sqrt((it.x * it.x) + (it.z * it.z)) <= 2.25 }.shouldBeTrue()
-            offsets.any { sqrt((it.x * it.x) + (it.z * it.z)) < 0.5 }.shouldBeTrue()
+            offsets.size shouldBe 30
+            offsets.all { sqrt((it.x * it.x) + (it.z * it.z)) <= 6.0 }.shouldBeTrue()
+            offsets.all { kotlin.math.abs(it.y) <= 3.5 }.shouldBeTrue()
+            offsets.any { sqrt((it.x * it.x) + (it.z * it.z)) < 0.75 }.shouldBeTrue()
+            offsets.map { it.stream }.distinct().size shouldBe 10
+            offsets.map { it.trailPoint }.distinct().size shouldBe 3
+        }
+
+        "keeps the portal closed until the configured opening finishes" {
+            settings().shouldNotBeNull().entryTick shouldBe 66
+            settings(openingDuration = 96).shouldNotBeNull().entryTick shouldBe 96
         }
     }
 })
@@ -126,14 +156,19 @@ class PortalOriginGateTest : FreeSpec({
 private fun settings(
     astral: String = "origin_gate_portals:astral_portal",
     chaos: String = "origin_gate_portals:chaos_portal",
-    openingDuration: Int = 36,
+    openingDuration: Int = 66,
     closingDuration: Int = 12,
-    width: Float = 2.0f,
-    height: Float = 2.8f,
+    width: Float = 6.0f,
+    height: Float = 8.4f,
+    yawOffsetDegrees: Float = 180f,
     viewRange: Float = 1f,
-    suctionStreams: Int = 8,
-    reducedSuctionStreams: Int = 3,
-    suctionRadius: Double = 2.25,
+    openingSoundId: String = "minecraft:block.end_portal.spawn",
+    openingSoundVolume: Float = 1.35f,
+    suctionStreams: Int = 10,
+    reducedSuctionStreams: Int = 4,
+    suctionPointsPerStream: Int = 3,
+    suctionRadius: Double = 6.0,
+    suctionTurns: Double = 2.25,
 ): PortalOriginGateSettings? =
     PortalOriginGateSettings.validated(
         astralItemId = astral,
@@ -143,13 +178,23 @@ private fun settings(
         closingDurationTicks = closingDuration,
         width = width,
         height = height,
-        verticalOffset = 1.65,
+        verticalOffset = 4.45,
+        yawOffsetDegrees = yawOffsetDegrees,
         viewRange = viewRange,
+        openingSoundEnabled = true,
+        openingSoundId = openingSoundId,
+        openingSoundVolume = openingSoundVolume,
+        openingSoundPitch = 0.9f,
         suctionEnabled = true,
         suctionStreams = suctionStreams,
         reducedSuctionStreams = reducedSuctionStreams,
+        suctionPointsPerStream = suctionPointsPerStream,
+        reducedSuctionPointsPerStream = 1,
         suctionRadius = suctionRadius,
+        suctionHeight = 7.0,
+        suctionTurns = suctionTurns,
         suctionParticleSize = 0.8f,
+        suctionCoreCount = 12,
     )
 
 private class RecordingOriginGateHandle : PortalOriginGateHandle {

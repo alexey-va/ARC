@@ -6,6 +6,7 @@ import org.bukkit.Bukkit
 import org.bukkit.Color
 import org.bukkit.Location
 import org.bukkit.Particle
+import org.bukkit.SoundCategory
 import org.bukkit.block.Block
 import org.bukkit.entity.Display
 import org.bukkit.entity.ItemDisplay
@@ -38,13 +39,26 @@ internal data class PortalOriginGateSettings(
     val width: Float,
     val height: Float,
     val verticalOffset: Double,
+    val yawOffsetDegrees: Float,
     val viewRange: Float,
+    val openingSoundEnabled: Boolean,
+    val openingSoundId: String,
+    val openingSoundVolume: Float,
+    val openingSoundPitch: Float,
     val suctionEnabled: Boolean,
     val suctionStreams: Int,
     val reducedSuctionStreams: Int,
+    val suctionPointsPerStream: Int,
+    val reducedSuctionPointsPerStream: Int,
     val suctionRadius: Double,
+    val suctionHeight: Double,
+    val suctionTurns: Double,
     val suctionParticleSize: Float,
+    val suctionCoreCount: Int,
 ) {
+    val entryTick: Int
+        get() = openingStartTick + openingDurationTicks
+
     companion object {
         private val namespacedId = Regex("[a-z0-9_.-]+:[a-z0-9_./-]+")
 
@@ -56,17 +70,27 @@ internal data class PortalOriginGateSettings(
                 astralItemId = config.string("$path.astral-item", ""),
                 chaosItemId = config.string("$path.chaos-item", ""),
                 openingStartTick = config.integer("$path.opening-start-tick", 0),
-                openingDurationTicks = config.integer("$path.opening-duration-ticks", 36),
+                openingDurationTicks = config.integer("$path.opening-duration-ticks", 66),
                 closingDurationTicks = config.integer("$path.closing-duration-ticks", 12),
-                width = config.real("$path.width", 2.0).toFloat(),
-                height = config.real("$path.height", 2.8).toFloat(),
-                verticalOffset = config.real("$path.vertical-offset", 1.65),
+                width = config.real("$path.width", 6.0).toFloat(),
+                height = config.real("$path.height", 8.4).toFloat(),
+                verticalOffset = config.real("$path.vertical-offset", 4.45),
+                yawOffsetDegrees = config.real("$path.yaw-offset-degrees", 180.0).toFloat(),
                 viewRange = config.real("$path.view-range", 1.0).toFloat(),
+                openingSoundEnabled = config.bool("$path.sound.enabled", true),
+                openingSoundId = config.string("$path.sound.id", "minecraft:block.end_portal.spawn"),
+                openingSoundVolume = config.real("$path.sound.volume", 1.35).toFloat(),
+                openingSoundPitch = config.real("$path.sound.pitch", 0.9).toFloat(),
                 suctionEnabled = config.bool("$path.suction.enabled", true),
-                suctionStreams = config.integer("$path.suction.streams", 8),
-                reducedSuctionStreams = config.integer("$path.suction.reduced-streams", 3),
-                suctionRadius = config.real("$path.suction.radius", 2.25),
+                suctionStreams = config.integer("$path.suction.streams", 10),
+                reducedSuctionStreams = config.integer("$path.suction.reduced-streams", 4),
+                suctionPointsPerStream = config.integer("$path.suction.points-per-stream", 3),
+                reducedSuctionPointsPerStream = config.integer("$path.suction.reduced-points-per-stream", 1),
+                suctionRadius = config.real("$path.suction.radius", 6.0),
+                suctionHeight = config.real("$path.suction.height", 7.0),
+                suctionTurns = config.real("$path.suction.turns", 2.25),
                 suctionParticleSize = config.real("$path.suction.particle-size", 0.8).toFloat(),
+                suctionCoreCount = config.integer("$path.suction.core-count", 12),
             ).also { settings ->
                 if (settings == null) {
                     warn("Portal origin-gate config is invalid; falling back to the legacy portal visual")
@@ -83,27 +107,54 @@ internal data class PortalOriginGateSettings(
             width: Float,
             height: Float,
             verticalOffset: Double,
+            yawOffsetDegrees: Float,
             viewRange: Float,
+            openingSoundEnabled: Boolean,
+            openingSoundId: String,
+            openingSoundVolume: Float,
+            openingSoundPitch: Float,
             suctionEnabled: Boolean,
             suctionStreams: Int,
             reducedSuctionStreams: Int,
+            suctionPointsPerStream: Int,
+            reducedSuctionPointsPerStream: Int,
             suctionRadius: Double,
+            suctionHeight: Double,
+            suctionTurns: Double,
             suctionParticleSize: Float,
+            suctionCoreCount: Int,
         ): PortalOriginGateSettings? {
             val normalizedAstral = astralItemId.trim().lowercase()
             val normalizedChaos = chaosItemId.trim().lowercase()
+            val normalizedSound = openingSoundId.trim().lowercase()
             if (normalizedAstral.length !in 3..128 || !namespacedId.matches(normalizedAstral)) return null
             if (normalizedChaos.length !in 3..128 || !namespacedId.matches(normalizedChaos)) return null
             if (openingStartTick !in 0..58) return null
-            if (openingDurationTicks !in 1..60 || closingDurationTicks !in 1..60) return null
-            if (!width.isFinite() || width !in 0.1f..4.0f) return null
-            if (!height.isFinite() || height !in 0.1f..4.0f) return null
-            if (!verticalOffset.isFinite() || verticalOffset !in 0.5..4.0) return null
+            if (openingDurationTicks !in 1..200 || closingDurationTicks !in 1..60) return null
+            if (!width.isFinite() || width !in 0.1f..12.0f) return null
+            if (!height.isFinite() || height !in 0.1f..12.0f) return null
+            if (!verticalOffset.isFinite() || verticalOffset !in 0.5..12.0) return null
+            if (!yawOffsetDegrees.isFinite() || yawOffsetDegrees !in -360f..360f) return null
             if (!viewRange.isFinite() || viewRange !in 0.1f..4.0f) return null
+            if (
+                openingSoundEnabled &&
+                (normalizedSound.length !in 3..128 || !namespacedId.matches(normalizedSound))
+            ) {
+                return null
+            }
+            if (!openingSoundVolume.isFinite() || openingSoundVolume !in 0.01f..4.0f) return null
+            if (!openingSoundPitch.isFinite() || openingSoundPitch !in 0.5f..2.0f) return null
             if (suctionStreams !in 1..16) return null
             if (reducedSuctionStreams !in 1..suctionStreams) return null
-            if (!suctionRadius.isFinite() || suctionRadius !in 0.25..5.0) return null
+            if (suctionPointsPerStream !in 1..6) return null
+            if (reducedSuctionPointsPerStream !in 1..suctionPointsPerStream) return null
+            if (suctionStreams * suctionPointsPerStream > MAX_SUCTION_PARTICLES_PER_TICK) return null
+            if (reducedSuctionStreams * reducedSuctionPointsPerStream > MAX_SUCTION_PARTICLES_PER_TICK) return null
+            if (!suctionRadius.isFinite() || suctionRadius !in 0.25..12.0) return null
+            if (!suctionHeight.isFinite() || suctionHeight !in 0.25..12.0) return null
+            if (!suctionTurns.isFinite() || suctionTurns !in 0.25..4.0) return null
             if (!suctionParticleSize.isFinite() || suctionParticleSize !in 0.1f..2.0f) return null
+            if (suctionCoreCount !in 0..24) return null
 
             return PortalOriginGateSettings(
                 astralItemId = normalizedAstral,
@@ -114,12 +165,22 @@ internal data class PortalOriginGateSettings(
                 width = width,
                 height = height,
                 verticalOffset = verticalOffset,
+                yawOffsetDegrees = yawOffsetDegrees,
                 viewRange = viewRange,
+                openingSoundEnabled = openingSoundEnabled,
+                openingSoundId = normalizedSound,
+                openingSoundVolume = openingSoundVolume,
+                openingSoundPitch = openingSoundPitch,
                 suctionEnabled = suctionEnabled,
                 suctionStreams = suctionStreams,
                 reducedSuctionStreams = reducedSuctionStreams,
+                suctionPointsPerStream = suctionPointsPerStream,
+                reducedSuctionPointsPerStream = reducedSuctionPointsPerStream,
                 suctionRadius = suctionRadius,
+                suctionHeight = suctionHeight,
+                suctionTurns = suctionTurns,
                 suctionParticleSize = suctionParticleSize,
+                suctionCoreCount = suctionCoreCount,
             )
         }
     }
@@ -219,7 +280,22 @@ internal fun originGateFacingYaw(
     return Math.toDegrees(atan2(-deltaX, deltaZ)).toFloat()
 }
 
+internal fun originGateDisplayYaw(
+    fromX: Double,
+    fromZ: Double,
+    targetX: Double,
+    targetZ: Double,
+    yawOffsetDegrees: Float,
+): Float {
+    var yaw = (originGateFacingYaw(fromX, fromZ, targetX, targetZ) + yawOffsetDegrees) % 360f
+    if (yaw < -180f) yaw += 360f
+    if (yaw > 180f) yaw -= 360f
+    return if (yaw == -180f) 180f else yaw
+}
+
 internal data class OriginGateParticleOffset(
+    val stream: Int,
+    val trailPoint: Int,
     val x: Double,
     val y: Double,
     val z: Double,
@@ -228,19 +304,34 @@ internal data class OriginGateParticleOffset(
 internal fun originGateParticleOffsets(
     tick: Int,
     streams: Int,
+    pointsPerStream: Int,
     radius: Double,
+    height: Double,
+    turns: Double,
 ): List<OriginGateParticleOffset> {
     val advance = Math.floorMod(tick, SUCTION_CYCLE_TICKS) / SUCTION_CYCLE_TICKS.toDouble()
-    return List(streams) { stream ->
-        val travel = (advance + (stream / streams.toDouble())) % 1.0
-        val remaining = 1.0 - travel
-        val currentRadius = radius * remaining.pow(0.85)
-        val angle = (tick * 0.16) + ((2.0 * PI * stream) / streams) + (travel * 2.0 * PI)
-        OriginGateParticleOffset(
-            x = cos(angle) * currentRadius,
-            y = sin((angle * 1.6) + stream) * currentRadius * 0.55,
-            z = sin(angle) * currentRadius,
-        )
+    return buildList(streams * pointsPerStream) {
+        repeat(streams) { stream ->
+            repeat(pointsPerStream) { trailPoint ->
+                val travel =
+                    (advance + (stream / streams.toDouble()) + (trailPoint * SUCTION_TRAIL_SPACING)) % 1.0
+                val remaining = 1.0 - travel
+                val currentRadius = radius * remaining.pow(0.88)
+                val angle =
+                    (tick * 0.18) +
+                        ((2.0 * PI * stream) / streams) +
+                        (travel * turns * 2.0 * PI)
+                add(
+                    OriginGateParticleOffset(
+                        stream = stream,
+                        trailPoint = trailPoint,
+                        x = cos(angle) * currentRadius,
+                        y = sin((angle * 0.72) + (stream * 0.91)) * (height * 0.5) * remaining.pow(0.72),
+                        z = sin(angle) * currentRadius,
+                    ),
+                )
+            }
+        }
     }
 }
 
@@ -260,7 +351,14 @@ internal object BukkitPortalOriginGate {
                 settings.verticalOffset,
                 0.5,
             )
-        location.yaw = originGateFacingYaw(location.x, location.z, viewerLocation.x, viewerLocation.z)
+        location.yaw =
+            originGateDisplayYaw(
+                location.x,
+                location.z,
+                viewerLocation.x,
+                viewerLocation.z,
+                settings.yawOffsetDegrees,
+            )
         location.pitch = 0f
 
         var display: ItemDisplay? = null
@@ -268,6 +366,7 @@ internal object BukkitPortalOriginGate {
             val created = base.world.spawn(location, ItemDisplay::class.java)
             display = created
             configure(created, astral, settings)
+            playOpeningSound(location, settings)
             BukkitPortalOriginGateHandle(created, chaos, settings)
         } catch (failure: Exception) {
             display?.remove()
@@ -285,6 +384,20 @@ internal object BukkitPortalOriginGate {
     private fun missing(namespacedId: String): PortalOriginGateHandle? {
         warn("Portal origin-gate item '{}' is unavailable; falling back to the legacy visual", namespacedId)
         return null
+    }
+
+    private fun playOpeningSound(
+        location: Location,
+        settings: PortalOriginGateSettings,
+    ) {
+        if (!settings.openingSoundEnabled) return
+        location.world.playSound(
+            location,
+            settings.openingSoundId,
+            SoundCategory.BLOCKS,
+            settings.openingSoundVolume,
+            settings.openingSoundPitch,
+        )
     }
 
     private fun configure(
@@ -321,9 +434,23 @@ internal object BukkitPortalOriginGate {
         reducedReceivers: Collection<Player>,
     ) {
         if (!settings.suctionEnabled) return
-        renderSuction(center, tick, settings.suctionStreams, settings, fullReceivers)
+        renderSuction(
+            center,
+            tick,
+            settings.suctionStreams,
+            settings.suctionPointsPerStream,
+            settings,
+            fullReceivers,
+        )
         if (tick % 2 == 0) {
-            renderSuction(center, tick, settings.reducedSuctionStreams, settings, reducedReceivers)
+            renderSuction(
+                center,
+                tick,
+                settings.reducedSuctionStreams,
+                settings.reducedSuctionPointsPerStream,
+                settings,
+                reducedReceivers,
+            )
         }
     }
 
@@ -331,27 +458,67 @@ internal object BukkitPortalOriginGate {
         center: Location,
         tick: Int,
         streams: Int,
+        pointsPerStream: Int,
         settings: PortalOriginGateSettings,
         receivers: Collection<Player>,
     ) {
         if (receivers.isEmpty()) return
-        val dust = Particle.DustTransition(SUCTION_START_COLOR, SUCTION_END_COLOR, settings.suctionParticleSize)
-        for (offset in originGateParticleOffsets(tick, streams, settings.suctionRadius)) {
+        val primaryDust =
+            Particle.DustTransition(SUCTION_START_COLOR, SUCTION_END_COLOR, settings.suctionParticleSize)
+        val secondaryDust =
+            Particle.DustTransition(
+                SUCTION_ACCENT_START_COLOR,
+                SUCTION_ACCENT_END_COLOR,
+                settings.suctionParticleSize * 0.8f,
+            )
+        val offsets =
+            originGateParticleOffsets(
+                tick,
+                streams,
+                pointsPerStream,
+                settings.suctionRadius,
+                settings.suctionHeight,
+                settings.suctionTurns,
+            )
+        for (offset in offsets) {
             ParticleBuilder(Particle.DUST_COLOR_TRANSITION)
                 .count(1)
                 .location(center.clone().add(offset.x, offset.y, offset.z))
                 .receivers(receivers)
-                .data(dust)
+                .data(if ((offset.stream + offset.trailPoint) % 3 == 0) secondaryDust else primaryDust)
                 .spawn()
         }
-        if (tick % 3 == 0) {
+        val fullQuality =
+            streams == settings.suctionStreams &&
+                pointsPerStream == settings.suctionPointsPerStream
+        if (settings.suctionCoreCount > 0 && tick % 3 == 0) {
             ParticleBuilder(Particle.REVERSE_PORTAL)
-                .count(if (streams >= settings.suctionStreams) 4 else 2)
+                .count(
+                    if (fullQuality) {
+                        settings.suctionCoreCount
+                    } else {
+                        (settings.suctionCoreCount / 3).coerceAtLeast(1)
+                    },
+                )
                 .location(center)
                 .receivers(receivers)
-                .offset(0.35, 0.55, 0.35)
-                .extra(0.02)
+                .offset(settings.width * 0.22, settings.height * 0.32, settings.width * 0.22)
+                .extra(0.08)
                 .spawn()
+        }
+        if (fullQuality && tick % 5 == 0) {
+            val innerOffsets = offsets.filter { offset ->
+                (offset.x * offset.x) + (offset.z * offset.z) <= (settings.suctionRadius * 0.18).pow(2)
+            }
+            for (offset in innerOffsets.take(4)) {
+                ParticleBuilder(Particle.END_ROD)
+                    .count(1)
+                    .location(center.clone().add(offset.x, offset.y, offset.z))
+                    .receivers(receivers)
+                    .offset(0.04, 0.04, 0.04)
+                    .extra(0.01)
+                    .spawn()
+            }
         }
     }
 
@@ -393,7 +560,11 @@ internal object BukkitPortalOriginGate {
 
     private val SUCTION_START_COLOR = Color.fromRGB(154, 55, 255)
     private val SUCTION_END_COLOR = Color.fromRGB(35, 205, 255)
+    private val SUCTION_ACCENT_START_COLOR = Color.fromRGB(46, 94, 255)
+    private val SUCTION_ACCENT_END_COLOR = Color.fromRGB(255, 75, 214)
 }
 
 private const val TINY_SCALE_MULTIPLIER = 0.02f
 private const val SUCTION_CYCLE_TICKS = 24
+private const val SUCTION_TRAIL_SPACING = 0.055
+private const val MAX_SUCTION_PARTICLES_PER_TICK = 64

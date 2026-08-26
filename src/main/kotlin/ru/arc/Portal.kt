@@ -168,7 +168,9 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
                     if (!p.hasPotionEffect(BLINDNESS)) p.addPotionEffect(potionEffect)
                 }
             }
-            if (phase.get() == 58) cb.world.playSound(cb.location, org.bukkit.Sound.BLOCK_END_PORTAL_SPAWN, 1f, 1f)
+            if (phase.get() == 58 && originGate?.isActive != true) {
+                cb.world.playSound(cb.location, org.bukkit.Sound.BLOCK_END_PORTAL_SPAWN, 1f, 1f)
+            }
 
             val originGateActive = originGate?.tickOpening(phase.get()) == true
             if (originGateActive) {
@@ -180,7 +182,8 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
                     placeBlocksPackets(nearbyPlayers)
                 }
             }
-            if (phase.get() >= 61) {
+            val entryTick = originGateSettings?.entryTick?.takeIf { originGate?.isActive == true } ?: 61
+            if (phase.get() >= entryTick) {
                 val enteredPlayer = getEnteredPlayer(nearbyPlayers)
                 if (enteredPlayer != null && !success.getAndSet(true)) {
                     originGate?.beginClosing()

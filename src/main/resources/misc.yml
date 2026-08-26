@@ -80,23 +80,35 @@ portal:
   particle-distance: 50.0
   # Экспериментальный ItemDisplay-портал. Требует arc.portal.origin-gate.
   # В переносимом default отключён; серверный override задаёт ItemsAdder ID.
+  # Все параметры ниже применяются после /arc reload, без рестарта Paper.
   origin-gate:
     enabled: false
     astral-item: ""
     chaos-item: ""
     opening-start-tick: 0
-    opening-duration-ticks: 36
+    opening-duration-ticks: 66
     closing-duration-ticks: 12
-    width: 2.0
-    height: 2.8
-    vertical-offset: 1.65
+    width: 6.0
+    height: 8.4
+    vertical-offset: 4.45
+    yaw-offset-degrees: 180.0
     view-range: 1.0
+    sound:
+      enabled: true
+      id: minecraft:block.end_portal.spawn
+      volume: 1.35
+      pitch: 0.9
     suction:
       enabled: true
-      streams: 8
-      reduced-streams: 3
-      radius: 2.25
+      streams: 10
+      reduced-streams: 4
+      points-per-stream: 3
+      reduced-points-per-stream: 1
+      radius: 6.0
+      height: 7.0
+      turns: 2.25
       particle-size: 0.8
+      core-count: 12
   # DUST_COLOR_TRANSITION: цвета и размер рамки
   border:
     color:
