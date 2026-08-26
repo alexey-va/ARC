@@ -93,8 +93,11 @@ target/
 .gradle
 build/
 bin/
-gradle/
+gradle/*
+!gradle/wrapper/
+gradle/wrapper/*
 !gradle/wrapper/gradle-wrapper.properties
+!gradle/wrapper/gradle-wrapper.jar
 .kotlin
 
 /ARC
