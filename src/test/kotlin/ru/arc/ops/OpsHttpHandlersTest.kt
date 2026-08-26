@@ -9,6 +9,16 @@ import org.bukkit.plugin.Plugin
 
 class OpsHttpHandlersTest :
     FreeSpec({
+        "runtime health exposes the bounded agent-readable contract" {
+            val snapshot = OpsHttpHandlers.runtimeHealthSnapshot()
+
+            snapshot.component shouldBe "arc"
+            snapshot.recoveryBacklog shouldBe 0
+            snapshot.activeLeases shouldBe 0
+            snapshot.schemas.containsKey("runtime.module_runtime") shouldBe true
+            snapshot.dependencies.containsKey("runtime.redis") shouldBe true
+        }
+
         "plugin summary reports metadata through the current Paper API" {
             val meta =
                 mockk<PluginMeta> {

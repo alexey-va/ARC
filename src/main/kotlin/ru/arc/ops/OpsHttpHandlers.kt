@@ -7,6 +7,7 @@ import org.bukkit.entity.Player
 import ru.arc.ARC
 import ru.arc.core.ModuleRegistry
 import ru.arc.core.Tasks
+import ru.arc.core.moduleRuntimeHealth
 import ru.arc.core.modules.EconomyModule
 import ru.arc.hooks.HookRegistry
 import ru.arc.util.playSoundSelf
@@ -17,6 +18,16 @@ import ru.arc.xserver.XActionManager
 import ru.arc.xaction.XCondition
 import ru.arc.xserver.XMessage
 import ru.arc.xserver.playerlist.PlayerManager
+import ru.arc.buildertools.BuilderJournalRecord
+import ru.arc.contracts.ContractsConfig
+import ru.arc.metrics.ProductInterestStore
+import ru.arc.mounts.MountPurchaseJournalSnapshot
+import ru.arc.observability.RuntimeHealthContribution
+import ru.arc.observability.RuntimeHealthProvider
+import ru.arc.observability.RuntimeHealthRegistry
+import ru.arc.observability.StructuredRuntimeHealthLine
+import ru.arc.onboarding.OnboardingStore
+import ru.arc.rtp.RtpPlayerStore
 import org.bukkit.boss.BarColor
 import org.bukkit.plugin.Plugin
 import java.io.File
@@ -58,12 +69,29 @@ object OpsBukkitSync {
 
 object OpsHttpHandlers {
     fun health(): Map<String, Any?> =
-        mapOf(
-            "service" to "arc-ops",
-            "serverName" to (ARC.serverName ?: "unknown"),
-            "online" to Bukkit.getOnlinePlayers().size,
-            "maxPlayers" to Bukkit.getMaxPlayers(),
-        )
+        linkedMapOf<String, Any?>().apply {
+            putAll(runtimeHealthSnapshot().asMap())
+            put("service", "arc-ops")
+            put("serverName", ARC.serverName ?: "unknown")
+            put("online", Bukkit.getOnlinePlayers().size)
+            put("maxPlayers", Bukkit.getMaxPlayers())
+            put("modules", runtimeModuleDetails())
+        }
+
+    private fun runtimeModuleDetails(): List<Map<String, Any?>> =
+        ModuleRegistry.getRuntimeStatuses().map { status ->
+            linkedMapOf(
+                "name" to status.name,
+                "ready" to status.ready,
+                "failures" to status.failures,
+                "initDurationMs" to status.initDurationMs,
+                "reloadDurationMs" to status.reloadDurationMs,
+            )
+        }
+
+    fun runtimeHealthLine(): String = ArcRuntimeHealth.line()
+
+    internal fun runtimeHealthSnapshot() = ArcRuntimeHealth.snapshot()
 
     fun serverInfo(): Map<String, Any?> =
         OpsBukkitSync.call {
@@ -648,5 +676,35 @@ object OpsHttpHandlers {
             }
         }
         return base
+    }
+}
+
+private object ArcRuntimeHealth : RuntimeHealthProvider {
+    private val renderer = StructuredRuntimeHealthLine()
+    private val registry =
+        RuntimeHealthRegistry("arc").apply {
+            register("runtime", ::runtimeContribution)
+            markReady()
+        }
+
+    override fun snapshot() = registry.snapshot()
+
+    fun line(): String = renderer.line(snapshot())
+
+    private fun runtimeContribution(): RuntimeHealthContribution {
+        val modules = moduleRuntimeHealth(ModuleRegistry.getRuntimeStatuses())
+        return modules.copy(
+            schemas =
+                modules.schemas +
+                    mapOf(
+                        "onboarding" to OnboardingStore.CURRENT_VERSION,
+                        "rtp_players" to RtpPlayerStore.CURRENT_VERSION,
+                        "product_interest" to ProductInterestStore.VERSION,
+                        "builder_journal" to BuilderJournalRecord.CURRENT_SCHEMA_VERSION,
+                        "mount_purchase" to MountPurchaseJournalSnapshot.CURRENT_SCHEMA,
+                        "season_catalog" to ContractsConfig.SEASON_CATALOG_SCHEMA_VERSION,
+                    ),
+            dependencies = modules.dependencies + ("redis" to (ARC.redisManager?.isConnected() == true)),
+        )
     }
 }
