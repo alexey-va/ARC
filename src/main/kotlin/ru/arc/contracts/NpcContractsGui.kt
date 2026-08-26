@@ -85,7 +85,7 @@ object NpcContractsGui {
                                     "remaining" to view.contract.remainingQuantity.toString(),
                                     "target" to view.contract.targetQuantity.toString(),
                                     "player_remaining" to view.playerRemainingQuantity.toString(),
-                                    "payout" to money(view.contract.payoutMinorPerUnit),
+                                    "payout" to formatContractMoney(view.contract.payoutMinorPerUnit),
                                     "ends_at" to formatTime(view.contract.windowEndsAt),
                                     "action" to action(view, selectable),
                                 ),
@@ -96,7 +96,7 @@ object NpcContractsGui {
                                     "<gray>Осталось по заказу: <white><remaining><gray>/<white><target>",
                                     "<gray>У вас в инвентаре: <white><available>",
                                     "<gray>Ваш лимит: <white><player_remaining>",
-                                    "<gray>Награда: <gold><payout> <gray>за единицу",
+                                    "<gray>Награда: <gold><payout> <white>💰</white> <gray>за единицу",
                                     "<gray>До: <white><ends_at>",
                                     "",
                                     "<action>",
@@ -179,12 +179,12 @@ object NpcContractsGui {
                     material(Material.GOLD_NUGGET)
                     tags(
                         mapOf(
-                            "payout" to money(selection.payoutMinor),
-                            "per_unit" to money(view.contract.payoutMinorPerUnit),
+                            "payout" to formatContractMoney(selection.payoutMinor),
+                            "per_unit" to formatContractMoney(view.contract.payoutMinorPerUnit),
                         ),
                     )
-                    display("<gold><bold>Выплата: <payout>")
-                    lore(listOf("<gray>Ставка: <gold><per_unit> <gray>за единицу."))
+                    display("<gold><bold>Выплата:</bold> <payout> <white>💰</white>")
+                    lore(listOf("<gray>Ставка: <gold><per_unit> <white>💰</white> <gray>за единицу."))
                     fromConfig(contractGuiConfig, "detail.payout")
                 }
                 item(4, 1) {
@@ -240,7 +240,7 @@ object NpcContractsGui {
                     tags(
                         mapOf(
                             "selected" to selection.selected.toString(),
-                            "payout" to money(selection.payoutMinor),
+                            "payout" to formatContractMoney(selection.payoutMinor),
                         ),
                     )
                     display(if (selection.canSubmit) "<green><bold>Подтвердить" else "<red><bold>Сдача недоступна")
@@ -248,7 +248,7 @@ object NpcContractsGui {
                         if (selection.canSubmit) {
                             listOf(
                                 "<gray>Будет принято: <white><selected>",
-                                "<gray>Выплата: <gold><payout>",
+                                "<gray>Выплата: <gold><payout> <white>💰</white>",
                                 "",
                                 "<green>ЛКМ: подтвердить сдачу.",
                             )
@@ -331,8 +331,6 @@ object NpcContractsGui {
     private fun boardString(group: String, path: String, fallback: String): String =
         contractGuiConfig.string("boards.$group.$path", contractGuiConfig.string("defaults.$path", fallback))
 
-    private fun money(minor: Long): String = "${minor / 100}.${(minor % 100).toString().padStart(2, '0')}"
-
     private fun formatTime(timestamp: Long): String = TIME_FORMAT.format(Instant.ofEpochMilli(timestamp))
 
     private val LIST_POSITIONS = listOf(0 to 1, 2 to 1, 4 to 1, 6 to 1, 8 to 1, 1 to 2, 3 to 2, 5 to 2, 7 to 2)
@@ -350,9 +348,9 @@ object ContractPlayerMessages {
                     config,
                     "messages.committed",
                     group,
-                    "<gold><speaker> <dark_gray>» <green>Заказ принят. <gray>Сдано <white><quantity><gray>, выплата <gold><payout>.",
+                    "<gold><speaker> <dark_gray>» <green>Заказ принят. <gray>Сдано <white><quantity><gray>, выплата <gold><payout> <white>💰</white><gray>.",
                     "quantity" to outcome.receipt.quantity,
-                    "payout" to money(outcome.receipt.payoutMinor),
+                    "payout" to formatContractMoney(outcome.receipt.payoutMinor),
                 )
             is ContractSubmissionOutcome.Duplicate ->
                 message(
@@ -445,5 +443,4 @@ object ContractPlayerMessages {
         )
     }
 
-    private fun money(minor: Long): String = "${minor / 100}.${(minor % 100).toString().padStart(2, '0')}"
 }

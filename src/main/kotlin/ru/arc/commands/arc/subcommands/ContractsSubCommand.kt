@@ -17,6 +17,7 @@ import ru.arc.contracts.SeasonMoneyActionRequest
 import ru.arc.contracts.SeasonMoneyRejection
 import ru.arc.contracts.SeasonTrophyContributionOutcome
 import ru.arc.contracts.SeasonTrophyContributionRejection
+import ru.arc.contracts.formatContractMoney
 import ru.arc.core.Tasks
 import ru.arc.hooks.HookRegistry
 import ru.arc.util.TextUtil
@@ -92,7 +93,9 @@ object ContractsSubCommand : SubCommand {
                 ),
             )
             val weeklyBudget = ContractsManager.summary()["serverWeeklyBudgetMinor"] as? Long ?: 0L
-            sender.sendMessage(TextUtil.mm("<dark_gray>Недельный бюджет: <gray>${money(weeklyBudget)}"))
+            sender.sendMessage(
+                TextUtil.mm("<dark_gray>Недельный бюджет: <gray>${formatContractMoney(weeklyBudget)} <white>💰</white>"),
+            )
             return
         }
         views.forEach { view ->
@@ -100,7 +103,7 @@ object ContractsSubCommand : SubCommand {
                 TextUtil.mm(
                     "<yellow>${escape(view.displayName)} <dark_gray>[${status(view.status)}]\n" +
                         "<gray>  ${view.itemKey}: <white>${view.remainingQuantity}/${view.targetQuantity}" +
-                        " <gray>· <green>${money(view.payoutMinorPerUnit)}/шт." +
+                        " <gray>· <green>${formatContractMoney(view.payoutMinorPerUnit)} <white>💰</white><gray>/шт." +
                         " <gray>· до <white>${formatTime(view.windowEndsAt)}",
                 ),
             )
@@ -271,7 +274,7 @@ object ContractsSubCommand : SubCommand {
         TextUtil.mm(
             when (outcome) {
                 is SeasonMoneyActionOutcome.Committed ->
-                    "<green>Операция учтена: <white>${money(outcome.receipt.amountMinor)}"
+                    "<green>Операция учтена: <white>${formatContractMoney(outcome.receipt.amountMinor)} <white>💰</white>"
                 is SeasonMoneyActionOutcome.Duplicate -> "<yellow>Эта операция уже учтена; повторного списания не было."
                 is SeasonMoneyActionOutcome.Rejected -> "<yellow>Операция отклонена: <gray>${seasonRejection(outcome.reason)}"
                 is SeasonMoneyActionOutcome.Cancelled -> "<yellow>Списание не выполнено; баланс не изменился."
@@ -313,7 +316,7 @@ object ContractsSubCommand : SubCommand {
         TextUtil.mm(
             when (outcome) {
                 is ContractSubmissionOutcome.Committed ->
-                    "<green>Контракт принят: <white>${outcome.receipt.quantity} шт. <gray>· выплата <green>${money(outcome.receipt.payoutMinor)}"
+                    "<green>Контракт принят: <white>${outcome.receipt.quantity} шт. <gray>· выплата <green>${formatContractMoney(outcome.receipt.payoutMinor)} <white>💰</white>"
                 is ContractSubmissionOutcome.Duplicate ->
                     "<yellow>Эта заявка уже учтена. <gray>Повторной выплаты не было."
                 is ContractSubmissionOutcome.Rejected ->
@@ -345,8 +348,6 @@ object ContractsSubCommand : SubCommand {
             SubmissionRejection.JOURNAL_CAPACITY_REACHED -> "журнал заявок заполнен; нужна проверка администратора"
             SubmissionRejection.SUBMISSION_IN_PROGRESS -> "предыдущая сдача ещё обрабатывается"
         }
-
-    private fun money(minor: Long): String = "${minor / 100}.${(minor % 100).toString().padStart(2, '0')}"
 
     private fun formatTime(timestamp: Long): String = TIME_FORMAT.format(Instant.ofEpochMilli(timestamp))
 
