@@ -617,51 +617,64 @@ internal class BuilderToolsRuntime(
         val previewOpen = BuildingManager.getPendingConstruction(playerId) != null
         val clipboard = clipboards[playerId]?.takeIf { it.expiresAtMillis > now }
         val selection = selectionOrNull(player)
-        when {
-            quote != null -> send(
+        val stage = BuilderBookJourney.resolve(
+            BuilderBookJourneySnapshot(
+                hasQuote = quote != null,
+                deliveryPending = held?.deliveryPending == true,
+                auctionLocked = heldAuctionToken != null,
+                draft = held?.draft == true,
+                previewOpen = previewOpen,
+                active = held?.available == true,
+                hasClipboard = clipboard != null,
+                hasSelection = selection != null,
+            ),
+        )
+        when (stage) {
+            BuilderBookJourneyStage.QUOTE -> send(
                 player,
-                "book.status.quote",
+                stage.messagePath,
                 mapOf(
-                    "price" to messages.literal(formatMinor(quote.blueprint.issuePriceMinor)),
+                    "price" to messages.literal(formatMinor(checkNotNull(quote).blueprint.issuePriceMinor)),
                     "seconds" to messages.literal(((quote.expiresAtMillis - now) / 1_000L).coerceAtLeast(1L)),
                 ),
             )
-            held?.deliveryPending == true -> send(player, "book.status.delivery")
-            heldAuctionToken != null -> send(player, "book.auction-locked")
-            held?.draft == true && previewOpen -> send(
+            BuilderBookJourneyStage.DELIVERY,
+            BuilderBookJourneyStage.AUCTION_LOCKED,
+            BuilderBookJourneyStage.START,
+            -> send(player, stage.messagePath)
+            BuilderBookJourneyStage.PREVIEW -> send(
                 player,
-                "book.status.preview",
-                mapOf("name" to messages.literal(held.title)),
+                stage.messagePath,
+                mapOf("name" to messages.literal(checkNotNull(held).title)),
             )
-            held?.draft == true -> send(
+            BuilderBookJourneyStage.DRAFT -> send(
                 player,
-                "book.status.draft",
-                mapOf("name" to messages.literal(held.title)),
+                stage.messagePath,
+                mapOf("name" to messages.literal(checkNotNull(held).title)),
             )
-            held?.available == true -> send(
+            BuilderBookJourneyStage.ACTIVE -> send(
                 player,
-                "book.status.active",
+                stage.messagePath,
                 mapOf(
-                    "name" to messages.literal(held.title),
+                    "name" to messages.literal(checkNotNull(held).title),
                     "price" to messages.literal(formatMinor(checkNotNull(held.issuePriceMinor))),
                 ),
             )
-            clipboard != null -> send(
+            BuilderBookJourneyStage.CLIPBOARD -> send(
                 player,
-                "book.status.clipboard",
-                mapOf("count" to messages.literal(clipboard.blocks.size)),
+                stage.messagePath,
+                mapOf("count" to messages.literal(checkNotNull(clipboard).blocks.size)),
             )
-            selection != null -> send(
+            BuilderBookJourneyStage.SELECTION -> send(
                 player,
-                "book.status.selection",
+                stage.messagePath,
                 mapOf(
-                    "x" to messages.literal(selection.sizeX),
+                    "x" to messages.literal(checkNotNull(selection).sizeX),
                     "y" to messages.literal(selection.sizeY),
                     "z" to messages.literal(selection.sizeZ),
                     "volume" to messages.literal(selection.volume),
                 ),
             )
-            else -> send(player, "book.status.start")
         }
     }
 

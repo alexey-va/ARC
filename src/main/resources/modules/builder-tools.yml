@@ -244,7 +244,7 @@ locales:
         - "<#8c8c8c>     <#e6fff3>ЛКМ и ПКМ — два угла. Контур виден постоянно."
         - "<#8c8c8c>  2. <click:run_command:'/builder copy'><#92bed8>/builder copy</#92bed8></click> <#e6fff3>— сохранить чертёж на 15 минут."
         - "<#8c8c8c>  3. <#e6fff3>Возьмите обычную книгу."
-        - "<#8c8c8c>     <click:suggest_command:'/builder book draft '><#92bed8>/builder book draft [имя]</#92bed8></click> <#e6fff3>— создать черновик."
+        - "<#8c8c8c>     <click:suggest_command:'/builder book draft '><#92bed8>/builder book draft [имя]</#92bed8></click> <#e6fff3>— создать бесплатный черновик."
         - "<#8c8c8c>  4. <#e6fff3>ПКМ по земле — превью."
         - "<#8c8c8c>     <#e6fff3>ПКМ в воздух или Shift + ПКМ — меню положения."
         - "<#8c8c8c>     <#969696>Черновик — только предпросмотр; он не строит."
@@ -284,7 +284,7 @@ locales:
           <#8c8c8c>  • <#e6fff3>Выдача продолжится автоматически.
         active: |-
           <prefix><#2bba43>Готово: книга «<#92bed8><name><#2bba43>» активна.
-          <#8c8c8c>  • <#e6fff3>Новый экземпляр: <#92bed8><price>
+          <#8c8c8c>  • <#e6fff3>Себестоимость копии: <#92bed8><price>
           <#8c8c8c>  • <#e6fff3>ПКМ по земле — превью.
           <#8c8c8c>  • <click:run_command:'/builder book copy'><#92bed8>/builder book copy</#92bed8></click> <#e6fff3>— копия.
           <#8c8c8c>  • <click:suggest_command:'/builder book sell '><#92bed8>/builder book sell [цена]</#92bed8></click> <#e6fff3>— продажа.
@@ -589,7 +589,7 @@ locales:
           <dark_gray>  • <gray>Delivery resumes automatically.
         active: |-
           <prefix><green>Ready: <white><name></white> is active.
-          <dark_gray>  • <gray>New instance: <white><price>
+          <dark_gray>  • <gray>Copy at stored cost: <white><price>
           <dark_gray>  • <aqua>/builder book copy <gray>— copy.
           <dark_gray>  • <aqua>/builder book sell [price] <gray>— sell.
       draft-created: |-

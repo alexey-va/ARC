@@ -12,7 +12,7 @@ build-book:
     - ''
     - '<#8c8c8c>Автор: <#e6fff3><creator>'
     - '<#8c8c8c>Объём: <#e6fff3><blocks> блоков'
-    - '<#8c8c8c>Выпуск: <#2bba43><price>'
+    - '<#8c8c8c>Себестоимость: <#2bba43><price>'
     - '<#8c8c8c>ID экземпляра: <#969696><instance>'
     - ''
     - '<#8c8c8c>Поворот: <#e6fff3><rotation>° <#8c8c8c>• смещение: <#e6fff3><offset_x>, <offset_y>, <offset_z>'

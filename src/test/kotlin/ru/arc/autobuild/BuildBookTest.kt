@@ -7,6 +7,7 @@ import org.bukkit.NamespacedKey
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import net.kyori.adventure.text.format.TextDecoration
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -88,6 +89,11 @@ class BuildBookTest : TestBase() {
         assertTrue(checkNotNull(draftItem.itemMeta.displayName()).decoration(TextDecoration.ITALIC) == TextDecoration.State.FALSE)
         assertTrue(draftItem.itemMeta.lore().orEmpty().all { it.decoration(TextDecoration.ITALIC) == TextDecoration.State.FALSE })
         assertTrue(registeredItem.itemMeta.lore().orEmpty().all { it.decoration(TextDecoration.ITALIC) == TextDecoration.State.FALSE })
+        val plainText = PlainTextComponentSerializer.plainText()
+        val draftLore = draftItem.itemMeta.lore().orEmpty().map(plainText::serialize)
+        val registeredLore = registeredItem.itemMeta.lore().orEmpty().map(plainText::serialize)
+        assertTrue(draftLore.any { it.contains("Себестоимость: после проверки") })
+        assertTrue(registeredLore.any { it.contains("Себестоимость: 123.45") })
     }
 
     @Test
