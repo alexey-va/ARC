@@ -125,7 +125,39 @@ internal class BuilderToolsRuntime(
         previewSpacing = config.previewSpacing,
         maximumOutlinePoints = config.previewMaxSelectionParticles,
     )
-    private val clipboards = mutableMapOf<UUID, BuilderClipboard>()
+    private val clipboardController = BuilderClipboardController(
+        safety = safety,
+        selections = selections,
+        maximumBlocks = config.maxClipboardBlocks,
+        clipboardTtl = config.clipboardTtl,
+        host = object : BuilderClipboardHost {
+            override fun ensureCopyPermission(player: Player) = ensureFeaturePermission(player, BuilderFeature.COPY)
+
+            override fun ensurePastePermission(player: Player) = ensureFeaturePermission(player, BuilderFeature.PASTE)
+
+            override fun requiredSelection(player: Player): BuilderSelection = this@BuilderToolsRuntime.requiredSelection(player)
+
+            override fun world(worldId: UUID): World = requireWorld(worldId)
+
+            override fun ensureInRangeAndLoaded(player: Player, block: Block) =
+                this@BuilderToolsRuntime.ensureInRangeAndLoaded(player, block)
+
+            override fun ensureProtected(player: Player, block: Block) =
+                this@BuilderToolsRuntime.ensureProtected(player, block)
+
+            override fun ensureMutable(player: Player, block: Block) = this@BuilderToolsRuntime.ensureMutable(player, block)
+
+            override fun createPastePlan(
+                player: Player,
+                changes: List<BuilderBlockChange>,
+                costs: List<BuilderItemAmount>,
+            ): BuilderPlan = newPlan(player, BuilderPlanKind.PASTE, changes, costs, emptyList())
+
+            override fun failUnsafe(block: Block): Nothing = throw unsafeBlock(block)
+
+            override fun fail(path: String): Nothing = throw UserFailure(path)
+        },
+    )
     private val previews: BuilderPreviewSessions
     private val crown: BuilderCrownController
     private val pendingBookMints = mutableMapOf<UUID, PendingBookMint>()
@@ -331,9 +363,12 @@ internal class BuilderToolsRuntime(
             "pos2" -> setCommandPosition(player, first = false)
             "clear" -> clearSelection(player)
             "fill" -> preparePlan(player, planFill(player, materialArgument(player, args.getOrNull(1))))
-            "copy" -> copySelection(player)
+            "copy" -> {
+                val copied = clipboardController.copy(player)
+                send(player, "clipboard.saved", mapOf("count" to messages.literal(copied.blocks.size)))
+            }
             "book" -> handleBuildBookCommand(player, args.drop(1))
-            "paste" -> preparePlan(player, planPaste(player))
+            "paste" -> preparePlan(player, clipboardController.planPaste(player))
             "deconstruct" -> preparePlan(player, planDeconstruct(player))
             "crown" -> crown.handle(player, args.drop(1))
             "confirm" -> when (args.getOrNull(1)?.lowercase(Locale.ROOT)) {
@@ -473,37 +508,6 @@ internal class BuilderToolsRuntime(
         return newPlan(player, BuilderPlanKind.FILL, changes, cost, emptyList())
     }
 
-    private fun copySelection(player: Player) {
-        ensureFeaturePermission(player, BuilderFeature.COPY)
-        val selection = requiredSelection(player)
-        val world = requireWorld(selection.worldId)
-        val blocks = mutableListOf<BuilderClipboardBlock>()
-        selection.positionsBottomUp().forEach { position ->
-            val block = block(world, position)
-            ensureInRangeAndLoaded(player, block)
-            if (block.type.isAir) return@forEach
-            if (safety.isReplaceable(block)) return@forEach
-            if (!safety.isSafeExisting(block)) throw unsafeBlock(block)
-            ensureProtected(player, block)
-            val copiedData = block.blockData.clone().also { data ->
-                if (data is Leaves) data.isPersistent = true
-            }
-            blocks += BuilderClipboardBlock(position.x - selection.minX, position.y - selection.minY, position.z - selection.minZ, copiedData.asString)
-            if (blocks.size > config.maxClipboardBlocks) throw UserFailure("errors.selection-too-large")
-        }
-        if (blocks.isEmpty()) throw UserFailure("errors.empty-copy")
-        val now = System.currentTimeMillis()
-        clipboards[player.uniqueId] = BuilderClipboard(
-            blocks = blocks,
-            sizeX = selection.sizeX,
-            sizeY = selection.sizeY,
-            sizeZ = selection.sizeZ,
-            createdAtMillis = now,
-            expiresAtMillis = now + config.clipboardTtl.toMillis(),
-        ).validated(config.maxClipboardBlocks)
-        send(player, "clipboard.saved", mapOf("count" to messages.literal(blocks.size)))
-    }
-
     private fun handleBuildBookCommand(player: Player, args: List<String>) {
         when (args.firstOrNull()?.lowercase(Locale.ROOT)) {
             null, "guide", "help" -> showBuildBookGuide(player)
@@ -582,7 +586,7 @@ internal class BuilderToolsRuntime(
             return
         }
         val previewOpen = BuildingManager.getPendingConstruction(playerId) != null
-        val clipboard = clipboards[playerId]?.takeIf { it.expiresAtMillis > now }
+        val clipboard = clipboardController.current(playerId)
         val selection = selectionOrNull(player)
         val stage = BuilderBookJourney.resolve(
             BuilderBookJourneySnapshot(
@@ -648,7 +652,7 @@ internal class BuilderToolsRuntime(
     private fun createBuildBookDraft(player: Player, rawTitle: List<String>) {
         ensureFeaturePermission(player, BuilderFeature.COPY)
         if (!player.hasPermission("arc.build.book.create")) throw UserFailure("errors.no-permission")
-        val clipboard = clipboards[player.uniqueId]?.takeIf { it.expiresAtMillis > System.currentTimeMillis() }
+        val clipboard = clipboardController.current(player.uniqueId)
             ?: throw UserFailure("errors.expired")
         val held = player.inventory.itemInMainHand
         if (!isPlainBook(held)) throw UserFailure("book.material-required")
@@ -1197,28 +1201,6 @@ internal class BuilderToolsRuntime(
         if (player.inventory.firstEmpty() == -1) throw UserFailure("book.inventory-full")
         player.inventory.setItemInMainHand(held.clone().also { it.amount = held.amount - 1 })
         check(player.inventory.addItem(replacement).isEmpty()) { "Owned build book did not fit after preflight" }
-    }
-
-    private fun planPaste(player: Player): BuilderPlan {
-        ensureFeaturePermission(player, BuilderFeature.PASTE)
-        val clipboard = clipboards[player.uniqueId]?.takeIf { it.expiresAtMillis > System.currentTimeMillis() }
-            ?: throw UserFailure("errors.expired")
-        val anchor = selections.first(player.uniqueId, player.world.uid) ?: throw UserFailure("errors.selection-missing")
-        val world = requireWorld(anchor.worldId)
-        val costs = mutableListOf<ItemStack>()
-        val changes = clipboard.blocks.mapNotNull { copied ->
-            val position = BuilderBlockPos(anchor.worldId, anchor.x + copied.dx, anchor.y + copied.dy, anchor.z + copied.dz).validated()
-            val block = block(world, position)
-            val after = Bukkit.createBlockData(copied.blockData)
-            if (!safety.isSafePlacement(after)) throw unsafeBlock(block)
-            if (block.blockData.asString == after.asString) return@mapNotNull null
-            if (!safety.isReplaceable(block)) throw unsafeBlock(block)
-            ensureMutable(player, block)
-            if (BuilderGameModePolicy.usesInventory(player.gameMode)) costs += BuilderPlacementCost.item(after)
-            BuilderBlockChange(position, block.blockData.asString, after.asString)
-        }
-        requireChanges(changes)
-        return newPlan(player, BuilderPlanKind.PASTE, changes, BuilderItemCodec.aggregate(costs), emptyList())
     }
 
     private fun planBuildBook(player: Player, site: ConstructionSite, book: ItemStack): BuilderPlan {
@@ -2451,7 +2433,7 @@ internal class BuilderToolsRuntime(
     fun onQuit(event: PlayerQuitEvent) {
         discardPendingPlan(event.player.uniqueId)
         selections.clear(event.player.uniqueId)
-        clipboards.remove(event.player.uniqueId)
+        clipboardController.clear(event.player.uniqueId)
         pendingBookMints.remove(event.player.uniqueId)
         crown.clearPlayer(event.player.uniqueId)
         val operation = operationLocks.operation(event.player.uniqueId) ?: return
@@ -2530,7 +2512,7 @@ internal class BuilderToolsRuntime(
         shop.close()
         operationLocks.close()
         selections.clear()
-        clipboards.clear()
+        clipboardController.close()
     }
 
     private companion object {

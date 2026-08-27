@@ -76,6 +76,9 @@ class BuilderToolsConfig(
         }
         require(maxChanges in 1..BuilderPlan.ABSOLUTE_MAX_CHANGES) { "Builder-tools max-changes is invalid" }
         require(maxClipboardBlocks in 1..BuilderPlan.ABSOLUTE_MAX_CHANGES) { "Builder-tools clipboard limit is invalid" }
+        require(maxClipboardBlocks <= maxChanges) {
+            "Builder-tools clipboard limit cannot exceed the per-operation change limit"
+        }
         require(maxScanVolume in maxChanges.toLong()..1_000_000L) { "Builder-tools scan volume limit is invalid" }
         require(absoluteMaxAxis in 3..100) { "Builder-tools maximum axis is invalid" }
         require(blocksPerTick in 1..256) { "Builder-tools blocks-per-tick is invalid" }

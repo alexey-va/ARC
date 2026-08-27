@@ -87,6 +87,21 @@ class BuilderToolsDomainTest : FunSpec({
         sql.maximumPoolSize shouldBe 3
     }
 
+    test("clipboard capacity cannot exceed one operation capacity") {
+        val temporaryDirectory = Files.createTempDirectory("arc-builder-clipboard-config-")
+        val base = Config(temporaryDirectory, "modules/builder-tools.yml")
+        val override = Config(temporaryDirectory, "modules/builder-tools-runtime.yml")
+        override.setBoolean("enabled", true)
+        override.setStringList("allowed-worlds", listOf("*"))
+        base.setInt("limits.max-changes", 10)
+        base.setInt("limits.max-clipboard-blocks", 11)
+
+        shouldThrow<IllegalArgumentException> { BuilderToolsConfig(base, override).validated() }
+
+        base.setInt("limits.max-clipboard-blocks", 10)
+        BuilderToolsConfig(base, override).validated().maxClipboardBlocks shouldBe 10
+    }
+
     test("bundled policy supports survival and creative without opening spectator modes") {
         BuilderGameModePolicy.allows(GameMode.SURVIVAL) shouldBe true
         BuilderGameModePolicy.allows(GameMode.CREATIVE) shouldBe true

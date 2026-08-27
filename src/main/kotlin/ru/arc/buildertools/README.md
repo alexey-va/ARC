@@ -195,6 +195,13 @@ cleanup. It delegates generic Lands/range protection, preview/confirmation,
 journaling, and mutation through `BuilderCrownHost`; closing it unregisters its
 listener and clears every player session and anchor.
 
+`BuilderClipboardController` is the primary-thread owner of every non-durable
+copy/paste clipboard. It creates bounded safe BlockData snapshots, normalizes
+copied leaves to persistent state, expires stale snapshots on access, plans
+survival costs without mutating the world, and clears state on quit or module
+shutdown. `BuilderClipboardHost` keeps permissions, Lands/range checks and the
+generic journaled plan boundary in the runtime.
+
 Player schematic filenames contain the creator UUID plus the full SHA-256 of
 the normalized block content. This lets an identical design reuse its existing
 file even when WorldEdit changes non-semantic Sponge metadata (including the
