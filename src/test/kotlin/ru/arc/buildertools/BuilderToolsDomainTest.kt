@@ -53,6 +53,39 @@ class BuilderToolsDomainTest : FunSpec({
         shouldThrow<IllegalArgumentException> { BuilderToolsConfig(base, override).validated() }
     }
 
+    test("runtime override owns survival book contracts and their MySQL connection") {
+        val temporaryDirectory = Files.createTempDirectory("arc-builder-books-config-")
+        val base = Config(temporaryDirectory, "modules/builder-tools.yml")
+        val override = Config(temporaryDirectory, "modules/builder-tools-runtime.yml")
+        override.setBoolean("enabled", true)
+        override.setStringList("allowed-worlds", listOf("*"))
+        override.setBoolean("book-contracts.enabled", true)
+        override.setDouble("book-contracts.construction-markup-percent", 22.5)
+        override.setDouble("book-contracts.max-issue-price", 12_345.67)
+        override.setBoolean("book-contracts.mysql.enabled", true)
+        override.setString("book-contracts.mysql.host", "db.internal")
+        override.setInt("book-contracts.mysql.port", 3307)
+        override.setString("book-contracts.mysql.database", "builder_contracts")
+        override.setString("book-contracts.mysql.username", "builder")
+        override.setString("book-contracts.mysql.password", "test-password")
+        override.setString("book-contracts.mysql.ssl-mode", "DISABLED")
+        override.setInt("book-contracts.mysql.pool.maximum-size", 3)
+
+        val configured = BuilderToolsConfig(base, override).validated()
+        val sql = configured.bookSqlConfig()
+
+        configured.bookContractsEnabled shouldBe true
+        configured.bookConstructionMarkupBasisPoints shouldBe 2_250
+        configured.bookMaxIssuePriceMinor shouldBe 1_234_567
+        sql.enabled shouldBe true
+        sql.host shouldBe "db.internal"
+        sql.port shouldBe 3307
+        sql.database shouldBe "builder_contracts"
+        sql.username shouldBe "builder"
+        sql.password shouldBe "test-password"
+        sql.maximumPoolSize shouldBe 3
+    }
+
     test("bundled policy supports survival and creative without opening spectator modes") {
         BuilderGameModePolicy.allows(GameMode.SURVIVAL) shouldBe true
         BuilderGameModePolicy.allows(GameMode.CREATIVE) shouldBe true

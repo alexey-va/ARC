@@ -7,6 +7,7 @@ import ru.arc.text.LocaleCatalog
 import ru.arc.text.LocaleRequirements
 import ru.arc.text.LocalizedMiniMessage
 import ru.arc.sql.SqlModuleConfig
+import ru.arc.sql.SqlSslMode
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.Duration
@@ -37,14 +38,22 @@ class BuilderToolsConfig(
     val shopMaxQuotedMaterials: Int get() = config.integer("shop.max-quoted-materials", 64)
     val shopMaxAutoBuyItems: Int get() = config.integer("shop.max-auto-buy-items", 4_096)
     val shopMaxAutoBuyPrice: Double get() = config.double("shop.max-auto-buy-price", 250_000.0)
-    val bookContractsEnabled: Boolean get() = config.bool("book-contracts.enabled", false)
+    val bookContractsEnabled: Boolean
+        get() = runtimeOverride?.booleanOrNull("book-contracts.enabled")
+            ?: config.bool("book-contracts.enabled", false)
     val bookConstructionMarkupBasisPoints: Int
-        get() = BigDecimal.valueOf(config.double("book-contracts.construction-markup-percent", 15.0))
+        get() = BigDecimal.valueOf(
+            runtimeOverride?.doubleOrNull("book-contracts.construction-markup-percent")
+                ?: config.double("book-contracts.construction-markup-percent", 15.0),
+        )
             .movePointRight(2)
             .setScale(0, RoundingMode.UNNECESSARY)
             .intValueExact()
     val bookMaxIssuePriceMinor: Long
-        get() = BuilderBookCostRules.quoteTotalToMinor(config.double("book-contracts.max-issue-price", 50_000_000.0))
+        get() = BuilderBookCostRules.quoteTotalToMinor(
+            runtimeOverride?.doubleOrNull("book-contracts.max-issue-price")
+                ?: config.double("book-contracts.max-issue-price", 50_000_000.0),
+        )
     val planTtl: Duration get() = config.duration("timers.plan-ttl", Duration.ofSeconds(30))
     val clipboardTtl: Duration get() = config.duration("timers.clipboard-ttl", Duration.ofMinutes(15))
     val undoTtl: Duration get() = config.duration("timers.undo-ttl", Duration.ofMinutes(30))
@@ -114,7 +123,11 @@ class BuilderToolsConfig(
         )
     }
 
-    fun bookSqlConfig(): SqlModuleConfig = SqlModuleConfig(config, "book-contracts.mysql")
+    fun bookSqlConfig(): SqlModuleConfig = LayeredSqlModuleConfig(
+        base = config,
+        override = runtimeOverride,
+        prefix = "book-contracts.mysql",
+    )
 
     companion object {
         private val WORLD_NAME = Regex("[A-Za-z0-9_./-]{1,128}")
@@ -273,4 +286,33 @@ private class PrefixLocaleCatalog(
 ) : LocaleCatalog {
     override fun scalar(path: String): String? = config.stringOrNull("$root.$path")
     override fun lines(path: String): List<String>? = config.stringListOrNull("$root.$path")
+}
+
+/**
+ * Keeps portable defaults in the bundled module while allowing one runtime-only
+ * file to own credentials and node policy without copying the full locale file.
+ */
+private class LayeredSqlModuleConfig(
+    base: Config,
+    private val override: Config?,
+    private val prefix: String,
+) : SqlModuleConfig(base, prefix) {
+    override val enabled: Boolean get() = override?.booleanOrNull("$prefix.enabled") ?: super.enabled
+    override val host: String get() = override?.stringOrNull("$prefix.host") ?: super.host
+    override val port: Int get() = override?.intOrNull("$prefix.port") ?: super.port
+    override val database: String get() = override?.stringOrNull("$prefix.database") ?: super.database
+    override val username: String get() = override?.stringOrNull("$prefix.username") ?: super.username
+    override val password: String get() = override?.stringOrNull("$prefix.password") ?: super.password
+    override val sslMode: SqlSslMode get() = override?.enumOrNull<SqlSslMode>("$prefix.ssl-mode") ?: super.sslMode
+    override val minimumIdle: Int get() = override?.intOrNull("$prefix.pool.minimum-idle") ?: super.minimumIdle
+    override val maximumPoolSize: Int get() = override?.intOrNull("$prefix.pool.maximum-size") ?: super.maximumPoolSize
+    override val connectionTimeoutMs: Long
+        get() = override?.longOrNull("$prefix.pool.connection-timeout-ms") ?: super.connectionTimeoutMs
+    override val socketTimeoutMs: Long
+        get() = override?.longOrNull("$prefix.pool.socket-timeout-ms") ?: super.socketTimeoutMs
+    override val validationTimeoutMs: Long
+        get() = override?.longOrNull("$prefix.pool.validation-timeout-ms") ?: super.validationTimeoutMs
+    override val maxLifetimeMs: Long
+        get() = override?.longOrNull("$prefix.pool.max-lifetime-ms") ?: super.maxLifetimeMs
+    override val failFast: Boolean get() = override?.booleanOrNull("$prefix.fail-fast") ?: super.failFast
 }
