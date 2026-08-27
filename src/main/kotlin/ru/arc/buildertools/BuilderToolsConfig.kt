@@ -3,6 +3,7 @@ package ru.arc.buildertools
 import ru.arc.ARC
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
+import ru.arc.hooks.economyshop.ShopPurchaseStatus
 import ru.arc.text.LocaleCatalog
 import ru.arc.text.LocaleRequirements
 import ru.arc.text.LocalizedMiniMessage
@@ -277,7 +278,12 @@ class BuilderToolsConfig(
                 "status.idle",
             ) + BuilderPlanKind.entries.map { kind ->
                 "kinds.${kind.name.lowercase(Locale.ROOT)}"
-            },
+            } + ShopPurchaseStatus.entries.map { status ->
+                "shop.status.${status.name.lowercase(Locale.ROOT).replace('_', '-')}"
+            } + setOf(
+                "shop.status.ambiguous",
+                "shop.status.delivery-mismatch",
+            ),
             listPaths = setOf(
                 "help",
                 "book.guide",

@@ -204,7 +204,7 @@ private class ClipboardHarness(
                 ).validated()
             }
 
-            override fun failUnsafe(block: Block): Nothing = throw ClipboardFailure("errors.unsafe-block")
+            override fun failUnsafe(player: Player, block: Block): Nothing = throw ClipboardFailure("errors.unsafe-block")
 
             override fun fail(path: String): Nothing = throw ClipboardFailure(path)
         },

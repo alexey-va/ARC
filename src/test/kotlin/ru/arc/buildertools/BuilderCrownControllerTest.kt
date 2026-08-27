@@ -73,6 +73,8 @@ class BuilderCrownControllerTest : FunSpec({
                 val rendered = checkNotNull(player.nextComponentMessage())
                 PlainTextComponentSerializer.plainText().serialize(rendered) shouldBe
                     "Параметры: естественная / 5 / естественная / естественный"
+                PlainTextComponentSerializer.plainText().serialize(checkNotNull(player.nextComponentMessage())) shouldBe
+                    "Палитра: Дубовые листья × 1"
             }
         }
     }
@@ -168,6 +170,9 @@ private class CrownHarness(plugin: Plugin) {
                 if (data is Leaves) data.isPersistent = true
             }
 
+            override fun materialLabel(player: org.bukkit.entity.Player, material: Material): Component =
+                Component.text(if (material == Material.OAK_LEAVES) "Дубовые листья" else material.name)
+
             override fun setFirstPosition(player: org.bukkit.entity.Player, location: Location) {
                 selections.set(
                     player.uniqueId,
@@ -244,7 +249,7 @@ private fun crownMessages(): LocalizedMiniMessage = LocalizedMiniMessage(
                 "crown-brush.received" to "Кисть готова",
                 "crown.settings-updated" to "Настройка: <setting> = <value>",
                 "crown.palette-updated" to "Палитра обновлена",
-                "crown.palette-row" to "Палитра",
+                "crown.palette-row" to "Палитра: <material> × <weight>",
                 "crown.labels.settings.shape" to "Форма",
                 "crown.labels.settings.radius" to "Радиус",
                 "crown.labels.settings.density" to "Густота",

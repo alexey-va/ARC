@@ -170,7 +170,7 @@ private class DeconstructionHarness(
                 ).validated(maximumChanges)
             }
 
-            override fun failUnsafe(block: Block): Nothing = throw DeconstructionFailure("errors.unsafe-block")
+            override fun failUnsafe(player: Player, block: Block): Nothing = throw DeconstructionFailure("errors.unsafe-block")
 
             override fun fail(path: String): Nothing = throw DeconstructionFailure(path)
         },

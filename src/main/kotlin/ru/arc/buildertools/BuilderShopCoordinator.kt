@@ -1,10 +1,14 @@
 package ru.arc.buildertools
 
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import org.bukkit.Material
 import org.bukkit.entity.Player
 import ru.arc.hooks.HookRegistry
 import ru.arc.hooks.economyshop.ShopPurchaseService
+import ru.arc.hooks.economyshop.ShopPurchaseStatus
 import ru.arc.text.LocalizedMiniMessage
 import ru.arc.util.Logging.warn
 import java.util.Locale
@@ -15,7 +19,7 @@ internal sealed interface BuilderShopConfirmation {
 
     data class Rejected(
         val messagePath: String,
-        val values: Map<String, Any?> = emptyMap(),
+        val values: Map<String, Component> = emptyMap(),
     ) : BuilderShopConfirmation
 }
 
@@ -24,6 +28,7 @@ internal class BuilderShopCoordinator(
     private val config: BuilderToolsConfig,
     private val messages: LocalizedMiniMessage,
     private val serviceProvider: () -> ShopPurchaseService? = { HookRegistry.shopPurchaseService },
+    private val materialLabel: (Player, Material) -> Component = BuilderMaterialPresentation::label,
 ) : AutoCloseable {
     private val estimates = mutableMapOf<UUID, BuilderShopEstimate>()
 
@@ -51,8 +56,8 @@ internal class BuilderShopCoordinator(
         if (missing.size > config.shopMaxQuotedMaterials || missingItems > config.shopMaxAutoBuyItems) {
             return rejected(
                 "errors.shop-limit",
-                "items" to missingItems,
-                "price" to "—",
+                "items" to messages.literal(missingItems),
+                "price" to priceLabel("—"),
             )
         }
 
@@ -61,7 +66,7 @@ internal class BuilderShopCoordinator(
         if (current.missingUnavailable.isNotEmpty()) {
             estimates[player.uniqueId] = current
             current.missingUnavailable.distinctBy { it.material }.forEach { line ->
-                send(player, "plan.market-unavailable", "material" to line.material.key.value())
+                send(player, "plan.market-unavailable", "material" to materialLabel(player, line.material))
             }
             return rejected("errors.shop-material-unavailable")
         }
@@ -78,16 +83,16 @@ internal class BuilderShopCoordinator(
         if (current.missingTotal > config.shopMaxAutoBuyPrice) {
             return rejected(
                 "errors.shop-limit",
-                "items" to missingItems,
-                "price" to formatTotal(service, current.missingTotal, true),
+                "items" to messages.literal(missingItems),
+                "price" to priceLabel(formatTotal(service, current.missingTotal, true)),
             )
         }
         val balance = service.vaultBalance(player) ?: return rejected("errors.shop-unavailable")
         if (balance < current.missingTotal) {
             return rejected(
                 "errors.shop-insufficient-funds",
-                "price" to formatTotal(service, current.missingTotal, true),
-                "balance" to formatTotal(service, balance, true),
+                "price" to priceLabel(formatTotal(service, current.missingTotal, true)),
+                "balance" to priceLabel(formatTotal(service, balance, true)),
             )
         }
         if (
@@ -118,9 +123,9 @@ internal class BuilderShopCoordinator(
                 refresh(player, plan)
                 return partialFailure(
                     player,
-                    procurement.material.key.value(),
+                    procurement.material,
                     procurement.purchasedItems,
-                    procurement.status.name.lowercase(Locale.ROOT),
+                    procurement.status,
                 )
             }
             is BuilderShopProcurementResult.Ambiguous -> {
@@ -133,20 +138,29 @@ internal class BuilderShopCoordinator(
                     )
                 }
                 refresh(player, plan)
-                sendPurchaseStopped(player, procurement.purchasedItems, "ambiguous outcome")
-                return rejected("errors.shop-purchase-ambiguous", "material" to procurement.material.key.value())
+                sendPurchaseStopped(player, procurement.purchasedItems, messages.render("shop.status.ambiguous", locale(player)))
+                return rejected(
+                    "errors.shop-purchase-ambiguous",
+                    "material" to materialLabel(player, procurement.material),
+                )
             }
         }
         if (BuilderInventory.missingCosts(player, plan.costs).isNotEmpty()) {
             refresh(player, plan)
-            sendPurchaseStopped(player, purchasedItems, "delivery mismatch")
-            return rejected("errors.shop-purchase-ambiguous", "material" to "—")
+            sendPurchaseStopped(
+                player,
+                purchasedItems,
+                messages.render("shop.status.delivery-mismatch", locale(player)),
+            )
+            return rejected("errors.shop-purchase-ambiguous", "material" to messages.literal("—"))
         }
         send(
             player,
             "shop.purchased",
-            "items" to purchasedItems,
-            "price" to purchasedPrices.joinToString(" + ").ifBlank { formatTotal(service, current.missingTotal, true) },
+            "items" to messages.literal(purchasedItems),
+            "price" to priceLabel(
+                purchasedPrices.joinToString(" + ").ifBlank { formatTotal(service, current.missingTotal, true) },
+            ),
         )
         return BuilderShopConfirmation.Ready
     }
@@ -182,49 +196,59 @@ internal class BuilderShopCoordinator(
             "plan.market",
             locale(player),
             mapOf(
-                "full_price" to messages.literal(
+                "full_price" to priceLabel(
                     formatTotal(
                         service,
                         estimate.fullTotal,
                         estimate.full.isNotEmpty() && estimate.fullUnavailable.isEmpty(),
                     ),
                 ),
-                "missing_price" to messages.literal(
+                "missing_price" to priceLabel(
                     formatTotal(service, estimate.missingTotal, estimate.missingUnavailable.isEmpty()),
                 ),
             ),
         ).forEach(player::sendMessage)
         estimate.missing.take(MAX_DISPLAYED_MARKET_LINES).forEach { line ->
-            send(player, "plan.market-item", "amount" to line.amount, "material" to line.material.key.value())
+            send(
+                player,
+                "plan.market-item",
+                "amount" to messages.literal(line.amount),
+                "material" to materialLabel(player, line.material),
+            )
         }
         val unavailable = estimate.fullUnavailable.distinctBy { it.material }
         unavailable.take(MAX_DISPLAYED_MARKET_LINES).forEach { line ->
-            send(player, "plan.market-unavailable", "material" to line.material.key.value())
+            send(player, "plan.market-unavailable", "material" to materialLabel(player, line.material))
         }
         val hiddenLines =
             (estimate.missing.size - MAX_DISPLAYED_MARKET_LINES).coerceAtLeast(0) +
                 (unavailable.size - MAX_DISPLAYED_MARKET_LINES).coerceAtLeast(0)
-        if (hiddenLines > 0) send(player, "plan.market-more", "count" to hiddenLines)
+        if (hiddenLines > 0) send(player, "plan.market-more", "count" to messages.literal(hiddenLines))
     }
 
     private fun partialFailure(
         player: Player,
-        material: String,
+        material: Material,
         purchasedItems: Int,
-        status: String,
+        status: ShopPurchaseStatus,
     ): BuilderShopConfirmation.Rejected {
-        sendPurchaseStopped(player, purchasedItems, status)
-        return rejected("errors.shop-purchase-failed", "material" to material)
+        sendPurchaseStopped(player, purchasedItems, purchaseStatusLabel(player, status))
+        return rejected("errors.shop-purchase-failed", "material" to materialLabel(player, material))
     }
 
-    private fun sendPurchaseStopped(player: Player, purchasedItems: Int, status: String) {
+    private fun sendPurchaseStopped(player: Player, purchasedItems: Int, status: Component) {
         messages.renderLines(
             "shop.purchase-detail",
             locale(player),
-            mapOf("status" to messages.literal(status), "purchased" to messages.literal(purchasedItems)),
+            mapOf("status" to status, "purchased" to messages.literal(purchasedItems)),
         ).forEach(player::sendMessage)
         send(player, "shop.world-untouched")
     }
+
+    private fun purchaseStatusLabel(player: Player, status: ShopPurchaseStatus): Component = messages.render(
+        "shop.status.${status.name.lowercase(Locale.ROOT).replace('_', '-')}",
+        locale(player),
+    )
 
     private fun refresh(player: Player, plan: BuilderPlan) {
         createEstimate(player, plan)?.let { estimates[player.uniqueId] = it }
@@ -241,17 +265,24 @@ internal class BuilderShopCoordinator(
             .serialize(LegacyComponentSerializer.legacySection().deserialize(raw))
             .take(MAX_FORMATTED_PRICE_LENGTH)
 
-    private fun send(player: Player, path: String, vararg values: Pair<String, Any?>) {
+    private fun priceLabel(formatted: String): Component {
+        if (formatted == "—") return messages.literal(formatted)
+        return messages.literal(formatted.trim().removeSuffix("💰").trimEnd())
+            .append(Component.space())
+            .append(Component.text("💰", NamedTextColor.WHITE))
+    }
+
+    private fun send(player: Player, path: String, vararg values: Pair<String, Component>) {
         player.sendMessage(
             messages.render(
                 path,
                 locale(player),
-                values.associate { (key, value) -> key to messages.literal(value) },
+                values.toMap(),
             ),
         )
     }
 
-    private fun rejected(path: String, vararg values: Pair<String, Any?>): BuilderShopConfirmation.Rejected =
+    private fun rejected(path: String, vararg values: Pair<String, Component>): BuilderShopConfirmation.Rejected =
         BuilderShopConfirmation.Rejected(path, values.toMap())
 
     private fun locale(player: Player): String = player.locale().toLanguageTag()

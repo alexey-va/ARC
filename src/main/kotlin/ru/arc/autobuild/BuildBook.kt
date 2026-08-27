@@ -2,6 +2,7 @@ package ru.arc.autobuild
 
 import de.tr7zw.changeme.nbtapi.NBT
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.inventory.ItemStack
@@ -338,10 +339,11 @@ object BuildBookItems {
                     )
                     tag(
                         "price",
-                        Component.text(
-                            data.issuePriceMinor?.let { String.format(Locale.US, "%,.2f", it.minorToDouble()) }
-                                ?: "после проверки",
-                        ),
+                        data.issuePriceMinor?.let { priceMinor ->
+                            Component.text(String.format(Locale.US, "%,.2f", priceMinor.minorToDouble()))
+                                .append(Component.space())
+                                .append(Component.text("💰", NamedTextColor.WHITE))
+                        } ?: Component.text("после проверки"),
                     )
                     tag("instance", Component.text(data.instanceId?.toString()?.take(8) ?: "после активации"))
                 }.mapNotNull(::strip),

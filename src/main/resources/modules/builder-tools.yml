@@ -464,6 +464,22 @@ locales:
         <#8c8c8c>  • <#969696>Мир и инвентарь не изменены.
     shop:
       purchased: "<prefix><#2bba43>Куплено: <#92bed8><items> шт. <#8c8c8c>• <#e6fff3>стоимость: <#92bed8><price>"
+      status:
+        success: "покупка подтверждена"
+        item-not-found: "товар не найден"
+        item-error: "ошибка товара"
+        not-buyable: "товар нельзя купить"
+        no-permissions: "нет доступа к товару"
+        requirements-failed: "условия покупки не выполнены"
+        insufficient-funds: "недостаточно средств"
+        no-inventory-space: "нет места в инвентаре"
+        transaction-cancelled: "покупка отменена"
+        below-minimum: "меньше минимального количества"
+        above-maximum: "больше максимального количества"
+        out-of-stock: "товар закончился"
+        failed: "магазин отклонил покупку"
+        ambiguous: "магазин не подтвердил результат"
+        delivery-mismatch: "выдано не то количество"
       purchase-detail:
         - "<#8c8c8c>  • <#e6fff3>Статус: <#92bed8><status>"
         - "<#8c8c8c>  • <#e6fff3>Уже куплено: <#92bed8><purchased>"
@@ -474,7 +490,7 @@ locales:
       started: |-
         <prefix><#ff9f0f>Строительство начато.
         <#8c8c8c>  • <#e6fff3>Блоков: <#92bed8><count> <#8c8c8c>• <#969696>инвентарь временно защищён
-      progress: "<prefix><#e6fff3><kind>: <#2bba43><count><#8c8c8c>/<#92bed8><total>"
+      progress: "<#e6fff3><kind>: <#2bba43><count><#8c8c8c>/<#92bed8><total>"
       completed: |-
         <prefix><#2bba43>Операция завершена: <#92bed8><kind>
         <#8c8c8c>  • <#e6fff3>Изменено блоков: <#2bba43><count>
@@ -856,6 +872,22 @@ locales:
         <dark_gray>  • <gray>The world and inventory are unchanged.
     shop:
       purchased: "<prefix><green>Bought <white><items></white> items • <white><price></white>."
+      status:
+        success: "purchase confirmed"
+        item-not-found: "item not found"
+        item-error: "item error"
+        not-buyable: "item cannot be bought"
+        no-permissions: "item is not available to you"
+        requirements-failed: "purchase requirements were not met"
+        insufficient-funds: "insufficient funds"
+        no-inventory-space: "inventory is full"
+        transaction-cancelled: "purchase cancelled"
+        below-minimum: "below the minimum amount"
+        above-maximum: "above the maximum amount"
+        out-of-stock: "item is out of stock"
+        failed: "shop rejected the purchase"
+        ambiguous: "shop did not confirm the outcome"
+        delivery-mismatch: "delivered amount did not match"
       purchase-detail:
         - "<prefix><gray>Reason: <white><status></white>."
         - "<prefix><gray>Bought earlier: <white><purchased></white>."
@@ -864,7 +896,7 @@ locales:
       started: |-
         <prefix><yellow>Construction started: <white><count> blocks
         <dark_gray>  • <gray>Your inventory is briefly protected.
-      progress: "<prefix><gray><kind>: <green><count><dark_gray>/<aqua><total>"
+      progress: "<gray><kind>: <green><count><dark_gray>/<aqua><total>"
       completed: "<prefix><green><white><kind></white> completed: <white><count></white> blocks."
       rolled-back: |-
         <prefix><red>The operation was rolled back and restored.

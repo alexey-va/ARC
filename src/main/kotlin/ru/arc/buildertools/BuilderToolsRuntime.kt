@@ -1,6 +1,7 @@
 package ru.arc.buildertools
 
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Bukkit
 import org.bukkit.GameMode
@@ -176,7 +177,7 @@ internal class BuilderToolsRuntime(
                 costs: List<BuilderItemAmount>,
             ): BuilderPlan = newPlan(player, BuilderPlanKind.PASTE, changes, costs, emptyList())
 
-            override fun failUnsafe(block: Block): Nothing = throw unsafeBlock(block)
+            override fun failUnsafe(player: Player, block: Block): Nothing = throw unsafeBlock(player, block)
 
             override fun fail(path: String): Nothing = throw UserFailure(path)
         },
@@ -209,7 +210,7 @@ internal class BuilderToolsRuntime(
                 toolDamage = toolDamage,
             )
 
-            override fun failUnsafe(block: Block): Nothing = throw unsafeBlock(block)
+            override fun failUnsafe(player: Player, block: Block): Nothing = throw unsafeBlock(player, block)
 
             override fun fail(path: String): Nothing = throw UserFailure(path)
         },
@@ -231,7 +232,13 @@ internal class BuilderToolsRuntime(
             serverName = serverName,
             runSync = { action -> taskScope.runSync(action) },
             send = { player, path, values ->
-                send(player, path, values.mapValues { (_, value) -> messages.literal(value) })
+                send(
+                    player,
+                    path,
+                    values.mapValues { (key, value) ->
+                        if (key == "price") moneyLabel(value) else messages.literal(value)
+                    },
+                )
             },
             lock = { playerId ->
                 operationLocks.tryBookLock(playerId)
@@ -293,6 +300,9 @@ internal class BuilderToolsRuntime(
                     override fun ensureMutable(player: Player, block: Block) = this@BuilderToolsRuntime.ensureMutable(player, block)
 
                     override fun placementData(material: Material) = this@BuilderToolsRuntime.placementData(material)
+
+                    override fun materialLabel(player: Player, material: Material): Component =
+                        BuilderMaterialPresentation.label(player, material)
 
                     override fun setFirstPosition(player: Player, location: Location) = setPosition(player, location, first = true)
 
@@ -604,7 +614,7 @@ internal class BuilderToolsRuntime(
                             "book.status.active",
                             mapOf(
                                 "name" to displayBookTitle(verification.blueprint.title),
-                                "price" to messages.literal(formatMinor(verification.blueprint.issuePriceMinor)),
+                                "price" to moneyLabel(formatMinor(verification.blueprint.issuePriceMinor)),
                             ),
                         )
                         BuilderBookStatusVerification.Stale -> send(player, "book.stale")
@@ -640,7 +650,7 @@ internal class BuilderToolsRuntime(
                 player,
                 stage.messagePath,
                 mapOf(
-                    "price" to messages.literal(formatMinor(checkNotNull(quote).blueprint.issuePriceMinor)),
+                    "price" to moneyLabel(formatMinor(checkNotNull(quote).blueprint.issuePriceMinor)),
                     "seconds" to messages.literal(((quote.expiresAtMillis - now) / 1_000L).coerceAtLeast(1L)),
                 ),
             )
@@ -663,7 +673,7 @@ internal class BuilderToolsRuntime(
                 stage.messagePath,
                 mapOf(
                     "name" to displayBookTitle(checkNotNull(held).title),
-                    "price" to messages.literal(formatMinor(checkNotNull(held.issuePriceMinor))),
+                    "price" to moneyLabel(formatMinor(checkNotNull(held.issuePriceMinor))),
                 ),
             )
             BuilderBookJourneyStage.CLIPBOARD -> send(
@@ -797,7 +807,7 @@ internal class BuilderToolsRuntime(
                             BuilderBookQuoteResult.ShopUnavailable -> throw UserFailure("book.shop-unavailable")
                             is BuilderBookQuoteResult.MaterialsUnavailable -> throw UserFailure(
                                 "book.material-unavailable",
-                                mapOf("materials" to messages.literal(materialsSummary(quoted.materials))),
+                                mapOf("materials" to materialsSummary(player, quoted.materials)),
                             )
                             BuilderBookQuoteResult.LimitExceeded -> throw UserFailure("book.price-limit")
                         }
@@ -1137,9 +1147,9 @@ internal class BuilderToolsRuntime(
                 "blocks" to messages.literal(blueprint.blockCount),
                 "items" to messages.literal(blueprint.materialItems),
                 "types" to messages.literal(blueprint.materialTypes),
-                "materials" to messages.literal(formatMinor(blueprint.materialCostMinor)),
-                "labor" to messages.literal(formatMinor(blueprint.constructionFeeMinor)),
-                "price" to messages.literal(formatMinor(blueprint.issuePriceMinor)),
+                "materials" to moneyLabel(formatMinor(blueprint.materialCostMinor)),
+                "labor" to moneyLabel(formatMinor(blueprint.constructionFeeMinor)),
+                "price" to moneyLabel(formatMinor(blueprint.issuePriceMinor)),
                 "seconds" to messages.literal(config.planTtl.seconds),
             ),
         )
@@ -1230,6 +1240,10 @@ internal class BuilderToolsRuntime(
 
     private fun formatMinor(amount: Long): String = String.format(Locale.US, "%,.2f", amount / 100.0)
 
+    private fun moneyLabel(formatted: String): Component = messages.literal(formatted)
+        .append(Component.space())
+        .append(Component.text("💰", NamedTextColor.WHITE))
+
     private fun isPlainBook(item: ItemStack): Boolean {
         if (item.type != Material.BOOK || item.amount <= 0) return false
         return item.clone().also { it.amount = 1 }.isSimilar(ItemStack(Material.BOOK))
@@ -1263,9 +1277,9 @@ internal class BuilderToolsRuntime(
             if (after.material.isAir) return@mapNotNull null
             val location = site.worldLocation(relative)
             val block = location.block
-            if (!safety.isSafePlacement(after)) throw unsafeBlock(block)
+            if (!safety.isSafePlacement(after)) throw unsafeBlock(player, block)
             if (block.blockData.asString == after.asString) return@mapNotNull null
-            if (!safety.isReplaceable(block)) throw unsafeBlock(block)
+            if (!safety.isReplaceable(block)) throw unsafeBlock(player, block)
             ensureMutable(player, block)
             BuilderBlockChange(
                 BuilderBlockPos(site.world.uid, block.x, block.y, block.z).validated(),
@@ -1427,7 +1441,7 @@ internal class BuilderToolsRuntime(
                 BuilderShopConfirmation.Ready -> Unit
                 is BuilderShopConfirmation.Rejected -> throw UserFailure(
                     result.messagePath,
-                    result.values.mapValues { (_, value) -> messages.literal(value) },
+                    result.values,
                 )
             }
         }
@@ -1763,10 +1777,12 @@ internal class BuilderToolsRuntime(
             val block = block(requireWorld(change.position.worldId), change.position)
             ensureMutable(player, block)
             if (block.blockData.asString != change.beforeBlockData) throw UserFailure("errors.expired")
-            if (!block.type.isAir && !safety.isSafeExisting(block) && !safety.isReplaceable(block)) throw unsafeBlock(block)
+            if (!block.type.isAir && !safety.isSafeExisting(block) && !safety.isReplaceable(block)) {
+                throw unsafeBlock(player, block)
+            }
             val after = Bukkit.createBlockData(change.afterBlockData)
             if (!safety.isSafePlacement(after) && after.material !in safety.replaceable) {
-                throw unsafeBlock(block)
+                throw unsafeBlock(player, block)
             }
         }
     }
@@ -1860,9 +1876,14 @@ internal class BuilderToolsRuntime(
         if (changes.size > config.maxChanges) throw UserFailure("errors.selection-too-large")
     }
 
-    private fun unsafeBlock(block: Block) = UserFailure(
+    private fun unsafeBlock(player: Player, block: Block) = UserFailure(
         "errors.unsafe-block",
-        mapOf("material" to messages.literal(block.type.key.key), "x" to messages.literal(block.x), "y" to messages.literal(block.y), "z" to messages.literal(block.z)),
+        mapOf(
+            "material" to BuilderMaterialPresentation.label(player, block.type),
+            "x" to messages.literal(block.x),
+            "y" to messages.literal(block.y),
+            "z" to messages.literal(block.z),
+        ),
     )
 
     private fun hourlyUsage(playerId: UUID, now: Long): Int = committedRecords.values
@@ -1888,9 +1909,11 @@ internal class BuilderToolsRuntime(
             )
         }
 
-    private fun materialsSummary(materials: List<Material>): String {
-        val first = checkNotNull(materials.firstOrNull()) { "Unavailable builder-book materials cannot be empty" }.key.key
-        return first + if (materials.size > 1) " +${materials.size - 1}" else ""
+    private fun materialsSummary(player: Player, materials: List<Material>): Component {
+        val first = checkNotNull(materials.firstOrNull()) { "Unavailable builder-book materials cannot be empty" }
+        return BuilderMaterialPresentation.label(player, first).append(
+            messages.literal(if (materials.size > 1) " +${materials.size - 1}" else ""),
+        )
     }
 
     private fun displayBookTitle(title: String): Component = messages.literal(BuildBookItems.compactTitle(title, 22))

@@ -2,6 +2,10 @@ package ru.arc.buildertools
 
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
@@ -10,6 +14,8 @@ import ru.arc.hooks.economyshop.ShopPurchaseOutcome
 import ru.arc.hooks.economyshop.ShopPurchaseService
 import ru.arc.hooks.economyshop.ShopPurchaseStatus
 import ru.arc.paper.testing.MockBukkitTestRuntime
+import ru.arc.config.Config
+import java.nio.file.Files
 import java.util.UUID
 
 class BuilderShopEstimateTest : FunSpec({
@@ -120,6 +126,61 @@ class BuilderShopEstimateTest : FunSpec({
                 listOf(BuilderShopProcurementRequest(cost, expected)),
             ) shouldBe BuilderShopProcurementResult.Ambiguous(0, Material.STONE)
             BuilderInventory.countExact(player, cost) shouldBe 4
+        }
+    }
+
+    test("shop feedback localizes material names and provider statuses") {
+        MockBukkitTestRuntime.open().use { paper ->
+            val player = paper.server.addPlayer("LocalizedBuyer")
+            val world = paper.addSimpleWorld("localized-shop")
+            val service = FakeShopPurchaseService(failMaterial = Material.OAK_PLANKS)
+            val cost = BuilderItemCodec.aggregate(listOf(ItemStack(Material.OAK_PLANKS, 2))).single()
+            service.quotes[Material.OAK_PLANKS] = quote(Material.OAK_PLANKS, 2, 4.0)
+            val now = System.currentTimeMillis()
+            val plan = BuilderPlan(
+                id = UUID.randomUUID(),
+                playerId = player.uniqueId,
+                kind = BuilderPlanKind.FILL,
+                changes = listOf(
+                    BuilderBlockChange(
+                        BuilderBlockPos(world.uid, 0, 64, 0),
+                        Material.AIR.createBlockData().asString,
+                        Material.OAK_PLANKS.createBlockData().asString,
+                    ),
+                ),
+                costs = listOf(cost),
+                rewards = emptyList(),
+                createdAtMillis = now,
+                expiresAtMillis = now + 30_000L,
+            ).validated()
+            val config = BuilderToolsConfig(
+                Config(Files.createTempDirectory("arc-builder-shop-feedback-"), "modules/builder-tools.yml"),
+            )
+            BuilderShopCoordinator(
+                config = config,
+                messages = config.messages(),
+                serviceProvider = { service },
+                materialLabel = { _, _ -> Component.text("Oak planks") },
+            ).use { coordinator ->
+                coordinator.preview(player, plan)
+                repeat(4) { checkNotNull(player.nextComponentMessage()) }
+
+                val result = coordinator.procure(player, plan) as BuilderShopConfirmation.Rejected
+                val detail = buildString {
+                    repeat(3) {
+                        appendLine(
+                            PlainTextComponentSerializer.plainText().serialize(
+                                checkNotNull(player.nextComponentMessage()),
+                            ),
+                        )
+                    }
+                }
+
+                detail shouldContain "item is out of stock"
+                detail shouldNotContain "out_of_stock"
+                PlainTextComponentSerializer.plainText().serialize(checkNotNull(result.values["material"])) shouldBe
+                    "Oak planks"
+            }
         }
     }
 })

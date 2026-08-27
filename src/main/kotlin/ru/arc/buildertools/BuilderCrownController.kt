@@ -29,6 +29,7 @@ internal interface BuilderCrownHost {
     fun ensurePermission(player: Player)
     fun ensureMutable(player: Player, block: Block)
     fun placementData(material: Material): BlockData
+    fun materialLabel(player: Player, material: Material): Component
     fun setFirstPosition(player: Player, location: Location)
     fun createPlan(player: Player, changes: List<BuilderBlockChange>, costs: List<BuilderItemAmount>): BuilderPlan
     fun preparePlan(player: Player, plan: BuilderPlan)
@@ -245,7 +246,13 @@ internal class BuilderCrownController(
             send(
                 player,
                 "crown.palette-row",
-                mapOf("material" to messages.literal(entry.materialName), "weight" to messages.literal(entry.weight)),
+                mapOf(
+                    "material" to host.materialLabel(
+                        player,
+                        Material.matchMaterial(entry.materialName) ?: failure("errors.material"),
+                    ),
+                    "weight" to messages.literal(entry.weight),
+                ),
             )
         }
         host.showPlanStatus(player)

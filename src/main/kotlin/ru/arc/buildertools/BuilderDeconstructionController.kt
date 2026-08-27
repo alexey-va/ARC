@@ -22,7 +22,7 @@ internal interface BuilderDeconstructionHost {
         toolFingerprint: String?,
         toolDamage: Int,
     ): BuilderPlan
-    fun failUnsafe(block: Block): Nothing
+    fun failUnsafe(player: Player, block: Block): Nothing
     fun fail(path: String): Nothing
 }
 
@@ -60,7 +60,7 @@ internal class BuilderDeconstructionController(
         selection.positionsTopDown().forEach { position ->
             val block = world.getBlockAt(position.x, position.y, position.z)
             if (block.type.isAir || safety.isReplaceable(block)) return@forEach
-            if (!safety.isSafeExisting(block)) host.failUnsafe(block)
+            if (!safety.isSafeExisting(block)) host.failUnsafe(player, block)
             if (tool != null && !isPreferredTool(block, tool)) host.fail("errors.tool")
             host.ensureMutable(player, block)
             if (tool != null) constructionRefund(block)?.let(refunds::add)

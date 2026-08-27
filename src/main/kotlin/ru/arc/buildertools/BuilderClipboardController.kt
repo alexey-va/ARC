@@ -23,7 +23,7 @@ internal interface BuilderClipboardHost {
         changes: List<BuilderBlockChange>,
         costs: List<BuilderItemAmount>,
     ): BuilderPlan
-    fun failUnsafe(block: Block): Nothing
+    fun failUnsafe(player: Player, block: Block): Nothing
     fun fail(path: String): Nothing
 }
 
@@ -66,7 +66,7 @@ internal class BuilderClipboardController(
             host.ensureInRangeAndLoaded(player, block)
             if (block.type.isAir) return@forEach
             if (safety.isReplaceable(block)) return@forEach
-            if (!safety.isSafeExisting(block)) host.failUnsafe(block)
+            if (!safety.isSafeExisting(block)) host.failUnsafe(player, block)
             host.ensureProtected(player, block)
             val copiedData = block.blockData.clone().also { data ->
                 if (data is Leaves) data.isPersistent = true
@@ -109,9 +109,9 @@ internal class BuilderClipboardController(
             ).validated()
             val block = world.getBlockAt(position.x, position.y, position.z)
             val after = Bukkit.createBlockData(copied.blockData)
-            if (!safety.isSafePlacement(after)) host.failUnsafe(block)
+            if (!safety.isSafePlacement(after)) host.failUnsafe(player, block)
             if (block.blockData.asString == after.asString) return@mapNotNull null
-            if (!safety.isReplaceable(block)) host.failUnsafe(block)
+            if (!safety.isReplaceable(block)) host.failUnsafe(player, block)
             host.ensureMutable(player, block)
             if (BuilderGameModePolicy.usesInventory(player.gameMode)) {
                 costs += BuilderPlacementCost.item(after)
