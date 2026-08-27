@@ -2635,6 +2635,8 @@ internal class BuilderToolsRuntime(
                     landsAvailable = HookRegistry.landsHook != null,
                     coreProtectRequired = config.requireCoreProtect,
                     coreProtectAvailable = coreProtect != null,
+                    shopRequired = config.shopEnabled,
+                    shopAvailable = HookRegistry.shopPurchaseService != null,
                     bookContractsEnabled = config.bookContractsEnabled,
                     bookRegistryReady = bookRegistryReady,
                     bookRegistryFailed = bookRegistryFailed,

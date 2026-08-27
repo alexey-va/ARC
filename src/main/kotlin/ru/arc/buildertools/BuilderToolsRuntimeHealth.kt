@@ -16,6 +16,8 @@ internal data class BuilderToolsRuntimeHealthInputs(
     val landsAvailable: Boolean,
     val coreProtectRequired: Boolean,
     val coreProtectAvailable: Boolean,
+    val shopRequired: Boolean,
+    val shopAvailable: Boolean,
     val bookContractsEnabled: Boolean,
     val bookRegistryReady: Boolean,
     val bookRegistryFailed: Boolean,
@@ -34,6 +36,7 @@ internal object BuilderToolsRuntimeHealth {
     fun contribution(input: BuilderToolsRuntimeHealthInputs): RuntimeHealthContribution {
         val landsReady = !input.landsRequired || input.landsAvailable
         val coreProtectReady = !input.coreProtectRequired || input.coreProtectAvailable
+        val shopReady = !input.shopRequired || input.shopAvailable
         val registryReady = !input.bookContractsEnabled || (input.bookRegistryReady && !input.bookRegistryFailed)
         val backlog = saturatedAdd(input.recoveryPlayers, input.deliveryWaitingForSpace)
         val leases = saturatedAdd(input.activeOperations, input.bookLockedPlayers)
@@ -41,7 +44,7 @@ internal object BuilderToolsRuntimeHealth {
             input.closed || input.recoveryBlocked || !landsReady || !coreProtectReady -> RuntimeHealthState.DOWN
             input.recovering || (input.bookContractsEnabled && !input.bookRegistryReady && !input.bookRegistryFailed) ->
                 RuntimeHealthState.STARTING
-            input.bookRegistryFailed || backlog > 0 -> RuntimeHealthState.DEGRADED
+            input.bookRegistryFailed || !shopReady || backlog > 0 -> RuntimeHealthState.DEGRADED
             else -> RuntimeHealthState.UP
         }
         return RuntimeHealthContribution(
@@ -56,6 +59,7 @@ internal object BuilderToolsRuntimeHealth {
             dependencies = linkedMapOf(
                 "lands" to landsReady,
                 "coreprotect" to coreProtectReady,
+                "shop" to shopReady,
                 "book_registry" to registryReady,
             ),
         )

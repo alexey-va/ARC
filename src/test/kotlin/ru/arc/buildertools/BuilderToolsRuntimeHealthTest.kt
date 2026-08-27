@@ -15,6 +15,7 @@ class BuilderToolsRuntimeHealthTest : FunSpec({
         contribution.dependencies shouldBe mapOf(
             "lands" to true,
             "coreprotect" to true,
+            "shop" to true,
             "book_registry" to true,
         )
     }
@@ -47,6 +48,24 @@ class BuilderToolsRuntimeHealthTest : FunSpec({
         contribution.dependencies["book_registry"] shouldBe false
     }
 
+    test("missing enabled shop degrades tools and publishes the failed dependency") {
+        val contribution = BuilderToolsRuntimeHealth.contribution(
+            healthyInputs().copy(shopAvailable = false),
+        )
+
+        contribution.state shouldBe RuntimeHealthState.DEGRADED
+        contribution.dependencies["shop"] shouldBe false
+    }
+
+    test("disabled shop remains an optional healthy dependency") {
+        val contribution = BuilderToolsRuntimeHealth.contribution(
+            healthyInputs().copy(shopRequired = false, shopAvailable = false),
+        )
+
+        contribution.state shouldBe RuntimeHealthState.UP
+        contribution.dependencies["shop"] shouldBe true
+    }
+
     test("external failure classification never includes the exception message") {
         BuilderToolsFailureType.of(IllegalStateException("jdbc:mysql://secret-host/password")) shouldBe
             "IllegalStateException"
@@ -66,6 +85,8 @@ private fun healthyInputs() = BuilderToolsRuntimeHealthInputs(
     landsAvailable = true,
     coreProtectRequired = true,
     coreProtectAvailable = true,
+    shopRequired = true,
+    shopAvailable = true,
     bookContractsEnabled = true,
     bookRegistryReady = true,
     bookRegistryFailed = false,
