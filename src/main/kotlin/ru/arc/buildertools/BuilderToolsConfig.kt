@@ -191,6 +191,8 @@ class BuilderToolsConfig(
                 "book.status.preview",
                 "book.status.quote",
                 "book.status.delivery",
+                "book.status.checking",
+                "book.status.changed",
                 "book.status.active",
                 "book.material-required",
                 "book.inventory-full",

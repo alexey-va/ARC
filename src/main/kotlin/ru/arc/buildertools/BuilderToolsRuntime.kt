@@ -139,6 +139,13 @@ internal class BuilderToolsRuntime(
             },
         )
     }
+    private val bookStatusVerifier: BuilderBookStatusVerifier? = bookRegistry?.let { registry ->
+        BuilderBookStatusVerifier(
+            loadInstance = registry::loadInstance,
+            loadBlueprint = registry::loadBlueprint,
+            runSync = { action -> taskScope.runSync(action) },
+        )
+    }
     private val storageExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "arc-builder-tools-storage").apply { isDaemon = true }
     }
@@ -631,6 +638,57 @@ internal class BuilderToolsRuntime(
         if (quote == null) pendingBookMints.remove(playerId)
         val held = BuildBookCodec.read(player.inventory.itemInMainHand)
         val heldAuctionToken = BuilderBookAuctionTokenCodec.read(player.inventory.itemInMainHand)
+        val presentedIdentity = BuilderBookPresentedIdentity.from(held)
+        if (BuilderBookStatusLookupPolicy.shouldVerify(quote != null, presentedIdentity, heldAuctionToken != null)) {
+            val expectedIdentity = checkNotNull(presentedIdentity)
+            if (!bookRegistryReady) {
+                send(player, if (bookRegistryFailed) "book.registry-unavailable" else "book.registry-starting")
+                return
+            }
+            val verifier = bookStatusVerifier
+            if (verifier == null) {
+                send(player, "book.registry-unavailable")
+                return
+            }
+            val start = verifier.verify(
+                playerId = playerId,
+                expected = expectedIdentity,
+                currentIdentity = {
+                    val current = player.inventory.itemInMainHand
+                    if (BuilderBookAuctionTokenCodec.read(current) != null) {
+                        null
+                    } else {
+                        BuilderBookPresentedIdentity.from(BuildBookCodec.read(current))
+                    }
+                },
+                complete = status@{ verification ->
+                    if (!player.isOnline) return@status
+                    if (pendingBookMints[playerId]?.expiresAtMillis?.let { it > System.currentTimeMillis() } == true) {
+                        showBuildBookStatus(player)
+                        return@status
+                    }
+                    when (verification) {
+                        is BuilderBookStatusVerification.Active -> send(
+                            player,
+                            "book.status.active",
+                            mapOf(
+                                "name" to messages.literal(verification.blueprint.title),
+                                "price" to messages.literal(formatMinor(verification.blueprint.issuePriceMinor)),
+                            ),
+                        )
+                        BuilderBookStatusVerification.Stale -> send(player, "book.stale")
+                        BuilderBookStatusVerification.SourceChanged -> send(player, "book.status.changed")
+                        BuilderBookStatusVerification.RegistryUnavailable -> send(player, "book.registry-unavailable")
+                    }
+                },
+            )
+            when (start) {
+                BuilderBookStatusLookupStart.STARTED -> send(player, "book.status.checking")
+                BuilderBookStatusLookupStart.ALREADY_PENDING -> Unit
+                BuilderBookStatusLookupStart.CLOSED -> send(player, "book.registry-unavailable")
+            }
+            return
+        }
         val previewOpen = BuildingManager.getPendingConstruction(playerId) != null
         val clipboard = clipboards[playerId]?.takeIf { it.expiresAtMillis > now }
         val selection = selectionOrNull(player)
@@ -2696,6 +2754,7 @@ internal class BuilderToolsRuntime(
         publishRuntimeHealth()
         HandlerList.unregisterAll(this)
         bookAuctionCoordinator?.close()
+        bookStatusVerifier?.close()
         previews.close()
         taskScope.close()
         activeOperations.values.toList().forEach { operation ->

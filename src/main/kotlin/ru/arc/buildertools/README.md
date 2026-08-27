@@ -30,8 +30,13 @@
   `/builder book confirm` pays and registers one single-use instance.
 - `/builder book` prints the complete clickable seven-step workflow and then
   reports the player's current step. `/builder book status` reports only that
-  contextual next action. Selection, clipboard, draft, quote, delivery, and
-  activated-book messages each lead directly into the next safe command.
+  contextual next action. For a registered physical book, status reads its
+  instance and blueprint from MySQL before calling it active; owner, UUID,
+  generation, state, title, and stored cost therefore come from the same
+  authority used by build/copy/sale. Concurrent status spam is coalesced and a
+  held-item change cannot receive the earlier lookup result. Selection,
+  clipboard, draft, quote, delivery, and activated-book messages each lead
+  directly into the next safe command.
 - Holding a registered book, `/builder book copy` shows the same stored
   self-cost and `/builder book confirm` pays for a new instance with a new UUID.
   The registered book may be listed in zAuctionHouse at any seller-selected
@@ -57,9 +62,10 @@
   then enters the same journaled confirmation path. A plain `/builder confirm`
   never spends money. Command products, custom items, composite currencies,
   and unavailable requirements fail closed. The estimate is informational;
-  purchase uses the admin shop's current price without an extra confirmation
-  for price drift. If one of several purchases fails, the world remains untouched
-  and completed purchases stay in the player's inventory for a safe retry.
+  purchase reads the current admin-shop quote again, and material or price
+  drift outside the configured tolerance refreshes the estimate instead of
+  spending. If one of several purchases fails, the world remains untouched and
+  completed purchases stay in the player's inventory for a safe retry.
   `/builder undo` creates and confirms
   an inverse material transaction; deconstruction undo returns blocks only
   after the exact collected drops are surrendered, never repairs tool wear, and
@@ -78,9 +84,11 @@ inputs; the brush anchors a crown in the block outside the clicked face and
 confirms only on that same face, while all writes pass the ARC plan/confirm
 path.
 
-Permissions use only the canonical `arc.builder.tools.*` namespace. The former
-`arc.buildertools.*`, `arc.deconstruction*`, and `arc.crown` nodes, including
-their selection-size and hourly tiers, are not accepted by the runtime.
+Region operations use the canonical `arc.builder.tools.*` namespace, while
+book creation, use, editing, and sale retain the existing `arc.build.book.*`
+permissions. The former `arc.buildertools.*`, `arc.deconstruction*`, and
+`arc.crown` nodes, including their selection-size and hourly tiers, are not
+accepted by the runtime.
 
 ## Safety and recovery
 

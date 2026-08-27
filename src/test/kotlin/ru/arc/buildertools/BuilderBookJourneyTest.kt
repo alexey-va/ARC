@@ -89,5 +89,9 @@ class BuilderBookJourneyTest : FunSpec({
         russianGuide shouldContain "смета без оплаты"
         config.string("locales.ru.book.status.active") shouldContain "Себестоимость копии"
         config.string("locales.en.book.status.active") shouldContain "Copy at stored cost"
+        config.string("locales.ru.book.status.checking") shouldContain "UUID, владельца и поколение"
+        config.string("locales.en.book.status.checking") shouldContain "UUID, owner, and generation"
+        config.string("locales.ru.book.status.changed") shouldContain "/builder book status"
+        config.string("locales.en.book.status.changed") shouldContain "/builder book status"
     }
 })

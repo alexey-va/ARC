@@ -282,6 +282,10 @@ locales:
           <prefix><#ff9f0f>Этап 7/7: реестр проверяет оплату.
           <#8c8c8c>  • <#e6fff3>Не перемещайте книгу.
           <#8c8c8c>  • <#e6fff3>Выдача продолжится автоматически.
+        checking: "<prefix><#e6fff3>Проверяю UUID, владельца и поколение книги…"
+        changed: |-
+          <prefix><#ff9f0f>Книга в руке изменилась во время проверки.
+          <#8c8c8c>  • <click:run_command:'/builder book status'><#92bed8>/builder book status</#92bed8></click> <#e6fff3>— проверить текущую книгу.
         active: |-
           <prefix><#2bba43>Готово: книга «<#92bed8><name><#2bba43>» активна.
           <#8c8c8c>  • <#e6fff3>Себестоимость копии: <#92bed8><price>
@@ -591,6 +595,10 @@ locales:
           <prefix><yellow>Step 7/7: verifying payment.
           <dark_gray>  • <gray>Do not move the book.
           <dark_gray>  • <gray>Delivery resumes automatically.
+        checking: "<prefix><gray>Checking the book UUID, owner, and generation…"
+        changed: |-
+          <prefix><yellow>The held book changed during verification.
+          <dark_gray>  • <aqua>/builder book status <gray>— check the current book.
         active: |-
           <prefix><green>Ready: <white><name></white> is active.
           <dark_gray>  • <gray>Copy at stored cost: <white><price>
