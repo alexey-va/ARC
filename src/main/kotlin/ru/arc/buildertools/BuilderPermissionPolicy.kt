@@ -15,12 +15,18 @@ internal enum class BuilderFeature(
 
 internal object BuilderPermissionPolicy {
     private const val umbrellaPermission = "arc.builder.tools.use"
+    private val bookEntryPermissions = setOf(
+        "arc.build.book.create",
+        "arc.build.book.sell",
+        "arc.build.book.use",
+    )
     private val sizeTiers = listOf(100, 80, 60, 40, 20)
     private val hourlyTiers = listOf(200_000, 150_000, 100_000, 50_000, 20_000)
 
     fun canUseAny(hasPermission: (String) -> Boolean): Boolean =
         hasPermission(umbrellaPermission) ||
-            BuilderFeature.entries.any { feature -> canUse(feature, hasPermission) }
+            BuilderFeature.entries.any { feature -> canUse(feature, hasPermission) } ||
+            bookEntryPermissions.any(hasPermission)
 
     fun canUse(feature: BuilderFeature, hasPermission: (String) -> Boolean): Boolean =
         hasPermission(umbrellaPermission) || hasPermission(feature.canonicalPermission)

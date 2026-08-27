@@ -376,7 +376,7 @@ class BuilderToolsDomainTest : FunSpec({
         bundled.contains("разрешена WorldGuard") shouldBe false
     }
 
-    test("permission policy accepts only canonical feature nodes") {
+    test("permission policy accepts canonical feature and build-book entry nodes") {
         fun permissions(vararg nodes: String): (String) -> Boolean = nodes.toSet()::contains
 
         BuilderPermissionPolicy.canUse(BuilderFeature.FILL, permissions("arc.builder.tools.fill")) shouldBe true
@@ -384,6 +384,9 @@ class BuilderToolsDomainTest : FunSpec({
         BuilderPermissionPolicy.canUse(BuilderFeature.PASTE, permissions("arc.buildertools.paste")) shouldBe false
         BuilderPermissionPolicy.canUse(BuilderFeature.CROWN, permissions("arc.crown")) shouldBe false
         BuilderPermissionPolicy.canUseAny(permissions("arc.builder.tools.deconstruct")) shouldBe true
+        BuilderPermissionPolicy.canUseAny(permissions("arc.build.book.create")) shouldBe true
+        BuilderPermissionPolicy.canUseAny(permissions("arc.build.book.sell")) shouldBe true
+        BuilderPermissionPolicy.canUseAny(permissions("arc.build.book.use")) shouldBe true
         BuilderPermissionPolicy.canUseAny(permissions()) shouldBe false
     }
 
