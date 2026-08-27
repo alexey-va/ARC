@@ -67,4 +67,6 @@ cd ~/mcserver && ./scripts/mc arc classic classic_survival
 
 ## Dependencies
 
-`arc-core` + `arc-core-paper` + `arc-core-logging` + `arc-core-redis` via composite build (`includeBuild("../arc-core")`).
+The public `ru.ruscrafting.arc:*:2.0.0` release is the default dependency path.
+Use `-ParcCoreDir=/absolute/path/to/arc-core` only when a task intentionally
+tests coordinated local core changes through explicit composite substitution.

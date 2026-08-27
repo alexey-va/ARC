@@ -48,13 +48,13 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.10.2")
 
     implementation(kotlin("stdlib"))
-    implementation("ru.arc:arc-core:1.0-SNAPSHOT")
-    implementation("ru.arc:arc-core-logging:1.0-SNAPSHOT")
-    implementation("ru.arc:arc-core-metrics:1.0-SNAPSHOT")
-    implementation("ru.arc:arc-core-redis:1.0-SNAPSHOT")
-    implementation("ru.arc:arc-core-sql:1.0-SNAPSHOT")
-    implementation("ru.arc:arc-core-paper:1.0-SNAPSHOT")
-    implementation("ru.arc:arc-core-ai:1.0-SNAPSHOT")
+    implementation("ru.ruscrafting.arc:arc-core:2.0.0")
+    implementation("ru.ruscrafting.arc:arc-core-logging:2.0.0")
+    implementation("ru.ruscrafting.arc:arc-core-metrics:2.0.0")
+    implementation("ru.ruscrafting.arc:arc-core-redis:2.0.0")
+    implementation("ru.ruscrafting.arc:arc-core-sql:2.0.0")
+    implementation("ru.ruscrafting.arc:arc-core-paper:2.0.0")
+    implementation("ru.ruscrafting.arc:arc-core-ai:2.0.0")
 
     // snakeyaml-engine comes transitively from arc-core
 
@@ -124,7 +124,7 @@ dependencies {
     testImplementation(libs.org.junit.jupiter.junit.jupiter.engine)
     testImplementation(libs.org.junit.jupiter.junit.jupiter.params)
     testImplementation(libs.com.thedeanda.lorem)
-    testImplementation("ru.arc:arc-core-paper-testing:1.0-SNAPSHOT")
+    testImplementation("ru.ruscrafting.arc:arc-core-paper-testing:2.0.0")
     testImplementation("org.mockito:mockito-core:5.14.2")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
