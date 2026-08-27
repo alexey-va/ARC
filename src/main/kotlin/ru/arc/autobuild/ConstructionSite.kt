@@ -295,8 +295,18 @@ class ConstructionSite(
 
     // ==================== Utilities ====================
 
-    /** Checks if this site matches the given parameters (for click confirmation) */
+    /**
+     * Checks if this site matches the exact preview contract used for click
+     * confirmation. Player-created books must keep the same issuance state:
+     * an activated item must never confirm a preview that was opened from its
+     * earlier draft.
+     */
     fun same(player: Player, location: Location, building: Building, book: BuildBookData? = null): Boolean =
+        samePlacement(player, location, building, book) &&
+            (book == null || bookData == book)
+
+    /** Matches only the visible placement, not a book instance or draft state. */
+    fun samePlacement(player: Player, location: Location, building: Building, book: BuildBookData? = null): Boolean =
         location.toCenterLocation() == centerBlock.toCenterLocation() &&
             building.fileName == this.building.fileName &&
             rotation == BuildingManager.rotationFromYaw(player.yaw) &&
@@ -318,7 +328,7 @@ class ConstructionSite(
     )
 
     fun refreshPreview(next: BuildBookData): Boolean {
-        if (state != ConstructionState.DisplayingOutline || next.buildingId != building.fileName) return false
+        if (state != ConstructionState.DisplayingOutline || !acceptsPreviewUpdate(next)) return false
         val previous = transform
         transform = next.transform.validated()
         chunks.clear()
@@ -331,6 +341,12 @@ class ConstructionSite(
         display?.stop()
         display = Display(this).also { it.showBorder(displaySeconds) }
         return true
+    }
+
+    internal fun acceptsPreviewUpdate(next: BuildBookData): Boolean {
+        if (next.buildingId != building.fileName) return false
+        val currentBlueprint = bookData?.blueprintId ?: return true
+        return next.blueprintId == currentBlueprint
     }
 
     fun cancelSilently(): Boolean {

@@ -42,7 +42,10 @@ internal interface BuilderBookWallet {
         CompletableFuture.completedFuture(BuilderBookProviderTransaction(null, false))
 }
 
-/** Exact RedisEconomy 4.5.12 adapter. Mutation calls are never retried. */
+/**
+ * RedisEconomy 4.5.12 compile-baseline adapter, verified API-compatible with
+ * the active 4.5.13 runtime. Mutation calls are never retried.
+ */
 internal class RedisEconomyBuilderBookWallet(
     private val apiProvider: () -> RedisEconomyAPI? = RedisEconomyAPI::getAPI,
 ) : BuilderBookWallet {

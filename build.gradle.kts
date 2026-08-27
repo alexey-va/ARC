@@ -113,7 +113,8 @@ dependencies {
     compileOnly(files("libs/zauctionhouse-api-4.0.1.2.jar"))
     compileOnly(libs.com.github.zrips.jobs)
     compileOnly(libs.bank.bank)
-    // Exact private mirror of the active RedisEconomy runtime; never shaded.
+    // API-compatible compile baseline for the active 4.5.13 runtime; never
+    // shaded. The private mirror currently publishes 4.5.12.
     compileOnly(libs.ru.ruscrafting.thirdparty.rediseconomy)
     compileOnly(libs.io.lettuce.lettuce.core)
     compileOnly(libs.dev.aurelium.auraskills.api.bukkit)

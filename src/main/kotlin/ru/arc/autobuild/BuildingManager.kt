@@ -199,10 +199,25 @@ object BuildingManager {
             // No existing site - start new outline
             existingSite == null -> createConstruction(player, location, building, checkedBook, cooldownSeconds)
 
+            // A draft is deliberately preview-only. Repeating the placement
+            // click explains the next safe step instead of opening a build
+            // confirmation that can never succeed.
+            existingSite.state == ConstructionState.DisplayingOutline &&
+                    existingSite.same(player, location, building, checkedBook) &&
+                    checkedBook.draft -> player.sendMessage(BuildConfig.Messages.draftPreview())
+
             // Same location clicked while showing outline - advance to confirmation
             existingSite.state == ConstructionState.DisplayingOutline &&
                     existingSite.cooldownSeconds == cooldownSeconds &&
                     existingSite.same(player, location, building, checkedBook) -> existingSite.startConfirmation()
+
+            // Activation and paid copy issuance change the exact book identity.
+            // Keep the already inspected placement, refresh it with the new
+            // contract, and require one more deliberate click to confirm.
+            existingSite.state == ConstructionState.DisplayingOutline &&
+                    existingSite.cooldownSeconds == cooldownSeconds &&
+                    existingSite.samePlacement(player, location, building, checkedBook) &&
+                    existingSite.refreshPreview(checkedBook) -> player.sendMessage(BuildConfig.Messages.startOutline())
 
             // Already building
             existingSite.state == ConstructionState.Building -> {
@@ -211,7 +226,7 @@ object BuildingManager {
 
             // Different location or building - cancel old and start new
             else -> {
-                existingSite.cancel()
+                existingSite.cancelSilently()
                 createConstruction(player, location, building, checkedBook, cooldownSeconds)
             }
         }

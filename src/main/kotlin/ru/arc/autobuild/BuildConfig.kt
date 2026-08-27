@@ -129,6 +129,11 @@ object BuildConfig {
             "<gray>\uD83D\uDEE0 <green>Нажмите на тот же блок, чтобы подтвердить постройку"
         )
 
+        fun draftPreview() = config.component(
+            "build-book.draft-preview-message",
+            "<yellow>Это бесплатный черновик: проверьте превью, затем рассчитайте смету командой /builder book activate.",
+        )
+
         fun confirm() =
             config.component("confirm-message", "<gray>\uD83D\uDEE0 <green>Подтвердите постройку, нажав ПКМ на NPC")
 

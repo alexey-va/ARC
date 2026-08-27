@@ -21,7 +21,10 @@
   and consumes every placed block (including two items for a double slab).
 - `/builder book draft [name]`: turns one owned ordinary book into a free,
   content-addressed draft. A draft can use the full transform GUI and continuous
-  world preview, but cannot mutate the world. `/builder book activate` reads the
+  world preview, but repeated placement clicks never open build confirmation or
+  mutate the world; they point the player to the quote step. After successful
+  activation, an already open preview is refreshed to the registered instance,
+  and a fresh confirmation click is still required. `/builder book activate` reads the
   current admin-shop material prices and shows material cost, configured
   construction markup, and total without charging. Only the separate clickable
   `/builder book confirm` pays and registers one single-use instance.

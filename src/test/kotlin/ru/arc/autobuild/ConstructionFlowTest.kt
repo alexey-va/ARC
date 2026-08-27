@@ -403,6 +403,49 @@ class ConstructionFlowTest : TestBase() {
             player.setRotation(90f, 0f) // rotation 90
             assertFalse(site.same(player, centerBlock, building))
         }
+
+        @Test
+        @DisplayName("same() does not confirm an activated book against its draft preview")
+        fun testSameRejectsChangedBookIssuanceState() {
+            player.setRotation(180f, 0f)
+            val draft = BuildBookData(
+                buildingId = building.fileName,
+                title = "Дом у озера",
+                playerCreated = true,
+                creatorId = java.util.UUID.fromString("11111111-1111-1111-1111-111111111111"),
+                creatorName = "Builder",
+                blueprintId = java.util.UUID.fromString("22222222-2222-2222-2222-222222222222"),
+                contentSha256 = "a".repeat(64),
+                schematicSha256 = "b".repeat(64),
+                blockCount = 12,
+                cooldownSeconds = 0,
+            ).validated()
+            val active = draft.copy(
+                instanceId = java.util.UUID.fromString("33333333-3333-3333-3333-333333333333"),
+                issuePriceMinor = 12_500,
+            ).validated()
+            val otherDraft = draft.copy(
+                blueprintId = java.util.UUID.fromString("44444444-4444-4444-4444-444444444444"),
+            ).validated()
+            val site = ConstructionSite(
+                building,
+                centerBlock,
+                player,
+                0,
+                world,
+                0,
+                0,
+                cooldownSeconds = 0,
+                bookData = draft,
+                initialTransform = draft.transform,
+            )
+
+            assertTrue(site.same(player, centerBlock, building, draft))
+            assertTrue(site.samePlacement(player, centerBlock, building, active))
+            assertFalse(site.same(player, centerBlock, building, active))
+            assertTrue(site.acceptsPreviewUpdate(active))
+            assertFalse(site.acceptsPreviewUpdate(otherDraft))
+        }
     }
 
     // ==================== Progress Tests ====================

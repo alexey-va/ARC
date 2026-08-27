@@ -134,22 +134,31 @@ locales:
       protection: |-
         <prefix><#c42323>Здесь нельзя использовать инструменты строителя.
         <#8c8c8c>  • <#e6fff3>Нужен приват Lands с правом строительства.
-      unsafe-block: "<prefix><red>Небезопасный блок <white><material></white> в точке <white><x> <y> <z></white>. Контейнеры, механизмы и кастомные блоки не переносятся."
-      material: "<prefix><red>Этот материал нельзя использовать. Для кроны выберите обычную листву."
-      crown-setting: "<prefix><red>Неверный параметр. <aqua>/builder crown help</aqua>."
+      unsafe-block: |-
+        <prefix><#c42323>Небезопасный блок: <#92bed8><material>
+        <#8c8c8c>  • <#e6fff3>Координаты: <#92bed8><x>, <y>, <z>
+        <#8c8c8c>  • <#969696>Контейнеры и механизмы нельзя переносить.
+      material: |-
+        <prefix><#c42323>Этот материал нельзя использовать.
+        <#8c8c8c>  • <#e6fff3>Для кроны выберите обычную листву.
+      crown-setting: "<prefix><#c42323>Неверный параметр. <click:run_command:'/builder crown help'><#92bed8>/builder crown help</#92bed8></click>"
       tool: |-
         <prefix><#c42323>Для демонтажа нужен подходящий инструмент.
         <#8c8c8c>  • <#e6fff3>В выживании держите его в основной руке с запасом прочности.
-      recovering: "<prefix><yellow>Модуль завершает безопасное восстановление. Попробуйте чуть позже."
-      undo-missing: "<prefix><yellow>Нет подходящей завершённой операции для отката."
-      shop-unavailable: "<prefix><yellow>Админшоп недоступен. Принесите блоки."
-      shop-not-supported: "<prefix><yellow>Докупка: только fill, paste и crown."
-      shop-material-unavailable: "<prefix><yellow>Не всё продаётся. Добавьте вручную."
-      shop-limit: "<prefix><red>Лимит: <white><items></white> шт. • <white><price></white>."
-      shop-insufficient-funds: "<prefix><yellow>Цена <white><price></white> • у вас <white><balance></white>."
-      shop-estimate-changed: "<prefix><yellow>Состав покупки изменился. Повторите команду."
-      shop-purchase-failed: "<prefix><red>Не куплено: <white><material></white>."
-      shop-purchase-ambiguous: "<prefix><red>Нет ответа: <white><material></white>."
+      recovering: "<prefix><#ff9f0f>Завершается безопасное восстановление. Попробуйте чуть позже."
+      undo-missing: "<prefix><#ff9f0f>Нет завершённой операции, которую можно откатить."
+      shop-unavailable: "<prefix><#ff9f0f>Админшоп недоступен. Принесите недостающие материалы."
+      shop-not-supported: "<prefix><#ff9f0f>Докупка доступна только для fill, paste и crown."
+      shop-material-unavailable: |-
+        <prefix><#ff9f0f>Админшоп не продаёт часть материалов.
+        <#8c8c8c>  • <#e6fff3>Добавьте их вручную.
+      shop-limit: "<prefix><#c42323>Превышен лимит покупки: <#92bed8><items> шт. <#8c8c8c>• <#e6fff3><price>"
+      shop-insufficient-funds: "<prefix><#ff9f0f>Нужно <#92bed8><price> <#8c8c8c>• <#e6fff3>на балансе: <#92bed8><balance>"
+      shop-estimate-changed: "<prefix><#ff9f0f>Состав покупки изменился. Создайте план ещё раз."
+      shop-purchase-failed: "<prefix><#c42323>Не удалось купить: <#92bed8><material>"
+      shop-purchase-ambiguous: |-
+        <prefix><#c42323>Админшоп не подтвердил покупку: <#92bed8><material>
+        <#8c8c8c>  • <#969696>Мир не изменён; выданные предметы уже у вас.
     selection:
       first: |-
         <prefix><#2bba43>Первая точка выбрана.
@@ -183,8 +192,8 @@ locales:
       received: |-
         <prefix><#2bba43>Инструмент строителя готов.
         <#8c8c8c>  • <#e6fff3>ЛКМ — первая точка; ПКМ — вторая.
-      inventory-full: "<prefix><yellow>Освободите один слот для селектора."
-      material-required: "<prefix><yellow>Держите осколок эха в основной руке."
+      inventory-full: "<prefix><#ff9f0f>Освободите один слот для инструмента строителя."
+      material-required: "<prefix><#ff9f0f>Держите обычный осколок эха в основной руке."
     crown-brush:
       name: "<#92bed8><bold>Кисть крон"
       lore:
@@ -197,28 +206,29 @@ locales:
       received: |-
         <prefix><#2bba43>Кисть крон готова.
         <#8c8c8c>  • <#e6fff3>ЛКМ по грани — предпросмотр; ПКМ — построить.
-      inventory-full: "<prefix><yellow>Освободите один слот для кисти крон."
-      material-required: "<prefix><yellow>Держите кисть в основной руке."
+      inventory-full: "<prefix><#ff9f0f>Освободите один слот для кисти крон."
+      material-required: "<prefix><#ff9f0f>Держите обычную кисть в основной руке."
     crown:
       same-face: "<prefix><#ff9f0f>Подтвердите ПКМ по той же грани."
       settings-updated: "<prefix><#2bba43>Настройка изменена: <#92bed8><setting> — <value>"
       palette-updated: "<prefix><#2bba43>Палитра сохранена: <#92bed8><count> <#e6fff3>видов листвы."
       palette-row: "<#8c8c8c>    • <#e6fff3><material>: <#92bed8><weight>"
       help:
-        - "<prefix><white>Кроны строятся только из вашей обычной листвы."
-        - "<dark_gray>  • <aqua>/builder crown wand <gray>— настроить обычную кисть"
-        - "<dark_gray>  • <aqua>/builder crown palette oak_leaves,birch_leaves"
-        - "<dark_gray>  • <aqua>/builder crown shape natural|round|wide|tall"
-        - "<dark_gray>  • <aqua>/builder crown radius 3–10 <gray>— размер кроны"
-        - "<dark_gray>  • <aqua>/builder crown density airy|natural|dense"
-        - "<dark_gray>  • <aqua>/builder crown noise smooth|natural|wild"
-        - "<dark_gray>  • <aqua>/builder crown reroll <gray>— новый вариант"
-        - "<dark_gray>  • <aqua>/builder crown place <gray>— подтвердить"
+        - "<prefix><#e6fff3><bold>Настройка кроны"
+        - "<#8c8c8c>  • <click:run_command:'/builder crown wand'><#92bed8>/builder crown wand</#92bed8></click> <#e6fff3>— подготовить кисть."
+        - "<#8c8c8c>  • <click:suggest_command:'/builder crown palette oak_leaves,birch_leaves'><#92bed8>/builder crown palette [листва]</#92bed8></click> <#e6fff3>— выбрать палитру."
+        - "<#8c8c8c>  • <#92bed8>/builder crown shape natural|round|wide|tall"
+        - "<#8c8c8c>  • <#92bed8>/builder crown radius 3–10 <#e6fff3>— размер кроны."
+        - "<#8c8c8c>  • <#92bed8>/builder crown density airy|natural|dense"
+        - "<#8c8c8c>  • <#92bed8>/builder crown noise smooth|natural|wild"
+        - "<#8c8c8c>  • <click:run_command:'/builder crown reroll'><#92bed8>/builder crown reroll</#92bed8></click> <#e6fff3>— показать другой вариант."
+        - "<#8c8c8c>  • <click:run_command:'/builder crown place'><#92bed8>/builder crown place</#92bed8></click> <#e6fff3>— построить вариант."
+        - "<#8c8c8c>  • <#969696>В выживании листва берётся из инвентаря."
       status:
-        - "<prefix><white>Настройки кроны:"
-        - "<dark_gray>  • <gray>Форма: <aqua><shape></aqua>; радиус: <aqua><radius></aqua>"
-        - "<dark_gray>  • <gray>Густота: <aqua><density></aqua>; край: <aqua><noise></aqua>"
-        - "<dark_gray>  • <gray>Палитра:"
+        - "<prefix><#e6fff3><bold>Текущая крона"
+        - "<#8c8c8c>  • <#e6fff3>Форма: <#92bed8><shape> <#8c8c8c>• <#e6fff3>радиус: <#92bed8><radius>"
+        - "<#8c8c8c>  • <#e6fff3>Густота: <#92bed8><density> <#8c8c8c>• <#e6fff3>край: <#92bed8><noise>"
+        - "<#8c8c8c>  • <#e6fff3>Палитра:"
     clipboard:
       saved: |-
         <prefix><#2bba43>Чертёж скопирован.
@@ -235,7 +245,8 @@ locales:
         - "<#8c8c8c>  3. <#e6fff3>Возьмите обычную книгу."
         - "<#8c8c8c>     <click:suggest_command:'/builder book draft '><#92bed8>/builder book draft [имя]</#92bed8></click> <#e6fff3>— создать черновик."
         - "<#8c8c8c>  4. <#e6fff3>ПКМ по земле — превью."
-        - "<#8c8c8c>     <#e6fff3>ПКМ в воздух — поворот и смещение."
+        - "<#8c8c8c>     <#e6fff3>ПКМ в воздух или Shift + ПКМ — меню положения."
+        - "<#8c8c8c>     <#969696>Черновик — только предпросмотр; он не строит."
         - "<#8c8c8c>  5. <click:run_command:'/builder book activate'><#92bed8>/builder book activate</#92bed8></click> <#e6fff3>— смета без оплаты."
         - "<#8c8c8c>  6. <click:run_command:'/builder book confirm'><#92bed8>/builder book confirm</#92bed8></click> <#e6fff3>— оплатить."
         - "<#8c8c8c>  7. <click:run_command:'/builder book copy'><#92bed8>/builder book copy</#92bed8></click> <#e6fff3>— копия по себестоимости."
@@ -280,7 +291,7 @@ locales:
         <prefix><#2bba43>Черновик готов: <#92bed8><name>
         <#8c8c8c>  • <#e6fff3>Блоков: <#92bed8><count> <#8c8c8c>• <#969696>денег пока не списано
         <#8c8c8c>  • <#e6fff3>ПКМ по земле — превью.
-        <#8c8c8c>  • <#e6fff3>ПКМ в воздух — поворот и смещение.
+        <#8c8c8c>  • <#e6fff3>ПКМ в воздух или Shift + ПКМ — меню положения.
         <#8c8c8c>  • <#e6fff3>После проверки: <click:run_command:'/builder book activate'><#92bed8>/builder book activate</#92bed8></click>
       material-required: "<prefix><#ff9f0f>Держите обычную книгу в основной руке."
       inventory-full: "<prefix><#ff9f0f>Освободите один слот для книги строительства."
@@ -342,6 +353,10 @@ locales:
         <#8c8c8c>  • <#e6fff3>Каждый экземпляр — одноразовый.
         <#8c8c8c>  • <#e6fff3>Копия выпускается по той же себестоимости.
         <#8c8c8c>  • <click:suggest_command:'/builder book sell '><#92bed8>/builder book sell [цена]</#92bed8></click> <#e6fff3>— продажа.
+      activated-preview: |-
+        <prefix><#2bba43>Книга активна; открытое превью обновлено.
+        <#8c8c8c>  • <#e6fff3>Повторите ПКМ по опорному блоку.
+        <#8c8c8c>  • <#969696>Сначала откроется окно подтверждения.
       copied: |-
         <prefix><#2bba43>Новый экземпляр зарегистрирован.
         <#8c8c8c>  • <#e6fff3>Исходная книга сохранена.
@@ -389,11 +404,13 @@ locales:
       market-more: "<#8c8c8c>    • <#969696>Ещё материалов: <count>"
       cancelled: "<prefix><#ff9f0f>Предпросмотр отменён. <#969696>Мир и инвентарь не изменены."
     shop:
-      purchased: "<prefix><green>Куплено <white><items></white> шт. • <white><price></white>."
+      purchased: "<prefix><#2bba43>Куплено: <#92bed8><items> шт. <#8c8c8c>• <#e6fff3>стоимость: <#92bed8><price>"
       purchase-detail:
-        - "<prefix><gray>Причина: <white><status></white>."
-        - "<prefix><gray>Куплено ранее: <white><purchased></white>."
-      world-untouched: "<prefix><gray>Купленное у вас; мир не изменён."
+        - "<#8c8c8c>  • <#e6fff3>Статус: <#92bed8><status>"
+        - "<#8c8c8c>  • <#e6fff3>Уже куплено: <#92bed8><purchased>"
+      world-untouched: |-
+        <prefix><#ff9f0f>Строительство не началось.
+        <#8c8c8c>  • <#e6fff3>Материалы уже у вас; создайте план снова.
     operation:
       started: |-
         <prefix><#ff9f0f>Строительство начато.
@@ -635,6 +652,10 @@ locales:
         <prefix><green>The build book is active and registered.
         <dark_gray>  • <gray>Each instance is single-use.
         <dark_gray>  • <gray>Copies use the same stored cost.
+      activated-preview: |-
+        <prefix><green>The book is active; the open preview was refreshed.
+        <dark_gray>  • <gray>Right-click the anchor block again.
+        <dark_gray>  • <gray>A final confirmation opens before building.
       copied: |-
         <prefix><green>A new instance is registered.
         <dark_gray>  • <gray>The source remains yours.

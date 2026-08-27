@@ -212,6 +212,7 @@ class BuilderToolsConfig(
                 "book.delivery-pending",
                 "book.delivery-recovered",
                 "book.activated",
+                "book.activated-preview",
                 "book.copied",
                 "book.auction-price",
                 "book.auction-unavailable",

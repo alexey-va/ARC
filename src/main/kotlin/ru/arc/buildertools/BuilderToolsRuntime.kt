@@ -498,7 +498,9 @@ internal class BuilderToolsRuntime(
             )
             selections.render(player)
         } else {
-            player.spawnParticle(Particle.HAPPY_VILLAGER, location.clone().add(0.5, 0.5, 0.5), 6, 0.2, 0.2, 0.2, 0.0)
+            // Render through the same controller as the repeating preview so
+            // the first point is immediately white and the second green.
+            selections.render(player)
         }
     }
 
@@ -951,6 +953,14 @@ internal class BuilderToolsRuntime(
                     releaseBookSource(sourceInstanceId, transactionId)
                     return@runSync
                 }
+                val previewRefreshed = sourceInstanceId == null && runCatching {
+                    inventoryBooksWithInstance(player, instanceId).singleOrNull()?.second?.let { deliveredBook ->
+                        BuildingManager.updatePendingTransform(player, deliveredBook) == true
+                    } == true
+                }.getOrElse { failure ->
+                    warn("Builder-book paid delivery completed but preview refresh failed for {}: {}", player.name, failure.message)
+                    false
+                }
                 releaseBookSource(sourceInstanceId, transactionId) {
                     bookLockedPlayers -= player.uniqueId
                     bookDeliveryWaitingForSpace -= player.uniqueId
@@ -960,6 +970,7 @@ internal class BuilderToolsRuntime(
                             when {
                                 recovered -> "book.delivery-recovered"
                                 sourceInstanceId != null -> "book.copied"
+                                previewRefreshed -> "book.activated-preview"
                                 else -> "book.activated"
                             },
                         )
@@ -1809,7 +1820,7 @@ internal class BuilderToolsRuntime(
 
     private fun unsafeBlock(block: Block) = UserFailure(
         "errors.unsafe-block",
-        mapOf("material" to messages.literal(block.type.key), "x" to messages.literal(block.x), "y" to messages.literal(block.y), "z" to messages.literal(block.z)),
+        mapOf("material" to messages.literal(block.type.key.key), "x" to messages.literal(block.x), "y" to messages.literal(block.y), "z" to messages.literal(block.z)),
     )
 
     private fun hourlyUsage(playerId: UUID, now: Long): Int = committedRecords.values
