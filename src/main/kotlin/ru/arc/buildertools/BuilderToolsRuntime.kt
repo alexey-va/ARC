@@ -209,13 +209,13 @@ internal class BuilderToolsRuntime(
         if (sender !is Player) return emptyList()
         if (args.size == 1) {
             return filterPrefix(
-                listOf("help", "wand", "pos1", "pos2", "fill", "copy", "book", "paste", "deconstruct", "crown", "confirm", "cancel", "undo", "status"),
+                listOf("help", "wand", "pos1", "pos2", "clear", "fill", "copy", "book", "paste", "deconstruct", "crown", "confirm", "cancel", "undo", "status"),
                 args[0],
             )
         }
         if (args.size == 2 && args[0].equals("confirm", true)) return filterPrefix(listOf("buy"), args[1])
         if (args.size == 2 && args[0].equals("book", true)) {
-            return filterPrefix(listOf("draft", "activate", "copy", "confirm", "cancel"), args[1])
+            return filterPrefix(listOf("guide", "status", "draft", "activate", "copy", "confirm", "cancel"), args[1])
         }
         if (args.firstOrNull().equals("crown", true)) {
             if (args.size == 2) {
@@ -249,6 +249,7 @@ internal class BuilderToolsRuntime(
             "wand" -> giveWand(player)
             "pos1" -> setCommandPosition(player, first = true)
             "pos2" -> setCommandPosition(player, first = false)
+            "clear" -> clearSelection(player)
             "fill" -> preparePlan(player, planFill(player, materialArgument(player, args.getOrNull(1))))
             "copy" -> copySelection(player)
             "book" -> handleBuildBookCommand(player, args.drop(1))
@@ -454,6 +455,14 @@ internal class BuilderToolsRuntime(
         require(location.world == player.world) { "Selection world mismatch" }
         val position = BuilderBlockPos(player.world.uid, location.blockX, location.blockY, location.blockZ).validated()
         val draft = selections.getOrPut(player.uniqueId, ::SelectionDraft)
+        if (
+            (draft.first?.worldId != null && draft.first?.worldId != position.worldId) ||
+            (draft.second?.worldId != null && draft.second?.worldId != position.worldId)
+        ) {
+            draft.first = null
+            draft.second = null
+            send(player, "selection.world-reset")
+        }
         if (first) draft.first = position else draft.second = position
         send(
             player,
@@ -489,7 +498,10 @@ internal class BuilderToolsRuntime(
 
     private fun selectionOrNull(player: Player): BuilderSelection? {
         val draft = selections[player.uniqueId] ?: return null
-        return if (draft.first != null && draft.second != null) BuilderSelection(draft.first!!, draft.second!!) else null
+        val first = draft.first ?: return null
+        val second = draft.second ?: return null
+        if (first.worldId != second.worldId || first.worldId != player.world.uid) return null
+        return BuilderSelection(first, second)
     }
 
     private fun maxAxis(player: Player): Int {
@@ -550,12 +562,75 @@ internal class BuilderToolsRuntime(
 
     private fun handleBuildBookCommand(player: Player, args: List<String>) {
         when (args.firstOrNull()?.lowercase(Locale.ROOT)) {
+            null, "guide", "help" -> showBuildBookGuide(player)
+            "status" -> showBuildBookStatus(player)
             "draft" -> createBuildBookDraft(player, args.drop(1))
             "activate" -> prepareBuildBookActivation(player)
             "copy" -> prepareBuildBookCopy(player)
             "confirm" -> confirmBuildBookMint(player)
             "cancel" -> cancelBuildBookMint(player)
-            else -> messages.renderLines("help", locale(player)).forEach(player::sendMessage)
+            else -> showBuildBookGuide(player)
+        }
+    }
+
+    private fun showBuildBookGuide(player: Player) {
+        messages.renderLines("book.guide", locale(player)).forEach(player::sendMessage)
+        showBuildBookStatus(player)
+    }
+
+    private fun showBuildBookStatus(player: Player) {
+        val now = System.currentTimeMillis()
+        val playerId = player.uniqueId
+        val quote = pendingBookMints[playerId]?.takeIf { it.expiresAtMillis > now }
+        if (quote == null) pendingBookMints.remove(playerId)
+        val held = BuildBookCodec.read(player.inventory.itemInMainHand)
+        val previewOpen = BuildingManager.getPendingConstruction(playerId) != null
+        val clipboard = clipboards[playerId]?.takeIf { it.expiresAtMillis > now }
+        val selection = selectionOrNull(player)
+        when {
+            quote != null -> send(
+                player,
+                "book.status.quote",
+                mapOf(
+                    "price" to messages.literal(formatMinor(quote.blueprint.issuePriceMinor)),
+                    "seconds" to messages.literal(((quote.expiresAtMillis - now) / 1_000L).coerceAtLeast(1L)),
+                ),
+            )
+            held?.deliveryPending == true -> send(player, "book.status.delivery")
+            held?.draft == true && previewOpen -> send(
+                player,
+                "book.status.preview",
+                mapOf("name" to messages.literal(held.title)),
+            )
+            held?.draft == true -> send(
+                player,
+                "book.status.draft",
+                mapOf("name" to messages.literal(held.title)),
+            )
+            held?.available == true -> send(
+                player,
+                "book.status.active",
+                mapOf(
+                    "name" to messages.literal(held.title),
+                    "price" to messages.literal(formatMinor(checkNotNull(held.issuePriceMinor))),
+                ),
+            )
+            clipboard != null -> send(
+                player,
+                "book.status.clipboard",
+                mapOf("count" to messages.literal(clipboard.blocks.size)),
+            )
+            selection != null -> send(
+                player,
+                "book.status.selection",
+                mapOf(
+                    "x" to messages.literal(selection.sizeX),
+                    "y" to messages.literal(selection.sizeY),
+                    "z" to messages.literal(selection.sizeZ),
+                    "volume" to messages.literal(selection.volume),
+                ),
+            )
+            else -> send(player, "book.status.start")
         }
     }
 
@@ -1629,6 +1704,14 @@ internal class BuilderToolsRuntime(
         }
     }
 
+    private fun clearSelection(player: Player) {
+        if (player.uniqueId in activeOperations || player.uniqueId in bookLockedPlayers) throw UserFailure("errors.busy")
+        discardPendingPlan(player.uniqueId)
+        selections.remove(player.uniqueId)
+        crownBrushAnchors.remove(player.uniqueId)
+        send(player, "selection.cleared")
+    }
+
     private fun prepareUndo(player: Player) {
         ensureAvailable(player)
         val now = System.currentTimeMillis()
@@ -1731,8 +1814,7 @@ internal class BuilderToolsRuntime(
             try {
                 val playerId = player.uniqueId
                 pendingPlans[playerId]?.plan?.takeIf { it.expiresAtMillis > now }?.let { showPlanParticles(player, it) }
-                val holdingSelector = isSelector(player.inventory.itemInMainHand) || isSelector(player.inventory.itemInOffHand)
-                if (holdingSelector) selectionOrNull(player)?.let { showSelectionOutline(player, it, Particle.FLAME) }
+                showSelectionDraftParticles(player)
                 previewFailurePlayers.remove(playerId)
             } catch (failure: RuntimeException) {
                 if (previewFailurePlayers.add(player.uniqueId)) {
@@ -1740,6 +1822,26 @@ internal class BuilderToolsRuntime(
                 }
             }
         }
+    }
+
+    private fun showSelectionDraftParticles(player: Player) {
+        val draft = selections[player.uniqueId] ?: return
+        draft.first?.let { showSelectionPoint(player, it, Particle.END_ROD) }
+        draft.second?.let { showSelectionPoint(player, it, Particle.HAPPY_VILLAGER) }
+        selectionOrNull(player)?.let { showSelectionOutline(player, it, Particle.FLAME) }
+    }
+
+    private fun showSelectionPoint(player: Player, position: BuilderBlockPos, particle: Particle) {
+        if (position.worldId != player.world.uid) return
+        val x = position.x + 0.5
+        val y = position.y + 0.5
+        val z = position.z + 0.5
+        val eye = player.eyeLocation
+        val dx = x - eye.x
+        val dy = y - eye.y
+        val dz = z - eye.z
+        if (dx * dx + dy * dy + dz * dz > config.previewRadius * config.previewRadius) return
+        player.spawnParticle(particle, x, y, z, 3, 0.08, 0.08, 0.08, 0.0)
     }
 
     private fun showPlanParticles(player: Player, plan: BuilderPlan) {

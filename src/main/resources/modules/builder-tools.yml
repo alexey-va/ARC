@@ -85,6 +85,8 @@ locales:
       - "<#8c8c8c>  • <#92bed8>/builder book draft [имя] <#e6fff3>— бесплатный черновик"
       - "<#8c8c8c>  • <#92bed8>/builder book activate <#e6fff3>— рассчитать цену активации"
       - "<#8c8c8c>  • <#92bed8>/builder book copy <#e6fff3>— платная копия активной книги"
+      - "<#8c8c8c>  • <#92bed8>/builder book <#e6fff3>— пошаговая инструкция и текущий этап"
+      - "<#8c8c8c>  • <#92bed8>/builder clear <#e6fff3>— убрать выделение и его частицы"
       - "<#8c8c8c>  • <#92bed8>/builder deconstruct <#e6fff3>— разобрать область"
       - "<#8c8c8c>  • <#92bed8>/builder crown <#e6fff3>— создать крону"
       - "<#8c8c8c>  • <#92bed8>/builder confirm <#e6fff3>— применить показанный план"
@@ -136,18 +138,23 @@ locales:
       first: |-
         <prefix><#2bba43>Первая точка выбрана.
         <#8c8c8c>  • Координаты: <#92bed8><x>, <y>, <z>
+        <#8c8c8c>  • <#e6fff3>Теперь отметьте вторую точку <#92bed8>ПКМ<#e6fff3>; первая точка светится белым.
       second: |-
         <prefix><#2bba43>Вторая точка выбрана.
         <#8c8c8c>  • Координаты: <#92bed8><x>, <y>, <z>
+        <#8c8c8c>  • <#e6fff3>Если первой точки ещё нет, отметьте её <#92bed8>ЛКМ<#e6fff3>; эта точка светится зелёным.
       complete: |-
         <#8c8c8c>  • <#e6fff3>Область: <#92bed8><x> × <y> × <z> <#8c8c8c>• <#e6fff3>объём: <#92bed8><volume>
-        <#8c8c8c>  • <#969696>Контур виден постоянно, пока инструмент в руке.
+        <#8c8c8c>  • <#969696>Огненный контур остаётся видимым, пока выделение активно.
+        <#8c8c8c>  • <click:run_command:'/builder copy'><#92bed8>/builder copy</#92bed8></click> <#e6fff3>— скопировать безопасные блоки в чертёж.
+      cleared: "<prefix><#969696>Выделение очищено; частицы скрыты. Сохранённый чертёж не удалён."
+      world-reset: "<prefix><#ff9f0f>Старые точки были в другом мире и очищены. Выберите обе точки заново."
     wand:
       name: "<#92bed8><bold>Инструмент строителя"
       lore:
         - "<#e6fff3>ЛКМ по блоку — первая точка."
         - "<#e6fff3>ПКМ по блоку — вторая точка."
-        - "<#969696>Контур обновляется, пока инструмент в руке."
+        - "<#969696>Контур виден постоянно до /builder clear."
         - "<#969696>Размер области зависит от ваших прав."
         - "<reset>"
         - "<#8c8c8c>• <#92bed8>/builder <#e6fff3>— команды строителя."
@@ -194,12 +201,51 @@ locales:
       saved: |-
         <prefix><#2bba43>Чертёж скопирован.
         <#8c8c8c>  • <#e6fff3>Блоков: <#92bed8><count> <#8c8c8c>• <#969696>хранится 15 минут
-        <#8c8c8c>  • <#e6fff3>Создать черновик: <#92bed8>/builder book draft [имя]
+        <#8c8c8c>  • <#e6fff3>Возьмите обычную книгу в основную руку.
+        <#8c8c8c>  • <click:suggest_command:'/builder book draft '><#92bed8>/builder book draft [имя]</#92bed8></click> <#e6fff3>— получить бесплатный черновик.
+        <#8c8c8c>  • <click:run_command:'/builder clear'><#92bed8>/builder clear</#92bed8></click> <#e6fff3>— скрыть старый контур; чертёж сохранится.
     book:
+      guide:
+        - "<prefix><#e6fff3><bold>Как создать книгу строительства"
+        - "<#8c8c8c>  1. <click:run_command:'/builder wand'><#92bed8>/builder wand</#92bed8></click> <#e6fff3>— превратить осколок эха в селектор."
+        - "<#8c8c8c>  2. <#e6fff3>ЛКМ и ПКМ отметьте углы; точки и весь контур светятся постоянно."
+        - "<#8c8c8c>  3. <click:run_command:'/builder copy'><#92bed8>/builder copy</#92bed8></click> <#e6fff3>— сохранить безопасный чертёж на 15 минут."
+        - "<#8c8c8c>  4. <#e6fff3>Возьмите обычную книгу и выполните <click:suggest_command:'/builder book draft '><#92bed8>/builder book draft [имя]</#92bed8></click>."
+        - "<#8c8c8c>  5. <#e6fff3>ПКМ книгой по земле — постоянное превью; ПКМ в воздух — поворот и смещение."
+        - "<#8c8c8c>  6. <click:run_command:'/builder book activate'><#92bed8>/builder book activate</#92bed8></click> <#e6fff3>— увидеть полную смету; деньги пока не списываются."
+        - "<#8c8c8c>  7. <click:run_command:'/builder book confirm'><#92bed8>/builder book confirm</#92bed8></click> <#e6fff3>— оплатить и получить одноразовый зарегистрированный экземпляр."
+        - "<#8c8c8c>  • <#e6fff3>Активную книгу можно копировать за ту же стоимость или продать через <click:suggest_command:'/ah sell '><#92bed8>/ah sell [цена]</#92bed8></click>."
+        - "<#8c8c8c>  • <#e6fff3>Застряли? <click:run_command:'/builder book status'><#92bed8>/builder book status</#92bed8></click> покажет только ваш текущий этап."
+      status:
+        start: |-
+          <prefix><#ff9f0f>Этап 1/7: сначала выделите будущую постройку.
+          <#8c8c8c>  • <click:run_command:'/builder wand'><#92bed8>/builder wand</#92bed8></click> <#e6fff3>— получить селектор; ЛКМ и ПКМ — две точки.
+        selection: |-
+          <prefix><#2bba43>Этап 2/7: область выделена — <#92bed8><x> × <y> × <z> <#8c8c8c>(<volume> блоков).
+          <#8c8c8c>  • <click:run_command:'/builder copy'><#92bed8>/builder copy</#92bed8></click> <#e6fff3>— сохранить показанный контур как чертёж.
+        clipboard: |-
+          <prefix><#2bba43>Этап 3/7: чертёж готов — <#92bed8><count> блоков.
+          <#8c8c8c>  • <#e6fff3>Возьмите обычную книгу и нажмите <click:suggest_command:'/builder book draft '><#92bed8>/builder book draft [имя]</#92bed8></click>.
+        draft: |-
+          <prefix><#2bba43>Этап 4/7: бесплатный черновик «<#92bed8><name><#2bba43>» готов.
+          <#8c8c8c>  • <#e6fff3>ПКМ по земле — открыть превью; ПКМ в воздух — настроить положение.
+        preview: |-
+          <prefix><#2bba43>Этап 5/7: превью «<#92bed8><name><#2bba43>» открыто и обновляется постоянно.
+          <#8c8c8c>  • <#e6fff3>Когда всё совпало, выполните <click:run_command:'/builder book activate'><#92bed8>/builder book activate</#92bed8></click> для сметы.
+        quote: |-
+          <prefix><#ff9f0f>Этап 6/7: смета готова — <#2bba43><price><#ff9f0f>.
+          <#8c8c8c>  • <click:run_command:'/builder book confirm'><#92bed8>/builder book confirm</#92bed8></click> <#e6fff3>— оплатить; осталось <#92bed8><seconds> с<#e6fff3>.
+        delivery: |-
+          <prefix><#ff9f0f>Этап 7/7: оплаченный экземпляр подтверждается реестром.
+          <#8c8c8c>  • <#e6fff3>Не перемещайте книгу; ARC завершит выдачу автоматически.
+        active: |-
+          <prefix><#2bba43>Готово: «<#92bed8><name><#2bba43>» активна; стоимость выпуска нового экземпляра — <#92bed8><price><#2bba43>.
+          <#8c8c8c>  • <#e6fff3>ПКМ по земле — показать постройку; <click:run_command:'/builder book copy'><#92bed8>/builder book copy</#92bed8></click> — копия; <click:suggest_command:'/ah sell '><#92bed8>/ah sell [цена]</#92bed8></click> — продажа.
       draft-created: |-
         <prefix><#2bba43>Черновик готов: <#92bed8><name>
         <#8c8c8c>  • <#e6fff3>Блоков: <#92bed8><count> <#8c8c8c>• <#969696>денег пока не списано
-        <#8c8c8c>  • <#e6fff3>Проверьте превью и настройте положение, затем: <#92bed8>/builder book activate
+        <#8c8c8c>  • <#e6fff3>ПКМ по земле — превью; ПКМ в воздух — поворот и смещение.
+        <#8c8c8c>  • <#e6fff3>После проверки: <click:run_command:'/builder book activate'><#92bed8>/builder book activate</#92bed8></click>
       material-required: "<prefix><#ff9f0f>Держите обычную книгу в основной руке."
       inventory-full: "<prefix><#ff9f0f>Освободите один слот для книги строительства."
       invalid-name: "<prefix><#c42323>Название: от 1 до 48 обычных символов."
@@ -248,9 +294,11 @@ locales:
       activated: |-
         <prefix><#2bba43>Книга активна и зарегистрирована.
         <#8c8c8c>  • <#e6fff3>Каждый экземпляр одноразовый; копии оплачиваются по той же сохранённой себестоимости.
+        <#8c8c8c>  • <click:suggest_command:'/ah sell '><#92bed8>/ah sell [цена]</#92bed8></click> <#e6fff3>— выставить книгу по своей цене.
       copied: |-
         <prefix><#2bba43>Новый экземпляр зарегистрирован.
         <#8c8c8c>  • <#e6fff3>Исходная книга сохранена; у копии собственный одноразовый UUID.
+        <#8c8c8c>  • <click:suggest_command:'/ah sell '><#92bed8>/ah sell [цена]</#92bed8></click> <#e6fff3>— выставить экземпляр на аукцион.
     plan:
       ready: |-
         <prefix><#2bba43>Предпросмотр готов: <#92bed8><kind>
@@ -301,6 +349,8 @@ locales:
       - "<prefix><white>/builder book draft [name] <gray>— create a free preview-only draft"
       - "<prefix><white>/builder book activate <gray>— quote draft activation"
       - "<prefix><white>/builder book copy <gray>— quote a paid registered copy"
+      - "<prefix><white>/builder book <gray>— guided workflow and current step"
+      - "<prefix><white>/builder clear <gray>— clear the selection and hide its particles"
       - "<prefix><white>/builder deconstruct <gray>— dismantle with your current tool"
       - "<prefix><white>/builder crown [leaves] [3–10] <gray>— build a leaf crown"
       - "<prefix><white>/builder confirm <gray>— build with materials you own"
@@ -333,14 +383,17 @@ locales:
       shop-purchase-failed: "<prefix><red>Not purchased: <white><material></white>."
       shop-purchase-ambiguous: "<prefix><red>No response: <white><material></white>."
     selection:
-      first: "<prefix><green>Position 1: <white><x> <y> <z>"
-      second: "<prefix><green>Position 2: <white><x> <y> <z>"
-      complete: "<prefix><gray>Selection: <white><x>×<y>×<z></white>, volume <white><volume></white>."
+      first: "<prefix><green>Position 1: <white><x> <y> <z></white>. <gray>Right-click position 2; this point stays highlighted."
+      second: "<prefix><green>Position 2: <white><x> <y> <z></white>. <gray>If position 1 is missing, left-click it; this point stays green."
+      complete: "<prefix><gray>Selection: <white><x>×<y>×<z></white>, volume <white><volume></white>. The outline stays visible. Run <click:run_command:'/builder copy'><aqua>/builder copy</aqua></click>."
+      cleared: "<prefix><gray>Selection cleared; its particles are hidden. The saved clipboard remains."
+      world-reset: "<prefix><yellow>The old points belonged to another world and were cleared. Select both points again."
     wand:
       name: "<aqua><bold>Builder selector"
       lore:
         - "<gray>Left-click a block — position 1"
         - "<gray>Right-click a block — position 2"
+        - "<dark_gray>The outline stays visible until /builder clear"
         - "<dark_gray>The selector never changes blocks"
       received: "<prefix><green>Your echo shard is now the builder selector."
       inventory-full: "<prefix><yellow>Free one slot or hold a single echo shard."
@@ -375,8 +428,27 @@ locales:
         - "<dark_gray>  • <gray>Density: <aqua><density></aqua>; edge: <aqua><noise></aqua>"
         - "<dark_gray>  • <gray>Palette:"
     clipboard:
-      saved: "<prefix><green>Copied a safe <white><count></white>-block blueprint. <gray>Paste it or create a draft within 15 minutes."
+      saved: "<prefix><green>Copied a safe <white><count></white>-block blueprint. <gray>Hold a plain book, then use <click:suggest_command:'/builder book draft '><aqua>/builder book draft [name]</aqua></click> within 15 minutes. <click:run_command:'/builder clear'><aqua>/builder clear</aqua></click> hides the old outline without deleting the blueprint."
     book:
+      guide:
+        - "<prefix><white><bold>Build-book guide"
+        - "<dark_gray>  1. <aqua>/builder wand <gray>and mark two corners; particles stay visible."
+        - "<dark_gray>  2. <aqua>/builder copy <gray>to save a safe 15-minute clipboard."
+        - "<dark_gray>  3. Hold a plain book and use <aqua>/builder book draft [name]</aqua>."
+        - "<dark_gray>  4. Right-click ground to preview; right-click air to rotate or offset."
+        - "<dark_gray>  5. <aqua>/builder book activate <gray>shows the full quote without charging."
+        - "<dark_gray>  6. <aqua>/builder book confirm <gray>pays and registers one single-use instance."
+        - "<dark_gray>  7. Copy it at the same stored cost or sell it with <aqua>/ah sell [price]</aqua>."
+        - "<dark_gray>  • <aqua>/builder book status <gray>shows only your current step and next action."
+      status:
+        start: "<prefix><yellow>Step 1/7: use <aqua>/builder wand</aqua>, then left- and right-click the two corners."
+        selection: "<prefix><green>Step 2/7: selected <white><x>×<y>×<z></white> (<volume> blocks). Run <aqua>/builder copy</aqua>."
+        clipboard: "<prefix><green>Step 3/7: <white><count></white> blocks copied. Hold a plain book and use <aqua>/builder book draft [name]</aqua>."
+        draft: "<prefix><green>Step 4/7: draft <white><name></white> is ready. Right-click ground to preview; right-click air to edit."
+        preview: "<prefix><green>Step 5/7: preview <white><name></white> is continuously visible. Use <aqua>/builder book activate</aqua> when ready."
+        quote: "<prefix><yellow>Step 6/7: quote <green><price></green>. Use <aqua>/builder book confirm</aqua> within <white><seconds></white> seconds."
+        delivery: "<prefix><yellow>Step 7/7: the paid instance is being verified. Do not move it; delivery resumes automatically."
+        active: "<prefix><green>Ready: <white><name></white> is active; another instance costs <white><price></white>. Preview it, use <aqua>/builder book copy</aqua>, or sell with <aqua>/ah sell [price]</aqua>."
       draft-created: "<prefix><green>Draft <white><name></white> created from <white><count></white> blocks. <gray>No money was charged. Preview it, adjust it, then use <white>/builder book activate</white>."
       material-required: "<prefix><yellow>Hold a plain book in your main hand. It will become the build book."
       inventory-full: "<prefix><yellow>Free one slot or hold a single plain book."

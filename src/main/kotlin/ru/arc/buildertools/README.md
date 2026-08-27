@@ -8,8 +8,10 @@
 
 - `/builder wand`: binds one plain echo shard already owned by the player as
   the selector; left click sets position 1 and right click sets position 2.
-  While the selector is held, its clipped particle outline refreshes twice per
-  second. Prepared plans refresh their bounded preview for the whole TTL.
+  Each corner and the clipped particle outline refresh twice per second until
+  `/builder clear`, even after the selector is put away. Moving to another world
+  cannot join stale and current-world corners. Prepared plans refresh their
+  bounded preview for the whole TTL.
   `/builder crown wand` similarly binds one owned plain brush. ARC never mints
   the tool materials. Particles are visual-only and never fake client-side blocks.
 - `/builder fill [material]`: changes only configured replaceable blocks and
@@ -23,6 +25,10 @@
   current admin-shop material prices and shows material cost, configured
   construction markup, and total without charging. Only the separate clickable
   `/builder book confirm` pays and registers one single-use instance.
+- `/builder book` prints the complete clickable seven-step workflow and then
+  reports the player's current step. `/builder book status` reports only that
+  contextual next action. Selection, clipboard, draft, quote, delivery, and
+  activated-book messages each lead directly into the next safe command.
 - Holding a registered book, `/builder book copy` shows the same stored
   self-cost and `/builder book confirm` pays for a new instance with a new UUID.
   ARC does not own a blueprint marketplace: the physical registered book is
