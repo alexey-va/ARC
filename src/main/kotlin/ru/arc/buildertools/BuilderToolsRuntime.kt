@@ -1,7 +1,6 @@
 package ru.arc.buildertools
 
 import net.kyori.adventure.text.Component
-import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Bukkit
 import org.bukkit.GameMode
@@ -28,26 +27,15 @@ import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import ru.arc.ARC
 import ru.arc.autobuild.BuildBookCodec
-import ru.arc.autobuild.BuildBookData
-import ru.arc.autobuild.BuildBookItems
-import ru.arc.autobuild.BuildBookSettings
-import ru.arc.autobuild.BuildBookTransform
 import ru.arc.autobuild.BuildingManager
 import ru.arc.autobuild.ConstructionSite
-import ru.arc.autobuild.PlayerBuildBookLimitException
-import ru.arc.autobuild.PlayerBuildBookStore
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.hooks.HookRegistry
 import ru.arc.observability.RuntimeHealthContribution
 import ru.arc.observability.RuntimeHealthState
 import ru.arc.observability.StructuredDebugLine
-import ru.arc.onetime.OneTimeUseClaim
-import ru.arc.onetime.OneTimeUseClaimResult
-import ru.arc.onetime.OneTimeUseCommitResult
-import ru.arc.onetime.OneTimeUseReleaseResult
 import ru.arc.paper.playerstate.PaperPlayerStateCodec
 import ru.arc.paper.playerstate.PaperPlayerStateService
-import ru.arc.sql.SqlRuntime
 import ru.arc.text.LocalizedMiniMessage
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
@@ -65,57 +53,14 @@ internal class BuilderToolsRuntime(
     private val plugin: ARC,
     private val config: BuilderToolsConfig,
 ) : Listener, CommandExecutor, TabCompleter, AutoCloseable {
-    private data class PendingBookMint(
-        val kind: BuilderBookMintKind,
-        val sourceBlueprintId: UUID,
-        val sourceInstanceId: UUID?,
-        val sourceInstanceGeneration: Int?,
-        val blueprint: BuilderBookBlueprint,
-        val outputInstanceId: UUID,
-        val expiresAtMillis: Long,
-    )
-
-    private class UserFailure(val path: String, val values: Map<String, Component> = emptyMap()) : RuntimeException(path)
-
     private val messages: LocalizedMiniMessage = config.messages()
     private val shop = BuilderShopCoordinator(config, messages)
-    private val bookPricing = BuilderBookPricing(config)
     private val safety = BuilderBlockSafety(plugin, config.replaceableMaterials)
     private val coreProtect = BuilderCoreProtectBridge.resolve()
     private val journal = BuilderJournalStore(plugin.dataPath, config.maxChanges)
     private val stateService = PaperPlayerStateService()
     private val stateCodec = PaperPlayerStateCodec()
     private val taskScope = LifecycleTaskScope()
-    private val bookRegistry: BuilderBookRegistry? = if (config.bookContractsEnabled) {
-        runCatching {
-            BuilderBookSqlRegistry(
-                SqlRuntime.create(config.bookSqlConfig().connection(), "arc-builder-books"),
-            )
-        }.onFailure { failure ->
-            error("Builder-book MySQL runtime could not be created: type=${BuilderToolsFailureType.of(failure)}")
-        }.getOrNull()
-    } else {
-        null
-    }
-    private val bookMintCoordinator: BuilderBookMintCoordinator? = bookRegistry?.let { registry ->
-        BuilderBookMintCoordinator(
-            registry = registry,
-            wallet = RedisEconomyBuilderBookWallet(),
-            runSync = { action -> taskScope.runSync(action) },
-            onManualReview = { mint ->
-                error(
-                    "Builder-book mint requires manual review: transaction=${mint.transactionId} player=${mint.playerId} status=${mint.status}",
-                )
-            },
-        )
-    }
-    private val bookStatusVerifier: BuilderBookStatusVerifier? = bookRegistry?.let { registry ->
-        BuilderBookStatusVerifier(
-            loadInstance = registry::loadInstance,
-            loadBlueprint = registry::loadBlueprint,
-            runSync = { action -> taskScope.runSync(action) },
-        )
-    }
     private val storageExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "arc-builder-tools-storage").apply { isDaemon = true }
     }
@@ -146,7 +91,7 @@ internal class BuilderToolsRuntime(
                 costs: List<BuilderItemAmount>,
             ): BuilderPlan = newPlan(player, BuilderPlanKind.FILL, changes, costs, emptyList())
 
-            override fun fail(path: String): Nothing = throw UserFailure(path)
+            override fun fail(path: String): Nothing = throw BuilderUserFailure(path)
         },
     )
     private val clipboardController = BuilderClipboardController(
@@ -179,7 +124,7 @@ internal class BuilderToolsRuntime(
 
             override fun failUnsafe(player: Player, block: Block): Nothing = throw unsafeBlock(player, block)
 
-            override fun fail(path: String): Nothing = throw UserFailure(path)
+            override fun fail(path: String): Nothing = throw BuilderUserFailure(path)
         },
     )
     private val deconstructionController = BuilderDeconstructionController(
@@ -212,44 +157,18 @@ internal class BuilderToolsRuntime(
 
             override fun failUnsafe(player: Player, block: Block): Nothing = throw unsafeBlock(player, block)
 
-            override fun fail(path: String): Nothing = throw UserFailure(path)
+            override fun fail(path: String): Nothing = throw BuilderUserFailure(path)
         },
     )
     private val previews: BuilderPreviewSessions
     private val crown: BuilderCrownController
-    private val pendingBookMints = mutableMapOf<UUID, PendingBookMint>()
-    private val bookDeliveryWaitingForSpace = mutableSetOf<UUID>()
-    private val bookDeliveryRecoveries = mutableSetOf<UUID>()
+    private val books: BuilderBookLifecycle
     private val operationLocks: BuilderOperationLocks
     private val committedRecords = mutableMapOf<UUID, BuilderJournalRecord>()
     private val recoveryByPlayer = mutableMapOf<UUID, BuilderJournalRecord>()
     private val consumedUndoSources = mutableSetOf<UUID>()
-    private val bookAuctionCoordinator: BuilderBookAuctionCoordinator? = bookRegistry?.let { registry ->
-        val serverName = ARC.serverName ?: return@let null
-        BuilderBookAuctionCoordinator(
-            registry = registry,
-            portProvider = { HookRegistry.auctionHook },
-            serverName = serverName,
-            runSync = { action -> taskScope.runSync(action) },
-            send = { player, path, values ->
-                send(
-                    player,
-                    path,
-                    values.mapValues { (key, value) ->
-                        if (key == "price") moneyLabel(value) else messages.literal(value)
-                    },
-                )
-            },
-            lock = { playerId ->
-                operationLocks.tryBookLock(playerId)
-            },
-            unlock = { playerId -> operationLocks.unlockBook(playerId) },
-        )
-    }
     private var recovering = true
     private var recoveryBlocked = false
-    private var bookRegistryReady = !config.bookContractsEnabled
-    private var bookRegistryFailed = config.bookContractsEnabled && bookRegistry == null
     private var closed = false
     private val runtimeHealth = AtomicReference(
         RuntimeHealthContribution(state = RuntimeHealthState.STARTING),
@@ -265,6 +184,7 @@ internal class BuilderToolsRuntime(
         operationLocks = BuilderOperationLocks(plugin)
         var initializedPreviews: BuilderPreviewSessions? = null
         var initializedCrown: BuilderCrownController? = null
+        var initializedBooks: BuilderBookLifecycle? = null
         try {
             Bukkit.getPluginManager().registerEvents(this, plugin)
             previews = BuilderPreviewSessions(
@@ -331,47 +251,64 @@ internal class BuilderToolsRuntime(
                     override fun runEventAction(player: Player, action: () -> Unit) {
                         try {
                             action()
-                        } catch (failure: UserFailure) {
+                        } catch (failure: BuilderUserFailure) {
                             send(player, failure.path, failure.values)
                         }
                     }
 
                     override fun fail(path: String, values: Map<String, Component>): Nothing =
-                        throw UserFailure(path, values)
+                        throw BuilderUserFailure(path, values)
                 },
             ).also { initializedCrown = it }
+            books = BuilderBookLifecycle(
+                config = config,
+                messages = messages,
+                taskScope = taskScope,
+                storageExecutor = storageExecutor,
+                operationLocks = operationLocks,
+                host = object : BuilderBookLifecycleHost {
+                    override fun ensureOperationalContext(player: Player) =
+                        this@BuilderToolsRuntime.ensureOperationalContext(player)
+
+                    override fun ensureCopyPermission(player: Player) =
+                        ensureFeaturePermission(player, BuilderFeature.COPY)
+
+                    override fun currentClipboard(playerId: UUID): BuilderClipboard? =
+                        clipboardController.current(playerId)
+
+                    override fun currentSelection(player: Player): BuilderSelection? =
+                        selectionOrNull(player)
+
+                    override fun startJournaledOperation(player: Player, plan: BuilderPlan, plannedMode: GameMode) =
+                        this@BuilderToolsRuntime.startJournaledOperation(player, plan, plannedMode)
+
+                    override fun localJournalRecord(operationId: UUID): BuilderJournalRecord? =
+                        committedRecords[operationId]
+                            ?: recoveryByPlayer.values.firstOrNull { it.operationId == operationId }
+
+                    override fun awaitingPlayerRecovery(operationId: UUID): Boolean =
+                        recoveryByPlayer.values.any { it.operationId == operationId }
+
+                    override fun recoveryInProgress(): Boolean = recovering
+
+                    override fun send(player: Player, path: String, values: Map<String, Component>) =
+                        this@BuilderToolsRuntime.send(player, path, values)
+                },
+            ).also { initializedBooks = it }
             publishRuntimeHealth()
             checkNotNull(taskScope.runTimer(0L, HEALTH_PUBLISH_PERIOD_TICKS, ::publishRuntimeHealth)) {
                 "Builder-tools health publication task was not scheduled"
             }
-            if (config.bookContractsEnabled) {
-                checkNotNull(
-                    taskScope.runTimer(100L, 100L) {
-                        (operationLocks.bookLockedPlayerIds() + bookDeliveryWaitingForSpace).toList()
-                            .mapNotNull(Bukkit::getPlayer)
-                            .filter(Player::isOnline)
-                            .forEach(::recoverBookDeliveries)
-                        if (bookRegistryReady) {
-                            Bukkit.getOnlinePlayers().forEach { player ->
-                                bookAuctionCoordinator?.onPlayerAvailable(player)
-                            }
-                        }
-                    },
-                ) { "Builder-book delivery retry task was not scheduled" }
-            }
             loadRecoveryState()
-            initializeBookContracts()
+            books.start()
         } catch (failure: Throwable) {
             HandlerList.unregisterAll(this)
+            initializedBooks?.close()
             initializedCrown?.close()
             initializedPreviews?.close()
             taskScope.close()
             operationLocks.close()
             storageExecutor.shutdownNow()
-            bookAuctionCoordinator?.close()
-            bookStatusVerifier?.close()
-            bookMintCoordinator?.clear()
-            bookRegistry?.close()
             shop.close()
             throw failure
         }
@@ -384,7 +321,7 @@ internal class BuilderToolsRuntime(
         }
         try {
             handleBuilder(player, args)
-        } catch (failure: UserFailure) {
+        } catch (failure: BuilderUserFailure) {
             send(player, failure.path, failure.values)
         } catch (failure: IllegalArgumentException) {
             warn("Builder-tools rejected command for {}: {}", player.name, failure.message)
@@ -433,7 +370,7 @@ internal class BuilderToolsRuntime(
                 val copied = clipboardController.copy(player)
                 send(player, "clipboard.saved", mapOf("count" to messages.literal(copied.blocks.size)))
             }
-            "book" -> handleBuildBookCommand(player, args.drop(1))
+            "book" -> books.handleCommand(player, args.drop(1))
             "paste" -> preparePlan(player, clipboardController.planPaste(player))
             "deconstruct" -> preparePlan(player, deconstructionController.plan(player))
             "crown" -> crown.handle(player, args.drop(1))
@@ -450,24 +387,25 @@ internal class BuilderToolsRuntime(
     }
 
     private fun ensureAvailable(player: Player) {
-        if (!hasUsePermission(player)) throw UserFailure("errors.no-permission")
+        if (!hasUsePermission(player)) throw BuilderUserFailure("errors.no-permission")
         ensureOperationalContext(player)
     }
 
     private fun ensureBuildBookAvailable(player: Player) {
-        if (!player.hasPermission("arc.build.book.use")) throw UserFailure("errors.no-permission")
-        ensureOperationalContext(player)
+        books.ensureAvailable(player)
     }
 
     private fun ensureOperationalContext(player: Player) {
-        if (recovering || recoveryBlocked || player.uniqueId in recoveryByPlayer) throw UserFailure("errors.recovering")
-        if (!BuilderGameModePolicy.allows(player.gameMode)) throw UserFailure("errors.game-mode")
-        if (!config.allowsWorld(player.world.name)) throw UserFailure("errors.world-not-allowed")
+        if (recovering || recoveryBlocked || books.health().recoveryBlocked || player.uniqueId in recoveryByPlayer) {
+            throw BuilderUserFailure("errors.recovering")
+        }
+        if (!BuilderGameModePolicy.allows(player.gameMode)) throw BuilderUserFailure("errors.game-mode")
+        if (!config.allowsWorld(player.world.name)) throw BuilderUserFailure("errors.world-not-allowed")
     }
 
     private fun ensureFeaturePermission(player: Player, feature: BuilderFeature) {
         if (!BuilderPermissionPolicy.canUse(feature, player::hasPermission)) {
-            throw UserFailure("errors.no-permission")
+            throw BuilderUserFailure("errors.no-permission")
         }
     }
 
@@ -483,8 +421,8 @@ internal class BuilderToolsRuntime(
         val wand = styleWand(ItemStack(Material.ECHO_SHARD), player)
         when (BuilderOwnedToolExchange.replaceOnePlainHeld(player, Material.ECHO_SHARD, wand)) {
             BuilderOwnedToolExchangeResult.REPLACED -> Unit
-            BuilderOwnedToolExchangeResult.WRONG_ITEM -> throw UserFailure("wand.material-required")
-            BuilderOwnedToolExchangeResult.INVENTORY_FULL -> throw UserFailure("wand.inventory-full")
+            BuilderOwnedToolExchangeResult.WRONG_ITEM -> throw BuilderUserFailure("wand.material-required")
+            BuilderOwnedToolExchangeResult.INVENTORY_FULL -> throw BuilderUserFailure("wand.inventory-full")
         }
         send(player, "wand.received")
     }
@@ -537,11 +475,11 @@ internal class BuilderToolsRuntime(
     }
 
     private fun requiredSelection(player: Player): BuilderSelection {
-        val selection = selectionOrNull(player) ?: throw UserFailure("errors.selection-missing")
+        val selection = selectionOrNull(player) ?: throw BuilderUserFailure("errors.selection-missing")
         return try {
             selection.validated(maxAxis(player), config.maxScanVolume)
         } catch (_: IllegalArgumentException) {
-            throw UserFailure("errors.selection-too-large")
+            throw BuilderUserFailure("errors.selection-too-large")
         }
     }
 
@@ -553,722 +491,16 @@ internal class BuilderToolsRuntime(
         return BuilderPermissionPolicy.maximumAxis(player::hasPermission, config.absoluteMaxAxis)
     }
 
-    private fun handleBuildBookCommand(player: Player, args: List<String>) {
-        when (args.firstOrNull()?.lowercase(Locale.ROOT)) {
-            null, "guide", "help" -> showBuildBookGuide(player)
-            "status" -> showBuildBookStatus(player)
-            "draft" -> createBuildBookDraft(player, args.drop(1))
-            "activate" -> prepareBuildBookActivation(player)
-            "copy" -> prepareBuildBookCopy(player)
-            "sell" -> sellBuildBook(player, args.getOrNull(1))
-            "confirm" -> confirmBuildBookMint(player)
-            "cancel" -> cancelBuildBookMint(player)
-            else -> showBuildBookGuide(player)
-        }
-    }
-
-    private fun showBuildBookGuide(player: Player) {
-        messages.renderLines("book.guide", locale(player)).forEach(player::sendMessage)
-        showBuildBookStatus(player)
-    }
-
-    private fun showBuildBookStatus(player: Player) {
-        val now = System.currentTimeMillis()
-        val playerId = player.uniqueId
-        val quote = pendingBookMints[playerId]?.takeIf { it.expiresAtMillis > now }
-        if (quote == null) pendingBookMints.remove(playerId)
-        val held = BuildBookCodec.read(player.inventory.itemInMainHand)
-        val heldAuctionToken = BuilderBookAuctionTokenCodec.read(player.inventory.itemInMainHand)
-        val presentedIdentity = BuilderBookPresentedIdentity.from(held)
-        if (BuilderBookStatusLookupPolicy.shouldVerify(quote != null, presentedIdentity, heldAuctionToken != null)) {
-            val expectedIdentity = checkNotNull(presentedIdentity)
-            if (!bookRegistryReady) {
-                send(player, if (bookRegistryFailed) "book.registry-unavailable" else "book.registry-starting")
-                return
-            }
-            val verifier = bookStatusVerifier
-            if (verifier == null) {
-                send(player, "book.registry-unavailable")
-                return
-            }
-            val start = verifier.verify(
-                playerId = playerId,
-                expected = expectedIdentity,
-                currentIdentity = {
-                    val current = player.inventory.itemInMainHand
-                    if (BuilderBookAuctionTokenCodec.read(current) != null) {
-                        null
-                    } else {
-                        BuilderBookPresentedIdentity.from(BuildBookCodec.read(current))
-                    }
-                },
-                complete = status@{ verification ->
-                    if (!player.isOnline) return@status
-                    if (pendingBookMints[playerId]?.expiresAtMillis?.let { it > System.currentTimeMillis() } == true) {
-                        showBuildBookStatus(player)
-                        return@status
-                    }
-                    when (verification) {
-                        is BuilderBookStatusVerification.Active -> send(
-                            player,
-                            "book.status.active",
-                            mapOf(
-                                "name" to displayBookTitle(verification.blueprint.title),
-                                "price" to moneyLabel(formatMinor(verification.blueprint.issuePriceMinor)),
-                            ),
-                        )
-                        BuilderBookStatusVerification.Stale -> send(player, "book.stale")
-                        BuilderBookStatusVerification.SourceChanged -> send(player, "book.status.changed")
-                        BuilderBookStatusVerification.RegistryUnavailable -> send(player, "book.registry-unavailable")
-                    }
-                },
-            )
-            when (start) {
-                BuilderBookStatusLookupStart.STARTED -> send(player, "book.status.checking")
-                BuilderBookStatusLookupStart.ALREADY_PENDING -> Unit
-                BuilderBookStatusLookupStart.CLOSED -> send(player, "book.registry-unavailable")
-            }
-            return
-        }
-        val previewOpen = held?.takeIf { it.draft }?.let { BuildingManager.hasExactOpenPreview(player, it) } == true
-        val clipboard = clipboardController.current(playerId)
-        val selection = selectionOrNull(player)
-        val stage = BuilderBookJourney.resolve(
-            BuilderBookJourneySnapshot(
-                hasQuote = quote != null,
-                deliveryPending = held?.deliveryPending == true,
-                auctionLocked = heldAuctionToken != null,
-                draft = held?.draft == true,
-                previewOpen = previewOpen,
-                active = held?.available == true,
-                hasClipboard = clipboard != null,
-                hasSelection = selection != null,
-            ),
-        )
-        when (stage) {
-            BuilderBookJourneyStage.QUOTE -> send(
-                player,
-                stage.messagePath,
-                mapOf(
-                    "price" to moneyLabel(formatMinor(checkNotNull(quote).blueprint.issuePriceMinor)),
-                    "seconds" to messages.literal(((quote.expiresAtMillis - now) / 1_000L).coerceAtLeast(1L)),
-                ),
-            )
-            BuilderBookJourneyStage.DELIVERY,
-            BuilderBookJourneyStage.AUCTION_LOCKED,
-            BuilderBookJourneyStage.START,
-            -> send(player, stage.messagePath)
-            BuilderBookJourneyStage.PREVIEW -> send(
-                player,
-                stage.messagePath,
-                mapOf("name" to displayBookTitle(checkNotNull(held).title)),
-            )
-            BuilderBookJourneyStage.DRAFT -> send(
-                player,
-                stage.messagePath,
-                mapOf("name" to displayBookTitle(checkNotNull(held).title)),
-            )
-            BuilderBookJourneyStage.ACTIVE -> send(
-                player,
-                stage.messagePath,
-                mapOf(
-                    "name" to displayBookTitle(checkNotNull(held).title),
-                    "price" to moneyLabel(formatMinor(checkNotNull(held.issuePriceMinor))),
-                ),
-            )
-            BuilderBookJourneyStage.CLIPBOARD -> send(
-                player,
-                stage.messagePath,
-                mapOf("count" to messages.literal(checkNotNull(clipboard).blocks.size)),
-            )
-            BuilderBookJourneyStage.SELECTION -> send(
-                player,
-                stage.messagePath,
-                mapOf(
-                    "x" to messages.literal(checkNotNull(selection).sizeX),
-                    "y" to messages.literal(selection.sizeY),
-                    "z" to messages.literal(selection.sizeZ),
-                    "volume" to messages.literal(selection.volume),
-                ),
-            )
-        }
-    }
-
-    private fun createBuildBookDraft(player: Player, rawTitle: List<String>) {
-        ensureFeaturePermission(player, BuilderFeature.COPY)
-        if (!player.hasPermission("arc.build.book.create")) throw UserFailure("errors.no-permission")
-        val clipboard = clipboardController.current(player.uniqueId)
-            ?: throw UserFailure("errors.expired")
-        val held = player.inventory.itemInMainHand
-        if (!isPlainBook(held)) throw UserFailure("book.material-required")
-        if (held.amount > 1 && player.inventory.firstEmpty() == -1) throw UserFailure("book.inventory-full")
-        val title = rawTitle.joinToString(" ").trim().ifEmpty { BuildBookSettings.defaultTitle }
-        if (title.length > 48 || title.any(Char::isISOControl)) throw UserFailure("book.invalid-name")
-        val prepared = try {
-            PlayerBuildBookStore.prepare(player.uniqueId, clipboard)
-        } catch (failure: Throwable) {
-            error("Could not prepare player build book for ${player.name}: type=${BuilderToolsFailureType.of(failure)}")
-            throw UserFailure("book.failed")
-        }
-        if (!operationLocks.tryBookLock(player.uniqueId)) throw UserFailure("errors.busy")
-        val expectedBook = held.clone()
-        send(player, "book.draft-saving")
-        writeAsync(
-            action = { PlayerBuildBookStore.persist(prepared) },
-            callback = { template, failure ->
-                operationLocks.unlockBook(player.uniqueId)
-                if (!player.isOnline) return@writeAsync
-                when {
-                    failure is PlayerBuildBookLimitException -> send(player, "book.limit")
-                    failure != null || template == null -> {
-                        error(
-                            "Could not persist player build book for ${player.name}: " +
-                                "type=${BuilderToolsFailureType.of(failure)}",
-                        )
-                        send(player, "book.failed")
-                    }
-                    !isPlainBook(player.inventory.itemInMainHand) ||
-                        player.inventory.itemInMainHand.amount != expectedBook.amount ||
-                        !player.inventory.itemInMainHand.isSimilar(expectedBook) -> send(player, "book.source-changed")
-                    else -> try {
-                        PlayerBuildBookStore.register(template)
-                        val data = BuildBookData(
-                            buildingId = template.buildingId,
-                            title = title,
-                            playerCreated = true,
-                            creatorId = player.uniqueId,
-                            creatorName = player.name,
-                            blueprintId = UUID.randomUUID(),
-                            contentSha256 = template.contentSha256,
-                            schematicSha256 = template.schematicSha256,
-                            blockCount = template.blockCount,
-                            cooldownSeconds = 0,
-                        ).validated()
-                        replaceOneHeldBook(player, player.inventory.itemInMainHand, BuildBookItems.create(data))
-                        send(
-                            player,
-                            "book.draft-created",
-                            mapOf("name" to displayBookTitle(title), "count" to messages.literal(clipboard.blocks.size)),
-                        )
-                    } catch (unexpected: Throwable) {
-                        error(
-                            "Could not deliver player build-book draft for ${player.name}: " +
-                                "type=${BuilderToolsFailureType.of(unexpected)}",
-                        )
-                        send(player, "book.failed")
-                    }
-                }
-            },
-        )
-    }
-
-    private fun prepareBuildBookActivation(player: Player) {
-        if (!player.hasPermission("arc.build.book.create")) throw UserFailure("errors.no-permission")
-        val registry = requireBookRegistry()
-        val held = player.inventory.itemInMainHand
-        val data = BuildBookCodec.read(held)?.takeIf { it.draft } ?: throw UserFailure("book.draft-required")
-        if (held.amount != 1) throw UserFailure("book.duplicate")
-        if (data.creatorId != player.uniqueId) throw UserFailure("book.creator-only")
-        requireExactDraftPreview(player, data)
-        verifyBookSchematic(data)
-        val blueprintId = checkNotNull(data.blueprintId)
-        registry.loadBlueprint(blueprintId).whenComplete { existing, failure ->
-            taskScope.runSync {
-                if (!player.isOnline) return@runSync
-                if (failure != null) {
-                    warn("Builder-book blueprint lookup failed for {}: type={}", player.name, BuilderToolsFailureType.of(failure))
-                    send(player, "book.registry-unavailable")
-                    return@runSync
-                }
-                try {
-                    requireExactDraftPreview(player, data)
-                    val blueprint = if (existing != null) {
-                        if (!matchesBlueprint(data, existing)) throw UserFailure("book.invalid")
-                        existing
-                    } else {
-                        val building = BuildingManager.getBuilding(data.buildingId) ?: throw UserFailure("book.invalid")
-                        when (val quoted = bookPricing.quote(player, building)) {
-                            is BuilderBookQuoteResult.Ready -> BuilderBookBlueprint(
-                                blueprintId = blueprintId,
-                                creatorId = checkNotNull(data.creatorId),
-                                creatorName = data.creatorName ?: player.name,
-                                title = data.title,
-                                buildingId = data.buildingId,
-                                contentSha256 = checkNotNull(data.contentSha256),
-                                schematicSha256 = checkNotNull(data.schematicSha256),
-                                blockCount = data.blockCount ?: quoted.quote.materialItems,
-                                materialTypes = quoted.quote.materialTypes,
-                                materialItems = quoted.quote.materialItems,
-                                materialCostMinor = quoted.quote.cost.materialCostMinor,
-                                constructionFeeMinor = quoted.quote.cost.constructionFeeMinor,
-                                issuePriceMinor = quoted.quote.cost.issuePriceMinor,
-                                createdAtMillis = System.currentTimeMillis(),
-                            ).validated()
-                            BuilderBookQuoteResult.ShopUnavailable -> throw UserFailure("book.shop-unavailable")
-                            is BuilderBookQuoteResult.MaterialsUnavailable -> throw UserFailure(
-                                "book.material-unavailable",
-                                mapOf("materials" to materialsSummary(player, quoted.materials)),
-                            )
-                            BuilderBookQuoteResult.LimitExceeded -> throw UserFailure("book.price-limit")
-                        }
-                    }
-                    pendingBookMints[player.uniqueId] = PendingBookMint(
-                        kind = BuilderBookMintKind.CREATE,
-                        sourceBlueprintId = blueprintId,
-                        sourceInstanceId = null,
-                        sourceInstanceGeneration = null,
-                        blueprint = blueprint,
-                        outputInstanceId = UUID.randomUUID(),
-                        expiresAtMillis = System.currentTimeMillis() + config.planTtl.toMillis(),
-                    )
-                    sendBookMintQuote(player, blueprint, "activation")
-                } catch (userFailure: UserFailure) {
-                    send(player, userFailure.path, userFailure.values)
-                } catch (unexpected: Throwable) {
-                    error("Builder-book activation quote failed for ${player.name}", unexpected)
-                    send(player, "book.failed")
-                }
-            }
-        }
-    }
-
-    private fun prepareBuildBookCopy(player: Player) {
-        if (!player.hasPermission("arc.build.book.create")) throw UserFailure("errors.no-permission")
-        val registry = requireBookRegistry()
-        val held = player.inventory.itemInMainHand
-        val data = BuildBookCodec.read(held)?.takeIf { it.available } ?: throw UserFailure("book.active-required")
-        if (held.amount != 1) throw UserFailure("book.duplicate")
-        if (BuilderBookAuctionTokenCodec.read(held) != null) throw UserFailure("book.auction-locked")
-        if (player.inventory.firstEmpty() == -1) throw UserFailure("book.inventory-full")
-        verifyBookSchematic(data)
-        val instanceId = checkNotNull(data.instanceId)
-        registry.loadInstance(instanceId).whenComplete { instance, instanceFailure ->
-            taskScope.runSync instanceLookup@{
-                if (!player.isOnline) return@instanceLookup
-                if (instanceFailure != null || instance == null) {
-                    send(player, if (instanceFailure == null) "book.duplicate" else "book.registry-unavailable")
-                    return@instanceLookup
-                }
-                if (
-                    instance.status != BuilderBookInstanceStatus.AVAILABLE || instance.blueprintId != data.blueprintId ||
-                    instance.ownerId != player.uniqueId || instance.generation != data.instanceGeneration
-                ) {
-                    send(player, "book.stale")
-                    return@instanceLookup
-                }
-                registry.loadBlueprint(instance.blueprintId).whenComplete { blueprint, blueprintFailure ->
-                    taskScope.runSync blueprintLookup@{
-                        if (!player.isOnline) return@blueprintLookup
-                        if (blueprintFailure != null || blueprint == null) {
-                            send(player, if (blueprintFailure == null) "book.invalid" else "book.registry-unavailable")
-                            return@blueprintLookup
-                        }
-                        if (!matchesBlueprint(data, blueprint)) {
-                            send(player, "book.invalid")
-                            return@blueprintLookup
-                        }
-                        pendingBookMints[player.uniqueId] = PendingBookMint(
-                            kind = BuilderBookMintKind.COPY,
-                            sourceBlueprintId = blueprint.blueprintId,
-                            sourceInstanceId = instanceId,
-                            sourceInstanceGeneration = data.instanceGeneration,
-                            blueprint = blueprint,
-                            outputInstanceId = UUID.randomUUID(),
-                            expiresAtMillis = System.currentTimeMillis() + config.planTtl.toMillis(),
-                        )
-                        sendBookMintQuote(player, blueprint, "copy")
-                    }
-                }
-            }
-        }
-    }
-
-    private fun sellBuildBook(player: Player, rawPrice: String?) {
-        if (!player.hasPermission("arc.build.book.sell")) throw UserFailure("errors.no-permission")
-        requireBookRegistry()
-        if (operationLocks.isPlayerLocked(player.uniqueId)) throw UserFailure("errors.busy")
-        val price = BuilderBookAuctionPrice.parse(rawPrice) ?: throw UserFailure("book.auction-price")
-        val held = player.inventory.itemInMainHand
-        val data = BuildBookCodec.read(held)?.takeIf { it.available } ?: throw UserFailure("book.active-required")
-        if (held.amount != 1) throw UserFailure("book.duplicate")
-        if (BuilderBookAuctionTokenCodec.read(held) != null) throw UserFailure("book.auction-locked")
-        verifyBookSchematic(data)
-        val coordinator = bookAuctionCoordinator ?: throw UserFailure("book.auction-unavailable")
-        coordinator.sell(player, data, held.clone(), price)
-    }
-
-    private fun confirmBuildBookMint(player: Player) {
-        val registry = requireBookRegistry()
-        val coordinator = bookMintCoordinator ?: throw UserFailure("book.registry-unavailable")
-        if (operationLocks.isPlayerLocked(player.uniqueId)) throw UserFailure("errors.busy")
-        val pending = pendingBookMints[player.uniqueId] ?: throw UserFailure("book.quote-expired")
-        if (pending.expiresAtMillis <= System.currentTimeMillis()) {
-            pendingBookMints.remove(player.uniqueId)
-            throw UserFailure("book.quote-expired")
-        }
-        val held = player.inventory.itemInMainHand
-        val data = BuildBookCodec.read(held) ?: throw UserFailure("book.source-changed")
-        if (!matchesPendingSource(data, pending) || held.amount != 1) {
-            throw UserFailure("book.source-changed")
-        }
-        if (pending.kind == BuilderBookMintKind.CREATE) requireExactDraftPreview(player, data)
-        if (pending.kind == BuilderBookMintKind.COPY && player.inventory.firstEmpty() == -1) {
-            throw UserFailure("book.inventory-full")
-        }
-        verifyBookSchematic(data)
-        pendingBookMints.remove(player.uniqueId)
-        operationLocks.lockBook(player.uniqueId)
-        val now = System.currentTimeMillis()
-        val transactionId = UUID.randomUUID()
-        val transform = data.transform.validated()
-        val intent = BuilderBookMint(
-            transactionId = transactionId,
-            kind = pending.kind,
-            playerId = player.uniqueId,
-            blueprint = pending.blueprint,
-            instanceId = pending.outputInstanceId,
-            sourceInstanceId = pending.sourceInstanceId,
-            sourceInstanceGeneration = pending.sourceInstanceGeneration,
-            placement = BuilderBookPlacement(transform.rotation, transform.offsetX, transform.offsetY, transform.offsetZ),
-            createdAtMillis = now,
-        ).validated()
-        val sourceId = pending.sourceInstanceId
-        if (sourceId == null) {
-            startBookMint(player, intent, coordinator)
-            return
-        }
-        val serverName = ARC.serverName ?: run {
-            operationLocks.unlockBook(player.uniqueId)
-            throw UserFailure("book.registry-unavailable")
-        }
-        val sourceClaimRequest = BuilderBookOneTimeUse.request(
-            instanceId = sourceId,
-            expectedGeneration = checkNotNull(pending.sourceInstanceGeneration),
-            blueprintId = pending.blueprint.blueprintId,
-            buildingId = pending.blueprint.buildingId,
-            schematicSha256 = pending.blueprint.schematicSha256,
-            operationId = transactionId,
-            playerId = player.uniqueId,
-            serverName = serverName,
-        )
-        registry.oneTimeUses.claim(sourceClaimRequest).whenComplete { reservation, failure ->
-            taskScope.runSync {
-                if (failure != null || reservation == null) {
-                    operationLocks.unlockBook(player.uniqueId)
-                    send(player, "book.registry-unavailable")
-                } else if (reservation is OneTimeUseClaimResult.Acquired) {
-                    startBookMint(player, intent, coordinator)
-                } else {
-                    operationLocks.unlockBook(player.uniqueId)
-                    send(
-                        player,
-                        if (reservation == OneTimeUseClaimResult.IdentityConflict) "book.stale" else "book.duplicate",
-                    )
-                }
-            }
-        }
-    }
-
-    private fun startBookMint(player: Player, intent: BuilderBookMint, coordinator: BuilderBookMintCoordinator) {
-        coordinator.mint(intent) { result ->
-            when (result) {
-                is BuilderBookMintResult.Issued -> deliverIssuedBook(player, result.mint)
-                BuilderBookMintResult.Busy -> finishFailedBookMint(player, intent, "errors.busy", releaseSource = true)
-                BuilderBookMintResult.EconomyUnavailable -> finishFailedBookMint(player, intent, "book.economy-unavailable", releaseSource = true)
-                BuilderBookMintResult.InsufficientFunds -> finishFailedBookMint(player, intent, "book.insufficient-funds", releaseSource = true)
-                BuilderBookMintResult.PaymentRejected -> finishFailedBookMint(player, intent, "book.payment-failed", releaseSource = true)
-                BuilderBookMintResult.RegistryUnavailable -> finishFailedBookMint(player, intent, "book.registry-unavailable", releaseSource = true)
-                BuilderBookMintResult.Refunded -> finishFailedBookMint(player, intent, "book.refunded", releaseSource = true)
-                BuilderBookMintResult.ManualReview -> finishFailedBookMint(player, intent, "book.manual-review", releaseSource = false)
-            }
-        }
-    }
-
-    private fun deliverIssuedBook(player: Player, mint: BuilderBookMint) {
-        if (!player.isOnline) return
-        val data = registeredBookData(
-            mint.blueprint,
-            mint.instanceId,
-            BuilderBookInstance.INITIAL_GENERATION,
-            mint.placement,
-        )
-        val existing = inventoryBooksWithInstance(player, mint.instanceId)
-        if (existing.size > 1 || (existing.size == 1 && existing.single().second != data)) {
-            error("Builder-book issued item conflicts with local inventory: transaction=${mint.transactionId} instance=${mint.instanceId}")
-            send(player, "book.manual-review")
-            return
-        }
-        if (existing.isEmpty()) {
-            val held = player.inventory.itemInMainHand
-            val heldData = BuildBookCodec.read(held)
-            if (mint.kind == BuilderBookMintKind.CREATE && heldData?.draft == true && heldData.blueprintId == mint.blueprint.blueprintId) {
-                replaceOneHeldBook(player, held, BuildBookItems.create(data))
-            } else {
-                if (player.inventory.firstEmpty() == -1) {
-                    waitForBookDeliverySpace(player)
-                    return
-                }
-                check(player.inventory.addItem(BuildBookItems.create(data)).isEmpty()) { "Paid builder book did not fit after preflight" }
-            }
-            player.updateInventory()
-        }
-        markBookDelivered(player, mint.instanceId, mint.transactionId, sourceBookClaim(mint), recovered = false)
-    }
-
-    private fun markBookDelivered(
-        player: Player,
-        instanceId: UUID,
-        transactionId: UUID,
-        sourceClaim: OneTimeUseClaim?,
-        recovered: Boolean,
-        finished: () -> Unit = {},
-    ) {
-        val registry = bookRegistry ?: return finished()
-        registry.markDelivered(instanceId, transactionId, System.currentTimeMillis()).whenComplete { delivered, failure ->
-            taskScope.runSync {
-                if (failure != null || delivered != true) {
-                    error(
-                        "Builder-book delivery requires retry: transaction=$transactionId instance=$instanceId " +
-                            "type=${BuilderToolsFailureType.of(failure)} result=$delivered",
-                    )
-                    if (player.isOnline) send(player, "book.delivery-pending")
-                    finished()
-                    return@runSync
-                }
-                if (!completeLocalBookDelivery(player, instanceId)) {
-                    error("Builder-book delivery item disappeared while locked: transaction=$transactionId instance=$instanceId")
-                    if (player.isOnline) send(player, "book.manual-review")
-                    bookDeliveryRecoveries += player.uniqueId
-                    // The paid output remains quarantined, but a completed copy
-                    // must never leave its legitimate source reserved forever.
-                    releaseBookSource(sourceClaim)
-                    return@runSync
-                }
-                val previewRefreshed = sourceClaim == null && runCatching {
-                    inventoryBooksWithInstance(player, instanceId).singleOrNull()?.second?.let { deliveredBook ->
-                        BuildingManager.updatePendingTransform(player, deliveredBook) == true
-                    } == true
-                }.getOrElse { failure ->
-                    warn(
-                        "Builder-book paid delivery completed but preview refresh failed for {}: type={}",
-                        player.name,
-                        BuilderToolsFailureType.of(failure),
-                    )
-                    false
-                }
-                releaseBookSource(sourceClaim) {
-                    operationLocks.unlockBook(player.uniqueId)
-                    bookDeliveryWaitingForSpace -= player.uniqueId
-                    if (player.isOnline) {
-                        send(
-                            player,
-                            when {
-                                recovered -> "book.delivery-recovered"
-                                sourceClaim != null -> "book.copied"
-                                previewRefreshed -> "book.activated-preview"
-                                else -> "book.activated"
-                            },
-                        )
-                    }
-                    finished()
-                }
-            }
-        }
-    }
-
-    private fun finishFailedBookMint(player: Player, mint: BuilderBookMint, messagePath: String, releaseSource: Boolean) {
-        val finish = {
-            operationLocks.unlockBook(player.uniqueId)
-            bookDeliveryWaitingForSpace -= player.uniqueId
-            if (player.isOnline) send(player, messagePath)
-        }
-        if (releaseSource) releaseBookSource(sourceBookClaim(mint), finish) else finish()
-    }
-
-    private fun releaseBookSource(claim: OneTimeUseClaim?, done: () -> Unit = {}) {
-        if (claim == null) return done()
-        val registry = bookRegistry ?: return done()
-        registry.oneTimeUses.release(claim).whenComplete { released, failure ->
-            taskScope.runSync {
-                if (
-                    failure != null ||
-                    (released != OneTimeUseReleaseResult.RELEASED && released != OneTimeUseReleaseResult.ALREADY_RELEASED)
-                ) {
-                    warn(
-                        "Builder-book copy source release requires recovery: source={} operation={}",
-                        claim.identity.useId,
-                        claim.claimId,
-                    )
-                }
-                done()
-            }
-        }
-    }
-
-    private fun sourceBookClaim(mint: BuilderBookMint): OneTimeUseClaim? {
-        val sourceId = mint.sourceInstanceId ?: return null
-        val serverName = ARC.serverName ?: run {
-            recoveryBlocked = true
-            error("Builder-book copy source recovery has no backend identity: transaction=${mint.transactionId}")
-            return null
-        }
-        return OneTimeUseClaim.acquired(
-            BuilderBookOneTimeUse.request(
-                instanceId = sourceId,
-                expectedGeneration = checkNotNull(mint.sourceInstanceGeneration),
-                blueprintId = mint.blueprint.blueprintId,
-                buildingId = mint.blueprint.buildingId,
-                schematicSha256 = mint.blueprint.schematicSha256,
-                operationId = mint.transactionId,
-                playerId = mint.playerId,
-                serverName = serverName,
-            ),
-            newlyCreated = false,
-        )
-    }
-
-    private fun cancelBuildBookMint(player: Player) {
-        if (pendingBookMints.remove(player.uniqueId) != null) send(player, "book.quote-cancelled")
-        else throw UserFailure("book.quote-expired")
-    }
-
-    private fun waitForBookDeliverySpace(player: Player) {
-        operationLocks.unlockBook(player.uniqueId)
-        if (bookDeliveryWaitingForSpace.add(player.uniqueId)) send(player, "book.delivery-space")
-    }
-
-    private fun sendBookMintQuote(player: Player, blueprint: BuilderBookBlueprint, kind: String) {
-        send(
-            player,
-            "book.quote",
-            mapOf(
-                "kind" to messages.render("book.quote-kind.$kind", locale(player)),
-                "name" to displayBookTitle(blueprint.title),
-                "blocks" to messages.literal(blueprint.blockCount),
-                "items" to messages.literal(blueprint.materialItems),
-                "types" to messages.literal(blueprint.materialTypes),
-                "materials" to moneyLabel(formatMinor(blueprint.materialCostMinor)),
-                "labor" to moneyLabel(formatMinor(blueprint.constructionFeeMinor)),
-                "price" to moneyLabel(formatMinor(blueprint.issuePriceMinor)),
-                "seconds" to messages.literal(config.planTtl.seconds),
-            ),
-        )
-    }
-
-    private fun matchesPendingSource(data: BuildBookData, pending: PendingBookMint): Boolean =
-        data.blueprintId == pending.sourceBlueprintId &&
-            data.instanceId == pending.sourceInstanceId &&
-            data.instanceGeneration == pending.sourceInstanceGeneration &&
-            ((pending.kind == BuilderBookMintKind.CREATE && data.draft) ||
-                (pending.kind == BuilderBookMintKind.COPY && data.available)) &&
-            matchesBlueprint(data, pending.blueprint)
-
-    private fun requireExactDraftPreview(player: Player, data: BuildBookData) {
-        if (!BuildingManager.hasExactOpenPreview(player, data)) throw UserFailure("book.preview-required")
-    }
-
-    private fun matchesBlueprint(data: BuildBookData, blueprint: BuilderBookBlueprint): Boolean =
-        data.blueprintId == blueprint.blueprintId &&
-            data.creatorId == blueprint.creatorId &&
-            data.creatorName == blueprint.creatorName &&
-            data.title == blueprint.title &&
-            data.buildingId == blueprint.buildingId &&
-            data.contentSha256 == blueprint.contentSha256 &&
-            data.schematicSha256 == blueprint.schematicSha256 &&
-            data.blockCount == blueprint.blockCount &&
-            (data.issuePriceMinor == null || data.issuePriceMinor == blueprint.issuePriceMinor)
-
-    private fun verifyBookSchematic(data: BuildBookData) {
-        val expectedFile = data.schematicSha256 ?: throw UserFailure("book.invalid")
-        val expectedContent = data.contentSha256 ?: throw UserFailure("book.invalid")
-        val actualFile = PlayerBuildBookStore.schematicSha256(data.buildingId) ?: throw UserFailure("book.invalid")
-        val actualContent = PlayerBuildBookStore.contentSha256(data.buildingId) ?: throw UserFailure("book.invalid")
-        if (actualFile != expectedFile || actualContent != expectedContent) throw UserFailure("book.invalid")
-    }
-
-    private fun registeredBookData(
-        blueprint: BuilderBookBlueprint,
-        instanceId: UUID,
-        instanceGeneration: Int,
-        placement: BuilderBookPlacement,
-        deliveryPending: Boolean = true,
-    ): BuildBookData = BuildBookData(
-        buildingId = blueprint.buildingId,
-        title = blueprint.title,
-        transform = BuildBookTransform(placement.rotation, placement.offsetX, placement.offsetY, placement.offsetZ),
-        playerCreated = true,
-        creatorId = blueprint.creatorId,
-        creatorName = blueprint.creatorName,
-        blueprintId = blueprint.blueprintId,
-        instanceId = instanceId,
-        instanceGeneration = instanceGeneration,
-        issuePriceMinor = blueprint.issuePriceMinor,
-        contentSha256 = blueprint.contentSha256,
-        schematicSha256 = blueprint.schematicSha256,
-        deliveryPending = deliveryPending,
-        blockCount = blueprint.blockCount,
-        cooldownSeconds = 0,
-    ).validated()
-
-    private fun inventoryBooksWithInstance(player: Player, instanceId: UUID): List<Pair<Int, BuildBookData>> =
-        (0 until player.inventory.size).mapNotNull { slot ->
-            val data = player.inventory.getItem(slot)?.let(BuildBookCodec::read) ?: return@mapNotNull null
-            if (data.instanceId == instanceId) slot to data else null
-        }
-
-    private fun completeLocalBookDelivery(player: Player, instanceId: UUID): Boolean {
-        val matches = inventoryBooksWithInstance(player, instanceId)
-        if (matches.size != 1) return false
-        val (slot, data) = matches.single()
-        if (!data.deliveryPending) return true
-        val item = player.inventory.getItem(slot) ?: return false
-        player.inventory.setItem(slot, BuildBookCodec.update(item, data.copy(deliveryPending = false).validated()))
-        player.updateInventory()
-        return true
-    }
-
-    private fun localPendingBookInstances(player: Player): List<UUID> = player.inventory.contents
-        .filterNotNull()
-        .mapNotNull { BuildBookCodec.read(it)?.takeIf(BuildBookData::deliveryPending)?.instanceId }
-
-    private fun requireBookRegistry(): BuilderBookRegistry {
-        if (!config.bookContractsEnabled) throw UserFailure("book.contracts-disabled")
-        if (bookRegistryFailed) throw UserFailure("book.registry-unavailable")
-        if (!bookRegistryReady) throw UserFailure("book.registry-starting")
-        return bookRegistry ?: throw UserFailure("book.registry-unavailable")
-    }
-
-    private fun formatMinor(amount: Long): String = String.format(Locale.US, "%,.2f", amount / 100.0)
-
-    private fun moneyLabel(formatted: String): Component = messages.literal(formatted)
-        .append(Component.space())
-        .append(Component.text("💰", NamedTextColor.WHITE))
-
-    private fun isPlainBook(item: ItemStack): Boolean {
-        if (item.type != Material.BOOK || item.amount <= 0) return false
-        return item.clone().also { it.amount = 1 }.isSimilar(ItemStack(Material.BOOK))
-    }
-
-    private fun replaceOneHeldBook(player: Player, held: ItemStack, replacement: ItemStack) {
-        if (held.amount == 1) {
-            player.inventory.setItemInMainHand(replacement)
-            return
-        }
-        if (player.inventory.firstEmpty() == -1) throw UserFailure("book.inventory-full")
-        player.inventory.setItemInMainHand(held.clone().also { it.amount = held.amount - 1 })
-        check(player.inventory.addItem(replacement).isEmpty()) { "Owned build book did not fit after preflight" }
-    }
-
     private fun planBuildBook(player: Player, site: ConstructionSite, book: ItemStack): BuilderPlan {
-        if (!player.hasPermission("arc.build.book.use")) throw UserFailure("errors.no-permission")
-        val data = site.bookData?.takeIf { it.playerCreated } ?: throw UserFailure("book.invalid")
-        if (data.draft) throw UserFailure("book.unactivated")
-        if (data.deliveryPending) throw UserFailure("book.delivery-pending")
-        if (!data.available) throw UserFailure("book.invalid")
-        if (BuilderBookAuctionTokenCodec.read(book) != null) throw UserFailure("book.auction-locked")
-        if (!BuildBookCodec.matches(book, data)) throw UserFailure("book.missing")
-        verifyBookSchematic(data)
-        if (site.building.volume > config.maxScanVolume) throw UserFailure("errors.selection-too-large")
+        if (!player.hasPermission("arc.build.book.use")) throw BuilderUserFailure("errors.no-permission")
+        val data = site.bookData?.takeIf { it.playerCreated } ?: throw BuilderUserFailure("book.invalid")
+        if (data.draft) throw BuilderUserFailure("book.unactivated")
+        if (data.deliveryPending) throw BuilderUserFailure("book.delivery-pending")
+        if (!data.available) throw BuilderUserFailure("book.invalid")
+        if (BuilderBookAuctionTokenCodec.read(book) != null) throw BuilderUserFailure("book.auction-locked")
+        if (!BuildBookCodec.matches(book, data)) throw BuilderUserFailure("book.missing")
+        books.verifySchematic(data)
+        if (site.building.volume > config.maxScanVolume) throw BuilderUserFailure("errors.selection-too-large")
 
         val changes = site.relativePositionsBottomUp().mapNotNull { relative ->
             val after = BukkitAdapter.adapt(site.building.getBlock(relative, site.fullRotation)).also { blockData ->
@@ -1307,13 +539,13 @@ internal class BuilderToolsRuntime(
         .takeIf(safety::isSafeMaterial)
         ?.createBlockData()
         ?.also { data ->
-            if (!safety.isSafePlacement(data)) throw UserFailure("errors.material")
+            if (!safety.isSafePlacement(data)) throw BuilderUserFailure("errors.material")
             if (data is Leaves) data.isPersistent = true
-        } ?: throw UserFailure("errors.material")
+        } ?: throw BuilderUserFailure("errors.material")
 
     private fun materialArgument(player: Player, raw: String?): Material {
-        if (raw == null) return player.inventory.itemInMainHand.type.takeUnless(Material::isAir) ?: throw UserFailure("errors.material")
-        return Material.matchMaterial(raw) ?: Material.matchMaterial(raw.uppercase(Locale.ROOT)) ?: throw UserFailure("errors.material")
+        if (raw == null) return player.inventory.itemInMainHand.type.takeUnless(Material::isAir) ?: throw BuilderUserFailure("errors.material")
+        return Material.matchMaterial(raw) ?: Material.matchMaterial(raw.uppercase(Locale.ROOT)) ?: throw BuilderUserFailure("errors.material")
     }
 
     private fun newPlan(
@@ -1375,14 +607,14 @@ internal class BuilderToolsRuntime(
     }
 
     private fun preflightPlan(player: Player, plan: BuilderPlan) {
-        if (operationLocks.isPlayerLocked(player.uniqueId)) throw UserFailure("errors.busy")
+        if (operationLocks.isPlayerLocked(player.uniqueId)) throw BuilderUserFailure("errors.busy")
         val used = hourlyUsage(player.uniqueId, System.currentTimeMillis())
         if (plan.kind != BuilderPlanKind.UNDO && used + plan.changes.size > hourlyLimit(player)) {
-            throw UserFailure("errors.hourly-limit")
+            throw BuilderUserFailure("errors.hourly-limit")
         }
         val canApplyNow = BuilderInventory.canApply(player, plan.costs, plan.rewards, plan.toolFingerprintBase64, plan.toolDamage)
         if (!canApplyNow) {
-            if (!BuilderShopEstimateRules.supportsAutoBuy(plan.kind)) throw UserFailure("errors.inventory")
+            if (!BuilderShopEstimateRules.supportsAutoBuy(plan.kind)) throw BuilderUserFailure("errors.inventory")
             val missing = BuilderInventory.missingCosts(player, plan.costs)
             if (
                 missing.isEmpty() ||
@@ -1395,7 +627,7 @@ internal class BuilderToolsRuntime(
                     plan.toolDamage,
                 )
             ) {
-                throw UserFailure("errors.inventory")
+                throw BuilderUserFailure("errors.inventory")
             }
         }
     }
@@ -1408,7 +640,7 @@ internal class BuilderToolsRuntime(
         confirm(player, buildBook = true)
         site.cancelSilently()
         true
-    } catch (failure: UserFailure) {
+    } catch (failure: BuilderUserFailure) {
         send(player, failure.path, failure.values)
         false
     } catch (failure: IllegalArgumentException) {
@@ -1423,76 +655,40 @@ internal class BuilderToolsRuntime(
 
     private fun confirm(player: Player, buyMissing: Boolean = false, buildBook: Boolean = false) {
         if (buildBook) ensureBuildBookAvailable(player) else ensureAvailable(player)
-        if (operationLocks.isPlayerLocked(player.uniqueId)) throw UserFailure("errors.busy")
-        val pending = previews[player.uniqueId] ?: throw UserFailure("errors.expired")
+        if (operationLocks.isPlayerLocked(player.uniqueId)) throw BuilderUserFailure("errors.busy")
+        val pending = previews[player.uniqueId] ?: throw BuilderUserFailure("errors.expired")
         val plan = pending.plan
         if (plan.expiresAtMillis <= System.currentTimeMillis()) {
             discardPendingPlan(player.uniqueId)
-            throw UserFailure("errors.expired")
+            throw BuilderUserFailure("errors.expired")
         }
         val plannedMode = pending.gameMode
         if (player.gameMode != plannedMode) {
             discardPendingPlan(player.uniqueId)
-            throw UserFailure("errors.game-mode-changed")
+            throw BuilderUserFailure("errors.game-mode-changed")
         }
         revalidatePlan(player, plan)
         if (buyMissing) {
             when (val result = shop.procure(player, plan)) {
                 BuilderShopConfirmation.Ready -> Unit
-                is BuilderShopConfirmation.Rejected -> throw UserFailure(
+                is BuilderShopConfirmation.Rejected -> throw BuilderUserFailure(
                     result.messagePath,
                     result.values,
                 )
             }
         }
         if (!BuilderInventory.canApply(player, plan.costs, plan.rewards, plan.toolFingerprintBase64, plan.toolDamage)) {
-            throw UserFailure("errors.inventory")
+            throw BuilderUserFailure("errors.inventory")
         }
-        if (!operationLocks.tryLock(plan)) throw UserFailure("errors.busy")
+        if (!operationLocks.tryLock(plan)) throw BuilderUserFailure("errors.busy")
         previews.remove(player.uniqueId, pending)
         shop.clear(player.uniqueId)
         crown.clearAnchor(player.uniqueId)
         val instanceId = plan.bookInstanceId
         if (instanceId != null) {
-            reserveBookForBuild(player, plan, plannedMode)
+            books.reserveForBuild(player, plan, plannedMode)
         } else {
             startJournaledOperation(player, plan, plannedMode)
-        }
-    }
-
-    private fun reserveBookForBuild(player: Player, plan: BuilderPlan, plannedMode: GameMode) {
-        val registry = requireBookRegistry()
-        val serverName = ARC.serverName ?: run {
-            operationLocks.unlock(plan)
-            throw UserFailure("book.registry-unavailable")
-        }
-        operationLocks.lockBook(player.uniqueId)
-        registry.oneTimeUses.claim(BuilderBookOneTimeUse.request(plan, serverName)).whenComplete { result, failure ->
-            taskScope.runSync {
-                if (failure != null || result == null) {
-                    operationLocks.unlockBook(player.uniqueId)
-                    operationLocks.unlock(plan)
-                    send(player, "book.registry-unavailable")
-                    return@runSync
-                }
-                if (result !is OneTimeUseClaimResult.Acquired) {
-                    operationLocks.unlockBook(player.uniqueId)
-                    operationLocks.unlock(plan)
-                    send(
-                        player,
-                        if (result == OneTimeUseClaimResult.IdentityConflict) "book.stale" else "book.duplicate",
-                    )
-                    return@runSync
-                }
-                if (!player.isOnline) {
-                    releasePlanBookReservation(plan)
-                    operationLocks.unlockBook(player.uniqueId)
-                    operationLocks.unlock(plan)
-                    return@runSync
-                }
-                operationLocks.unlockBook(player.uniqueId)
-                startJournaledOperation(player, plan, plannedMode)
-            }
         }
     }
 
@@ -1636,36 +832,17 @@ internal class BuilderToolsRuntime(
                 if (instanceId == null) {
                     finalizeCommittedOperation(player, operation)
                 } else {
-                    val registry = bookRegistry
-                    if (registry == null) {
-                        operation.uncertainCommit = true
-                        recoveryBlocked = true
-                        send(player, "errors.recovering")
-                        return@writeAsync
-                    }
-                    val serverName = ARC.serverName
-                    if (serverName == null) {
-                        operation.uncertainCommit = true
-                        recoveryBlocked = true
-                        send(player, "errors.recovering")
-                        return@writeAsync
-                    }
-                    registry.oneTimeUses.commit(BuilderBookOneTimeUse.claim(durable.plan, serverName)).whenComplete { consumed, consumeFailure ->
-                        taskScope.runSync {
-                            if (
-                                consumeFailure != null ||
-                                (consumed != OneTimeUseCommitResult.COMMITTED && consumed != OneTimeUseCommitResult.ALREADY_COMMITTED)
-                            ) {
-                                operation.uncertainCommit = true
-                                recoveryBlocked = true
-                                error(
-                                    "Builder-book consume outcome requires restart recovery for ${durable.operationId}: " +
-                                        "type=${BuilderToolsFailureType.of(consumeFailure)} result=$consumed",
-                                )
-                                send(player, "errors.recovering")
-                            } else {
-                                finalizeCommittedOperation(player, operation)
-                            }
+                    books.commitPlanReservation(durable.plan) { consumed, consumeFailure ->
+                        if (!consumed) {
+                            operation.uncertainCommit = true
+                            recoveryBlocked = true
+                            error(
+                                "Builder-book consume outcome requires restart recovery for ${durable.operationId}: " +
+                                    "type=${BuilderToolsFailureType.of(consumeFailure)}",
+                            )
+                            send(player, "errors.recovering")
+                        } else {
+                            finalizeCommittedOperation(player, operation)
                         }
                     }
                 }
@@ -1714,7 +891,7 @@ internal class BuilderToolsRuntime(
             error("Builder-tools rollback requires operator attention for ${operation.record.operationId}", rollbackFailure)
         }
         finishOperation(operation)
-        if (failure == null) releasePlanBookReservation(operation.record.plan)
+        if (failure == null) books.releasePlanReservation(operation.record.plan)
         if (failure == null && player.isOnline) send(player, "operation.rolled-back")
         if (failure == null && player.uniqueId !in recoveryByPlayer) {
             writeAsync(action = { journal.acknowledge(operation.record.operationId) }, callback = { _, acknowledgeFailure ->
@@ -1726,7 +903,7 @@ internal class BuilderToolsRuntime(
 
     private fun failBeforeMutation(player: Player, operation: BuilderActiveOperation, failure: Throwable?) {
         finishOperation(operation)
-        releasePlanBookReservation(operation.record.plan)
+        books.releasePlanReservation(operation.record.plan)
         send(player, "operation.rolled-back")
         failure?.let { warn("Builder-tools durability barrier failed: {}", it.message) }
         writeAsync(action = { journal.acknowledge(operation.record.operationId) }, callback = { _, acknowledgeFailure ->
@@ -1739,34 +916,8 @@ internal class BuilderToolsRuntime(
 
     private fun acknowledgeCancelled(operation: BuilderActiveOperation) {
         finishOperation(operation)
-        releasePlanBookReservation(operation.record.plan)
+        books.releasePlanReservation(operation.record.plan)
         writeAsync(action = { journal.acknowledge(operation.record.operationId) }, callback = { _, _ -> })
-    }
-
-    private fun releasePlanBookReservation(plan: BuilderPlan) {
-        val instanceId = plan.bookInstanceId ?: return
-        val registry = bookRegistry ?: run {
-            recoveryBlocked = true
-            return
-        }
-        val serverName = ARC.serverName ?: run {
-            recoveryBlocked = true
-            return
-        }
-        registry.oneTimeUses.release(BuilderBookOneTimeUse.claim(plan, serverName)).whenComplete { released, failure ->
-            taskScope.runSync {
-                if (
-                    failure != null ||
-                    (released != OneTimeUseReleaseResult.RELEASED && released != OneTimeUseReleaseResult.ALREADY_RELEASED)
-                ) {
-                    recoveryBlocked = true
-                    error(
-                        "Builder-book reservation release failed for ${plan.id}: " +
-                            "type=${BuilderToolsFailureType.of(failure)} result=$released",
-                    )
-                }
-            }
-        }
     }
 
     private fun finishOperation(operation: BuilderActiveOperation) = operationLocks.finish(operation)
@@ -1776,7 +927,7 @@ internal class BuilderToolsRuntime(
         plan.changes.forEach { change ->
             val block = block(requireWorld(change.position.worldId), change.position)
             ensureMutable(player, block)
-            if (block.blockData.asString != change.beforeBlockData) throw UserFailure("errors.expired")
+            if (block.blockData.asString != change.beforeBlockData) throw BuilderUserFailure("errors.expired")
             if (!block.type.isAir && !safety.isSafeExisting(block) && !safety.isReplaceable(block)) {
                 throw unsafeBlock(player, block)
             }
@@ -1799,12 +950,12 @@ internal class BuilderToolsRuntime(
             discardPendingPlan(player.uniqueId)
             send(player, "plan.cancelled")
         } else {
-            throw UserFailure("errors.expired")
+            throw BuilderUserFailure("errors.expired")
         }
     }
 
     private fun clearSelection(player: Player) {
-        if (operationLocks.isPlayerLocked(player.uniqueId)) throw UserFailure("errors.busy")
+        if (operationLocks.isPlayerLocked(player.uniqueId)) throw BuilderUserFailure("errors.busy")
         discardPendingPlan(player.uniqueId)
         selections.clear(player.uniqueId)
         crown.clearAnchor(player.uniqueId)
@@ -1820,7 +971,7 @@ internal class BuilderToolsRuntime(
             .filter { it.plan.kind != BuilderPlanKind.UNDO && it.operationId !in consumedUndoSources }
             .filter { (it.committedAtMillis ?: 0L) + config.undoTtl.toMillis() > now }
             .maxByOrNull { it.committedAtMillis ?: 0L }
-            ?: throw UserFailure("errors.undo-missing")
+            ?: throw BuilderUserFailure("errors.undo-missing")
         val changes = source.plan.changes.asReversed().map { change ->
             BuilderBlockChange(change.position, change.afterBlockData, change.beforeBlockData)
         }
@@ -1850,33 +1001,33 @@ internal class BuilderToolsRuntime(
     private fun ensureMutable(player: Player, block: Block) {
         ensureInRangeAndLoaded(player, block)
         ensureProtected(player, block)
-        if (!block.world.worldBorder.isInside(block.location)) throw UserFailure("errors.protection")
+        if (!block.world.worldBorder.isInside(block.location)) throw BuilderUserFailure("errors.protection")
     }
 
     private fun ensureInRangeAndLoaded(player: Player, block: Block) {
-        if (!block.world.isChunkLoaded(block.x shr 4, block.z shr 4)) throw UserFailure("errors.chunk-unloaded")
+        if (!block.world.isChunkLoaded(block.x shr 4, block.z shr 4)) throw BuilderUserFailure("errors.chunk-unloaded")
         if (player.world.uid != block.world.uid || player.location.distanceSquared(block.location.clone().add(0.5, 0.5, 0.5)) > config.maximumRange * config.maximumRange) {
-            throw UserFailure("errors.too-far")
+            throw BuilderUserFailure("errors.too-far")
         }
     }
 
     private fun ensureProtected(player: Player, block: Block) {
         val lands = HookRegistry.landsHook
         if ((lands != null && !lands.isProtectedFor(player, block.location)) || (lands == null && config.requireLands)) {
-            throw UserFailure("errors.protection")
+            throw BuilderUserFailure("errors.protection")
         }
     }
 
     private fun block(world: World, position: BuilderBlockPos): Block = world.getBlockAt(position.x, position.y, position.z)
 
-    private fun requireWorld(id: UUID): World = Bukkit.getWorld(id) ?: throw UserFailure("errors.world-not-allowed")
+    private fun requireWorld(id: UUID): World = Bukkit.getWorld(id) ?: throw BuilderUserFailure("errors.world-not-allowed")
 
     private fun requireChanges(changes: List<BuilderBlockChange>) {
-        if (changes.isEmpty()) throw UserFailure("errors.nothing-to-change")
-        if (changes.size > config.maxChanges) throw UserFailure("errors.selection-too-large")
+        if (changes.isEmpty()) throw BuilderUserFailure("errors.nothing-to-change")
+        if (changes.size > config.maxChanges) throw BuilderUserFailure("errors.selection-too-large")
     }
 
-    private fun unsafeBlock(player: Player, block: Block) = UserFailure(
+    private fun unsafeBlock(player: Player, block: Block) = BuilderUserFailure(
         "errors.unsafe-block",
         mapOf(
             "material" to BuilderMaterialPresentation.label(player, block.type),
@@ -1909,15 +1060,6 @@ internal class BuilderToolsRuntime(
             )
         }
 
-    private fun materialsSummary(player: Player, materials: List<Material>): Component {
-        val first = checkNotNull(materials.firstOrNull()) { "Unavailable builder-book materials cannot be empty" }
-        return BuilderMaterialPresentation.label(player, first).append(
-            messages.literal(if (materials.size > 1) " +${materials.size - 1}" else ""),
-        )
-    }
-
-    private fun displayBookTitle(title: String): Component = messages.literal(BuildBookItems.compactTitle(title, 22))
-
     private fun kindLabel(player: Player, kind: BuilderPlanKind): Component =
         messages.render("kinds.${kind.name.lowercase(Locale.ROOT)}", locale(player))
 
@@ -1940,362 +1082,6 @@ internal class BuilderToolsRuntime(
         val step = kotlin.math.ceil(visible.size / config.previewMaxPlanParticles.toDouble()).toInt().coerceAtLeast(1)
         visible.asSequence().filterIndexed { index, _ -> index % step == 0 }.take(config.previewMaxPlanParticles).forEach { change ->
             player.spawnParticle(Particle.END_ROD, change.position.x + 0.5, change.position.y + 0.5, change.position.z + 0.5, 1, 0.0, 0.0, 0.0, 0.0)
-        }
-    }
-
-    private fun initializeBookContracts() {
-        val registry = bookRegistry ?: return
-        registry.initialize().whenComplete { _, failure ->
-            taskScope.runSync {
-                if (failure != null) {
-                    bookRegistryFailed = true
-                    error("Builder-book MySQL initialization failed: type=${BuilderToolsFailureType.of(failure)}")
-                    return@runSync
-                }
-                bookRegistryReady = true
-                bookRegistryFailed = false
-                info(debugLine.line("event" to "book_registry_ready"))
-                bookAuctionCoordinator?.start()
-                recoverOpenBookMints()
-                Bukkit.getOnlinePlayers().forEach(::recoverBookDeliveries)
-                if (!recovering) reconcileBookReservations()
-            }
-        }
-    }
-
-    private fun recoverOpenBookMints() {
-        val registry = bookRegistry ?: return
-        val coordinator = bookMintCoordinator ?: return
-        registry.openMints().whenComplete { mints, failure ->
-            taskScope.runSync {
-                if (failure != null || mints == null) {
-                    bookRegistryFailed = true
-                    bookRegistryReady = false
-                    error(
-                        "Builder-book mint recovery scan failed: " +
-                            "type=${BuilderToolsFailureType.of(failure)} result_present=${mints != null}",
-                    )
-                    return@runSync
-                }
-                mints.forEach { mint ->
-                    coordinator.recover(mint) { result ->
-                        when (result) {
-                            is BuilderBookMintResult.Issued -> Bukkit.getPlayer(mint.playerId)
-                                ?.takeIf(Player::isOnline)
-                                ?.let(::recoverBookDeliveries)
-                            BuilderBookMintResult.PaymentRejected,
-                            BuilderBookMintResult.Refunded,
-                            -> releaseBookSource(sourceBookClaim(mint))
-                            BuilderBookMintResult.ManualReview -> Unit
-                            else -> warn(
-                                "Builder-book mint recovery incomplete: transaction={} status={} result={}",
-                                mint.transactionId,
-                                mint.status,
-                                result::class.simpleName,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private fun recoverBookDeliveries(player: Player) {
-        if (!bookRegistryReady || !player.isOnline) return
-        if (!bookDeliveryRecoveries.add(player.uniqueId)) return
-        val registry = bookRegistry ?: run {
-            bookDeliveryRecoveries -= player.uniqueId
-            return
-        }
-        val localPending = localPendingBookInstances(player)
-        if (localPending.isNotEmpty()) operationLocks.lockBook(player.uniqueId)
-        registry.pendingDeliveries(player.uniqueId).whenComplete { deliveries, failure ->
-            taskScope.runSync deliveryLookup@{
-                if (!player.isOnline) {
-                    bookDeliveryRecoveries -= player.uniqueId
-                    return@deliveryLookup
-                }
-                if (failure != null || deliveries == null) {
-                    warn(
-                        "Builder-book delivery lookup failed for {}: type={} result_present={}",
-                        player.name,
-                        BuilderToolsFailureType.of(failure),
-                        deliveries != null,
-                    )
-                    bookDeliveryRecoveries -= player.uniqueId
-                    return@deliveryLookup
-                }
-                if (deliveries.isEmpty()) {
-                    if (localPending.size == 1) {
-                        reconcileLocalDeliveredBook(player, localPending.single()) {
-                            bookDeliveryRecoveries -= player.uniqueId
-                        }
-                    }
-                    else if (localPending.size > 1) {
-                        bookDeliveryWaitingForSpace -= player.uniqueId
-                        error("Builder-book local delivery invariant failed for ${player.uniqueId}: ${localPending.size} pending items")
-                        send(player, "book.manual-review")
-                    } else {
-                        bookDeliveryRecoveries -= player.uniqueId
-                    }
-                    return@deliveryLookup
-                }
-                operationLocks.lockBook(player.uniqueId)
-                if (deliveries.size != 1) {
-                    bookDeliveryWaitingForSpace -= player.uniqueId
-                    error("Builder-book delivery invariant failed for ${player.uniqueId}: ${deliveries.size} pending instances")
-                    send(player, "book.manual-review")
-                    return@deliveryLookup
-                }
-                val delivery = deliveries.single()
-                val instanceId = delivery.instance.instanceId
-                if (localPending.isNotEmpty() && (localPending.size != 1 || localPending.single() != instanceId)) {
-                    bookDeliveryWaitingForSpace -= player.uniqueId
-                    error(
-                        "Builder-book pending item does not match authoritative delivery: " +
-                            "player=${player.uniqueId} expected=$instanceId local=$localPending",
-                    )
-                    send(player, "book.manual-review")
-                    return@deliveryLookup
-                }
-                val expectedData = registeredBookData(
-                    delivery.blueprint,
-                    instanceId,
-                    delivery.instance.generation,
-                    delivery.placement,
-                )
-                val existing = inventoryBooksWithInstance(player, instanceId)
-                if (existing.size > 1 || (existing.size == 1 && existing.single().second != expectedData)) {
-                    bookDeliveryWaitingForSpace -= player.uniqueId
-                    error("Builder-book recovered item conflicts with local inventory: player=${player.uniqueId} instance=$instanceId")
-                    send(player, "book.manual-review")
-                    return@deliveryLookup
-                }
-                if (existing.isEmpty()) {
-                    val output = BuildBookItems.create(expectedData)
-                    val held = player.inventory.itemInMainHand
-                    val heldData = BuildBookCodec.read(held)
-                    if (
-                        delivery.sourceInstanceId == null && heldData?.draft == true &&
-                        heldData.blueprintId == delivery.blueprint.blueprintId
-                    ) {
-                        if (held.amount > 1 && player.inventory.firstEmpty() == -1) {
-                            waitForBookDeliverySpace(player)
-                            bookDeliveryRecoveries -= player.uniqueId
-                            return@deliveryLookup
-                        }
-                        replaceOneHeldBook(player, held, output)
-                    } else {
-                        if (player.inventory.firstEmpty() == -1) {
-                            waitForBookDeliverySpace(player)
-                            bookDeliveryRecoveries -= player.uniqueId
-                            return@deliveryLookup
-                        }
-                        check(player.inventory.addItem(output).isEmpty()) { "Recovered builder book did not fit after preflight" }
-                    }
-                    player.updateInventory()
-                }
-                operationLocks.lockBook(player.uniqueId)
-                bookDeliveryWaitingForSpace -= player.uniqueId
-                markBookDelivered(
-                    player = player,
-                    instanceId = instanceId,
-                    transactionId = delivery.instance.transactionId,
-                    sourceClaim = delivery.sourceInstanceId?.let { sourceId ->
-                        val serverName = ARC.serverName ?: run {
-                            recoveryBlocked = true
-                            error(
-                                "Builder-book delivery recovery has no backend identity: " +
-                                    "transaction=${delivery.instance.transactionId}",
-                            )
-                            return@let null
-                        }
-                        OneTimeUseClaim.acquired(
-                            BuilderBookOneTimeUse.request(
-                                instanceId = sourceId,
-                                expectedGeneration = checkNotNull(delivery.sourceInstanceGeneration),
-                                blueprintId = delivery.blueprint.blueprintId,
-                                buildingId = delivery.blueprint.buildingId,
-                                schematicSha256 = delivery.blueprint.schematicSha256,
-                                operationId = delivery.instance.transactionId,
-                                playerId = player.uniqueId,
-                                serverName = serverName,
-                            ),
-                            newlyCreated = false,
-                        )
-                    },
-                    recovered = true,
-                    finished = { bookDeliveryRecoveries -= player.uniqueId },
-                )
-            }
-        }
-    }
-
-    private fun reconcileLocalDeliveredBook(player: Player, instanceId: UUID, finished: () -> Unit) {
-        val registry = bookRegistry ?: return finished()
-        registry.loadInstance(instanceId).whenComplete { instance, failure ->
-            taskScope.runSync {
-                if (failure != null) {
-                    error(
-                        "Builder-book local delivery reconciliation failed for $instanceId: " +
-                            "type=${BuilderToolsFailureType.of(failure)}",
-                    )
-                    finished()
-                } else if (instance == null) {
-                    error("Builder-book local delivery instance is missing: $instanceId")
-                    send(player, "book.manual-review")
-                } else if (instance.status == BuilderBookInstanceStatus.AVAILABLE) {
-                    verifyCompletedLocalDelivery(player, instance, finished)
-                } else {
-                    error("Builder-book local delivery state is ambiguous: instance=$instanceId status=${instance.status}")
-                    send(player, "book.manual-review")
-                }
-            }
-        }
-    }
-
-    private fun verifyCompletedLocalDelivery(
-        player: Player,
-        instance: BuilderBookInstance,
-        finished: () -> Unit,
-    ) {
-        val registry = bookRegistry ?: return finished()
-        registry.loadMint(instance.transactionId).whenComplete { mint, failure ->
-            taskScope.runSync {
-                if (!player.isOnline) {
-                    finished()
-                    return@runSync
-                }
-                if (failure != null) {
-                    error(
-                        "Builder-book completed delivery lookup failed for ${instance.instanceId}: " +
-                            "type=${BuilderToolsFailureType.of(failure)}",
-                    )
-                    finished()
-                    return@runSync
-                }
-                val expected = mint
-                    ?.takeIf { it.status == BuilderBookMintStatus.COMPLETED && it.instanceId == instance.instanceId }
-                    ?.let { registeredBookData(it.blueprint, instance.instanceId, instance.generation, it.placement) }
-                val local = inventoryBooksWithInstance(player, instance.instanceId)
-                if (
-                    expected == null || local.size != 1 || local.single().second != expected ||
-                    !completeLocalBookDelivery(player, instance.instanceId)
-                ) {
-                    error("Builder-book completed delivery item failed authoritative verification: instance=${instance.instanceId}")
-                    send(player, "book.manual-review")
-                    return@runSync
-                }
-                operationLocks.unlockBook(player.uniqueId)
-                bookDeliveryWaitingForSpace -= player.uniqueId
-                send(player, "book.delivery-recovered")
-                finished()
-            }
-        }
-    }
-
-    private fun reconcileBookReservations() {
-        val registry = bookRegistry ?: return
-        val serverName = ARC.serverName ?: return
-        registry.reservedForServer(serverName).whenComplete { reservations, failure ->
-            taskScope.runSync {
-                if (failure != null || reservations == null) {
-                    recoveryBlocked = true
-                    error(
-                        "Builder-book reservation recovery failed: " +
-                            "type=${BuilderToolsFailureType.of(failure)} result_present=${reservations != null}",
-                    )
-                    return@runSync
-                }
-                reservations.forEach { instance -> reconcileBookReservation(instance) }
-            }
-        }
-    }
-
-    private fun reconcileBookReservation(instance: BuilderBookInstance) {
-        val registry = bookRegistry ?: return
-        val operationId = instance.reservationOperationId ?: return
-        val localRecord = committedRecords[operationId] ?: recoveryByPlayer.values.firstOrNull { it.operationId == operationId }
-        if (localRecord != null && localRecord.plan.bookInstanceId == instance.instanceId) {
-            if (localRecord.phase == BuilderJournalPhase.COMMITTED) {
-                val serverName = instance.reservationServer ?: run {
-                    recoveryBlocked = true
-                    return
-                }
-                registry.oneTimeUses.commit(BuilderBookOneTimeUse.claim(localRecord.plan, serverName)).whenComplete { consumed, failure ->
-                    taskScope.runSync {
-                        if (
-                            failure != null ||
-                            (consumed != OneTimeUseCommitResult.COMMITTED && consumed != OneTimeUseCommitResult.ALREADY_COMMITTED)
-                        ) {
-                            recoveryBlocked = true
-                            error(
-                                "Builder-book committed reservation could not be consumed: $operationId " +
-                                    "type=${BuilderToolsFailureType.of(failure)} result=$consumed",
-                            )
-                        }
-                    }
-                }
-            } else if (recoveryByPlayer.values.none { it.operationId == operationId }) {
-                releaseRecoveredBookReservation(registry, instance)
-            }
-            return
-        }
-        registry.loadMint(operationId).whenComplete { mint, failure ->
-            taskScope.runSync {
-                if (failure != null) {
-                    recoveryBlocked = true
-                    error(
-                        "Builder-book reservation owner lookup failed: $operationId " +
-                            "type=${BuilderToolsFailureType.of(failure)}",
-                    )
-                } else if (mint != null && mint.sourceInstanceId == instance.instanceId) {
-                    if (mint.status.terminal) {
-                        releaseRecoveredBookReservation(registry, instance)
-                    }
-                } else {
-                    releaseRecoveredBookReservation(registry, instance)
-                }
-            }
-        }
-    }
-
-    private fun releaseRecoveredBookReservation(registry: BuilderBookRegistry, instance: BuilderBookInstance) {
-        registry.loadBlueprint(instance.blueprintId).whenComplete { blueprint, loadFailure ->
-            taskScope.runSync {
-                if (loadFailure != null || blueprint == null) {
-                    recoveryBlocked = true
-                    error(
-                        "Builder-book recovered reservation blueprint could not be loaded: ${instance.reservationOperationId}",
-                        loadFailure ?: IllegalStateException("blueprint missing"),
-                    )
-                    return@runSync
-                }
-                val request = BuilderBookOneTimeUse.request(
-                    instanceId = instance.instanceId,
-                    expectedGeneration = instance.generation,
-                    blueprintId = blueprint.blueprintId,
-                    buildingId = blueprint.buildingId,
-                    schematicSha256 = blueprint.schematicSha256,
-                    operationId = checkNotNull(instance.reservationOperationId),
-                    playerId = checkNotNull(instance.reservationPlayerId),
-                    serverName = checkNotNull(instance.reservationServer),
-                )
-                registry.oneTimeUses.release(OneTimeUseClaim.acquired(request, newlyCreated = false)).whenComplete { released, failure ->
-                    taskScope.runSync {
-                        if (
-                            failure != null ||
-                            (released != OneTimeUseReleaseResult.RELEASED && released != OneTimeUseReleaseResult.ALREADY_RELEASED)
-                        ) {
-                            recoveryBlocked = true
-                            error(
-                                "Builder-book recovered reservation could not be released: ${instance.reservationOperationId}",
-                                failure ?: IllegalStateException("release rejected"),
-                            )
-                        }
-                    }
-                }
-            }
         }
     }
 
@@ -2351,7 +1137,7 @@ internal class BuilderToolsRuntime(
     private fun finishRecovery(recordCount: Int) {
         recovering = false
         cleanupOldRecords()
-        if (bookRegistryReady) reconcileBookReservations()
+        books.onGeneralRecoveryFinished()
         info(debugLine.line("event" to "recovery_ready", "records" to recordCount, "pending_players" to recoveryByPlayer.size))
     }
 
@@ -2446,7 +1232,7 @@ internal class BuilderToolsRuntime(
         event.isCancelled = true
         try {
             setPosition(player, clicked.location, first)
-        } catch (failure: UserFailure) {
+        } catch (failure: BuilderUserFailure) {
             send(player, failure.path, failure.values)
         }
     }
@@ -2458,7 +1244,7 @@ internal class BuilderToolsRuntime(
             try {
                 stateService.restoreInventoryAndVerify(event.player, stateCodec.decode(record.inventoryBefore))
                 recoveryByPlayer.remove(event.player.uniqueId)
-                releasePlanBookReservation(record.plan)
+                books.releasePlanReservation(record.plan)
                 writeAsync(action = {
                     check(journal.acknowledge(record.operationId)) { "Builder-tools player recovery acknowledgement failed" }
                 }, callback = { _, failure ->
@@ -2470,8 +1256,7 @@ internal class BuilderToolsRuntime(
                 error("Builder-tools player recovery failed for ${record.operationId}", failure)
             }
         }
-        recoverBookDeliveries(event.player)
-        if (bookRegistryReady) bookAuctionCoordinator?.onPlayerAvailable(event.player)
+        books.onPlayerAvailable(event.player)
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -2479,7 +1264,7 @@ internal class BuilderToolsRuntime(
         discardPendingPlan(event.player.uniqueId)
         selections.clear(event.player.uniqueId)
         clipboardController.clear(event.player.uniqueId)
-        pendingBookMints.remove(event.player.uniqueId)
+        books.onPlayerQuit(event.player.uniqueId)
         crown.clearPlayer(event.player.uniqueId)
         val operation = operationLocks.operation(event.player.uniqueId) ?: return
         if (operation.uncertainCommit) return
@@ -2489,20 +1274,21 @@ internal class BuilderToolsRuntime(
     }
 
     internal fun rejectUnsafeAuctionSale(player: Player) {
-        send(player, "book.auction-use-safe-command")
+        books.rejectUnsafeAuctionSale(player)
     }
 
     internal fun runtimeHealthContribution(): RuntimeHealthContribution = runtimeHealth.get()
 
     private fun publishRuntimeHealth() {
+        val bookHealth = books.health()
         runtimeHealth.set(
             BuilderToolsRuntimeHealth.contribution(
                 BuilderToolsRuntimeHealthInputs(
                     closed = closed,
                     recovering = recovering,
-                    recoveryBlocked = recoveryBlocked,
+                    recoveryBlocked = recoveryBlocked || bookHealth.recoveryBlocked,
                     recoveryPlayers = recoveryByPlayer.size,
-                    deliveryWaitingForSpace = bookDeliveryWaitingForSpace.size,
+                    deliveryWaitingForSpace = bookHealth.deliveryWaitingForSpace,
                     activeOperations = operationLocks.activeOperationCount,
                     bookLockedPlayers = operationLocks.bookLockedPlayerCount,
                     landsRequired = config.requireLands,
@@ -2512,8 +1298,8 @@ internal class BuilderToolsRuntime(
                     shopRequired = config.shopEnabled,
                     shopAvailable = HookRegistry.shopPurchaseService != null,
                     bookContractsEnabled = config.bookContractsEnabled,
-                    bookRegistryReady = bookRegistryReady,
-                    bookRegistryFailed = bookRegistryFailed,
+                    bookRegistryReady = bookHealth.registryReady,
+                    bookRegistryFailed = bookHealth.registryFailed,
                 ),
             ),
         )
@@ -2535,8 +1321,7 @@ internal class BuilderToolsRuntime(
         publishRuntimeHealth()
         HandlerList.unregisterAll(this)
         crown.close()
-        bookAuctionCoordinator?.close()
-        bookStatusVerifier?.close()
+        books.close()
         previews.close()
         taskScope.close()
         operationLocks.operations().forEach { operation ->
@@ -2549,11 +1334,6 @@ internal class BuilderToolsRuntime(
             else finishOperation(operation)
         }
         storageExecutor.shutdownNow()
-        pendingBookMints.clear()
-        bookDeliveryWaitingForSpace.clear()
-        bookDeliveryRecoveries.clear()
-        bookMintCoordinator?.clear()
-        bookRegistry?.close()
         shop.close()
         operationLocks.close()
         selections.clear()
