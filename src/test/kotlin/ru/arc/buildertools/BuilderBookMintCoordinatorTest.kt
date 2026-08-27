@@ -241,19 +241,6 @@ private class FakeBookRegistry : BuilderBookRegistry {
     override fun pendingDeliveries(playerId: UUID) =
         CompletableFuture.completedFuture<List<BuilderBookDelivery>>(emptyList())
     override fun openMints() = CompletableFuture.completedFuture(records.filter { !it.status.terminal })
-    override fun reserve(
-        instanceId: UUID,
-        expectedGeneration: Int,
-        expectedBlueprintId: UUID,
-        expectedBuildingId: String,
-        expectedSchematicSha256: String,
-        operationId: UUID,
-        playerId: UUID,
-        serverName: String,
-        now: Long,
-    ) = CompletableFuture.completedFuture<BuilderBookReservationResult>(BuilderBookReservationResult.Missing)
-    override fun consume(instanceId: UUID, operationId: UUID, now: Long) = CompletableFuture.completedFuture(false)
-    override fun release(instanceId: UUID, operationId: UUID) = CompletableFuture.completedFuture(false)
     override fun reservedForServer(serverName: String) = CompletableFuture.completedFuture<List<BuilderBookInstance>>(emptyList())
     override fun reserveForAuction(
         instanceId: UUID,

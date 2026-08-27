@@ -398,19 +398,6 @@ private class AuctionRegistry(
     override fun loadInstance(instanceId: UUID) = CompletableFuture.completedFuture(instance.takeIf { it.instanceId == instanceId })
     override fun pendingDeliveries(playerId: UUID) = unsupported<List<BuilderBookDelivery>>()
     override fun openMints() = unsupported<List<BuilderBookMint>>()
-    override fun reserve(
-        instanceId: UUID,
-        expectedGeneration: Int,
-        expectedBlueprintId: UUID,
-        expectedBuildingId: String,
-        expectedSchematicSha256: String,
-        operationId: UUID,
-        playerId: UUID,
-        serverName: String,
-        now: Long,
-    ) = unsupported<BuilderBookReservationResult>()
-    override fun consume(instanceId: UUID, operationId: UUID, now: Long) = unsupported<Boolean>()
-    override fun release(instanceId: UUID, operationId: UUID) = unsupported<Boolean>()
     override fun reservedForServer(serverName: String) = unsupported<List<BuilderBookInstance>>()
     override fun loadMint(transactionId: UUID) = unsupported<BuilderBookMint?>()
     override fun close() = Unit

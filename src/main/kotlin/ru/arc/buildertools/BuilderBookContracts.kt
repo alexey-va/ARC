@@ -149,6 +149,7 @@ internal data class BuilderBookMint(
     val blueprint: BuilderBookBlueprint,
     val instanceId: UUID,
     val sourceInstanceId: UUID? = null,
+    val sourceInstanceGeneration: Int? = null,
     val placement: BuilderBookPlacement,
     val status: BuilderBookMintStatus = BuilderBookMintStatus.PREPARED,
     val createdAtMillis: Long,
@@ -166,9 +167,10 @@ internal data class BuilderBookMint(
         if (kind == BuilderBookMintKind.CREATE) {
             require(playerId == blueprint.creatorId) { "Builder-book create mint owner is invalid" }
         }
-        require((kind == BuilderBookMintKind.COPY) == (sourceInstanceId != null)) {
+        require((kind == BuilderBookMintKind.COPY) == (sourceInstanceId != null && sourceInstanceGeneration != null)) {
             "Builder-book copy mint source is invalid"
         }
+        sourceInstanceGeneration?.let { require(it > 0) { "Builder-book copy source generation is invalid" } }
         require(sourceInstanceId == null || sourceInstanceId != instanceId) { "Builder-book copy instance collides with its source" }
         require(createdAtMillis > 0L && updatedAtMillis >= createdAtMillis) { "Builder-book mint time is invalid" }
         require(evidence == null || EVIDENCE.matches(evidence)) { "Builder-book mint evidence is invalid" }
@@ -237,6 +239,7 @@ internal data class BuilderBookDelivery(
     val instance: BuilderBookInstance,
     val placement: BuilderBookPlacement,
     val sourceInstanceId: UUID?,
+    val sourceInstanceGeneration: Int?,
 ) {
     fun validated(): BuilderBookDelivery = apply {
         blueprint.validated()
@@ -244,6 +247,10 @@ internal data class BuilderBookDelivery(
         placement.validated()
         require(instance.blueprintId == blueprint.blueprintId) { "Builder-book delivery identity mismatch" }
         require(sourceInstanceId == null || sourceInstanceId != instance.instanceId) { "Builder-book delivery source is invalid" }
+        require((sourceInstanceId == null) == (sourceInstanceGeneration == null)) {
+            "Builder-book delivery source generation is invalid"
+        }
+        sourceInstanceGeneration?.let { require(it > 0) { "Builder-book delivery source generation is invalid" } }
     }
 }
 
@@ -283,14 +290,6 @@ internal object BuilderBookCostRules {
             .longValueExact()
         return BuilderBookCost(material, fee, Math.addExact(material, fee)).validated()
     }
-}
-
-internal sealed interface BuilderBookReservationResult {
-    data class Reserved(val blueprint: BuilderBookBlueprint) : BuilderBookReservationResult
-    data object Missing : BuilderBookReservationResult
-    data object Unavailable : BuilderBookReservationResult
-    data object Stale : BuilderBookReservationResult
-    data object Mismatch : BuilderBookReservationResult
 }
 
 internal sealed interface BuilderBookAuctionReservationResult {

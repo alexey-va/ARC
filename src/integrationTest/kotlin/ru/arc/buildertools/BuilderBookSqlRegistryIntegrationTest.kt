@@ -3,6 +3,10 @@ package ru.arc.buildertools
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
+import ru.arc.onetime.OneTimeUseClaim
+import ru.arc.onetime.OneTimeUseClaimResult
+import ru.arc.onetime.OneTimeUseCommitResult
+import ru.arc.onetime.OneTimeUseReleaseResult
 import ru.arc.sql.SqlConnectionConfig
 import ru.arc.sql.SqlRuntime
 import ru.arc.sql.SqlSslMode
@@ -40,39 +44,21 @@ class BuilderBookSqlRegistryIntegrationTest : StringSpec({
 
                 val firstOperation = UUID.randomUUID()
                 val secondOperation = UUID.randomUUID()
-                val firstReservation = registry.reserve(
-                    mint.instanceId,
-                    BuilderBookInstance.INITIAL_GENERATION,
-                    mint.blueprint.blueprintId,
-                    mint.blueprint.buildingId,
-                    mint.blueprint.schematicSha256,
-                    firstOperation,
-                    mint.playerId,
-                    "survival",
-                    20L,
-                )
-                val secondReservation = registry.reserve(
-                    mint.instanceId,
-                    BuilderBookInstance.INITIAL_GENERATION,
-                    mint.blueprint.blueprintId,
-                    mint.blueprint.buildingId,
-                    mint.blueprint.schematicSha256,
-                    secondOperation,
-                    mint.playerId,
-                    "survival",
-                    20L,
-                )
+                val firstRequest = bookUseRequest(mint, firstOperation)
+                val secondRequest = bookUseRequest(mint, secondOperation)
+                val firstReservation = registry.oneTimeUses.claim(firstRequest)
+                val secondReservation = registry.oneTimeUses.claim(secondRequest)
                 val reservationOutcomes = listOf(firstReservation.await(), secondReservation.await())
-                reservationOutcomes.count { it is BuilderBookReservationResult.Reserved } shouldBe 1
-                reservationOutcomes.count { it == BuilderBookReservationResult.Unavailable } shouldBe 1
-                val winner = if (reservationOutcomes[0] is BuilderBookReservationResult.Reserved) {
-                    firstOperation
+                reservationOutcomes.count { it is OneTimeUseClaimResult.Acquired } shouldBe 1
+                reservationOutcomes.count { it == OneTimeUseClaimResult.Busy } shouldBe 1
+                val winner = if (reservationOutcomes[0] is OneTimeUseClaimResult.Acquired) {
+                    OneTimeUseClaim.acquired(firstRequest, newlyCreated = false)
                 } else {
-                    secondOperation
+                    OneTimeUseClaim.acquired(secondRequest, newlyCreated = false)
                 }
 
-                registry.consume(mint.instanceId, winner, 30L).await() shouldBe true
-                registry.consume(mint.instanceId, winner, 31L).await() shouldBe true
+                registry.oneTimeUses.commit(winner).await() shouldBe OneTimeUseCommitResult.COMMITTED
+                registry.oneTimeUses.commit(winner).await() shouldBe OneTimeUseCommitResult.ALREADY_COMMITTED
                 registry.loadInstance(mint.instanceId).await()?.status shouldBe BuilderBookInstanceStatus.CONSUMED
 
                 val sourceMint = paidMint()
@@ -93,6 +79,7 @@ class BuilderBookSqlRegistryIntegrationTest : StringSpec({
                     blueprint = sourceMint.blueprint,
                     instanceId = UUID.randomUUID(),
                     sourceInstanceId = sourceMint.instanceId,
+                    sourceInstanceGeneration = BuilderBookInstance.INITIAL_GENERATION,
                     placement = BuilderBookPlacement(180, -2, 1, 3),
                     status = BuilderBookMintStatus.FUNDS_WITHDRAWN,
                     createdAtMillis = 42L,
@@ -103,24 +90,17 @@ class BuilderBookSqlRegistryIntegrationTest : StringSpec({
                 ).validated()
                 val copyPrepared = copyPaid.preparedVersion()
                 val copyStarted = copyPrepared.withdrawalStarted()
-                registry.reserve(
-                    sourceMint.instanceId,
-                    BuilderBookInstance.INITIAL_GENERATION,
-                    sourceMint.blueprint.blueprintId,
-                    sourceMint.blueprint.buildingId,
-                    sourceMint.blueprint.schematicSha256,
-                    copyTransaction,
-                    copyPlayer,
-                    "survival",
-                    42L,
-                ).await() shouldBe BuilderBookReservationResult.Reserved(sourceMint.blueprint)
+                val copySourceRequest = bookUseRequest(sourceMint, copyTransaction, copyPlayer)
+                registry.oneTimeUses.claim(copySourceRequest).await() shouldBe
+                    OneTimeUseClaimResult.Acquired(OneTimeUseClaim.acquired(copySourceRequest, newlyCreated = true))
                 registry.prepareMint(copyPrepared).await() shouldBe true
                 registry.transitionMint(copyPrepared, copyStarted).await() shouldBe copyStarted
                 registry.transitionMint(copyStarted, copyPaid).await() shouldBe copyPaid
                 registry.issuePaidMint(copyTransaction, 45L).await().status shouldBe BuilderBookMintStatus.ISSUED
                 registry.loadInstance(sourceMint.instanceId).await()?.status shouldBe BuilderBookInstanceStatus.RESERVED
                 registry.markDelivered(copyPaid.instanceId, copyTransaction, 46L).await() shouldBe true
-                registry.release(sourceMint.instanceId, copyTransaction).await() shouldBe true
+                registry.oneTimeUses.release(OneTimeUseClaim.acquired(copySourceRequest, newlyCreated = false)).await() shouldBe
+                    OneTimeUseReleaseResult.RELEASED
                 registry.loadInstance(sourceMint.instanceId).await()?.status shouldBe BuilderBookInstanceStatus.AVAILABLE
 
                 val auctionLease = UUID.randomUUID()
@@ -137,17 +117,8 @@ class BuilderBookSqlRegistryIntegrationTest : StringSpec({
                 ).await() shouldBe BuilderBookAuctionReservationResult.Reserved(sourceMint.blueprint)
                 registry.loadInstance(sourceMint.instanceId).await()?.status shouldBe BuilderBookInstanceStatus.LISTED
                 registry.listedForServer("survival").await().map { it.instanceId } shouldBe listOf(sourceMint.instanceId)
-                registry.reserve(
-                    sourceMint.instanceId,
-                    BuilderBookInstance.INITIAL_GENERATION,
-                    sourceMint.blueprint.blueprintId,
-                    sourceMint.blueprint.buildingId,
-                    sourceMint.blueprint.schematicSha256,
-                    UUID.randomUUID(),
-                    copyPlayer,
-                    "survival",
-                    51L,
-                ).await() shouldBe BuilderBookReservationResult.Unavailable
+                registry.oneTimeUses.claim(bookUseRequest(sourceMint, UUID.randomUUID(), copyPlayer)).await() shouldBe
+                    OneTimeUseClaimResult.Busy
                 registry.releaseFromAuction(sourceMint.instanceId, UUID.randomUUID()).await() shouldBe false
                 val auctionBuyer = UUID.randomUUID()
                 registry.beginAuctionTransfer(
@@ -181,30 +152,20 @@ class BuilderBookSqlRegistryIntegrationTest : StringSpec({
                 transferred.status shouldBe BuilderBookInstanceStatus.AVAILABLE
                 transferred.ownerId shouldBe auctionBuyer
                 transferred.generation shouldBe 2
-                registry.reserve(
-                    sourceMint.instanceId,
-                    BuilderBookInstance.INITIAL_GENERATION,
-                    sourceMint.blueprint.blueprintId,
-                    sourceMint.blueprint.buildingId,
-                    sourceMint.blueprint.schematicSha256,
-                    UUID.randomUUID(),
-                    copyPlayer,
-                    "survival",
-                    55L,
-                ).await() shouldBe BuilderBookReservationResult.Stale
+                registry.oneTimeUses.claim(
+                    bookUseRequest(
+                        sourceMint,
+                        UUID.randomUUID(),
+                        copyPlayer,
+                        generation = BuilderBookInstance.INITIAL_GENERATION,
+                    ),
+                ).await() shouldBe OneTimeUseClaimResult.IdentityConflict
                 val buyerOperation = UUID.randomUUID()
-                registry.reserve(
-                    sourceMint.instanceId,
-                    2,
-                    sourceMint.blueprint.blueprintId,
-                    sourceMint.blueprint.buildingId,
-                    sourceMint.blueprint.schematicSha256,
-                    buyerOperation,
-                    auctionBuyer,
-                    "survival",
-                    56L,
-                ).await() shouldBe BuilderBookReservationResult.Reserved(sourceMint.blueprint)
-                registry.release(sourceMint.instanceId, buyerOperation).await() shouldBe true
+                val buyerRequest = bookUseRequest(sourceMint, buyerOperation, auctionBuyer, generation = 2)
+                registry.oneTimeUses.claim(buyerRequest).await() shouldBe
+                    OneTimeUseClaimResult.Acquired(OneTimeUseClaim.acquired(buyerRequest, newlyCreated = true))
+                registry.oneTimeUses.release(OneTimeUseClaim.acquired(buyerRequest, newlyCreated = false)).await() shouldBe
+                    OneTimeUseReleaseResult.RELEASED
 
                 val firstMint = preparedMint(openMintPlayer)
                 val secondMint = preparedMint(playerId = firstMint.playerId)
@@ -233,6 +194,22 @@ class BuilderBookSqlRegistryIntegrationTest : StringSpec({
         }
     }
 })
+
+private fun bookUseRequest(
+    mint: BuilderBookMint,
+    operationId: UUID,
+    playerId: UUID = mint.playerId,
+    generation: Int = BuilderBookInstance.INITIAL_GENERATION,
+) = BuilderBookOneTimeUse.request(
+    instanceId = mint.instanceId,
+    expectedGeneration = generation,
+    blueprintId = mint.blueprint.blueprintId,
+    buildingId = mint.blueprint.buildingId,
+    schematicSha256 = mint.blueprint.schematicSha256,
+    operationId = operationId,
+    playerId = playerId,
+    serverName = "survival",
+)
 
 private fun openRegistry(endpoint: MySqlTestEndpoint): BuilderBookSqlRegistry = BuilderBookSqlRegistry(
     SqlRuntime.create(

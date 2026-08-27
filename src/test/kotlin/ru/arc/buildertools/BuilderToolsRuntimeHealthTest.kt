@@ -11,7 +11,7 @@ class BuilderToolsRuntimeHealthTest : FunSpec({
         contribution.state shouldBe RuntimeHealthState.UP
         contribution.recoveryBacklog shouldBe 0
         contribution.activeLeases shouldBe 0
-        contribution.schemas shouldBe mapOf("book_registry" to 2)
+        contribution.schemas shouldBe mapOf("book_registry" to BuilderBookSqlRegistry.CURRENT_SCHEMA_VERSION)
         contribution.dependencies shouldBe mapOf(
             "lands" to true,
             "coreprotect" to true,

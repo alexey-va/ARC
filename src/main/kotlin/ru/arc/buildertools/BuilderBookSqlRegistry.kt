@@ -1,13 +1,25 @@
 package ru.arc.buildertools
 
+import ru.arc.onetime.OneTimeUseAbandonResult
+import ru.arc.onetime.OneTimeUseClaim
+import ru.arc.onetime.OneTimeUseClaimRequest
+import ru.arc.onetime.OneTimeUseClaimResult
+import ru.arc.onetime.OneTimeUseCommitResult
+import ru.arc.onetime.OneTimeUseLedger
+import ru.arc.onetime.OneTimeUseReleaseResult
+import ru.arc.onetime.UnavailableOneTimeUseLedger
 import ru.arc.sql.MySqlMigrator
 import ru.arc.sql.SqlMigration
 import ru.arc.sql.SqlRuntime
+import ru.arc.sql.onetime.MySqlOneTimeUseLedger
+import ru.arc.sql.onetime.MySqlOneTimeUsePartition
 import java.sql.Connection
 import java.sql.ResultSet
 import java.sql.SQLException
+import java.time.Clock
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Authoritative network-wide book ledger. Implementations complete every
@@ -16,6 +28,7 @@ import java.util.concurrent.CompletableFuture
  * compare-and-set operations. An exceptional future has an unknown outcome.
  */
 internal interface BuilderBookRegistry : AutoCloseable {
+    val oneTimeUses: OneTimeUseLedger get() = UnavailableOneTimeUseLedger
     fun initialize(): CompletableFuture<Unit>
     fun prepareMint(mint: BuilderBookMint): CompletableFuture<Boolean>
     fun hasOpenMint(playerId: UUID): CompletableFuture<Boolean>
@@ -26,19 +39,6 @@ internal interface BuilderBookRegistry : AutoCloseable {
     fun loadInstance(instanceId: UUID): CompletableFuture<BuilderBookInstance?>
     fun pendingDeliveries(playerId: UUID): CompletableFuture<List<BuilderBookDelivery>>
     fun openMints(): CompletableFuture<List<BuilderBookMint>>
-    fun reserve(
-        instanceId: UUID,
-        expectedGeneration: Int,
-        expectedBlueprintId: UUID,
-        expectedBuildingId: String,
-        expectedSchematicSha256: String,
-        operationId: UUID,
-        playerId: UUID,
-        serverName: String,
-        now: Long,
-    ): CompletableFuture<BuilderBookReservationResult>
-    fun consume(instanceId: UUID, operationId: UUID, now: Long): CompletableFuture<Boolean>
-    fun release(instanceId: UUID, operationId: UUID): CompletableFuture<Boolean>
     fun reservedForServer(serverName: String): CompletableFuture<List<BuilderBookInstance>>
     fun reserveForAuction(
         instanceId: UUID,
@@ -69,10 +69,26 @@ internal interface BuilderBookRegistry : AutoCloseable {
     fun loadMint(transactionId: UUID): CompletableFuture<BuilderBookMint?>
 }
 
-/** MySQL owner for the three `arc_builder_book_*` tables and their migration. */
+/**
+ * MySQL owner for builder-book domain rows plus its shared one-time-use
+ * partition. [oneTimeUses] keeps core's advisory lock across the world or
+ * delivery operation, mirrors claim/commit/release into the book instance row,
+ * and reacquires the exact durable claim when restart recovery completes a
+ * previously journaled operation.
+ */
 internal class BuilderBookSqlRegistry(
     private val runtime: SqlRuntime,
-) : BuilderBookRegistry {
+    private val clock: Clock = Clock.systemUTC(),
+) : BuilderBookRegistry, OneTimeUseLedger {
+    private val durableOneTimeUses = MySqlOneTimeUseLedger.attach(
+        runtime = runtime,
+        runtimeName = "arc-builder-books",
+        partition = ONE_TIME_USE_PARTITION,
+        clock = clock,
+    )
+    private val activeOneTimeClaims = ConcurrentHashMap<UUID, OneTimeUseClaim>()
+    override val oneTimeUses: OneTimeUseLedger get() = this
+    override val activeClaims: Int get() = durableOneTimeUses.activeClaims
     override fun initialize(): CompletableFuture<Unit> = runtime.executor.submit {
         MySqlMigrator(runtime.dataSource, MIGRATION_NAMESPACE).migrate(MIGRATIONS)
         Unit
@@ -89,6 +105,7 @@ internal class BuilderBookSqlRegistry(
             statement.setString(index++, checked.blueprint.blueprintId.toString())
             statement.setString(index++, checked.instanceId.toString())
             statement.setString(index++, checked.sourceInstanceId?.toString())
+            statement.setNullableInt(index++, checked.sourceInstanceGeneration)
             statement.setInt(index++, checked.placement.rotation)
             statement.setInt(index++, checked.placement.offsetX)
             statement.setInt(index++, checked.placement.offsetY)
@@ -179,6 +196,7 @@ internal class BuilderBookSqlRegistry(
                 val source = loadInstance(connection, checkNotNull(current.sourceInstanceId), true)
                 require(
                     source?.blueprintId == current.blueprint.blueprintId &&
+                        source.generation == current.sourceInstanceGeneration &&
                         source.status == BuilderBookInstanceStatus.RESERVED &&
                         source.reservationOperationId == current.transactionId &&
                         source.reservationPlayerId == current.playerId,
@@ -257,7 +275,7 @@ internal class BuilderBookSqlRegistry(
                     "i.consumed_operation_uuid AS instance_consumed_operation_uuid, " +
                     "i.consumed_at_ms AS instance_consumed_at_ms, " +
                     "m.delivery_rotation, m.delivery_offset_x, m.delivery_offset_y, m.delivery_offset_z, " +
-                    "m.source_instance_uuid " +
+                    "m.source_instance_uuid, m.source_instance_generation " +
                     "FROM arc_builder_book_instances i " +
                     "JOIN arc_builder_book_blueprints b ON b.blueprint_uuid = i.blueprint_uuid " +
                     "JOIN arc_builder_book_mints m ON m.transaction_uuid = i.transaction_uuid " +
@@ -274,6 +292,7 @@ internal class BuilderBookSqlRegistry(
                                     instance = result.readInstance("instance_"),
                                     placement = result.readPlacement(),
                                     sourceInstanceId = result.getString("source_instance_uuid")?.let(UUID::fromString),
+                                    sourceInstanceGeneration = result.getNullableInt("source_instance_generation"),
                                 ).validated(),
                             )
                         }
@@ -291,82 +310,257 @@ internal class BuilderBookSqlRegistry(
         }
     }
 
-    override fun reserve(
-        instanceId: UUID,
-        expectedGeneration: Int,
-        expectedBlueprintId: UUID,
-        expectedBuildingId: String,
-        expectedSchematicSha256: String,
-        operationId: UUID,
-        playerId: UUID,
-        serverName: String,
-        now: Long,
-    ): CompletableFuture<BuilderBookReservationResult> = runtime.executor.transaction { connection ->
-        val instance = loadInstance(connection, instanceId, true) ?: return@transaction BuilderBookReservationResult.Missing
-        if (instance.blueprintId != expectedBlueprintId) return@transaction BuilderBookReservationResult.Mismatch
-        val blueprint = loadBlueprint(connection, expectedBlueprintId, true) ?: return@transaction BuilderBookReservationResult.Missing
-        if (blueprint.buildingId != expectedBuildingId || blueprint.schematicSha256 != expectedSchematicSha256) {
-            return@transaction BuilderBookReservationResult.Mismatch
+    override fun claim(request: OneTimeUseClaimRequest): CompletableFuture<OneTimeUseClaimResult> =
+        durableOneTimeUses.claim(request).thenCompose { claimed ->
+            if (claimed !is OneTimeUseClaimResult.Acquired) {
+                return@thenCompose CompletableFuture.completedFuture(claimed)
+            }
+            activeOneTimeClaims[claimed.claim.claimId] = claimed.claim
+            reserveBookIdentity(claimed.claim).handle { domainResult, failure -> domainResult to failure }
+                .thenCompose { (domainResult, failure) ->
+                    when {
+                        failure != null -> abandonAfterFailure(claimed.claim, failure)
+                        domainResult is OneTimeUseClaimResult.Acquired -> CompletableFuture.completedFuture(claimed)
+                        domainResult == OneTimeUseClaimResult.AlreadyConsumed ->
+                            durableOneTimeUses.commit(claimed.claim).whenComplete { _, _ ->
+                                removeActiveClaim(claimed.claim)
+                            }.thenApply { committed ->
+                                check(
+                                    committed == OneTimeUseCommitResult.COMMITTED ||
+                                        committed == OneTimeUseCommitResult.ALREADY_COMMITTED,
+                                ) { "Could not reconcile consumed builder-book identity" }
+                                OneTimeUseClaimResult.AlreadyConsumed
+                            }
+                        else -> closeRejectedClaim(claimed.claim, checkNotNull(domainResult))
+                    }
+                }
         }
-        if (instance.ownerId != playerId || instance.generation != expectedGeneration) {
-            return@transaction BuilderBookReservationResult.Stale
-        }
-        if (instance.status != BuilderBookInstanceStatus.AVAILABLE) return@transaction BuilderBookReservationResult.Unavailable
-        require(serverName.matches(Regex("[A-Za-z0-9_.-]{1,64}"))) { "Builder-book server name is invalid" }
-        connection.prepareStatement(
-            "UPDATE arc_builder_book_instances SET status = 'RESERVED', reservation_operation_uuid = ?, " +
-                "reservation_player_uuid = ?, reservation_server = ?, reserved_at_ms = ? " +
-                "WHERE instance_uuid = ? AND status = 'AVAILABLE'",
-        ).use { statement ->
-            statement.setString(1, operationId.toString())
-            statement.setString(2, playerId.toString())
-            statement.setString(3, serverName)
-            statement.setLong(4, now)
-            statement.setString(5, instanceId.toString())
-            if (statement.executeUpdate() != 1) BuilderBookReservationResult.Unavailable
-            else BuilderBookReservationResult.Reserved(blueprint)
-        }
-    }
 
-    override fun consume(instanceId: UUID, operationId: UUID, now: Long): CompletableFuture<Boolean> =
+    override fun commit(claim: OneTimeUseClaim): CompletableFuture<OneTimeUseCommitResult> =
+        ensureActiveClaim(claim).thenCompose { acquired ->
+            when (acquired) {
+                OneTimeUseClaimResult.AlreadyConsumed -> consumeBookIdentity(claim).thenApply { reconciled ->
+                    if (reconciled) OneTimeUseCommitResult.ALREADY_COMMITTED else OneTimeUseCommitResult.REJECTED
+                }
+                is OneTimeUseClaimResult.Acquired -> commitActiveClaim(acquired.claim)
+                else -> CompletableFuture.completedFuture(OneTimeUseCommitResult.REJECTED)
+            }
+        }
+
+    override fun release(claim: OneTimeUseClaim): CompletableFuture<OneTimeUseReleaseResult> =
+        ensureActiveClaim(claim).thenCompose { acquired ->
+            if (acquired !is OneTimeUseClaimResult.Acquired) {
+                return@thenCompose CompletableFuture.completedFuture(OneTimeUseReleaseResult.REJECTED)
+            }
+            releaseBookIdentity(acquired.claim).handle { released, failure -> released to failure }
+                .thenCompose { (released, failure) ->
+                    when {
+                        failure != null -> abandonAfterReleaseFailure(acquired.claim, failure)
+                        released != true -> abandonRejectedRelease(acquired.claim)
+                        else -> durableOneTimeUses.release(acquired.claim).whenComplete { _, _ ->
+                            removeActiveClaim(acquired.claim)
+                        }
+                    }
+                }
+        }
+
+    override fun abandon(claim: OneTimeUseClaim): CompletableFuture<OneTimeUseAbandonResult> =
+        ensureActiveClaim(claim).thenCompose { acquired ->
+            when (acquired) {
+                OneTimeUseClaimResult.AlreadyConsumed ->
+                    CompletableFuture.completedFuture(OneTimeUseAbandonResult.ALREADY_COMMITTED)
+                is OneTimeUseClaimResult.Acquired ->
+                    durableOneTimeUses.abandon(acquired.claim).whenComplete { _, _ -> removeActiveClaim(acquired.claim) }
+                else -> CompletableFuture.completedFuture(OneTimeUseAbandonResult.REJECTED)
+            }
+        }
+
+    private fun reserveBookIdentity(claim: OneTimeUseClaim): CompletableFuture<OneTimeUseClaimResult> =
         runtime.executor.transaction { connection ->
-            val current = loadInstance(connection, instanceId, true) ?: return@transaction false
+            val request = claim.asRequest()
+            val instance = loadInstance(connection, request.identity.useId, true)
+                ?: return@transaction OneTimeUseClaimResult.Missing
+            val blueprint = loadBlueprint(connection, instance.blueprintId, true)
+                ?: return@transaction OneTimeUseClaimResult.Missing
+            val expectedFingerprint = BuilderBookOneTimeUse.fingerprint(
+                blueprint.blueprintId,
+                instance.generation,
+                blueprint.buildingId,
+                blueprint.schematicSha256,
+            )
+            if (request.identity.fingerprint != expectedFingerprint || request.claimantId != instance.ownerId) {
+                return@transaction OneTimeUseClaimResult.IdentityConflict
+            }
+            when (instance.status) {
+                BuilderBookInstanceStatus.CONSUMED -> return@transaction OneTimeUseClaimResult.AlreadyConsumed
+                BuilderBookInstanceStatus.RESERVED -> {
+                    if (!instance.matches(claim)) return@transaction OneTimeUseClaimResult.Busy
+                    return@transaction OneTimeUseClaimResult.Acquired(claim)
+                }
+                BuilderBookInstanceStatus.AVAILABLE -> Unit
+                else -> return@transaction OneTimeUseClaimResult.Busy
+            }
+
+            connection.prepareStatement(
+                "UPDATE arc_builder_book_instances SET status = 'RESERVED', reservation_operation_uuid = ?, " +
+                    "reservation_player_uuid = ?, reservation_server = ?, reserved_at_ms = ? " +
+                    "WHERE instance_uuid = ? AND status = 'AVAILABLE'",
+            ).use { statement ->
+                statement.setString(1, request.claimId.toString())
+                statement.setString(2, request.claimantId.toString())
+                statement.setString(3, checkNotNull(request.scope).value)
+                statement.setLong(4, clock.millis())
+                statement.setString(5, request.identity.useId.toString())
+                check(statement.executeUpdate() == 1) { "Builder-book one-time claim raced after row lock" }
+            }
+            OneTimeUseClaimResult.Acquired(claim)
+        }
+
+    private fun consumeBookIdentity(claim: OneTimeUseClaim): CompletableFuture<Boolean> =
+        runtime.executor.transaction { connection ->
+            val current = loadInstance(connection, claim.identity.useId, true) ?: return@transaction false
             if (current.status == BuilderBookInstanceStatus.CONSUMED) {
-                return@transaction current.consumedOperationId == operationId
+                return@transaction current.consumedOperationId == claim.claimId
             }
-            if (current.status != BuilderBookInstanceStatus.RESERVED || current.reservationOperationId != operationId) {
-                return@transaction false
-            }
+            if (current.status != BuilderBookInstanceStatus.RESERVED || !current.matches(claim)) return@transaction false
             connection.prepareStatement(
                 "UPDATE arc_builder_book_instances SET status = 'CONSUMED', consumed_operation_uuid = ?, consumed_at_ms = ?, " +
                     "reservation_operation_uuid = NULL, reservation_player_uuid = NULL, reservation_server = NULL, reserved_at_ms = NULL " +
                     "WHERE instance_uuid = ? AND status = 'RESERVED' AND reservation_operation_uuid = ?",
             ).use { statement ->
-                statement.setString(1, operationId.toString())
-                statement.setLong(2, now)
-                statement.setString(3, instanceId.toString())
-                statement.setString(4, operationId.toString())
-                statement.executeUpdate() == 1
+                statement.setString(1, claim.claimId.toString())
+                statement.setLong(2, clock.millis())
+                statement.setString(3, claim.identity.useId.toString())
+                statement.setString(4, claim.claimId.toString())
+                check(statement.executeUpdate() == 1) { "Builder-book consume transition raced after row lock" }
             }
+            true
         }
 
-    override fun release(instanceId: UUID, operationId: UUID): CompletableFuture<Boolean> =
+    private fun releaseBookIdentity(claim: OneTimeUseClaim): CompletableFuture<Boolean> =
         runtime.executor.transaction { connection ->
-            val current = loadInstance(connection, instanceId, true) ?: return@transaction false
+            val current = loadInstance(connection, claim.identity.useId, true) ?: return@transaction false
             if (current.status == BuilderBookInstanceStatus.AVAILABLE) return@transaction true
-            if (current.status != BuilderBookInstanceStatus.RESERVED || current.reservationOperationId != operationId) {
-                return@transaction false
-            }
+            if (current.status != BuilderBookInstanceStatus.RESERVED || !current.matches(claim)) return@transaction false
             connection.prepareStatement(
                 "UPDATE arc_builder_book_instances SET status = 'AVAILABLE', reservation_operation_uuid = NULL, " +
                     "reservation_player_uuid = NULL, reservation_server = NULL, reserved_at_ms = NULL " +
                     "WHERE instance_uuid = ? AND status = 'RESERVED' AND reservation_operation_uuid = ?",
             ).use { statement ->
-                statement.setString(1, instanceId.toString())
-                statement.setString(2, operationId.toString())
-                statement.executeUpdate() == 1
+                statement.setString(1, claim.identity.useId.toString())
+                statement.setString(2, claim.claimId.toString())
+                check(statement.executeUpdate() == 1) { "Builder-book release transition raced after row lock" }
+            }
+            true
+        }
+
+    private fun BuilderBookInstance.matches(claim: OneTimeUseClaim): Boolean =
+        reservationOperationId == claim.claimId &&
+            reservationPlayerId == claim.claimantId &&
+            reservationServer == claim.scope?.value
+
+    private fun OneTimeUseClaim.sameIdentity(other: OneTimeUseClaim): Boolean =
+        identity == other.identity && claimId == other.claimId && claimantId == other.claimantId && scope == other.scope
+
+    private fun ensureActiveClaim(claim: OneTimeUseClaim): CompletableFuture<OneTimeUseClaimResult> {
+        val active = activeOneTimeClaims[claim.claimId]
+        if (active != null) {
+            return CompletableFuture.completedFuture(
+                if (active.sameIdentity(claim)) OneTimeUseClaimResult.Acquired(active) else OneTimeUseClaimResult.Busy,
+            )
+        }
+        return durableOneTimeUses.claim(claim.asRequest()).thenApply { acquired ->
+            if (acquired is OneTimeUseClaimResult.Acquired) {
+                activeOneTimeClaims[acquired.claim.claimId] = acquired.claim
+            }
+            acquired
+        }
+    }
+
+    private fun commitActiveClaim(claim: OneTimeUseClaim): CompletableFuture<OneTimeUseCommitResult> =
+        consumeBookIdentity(claim).handle { consumed, failure -> consumed to failure }
+            .thenCompose { (consumed, failure) ->
+                when {
+                    failure != null -> abandonAfterCommitFailure(claim, failure)
+                    consumed != true -> abandonRejectedCommit(claim)
+                    else -> durableOneTimeUses.commit(claim).whenComplete { _, _ -> removeActiveClaim(claim) }
+                }
+            }
+
+    private fun closeRejectedClaim(
+        claim: OneTimeUseClaim,
+        result: OneTimeUseClaimResult,
+    ): CompletableFuture<OneTimeUseClaimResult> {
+        val cleanup = if (claim.newlyCreated) {
+            durableOneTimeUses.release(claim).thenApply { released ->
+                check(
+                    released == OneTimeUseReleaseResult.RELEASED ||
+                        released == OneTimeUseReleaseResult.ALREADY_RELEASED,
+                ) { "Could not release rejected builder-book claim" }
+            }
+        } else {
+            durableOneTimeUses.abandon(claim).thenApply { abandoned ->
+                check(
+                    abandoned == OneTimeUseAbandonResult.RETAINED_FOR_RECOVERY ||
+                        abandoned == OneTimeUseAbandonResult.ALREADY_COMMITTED,
+                ) { "Could not retain rejected builder-book recovery claim" }
             }
         }
+        return cleanup.whenComplete { _, _ -> removeActiveClaim(claim) }.thenApply { result }
+    }
+
+    private fun abandonAfterFailure(
+        claim: OneTimeUseClaim,
+        failure: Throwable,
+    ): CompletableFuture<OneTimeUseClaimResult> {
+        val outcome = CompletableFuture<OneTimeUseClaimResult>()
+        durableOneTimeUses.abandon(claim).whenComplete { _, abandonFailure ->
+            removeActiveClaim(claim)
+            if (abandonFailure != null) failure.addSuppressed(abandonFailure)
+            outcome.completeExceptionally(failure)
+        }
+        return outcome
+    }
+
+    private fun abandonAfterCommitFailure(
+        claim: OneTimeUseClaim,
+        failure: Throwable,
+    ): CompletableFuture<OneTimeUseCommitResult> {
+        val outcome = CompletableFuture<OneTimeUseCommitResult>()
+        durableOneTimeUses.abandon(claim).whenComplete { _, abandonFailure ->
+            removeActiveClaim(claim)
+            if (abandonFailure != null) failure.addSuppressed(abandonFailure)
+            outcome.completeExceptionally(failure)
+        }
+        return outcome
+    }
+
+    private fun abandonRejectedCommit(claim: OneTimeUseClaim): CompletableFuture<OneTimeUseCommitResult> =
+        durableOneTimeUses.abandon(claim).whenComplete { _, _ -> removeActiveClaim(claim) }
+            .thenApply { OneTimeUseCommitResult.REJECTED }
+
+    private fun abandonAfterReleaseFailure(
+        claim: OneTimeUseClaim,
+        failure: Throwable,
+    ): CompletableFuture<OneTimeUseReleaseResult> {
+        val outcome = CompletableFuture<OneTimeUseReleaseResult>()
+        durableOneTimeUses.abandon(claim).whenComplete { _, abandonFailure ->
+            removeActiveClaim(claim)
+            if (abandonFailure != null) failure.addSuppressed(abandonFailure)
+            outcome.completeExceptionally(failure)
+        }
+        return outcome
+    }
+
+    private fun abandonRejectedRelease(claim: OneTimeUseClaim): CompletableFuture<OneTimeUseReleaseResult> =
+        durableOneTimeUses.abandon(claim).whenComplete { _, _ -> removeActiveClaim(claim) }
+            .thenApply { OneTimeUseReleaseResult.REJECTED }
+
+    private fun removeActiveClaim(claim: OneTimeUseClaim) {
+        activeOneTimeClaims.computeIfPresent(claim.claimId) { _, current ->
+            current.takeUnless { it.sameIdentity(claim) }
+        }
+    }
 
     override fun reservedForServer(serverName: String): CompletableFuture<List<BuilderBookInstance>> = runtime.executor.read { connection ->
         connection.prepareStatement(
@@ -534,6 +728,7 @@ internal class BuilderBookSqlRegistry(
         runtime.executor.read { connection -> loadMint(connection, transactionId) }
 
     override fun close() {
+        durableOneTimeUses.close()
         runtime.close()
     }
 
@@ -689,6 +884,7 @@ internal class BuilderBookSqlRegistry(
         ).validated(),
         instanceId = UUID.fromString(getString("instance_uuid")),
         sourceInstanceId = getString("source_instance_uuid")?.let(UUID::fromString),
+        sourceInstanceGeneration = getNullableInt("source_instance_generation"),
         placement = readPlacement(),
         status = BuilderBookMintStatus.valueOf(getString("status")),
         createdAtMillis = getLong("created_at_ms"),
@@ -712,13 +908,19 @@ internal class BuilderBookSqlRegistry(
         if (value == null) setNull(index, java.sql.Types.BIGINT) else setLong(index, value)
     }
 
+    private fun java.sql.PreparedStatement.setNullableInt(index: Int, value: Int?) {
+        if (value == null) setNull(index, java.sql.Types.INTEGER) else setInt(index, value)
+    }
+
     private fun ResultSet.getNullableLong(column: String): Long? = getLong(column).let { if (wasNull()) null else it }
+
+    private fun ResultSet.getNullableInt(column: String): Int? = getInt(column).let { if (wasNull()) null else it }
 
     private fun SQLException.isDuplicateKey(): Boolean = sqlState == "23000" && errorCode == 1062
 
     companion object {
         const val MIGRATION_NAMESPACE = "arc_builder_books"
-        const val CURRENT_SCHEMA_VERSION = 2
+        const val CURRENT_SCHEMA_VERSION = 4
 
         val MIGRATIONS = listOf(
             SqlMigration(
@@ -818,7 +1020,7 @@ internal class BuilderBookSqlRegistry(
                 ),
             ),
             SqlMigration(
-                version = CURRENT_SCHEMA_VERSION,
+                version = 2,
                 description = "Bind builder books to one owner and rotate their generation after auction transfer",
                 statements = buildList {
                     addAll(
@@ -843,32 +1045,62 @@ internal class BuilderBookSqlRegistry(
                     add("ALTER TABLE arc_builder_book_instances MODIFY owner_uuid CHAR(36) NOT NULL")
                 },
             ),
+            SqlMigration(
+                version = 3,
+                description = "Persist the exact source generation for recoverable copy claims",
+                statements = buildList {
+                    addAll(
+                        addColumnIfMissing(
+                            table = "arc_builder_book_mints",
+                            column = "source_instance_generation",
+                            definition = "source_instance_generation INT UNSIGNED NULL AFTER source_instance_uuid",
+                        ),
+                    )
+                    add(
+                        "UPDATE arc_builder_book_mints m JOIN arc_builder_book_instances i " +
+                            "ON i.instance_uuid = m.source_instance_uuid " +
+                            "SET m.source_instance_generation = i.generation " +
+                            "WHERE m.source_instance_uuid IS NOT NULL AND m.source_instance_generation IS NULL",
+                    )
+                },
+            ),
+            MySqlOneTimeUseLedger.createTableMigration(
+                version = CURRENT_SCHEMA_VERSION,
+                description = "Create shared one-time-use ledger for builder books",
+            ),
         )
 
-        private fun addColumnIfMissing(column: String, definition: String): List<String> {
+        private fun addColumnIfMissing(
+            column: String,
+            definition: String,
+            table: String = "arc_builder_book_instances",
+        ): List<String> {
+            require(table.matches(Regex("[a-z_]{1,64}"))) { "Unsafe builder-book migration table" }
             require(column.matches(Regex("[a-z_]{1,64}"))) { "Unsafe builder-book migration column" }
             require(definition.matches(Regex("[A-Za-z0-9_() ]{1,256}"))) { "Unsafe builder-book migration definition" }
             val variable = "@arc_builder_${column}_ddl"
             val statement = "arc_builder_${column}_stmt"
-            val alter = "ALTER TABLE arc_builder_book_instances ADD COLUMN $definition"
+            val alter = "ALTER TABLE $table ADD COLUMN $definition"
             return listOf(
                 "SET $variable = (SELECT IF(COUNT(*) = 0, '$alter', 'SELECT 1') " +
                     "FROM information_schema.columns WHERE table_schema = DATABASE() " +
-                    "AND table_name = 'arc_builder_book_instances' AND column_name = '$column')",
+                    "AND table_name = '$table' AND column_name = '$column')",
                 "PREPARE $statement FROM $variable",
                 "EXECUTE $statement",
                 "DEALLOCATE PREPARE $statement",
             )
         }
 
+        private val ONE_TIME_USE_PARTITION = MySqlOneTimeUsePartition("arc.builder_book")
+
         private const val INSERT_MINT =
             "INSERT INTO arc_builder_book_mints (transaction_uuid, kind, player_uuid, blueprint_uuid, instance_uuid, " +
-                "source_instance_uuid, " +
+                "source_instance_uuid, source_instance_generation, " +
                 "delivery_rotation, delivery_offset_x, delivery_offset_y, delivery_offset_z, " +
                 "creator_uuid, creator_name, title, building_id, content_sha256, schematic_sha256, block_count, " +
                 "material_types, material_items, material_cost_minor, construction_fee_minor, issue_price_minor, " +
                 "blueprint_created_at_ms, status, open_player_uuid, created_at_ms, updated_at_ms) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 
         private const val UPDATE_MINT =
             "UPDATE arc_builder_book_mints SET status = ?, open_player_uuid = ?, updated_at_ms = ?, balance_before_minor = ?, " +

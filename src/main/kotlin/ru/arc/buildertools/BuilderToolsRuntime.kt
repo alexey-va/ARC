@@ -62,6 +62,10 @@ import ru.arc.hooks.HookRegistry
 import ru.arc.observability.RuntimeHealthContribution
 import ru.arc.observability.RuntimeHealthState
 import ru.arc.observability.StructuredDebugLine
+import ru.arc.onetime.OneTimeUseClaim
+import ru.arc.onetime.OneTimeUseClaimResult
+import ru.arc.onetime.OneTimeUseCommitResult
+import ru.arc.onetime.OneTimeUseReleaseResult
 import ru.arc.paper.playerstate.PaperPlayerStateCodec
 import ru.arc.paper.playerstate.PaperPlayerStateService
 import ru.arc.sql.SqlRuntime
@@ -893,6 +897,7 @@ internal class BuilderToolsRuntime(
             blueprint = pending.blueprint,
             instanceId = pending.outputInstanceId,
             sourceInstanceId = pending.sourceInstanceId,
+            sourceInstanceGeneration = pending.sourceInstanceGeneration,
             placement = BuilderBookPlacement(transform.rotation, transform.offsetX, transform.offsetY, transform.offsetZ),
             createdAtMillis = now,
         ).validated()
@@ -905,33 +910,29 @@ internal class BuilderToolsRuntime(
             bookLockedPlayers -= player.uniqueId
             throw UserFailure("book.registry-unavailable")
         }
-        registry.reserve(
+        val sourceClaimRequest = BuilderBookOneTimeUse.request(
             instanceId = sourceId,
             expectedGeneration = checkNotNull(pending.sourceInstanceGeneration),
-            expectedBlueprintId = pending.blueprint.blueprintId,
-            expectedBuildingId = pending.blueprint.buildingId,
-            expectedSchematicSha256 = pending.blueprint.schematicSha256,
+            blueprintId = pending.blueprint.blueprintId,
+            buildingId = pending.blueprint.buildingId,
+            schematicSha256 = pending.blueprint.schematicSha256,
             operationId = transactionId,
             playerId = player.uniqueId,
             serverName = serverName,
-            now = now,
-        ).whenComplete { reservation, failure ->
+        )
+        registry.oneTimeUses.claim(sourceClaimRequest).whenComplete { reservation, failure ->
             taskScope.runSync {
                 if (failure != null || reservation == null) {
                     bookLockedPlayers -= player.uniqueId
                     send(player, "book.registry-unavailable")
+                } else if (reservation is OneTimeUseClaimResult.Acquired) {
+                    startBookMint(player, intent, coordinator)
                 } else {
-                    when (reservation) {
-                        is BuilderBookReservationResult.Reserved -> startBookMint(player, intent, coordinator)
-                        BuilderBookReservationResult.Stale -> {
-                            bookLockedPlayers -= player.uniqueId
-                            send(player, "book.stale")
-                        }
-                        else -> {
-                            bookLockedPlayers -= player.uniqueId
-                            send(player, "book.duplicate")
-                        }
-                    }
+                    bookLockedPlayers -= player.uniqueId
+                    send(
+                        player,
+                        if (reservation == OneTimeUseClaimResult.IdentityConflict) "book.stale" else "book.duplicate",
+                    )
                 }
             }
         }
@@ -980,14 +981,14 @@ internal class BuilderToolsRuntime(
             }
             player.updateInventory()
         }
-        markBookDelivered(player, mint.instanceId, mint.transactionId, mint.sourceInstanceId, recovered = false)
+        markBookDelivered(player, mint.instanceId, mint.transactionId, sourceBookClaim(mint), recovered = false)
     }
 
     private fun markBookDelivered(
         player: Player,
         instanceId: UUID,
         transactionId: UUID,
-        sourceInstanceId: UUID?,
+        sourceClaim: OneTimeUseClaim?,
         recovered: Boolean,
         finished: () -> Unit = {},
     ) {
@@ -1009,10 +1010,10 @@ internal class BuilderToolsRuntime(
                     bookDeliveryRecoveries += player.uniqueId
                     // The paid output remains quarantined, but a completed copy
                     // must never leave its legitimate source reserved forever.
-                    releaseBookSource(sourceInstanceId, transactionId)
+                    releaseBookSource(sourceClaim)
                     return@runSync
                 }
-                val previewRefreshed = sourceInstanceId == null && runCatching {
+                val previewRefreshed = sourceClaim == null && runCatching {
                     inventoryBooksWithInstance(player, instanceId).singleOrNull()?.second?.let { deliveredBook ->
                         BuildingManager.updatePendingTransform(player, deliveredBook) == true
                     } == true
@@ -1024,7 +1025,7 @@ internal class BuilderToolsRuntime(
                     )
                     false
                 }
-                releaseBookSource(sourceInstanceId, transactionId) {
+                releaseBookSource(sourceClaim) {
                     bookLockedPlayers -= player.uniqueId
                     bookDeliveryWaitingForSpace -= player.uniqueId
                     if (player.isOnline) {
@@ -1032,7 +1033,7 @@ internal class BuilderToolsRuntime(
                             player,
                             when {
                                 recovered -> "book.delivery-recovered"
-                                sourceInstanceId != null -> "book.copied"
+                                sourceClaim != null -> "book.copied"
                                 previewRefreshed -> "book.activated-preview"
                                 else -> "book.activated"
                             },
@@ -1050,20 +1051,49 @@ internal class BuilderToolsRuntime(
             bookDeliveryWaitingForSpace -= player.uniqueId
             if (player.isOnline) send(player, messagePath)
         }
-        if (releaseSource) releaseBookSource(mint.sourceInstanceId, mint.transactionId, finish) else finish()
+        if (releaseSource) releaseBookSource(sourceBookClaim(mint), finish) else finish()
     }
 
-    private fun releaseBookSource(sourceInstanceId: UUID?, operationId: UUID, done: () -> Unit = {}) {
-        if (sourceInstanceId == null) return done()
+    private fun releaseBookSource(claim: OneTimeUseClaim?, done: () -> Unit = {}) {
+        if (claim == null) return done()
         val registry = bookRegistry ?: return done()
-        registry.release(sourceInstanceId, operationId).whenComplete { released, failure ->
+        registry.oneTimeUses.release(claim).whenComplete { released, failure ->
             taskScope.runSync {
-                if (failure != null || released != true) {
-                    warn("Builder-book copy source release requires recovery: source={} operation={}", sourceInstanceId, operationId)
+                if (
+                    failure != null ||
+                    (released != OneTimeUseReleaseResult.RELEASED && released != OneTimeUseReleaseResult.ALREADY_RELEASED)
+                ) {
+                    warn(
+                        "Builder-book copy source release requires recovery: source={} operation={}",
+                        claim.identity.useId,
+                        claim.claimId,
+                    )
                 }
                 done()
             }
         }
+    }
+
+    private fun sourceBookClaim(mint: BuilderBookMint): OneTimeUseClaim? {
+        val sourceId = mint.sourceInstanceId ?: return null
+        val serverName = ARC.serverName ?: run {
+            recoveryBlocked = true
+            error("Builder-book copy source recovery has no backend identity: transaction=${mint.transactionId}")
+            return null
+        }
+        return OneTimeUseClaim.acquired(
+            BuilderBookOneTimeUse.request(
+                instanceId = sourceId,
+                expectedGeneration = checkNotNull(mint.sourceInstanceGeneration),
+                blueprintId = mint.blueprint.blueprintId,
+                buildingId = mint.blueprint.buildingId,
+                schematicSha256 = mint.blueprint.schematicSha256,
+                operationId = mint.transactionId,
+                playerId = mint.playerId,
+                serverName = serverName,
+            ),
+            newlyCreated = false,
+        )
     }
 
     private fun cancelBuildBookMint(player: Player) {
@@ -1488,17 +1518,7 @@ internal class BuilderToolsRuntime(
             throw UserFailure("book.registry-unavailable")
         }
         bookLockedPlayers += player.uniqueId
-        registry.reserve(
-            instanceId = checkNotNull(plan.bookInstanceId),
-            expectedGeneration = checkNotNull(plan.bookInstanceGeneration),
-            expectedBlueprintId = checkNotNull(plan.bookBlueprintId),
-            expectedBuildingId = checkNotNull(plan.bookBuildingId),
-            expectedSchematicSha256 = checkNotNull(plan.bookSchematicSha256),
-            operationId = plan.id,
-            playerId = player.uniqueId,
-            serverName = serverName,
-            now = System.currentTimeMillis(),
-        ).whenComplete { result, failure ->
+        registry.oneTimeUses.claim(BuilderBookOneTimeUse.request(plan, serverName)).whenComplete { result, failure ->
             taskScope.runSync {
                 if (failure != null || result == null) {
                     bookLockedPlayers -= player.uniqueId
@@ -1506,10 +1526,13 @@ internal class BuilderToolsRuntime(
                     send(player, "book.registry-unavailable")
                     return@runSync
                 }
-                if (result !is BuilderBookReservationResult.Reserved) {
+                if (result !is OneTimeUseClaimResult.Acquired) {
                     bookLockedPlayers -= player.uniqueId
                     unlock(plan)
-                    send(player, if (result == BuilderBookReservationResult.Stale) "book.stale" else "book.duplicate")
+                    send(
+                        player,
+                        if (result == OneTimeUseClaimResult.IdentityConflict) "book.stale" else "book.duplicate",
+                    )
                     return@runSync
                 }
                 if (!player.isOnline) {
@@ -1656,9 +1679,19 @@ internal class BuilderToolsRuntime(
                         send(player, "errors.recovering")
                         return@writeAsync
                     }
-                    registry.consume(instanceId, durable.operationId, System.currentTimeMillis()).whenComplete { consumed, consumeFailure ->
+                    val serverName = ARC.serverName
+                    if (serverName == null) {
+                        operation.uncertainCommit = true
+                        recoveryBlocked = true
+                        send(player, "errors.recovering")
+                        return@writeAsync
+                    }
+                    registry.oneTimeUses.commit(BuilderBookOneTimeUse.claim(durable.plan, serverName)).whenComplete { consumed, consumeFailure ->
                         taskScope.runSync {
-                            if (consumeFailure != null || consumed != true) {
+                            if (
+                                consumeFailure != null ||
+                                (consumed != OneTimeUseCommitResult.COMMITTED && consumed != OneTimeUseCommitResult.ALREADY_COMMITTED)
+                            ) {
                                 operation.uncertainCommit = true
                                 recoveryBlocked = true
                                 error(
@@ -1752,9 +1785,16 @@ internal class BuilderToolsRuntime(
             recoveryBlocked = true
             return
         }
-        registry.release(instanceId, plan.id).whenComplete { released, failure ->
+        val serverName = ARC.serverName ?: run {
+            recoveryBlocked = true
+            return
+        }
+        registry.oneTimeUses.release(BuilderBookOneTimeUse.claim(plan, serverName)).whenComplete { released, failure ->
             taskScope.runSync {
-                if (failure != null || released != true) {
+                if (
+                    failure != null ||
+                    (released != OneTimeUseReleaseResult.RELEASED && released != OneTimeUseReleaseResult.ALREADY_RELEASED)
+                ) {
                     recoveryBlocked = true
                     error(
                         "Builder-book reservation release failed for ${plan.id}: " +
@@ -1971,7 +2011,7 @@ internal class BuilderToolsRuntime(
                                 ?.let(::recoverBookDeliveries)
                             BuilderBookMintResult.PaymentRejected,
                             BuilderBookMintResult.Refunded,
-                            -> releaseBookSource(mint.sourceInstanceId, mint.transactionId)
+                            -> releaseBookSource(sourceBookClaim(mint))
                             BuilderBookMintResult.ManualReview -> Unit
                             else -> warn(
                                 "Builder-book mint recovery incomplete: transaction={} status={} result={}",
@@ -2087,7 +2127,29 @@ internal class BuilderToolsRuntime(
                     player = player,
                     instanceId = instanceId,
                     transactionId = delivery.instance.transactionId,
-                    sourceInstanceId = delivery.sourceInstanceId,
+                    sourceClaim = delivery.sourceInstanceId?.let { sourceId ->
+                        val serverName = ARC.serverName ?: run {
+                            recoveryBlocked = true
+                            error(
+                                "Builder-book delivery recovery has no backend identity: " +
+                                    "transaction=${delivery.instance.transactionId}",
+                            )
+                            return@let null
+                        }
+                        OneTimeUseClaim.acquired(
+                            BuilderBookOneTimeUse.request(
+                                instanceId = sourceId,
+                                expectedGeneration = checkNotNull(delivery.sourceInstanceGeneration),
+                                blueprintId = delivery.blueprint.blueprintId,
+                                buildingId = delivery.blueprint.buildingId,
+                                schematicSha256 = delivery.blueprint.schematicSha256,
+                                operationId = delivery.instance.transactionId,
+                                playerId = player.uniqueId,
+                                serverName = serverName,
+                            ),
+                            newlyCreated = false,
+                        )
+                    },
                     recovered = true,
                     finished = { bookDeliveryRecoveries -= player.uniqueId },
                 )
@@ -2182,9 +2244,16 @@ internal class BuilderToolsRuntime(
         val localRecord = committedRecords[operationId] ?: recoveryByPlayer.values.firstOrNull { it.operationId == operationId }
         if (localRecord != null && localRecord.plan.bookInstanceId == instance.instanceId) {
             if (localRecord.phase == BuilderJournalPhase.COMMITTED) {
-                registry.consume(instance.instanceId, operationId, System.currentTimeMillis()).whenComplete { consumed, failure ->
+                val serverName = instance.reservationServer ?: run {
+                    recoveryBlocked = true
+                    return
+                }
+                registry.oneTimeUses.commit(BuilderBookOneTimeUse.claim(localRecord.plan, serverName)).whenComplete { consumed, failure ->
                     taskScope.runSync {
-                        if (failure != null || consumed != true) {
+                        if (
+                            failure != null ||
+                            (consumed != OneTimeUseCommitResult.COMMITTED && consumed != OneTimeUseCommitResult.ALREADY_COMMITTED)
+                        ) {
                             recoveryBlocked = true
                             error(
                                 "Builder-book committed reservation could not be consumed: $operationId " +
@@ -2194,7 +2263,7 @@ internal class BuilderToolsRuntime(
                     }
                 }
             } else if (recoveryByPlayer.values.none { it.operationId == operationId }) {
-                releaseRecoveredBookReservation(registry, instance.instanceId, operationId)
+                releaseRecoveredBookReservation(registry, instance)
             }
             return
         }
@@ -2208,24 +2277,49 @@ internal class BuilderToolsRuntime(
                     )
                 } else if (mint != null && mint.sourceInstanceId == instance.instanceId) {
                     if (mint.status.terminal) {
-                        releaseRecoveredBookReservation(registry, instance.instanceId, operationId)
+                        releaseRecoveredBookReservation(registry, instance)
                     }
                 } else {
-                    releaseRecoveredBookReservation(registry, instance.instanceId, operationId)
+                    releaseRecoveredBookReservation(registry, instance)
                 }
             }
         }
     }
 
-    private fun releaseRecoveredBookReservation(registry: BuilderBookRegistry, instanceId: UUID, operationId: UUID) {
-        registry.release(instanceId, operationId).whenComplete { released, failure ->
+    private fun releaseRecoveredBookReservation(registry: BuilderBookRegistry, instance: BuilderBookInstance) {
+        registry.loadBlueprint(instance.blueprintId).whenComplete { blueprint, loadFailure ->
             taskScope.runSync {
-                if (failure != null || released != true) {
+                if (loadFailure != null || blueprint == null) {
                     recoveryBlocked = true
                     error(
-                        "Builder-book recovered reservation could not be released: $operationId " +
-                            "type=${BuilderToolsFailureType.of(failure)} result=$released",
+                        "Builder-book recovered reservation blueprint could not be loaded: ${instance.reservationOperationId}",
+                        loadFailure ?: IllegalStateException("blueprint missing"),
                     )
+                    return@runSync
+                }
+                val request = BuilderBookOneTimeUse.request(
+                    instanceId = instance.instanceId,
+                    expectedGeneration = instance.generation,
+                    blueprintId = blueprint.blueprintId,
+                    buildingId = blueprint.buildingId,
+                    schematicSha256 = blueprint.schematicSha256,
+                    operationId = checkNotNull(instance.reservationOperationId),
+                    playerId = checkNotNull(instance.reservationPlayerId),
+                    serverName = checkNotNull(instance.reservationServer),
+                )
+                registry.oneTimeUses.release(OneTimeUseClaim.acquired(request, newlyCreated = false)).whenComplete { released, failure ->
+                    taskScope.runSync {
+                        if (
+                            failure != null ||
+                            (released != OneTimeUseReleaseResult.RELEASED && released != OneTimeUseReleaseResult.ALREADY_RELEASED)
+                        ) {
+                            recoveryBlocked = true
+                            error(
+                                "Builder-book recovered reservation could not be released: ${instance.reservationOperationId}",
+                                failure ?: IllegalStateException("release rejected"),
+                            )
+                        }
+                    }
                 }
             }
         }

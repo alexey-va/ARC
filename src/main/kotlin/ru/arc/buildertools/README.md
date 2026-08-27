@@ -116,11 +116,17 @@ player inventory restoration occurs at join before the record is acknowledged.
 Every forward and rollback block change is also submitted to the public
 CoreProtect API. Registered player books add a network-wide MySQL barrier:
 each physical item carries a blueprint UUID, instance UUID, and positive
-generation, but MySQL is the authority for its owner and generation. Before the
-local journal is created, `AVAILABLE -> RESERVED` is an atomic compare-and-set
-over all of that identity. A committed build changes it to `CONSUMED`; rollback
-returns it to `AVAILABLE`. Two duplicated items carrying the same instance UUID
-therefore cannot both build, copy, or reserve concurrently.
+generation, while MySQL is the authority for its owner and generation. Before
+the local journal is created, core's shared
+`arc_one_time_uses` table claims the instance UUID under purpose
+`arc.builder_book` with that generation in the fingerprint, while the domain
+row verifies the owner and moves `AVAILABLE -> RESERVED`. A committed build
+changes both ledgers to `COMMITTED`/`CONSUMED`; a proven
+pre-mutation rollback releases the shared claim and returns the domain row to
+`AVAILABLE`. Unknown outcomes retain both recovery identities. The core ledger
+holds a MySQL advisory lock across the external operation, so two duplicated
+items carrying the same instance UUID cannot both build, copy, or reserve
+concurrently.
 
 Auction listing adds a separate `AVAILABLE -> LISTED` compare-and-set and an
 exact lease UUID copied into the auction ItemStack. The zAuctionHouse blacklist
@@ -151,8 +157,10 @@ survival mirror enables `book-contracts` and its MySQL connection, while
 ["*"]`; spawn and parkour remain off. No code path rewrites shop prices.
 Journal records live below `plugins/ARC/data/builder-tools-journal/` and are
 server-owned runtime state, never configuration deployment input.
-The `book-contracts.mysql` pool owns only the three `arc_builder_book_*`
-tables. Shop pricing is read-only; ARC never changes EconomyShopGUI prices.
+The `book-contracts.mysql` pool owns the three `arc_builder_book_*` domain
+tables and the single shared `arc_one_time_uses` table. It must not introduce a
+feature-local replay table. Shop pricing is read-only; ARC never changes
+EconomyShopGUI prices.
 The authenticated ARC runtime-health surface publishes only bounded aggregate
 state for Builder Tools: lifecycle state, recovery backlog, active leases, and
 Lands/CoreProtect/book-registry readiness. It never exposes player identities,
