@@ -143,7 +143,7 @@ dependencies {
     testImplementation("io.mockk:mockk:1.14.7")
 
     // Testcontainers — integration tests source set
-    "integrationTestImplementation"("ru.arc:arc-core-integration-testing:1.0-SNAPSHOT")
+    "integrationTestImplementation"("ru.ruscrafting.arc:arc-core-integration-testing:2.0.1")
     "integrationTestImplementation"("org.testcontainers:testcontainers-junit-jupiter:2.0.5")
     // Integration tests reuse all test dependencies (Kotest, MockK, Paper API, etc.)
     "integrationTestImplementation"(sourceSets.test.get().output)

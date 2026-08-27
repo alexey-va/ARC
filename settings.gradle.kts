@@ -9,6 +9,7 @@ providers.gradleProperty("arcCoreDir").orNull?.let(::file)?.let { arcCoreDir ->
             listOf(
                 "arc-core",
                 "arc-core-ai",
+                "arc-core-integration-testing",
                 "arc-core-logging",
                 "arc-core-metrics",
                 "arc-core-paper",

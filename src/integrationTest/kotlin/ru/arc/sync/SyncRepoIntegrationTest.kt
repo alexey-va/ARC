@@ -9,12 +9,15 @@ import io.kotest.matchers.shouldBe
 import org.testcontainers.containers.GenericContainer
 import org.testcontainers.utility.DockerImageName
 import ru.arc.ARC
+import ru.arc.core.Tasks
+import ru.arc.core.TestTaskScheduler
 import ru.arc.redis.RedisManager
 import ru.arc.sync.base.Context
 import ru.arc.sync.base.SyncData
 import ru.arc.sync.base.SyncRepo
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
@@ -30,16 +33,23 @@ class SyncRepoIntegrationTest : FreeSpec() {
 
     private val redis: GenericContainer<*> by lazy { startRedis() }
     private lateinit var redisManager: RedisManager
+    private lateinit var scheduler: TestTaskScheduler
 
     init {
         beforeSpec {
             ARC.serverName = "server-A"
+            scheduler = TestTaskScheduler()
+            Tasks.install(scheduler)
             redisManager = RedisManager(redis.host, redis.getMappedPort(6379), null, null)
             Thread.sleep(500)
         }
 
         afterSpec {
-            redisManager.close()
+            try {
+                redisManager.close()
+            } finally {
+                Tasks.reset()
+            }
         }
 
     "SyncRepo" - {
@@ -55,7 +65,7 @@ class SyncRepoIntegrationTest : FreeSpec() {
             Thread.sleep(300)
 
             ARC.serverName = "server-B"
-            repo.loadAndApplyData(uuid).get(2, TimeUnit.SECONDS)
+            executeUntilDone(repo.loadAndApplyData(uuid))
             Thread.sleep(200)
 
             val dto = received.get().shouldNotBeNull()
@@ -74,7 +84,7 @@ class SyncRepoIntegrationTest : FreeSpec() {
             repo.saveAndPersistData(ctx).get(2, TimeUnit.SECONDS)
             Thread.sleep(300)
 
-            repo.loadAndApplyData(uuid).get(2, TimeUnit.SECONDS)
+            executeUntilDone(repo.loadAndApplyData(uuid))
             Thread.sleep(200)
 
             received.get() shouldBe null
@@ -86,7 +96,7 @@ class SyncRepoIntegrationTest : FreeSpec() {
             val repo = buildRepo(redisManager, uuid, received)
 
             ARC.serverName = "other-server"
-            repo.loadAndApplyData(uuid).get(2, TimeUnit.SECONDS)
+            executeUntilDone(repo.loadAndApplyData(uuid))
             Thread.sleep(200)
 
             received.get() shouldBe null
@@ -117,7 +127,7 @@ class SyncRepoIntegrationTest : FreeSpec() {
             }
 
             ARC.serverName = "server-B"
-            repo.loadAndApplyData(uuid).get(2, TimeUnit.SECONDS)
+            executeUntilDone(repo.loadAndApplyData(uuid))
             Thread.sleep(200)
 
             received.get()?.value shouldBe "v3"
@@ -140,6 +150,16 @@ class SyncRepoIntegrationTest : FreeSpec() {
             back.value shouldBe dto.value
         }
     }
+    }
+
+    private fun executeUntilDone(future: CompletableFuture<*>) {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
+        while (!future.isDone && System.nanoTime() < deadline) {
+            scheduler.executeImmediate()
+            Thread.onSpinWait()
+        }
+        future.isDone shouldBe true
+        future.join()
     }
 
     companion object {

@@ -12,11 +12,14 @@ import io.kotest.matchers.string.shouldNotContain
 import org.testcontainers.containers.GenericContainer
 import org.testcontainers.utility.DockerImageName
 import ru.arc.ARC
+import ru.arc.core.Tasks
+import ru.arc.core.TestTaskScheduler
 import ru.arc.redis.RedisManager
 import ru.arc.sync.base.Context
 import ru.arc.sync.base.SyncRepo
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
@@ -26,15 +29,24 @@ class SkillsSyncTest : FreeSpec() {
 
     private val redis: GenericContainer<*> by lazy { startRedis() }
     private lateinit var redisManager: RedisManager
+    private lateinit var scheduler: TestTaskScheduler
 
     init {
         beforeSpec {
             ARC.serverName = "server-skills-a"
+            scheduler = TestTaskScheduler()
+            Tasks.install(scheduler)
             redisManager = RedisManager(redis.host, redis.getMappedPort(6379), null, null)
             Thread.sleep(500)
         }
 
-        afterSpec { redisManager.close() }
+        afterSpec {
+            try {
+                redisManager.close()
+            } finally {
+                Tasks.reset()
+            }
+        }
 
         "UserSkillData DTO" - {
 
@@ -165,7 +177,7 @@ class SkillsSyncTest : FreeSpec() {
                 Thread.sleep(300)
 
                 ARC.serverName = "server-skills-b"
-                repo.loadAndApplyData(uuid).get(2, TimeUnit.SECONDS)
+                executeUntilDone(repo.loadAndApplyData(uuid))
                 Thread.sleep(200)
 
                 val dto = received.get().shouldNotBeNull()
@@ -199,7 +211,7 @@ class SkillsSyncTest : FreeSpec() {
                 repo.saveAndPersistData(ctx).get(2, TimeUnit.SECONDS)
                 Thread.sleep(300)
 
-                repo.loadAndApplyData(uuid).get(2, TimeUnit.SECONDS)
+                executeUntilDone(repo.loadAndApplyData(uuid))
                 Thread.sleep(200)
 
                 received.get() shouldBe null
@@ -227,7 +239,7 @@ class SkillsSyncTest : FreeSpec() {
                 Thread.sleep(300)
 
                 ARC.serverName = "server-skills-c"
-                repo.loadAndApplyData(uuid).get(2, TimeUnit.SECONDS)
+                executeUntilDone(repo.loadAndApplyData(uuid))
                 Thread.sleep(200)
 
                 received.get()?.mana shouldBe preciseMana
@@ -260,7 +272,7 @@ class SkillsSyncTest : FreeSpec() {
                 Thread.sleep(300)
 
                 ARC.serverName = "server-skills-d"
-                repo.loadAndApplyData(uuid).get(2, TimeUnit.SECONDS)
+                executeUntilDone(repo.loadAndApplyData(uuid))
                 Thread.sleep(200)
 
                 received
@@ -275,6 +287,16 @@ class SkillsSyncTest : FreeSpec() {
                     ?.level shouldBe 100
             }
         }
+    }
+
+    private fun executeUntilDone(future: CompletableFuture<*>) {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
+        while (!future.isDone && System.nanoTime() < deadline) {
+            scheduler.executeImmediate()
+            Thread.onSpinWait()
+        }
+        future.isDone shouldBe true
+        future.join()
     }
 
     companion object {

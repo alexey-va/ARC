@@ -1,5 +1,5 @@
 ---
-description: Commit and push ARC plugin changes; runtime configs need mcserver deploy
+description: Commit and push ARC plugin changes; runtime configs need ruscrafting-ops deploy
 alwaysApply: true
 ---
 
@@ -8,7 +8,8 @@ alwaysApply: true
 ## Два репозитория
 
 1. **Этот репо (ARC)** — код плагина, bundled resources, тесты.
-2. **mcserver** — **runtime** конфиги на McFine. См. `.cursor/rules/mcserver-config-deploy.mdc`.
+2. **ruscrafting-ops** — **runtime** конфиги на McFine. См.
+   `.cursor/rules/ruscrafting-ops-config-deploy.mdc`.
 
 `git push` здесь **не деплоит** YAML на spawn/survival/parkour.
 
@@ -21,14 +22,15 @@ alwaysApply: true
 1. `git status` — не коммитить `build/`, `bin/`
 2. `./gradlew test` перед значимым push
 3. Commit + push (если пользователь просит)
-4. **JAR на прод:** `cd ~/mcserver && ./scripts/mc arc classic` (+ survival/parkour при необходимости)
+4. **JAR на прод:** `cd ~/RusCrafting/ruscrafting-ops && ./scripts/mc arc classic classic_survival parkour`
 
 ## Runtime configs (announce, board, …)
 
-Править **`~/mcserver/classic/plugins/ARC/`** (и survival/parkour), затем:
+Править **`~/RusCrafting/ruscrafting-ops/classic/plugins/ARC/`** (и survival/parkour), затем:
 
 ```bash
-cd ~/mcserver && ./scripts/mc deploy -m "…" --plugin ARC classic classic_survival parkour
+cd ~/RusCrafting/ruscrafting-ops
+./scripts/mc deploy -m "…" --plugin ARC classic classic_survival parkour
 ```
 
 Не заканчивать задачу без deploy, если меняли prod YAML.
@@ -36,6 +38,7 @@ cd ~/mcserver && ./scripts/mc deploy -m "…" --plugin ARC classic classic_survi
 ## После сессии с агентом
 
 - Код → commit/push ARC + `mc arc` (по правилам пользователя про commit)
-- Prod YAML → commit mcserver + **`mc deploy`** (обязательно)
+- Prod YAML → commit ruscrafting-ops + **`mc deploy`** (обязательно)
 
-Логи: Grafana Loki (`query_loki_logs`), см. `mcserver/.cursor/rules/grafana-logs.mdc`.
+Логи: Grafana Loki (`query_loki_logs`), см.
+`ruscrafting-ops/.cursor/rules/grafana-logs.mdc`.
