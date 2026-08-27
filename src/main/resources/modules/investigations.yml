@@ -1,0 +1,20 @@
+# Paid, durable trade-hall investigation. Denizen owns NPC gestures; ARC owns
+# money, deadlines, cooldowns, evidence and the verdict state machine.
+enabled: false
+
+scene:
+  world: rc_origin_spawn
+  npcs:
+    foma: { id: 367, x: -67.5, y: 72.0, z: 4.0, radius: 4.5 }
+    stavr: { id: 372, x: -67.5, y: 72.0, z: -4.0, radius: 4.5 }
+    prokhor: { id: 373, x: -64.5, y: 73.0, z: 4.0, radius: 4.5 }
+    gordey: { id: 374, x: -64.5, y: 73.0, z: -4.0, radius: 4.5 }
+
+challenge:
+  fee: "100.00"
+  reward: "300.00"
+  duration: 90s
+  cooldown: 20h
+
+contracts:
+  group: bank_orders

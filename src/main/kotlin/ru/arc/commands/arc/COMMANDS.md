@@ -10,6 +10,7 @@
 - [Справка](#arc-help)
 - [Покупка из магазина](#arc-buy--buy)
 - [Доска контрактов](#arc-contracts--arc-заказы)
+- [Ревизорская проба](#arc-investigation)
 - [Охота на сокровища](#arc-hunt)
 - [Пулы наград](#arc-treasures)
 - [Пулы локаций](#arc-locationpool)
@@ -122,6 +123,23 @@ balance сверяется в точных minor units. Неоднозначны
 /arc contracts status
 /arc contracts open forge_orders
 /arc contracts submit forge_raw_iron 64
+```
+
+## /arc investigation
+
+Внутренняя команда четырёх NPC палаты сделок в Origin. Фома открывает
+оплачиваемое расследование, а Ставр, Прохор и Гордей добавляют в него свои
+показания. ARC проверяет точный мир и расстояние до соответствующего NPC;
+деньги, таймер, перерыв и сгенерированное дело сохраняются в durable journal.
+
+```bash
+/arc investigation open
+/arc investigation clue stavr
+/arc investigation clue prokhor
+/arc investigation clue gordey
+/arc investigation verdict amount
+/arc investigation verdict seal
+/arc investigation verdict clean
 ```
 
 ---

@@ -10,6 +10,12 @@ commands:
     permission: ''
     player-only: false
     usage: /arc contracts [status|open <группа>|submit <id> <количество>]
+  investigation:
+    name: investigation
+    aliases: [расследование]
+    permission: ''
+    player-only: true
+    usage: /arc investigation [open|clue <stavr|prokhor|gordey>|verdict <amount|seal|clean>]
   help:
     name: help
     aliases: [ ]

@@ -57,6 +57,7 @@ import ru.arc.core.modules.SyncModule
 import ru.arc.core.modules.TreasureModule
 import ru.arc.core.modules.XActionModule
 import ru.arc.contracts.ContractsModule
+import ru.arc.investigation.InvestigationModule
 import ru.arc.hooks.HookRegistry
 import ru.arc.gui.GuiDefaults
 import ru.arc.itemcatalog.ItemsCatalogModule
@@ -207,6 +208,7 @@ open class ARC : JavaPlugin() {
             StoreModule,
             StockAuditModule,
             ContractsModule,
+            InvestigationModule,
             TreasureModule,
             EliteLootModule,
             LeafDecayModule,
@@ -320,6 +322,7 @@ open class ARC : JavaPlugin() {
                 "modules/chat-mode.yml",
                 "modules/cross-server-spy.yml",
                 "modules/contracts.yml",
+                "modules/investigations.yml",
                 "modules/auction.yml",
                 "modules/treasure-hunt.yml",
                 "modules/mobspawn.yml",
@@ -344,6 +347,7 @@ open class ARC : JavaPlugin() {
                 "guis/defaults.yml",
                 "guis/board.yml",
                 "guis/contracts.yml",
+                "guis/investigations.yml",
                 "guis/scheduled-commands.yml",
             )
 
