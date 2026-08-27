@@ -12,7 +12,7 @@ export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-25.jdk/Contents/Home
 ./gradlew shadowJar   # → build/libs/ARC-*.jar
 ```
 
-## McFine runtime (`~/mcserver`)
+## RusCrafting runtime (`~/RusCrafting/ruscrafting-ops`)
 
 | Doc | Purpose |
 |-----|---------|
@@ -21,6 +21,6 @@ export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-25.jdk/Contents/Home
 | `mcserver/classic/plugins/ARC/AGENTS.md` | Runtime YAML, ops-http |
 | `src/main/kotlin/ru/arc/ops/AGENTS.md` | Item Ops, CMI kits API |
 
-Deploy: `cd ~/mcserver && ./scripts/mc arc classic classic_survival`
+Deploy: `cd ~/RusCrafting/ruscrafting-ops && ./scripts/mc arc classic classic_survival`
 
 Patterns (Config `get()`, Kotest+MockK, PluginModule, Tasks.*): **arc-core/AGENTS.md** — not duplicated here.

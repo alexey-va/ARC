@@ -1,6 +1,6 @@
 # AGENTS.md — ARC (Paper plugin)
 
-**Architecture canon:** [`~/IdeaProjects/arc-core/AGENTS.md`](../arc-core/AGENTS.md) or [github.com/alexey-va/arc-core](https://github.com/alexey-va/arc-core/blob/main/AGENTS.md) — read before structural changes.
+**Architecture canon:** [`~/RusCrafting/arc-core/AGENTS.md`](../arc-core/AGENTS.md) or [github.com/alexey-va/arc-core](https://github.com/alexey-va/arc-core/blob/main/AGENTS.md) — read before structural changes.
 
 ## Paper-only (stays in this repo)
 
@@ -54,15 +54,15 @@ listener must marshal Bukkit access to the Paper main thread.
 
 | Doc | Purpose |
 |-----|---------|
-| `~/mcserver/TASKS.md` | Current tasks |
-| `~/mcserver/AGENTS.md` | Deploy, MCP |
-| `~/mcserver/classic/plugins/ARC/AGENTS.md` | Runtime YAML (spawn) |
+| `~/RusCrafting/ruscrafting-ops/TASKS.md` | Current tasks |
+| `~/RusCrafting/ruscrafting-ops/AGENTS.md` | Deploy, MCP |
+| `~/RusCrafting/ruscrafting-ops/classic/plugins/ARC/AGENTS.md` | Runtime YAML (spawn) |
 
 ```bash
 export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-25.jdk/Contents/Home
 ./gradlew test                    # all tests
 ./gradlew shadowJar               # build/libs/ARC-*.jar
-cd ~/mcserver && ./scripts/mc arc classic classic_survival
+cd ~/RusCrafting/ruscrafting-ops && ./scripts/mc arc classic classic_survival
 ```
 
 ## Dependencies

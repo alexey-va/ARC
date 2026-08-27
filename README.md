@@ -30,10 +30,10 @@ For coordinated local development, opt into source substitution explicitly:
 
 ## Deploy
 
-Runtime configs: [mcserver](https://github.com/alexey-va/arserver-plugins) — `classic/plugins/ARC/`, `classic_survival/...`
+Runtime configs: [ruscrafting-ops](https://github.com/alexey-va/ruscrafting-ops) — `classic/plugins/ARC/`, `classic_survival/...`
 
 ```bash
-cd ~/mcserver && ./scripts/mc arc classic classic_survival
+cd ~/RusCrafting/ruscrafting-ops && ./scripts/mc arc classic classic_survival
 ```
 
 ## Features
