@@ -134,6 +134,34 @@ class ConstructionFlowTest : TestBase() {
             assertTrue(site.complete())
             assertEquals(ConstructionState.Done, site.state)
         }
+
+        @Test
+        @DisplayName("One player's transition never cancels another player's phase timeout")
+        fun testPhaseTimeoutOwnershipIsPerSite() {
+            val otherPlayer = server.addPlayer("OtherBuilder")
+            val first = ConstructionSite(building, centerBlock, player, 0, world, 0, 0)
+            val second = ConstructionSite(building, centerBlock.clone().add(20.0, 0.0, 0.0), otherPlayer, 0, world, 0, 0)
+
+            assertTrue(first.startDisplayingBorder())
+            val firstOutlineTimeout = checkNotNull(first.phaseTimeoutTask)
+            assertTrue(second.startDisplayingBorder())
+            val secondOutlineTimeout = checkNotNull(second.phaseTimeoutTask)
+
+            assertTrue(first.startConfirmation())
+
+            assertTrue(firstOutlineTimeout.isCancelled)
+            assertFalse(secondOutlineTimeout.isCancelled)
+            assertEquals(secondOutlineTimeout, second.phaseTimeoutTask)
+
+            val firstConfirmationTimeout = checkNotNull(first.phaseTimeoutTask)
+            assertTrue(second.startConfirmation())
+            val secondConfirmationTimeout = checkNotNull(second.phaseTimeoutTask)
+            assertTrue(first.cancel())
+
+            assertTrue(firstConfirmationTimeout.isCancelled)
+            assertFalse(secondConfirmationTimeout.isCancelled)
+            assertEquals(secondConfirmationTimeout, second.phaseTimeoutTask)
+        }
     }
 
     // ==================== Cancellation Tests ====================

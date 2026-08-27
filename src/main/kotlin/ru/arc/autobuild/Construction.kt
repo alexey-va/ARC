@@ -5,11 +5,9 @@ import com.sk89q.worldedit.bukkit.BukkitAdapter
 import com.sk89q.worldedit.math.BlockVector3
 import org.bukkit.Location
 import org.bukkit.Material
-import org.bukkit.block.Barrel
-import org.bukkit.block.Chest
+import org.bukkit.block.Block
+import org.bukkit.block.data.BlockData
 import org.bukkit.inventory.ItemStack
-import org.bukkit.loot.LootContext
-import org.bukkit.loot.LootTables
 import ru.arc.core.ScheduledTask
 import ru.arc.core.async
 import ru.arc.core.delayed
@@ -24,6 +22,16 @@ import ru.arc.util.ParticleManager
 import ru.arc.util.RandomUtils
 import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.atomic.AtomicInteger
+
+/**
+ * Applies only the structural block state from a build book. A schematic does
+ * not own container inventory data and must never synthesize loot on placement.
+ */
+internal object ConstructionBlockPlacement {
+    fun apply(block: Block, blockData: BlockData) {
+        block.blockData = blockData
+    }
+}
 
 /**
  * Handles the block-by-block construction process.
@@ -152,10 +160,7 @@ class Construction(private val site: ConstructionSite) {
             }
 
             // Place block
-            currentBlock.blockData = blockData
-
-            // Fill containers
-            fillContainerIfNeeded(location)
+            ConstructionBlockPlacement.apply(currentBlock, blockData)
 
             // Effects on first block of tick (only if player is in same world and nearby)
             if (placed == 0 && isPlayerNearby()) {
@@ -174,25 +179,6 @@ class Construction(private val site: ConstructionSite) {
             for (item in leftover.values) {
                 site.player.world.dropItem(site.player.location, item)
             }
-        }
-    }
-
-    private fun fillContainerIfNeeded(location: Location) {
-        val state = location.block.state
-        val context = LootContext.Builder(location).build()
-
-        when (state) {
-            is Chest -> LootTables.SPAWN_BONUS_CHEST.lootTable.fillInventory(
-                state.inventory,
-                ThreadLocalRandom.current(),
-                context
-            )
-
-            is Barrel -> LootTables.SPAWN_BONUS_CHEST.lootTable.fillInventory(
-                state.inventory,
-                ThreadLocalRandom.current(),
-                context
-            )
         }
     }
 

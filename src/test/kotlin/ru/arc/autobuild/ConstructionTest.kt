@@ -2,10 +2,13 @@
 package ru.arc.autobuild
 
 import org.bukkit.Location
+import org.bukkit.Material
+import org.bukkit.block.Container
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockbukkit.mockbukkit.entity.PlayerMock
@@ -68,5 +71,19 @@ class ConstructionTest : TestBase() {
         // Should not throw even without Citizens hook
         HookRegistry.citizensHook = null
         assertDoesNotThrow { construction.destroyNpc() }
+    }
+
+    @Test
+    fun `constructed containers never generate bonus loot`() {
+        listOf(Material.CHEST, Material.BARREL).forEachIndexed { index, material ->
+            val location = Location(world, index * 3.0, 64.0, 0.0)
+            val block = world.getBlockAt(location).also { it.type = material }
+
+            ConstructionBlockPlacement.apply(block, material.createBlockData())
+
+            val state = world.getBlockAt(location).state
+            assertTrue(state is Container, "$material should be placed as a container")
+            assertTrue((state as Container).inventory.isEmpty, "$material must remain empty after construction")
+        }
     }
 }

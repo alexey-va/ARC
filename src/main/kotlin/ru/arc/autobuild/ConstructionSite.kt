@@ -10,6 +10,7 @@ import org.bukkit.entity.EntityType
 import org.bukkit.entity.Firework
 import org.bukkit.entity.Player
 import org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.CUSTOM
+import ru.arc.core.ScheduledTask
 import ru.arc.core.delayed
 import ru.arc.core.repeat
 import ru.arc.core.ticks
@@ -104,6 +105,7 @@ class ConstructionSite(
     private val chunks = mutableSetOf<Chunk>()
     internal var display: Display? = null
     internal var construction: Construction? = null
+    internal var phaseTimeoutTask: ScheduledTask? = null
     private var transform: BuildBookTransform =
         (initialTransform ?: BuildBookTransform(rotation = subRotation, offsetY = yOffset)).validated()
     var bookData: BuildBookData? = bookData

@@ -1,6 +1,5 @@
 package ru.arc.autobuild
 
-import ru.arc.core.ScheduledTask
 import ru.arc.core.delayed
 import ru.arc.core.ticks
 import ru.arc.util.CooldownManager
@@ -38,12 +37,10 @@ sealed class ConstructionState {
 
     /** Showing border particles to player */
     data object DisplayingOutline : ConstructionState() {
-        private var timeoutTask: ScheduledTask? = null
-
         override fun enter(site: ConstructionSite) {
             site.display = Display(site).also { it.showBorder(site.displaySeconds) }
 
-            timeoutTask =
+            site.phaseTimeoutTask =
                 delayed((site.displaySeconds * 20L).ticks) {
                     if (site.state == DisplayingOutline) {
                         debug(
@@ -58,8 +55,8 @@ sealed class ConstructionState {
         }
 
         override fun exit(site: ConstructionSite) {
-            timeoutTask?.cancel()
-            timeoutTask = null
+            site.phaseTimeoutTask?.cancel()
+            site.phaseTimeoutTask = null
         }
 
         override fun allowedTransitions() = setOf(Confirmation, Created, Cancelled)
@@ -67,8 +64,6 @@ sealed class ConstructionState {
 
     /** NPC spawned, waiting for player confirmation */
     data object Confirmation : ConstructionState() {
-        private var timeoutTask: ScheduledTask? = null
-
         override fun enter(site: ConstructionSite) {
             site.timestamp = System.currentTimeMillis()
             site.display?.showBorderAndDisplay(site.confirmSeconds)
@@ -77,7 +72,7 @@ sealed class ConstructionState {
             }
             site.player.sendMessage(BuildConfig.Messages.confirm())
 
-            timeoutTask =
+            site.phaseTimeoutTask =
                 delayed((site.confirmSeconds * 20L).ticks) {
                     if (site.state == Confirmation) {
                         debug(
@@ -93,8 +88,8 @@ sealed class ConstructionState {
         }
 
         override fun exit(site: ConstructionSite) {
-            timeoutTask?.cancel()
-            timeoutTask = null
+            site.phaseTimeoutTask?.cancel()
+            site.phaseTimeoutTask = null
         }
 
         override fun allowedTransitions() = setOf(Building, Created, Cancelled)
