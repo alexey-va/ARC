@@ -85,6 +85,7 @@ locales:
       - "<#8c8c8c>  • <#92bed8>/builder book draft [имя] <#e6fff3>— бесплатный черновик"
       - "<#8c8c8c>  • <#92bed8>/builder book activate <#e6fff3>— рассчитать цену активации"
       - "<#8c8c8c>  • <#92bed8>/builder book copy <#e6fff3>— платная копия активной книги"
+      - "<#8c8c8c>  • <#92bed8>/builder book sell [цена] <#e6fff3>— безопасно продать книгу"
       - "<#8c8c8c>  • <#92bed8>/builder book <#e6fff3>— пошаговая инструкция и текущий этап"
       - "<#8c8c8c>  • <#92bed8>/builder clear <#e6fff3>— убрать выделение и его частицы"
       - "<#8c8c8c>  • <#92bed8>/builder deconstruct <#e6fff3>— разобрать область"
@@ -153,17 +154,23 @@ locales:
       first: |-
         <prefix><#2bba43>Первая точка выбрана.
         <#8c8c8c>  • Координаты: <#92bed8><x>, <y>, <z>
-        <#8c8c8c>  • <#e6fff3>Теперь отметьте вторую точку <#92bed8>ПКМ<#e6fff3>; первая точка светится белым.
+        <#8c8c8c>  • <#e6fff3>Теперь отметьте вторую точку <#92bed8>ПКМ<#e6fff3>.
+        <#8c8c8c>  • <#969696>Первая точка светится белым.
       second: |-
         <prefix><#2bba43>Вторая точка выбрана.
         <#8c8c8c>  • Координаты: <#92bed8><x>, <y>, <z>
-        <#8c8c8c>  • <#e6fff3>Если первой точки ещё нет, отметьте её <#92bed8>ЛКМ<#e6fff3>; эта точка светится зелёным.
+        <#8c8c8c>  • <#e6fff3>Если первой точки нет, отметьте её <#92bed8>ЛКМ<#e6fff3>.
+        <#8c8c8c>  • <#969696>Вторая точка светится зелёным.
       complete: |-
         <#8c8c8c>  • <#e6fff3>Область: <#92bed8><x> × <y> × <z> <#8c8c8c>• <#e6fff3>объём: <#92bed8><volume>
-        <#8c8c8c>  • <#969696>Огненный контур остаётся видимым, пока выделение активно.
-        <#8c8c8c>  • <click:run_command:'/builder copy'><#92bed8>/builder copy</#92bed8></click> <#e6fff3>— скопировать безопасные блоки в чертёж.
-      cleared: "<prefix><#969696>Выделение очищено; частицы скрыты. Сохранённый чертёж не удалён."
-      world-reset: "<prefix><#ff9f0f>Старые точки были в другом мире и очищены. Выберите обе точки заново."
+        <#8c8c8c>  • <#969696>Огненный контур виден постоянно.
+        <#8c8c8c>  • <click:run_command:'/builder copy'><#92bed8>/builder copy</#92bed8></click> <#e6fff3>— сохранить чертёж.
+      cleared: |-
+        <prefix><#969696>Выделение очищено; частицы скрыты.
+        <#8c8c8c>  • <#969696>Сохранённый чертёж не удалён.
+      world-reset: |-
+        <prefix><#ff9f0f>Точки из другого мира очищены.
+        <#8c8c8c>  • <#e6fff3>Выберите обе точки заново.
     wand:
       name: "<#92bed8><bold>Инструмент строителя"
       lore:
@@ -222,44 +229,58 @@ locales:
     book:
       guide:
         - "<prefix><#e6fff3><bold>Как создать книгу строительства"
-        - "<#8c8c8c>  1. <click:run_command:'/builder wand'><#92bed8>/builder wand</#92bed8></click> <#e6fff3>— превратить осколок эха в селектор."
-        - "<#8c8c8c>  2. <#e6fff3>ЛКМ и ПКМ отметьте углы; точки и весь контур светятся постоянно."
-        - "<#8c8c8c>  3. <click:run_command:'/builder copy'><#92bed8>/builder copy</#92bed8></click> <#e6fff3>— сохранить безопасный чертёж на 15 минут."
-        - "<#8c8c8c>  4. <#e6fff3>Возьмите обычную книгу и выполните <click:suggest_command:'/builder book draft '><#92bed8>/builder book draft [имя]</#92bed8></click>."
-        - "<#8c8c8c>  5. <#e6fff3>ПКМ книгой по земле — постоянное превью; ПКМ в воздух — поворот и смещение."
-        - "<#8c8c8c>  6. <click:run_command:'/builder book activate'><#92bed8>/builder book activate</#92bed8></click> <#e6fff3>— увидеть полную смету; деньги пока не списываются."
-        - "<#8c8c8c>  7. <click:run_command:'/builder book confirm'><#92bed8>/builder book confirm</#92bed8></click> <#e6fff3>— оплатить и получить одноразовый зарегистрированный экземпляр."
-        - "<#8c8c8c>  • <#e6fff3>Активную книгу можно копировать за ту же стоимость или продать через <click:suggest_command:'/ah sell '><#92bed8>/ah sell [цена]</#92bed8></click>."
-        - "<#8c8c8c>  • <#e6fff3>Застряли? <click:run_command:'/builder book status'><#92bed8>/builder book status</#92bed8></click> покажет только ваш текущий этап."
+        - "<#8c8c8c>  1. <click:run_command:'/builder wand'><#92bed8>/builder wand</#92bed8></click> <#e6fff3>— получить селектор."
+        - "<#8c8c8c>     <#e6fff3>ЛКМ и ПКМ — два угла. Контур виден постоянно."
+        - "<#8c8c8c>  2. <click:run_command:'/builder copy'><#92bed8>/builder copy</#92bed8></click> <#e6fff3>— сохранить чертёж на 15 минут."
+        - "<#8c8c8c>  3. <#e6fff3>Возьмите обычную книгу."
+        - "<#8c8c8c>     <click:suggest_command:'/builder book draft '><#92bed8>/builder book draft [имя]</#92bed8></click> <#e6fff3>— создать черновик."
+        - "<#8c8c8c>  4. <#e6fff3>ПКМ по земле — превью."
+        - "<#8c8c8c>     <#e6fff3>ПКМ в воздух — поворот и смещение."
+        - "<#8c8c8c>  5. <click:run_command:'/builder book activate'><#92bed8>/builder book activate</#92bed8></click> <#e6fff3>— смета без оплаты."
+        - "<#8c8c8c>  6. <click:run_command:'/builder book confirm'><#92bed8>/builder book confirm</#92bed8></click> <#e6fff3>— оплатить."
+        - "<#8c8c8c>  7. <click:run_command:'/builder book copy'><#92bed8>/builder book copy</#92bed8></click> <#e6fff3>— копия по себестоимости."
+        - "<#8c8c8c>     <click:suggest_command:'/builder book sell '><#92bed8>/builder book sell [цена]</#92bed8></click> <#e6fff3>— продажа."
+        - "<#8c8c8c>  • <click:run_command:'/builder book status'><#92bed8>/builder book status</#92bed8></click> <#e6fff3>— ваш текущий этап."
       status:
         start: |-
           <prefix><#ff9f0f>Этап 1/7: сначала выделите будущую постройку.
-          <#8c8c8c>  • <click:run_command:'/builder wand'><#92bed8>/builder wand</#92bed8></click> <#e6fff3>— получить селектор; ЛКМ и ПКМ — две точки.
+          <#8c8c8c>  • <click:run_command:'/builder wand'><#92bed8>/builder wand</#92bed8></click> <#e6fff3>— селектор.
+          <#8c8c8c>  • <#e6fff3>ЛКМ и ПКМ — две точки.
         selection: |-
-          <prefix><#2bba43>Этап 2/7: область выделена — <#92bed8><x> × <y> × <z> <#8c8c8c>(<volume> блоков).
-          <#8c8c8c>  • <click:run_command:'/builder copy'><#92bed8>/builder copy</#92bed8></click> <#e6fff3>— сохранить показанный контур как чертёж.
+          <prefix><#2bba43>Этап 2/7: область выделена.
+          <#8c8c8c>  • <#e6fff3>Размер: <#92bed8><x> × <y> × <z> <#8c8c8c>• <#e6fff3><volume> блоков
+          <#8c8c8c>  • <click:run_command:'/builder copy'><#92bed8>/builder copy</#92bed8></click> <#e6fff3>— сохранить чертёж.
         clipboard: |-
           <prefix><#2bba43>Этап 3/7: чертёж готов — <#92bed8><count> блоков.
-          <#8c8c8c>  • <#e6fff3>Возьмите обычную книгу и нажмите <click:suggest_command:'/builder book draft '><#92bed8>/builder book draft [имя]</#92bed8></click>.
+          <#8c8c8c>  • <#e6fff3>Возьмите обычную книгу.
+          <#8c8c8c>  • <click:suggest_command:'/builder book draft '><#92bed8>/builder book draft [имя]</#92bed8></click> <#e6fff3>— создать черновик.
         draft: |-
-          <prefix><#2bba43>Этап 4/7: бесплатный черновик «<#92bed8><name><#2bba43>» готов.
-          <#8c8c8c>  • <#e6fff3>ПКМ по земле — открыть превью; ПКМ в воздух — настроить положение.
+          <prefix><#2bba43>Этап 4/7: бесплатный черновик готов.
+          <#8c8c8c>  • <#e6fff3>Название: <#92bed8><name>
+          <#8c8c8c>  • <#e6fff3>ПКМ по земле — превью.
+          <#8c8c8c>  • <#e6fff3>ПКМ в воздух — настройка положения.
         preview: |-
-          <prefix><#2bba43>Этап 5/7: превью «<#92bed8><name><#2bba43>» открыто и обновляется постоянно.
-          <#8c8c8c>  • <#e6fff3>Когда всё совпало, выполните <click:run_command:'/builder book activate'><#92bed8>/builder book activate</#92bed8></click> для сметы.
+          <prefix><#2bba43>Этап 5/7: превью открыто.
+          <#8c8c8c>  • <#e6fff3>Контур обновляется постоянно.
+          <#8c8c8c>  • <click:run_command:'/builder book activate'><#92bed8>/builder book activate</#92bed8></click> <#e6fff3>— рассчитать смету.
         quote: |-
           <prefix><#ff9f0f>Этап 6/7: смета готова — <#2bba43><price><#ff9f0f>.
           <#8c8c8c>  • <click:run_command:'/builder book confirm'><#92bed8>/builder book confirm</#92bed8></click> <#e6fff3>— оплатить; осталось <#92bed8><seconds> с<#e6fff3>.
         delivery: |-
-          <prefix><#ff9f0f>Этап 7/7: оплаченный экземпляр подтверждается реестром.
-          <#8c8c8c>  • <#e6fff3>Не перемещайте книгу; ARC завершит выдачу автоматически.
+          <prefix><#ff9f0f>Этап 7/7: реестр проверяет оплату.
+          <#8c8c8c>  • <#e6fff3>Не перемещайте книгу.
+          <#8c8c8c>  • <#e6fff3>Выдача продолжится автоматически.
         active: |-
-          <prefix><#2bba43>Готово: «<#92bed8><name><#2bba43>» активна; стоимость выпуска нового экземпляра — <#92bed8><price><#2bba43>.
-          <#8c8c8c>  • <#e6fff3>ПКМ по земле — показать постройку; <click:run_command:'/builder book copy'><#92bed8>/builder book copy</#92bed8></click> — копия; <click:suggest_command:'/ah sell '><#92bed8>/ah sell [цена]</#92bed8></click> — продажа.
+          <prefix><#2bba43>Готово: книга «<#92bed8><name><#2bba43>» активна.
+          <#8c8c8c>  • <#e6fff3>Новый экземпляр: <#92bed8><price>
+          <#8c8c8c>  • <#e6fff3>ПКМ по земле — превью.
+          <#8c8c8c>  • <click:run_command:'/builder book copy'><#92bed8>/builder book copy</#92bed8></click> <#e6fff3>— копия.
+          <#8c8c8c>  • <click:suggest_command:'/builder book sell '><#92bed8>/builder book sell [цена]</#92bed8></click> <#e6fff3>— продажа.
       draft-created: |-
         <prefix><#2bba43>Черновик готов: <#92bed8><name>
         <#8c8c8c>  • <#e6fff3>Блоков: <#92bed8><count> <#8c8c8c>• <#969696>денег пока не списано
-        <#8c8c8c>  • <#e6fff3>ПКМ по земле — превью; ПКМ в воздух — поворот и смещение.
+        <#8c8c8c>  • <#e6fff3>ПКМ по земле — превью.
+        <#8c8c8c>  • <#e6fff3>ПКМ в воздух — поворот и смещение.
         <#8c8c8c>  • <#e6fff3>После проверки: <click:run_command:'/builder book activate'><#92bed8>/builder book activate</#92bed8></click>
       material-required: "<prefix><#ff9f0f>Держите обычную книгу в основной руке."
       inventory-full: "<prefix><#ff9f0f>Освободите один слот для книги строительства."
@@ -272,18 +293,20 @@ locales:
       missing: "<prefix><#ff9f0f>Положите нужную книгу в инвентарь."
       draft-required: "<prefix><#ff9f0f>Держите бесплатный черновик в основной руке."
       active-required: "<prefix><#ff9f0f>Держите активную книгу в основной руке."
-      creator-only: "<prefix><#ff9f0f>Первую активацию черновика подтверждает его автор."
+      creator-only: "<prefix><#ff9f0f>Первую активацию подтверждает автор."
       unactivated: |-
         <prefix><#ff9f0f>Это только черновик — по нему нельзя строить.
-        <#8c8c8c>  • <#e6fff3>Проверьте превью и выполните <#92bed8>/builder book activate
+        <#8c8c8c>  • <#92bed8>/builder book activate <#e6fff3>— рассчитать смету.
       duplicate: |-
-        <prefix><#c42323>Этот экземпляр уже используется, потрачен или скопирован нечестно.
-        <#8c8c8c>  • <#969696>MySQL разрешает действие только одному настоящему UUID.
-      source-changed: "<prefix><#ff9f0f>Книга в руке изменилась после расчёта. Рассчитайте цену снова."
-      contracts-disabled: "<prefix><#ff9f0f>Активация пользовательских книг на этом сервере отключена."
-      registry-starting: "<prefix><#ff9f0f>Реестр книг запускается. Попробуйте через несколько секунд."
-      registry-unavailable: "<prefix><#c42323>Реестр книг временно недоступен. Деньги не списаны либо операция остановлена безопасно."
-      shop-unavailable: "<prefix><#ff9f0f>Не удалось получить цены материалов из админшопа."
+        <prefix><#c42323>Этот UUID уже занят или потрачен.
+        <#8c8c8c>  • <#969696>Действие разрешено только одному экземпляру.
+      source-changed: "<prefix><#ff9f0f>Книга изменилась. Рассчитайте цену снова."
+      contracts-disabled: "<prefix><#ff9f0f>Активация книг здесь отключена."
+      registry-starting: "<prefix><#ff9f0f>Реестр запускается. Попробуйте чуть позже."
+      registry-unavailable: |-
+        <prefix><#c42323>Реестр книг временно недоступен.
+        <#8c8c8c>  • <#969696>Новые деньги не списаны.
+      shop-unavailable: "<prefix><#ff9f0f>Цены админшопа сейчас недоступны."
       material-unavailable: "<prefix><#ff9f0f>В админшопе нет материалов: <#92bed8><materials>"
       price-limit: "<prefix><#c42323>Смета превышает безопасный лимит книги."
       quote-kind:
@@ -292,28 +315,65 @@ locales:
       quote: |-
         <prefix><#e6fff3>Смета: <#92bed8><kind> <#8c8c8c>• <#e6fff3><name>
         <#8c8c8c>  • <#e6fff3>Материалы: <#92bed8><materials> <#8c8c8c>• <#e6fff3>возведение: <#92bed8><labor>
-        <#8c8c8c>  • <#e6fff3>Итого: <#2bba43><price> <#8c8c8c>• <#969696><blocks> блоков, <items> предметов, <types> видов
+        <#8c8c8c>  • <#e6fff3>Итого: <#2bba43><price>
+        <#8c8c8c>  • <#969696><blocks> блоков • <items> предметов • <types> видов
         <#8c8c8c>  • <click:run_command:'/builder book confirm'><#92bed8>/builder book confirm</#92bed8></click> <#e6fff3>— оплатить в течение <#92bed8><seconds> с
-      quote-expired: "<prefix><#ff9f0f>Смета отсутствует или устарела. Запустите activate/copy ещё раз."
+      quote-expired: "<prefix><#ff9f0f>Смета устарела. Запустите activate или copy."
       quote-cancelled: "<prefix><#969696>Смета отменена. Деньги не списаны."
-      economy-unavailable: "<prefix><#c42323>Экономика временно недоступна. Деньги не списаны."
-      insufficient-funds: "<prefix><#ff9f0f>Недостаточно денег для активации. Черновик сохранён."
+      economy-unavailable: "<prefix><#c42323>Экономика недоступна. Деньги не списаны."
+      insufficient-funds: "<prefix><#ff9f0f>Не хватает денег. Черновик сохранён."
       payment-failed: "<prefix><#c42323>Платёж отклонён. Книга не активирована."
-      refunded: "<prefix><#ff9f0f>Книгу не удалось выпустить; вся сумма автоматически возвращена."
-      manual-review: "<prefix><#c42323>Операция остановлена для безопасной проверки. Не перемещайте книгу; деньги повторно не списываются."
+      refunded: |-
+        <prefix><#ff9f0f>Книгу не удалось выпустить.
+        <#8c8c8c>  • <#e6fff3>Вся сумма возвращена.
+      manual-review: |-
+        <prefix><#c42323>Операция остановлена для проверки.
+        <#8c8c8c>  • <#e6fff3>Не перемещайте книгу.
+        <#8c8c8c>  • <#969696>Повторного списания не будет.
       delivery-space: |-
         <prefix><#ff9f0f>Оплаченная книга ожидает свободный слот.
-        <#8c8c8c>  • <#e6fff3>Освободите место — выдача продолжится автоматически.
-      delivery-pending: "<prefix><#ff9f0f>Книга выдана, но реестр ещё подтверждает доставку. Инвентарь временно защищён."
+        <#8c8c8c>  • <#e6fff3>Освободите место — выдача продолжится.
+      delivery-pending: |-
+        <prefix><#ff9f0f>Реестр подтверждает выдачу книги.
+        <#8c8c8c>  • <#e6fff3>Инвентарь временно защищён.
       delivery-recovered: "<prefix><#2bba43>Оплаченная книга восстановлена и активна."
       activated: |-
         <prefix><#2bba43>Книга активна и зарегистрирована.
-        <#8c8c8c>  • <#e6fff3>Каждый экземпляр одноразовый; копии оплачиваются по той же сохранённой себестоимости.
-        <#8c8c8c>  • <click:suggest_command:'/ah sell '><#92bed8>/ah sell [цена]</#92bed8></click> <#e6fff3>— выставить книгу по своей цене.
+        <#8c8c8c>  • <#e6fff3>Каждый экземпляр — одноразовый.
+        <#8c8c8c>  • <#e6fff3>Копия выпускается по той же себестоимости.
+        <#8c8c8c>  • <click:suggest_command:'/builder book sell '><#92bed8>/builder book sell [цена]</#92bed8></click> <#e6fff3>— продажа.
       copied: |-
         <prefix><#2bba43>Новый экземпляр зарегистрирован.
-        <#8c8c8c>  • <#e6fff3>Исходная книга сохранена; у копии собственный одноразовый UUID.
-        <#8c8c8c>  • <click:suggest_command:'/ah sell '><#92bed8>/ah sell [цена]</#92bed8></click> <#e6fff3>— выставить экземпляр на аукцион.
+        <#8c8c8c>  • <#e6fff3>Исходная книга сохранена.
+        <#8c8c8c>  • <#e6fff3>У копии свой одноразовый UUID.
+        <#8c8c8c>  • <click:suggest_command:'/builder book sell '><#92bed8>/builder book sell [цена]</#92bed8></click> <#e6fff3>— продажа.
+      auction-price: |-
+        <prefix><#ff9f0f>Укажите цену продажи.
+        <#8c8c8c>  • <click:suggest_command:'/builder book sell '><#92bed8>/builder book sell [цена]</#92bed8></click>
+      auction-unavailable: "<prefix><#c42323>Аукцион книг недоступен. Книга осталась у вас."
+      auction-locked: |-
+        <prefix><#ff9f0f>Этот экземпляр сейчас закреплён за аукционом.
+        <#8c8c8c>  • <#e6fff3>Заберите книгу из завершённых лотов.
+      auction-use-safe-command: |-
+        <prefix><#ff9f0f>Для книг есть защищённая продажа.
+        <#8c8c8c>  • <click:suggest_command:'/builder book sell '><#92bed8>/builder book sell [цена]</#92bed8></click> <#e6fff3>— цена остаётся вашей.
+      auction-listed: |-
+        <prefix><#2bba43>Книга выставлена за <#92bed8><price><#2bba43>.
+        <#8c8c8c>  • <#969696>UUID заблокирован до выдачи книги.
+        <#8c8c8c>  • <#e6fff3>После выдачи книга активируется у получателя.
+      auction-listed-late: |-
+        <prefix><#2bba43>Аукцион подтвердил лот после задержки.
+        <#8c8c8c>  • <#e6fff3>Книга уже находится в вашем списке продаж.
+      auction-rejected: |-
+        <prefix><#ff9f0f>Лот не создан; книга возвращена.
+        <#8c8c8c>  • <#e6fff3>Проверьте цену, налог и лимит лотов.
+      auction-review: |-
+        <prefix><#c42323>Состояние лота проверяется безопасно.
+        <#8c8c8c>  • <#e6fff3>Не перемещайте книгу.
+        <#8c8c8c>  • <#e6fff3>Не повторяйте продажу.
+        <#8c8c8c>  • <#969696>UUID остаётся заблокирован.
+      auction-returned: "<prefix><#2bba43>Возвращённая с аукциона книга снова активна."
+      auction-received: "<prefix><#2bba43>Книга получена с аукциона и снова активна."
     plan:
       ready: |-
         <prefix><#2bba43>Предпросмотр готов: <#92bed8><kind>
@@ -363,6 +423,7 @@ locales:
       - "<prefix><white>/builder copy <gray>and <white>/builder paste <gray>— temporary blueprint"
       - "<prefix><white>/builder book draft [name] <gray>— create a free preview-only draft"
       - "<prefix><white>/builder book activate <gray>— quote draft activation"
+      - "<prefix><white>/builder book sell [price] <gray>— safely list an active book"
       - "<prefix><white>/builder book copy <gray>— quote a paid registered copy"
       - "<prefix><white>/builder book <gray>— guided workflow and current step"
       - "<prefix><white>/builder clear <gray>— clear the selection and hide its particles"
@@ -403,11 +464,24 @@ locales:
       shop-purchase-failed: "<prefix><red>Not purchased: <white><material></white>."
       shop-purchase-ambiguous: "<prefix><red>No response: <white><material></white>."
     selection:
-      first: "<prefix><green>Position 1: <white><x> <y> <z></white>. <gray>Right-click position 2; this point stays highlighted."
-      second: "<prefix><green>Position 2: <white><x> <y> <z></white>. <gray>If position 1 is missing, left-click it; this point stays green."
-      complete: "<prefix><gray>Selection: <white><x>×<y>×<z></white>, volume <white><volume></white>. The outline stays visible. Run <click:run_command:'/builder copy'><aqua>/builder copy</aqua></click>."
-      cleared: "<prefix><gray>Selection cleared; its particles are hidden. The saved clipboard remains."
-      world-reset: "<prefix><yellow>The old points belonged to another world and were cleared. Select both points again."
+      first: |-
+        <prefix><green>Position 1 selected.
+        <dark_gray>  • <gray>Coordinates: <white><x> <y> <z>
+        <dark_gray>  • <gray>Right-click position 2.
+      second: |-
+        <prefix><green>Position 2 selected.
+        <dark_gray>  • <gray>Coordinates: <white><x> <y> <z>
+        <dark_gray>  • <gray>Left-click position 1 if needed.
+      complete: |-
+        <dark_gray>  • <gray>Area: <white><x>×<y>×<z></white> • <volume> blocks
+        <dark_gray>  • <gray>The outline stays visible.
+        <dark_gray>  • <click:run_command:'/builder copy'><aqua>/builder copy</aqua></click> <gray>— save it.
+      cleared: |-
+        <prefix><gray>Selection cleared; particles hidden.
+        <dark_gray>  • <gray>The saved clipboard remains.
+      world-reset: |-
+        <prefix><yellow>Points from another world were cleared.
+        <dark_gray>  • <gray>Select both points again.
     wand:
       name: "<aqua><bold>Builder selector"
       lore:
@@ -417,7 +491,9 @@ locales:
         - "<dark_gray>The selector never changes blocks"
       received: "<prefix><green>Your echo shard is now the builder selector."
       inventory-full: "<prefix><yellow>Free one slot or hold a single echo shard."
-      material-required: "<prefix><yellow>Hold a plain echo shard in your main hand. ARC never creates one for free."
+      material-required: |-
+        <prefix><yellow>Hold a plain echo shard.
+        <dark_gray>  • <gray>ARC never creates one for free.
     crown-brush:
       name: "<aqua><bold>Crown brush"
       lore:
@@ -452,59 +528,137 @@ locales:
     book:
       guide:
         - "<prefix><white><bold>Build-book guide"
-        - "<dark_gray>  1. <aqua>/builder wand <gray>and mark two corners; particles stay visible."
-        - "<dark_gray>  2. <aqua>/builder copy <gray>to save a safe 15-minute clipboard."
-        - "<dark_gray>  3. Hold a plain book and use <aqua>/builder book draft [name]</aqua>."
-        - "<dark_gray>  4. Right-click ground to preview; right-click air to rotate or offset."
-        - "<dark_gray>  5. <aqua>/builder book activate <gray>shows the full quote without charging."
-        - "<dark_gray>  6. <aqua>/builder book confirm <gray>pays and registers one single-use instance."
-        - "<dark_gray>  7. Copy it at the same stored cost or sell it with <aqua>/ah sell [price]</aqua>."
-        - "<dark_gray>  • <aqua>/builder book status <gray>shows only your current step and next action."
+        - "<dark_gray>  1. <aqua>/builder wand <gray>— get the selector."
+        - "<dark_gray>     <gray>Mark two corners; the outline stays visible."
+        - "<dark_gray>  2. <aqua>/builder copy <gray>— save it for 15 minutes."
+        - "<dark_gray>  3. <gray>Hold a plain book."
+        - "<dark_gray>     <aqua>/builder book draft [name] <gray>— free draft."
+        - "<dark_gray>  4. <gray>Right-click ground — preview."
+        - "<dark_gray>     <gray>Right-click air — rotate or offset."
+        - "<dark_gray>  5. <aqua>/builder book activate <gray>— quote, no charge."
+        - "<dark_gray>  6. <aqua>/builder book confirm <gray>— pay and activate."
+        - "<dark_gray>  7. <aqua>/builder book copy <gray>— copy at stored cost."
+        - "<dark_gray>     <aqua>/builder book sell [price] <gray>— sell."
+        - "<dark_gray>  • <aqua>/builder book status <gray>— your current step."
       status:
-        start: "<prefix><yellow>Step 1/7: use <aqua>/builder wand</aqua>, then left- and right-click the two corners."
-        selection: "<prefix><green>Step 2/7: selected <white><x>×<y>×<z></white> (<volume> blocks). Run <aqua>/builder copy</aqua>."
-        clipboard: "<prefix><green>Step 3/7: <white><count></white> blocks copied. Hold a plain book and use <aqua>/builder book draft [name]</aqua>."
-        draft: "<prefix><green>Step 4/7: draft <white><name></white> is ready. Right-click ground to preview; right-click air to edit."
-        preview: "<prefix><green>Step 5/7: preview <white><name></white> is continuously visible. Use <aqua>/builder book activate</aqua> when ready."
-        quote: "<prefix><yellow>Step 6/7: quote <green><price></green>. Use <aqua>/builder book confirm</aqua> within <white><seconds></white> seconds."
-        delivery: "<prefix><yellow>Step 7/7: the paid instance is being verified. Do not move it; delivery resumes automatically."
-        active: "<prefix><green>Ready: <white><name></white> is active; another instance costs <white><price></white>. Preview it, use <aqua>/builder book copy</aqua>, or sell with <aqua>/ah sell [price]</aqua>."
-      draft-created: "<prefix><green>Draft <white><name></white> created from <white><count></white> blocks. <gray>No money was charged. Preview it, adjust it, then use <white>/builder book activate</white>."
-      material-required: "<prefix><yellow>Hold a plain book in your main hand. It will become the build book."
+        start: |-
+          <prefix><yellow>Step 1/7: select the build area.
+          <dark_gray>  • <aqua>/builder wand <gray>— selector.
+          <dark_gray>  • <gray>Left/right-click the two corners.
+        selection: |-
+          <prefix><green>Step 2/7: area selected.
+          <dark_gray>  • <gray>Size: <white><x>×<y>×<z></white> • <volume> blocks
+          <dark_gray>  • <aqua>/builder copy <gray>— save it.
+        clipboard: |-
+          <prefix><green>Step 3/7: <white><count></white> blocks copied.
+          <dark_gray>  • <gray>Hold a plain book.
+          <dark_gray>  • <aqua>/builder book draft [name] <gray>— create draft.
+        draft: |-
+          <prefix><green>Step 4/7: free draft ready.
+          <dark_gray>  • <gray>Name: <white><name>
+          <dark_gray>  • <gray>Right-click ground — preview.
+          <dark_gray>  • <gray>Right-click air — edit position.
+        preview: |-
+          <prefix><green>Step 5/7: preview is open.
+          <dark_gray>  • <gray>The outline updates continuously.
+          <dark_gray>  • <aqua>/builder book activate <gray>— calculate quote.
+        quote: |-
+          <prefix><yellow>Step 6/7: quote <green><price></green>.
+          <dark_gray>  • <aqua>/builder book confirm <gray>— pay within <seconds>s.
+        delivery: |-
+          <prefix><yellow>Step 7/7: verifying payment.
+          <dark_gray>  • <gray>Do not move the book.
+          <dark_gray>  • <gray>Delivery resumes automatically.
+        active: |-
+          <prefix><green>Ready: <white><name></white> is active.
+          <dark_gray>  • <gray>New instance: <white><price>
+          <dark_gray>  • <aqua>/builder book copy <gray>— copy.
+          <dark_gray>  • <aqua>/builder book sell [price] <gray>— sell.
+      draft-created: |-
+        <prefix><green>Draft <white><name></white> created.
+        <dark_gray>  • <gray><count> blocks • no charge
+        <dark_gray>  • <gray>Preview and adjust it.
+        <dark_gray>  • <aqua>/builder book activate <gray>— calculate quote.
+      material-required: "<prefix><yellow>Hold a plain book in your main hand."
       inventory-full: "<prefix><yellow>Free one slot or hold a single plain book."
-      invalid-name: "<prefix><red>A book name must contain 1 to 48 ordinary characters."
-      limit: "<prefix><yellow>You reached the permanent-blueprint limit. You can still bind the same copied design again."
-      failed: "<prefix><red>The book could not be saved. The world and inventory were not changed."
+      invalid-name: "<prefix><red>Use 1–48 ordinary characters for the name."
+      limit: |-
+        <prefix><yellow>Permanent-blueprint limit reached.
+        <dark_gray>  • <gray>You may bind the same copied design again.
+      failed: |-
+        <prefix><red>The book could not be saved.
+        <dark_gray>  • <gray>The world and inventory are unchanged.
       invalid: "<prefix><red>This player build book is damaged or unavailable."
-      missing: "<prefix><yellow>Keep the exact book used for this preview in your inventory."
+      missing: "<prefix><yellow>Keep the preview book in your inventory."
       draft-required: "<prefix><yellow>Hold a free build-book draft in your main hand."
       active-required: "<prefix><yellow>Hold a registered build book in your main hand."
       creator-only: "<prefix><yellow>The draft author must approve its first activation."
-      unactivated: "<prefix><yellow>This is a preview-only draft. Check it, then use <white>/builder book activate</white>."
-      duplicate: "<prefix><red>This instance is already reserved, consumed, revoked, or duplicated. Only one authoritative UUID can win."
-      source-changed: "<prefix><yellow>The held book changed after the quote. Request a new quote."
+      unactivated: |-
+        <prefix><yellow>This draft is preview-only.
+        <dark_gray>  • <aqua>/builder book activate <gray>— calculate quote.
+      duplicate: |-
+        <prefix><red>This UUID is reserved or already spent.
+        <dark_gray>  • <gray>Only one physical instance may act.
+      source-changed: "<prefix><yellow>The book changed. Request a new quote."
       contracts-disabled: "<prefix><yellow>Player book activation is disabled on this server."
-      registry-starting: "<prefix><yellow>The book registry is starting. Try again in a few seconds."
-      registry-unavailable: "<prefix><red>The book registry is temporarily unavailable. No new charge was made, or the operation stopped safely."
+      registry-starting: "<prefix><yellow>The registry is starting. Try again shortly."
+      registry-unavailable: |-
+        <prefix><red>The book registry is unavailable.
+        <dark_gray>  • <gray>No new charge was made.
       shop-unavailable: "<prefix><yellow>Could not read material prices from the admin shop."
       material-unavailable: "<prefix><yellow>The admin shop does not sell: <white><materials></white>."
       price-limit: "<prefix><red>The estimate exceeds the safe book-price limit."
       quote-kind:
         activation: "draft activation"
         copy: "new registered instance"
-      quote: "<prefix><white><kind></white> • <white><name></white>\n<dark_gray>  • <gray>Materials: <aqua><materials></aqua> • construction: <aqua><labor></aqua>\n<dark_gray>  • <gray>Total: <green><price></green> • <blocks> blocks, <items> items, <types> types\n<dark_gray>  • <click:run_command:'/builder book confirm'><aqua>/builder book confirm</aqua></click> <gray>— pay within <white><seconds></white> seconds"
-      quote-expired: "<prefix><yellow>The quote is missing or expired. Run activate/copy again."
+      quote: "<prefix><white><kind></white> • <white><name></white>\n<dark_gray>  • <gray>Materials: <aqua><materials></aqua> • construction: <aqua><labor></aqua>\n<dark_gray>  • <gray>Total: <green><price></green>\n<dark_gray>  • <gray><blocks> blocks • <items> items • <types> types\n<dark_gray>  • <click:run_command:'/builder book confirm'><aqua>/builder book confirm</aqua></click> <gray>— pay within <white><seconds></white> seconds"
+      quote-expired: "<prefix><yellow>Quote expired. Run activate or copy again."
       quote-cancelled: "<prefix><gray>Quote cancelled. No money was charged."
       economy-unavailable: "<prefix><red>The economy is unavailable. No money was charged."
-      insufficient-funds: "<prefix><yellow>You cannot afford this activation. Your source book remains unchanged."
-      payment-failed: "<prefix><red>The payment was rejected. The book was not activated."
-      refunded: "<prefix><yellow>The instance could not be issued, so the full amount was refunded."
-      manual-review: "<prefix><red>The operation stopped for safe review. Do not move the book; ARC will not charge it again."
-      delivery-space: "<prefix><yellow>Your paid book is waiting for one free slot. <gray>Free space; delivery resumes automatically."
-      delivery-pending: "<prefix><yellow>The book exists, but the registry is still confirming delivery. Your inventory is temporarily protected."
-      delivery-recovered: "<prefix><green>Your paid build book was safely recovered and is active."
-      activated: "<prefix><green>The build book is active and registered. <gray>Each instance is single-use; paid copies keep this stored self-cost."
-      copied: "<prefix><green>A new instance is registered. <gray>The source remains yours; the copy has its own single-use UUID."
+      insufficient-funds: "<prefix><yellow>Not enough money. Your draft is unchanged."
+      payment-failed: "<prefix><red>Payment rejected. The book is unchanged."
+      refunded: |-
+        <prefix><yellow>The instance could not be issued.
+        <dark_gray>  • <gray>The full amount was refunded.
+      manual-review: |-
+        <prefix><red>The operation stopped for review.
+        <dark_gray>  • <gray>Do not move the book.
+        <dark_gray>  • <gray>ARC will not charge it again.
+      delivery-space: |-
+        <prefix><yellow>Your paid book needs one free slot.
+        <dark_gray>  • <gray>Free space; delivery will resume.
+      delivery-pending: |-
+        <prefix><yellow>The registry is confirming delivery.
+        <dark_gray>  • <gray>Your inventory is temporarily protected.
+      delivery-recovered: "<prefix><green>Your paid book is recovered and active."
+      activated: |-
+        <prefix><green>The build book is active and registered.
+        <dark_gray>  • <gray>Each instance is single-use.
+        <dark_gray>  • <gray>Copies use the same stored cost.
+      copied: |-
+        <prefix><green>A new instance is registered.
+        <dark_gray>  • <gray>The source remains yours.
+        <dark_gray>  • <gray>The copy has its own one-use UUID.
+      auction-price: "<prefix><yellow>Enter a sale price: <aqua>/builder book sell [price]</aqua>."
+      auction-unavailable: "<prefix><red>Auction unavailable; your book is unchanged."
+      auction-locked: |-
+        <prefix><yellow>This book is reserved by the auction.
+        <dark_gray>  • <gray>Claim it from sold or expired listings first.
+      auction-use-safe-command: |-
+        <prefix><yellow>Build books use a protected sale route.
+        <dark_gray>  • <aqua>/builder book sell [price]
+      auction-listed: |-
+        <prefix><green>Book listed for <white><price></white>.
+        <dark_gray>  • <gray>Its UUID stays locked until delivery or return.
+      auction-listed-late: "<prefix><green>Delayed listing confirmed; the book is on sale."
+      auction-rejected: |-
+        <prefix><yellow>Listing rejected; your book was returned.
+        <dark_gray>  • <gray>Check the price, tax, and listing limit.
+      auction-review: |-
+        <prefix><red>The listing is under safe review.
+        <dark_gray>  • <gray>Do not move or retry; its UUID stays locked.
+      auction-returned: "<prefix><green>The returned auction book is active again."
+      auction-received: "<prefix><green>The auction book was received and is active again."
     plan:
       ready: "<prefix><green><white><kind></white> plan: <white><count></white> blocks. <gray>Cost: <white><cost></white>; result: <white><reward></white>. Check the particles and enter <click:run_command:'/builder confirm'><aqua>/builder confirm</aqua></click> within <seconds> seconds."
       market:

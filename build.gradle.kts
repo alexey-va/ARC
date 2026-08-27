@@ -107,7 +107,10 @@ dependencies {
     compileOnly(libs.io.josemmo.yamipa)
     compileOnly(libs.net.luckperms.api)
     compileOnly(libs.fr.black.eyes.lootchest)
-    compileOnly(libs.fr.maxlego08.zauctionhouse)
+    // Exact API extracted from the active zAuctionHouse 4.0.1.2 release; the
+    // upstream project does not publish this release to Maven repositories.
+    // This remains compile-only and is never shaded into ARC.
+    compileOnly(files("libs/zauctionhouse-api-4.0.1.2.jar"))
     compileOnly(libs.com.github.zrips.jobs)
     compileOnly(libs.bank.bank)
     // Exact private mirror of the active RedisEconomy runtime; never shaded.

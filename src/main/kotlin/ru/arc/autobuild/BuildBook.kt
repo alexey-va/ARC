@@ -283,6 +283,13 @@ object BuildBookCodec {
 }
 
 object BuildBookItems {
+    internal fun compactTitle(title: String, maximumCodePoints: Int = 28): String {
+        require(maximumCodePoints > 0) { "Build-book display title limit must be positive" }
+        if (title.codePointCount(0, title.length) <= maximumCodePoints) return title
+        val end = title.offsetByCodePoints(0, maximumCodePoints)
+        return title.substring(0, end).trimEnd() + "…"
+    }
+
     fun create(data: BuildBookData, modelId: Int = BuildBookSettings.customModelData): ItemStack =
         ItemStack(Material.BOOK).also { item ->
             BuildBookCodec.write(item, data)
@@ -292,7 +299,11 @@ object BuildBookItems {
     fun refreshAppearance(item: ItemStack, data: BuildBookData, modelId: Int? = null) {
         val config = ConfigManager.ofModule(ARC.instance.dataPath, "auto-build.yml")
         item.editMeta { meta ->
-            strip(config.component("build-book.display-name", "<#92bed8><bold>Книга строительства"))?.let(meta::displayName)
+            strip(
+                config.component("build-book.display-name", "<#92bed8><bold><name>") {
+                    tag("name", Component.text(compactTitle(data.title)))
+                },
+            )?.let(meta::displayName)
             meta.lore(
                 config.componentList("build-book.lore") {
                     tag("name", Component.text(data.title))
@@ -316,10 +327,11 @@ object BuildBookItems {
                     tag(
                         "price",
                         Component.text(
-                            data.issuePriceMinor?.let { String.format(Locale.US, "%,.2f", it.minorToDouble()) } ?: "—",
+                            data.issuePriceMinor?.let { String.format(Locale.US, "%,.2f", it.minorToDouble()) }
+                                ?: "после проверки",
                         ),
                     )
-                    tag("instance", Component.text(data.instanceId?.toString()?.take(8) ?: "—"))
+                    tag("instance", Component.text(data.instanceId?.toString()?.take(8) ?: "после активации"))
                 }.mapNotNull(::strip),
             )
             @Suppress("DEPRECATION")

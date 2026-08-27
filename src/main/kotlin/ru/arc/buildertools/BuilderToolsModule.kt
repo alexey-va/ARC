@@ -53,6 +53,10 @@ object BuilderToolsModule : PluginModule, CommandExecutor, TabCompleter {
     fun startPlayerBuildBook(player: Player, site: ConstructionSite, book: ItemStack): Boolean =
         runtime?.startPlayerBuildBook(player, site, book) ?: false
 
+    fun rejectUnsafeAuctionSale(player: Player) {
+        runtime?.rejectUnsafeAuctionSale(player)
+    }
+
     private fun bindCommands() {
         val command = ARC.instance.getCommand("builder")
         if (command == null) {

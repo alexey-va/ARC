@@ -6,19 +6,18 @@
 # Тик интервала очистки «зависших» построек
 cleanup-interval: 20
 build-book:
-  display-name: '<#92bed8><bold>Книга строительства'
+  display-name: '<#92bed8><bold><name>'
   lore:
-    - '<#e6fff3><bold><name>'
+    - '<#969696>Книга строительства <#8c8c8c>• <#92bed8><state>'
     - ''
-    - '<#8c8c8c>Статус: <#92bed8><state>'
     - '<#8c8c8c>Автор: <#e6fff3><creator>'
-    - '<#8c8c8c>Стоимость выпуска: <#2bba43><price>'
-    - '<#8c8c8c>Экземпляр: <#969696><instance>'
+    - '<#8c8c8c>Объём: <#e6fff3><blocks> блоков'
+    - '<#8c8c8c>Выпуск: <#2bba43><price>'
+    - '<#8c8c8c>ID экземпляра: <#969696><instance>'
     - ''
-    - '<#8c8c8c>Блоков: <#e6fff3><blocks> <#8c8c8c>• <#e6fff3><rotation>°'
-    - '<#8c8c8c>Смещение: <#e6fff3><offset_x>, <offset_y>, <offset_z>'
+    - '<#8c8c8c>Поворот: <#e6fff3><rotation>° <#8c8c8c>• смещение: <#e6fff3><offset_x>, <offset_y>, <offset_z>'
     - ''
-    - '<#8c8c8c>• <#92bed8>ПКМ по земле<#e6fff3> — показать'
+    - '<#8c8c8c>• <#92bed8>ПКМ по земле<#e6fff3> — показать превью'
     - '<#8c8c8c>• <#92bed8>ПКМ в воздух<#e6fff3> — настроить'
   received: '<#92bed8>◇ <#2bba43>Книга строительства создана: <#e6fff3><building>'
   player-copy:

@@ -89,7 +89,7 @@ class HookRegistry(
 
         @JvmField var lootChestHook: LootChestHook? = null
 
-        @JvmField var auctionHook: AuctionHook? = null
+        @JvmField internal var auctionHook: AuctionHook? = null
 
         @JvmField var translatorHook: TranslatorHook? = null
 
@@ -310,7 +310,7 @@ class HookRegistry(
                 val hook = AuctionHook()
                 try {
                     hook.start()
-                    registerListener(AuctionTrophyGuardListener())
+                    registerListener(AuctionTrophyGuardListener(hook))
                     registerListener(AuctionSaleNotifier(hook))
                     auctionHook = hook
                 } catch (failure: Throwable) {

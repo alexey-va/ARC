@@ -21,6 +21,8 @@ softdepend:
   - Slimefun
   - EconomyShopGUI-Premium
   - AutoSellChests
+  - zAuctionHouse
+  - zAuctionHouseV3
   - AdvancedEnchantments
   - ItemsAdder
   - ProtocolLib
@@ -120,9 +122,13 @@ permissions:
     default: false
     children:
       arc.build.book.edit: true
+      arc.build.book.sell: true
       arc.build.book.use: true
   arc.build.book.edit:
     description: Edit build-book rotation and offsets
+    default: false
+  arc.build.book.sell:
+    description: Safely list registered build books on the auction
     default: false
   arc.build.book.use:
     description: Preview and construct ARC build books

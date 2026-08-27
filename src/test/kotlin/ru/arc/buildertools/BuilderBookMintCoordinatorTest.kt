@@ -254,5 +254,17 @@ private class FakeBookRegistry : BuilderBookRegistry {
     override fun consume(instanceId: UUID, operationId: UUID, now: Long) = CompletableFuture.completedFuture(false)
     override fun release(instanceId: UUID, operationId: UUID) = CompletableFuture.completedFuture(false)
     override fun reservedForServer(serverName: String) = CompletableFuture.completedFuture<List<BuilderBookInstance>>(emptyList())
+    override fun reserveForAuction(
+        instanceId: UUID,
+        expectedBlueprintId: UUID,
+        expectedBuildingId: String,
+        expectedSchematicSha256: String,
+        leaseId: UUID,
+        sellerId: UUID,
+        serverName: String,
+        now: Long,
+    ) = CompletableFuture.completedFuture<BuilderBookAuctionReservationResult>(BuilderBookAuctionReservationResult.Missing)
+    override fun releaseFromAuction(instanceId: UUID, leaseId: UUID) = CompletableFuture.completedFuture(false)
+    override fun listedForServer(serverName: String) = CompletableFuture.completedFuture<List<BuilderBookInstance>>(emptyList())
     override fun close() = Unit
 }

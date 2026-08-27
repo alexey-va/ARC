@@ -25,6 +25,7 @@ internal enum class BuilderBookInstanceStatus {
     PENDING_DELIVERY,
     AVAILABLE,
     RESERVED,
+    LISTED,
     CONSUMED,
     REVOKED,
 }
@@ -109,7 +110,7 @@ internal data class BuilderBookInstance(
         require(reservationValues.all { it == null } || reservationValues.all { it != null }) {
             "Builder-book reservation fields must be present together"
         }
-        require((status == BuilderBookInstanceStatus.RESERVED) == (reservationOperationId != null)) {
+        require((status in RESERVATION_STATUSES) == (reservationOperationId != null)) {
             "Builder-book reservation fields do not match status"
         }
         reservationServer?.let {
@@ -122,6 +123,10 @@ internal data class BuilderBookInstance(
 
     private companion object {
         val SERVER_NAME = Regex("[A-Za-z0-9_.-]{1,64}")
+        val RESERVATION_STATUSES = setOf(
+            BuilderBookInstanceStatus.RESERVED,
+            BuilderBookInstanceStatus.LISTED,
+        )
     }
 }
 
@@ -273,4 +278,11 @@ internal sealed interface BuilderBookReservationResult {
     data object Missing : BuilderBookReservationResult
     data object Unavailable : BuilderBookReservationResult
     data object Mismatch : BuilderBookReservationResult
+}
+
+internal sealed interface BuilderBookAuctionReservationResult {
+    data class Reserved(val blueprint: BuilderBookBlueprint) : BuilderBookAuctionReservationResult
+    data object Missing : BuilderBookAuctionReservationResult
+    data object Unavailable : BuilderBookAuctionReservationResult
+    data object Mismatch : BuilderBookAuctionReservationResult
 }

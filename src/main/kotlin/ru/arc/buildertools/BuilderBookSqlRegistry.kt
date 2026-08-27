@@ -39,6 +39,18 @@ internal interface BuilderBookRegistry : AutoCloseable {
     fun consume(instanceId: UUID, operationId: UUID, now: Long): CompletableFuture<Boolean>
     fun release(instanceId: UUID, operationId: UUID): CompletableFuture<Boolean>
     fun reservedForServer(serverName: String): CompletableFuture<List<BuilderBookInstance>>
+    fun reserveForAuction(
+        instanceId: UUID,
+        expectedBlueprintId: UUID,
+        expectedBuildingId: String,
+        expectedSchematicSha256: String,
+        leaseId: UUID,
+        sellerId: UUID,
+        serverName: String,
+        now: Long,
+    ): CompletableFuture<BuilderBookAuctionReservationResult>
+    fun releaseFromAuction(instanceId: UUID, leaseId: UUID): CompletableFuture<Boolean>
+    fun listedForServer(serverName: String): CompletableFuture<List<BuilderBookInstance>>
     fun loadMint(transactionId: UUID): CompletableFuture<BuilderBookMint?>
 }
 
@@ -337,6 +349,72 @@ internal class BuilderBookSqlRegistry(
     override fun reservedForServer(serverName: String): CompletableFuture<List<BuilderBookInstance>> = runtime.executor.read { connection ->
         connection.prepareStatement(
             "SELECT * FROM arc_builder_book_instances WHERE status = 'RESERVED' AND reservation_server = ? " +
+                "ORDER BY reserved_at_ms",
+        ).use { statement ->
+            statement.setString(1, serverName)
+            statement.executeQuery().use { result -> buildList { while (result.next()) add(result.readInstance()) } }
+        }
+    }
+
+    override fun reserveForAuction(
+        instanceId: UUID,
+        expectedBlueprintId: UUID,
+        expectedBuildingId: String,
+        expectedSchematicSha256: String,
+        leaseId: UUID,
+        sellerId: UUID,
+        serverName: String,
+        now: Long,
+    ): CompletableFuture<BuilderBookAuctionReservationResult> = runtime.executor.transaction { connection ->
+        val instance = loadInstance(connection, instanceId, true)
+            ?: return@transaction BuilderBookAuctionReservationResult.Missing
+        if (instance.blueprintId != expectedBlueprintId) {
+            return@transaction BuilderBookAuctionReservationResult.Mismatch
+        }
+        val blueprint = loadBlueprint(connection, expectedBlueprintId, true)
+            ?: return@transaction BuilderBookAuctionReservationResult.Missing
+        if (blueprint.buildingId != expectedBuildingId || blueprint.schematicSha256 != expectedSchematicSha256) {
+            return@transaction BuilderBookAuctionReservationResult.Mismatch
+        }
+        if (instance.status != BuilderBookInstanceStatus.AVAILABLE) {
+            return@transaction BuilderBookAuctionReservationResult.Unavailable
+        }
+        require(serverName.matches(Regex("[A-Za-z0-9_.-]{1,64}"))) { "Builder-book server name is invalid" }
+        connection.prepareStatement(
+            "UPDATE arc_builder_book_instances SET status = 'LISTED', reservation_operation_uuid = ?, " +
+                "reservation_player_uuid = ?, reservation_server = ?, reserved_at_ms = ? " +
+                "WHERE instance_uuid = ? AND status = 'AVAILABLE'",
+        ).use { statement ->
+            statement.setString(1, leaseId.toString())
+            statement.setString(2, sellerId.toString())
+            statement.setString(3, serverName)
+            statement.setLong(4, now)
+            statement.setString(5, instanceId.toString())
+            if (statement.executeUpdate() != 1) BuilderBookAuctionReservationResult.Unavailable
+            else BuilderBookAuctionReservationResult.Reserved(blueprint)
+        }
+    }
+
+    override fun releaseFromAuction(instanceId: UUID, leaseId: UUID): CompletableFuture<Boolean> =
+        runtime.executor.transaction { connection ->
+            val current = loadInstance(connection, instanceId, true) ?: return@transaction false
+            if (current.status != BuilderBookInstanceStatus.LISTED || current.reservationOperationId != leaseId) {
+                return@transaction false
+            }
+            connection.prepareStatement(
+                "UPDATE arc_builder_book_instances SET status = 'AVAILABLE', reservation_operation_uuid = NULL, " +
+                    "reservation_player_uuid = NULL, reservation_server = NULL, reserved_at_ms = NULL " +
+                    "WHERE instance_uuid = ? AND status = 'LISTED' AND reservation_operation_uuid = ?",
+            ).use { statement ->
+                statement.setString(1, instanceId.toString())
+                statement.setString(2, leaseId.toString())
+                statement.executeUpdate() == 1
+            }
+        }
+
+    override fun listedForServer(serverName: String): CompletableFuture<List<BuilderBookInstance>> = runtime.executor.read { connection ->
+        connection.prepareStatement(
+            "SELECT * FROM arc_builder_book_instances WHERE status = 'LISTED' AND reservation_server = ? " +
                 "ORDER BY reserved_at_ms",
         ).use { statement ->
             statement.setString(1, serverName)

@@ -16,6 +16,7 @@ import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
 import ru.arc.autobuild.BuildBookCodec
 import ru.arc.autobuild.BuildBookData
+import ru.arc.autobuild.BuildBookItems
 import ru.arc.autobuild.BuildBookSettings
 import ru.arc.autobuild.BuildBookTransform
 import ru.arc.autobuild.BuildingManager
@@ -87,7 +88,7 @@ object BuildBookEditorGui {
     private fun overview(data: BuildBookData): GuiItem = item(
         Material.BOOK,
         config.component("build-book.editor.overview.name", "<#92bed8><bold><name>") {
-            tag("name", Component.text(data.title))
+            tag("name", Component.text(BuildBookItems.compactTitle(data.title)))
         },
         config.componentList("build-book.editor.overview.lore") {
             tag("name", Component.text(data.title))

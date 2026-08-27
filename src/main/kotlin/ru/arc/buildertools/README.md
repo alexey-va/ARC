@@ -32,7 +32,9 @@
 - Holding a registered book, `/builder book copy` shows the same stored
   self-cost and `/builder book confirm` pays for a new instance with a new UUID.
   ARC does not own a blueprint marketplace: the physical registered book is
-  transferable and may be listed in zAuctionHouse at any seller-selected price.
+  transferable and may be listed in zAuctionHouse at any seller-selected price
+  through `/builder book sell <price>`. Ordinary `/ah sell` paths reject player
+  build books so the UUID lease cannot be bypassed by zAuctionHouse's sell GUI.
 - `/builder deconstruct`: requires one preferred held tool for the whole
   selection, checks worst-case remaining durability, calculates drops once,
   damages the real tool, and requires all exact drops to fit the inventory.
@@ -113,6 +115,18 @@ authority. Before the local journal is created, `AVAILABLE -> RESERVED` is an
 atomic compare-and-set. A committed build changes it to `CONSUMED`; rollback
 returns it to `AVAILABLE`. Two duplicated items carrying the same instance UUID
 therefore cannot both build, copy, or reserve concurrently.
+
+Auction listing adds a separate `AVAILABLE -> LISTED` compare-and-set and an
+exact lease UUID copied into the auction ItemStack. The zAuctionHouse blacklist
+rule blocks drafts and registered books from every ordinary sell path; the
+protected command authorizes only the exact token during synchronous listing
+validation. The guard also inspects bounded shulker and bundle contents, so a
+book cannot bypass the safe route inside a container. Listed, purchased, and
+expired storage retain the lease. A return or buyer claim releases only the
+matching lease and removes its token from the delivered item. Online recovery
+rechecks unresolved tokenized items every five seconds with rate-limited retries;
+timeouts and missing delivery evidence remain `LISTED` and fail-closed instead
+of making a second physical copy usable.
 
 Book payment is separately journaled before touching RedisEconomy. Provider
 calls are never blindly retried. Startup reconciles the exact transaction

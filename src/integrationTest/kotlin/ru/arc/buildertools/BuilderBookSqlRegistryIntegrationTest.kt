@@ -120,6 +120,34 @@ class BuilderBookSqlRegistryIntegrationTest : StringSpec({
                 registry.release(sourceMint.instanceId, copyTransaction).await() shouldBe true
                 registry.loadInstance(sourceMint.instanceId).await()?.status shouldBe BuilderBookInstanceStatus.AVAILABLE
 
+                val auctionLease = UUID.randomUUID()
+                registry.reserveForAuction(
+                    sourceMint.instanceId,
+                    sourceMint.blueprint.blueprintId,
+                    sourceMint.blueprint.buildingId,
+                    sourceMint.blueprint.schematicSha256,
+                    auctionLease,
+                    copyPlayer,
+                    "survival",
+                    50L,
+                ).await() shouldBe BuilderBookAuctionReservationResult.Reserved(sourceMint.blueprint)
+                registry.loadInstance(sourceMint.instanceId).await()?.status shouldBe BuilderBookInstanceStatus.LISTED
+                registry.listedForServer("survival").await().map { it.instanceId } shouldBe listOf(sourceMint.instanceId)
+                registry.reserve(
+                    sourceMint.instanceId,
+                    sourceMint.blueprint.blueprintId,
+                    sourceMint.blueprint.buildingId,
+                    sourceMint.blueprint.schematicSha256,
+                    UUID.randomUUID(),
+                    copyPlayer,
+                    "survival",
+                    51L,
+                ).await() shouldBe BuilderBookReservationResult.Unavailable
+                registry.releaseFromAuction(sourceMint.instanceId, UUID.randomUUID()).await() shouldBe false
+                registry.releaseFromAuction(sourceMint.instanceId, auctionLease).await() shouldBe true
+                registry.loadInstance(sourceMint.instanceId).await()?.status shouldBe BuilderBookInstanceStatus.AVAILABLE
+                registry.releaseFromAuction(sourceMint.instanceId, auctionLease).await() shouldBe false
+
                 val firstMint = preparedMint(openMintPlayer)
                 val secondMint = preparedMint(playerId = firstMint.playerId)
                 val mintOutcomes = listOf(registry.prepareMint(firstMint), registry.prepareMint(secondMint)).map { it.await() }

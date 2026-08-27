@@ -29,7 +29,6 @@ de-tr7zw-item-nbt-api = "2.15.7"
 dev-aurelium-auraskills-api-bukkit = "2.0.0"
 dev-espi-protectionstones = "2.10.2"
 fr-black-eyes-lootchest = "2.5.1"
-fr-maxlego08-zauctionhouse = "4.0.0.7"
 io-josemmo-yamipa = "1.3"
 io-lettuce-lettuce-core = "6.3.2.RELEASE"
 io-papermc-paper-paper-api = "26.1.2.build.+"
@@ -78,7 +77,6 @@ de-tr7zw-item-nbt-api = { module = "de.tr7zw:item-nbt-api", version.ref = "de-tr
 dev-aurelium-auraskills-api-bukkit = { module = "dev.aurelium:auraskills-api-bukkit", version.ref = "dev-aurelium-auraskills-api-bukkit" }
 dev-espi-protectionstones = { module = "dev.espi:protectionstones", version.ref = "dev-espi-protectionstones" }
 fr-black-eyes-lootchest = { module = "fr.black_eyes:LootChest", version.ref = "fr-black-eyes-lootchest" }
-fr-maxlego08-zauctionhouse = { module = "fr.maxlego08:zAuctionHouse", version.ref = "fr-maxlego08-zauctionhouse" }
 io-josemmo-yamipa = { module = "io.josemmo:Yamipa", version.ref = "io-josemmo-yamipa" }
 io-lettuce-lettuce-core = { module = "io.lettuce:lettuce-core", version.ref = "io-lettuce-lettuce-core" }
 io-papermc-paper-paper-api = { module = "io.papermc.paper:paper-api", version.ref = "io-papermc-paper-paper-api" }

@@ -154,6 +154,22 @@ internal class BuilderToolsRuntime(
     private val recoveryByPlayer = mutableMapOf<UUID, BuilderJournalRecord>()
     private val consumedUndoSources = mutableSetOf<UUID>()
     private val previewFailurePlayers = mutableSetOf<UUID>()
+    private val bookAuctionCoordinator: BuilderBookAuctionCoordinator? = bookRegistry?.let { registry ->
+        val serverName = ARC.serverName ?: return@let null
+        BuilderBookAuctionCoordinator(
+            registry = registry,
+            portProvider = { HookRegistry.auctionHook },
+            serverName = serverName,
+            runSync = { action -> taskScope.runSync(action) },
+            send = { player, path, values ->
+                send(player, path, values.mapValues { (_, value) -> messages.literal(value) })
+            },
+            lock = { playerId ->
+                if (isPlayerLocked(playerId)) false else bookLockedPlayers.add(playerId)
+            },
+            unlock = { playerId -> bookLockedPlayers.remove(playerId) },
+        )
+    }
     private var recovering = true
     private var recoveryBlocked = false
     private var bookRegistryReady = !config.bookContractsEnabled
@@ -176,6 +192,11 @@ internal class BuilderToolsRuntime(
                         .mapNotNull(Bukkit::getPlayer)
                         .filter(Player::isOnline)
                         .forEach(::recoverBookDeliveries)
+                    if (bookRegistryReady) {
+                        Bukkit.getOnlinePlayers().forEach { player ->
+                            bookAuctionCoordinator?.onPlayerAvailable(player)
+                        }
+                    }
                 },
             ) { "Builder-book delivery retry task was not scheduled" }
         }
@@ -217,7 +238,7 @@ internal class BuilderToolsRuntime(
         }
         if (args.size == 2 && args[0].equals("confirm", true)) return filterPrefix(listOf("buy"), args[1])
         if (args.size == 2 && args[0].equals("book", true)) {
-            return filterPrefix(listOf("guide", "status", "draft", "activate", "copy", "confirm", "cancel"), args[1])
+            return filterPrefix(listOf("guide", "status", "draft", "activate", "copy", "sell", "confirm", "cancel"), args[1])
         }
         if (args.firstOrNull().equals("crown", true)) {
             if (args.size == 2) {
@@ -557,6 +578,7 @@ internal class BuilderToolsRuntime(
             "draft" -> createBuildBookDraft(player, args.drop(1))
             "activate" -> prepareBuildBookActivation(player)
             "copy" -> prepareBuildBookCopy(player)
+            "sell" -> sellBuildBook(player, args.getOrNull(1))
             "confirm" -> confirmBuildBookMint(player)
             "cancel" -> cancelBuildBookMint(player)
             else -> showBuildBookGuide(player)
@@ -574,6 +596,7 @@ internal class BuilderToolsRuntime(
         val quote = pendingBookMints[playerId]?.takeIf { it.expiresAtMillis > now }
         if (quote == null) pendingBookMints.remove(playerId)
         val held = BuildBookCodec.read(player.inventory.itemInMainHand)
+        val heldAuctionToken = BuilderBookAuctionTokenCodec.read(player.inventory.itemInMainHand)
         val previewOpen = BuildingManager.getPendingConstruction(playerId) != null
         val clipboard = clipboards[playerId]?.takeIf { it.expiresAtMillis > now }
         val selection = selectionOrNull(player)
@@ -587,6 +610,7 @@ internal class BuilderToolsRuntime(
                 ),
             )
             held?.deliveryPending == true -> send(player, "book.status.delivery")
+            heldAuctionToken != null -> send(player, "book.auction-locked")
             held?.draft == true && previewOpen -> send(
                 player,
                 "book.status.preview",
@@ -736,6 +760,7 @@ internal class BuilderToolsRuntime(
         val held = player.inventory.itemInMainHand
         val data = BuildBookCodec.read(held)?.takeIf { it.available } ?: throw UserFailure("book.active-required")
         if (held.amount != 1) throw UserFailure("book.duplicate")
+        if (BuilderBookAuctionTokenCodec.read(held) != null) throw UserFailure("book.auction-locked")
         if (player.inventory.firstEmpty() == -1) throw UserFailure("book.inventory-full")
         verifyBookSchematic(data)
         val instanceId = checkNotNull(data.instanceId)
@@ -774,6 +799,20 @@ internal class BuilderToolsRuntime(
                 }
             }
         }
+    }
+
+    private fun sellBuildBook(player: Player, rawPrice: String?) {
+        if (!player.hasPermission("arc.build.book.sell")) throw UserFailure("errors.no-permission")
+        requireBookRegistry()
+        if (isPlayerLocked(player.uniqueId)) throw UserFailure("errors.busy")
+        val price = BuilderBookAuctionPrice.parse(rawPrice) ?: throw UserFailure("book.auction-price")
+        val held = player.inventory.itemInMainHand
+        val data = BuildBookCodec.read(held)?.takeIf { it.available } ?: throw UserFailure("book.active-required")
+        if (held.amount != 1) throw UserFailure("book.duplicate")
+        if (BuilderBookAuctionTokenCodec.read(held) != null) throw UserFailure("book.auction-locked")
+        verifyBookSchematic(data)
+        val coordinator = bookAuctionCoordinator ?: throw UserFailure("book.auction-unavailable")
+        coordinator.sell(player, data, held.clone(), price)
     }
 
     private fun confirmBuildBookMint(player: Player) {
@@ -1102,6 +1141,7 @@ internal class BuilderToolsRuntime(
         if (data.draft) throw UserFailure("book.unactivated")
         if (data.deliveryPending) throw UserFailure("book.delivery-pending")
         if (!data.available) throw UserFailure("book.invalid")
+        if (BuilderBookAuctionTokenCodec.read(book) != null) throw UserFailure("book.auction-locked")
         if (!BuildBookCodec.matches(book, data)) throw UserFailure("book.missing")
         verifyBookSchematic(data)
         if (site.building.volume > config.maxScanVolume) throw UserFailure("errors.selection-too-large")
@@ -1842,6 +1882,7 @@ internal class BuilderToolsRuntime(
                 bookRegistryReady = true
                 bookRegistryFailed = false
                 info(debugLine.line("event" to "book_registry_ready"))
+                bookAuctionCoordinator?.start()
                 recoverOpenBookMints()
                 Bukkit.getOnlinePlayers().forEach(::recoverBookDeliveries)
                 if (!recovering) reconcileBookReservations()
@@ -2307,6 +2348,7 @@ internal class BuilderToolsRuntime(
             }
         }
         recoverBookDeliveries(event.player)
+        if (bookRegistryReady) bookAuctionCoordinator?.onPlayerAvailable(event.player)
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -2429,6 +2471,10 @@ internal class BuilderToolsRuntime(
 
     private fun isPlayerLocked(playerId: UUID): Boolean = playerId in activeOperations || playerId in bookLockedPlayers
 
+    internal fun rejectUnsafeAuctionSale(player: Player) {
+        send(player, "book.auction-use-safe-command")
+    }
+
     private fun isSelector(item: ItemStack): Boolean {
         if (item.itemMeta?.persistentDataContainer?.has(wandKey, PersistentDataType.BYTE) == true) return true
         if (item.type != Material.ECHO_SHARD) return false
@@ -2448,6 +2494,7 @@ internal class BuilderToolsRuntime(
         if (closed) return
         closed = true
         HandlerList.unregisterAll(this)
+        bookAuctionCoordinator?.close()
         taskScope.close()
         activeOperations.values.toList().forEach { operation ->
             if (operation.uncertainCommit) {

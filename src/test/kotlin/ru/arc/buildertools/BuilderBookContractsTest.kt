@@ -67,6 +67,30 @@ class BuilderBookContractsTest : StringSpec({
             ).validated()
         }
     }
+
+    "auction listing is a distinct reservation state" {
+        val leaseId = UUID.randomUUID()
+        BuilderBookInstance(
+            instanceId = UUID.randomUUID(),
+            blueprintId = UUID.randomUUID(),
+            transactionId = UUID.randomUUID(),
+            mintedBy = UUID.randomUUID(),
+            deliveryPlayerId = UUID.randomUUID(),
+            status = BuilderBookInstanceStatus.LISTED,
+            createdAtMillis = 1L,
+            reservationOperationId = leaseId,
+            reservationPlayerId = UUID.randomUUID(),
+            reservationServer = "survival",
+            reservedAtMillis = 2L,
+        ).validated().reservationOperationId shouldBe leaseId
+    }
+
+    "auction prices accept Russian decimals but reject ambiguous input" {
+        BuilderBookAuctionPrice.parse("12500,50") shouldBe java.math.BigDecimal("12500.50")
+        BuilderBookAuctionPrice.parse("1e9") shouldBe null
+        BuilderBookAuctionPrice.parse("0") shouldBe null
+        BuilderBookAuctionPrice.parse("12.345") shouldBe null
+    }
 })
 
 private fun mint(): BuilderBookMint {

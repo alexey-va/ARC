@@ -91,6 +91,16 @@ class BuildBookTest : TestBase() {
     }
 
     @Test
+    fun `long player title is compacted without splitting Unicode code points`() {
+        val title = "Очень длинное название уютного дома у озера 🏡"
+        val compact = BuildBookItems.compactTitle(title, 28)
+
+        assertTrue(compact.endsWith("…"))
+        assertTrue(compact.codePointCount(0, compact.length) <= 29)
+        assertFalse(compact.contains('\uFFFD'))
+    }
+
+    @Test
     fun `PDC book without current schema is rejected`() {
         val item = ItemStack(Material.BOOK)
         item.editMeta { meta ->
