@@ -35,11 +35,13 @@ internal class BuilderPreviewLoop(
     scope: LifecycleTaskScope,
     periodTicks: Long,
     render: () -> Unit,
-) {
-    init {
+) : AutoCloseable {
+    private val task = run {
         require(periodTicks >= 1L) { "Builder preview period must be positive" }
         checkNotNull(scope.runTimer(0L, periodTicks, render)) { "Builder preview task was not scheduled" }
     }
+
+    override fun close() = task.cancel()
 }
 
 internal data class BuilderPreviewPoint(val x: Double, val y: Double, val z: Double)

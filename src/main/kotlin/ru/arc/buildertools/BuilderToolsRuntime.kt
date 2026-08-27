@@ -143,7 +143,7 @@ internal class BuilderToolsRuntime(
     private val clipboards = mutableMapOf<UUID, BuilderClipboard>()
     private val crownSessions = BuilderCrownSessions()
     private val crownBrushAnchors = mutableMapOf<UUID, BuilderBlockPos>()
-    private val pendingPlans = mutableMapOf<UUID, BuilderPendingPlan>()
+    private val previews: BuilderPreviewSessions
     private val pendingBookMints = mutableMapOf<UUID, PendingBookMint>()
     private val bookLockedPlayers = mutableSetOf<UUID>()
     private val bookDeliveryWaitingForSpace = mutableSetOf<UUID>()
@@ -153,7 +153,6 @@ internal class BuilderToolsRuntime(
     private val committedRecords = mutableMapOf<UUID, BuilderJournalRecord>()
     private val recoveryByPlayer = mutableMapOf<UUID, BuilderJournalRecord>()
     private val consumedUndoSources = mutableSetOf<UUID>()
-    private val previewFailurePlayers = mutableSetOf<UUID>()
     private val bookAuctionCoordinator: BuilderBookAuctionCoordinator? = bookRegistry?.let { registry ->
         val serverName = ARC.serverName ?: return@let null
         BuilderBookAuctionCoordinator(
@@ -184,7 +183,23 @@ internal class BuilderToolsRuntime(
             "Builder-tools requires the active CoreProtect API"
         }
         Bukkit.getPluginManager().registerEvents(this, plugin)
-        BuilderPreviewLoop(taskScope, config.previewPeriodTicks, ::renderPreviews)
+        previews = BuilderPreviewSessions(
+            taskScope = taskScope,
+            periodTicks = config.previewPeriodTicks,
+            onlinePlayers = { Bukkit.getOnlinePlayers() },
+            canRender = { player ->
+                BuilderGameModePolicy.allows(player.gameMode) && config.allowsWorld(player.world.name)
+            },
+            renderSelection = selections::render,
+            renderPlan = ::showPlanParticles,
+            onExpired = { playerId ->
+                shop.clear(playerId)
+                crownBrushAnchors.remove(playerId)
+            },
+            onRenderFailure = { player, failure ->
+                warn("Builder-tools preview failed for {}: {}", player.name, failure.message)
+            },
+        )
         if (config.bookContractsEnabled) {
             checkNotNull(
                 taskScope.runTimer(100L, 100L) {
@@ -367,7 +382,7 @@ internal class BuilderToolsRuntime(
 
     private fun storeCrownSettings(player: Player, updated: BuilderCrownSettings) {
         crownSessions.update(player.uniqueId, updated)
-        pendingPlans[player.uniqueId]?.plan?.takeIf { it.kind == BuilderPlanKind.CROWN }?.let {
+        previews.plan(player.uniqueId)?.takeIf { it.kind == BuilderPlanKind.CROWN }?.let {
             discardPendingPlan(player.uniqueId)
         }
     }
@@ -1307,8 +1322,11 @@ internal class BuilderToolsRuntime(
     private fun preparePlan(player: Player, plan: BuilderPlan) {
         preflightPlan(player, plan)
         crownBrushAnchors.remove(player.uniqueId)
-        pendingPlans[player.uniqueId] = BuilderPendingPlan(plan, player.gameMode)
-        showPlanParticles(player, plan)
+        previews.open(
+            player = player,
+            plan = BuilderPendingPlan(plan, player.gameMode),
+            expireAfterTicks = config.planTtl.toTicks(),
+        )
         send(
             player,
             "plan.ready",
@@ -1321,14 +1339,6 @@ internal class BuilderToolsRuntime(
             ),
         )
         shop.preview(player, plan)
-        val planId = plan.id
-        taskScope.runLater(config.planTtl.toTicks()) {
-            if (pendingPlans[player.uniqueId]?.plan?.id == planId) {
-                pendingPlans.remove(player.uniqueId)
-                shop.clear(player.uniqueId)
-                crownBrushAnchors.remove(player.uniqueId)
-            }
-        }
     }
 
     private fun preflightPlan(player: Player, plan: BuilderPlan) {
@@ -1361,7 +1371,7 @@ internal class BuilderToolsRuntime(
         ensureBuildBookAvailable(player)
         val plan = planBuildBook(player, site, book)
         preflightPlan(player, plan)
-        pendingPlans[player.uniqueId] = BuilderPendingPlan(plan, player.gameMode)
+        previews.store(player.uniqueId, BuilderPendingPlan(plan, player.gameMode))
         confirm(player, buildBook = true)
         site.cancelSilently()
         true
@@ -1381,7 +1391,7 @@ internal class BuilderToolsRuntime(
     private fun confirm(player: Player, buyMissing: Boolean = false, buildBook: Boolean = false) {
         if (buildBook) ensureBuildBookAvailable(player) else ensureAvailable(player)
         if (isPlayerLocked(player.uniqueId)) throw UserFailure("errors.busy")
-        val pending = pendingPlans[player.uniqueId] ?: throw UserFailure("errors.expired")
+        val pending = previews[player.uniqueId] ?: throw UserFailure("errors.expired")
         val plan = pending.plan
         if (plan.expiresAtMillis <= System.currentTimeMillis()) {
             discardPendingPlan(player.uniqueId)
@@ -1406,7 +1416,7 @@ internal class BuilderToolsRuntime(
             throw UserFailure("errors.inventory")
         }
         if (!lock(plan)) throw UserFailure("errors.busy")
-        pendingPlans.remove(player.uniqueId, pending)
+        previews.remove(player.uniqueId, pending)
         shop.clear(player.uniqueId)
         crownBrushAnchors.remove(player.uniqueId)
         val instanceId = plan.bookInstanceId
@@ -1737,7 +1747,7 @@ internal class BuilderToolsRuntime(
             else send(player, "plan.cancelled")
             return
         }
-        if (pendingPlans.containsKey(player.uniqueId)) {
+        if (previews.contains(player.uniqueId)) {
             discardPendingPlan(player.uniqueId)
             send(player, "plan.cancelled")
         } else {
@@ -1779,7 +1789,7 @@ internal class BuilderToolsRuntime(
 
     private fun showStatus(player: Player) {
         val active = activeOperations[player.uniqueId]
-        val plan = pendingPlans[player.uniqueId]?.plan
+        val plan = previews.plan(player.uniqueId)
         val selection = selectionOrNull(player)
         when {
             active != null -> send(player, "status.plan", mapOf("kind" to kindLabel(player, active.record.plan.kind), "count" to messages.literal(active.appliedChanges), "total" to messages.literal(active.record.plan.changes.size)))
@@ -1843,26 +1853,9 @@ internal class BuilderToolsRuntime(
         messages.render("kinds.${kind.name.lowercase(Locale.ROOT)}", locale(player))
 
     private fun discardPendingPlan(playerId: UUID) {
-        pendingPlans.remove(playerId)
+        previews.discard(playerId)
         shop.clear(playerId)
         crownBrushAnchors.remove(playerId)
-    }
-
-    private fun renderPreviews() {
-        val now = System.currentTimeMillis()
-        Bukkit.getOnlinePlayers().forEach { player ->
-            if (!BuilderGameModePolicy.allows(player.gameMode) || !config.allowsWorld(player.world.name)) return@forEach
-            try {
-                val playerId = player.uniqueId
-                pendingPlans[playerId]?.plan?.takeIf { it.expiresAtMillis > now }?.let { showPlanParticles(player, it) }
-                selections.render(player)
-                previewFailurePlayers.remove(playerId)
-            } catch (failure: RuntimeException) {
-                if (previewFailurePlayers.add(player.uniqueId)) {
-                    warn("Builder-tools preview failed for {}: {}", player.name, failure.message)
-                }
-            }
-        }
     }
 
     private fun showPlanParticles(player: Player, plan: BuilderPlan) {
@@ -2506,6 +2499,7 @@ internal class BuilderToolsRuntime(
         closed = true
         HandlerList.unregisterAll(this)
         bookAuctionCoordinator?.close()
+        previews.close()
         taskScope.close()
         activeOperations.values.toList().forEach { operation ->
             if (operation.uncertainCommit) {
@@ -2517,7 +2511,6 @@ internal class BuilderToolsRuntime(
             else finishOperation(operation)
         }
         storageExecutor.shutdownNow()
-        pendingPlans.clear()
         pendingBookMints.clear()
         bookLockedPlayers.clear()
         bookDeliveryWaitingForSpace.clear()
@@ -2529,6 +2522,5 @@ internal class BuilderToolsRuntime(
         selections.clear()
         clipboards.clear()
         crownSessions.clear()
-        previewFailurePlayers.clear()
     }
 }

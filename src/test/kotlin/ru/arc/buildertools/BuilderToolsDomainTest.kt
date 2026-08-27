@@ -13,6 +13,7 @@ import org.bukkit.block.data.type.Slab
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.Plugin
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.whenever
 import ru.arc.config.Config
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.TestTaskScheduler
@@ -197,6 +198,119 @@ class BuilderToolsDomainTest : FunSpec({
         scope.close()
         scheduler.tick(20)
         renders shouldBe 2
+    }
+
+    test("preview sessions own refresh failure throttling exact expiry and cleanup") {
+        val scheduler = TestTaskScheduler()
+        val scope = LifecycleTaskScope(scheduler)
+        val player = mock<org.bukkit.entity.Player>()
+        whenever(player.uniqueId).thenReturn(playerId)
+        val plan = BuilderPlan(
+            id = UUID.fromString("33333333-3333-3333-3333-333333333335"),
+            playerId = playerId,
+            kind = BuilderPlanKind.FILL,
+            changes = listOf(
+                BuilderBlockChange(
+                    BuilderBlockPos(worldId, 1, 64, 1),
+                    "minecraft:air",
+                    "minecraft:stone",
+                ),
+            ),
+            costs = listOf(BuilderItemAmount("AAAA", "minecraft:stone", 1)),
+            rewards = emptyList(),
+            createdAtMillis = 1L,
+            expiresAtMillis = 1_000L,
+        ).validated()
+        val pending = BuilderPendingPlan(plan, GameMode.SURVIVAL)
+        var failRendering = true
+        var planRenders = 0
+        var selectionRenders = 0
+        var failures = 0
+        val expired = mutableListOf<UUID>()
+        val sessions = BuilderPreviewSessions(
+            taskScope = scope,
+            periodTicks = 2L,
+            onlinePlayers = { listOf(player) },
+            canRender = { true },
+            renderSelection = { selectionRenders++ },
+            renderPlan = { _, _ ->
+                if (failRendering) error("preview unavailable")
+                planRenders++
+            },
+            onExpired = expired::add,
+            onRenderFailure = { _, _ -> failures++ },
+            nowMillis = { 0L },
+        )
+
+        sessions.open(player, pending, expireAfterTicks = 10L, showImmediately = false)
+        sessions[playerId] shouldBe pending
+        scheduler.tick(1)
+        failures shouldBe 1
+        scheduler.tick(2)
+        failures shouldBe 1
+
+        failRendering = false
+        scheduler.tick(2)
+        planRenders shouldBe 1
+        selectionRenders shouldBe 1
+        failRendering = true
+        scheduler.tick(2)
+        failures shouldBe 2
+
+        failRendering = false
+        scheduler.tick(3)
+        sessions[playerId] shouldBe null
+        expired shouldBe listOf(playerId)
+        sessions.close()
+        val rendersAtClose = planRenders + selectionRenders
+        scheduler.tick(20)
+        planRenders + selectionRenders shouldBe rendersAtClose
+        scope.close()
+    }
+
+    test("an older preview expiry cannot discard its replacement") {
+        val scheduler = TestTaskScheduler()
+        val scope = LifecycleTaskScope(scheduler)
+        val player = mock<org.bukkit.entity.Player>()
+        whenever(player.uniqueId).thenReturn(playerId)
+        fun pending(id: String) = BuilderPendingPlan(
+            BuilderPlan(
+                id = UUID.fromString(id),
+                playerId = playerId,
+                kind = BuilderPlanKind.DECONSTRUCT,
+                changes = emptyList(),
+                costs = emptyList(),
+                rewards = emptyList(),
+                createdAtMillis = 0L,
+                expiresAtMillis = 1_000L,
+            ),
+            GameMode.CREATIVE,
+        )
+        val first = pending("33333333-3333-3333-3333-333333333336")
+        val replacement = pending("33333333-3333-3333-3333-333333333337")
+        val expired = mutableListOf<UUID>()
+        val sessions = BuilderPreviewSessions(
+            taskScope = scope,
+            periodTicks = 20L,
+            onlinePlayers = { emptyList() },
+            canRender = { true },
+            renderSelection = {},
+            renderPlan = { _, _ -> },
+            onExpired = expired::add,
+            onRenderFailure = { _, failure -> throw failure },
+        )
+
+        sessions.open(player, first, expireAfterTicks = 5L, showImmediately = false)
+        scheduler.tick(2)
+        sessions.open(player, replacement, expireAfterTicks = 10L, showImmediately = false)
+        scheduler.tick(3)
+        sessions[playerId] shouldBe replacement
+        expired shouldBe emptyList()
+        sessions.close()
+        scheduler.tick(20)
+        sessions[playerId] shouldBe null
+        expired shouldBe emptyList()
+        scope.close()
     }
 
     test("selection preview is clipped around the viewer and remains bounded") {
