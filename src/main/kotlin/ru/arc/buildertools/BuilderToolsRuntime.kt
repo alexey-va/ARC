@@ -125,6 +125,29 @@ internal class BuilderToolsRuntime(
         previewSpacing = config.previewSpacing,
         maximumOutlinePoints = config.previewMaxSelectionParticles,
     )
+    private val fillController = BuilderFillController(
+        safety = safety,
+        maximumChanges = config.maxChanges,
+        host = object : BuilderFillHost {
+            override fun ensurePermission(player: Player) = ensureFeaturePermission(player, BuilderFeature.FILL)
+
+            override fun requiredSelection(player: Player): BuilderSelection = this@BuilderToolsRuntime.requiredSelection(player)
+
+            override fun world(worldId: UUID): World = requireWorld(worldId)
+
+            override fun placementData(material: Material) = this@BuilderToolsRuntime.placementData(material)
+
+            override fun ensureMutable(player: Player, block: Block) = this@BuilderToolsRuntime.ensureMutable(player, block)
+
+            override fun createPlan(
+                player: Player,
+                changes: List<BuilderBlockChange>,
+                costs: List<BuilderItemAmount>,
+            ): BuilderPlan = newPlan(player, BuilderPlanKind.FILL, changes, costs, emptyList())
+
+            override fun fail(path: String): Nothing = throw UserFailure(path)
+        },
+    )
     private val clipboardController = BuilderClipboardController(
         safety = safety,
         selections = selections,
@@ -395,7 +418,7 @@ internal class BuilderToolsRuntime(
             "pos1" -> setCommandPosition(player, first = true)
             "pos2" -> setCommandPosition(player, first = false)
             "clear" -> clearSelection(player)
-            "fill" -> preparePlan(player, planFill(player, materialArgument(player, args.getOrNull(1))))
+            "fill" -> preparePlan(player, fillController.plan(player, materialArgument(player, args.getOrNull(1))))
             "copy" -> {
                 val copied = clipboardController.copy(player)
                 send(player, "clipboard.saved", mapOf("count" to messages.literal(copied.blocks.size)))
@@ -518,27 +541,6 @@ internal class BuilderToolsRuntime(
 
     private fun maxAxis(player: Player): Int {
         return BuilderPermissionPolicy.maximumAxis(player::hasPermission, config.absoluteMaxAxis)
-    }
-
-    private fun planFill(player: Player, material: Material): BuilderPlan {
-        ensureFeaturePermission(player, BuilderFeature.FILL)
-        val data = placementData(material)
-        val selection = requiredSelection(player)
-        val world = requireWorld(selection.worldId)
-        val changes = selection.positionsBottomUp().mapNotNull { position ->
-            val block = block(world, position)
-            if (block.blockData.asString == data.asString) return@mapNotNull null
-            if (!safety.isReplaceable(block)) return@mapNotNull null
-            ensureMutable(player, block)
-            BuilderBlockChange(position, block.blockData.asString, data.asString)
-        }.take(config.maxChanges + 1).toList()
-        requireChanges(changes)
-        val cost = if (BuilderGameModePolicy.usesInventory(player.gameMode)) {
-            BuilderItemCodec.aggregate(listOf(ItemStack(material, changes.size)))
-        } else {
-            emptyList()
-        }
-        return newPlan(player, BuilderPlanKind.FILL, changes, cost, emptyList())
     }
 
     private fun handleBuildBookCommand(player: Player, args: List<String>) {
