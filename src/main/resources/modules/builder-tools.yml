@@ -228,6 +228,25 @@ locales:
         <#8c8c8c>  • <#e6fff3><setting>: <#92bed8><value>
       palette-updated: "<prefix><#2bba43>Палитра сохранена: <#92bed8><count> <#e6fff3>видов листвы."
       palette-row: "<#8c8c8c>    • <#e6fff3><material>: <#92bed8><weight>"
+      labels:
+        settings:
+          shape: "Форма"
+          radius: "Радиус"
+          density: "Густота"
+          noise: "Край"
+        shape:
+          natural: "естественная"
+          round: "округлая"
+          wide: "раскидистая"
+          tall: "вытянутая"
+        density:
+          airy: "воздушная"
+          natural: "естественная"
+          dense: "густая"
+        noise:
+          smooth: "мягкий"
+          natural: "естественный"
+          wild: "сильный"
       help:
         - "<prefix><#e6fff3><bold>Настройка кроны"
         - "<#8c8c8c>  • <click:run_command:'/builder crown wand'><#92bed8>/builder crown wand</#92bed8></click> <#e6fff3>— подготовить кисть."
@@ -455,6 +474,7 @@ locales:
       started: |-
         <prefix><#ff9f0f>Строительство начато.
         <#8c8c8c>  • <#e6fff3>Блоков: <#92bed8><count> <#8c8c8c>• <#969696>инвентарь временно защищён
+      progress: "<prefix><#e6fff3><kind>: <#2bba43><count><#8c8c8c>/<#92bed8><total>"
       completed: |-
         <prefix><#2bba43>Операция завершена: <#92bed8><kind>
         <#8c8c8c>  • <#e6fff3>Изменено блоков: <#2bba43><count>
@@ -611,6 +631,25 @@ locales:
       settings-updated: "<prefix><green><white><setting></white> is now <white><value></white>."
       palette-updated: "<prefix><green>Palette updated: <white><count></white> leaf types."
       palette-row: "<dark_gray>    • <gray><material>: <aqua><weight>"
+      labels:
+        settings:
+          shape: "Shape"
+          radius: "Radius"
+          density: "Density"
+          noise: "Edge"
+        shape:
+          natural: "natural"
+          round: "round"
+          wide: "wide"
+          tall: "tall"
+        density:
+          airy: "airy"
+          natural: "natural"
+          dense: "dense"
+        noise:
+          smooth: "smooth"
+          natural: "natural"
+          wild: "wild"
       help:
         - "<prefix><white>Crowns use ordinary leaves from your inventory."
         - "<dark_gray>  • <aqua>/builder crown wand <gray>— bind a plain brush"
@@ -825,6 +864,7 @@ locales:
       started: |-
         <prefix><yellow>Construction started: <white><count> blocks
         <dark_gray>  • <gray>Your inventory is briefly protected.
+      progress: "<prefix><gray><kind>: <green><count><dark_gray>/<aqua><total>"
       completed: "<prefix><green><white><kind></white> completed: <white><count></white> blocks."
       rolled-back: |-
         <prefix><red>The operation was rolled back and restored.

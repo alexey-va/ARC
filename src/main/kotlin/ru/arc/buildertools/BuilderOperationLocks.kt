@@ -37,6 +37,7 @@ internal data class BuilderActiveOperation(
     var record: BuilderJournalRecord,
     val gameMode: GameMode,
     var appliedChanges: Int = 0,
+    var mutationBatches: Int = 0,
     var inventoryMutated: Boolean = false,
     var cancelled: Boolean = false,
     var uncertainCommit: Boolean = false,

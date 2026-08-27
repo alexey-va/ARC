@@ -1566,6 +1566,21 @@ internal class BuilderToolsRuntime(
                 operation.appliedChanges++
                 processed++
             }
+            operation.mutationBatches++
+            val completed = operation.appliedChanges >= changes.size
+            if (BuilderProgressCadence.shouldRender(operation.mutationBatches, completed)) {
+                player.sendActionBar(
+                    messages.render(
+                        "operation.progress",
+                        locale(player),
+                        mapOf(
+                            "kind" to kindLabel(player, operation.record.plan.kind),
+                            "count" to messages.literal(operation.appliedChanges),
+                            "total" to messages.literal(changes.size),
+                        ),
+                    ),
+                )
+            }
             if (operation.appliedChanges < changes.size) {
                 taskScope.runLater(1L) { runMutationBatch(player, operation) }
                 return

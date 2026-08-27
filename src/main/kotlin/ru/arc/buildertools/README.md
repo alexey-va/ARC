@@ -74,6 +74,9 @@
   or unavailable material refreshes the estimate instead of spending. If one
   of several purchases fails, the world remains untouched and completed
   purchases stay in the player's inventory for a safe retry.
+  Once confirmed, longer mutations report localized live progress in the
+  action bar without flooding it every tick. Crown status and setting feedback
+  use player-facing localized names while command arguments remain stable.
   `/builder undo` creates and confirms
   an inverse material transaction; deconstruction undo returns blocks only
   after the exact collected drops are surrendered, never repairs tool wear, and

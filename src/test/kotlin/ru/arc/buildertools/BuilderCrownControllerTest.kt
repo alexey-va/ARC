@@ -52,10 +52,27 @@ class BuilderCrownControllerTest : FunSpec({
 
                 controller.settings(player.uniqueId).radius shouldBe 7
                 harness.discardedPreviews shouldBe 1
+                PlainTextComponentSerializer.plainText().serialize(checkNotNull(player.nextComponentMessage())) shouldBe
+                    "Настройка: Радиус = 7"
 
                 controller.clearPlayer(player.uniqueId)
                 controller.settings(player.uniqueId) shouldBe BuilderCrownSettings()
                 controller.anchor(player.uniqueId) shouldBe null
+            }
+        }
+    }
+
+    test("crown status renders player-facing localized setting values") {
+        MockBukkitTestRuntime.open().use { paper ->
+            val plugin = paper.createSimplePlugin("BuilderCrownLocalizedStatusTest")
+            val player = paper.addPlayer("CrownStatusOwner")
+            val harness = CrownHarness(plugin)
+            harness.controller.use { controller ->
+                controller.handle(player, listOf("status"))
+
+                val rendered = checkNotNull(player.nextComponentMessage())
+                PlainTextComponentSerializer.plainText().serialize(rendered) shouldBe
+                    "Параметры: естественная / 5 / естественная / естественный"
             }
         }
     }
@@ -225,14 +242,28 @@ private fun crownMessages(): LocalizedMiniMessage = LocalizedMiniMessage(
                 "prefix" to "",
                 "crown-brush.name" to "Кисть крон",
                 "crown-brush.received" to "Кисть готова",
-                "crown.settings-updated" to "Настройка обновлена",
+                "crown.settings-updated" to "Настройка: <setting> = <value>",
                 "crown.palette-updated" to "Палитра обновлена",
                 "crown.palette-row" to "Палитра",
+                "crown.labels.settings.shape" to "Форма",
+                "crown.labels.settings.radius" to "Радиус",
+                "crown.labels.settings.density" to "Густота",
+                "crown.labels.settings.noise" to "Край",
+                "crown.labels.shape.natural" to "естественная",
+                "crown.labels.shape.round" to "округлая",
+                "crown.labels.shape.wide" to "раскидистая",
+                "crown.labels.shape.tall" to "вытянутая",
+                "crown.labels.density.airy" to "воздушная",
+                "crown.labels.density.natural" to "естественная",
+                "crown.labels.density.dense" to "густая",
+                "crown.labels.noise.smooth" to "мягкий",
+                "crown.labels.noise.natural" to "естественный",
+                "crown.labels.noise.wild" to "сильный",
             )
             private val lists = mapOf(
                 "crown-brush.lore" to listOf("ЛКМ — превью", "ПКМ — подтвердить"),
                 "crown.help" to listOf("Настройте крону"),
-                "crown.status" to listOf("Параметры кроны"),
+                "crown.status" to listOf("Параметры: <shape> / <radius> / <density> / <noise>"),
             )
 
             override fun scalar(path: String): String? = scalars[path]

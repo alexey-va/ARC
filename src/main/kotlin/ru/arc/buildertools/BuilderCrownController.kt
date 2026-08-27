@@ -217,7 +217,14 @@ internal class BuilderCrownController(
 
     private fun updateSettings(player: Player, key: String, value: String, updated: BuilderCrownSettings) {
         storeSettings(player, updated)
-        send(player, "crown.settings-updated", mapOf("setting" to messages.literal(key), "value" to messages.literal(value)))
+        send(
+            player,
+            "crown.settings-updated",
+            mapOf(
+                "setting" to crownSettingLabel(player, key),
+                "value" to crownValueLabel(player, key, value),
+            ),
+        )
     }
 
     private fun storeSettings(player: Player, updated: BuilderCrownSettings) {
@@ -228,10 +235,10 @@ internal class BuilderCrownController(
     private fun showStatus(player: Player) {
         val settings = settings(player)
         val values = mapOf(
-            "shape" to messages.literal(settings.shape.name.lowercase(Locale.ROOT)),
+            "shape" to crownValueLabel(player, "shape", settings.shape.name.lowercase(Locale.ROOT)),
             "radius" to messages.literal(settings.radius),
-            "density" to messages.literal(settings.density.name.lowercase(Locale.ROOT)),
-            "noise" to messages.literal(settings.noise.name.lowercase(Locale.ROOT)),
+            "density" to crownValueLabel(player, "density", settings.density.name.lowercase(Locale.ROOT)),
+            "noise" to crownValueLabel(player, "noise", settings.noise.name.lowercase(Locale.ROOT)),
         )
         messages.renderLines("crown.status", locale(player), values).forEach(player::sendMessage)
         settings.palette.forEach { entry ->
@@ -313,6 +320,12 @@ internal class BuilderCrownController(
     private fun send(player: Player, path: String, values: Map<String, Component> = emptyMap()) {
         player.sendMessage(messages.render(path, locale(player), values))
     }
+
+    private fun crownSettingLabel(player: Player, key: String): Component =
+        messages.render("crown.labels.settings.$key", locale(player))
+
+    private fun crownValueLabel(player: Player, key: String, value: String): Component =
+        if (key == "radius") messages.literal(value) else messages.render("crown.labels.$key.$value", locale(player))
 
     private fun locale(player: Player): String = player.locale().toLanguageTag()
 

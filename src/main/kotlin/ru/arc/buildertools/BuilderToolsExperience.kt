@@ -30,6 +30,16 @@ internal object BuilderItemPresentation {
         component.decoration(TextDecoration.ITALIC, TextDecoration.State.FALSE)
 }
 
+/** Keeps action-bar progress useful without sending a component every tick. */
+internal object BuilderProgressCadence {
+    private const val UPDATE_EVERY_BATCHES = 10
+
+    fun shouldRender(batchNumber: Int, completed: Boolean): Boolean {
+        require(batchNumber >= 1) { "Builder progress batch number must be positive" }
+        return batchNumber == 1 || completed || batchNumber % UPDATE_EVERY_BATCHES == 0
+    }
+}
+
 /** Starts one lifecycle-owned repeating preview task. */
 internal class BuilderPreviewLoop(
     scope: LifecycleTaskScope,
