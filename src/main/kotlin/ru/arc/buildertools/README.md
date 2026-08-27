@@ -188,6 +188,13 @@ directly; stale completion uses the operation UUID and therefore cannot unlock
 a newer plan. Closing the owner unregisters the listener and clears all lock
 state after the runtime has reconciled its active operations.
 
+`BuilderCrownController` is the primary-thread owner of the complete
+non-durable crown lifecycle: settings and reroll state, brush identity, exact
+face anchors, crown command completion, click listener, plan geometry, and
+cleanup. It delegates generic Lands/range protection, preview/confirmation,
+journaling, and mutation through `BuilderCrownHost`; closing it unregisters its
+listener and clears every player session and anchor.
+
 Player schematic filenames contain the creator UUID plus the full SHA-256 of
 the normalized block content. This lets an identical design reuse its existing
 file even when WorldEdit changes non-semantic Sponge metadata (including the
