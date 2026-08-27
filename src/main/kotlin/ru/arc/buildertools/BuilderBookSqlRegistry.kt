@@ -10,6 +10,7 @@ import ru.arc.onetime.OneTimeUseReleaseResult
 import ru.arc.onetime.UnavailableOneTimeUseLedger
 import ru.arc.sql.MySqlMigrator
 import ru.arc.sql.SqlMigration
+import ru.arc.sql.SqlMigrationCompatibility
 import ru.arc.sql.SqlRuntime
 import ru.arc.sql.onetime.MySqlOneTimeUseLedger
 import ru.arc.sql.onetime.MySqlOneTimeUsePartition
@@ -90,7 +91,7 @@ internal class BuilderBookSqlRegistry(
     override val oneTimeUses: OneTimeUseLedger get() = this
     override val activeClaims: Int get() = durableOneTimeUses.activeClaims
     override fun initialize(): CompletableFuture<Unit> = runtime.executor.submit {
-        MySqlMigrator(runtime.dataSource, MIGRATION_NAMESPACE).migrate(MIGRATIONS)
+        MySqlMigrator(runtime.dataSource, MIGRATION_NAMESPACE).migrate(MIGRATIONS, MIGRATION_COMPATIBILITY)
         Unit
     }
 
@@ -1010,11 +1011,7 @@ internal class BuilderBookSqlRegistry(
                         UNIQUE KEY uq_arc_builder_instance_transaction (transaction_uuid),
                         UNIQUE KEY uq_arc_builder_instance_reservation (reservation_operation_uuid),
                         KEY idx_arc_builder_instance_delivery (delivery_player_uuid, status),
-                        KEY idx_arc_builder_instance_reservation_server (reservation_server, status),
-                        CONSTRAINT fk_arc_builder_instance_blueprint FOREIGN KEY (blueprint_uuid)
-                            REFERENCES arc_builder_book_blueprints (blueprint_uuid) ON DELETE RESTRICT,
-                        CONSTRAINT fk_arc_builder_instance_mint FOREIGN KEY (transaction_uuid)
-                            REFERENCES arc_builder_book_mints (transaction_uuid) ON DELETE RESTRICT
+                        KEY idx_arc_builder_instance_reservation_server (reservation_server, status)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                     """.trimIndent(),
                 ),
@@ -1067,6 +1064,19 @@ internal class BuilderBookSqlRegistry(
             MySqlOneTimeUseLedger.createTableMigration(
                 version = CURRENT_SCHEMA_VERSION,
                 description = "Create shared one-time-use ledger for builder books",
+            ),
+        )
+
+        /**
+         * The original version-one DDL included two foreign keys. Production
+         * migration users intentionally lack REFERENCES, so fresh and partial
+         * installs now rely on the registry's transactional identity checks.
+         * Nodes that already applied the source-verified original checksum
+         * remain valid without weakening compatibility for any other version.
+         */
+        private val MIGRATION_COMPATIBILITY = SqlMigrationCompatibility(
+            mapOf(
+                1 to setOf("b1a6998b8a240a3c24e7dce340268dea19047cfadd83d8863d7d0218a415223a"),
             ),
         )
 

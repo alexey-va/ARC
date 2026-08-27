@@ -177,6 +177,11 @@ class BuilderBookSqlRegistryIntegrationTest : StringSpec({
             endpoint.connect().use { connection ->
                 connection.createStatement().use { statement ->
                     statement.executeUpdate("DELETE FROM arc_builder_books_schema_history WHERE version = 2")
+                    statement.executeUpdate(
+                        "UPDATE arc_builder_books_schema_history " +
+                            "SET checksum = 'b1a6998b8a240a3c24e7dce340268dea19047cfadd83d8863d7d0218a415223a' " +
+                            "WHERE version = 1",
+                    )
                 }
             }
             openRegistry(endpoint).use { retried ->
@@ -190,6 +195,42 @@ class BuilderBookSqlRegistryIntegrationTest : StringSpec({
                 val recovered = reopened.openMints().await().filter { it.playerId == openMintPlayer }
                 recovered shouldHaveSize 1
                 recovered.single().status shouldBe BuilderBookMintStatus.PREPARED
+            }
+        }
+    }
+
+    "migration resumes after MySQL committed only the first version-one DDL statements" {
+        val settings = MySqlTestSettings(image = "mysql:8.0.46", database = "arc_test")
+        MySqlTestService.start(settings).use { mysql ->
+            mysql.endpoint.copy(username = "root", password = settings.rootPassword).connect().use { connection ->
+                connection.createStatement().use { statement ->
+                    statement.execute("REVOKE ALL PRIVILEGES, GRANT OPTION FROM '${settings.username}'@'%'")
+                    statement.execute(
+                        "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX " +
+                            "ON `${settings.database}`.* TO '${settings.username}'@'%'",
+                    )
+                }
+            }
+            mysql.endpoint.connect().use { connection ->
+                BuilderBookSqlRegistry.MIGRATIONS.single { it.version == 1 }.statements.take(2).forEach { sql ->
+                    connection.createStatement().use { statement -> statement.execute(sql) }
+                }
+            }
+
+            openRegistry(mysql.endpoint).use { registry ->
+                registry.initialize().await()
+            }
+
+            mysql.endpoint.connect().use { connection ->
+                connection.createStatement().use { statement ->
+                    statement.executeQuery(
+                        "SELECT version FROM arc_builder_books_schema_history ORDER BY version",
+                    ).use { rows ->
+                        buildList {
+                            while (rows.next()) add(rows.getInt("version"))
+                        } shouldBe (1..BuilderBookSqlRegistry.CURRENT_SCHEMA_VERSION).toList()
+                    }
+                }
             }
         }
     }

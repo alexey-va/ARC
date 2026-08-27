@@ -170,6 +170,12 @@ The `book-contracts.mysql` pool owns the three `arc_builder_book_*` domain
 tables and the single shared `arc_one_time_uses` table. It must not introduce a
 feature-local replay table. Shop pricing is read-only; ARC never changes
 EconomyShopGUI prices.
+
+The migration account is deliberately least-privileged: it needs `SELECT`,
+`INSERT`, `UPDATE`, `DELETE`, `CREATE`, `ALTER`, and `INDEX`, but not
+`REFERENCES`. Cross-table identity is maintained by the registry's
+transactional compare-and-set operations, so migrations must not add foreign
+keys or require broader database grants.
 The authenticated ARC runtime-health surface publishes only bounded aggregate
 state for Builder Tools: lifecycle state, recovery backlog, active leases, and
 Lands/CoreProtect/book-registry readiness. It never exposes player identities,
