@@ -158,6 +158,39 @@ internal class BuilderToolsRuntime(
             override fun fail(path: String): Nothing = throw UserFailure(path)
         },
     )
+    private val deconstructionController = BuilderDeconstructionController(
+        safety = safety,
+        maximumChanges = config.maxChanges,
+        host = object : BuilderDeconstructionHost {
+            override fun ensurePermission(player: Player) = ensureFeaturePermission(player, BuilderFeature.DECONSTRUCT)
+
+            override fun requiredSelection(player: Player): BuilderSelection = this@BuilderToolsRuntime.requiredSelection(player)
+
+            override fun world(worldId: UUID): World = requireWorld(worldId)
+
+            override fun ensureMutable(player: Player, block: Block) = this@BuilderToolsRuntime.ensureMutable(player, block)
+
+            override fun createPlan(
+                player: Player,
+                changes: List<BuilderBlockChange>,
+                rewards: List<BuilderItemAmount>,
+                toolFingerprint: String?,
+                toolDamage: Int,
+            ): BuilderPlan = newPlan(
+                player = player,
+                kind = BuilderPlanKind.DECONSTRUCT,
+                changes = changes,
+                costs = emptyList(),
+                rewards = rewards,
+                toolFingerprint = toolFingerprint,
+                toolDamage = toolDamage,
+            )
+
+            override fun failUnsafe(block: Block): Nothing = throw unsafeBlock(block)
+
+            override fun fail(path: String): Nothing = throw UserFailure(path)
+        },
+    )
     private val previews: BuilderPreviewSessions
     private val crown: BuilderCrownController
     private val pendingBookMints = mutableMapOf<UUID, PendingBookMint>()
@@ -369,7 +402,7 @@ internal class BuilderToolsRuntime(
             }
             "book" -> handleBuildBookCommand(player, args.drop(1))
             "paste" -> preparePlan(player, clipboardController.planPaste(player))
-            "deconstruct" -> preparePlan(player, planDeconstruct(player))
+            "deconstruct" -> preparePlan(player, deconstructionController.plan(player))
             "crown" -> crown.handle(player, args.drop(1))
             "confirm" -> when (args.getOrNull(1)?.lowercase(Locale.ROOT)) {
                 null -> confirm(player)
@@ -1244,41 +1277,6 @@ internal class BuilderToolsRuntime(
             bookInstanceGeneration = checkNotNull(data.instanceGeneration),
             bookBuildingId = data.buildingId,
             bookSchematicSha256 = checkNotNull(data.schematicSha256),
-        )
-    }
-
-    private fun planDeconstruct(player: Player): BuilderPlan {
-        ensureFeaturePermission(player, BuilderFeature.DECONSTRUCT)
-        val selection = requiredSelection(player)
-        val world = requireWorld(selection.worldId)
-        val usesInventory = BuilderGameModePolicy.usesInventory(player.gameMode)
-        val tool = player.inventory.itemInMainHand.clone().takeIf { usesInventory }
-        if (usesInventory && (tool == null || tool.type.isAir || tool.type.maxDurability <= 0)) throw UserFailure("errors.tool")
-        val drops = mutableListOf<ItemStack>()
-        val air = Material.AIR.createBlockData().asString
-        val changes = selection.positionsTopDown().mapNotNull { position ->
-            val block = block(world, position)
-            if (block.type.isAir) return@mapNotNull null
-            if (safety.isReplaceable(block)) return@mapNotNull null
-            if (!safety.isSafeExisting(block)) throw unsafeBlock(block)
-            if (usesInventory && !block.isPreferredTool(checkNotNull(tool))) throw UserFailure("errors.tool")
-            ensureMutable(player, block)
-            if (usesInventory) drops += block.getDrops(checkNotNull(tool), player).map(ItemStack::clone)
-            BuilderBlockChange(position, block.blockData.asString, air)
-        }.take(config.maxChanges + 1).toList()
-        requireChanges(changes)
-        val fingerprint = tool?.let(BuilderItemCodec::encodePrototype)
-        val rewards = BuilderItemCodec.aggregate(drops)
-        val toolDamage = if (usesInventory) changes.size else 0
-        if (!BuilderInventory.canApply(player, emptyList(), rewards, fingerprint, toolDamage)) throw UserFailure("errors.inventory")
-        return newPlan(
-            player = player,
-            kind = BuilderPlanKind.DECONSTRUCT,
-            changes = changes,
-            costs = emptyList(),
-            rewards = rewards,
-            toolFingerprint = fingerprint,
-            toolDamage = toolDamage,
         )
     }
 

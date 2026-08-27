@@ -46,8 +46,13 @@
   usable. Ordinary `/ah sell` paths reject player build books so the UUID lease
   cannot be bypassed by zAuctionHouse's sell GUI.
 - `/builder deconstruct`: requires one preferred held tool for the whole
-  selection, checks worst-case remaining durability, calculates drops once,
-  damages the real tool, and requires all exact drops to fit the inventory.
+  selection, checks worst-case remaining durability, damages the real tool,
+  and returns the exact safe construction material only when vanilla Silk
+  Touch yields exactly that item (including two slabs for a double slab).
+  Non-recoverable blocks produce no refund, while Fortune and other random
+  multipliers are deliberately ignored, so the builder helper cannot become a
+  loot farm or reroll surface. Every exact refund must fit the inventory before
+  confirmation.
 - `/builder crown [leaves] [radius]`: makes a deterministic organic crown from
   ordinary persistent leaves, replacing only configured vegetation/air and
   consuming every leaf. Its nested command surface provides bounded palettes,
