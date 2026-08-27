@@ -399,20 +399,25 @@ object BuildingManager {
             try {
                 val isStale = System.currentTimeMillis() - site.timestamp > 180_000
                 if (!isStale && !force) continue
+                // A construction can legitimately run longer than the preview
+                // timeout. Keep it managed until it finishes naturally so a
+                // later shutdown can still cancel its owned tasks and release
+                // chunk loading.
+                if (site.state == ConstructionState.Building && !force) continue
 
                 info("Cleaning up construction site for player {} {}", site.player.name, site)
 
                 when (site.state) {
                     ConstructionState.DisplayingOutline,
-                    ConstructionState.Confirmation -> site.cancel()
+                    ConstructionState.Confirmation,
+                    ConstructionState.Building -> {
+                        if (force) site.cancelSilently() else site.cancel()
+                    }
 
-                    ConstructionState.Building -> if (force) site.finishInstantly()
                     ConstructionState.Done,
                     ConstructionState.Created,
                     ConstructionState.Cancelled -> site.cleanup(0)
                 }
-
-                removeConstruction(site)
             } catch (e: Exception) {
                 error("Error while cleaning up site for player {}", site.player.name, e)
             }
@@ -421,9 +426,9 @@ object BuildingManager {
 
     @JvmStatic
     fun stopAll() {
-        cleanup(force = true)
         cleanupTask?.cancel()
         cleanupTask = null
+        cleanup(force = true)
         pendingSites.clear()
         activeSites.clear()
         buildings.clear()
