@@ -618,7 +618,7 @@ internal class BuilderToolsRuntime(
             }
             return
         }
-        val previewOpen = BuildingManager.getPendingConstruction(playerId) != null
+        val previewOpen = held?.takeIf { it.draft }?.let { BuildingManager.hasExactOpenPreview(player, it) } == true
         val clipboard = clipboardController.current(playerId)
         val selection = selectionOrNull(player)
         val stage = BuilderBookJourney.resolve(
@@ -757,6 +757,7 @@ internal class BuilderToolsRuntime(
         val data = BuildBookCodec.read(held)?.takeIf { it.draft } ?: throw UserFailure("book.draft-required")
         if (held.amount != 1) throw UserFailure("book.duplicate")
         if (data.creatorId != player.uniqueId) throw UserFailure("book.creator-only")
+        requireExactDraftPreview(player, data)
         verifyBookSchematic(data)
         val blueprintId = checkNotNull(data.blueprintId)
         registry.loadBlueprint(blueprintId).whenComplete { existing, failure ->
@@ -768,6 +769,7 @@ internal class BuilderToolsRuntime(
                     return@runSync
                 }
                 try {
+                    requireExactDraftPreview(player, data)
                     val blueprint = if (existing != null) {
                         if (!matchesBlueprint(data, existing)) throw UserFailure("book.invalid")
                         existing
@@ -897,6 +899,7 @@ internal class BuilderToolsRuntime(
         if (!matchesPendingSource(data, pending) || held.amount != 1) {
             throw UserFailure("book.source-changed")
         }
+        if (pending.kind == BuilderBookMintKind.CREATE) requireExactDraftPreview(player, data)
         if (pending.kind == BuilderBookMintKind.COPY && player.inventory.firstEmpty() == -1) {
             throw UserFailure("book.inventory-full")
         }
@@ -1147,6 +1150,10 @@ internal class BuilderToolsRuntime(
             ((pending.kind == BuilderBookMintKind.CREATE && data.draft) ||
                 (pending.kind == BuilderBookMintKind.COPY && data.available)) &&
             matchesBlueprint(data, pending.blueprint)
+
+    private fun requireExactDraftPreview(player: Player, data: BuildBookData) {
+        if (!BuildingManager.hasExactOpenPreview(player, data)) throw UserFailure("book.preview-required")
+    }
 
     private fun matchesBlueprint(data: BuildBookData, blueprint: BuilderBookBlueprint): Boolean =
         data.blueprintId == blueprint.blueprintId &&

@@ -326,6 +326,10 @@ locales:
       invalid: "<prefix><#c42323>Эта книга повреждена или её чертёж недоступен."
       missing: "<prefix><#ff9f0f>Положите нужную книгу в инвентарь."
       draft-required: "<prefix><#ff9f0f>Держите бесплатный черновик в основной руке."
+      preview-required: |-
+        <prefix><#ff9f0f>Сначала откройте превью этого черновика.
+        <#8c8c8c>  • <#e6fff3>Держите черновик и нажмите ПКМ по опорному блоку.
+        <#8c8c8c>  • <#969696>Смета и оплата доступны, пока точное превью открыто.
       active-required: "<prefix><#ff9f0f>Держите активную книгу в основной руке."
       creator-only: "<prefix><#ff9f0f>Первую активацию подтверждает автор."
       unactivated: |-
@@ -703,6 +707,10 @@ locales:
       invalid: "<prefix><red>This player build book is damaged or unavailable."
       missing: "<prefix><yellow>Keep the preview book in your inventory."
       draft-required: "<prefix><yellow>Hold a free build-book draft in your main hand."
+      preview-required: |-
+        <prefix><yellow>Open this draft's preview first.
+        <dark_gray>  • <gray>Hold the draft and right-click its anchor block.
+        <dark_gray>  • <gray>The quote and payment require that exact preview to remain open.
       active-required: "<prefix><yellow>Hold a registered build book in your main hand."
       creator-only: "<prefix><yellow>The draft author must approve its first activation."
       unactivated: |-

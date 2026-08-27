@@ -93,6 +93,8 @@ class BuilderBookJourneyTest : FunSpec({
         config.string("locales.en.book.status.checking") shouldContain "UUID, owner, and generation"
         config.string("locales.ru.book.status.changed") shouldContain "/builder book status"
         config.string("locales.en.book.status.changed") shouldContain "/builder book status"
+        config.string("locales.ru.book.preview-required") shouldContain "ПКМ"
+        config.string("locales.en.book.preview-required") shouldContain "right-click"
     }
 
     test("dense dynamic messages keep one fact per physical chat line") {

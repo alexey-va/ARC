@@ -22,7 +22,9 @@
 - `/builder book draft [name]`: turns one owned ordinary book into a free,
   content-addressed draft. A draft can use the full transform GUI and continuous
   world preview, but repeated placement clicks never open build confirmation or
-  mutate the world; they point the player to the quote step. After successful
+  mutate the world; they point the player to the quote step. The quote and final
+  payment both require that exact draft preview to remain open, so a player
+  cannot accidentally activate an object they have not inspected. After successful
   activation, an already open preview is refreshed to the registered instance,
   and a fresh confirmation click is still required. `/builder book activate` reads the
   current admin-shop material prices and shows material cost, configured

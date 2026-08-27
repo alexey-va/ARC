@@ -206,6 +206,7 @@ class BuilderToolsConfig(
                 "book.invalid",
                 "book.missing",
                 "book.draft-required",
+                "book.preview-required",
                 "book.active-required",
                 "book.creator-only",
                 "book.unactivated",

@@ -305,6 +305,16 @@ class ConstructionSite(
         samePlacement(player, location, building, book) &&
             (book == null || bookData == book)
 
+    /**
+     * A paid first activation may only proceed while the author still has the
+     * exact draft open as a world preview. This binds the quote and payment to
+     * the object and transform the player actually inspected.
+     */
+    internal fun isExactOpenPreview(player: Player, expected: BuildBookData): Boolean =
+        state == ConstructionState.DisplayingOutline &&
+            this.player.uniqueId == player.uniqueId &&
+            bookData == expected
+
     /** Matches only the visible placement, not a book instance or draft state. */
     fun samePlacement(player: Player, location: Location, building: Building, book: BuildBookData? = null): Boolean =
         location.toCenterLocation() == centerBlock.toCenterLocation() &&

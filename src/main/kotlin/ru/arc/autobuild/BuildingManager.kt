@@ -107,6 +107,10 @@ object BuildingManager {
     fun getPendingConstruction(playerId: UUID): ConstructionSite? = pendingSites[playerId]
 
     @JvmStatic
+    fun hasExactOpenPreview(player: Player, expected: BuildBookData): Boolean =
+        getPendingConstruction(player.uniqueId)?.isExactOpenPreview(player, expected) == true
+
+    @JvmStatic
     fun findByNpcId(npcId: Int): ConstructionSite? =
         pendingSites.values.find { it.npcId == npcId }
             ?: activeSites.values.flatten().find { it.npcId == npcId }

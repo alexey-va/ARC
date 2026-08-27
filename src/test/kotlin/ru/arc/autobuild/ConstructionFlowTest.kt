@@ -444,6 +444,10 @@ class ConstructionFlowTest : TestBase() {
             assertTrue(site.same(player, centerBlock, building, draft))
             assertTrue(site.samePlacement(player, centerBlock, building, active))
             assertFalse(site.same(player, centerBlock, building, active))
+            assertFalse(site.isExactOpenPreview(player, draft))
+            assertTrue(site.startDisplayingBorder())
+            assertTrue(site.isExactOpenPreview(player, draft))
+            assertFalse(site.isExactOpenPreview(player, active))
             assertTrue(site.acceptsPreviewUpdate(active))
             assertFalse(site.acceptsPreviewUpdate(otherDraft))
         }
