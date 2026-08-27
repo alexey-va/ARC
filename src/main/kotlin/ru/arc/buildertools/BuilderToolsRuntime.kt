@@ -79,8 +79,6 @@ internal class BuilderToolsRuntime(
     private val plugin: ARC,
     private val config: BuilderToolsConfig,
 ) : Listener, CommandExecutor, TabCompleter, AutoCloseable {
-    private data class SelectionDraft(var first: BuilderBlockPos? = null, var second: BuilderBlockPos? = null)
-
     private data class ActiveOperation(
         var record: BuilderJournalRecord,
         val gameMode: GameMode,
@@ -137,7 +135,11 @@ internal class BuilderToolsRuntime(
     private val debugLine = StructuredDebugLine("ARC_BUILDER_TOOLS")
     private val wandKey = org.bukkit.NamespacedKey(plugin, "builder_selector")
     private val crownBrushKey = org.bukkit.NamespacedKey(plugin, "crown_brush")
-    private val selections = mutableMapOf<UUID, SelectionDraft>()
+    private val selections = BuilderSelectionController(
+        previewRadius = config.previewRadius,
+        previewSpacing = config.previewSpacing,
+        maximumOutlinePoints = config.previewMaxSelectionParticles,
+    )
     private val clipboards = mutableMapOf<UUID, BuilderClipboard>()
     private val crownSessions = BuilderCrownSessions()
     private val crownBrushAnchors = mutableMapOf<UUID, BuilderBlockPos>()
@@ -192,10 +194,10 @@ internal class BuilderToolsRuntime(
             send(player, failure.path, failure.values)
         } catch (failure: IllegalArgumentException) {
             warn("Builder-tools rejected command for {}: {}", player.name, failure.message)
-            send(player, "errors.plan-failed", mapOf("reason" to messages.literal(failure.message ?: "invalid plan")))
+            send(player, "errors.plan-failed")
         } catch (failure: Throwable) {
             error("Builder-tools command failed for ${player.name}", failure)
-            send(player, "errors.plan-failed", mapOf("reason" to messages.literal("internal safety check")))
+            send(player, "errors.plan-failed")
         }
         return true
     }
@@ -454,22 +456,14 @@ internal class BuilderToolsRuntime(
         ensureAvailable(player)
         require(location.world == player.world) { "Selection world mismatch" }
         val position = BuilderBlockPos(player.world.uid, location.blockX, location.blockY, location.blockZ).validated()
-        val draft = selections.getOrPut(player.uniqueId, ::SelectionDraft)
-        if (
-            (draft.first?.worldId != null && draft.first?.worldId != position.worldId) ||
-            (draft.second?.worldId != null && draft.second?.worldId != position.worldId)
-        ) {
-            draft.first = null
-            draft.second = null
-            send(player, "selection.world-reset")
-        }
-        if (first) draft.first = position else draft.second = position
+        val update = selections.set(player.uniqueId, position, first)
+        if (update.worldReset) send(player, "selection.world-reset")
         send(
             player,
             if (first) "selection.first" else "selection.second",
             mapOf("x" to messages.literal(position.x), "y" to messages.literal(position.y), "z" to messages.literal(position.z)),
         )
-        val selection = selectionOrNull(player)
+        val selection = update.selection
         if (selection != null) {
             send(
                 player,
@@ -481,7 +475,7 @@ internal class BuilderToolsRuntime(
                     "volume" to messages.literal(selection.volume),
                 ),
             )
-            showSelectionOutline(player, selection, Particle.HAPPY_VILLAGER)
+            selections.render(player)
         } else {
             player.spawnParticle(Particle.HAPPY_VILLAGER, location.clone().add(0.5, 0.5, 0.5), 6, 0.2, 0.2, 0.2, 0.0)
         }
@@ -497,11 +491,7 @@ internal class BuilderToolsRuntime(
     }
 
     private fun selectionOrNull(player: Player): BuilderSelection? {
-        val draft = selections[player.uniqueId] ?: return null
-        val first = draft.first ?: return null
-        val second = draft.second ?: return null
-        if (first.worldId != second.worldId || first.worldId != player.world.uid) return null
-        return BuilderSelection(first, second)
+        return selections.selection(player.uniqueId, player.world.uid)
     }
 
     private fun maxAxis(player: Player): Int {
@@ -547,7 +537,7 @@ internal class BuilderToolsRuntime(
             blocks += BuilderClipboardBlock(position.x - selection.minX, position.y - selection.minY, position.z - selection.minZ, copiedData.asString)
             if (blocks.size > config.maxClipboardBlocks) throw UserFailure("errors.selection-too-large")
         }
-        if (blocks.isEmpty()) throw UserFailure("errors.plan-failed", mapOf("reason" to messages.literal("empty copy")))
+        if (blocks.isEmpty()) throw UserFailure("errors.empty-copy")
         val now = System.currentTimeMillis()
         clipboards[player.uniqueId] = BuilderClipboard(
             blocks = blocks,
@@ -1088,7 +1078,7 @@ internal class BuilderToolsRuntime(
         ensureFeaturePermission(player, BuilderFeature.PASTE)
         val clipboard = clipboards[player.uniqueId]?.takeIf { it.expiresAtMillis > System.currentTimeMillis() }
             ?: throw UserFailure("errors.expired")
-        val anchor = selections[player.uniqueId]?.first ?: throw UserFailure("errors.selection-missing")
+        val anchor = selections.first(player.uniqueId, player.world.uid) ?: throw UserFailure("errors.selection-missing")
         val world = requireWorld(anchor.worldId)
         val costs = mutableListOf<ItemStack>()
         val changes = clipboard.blocks.mapNotNull { copied ->
@@ -1189,13 +1179,13 @@ internal class BuilderToolsRuntime(
         } catch (_: IllegalArgumentException) {
             throw UserFailure("errors.crown-setting")
         }
-        val center = selections[player.uniqueId]?.first ?: throw UserFailure("errors.selection-missing")
+        val center = selections.first(player.uniqueId, player.world.uid) ?: throw UserFailure("errors.selection-missing")
         val seed = crownSessions.seed(player.uniqueId, center, settings, reroll)
         preparePlan(player, planCrown(player, settings, seed))
     }
 
     private fun planCrown(player: Player, settings: BuilderCrownSettings, seed: Long): BuilderPlan {
-        val center = selections[player.uniqueId]?.first ?: throw UserFailure("errors.selection-missing")
+        val center = selections.first(player.uniqueId, player.world.uid) ?: throw UserFailure("errors.selection-missing")
         val world = requireWorld(center.worldId)
         val materialByName = settings.palette.associate { entry ->
             val material = Material.matchMaterial(entry.materialName) ?: throw UserFailure("errors.material")
@@ -1294,7 +1284,7 @@ internal class BuilderToolsRuntime(
         if (isPlayerLocked(player.uniqueId)) throw UserFailure("errors.busy")
         val used = hourlyUsage(player.uniqueId, System.currentTimeMillis())
         if (plan.kind != BuilderPlanKind.UNDO && used + plan.changes.size > hourlyLimit(player)) {
-            throw UserFailure("errors.plan-failed", mapOf("reason" to messages.literal("hourly change limit")))
+            throw UserFailure("errors.hourly-limit")
         }
         val canApplyNow = BuilderInventory.canApply(player, plan.costs, plan.rewards, plan.toolFingerprintBase64, plan.toolDamage)
         if (!canApplyNow) {
@@ -1612,7 +1602,7 @@ internal class BuilderToolsRuntime(
         }
         finishOperation(operation)
         if (failure == null) releasePlanBookReservation(operation.record.plan)
-        if (failure == null && player.isOnline) send(player, "operation.rolled-back", mapOf("reason" to messages.literal(reason)))
+        if (failure == null && player.isOnline) send(player, "operation.rolled-back")
         if (failure == null && player.uniqueId !in recoveryByPlayer) {
             writeAsync(action = { journal.acknowledge(operation.record.operationId) }, callback = { _, acknowledgeFailure ->
                 if (acknowledgeFailure != null) warn("Builder-tools could not acknowledge rolled-back operation {}", operation.record.operationId)
@@ -1624,7 +1614,7 @@ internal class BuilderToolsRuntime(
     private fun failBeforeMutation(player: Player, operation: ActiveOperation, failure: Throwable?) {
         finishOperation(operation)
         releasePlanBookReservation(operation.record.plan)
-        send(player, "operation.rolled-back", mapOf("reason" to messages.literal("durability unavailable")))
+        send(player, "operation.rolled-back")
         failure?.let { warn("Builder-tools durability barrier failed: {}", it.message) }
         writeAsync(action = { journal.acknowledge(operation.record.operationId) }, callback = { _, acknowledgeFailure ->
             if (acknowledgeFailure != null) {
@@ -1707,7 +1697,7 @@ internal class BuilderToolsRuntime(
     private fun clearSelection(player: Player) {
         if (player.uniqueId in activeOperations || player.uniqueId in bookLockedPlayers) throw UserFailure("errors.busy")
         discardPendingPlan(player.uniqueId)
-        selections.remove(player.uniqueId)
+        selections.clear(player.uniqueId)
         crownBrushAnchors.remove(player.uniqueId)
         send(player, "selection.cleared")
     }
@@ -1755,9 +1745,9 @@ internal class BuilderToolsRuntime(
     }
 
     private fun ensureInRangeAndLoaded(player: Player, block: Block) {
-        if (!block.world.isChunkLoaded(block.x shr 4, block.z shr 4)) throw UserFailure("errors.plan-failed", mapOf("reason" to messages.literal("unloaded chunk")))
+        if (!block.world.isChunkLoaded(block.x shr 4, block.z shr 4)) throw UserFailure("errors.chunk-unloaded")
         if (player.world.uid != block.world.uid || player.location.distanceSquared(block.location.clone().add(0.5, 0.5, 0.5)) > config.maximumRange * config.maximumRange) {
-            throw UserFailure("errors.plan-failed", mapOf("reason" to messages.literal("too far away")))
+            throw UserFailure("errors.too-far")
         }
     }
 
@@ -1773,7 +1763,7 @@ internal class BuilderToolsRuntime(
     private fun requireWorld(id: UUID): World = Bukkit.getWorld(id) ?: throw UserFailure("errors.world-not-allowed")
 
     private fun requireChanges(changes: List<BuilderBlockChange>) {
-        if (changes.isEmpty()) throw UserFailure("errors.plan-failed", mapOf("reason" to messages.literal("nothing to change")))
+        if (changes.isEmpty()) throw UserFailure("errors.nothing-to-change")
         if (changes.size > config.maxChanges) throw UserFailure("errors.selection-too-large")
     }
 
@@ -1814,7 +1804,7 @@ internal class BuilderToolsRuntime(
             try {
                 val playerId = player.uniqueId
                 pendingPlans[playerId]?.plan?.takeIf { it.expiresAtMillis > now }?.let { showPlanParticles(player, it) }
-                showSelectionDraftParticles(player)
+                selections.render(player)
                 previewFailurePlayers.remove(playerId)
             } catch (failure: RuntimeException) {
                 if (previewFailurePlayers.add(player.uniqueId)) {
@@ -1822,26 +1812,6 @@ internal class BuilderToolsRuntime(
                 }
             }
         }
-    }
-
-    private fun showSelectionDraftParticles(player: Player) {
-        val draft = selections[player.uniqueId] ?: return
-        draft.first?.let { showSelectionPoint(player, it, Particle.END_ROD) }
-        draft.second?.let { showSelectionPoint(player, it, Particle.HAPPY_VILLAGER) }
-        selectionOrNull(player)?.let { showSelectionOutline(player, it, Particle.FLAME) }
-    }
-
-    private fun showSelectionPoint(player: Player, position: BuilderBlockPos, particle: Particle) {
-        if (position.worldId != player.world.uid) return
-        val x = position.x + 0.5
-        val y = position.y + 0.5
-        val z = position.z + 0.5
-        val eye = player.eyeLocation
-        val dx = x - eye.x
-        val dy = y - eye.y
-        val dz = z - eye.z
-        if (dx * dx + dy * dy + dz * dz > config.previewRadius * config.previewRadius) return
-        player.spawnParticle(particle, x, y, z, 3, 0.08, 0.08, 0.08, 0.0)
     }
 
     private fun showPlanParticles(player: Player, plan: BuilderPlan) {
@@ -1857,22 +1827,6 @@ internal class BuilderToolsRuntime(
         val step = kotlin.math.ceil(visible.size / config.previewMaxPlanParticles.toDouble()).toInt().coerceAtLeast(1)
         visible.asSequence().filterIndexed { index, _ -> index % step == 0 }.take(config.previewMaxPlanParticles).forEach { change ->
             player.spawnParticle(Particle.END_ROD, change.position.x + 0.5, change.position.y + 0.5, change.position.z + 0.5, 1, 0.0, 0.0, 0.0, 0.0)
-        }
-    }
-
-    private fun showSelectionOutline(player: Player, selection: BuilderSelection, particle: Particle) {
-        if (selection.worldId != player.world.uid) return
-        val eye = player.eyeLocation
-        BuilderSelectionPreviewGeometry.visibleOutline(
-            selection = selection,
-            viewerX = eye.x,
-            viewerY = eye.y,
-            viewerZ = eye.z,
-            radius = config.previewRadius,
-            spacing = config.previewSpacing,
-            maximumPoints = config.previewMaxSelectionParticles,
-        ).forEach { point ->
-            player.spawnParticle(particle, point.x, point.y, point.z, 1, 0.0, 0.0, 0.0, 0.0)
         }
     }
 
@@ -2304,7 +2258,7 @@ internal class BuilderToolsRuntime(
                     org.bukkit.event.block.Action.LEFT_CLICK_BLOCK -> {
                         setPosition(player, clicked.getRelative(event.blockFace).location, first = true)
                         prepareCrownPlan(player, crownSettings(player))
-                        crownBrushAnchors[player.uniqueId] = checkNotNull(selections[player.uniqueId]?.first)
+                        crownBrushAnchors[player.uniqueId] = checkNotNull(selections.first(player.uniqueId, player.world.uid))
                     }
                     org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK -> {
                         val relative = clicked.getRelative(event.blockFace)
@@ -2358,7 +2312,7 @@ internal class BuilderToolsRuntime(
     @EventHandler(priority = EventPriority.MONITOR)
     fun onQuit(event: PlayerQuitEvent) {
         discardPendingPlan(event.player.uniqueId)
-        selections.remove(event.player.uniqueId)
+        selections.clear(event.player.uniqueId)
         clipboards.remove(event.player.uniqueId)
         pendingBookMints.remove(event.player.uniqueId)
         crownSessions.clear(event.player.uniqueId)

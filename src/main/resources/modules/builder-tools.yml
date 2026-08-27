@@ -106,8 +106,23 @@ locales:
         <#8c8c8c>  • <#e6fff3>Возьмите инструмент: <#92bed8>/builder wand
       selection-too-large: "<prefix><#c42323>Область превышает ваш безопасный лимит."
       plan-failed: |-
-        <prefix><#c42323>Не удалось подготовить план.
-        <#8c8c8c>  • <#969696><reason>
+        <prefix><#c42323>Не удалось подготовить безопасный план.
+        <#8c8c8c>  • <#969696>Мир и инвентарь не изменены; попробуйте ещё раз.
+      empty-copy: |-
+        <prefix><#ff9f0f>В выделении нет блоков для чертежа.
+        <#8c8c8c>  • <#e6fff3>Воздух, трава и другие заменяемые блоки не копируются.
+      hourly-limit: |-
+        <prefix><#ff9f0f>Достигнут безопасный лимит изменений за час.
+        <#8c8c8c>  • <#e6fff3>Подождите немного или уменьшите область.
+      chunk-unloaded: |-
+        <prefix><#ff9f0f>Часть области сейчас не загружена.
+        <#8c8c8c>  • <#e6fff3>Подойдите к постройке и повторите действие.
+      too-far: |-
+        <prefix><#ff9f0f>Область находится слишком далеко.
+        <#8c8c8c>  • <#e6fff3>Подойдите ближе к выделению и повторите действие.
+      nothing-to-change: |-
+        <prefix><#ff9f0f>Здесь нечего изменять.
+        <#8c8c8c>  • <#e6fff3>Проверьте выделение, материал и текущие блоки.
       busy: "<prefix><#ff9f0f>Другая операция здесь ещё не завершена."
       expired: |-
         <prefix><#ff9f0f>Предпросмотр устарел.
@@ -328,7 +343,7 @@ locales:
         <#8c8c8c>  • <#e6fff3>Изменено блоков: <#2bba43><count>
       rolled-back: |-
         <prefix><#c42323>Операция отменена и полностью восстановлена.
-        <#8c8c8c>  • <#969696>Причина: <reason>
+        <#8c8c8c>  • <#969696>Мир и инвентарь сохранены; план можно создать заново.
     status:
       selection: "<prefix><#e6fff3>Выделено: <#92bed8><x> × <y> × <z> <#8c8c8c>• <#e6fff3>объём: <#92bed8><volume>"
       plan: "<prefix><#e6fff3><kind>: <#92bed8><count>/<total> <#e6fff3>блоков."
@@ -363,7 +378,12 @@ locales:
       world-not-allowed: "<prefix><yellow>Builder tools are disabled in this world."
       selection-missing: "<prefix><yellow>Select positions 1 and 2 first. A crown needs position 1."
       selection-too-large: "<prefix><red>The selection exceeds your safe size or block limit."
-      plan-failed: "<prefix><red>Could not create the plan: <reason>."
+      plan-failed: "<prefix><red>Could not prepare a safe plan. <gray>The world and inventory were not changed; try again."
+      empty-copy: "<prefix><yellow>The selection has no blocks to copy. <gray>Air, grass, and other replaceable blocks are excluded."
+      hourly-limit: "<prefix><yellow>You reached the safe hourly change limit. <gray>Wait a while or use a smaller area."
+      chunk-unloaded: "<prefix><yellow>Part of the area is not loaded. <gray>Move closer to the build and try again."
+      too-far: "<prefix><yellow>The area is too far away. <gray>Move closer to the selection and try again."
+      nothing-to-change: "<prefix><yellow>There is nothing to change. <gray>Check the selection, material, and existing blocks."
       busy: "<prefix><yellow>You or this area already has an operation in progress."
       expired: "<prefix><yellow>The plan or clipboard expired. Create it again."
       inventory: "<prefix><red>You lack exact materials, inventory space, or tool durability."
@@ -504,7 +524,7 @@ locales:
     operation:
       started: "<prefix><yellow>Locked a <white><count></white>-block plan. Your inventory is briefly protected."
       completed: "<prefix><green><white><kind></white> completed: <white><count></white> blocks."
-      rolled-back: "<prefix><red>The operation was safely rolled back and fully restored: <reason>."
+      rolled-back: "<prefix><red>The operation was safely rolled back and fully restored. <gray>The world and inventory are safe; prepare the plan again."
     status:
       selection: "<prefix><gray>Selected <white><x>×<y>×<z></white> (volume <white><volume></white>); no plan is ready."
       plan: "<prefix><yellow><white><kind></white> plan: <white><count>/<total></white> blocks."
