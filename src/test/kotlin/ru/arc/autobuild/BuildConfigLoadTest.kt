@@ -73,5 +73,12 @@ class BuildConfigLoadTest : KotestTestBase({
         it("npc skins map is non-empty") {
             BuildConfig.npcSkins shouldNotBe emptyMap<String, String>()
         }
+
+        it("npc confirmation prompt is concise and configured") {
+            BuildConfig.npcPrompt shouldBe listOf(
+                "&bПлан готов к подтверждению",
+                "&7(Нажмите ПКМ)",
+            )
+        }
     }
 })

@@ -108,6 +108,10 @@ confirm-time: 180
 construction:
   # Default limit for books without arc:cooldown_seconds. Set a book to 0 for unlimited simple builds.
   default-cooldown-seconds: 3600
+  # Citizens holograms use legacy colors. The prompt stays visible for the whole confirmation phase.
+  npc-prompt:
+    - '&bПлан готов к подтверждению'
+    - '&7(Нажмите ПКМ)'
   npc-skins:
     '&6Агадиль': https://minesk.in/e8eae58c095949de87ff9c9b5b7c17f2
     '&6Николаич': https://minesk.in/6666ba384aa3486b88c21fa7541fb856

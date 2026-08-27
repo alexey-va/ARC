@@ -52,6 +52,8 @@ object BuildConfig {
     val particleOffset: Double get() = construction.double("particle-offset", 0.25)
 
     val npcSkins: Map<String, String> get() = construction.map("npc-skins", defaultNpcSkins)
+    val npcPrompt: List<String>
+        get() = construction.stringList("npc-prompt", defaultNpcPrompt).ifEmpty { defaultNpcPrompt }
 
     val skipMaterials: Set<Material>
         get() =
@@ -176,5 +178,10 @@ object BuildConfig {
         "&6Николаич" to "https://minesk.in/6666ba384aa3486b88c21fa7541fb856",
         "&6Иваныч" to "https://minesk.in/3ff30e8f08ae48c2abece46bbf0c09d6",
         "&6Агадиль" to "https://minesk.in/e8eae58c095949de87ff9c9b5b7c17f2"
+    )
+
+    val defaultNpcPrompt = listOf(
+        "&bПлан готов к подтверждению",
+        "&7(Нажмите ПКМ)",
     )
 }

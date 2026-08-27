@@ -14,7 +14,12 @@ import org.junit.jupiter.api.Test
 import org.mockbukkit.mockbukkit.entity.PlayerMock
 import org.mockbukkit.mockbukkit.world.WorldMock
 import ru.arc.TestBase
+import ru.arc.core.LifecycleTaskScope
+import ru.arc.core.TestTaskScheduler
 import ru.arc.hooks.HookRegistry
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executor
+import java.util.concurrent.TimeUnit
 
 class ConstructionTest : TestBase() {
 
@@ -85,5 +90,53 @@ class ConstructionTest : TestBase() {
             assertTrue(state is Container, "$material should be placed as a container")
             assertTrue((state as Container).inventory.isEmpty, "$material must remain empty after construction")
         }
+    }
+
+    @Test
+    fun `cancelling while async preparation is running cannot schedule block placement`() {
+        val preparationStarted = CountDownLatch(1)
+        val allowPreparationToFinish = CountDownLatch(1)
+        val preparationFinished = CountDownLatch(1)
+        val scheduler = TestTaskScheduler(Executor { task -> Thread(task, "construction-race-test").start() })
+        val construction = Construction(
+            site,
+            LifecycleTaskScope(scheduler),
+        ) {
+            preparationStarted.countDown()
+            assertTrue(allowPreparationToFinish.await(2, TimeUnit.SECONDS), "Preparation release timed out")
+            preparationFinished.countDown()
+            mutableListOf()
+        }
+
+        construction.startBuilding()
+        assertEquals(1, scheduler.pendingCount(), "Async preparation should be owned by the construction")
+        scheduler.executeImmediate()
+        assertTrue(preparationStarted.await(2, TimeUnit.SECONDS), "Async preparation did not start")
+
+        construction.cancel(0)
+        allowPreparationToFinish.countDown()
+        assertTrue(preparationFinished.await(2, TimeUnit.SECONDS), "Async preparation did not finish")
+
+        assertEquals(0, scheduler.pendingCount(), "Cancellation should remove the pending preparation callback")
+        assertEquals(0, scheduler.timerCount(), "A cancelled construction must not attach a placement timer")
+    }
+
+    @Test
+    fun `completed async preparation schedules one owned placement timer`() {
+        val scheduler = TestTaskScheduler()
+        val construction = Construction(
+            site,
+            LifecycleTaskScope(scheduler),
+        ) { emptyList() }
+
+        construction.startBuilding()
+        scheduler.executeImmediate()
+        scheduler.executeImmediate()
+
+        assertEquals(0, scheduler.pendingCount(), "Preparation handoff should finish")
+        assertEquals(1, scheduler.timerCount(), "Exactly one placement timer should be scheduled")
+
+        construction.cancel(0)
+        assertEquals(0, scheduler.timerCount(), "The placement timer should remain owned by the construction")
     }
 }

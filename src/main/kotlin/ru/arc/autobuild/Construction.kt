@@ -8,10 +8,9 @@ import org.bukkit.Material
 import org.bukkit.block.Block
 import org.bukkit.block.data.BlockData
 import org.bukkit.inventory.ItemStack
+import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.ScheduledTask
-import ru.arc.core.async
 import ru.arc.core.delayed
-import ru.arc.core.repeating
 import ru.arc.core.ticks
 import ru.arc.hooks.HookRegistry
 import ru.arc.hooks.citizens.CitizensHook
@@ -38,10 +37,13 @@ internal object ConstructionBlockPlacement {
  *
  * Creates an NPC worker and places blocks over time with effects.
  */
-class Construction(private val site: ConstructionSite) {
-    private var buildTask: ScheduledTask? = null
+internal class Construction(
+    private val site: ConstructionSite,
+    private val buildTasks: LifecycleTaskScope = LifecycleTaskScope(),
+    private val prepareBlocks: (ConstructionSite) -> List<BlockVector3> = ::prepareBlockList,
+) {
     private var removeNpcTask: ScheduledTask? = null
-    private var blocks = mutableListOf<BlockVector3>()
+    private var blocks = emptyList<BlockVector3>()
 
     val pointer = AtomicInteger(-1)
     var lookClose = false
@@ -60,10 +62,10 @@ class Construction(private val site: ConstructionSite) {
         val (name, skinUrl) = RandomUtils.random(BuildConfig.npcSkins)
         npcId = citizens.createNpc(name, location.toCenterLocation())
 
+        val promptTicks = if (seconds > 0) (seconds.toLong() * 20L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt() else -1
         citizens.addChatBubble(
-            npcId, listOf(
-                CitizensHook.HologramLine("&6Нажмите ПКМ, чтобы начать строительство", 100)
-            )
+            npcId,
+            BuildConfig.npcPrompt.map { CitizensHook.HologramLine(it, promptTicks) },
         )
         citizens.setSkin(npcId, skinUrl)
 
@@ -92,41 +94,49 @@ class Construction(private val site: ConstructionSite) {
         if (npcId != -1 && lookClose) HookRegistry.citizensHook?.lookClose(npcId)
         removeNpcTask?.takeIf { !it.isCancelled }?.cancel()
 
-        // Prepare blocks async, then build sync
-        async {
+        val token = buildTasks.token()
+        buildTasks.runAsync(token) {
             try {
-                prepareBlockList()
-                debug(
-                    "[autobuild] startBuilding player={} building={} blocks={} npcId={}",
-                    site.player.name,
-                    site.building.fileName,
-                    blocks.size,
-                    npcId,
-                )
-                buildTask =
-                    repeating(period = BuildConfig.cycleDurationTicks.ticks, delay = 1.ticks) {
+                val preparedBlocks = prepareBlocks(site)
+                buildTasks.runSync(token) {
+                    blocks = preparedBlocks
+                    debug(
+                        "[autobuild] startBuilding player={} building={} blocks={} npcId={}",
+                        site.player.name,
+                        site.building.fileName,
+                        blocks.size,
+                        npcId,
+                    )
+                    buildTasks.runTimer(token, 1L, BuildConfig.cycleDurationTicks) {
                         if (placeNextBlocks(BuildConfig.blocksPerTick)) {
-                            cancel()
+                            buildTasks.close()
                             site.complete()
                         }
                     }
+                }
             } catch (e: Exception) {
                 error("[autobuild] startBuilding failed for player={}", site.player.name, e)
+                buildTasks.runSync(token) {
+                    if (site.state == ConstructionState.Building) site.cancel()
+                }
             }
         }
     }
 
-    private fun prepareBlockList() {
-        val c = site.corners
-        blocks.clear()
+    private companion object {
+        fun prepareBlockList(site: ConstructionSite): List<BlockVector3> {
+            val c = site.corners
+            val prepared = mutableListOf<BlockVector3>()
 
-        // Y first for bottom-up building
-        for (y in c.corner1.y()..c.corner2.y()) {
-            for (x in c.corner1.x()..c.corner2.x()) {
-                for (z in c.corner1.z()..c.corner2.z()) {
-                    blocks.add(BlockVector3.at(x, y, z))
+            // Y first for bottom-up building
+            for (y in c.corner1.y()..c.corner2.y()) {
+                for (x in c.corner1.x()..c.corner2.x()) {
+                    for (z in c.corner1.z()..c.corner2.z()) {
+                        prepared.add(BlockVector3.at(x, y, z))
+                    }
                 }
             }
+            return prepared
         }
     }
 
@@ -225,16 +235,22 @@ class Construction(private val site: ConstructionSite) {
     // ==================== Lifecycle ====================
 
     fun cancel(destroyNpcDelaySeconds: Int) {
-        buildTask?.takeIf { !it.isCancelled }?.cancel()
+        buildTasks.close()
         removeNpcTask?.takeIf { !it.isCancelled }?.cancel()
-        delayed((destroyNpcDelaySeconds * 20L).ticks) { destroyNpc() }
+        removeNpcTask =
+            if (destroyNpcDelaySeconds <= 0) {
+                destroyNpc()
+                null
+            } else {
+                delayed((destroyNpcDelaySeconds * 20L).ticks) { destroyNpc() }
+            }
     }
 
     fun finishInstantly() {
         cancel(0)
         // Ensure blocks are prepared before placing
         if (blocks.isEmpty()) {
-            prepareBlockList()
+            blocks = prepareBlocks(site)
         }
         placeNextBlocks(1_000_000)
     }
