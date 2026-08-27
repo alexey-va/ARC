@@ -17,19 +17,20 @@ object InvestigationGui {
     }
 
     fun openHub(player: Player, latest: InvestigationJournalRecord?) {
-        GuiUtils.constructAndShowAsync({ buildHub(player, latest) }, player)
-    }
-
-    fun openConfirmation(player: Player, balanceMinor: Long?, feeMinor: Long, rewardMinor: Long) {
-        GuiUtils.constructAndShowAsync({ buildConfirmation(player, balanceMinor, feeMinor, rewardMinor) }, player)
+        val policy = InvestigationModule.configOrNull() ?: return
+        GuiUtils.constructAndShowAsync({ buildHub(player, latest, policy) }, player)
     }
 
     fun openCase(player: Player, record: InvestigationJournalRecord) {
         GuiUtils.constructAndShowAsync({ buildCase(player, record) }, player)
     }
 
-    internal fun buildHub(player: Player, latest: InvestigationJournalRecord?): ChestGui =
-        gui(guiConfig.string("hub.title", "<dark_gray>Палата сделок"), 3, player, guiConfig) {
+    internal fun buildHub(
+        player: Player,
+        latest: InvestigationJournalRecord?,
+        policy: InvestigationConfig,
+    ): ChestGui =
+        gui(guiConfig.string("hub.title", "<dark_gray>Бюро расследований"), 3, player, guiConfig) {
             background()
             staticPane(width = 9, height = 3) {
                 item(4, 0) {
@@ -38,11 +39,11 @@ object InvestigationGui {
                     lore(
                         listOf(
                             "<gray>Фома выдаст случайное торговое дело.",
-                            "<gray>За <white>90 секунд <gray>сверьте показания",
-                            "<gray>Ставра, Прохора и Гордея.",
+                            "<gray>За <white>${policy.duration.seconds} секунд <gray>сверьте документы",
+                            "<gray>и показания пяти сотрудников бюро.",
                             "",
-                            "<yellow>Двух показаний достаточно для риска.",
-                            "<gray>Третье обычно разоблачает уловку.",
+                            "<yellow>Три показания откроют вердикт.",
+                            "<gray>Остальные помогут распознать уловку.",
                         ),
                     )
                 }
@@ -51,71 +52,28 @@ object InvestigationGui {
                     display("<green><bold>Взять дело")
                     lore(
                         listOf(
-                            "<gray>Взнос: <gold>100 <white>💰",
-                            "<gray>Награда за вердикт: <gold>300 <white>💰",
-                            "<gray>Повтор: <white>раз в 20 часов",
+                            "<gray>Взнос: <gold>${InvestigationModule.money(policy.feeMinor)} <white>💰",
+                            "<gray>Награда за вердикт: <gold>${InvestigationModule.money(policy.rewardMinor)} <white>💰",
+                            "<gray>Повтор: <white>${formatCooldown(policy.cooldown.toMinutes())}",
                             "",
                             cooldownLine(latest),
-                            "<green>Нажмите для сверки оплаты.",
+                            "<green>Нажмите, чтобы оплатить и начать.",
                         ),
                     )
-                    onClick { InvestigationModule.openConfirmation(player) }
+                    onClick { InvestigationModule.startCase(player) }
                 }
                 item(6, 1) {
                     style(InvestigationGuiRole.CONTRACTS)
-                    display("<aqua><bold>Заказы палаты")
+                    display("<aqua><bold>Заказы бюро")
                     lore(
                         listOf(
-                            "<gray>Палата покупает чернила, книги",
+                            "<gray>Бюро покупает чернила, книги",
                             "<gray>и золотые слитки по повышенной ставке.",
                             "",
                             "<aqua>Открыть книгу контрактов.",
                         ),
                     )
                     onClick { InvestigationModule.openContracts(player) }
-                }
-                item(4, 2) {
-                    style(InvestigationGuiRole.BACK)
-                    display("<gray>Закрыть")
-                    onClick { player.closeInventory() }
-                }
-            }
-        }
-
-    internal fun buildConfirmation(
-        player: Player,
-        balanceMinor: Long?,
-        feeMinor: Long,
-        rewardMinor: Long,
-    ): ChestGui =
-        gui(guiConfig.string("confirmation.title", "<dark_gray>Подтвердить дело"), 3, player, guiConfig) {
-            background()
-            staticPane(width = 9, height = 3) {
-                item(4, 0) {
-                    style(InvestigationGuiRole.DOSSIER)
-                    display("<gold><bold>Оплата ревизорской пробы")
-                    lore(
-                        listOf(
-                            "<gray>Будет списано: <gold>${InvestigationModule.money(feeMinor)} <white>💰",
-                            "<gray>За верный ответ: <gold>${InvestigationModule.money(rewardMinor)} <white>💰",
-                            "<gray>Ваш баланс: <white>${balanceMinor?.let(InvestigationModule::money) ?: "недоступен"} <white>💰",
-                            "",
-                            "<yellow>Таймер и перерыв начнутся",
-                            "<yellow>только после подтверждённого списания.",
-                        ),
-                    )
-                }
-                item(2, 2) {
-                    style(InvestigationGuiRole.CANCEL)
-                    display("<red><bold>Отмена")
-                    lore(listOf("<gray>Вернуться без списания."))
-                    onClick { InvestigationModule.open(player) }
-                }
-                item(6, 2) {
-                    style(InvestigationGuiRole.CONFIRM)
-                    display("<green><bold>Оплатить и начать")
-                    lore(listOf("<gray>Списать <gold>${InvestigationModule.money(feeMinor)} <white>💰<gray> и открыть дело."))
-                    onClick { InvestigationModule.startCase(player) }
                 }
             }
         }
@@ -127,38 +85,36 @@ object InvestigationGui {
                 item(4, 0) {
                     style(InvestigationGuiRole.DOSSIER)
                     display("<gold><bold>Ведомость ${record.case.caseNumber}")
-                    lore(record.case.dossier() + listOf("", timeLine(record), "<gray>Показания: <white>${record.clueCount()}/3"))
+                    lore(record.case.dossier() + listOf("", timeLine(record), "<gray>Показания: <white>${record.clueCount()}/5"))
                 }
 
-                witnessItem(1, player, record, InvestigationWitness.STAVR, InvestigationGuiRole.STAVR, "Глашатай Ставр", "южная стойка")
-                witnessItem(4, player, record, InvestigationWitness.PROKHOR, InvestigationGuiRole.PROKHOR, "Архивариус Прохор", "северная лестница")
-                witnessItem(7, player, record, InvestigationWitness.GORDEY, InvestigationGuiRole.GORDEY, "Пристав Гордей", "южная лестница")
+                witnessItem(0, player, record, InvestigationWitness.STAVR, InvestigationGuiRole.STAVR, "Глашатай Ставр", "стол у входа")
+                witnessItem(2, player, record, InvestigationWitness.PROKHOR, InvestigationGuiRole.PROKHOR, "Архивариус Прохор", "стол у входа")
+                witnessItem(4, player, record, InvestigationWitness.GORDEY, InvestigationGuiRole.GORDEY, "Пристав Гордей", "патруль первого этажа")
+                witnessItem(6, player, record, InvestigationWitness.AGATA, InvestigationGuiRole.AGATA, "Почерковед Агата", "второй этаж")
+                witnessItem(8, player, record, InvestigationWitness.TIKHON, InvestigationGuiRole.TIKHON, "Счётовод Тихон", "второй этаж")
 
-                verdictItem(1, player, record, InvestigationVerdict.AMOUNT_MISMATCH, InvestigationGuiRole.AMOUNT, "Ошибка в сумме", "Цифры ведомости не сходятся.")
-                verdictItem(4, player, record, InvestigationVerdict.FORGED_SEAL, InvestigationGuiRole.SEAL, "Поддельная печать", "Знак, воск или подпись не из реестра.")
-                verdictItem(7, player, record, InvestigationVerdict.CLEAN, InvestigationGuiRole.CLEAN, "Сделка чиста", "Подозрительная деталь была уловкой.")
+                verdictItem(0, player, record, InvestigationVerdict.AMOUNT_MISMATCH, InvestigationGuiRole.AMOUNT, "Ошибка в сумме", "Цифры ведомости не сходятся.")
+                verdictItem(2, player, record, InvestigationVerdict.FORGED_SEAL, InvestigationGuiRole.SEAL, "Поддельная печать", "Знак, воск или подпись не из реестра.")
+                verdictItem(4, player, record, InvestigationVerdict.CARGO_SUBSTITUTION, InvestigationGuiRole.CARGO, "Подмена груза", "Содержимое или число мест подменено.")
+                verdictItem(6, player, record, InvestigationVerdict.DUPLICATE_ENTRY, InvestigationGuiRole.DUPLICATE, "Повторная запись", "Один груз проведён по реестру дважды.")
+                verdictItem(8, player, record, InvestigationVerdict.CLEAN, InvestigationGuiRole.CLEAN, "Сделка чиста", "Подозрительная деталь была уловкой.")
 
-                item(0, 3) {
-                    style(InvestigationGuiRole.BACK)
-                    display("<gray>Закрыть ведомость")
-                    lore(listOf("<dark_gray>Таймер продолжит идти."))
-                    onClick { player.closeInventory() }
-                }
                 item(4, 3) {
                     material(Material.CLOCK)
-                    display("<yellow><bold>Правило палаты")
+                    display("<yellow><bold>Правило бюро")
                     lore(
                         listOf(
-                            "<gray>После двух показаний можно рискнуть.",
+                            "<gray>После трёх показаний можно рискнуть.",
                             "<gray>Ошибочный вердикт сразу закрывает дело.",
-                            "<gray>Третье показание помогает отличить",
-                            "<gray>нарушение от правдоподобной уловки.",
+                            "<gray>Пять показаний позволяют сверить сумму,",
+                            "<gray>печать, груз и записи реестра.",
                         ),
                     )
                 }
                 item(8, 3) {
                     style(InvestigationGuiRole.CONTRACTS)
-                    display("<aqua>Заказы палаты")
+                    display("<aqua>Заказы бюро")
                     lore(listOf("<gray>Открыть ресурсные контракты.", "<dark_gray>Таймер продолжит идти."))
                     onClick { InvestigationModule.openContracts(player) }
                 }
@@ -212,7 +168,7 @@ object InvestigationGui {
                     if (record.clueCount() >= InvestigationService.MIN_CLUES) {
                         "<red>Нажмите, чтобы вынести окончательный вердикт."
                     } else {
-                        "<dark_gray>Нужно хотя бы два показания."
+                        "<dark_gray>Нужно хотя бы три показания."
                     },
                 ),
             )
@@ -238,5 +194,15 @@ object InvestigationGui {
         val remainingMillis = (requireNotNull(record.expiresAt) - Instant.now().toEpochMilli()).coerceAtLeast(0L)
         val seconds = (remainingMillis + 999L) / 1_000L
         return if (seconds > 20L) "<yellow>Осталось: <white>${seconds}с" else "<red><bold>Осталось: ${seconds}с"
+    }
+
+    private fun formatCooldown(minutes: Long): String {
+        val hours = minutes / 60L
+        val remainder = minutes % 60L
+        return when {
+            remainder == 0L -> "раз в $hours ч"
+            hours == 0L -> "раз в $remainder мин"
+            else -> "раз в $hours ч $remainder мин"
+        }
     }
 }

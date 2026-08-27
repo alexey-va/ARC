@@ -92,7 +92,7 @@ data class InvestigationJournalRecord(
     fun clueCount(): Int = Integer.bitCount(cluesMask)
 
     companion object {
-        const val ALL_CLUES_MASK = 7
+        const val ALL_CLUES_MASK = 31
         private val EVIDENCE_PATTERN = Regex("[a-z0-9_:-]{1,180}")
     }
 }

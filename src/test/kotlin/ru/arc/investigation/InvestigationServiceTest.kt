@@ -9,11 +9,12 @@ import java.util.concurrent.CompletableFuture
 import kotlin.random.Random
 
 class InvestigationServiceTest : StringSpec({
-    "correct verdict after two witnesses charges once and rewards once" {
+    "correct verdict after three witnesses charges once and rewards once" {
         val fixture = InvestigationFixture()
         val started = fixture.service.start(fixture.playerId) as InvestigationStartResult.Started
         fixture.service.collectClue(fixture.playerId, InvestigationWitness.STAVR) as InvestigationClueResult.Evidence
         fixture.service.collectClue(fixture.playerId, InvestigationWitness.PROKHOR) as InvestigationClueResult.Evidence
+        fixture.service.collectClue(fixture.playerId, InvestigationWitness.AGATA) as InvestigationClueResult.Evidence
 
         val result = fixture.service.submitVerdict(fixture.playerId, started.record.case.verdict)
         val duplicate = fixture.service.submitVerdict(fixture.playerId, started.record.case.verdict)
@@ -26,12 +27,13 @@ class InvestigationServiceTest : StringSpec({
         fixture.journal.latest(fixture.playerId)?.status shouldBe InvestigationStatus.COMPLETED
     }
 
-    "one witness is not enough to gamble" {
+    "two witnesses are not enough to gamble" {
         val fixture = InvestigationFixture()
         val started = fixture.service.start(fixture.playerId) as InvestigationStartResult.Started
         fixture.service.collectClue(fixture.playerId, InvestigationWitness.STAVR)
+        fixture.service.collectClue(fixture.playerId, InvestigationWitness.TIKHON)
 
-        fixture.service.submitVerdict(fixture.playerId, started.record.case.verdict) shouldBe InvestigationVerdictResult.NeedClues(1)
+        fixture.service.submitVerdict(fixture.playerId, started.record.case.verdict) shouldBe InvestigationVerdictResult.NeedClues(2)
         fixture.wallet.deposits shouldBe 0
         fixture.journal.open(fixture.playerId)?.status shouldBe InvestigationStatus.ACTIVE
     }
@@ -41,6 +43,7 @@ class InvestigationServiceTest : StringSpec({
         val started = fixture.service.start(fixture.playerId) as InvestigationStartResult.Started
         fixture.service.collectClue(fixture.playerId, InvestigationWitness.STAVR)
         fixture.service.collectClue(fixture.playerId, InvestigationWitness.GORDEY)
+        fixture.service.collectClue(fixture.playerId, InvestigationWitness.TIKHON)
         val wrong = InvestigationVerdict.entries.first { it != started.record.case.verdict }
 
         fixture.service.submitVerdict(fixture.playerId, wrong)::class shouldBe InvestigationVerdictResult.Wrong::class
@@ -57,6 +60,7 @@ class InvestigationServiceTest : StringSpec({
         fixture.service.start(fixture.playerId) as InvestigationStartResult.Started
         fixture.service.collectClue(fixture.playerId, InvestigationWitness.STAVR)
         fixture.service.collectClue(fixture.playerId, InvestigationWitness.PROKHOR)
+        fixture.service.collectClue(fixture.playerId, InvestigationWitness.AGATA)
         fixture.now += 90_010L
 
         fixture.service.submitVerdict(fixture.playerId, InvestigationVerdict.CLEAN)::class shouldBe InvestigationVerdictResult.Expired::class
@@ -85,6 +89,7 @@ class InvestigationServiceTest : StringSpec({
         val started = fixture.service.start(fixture.playerId) as InvestigationStartResult.Started
         fixture.service.collectClue(fixture.playerId, InvestigationWitness.STAVR)
         fixture.service.collectClue(fixture.playerId, InvestigationWitness.PROKHOR)
+        fixture.service.collectClue(fixture.playerId, InvestigationWitness.AGATA)
 
         fixture.service.submitVerdict(fixture.playerId, started.record.case.verdict) shouldBe InvestigationVerdictResult.ManualReview
         fixture.wallet.deposits shouldBe 1

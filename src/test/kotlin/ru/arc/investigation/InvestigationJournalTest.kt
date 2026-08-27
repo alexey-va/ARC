@@ -3,6 +3,7 @@ package ru.arc.investigation
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import ru.arc.util.Common
 import java.nio.file.Files
 import java.util.UUID
 import kotlin.random.Random
@@ -37,6 +38,58 @@ class InvestigationJournalTest : StringSpec({
         shouldThrow<IllegalArgumentException> {
             journal.persist(prepared.active().copy(updatedAt = 6L, cluesMask = 0))
         }
+    }
+
+    "legacy persisted cases remain valid when new evidence fields are absent" {
+        val legacyJson =
+            """
+            {
+              "transactionId": "00000000-0000-0000-0000-000000000001",
+              "playerId": "00000000-0000-0000-0000-000000000002",
+              "case": {
+                "caseNumber": "А-0001",
+                "seller": "Купец Лука",
+                "goods": "рулоны сукна",
+                "quantity": 10,
+                "unitPrice": 5,
+                "announcedTotal": 55,
+                "archiveTotal": 50,
+                "registeredSeal": "ключ над волной",
+                "documentSeal": "ключ над волной",
+                "registeredWax": "синий воск",
+                "documentWax": "синий воск",
+                "registeredInitials": "Л.К.",
+                "documentInitials": "Л.К.",
+                "oddity": "На полях лежит крошка сургуча.",
+                "amountTrap": "ARITHMETIC",
+                "sealTrap": "NONE",
+                "verdict": "AMOUNT_MISMATCH",
+                "stavrVariant": 0,
+                "prokhorVariant": 1,
+                "gordeyVariant": 2
+              },
+              "feeMinor": 10000,
+              "rewardMinor": 30000,
+              "status": "PREPARED",
+              "createdAt": 1,
+              "updatedAt": 1,
+              "cluesMask": 0
+            }
+            """.trimIndent()
+
+        val decoded = Common.prettyGson.fromJson(legacyJson, InvestigationJournalRecord::class.java).validated()
+
+        decoded.case.declaredGoods shouldBe "рулоны сукна"
+        decoded.case.inspectedGoods shouldBe "рулоны сукна"
+        decoded.case.declaredQuantity shouldBe 10
+        decoded.case.inspectedQuantity shouldBe 10
+        decoded.case.entryReference shouldBe "А-0001"
+        decoded.case.effectiveCargoTrap shouldBe CargoTrap.NONE
+        decoded.case.effectiveLedgerTrap shouldBe LedgerTrap.NONE
+
+        Common.prettyGson
+            .fromJson(Common.prettyGson.toJson(decoded), InvestigationJournalRecord::class.java)
+            .validated() shouldBe decoded
     }
 })
 

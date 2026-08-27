@@ -127,9 +127,9 @@ balance сверяется в точных minor units. Неоднозначны
 
 ## /arc investigation
 
-Внутренняя команда четырёх NPC палаты сделок в Origin. Фома открывает
-оплачиваемое расследование, а Ставр, Прохор и Гордей добавляют в него свои
-показания. ARC проверяет точный мир и расстояние до соответствующего NPC;
+Внутренняя команда шести NPC бюро расследований в Origin. Фома открывает
+оплачиваемое расследование, а Ставр, Прохор, Гордей, Агата и Тихон добавляют
+в него свои показания. ARC проверяет точный мир и расстояние до NPC;
 деньги, таймер, перерыв и сгенерированное дело сохраняются в durable journal.
 
 ```bash
@@ -137,8 +137,12 @@ balance сверяется в точных minor units. Неоднозначны
 /arc investigation clue stavr
 /arc investigation clue prokhor
 /arc investigation clue gordey
+/arc investigation clue agata
+/arc investigation clue tikhon
 /arc investigation verdict amount
 /arc investigation verdict seal
+/arc investigation verdict cargo
+/arc investigation verdict duplicate
 /arc investigation verdict clean
 ```
 

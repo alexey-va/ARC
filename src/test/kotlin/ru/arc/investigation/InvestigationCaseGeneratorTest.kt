@@ -33,5 +33,19 @@ class InvestigationCaseGeneratorTest : StringSpec({
         clean.registeredSeal shouldBe clean.documentSeal
         clean.registeredWax shouldBe clean.documentWax
         clean.registeredInitials shouldBe clean.documentInitials
+        clean.declaredGoods shouldBe clean.inspectedGoods
+        clean.declaredQuantity shouldBe clean.inspectedQuantity
+        clean.duplicateReference shouldBe null
+    }
+
+    "every witness produces usable evidence for every generated case" {
+        val random = Random(813)
+
+        repeat(2_000) {
+            val case = InvestigationCaseGenerator.generate(random)
+            InvestigationWitness.entries.forEach { witness ->
+                case.testimony(witness).all(String::isNotBlank) shouldBe true
+            }
+        }
     }
 })

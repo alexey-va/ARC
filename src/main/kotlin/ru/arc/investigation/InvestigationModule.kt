@@ -42,11 +42,11 @@ object InvestigationModule : PluginModule {
         val currentConfig = config
         val currentService = service
         if (currentConfig == null || currentService == null || !currentConfig.enabled) {
-            player.sendActionBar(TextUtil.mm("<red>Палата сделок сейчас закрыта."))
+            player.sendActionBar(TextUtil.mm("<red>Бюро расследований сейчас закрыто."))
             return
         }
         if (!near(player, currentConfig.point("foma"))) {
-            player.sendActionBar(TextUtil.mm("<yellow>Обратитесь к Фоме у стойки палаты сделок."))
+            player.sendActionBar(TextUtil.mm("<yellow>Обратитесь к Фоме в бюро расследований."))
             return
         }
         val current = currentService.current(player.uniqueId)
@@ -61,16 +61,6 @@ object InvestigationModule : PluginModule {
         }
     }
 
-    fun openConfirmation(player: Player) {
-        val currentConfig = config ?: return unavailable(player)
-        val currentService = service ?: return unavailable(player)
-        if (!near(player, currentConfig.point("foma"))) {
-            player.sendActionBar(TextUtil.mm("<yellow>Подтвердить оплату можно только у Фомы."))
-            return
-        }
-        InvestigationGui.openConfirmation(player, currentService.balanceMinor(player.uniqueId), currentConfig.feeMinor, currentConfig.rewardMinor)
-    }
-
     fun startCase(player: Player) {
         val currentConfig = config ?: return unavailable(player)
         val currentService = service ?: return unavailable(player)
@@ -80,7 +70,7 @@ object InvestigationModule : PluginModule {
         }
         when (val result = currentService.start(player.uniqueId)) {
             is InvestigationStartResult.Started -> {
-                player.sendMessage(TextUtil.mm("<gold>Фома:</gold> <gray>Дело оплачено. У вас <white>${currentConfig.duration.seconds} секунд<gray>: опросите хотя бы двух свидетелей."))
+                player.sendMessage(TextUtil.mm("<gold>Фома:</gold> <gray>Дело оплачено. У вас <white>${currentConfig.duration.seconds} секунд<gray>: опросите хотя бы трёх свидетелей."))
                 InvestigationGui.openCase(player, result.record)
             }
             is InvestigationStartResult.AlreadyActive -> InvestigationGui.openCase(player, result.record)
@@ -104,10 +94,12 @@ object InvestigationModule : PluginModule {
         }
         when (val result = currentService.collectClue(player.uniqueId, witness)) {
             is InvestigationClueResult.Evidence -> {
-                result.lines.forEach { player.sendMessage(TextUtil.mm(it)) }
                 if (result.firstRead) {
+                    result.lines.forEach { player.sendMessage(TextUtil.mm(it)) }
                     val count = result.record.clueCount()
-                    player.sendActionBar(TextUtil.mm("<green>Показание внесено: <white>$count/3<green>."))
+                    player.sendActionBar(TextUtil.mm("<green>Показание внесено: <white>$count/5<green>."))
+                } else {
+                    player.sendActionBar(TextUtil.mm("<gray>Это показание уже записано в ведомости."))
                 }
                 InvestigationGui.openCase(player, result.record)
             }
@@ -124,13 +116,13 @@ object InvestigationModule : PluginModule {
         when (val result = currentService.submitVerdict(player.uniqueId, verdict)) {
             is InvestigationVerdictResult.Success -> {
                 player.closeInventory()
-                player.sendMessage(TextUtil.mm("<green><bold>Вердикт принят.</bold> <gray>Палата выплатила <gold>${money(result.record.rewardMinor)} <white>💰</white><gray>."))
+                player.sendMessage(TextUtil.mm("<green><bold>Вердикт принят.</bold> <gray>Бюро выплатило <gold>${money(result.record.rewardMinor)} <white>💰</white><gray>."))
             }
             is InvestigationVerdictResult.Wrong -> {
                 player.closeInventory()
                 player.sendMessage(TextUtil.mm("<red><bold>Вердикт неверен.</bold> <gray>Правильная зацепка: <white>${verdictHint(result.record.case.verdict)}<gray>."))
             }
-            is InvestigationVerdictResult.NeedClues -> player.sendActionBar(TextUtil.mm("<yellow>Нужно хотя бы два показания. Сейчас: <white>${result.collected}/3<yellow>."))
+            is InvestigationVerdictResult.NeedClues -> player.sendActionBar(TextUtil.mm("<yellow>Нужно хотя бы три показания. Сейчас: <white>${result.collected}/5<yellow>."))
             is InvestigationVerdictResult.Expired -> timeout(player)
             InvestigationVerdictResult.NoActiveCase -> player.sendActionBar(TextUtil.mm("<gray>Активного дела нет."))
             InvestigationVerdictResult.Busy -> player.sendActionBar(TextUtil.mm("<yellow>Вердикт уже обрабатывается."))
@@ -179,7 +171,7 @@ object InvestigationModule : PluginModule {
             warn("Investigation {} requires manual review at stage {}", record.transactionId, record.status.name.lowercase(Locale.ROOT))
         }
         tasks.runTimer(epoch, 20L, 20L, loadedService::expireAll)
-        info("Investigations module initialized for NPCs 367, 372, 373 and 374")
+        info("Investigations module initialized for six bureau NPCs")
     }
 
     private fun shutdownRuntime() {
@@ -203,7 +195,7 @@ object InvestigationModule : PluginModule {
     }
 
     private fun unavailable(player: Player) {
-        player.sendActionBar(TextUtil.mm("<red>Палата сделок сейчас недоступна."))
+        player.sendActionBar(TextUtil.mm("<red>Бюро расследований сейчас недоступно."))
     }
 
     private fun formatRemaining(until: Long): String {
@@ -217,6 +209,8 @@ object InvestigationModule : PluginModule {
         when (verdict) {
             InvestigationVerdict.AMOUNT_MISMATCH -> "суммы в документах не сходились"
             InvestigationVerdict.FORGED_SEAL -> "один признак печати не совпал с реестром"
+            InvestigationVerdict.CARGO_SUBSTITUTION -> "содержимое или количество груза не совпало с накладной"
+            InvestigationVerdict.DUPLICATE_ENTRY -> "одна запись реестра повторяла уже проведённое дело"
             InvestigationVerdict.CLEAN -> "подозрительная деталь была уловкой, а документы совпали"
         }
 }

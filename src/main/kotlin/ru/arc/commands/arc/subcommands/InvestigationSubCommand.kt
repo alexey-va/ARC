@@ -7,13 +7,13 @@ import ru.arc.investigation.InvestigationModule
 import ru.arc.investigation.InvestigationVerdict
 import ru.arc.investigation.InvestigationWitness
 
-/** Thin, proximity-checked bridge used by the four Denizen-owned scene NPCs. */
+/** Thin, proximity-checked bridge used by the Denizen-owned bureau NPCs. */
 object InvestigationSubCommand : SubCommand {
     override val configKey = "investigation"
     override val defaultName = "investigation"
     override val defaultPermission: String? = null
-    override val defaultDescription = "Открыть палату сделок"
-    override val defaultUsage = "/arc investigation [open|clue <stavr|prokhor|gordey>|verdict <amount|seal|clean>]"
+    override val defaultDescription = "Открыть бюро расследований"
+    override val defaultUsage = "/arc investigation [open|clue <stavr|prokhor|gordey|agata|tikhon>|verdict <amount|seal|cargo|duplicate|clean>]"
     override val defaultPlayerOnly = true
 
     override fun isAvailable(): Boolean = InvestigationModule.available

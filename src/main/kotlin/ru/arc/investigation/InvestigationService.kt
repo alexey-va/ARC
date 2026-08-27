@@ -388,7 +388,7 @@ class InvestigationService(
         raw?.lowercase()?.takeIf { EVIDENCE_PATTERN.matches(it) } ?: fallback
 
     companion object {
-        const val MIN_CLUES = 2
+        const val MIN_CLUES = 3
         private val EVIDENCE_PATTERN = Regex("[a-z0-9_:-]{1,180}")
     }
 }

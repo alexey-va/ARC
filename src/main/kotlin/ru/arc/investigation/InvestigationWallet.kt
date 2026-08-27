@@ -4,10 +4,9 @@ import dev.unnm3d.rediseconomy.api.RedisEconomyAPI
 import dev.unnm3d.rediseconomy.transaction.AccountID
 import net.milkbowl.vault.economy.EconomyResponse
 import java.math.BigDecimal
+import java.math.RoundingMode
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
-import kotlin.math.abs
-import kotlin.math.roundToLong
 
 data class InvestigationMoneyEvidence(
     val providerAccepted: Boolean?,
@@ -145,10 +144,10 @@ class RedisEconomyInvestigationWallet(
 
 private fun Double.toMinorOrNull(): Long? {
     if (!isFinite()) return null
-    val scaled = this * 100.0
-    if (!scaled.isFinite() || scaled < Long.MIN_VALUE.toDouble() || scaled > Long.MAX_VALUE.toDouble()) return null
-    val nearest = scaled.roundToLong()
-    return nearest.takeIf { abs(scaled - nearest.toDouble()) <= PROVIDER_MINOR_DRIFT_TOLERANCE }
+    return runCatching {
+        BigDecimal.valueOf(this)
+            .movePointRight(2)
+            .setScale(0, RoundingMode.HALF_UP)
+            .longValueExact()
+    }.getOrNull()
 }
-
-private const val PROVIDER_MINOR_DRIFT_TOLERANCE = 0.05

@@ -1,22 +1,21 @@
 # Resource-pack-neutral defaults. Production may override each Material/CMD
 # pair in the tracked classic runtime mirror.
 hub:
-  title: "<dark_gray>Палата сделок"
-confirmation:
-  title: "<dark_gray>Подтвердить дело"
+  title: "<dark_gray>Бюро расследований"
 case:
   title: "<dark_gray>Ревизорская проба"
 
 items:
-  dossier: { material: WRITABLE_BOOK }
+  dossier: { material: SPYGLASS }
   stavr: { material: BELL }
   prokhor: { material: BOOK }
   gordey: { material: SHIELD }
+  agata: { material: FEATHER }
+  tikhon: { material: BARREL }
   amount: { material: GOLD_NUGGET }
   seal: { material: HONEYCOMB }
+  cargo: { material: BUNDLE }
+  duplicate: { material: WRITTEN_BOOK }
   clean: { material: LIME_DYE }
-  start: { material: EMERALD }
+  start: { material: WRITABLE_BOOK }
   contracts: { material: CHEST }
-  back: { material: BLUE_STAINED_GLASS_PANE }
-  confirm: { material: GREEN_STAINED_GLASS_PANE }
-  cancel: { material: RED_STAINED_GLASS_PANE }

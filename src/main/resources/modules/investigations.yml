@@ -5,15 +5,17 @@ enabled: false
 scene:
   world: rc_origin_spawn
   npcs:
-    foma: { id: 367, x: -67.5, y: 72.0, z: 4.0, radius: 4.5 }
-    stavr: { id: 372, x: -67.5, y: 72.0, z: -4.0, radius: 4.5 }
-    prokhor: { id: 373, x: -64.5, y: 73.0, z: 4.0, radius: 4.5 }
-    gordey: { id: 374, x: -64.5, y: 73.0, z: -4.0, radius: 4.5 }
+    foma: { id: 367, x: -58.5, y: 72.0, z: 14.5, radius: 4.5 }
+    stavr: { id: 372, x: -53.1458, y: 72.0, z: 9.7134, radius: 4.5 }
+    prokhor: { id: 373, x: -54.8620, y: 72.0, z: 8.2354, radius: 4.5 }
+    gordey: { id: 374, x: -57.4479, y: 72.0, z: -7.5857, radius: 8.0 }
+    agata: { id: 375, x: -60.7692, y: 78.0625, z: -9.2809, radius: 4.5 }
+    tikhon: { id: 376, x: -62.8715, y: 78.0625, z: -9.6508, radius: 4.5 }
 
 challenge:
   fee: "100.00"
   reward: "300.00"
-  duration: 90s
+  duration: 150s
   cooldown: 20h
 
 contracts:
