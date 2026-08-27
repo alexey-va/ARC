@@ -94,4 +94,24 @@ class BuilderBookJourneyTest : FunSpec({
         config.string("locales.ru.book.status.changed") shouldContain "/builder book status"
         config.string("locales.en.book.status.changed") shouldContain "/builder book status"
     }
+
+    test("dense dynamic messages keep one fact per physical chat line") {
+        val config = Config(Files.createTempDirectory("arc-builder-message-layout-"), "modules/builder-tools.yml")
+
+        listOf("ru", "en").forEach { locale ->
+            val plan = config.string("locales.$locale.plan.ready").lines()
+            plan.size shouldBe 6
+            plan.single { it.contains("<cost>") }.contains("<reward>") shouldBe false
+            plan.single { it.contains("<reward>") }.contains("<cost>") shouldBe false
+
+            val quote = config.string("locales.$locale.book.quote").lines()
+            quote.size shouldBe 8
+            quote.single { it.contains("<materials>") }.contains("<labor>") shouldBe false
+            quote.single { it.contains("<labor>") }.contains("<materials>") shouldBe false
+
+            config.string("locales.$locale.items.none").isNotBlank() shouldBe true
+            config.string("locales.$locale.items.summary") shouldContain "<items>"
+            config.string("locales.$locale.items.summary") shouldContain "<types>"
+        }
+    }
 })

@@ -251,6 +251,8 @@ class BuilderToolsConfig(
                 "operation.started",
                 "operation.completed",
                 "operation.rolled-back",
+                "items.none",
+                "items.summary",
                 "status.selection",
                 "status.plan",
                 "status.idle",

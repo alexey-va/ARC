@@ -81,12 +81,12 @@ locales:
       - "<prefix><#e6fff3>Инструменты строителя"
       - "<#8c8c8c>  • <#92bed8>/builder wand <#e6fff3>— выделить область"
       - "<#8c8c8c>  • <#92bed8>/builder fill [блок] <#e6fff3>— заполнить пустоты"
-      - "<#8c8c8c>  • <#92bed8>/builder copy <#e6fff3>и <#92bed8>/builder paste <#e6fff3>— временный чертёж"
+      - "<#8c8c8c>  • <#92bed8>/builder copy <#e6fff3>и <#92bed8>/builder paste <#e6fff3>— чертёж"
       - "<#8c8c8c>  • <#92bed8>/builder book draft [имя] <#e6fff3>— бесплатный черновик"
-      - "<#8c8c8c>  • <#92bed8>/builder book activate <#e6fff3>— рассчитать цену активации"
-      - "<#8c8c8c>  • <#92bed8>/builder book copy <#e6fff3>— платная копия активной книги"
-      - "<#8c8c8c>  • <#92bed8>/builder book sell [цена] <#e6fff3>— безопасно продать книгу"
-      - "<#8c8c8c>  • <#92bed8>/builder book <#e6fff3>— пошаговая инструкция и текущий этап"
+      - "<#8c8c8c>  • <#92bed8>/builder book activate <#e6fff3>— рассчитать активацию"
+      - "<#8c8c8c>  • <#92bed8>/builder book copy <#e6fff3>— платная копия"
+      - "<#8c8c8c>  • <#92bed8>/builder book sell [цена] <#e6fff3>— продать книгу"
+      - "<#8c8c8c>  • <#92bed8>/builder book <#e6fff3>— инструкция и этап"
       - "<#8c8c8c>  • <#92bed8>/builder clear <#e6fff3>— убрать выделение и его частицы"
       - "<#8c8c8c>  • <#92bed8>/builder deconstruct <#e6fff3>— разобрать область"
       - "<#8c8c8c>  • <#92bed8>/builder crown <#e6fff3>— создать крону"
@@ -98,7 +98,7 @@ locales:
       no-permission: "<prefix><#c42323>У вас нет доступа к этому инструменту."
       game-mode: |-
         <prefix><#c42323>Режим недоступен для инструментов строителя.
-        <#8c8c8c>  • <#e6fff3>Переключитесь в выживание или творческий режим.
+        <#8c8c8c>  • <#e6fff3>Нужен режим выживания или творчества.
       game-mode-changed: |-
         <prefix><#ff9f0f>Режим игры изменился после предпросмотра.
         <#8c8c8c>  • <#e6fff3>Повторите план — расход зависит от режима.
@@ -109,10 +109,10 @@ locales:
       selection-too-large: "<prefix><#c42323>Область превышает ваш безопасный лимит."
       plan-failed: |-
         <prefix><#c42323>Не удалось подготовить безопасный план.
-        <#8c8c8c>  • <#969696>Мир и инвентарь не изменены; попробуйте ещё раз.
+        <#8c8c8c>  • <#969696>Ничего не изменено; попробуйте снова.
       empty-copy: |-
         <prefix><#ff9f0f>В выделении нет блоков для чертежа.
-        <#8c8c8c>  • <#e6fff3>Воздух, трава и другие заменяемые блоки не копируются.
+        <#8c8c8c>  • <#e6fff3>Воздух и заменяемые растения не копируются.
       hourly-limit: |-
         <prefix><#ff9f0f>Достигнут безопасный лимит изменений за час.
         <#8c8c8c>  • <#e6fff3>Подождите немного или уменьшите область.
@@ -121,7 +121,7 @@ locales:
         <#8c8c8c>  • <#e6fff3>Подойдите к постройке и повторите действие.
       too-far: |-
         <prefix><#ff9f0f>Область находится слишком далеко.
-        <#8c8c8c>  • <#e6fff3>Подойдите ближе к выделению и повторите действие.
+        <#8c8c8c>  • <#e6fff3>Подойдите ближе и повторите действие.
       nothing-to-change: |-
         <prefix><#ff9f0f>Здесь нечего изменять.
         <#8c8c8c>  • <#e6fff3>Проверьте выделение, материал и текущие блоки.
@@ -131,9 +131,10 @@ locales:
         <#8c8c8c>  • <#e6fff3>Создайте план ещё раз; мир не изменён.
       inventory: |-
         <prefix><#c42323>Операцию пока нельзя выполнить.
-        <#8c8c8c>  • <#e6fff3>Проверьте материалы, свободное место и прочность инструмента.
+        <#8c8c8c>  • <#e6fff3>Проверьте материалы и свободное место.
+        <#8c8c8c>  • <#e6fff3>Убедитесь, что инструмент достаточно прочный.
       protection: |-
-        <prefix><#c42323>Здесь нельзя использовать инструменты строителя.
+        <prefix><#c42323>Строительство здесь запрещено.
         <#8c8c8c>  • <#e6fff3>Нужен приват Lands с правом строительства.
       unsafe-block: |-
         <prefix><#c42323>Небезопасный блок.
@@ -146,20 +147,30 @@ locales:
       crown-setting: "<prefix><#c42323>Неверный параметр. <click:run_command:'/builder crown help'><#92bed8>/builder crown help</#92bed8></click>"
       tool: |-
         <prefix><#c42323>Для демонтажа нужен подходящий инструмент.
-        <#8c8c8c>  • <#e6fff3>В выживании держите его в основной руке с запасом прочности.
-      recovering: "<prefix><#ff9f0f>Завершается безопасное восстановление. Попробуйте чуть позже."
-      undo-missing: "<prefix><#ff9f0f>Нет завершённой операции, которую можно откатить."
-      shop-unavailable: "<prefix><#ff9f0f>Админшоп недоступен. Принесите недостающие материалы."
+        <#8c8c8c>  • <#e6fff3>Держите его в основной руке.
+        <#8c8c8c>  • <#e6fff3>Прочности должно хватить на весь план.
+      recovering: |-
+        <prefix><#ff9f0f>Завершается безопасное восстановление.
+        <#8c8c8c>  • <#e6fff3>Попробуйте чуть позже.
+      undo-missing: "<prefix><#ff9f0f>Нет завершённой операции для отката."
+      shop-unavailable: |-
+        <prefix><#ff9f0f>Админшоп сейчас недоступен.
+        <#8c8c8c>  • <#e6fff3>Принесите недостающие материалы.
       shop-not-supported: "<prefix><#ff9f0f>Докупка доступна только для fill, paste и crown."
       shop-material-unavailable: |-
         <prefix><#ff9f0f>Админшоп не продаёт часть материалов.
         <#8c8c8c>  • <#e6fff3>Добавьте их вручную.
-      shop-limit: "<prefix><#c42323>Превышен лимит покупки: <#92bed8><items> шт. <#8c8c8c>• <#e6fff3><price>"
+      shop-limit: |-
+        <prefix><#c42323>Превышен лимит покупки.
+        <#8c8c8c>  • <#e6fff3><items> шт. <#8c8c8c>• <#e6fff3><price>
       shop-insufficient-funds: "<prefix><#ff9f0f>Нужно <#92bed8><price> <#8c8c8c>• <#e6fff3>на балансе: <#92bed8><balance>"
       shop-estimate-changed: "<prefix><#ff9f0f>Состав покупки изменился. Создайте план ещё раз."
-      shop-purchase-failed: "<prefix><#c42323>Не удалось купить: <#92bed8><material>"
+      shop-purchase-failed: |-
+        <prefix><#c42323>Материал не куплен.
+        <#8c8c8c>  • <#e6fff3><material>
       shop-purchase-ambiguous: |-
-        <prefix><#c42323>Админшоп не подтвердил покупку: <#92bed8><material>
+        <prefix><#c42323>Админшоп не подтвердил покупку.
+        <#8c8c8c>  • <#e6fff3>Материал: <#92bed8><material>
         <#8c8c8c>  • <#969696>Мир не изменён; выданные предметы уже у вас.
     selection:
       first: |-
@@ -194,7 +205,7 @@ locales:
       received: |-
         <prefix><#2bba43>Инструмент строителя готов.
         <#8c8c8c>  • <#e6fff3>ЛКМ — первая точка; ПКМ — вторая.
-      inventory-full: "<prefix><#ff9f0f>Освободите один слот для инструмента строителя."
+      inventory-full: "<prefix><#ff9f0f>Освободите слот для инструмента строителя."
       material-required: "<prefix><#ff9f0f>Держите обычный осколок эха в основной руке."
     crown-brush:
       name: "<#92bed8><bold>Кисть крон"
@@ -212,13 +223,15 @@ locales:
       material-required: "<prefix><#ff9f0f>Держите обычную кисть в основной руке."
     crown:
       same-face: "<prefix><#ff9f0f>Подтвердите ПКМ по той же грани."
-      settings-updated: "<prefix><#2bba43>Настройка изменена: <#92bed8><setting> — <value>"
+      settings-updated: |-
+        <prefix><#2bba43>Настройка кроны изменена.
+        <#8c8c8c>  • <#e6fff3><setting>: <#92bed8><value>
       palette-updated: "<prefix><#2bba43>Палитра сохранена: <#92bed8><count> <#e6fff3>видов листвы."
       palette-row: "<#8c8c8c>    • <#e6fff3><material>: <#92bed8><weight>"
       help:
         - "<prefix><#e6fff3><bold>Настройка кроны"
         - "<#8c8c8c>  • <click:run_command:'/builder crown wand'><#92bed8>/builder crown wand</#92bed8></click> <#e6fff3>— подготовить кисть."
-        - "<#8c8c8c>  • <click:suggest_command:'/builder crown palette oak_leaves,birch_leaves'><#92bed8>/builder crown palette [листва]</#92bed8></click> <#e6fff3>— выбрать палитру."
+        - "<#8c8c8c>  • <click:suggest_command:'/builder crown palette oak_leaves,birch_leaves'><#92bed8>/builder crown palette [листва]</#92bed8></click>"
         - "<#8c8c8c>  • <#92bed8>/builder crown shape natural|round|wide|tall"
         - "<#8c8c8c>  • <#92bed8>/builder crown radius 3–10 <#e6fff3>— размер кроны."
         - "<#8c8c8c>  • <#92bed8>/builder crown density airy|natural|dense"
@@ -236,8 +249,9 @@ locales:
         <prefix><#2bba43>Чертёж скопирован.
         <#8c8c8c>  • <#e6fff3>Блоков: <#92bed8><count> <#8c8c8c>• <#969696>хранится 15 минут
         <#8c8c8c>  • <#e6fff3>Возьмите обычную книгу в основную руку.
-        <#8c8c8c>  • <click:suggest_command:'/builder book draft '><#92bed8>/builder book draft [имя]</#92bed8></click> <#e6fff3>— получить бесплатный черновик.
-        <#8c8c8c>  • <click:run_command:'/builder clear'><#92bed8>/builder clear</#92bed8></click> <#e6fff3>— скрыть старый контур; чертёж сохранится.
+        <#8c8c8c>  • <click:suggest_command:'/builder book draft '><#92bed8>/builder book draft [имя]</#92bed8></click>
+        <#8c8c8c>    <#969696>Бесплатный черновик для проверки.
+        <#8c8c8c>  • <click:run_command:'/builder clear'><#92bed8>/builder clear</#92bed8></click> <#969696>— скрыть контур.
     book:
       draft-saving: "<prefix><#e6fff3>Сохраняем чертёж…"
       guide:
@@ -246,7 +260,7 @@ locales:
         - "<#8c8c8c>     <#e6fff3>ЛКМ и ПКМ — два угла. Контур виден постоянно."
         - "<#8c8c8c>  2. <click:run_command:'/builder copy'><#92bed8>/builder copy</#92bed8></click> <#e6fff3>— сохранить чертёж на 15 минут."
         - "<#8c8c8c>  3. <#e6fff3>Возьмите обычную книгу."
-        - "<#8c8c8c>     <click:suggest_command:'/builder book draft '><#92bed8>/builder book draft [имя]</#92bed8></click> <#e6fff3>— создать бесплатный черновик."
+        - "<#8c8c8c>     <click:suggest_command:'/builder book draft '><#92bed8>/builder book draft [имя]</#92bed8></click> <#e6fff3>— бесплатный черновик."
         - "<#8c8c8c>  4. <#e6fff3>ПКМ по земле — превью."
         - "<#8c8c8c>     <#e6fff3>ПКМ в воздух или Shift + ПКМ — меню положения."
         - "<#8c8c8c>     <#969696>Черновик — только предпросмотр; он не строит."
@@ -289,13 +303,15 @@ locales:
           <prefix><#ff9f0f>Книга в руке изменилась во время проверки.
           <#8c8c8c>  • <click:run_command:'/builder book status'><#92bed8>/builder book status</#92bed8></click> <#e6fff3>— проверить текущую книгу.
         active: |-
-          <prefix><#2bba43>Готово: книга «<#92bed8><name><#2bba43>» активна.
+          <prefix><#2bba43>Книга активна и зарегистрирована.
+          <#8c8c8c>  • <#e6fff3>Название: <#92bed8><name>
           <#8c8c8c>  • <#e6fff3>Себестоимость копии: <#92bed8><price>
           <#8c8c8c>  • <#e6fff3>ПКМ по земле — превью.
           <#8c8c8c>  • <click:run_command:'/builder book copy'><#92bed8>/builder book copy</#92bed8></click> <#e6fff3>— копия.
           <#8c8c8c>  • <click:suggest_command:'/builder book sell '><#92bed8>/builder book sell [цена]</#92bed8></click> <#e6fff3>— продажа.
       draft-created: |-
-        <prefix><#2bba43>Черновик готов: <#92bed8><name>
+        <prefix><#2bba43>Бесплатный черновик готов.
+        <#8c8c8c>  • <#e6fff3>Название: <#92bed8><name>
         <#8c8c8c>  • <#e6fff3>Блоков: <#92bed8><count> <#8c8c8c>• <#969696>денег пока не списано
         <#8c8c8c>  • <#e6fff3>ПКМ по земле — превью.
         <#8c8c8c>  • <#e6fff3>ПКМ в воздух или Shift + ПКМ — меню положения.
@@ -320,7 +336,7 @@ locales:
         <#8c8c8c>  • <#969696>Действие разрешено только одному экземпляру.
       stale: |-
         <prefix><#c42323>Эта физическая копия книги больше не действует.
-        <#8c8c8c>  • <#969696>После продажи владелец и поколение меняются в реестре.
+        <#8c8c8c>  • <#969696>После продажи запись книги обновляется.
         <#8c8c8c>  • <#92bed8>Передавайте книги через /builder book sell 25000.
       source-changed: "<prefix><#ff9f0f>Книга изменилась. Рассчитайте цену снова."
       contracts-disabled: "<prefix><#ff9f0f>Активация книг здесь отключена."
@@ -329,17 +345,22 @@ locales:
         <prefix><#c42323>Реестр книг временно недоступен.
         <#8c8c8c>  • <#969696>Новые деньги не списаны.
       shop-unavailable: "<prefix><#ff9f0f>Цены админшопа сейчас недоступны."
-      material-unavailable: "<prefix><#ff9f0f>В админшопе нет материалов: <#92bed8><materials>"
+      material-unavailable: |-
+        <prefix><#ff9f0f>Часть материалов отсутствует в админшопе.
+        <#8c8c8c>  • <#e6fff3>Нет: <#92bed8><materials>
       price-limit: "<prefix><#c42323>Смета превышает безопасный лимит книги."
       quote-kind:
         activation: "активация черновика"
         copy: "новый экземпляр"
       quote: |-
-        <prefix><#e6fff3>Смета: <#92bed8><kind> <#8c8c8c>• <#e6fff3><name>
-        <#8c8c8c>  • <#e6fff3>Материалы: <#92bed8><materials> <#8c8c8c>• <#e6fff3>возведение: <#92bed8><labor>
+        <prefix><#e6fff3>Смета готова: <#92bed8><kind>
+        <#8c8c8c>  • <#e6fff3>Название: <#92bed8><name>
+        <#8c8c8c>  • <#e6fff3>Материалы: <#92bed8><materials>
+        <#8c8c8c>  • <#e6fff3>Возведение: <#92bed8><labor>
         <#8c8c8c>  • <#e6fff3>Итого: <#2bba43><price>
         <#8c8c8c>  • <#969696><blocks> блоков • <items> предметов • <types> видов
-        <#8c8c8c>  • <click:run_command:'/builder book confirm'><#92bed8>/builder book confirm</#92bed8></click> <#e6fff3>— оплатить в течение <#92bed8><seconds> с
+        <#8c8c8c>  • <click:run_command:'/builder book confirm'><#92bed8>/builder book confirm</#92bed8></click> <#e6fff3>— оплатить
+        <#8c8c8c>    <#969696>Смета действует <#92bed8><seconds> с<#969696>.
       quote-expired: "<prefix><#ff9f0f>Смета устарела. Запустите activate или copy."
       quote-cancelled: "<prefix><#969696>Смета отменена. Деньги не списаны."
       economy-unavailable: "<prefix><#c42323>Экономика недоступна. Деньги не списаны."
@@ -404,8 +425,10 @@ locales:
       ready: |-
         <prefix><#2bba43>Предпросмотр готов: <#92bed8><kind>
         <#8c8c8c>  • <#e6fff3>Изменится: <#92bed8><count> блоков
-        <#8c8c8c>  • <#e6fff3>Расход: <#92bed8><cost> <#8c8c8c>• <#e6fff3>результат: <#92bed8><reward>
-        <#8c8c8c>  • <#e6fff3>Подтвердить за <#92bed8><seconds> с: <click:run_command:'/builder confirm'><#92bed8>/builder confirm</#92bed8></click>
+        <#8c8c8c>  • <#e6fff3>Расход: <#92bed8><cost>
+        <#8c8c8c>  • <#e6fff3>Результат: <#92bed8><reward>
+        <#8c8c8c>  • <click:run_command:'/builder confirm'><#92bed8>/builder confirm</#92bed8></click> <#e6fff3>— применить
+        <#8c8c8c>    <#969696>Предпросмотр действует <#92bed8><seconds> с<#969696>.
       market:
         - "<#8c8c8c>  • <#e6fff3>Стоимость всей постройки: <#92bed8>≈ <full_price>"
         - "<#8c8c8c>  • <#e6fff3>Докупить недостающее: <#92bed8>≈ <missing_price>"
@@ -413,7 +436,9 @@ locales:
       market-item: "<#8c8c8c>    • <#e6fff3><amount>× <material>"
       market-unavailable: "<prefix><#ff9f0f>В админшопе нет: <#92bed8><material>"
       market-more: "<#8c8c8c>    • <#969696>Ещё материалов: <count>"
-      cancelled: "<prefix><#ff9f0f>Предпросмотр отменён. <#969696>Мир и инвентарь не изменены."
+      cancelled: |-
+        <prefix><#ff9f0f>Предпросмотр отменён.
+        <#8c8c8c>  • <#969696>Мир и инвентарь не изменены.
     shop:
       purchased: "<prefix><#2bba43>Куплено: <#92bed8><items> шт. <#8c8c8c>• <#e6fff3>стоимость: <#92bed8><price>"
       purchase-detail:
@@ -431,9 +456,14 @@ locales:
         <#8c8c8c>  • <#e6fff3>Изменено блоков: <#2bba43><count>
       rolled-back: |-
         <prefix><#c42323>Операция отменена и полностью восстановлена.
-        <#8c8c8c>  • <#969696>Мир и инвентарь сохранены; план можно создать заново.
+        <#8c8c8c>  • <#969696>Мир и инвентарь сохранены.
+    items:
+      none: "нет"
+      summary: "предметов: <items> • видов: <types>"
     status:
-      selection: "<prefix><#e6fff3>Выделено: <#92bed8><x> × <y> × <z> <#8c8c8c>• <#e6fff3>объём: <#92bed8><volume>"
+      selection: |-
+        <prefix><#e6fff3>Выделено: <#92bed8><x> × <y> × <z>
+        <#8c8c8c>  • <#e6fff3>Объём: <#92bed8><volume>
       plan: "<prefix><#e6fff3><kind>: <#92bed8><count>/<total> <#e6fff3>блоков."
       idle: "<prefix><#e6fff3>Нет выделения. <#8c8c8c>• <#92bed8>/builder wand"
     kinds:
@@ -446,52 +476,90 @@ locales:
   en:
     prefix: "<#92bed8>◇ "
     help:
-      - "<prefix><white>/builder wand <gray>— bind an echo shard as the selector"
-      - "<prefix><white>/builder fill [block] <gray>— fill space using your materials"
-      - "<prefix><white>/builder copy <gray>and <white>/builder paste <gray>— temporary blueprint"
-      - "<prefix><white>/builder book draft [name] <gray>— create a free preview-only draft"
+      - "<prefix><white>/builder wand <gray>— prepare the selector"
+      - "<prefix><white>/builder fill [block] <gray>— fill using your materials"
+      - "<prefix><white>/builder copy <gray>and <white>/builder paste <gray>— temporary plan"
+      - "<prefix><white>/builder book draft [name] <gray>— free draft"
       - "<prefix><white>/builder book activate <gray>— quote draft activation"
-      - "<prefix><white>/builder book sell [price] <gray>— safely list an active book"
+      - "<prefix><white>/builder book sell [price] <gray>— list an active book"
       - "<prefix><white>/builder book copy <gray>— quote a paid registered copy"
       - "<prefix><white>/builder book <gray>— guided workflow and current step"
-      - "<prefix><white>/builder clear <gray>— clear the selection and hide its particles"
-      - "<prefix><white>/builder deconstruct <gray>— dismantle with your current tool"
-      - "<prefix><white>/builder crown [leaves] [3–10] <gray>— build a leaf crown"
+      - "<prefix><white>/builder clear <gray>— clear selection and particles"
+      - "<prefix><white>/builder deconstruct <gray>— dismantle the area"
+      - "<prefix><white>/builder crown [leaves] [3–10] <gray>— leaf crown"
       - "<prefix><white>/builder confirm <gray>— build with materials you own"
-      - "<prefix><white>/builder confirm buy <gray>— buy missing materials and build"
+      - "<prefix><white>/builder confirm buy <gray>— buy and build"
       - "<prefix><white>/builder undo <gray>— revert the latest operation"
     errors:
       disabled: "<prefix><yellow>Builder tools are available only on survival servers."
       no-permission: "<prefix><red>You do not have access to this tool."
-      game-mode: "<prefix><red>Builder tools are available only in survival or creative mode."
-      game-mode-changed: "<prefix><yellow>Your game mode changed after preview. Create the plan again."
+      game-mode: |-
+        <prefix><red>This game mode is not supported.
+        <dark_gray>  • <gray>Use survival or creative mode.
+      game-mode-changed: |-
+        <prefix><yellow>Your game mode changed after preview.
+        <dark_gray>  • <gray>Create the plan again.
       world-not-allowed: "<prefix><yellow>Builder tools are disabled in this world."
-      selection-missing: "<prefix><yellow>Select positions 1 and 2 first. A crown needs position 1."
+      selection-missing: |-
+        <prefix><yellow>The required position is not selected.
+        <dark_gray>  • <gray>Use <aqua>/builder wand<gray> first.
       selection-too-large: "<prefix><red>The selection exceeds your safe size or block limit."
-      plan-failed: "<prefix><red>Could not prepare a safe plan. <gray>The world and inventory were not changed; try again."
-      empty-copy: "<prefix><yellow>The selection has no blocks to copy. <gray>Air, grass, and other replaceable blocks are excluded."
-      hourly-limit: "<prefix><yellow>You reached the safe hourly change limit. <gray>Wait a while or use a smaller area."
-      chunk-unloaded: "<prefix><yellow>Part of the area is not loaded. <gray>Move closer to the build and try again."
-      too-far: "<prefix><yellow>The area is too far away. <gray>Move closer to the selection and try again."
-      nothing-to-change: "<prefix><yellow>There is nothing to change. <gray>Check the selection, material, and existing blocks."
-      busy: "<prefix><yellow>You or this area already has an operation in progress."
+      plan-failed: |-
+        <prefix><red>Could not prepare a safe plan.
+        <dark_gray>  • <gray>Nothing changed; try again.
+      empty-copy: |-
+        <prefix><yellow>The selection has no blocks to copy.
+        <dark_gray>  • <gray>Air and replaceable plants are excluded.
+      hourly-limit: |-
+        <prefix><yellow>Safe hourly change limit reached.
+        <dark_gray>  • <gray>Wait or select a smaller area.
+      chunk-unloaded: |-
+        <prefix><yellow>Part of the area is not loaded.
+        <dark_gray>  • <gray>Move closer and try again.
+      too-far: |-
+        <prefix><yellow>The area is too far away.
+        <dark_gray>  • <gray>Move closer and try again.
+      nothing-to-change: |-
+        <prefix><yellow>There is nothing to change.
+        <dark_gray>  • <gray>Check the area, material, and blocks.
+      busy: |-
+        <prefix><yellow>An operation is already in progress.
+        <dark_gray>  • <gray>Wait for it to finish.
       expired: "<prefix><yellow>The plan or clipboard expired. Create it again."
-      inventory: "<prefix><red>You lack exact materials, inventory space, or tool durability."
-      protection: "<prefix><red>Every changed block must be in Lands where you can build."
-      unsafe-block: "<prefix><red>Unsafe <white><material></white> at <white><x> <y> <z></white>. Containers, mechanisms, and custom blocks are excluded."
-      material: "<prefix><red>That material is not supported. Crowns require ordinary leaves."
+      inventory: |-
+        <prefix><red>The operation cannot start yet.
+        <dark_gray>  • <gray>Check materials, space, and tool durability.
+      protection: |-
+        <prefix><red>You cannot build here.
+        <dark_gray>  • <gray>A Lands claim with build access is required.
+      unsafe-block: |-
+        <prefix><red>Unsafe block: <white><material>
+        <dark_gray>  • <gray>At: <white><x> <y> <z>
+        <dark_gray>  • <gray>Containers and mechanisms are excluded.
+      material: |-
+        <prefix><red>That material is not supported.
+        <dark_gray>  • <gray>Crowns require ordinary leaves.
       crown-setting: "<prefix><red>Invalid setting. See <aqua>/builder crown help</aqua>."
-      tool: "<prefix><red>Hold the preferred tool with enough durability for every selected block."
-      recovering: "<prefix><yellow>The module is finishing safe recovery. Try again shortly."
+      tool: |-
+        <prefix><red>A suitable tool is required.
+        <dark_gray>  • <gray>Hold it with enough durability.
+      recovering: |-
+        <prefix><yellow>Safe recovery is still finishing.
+        <dark_gray>  • <gray>Try again shortly.
       undo-missing: "<prefix><yellow>There is no completed operation available to undo."
       shop-unavailable: "<prefix><yellow>Admin shop unavailable. Bring the materials."
       shop-not-supported: "<prefix><yellow>Procurement: fill, paste, and crown only."
       shop-material-unavailable: "<prefix><yellow>Some items are not sold. Add them manually."
       shop-limit: "<prefix><red>Limit exceeded: <white><items></white> items or <white><price></white>."
       shop-insufficient-funds: "<prefix><yellow>Need <white><price></white> • balance <white><balance></white>."
-      shop-estimate-changed: "<prefix><yellow>The purchase contents changed. Try the command again."
+      shop-estimate-changed: |-
+        <prefix><yellow>The purchase contents changed.
+        <dark_gray>  • <gray>Create the plan again.
       shop-purchase-failed: "<prefix><red>Not purchased: <white><material></white>."
-      shop-purchase-ambiguous: "<prefix><red>No response: <white><material></white>."
+      shop-purchase-ambiguous: |-
+        <prefix><red>The shop did not confirm the purchase.
+        <dark_gray>  • <gray>Material: <white><material>
+        <dark_gray>  • <gray>Nothing changed; delivered items remain yours.
     selection:
       first: |-
         <prefix><green>Position 1 selected.
@@ -531,14 +599,16 @@ locales:
         - "<dark_gray>Every leaf is consumed from inventory"
       received: "<prefix><green>Your plain brush is now the crown brush."
       inventory-full: "<prefix><yellow>Free one slot or hold a single brush."
-      material-required: "<prefix><yellow>Hold a plain brush in your main hand. ARC never creates one for free."
+      material-required: |-
+        <prefix><yellow>Hold a plain brush in your main hand.
+        <dark_gray>  • <gray>ARC never creates one for free.
     crown:
       same-face: "<prefix><yellow>Confirm on the same face with right-click."
       settings-updated: "<prefix><green><white><setting></white> is now <white><value></white>."
       palette-updated: "<prefix><green>Palette updated: <white><count></white> leaf types."
       palette-row: "<dark_gray>    • <gray><material>: <aqua><weight>"
       help:
-        - "<prefix><white>Crowns use only ordinary leaves from your inventory."
+        - "<prefix><white>Crowns use ordinary leaves from your inventory."
         - "<dark_gray>  • <aqua>/builder crown wand <gray>— bind a plain brush"
         - "<dark_gray>  • <aqua>/builder crown palette oak_leaves,birch_leaves"
         - "<dark_gray>  • <aqua>/builder crown shape natural|round|wide|tall"
@@ -553,7 +623,13 @@ locales:
         - "<dark_gray>  • <gray>Density: <aqua><density></aqua>; edge: <aqua><noise></aqua>"
         - "<dark_gray>  • <gray>Palette:"
     clipboard:
-      saved: "<prefix><green>Copied a safe <white><count></white>-block blueprint. <gray>Hold a plain book, then use <click:suggest_command:'/builder book draft '><aqua>/builder book draft [name]</aqua></click> within 15 minutes. <click:run_command:'/builder clear'><aqua>/builder clear</aqua></click> hides the old outline without deleting the blueprint."
+      saved: |-
+        <prefix><green>Blueprint copied safely.
+        <dark_gray>  • <gray>Blocks: <white><count> <dark_gray>• <gray>kept for 15 minutes
+        <dark_gray>  • <gray>Hold a plain book in your main hand.
+        <dark_gray>  • <click:suggest_command:'/builder book draft '><aqua>/builder book draft [name]</aqua></click>
+        <dark_gray>    <gray>Create a free preview-only draft.
+        <dark_gray>  • <click:run_command:'/builder clear'><aqua>/builder clear</aqua></click> <gray>— hide the outline.
     book:
       draft-saving: "<prefix><gray>Saving the blueprint…"
       guide:
@@ -604,12 +680,14 @@ locales:
           <prefix><yellow>The held book changed during verification.
           <dark_gray>  • <aqua>/builder book status <gray>— check the current book.
         active: |-
-          <prefix><green>Ready: <white><name></white> is active.
+          <prefix><green>The book is active and registered.
+          <dark_gray>  • <gray>Name: <white><name>
           <dark_gray>  • <gray>Copy at stored cost: <white><price>
           <dark_gray>  • <aqua>/builder book copy <gray>— copy.
           <dark_gray>  • <aqua>/builder book sell [price] <gray>— sell.
       draft-created: |-
-        <prefix><green>Draft <white><name></white> created.
+        <prefix><green>Free draft created.
+        <dark_gray>  • <gray>Name: <white><name>
         <dark_gray>  • <gray><count> blocks • no charge
         <dark_gray>  • <gray>Preview and adjust it.
         <dark_gray>  • <aqua>/builder book activate <gray>— calculate quote.
@@ -635,7 +713,7 @@ locales:
         <dark_gray>  • <gray>Only one physical instance may act.
       stale: |-
         <prefix><red>This physical copy is no longer authoritative.
-        <dark_gray>  • <gray>Each sale rotates the registered owner and generation.
+        <dark_gray>  • <gray>Each sale updates its owner and generation.
         <dark_gray>  • <aqua>Transfer books through /builder book sell 25000.
       source-changed: "<prefix><yellow>The book changed. Request a new quote."
       contracts-disabled: "<prefix><yellow>Player book activation is disabled on this server."
@@ -644,12 +722,22 @@ locales:
         <prefix><red>The book registry is unavailable.
         <dark_gray>  • <gray>No new charge was made.
       shop-unavailable: "<prefix><yellow>Could not read material prices from the admin shop."
-      material-unavailable: "<prefix><yellow>The admin shop does not sell: <white><materials></white>."
+      material-unavailable: |-
+        <prefix><yellow>Some materials are not sold by the admin shop.
+        <dark_gray>  • <gray>Missing: <white><materials>
       price-limit: "<prefix><red>The estimate exceeds the safe book-price limit."
       quote-kind:
         activation: "draft activation"
         copy: "new registered instance"
-      quote: "<prefix><white><kind></white> • <white><name></white>\n<dark_gray>  • <gray>Materials: <aqua><materials></aqua> • construction: <aqua><labor></aqua>\n<dark_gray>  • <gray>Total: <green><price></green>\n<dark_gray>  • <gray><blocks> blocks • <items> items • <types> types\n<dark_gray>  • <click:run_command:'/builder book confirm'><aqua>/builder book confirm</aqua></click> <gray>— pay within <white><seconds></white> seconds"
+      quote: |-
+        <prefix><white>Quote ready: <aqua><kind>
+        <dark_gray>  • <gray>Name: <white><name>
+        <dark_gray>  • <gray>Materials: <aqua><materials>
+        <dark_gray>  • <gray>Construction: <aqua><labor>
+        <dark_gray>  • <gray>Total: <green><price>
+        <dark_gray>  • <gray><blocks> blocks • <items> items • <types> types
+        <dark_gray>  • <click:run_command:'/builder book confirm'><aqua>/builder book confirm</aqua></click> <gray>— pay
+        <dark_gray>    <gray>Quote remains valid for <white><seconds> seconds<gray>.
       quote-expired: "<prefix><yellow>Quote expired. Run activate or copy again."
       quote-cancelled: "<prefix><gray>Quote cancelled. No money was charged."
       economy-unavailable: "<prefix><red>The economy is unavailable. No money was charged."
@@ -702,7 +790,13 @@ locales:
       auction-returned: "<prefix><green>The returned auction book is active again."
       auction-received: "<prefix><green>The auction book was received and is active again."
     plan:
-      ready: "<prefix><green><white><kind></white> plan: <white><count></white> blocks. <gray>Cost: <white><cost></white>; result: <white><reward></white>. Check the particles and enter <click:run_command:'/builder confirm'><aqua>/builder confirm</aqua></click> within <seconds> seconds."
+      ready: |-
+        <prefix><green>Preview ready: <white><kind>
+        <dark_gray>  • <gray>Blocks changed: <white><count>
+        <dark_gray>  • <gray>Cost: <white><cost>
+        <dark_gray>  • <gray>Result: <white><reward>
+        <dark_gray>  • <click:run_command:'/builder confirm'><aqua>/builder confirm</aqua></click> <gray>— apply
+        <dark_gray>    <gray>Preview remains valid for <white><seconds> seconds<gray>.
       market:
         - "<prefix><gray>Market • whole build ≈ <white><full_price></white>."
         - "<prefix><gray>Market • missing ≈ <white><missing_price></white>."
@@ -710,7 +804,9 @@ locales:
       market-item: "<dark_gray>    • <gray>Need <white><amount>×<material></white>"
       market-unavailable: "<prefix><yellow>Shop: unavailable <white><material></white>."
       market-more: "<prefix><gray>More lines: <white><count></white>."
-      cancelled: "<prefix><gray>Plan cancelled; the world and inventory were not changed."
+      cancelled: |-
+        <prefix><gray>Preview cancelled.
+        <dark_gray>  • <gray>The world and inventory are unchanged.
     shop:
       purchased: "<prefix><green>Bought <white><items></white> items • <white><price></white>."
       purchase-detail:
@@ -718,11 +814,20 @@ locales:
         - "<prefix><gray>Bought earlier: <white><purchased></white>."
       world-untouched: "<prefix><gray>Bought items stay yours; world unchanged."
     operation:
-      started: "<prefix><yellow>Locked a <white><count></white>-block plan. Your inventory is briefly protected."
+      started: |-
+        <prefix><yellow>Construction started: <white><count> blocks
+        <dark_gray>  • <gray>Your inventory is briefly protected.
       completed: "<prefix><green><white><kind></white> completed: <white><count></white> blocks."
-      rolled-back: "<prefix><red>The operation was safely rolled back and fully restored. <gray>The world and inventory are safe; prepare the plan again."
+      rolled-back: |-
+        <prefix><red>The operation was rolled back and restored.
+        <dark_gray>  • <gray>The world and inventory are safe.
+    items:
+      none: "none"
+      summary: "items: <items> • types: <types>"
     status:
-      selection: "<prefix><gray>Selected <white><x>×<y>×<z></white> (volume <white><volume></white>); no plan is ready."
+      selection: |-
+        <prefix><gray>Selected: <white><x>×<y>×<z>
+        <dark_gray>  • <gray>Volume: <white><volume> <dark_gray>• <gray>no plan ready
       plan: "<prefix><yellow><white><kind></white> plan: <white><count>/<total></white> blocks."
       idle: "<prefix><gray>No selection or active plan. Start with <white>/builder wand</white>."
     kinds:

@@ -655,7 +655,7 @@ internal class BuilderToolsRuntime(
                             player,
                             "book.status.active",
                             mapOf(
-                                "name" to messages.literal(verification.blueprint.title),
+                                "name" to displayBookTitle(verification.blueprint.title),
                                 "price" to messages.literal(formatMinor(verification.blueprint.issuePriceMinor)),
                             ),
                         )
@@ -703,18 +703,18 @@ internal class BuilderToolsRuntime(
             BuilderBookJourneyStage.PREVIEW -> send(
                 player,
                 stage.messagePath,
-                mapOf("name" to messages.literal(checkNotNull(held).title)),
+                mapOf("name" to displayBookTitle(checkNotNull(held).title)),
             )
             BuilderBookJourneyStage.DRAFT -> send(
                 player,
                 stage.messagePath,
-                mapOf("name" to messages.literal(checkNotNull(held).title)),
+                mapOf("name" to displayBookTitle(checkNotNull(held).title)),
             )
             BuilderBookJourneyStage.ACTIVE -> send(
                 player,
                 stage.messagePath,
                 mapOf(
-                    "name" to messages.literal(checkNotNull(held).title),
+                    "name" to displayBookTitle(checkNotNull(held).title),
                     "price" to messages.literal(formatMinor(checkNotNull(held.issuePriceMinor))),
                 ),
             )
@@ -790,7 +790,7 @@ internal class BuilderToolsRuntime(
                         send(
                             player,
                             "book.draft-created",
-                            mapOf("name" to messages.literal(title), "count" to messages.literal(clipboard.blocks.size)),
+                            mapOf("name" to displayBookTitle(title), "count" to messages.literal(clipboard.blocks.size)),
                         )
                     } catch (unexpected: Throwable) {
                         error(
@@ -847,7 +847,7 @@ internal class BuilderToolsRuntime(
                             BuilderBookQuoteResult.ShopUnavailable -> throw UserFailure("book.shop-unavailable")
                             is BuilderBookQuoteResult.MaterialsUnavailable -> throw UserFailure(
                                 "book.material-unavailable",
-                                mapOf("materials" to messages.literal(quoted.materials.take(5).joinToString { it.key.key })),
+                                mapOf("materials" to messages.literal(materialsSummary(quoted.materials))),
                             )
                             BuilderBookQuoteResult.LimitExceeded -> throw UserFailure("book.price-limit")
                         }
@@ -1182,7 +1182,7 @@ internal class BuilderToolsRuntime(
             "book.quote",
             mapOf(
                 "kind" to messages.render("book.quote-kind.$kind", locale(player)),
-                "name" to messages.literal(blueprint.title),
+                "name" to displayBookTitle(blueprint.title),
                 "blocks" to messages.literal(blueprint.blockCount),
                 "items" to messages.literal(blueprint.materialItems),
                 "types" to messages.literal(blueprint.materialTypes),
@@ -1490,8 +1490,8 @@ internal class BuilderToolsRuntime(
             mapOf(
                 "kind" to kindLabel(player, plan.kind),
                 "count" to messages.literal(plan.changes.size),
-                "cost" to messages.literal(itemsSummary(plan.costs)),
-                "reward" to messages.literal(itemsSummary(plan.rewards)),
+                "cost" to itemsSummary(player, plan.costs),
+                "reward" to itemsSummary(player, plan.rewards),
                 "seconds" to messages.literal(config.planTtl.seconds),
             ),
         )
@@ -1997,12 +1997,26 @@ internal class BuilderToolsRuntime(
     private fun hourlyLimit(player: Player): Int =
         BuilderPermissionPolicy.hourlyChanges(player::hasPermission, config.baseHourlyChanges)
 
-    private fun itemsSummary(items: List<BuilderItemAmount>): String = if (items.isEmpty()) {
-        "—"
-    } else {
-        items.take(5).joinToString(", ") { "${it.amount}×${it.materialKey.removePrefix("minecraft:")}" } +
-            if (items.size > 5) " +${items.size - 5}" else ""
+    private fun itemsSummary(player: Player, items: List<BuilderItemAmount>): Component =
+        if (items.isEmpty()) {
+            messages.render("items.none", locale(player))
+        } else {
+            messages.render(
+                "items.summary",
+                locale(player),
+                mapOf(
+                    "items" to messages.literal(items.sumOf { it.amount.toLong() }),
+                    "types" to messages.literal(items.size),
+                ),
+            )
+        }
+
+    private fun materialsSummary(materials: List<Material>): String {
+        val first = checkNotNull(materials.firstOrNull()) { "Unavailable builder-book materials cannot be empty" }.key.key
+        return first + if (materials.size > 1) " +${materials.size - 1}" else ""
     }
+
+    private fun displayBookTitle(title: String): Component = messages.literal(BuildBookItems.compactTitle(title, 22))
 
     private fun kindLabel(player: Player, kind: BuilderPlanKind): Component =
         messages.render("kinds.${kind.name.lowercase(Locale.ROOT)}", locale(player))
