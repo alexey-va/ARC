@@ -1,9 +1,9 @@
 
 package ru.arc.autobuild
 
+import org.bukkit.Chunk
 import org.bukkit.Location
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test
 import org.mockbukkit.mockbukkit.entity.PlayerMock
 import org.mockbukkit.mockbukkit.world.WorldMock
 import ru.arc.TestBase
+import ru.arc.chunks.ArcChunkTicketLease
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.TestTaskScheduler
 
@@ -103,10 +104,14 @@ class BuildingManagerTest : TestBase() {
 
     @Test
     fun `shutdown cancels an active construction without synthesizing completion`() {
-        val (site, construction) = controlledActiveSite()
-        val buildChunk = site.adjustedCenter.chunk
+        var acquiredTickets = 0
+        var releasedTickets = 0
+        val (site, construction) = controlledActiveSite {
+            acquiredTickets++
+            ArcChunkTicketLease { releasedTickets++ }
+        }
 
-        assertTrue(buildChunk.isForceLoaded, "Active construction should keep its chunks loaded")
+        assertTrue(acquiredTickets > 0, "Active construction should acquire at least one chunk ticket")
         while (player.nextMessage() != null) {
             // Drain setup feedback so shutdown silence is asserted independently.
         }
@@ -118,7 +123,7 @@ class BuildingManagerTest : TestBase() {
 
         assertEquals(ConstructionState.Cancelled, site.state)
         assertEquals(-1, construction.pointer.get(), "Shutdown must not place the remaining schematic blocks")
-        assertFalse(buildChunk.isForceLoaded, "Shutdown should release construction chunk loading")
+        assertEquals(acquiredTickets, releasedTickets, "Shutdown should release every construction chunk ticket")
         assertNull(player.nextMessage(), "Shutdown cancellation should be silent")
         assertNull(player.nextComponentMessage(), "Shutdown cancellation should be silent")
     }
@@ -134,7 +139,9 @@ class BuildingManagerTest : TestBase() {
         assertEquals(ConstructionState.Building, site.state)
     }
 
-    private fun controlledActiveSite(): Pair<ConstructionSite, Construction> {
+    private fun controlledActiveSite(
+        ticketAcquirer: ((Chunk) -> ArcChunkTicketLease?)? = null,
+    ): Pair<ConstructionSite, Construction> {
         val building = Building("amogus_1.schem")
         val site = ConstructionSite(
             building,
@@ -147,6 +154,7 @@ class BuildingManagerTest : TestBase() {
         )
         assertTrue(site.startDisplayingBorder())
         assertTrue(site.startConfirmation())
+        ticketAcquirer?.let { site.chunkTicketAcquirer = it }
 
         val construction = Construction(
             site,

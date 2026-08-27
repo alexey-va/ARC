@@ -237,6 +237,24 @@ class ConstructionFlowTest : TestBase() {
         }
     }
 
+    @Nested
+    @DisplayName("Construction Chunk Tickets")
+    inner class ChunkTicketTests {
+
+        @Test
+        @DisplayName("Construction cleanup preserves an external force-load flag")
+        fun testCleanupPreservesExternalForceLoad() {
+            val site = ConstructionSite(building, centerBlock, player, 0, world, 0, 0)
+            val chunk = site.adjustedCenter.chunk
+            chunk.isForceLoaded = true
+
+            site.acquireChunkTickets()
+            site.cleanup(0)
+
+            assertTrue(chunk.isForceLoaded)
+        }
+    }
+
     // ==================== Invalid Transition Tests ====================
 
     @Nested

@@ -4,6 +4,8 @@ import net.citizensnpcs.api.CitizensAPI
 import org.bukkit.Bukkit
 import org.bukkit.World
 import ru.arc.ARC
+import ru.arc.chunks.ArcChunkTicketLease
+import ru.arc.chunks.ArcChunkTickets
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import java.util.Locale
@@ -24,8 +26,7 @@ import java.util.Locale
 internal class NpcChunkTicketManager(
     private val config: () -> NpcChunkTicketConfig,
 ) {
-    private val ownedTickets = linkedSetOf<NpcChunkKey>()
-    private val borrowedTickets = linkedSetOf<NpcChunkKey>()
+    private val leases = linkedMapOf<NpcChunkKey, ArcChunkTicketLease>()
     private val pendingTickets = linkedMapOf<NpcChunkKey, Long>()
 
     private var desiredTickets: Set<NpcChunkKey> = emptySet()
@@ -71,8 +72,7 @@ internal class NpcChunkTicketManager(
         revision++
         val currentRevision = revision
 
-        borrowedTickets.retainAll(desiredTickets)
-        val covered = ownedTickets + borrowedTickets + pendingTickets.keys
+        val covered = leases.keys + pendingTickets.keys
         (desiredTickets - covered).forEach { key -> acquireAsync(key, currentRevision) }
         releaseObsoleteTickets()
 
@@ -99,7 +99,6 @@ internal class NpcChunkTicketManager(
         desiredTickets = emptySet()
         pendingTickets.clear()
         releaseObsoleteTickets()
-        borrowedTickets.clear()
         lastSummary = null
     }
 
@@ -121,35 +120,16 @@ internal class NpcChunkTicketManager(
                 releaseObsoleteTickets()
                 return@whenComplete
             }
-            runCatching { chunk.addPluginChunkTicket(ARC.instance) }
-                .onSuccess { added ->
-                    if (added) {
-                        ownedTickets += key
-                    } else {
-                        borrowedTickets += key
-                    }
-                }.onFailure { ticketFailure ->
-                    warn("Failed to pin Citizens NPC chunk {}:{},{}", key.world, key.x, key.z, ticketFailure)
-                }
+            ArcChunkTickets.acquire(chunk)?.let { leases[key] = it }
             releaseObsoleteTickets()
         }
     }
 
     private fun releaseObsoleteTickets() {
         if (pendingTickets.isNotEmpty()) return
-        val obsolete = ownedTickets - desiredTickets
+        val obsolete = leases.keys - desiredTickets
         obsolete.forEach { key ->
-            val world = world(key)
-            if (world == null) {
-                warn("Cannot release Citizens NPC chunk ticket because world '{}' is unloaded", key.world)
-                return@forEach
-            }
-            runCatching { world.removePluginChunkTicket(key.x, key.z, ARC.instance) }
-                .onFailure { failure ->
-                    warn("Failed to release Citizens NPC chunk {}:{},{}", key.world, key.x, key.z, failure)
-                    return@forEach
-                }
-            ownedTickets.remove(key)
+            leases.remove(key)?.close()
         }
     }
 

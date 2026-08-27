@@ -10,6 +10,8 @@ import org.bukkit.entity.EntityType
 import org.bukkit.entity.Firework
 import org.bukkit.entity.Player
 import org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.CUSTOM
+import ru.arc.chunks.ArcChunkTicketLease
+import ru.arc.chunks.ArcChunkTickets
 import ru.arc.core.ScheduledTask
 import ru.arc.core.delayed
 import ru.arc.core.repeat
@@ -103,6 +105,8 @@ class ConstructionSite(
         internal set
 
     private val chunks = mutableSetOf<Chunk>()
+    private val chunkTicketLeases = mutableListOf<ArcChunkTicketLease>()
+    internal var chunkTicketAcquirer: (Chunk) -> ArcChunkTicketLease? = ArcChunkTickets::acquire
     internal var display: Display? = null
     internal var construction: Construction? = null
     internal var phaseTimeoutTask: ScheduledTask? = null
@@ -285,14 +289,15 @@ class ConstructionSite(
         }
     }
 
-    internal fun forceloadChunks() {
+    internal fun acquireChunkTickets() {
         calculateChunks()
-        debug("[autobuild] Forceloading {} chunks for player={} building={}", chunks.size, player.name, building.fileName)
-        chunks.forEach { it.isForceLoaded = true }
+        debug("[autobuild] Ticketing {} chunks for player={} building={}", chunks.size, player.name, building.fileName)
+        chunks.mapNotNullTo(chunkTicketLeases, chunkTicketAcquirer)
     }
 
-    private fun stopForceload() {
-        chunks.filter { it.isForceLoaded }.forEach { it.isForceLoaded = false }
+    private fun releaseChunkTickets() {
+        chunkTicketLeases.forEach(ArcChunkTicketLease::close)
+        chunkTicketLeases.clear()
     }
 
     // ==================== Utilities ====================
@@ -433,7 +438,7 @@ class ConstructionSite(
     /** Cleans up all resources */
     internal fun cleanup(destroyNpcDelaySeconds: Int) {
         BuildingManager.removeConstruction(this)
-        stopForceload()
+        releaseChunkTickets()
         display?.stop()
         construction?.cancel(destroyNpcDelaySeconds)
     }

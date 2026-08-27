@@ -23,6 +23,7 @@ import ru.arc.commands.chat.ChatModeAliasCommand
 import ru.arc.commandhide.CommandHideModule
 import ru.arc.citizens.NpcChunkTicketModule
 import ru.arc.buildertools.BuilderToolsModule
+import ru.arc.chunks.ArcChunkTickets
 import ru.arc.config.ConfigManager
 import ru.arc.config.LocationPoolConfig
 import ru.arc.core.ModuleRegistry
@@ -148,6 +149,7 @@ open class ARC : JavaPlugin() {
         info("Stopping ARC plugin")
         Portal.removeAll()
         ModuleRegistry.shutdownAll()
+        ArcChunkTickets.shutdown()
         pluginMessenger?.shutdown()
         pluginMessenger = null
         GuiDefaults.reset()

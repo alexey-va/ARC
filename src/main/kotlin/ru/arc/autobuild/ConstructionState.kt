@@ -99,7 +99,7 @@ sealed class ConstructionState {
     data object Building : ConstructionState() {
         override fun enter(site: ConstructionSite) {
             site.display?.stop()
-            site.forceloadChunks()
+            site.acquireChunkTickets()
             site.construction?.startBuilding()
 
             if (site.cooldownSeconds > 0 && !site.player.hasPermission("arc.buildings.cooldown.bypass")) {
