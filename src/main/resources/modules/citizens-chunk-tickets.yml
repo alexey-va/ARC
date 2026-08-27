@@ -1,0 +1,6 @@
+# Prevent Citizens nameplates and hologram entities from repeatedly entering
+# Paper's EntitiesUnloadEvent lifecycle. Keep this opt-in and world-bounded.
+enabled: false
+worlds: []
+reconcile-interval-ticks: 200
+max-pinned-chunks: 64

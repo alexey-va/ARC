@@ -21,6 +21,7 @@ import ru.arc.commands.arc.subcommands.TestSubCommand
 import ru.arc.commands.arc.subcommands.TreasuresSubCommand
 import ru.arc.commands.chat.ChatModeAliasCommand
 import ru.arc.commandhide.CommandHideModule
+import ru.arc.citizens.NpcChunkTicketModule
 import ru.arc.buildertools.BuilderToolsModule
 import ru.arc.config.ConfigManager
 import ru.arc.config.LocationPoolConfig
@@ -181,6 +182,7 @@ open class ARC : JavaPlugin() {
             RedisModule,
             NetworkModule,
             HooksModule,
+            NpcChunkTicketModule,
             AiModule,
             EconomyModule,
             // Configuration (priority 30-49)
@@ -309,6 +311,7 @@ open class ARC : JavaPlugin() {
                 "modules/metrics.yml",
                 "modules/redis.yml",
                 "modules/ops-http.yml",
+                "modules/citizens-chunk-tickets.yml",
                 "modules/announce.yml",
                 "modules/scheduled-commands.yml",
                 "modules/restart.yml",
