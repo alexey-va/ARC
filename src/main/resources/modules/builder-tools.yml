@@ -34,6 +34,29 @@ shop:
   max-auto-buy-items: 4096
   max-auto-buy-price: 250000
 
+# Player-authored build books: free drafts, explicit paid activation and paid copies.
+# Shop prices are read-only; the stored self-cost never rewrites EconomyShopGUI.
+book-contracts:
+  enabled: false
+  construction-markup-percent: 15.0
+  max-issue-price: 50000000
+  mysql:
+    enabled: false
+    host: 127.0.0.1
+    port: 3306
+    database: minecraft
+    username: minecraft
+    password: ''
+    ssl-mode: DISABLED
+    fail-fast: false
+    pool:
+      minimum-idle: 0
+      maximum-size: 4
+      connection-timeout-ms: 5000
+      socket-timeout-ms: 15000
+      validation-timeout-ms: 3000
+      max-lifetime-ms: 1700000
+
 safety:
   require-lands: true
   require-coreprotect: true
@@ -59,7 +82,9 @@ locales:
       - "<#8c8c8c>  • <#92bed8>/builder wand <#e6fff3>— выделить область"
       - "<#8c8c8c>  • <#92bed8>/builder fill [блок] <#e6fff3>— заполнить пустоты"
       - "<#8c8c8c>  • <#92bed8>/builder copy <#e6fff3>и <#92bed8>/builder paste <#e6fff3>— временный чертёж"
-      - "<#8c8c8c>  • <#92bed8>/builder book [имя] <#e6fff3>— сохранить чертёж в книге"
+      - "<#8c8c8c>  • <#92bed8>/builder book draft [имя] <#e6fff3>— бесплатный черновик"
+      - "<#8c8c8c>  • <#92bed8>/builder book activate <#e6fff3>— рассчитать цену активации"
+      - "<#8c8c8c>  • <#92bed8>/builder book copy <#e6fff3>— платная копия активной книги"
       - "<#8c8c8c>  • <#92bed8>/builder deconstruct <#e6fff3>— разобрать область"
       - "<#8c8c8c>  • <#92bed8>/builder crown <#e6fff3>— создать крону"
       - "<#8c8c8c>  • <#92bed8>/builder confirm <#e6fff3>— применить показанный план"
@@ -69,7 +94,7 @@ locales:
       no-permission: "<prefix><#c42323>У вас нет доступа к этому инструменту."
       game-mode: |-
         <prefix><#c42323>Режим недоступен для инструментов строителя.
-        <#8c8c8c>  • <#e6fff3>Переключитесь в выживание или creative.
+        <#8c8c8c>  • <#e6fff3>Переключитесь в выживание или творческий режим.
       game-mode-changed: |-
         <prefix><#ff9f0f>Режим игры изменился после предпросмотра.
         <#8c8c8c>  • <#e6fff3>Повторите план — расход зависит от режима.
@@ -137,7 +162,7 @@ locales:
         - "<#e6fff3>ЛКМ по грани — показать крону."
         - "<#e6fff3>ПКМ — построить показанный вариант."
         - "<#969696>В выживании листва берётся из инвентаря."
-        - "<#969696>В creative материалы не расходуются."
+        - "<#969696>В творческом режиме материалы не расходуются."
         - "<reset>"
         - "<#8c8c8c>• <#92bed8>/builder crown help <#e6fff3>— настройки."
       received: |-
@@ -169,11 +194,12 @@ locales:
       saved: |-
         <prefix><#2bba43>Чертёж скопирован.
         <#8c8c8c>  • <#e6fff3>Блоков: <#92bed8><count> <#8c8c8c>• <#969696>хранится 15 минут
-        <#8c8c8c>  • <#e6fff3>Сохранить навсегда: <#92bed8>/builder book [имя]
+        <#8c8c8c>  • <#e6fff3>Создать черновик: <#92bed8>/builder book draft [имя]
     book:
-      created: |-
-        <prefix><#2bba43>Книга строительства готова: <#92bed8><name>
-        <#8c8c8c>  • <#e6fff3>Сохранено блоков: <#92bed8><count>
+      draft-created: |-
+        <prefix><#2bba43>Черновик готов: <#92bed8><name>
+        <#8c8c8c>  • <#e6fff3>Блоков: <#92bed8><count> <#8c8c8c>• <#969696>денег пока не списано
+        <#8c8c8c>  • <#e6fff3>Проверьте превью и настройте положение, затем: <#92bed8>/builder book activate
       material-required: "<prefix><#ff9f0f>Держите обычную книгу в основной руке."
       inventory-full: "<prefix><#ff9f0f>Освободите один слот для книги строительства."
       invalid-name: "<prefix><#c42323>Название: от 1 до 48 обычных символов."
@@ -183,6 +209,48 @@ locales:
         <#8c8c8c>  • <#969696>Мир и инвентарь не изменены.
       invalid: "<prefix><#c42323>Эта книга повреждена или её чертёж недоступен."
       missing: "<prefix><#ff9f0f>Положите нужную книгу в инвентарь."
+      draft-required: "<prefix><#ff9f0f>Держите бесплатный черновик в основной руке."
+      active-required: "<prefix><#ff9f0f>Держите активную книгу в основной руке."
+      creator-only: "<prefix><#ff9f0f>Первую активацию черновика подтверждает его автор."
+      unactivated: |-
+        <prefix><#ff9f0f>Это только черновик — по нему нельзя строить.
+        <#8c8c8c>  • <#e6fff3>Проверьте превью и выполните <#92bed8>/builder book activate
+      duplicate: |-
+        <prefix><#c42323>Этот экземпляр уже используется, потрачен или скопирован нечестно.
+        <#8c8c8c>  • <#969696>MySQL разрешает действие только одному настоящему UUID.
+      source-changed: "<prefix><#ff9f0f>Книга в руке изменилась после расчёта. Рассчитайте цену снова."
+      contracts-disabled: "<prefix><#ff9f0f>Активация пользовательских книг на этом сервере отключена."
+      registry-starting: "<prefix><#ff9f0f>Реестр книг запускается. Попробуйте через несколько секунд."
+      registry-unavailable: "<prefix><#c42323>Реестр книг временно недоступен. Деньги не списаны либо операция остановлена безопасно."
+      shop-unavailable: "<prefix><#ff9f0f>Не удалось получить цены материалов из админшопа."
+      material-unavailable: "<prefix><#ff9f0f>В админшопе нет материалов: <#92bed8><materials>"
+      price-limit: "<prefix><#c42323>Смета превышает безопасный лимит книги."
+      quote-kind:
+        activation: "активация черновика"
+        copy: "новый экземпляр"
+      quote: |-
+        <prefix><#e6fff3>Смета: <#92bed8><kind> <#8c8c8c>• <#e6fff3><name>
+        <#8c8c8c>  • <#e6fff3>Материалы: <#92bed8><materials> <#8c8c8c>• <#e6fff3>возведение: <#92bed8><labor>
+        <#8c8c8c>  • <#e6fff3>Итого: <#2bba43><price> <#8c8c8c>• <#969696><blocks> блоков, <items> предметов, <types> видов
+        <#8c8c8c>  • <click:run_command:'/builder book confirm'><#92bed8>/builder book confirm</#92bed8></click> <#e6fff3>— оплатить в течение <#92bed8><seconds> с
+      quote-expired: "<prefix><#ff9f0f>Смета отсутствует или устарела. Запустите activate/copy ещё раз."
+      quote-cancelled: "<prefix><#969696>Смета отменена. Деньги не списаны."
+      economy-unavailable: "<prefix><#c42323>Экономика временно недоступна. Деньги не списаны."
+      insufficient-funds: "<prefix><#ff9f0f>Недостаточно денег для активации. Черновик сохранён."
+      payment-failed: "<prefix><#c42323>Платёж отклонён. Книга не активирована."
+      refunded: "<prefix><#ff9f0f>Книгу не удалось выпустить; вся сумма автоматически возвращена."
+      manual-review: "<prefix><#c42323>Операция остановлена для безопасной проверки. Не перемещайте книгу; деньги повторно не списываются."
+      delivery-space: |-
+        <prefix><#ff9f0f>Оплаченная книга ожидает свободный слот.
+        <#8c8c8c>  • <#e6fff3>Освободите место — выдача продолжится автоматически.
+      delivery-pending: "<prefix><#ff9f0f>Книга выдана, но реестр ещё подтверждает доставку. Инвентарь временно защищён."
+      delivery-recovered: "<prefix><#2bba43>Оплаченная книга восстановлена и активна."
+      activated: |-
+        <prefix><#2bba43>Книга активна и зарегистрирована.
+        <#8c8c8c>  • <#e6fff3>Каждый экземпляр одноразовый; копии оплачиваются по той же сохранённой себестоимости.
+      copied: |-
+        <prefix><#2bba43>Новый экземпляр зарегистрирован.
+        <#8c8c8c>  • <#e6fff3>Исходная книга сохранена; у копии собственный одноразовый UUID.
     plan:
       ready: |-
         <prefix><#2bba43>Предпросмотр готов: <#92bed8><kind>
@@ -230,7 +298,9 @@ locales:
       - "<prefix><white>/builder wand <gray>— bind an echo shard as the selector"
       - "<prefix><white>/builder fill [block] <gray>— fill space using your materials"
       - "<prefix><white>/builder copy <gray>and <white>/builder paste <gray>— temporary blueprint"
-      - "<prefix><white>/builder book [name] <gray>— bind a plain book to a permanent blueprint"
+      - "<prefix><white>/builder book draft [name] <gray>— create a free preview-only draft"
+      - "<prefix><white>/builder book activate <gray>— quote draft activation"
+      - "<prefix><white>/builder book copy <gray>— quote a paid registered copy"
       - "<prefix><white>/builder deconstruct <gray>— dismantle with your current tool"
       - "<prefix><white>/builder crown [leaves] [3–10] <gray>— build a leaf crown"
       - "<prefix><white>/builder confirm <gray>— build with materials you own"
@@ -305,9 +375,9 @@ locales:
         - "<dark_gray>  • <gray>Density: <aqua><density></aqua>; edge: <aqua><noise></aqua>"
         - "<dark_gray>  • <gray>Palette:"
     clipboard:
-      saved: "<prefix><green>Copied a safe <white><count></white>-block blueprint. <gray>Paste it or run <white>/builder book</white> within 15 minutes."
+      saved: "<prefix><green>Copied a safe <white><count></white>-block blueprint. <gray>Paste it or create a draft within 15 minutes."
     book:
-      created: "<prefix><green>Created <white><name></white> from a <white><count></white>-block blueprint."
+      draft-created: "<prefix><green>Draft <white><name></white> created from <white><count></white> blocks. <gray>No money was charged. Preview it, adjust it, then use <white>/builder book activate</white>."
       material-required: "<prefix><yellow>Hold a plain book in your main hand. It will become the build book."
       inventory-full: "<prefix><yellow>Free one slot or hold a single plain book."
       invalid-name: "<prefix><red>A book name must contain 1 to 48 ordinary characters."
@@ -315,6 +385,34 @@ locales:
       failed: "<prefix><red>The book could not be saved. The world and inventory were not changed."
       invalid: "<prefix><red>This player build book is damaged or unavailable."
       missing: "<prefix><yellow>Keep the exact book used for this preview in your inventory."
+      draft-required: "<prefix><yellow>Hold a free build-book draft in your main hand."
+      active-required: "<prefix><yellow>Hold a registered build book in your main hand."
+      creator-only: "<prefix><yellow>The draft author must approve its first activation."
+      unactivated: "<prefix><yellow>This is a preview-only draft. Check it, then use <white>/builder book activate</white>."
+      duplicate: "<prefix><red>This instance is already reserved, consumed, revoked, or duplicated. Only one authoritative UUID can win."
+      source-changed: "<prefix><yellow>The held book changed after the quote. Request a new quote."
+      contracts-disabled: "<prefix><yellow>Player book activation is disabled on this server."
+      registry-starting: "<prefix><yellow>The book registry is starting. Try again in a few seconds."
+      registry-unavailable: "<prefix><red>The book registry is temporarily unavailable. No new charge was made, or the operation stopped safely."
+      shop-unavailable: "<prefix><yellow>Could not read material prices from the admin shop."
+      material-unavailable: "<prefix><yellow>The admin shop does not sell: <white><materials></white>."
+      price-limit: "<prefix><red>The estimate exceeds the safe book-price limit."
+      quote-kind:
+        activation: "draft activation"
+        copy: "new registered instance"
+      quote: "<prefix><white><kind></white> • <white><name></white>\n<dark_gray>  • <gray>Materials: <aqua><materials></aqua> • construction: <aqua><labor></aqua>\n<dark_gray>  • <gray>Total: <green><price></green> • <blocks> blocks, <items> items, <types> types\n<dark_gray>  • <click:run_command:'/builder book confirm'><aqua>/builder book confirm</aqua></click> <gray>— pay within <white><seconds></white> seconds"
+      quote-expired: "<prefix><yellow>The quote is missing or expired. Run activate/copy again."
+      quote-cancelled: "<prefix><gray>Quote cancelled. No money was charged."
+      economy-unavailable: "<prefix><red>The economy is unavailable. No money was charged."
+      insufficient-funds: "<prefix><yellow>You cannot afford this activation. Your source book remains unchanged."
+      payment-failed: "<prefix><red>The payment was rejected. The book was not activated."
+      refunded: "<prefix><yellow>The instance could not be issued, so the full amount was refunded."
+      manual-review: "<prefix><red>The operation stopped for safe review. Do not move the book; ARC will not charge it again."
+      delivery-space: "<prefix><yellow>Your paid book is waiting for one free slot. <gray>Free space; delivery resumes automatically."
+      delivery-pending: "<prefix><yellow>The book exists, but the registry is still confirming delivery. Your inventory is temporarily protected."
+      delivery-recovered: "<prefix><green>Your paid build book was safely recovered and is active."
+      activated: "<prefix><green>The build book is active and registered. <gray>Each instance is single-use; paid copies keep this stored self-cost."
+      copied: "<prefix><green>A new instance is registered. <gray>The source remains yours; the copy has its own single-use UUID."
     plan:
       ready: "<prefix><green><white><kind></white> plan: <white><count></white> blocks. <gray>Cost: <white><cost></white>; result: <white><reward></white>. Check the particles and enter <click:run_command:'/builder confirm'><aqua>/builder confirm</aqua></click> within <seconds> seconds."
       market:

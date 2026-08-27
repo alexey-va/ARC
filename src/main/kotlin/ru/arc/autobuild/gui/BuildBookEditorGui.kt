@@ -166,8 +166,8 @@ object BuildBookEditorGui {
     ): GuiItem {
         val stack = ItemStack(material)
         stack.editMeta { meta ->
-            meta.displayName(name)
-            meta.lore(lore)
+            TextUtil.strip(name)?.let(meta::displayName)
+            meta.lore(lore.mapNotNull(TextUtil::strip))
         }
         return GuiItems.create(stack) { event ->
             event.isCancelled = true

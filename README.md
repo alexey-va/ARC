@@ -17,7 +17,8 @@ export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-25.jdk/Contents/Home
 ./gradlew shadowJar
 ```
 
-Output: `build/libs/ARC-*.jar` (shadowed dependencies)
+Deployable output: `build/libs/ARC-1.0.jar` (shadowed dependencies). The
+non-deployable plain archive is written separately as `ARC-1.0-plain.jar`.
 
 ## Deploy
 

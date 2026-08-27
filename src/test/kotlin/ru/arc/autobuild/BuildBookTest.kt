@@ -6,6 +6,7 @@ import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
+import net.kyori.adventure.text.format.TextDecoration
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -59,6 +60,34 @@ class BuildBookTest : TestBase() {
 
         assertEquals(expected, BuildBookCodec.read(item))
         assertTrue(item.itemMeta.lore().orEmpty().isNotEmpty())
+    }
+
+    @Test
+    fun `draft and registered UUID metadata round trip without vanilla italics`() {
+        val creator = UUID.randomUUID()
+        val blueprint = UUID.randomUUID()
+        val draft = BuildBookData(
+            buildingId = "player-${creator.toString().replace("-", "")}-draft.schem",
+            title = "Башня",
+            playerCreated = true,
+            creatorId = creator,
+            creatorName = "Builder",
+            blueprintId = blueprint,
+            contentSha256 = "a".repeat(64),
+            schematicSha256 = "b".repeat(64),
+            blockCount = 42,
+            cooldownSeconds = 0,
+        ).validated()
+        val registered = draft.copy(instanceId = UUID.randomUUID(), issuePriceMinor = 12_345L).validated()
+
+        val draftItem = BuildBookItems.create(draft)
+        val registeredItem = BuildBookItems.create(registered)
+
+        assertEquals(draft, BuildBookCodec.read(draftItem))
+        assertEquals(registered, BuildBookCodec.read(registeredItem))
+        assertTrue(checkNotNull(draftItem.itemMeta.displayName()).decoration(TextDecoration.ITALIC) == TextDecoration.State.FALSE)
+        assertTrue(draftItem.itemMeta.lore().orEmpty().all { it.decoration(TextDecoration.ITALIC) == TextDecoration.State.FALSE })
+        assertTrue(registeredItem.itemMeta.lore().orEmpty().all { it.decoration(TextDecoration.ITALIC) == TextDecoration.State.FALSE })
     }
 
     @Test

@@ -8,15 +8,19 @@ cleanup-interval: 20
 build-book:
   display-name: '<#92bed8><bold>Книга строительства'
   lore:
-    - '<#e6fff3><name>'
+    - '<#e6fff3><bold><name>'
     - ''
-    - '<#8c8c8c>Блоков: <#92bed8><blocks>'
-    - '<#8c8c8c>Поворот: <#92bed8><rotation>°'
-    - '<#8c8c8c>Смещение: <#92bed8><offset_x>, <offset_y>, <offset_z>'
+    - '<#8c8c8c>Статус: <#92bed8><state>'
+    - '<#8c8c8c>Автор: <#e6fff3><creator>'
+    - '<#8c8c8c>Стоимость выпуска: <#2bba43><price>'
+    - '<#8c8c8c>Экземпляр: <#969696><instance>'
+    - ''
+    - '<#8c8c8c>Блоков: <#e6fff3><blocks> <#8c8c8c>• <#e6fff3><rotation>°'
+    - '<#8c8c8c>Смещение: <#e6fff3><offset_x>, <offset_y>, <offset_z>'
     - ''
     - '<#8c8c8c>• <#92bed8>ПКМ по земле<#e6fff3> — показать'
     - '<#8c8c8c>• <#92bed8>ПКМ в воздух<#e6fff3> — настроить'
-  received: '<#2bba43>Книга строительства создана: <#92bed8><building>'
+  received: '<#92bed8>◇ <#2bba43>Книга строительства создана: <#e6fff3><building>'
   player-copy:
     max-offset: 16
     max-per-player: 24
@@ -24,9 +28,9 @@ build-book:
     default-name: 'Моя постройка'
   editor:
     title: '<dark_gray>Настройка книги'
-    invalid: '<#c42323>Книга строительства повреждена или её схема недоступна.'
-    no-permission: '<#c42323>У вас нет доступа к настройке книг строительства.'
-    preview-blocked: '<#ff9f0f>Это смещение выходит за границы доступной для строительства области.'
+    invalid: '<#92bed8>◇ <#c42323>Книга повреждена или её чертёж недоступен.'
+    no-permission: '<#92bed8>◇ <#c42323>У вас нет доступа к настройке этой книги.'
+    preview-blocked: '<#92bed8>◇ <#ff9f0f>После этого изменения постройка выйдет за доступную область.'
     overview:
       name: '<#92bed8><bold><name>'
       lore:
@@ -77,8 +81,10 @@ build-book:
         - '<#8c8c8c>• <#92bed8>ПКМ по земле<#e6fff3> — открыть превью <#8c8c8c>•'
 # На classic (спавн/данжи): true. На survival: false.
 disable-building: false
-cant-build-message: <dark_gray>🛠 <red>Вы не можете строить здесь.
-disabled-message: <gray>🛠 <red>Постройка здесь отключена!
+cant-build-message: |-
+  <#92bed8>◇ <#c42323>Здесь нельзя разместить эту постройку.
+  <#8c8c8c>  • <#e6fff3>Проверьте право строительства на всей площадке.
+disabled-message: '<#92bed8>◇ <#ff9f0f>Автопостройка в этом мире отключена.'
 display:
   border-particle-interval: 5
   border-particle: FLAME
@@ -90,7 +96,10 @@ display:
   center-particle-count: 1
   max-blocks: 20000
   max-per-10-min: 10000000
-start-message: <gray>🛠 <green>Нажмите на тот же блок, чтобы подтвердить постройку
+start-message: |-
+  <#92bed8>◇ <#e6fff3>Предпросмотр постройки включён.
+  <#8c8c8c>  • <#92bed8>Контур обновляется постоянно <#8c8c8c>• <#e6fff3>ПКМ в воздух — настройка
+  <#8c8c8c>  • <#e6fff3>Нажмите тот же блок ещё раз, когда всё готово.
 confirm-time: 180
 construction:
   # Default limit for books without arc:cooldown_seconds. Set a book to 0 for unlimited simple builds.
@@ -115,38 +124,46 @@ construction:
   blocks-per-tick: 3
   play-sounds: true
   show-particles: false
-confirm-message: <gray>🛠 <green>Подтвердите постройку, нажав ПКМ на NPC
+confirm-message: '<#92bed8>◇ <#e6fff3>Проверьте площадку и нажмите <#92bed8>ПКМ по строителю<#e6fff3>.'
 confirm-gui:
-  title: <dark_gray>Подтверждение постройки
+  title: '<dark_gray>Подтверждение постройки'
   confirm:
     material: PAPER
-    display: <green>Подтвердить постройку
+    display: '<#2bba43><bold>Начать строительство'
+    lore:
+      - '<#e6fff3>Применить показанный план.'
+      - ''
+      - '<#8c8c8c>• <#ff9f0f>Книга будет израсходована <#8c8c8c>•'
     customModelData: 0
   cancel:
     material: RED_STAINED_GLASS_PANE
-    display: <red>Отменить постройку
+    display: '<#c42323><bold>Вернуться к настройке'
+    lore:
+      - '<#e6fff3>Закрыть подтверждение без изменений.'
     customModelData: 0
-start-build-message: <gray>🛠 <green>Постройка начата
-already-building-message: <gray>🛠 <red>Вы уже строите одно здание!
+start-build-message: '<#92bed8>◇ <#2bba43>Строительство началось.'
+already-building-message: '<#92bed8>◇ <#ff9f0f>Сначала завершите текущую постройку.'
 building-gui:
   progress:
     material: PAPER
-    display: <gold>Прогресс строительства
+    display: '<#92bed8><bold>Ход строительства'
   cancel:
     material: RED_STAINED_GLASS_PANE
-    display: <red>Отменить постройку
+    display: '<#c42323><bold>Отменить строительство'
     lore:
-      - <red>Книга не вернётся!
-      - <gray>Нажмите ещё раз для отмены
+      - '<#e6fff3>Остановить текущую постройку.'
+      - ''
+      - '<#8c8c8c>• <#ff9f0f>Использованная книга не вернётся <#8c8c8c>•'
+      - '<#969696>Нажмите ещё раз для подтверждения.'
     customModelData: 0
   cancel-confirm:
-    display: <yellow>Нажмите ещё раз для подтверждения
-  cancel-hint: <gray>🛠 <yellow>Нажмите «Отменить» ещё раз для подтверждения
+    display: '<#ff9f0f><bold>Подтвердить отмену'
+  cancel-hint: '<#92bed8>◇ <#ff9f0f>Нажмите «Отменить» ещё раз, чтобы остановить строительство.'
   fast-finish:
     material: BLAZE_POWDER
-    display: <green>Мгновенно завершить
-inactivity-cancel-message: <gray>🛠 Постройка отменена из-за неактивности.
+    display: '<#2bba43><bold>Завершить мгновенно'
+inactivity-cancel-message: '<#92bed8>◇ <#969696>Предпросмотр закрыт из-за неактивности.'
 messages:
-  display-limit: <red>Слишком много блоков в строении. Показывается лишь <amount>/<max>
-  display-limit-2: <gray>🛠 <red>Превышен лимит показа блоков. Строение не будет показано
-cancel-build-message: <gray>🛠 <red>Постройка отменена
+  display-limit: '<#92bed8>◇ <#ff9f0f>Показана часть чертежа: <#e6fff3><amount>/<max> блоков.'
+  display-limit-2: '<#92bed8>◇ <#c42323>Этот чертёж слишком велик для безопасного предпросмотра.'
+cancel-build-message: '<#92bed8>◇ <#969696>Постройка отменена.'

@@ -10,6 +10,8 @@ import ru.arc.ARC
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import ru.arc.util.TextUtil.strip
+import ru.arc.mounts.minorToDouble
+import java.util.Locale
 import java.util.UUID
 
 data class BuildBookTransform(
@@ -68,6 +70,13 @@ data class BuildBookData(
     val transform: BuildBookTransform = BuildBookTransform(),
     val playerCreated: Boolean = false,
     val creatorId: UUID? = null,
+    val creatorName: String? = null,
+    val blueprintId: UUID? = null,
+    val instanceId: UUID? = null,
+    val issuePriceMinor: Long? = null,
+    val contentSha256: String? = null,
+    val schematicSha256: String? = null,
+    val deliveryPending: Boolean = false,
     val blockCount: Int? = null,
     val cooldownSeconds: Long? = null,
 ) {
@@ -80,10 +89,35 @@ data class BuildBookData(
             "Build-book cooldown is invalid"
         }
         require(!playerCreated || creatorId != null) { "Player-created build books require a creator" }
+        creatorName?.let { require(CREATOR_NAME.matches(it)) { "Build-book creator name is invalid" } }
+        require(instanceId == null || blueprintId != null) { "Build-book instance requires a blueprint" }
+        require(!deliveryPending || instanceId != null) { "Only an issued build-book instance may await delivery" }
+        require(issuePriceMinor == null || issuePriceMinor in 1..100_000_000_000L) { "Build-book price is invalid" }
+        require((contentSha256 == null) == (schematicSha256 == null)) {
+            "Build-book content digests must be present together"
+        }
+        contentSha256?.let { require(SHA256.matches(it)) { "Build-book content digest is invalid" } }
+        schematicSha256?.let { require(SHA256.matches(it)) { "Build-book schematic digest is invalid" } }
+        if (playerCreated && blueprintId != null) {
+            require(contentSha256 != null && schematicSha256 != null) {
+                "Player-created build-book lacks immutable content digests"
+            }
+        }
+        if (instanceId != null) {
+            require(playerCreated && creatorName != null && issuePriceMinor != null) {
+                "Registered build-book instance lacks authoritative display fields"
+            }
+        }
     }
+
+    val registered: Boolean get() = playerCreated && blueprintId != null && instanceId != null && issuePriceMinor != null
+    val draft: Boolean get() = playerCreated && blueprintId != null && instanceId == null
+    val available: Boolean get() = registered && !deliveryPending
 
     companion object {
         private val BUILDING_ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,159}")
+        private val CREATOR_NAME = Regex("[A-Za-z0-9_]{1,16}")
+        private val SHA256 = Regex("[a-f0-9]{64}")
     }
 }
 
@@ -134,7 +168,7 @@ object BuildBookSettings {
 }
 
 object BuildBookCodec {
-    private const val SCHEMA_VERSION = 1
+    private const val SCHEMA_VERSION = 2
     private val schemaKey get() = NamespacedKey(ARC.instance, "build_book_schema")
     private val buildingKey get() = NamespacedKey(ARC.instance, "build_book_id")
     private val titleKey get() = NamespacedKey(ARC.instance, "build_book_title")
@@ -144,6 +178,13 @@ object BuildBookCodec {
     private val offsetZKey get() = NamespacedKey(ARC.instance, "build_book_offset_z")
     private val playerCreatedKey get() = NamespacedKey(ARC.instance, "build_book_player_created")
     private val creatorKey get() = NamespacedKey(ARC.instance, "build_book_creator")
+    private val creatorNameKey get() = NamespacedKey(ARC.instance, "build_book_creator_name")
+    private val blueprintKey get() = NamespacedKey(ARC.instance, "build_book_blueprint_uuid")
+    private val instanceKey get() = NamespacedKey(ARC.instance, "build_book_instance_uuid")
+    private val issuePriceKey get() = NamespacedKey(ARC.instance, "build_book_issue_price_minor")
+    private val contentShaKey get() = NamespacedKey(ARC.instance, "build_book_content_sha256")
+    private val schematicShaKey get() = NamespacedKey(ARC.instance, "build_book_schematic_sha256")
+    private val deliveryPendingKey get() = NamespacedKey(ARC.instance, "build_book_delivery_pending")
     private val blockCountKey get() = NamespacedKey(ARC.instance, "build_book_block_count")
     private val cooldownKey get() = NamespacedKey(ARC.instance, "build_book_cooldown_seconds")
 
@@ -152,7 +193,8 @@ object BuildBookCodec {
         val pdc = item.itemMeta?.persistentDataContainer ?: return null
         val buildingId = pdc.get(buildingKey, PersistentDataType.STRING)
         if (buildingId != null) {
-            if (pdc.get(schemaKey, PersistentDataType.INTEGER) != SCHEMA_VERSION) return null
+            val schema = pdc.get(schemaKey, PersistentDataType.INTEGER) ?: return null
+            if (schema !in 1..SCHEMA_VERSION) return null
             return runCatching {
                 BuildBookData(
                     buildingId = buildingId,
@@ -165,6 +207,13 @@ object BuildBookCodec {
                     ),
                     playerCreated = (pdc.get(playerCreatedKey, PersistentDataType.BYTE) ?: 0) != 0.toByte(),
                     creatorId = pdc.get(creatorKey, PersistentDataType.STRING)?.let(UUID::fromString),
+                    creatorName = pdc.get(creatorNameKey, PersistentDataType.STRING),
+                    blueprintId = pdc.get(blueprintKey, PersistentDataType.STRING)?.let(UUID::fromString),
+                    instanceId = pdc.get(instanceKey, PersistentDataType.STRING)?.let(UUID::fromString),
+                    issuePriceMinor = pdc.get(issuePriceKey, PersistentDataType.LONG),
+                    contentSha256 = pdc.get(contentShaKey, PersistentDataType.STRING),
+                    schematicSha256 = pdc.get(schematicShaKey, PersistentDataType.STRING),
+                    deliveryPending = (pdc.get(deliveryPendingKey, PersistentDataType.BYTE) ?: 0) != 0.toByte(),
                     blockCount = pdc.get(blockCountKey, PersistentDataType.INTEGER),
                     cooldownSeconds = pdc.get(cooldownKey, PersistentDataType.LONG),
                 ).validated()
@@ -185,9 +234,16 @@ object BuildBookCodec {
             pdc.set(offsetYKey, PersistentDataType.INTEGER, checked.transform.offsetY)
             pdc.set(offsetZKey, PersistentDataType.INTEGER, checked.transform.offsetZ)
             pdc.set(playerCreatedKey, PersistentDataType.BYTE, (if (checked.playerCreated) 1 else 0).toByte())
-            checked.creatorId?.let { pdc.set(creatorKey, PersistentDataType.STRING, it.toString()) }
-            checked.blockCount?.let { pdc.set(blockCountKey, PersistentDataType.INTEGER, it) }
-            checked.cooldownSeconds?.let { pdc.set(cooldownKey, PersistentDataType.LONG, it) }
+            pdc.setOrRemove(creatorKey, PersistentDataType.STRING, checked.creatorId?.toString())
+            pdc.setOrRemove(creatorNameKey, PersistentDataType.STRING, checked.creatorName)
+            pdc.setOrRemove(blueprintKey, PersistentDataType.STRING, checked.blueprintId?.toString())
+            pdc.setOrRemove(instanceKey, PersistentDataType.STRING, checked.instanceId?.toString())
+            pdc.setOrRemove(issuePriceKey, PersistentDataType.LONG, checked.issuePriceMinor)
+            pdc.setOrRemove(contentShaKey, PersistentDataType.STRING, checked.contentSha256)
+            pdc.setOrRemove(schematicShaKey, PersistentDataType.STRING, checked.schematicSha256)
+            pdc.set(deliveryPendingKey, PersistentDataType.BYTE, (if (checked.deliveryPending) 1 else 0).toByte())
+            pdc.setOrRemove(blockCountKey, PersistentDataType.INTEGER, checked.blockCount)
+            pdc.setOrRemove(cooldownKey, PersistentDataType.LONG, checked.cooldownSeconds)
         }
     }
 
@@ -216,6 +272,14 @@ object BuildBookCodec {
             ).validated()
         }
     }.getOrNull()
+
+    private fun <P, C : Any> org.bukkit.persistence.PersistentDataContainer.setOrRemove(
+        key: NamespacedKey,
+        type: PersistentDataType<P, C>,
+        value: C?,
+    ) {
+        if (value == null) remove(key) else set(key, type, value)
+    }
 }
 
 object BuildBookItems {
@@ -237,6 +301,25 @@ object BuildBookItems {
                     tag("offset_y", Component.text(data.transform.offsetY))
                     tag("offset_z", Component.text(data.transform.offsetZ))
                     tag("blocks", Component.text((data.blockCount ?: BuildingManager.getBuilding(data.buildingId)?.volume ?: "?").toString()))
+                    tag("creator", Component.text(data.creatorName ?: "RusCrafting"))
+                    tag(
+                        "state",
+                        Component.text(
+                            when {
+                                data.deliveryPending -> "подтверждается"
+                                data.registered -> "активна"
+                                data.draft -> "черновик"
+                                else -> "служебная"
+                            },
+                        ),
+                    )
+                    tag(
+                        "price",
+                        Component.text(
+                            data.issuePriceMinor?.let { String.format(Locale.US, "%,.2f", it.minorToDouble()) } ?: "—",
+                        ),
+                    )
+                    tag("instance", Component.text(data.instanceId?.toString()?.take(8) ?: "—"))
                 }.mapNotNull(::strip),
             )
             @Suppress("DEPRECATION")

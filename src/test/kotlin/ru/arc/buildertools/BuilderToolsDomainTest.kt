@@ -101,6 +101,36 @@ class BuilderToolsDomainTest : FunSpec({
         pending.gameMode shouldBe GameMode.SURVIVAL
     }
 
+    test("registered build-book plans require the complete authoritative identity") {
+        val now = 1_800_000_000_000L
+        val base = BuilderPlan(
+            id = UUID.randomUUID(),
+            playerId = playerId,
+            kind = BuilderPlanKind.BUILD_BOOK,
+            changes = listOf(
+                BuilderBlockChange(
+                    BuilderBlockPos(worldId, 4, 70, 8),
+                    "minecraft:air",
+                    "minecraft:stone",
+                ),
+            ),
+            costs = emptyList(),
+            rewards = emptyList(),
+            createdAtMillis = now,
+            expiresAtMillis = now + 30_000,
+        )
+
+        shouldThrow<IllegalArgumentException> {
+            base.copy(bookInstanceId = UUID.randomUUID()).validated()
+        }
+        base.copy(
+            bookBlueprintId = UUID.randomUUID(),
+            bookInstanceId = UUID.randomUUID(),
+            bookBuildingId = "player-0123456789abcdef0123456789abcdef-book.schem",
+            bookSchematicSha256 = "a".repeat(64),
+        ).validated().kind shouldBe BuilderPlanKind.BUILD_BOOK
+    }
+
     test("builder item presentation explicitly disables vanilla italic styling") {
         MockBukkitTestRuntime.open().use {
             val item = ItemStack(Material.ECHO_SHARD)

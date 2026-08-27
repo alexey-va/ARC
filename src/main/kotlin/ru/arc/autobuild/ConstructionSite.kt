@@ -192,9 +192,12 @@ class ConstructionSite(
             }
         }
 
-        // Check WorldGuard - optimized to check only strategic points
-        HookRegistry.wgHook?.let { wg ->
-            if (!canBuildWorldGuard(wg)) return false
+        // Lands is authoritative wherever installed (survival). WorldGuard is
+        // only a legacy fallback for other runtimes that do not run Lands.
+        if (HookRegistry.landsHook == null) {
+            HookRegistry.wgHook?.let { wg ->
+                if (!canBuildWorldGuard(wg)) return false
+            }
         }
         return true
     }

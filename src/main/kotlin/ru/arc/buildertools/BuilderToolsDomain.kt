@@ -143,6 +143,10 @@ data class BuilderPlan(
     val toolFingerprintBase64: String? = null,
     val toolDamage: Int = 0,
     val sourceRecordId: UUID? = null,
+    val bookBlueprintId: UUID? = null,
+    val bookInstanceId: UUID? = null,
+    val bookBuildingId: String? = null,
+    val bookSchematicSha256: String? = null,
     val createdAtMillis: Long,
     val expiresAtMillis: Long,
 ) {
@@ -180,6 +184,21 @@ data class BuilderPlan(
         }
         require(kind != BuilderPlanKind.UNDO || sourceRecordId != null) {
             "An undo plan must reference its source operation"
+        }
+        val bookValues = listOf(bookBlueprintId, bookInstanceId, bookBuildingId, bookSchematicSha256)
+        require(bookValues.all { it == null } || bookValues.all { it != null }) {
+            "Builder-book plan identity must be present together"
+        }
+        require(bookInstanceId == null || kind == BuilderPlanKind.BUILD_BOOK) {
+            "Only a build-book plan may reserve a book instance"
+        }
+        bookSchematicSha256?.let {
+            require(it.matches(Regex("[a-f0-9]{64}"))) { "Builder-book plan schematic digest is invalid" }
+        }
+        bookBuildingId?.let {
+            require(it.matches(Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,159}"))) {
+                "Builder-book plan building id is invalid"
+            }
         }
     }
 

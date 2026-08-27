@@ -21,6 +21,8 @@ val integrationTestSourceSet = sourceSets.create("integrationTest") {
     compileClasspath += sourceSets.main.get().output + sourceSets.test.get().output
     runtimeClasspath += sourceSets.main.get().output + sourceSets.test.get().output
 }
+kotlin.target.compilations.getByName("integrationTest")
+    .associateWith(kotlin.target.compilations.getByName("main"))
 
 repositories {
     mavenLocal()
@@ -50,6 +52,7 @@ dependencies {
     implementation("ru.arc:arc-core-logging:1.0-SNAPSHOT")
     implementation("ru.arc:arc-core-metrics:1.0-SNAPSHOT")
     implementation("ru.arc:arc-core-redis:1.0-SNAPSHOT")
+    implementation("ru.arc:arc-core-sql:1.0-SNAPSHOT")
     implementation("ru.arc:arc-core-paper:1.0-SNAPSHOT")
     implementation("ru.arc:arc-core-ai:1.0-SNAPSHOT")
 
@@ -136,8 +139,8 @@ dependencies {
     testImplementation("io.mockk:mockk:1.14.7")
 
     // Testcontainers — integration tests source set
-    "integrationTestImplementation"("org.testcontainers:testcontainers:2.0.2")
-    "integrationTestImplementation"("org.testcontainers:testcontainers-junit-jupiter:2.0.2")
+    "integrationTestImplementation"("ru.arc:arc-core-integration-testing:1.0-SNAPSHOT")
+    "integrationTestImplementation"("org.testcontainers:testcontainers-junit-jupiter:2.0.5")
     // Integration tests reuse all test dependencies (Kotest, MockK, Paper API, etc.)
     "integrationTestImplementation"(sourceSets.test.get().output)
     configurations["integrationTestImplementation"].extendsFrom(configurations["testImplementation"])
@@ -222,6 +225,12 @@ tasks {
     test {
         useJUnitPlatform()
         systemProperty("arc.test.unit", "true")
+    }
+
+    // Never let the plain archive race with or overwrite the deployable
+    // dependency-complete shadow JAR at build/libs/ARC-1.0.jar.
+    jar {
+        archiveClassifier.set("plain")
     }
 
     register<Test>("integrationTest") {

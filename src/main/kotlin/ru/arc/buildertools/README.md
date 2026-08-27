@@ -17,11 +17,16 @@
 - `/builder copy` and `/builder paste`: retain only safe non-air vanilla
   BlockData for 15 minutes. Paste uses position 1 as its minimum-corner anchor
   and consumes every placed block (including two items for a double slab).
-- `/builder book [name]`: binds one ordinary book to the current safe copy and
-  stores a bounded, content-addressed schematic. Right click in air opens the
-  transform GUI; right click a block previews it. Player-created books are
-  consumed together with every exact placement material by this transaction
-  engine, so a copied valuable block can never become a free duplication path.
+- `/builder book draft [name]`: turns one owned ordinary book into a free,
+  content-addressed draft. A draft can use the full transform GUI and continuous
+  world preview, but cannot mutate the world. `/builder book activate` reads the
+  current admin-shop material prices and shows material cost, configured
+  construction markup, and total without charging. Only the separate clickable
+  `/builder book confirm` pays and registers one single-use instance.
+- Holding a registered book, `/builder book copy` shows the same stored
+  self-cost and `/builder book confirm` pays for a new instance with a new UUID.
+  ARC does not own a blueprint marketplace: the physical registered book is
+  transferable and may be listed in zAuctionHouse at any seller-selected price.
 - `/builder deconstruct`: requires one preferred held tool for the whole
   selection, checks worst-case remaining durability, calculates drops once,
   damages the real tool, and requires all exact drops to fit the inventory.
@@ -47,9 +52,11 @@
   after the exact collected drops are surrendered, never repairs tool wear, and
   never buys replacement drops.
 - Survival consumes and returns the exact material transaction described
-  above. Creative is also supported for staff/build testing, but neither
-  consumes nor produces items and never damages a tool. Changing game mode
-  after preview invalidates the plan.
+  above. Creative is also supported for staff/build testing, but ordinary
+  fill/paste/deconstruction/crown operations neither consume nor produce items
+  and never damage a tool. A registered build book remains paid and single-use
+  in every game mode; creative cannot bypass its UUID ledger. Changing game
+  mode after preview invalidates the plan.
 
 `/builder` is the only public command root. The former `/deconstruction`,
 `/crown`, and `/buildtools` roots are deliberately not registered. Existing
@@ -94,13 +101,26 @@ may restore exact `after` states to `before` plus the escrowed inventory.
 Unexpected third-party states stop the module for operator review. Offline
 player inventory restoration occurs at join before the record is acknowledged.
 Every forward and rollback block change is also submitted to the public
-CoreProtect API.
+CoreProtect API. Registered player books add a network-wide MySQL barrier:
+each physical item carries a blueprint UUID and instance UUID, but MySQL is the
+authority. Before the local journal is created, `AVAILABLE -> RESERVED` is an
+atomic compare-and-set. A committed build changes it to `CONSUMED`; rollback
+returns it to `AVAILABLE`. Two duplicated items carrying the same instance UUID
+therefore cannot both build, copy, or reserve concurrently.
+
+Book payment is separately journaled before touching RedisEconomy. Provider
+calls are never blindly retried. Startup reconciles the exact transaction
+reason and amount from RedisEconomy history, finishes paid issuance, refunds a
+proven failed issue, restores pending delivery, and quarantines ambiguous money
+states for manual review.
 
 ## Runtime ownership
 
-The bundled `modules/builder-tools.yml` is disabled by default and refreshed
-from the active JAR on startup so schema/locale additions cannot leave a stale
-base file. Node policy never edits it: survival opts in through
-`modules/builder-tools-runtime.yml`; spawn and parkour remain off.
+The bundled `modules/builder-tools.yml` is disabled by default. The tracked
+survival mirror enables `book-contracts` and its MySQL connection, while
+`modules/builder-tools-runtime.yml` enables the module for `allowed-worlds:
+["*"]`; spawn and parkour remain off. No code path rewrites shop prices.
 Journal records live below `plugins/ARC/data/builder-tools-journal/` and are
 server-owned runtime state, never configuration deployment input.
+The `book-contracts.mysql` pool owns only the three `arc_builder_book_*`
+tables. Shop pricing is read-only; ARC never changes EconomyShopGUI prices.

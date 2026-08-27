@@ -6,6 +6,9 @@ import ru.arc.config.ConfigManager
 import ru.arc.text.LocaleCatalog
 import ru.arc.text.LocaleRequirements
 import ru.arc.text.LocalizedMiniMessage
+import ru.arc.sql.SqlModuleConfig
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.Duration
 import java.util.Locale
 
@@ -34,6 +37,14 @@ class BuilderToolsConfig(
     val shopMaxQuotedMaterials: Int get() = config.integer("shop.max-quoted-materials", 64)
     val shopMaxAutoBuyItems: Int get() = config.integer("shop.max-auto-buy-items", 4_096)
     val shopMaxAutoBuyPrice: Double get() = config.double("shop.max-auto-buy-price", 250_000.0)
+    val bookContractsEnabled: Boolean get() = config.bool("book-contracts.enabled", false)
+    val bookConstructionMarkupBasisPoints: Int
+        get() = BigDecimal.valueOf(config.double("book-contracts.construction-markup-percent", 15.0))
+            .movePointRight(2)
+            .setScale(0, RoundingMode.UNNECESSARY)
+            .intValueExact()
+    val bookMaxIssuePriceMinor: Long
+        get() = BuilderBookCostRules.quoteTotalToMinor(config.double("book-contracts.max-issue-price", 50_000_000.0))
     val planTtl: Duration get() = config.duration("timers.plan-ttl", Duration.ofSeconds(30))
     val clipboardTtl: Duration get() = config.duration("timers.clipboard-ttl", Duration.ofMinutes(15))
     val undoTtl: Duration get() = config.duration("timers.undo-ttl", Duration.ofMinutes(30))
@@ -73,6 +84,17 @@ class BuilderToolsConfig(
         require(shopMaxAutoBuyPrice.isFinite() && shopMaxAutoBuyPrice in 1.0..1_000_000_000.0) {
             "Builder-tools shop price limit is invalid"
         }
+        if (bookContractsEnabled) {
+            require(shopEnabled) { "Builder-book contracts require admin-shop pricing" }
+            require(bookConstructionMarkupBasisPoints in 0..10_000) {
+                "Builder-book construction markup must be between 0 and 100 percent"
+            }
+            require(bookMaxIssuePriceMinor in 1..BuilderBookBlueprint.MAX_PRICE_MINOR) {
+                "Builder-book maximum issue price is invalid"
+            }
+            require(bookSqlConfig().enabled) { "Builder-book contracts require MySQL" }
+            bookSqlConfig().connection()
+        }
         require(planTtl in Duration.ofSeconds(10)..Duration.ofMinutes(2)) { "Builder-tools plan TTL is invalid" }
         require(clipboardTtl in Duration.ofMinutes(1)..Duration.ofHours(2)) { "Builder-tools clipboard TTL is invalid" }
         require(undoTtl in Duration.ofMinutes(1)..Duration.ofHours(2)) { "Builder-tools undo TTL is invalid" }
@@ -91,6 +113,8 @@ class BuilderToolsConfig(
             missingMessage = { "<red>Missing builder-tools message: $it" },
         )
     }
+
+    fun bookSqlConfig(): SqlModuleConfig = SqlModuleConfig(config, "book-contracts.mysql")
 
     companion object {
         private val WORLD_NAME = Regex("[A-Za-z0-9_./-]{1,128}")
@@ -138,7 +162,7 @@ class BuilderToolsConfig(
                 "crown.palette-updated",
                 "crown.palette-row",
                 "clipboard.saved",
-                "book.created",
+                "book.draft-created",
                 "book.material-required",
                 "book.inventory-full",
                 "book.invalid-name",
@@ -146,6 +170,33 @@ class BuilderToolsConfig(
                 "book.failed",
                 "book.invalid",
                 "book.missing",
+                "book.draft-required",
+                "book.active-required",
+                "book.creator-only",
+                "book.unactivated",
+                "book.duplicate",
+                "book.source-changed",
+                "book.contracts-disabled",
+                "book.registry-starting",
+                "book.registry-unavailable",
+                "book.shop-unavailable",
+                "book.material-unavailable",
+                "book.price-limit",
+                "book.quote",
+                "book.quote-kind.activation",
+                "book.quote-kind.copy",
+                "book.quote-expired",
+                "book.quote-cancelled",
+                "book.economy-unavailable",
+                "book.insufficient-funds",
+                "book.payment-failed",
+                "book.refunded",
+                "book.manual-review",
+                "book.delivery-space",
+                "book.delivery-pending",
+                "book.delivery-recovered",
+                "book.activated",
+                "book.copied",
                 "plan.ready",
                 "plan.market-item",
                 "plan.market-unavailable",
