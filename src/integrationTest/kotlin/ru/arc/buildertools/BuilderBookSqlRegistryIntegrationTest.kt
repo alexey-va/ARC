@@ -42,6 +42,7 @@ class BuilderBookSqlRegistryIntegrationTest : StringSpec({
                 val secondOperation = UUID.randomUUID()
                 val firstReservation = registry.reserve(
                     mint.instanceId,
+                    BuilderBookInstance.INITIAL_GENERATION,
                     mint.blueprint.blueprintId,
                     mint.blueprint.buildingId,
                     mint.blueprint.schematicSha256,
@@ -52,6 +53,7 @@ class BuilderBookSqlRegistryIntegrationTest : StringSpec({
                 )
                 val secondReservation = registry.reserve(
                     mint.instanceId,
+                    BuilderBookInstance.INITIAL_GENERATION,
                     mint.blueprint.blueprintId,
                     mint.blueprint.buildingId,
                     mint.blueprint.schematicSha256,
@@ -82,7 +84,7 @@ class BuilderBookSqlRegistryIntegrationTest : StringSpec({
                 registry.issuePaidMint(sourceMint.transactionId, 40L).await().status shouldBe BuilderBookMintStatus.ISSUED
                 registry.markDelivered(sourceMint.instanceId, sourceMint.transactionId, 41L).await() shouldBe true
 
-                val copyPlayer = UUID.randomUUID()
+                val copyPlayer = sourceMint.playerId
                 val copyTransaction = UUID.randomUUID()
                 val copyPaid = BuilderBookMint(
                     transactionId = copyTransaction,
@@ -103,6 +105,7 @@ class BuilderBookSqlRegistryIntegrationTest : StringSpec({
                 val copyStarted = copyPrepared.withdrawalStarted()
                 registry.reserve(
                     sourceMint.instanceId,
+                    BuilderBookInstance.INITIAL_GENERATION,
                     sourceMint.blueprint.blueprintId,
                     sourceMint.blueprint.buildingId,
                     sourceMint.blueprint.schematicSha256,
@@ -123,6 +126,7 @@ class BuilderBookSqlRegistryIntegrationTest : StringSpec({
                 val auctionLease = UUID.randomUUID()
                 registry.reserveForAuction(
                     sourceMint.instanceId,
+                    BuilderBookInstance.INITIAL_GENERATION,
                     sourceMint.blueprint.blueprintId,
                     sourceMint.blueprint.buildingId,
                     sourceMint.blueprint.schematicSha256,
@@ -135,6 +139,7 @@ class BuilderBookSqlRegistryIntegrationTest : StringSpec({
                 registry.listedForServer("survival").await().map { it.instanceId } shouldBe listOf(sourceMint.instanceId)
                 registry.reserve(
                     sourceMint.instanceId,
+                    BuilderBookInstance.INITIAL_GENERATION,
                     sourceMint.blueprint.blueprintId,
                     sourceMint.blueprint.buildingId,
                     sourceMint.blueprint.schematicSha256,
@@ -144,15 +149,78 @@ class BuilderBookSqlRegistryIntegrationTest : StringSpec({
                     51L,
                 ).await() shouldBe BuilderBookReservationResult.Unavailable
                 registry.releaseFromAuction(sourceMint.instanceId, UUID.randomUUID()).await() shouldBe false
-                registry.releaseFromAuction(sourceMint.instanceId, auctionLease).await() shouldBe true
-                registry.loadInstance(sourceMint.instanceId).await()?.status shouldBe BuilderBookInstanceStatus.AVAILABLE
-                registry.releaseFromAuction(sourceMint.instanceId, auctionLease).await() shouldBe false
+                val auctionBuyer = UUID.randomUUID()
+                registry.beginAuctionTransfer(
+                    sourceMint.instanceId,
+                    auctionLease,
+                    auctionBuyer,
+                    "survival",
+                    52L,
+                ).await() shouldBe BuilderBookAuctionTransferResult.Pending(2)
+                registry.beginAuctionTransfer(
+                    sourceMint.instanceId,
+                    auctionLease,
+                    auctionBuyer,
+                    "survival",
+                    53L,
+                ).await() shouldBe BuilderBookAuctionTransferResult.Pending(2)
+                val transferring = checkNotNull(registry.loadInstance(sourceMint.instanceId).await())
+                transferring.status shouldBe BuilderBookInstanceStatus.TRANSFER_PENDING
+                transferring.ownerId shouldBe auctionBuyer
+                transferring.generation shouldBe 2
+                registry.completeAuctionTransfer(sourceMint.instanceId, auctionLease, auctionBuyer, 2).await() shouldBe true
+                registry.completeAuctionTransfer(sourceMint.instanceId, auctionLease, auctionBuyer, 2).await() shouldBe true
+                registry.beginAuctionTransfer(
+                    sourceMint.instanceId,
+                    auctionLease,
+                    auctionBuyer,
+                    "survival",
+                    54L,
+                ).await() shouldBe BuilderBookAuctionTransferResult.Completed(2)
+                val transferred = checkNotNull(registry.loadInstance(sourceMint.instanceId).await())
+                transferred.status shouldBe BuilderBookInstanceStatus.AVAILABLE
+                transferred.ownerId shouldBe auctionBuyer
+                transferred.generation shouldBe 2
+                registry.reserve(
+                    sourceMint.instanceId,
+                    BuilderBookInstance.INITIAL_GENERATION,
+                    sourceMint.blueprint.blueprintId,
+                    sourceMint.blueprint.buildingId,
+                    sourceMint.blueprint.schematicSha256,
+                    UUID.randomUUID(),
+                    copyPlayer,
+                    "survival",
+                    55L,
+                ).await() shouldBe BuilderBookReservationResult.Stale
+                val buyerOperation = UUID.randomUUID()
+                registry.reserve(
+                    sourceMint.instanceId,
+                    2,
+                    sourceMint.blueprint.blueprintId,
+                    sourceMint.blueprint.buildingId,
+                    sourceMint.blueprint.schematicSha256,
+                    buyerOperation,
+                    auctionBuyer,
+                    "survival",
+                    56L,
+                ).await() shouldBe BuilderBookReservationResult.Reserved(sourceMint.blueprint)
+                registry.release(sourceMint.instanceId, buyerOperation).await() shouldBe true
 
                 val firstMint = preparedMint(openMintPlayer)
                 val secondMint = preparedMint(playerId = firstMint.playerId)
                 val mintOutcomes = listOf(registry.prepareMint(firstMint), registry.prepareMint(secondMint)).map { it.await() }
                 mintOutcomes.count { it } shouldBe 1
                 mintOutcomes.count { !it } shouldBe 1
+            }
+
+            endpoint.connect().use { connection ->
+                connection.createStatement().use { statement ->
+                    statement.executeUpdate("DELETE FROM arc_builder_books_schema_history WHERE version = 2")
+                }
+            }
+            openRegistry(endpoint).use { retried ->
+                retried.initialize().await()
+                retried.loadInstance(mint.instanceId).await()?.status shouldBe BuilderBookInstanceStatus.CONSUMED
             }
 
             openRegistry(endpoint).use { reopened ->

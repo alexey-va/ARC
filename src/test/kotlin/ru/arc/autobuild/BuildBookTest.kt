@@ -79,13 +79,23 @@ class BuildBookTest : TestBase() {
             blockCount = 42,
             cooldownSeconds = 0,
         ).validated()
-        val registered = draft.copy(instanceId = UUID.randomUUID(), issuePriceMinor = 12_345L).validated()
+        val registered = draft.copy(
+            instanceId = UUID.randomUUID(),
+            instanceGeneration = 1,
+            issuePriceMinor = 12_345L,
+        ).validated()
 
         val draftItem = BuildBookItems.create(draft)
         val registeredItem = BuildBookItems.create(registered)
 
         assertEquals(draft, BuildBookCodec.read(draftItem))
         assertEquals(registered, BuildBookCodec.read(registeredItem))
+        val preGenerationItem = registeredItem.clone().also { item ->
+            item.editMeta { meta ->
+                meta.persistentDataContainer.remove(NamespacedKey(plugin, "build_book_instance_generation"))
+            }
+        }
+        assertEquals(1, BuildBookCodec.read(preGenerationItem)?.instanceGeneration)
         assertTrue(checkNotNull(draftItem.itemMeta.displayName()).decoration(TextDecoration.ITALIC) == TextDecoration.State.FALSE)
         assertTrue(draftItem.itemMeta.lore().orEmpty().all { it.decoration(TextDecoration.ITALIC) == TextDecoration.State.FALSE })
         assertTrue(registeredItem.itemMeta.lore().orEmpty().all { it.decoration(TextDecoration.ITALIC) == TextDecoration.State.FALSE })

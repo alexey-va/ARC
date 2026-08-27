@@ -126,10 +126,10 @@ internal class BuilderShopCoordinator(
             is BuilderShopProcurementResult.Ambiguous -> {
                 procurement.failure?.let { failure ->
                     warn(
-                        "Builder-tools shop purchase outcome is ambiguous for {} {}: {}",
+                        "Builder-tools shop purchase outcome is ambiguous for {} {}: type={}",
                         player.name,
                         procurement.material.key,
-                        failure.message,
+                        BuilderToolsFailureType.of(failure),
                     )
                 }
                 refresh(player, plan)

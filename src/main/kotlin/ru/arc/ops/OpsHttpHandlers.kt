@@ -19,6 +19,7 @@ import ru.arc.xaction.XCondition
 import ru.arc.xserver.XMessage
 import ru.arc.xserver.playerlist.PlayerManager
 import ru.arc.buildertools.BuilderJournalRecord
+import ru.arc.buildertools.BuilderToolsModule
 import ru.arc.contracts.ContractsConfig
 import ru.arc.metrics.ProductInterestStore
 import ru.arc.mounts.MountPurchaseJournalSnapshot
@@ -684,6 +685,7 @@ private object ArcRuntimeHealth : RuntimeHealthProvider {
     private val registry =
         RuntimeHealthRegistry("arc").apply {
             register("runtime", ::runtimeContribution)
+            register("builder_tools", BuilderToolsModule::runtimeHealthContribution)
             markReady()
         }
 

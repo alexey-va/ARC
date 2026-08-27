@@ -243,6 +243,7 @@ private class FakeBookRegistry : BuilderBookRegistry {
     override fun openMints() = CompletableFuture.completedFuture(records.filter { !it.status.terminal })
     override fun reserve(
         instanceId: UUID,
+        expectedGeneration: Int,
         expectedBlueprintId: UUID,
         expectedBuildingId: String,
         expectedSchematicSha256: String,
@@ -256,6 +257,7 @@ private class FakeBookRegistry : BuilderBookRegistry {
     override fun reservedForServer(serverName: String) = CompletableFuture.completedFuture<List<BuilderBookInstance>>(emptyList())
     override fun reserveForAuction(
         instanceId: UUID,
+        expectedGeneration: Int,
         expectedBlueprintId: UUID,
         expectedBuildingId: String,
         expectedSchematicSha256: String,
@@ -265,6 +267,19 @@ private class FakeBookRegistry : BuilderBookRegistry {
         now: Long,
     ) = CompletableFuture.completedFuture<BuilderBookAuctionReservationResult>(BuilderBookAuctionReservationResult.Missing)
     override fun releaseFromAuction(instanceId: UUID, leaseId: UUID) = CompletableFuture.completedFuture(false)
+    override fun beginAuctionTransfer(
+        instanceId: UUID,
+        leaseId: UUID,
+        recipientId: UUID,
+        serverName: String,
+        now: Long,
+    ) = CompletableFuture.completedFuture<BuilderBookAuctionTransferResult>(BuilderBookAuctionTransferResult.Rejected)
+    override fun completeAuctionTransfer(
+        instanceId: UUID,
+        leaseId: UUID,
+        recipientId: UUID,
+        generation: Int,
+    ) = CompletableFuture.completedFuture(false)
     override fun listedForServer(serverName: String) = CompletableFuture.completedFuture<List<BuilderBookInstance>>(emptyList())
     override fun close() = Unit
 }

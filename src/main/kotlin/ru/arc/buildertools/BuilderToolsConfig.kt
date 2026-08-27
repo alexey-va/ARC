@@ -204,6 +204,7 @@ class BuilderToolsConfig(
                 "book.creator-only",
                 "book.unactivated",
                 "book.duplicate",
+                "book.stale",
                 "book.source-changed",
                 "book.contracts-disabled",
                 "book.registry-starting",

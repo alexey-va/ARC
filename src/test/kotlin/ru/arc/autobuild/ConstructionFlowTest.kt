@@ -422,6 +422,7 @@ class ConstructionFlowTest : TestBase() {
             ).validated()
             val active = draft.copy(
                 instanceId = java.util.UUID.fromString("33333333-3333-3333-3333-333333333333"),
+                instanceGeneration = 1,
                 issuePriceMinor = 12_500,
             ).validated()
             val otherDraft = draft.copy(

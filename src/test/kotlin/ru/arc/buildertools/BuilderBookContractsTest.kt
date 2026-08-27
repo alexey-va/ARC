@@ -85,6 +85,29 @@ class BuilderBookContractsTest : StringSpec({
         ).validated().reservationOperationId shouldBe leaseId
     }
 
+    "auction transfer requires matching durable lease evidence and a positive generation" {
+        val leaseId = UUID.randomUUID()
+        val base = BuilderBookInstance(
+            instanceId = UUID.randomUUID(),
+            blueprintId = UUID.randomUUID(),
+            transactionId = UUID.randomUUID(),
+            mintedBy = UUID.randomUUID(),
+            deliveryPlayerId = UUID.randomUUID(),
+            generation = 2,
+            status = BuilderBookInstanceStatus.TRANSFER_PENDING,
+            createdAtMillis = 1L,
+            reservationOperationId = leaseId,
+            reservationPlayerId = UUID.randomUUID(),
+            reservationServer = "survival",
+            reservedAtMillis = 2L,
+            lastAuctionLeaseId = leaseId,
+        )
+
+        base.validated().generation shouldBe 2
+        shouldThrow<IllegalArgumentException> { base.copy(lastAuctionLeaseId = UUID.randomUUID()).validated() }
+        shouldThrow<IllegalArgumentException> { base.copy(generation = 0).validated() }
+    }
+
     "auction prices accept Russian decimals but reject ambiguous input" {
         BuilderBookAuctionPrice.parse("12500,50") shouldBe java.math.BigDecimal("12500.50")
         BuilderBookAuctionPrice.parse("1e9") shouldBe null

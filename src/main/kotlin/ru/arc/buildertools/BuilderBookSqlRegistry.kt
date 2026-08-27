@@ -28,6 +28,7 @@ internal interface BuilderBookRegistry : AutoCloseable {
     fun openMints(): CompletableFuture<List<BuilderBookMint>>
     fun reserve(
         instanceId: UUID,
+        expectedGeneration: Int,
         expectedBlueprintId: UUID,
         expectedBuildingId: String,
         expectedSchematicSha256: String,
@@ -41,6 +42,7 @@ internal interface BuilderBookRegistry : AutoCloseable {
     fun reservedForServer(serverName: String): CompletableFuture<List<BuilderBookInstance>>
     fun reserveForAuction(
         instanceId: UUID,
+        expectedGeneration: Int,
         expectedBlueprintId: UUID,
         expectedBuildingId: String,
         expectedSchematicSha256: String,
@@ -50,6 +52,19 @@ internal interface BuilderBookRegistry : AutoCloseable {
         now: Long,
     ): CompletableFuture<BuilderBookAuctionReservationResult>
     fun releaseFromAuction(instanceId: UUID, leaseId: UUID): CompletableFuture<Boolean>
+    fun beginAuctionTransfer(
+        instanceId: UUID,
+        leaseId: UUID,
+        recipientId: UUID,
+        serverName: String,
+        now: Long,
+    ): CompletableFuture<BuilderBookAuctionTransferResult>
+    fun completeAuctionTransfer(
+        instanceId: UUID,
+        leaseId: UUID,
+        recipientId: UUID,
+        generation: Int,
+    ): CompletableFuture<Boolean>
     fun listedForServer(serverName: String): CompletableFuture<List<BuilderBookInstance>>
     fun loadMint(transactionId: UUID): CompletableFuture<BuilderBookMint?>
 }
@@ -178,6 +193,7 @@ internal class BuilderBookSqlRegistry(
                 transactionId = current.transactionId,
                 mintedBy = current.playerId,
                 deliveryPlayerId = current.playerId,
+                ownerId = current.playerId,
                 status = BuilderBookInstanceStatus.PENDING_DELIVERY,
                 createdAtMillis = now,
             ).validated(),
@@ -232,10 +248,12 @@ internal class BuilderBookSqlRegistry(
                     "i.instance_uuid AS instance_instance_uuid, i.blueprint_uuid AS instance_blueprint_uuid, " +
                     "i.transaction_uuid AS instance_transaction_uuid, " +
                     "i.minted_by_uuid AS instance_minted_by_uuid, i.delivery_player_uuid AS instance_delivery_player_uuid, " +
+                    "i.owner_uuid AS instance_owner_uuid, i.generation AS instance_generation, " +
                     "i.status AS instance_status, i.created_at_ms AS instance_created_at_ms, " +
                     "i.reservation_operation_uuid AS instance_reservation_operation_uuid, " +
                     "i.reservation_player_uuid AS instance_reservation_player_uuid, " +
                     "i.reservation_server AS instance_reservation_server, i.reserved_at_ms AS instance_reserved_at_ms, " +
+                    "i.last_auction_lease_uuid AS instance_last_auction_lease_uuid, " +
                     "i.consumed_operation_uuid AS instance_consumed_operation_uuid, " +
                     "i.consumed_at_ms AS instance_consumed_at_ms, " +
                     "m.delivery_rotation, m.delivery_offset_x, m.delivery_offset_y, m.delivery_offset_z, " +
@@ -275,6 +293,7 @@ internal class BuilderBookSqlRegistry(
 
     override fun reserve(
         instanceId: UUID,
+        expectedGeneration: Int,
         expectedBlueprintId: UUID,
         expectedBuildingId: String,
         expectedSchematicSha256: String,
@@ -288,6 +307,9 @@ internal class BuilderBookSqlRegistry(
         val blueprint = loadBlueprint(connection, expectedBlueprintId, true) ?: return@transaction BuilderBookReservationResult.Missing
         if (blueprint.buildingId != expectedBuildingId || blueprint.schematicSha256 != expectedSchematicSha256) {
             return@transaction BuilderBookReservationResult.Mismatch
+        }
+        if (instance.ownerId != playerId || instance.generation != expectedGeneration) {
+            return@transaction BuilderBookReservationResult.Stale
         }
         if (instance.status != BuilderBookInstanceStatus.AVAILABLE) return@transaction BuilderBookReservationResult.Unavailable
         require(serverName.matches(Regex("[A-Za-z0-9_.-]{1,64}"))) { "Builder-book server name is invalid" }
@@ -358,6 +380,7 @@ internal class BuilderBookSqlRegistry(
 
     override fun reserveForAuction(
         instanceId: UUID,
+        expectedGeneration: Int,
         expectedBlueprintId: UUID,
         expectedBuildingId: String,
         expectedSchematicSha256: String,
@@ -375,6 +398,9 @@ internal class BuilderBookSqlRegistry(
             ?: return@transaction BuilderBookAuctionReservationResult.Missing
         if (blueprint.buildingId != expectedBuildingId || blueprint.schematicSha256 != expectedSchematicSha256) {
             return@transaction BuilderBookAuctionReservationResult.Mismatch
+        }
+        if (instance.ownerId != sellerId || instance.generation != expectedGeneration) {
+            return@transaction BuilderBookAuctionReservationResult.Stale
         }
         if (instance.status != BuilderBookInstanceStatus.AVAILABLE) {
             return@transaction BuilderBookAuctionReservationResult.Unavailable
@@ -412,9 +438,91 @@ internal class BuilderBookSqlRegistry(
             }
         }
 
+    override fun beginAuctionTransfer(
+        instanceId: UUID,
+        leaseId: UUID,
+        recipientId: UUID,
+        serverName: String,
+        now: Long,
+    ): CompletableFuture<BuilderBookAuctionTransferResult> = runtime.executor.transaction { connection ->
+        require(serverName.matches(BuilderBookInstance.SERVER_NAME)) { "Builder-book server name is invalid" }
+        val current = loadInstance(connection, instanceId, true)
+            ?: return@transaction BuilderBookAuctionTransferResult.Rejected
+        if (
+            current.status == BuilderBookInstanceStatus.AVAILABLE &&
+            current.lastAuctionLeaseId == leaseId && current.ownerId == recipientId
+        ) {
+            return@transaction BuilderBookAuctionTransferResult.Completed(current.generation)
+        }
+        if (
+            current.status == BuilderBookInstanceStatus.TRANSFER_PENDING &&
+            current.reservationOperationId == leaseId && current.reservationPlayerId == recipientId &&
+            current.reservationServer == serverName && current.lastAuctionLeaseId == leaseId
+        ) {
+            return@transaction BuilderBookAuctionTransferResult.Pending(current.generation)
+        }
+        if (
+            current.status != BuilderBookInstanceStatus.LISTED || current.reservationOperationId != leaseId ||
+            current.reservationServer != serverName
+        ) {
+            return@transaction BuilderBookAuctionTransferResult.Rejected
+        }
+        val nextGeneration = Math.addExact(current.generation, 1)
+        connection.prepareStatement(
+            "UPDATE arc_builder_book_instances SET status = 'TRANSFER_PENDING', owner_uuid = ?, generation = ?, " +
+                "reservation_player_uuid = ?, reserved_at_ms = ?, last_auction_lease_uuid = ? " +
+                "WHERE instance_uuid = ? AND status = 'LISTED' AND reservation_operation_uuid = ?",
+        ).use { statement ->
+            statement.setString(1, recipientId.toString())
+            statement.setInt(2, nextGeneration)
+            statement.setString(3, recipientId.toString())
+            statement.setLong(4, now)
+            statement.setString(5, leaseId.toString())
+            statement.setString(6, instanceId.toString())
+            statement.setString(7, leaseId.toString())
+            check(statement.executeUpdate() == 1) { "Builder-book auction transfer transition raced" }
+        }
+        BuilderBookAuctionTransferResult.Pending(nextGeneration)
+    }
+
+    override fun completeAuctionTransfer(
+        instanceId: UUID,
+        leaseId: UUID,
+        recipientId: UUID,
+        generation: Int,
+    ): CompletableFuture<Boolean> = runtime.executor.transaction { connection ->
+        val current = loadInstance(connection, instanceId, true) ?: return@transaction false
+        if (
+            current.status == BuilderBookInstanceStatus.AVAILABLE && current.lastAuctionLeaseId == leaseId &&
+            current.ownerId == recipientId && current.generation == generation
+        ) {
+            return@transaction true
+        }
+        if (
+            current.status != BuilderBookInstanceStatus.TRANSFER_PENDING ||
+            current.reservationOperationId != leaseId || current.reservationPlayerId != recipientId ||
+            current.lastAuctionLeaseId != leaseId || current.generation != generation
+        ) {
+            return@transaction false
+        }
+        connection.prepareStatement(
+            "UPDATE arc_builder_book_instances SET status = 'AVAILABLE', reservation_operation_uuid = NULL, " +
+                "reservation_player_uuid = NULL, reservation_server = NULL, reserved_at_ms = NULL " +
+                "WHERE instance_uuid = ? AND status = 'TRANSFER_PENDING' AND reservation_operation_uuid = ? " +
+                "AND owner_uuid = ? AND generation = ? AND last_auction_lease_uuid = ?",
+        ).use { statement ->
+            statement.setString(1, instanceId.toString())
+            statement.setString(2, leaseId.toString())
+            statement.setString(3, recipientId.toString())
+            statement.setInt(4, generation)
+            statement.setString(5, leaseId.toString())
+            statement.executeUpdate() == 1
+        }
+    }
+
     override fun listedForServer(serverName: String): CompletableFuture<List<BuilderBookInstance>> = runtime.executor.read { connection ->
         connection.prepareStatement(
-            "SELECT * FROM arc_builder_book_instances WHERE status = 'LISTED' AND reservation_server = ? " +
+            "SELECT * FROM arc_builder_book_instances WHERE status IN ('LISTED', 'TRANSFER_PENDING') AND reservation_server = ? " +
                 "ORDER BY reserved_at_ms",
         ).use { statement ->
             statement.setString(1, serverName)
@@ -465,8 +573,10 @@ internal class BuilderBookSqlRegistry(
             statement.setString(3, instance.transactionId.toString())
             statement.setString(4, instance.mintedBy.toString())
             statement.setString(5, instance.deliveryPlayerId.toString())
-            statement.setString(6, instance.status.name)
-            statement.setLong(7, instance.createdAtMillis)
+            statement.setString(6, instance.ownerId.toString())
+            statement.setInt(7, instance.generation)
+            statement.setString(8, instance.status.name)
+            statement.setLong(9, instance.createdAtMillis)
             try {
                 statement.executeUpdate()
             } catch (failure: SQLException) {
@@ -544,6 +654,8 @@ internal class BuilderBookSqlRegistry(
         transactionId = UUID.fromString(getString("${prefix}transaction_uuid")),
         mintedBy = UUID.fromString(getString("${prefix}minted_by_uuid")),
         deliveryPlayerId = UUID.fromString(getString("${prefix}delivery_player_uuid")),
+        ownerId = UUID.fromString(getString("${prefix}owner_uuid")),
+        generation = getInt("${prefix}generation"),
         status = BuilderBookInstanceStatus.valueOf(getString("${prefix}status")),
         createdAtMillis = getLong("${prefix}created_at_ms"),
         reservationOperationId = getString("${prefix}reservation_operation_uuid")?.let(UUID::fromString),
@@ -552,6 +664,7 @@ internal class BuilderBookSqlRegistry(
         reservedAtMillis = getNullableLong("${prefix}reserved_at_ms"),
         consumedOperationId = getString("${prefix}consumed_operation_uuid")?.let(UUID::fromString),
         consumedAtMillis = getNullableLong("${prefix}consumed_at_ms"),
+        lastAuctionLeaseId = getString("${prefix}last_auction_lease_uuid")?.let(UUID::fromString),
     ).validated()
 
     private fun ResultSet.readMint(): BuilderBookMint = BuilderBookMint(
@@ -605,6 +718,7 @@ internal class BuilderBookSqlRegistry(
 
     companion object {
         const val MIGRATION_NAMESPACE = "arc_builder_books"
+        const val CURRENT_SCHEMA_VERSION = 2
 
         val MIGRATIONS = listOf(
             SqlMigration(
@@ -703,7 +817,49 @@ internal class BuilderBookSqlRegistry(
                     """.trimIndent(),
                 ),
             ),
+            SqlMigration(
+                version = CURRENT_SCHEMA_VERSION,
+                description = "Bind builder books to one owner and rotate their generation after auction transfer",
+                statements = buildList {
+                    addAll(
+                        addColumnIfMissing(
+                            column = "owner_uuid",
+                            definition = "owner_uuid CHAR(36) NULL AFTER delivery_player_uuid",
+                        ),
+                    )
+                    addAll(
+                        addColumnIfMissing(
+                            column = "generation",
+                            definition = "generation INT UNSIGNED NOT NULL DEFAULT 1 AFTER owner_uuid",
+                        ),
+                    )
+                    addAll(
+                        addColumnIfMissing(
+                            column = "last_auction_lease_uuid",
+                            definition = "last_auction_lease_uuid CHAR(36) NULL AFTER reserved_at_ms",
+                        ),
+                    )
+                    add("UPDATE arc_builder_book_instances SET owner_uuid = delivery_player_uuid WHERE owner_uuid IS NULL")
+                    add("ALTER TABLE arc_builder_book_instances MODIFY owner_uuid CHAR(36) NOT NULL")
+                },
+            ),
         )
+
+        private fun addColumnIfMissing(column: String, definition: String): List<String> {
+            require(column.matches(Regex("[a-z_]{1,64}"))) { "Unsafe builder-book migration column" }
+            require(definition.matches(Regex("[A-Za-z0-9_() ]{1,256}"))) { "Unsafe builder-book migration definition" }
+            val variable = "@arc_builder_${column}_ddl"
+            val statement = "arc_builder_${column}_stmt"
+            val alter = "ALTER TABLE arc_builder_book_instances ADD COLUMN $definition"
+            return listOf(
+                "SET $variable = (SELECT IF(COUNT(*) = 0, '$alter', 'SELECT 1') " +
+                    "FROM information_schema.columns WHERE table_schema = DATABASE() " +
+                    "AND table_name = 'arc_builder_book_instances' AND column_name = '$column')",
+                "PREPARE $statement FROM $variable",
+                "EXECUTE $statement",
+                "DEALLOCATE PREPARE $statement",
+            )
+        }
 
         private const val INSERT_MINT =
             "INSERT INTO arc_builder_book_mints (transaction_uuid, kind, player_uuid, blueprint_uuid, instance_uuid, " +
@@ -726,6 +882,6 @@ internal class BuilderBookSqlRegistry(
 
         private const val INSERT_INSTANCE =
             "INSERT INTO arc_builder_book_instances (instance_uuid, blueprint_uuid, transaction_uuid, minted_by_uuid, " +
-                "delivery_player_uuid, status, created_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)"
+                "delivery_player_uuid, owner_uuid, generation, status, created_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     }
 }

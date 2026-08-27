@@ -179,6 +179,7 @@ internal class BuilderBookAuctionCoordinator(
         val leaseId = UUID.randomUUID()
         registry.reserveForAuction(
             instanceId = instanceId,
+            expectedGeneration = requireNotNull(data.instanceGeneration),
             expectedBlueprintId = blueprintId,
             expectedBuildingId = data.buildingId,
             expectedSchematicSha256 = schematicSha256,
@@ -197,7 +198,11 @@ internal class BuilderBookAuctionCoordinator(
                 }
                 if (failure != null) {
                     unlock(player.uniqueId)
-                    warn("Builder-book auction reservation failed for {}: {}", player.name, failure.message)
+                    warn(
+                        "Builder-book auction reservation failed for {}: type={}",
+                        player.name,
+                        BuilderToolsFailureType.of(failure),
+                    )
                     send(player, "book.registry-unavailable", emptyMap())
                     return@runSync
                 }
@@ -220,6 +225,10 @@ internal class BuilderBookAuctionCoordinator(
                         unlock(player.uniqueId)
                         send(player, "book.duplicate", emptyMap())
                     }
+                    BuilderBookAuctionReservationResult.Stale -> {
+                        unlock(player.uniqueId)
+                        send(player, "book.stale", emptyMap())
+                    }
                     null -> {
                         unlock(player.uniqueId)
                         send(player, "book.registry-unavailable", emptyMap())
@@ -238,7 +247,7 @@ internal class BuilderBookAuctionCoordinator(
                 true, null -> return@forEach
                 false -> Unit
             }
-            restoreAndRelease(player, token, "book.auction-returned")
+            transferAndRestore(player, token, "book.auction-returned")
         }
     }
 
@@ -265,7 +274,10 @@ internal class BuilderBookAuctionCoordinator(
         } catch (failure: RuntimeException) {
             unlock(player.uniqueId)
             releaseWithoutItem(token.instanceId, token.leaseId)
-            error("Builder-book auction token creation failed for ${player.name}", failure)
+            error(
+                "Builder-book auction token creation failed for ${player.name}: " +
+                    "type=${BuilderToolsFailureType.of(failure)}",
+            )
             send(player, "book.invalid", emptyMap())
             return
         }
@@ -274,7 +286,10 @@ internal class BuilderBookAuctionCoordinator(
         val future = try {
             port.submit(player, price, tokenized)
         } catch (failure: Throwable) {
-            error("Builder-book auction submission failed for ${player.name}", failure)
+            error(
+                "Builder-book auction submission failed for ${player.name}: " +
+                    "type=${BuilderToolsFailureType.of(failure)}",
+            )
             completeFailure(player, token, port, BuilderBookAuctionFailure.UNAVAILABLE)
             return
         }
@@ -282,7 +297,12 @@ internal class BuilderBookAuctionCoordinator(
             runSync {
                 if (closed) return@runSync
                 if (failure != null || result == null) {
-                    warn("Builder-book auction result failed for {}: {}", player.name, failure?.message ?: "missing result")
+                    warn(
+                        "Builder-book auction result failed for {}: type={} result_present={}",
+                        player.name,
+                        BuilderToolsFailureType.of(failure),
+                        result != null,
+                    )
                     completeFailure(player, token, port, BuilderBookAuctionFailure.AMBIGUOUS)
                     return@runSync
                 }
@@ -333,7 +353,7 @@ internal class BuilderBookAuctionCoordinator(
             token.leaseId,
             reason,
         )
-        restoreAndRelease(player, token, "book.auction-rejected", lockAlreadyHeld = true)
+        transferAndRestore(player, token, "book.auction-rejected", lockAlreadyHeld = true)
     }
 
     private fun onDelivered(player: Player, item: ItemStack) {
@@ -345,10 +365,10 @@ internal class BuilderBookAuctionCoordinator(
             // lot to EXPIRED without giving it to the player.
             return
         }
-        restoreAndRelease(player, token, "book.auction-received")
+        transferAndRestore(player, token, "book.auction-received")
     }
 
-    private fun restoreAndRelease(
+    private fun transferAndRestore(
         player: Player,
         token: BuilderBookAuctionToken,
         successPath: String,
@@ -359,9 +379,8 @@ internal class BuilderBookAuctionCoordinator(
             unlock(player.uniqueId)
             return
         }
-        if (!player.isOnline || !stripTokenFromInventory(player, token)) {
-            recoveryInFlight -= token
-            unlock(player.uniqueId)
+        if (!player.isOnline || inventoryTokenSlots(player, token).size != 1) {
+            finishRecoveryAttempt(player, token)
             warn(
                 "Builder-book auction item was not available for exact release: instance={} lease={}",
                 token.instanceId,
@@ -370,24 +389,115 @@ internal class BuilderBookAuctionCoordinator(
             notifyReview(player, token)
             return
         }
-        registry.releaseFromAuction(token.instanceId, token.leaseId).whenComplete { released, failure ->
+        registry.beginAuctionTransfer(
+            instanceId = token.instanceId,
+            leaseId = token.leaseId,
+            recipientId = player.uniqueId,
+            serverName = serverName,
+            now = clock(),
+        ).whenComplete { transfer, failure ->
             runSync {
-                recoveryInFlight -= token
-                if (failure != null || released != true) {
-                    reattachTokenInInventory(player, token)
+                if (failure != null || transfer == null) {
                     error(
-                        "Builder-book returned auction item release failed: instance=${token.instanceId} lease=${token.leaseId}",
-                        failure ?: IllegalStateException("release rejected"),
+                        "Builder-book auction transfer start failed: instance=${token.instanceId} lease=${token.leaseId} " +
+                            "type=${BuilderToolsFailureType.of(failure)} result_present=${transfer != null}",
                     )
                     retryAfterMillis[token] = clock() + RECOVERY_RETRY_MILLIS
                     notifyReview(player, token)
-                } else {
-                    clearRecoveryTracking(token)
-                    if (player.isOnline) send(player, successPath, emptyMap())
+                    finishRecoveryAttempt(player, token)
+                    return@runSync
                 }
-                unlock(player.uniqueId)
+                when (transfer) {
+                    is BuilderBookAuctionTransferResult.Pending -> completePendingTransfer(
+                        player,
+                        token,
+                        transfer.generation,
+                        successPath,
+                    )
+                    is BuilderBookAuctionTransferResult.Completed -> finishCompletedTransfer(
+                        player,
+                        token,
+                        transfer.generation,
+                        successPath,
+                    )
+                    BuilderBookAuctionTransferResult.Rejected -> {
+                        warn(
+                            "Builder-book auction transfer evidence was rejected: instance={} lease={}",
+                            token.instanceId,
+                            token.leaseId,
+                        )
+                        notifyReview(player, token)
+                        finishRecoveryAttempt(player, token)
+                    }
+                }
             }
         }
+    }
+
+    private fun completePendingTransfer(
+        player: Player,
+        token: BuilderBookAuctionToken,
+        generation: Int,
+        successPath: String,
+    ) {
+        if (!stageTokenGeneration(player, token, generation)) {
+            warn(
+                "Builder-book auction token could not be staged: instance={} lease={} generation={}",
+                token.instanceId,
+                token.leaseId,
+                generation,
+            )
+            notifyReview(player, token)
+            finishRecoveryAttempt(player, token)
+            return
+        }
+        registry.completeAuctionTransfer(
+            instanceId = token.instanceId,
+            leaseId = token.leaseId,
+            recipientId = player.uniqueId,
+            generation = generation,
+        ).whenComplete { completed, failure ->
+            runSync {
+                if (failure != null || completed != true) {
+                    error(
+                        "Builder-book auction transfer completion failed: instance=${token.instanceId} lease=${token.leaseId} " +
+                            "type=${BuilderToolsFailureType.of(failure)} result=$completed",
+                    )
+                    retryAfterMillis[token] = clock() + RECOVERY_RETRY_MILLIS
+                    notifyReview(player, token)
+                    finishRecoveryAttempt(player, token)
+                } else {
+                    finishCompletedTransfer(player, token, generation, successPath)
+                }
+            }
+        }
+    }
+
+    private fun finishCompletedTransfer(
+        player: Player,
+        token: BuilderBookAuctionToken,
+        generation: Int,
+        successPath: String,
+    ) {
+        if (!stripCompletedToken(player, token, generation)) {
+            warn(
+                "Builder-book completed auction transfer lacks one exact item: instance={} lease={} generation={}",
+                token.instanceId,
+                token.leaseId,
+                generation,
+            )
+            notifyReview(player, token)
+            finishRecoveryAttempt(player, token)
+            return
+        }
+        clearRecoveryTracking(token)
+        if (player.isOnline) send(player, successPath, emptyMap())
+        finishRecoveryAttempt(player, token)
+    }
+
+    private fun finishRecoveryAttempt(player: Player, token: BuilderBookAuctionToken) {
+        recoveryInFlight -= token
+        unlock(player.uniqueId)
     }
 
     private fun reconcile() {
@@ -396,7 +506,10 @@ internal class BuilderBookAuctionCoordinator(
             runSync {
                 if (closed) return@runSync
                 if (failure != null || instances == null) {
-                    error("Builder-book auction recovery scan failed", failure ?: IllegalStateException("missing result"))
+                    error(
+                        "Builder-book auction recovery scan failed: " +
+                            "type=${BuilderToolsFailureType.of(failure)} result_present=${instances != null}",
+                    )
                     return@runSync
                 }
                 instances.forEach { instance ->
@@ -405,7 +518,7 @@ internal class BuilderBookAuctionCoordinator(
                     if (containsSafely(port, token) != false) return@forEach
                     val player = org.bukkit.Bukkit.getPlayer(instance.reservationPlayerId ?: return@forEach)
                     if (player != null && player.isOnline && inventoryTokens(player).contains(token)) {
-                        restoreAndRelease(player, token, "book.auction-returned")
+                        transferAndRestore(player, token, "book.auction-returned")
                     } else {
                         warn(
                             "Builder-book auction lease has no live storage evidence and remains fail-closed: instance={} lease={}",
@@ -422,31 +535,34 @@ internal class BuilderBookAuctionCoordinator(
     private fun inventoryTokens(player: Player): Set<BuilderBookAuctionToken> =
         player.inventory.contents.filterNotNull().mapNotNull(BuilderBookAuctionTokenCodec::read).toSet()
 
-    private fun stripTokenFromInventory(player: Player, token: BuilderBookAuctionToken): Boolean {
-        val slots = (0 until player.inventory.size).filter { slot ->
+    private fun inventoryTokenSlots(player: Player, token: BuilderBookAuctionToken): List<Int> =
+        (0 until player.inventory.size).filter { slot ->
             player.inventory.getItem(slot)?.let(BuilderBookAuctionTokenCodec::read) == token
         }
+
+    private fun stageTokenGeneration(player: Player, token: BuilderBookAuctionToken, generation: Int): Boolean {
+        val slots = inventoryTokenSlots(player, token)
         if (slots.size != 1) return false
         val slot = slots.single()
         val item = player.inventory.getItem(slot) ?: return false
-        val restored = BuilderBookAuctionTokenCodec.strip(item, token) ?: return false
-        player.inventory.setItem(slot, restored)
+        val data = BuildBookCodec.read(item) ?: return false
+        if (data.instanceId != token.instanceId || data.instanceGeneration !in setOf(generation - 1, generation)) return false
+        if (data.instanceGeneration != generation) {
+            player.inventory.setItem(slot, BuildBookCodec.update(item, data.copy(instanceGeneration = generation).validated()))
+        }
         player.updateInventory()
         return true
     }
 
-    private fun reattachTokenInInventory(player: Player, token: BuilderBookAuctionToken): Boolean {
-        if (!player.isOnline) return false
-        val slots = (0 until player.inventory.size).filter { slot ->
-            val item = player.inventory.getItem(slot) ?: return@filter false
-            val data = BuildBookCodec.read(item) ?: return@filter false
-            data.instanceId == token.instanceId && BuilderBookAuctionTokenCodec.read(item) == null
-        }
+    private fun stripCompletedToken(player: Player, token: BuilderBookAuctionToken, generation: Int): Boolean {
+        val slots = inventoryTokenSlots(player, token)
         if (slots.size != 1) return false
         val slot = slots.single()
         val item = player.inventory.getItem(slot) ?: return false
-        val tokenized = runCatching { BuilderBookAuctionTokenCodec.attach(item, token) }.getOrNull() ?: return false
-        player.inventory.setItem(slot, tokenized)
+        val data = BuildBookCodec.read(item) ?: return false
+        if (data.instanceGeneration != generation) return false
+        val restored = BuilderBookAuctionTokenCodec.strip(item, token) ?: return false
+        player.inventory.setItem(slot, restored)
         player.updateInventory()
         return true
     }
@@ -455,8 +571,8 @@ internal class BuilderBookAuctionCoordinator(
         registry.releaseFromAuction(instanceId, leaseId).whenComplete { released, failure ->
             if (failure != null || released != true) {
                 error(
-                    "Builder-book pre-auction lease release failed: instance=$instanceId lease=$leaseId",
-                    failure ?: IllegalStateException("release rejected"),
+                    "Builder-book pre-auction lease release failed: instance=$instanceId lease=$leaseId " +
+                        "type=${BuilderToolsFailureType.of(failure)} result=$released",
                 )
             }
         }
@@ -470,7 +586,7 @@ internal class BuilderBookAuctionCoordinator(
                 "Builder-book auction lookup failed and remains fail-closed: instance={} lease={} error={}",
                 token.instanceId,
                 token.leaseId,
-                failure.message,
+                BuilderToolsFailureType.of(failure),
             )
             null
         }

@@ -26,6 +26,7 @@ internal enum class BuilderBookInstanceStatus {
     AVAILABLE,
     RESERVED,
     LISTED,
+    TRANSFER_PENDING,
     CONSUMED,
     REVOKED,
 }
@@ -95,6 +96,8 @@ internal data class BuilderBookInstance(
     val transactionId: UUID,
     val mintedBy: UUID,
     val deliveryPlayerId: UUID,
+    val ownerId: UUID = deliveryPlayerId,
+    val generation: Int = INITIAL_GENERATION,
     val status: BuilderBookInstanceStatus,
     val createdAtMillis: Long,
     val reservationOperationId: UUID? = null,
@@ -103,9 +106,11 @@ internal data class BuilderBookInstance(
     val reservedAtMillis: Long? = null,
     val consumedOperationId: UUID? = null,
     val consumedAtMillis: Long? = null,
+    val lastAuctionLeaseId: UUID? = null,
 ) {
     fun validated(): BuilderBookInstance = apply {
         require(createdAtMillis > 0L) { "Builder-book instance creation time is invalid" }
+        require(generation > 0) { "Builder-book instance generation is invalid" }
         val reservationValues = listOf(reservationOperationId, reservationPlayerId, reservationServer, reservedAtMillis)
         require(reservationValues.all { it == null } || reservationValues.all { it != null }) {
             "Builder-book reservation fields must be present together"
@@ -119,13 +124,20 @@ internal data class BuilderBookInstance(
         require((status == BuilderBookInstanceStatus.CONSUMED) == (consumedAtMillis != null && consumedOperationId != null)) {
             "Builder-book consumed evidence does not match status"
         }
+        if (status == BuilderBookInstanceStatus.TRANSFER_PENDING) {
+            require(lastAuctionLeaseId == reservationOperationId) {
+                "Builder-book pending transfer lacks auction lease evidence"
+            }
+        }
     }
 
-    private companion object {
+    companion object {
+        const val INITIAL_GENERATION = 1
         val SERVER_NAME = Regex("[A-Za-z0-9_.-]{1,64}")
         val RESERVATION_STATUSES = setOf(
             BuilderBookInstanceStatus.RESERVED,
             BuilderBookInstanceStatus.LISTED,
+            BuilderBookInstanceStatus.TRANSFER_PENDING,
         )
     }
 }
@@ -277,6 +289,7 @@ internal sealed interface BuilderBookReservationResult {
     data class Reserved(val blueprint: BuilderBookBlueprint) : BuilderBookReservationResult
     data object Missing : BuilderBookReservationResult
     data object Unavailable : BuilderBookReservationResult
+    data object Stale : BuilderBookReservationResult
     data object Mismatch : BuilderBookReservationResult
 }
 
@@ -284,5 +297,12 @@ internal sealed interface BuilderBookAuctionReservationResult {
     data class Reserved(val blueprint: BuilderBookBlueprint) : BuilderBookAuctionReservationResult
     data object Missing : BuilderBookAuctionReservationResult
     data object Unavailable : BuilderBookAuctionReservationResult
+    data object Stale : BuilderBookAuctionReservationResult
     data object Mismatch : BuilderBookAuctionReservationResult
+}
+
+internal sealed interface BuilderBookAuctionTransferResult {
+    data class Pending(val generation: Int) : BuilderBookAuctionTransferResult
+    data class Completed(val generation: Int) : BuilderBookAuctionTransferResult
+    data object Rejected : BuilderBookAuctionTransferResult
 }

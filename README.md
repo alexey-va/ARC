@@ -48,7 +48,11 @@ Builder tools player and recovery contract: [`src/main/kotlin/ru/arc/buildertool
 
 ## Dependencies
 
-Vault, Redis, WorldEdit/WorldGuard; optional: Citizens, ItemsAdder, Jobs, BetterStructures, EliteMobs, PlaceholderAPI.
+Dependencies are enabled per module. Builder Tools requires Lands and
+CoreProtect on survival and uses WorldEdit for schematics; WorldGuard is only a
+legacy optional soft integration for other ARC paths and is not required by
+Builder Tools. Other optional integrations include Citizens, ItemsAdder, Jobs,
+BetterStructures, EliteMobs, and PlaceholderAPI.
 
 ## License
 

@@ -73,6 +73,7 @@ data class BuildBookData(
     val creatorName: String? = null,
     val blueprintId: UUID? = null,
     val instanceId: UUID? = null,
+    val instanceGeneration: Int? = null,
     val issuePriceMinor: Long? = null,
     val contentSha256: String? = null,
     val schematicSha256: String? = null,
@@ -91,6 +92,10 @@ data class BuildBookData(
         require(!playerCreated || creatorId != null) { "Player-created build books require a creator" }
         creatorName?.let { require(CREATOR_NAME.matches(it)) { "Build-book creator name is invalid" } }
         require(instanceId == null || blueprintId != null) { "Build-book instance requires a blueprint" }
+        require((instanceId == null) == (instanceGeneration == null)) {
+            "Build-book instance and generation must be present together"
+        }
+        instanceGeneration?.let { require(it > 0) { "Build-book instance generation is invalid" } }
         require(!deliveryPending || instanceId != null) { "Only an issued build-book instance may await delivery" }
         require(issuePriceMinor == null || issuePriceMinor in 1..100_000_000_000L) { "Build-book price is invalid" }
         require((contentSha256 == null) == (schematicSha256 == null)) {
@@ -168,7 +173,7 @@ object BuildBookSettings {
 }
 
 object BuildBookCodec {
-    private const val SCHEMA_VERSION = 2
+    private const val SCHEMA_VERSION = 3
     private val schemaKey get() = NamespacedKey(ARC.instance, "build_book_schema")
     private val buildingKey get() = NamespacedKey(ARC.instance, "build_book_id")
     private val titleKey get() = NamespacedKey(ARC.instance, "build_book_title")
@@ -181,6 +186,7 @@ object BuildBookCodec {
     private val creatorNameKey get() = NamespacedKey(ARC.instance, "build_book_creator_name")
     private val blueprintKey get() = NamespacedKey(ARC.instance, "build_book_blueprint_uuid")
     private val instanceKey get() = NamespacedKey(ARC.instance, "build_book_instance_uuid")
+    private val instanceGenerationKey get() = NamespacedKey(ARC.instance, "build_book_instance_generation")
     private val issuePriceKey get() = NamespacedKey(ARC.instance, "build_book_issue_price_minor")
     private val contentShaKey get() = NamespacedKey(ARC.instance, "build_book_content_sha256")
     private val schematicShaKey get() = NamespacedKey(ARC.instance, "build_book_schematic_sha256")
@@ -196,6 +202,7 @@ object BuildBookCodec {
             val schema = pdc.get(schemaKey, PersistentDataType.INTEGER) ?: return null
             if (schema !in 1..SCHEMA_VERSION) return null
             return runCatching {
+                val instanceId = pdc.get(instanceKey, PersistentDataType.STRING)?.let(UUID::fromString)
                 BuildBookData(
                     buildingId = buildingId,
                     title = pdc.get(titleKey, PersistentDataType.STRING)?.takeIf(String::isNotBlank) ?: buildingId,
@@ -209,7 +216,9 @@ object BuildBookCodec {
                     creatorId = pdc.get(creatorKey, PersistentDataType.STRING)?.let(UUID::fromString),
                     creatorName = pdc.get(creatorNameKey, PersistentDataType.STRING),
                     blueprintId = pdc.get(blueprintKey, PersistentDataType.STRING)?.let(UUID::fromString),
-                    instanceId = pdc.get(instanceKey, PersistentDataType.STRING)?.let(UUID::fromString),
+                    instanceId = instanceId,
+                    instanceGeneration = pdc.get(instanceGenerationKey, PersistentDataType.INTEGER)
+                        ?: instanceId?.let { INITIAL_REGISTERED_GENERATION },
                     issuePriceMinor = pdc.get(issuePriceKey, PersistentDataType.LONG),
                     contentSha256 = pdc.get(contentShaKey, PersistentDataType.STRING),
                     schematicSha256 = pdc.get(schematicShaKey, PersistentDataType.STRING),
@@ -238,6 +247,7 @@ object BuildBookCodec {
             pdc.setOrRemove(creatorNameKey, PersistentDataType.STRING, checked.creatorName)
             pdc.setOrRemove(blueprintKey, PersistentDataType.STRING, checked.blueprintId?.toString())
             pdc.setOrRemove(instanceKey, PersistentDataType.STRING, checked.instanceId?.toString())
+            pdc.setOrRemove(instanceGenerationKey, PersistentDataType.INTEGER, checked.instanceGeneration)
             pdc.setOrRemove(issuePriceKey, PersistentDataType.LONG, checked.issuePriceMinor)
             pdc.setOrRemove(contentShaKey, PersistentDataType.STRING, checked.contentSha256)
             pdc.setOrRemove(schematicShaKey, PersistentDataType.STRING, checked.schematicSha256)
@@ -280,6 +290,8 @@ object BuildBookCodec {
     ) {
         if (value == null) remove(key) else set(key, type, value)
     }
+
+    private const val INITIAL_REGISTERED_GENERATION = 1
 }
 
 object BuildBookItems {

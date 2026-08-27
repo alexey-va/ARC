@@ -59,6 +59,8 @@ import ru.arc.autobuild.PlayerBuildBookLimitException
 import ru.arc.autobuild.PlayerBuildBookStore
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.hooks.HookRegistry
+import ru.arc.observability.RuntimeHealthContribution
+import ru.arc.observability.RuntimeHealthState
 import ru.arc.observability.StructuredDebugLine
 import ru.arc.paper.playerstate.PaperPlayerStateCodec
 import ru.arc.paper.playerstate.PaperPlayerStateService
@@ -74,6 +76,7 @@ import java.util.UUID
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.atomic.AtomicReference
 
 internal class BuilderToolsRuntime(
     private val plugin: ARC,
@@ -92,6 +95,7 @@ internal class BuilderToolsRuntime(
         val kind: BuilderBookMintKind,
         val sourceBlueprintId: UUID,
         val sourceInstanceId: UUID?,
+        val sourceInstanceGeneration: Int?,
         val blueprint: BuilderBookBlueprint,
         val outputInstanceId: UUID,
         val expiresAtMillis: Long,
@@ -113,7 +117,9 @@ internal class BuilderToolsRuntime(
             BuilderBookSqlRegistry(
                 SqlRuntime.create(config.bookSqlConfig().connection(), "arc-builder-books"),
             )
-        }.onFailure { failure -> error("Builder-book MySQL runtime could not be created", failure) }.getOrNull()
+        }.onFailure { failure ->
+            error("Builder-book MySQL runtime could not be created: type=${BuilderToolsFailureType.of(failure)}")
+        }.getOrNull()
     } else {
         null
     }
@@ -174,6 +180,9 @@ internal class BuilderToolsRuntime(
     private var bookRegistryReady = !config.bookContractsEnabled
     private var bookRegistryFailed = config.bookContractsEnabled && bookRegistry == null
     private var closed = false
+    private val runtimeHealth = AtomicReference(
+        RuntimeHealthContribution(state = RuntimeHealthState.STARTING),
+    )
 
     init {
         require(!config.requireLands || HookRegistry.landsHook != null) {
@@ -200,6 +209,10 @@ internal class BuilderToolsRuntime(
                 warn("Builder-tools preview failed for {}: {}", player.name, failure.message)
             },
         )
+        publishRuntimeHealth()
+        checkNotNull(taskScope.runTimer(0L, HEALTH_PUBLISH_PERIOD_TICKS, ::publishRuntimeHealth)) {
+            "Builder-tools health publication task was not scheduled"
+        }
         if (config.bookContractsEnabled) {
             checkNotNull(
                 taskScope.runTimer(100L, 100L) {
@@ -730,7 +743,7 @@ internal class BuilderToolsRuntime(
             taskScope.runSync {
                 if (!player.isOnline) return@runSync
                 if (failure != null) {
-                    warn("Builder-book blueprint lookup failed for {}: {}", player.name, failure.message)
+                    warn("Builder-book blueprint lookup failed for {}: type={}", player.name, BuilderToolsFailureType.of(failure))
                     send(player, "book.registry-unavailable")
                     return@runSync
                 }
@@ -769,6 +782,7 @@ internal class BuilderToolsRuntime(
                         kind = BuilderBookMintKind.CREATE,
                         sourceBlueprintId = blueprintId,
                         sourceInstanceId = null,
+                        sourceInstanceGeneration = null,
                         blueprint = blueprint,
                         outputInstanceId = UUID.randomUUID(),
                         expiresAtMillis = System.currentTimeMillis() + config.planTtl.toMillis(),
@@ -801,8 +815,11 @@ internal class BuilderToolsRuntime(
                     send(player, if (instanceFailure == null) "book.duplicate" else "book.registry-unavailable")
                     return@instanceLookup
                 }
-                if (instance.status != BuilderBookInstanceStatus.AVAILABLE || instance.blueprintId != data.blueprintId) {
-                    send(player, "book.duplicate")
+                if (
+                    instance.status != BuilderBookInstanceStatus.AVAILABLE || instance.blueprintId != data.blueprintId ||
+                    instance.ownerId != player.uniqueId || instance.generation != data.instanceGeneration
+                ) {
+                    send(player, "book.stale")
                     return@instanceLookup
                 }
                 registry.loadBlueprint(instance.blueprintId).whenComplete { blueprint, blueprintFailure ->
@@ -820,6 +837,7 @@ internal class BuilderToolsRuntime(
                             kind = BuilderBookMintKind.COPY,
                             sourceBlueprintId = blueprint.blueprintId,
                             sourceInstanceId = instanceId,
+                            sourceInstanceGeneration = data.instanceGeneration,
                             blueprint = blueprint,
                             outputInstanceId = UUID.randomUUID(),
                             expiresAtMillis = System.currentTimeMillis() + config.planTtl.toMillis(),
@@ -889,6 +907,7 @@ internal class BuilderToolsRuntime(
         }
         registry.reserve(
             instanceId = sourceId,
+            expectedGeneration = checkNotNull(pending.sourceInstanceGeneration),
             expectedBlueprintId = pending.blueprint.blueprintId,
             expectedBuildingId = pending.blueprint.buildingId,
             expectedSchematicSha256 = pending.blueprint.schematicSha256,
@@ -901,11 +920,18 @@ internal class BuilderToolsRuntime(
                 if (failure != null || reservation == null) {
                     bookLockedPlayers -= player.uniqueId
                     send(player, "book.registry-unavailable")
-                } else if (reservation is BuilderBookReservationResult.Reserved) {
-                    startBookMint(player, intent, coordinator)
                 } else {
-                    bookLockedPlayers -= player.uniqueId
-                    send(player, "book.duplicate")
+                    when (reservation) {
+                        is BuilderBookReservationResult.Reserved -> startBookMint(player, intent, coordinator)
+                        BuilderBookReservationResult.Stale -> {
+                            bookLockedPlayers -= player.uniqueId
+                            send(player, "book.stale")
+                        }
+                        else -> {
+                            bookLockedPlayers -= player.uniqueId
+                            send(player, "book.duplicate")
+                        }
+                    }
                 }
             }
         }
@@ -928,7 +954,12 @@ internal class BuilderToolsRuntime(
 
     private fun deliverIssuedBook(player: Player, mint: BuilderBookMint) {
         if (!player.isOnline) return
-        val data = registeredBookData(mint.blueprint, mint.instanceId, mint.placement)
+        val data = registeredBookData(
+            mint.blueprint,
+            mint.instanceId,
+            BuilderBookInstance.INITIAL_GENERATION,
+            mint.placement,
+        )
         val existing = inventoryBooksWithInstance(player, mint.instanceId)
         if (existing.size > 1 || (existing.size == 1 && existing.single().second != data)) {
             error("Builder-book issued item conflicts with local inventory: transaction=${mint.transactionId} instance=${mint.instanceId}")
@@ -965,8 +996,8 @@ internal class BuilderToolsRuntime(
             taskScope.runSync {
                 if (failure != null || delivered != true) {
                     error(
-                        "Builder-book delivery requires retry: transaction=$transactionId instance=$instanceId",
-                        failure ?: IllegalStateException("delivery transition rejected"),
+                        "Builder-book delivery requires retry: transaction=$transactionId instance=$instanceId " +
+                            "type=${BuilderToolsFailureType.of(failure)} result=$delivered",
                     )
                     if (player.isOnline) send(player, "book.delivery-pending")
                     finished()
@@ -986,7 +1017,11 @@ internal class BuilderToolsRuntime(
                         BuildingManager.updatePendingTransform(player, deliveredBook) == true
                     } == true
                 }.getOrElse { failure ->
-                    warn("Builder-book paid delivery completed but preview refresh failed for {}: {}", player.name, failure.message)
+                    warn(
+                        "Builder-book paid delivery completed but preview refresh failed for {}: type={}",
+                        player.name,
+                        BuilderToolsFailureType.of(failure),
+                    )
                     false
                 }
                 releaseBookSource(sourceInstanceId, transactionId) {
@@ -1062,6 +1097,7 @@ internal class BuilderToolsRuntime(
     private fun matchesPendingSource(data: BuildBookData, pending: PendingBookMint): Boolean =
         data.blueprintId == pending.sourceBlueprintId &&
             data.instanceId == pending.sourceInstanceId &&
+            data.instanceGeneration == pending.sourceInstanceGeneration &&
             ((pending.kind == BuilderBookMintKind.CREATE && data.draft) ||
                 (pending.kind == BuilderBookMintKind.COPY && data.available)) &&
             matchesBlueprint(data, pending.blueprint)
@@ -1088,6 +1124,7 @@ internal class BuilderToolsRuntime(
     private fun registeredBookData(
         blueprint: BuilderBookBlueprint,
         instanceId: UUID,
+        instanceGeneration: Int,
         placement: BuilderBookPlacement,
         deliveryPending: Boolean = true,
     ): BuildBookData = BuildBookData(
@@ -1099,6 +1136,7 @@ internal class BuilderToolsRuntime(
         creatorName = blueprint.creatorName,
         blueprintId = blueprint.blueprintId,
         instanceId = instanceId,
+        instanceGeneration = instanceGeneration,
         issuePriceMinor = blueprint.issuePriceMinor,
         contentSha256 = blueprint.contentSha256,
         schematicSha256 = blueprint.schematicSha256,
@@ -1212,6 +1250,7 @@ internal class BuilderToolsRuntime(
             rewards = emptyList(),
             bookBlueprintId = checkNotNull(data.blueprintId),
             bookInstanceId = checkNotNull(data.instanceId),
+            bookInstanceGeneration = checkNotNull(data.instanceGeneration),
             bookBuildingId = data.buildingId,
             bookSchematicSha256 = checkNotNull(data.schematicSha256),
         )
@@ -1309,6 +1348,7 @@ internal class BuilderToolsRuntime(
         sourceRecordId: UUID? = null,
         bookBlueprintId: UUID? = null,
         bookInstanceId: UUID? = null,
+        bookInstanceGeneration: Int? = null,
         bookBuildingId: String? = null,
         bookSchematicSha256: String? = null,
     ): BuilderPlan {
@@ -1325,6 +1365,7 @@ internal class BuilderToolsRuntime(
             sourceRecordId = sourceRecordId,
             bookBlueprintId = bookBlueprintId,
             bookInstanceId = bookInstanceId,
+            bookInstanceGeneration = bookInstanceGeneration,
             bookBuildingId = bookBuildingId,
             bookSchematicSha256 = bookSchematicSha256,
             createdAtMillis = now,
@@ -1449,6 +1490,7 @@ internal class BuilderToolsRuntime(
         bookLockedPlayers += player.uniqueId
         registry.reserve(
             instanceId = checkNotNull(plan.bookInstanceId),
+            expectedGeneration = checkNotNull(plan.bookInstanceGeneration),
             expectedBlueprintId = checkNotNull(plan.bookBlueprintId),
             expectedBuildingId = checkNotNull(plan.bookBuildingId),
             expectedSchematicSha256 = checkNotNull(plan.bookSchematicSha256),
@@ -1467,7 +1509,7 @@ internal class BuilderToolsRuntime(
                 if (result !is BuilderBookReservationResult.Reserved) {
                     bookLockedPlayers -= player.uniqueId
                     unlock(plan)
-                    send(player, "book.duplicate")
+                    send(player, if (result == BuilderBookReservationResult.Stale) "book.stale" else "book.duplicate")
                     return@runSync
                 }
                 if (!player.isOnline) {
@@ -1620,8 +1662,8 @@ internal class BuilderToolsRuntime(
                                 operation.uncertainCommit = true
                                 recoveryBlocked = true
                                 error(
-                                    "Builder-book consume outcome requires restart recovery for ${durable.operationId}",
-                                    consumeFailure ?: IllegalStateException("consume transition rejected"),
+                                    "Builder-book consume outcome requires restart recovery for ${durable.operationId}: " +
+                                        "type=${BuilderToolsFailureType.of(consumeFailure)} result=$consumed",
                                 )
                                 send(player, "errors.recovering")
                             } else {
@@ -1715,8 +1757,8 @@ internal class BuilderToolsRuntime(
                 if (failure != null || released != true) {
                     recoveryBlocked = true
                     error(
-                        "Builder-book reservation release failed for ${plan.id}",
-                        failure ?: IllegalStateException("release transition rejected"),
+                        "Builder-book reservation release failed for ${plan.id}: " +
+                            "type=${BuilderToolsFailureType.of(failure)} result=$released",
                     )
                 }
             }
@@ -1893,7 +1935,7 @@ internal class BuilderToolsRuntime(
             taskScope.runSync {
                 if (failure != null) {
                     bookRegistryFailed = true
-                    error("Builder-book MySQL initialization failed", failure)
+                    error("Builder-book MySQL initialization failed: type=${BuilderToolsFailureType.of(failure)}")
                     return@runSync
                 }
                 bookRegistryReady = true
@@ -1915,7 +1957,10 @@ internal class BuilderToolsRuntime(
                 if (failure != null || mints == null) {
                     bookRegistryFailed = true
                     bookRegistryReady = false
-                    error("Builder-book mint recovery scan failed", failure ?: IllegalStateException("missing mint scan"))
+                    error(
+                        "Builder-book mint recovery scan failed: " +
+                            "type=${BuilderToolsFailureType.of(failure)} result_present=${mints != null}",
+                    )
                     return@runSync
                 }
                 mints.forEach { mint ->
@@ -1957,7 +2002,12 @@ internal class BuilderToolsRuntime(
                     return@deliveryLookup
                 }
                 if (failure != null || deliveries == null) {
-                    warn("Builder-book delivery lookup failed for {}: {}", player.name, failure?.message)
+                    warn(
+                        "Builder-book delivery lookup failed for {}: type={} result_present={}",
+                        player.name,
+                        BuilderToolsFailureType.of(failure),
+                        deliveries != null,
+                    )
                     bookDeliveryRecoveries -= player.uniqueId
                     return@deliveryLookup
                 }
@@ -1994,7 +2044,12 @@ internal class BuilderToolsRuntime(
                     send(player, "book.manual-review")
                     return@deliveryLookup
                 }
-                val expectedData = registeredBookData(delivery.blueprint, instanceId, delivery.placement)
+                val expectedData = registeredBookData(
+                    delivery.blueprint,
+                    instanceId,
+                    delivery.instance.generation,
+                    delivery.placement,
+                )
                 val existing = inventoryBooksWithInstance(player, instanceId)
                 if (existing.size > 1 || (existing.size == 1 && existing.single().second != expectedData)) {
                     bookDeliveryWaitingForSpace -= player.uniqueId
@@ -2046,8 +2101,8 @@ internal class BuilderToolsRuntime(
             taskScope.runSync {
                 if (failure != null) {
                     error(
-                        "Builder-book local delivery reconciliation failed for $instanceId",
-                        failure,
+                        "Builder-book local delivery reconciliation failed for $instanceId: " +
+                            "type=${BuilderToolsFailureType.of(failure)}",
                     )
                     finished()
                 } else if (instance == null) {
@@ -2076,13 +2131,16 @@ internal class BuilderToolsRuntime(
                     return@runSync
                 }
                 if (failure != null) {
-                    error("Builder-book completed delivery lookup failed for ${instance.instanceId}", failure)
+                    error(
+                        "Builder-book completed delivery lookup failed for ${instance.instanceId}: " +
+                            "type=${BuilderToolsFailureType.of(failure)}",
+                    )
                     finished()
                     return@runSync
                 }
                 val expected = mint
                     ?.takeIf { it.status == BuilderBookMintStatus.COMPLETED && it.instanceId == instance.instanceId }
-                    ?.let { registeredBookData(it.blueprint, instance.instanceId, it.placement) }
+                    ?.let { registeredBookData(it.blueprint, instance.instanceId, instance.generation, it.placement) }
                 val local = inventoryBooksWithInstance(player, instance.instanceId)
                 if (
                     expected == null || local.size != 1 || local.single().second != expected ||
@@ -2107,7 +2165,10 @@ internal class BuilderToolsRuntime(
             taskScope.runSync {
                 if (failure != null || reservations == null) {
                     recoveryBlocked = true
-                    error("Builder-book reservation recovery failed", failure ?: IllegalStateException("missing reservations"))
+                    error(
+                        "Builder-book reservation recovery failed: " +
+                            "type=${BuilderToolsFailureType.of(failure)} result_present=${reservations != null}",
+                    )
                     return@runSync
                 }
                 reservations.forEach { instance -> reconcileBookReservation(instance) }
@@ -2126,8 +2187,8 @@ internal class BuilderToolsRuntime(
                         if (failure != null || consumed != true) {
                             recoveryBlocked = true
                             error(
-                                "Builder-book committed reservation could not be consumed: $operationId",
-                                failure ?: IllegalStateException("consume rejected"),
+                                "Builder-book committed reservation could not be consumed: $operationId " +
+                                    "type=${BuilderToolsFailureType.of(failure)} result=$consumed",
                             )
                         }
                     }
@@ -2141,7 +2202,10 @@ internal class BuilderToolsRuntime(
             taskScope.runSync {
                 if (failure != null) {
                     recoveryBlocked = true
-                    error("Builder-book reservation owner lookup failed: $operationId", failure)
+                    error(
+                        "Builder-book reservation owner lookup failed: $operationId " +
+                            "type=${BuilderToolsFailureType.of(failure)}",
+                    )
                 } else if (mint != null && mint.sourceInstanceId == instance.instanceId) {
                     if (mint.status.terminal) {
                         releaseRecoveredBookReservation(registry, instance.instanceId, operationId)
@@ -2159,8 +2223,8 @@ internal class BuilderToolsRuntime(
                 if (failure != null || released != true) {
                     recoveryBlocked = true
                     error(
-                        "Builder-book recovered reservation could not be released: $operationId",
-                        failure ?: IllegalStateException("release rejected"),
+                        "Builder-book recovered reservation could not be released: $operationId " +
+                            "type=${BuilderToolsFailureType.of(failure)} result=$released",
                     )
                 }
             }
@@ -2492,6 +2556,31 @@ internal class BuilderToolsRuntime(
         send(player, "book.auction-use-safe-command")
     }
 
+    internal fun runtimeHealthContribution(): RuntimeHealthContribution = runtimeHealth.get()
+
+    private fun publishRuntimeHealth() {
+        runtimeHealth.set(
+            BuilderToolsRuntimeHealth.contribution(
+                BuilderToolsRuntimeHealthInputs(
+                    closed = closed,
+                    recovering = recovering,
+                    recoveryBlocked = recoveryBlocked,
+                    recoveryPlayers = recoveryByPlayer.size,
+                    deliveryWaitingForSpace = bookDeliveryWaitingForSpace.size,
+                    activeOperations = activeOperations.size,
+                    bookLockedPlayers = bookLockedPlayers.size,
+                    landsRequired = config.requireLands,
+                    landsAvailable = HookRegistry.landsHook != null,
+                    coreProtectRequired = config.requireCoreProtect,
+                    coreProtectAvailable = coreProtect != null,
+                    bookContractsEnabled = config.bookContractsEnabled,
+                    bookRegistryReady = bookRegistryReady,
+                    bookRegistryFailed = bookRegistryFailed,
+                ),
+            ),
+        )
+    }
+
     private fun isSelector(item: ItemStack): Boolean {
         if (item.itemMeta?.persistentDataContainer?.has(wandKey, PersistentDataType.BYTE) == true) return true
         if (item.type != Material.ECHO_SHARD) return false
@@ -2510,6 +2599,7 @@ internal class BuilderToolsRuntime(
     override fun close() {
         if (closed) return
         closed = true
+        publishRuntimeHealth()
         HandlerList.unregisterAll(this)
         bookAuctionCoordinator?.close()
         previews.close()
@@ -2535,5 +2625,9 @@ internal class BuilderToolsRuntime(
         selections.clear()
         clipboards.clear()
         crownSessions.clear()
+    }
+
+    private companion object {
+        const val HEALTH_PUBLISH_PERIOD_TICKS = 20L
     }
 }

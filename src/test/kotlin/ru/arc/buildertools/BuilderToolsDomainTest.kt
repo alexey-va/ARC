@@ -160,6 +160,7 @@ class BuilderToolsDomainTest : FunSpec({
         base.copy(
             bookBlueprintId = UUID.randomUUID(),
             bookInstanceId = UUID.randomUUID(),
+            bookInstanceGeneration = 1,
             bookBuildingId = "player-0123456789abcdef0123456789abcdef-book.schem",
             bookSchematicSha256 = "a".repeat(64),
         ).validated().kind shouldBe BuilderPlanKind.BUILD_BOOK

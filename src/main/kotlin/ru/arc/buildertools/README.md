@@ -34,10 +34,12 @@
   activated-book messages each lead directly into the next safe command.
 - Holding a registered book, `/builder book copy` shows the same stored
   self-cost and `/builder book confirm` pays for a new instance with a new UUID.
-  ARC does not own a blueprint marketplace: the physical registered book is
-  transferable and may be listed in zAuctionHouse at any seller-selected price
-  through `/builder book sell <price>`. Ordinary `/ah sell` paths reject player
-  build books so the UUID lease cannot be bypassed by zAuctionHouse's sell GUI.
+  The registered book may be listed in zAuctionHouse at any seller-selected
+  price through `/builder book sell <price>`. This protected sale path is also
+  the ownership-transfer path: direct inventory/drop transfer does not update
+  the authoritative owner and therefore cannot make the recipient's copy
+  usable. Ordinary `/ah sell` paths reject player build books so the UUID lease
+  cannot be bypassed by zAuctionHouse's sell GUI.
 - `/builder deconstruct`: requires one preferred held tool for the whole
   selection, checks worst-case remaining durability, calculates drops once,
   damages the real tool, and requires all exact drops to fit the inventory.
@@ -113,9 +115,10 @@ Unexpected third-party states stop the module for operator review. Offline
 player inventory restoration occurs at join before the record is acknowledged.
 Every forward and rollback block change is also submitted to the public
 CoreProtect API. Registered player books add a network-wide MySQL barrier:
-each physical item carries a blueprint UUID and instance UUID, but MySQL is the
-authority. Before the local journal is created, `AVAILABLE -> RESERVED` is an
-atomic compare-and-set. A committed build changes it to `CONSUMED`; rollback
+each physical item carries a blueprint UUID, instance UUID, and positive
+generation, but MySQL is the authority for its owner and generation. Before the
+local journal is created, `AVAILABLE -> RESERVED` is an atomic compare-and-set
+over all of that identity. A committed build changes it to `CONSUMED`; rollback
 returns it to `AVAILABLE`. Two duplicated items carrying the same instance UUID
 therefore cannot both build, copy, or reserve concurrently.
 
@@ -125,11 +128,14 @@ rule blocks drafts and registered books from every ordinary sell path; the
 protected command authorizes only the exact token during synchronous listing
 validation. The guard also inspects bounded shulker and bundle contents, so a
 book cannot bypass the safe route inside a container. Listed, purchased, and
-expired storage retain the lease. A return or buyer claim releases only the
-matching lease and removes its token from the delivered item. Online recovery
-rechecks unresolved tokenized items every five seconds with rate-limited retries;
-timeouts and missing delivery evidence remain `LISTED` and fail-closed instead
-of making a second physical copy usable.
+expired storage retain the lease. A return or buyer claim first moves the row
+to `TRANSFER_PENDING`, atomically changes its owner, increments the generation,
+stages that generation on the one exact tokenized item, and only then returns
+the row to `AVAILABLE` and removes the token. Every older physical duplicate is
+permanently stale after that transition. Online recovery rechecks unresolved
+tokenized items every five seconds with rate-limited retries; timeouts and
+missing delivery evidence remain fail-closed instead of making a second
+physical copy usable.
 
 Book payment is separately journaled before touching RedisEconomy. Provider
 calls are never blindly retried. Startup reconciles the exact transaction
@@ -147,3 +153,7 @@ Journal records live below `plugins/ARC/data/builder-tools-journal/` and are
 server-owned runtime state, never configuration deployment input.
 The `book-contracts.mysql` pool owns only the three `arc_builder_book_*`
 tables. Shop pricing is read-only; ARC never changes EconomyShopGUI prices.
+The authenticated ARC runtime-health surface publishes only bounded aggregate
+state for Builder Tools: lifecycle state, recovery backlog, active leases, and
+Lands/CoreProtect/book-registry readiness. It never exposes player identities,
+book UUIDs, SQL errors, or credentials.

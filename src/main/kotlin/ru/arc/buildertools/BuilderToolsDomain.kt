@@ -145,6 +145,7 @@ data class BuilderPlan(
     val sourceRecordId: UUID? = null,
     val bookBlueprintId: UUID? = null,
     val bookInstanceId: UUID? = null,
+    val bookInstanceGeneration: Int? = null,
     val bookBuildingId: String? = null,
     val bookSchematicSha256: String? = null,
     val createdAtMillis: Long,
@@ -185,13 +186,14 @@ data class BuilderPlan(
         require(kind != BuilderPlanKind.UNDO || sourceRecordId != null) {
             "An undo plan must reference its source operation"
         }
-        val bookValues = listOf(bookBlueprintId, bookInstanceId, bookBuildingId, bookSchematicSha256)
+        val bookValues = listOf(bookBlueprintId, bookInstanceId, bookInstanceGeneration, bookBuildingId, bookSchematicSha256)
         require(bookValues.all { it == null } || bookValues.all { it != null }) {
             "Builder-book plan identity must be present together"
         }
         require(bookInstanceId == null || kind == BuilderPlanKind.BUILD_BOOK) {
             "Only a build-book plan may reserve a book instance"
         }
+        bookInstanceGeneration?.let { require(it > 0) { "Builder-book plan generation is invalid" } }
         bookSchematicSha256?.let {
             require(it.matches(Regex("[a-f0-9]{64}"))) { "Builder-book plan schematic digest is invalid" }
         }

@@ -312,6 +312,10 @@ locales:
       duplicate: |-
         <prefix><#c42323>Этот UUID уже занят или потрачен.
         <#8c8c8c>  • <#969696>Действие разрешено только одному экземпляру.
+      stale: |-
+        <prefix><#c42323>Эта физическая копия книги больше не действует.
+        <#8c8c8c>  • <#969696>После продажи владелец и поколение меняются в реестре.
+        <#8c8c8c>  • <#92bed8>Передавайте книги через /builder book sell 25000.
       source-changed: "<prefix><#ff9f0f>Книга изменилась. Рассчитайте цену снова."
       contracts-disabled: "<prefix><#ff9f0f>Активация книг здесь отключена."
       registry-starting: "<prefix><#ff9f0f>Реестр запускается. Попробуйте чуть позже."
@@ -617,6 +621,10 @@ locales:
       duplicate: |-
         <prefix><red>This UUID is reserved or already spent.
         <dark_gray>  • <gray>Only one physical instance may act.
+      stale: |-
+        <prefix><red>This physical copy is no longer authoritative.
+        <dark_gray>  • <gray>Each sale rotates the registered owner and generation.
+        <dark_gray>  • <aqua>Transfer books through /builder book sell 25000.
       source-changed: "<prefix><yellow>The book changed. Request a new quote."
       contracts-disabled: "<prefix><yellow>Player book activation is disabled on this server."
       registry-starting: "<prefix><yellow>The registry is starting. Try again shortly."

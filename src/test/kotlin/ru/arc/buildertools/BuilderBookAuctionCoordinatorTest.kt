@@ -25,14 +25,17 @@ class BuilderBookAuctionCoordinatorTest : TestBase() {
     }
 
     @Test
-    fun `rejected listing restores the exact book and releases its MySQL lease`() {
+    fun `rejected listing restores one rotated book and releases its MySQL lease`() {
         fixture.port.result = BuilderBookAuctionListingResult.Failed(BuilderBookAuctionFailure.REJECTED)
 
         fixture.sell()
 
         assertEquals(BuilderBookInstanceStatus.AVAILABLE, fixture.registry.instance.status)
         assertNull(BuilderBookAuctionTokenCodec.read(fixture.player.inventory.itemInMainHand))
-        assertEquals(fixture.data, ru.arc.autobuild.BuildBookCodec.read(fixture.player.inventory.itemInMainHand))
+        assertEquals(
+            fixture.data.copy(instanceGeneration = 2),
+            ru.arc.autobuild.BuildBookCodec.read(fixture.player.inventory.itemInMainHand),
+        )
         assertFalse(fixture.locked)
         assertTrue(fixture.messages.any { it == "book.auction-rejected" })
     }
@@ -52,7 +55,11 @@ class BuilderBookAuctionCoordinatorTest : TestBase() {
         fixture.port.deliver(fixture.player)
 
         assertEquals(BuilderBookInstanceStatus.AVAILABLE, fixture.registry.instance.status)
-        assertEquals(fixture.data, ru.arc.autobuild.BuildBookCodec.read(fixture.player.inventory.itemInMainHand))
+        assertEquals(
+            fixture.data.copy(instanceGeneration = 2),
+            ru.arc.autobuild.BuildBookCodec.read(fixture.player.inventory.itemInMainHand),
+        )
+        assertEquals(2, fixture.registry.instance.generation)
         assertNull(BuilderBookAuctionTokenCodec.read(fixture.player.inventory.itemInMainHand))
         assertTrue(fixture.messages.any { it == "book.auction-received" })
     }
@@ -71,6 +78,49 @@ class BuilderBookAuctionCoordinatorTest : TestBase() {
         assertEquals(BuilderBookInstanceStatus.AVAILABLE, fixture.registry.instance.status)
         assertTrue(BuilderBookAuctionTokenCodec.read(fixture.player.inventory.itemInMainHand) != null)
         assertTrue(fixture.messages.any { it == "book.auction-review" })
+    }
+
+    @Test
+    fun `auction transfer rotates ownership so the seller's stale duplicate cannot be listed again`() {
+        val staleDuplicate = fixture.player.inventory.itemInMainHand.clone()
+        val buyer = server.addPlayer("BookBuyer")
+        fixture.port.result = BuilderBookAuctionListingResult.Listed("42")
+        fixture.port.removeOnSuccess = true
+
+        fixture.sell()
+        fixture.port.deliver(buyer)
+
+        assertEquals(BuilderBookInstanceStatus.AVAILABLE, fixture.registry.instance.status)
+        assertEquals(buyer.uniqueId, fixture.registry.instance.ownerId)
+        assertEquals(2, fixture.registry.instance.generation)
+        assertEquals(2, ru.arc.autobuild.BuildBookCodec.read(buyer.inventory.itemInMainHand)?.instanceGeneration)
+
+        fixture.player.inventory.setItemInMainHand(staleDuplicate)
+        fixture.coordinator.sell(fixture.player, fixture.data, staleDuplicate.clone(), BigDecimal("30000"))
+
+        assertEquals(buyer.uniqueId, fixture.registry.instance.ownerId)
+        assertEquals(BuilderBookInstanceStatus.AVAILABLE, fixture.registry.instance.status)
+        assertTrue(fixture.messages.any { it == "book.stale" })
+    }
+
+    @Test
+    fun `unknown transfer completion is recovered without rotating a second physical token`() {
+        fixture.port.result = BuilderBookAuctionListingResult.Listed("42")
+        fixture.port.removeOnSuccess = true
+        fixture.registry.failCompletedCallbackOnce = true
+
+        fixture.sell()
+        fixture.port.deliver(fixture.player)
+
+        assertEquals(BuilderBookInstanceStatus.AVAILABLE, fixture.registry.instance.status)
+        assertEquals(2, fixture.registry.instance.generation)
+        assertTrue(BuilderBookAuctionTokenCodec.read(fixture.player.inventory.itemInMainHand) != null)
+        fixture.now = 40_000L
+
+        fixture.coordinator.onPlayerAvailable(fixture.player)
+
+        assertNull(BuilderBookAuctionTokenCodec.read(fixture.player.inventory.itemInMainHand))
+        assertEquals(2, ru.arc.autobuild.BuildBookCodec.read(fixture.player.inventory.itemInMainHand)?.instanceGeneration)
     }
 
     @Test
@@ -122,6 +172,7 @@ class BuilderBookAuctionCoordinatorTest : TestBase() {
             creatorName = blueprint.creatorName,
             blueprintId = blueprint.blueprintId,
             instanceId = UUID.randomUUID(),
+            instanceGeneration = BuilderBookInstance.INITIAL_GENERATION,
             issuePriceMinor = blueprint.issuePriceMinor,
             contentSha256 = blueprint.contentSha256,
             schematicSha256 = blueprint.schematicSha256,
@@ -132,6 +183,7 @@ class BuilderBookAuctionCoordinatorTest : TestBase() {
         val port = AuctionPort()
         val messages = mutableListOf<String>()
         var locked = false
+        var now = 10L
         val coordinator = BuilderBookAuctionCoordinator(
             registry = registry,
             portProvider = { port },
@@ -145,7 +197,7 @@ class BuilderBookAuctionCoordinatorTest : TestBase() {
                 }
             },
             unlock = { locked = false },
-            clock = { 10L },
+            clock = { now },
         ).also(BuilderBookAuctionCoordinator::start)
 
         init {
@@ -208,6 +260,7 @@ private class AuctionRegistry(
     private val blueprint: BuilderBookBlueprint,
     data: BuildBookData,
 ) : BuilderBookRegistry {
+    var failCompletedCallbackOnce = false
     var instance = BuilderBookInstance(
         instanceId = requireNotNull(data.instanceId),
         blueprintId = requireNotNull(data.blueprintId),
@@ -220,6 +273,7 @@ private class AuctionRegistry(
 
     override fun reserveForAuction(
         instanceId: UUID,
+        expectedGeneration: Int,
         expectedBlueprintId: UUID,
         expectedBuildingId: String,
         expectedSchematicSha256: String,
@@ -228,6 +282,9 @@ private class AuctionRegistry(
         serverName: String,
         now: Long,
     ): CompletableFuture<BuilderBookAuctionReservationResult> {
+        if (instance.instanceId == instanceId && (instance.generation != expectedGeneration || instance.ownerId != sellerId)) {
+            return CompletableFuture.completedFuture(BuilderBookAuctionReservationResult.Stale)
+        }
         if (
             instance.status != BuilderBookInstanceStatus.AVAILABLE || instance.instanceId != instanceId ||
             blueprint.blueprintId != expectedBlueprintId || blueprint.buildingId != expectedBuildingId ||
@@ -260,9 +317,75 @@ private class AuctionRegistry(
         return CompletableFuture.completedFuture(true)
     }
 
+    override fun beginAuctionTransfer(
+        instanceId: UUID,
+        leaseId: UUID,
+        recipientId: UUID,
+        serverName: String,
+        now: Long,
+    ): CompletableFuture<BuilderBookAuctionTransferResult> {
+        if (
+            instance.instanceId == instanceId && instance.status == BuilderBookInstanceStatus.AVAILABLE &&
+            instance.lastAuctionLeaseId == leaseId && instance.ownerId == recipientId
+        ) {
+            return CompletableFuture.completedFuture(BuilderBookAuctionTransferResult.Completed(instance.generation))
+        }
+        if (
+            instance.instanceId == instanceId && instance.status == BuilderBookInstanceStatus.TRANSFER_PENDING &&
+            instance.reservationOperationId == leaseId && instance.reservationPlayerId == recipientId
+        ) {
+            return CompletableFuture.completedFuture(BuilderBookAuctionTransferResult.Pending(instance.generation))
+        }
+        if (
+            instance.instanceId != instanceId || instance.status != BuilderBookInstanceStatus.LISTED ||
+            instance.reservationOperationId != leaseId || instance.reservationServer != serverName
+        ) {
+            return CompletableFuture.completedFuture(BuilderBookAuctionTransferResult.Rejected)
+        }
+        instance = instance.copy(
+            ownerId = recipientId,
+            generation = instance.generation + 1,
+            status = BuilderBookInstanceStatus.TRANSFER_PENDING,
+            reservationPlayerId = recipientId,
+            reservedAtMillis = now,
+            lastAuctionLeaseId = leaseId,
+        ).validated()
+        return CompletableFuture.completedFuture(BuilderBookAuctionTransferResult.Pending(instance.generation))
+    }
+
+    override fun completeAuctionTransfer(
+        instanceId: UUID,
+        leaseId: UUID,
+        recipientId: UUID,
+        generation: Int,
+    ): CompletableFuture<Boolean> {
+        if (
+            instance.instanceId == instanceId && instance.status == BuilderBookInstanceStatus.AVAILABLE &&
+            instance.lastAuctionLeaseId == leaseId && instance.ownerId == recipientId && instance.generation == generation
+        ) return CompletableFuture.completedFuture(true)
+        if (
+            instance.instanceId != instanceId || instance.status != BuilderBookInstanceStatus.TRANSFER_PENDING ||
+            instance.reservationOperationId != leaseId || instance.reservationPlayerId != recipientId ||
+            instance.generation != generation
+        ) return CompletableFuture.completedFuture(false)
+        instance = instance.copy(
+            status = BuilderBookInstanceStatus.AVAILABLE,
+            reservationOperationId = null,
+            reservationPlayerId = null,
+            reservationServer = null,
+            reservedAtMillis = null,
+        ).validated()
+        if (failCompletedCallbackOnce) {
+            failCompletedCallbackOnce = false
+            return CompletableFuture.failedFuture(IllegalStateException("unknown fixture outcome"))
+        }
+        return CompletableFuture.completedFuture(true)
+    }
+
     override fun listedForServer(serverName: String): CompletableFuture<List<BuilderBookInstance>> =
         CompletableFuture.completedFuture(listOf(instance).filter {
-            it.status == BuilderBookInstanceStatus.LISTED && it.reservationServer == serverName
+            it.status in setOf(BuilderBookInstanceStatus.LISTED, BuilderBookInstanceStatus.TRANSFER_PENDING) &&
+                it.reservationServer == serverName
         })
 
     override fun initialize() = CompletableFuture.completedFuture(Unit)
@@ -277,6 +400,7 @@ private class AuctionRegistry(
     override fun openMints() = unsupported<List<BuilderBookMint>>()
     override fun reserve(
         instanceId: UUID,
+        expectedGeneration: Int,
         expectedBlueprintId: UUID,
         expectedBuildingId: String,
         expectedSchematicSha256: String,

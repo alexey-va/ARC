@@ -9,6 +9,7 @@ import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
 import ru.arc.autobuild.ConstructionSite
 import ru.arc.core.PluginModule
+import ru.arc.observability.RuntimeHealthContribution
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 
@@ -16,6 +17,7 @@ object BuilderToolsModule : PluginModule, CommandExecutor, TabCompleter {
     override val name: String = "BuilderTools"
     override val priority: Int = 91
 
+    @Volatile
     private var runtime: BuilderToolsRuntime? = null
 
     override fun init() {
@@ -56,6 +58,9 @@ object BuilderToolsModule : PluginModule, CommandExecutor, TabCompleter {
     fun rejectUnsafeAuctionSale(player: Player) {
         runtime?.rejectUnsafeAuctionSale(player)
     }
+
+    internal fun runtimeHealthContribution(): RuntimeHealthContribution =
+        runtime?.runtimeHealthContribution() ?: RuntimeHealthContribution()
 
     private fun bindCommands() {
         val command = ARC.instance.getCommand("builder")
