@@ -168,6 +168,38 @@ class BuildBookTest : TestBase() {
         assertNotEquals(PlayerBuildBookStore.fileName(owner, first), PlayerBuildBookStore.fileName(UUID.randomUUID(), first))
     }
 
+    @Test
+    fun `player schematic reuses a full content address and rejects an address mismatch`() {
+        val owner = UUID.randomUUID()
+        val source = clipboard(System.currentTimeMillis(), "minecraft:oak_planks")
+        val prepared = PreparedPlayerBuildBookTemplate(
+            creatorId = owner,
+            fileName = PlayerBuildBookStore.fileName(owner, source),
+            contentSha256 = PlayerBuildBookStore.contentSha256(source),
+            blockCount = source.blocks.size,
+            writeSchematic = { output -> output.write("stable-schematic".toByteArray()) },
+        )
+
+        val first = PlayerBuildBookStore.persist(prepared)
+        val repeated = PlayerBuildBookStore.persist(
+            prepared.copy(writeSchematic = { output -> output.write("same-content-new-metadata".toByteArray()) }),
+        )
+
+        assertEquals(first, repeated)
+        assertTrue(first.buildingId.contains(prepared.contentSha256))
+        assertEquals(first.schematicSha256, PlayerBuildBookStore.schematicSha256(first.buildingId))
+
+        PlayerBuildBookStore.register(first)
+
+        assertEquals(first.buildingId, BuildingManager.getBuilding(first.buildingId)?.fileName)
+
+        val collision = prepared.copy(
+            contentSha256 = "f".repeat(64),
+            writeSchematic = { output -> output.write("different-schematic".toByteArray()) },
+        )
+        assertThrows(IllegalArgumentException::class.java) { PlayerBuildBookStore.persist(collision) }
+    }
+
     private fun clipboard(now: Long, blockData: String) = BuilderClipboard(
         blocks = listOf(BuilderClipboardBlock(0, 0, 0, blockData)),
         sizeX = 2,

@@ -134,6 +134,7 @@ class BuilderToolsConfig(
         private val MESSAGE_REQUIREMENTS = LocaleRequirements(
             scalarPaths = setOf(
                 "prefix",
+                "errors.disabled",
                 "errors.no-permission",
                 "errors.game-mode",
                 "errors.game-mode-changed",
@@ -182,8 +183,8 @@ class BuilderToolsConfig(
                 "crown.palette-updated",
                 "crown.palette-row",
                 "clipboard.saved",
+                "book.draft-saving",
                 "book.draft-created",
-                "book.guide",
                 "book.status.start",
                 "book.status.selection",
                 "book.status.clipboard",
@@ -258,6 +259,7 @@ class BuilderToolsConfig(
             },
             listPaths = setOf(
                 "help",
+                "book.guide",
                 "wand.lore",
                 "crown-brush.lore",
                 "crown.help",

@@ -94,6 +94,7 @@ locales:
       - "<#8c8c8c>  • <#92bed8>/builder confirm buy <#e6fff3>— докупить недостающее"
       - "<#8c8c8c>  • <#92bed8>/builder undo <#e6fff3>— подготовить отмену"
     errors:
+      disabled: "<prefix><#ff9f0f>Строительные инструменты — только на survival."
       no-permission: "<prefix><#c42323>У вас нет доступа к этому инструменту."
       game-mode: |-
         <prefix><#c42323>Режим недоступен для инструментов строителя.
@@ -238,6 +239,7 @@ locales:
         <#8c8c8c>  • <click:suggest_command:'/builder book draft '><#92bed8>/builder book draft [имя]</#92bed8></click> <#e6fff3>— получить бесплатный черновик.
         <#8c8c8c>  • <click:run_command:'/builder clear'><#92bed8>/builder clear</#92bed8></click> <#e6fff3>— скрыть старый контур; чертёж сохранится.
     book:
+      draft-saving: "<prefix><#e6fff3>Сохраняем чертёж…"
       guide:
         - "<prefix><#e6fff3><bold>Как создать книгу строительства"
         - "<#8c8c8c>  1. <click:run_command:'/builder wand'><#92bed8>/builder wand</#92bed8></click> <#e6fff3>— получить селектор."
@@ -459,6 +461,7 @@ locales:
       - "<prefix><white>/builder confirm buy <gray>— buy missing materials and build"
       - "<prefix><white>/builder undo <gray>— revert the latest operation"
     errors:
+      disabled: "<prefix><yellow>Builder tools are available only on survival servers."
       no-permission: "<prefix><red>You do not have access to this tool."
       game-mode: "<prefix><red>Builder tools are available only in survival or creative mode."
       game-mode-changed: "<prefix><yellow>Your game mode changed after preview. Create the plan again."
@@ -552,6 +555,7 @@ locales:
     clipboard:
       saved: "<prefix><green>Copied a safe <white><count></white>-block blueprint. <gray>Hold a plain book, then use <click:suggest_command:'/builder book draft '><aqua>/builder book draft [name]</aqua></click> within 15 minutes. <click:run_command:'/builder clear'><aqua>/builder clear</aqua></click> hides the old outline without deleting the blueprint."
     book:
+      draft-saving: "<prefix><gray>Saving the blueprint…"
       guide:
         - "<prefix><white><bold>Build-book guide"
         - "<dark_gray>  1. <aqua>/builder wand <gray>— get the selector."

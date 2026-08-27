@@ -62,10 +62,11 @@
   then enters the same journaled confirmation path. A plain `/builder confirm`
   never spends money. Command products, custom items, composite currencies,
   and unavailable requirements fail closed. The estimate is informational;
-  purchase reads the current admin-shop quote again, and material or price
-  drift outside the configured tolerance refreshes the estimate instead of
-  spending. If one of several purchases fails, the world remains untouched and
-  completed purchases stay in the player's inventory for a safe retry.
+  purchase reads the current admin-shop quote again and deliberately uses that
+  current price without another confirmation. A changed deficit, product path,
+  or unavailable material refreshes the estimate instead of spending. If one
+  of several purchases fails, the world remains untouched and completed
+  purchases stay in the player's inventory for a safe retry.
   `/builder undo` creates and confirms
   an inverse material transaction; deconstruction undo returns blocks only
   after the exact collected drops are surrendered, never repairs tool wear, and
@@ -173,3 +174,16 @@ The authenticated ARC runtime-health surface publishes only bounded aggregate
 state for Builder Tools: lifecycle state, recovery backlog, active leases, and
 Lands/CoreProtect/book-registry readiness. It never exposes player identities,
 book UUIDs, SQL errors, or credentials.
+
+`BuilderOperationLocks` is the primary-thread owner of every active mutation,
+book lock, exact operation/block lease, and the event-isolation listener. The
+runtime drives journal transitions, but it cannot mutate or release those maps
+directly; stale completion uses the operation UUID and therefore cannot unlock
+a newer plan. Closing the owner unregisters the listener and clears all lock
+state after the runtime has reconciled its active operations.
+
+Player schematic filenames contain the creator UUID plus the full SHA-256 of
+the normalized block content. This lets an identical design reuse its existing
+file even when WorldEdit changes non-semantic Sponge metadata (including the
+v3 write date). The exact file SHA-256 is still embedded in every draft and
+verified together with the normalized content digest before activation or use.

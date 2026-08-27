@@ -10,6 +10,7 @@ import ru.arc.ARC
 import ru.arc.autobuild.ConstructionSite
 import ru.arc.core.PluginModule
 import ru.arc.observability.RuntimeHealthContribution
+import ru.arc.text.LocalizedMiniMessage
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 
@@ -19,10 +20,12 @@ object BuilderToolsModule : PluginModule, CommandExecutor, TabCompleter {
 
     @Volatile
     private var runtime: BuilderToolsRuntime? = null
+    private var messages: LocalizedMiniMessage? = null
 
     override fun init() {
         bindCommands()
         val config = BuilderToolsConfig.load().validated()
+        messages = config.messages()
         if (!config.enabled) {
             info("Builder tools disabled by configuration")
             return
@@ -39,7 +42,8 @@ object BuilderToolsModule : PluginModule, CommandExecutor, TabCompleter {
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
         val active = runtime
         if (active == null) {
-            sender.sendMessage("Builder tools are disabled on this server.")
+            val locale = (sender as? Player)?.locale()?.toLanguageTag()
+            sender.sendMessage(checkNotNull(messages).render("errors.disabled", locale))
             return true
         }
         return active.onCommand(sender, command, label, args)
