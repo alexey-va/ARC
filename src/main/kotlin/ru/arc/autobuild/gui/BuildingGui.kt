@@ -7,8 +7,6 @@ import com.github.stefvanschie.inventoryframework.pane.OutlinePane
 import com.github.stefvanschie.inventoryframework.pane.Pane
 import com.github.stefvanschie.inventoryframework.pane.StaticPane
 import com.github.stefvanschie.inventoryframework.pane.util.Slot
-import net.kyori.adventure.text.Component
-import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.Material
 import org.bukkit.entity.HumanEntity
 import org.bukkit.entity.Player
@@ -25,8 +23,6 @@ import ru.arc.util.GuiUtils
 import ru.arc.util.TextUtil
 import ru.arc.util.fromConfig
 import ru.arc.util.guiItem
-import ru.arc.util.itemComponents
-import ru.arc.util.itemLore
 
 /**
  * GUI shown during active construction.
@@ -35,7 +31,11 @@ import ru.arc.util.itemLore
 class BuildingGui(
     private val player: Player,
     private val site: ConstructionSite
-) : ChestGui(3, TextHolder.deserialize("&8Подтверждение строительства"), ARC.instance) {
+) : ChestGui(
+        3,
+        TextHolder.deserialize(TextUtil.toLegacy(BuildConfig.BuildingGui.title)),
+        ARC.instance,
+    ) {
     private var youSure = false
     private var renameTask: ScheduledTask? = null
     private var progressTask: ScheduledTask? = null
@@ -68,9 +68,9 @@ class BuildingGui(
         val percentage = (site.progress * 100).toInt()
         val progressItem =
             guiItem(Material.PAPER) {
-                lore("<gray>> $percentage%")
                 fromConfig(buildConfig, "building-gui.progress")
             }
+        BuildingGuiPresentation.progress(buildConfig, percentage).applyTo(progressItem.item)
 
         // Auto-update progress using Task DSL
         progressTask =
@@ -80,16 +80,16 @@ class BuildingGui(
                     viewers.forEach(HumanEntity::closeInventory)
                     return@repeating
                 }
-                progressItem.item.editMeta { meta ->
-                    val newPercentage = (site.progress * 100).toInt()
-                    meta.lore(listOf(TextUtil.strip(Component.text("> $newPercentage%", NamedTextColor.GRAY))))
-                }
+                val newPercentage = (site.progress * 100).toInt()
+                BuildingGuiPresentation.progress(buildConfig, newPercentage).applyTo(progressItem.item)
                 update()
             }
 
         pane.addItem(progressItem, 2, 0)
 
         // Cancel button with confirmation
+        val normalCancel = BuildingGuiPresentation.item(buildConfig, "building-gui.cancel")
+        val confirmCancel = BuildingGuiPresentation.item(buildConfig, "building-gui.cancel-confirm")
         lateinit var cancelItem: GuiItem
         cancelItem =
             guiItem(Material.RED_STAINED_GLASS_PANE) {
@@ -102,25 +102,12 @@ class BuildingGui(
                         event.whoClicked.closeInventory()
                     } else {
                         youSure = true
-                        player.sendMessage(BuildConfig.Messages.cancelConfirmHint())
-                        val (confirmDisplay, _) = buildConfig.itemComponents("building-gui.cancel-confirm")
-                        val cancelLore =
-                            buildConfig.itemLore("building-gui.cancel").map {
-                                TextUtil.strip(TextUtil.mm(it))
-                            }
-                        cancelItem.item.editMeta { meta ->
-                            confirmDisplay?.let { meta.displayName(TextUtil.strip(it)) }
-                            meta.lore(cancelLore.filterNotNull())
-                        }
+                        confirmCancel.applyTo(cancelItem.item)
 
                         renameTask =
                             delayed((5 * 20).ticks) {
                                 youSure = false
-                                val (normalDisplay, _) = buildConfig.itemComponents("building-gui.cancel")
-                                cancelItem.item.editMeta { meta ->
-                                    normalDisplay?.let { meta.displayName(TextUtil.strip(it)) }
-                                    meta.lore(null)
-                                }
+                                normalCancel.applyTo(cancelItem.item)
                                 update()
                             }
 
@@ -128,6 +115,7 @@ class BuildingGui(
                     }
                 }
             }
+        normalCancel.applyTo(cancelItem.item)
 
         pane.addItem(cancelItem, 6, 0)
 

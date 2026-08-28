@@ -48,6 +48,7 @@ class GuiUtilsTest : TestBase() {
         val guiItem = GuiUtils.background()
         assertNotNull(guiItem, "Should create default background")
         assertEquals(Material.GRAY_STAINED_GLASS_PANE, guiItem.item.type, "Should use default material")
+        assertFalse(guiItem.item.itemMeta.hasCustomModelDataSafe(), "Portable default must not require a resource pack")
     }
 
     @Test

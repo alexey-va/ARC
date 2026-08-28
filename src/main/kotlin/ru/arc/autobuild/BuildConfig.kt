@@ -97,6 +97,10 @@ object BuildConfig {
         val title: String get() = config.string("confirm-gui.title", "<dark_gray>Подтверждение постройки")
     }
 
+    object BuildingGui {
+        val title: String get() = config.string("building-gui.title", "<dark_gray>Строительство")
+    }
+
     /** Module YAML — use [ru.arc.util.fromConfig] with paths under `building-gui.*` / `confirm-gui.*`. */
     @JvmStatic
     fun config(): Config =
@@ -153,12 +157,6 @@ object BuildConfig {
 
         fun noBook() =
             config.component("confirm-gui.no-book", "<gray>\uD83D\uDEE0 <red>У вас нет книги в инвентаре!")
-
-        fun cancelConfirmHint() =
-            config.component(
-                "building-gui.cancel-hint",
-                "<gray>\uD83D\uDEE0 <yellow>Нажмите «Отменить» ещё раз для подтверждения",
-            )
 
         fun displayLimit() = config.component(
             "messages.display-limit",

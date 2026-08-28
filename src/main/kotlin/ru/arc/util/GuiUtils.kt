@@ -11,6 +11,7 @@ import org.bukkit.inventory.ItemStack
 import ru.arc.core.ScheduledTask
 import ru.arc.core.delayed
 import ru.arc.core.ticks
+import ru.arc.gui.GuiDefaults
 import ru.arc.util.Logging.error
 import ru.arc.util.TextUtil.strip
 import java.util.UUID
@@ -150,5 +151,5 @@ object GuiUtils {
     fun background(material: Material): GuiItem = background(material, 0)
 
     @JvmStatic
-    fun background(): GuiItem = background(Material.GRAY_STAINED_GLASS_PANE, 11000)
+    fun background(): GuiItem = background(GuiDefaults.Background.material, GuiDefaults.Background.modelData)
 }
