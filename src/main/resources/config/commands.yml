@@ -1,6 +1,6 @@
 # =============================================================================
 # config/commands.yml — подкоманды /arc: name, aliases, permission, player-only, usage.
-# messages — MiniMessage для подсказок и ошибок (common, buildbook, hunt, treasures).
+# messages — MiniMessage для подсказок и ошибок (common, hunt, treasures).
 # =============================================================================
 
 commands:
@@ -136,12 +136,6 @@ commands:
     name: test
     aliases: [ ]
     permission: arc.test
-  buildbook:
-    name: buildbook
-    aliases: [ ]
-    permission: arc.build.book.give
-    player-only: true
-    usage: /arc buildbook <building> <model-id> [rotation] [y-offset] [name...]
   eliteloot:
     name: eliteloot
     aliases: [ ]
@@ -213,13 +207,6 @@ messages:
     failed: '<red>Не удалось выполнить покупку. Деньги не списаны.'
     success: '<green>Куплено <white>%amount% шт.<green> товара <white>%item%<green> за <white>%price%<green>.'
     success-no-price: '<green>Куплено <white>%amount% шт.<green> товара <white>%item%<green>.'
-  buildbook:
-    not-found: <red>Строение <white>%name%<red> не найдено!
-    invalid-model: '<red>Неверный model-id: <white>%value%'
-    invalid-transform: '<red>Поворот должен быть 0°, 90°, 180° или 270°, а смещение — в допустимом диапазоне.'
-    invalid-name: '<red>Название книги должно содержать от 1 до 48 обычных символов.'
-    inventory-full: '<red>В инвентаре нет места для книги.'
-    received: '<green>Книга строительства создана для <white>%building%'
   hunt:
     no-types: <gray>Нет настроенных пресетов охот
     types-header: <gold>═══ Пресеты охот ═══

@@ -611,26 +611,6 @@ object ChatModeModule : PluginModule {
     override fun reload() {}
 }
 
-// ==================== Priority 90: Building System ====================
-
-/**
- * Auto-build system for structures.
- */
-object BuildingModule : PluginModule {
-    override val name = "Building"
-    override val priority = 90
-
-    override fun init() {
-        ru.arc.autobuild.BuildingManager
-            .init()
-    }
-
-    override fun shutdown() {
-        ru.arc.autobuild.BuildingManager
-            .stopAll()
-    }
-}
-
 // ==================== Priority 100: Sync Systems ====================
 
 /**

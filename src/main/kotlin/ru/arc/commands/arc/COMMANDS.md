@@ -15,7 +15,6 @@
 - [Пулы наград](#arc-treasures)
 - [Пулы локаций](#arc-locationpool)
 - [Биржа и инвестиции](#arc-invest)
-- [Строительство](#arc-buildbook)
 - [Elite Loot](#arc-eliteloot)
 - [Администрирование](#администрирование)
 - [GUI команды](#gui-команды)
@@ -367,61 +366,6 @@ pouches:
 /arc invest sell AAPL 5  # продать 5 акций
 /arc invest portfolio    # портфель
 ```
-
----
-
-## /arc buildbook
-
-Административная выдача книги для существующей серверной схемы. Игроки создают
-бесплатный черновик из безопасной копии, проверяют превью и только затем
-подтверждают платную регистрацию одноразового экземпляра.
-
-| Параметр         | Значение        |
-|------------------|-----------------|
-| **Право**        | `arc.build.book.give` |
-| **Только игрок** | Да              |
-
-### Использование
-
-```bash
-/arc buildbook <building_id> <model-id> [rotation] [y-offset] [name...]
-```
-
----
-
-## /builder book
-
-Игрок создаёт книгу из собственного безопасного `/builder copy`. Черновик
-бесплатный и работает только как настраиваемое непрерывное превью: повторный
-клик по площадке не открывает строительство, а подсказывает перейти к смете.
-После активации открытое превью обновляется до зарегистрированного экземпляра,
-но строительство всё равно требует отдельного подтверждения. Деньги списываются
-исключительно после отдельного `/builder book confirm`.
-
-| Команда | Результат |
-|---------|-----------|
-| `/builder book draft [название]` | Заменить одну обычную книгу бесплатным черновиком |
-| `/builder book activate` | Показать материалы, наценку за возведение и итог без оплаты |
-| `/builder book copy` | Показать сохранённую себестоимость новой UUID-копии активной книги |
-| `/builder book sell <цена>` | Безопасно выставить активную книгу в zAuctionHouse по своей цене |
-| `/builder book confirm` | Оплатить показанную смету и безопасно получить одноразовый экземпляр |
-| `/builder book cancel` | Отменить смету без списания |
-
-```bash
-/builder copy
-/builder book draft Дом у озера
-/builder book activate
-/builder book confirm
-# С активной книгой в руке:
-/builder book copy
-/builder book confirm
-/builder book sell 25000
-```
-
-Обычный `/ah sell` намеренно не принимает пользовательские книги. Безопасная
-команда сначала переводит UUID экземпляра из `AVAILABLE` в `LISTED` в MySQL,
-затем передаёт ровно эту книгу штатному сервису zAuctionHouse. При возврате,
-истечении или выдаче покупателю точный lease снимается автоматически.
 
 ---
 
@@ -844,18 +788,12 @@ lp group default permission set arc.store true
 | Право            | Описание                     |
 |------------------|------------------------------|
 | `arc.jobs.boost.use` | Просмотр своих бустов работ  |
-| `arc.build.book.create` | Создание книги из собственного безопасного чертежа |
-| `arc.build.book.edit` | Настройка поворота и смещения книги |
-| `arc.build.book.use` | Превью и материалоёмкая постройка по книге |
 
 **LuckPerms команда:**
 
 ```bash
 lp group vip parent add default
 lp group vip permission set arc.jobs.boost.use true
-lp group vip permission set arc.build.book.create true
-lp group vip permission set arc.build.book.edit true
-lp group vip permission set arc.build.book.use true
 ```
 
 ---
@@ -921,7 +859,6 @@ lp group admin permission set arc.x true
 | `arc.invest`              | `/arc invest`                                                         | Игрок     |
 | `arc.store`               | `/arc store`                                                          | Игрок     |
 | `arc.jobs.boost.use`          | `/arc jobsboosts`                                                     | VIP       |
-| `arc.build.book.give`     | `/arc buildbook`                                                      | Админ     |
 | `arc.audit`               | `/arc audit`                                                          | Модератор |
 | `arc.treasure.hunt.admin`       | `/arc hunt`                                                           | Модератор |
 | `arc.sound.follow`        | `/arc soundfollow`                                                    | Модератор |

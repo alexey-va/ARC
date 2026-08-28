@@ -86,9 +86,6 @@ commands:
     description: Open and administer the mount collection
     usage: /mount [menu|help|admin]
     permission: arc.mounts.use
-  builder:
-    description: Survival-friendly builder tools
-    usage: /builder [help|wand|fill|copy|book|paste|deconstruct|crown|confirm|cancel|undo|status]
 permissions:
   arc.admin:
     description: Administer ARC
@@ -115,31 +112,6 @@ permissions:
     default: false
   arc.board.rate.own:
     description: Rate your own community board entries
-    default: op
-  arc.build.book.give:
-    description: Give ARC build books backed by existing schematics
-    default: op
-  arc.build.book.create:
-    description: Create material-backed build books from safe builder copies
-    default: false
-    children:
-      arc.build.book.edit: true
-      arc.build.book.sell: true
-      arc.build.book.use: true
-  arc.build.book.edit:
-    description: Edit build-book rotation and offsets
-    default: false
-  arc.build.book.sell:
-    description: Safely list registered build books on the auction
-    default: false
-  arc.build.book.use:
-    description: Preview and construct ARC build books
-    default: false
-  arc.build.fast:
-    description: Use accelerated ARC construction
-    default: op
-  arc.buildings.cooldown.bypass:
-    description: Bypass ARC building cooldowns
     default: op
   arc.chat.notify:
     description: Receive ARC chat announcements
@@ -271,59 +243,4 @@ permissions:
       arc.mounts.use: true
   arc.mounts.use:
     description: Open and use the mount collection
-    default: false
-  arc.builder.tools.use:
-    description: Use survival-friendly ARC builder tools
-    default: false
-    children:
-      arc.builder.tools.fill: true
-      arc.builder.tools.copy: true
-      arc.build.book.create: true
-      arc.builder.tools.paste: true
-      arc.builder.tools.deconstruct: true
-      arc.builder.tools.crown: true
-  arc.builder.tools.fill:
-    description: Plan and confirm bounded material-backed fills
-    default: false
-  arc.builder.tools.copy:
-    description: Copy bounded safe block selections to a temporary clipboard
-    default: false
-  arc.builder.tools.paste:
-    description: Paste a temporary clipboard while paying exact materials
-    default: false
-  arc.builder.tools.deconstruct:
-    description: Deconstruct bounded selections with a real tool and exact drops
-    default: false
-  arc.builder.tools.crown:
-    description: Build bounded material-backed leaf crowns
-    default: false
-  arc.builder.tools.selection.size.20:
-    description: Allow a builder-tools selection axis up to 20 blocks
-    default: false
-  arc.builder.tools.selection.size.40:
-    description: Allow a builder-tools selection axis up to 40 blocks
-    default: false
-  arc.builder.tools.selection.size.60:
-    description: Allow a builder-tools selection axis up to 60 blocks
-    default: false
-  arc.builder.tools.selection.size.80:
-    description: Allow a builder-tools selection axis up to 80 blocks
-    default: false
-  arc.builder.tools.selection.size.100:
-    description: Allow a builder-tools selection axis up to 100 blocks
-    default: false
-  arc.builder.tools.hourly.20000:
-    description: Allow up to 20000 builder-tools block changes per hour
-    default: false
-  arc.builder.tools.hourly.50000:
-    description: Allow up to 50000 builder-tools block changes per hour
-    default: false
-  arc.builder.tools.hourly.100000:
-    description: Allow up to 100000 builder-tools block changes per hour
-    default: false
-  arc.builder.tools.hourly.150000:
-    description: Allow up to 150000 builder-tools block changes per hour
-    default: false
-  arc.builder.tools.hourly.200000:
-    description: Allow up to 200000 builder-tools block changes per hour
     default: false

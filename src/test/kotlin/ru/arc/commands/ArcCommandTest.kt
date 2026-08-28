@@ -557,7 +557,6 @@ class ArcCommandTest : TestBase() {
             player.addAttachment(plugin, "arc.balance.top", true)
             player.addAttachment(plugin, "arc.jobs.boost.use", true)
             player.addAttachment(plugin, "arc.test", true)
-            player.addAttachment(plugin, "arc.build.book.give", true)
             player.addAttachment(plugin, "arc.elite.loot.admin", true)
             player.addAttachment(plugin, "arc.stocks.buy", true)
             player.addAttachment(plugin, "arc.store", true)
@@ -586,7 +585,6 @@ class ArcCommandTest : TestBase() {
                     "hunt",
                     "treasures",
                     "test",
-                    "buildbook",
                     "eliteloot",
                     "invest",
                     "store",
@@ -884,84 +882,6 @@ class ArcCommandTest : TestBase() {
             assertTrue(completions.contains("leaf"))
             assertTrue(completions.contains("ploot"))
             assertTrue(completions.contains("blockdata"))
-        }
-    }
-
-    // ==================== BuildBook Subcommand ====================
-
-    @Nested
-    @DisplayName("/arc buildbook")
-    inner class BuildBookSubCommandTests {
-        @Test
-        @DisplayName("Without permission - sends no permission message")
-        fun testNoPermission() {
-            assertFalse(player.hasPermission("arc.build.book.give"))
-
-            val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("buildbook", "test", "1"))
-
-            assertTrue(result)
-            assertTrue(player.hasReceivedMessage(), "Should send no permission message")
-        }
-
-        @Test
-        @DisplayName("Too few args - shows usage")
-        fun testTooFewArgs() {
-            player.addAttachment(plugin, "arc.build.book.give", true)
-
-            val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("buildbook"))
-
-            assertTrue(result)
-            assertTrue(player.hasReceivedMessage(), "Should show usage")
-        }
-
-        @Test
-        @DisplayName("Invalid building - shows not found message")
-        fun testBuildingNotFound() {
-            player.addAttachment(plugin, "arc.build.book.give", true)
-
-            val result =
-                arcCommand.onCommand(player, mockCommand, "arc", arrayOf("buildbook", "nonexistent_building", "1"))
-
-            assertTrue(result)
-            assertTrue(player.hasReceivedMessage(), "Should show building not found")
-        }
-
-        @Test
-        @DisplayName("Tab completion shows buildings on first arg")
-        fun testTabCompletionBuildings() {
-            player.addAttachment(plugin, "arc.build.book.give", true)
-
-            val completions = arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("buildbook", ""))
-
-            assertNotNull(completions)
-            // Buildings list may be empty in test environment
-        }
-
-        @Test
-        @DisplayName("Tab completion shows model IDs on second arg")
-        fun testTabCompletionModelIds() {
-            player.addAttachment(plugin, "arc.build.book.give", true)
-
-            val completions = arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("buildbook", "test", ""))
-
-            assertNotNull(completions)
-            assertTrue(completions!!.contains("0"))
-            assertTrue(completions.contains("1"))
-        }
-
-        @Test
-        @DisplayName("Tab completion shows rotations on third arg")
-        fun testTabCompletionRotations() {
-            player.addAttachment(plugin, "arc.build.book.give", true)
-
-            val completions =
-                arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("buildbook", "test", "1", ""))
-
-            assertNotNull(completions)
-            assertTrue(completions!!.contains("0"))
-            assertTrue(completions.contains("90"))
-            assertTrue(completions.contains("180"))
-            assertTrue(completions.contains("270"))
         }
     }
 

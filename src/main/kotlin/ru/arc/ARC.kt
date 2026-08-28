@@ -22,7 +22,6 @@ import ru.arc.commands.arc.subcommands.TreasuresSubCommand
 import ru.arc.commands.chat.ChatModeAliasCommand
 import ru.arc.commandhide.CommandHideModule
 import ru.arc.citizens.NpcChunkTicketModule
-import ru.arc.buildertools.BuilderToolsModule
 import ru.arc.chunks.ArcChunkTickets
 import ru.arc.config.ConfigManager
 import ru.arc.config.LocationPoolConfig
@@ -34,7 +33,6 @@ import ru.arc.core.modules.AiModule
 import ru.arc.core.modules.AnnounceModule
 import ru.arc.core.modules.AuditModule
 import ru.arc.core.modules.BoardModule
-import ru.arc.core.modules.BuildingModule
 import ru.arc.core.modules.ConfigModule
 import ru.arc.metrics.MetricsModule
 import ru.arc.mounts.MountModule
@@ -223,9 +221,6 @@ open class ARC : JavaPlugin() {
             ItemsCatalogModule,
             CommandHideModule,
             OnboardingModule,
-            // Building system (priority 90)
-            BuildingModule,
-            BuilderToolsModule,
             // Sync systems (priority 100)
             SyncModule,
         )
@@ -331,13 +326,11 @@ open class ARC : JavaPlugin() {
                 "modules/mounts.yml",
                 "modules/location-pools.yml",
                 "modules/elite-loot.yml",
-                "modules/auto-build.yml",
                 "modules/onboarding.yml",
                 "modules/leafdecay.yml",
                 "modules/personalloot.yml",
                 "modules/item-presets.yml",
                 "modules/items-catalog.yml",
-                "modules/builder-tools.yml",
                 "modules/pouches.yml",
                 "modules/backpacks.yml",
                 "modules/commands.yml",
@@ -353,8 +346,7 @@ open class ARC : JavaPlugin() {
                 "guis/scheduled-commands.yml",
             )
 
-        /** Feature defaults refreshed from the JAR; mutable node policy lives in separate runtime overlays. */
-        private val AUTHORITATIVE_BUNDLED_RESOURCES = setOf("modules/builder-tools.yml")
+        private val AUTHORITATIVE_BUNDLED_RESOURCES = emptySet<String>()
 
         @JvmField var plugin: ARC? = null
 

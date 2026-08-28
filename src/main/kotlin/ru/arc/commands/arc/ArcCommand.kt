@@ -7,7 +7,6 @@ import org.bukkit.command.TabCompleter
 import ru.arc.commands.arc.subcommands.AuditSubCommand
 import ru.arc.commands.arc.subcommands.BaltopSubCommand
 import ru.arc.commands.arc.subcommands.BoardSubCommand
-import ru.arc.commands.arc.subcommands.BuildBookSubCommand
 import ru.arc.commands.arc.subcommands.BuySubCommand
 import ru.arc.commands.arc.subcommands.ChatSubCommand
 import ru.arc.commands.arc.subcommands.ContractsSubCommand
@@ -83,7 +82,6 @@ class ArcCommand :
             NpcChatSubCommand,
             // New subcommands
             TestSubCommand,
-            BuildBookSubCommand,
             EliteLootSubCommand,
             InvestSubCommand,
             StoreSubCommand,

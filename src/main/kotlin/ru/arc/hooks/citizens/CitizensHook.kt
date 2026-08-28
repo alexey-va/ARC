@@ -7,7 +7,6 @@ import net.citizensnpcs.trait.HologramTrait
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.entity.EntityType
-import org.bukkit.event.HandlerList
 import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
 import ru.arc.util.Logging.debug
@@ -32,29 +31,12 @@ class CitizensHook : AutoCloseable {
         .expireAfterAccess(10, TimeUnit.MINUTES)
         .build<Int, ConcurrentLinkedDeque<InsertedHologramLine>>()
 
-    private var listener: CitizensListener? = null
     private var closed = false
-
-    @Synchronized
-    fun registerListeners() {
-        check(!closed) { "CitizensHook is closed" }
-        if (listener != null) return
-        val newListener = CitizensListener()
-        try {
-            Bukkit.getPluginManager().registerEvents(newListener, ARC.instance)
-            listener = newListener
-        } catch (failure: Throwable) {
-            HandlerList.unregisterAll(newListener)
-            throw failure
-        }
-    }
 
     @Synchronized
     override fun close() {
         if (closed) return
         closed = true
-        listener?.let(HandlerList::unregisterAll)
-        listener = null
         linesCache.invalidateAll()
     }
 

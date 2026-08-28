@@ -4,8 +4,6 @@ import io.kotest.core.spec.style.DescribeSpec
 import org.mockbukkit.mockbukkit.MockBukkit
 import org.mockbukkit.mockbukkit.ServerMock
 import org.mockbukkit.mockbukkit.inventory.ItemStackMock
-import ru.arc.autobuild.ClipboardLoaders
-import ru.arc.autobuild.MockClipboardLoader
 import ru.arc.config.ConfigManager
 import ru.arc.gui.GuiItems
 import ru.arc.gui.MockGuiItemFactory
@@ -35,7 +33,6 @@ abstract class KotestTestBase(
 ) : DescribeSpec() {
     companion object {
         private val mockGuiItemFactory = MockGuiItemFactory()
-        private val mockClipboardLoader = MockClipboardLoader()
 
         init {
             Logging.disableLokiAppender = true
@@ -48,8 +45,6 @@ abstract class KotestTestBase(
             // Use mock GuiItem factory to avoid Paper ClassLoader issues with InventoryFramework
             GuiItems.factory = mockGuiItemFactory
 
-            // Use mock ClipboardLoader to avoid WorldEdit platform initialization issues
-            ClipboardLoaders.loader = mockClipboardLoader
         }
     }
 
@@ -180,7 +175,5 @@ abstract class KotestTestBase(
         GuiUtils.clearBackgrounds()
         // Clear mock GUI factory state
         mockGuiItemFactory.clear()
-        // Clear mock clipboard loader state
-        mockClipboardLoader.clear()
     }
 }

@@ -17,9 +17,6 @@ import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.persistence.PersistentDataType
 import ru.arc.ARC
-import ru.arc.autobuild.BuildingManager
-import ru.arc.autobuild.BuildBookCodec
-import ru.arc.autobuild.gui.BuildBookEditorGui
 import ru.arc.bschests.PersonalLootModule
 import ru.arc.common.locationpools.LocationPoolManager
 import ru.arc.config.ConfigManager
@@ -51,7 +48,6 @@ class BlockListener : Listener {
 
     @EventHandler(priority = EventPriority.LOWEST)
     fun onBlockInteract(event: PlayerInteractEvent) {
-        if (processBuildingEvent(event)) return
         processTreasureHunt(event)
         processBees(event)
         processTreasureItemUse(event)
@@ -161,33 +157,6 @@ class BlockListener : Listener {
         if (event.isCancelled) return
         if (event.player.hasPermission("arc.leaf.decay.bypass")) return
         LeafDecayManager.markAsPlayerPlaced(event.block)
-    }
-
-    @Suppress("DEPRECATION")
-    private fun processBuildingEvent(event: PlayerInteractEvent): Boolean {
-        if (!event.hasItem()) return false
-        val hand = event.item ?: return false
-        if (hand.type != Material.BOOK) return false
-        val book = BuildBookCodec.read(hand) ?: return false
-        if (event.hand != EquipmentSlot.HAND) return false
-        if (event.action != Action.RIGHT_CLICK_AIR && event.action != Action.RIGHT_CLICK_BLOCK) return false
-
-        if (event.action == Action.RIGHT_CLICK_AIR || event.player.isSneaking) {
-            event.isCancelled = true
-            BuildBookEditorGui.open(event.player)
-            return true
-        }
-        if (!event.player.hasPermission("arc.build.book.use")) {
-            event.isCancelled = true
-            event.player.sendMessage(TextUtil.noPermissions())
-            return true
-        }
-        val clickedBlock = event.clickedBlock ?: return false
-        val center = clickedBlock.location.add(0.0, 1.0, 0.0)
-
-        event.isCancelled = true
-        BuildingManager.processPlayerClick(event.player, center, book)
-        return true
     }
 
     private fun processTreasureHunt(event: PlayerInteractEvent) {

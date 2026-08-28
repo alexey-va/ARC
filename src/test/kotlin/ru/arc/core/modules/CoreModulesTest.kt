@@ -66,13 +66,6 @@ class CoreModulesTest : TestBase() {
         }
 
         @Test
-        @DisplayName("BuildingModule has correct name and priority")
-        fun testBuildingModule() {
-            assertEquals("Building", BuildingModule.name)
-            assertEquals(90, BuildingModule.priority)
-        }
-
-        @Test
         @DisplayName("SyncModule has correct name and priority")
         fun testSyncModule() {
             assertEquals("Sync", SyncModule.name)
@@ -111,7 +104,6 @@ class CoreModulesTest : TestBase() {
             PersonalLootModule,
             MobSpawnModule,
             JoinMessagesModule,
-            BuildingModule,
             SyncModule
         )
 
@@ -131,13 +123,6 @@ class CoreModulesTest : TestBase() {
             assertTrue(HooksModule.priority < ConfigModule.priority)
             assertTrue(AiModule.priority < ConfigModule.priority)
             assertTrue(EconomyModule.priority < ConfigModule.priority)
-        }
-
-        @Test
-        @DisplayName("Building module comes after game features")
-        fun testBuildingAfterGameFeatures() {
-            assertTrue(BuildingModule.priority > StockModule.priority)
-            assertTrue(BuildingModule.priority > TreasureModule.priority)
         }
 
         @Test
@@ -252,7 +237,6 @@ class CoreModulesTest : TestBase() {
             PersonalLootModule,
             MobSpawnModule,
             JoinMessagesModule,
-            BuildingModule,
             SyncModule
         )
 
@@ -303,10 +287,9 @@ class CoreModulesTest : TestBase() {
             PersonalLootModule,
             MobSpawnModule,
             JoinMessagesModule,
-            BuildingModule,
             SyncModule
         )
 
-        assertEquals(26, allModules.size, "Should have 26 modules")
+        assertEquals(25, allModules.size, "Should have 25 modules")
     }
 }

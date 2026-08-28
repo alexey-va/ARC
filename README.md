@@ -38,21 +38,19 @@ cd ~/RusCrafting/ruscrafting-ops && ./scripts/mc arc classic classic_survival
 
 ## Features
 
-Treasure hunts, auto-building, survival-safe transactional builder tools, stock simulation, auction (Redis pub/sub), x-server announcements, and native cross-server mounts with progression, cosmetics, abilities, and player tuning.
+Treasure hunts, stock simulation, auction (Redis pub/sub), x-server
+announcements, and native cross-server mounts with progression, cosmetics,
+abilities, and player tuning.
 
 Mount configuration and permission-state contract: [`docs/mounts.md`](docs/mounts.md).
 
 Canonical ARC permission namespace and migration map: [`docs/permissions.md`](docs/permissions.md).
 
-Builder tools player and recovery contract: [`src/main/kotlin/ru/arc/buildertools/README.md`](src/main/kotlin/ru/arc/buildertools/README.md).
-
 ## Dependencies
 
-Dependencies are enabled per module. Builder Tools requires Lands and
-CoreProtect on survival and uses WorldEdit for schematics; WorldGuard is only a
-legacy optional soft integration for other ARC paths and is not required by
-Builder Tools. Other optional integrations include Citizens, ItemsAdder, Jobs,
-BetterStructures, EliteMobs, and PlaceholderAPI.
+Dependencies are enabled per module. Optional integrations include Citizens,
+ItemsAdder, Jobs, BetterStructures, EliteMobs, and PlaceholderAPI. Survival
+building assistance is owned by the standalone ArcBuilder repository.
 
 ## License
 

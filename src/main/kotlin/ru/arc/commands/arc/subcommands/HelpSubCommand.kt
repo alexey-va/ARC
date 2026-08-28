@@ -160,7 +160,6 @@ object HelpSubCommand : SubCommand {
             HuntSubCommand,
             TreasuresSubCommand,
             TestSubCommand,
-            BuildBookSubCommand,
             EliteLootSubCommand,
             InvestSubCommand,
             StoreSubCommand,

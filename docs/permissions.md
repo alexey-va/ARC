@@ -13,14 +13,9 @@ also be declared with an explicit default in `src/main/resources/plugin.yml`.
 | `arc.baltop` | `arc.balance.top` |
 | `arc.board-announce` | `arc.board.announce` |
 | `arc.boost.large` | `arc.jobs.boost.large` |
-| `arc.buildertools.*` | `arc.builder.tools.*` |
-| `arc.buildings.bypass-cooldown` | `arc.buildings.cooldown.bypass` |
 | `arc.bypass-invulnerable` | `arc.join.invulnerability.bypass` |
 | `arc.bypass-portal` | `arc.portal.bypass` |
 | `arc.chat-notify` | `arc.chat.notify` |
-| `arc.command.buildbook` | `arc.build.book.give` |
-| `arc.buildings.build` | `arc.build.book.use` |
-| `arc.deconstruction*`, `arc.crown` | `arc.builder.tools.*` |
 | `arc.eliteloot` | `arc.elite.loot.admin` |
 | `arc.give` | `arc.item.give` |
 | `arc.hide.*` | `arc.command.hide.*` |
@@ -42,8 +37,10 @@ also be declared with an explicit default in `src/main/resources/plugin.yml`.
 
 The former names are not runtime aliases. Deploy the matching LuckPerms desired
 state together with the ARC JAR so grants and checks switch as one rollout.
-
 Portal appearance is a player setting, not a permission. It is stored in the
 LuckPerms meta key `arc-portal-style`; supported values are `legacy`, `origin`,
 `astral`, `chaos`, `solar`, and `void`. If the key is absent or invalid, ARC
 uses `portal.origin-gate.default-style` from `modules/misc.yml`.
+
+Builder and construction-book permissions are now declared by the standalone
+ArcBuilder plugin and are intentionally absent from ARC.

@@ -17,7 +17,7 @@ class OpsHttpHandlersTest :
             snapshot.activeLeases shouldBe 0
             snapshot.schemas.containsKey("runtime.module_runtime") shouldBe true
             snapshot.dependencies.containsKey("runtime.redis") shouldBe true
-            snapshot.probes.map { it.id }.contains("builder_tools") shouldBe true
+            snapshot.probes.map { it.id }.contains("builder_tools") shouldBe false
         }
 
         "plugin summary reports metadata through the current Paper API" {

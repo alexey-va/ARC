@@ -310,7 +310,7 @@ class HookRegistry(
                 val hook = AuctionHook()
                 try {
                     hook.start()
-                    registerListener(AuctionTrophyGuardListener(hook))
+                    registerListener(AuctionTrophyGuardListener())
                     registerListener(AuctionSaleNotifier(hook))
                     auctionHook = hook
                 } catch (failure: Throwable) {
@@ -349,14 +349,7 @@ class HookRegistry(
             itemsAdderHook = registerListener(ItemsAdderHook(resourcePackZip, syncScript, config))
         }
         register("Citizens", true) {
-            val hook = CitizensHook()
-            try {
-                hook.registerListeners()
-                citizensHook = hook
-            } catch (failure: Throwable) {
-                hook.close()
-                throw failure
-            }
+            citizensHook = CitizensHook()
         }
         register("BetterRTP", true) {
             betterRTPListener = registerListener(BetterRTPListener())
