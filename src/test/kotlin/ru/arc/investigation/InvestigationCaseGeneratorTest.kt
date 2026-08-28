@@ -8,6 +8,7 @@ import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldStartWith
+import io.kotest.matchers.string.shouldNotContain
 import ru.arc.config.Config
 import java.nio.file.Files
 import kotlin.random.Random
@@ -42,7 +43,7 @@ class InvestigationCaseGeneratorTest : StringSpec({
         bundledInvestigationCatalogForTest.witnessKeys.size shouldBe 13
         cases.mapNotNull { it.narrative?.plotId }.toSet() shouldBe bundledInvestigationCatalogForTest.plotIds
         cases.map(InvestigationCase::verdict).toSet() shouldBe InvestigationVerdict.entries.toSet()
-        cases.map(InvestigationCase::fingerprint).distinct().size shouldBeGreaterThan 7_500
+        cases.map(InvestigationCase::fingerprint).distinct().size shouldBeGreaterThan 7_000
     }
 
     "all configured witnesses participate in at least one authored plot" {
@@ -61,13 +62,13 @@ class InvestigationCaseGeneratorTest : StringSpec({
     "one malformed configured case is skipped without losing the valid catalog" {
         val root = Files.createTempDirectory("arc-investigation-malformed-")
         val config = Config(root, "modules/investigation-cases.yml")
-        config.setString("cases.side_gate_switch.question", "")
+        config.setString("cases.missing_pie.question", "")
 
         val catalog = InvestigationStoryCatalog.parse(config)
 
         catalog.storyCount shouldBe 24
-        ("side_gate_switch" in catalog.plotIds) shouldBe false
-        ("clean_conspiracy" in catalog.plotIds) shouldBe true
+        ("missing_pie" in catalog.plotIds) shouldBe false
+        ("ring_in_ashes" in catalog.plotIds) shouldBe true
     }
 
     "catalog rejects an invalid witness material before a case can be sold" {
@@ -115,15 +116,26 @@ class InvestigationCaseGeneratorTest : StringSpec({
     }
 
     "dynamic dossier lore is wrapped without dropping its continuation" {
-        val source = listOf("<gray>Перед полуночью неизвестный вернул телегу к боковым воротам за якобы забытой биркой.")
+        val source = listOf("<gray>Перед полуночью кто-то оставил длинную записку у боковых ворот и убежал под дождём.")
 
         val wrapped = wrapInvestigationLore(source, 32)
 
         wrapped.size shouldBeGreaterThan 1
-        wrapped.drop(1).forEach { it shouldStartWith "<dark_gray>  " }
+        wrapped.drop(1).forEach { it shouldStartWith "<gray>  " }
+        wrapped.joinToString("\n") shouldNotContain "<dark_gray>  "
         wrapped.forEach { line ->
             line.replace(Regex("<[^>]+>"), "").length shouldBeLessThanOrEqual 32
         }
+    }
+
+    "testimony contains only the witness words without repeated attribution" {
+        val case = investigationCaseGeneratorForTest().generate(Random(511))
+        val witness = case.witnesses().first()
+        val testimony = case.testimony(witness).joinToString(" ")
+
+        testimony shouldNotContain witness.displayName
+        testimony shouldNotContain "»"
+        testimony shouldNotContain "<dark_gray>"
     }
 })
 

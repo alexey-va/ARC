@@ -21,5 +21,7 @@ class PacketEventsHookTest : StringSpec({
 
         commonEntityFlags(entity, invisibleForViewer = false) shouldBe 0x52.toByte()
         commonEntityFlags(entity, invisibleForViewer = true) shouldBe 0x32.toByte()
+        commonEntityFlags(entity, glowingForViewer = false) shouldBe 0x12.toByte()
+        commonEntityFlags(entity, glowingForViewer = true) shouldBe 0x52.toByte()
     }
 })

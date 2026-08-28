@@ -27,7 +27,20 @@ class PacketEventsHook {
             val metadata =
                 WrapperPlayServerEntityMetadata(
                     entity.entityId,
-                    listOf(EntityData(0, EntityDataTypes.BYTE, commonEntityFlags(entity, invisible))),
+                    listOf(EntityData(0, EntityDataTypes.BYTE, commonEntityFlags(entity, invisibleForViewer = invisible))),
+                )
+            PacketEvents.getAPI().playerManager.sendPacket(player, metadata)
+        }
+    }
+
+    /** Sends a viewer-only glow outline without changing the entity for other players. */
+    fun setEntityGlowingFor(entity: LivingEntity, player: Player, glowing: Boolean) {
+        runOnMainThread {
+            if (!player.isOnline || !entity.isValid) return@runOnMainThread
+            val metadata =
+                WrapperPlayServerEntityMetadata(
+                    entity.entityId,
+                    listOf(EntityData(0, EntityDataTypes.BYTE, commonEntityFlags(entity, glowingForViewer = glowing))),
                 )
             PacketEvents.getAPI().playerManager.sendPacket(player, metadata)
         }
@@ -80,13 +93,19 @@ class PacketEventsHook {
     }
 }
 
-internal fun commonEntityFlags(entity: LivingEntity, invisibleForViewer: Boolean): Byte {
+internal fun commonEntityFlags(
+    entity: LivingEntity,
+    invisibleForViewer: Boolean? = null,
+    glowingForViewer: Boolean? = null,
+): Byte {
     var flags = 0
+    val invisible = invisibleForViewer ?: entity.isInvisible
+    val glowing = glowingForViewer ?: entity.isGlowing
     if (entity.fireTicks > 0 || entity.visualFire == TriState.TRUE) flags = flags or 0x01
     if (entity.isSneaking) flags = flags or 0x02
     if (entity.isSwimming) flags = flags or 0x10
-    if (invisibleForViewer || entity.isInvisible) flags = flags or 0x20
-    if (!invisibleForViewer && entity.isGlowing) flags = flags or 0x40
+    if (invisible) flags = flags or 0x20
+    if (!invisible && glowing) flags = flags or 0x40
     if (entity.isGliding) flags = flags or 0x80
     return flags.toByte()
 }

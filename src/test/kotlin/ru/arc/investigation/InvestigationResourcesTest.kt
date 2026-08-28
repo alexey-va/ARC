@@ -1,6 +1,7 @@
 package ru.arc.investigation
 
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 
@@ -17,6 +18,7 @@ class InvestigationResourcesTest : StringSpec({
         gui shouldContain "choose-verdict: { material: TARGET }"
         gui shouldContain "return-to-foma: { material: EMERALD }"
         gui shouldContain "case-file: { material: BOOK }"
+        gui shouldContain "testimony: { material: PAPER }"
         gui shouldContain "theory-five: { material: LIME_DYE }"
         gui shouldNotContain "customModelData"
         gui shouldNotContain "arc:"
@@ -25,5 +27,14 @@ class InvestigationResourcesTest : StringSpec({
         gui shouldNotContain "confirm:"
         gui shouldNotContain "cancel:"
         gui shouldNotContain "close:"
+    }
+
+    "authored investigations stay away from auction and registry jargon" {
+        val catalog = requireNotNull(javaClass.classLoader.getResource("modules/investigation-cases.yml")).readText()
+        val words = catalog.lowercase().split(Regex("[^\\p{L}]+"))
+
+        words.toSet().intersect(
+            setOf("лот", "лоты", "лотов", "торги", "аукцион", "реестр", "ведомость", "страховой", "полис"),
+        ) shouldBe emptySet()
     }
 })

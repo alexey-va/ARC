@@ -43,7 +43,7 @@ class InvestigationConfig(private val config: Config) {
         require(feeMinor in 1L..MAX_MONEY_MINOR && rewardMinor in (feeMinor + 1L)..MAX_MONEY_MINOR) {
             "Investigation fee and reward must be positive, bounded, and reward must exceed fee"
         }
-        require(duration in Duration.ofSeconds(30)..Duration.ofMinutes(5)) { "Investigation duration must be 30s..5m" }
+        require(duration in Duration.ofSeconds(30)..Duration.ofMinutes(30)) { "Investigation duration must be 30s..30m" }
         require(cooldown in Duration.ofHours(1)..Duration.ofDays(7)) { "Investigation cooldown must be 1h..7d" }
         require(GROUP_PATTERN.matches(contractGroup)) { "Invalid investigation contract group" }
         require(witnessKeys.size in 5..24 && witnessKeys.all(WITNESS_KEY_PATTERN::matches)) {
@@ -98,4 +98,5 @@ enum class InvestigationGuiRole(val configKey: String, val fallback: Material) {
     START("start", Material.EMERALD),
     CONTRACTS("contracts", Material.CHEST),
     CASE_FILE("case-file", Material.BOOK),
+    TESTIMONY("testimony", Material.PAPER),
 }

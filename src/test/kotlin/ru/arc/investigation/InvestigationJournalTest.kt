@@ -96,7 +96,7 @@ class InvestigationJournalTest : StringSpec({
     "schema two narrative snapshots retain the original five witnesses" {
         val story =
             bundledInvestigationCatalogForTest.generatePlot(
-                plotId = "side_gate_switch",
+                plotId = "false_bell",
                 random = Random(7),
                 caseNumber = "А-2002",
             )

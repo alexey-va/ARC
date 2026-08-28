@@ -332,9 +332,8 @@ data class InvestigationCase(
         } ?: legacyDossier()
 
     fun testimony(witness: InvestigationWitness): List<String> =
-        narrative?.testimonies?.get(witness.commandValue)?.lines?.mapIndexed { index, line ->
-            if (index == 0) "<gold>${witness.displayName} <dark_gray>» <gray>$line" else "<dark_gray>  $line"
-        } ?: legacyTestimony(witness)
+        narrative?.testimonies?.get(witness.commandValue)?.lines?.map { line -> "<gray>$line" }
+            ?: legacyTestimony(witness).map(::stripLegacyAttribution)
 
     fun timeline(mask: Int): List<String> =
         narrative?.timeline?.sortedBy(InvestigationTimelineBeat::order)?.map { beat ->
@@ -439,6 +438,9 @@ data class InvestigationCase(
         private val CASE_PATTERN = Regex("[А-Я]-[0-9]{4}")
     }
 }
+
+private fun stripLegacyAttribution(line: String): String =
+    line.replace(Regex("^<[^>]+>[^<]+:</[^>]+>\\s*"), "<gray>")
 
 class InvestigationCaseGenerator internal constructor(
     private val catalog: InvestigationStoryCatalog,

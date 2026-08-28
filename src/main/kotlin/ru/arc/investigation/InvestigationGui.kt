@@ -30,6 +30,14 @@ object InvestigationGui {
         GuiUtils.constructAndShowAsync({ buildVerdicts(player, record) }, player)
     }
 
+    fun openTestimony(
+        player: Player,
+        record: InvestigationJournalRecord,
+        witness: InvestigationWitness,
+    ) {
+        GuiUtils.constructAndShowAsync({ buildTestimony(player, record, witness) }, player)
+    }
+
     internal fun buildHub(
         player: Player,
         latest: InvestigationJournalRecord?,
@@ -41,7 +49,7 @@ object InvestigationGui {
             staticPane(width = 9, height = 3) {
                 item(4, 1) {
                     style(InvestigationGuiRole.START)
-                    display("<green><bold>Взять дело за ${InvestigationModule.money(policy.feeMinor)} 💰")
+                    display("<green><bold>Взять дело за ${InvestigationModule.money(policy.feeMinor)} <white>💰</white>")
                     lore(
                         listOf(
                             "<white>Фома выдаст вам предмет <gold>«Дело»<white>.",
@@ -53,8 +61,8 @@ object InvestigationGui {
                             "<yellow>3. <gray>Соберите хотя бы три показания.",
                             "<yellow>4. <gray>Выберите верную версию событий.",
                             "",
-                            "<gray>Награда: <gold>${InvestigationModule.money(policy.rewardMinor)} 💰",
-                            "<gray>Время: <white>${policy.duration.seconds} секунд",
+                            "<gray>Награда: <gold>${InvestigationModule.money(policy.rewardMinor)} <white>💰</white>",
+                            "<gray>Время: <white>${formatDuration(policy.duration.seconds)}",
                             if (bypassCooldown) {
                                 "<gray>Повтор: <aqua>без ожидания для администратора"
                             } else {
@@ -82,9 +90,9 @@ object InvestigationGui {
         }
 
     internal fun buildCase(player: Player, record: InvestigationJournalRecord): ChestGui =
-        gui(guiConfig.string("case.title", "<dark_gray>Материалы расследования"), 3, player, guiConfig) {
+        gui(guiConfig.string("case.title", "<dark_gray>Материалы расследования"), CASE_ROWS, player, guiConfig) {
             background()
-            staticPane(width = 9, height = 3) {
+            staticPane(width = 9, height = CASE_ROWS) {
                 item(4, 0) {
                     style(InvestigationGuiRole.NEXT_STEP)
                     display("<yellow><bold>Что делать сейчас")
@@ -92,15 +100,15 @@ object InvestigationGui {
                 }
 
                 record.case.witnesses().forEachIndexed { index, witness ->
-                    witnessItem(index * 2, player, record, witness)
+                    witnessItem(index * 2, WITNESS_ROW, player, record, witness)
                 }
 
-                item(1, 2) {
+                item(0, INFO_ROW) {
                     style(InvestigationGuiRole.DOSSIER)
                     display("<gold><bold>${record.case.displayTitle()}")
                     lore(wrapInvestigationLore(record.case.dossier()))
                 }
-                item(4, 2) {
+                item(4, INFO_ROW) {
                     style(InvestigationGuiRole.EVIDENCE)
                     display("<aqua><bold>Хронология и связи")
                     val checks = record.case.crossChecks(record.cluesMask)
@@ -116,7 +124,7 @@ object InvestigationGui {
                         ),
                     )
                 }
-                item(7, 2) {
+                item(8, INFO_ROW) {
                     style(InvestigationGuiRole.RETURN_TO_FOMA)
                     display(
                         if (record.clueCount() >= InvestigationService.MIN_CLUES) {
@@ -151,6 +159,23 @@ object InvestigationGui {
             }
         }
 
+    internal fun buildTestimony(
+        player: Player,
+        record: InvestigationJournalRecord,
+        witness: InvestigationWitness,
+    ): ChestGui =
+        gui(guiConfig.string("testimony.title", "<dark_gray>Показание свидетеля"), 3, player, guiConfig) {
+            background()
+            staticPane(width = 9, height = 3) {
+                item(4, 1) {
+                    style(InvestigationGuiRole.TESTIMONY)
+                    material(Material.matchMaterial(witness.itemMaterial) ?: Material.PAPER)
+                    display("<gold><bold>${witness.displayName}")
+                    lore(wrapInvestigationLore(record.case.testimony(witness)))
+                }
+            }
+        }
+
     internal fun buildVerdicts(player: Player, record: InvestigationJournalRecord): ChestGui =
         gui(guiConfig.string("verdict.title", "<dark_gray>Выберите версию"), 3, player, guiConfig) {
             background()
@@ -179,16 +204,21 @@ object InvestigationGui {
 
     private fun ru.arc.gui.StaticPaneBuilder.witnessItem(
         x: Int,
+        y: Int,
         player: Player,
         record: InvestigationJournalRecord,
         witness: InvestigationWitness,
     ) {
-        item(x, 1) {
+        item(x, y) {
             material(Material.matchMaterial(witness.itemMaterial) ?: Material.PAPER)
             display(if (record.hasClue(witness)) "<green><bold>${witness.displayName}" else "<yellow><bold>${witness.displayName}")
             lore(
                 if (record.hasClue(witness)) {
-                    wrapInvestigationLore(record.case.testimony(witness)) + listOf("", "<green>Показание записано.")
+                    listOf(
+                        "<green>Показание записано.",
+                        "",
+                        "<aqua>Нажмите, чтобы перечитать.",
+                    )
                 } else {
                     listOf(
                         "<gray>Где искать: <white>${witness.locationHint}<gray>.",
@@ -198,7 +228,13 @@ object InvestigationGui {
                     )
                 },
             )
-            onClick { player.sendActionBar(TextUtil.mm("<yellow>Найдите свидетеля лично: <white>${witness.locationHint}<yellow>.")) }
+            onClick {
+                if (record.hasClue(witness)) {
+                    openTestimony(player, record, witness)
+                } else {
+                    player.sendActionBar(TextUtil.mm("<yellow>Найдите свидетеля лично: <white>${witness.locationHint}<yellow>."))
+                }
+            }
         }
     }
 
@@ -281,8 +317,16 @@ object InvestigationGui {
     private fun timeLine(record: InvestigationJournalRecord): String {
         val remainingMillis = (requireNotNull(record.expiresAt) - Instant.now().toEpochMilli()).coerceAtLeast(0L)
         val seconds = (remainingMillis + 999L) / 1_000L
-        return if (seconds > 20L) "<yellow>Осталось: <white>${seconds}с" else "<red><bold>Осталось: ${seconds}с"
+        val formatted = "%d:%02d".format(seconds / 60L, seconds % 60L)
+        return if (seconds > 20L) "<yellow>Осталось: <white>$formatted" else "<red><bold>Осталось: $formatted"
     }
+
+    private fun formatDuration(seconds: Long): String =
+        when {
+            seconds % 60L == 0L -> "${seconds / 60L} мин"
+            seconds >= 60L -> "${seconds / 60L} мин ${seconds % 60L} сек"
+            else -> "$seconds сек"
+        }
 
     private fun formatCooldown(minutes: Long): String {
         val hours = minutes / 60L
@@ -302,6 +346,10 @@ object InvestigationGui {
             InvestigationGuiRole.THEORY_FOUR,
             InvestigationGuiRole.THEORY_FIVE,
         )
+
+    internal const val CASE_ROWS = 5
+    internal const val WITNESS_ROW = 2
+    internal const val INFO_ROW = 4
 }
 
 private val MINI_MESSAGE_TAG = Regex("<[^>]+>")
@@ -316,11 +364,12 @@ internal fun wrapInvestigationLore(
         val wrapped = mutableListOf<String>()
         var current = StringBuilder()
         var visible = 0
+        var activeColor = "<gray>"
         line.trim().split(Regex("\\s+")).forEach { word ->
             val wordLength = word.replace(MINI_MESSAGE_TAG, "").length
             if (visible > 0 && visible + 1 + wordLength > maxVisibleCharacters) {
                 wrapped += current.toString()
-                current = StringBuilder("<dark_gray>  ").append(word)
+                current = StringBuilder(activeColor).append("  ").append(word)
                 visible = 2 + wordLength
             } else {
                 if (visible > 0) {
@@ -330,7 +379,11 @@ internal fun wrapInvestigationLore(
                 current.append(word)
                 visible += wordLength
             }
+            COLOR_TAG.findAll(word).lastOrNull()?.let { match -> activeColor = match.value }
         }
         if (current.isNotEmpty()) wrapped += current.toString()
         wrapped
     }
+
+private val COLOR_TAG =
+    Regex("<(?:black|dark_blue|dark_green|dark_aqua|dark_red|dark_purple|gold|gray|dark_gray|blue|green|aqua|red|light_purple|yellow|white|#[0-9a-fA-F]{6})>")

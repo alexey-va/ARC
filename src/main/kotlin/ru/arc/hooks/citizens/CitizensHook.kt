@@ -7,6 +7,7 @@ import net.citizensnpcs.trait.HologramTrait
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.entity.EntityType
+import org.bukkit.entity.LivingEntity
 import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
 import ru.arc.util.Logging.debug
@@ -71,6 +72,9 @@ class CitizensHook : AutoCloseable {
             .minByOrNull { it.third }
             ?.let { (npc, location) -> NearbyNpc(npc.id, npc.name, location.clone()) }
     }
+
+    fun livingEntity(id: Int): LivingEntity? =
+        CitizensAPI.getNPCRegistry().getById(id)?.entity as? LivingEntity
 
     fun deleteWithNames(npcNames: Set<String>) {
         CitizensAPI.getNPCRegistry().forEach { npc ->
