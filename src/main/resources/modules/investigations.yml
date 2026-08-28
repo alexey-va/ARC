@@ -15,7 +15,7 @@ scene:
 challenge:
   fee: "100.00"
   reward: "300.00"
-  duration: 150s
+  duration: 240s
   cooldown: 20h
 
 contracts:

@@ -70,7 +70,13 @@ object InvestigationModule : PluginModule {
         }
         when (val result = currentService.start(player.uniqueId)) {
             is InvestigationStartResult.Started -> {
-                player.sendMessage(TextUtil.mm("<gold>Фома:</gold> <gray>Дело оплачено. У вас <white>${currentConfig.duration.seconds} секунд<gray>: опросите хотя бы трёх свидетелей."))
+                player.sendMessage(
+                    TextUtil.mm(
+                        "<gold>Фома:</gold> <gray>Дело оплачено. <white>${result.record.case.displayTitle()}</white>. " +
+                            "У вас <white>${currentConfig.duration.seconds} секунд<gray>.",
+                    ),
+                )
+                player.sendMessage(TextUtil.mm("<yellow>Нужно установить:</yellow> <white>${result.record.case.question()}"))
                 InvestigationGui.openCase(player, result.record)
             }
             is InvestigationStartResult.AlreadyActive -> InvestigationGui.openCase(player, result.record)
@@ -97,6 +103,11 @@ object InvestigationModule : PluginModule {
                 if (result.firstRead) {
                     result.lines.forEach { player.sendMessage(TextUtil.mm(it)) }
                     val count = result.record.clueCount()
+                    val previousMask = result.record.cluesMask and witness.bit.inv()
+                    val previousChecks = result.record.case.crossChecks(previousMask).toSet()
+                    result.record.case.crossChecks(result.record.cluesMask)
+                        .filterNot(previousChecks::contains)
+                        .forEach { player.sendMessage(TextUtil.mm("<light_purple>Сверка:</light_purple> $it")) }
                     player.sendActionBar(TextUtil.mm("<green>Показание внесено: <white>$count/5<green>."))
                 } else {
                     player.sendActionBar(TextUtil.mm("<gray>Это показание уже записано в ведомости."))
@@ -116,11 +127,11 @@ object InvestigationModule : PluginModule {
         when (val result = currentService.submitVerdict(player.uniqueId, verdict)) {
             is InvestigationVerdictResult.Success -> {
                 player.closeInventory()
-                player.sendMessage(TextUtil.mm("<green><bold>Вердикт принят.</bold> <gray>Бюро выплатило <gold>${money(result.record.rewardMinor)} <white>💰</white><gray>."))
+                sendResolution(player, result.record, true)
             }
             is InvestigationVerdictResult.Wrong -> {
                 player.closeInventory()
-                player.sendMessage(TextUtil.mm("<red><bold>Вердикт неверен.</bold> <gray>Правильная зацепка: <white>${verdictHint(result.record.case.verdict)}<gray>."))
+                sendResolution(player, result.record, false)
             }
             is InvestigationVerdictResult.NeedClues -> player.sendActionBar(TextUtil.mm("<yellow>Нужно хотя бы три показания. Сейчас: <white>${result.collected}/5<yellow>."))
             is InvestigationVerdictResult.Expired -> timeout(player)
@@ -205,12 +216,21 @@ object InvestigationModule : PluginModule {
         return if (hours > 0L) "${hours}ч ${minutes}м" else "${minutes.coerceAtLeast(1L)}м"
     }
 
-    private fun verdictHint(verdict: InvestigationVerdict): String =
-        when (verdict) {
-            InvestigationVerdict.AMOUNT_MISMATCH -> "суммы в документах не сходились"
-            InvestigationVerdict.FORGED_SEAL -> "один признак печати не совпал с реестром"
-            InvestigationVerdict.CARGO_SUBSTITUTION -> "содержимое или количество груза не совпало с накладной"
-            InvestigationVerdict.DUPLICATE_ENTRY -> "одна запись реестра повторяла уже проведённое дело"
-            InvestigationVerdict.CLEAN -> "подозрительная деталь была уловкой, а документы совпали"
+    private fun sendResolution(
+        player: Player,
+        record: InvestigationJournalRecord,
+        success: Boolean,
+    ) {
+        val conclusion = record.case.conclusion(record.case.verdict)
+        val heading = if (success) "<green><bold>Вердикт принят.</bold>" else "<red><bold>Вердикт неверен.</bold>"
+        player.sendMessage(TextUtil.mm("$heading <gold>${conclusion.title}</gold>"))
+        conclusion.explanation.forEach { player.sendMessage(TextUtil.mm("<gray>• $it")) }
+        if (success) {
+            player.sendMessage(
+                TextUtil.mm(
+                    "<gray>Бюро выплатило <gold>${money(record.rewardMinor)} <white>💰</white><gray> за точную реконструкцию.",
+                ),
+            )
         }
+    }
 }

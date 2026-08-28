@@ -2,6 +2,11 @@ package ru.arc.investigation
 
 import kotlin.random.Random
 
+/**
+ * Stable persisted choice slots. The enum names predate narrative cases and
+ * remain unchanged so open journal records from the first live revision load.
+ * New cases put a case-specific reconstruction into every slot.
+ */
 enum class InvestigationVerdict(val commandValue: String) {
     AMOUNT_MISMATCH("amount"),
     FORGED_SEAL("seal"),
@@ -15,12 +20,16 @@ enum class InvestigationVerdict(val commandValue: String) {
     }
 }
 
-enum class InvestigationWitness(val commandValue: String, val bit: Int) {
-    STAVR("stavr", 1),
-    PROKHOR("prokhor", 2),
-    GORDEY("gordey", 4),
-    AGATA("agata", 8),
-    TIKHON("tikhon", 16),
+enum class InvestigationWitness(
+    val commandValue: String,
+    val bit: Int,
+    val displayName: String,
+) {
+    STAVR("stavr", 1, "Глашатай Ставр"),
+    PROKHOR("prokhor", 2, "Архивариус Прохор"),
+    GORDEY("gordey", 4, "Пристав Гордей"),
+    AGATA("agata", 8, "Почерковед Агата"),
+    TIKHON("tikhon", 16, "Счётовод Тихон"),
     ;
 
     companion object {
@@ -52,6 +61,125 @@ enum class LedgerTrap {
     DUPLICATE,
 }
 
+data class InvestigationTimelineBeat(
+    val order: Int,
+    val time: String,
+    val witness: String,
+    val event: String,
+) {
+    fun validated(): InvestigationTimelineBeat {
+        require(order in 1..5) { "Invalid investigation timeline order" }
+        require(InvestigationWitness.parse(witness) != null) { "Invalid investigation timeline witness" }
+        validateNarrativeText(time, 40)
+        validateNarrativeText(event, 120)
+        return this
+    }
+}
+
+data class InvestigationTestimony(
+    val lines: List<String>,
+) {
+    fun validated(): InvestigationTestimony {
+        require(lines.size in 2..4) { "Investigation testimony must have 2..4 lines" }
+        lines.forEach { validateNarrativeText(it, 150) }
+        return this
+    }
+}
+
+data class InvestigationCrossCheck(
+    val first: String,
+    val second: String,
+    val insight: String,
+) {
+    fun validated(): InvestigationCrossCheck {
+        val firstWitness = requireNotNull(InvestigationWitness.parse(first)) { "Invalid first cross-check witness" }
+        val secondWitness = requireNotNull(InvestigationWitness.parse(second)) { "Invalid second cross-check witness" }
+        require(firstWitness != secondWitness) { "A cross-check needs two witnesses" }
+        validateNarrativeText(insight, 140)
+        return this
+    }
+
+    fun unlocked(mask: Int): Boolean {
+        val firstWitness = requireNotNull(InvestigationWitness.parse(first))
+        val secondWitness = requireNotNull(InvestigationWitness.parse(second))
+        return mask and firstWitness.bit != 0 && mask and secondWitness.bit != 0
+    }
+
+    fun pairKey(): Set<String> = setOf(first, second)
+}
+
+data class InvestigationConclusion(
+    val title: String,
+    val explanation: List<String>,
+) {
+    fun validated(): InvestigationConclusion {
+        validateNarrativeText(title, 72)
+        require(explanation.size in 1..3) { "Investigation conclusion must have 1..3 explanation lines" }
+        explanation.forEach { validateNarrativeText(it, 140) }
+        return this
+    }
+}
+
+data class InvestigationNarrative(
+    val schemaVersion: Int,
+    val plotId: String,
+    val title: String,
+    val briefing: List<String>,
+    val question: String,
+    val suspiciousLead: String,
+    val timeline: List<InvestigationTimelineBeat>,
+    val testimonies: Map<String, InvestigationTestimony>,
+    val crossChecks: List<InvestigationCrossCheck>,
+    val conclusions: Map<String, InvestigationConclusion>,
+) {
+    fun validated(correct: InvestigationVerdict): InvestigationNarrative {
+        require(schemaVersion == CURRENT_SCHEMA) { "Unsupported investigation narrative schema" }
+        require(PLOT_ID.matches(plotId)) { "Invalid investigation plot id" }
+        validateNarrativeText(title, 72)
+        require(briefing.size in 2..4) { "Investigation briefing must have 2..4 lines" }
+        briefing.forEach { validateNarrativeText(it, 140) }
+        validateNarrativeText(question, 140)
+        validateNarrativeText(suspiciousLead, 140)
+
+        require(timeline.size == InvestigationWitness.entries.size) { "Investigation timeline must have five events" }
+        timeline.forEach(InvestigationTimelineBeat::validated)
+        require(timeline.map(InvestigationTimelineBeat::order).toSet() == (1..5).toSet()) { "Investigation timeline order is incomplete" }
+        require(timeline.map(InvestigationTimelineBeat::witness).toSet() == witnessKeys()) { "Every witness must own one timeline event" }
+
+        require(testimonies.keys == witnessKeys()) { "Investigation testimony roster is incomplete" }
+        testimonies.values.forEach(InvestigationTestimony::validated)
+
+        require(crossChecks.size >= InvestigationWitness.entries.size) { "Investigation needs at least five cross-checks" }
+        crossChecks.forEach(InvestigationCrossCheck::validated)
+        require(crossChecks.map(InvestigationCrossCheck::pairKey).distinct().size == crossChecks.size) { "Investigation cross-check pairs must be unique" }
+        require(anyThreeWitnessesUnlockCrossCheck()) { "Every three-witness path must unlock a cross-check" }
+
+        require(conclusions.keys == verdictKeys()) { "Investigation must offer five reconstructions" }
+        conclusions.values.forEach(InvestigationConclusion::validated)
+        require(conclusions.values.map(InvestigationConclusion::title).distinct().size == conclusions.size) { "Investigation conclusions must be distinct" }
+        require(conclusions.containsKey(correct.commandValue)) { "Correct investigation reconstruction is missing" }
+        return this
+    }
+
+    private fun anyThreeWitnessesUnlockCrossCheck(): Boolean {
+        val witnesses = InvestigationWitness.entries
+        for (first in witnesses.indices) {
+            for (second in first + 1 until witnesses.size) {
+                for (third in second + 1 until witnesses.size) {
+                    val mask = witnesses[first].bit or witnesses[second].bit or witnesses[third].bit
+                    if (crossChecks.none { it.unlocked(mask) }) return false
+                }
+            }
+        }
+        return true
+    }
+
+    companion object {
+        const val CURRENT_SCHEMA = 2
+        private val PLOT_ID = Regex("[a-z0-9][a-z0-9_-]{2,47}")
+    }
+}
+
 /** Immutable evidence generated before any money is withdrawn. */
 data class InvestigationCase(
     val caseNumber: String,
@@ -74,7 +202,7 @@ data class InvestigationCase(
     val stavrVariant: Int,
     val prokhorVariant: Int,
     val gordeyVariant: Int,
-    /** Nullable fields keep journal records written by the first live revision readable. */
+    /** Nullable fields keep journal records written by earlier live revisions readable. */
     val manifestGoods: String? = null,
     val observedGoods: String? = null,
     val manifestQuantity: Int? = null,
@@ -85,6 +213,7 @@ data class InvestigationCase(
     val ledgerTrap: LedgerTrap? = null,
     val agataVariant: Int = 0,
     val tikhonVariant: Int = 0,
+    val narrative: InvestigationNarrative? = null,
 ) {
     val expectedTotal: Int get() = Math.multiplyExact(quantity, unitPrice)
     val declaredGoods: String get() = manifestGoods ?: goods
@@ -98,15 +227,99 @@ data class InvestigationCase(
     fun validated(): InvestigationCase {
         require(CASE_PATTERN.matches(caseNumber)) { "Invalid investigation case number" }
         listOf(seller, goods, registeredSeal, documentSeal, registeredWax, documentWax, registeredInitials, documentInitials, oddity)
-            .forEach { require(it.isNotBlank() && it.length <= 96 && it.none(Char::isISOControl)) { "Invalid investigation text" } }
+            .forEach { validateLegacyText(it) }
         require(quantity in 8..96 && unitPrice in 3..24) { "Invalid investigation arithmetic" }
         require(announcedTotal > 0 && archiveTotal > 0) { "Invalid investigation totals" }
-        listOf(declaredGoods, inspectedGoods, entryReference)
-            .forEach { require(it.isNotBlank() && it.length <= 96 && it.none(Char::isISOControl)) { "Invalid investigation text" } }
+        listOf(declaredGoods, inspectedGoods, entryReference).forEach { validateLegacyText(it) }
         require(declaredQuantity in 8..96 && inspectedQuantity in 1..128) { "Invalid cargo quantity" }
         require(duplicateReference == null || CASE_PATTERN.matches(duplicateReference)) { "Invalid duplicate reference" }
         require(stavrVariant in 0..3 && prokhorVariant in 0..3 && gordeyVariant in 0..3) { "Invalid witness variant" }
         require(agataVariant in 0..3 && tikhonVariant in 0..3) { "Invalid specialist variant" }
+
+        if (narrative != null) {
+            narrative.validated(verdict)
+        } else {
+            validateLegacyEvidence()
+        }
+        return this
+    }
+
+    fun fingerprint(): String =
+        if (narrative != null) {
+            listOf(
+                narrative.plotId,
+                narrative.title,
+                seller,
+                goods,
+                narrative.briefing.joinToString("/"),
+                narrative.timeline.joinToString("/") { it.event },
+                narrative.conclusions.values.joinToString("/") { it.title },
+                verdict,
+            ).joinToString("|")
+        } else {
+            listOf(
+                seller,
+                goods,
+                quantity,
+                unitPrice,
+                announcedTotal,
+                archiveTotal,
+                registeredSeal,
+                documentSeal,
+                registeredWax,
+                documentWax,
+                registeredInitials,
+                documentInitials,
+                oddity,
+                amountTrap,
+                sealTrap,
+                declaredGoods,
+                inspectedGoods,
+                declaredQuantity,
+                inspectedQuantity,
+                entryReference,
+                duplicateReference,
+                effectiveCargoTrap,
+                effectiveLedgerTrap,
+                verdict,
+            ).joinToString("|")
+        }
+
+    fun displayTitle(): String = narrative?.title ?: "Ведомость $caseNumber"
+
+    fun question(): String = narrative?.question ?: "Какой из документов содержит решающее расхождение?"
+
+    fun dossier(): List<String> =
+        narrative?.let { story ->
+            listOf("<gold><bold>Дело $caseNumber</bold> <dark_gray>· <white>${story.title}") +
+                story.briefing.map { "<gray>$it" } +
+                listOf("", "<yellow>Вопрос: <white>${story.question}", "<dark_gray>Зацепка: ${story.suspiciousLead}")
+        } ?: legacyDossier()
+
+    fun testimony(witness: InvestigationWitness): List<String> =
+        narrative?.testimonies?.get(witness.commandValue)?.lines?.mapIndexed { index, line ->
+            if (index == 0) "<gold>${witness.displayName} <dark_gray>» <gray>$line" else "<dark_gray>  $line"
+        } ?: legacyTestimony(witness)
+
+    fun timeline(mask: Int): List<String> =
+        narrative?.timeline?.sortedBy(InvestigationTimelineBeat::order)?.map { beat ->
+            val witness = requireNotNull(InvestigationWitness.parse(beat.witness))
+            if (mask and witness.bit != 0) {
+                "<gray>${beat.time} <dark_gray>• <white>${beat.event}"
+            } else {
+                "<dark_gray>${beat.time} • событие ещё не установлено"
+            }
+        } ?: listOf("<dark_gray>Старое дело не содержит отдельной хронологии.")
+
+    fun crossChecks(mask: Int): List<String> =
+        narrative?.crossChecks?.filter { it.unlocked(mask) }?.map { "<green>✔ <gray>${it.insight}" }.orEmpty()
+
+    fun totalCrossChecks(): Int = narrative?.crossChecks?.size ?: 0
+
+    fun conclusion(verdict: InvestigationVerdict): InvestigationConclusion =
+        narrative?.conclusions?.get(verdict.commandValue) ?: legacyConclusion(verdict)
+
+    private fun validateLegacyEvidence() {
         when (verdict) {
             InvestigationVerdict.AMOUNT_MISMATCH -> {
                 require(amountTrap != AmountTrap.NONE && sealTrap == SealTrap.NONE && effectiveCargoTrap == CargoTrap.NONE && effectiveLedgerTrap == LedgerTrap.NONE) { "Amount case has invalid traps" }
@@ -124,13 +337,9 @@ data class InvestigationCase(
                 require(announcedTotal == expectedTotal && archiveTotal == expectedTotal) { "Seal case must have exact totals" }
                 require(cargoMatches() && duplicateReference == null) { "Seal case has conflicting evidence" }
                 require(!sealMatches()) { "Seal case must contain one forged field" }
-                require(
-                    listOf(
-                        registeredSeal != documentSeal,
-                        registeredWax != documentWax,
-                        registeredInitials != documentInitials,
-                    ).count { it } == 1,
-                ) { "Seal case must contain exactly one decisive mismatch" }
+                require(listOf(registeredSeal != documentSeal, registeredWax != documentWax, registeredInitials != documentInitials).count { it } == 1) {
+                    "Seal case must contain exactly one decisive mismatch"
+                }
             }
 
             InvestigationVerdict.CARGO_SUBSTITUTION -> {
@@ -153,38 +362,9 @@ data class InvestigationCase(
                 }
             }
         }
-        return this
     }
 
-    fun fingerprint(): String =
-        listOf(
-            seller,
-            goods,
-            quantity,
-            unitPrice,
-            announcedTotal,
-            archiveTotal,
-            registeredSeal,
-            documentSeal,
-            registeredWax,
-            documentWax,
-            registeredInitials,
-            documentInitials,
-            oddity,
-            amountTrap,
-            sealTrap,
-            declaredGoods,
-            inspectedGoods,
-            declaredQuantity,
-            inspectedQuantity,
-            entryReference,
-            duplicateReference,
-            effectiveCargoTrap,
-            effectiveLedgerTrap,
-            verdict,
-        ).joinToString("|")
-
-    fun dossier(): List<String> =
+    private fun legacyDossier(): List<String> =
         listOf(
             "<gold><bold>Дело $caseNumber</bold> <dark_gray>· <white>$seller",
             "<gray>Накладная: <white>$declaredQuantity × $declaredGoods <gray>по <white>$unitPrice <gray>монет.",
@@ -193,47 +373,22 @@ data class InvestigationCase(
             "<dark_gray>Странность: $oddity",
         )
 
-    fun testimony(witness: InvestigationWitness): List<String> =
+    private fun legacyTestimony(witness: InvestigationWitness): List<String> =
         when (witness) {
-            InvestigationWitness.STAVR ->
-                when (stavrVariant) {
-                    0 -> listOf("<gold>Ставр:</gold> <gray>Я объявлял: <white>$declaredQuantity × $unitPrice<gray>, итог <white>$announcedTotal<gray>.", "<dark_gray>$oddity")
-                    1 -> listOf("<gold>Ставр:</gold> <gray>С помоста звучало: <white>$declaredGoods, $declaredQuantity штук, $announcedTotal монет<gray>.", "<dark_gray>$oddity")
-                    2 -> listOf("<gold>Ставр:</gold> <gray>Цена была <white>$unitPrice<gray> за штуку; названный итог — <white>$announcedTotal<gray>.", "<dark_gray>$oddity")
-                    else -> listOf("<gold>Ставр:</gold> <gray>Продавец подтвердил партию <white>$declaredQuantity × $declaredGoods<gray>.", "<dark_gray>А вот странность помню: $oddity")
-                }
+            InvestigationWitness.STAVR -> listOf("<gold>Ставр:</gold> <gray>Я объявлял: <white>$declaredQuantity × $unitPrice<gray>, итог <white>$announcedTotal<gray>.", "<dark_gray>$oddity")
+            InvestigationWitness.PROKHOR -> listOf("<aqua>Прохор:</aqua> <gray>В архивной копии итог <white>$archiveTotal<gray>.", "<gray>Реестр печатей: <white>$registeredWax, $registeredSeal, $registeredInitials<gray>.")
+            InvestigationWitness.GORDEY -> listOf("<red>Гордей:</red> <gray>На листе: <white>$documentWax, $documentSeal, $documentInitials<gray>.", "<dark_gray>Бумага цела; $oddity")
+            InvestigationWitness.AGATA -> listOf("<light_purple>Агата:</light_purple> <gray>Сверила почерк, воск и оттиск.", "<gray>На листе стоят инициалы <white>$documentInitials<gray>.")
+            InvestigationWitness.TIKHON -> listOf("<blue>Тихон:</blue> <gray>На складе: <white>$inspectedQuantity × $inspectedGoods<gray>.", "<gray>Накладная требует <white>$declaredQuantity × $declaredGoods<gray>.")
+        }
 
-            InvestigationWitness.PROKHOR ->
-                when (prokhorVariant) {
-                    0 -> listOf("<aqua>Прохор:</aqua> <gray>В архивной копии итог <white>$archiveTotal<gray>.", "<gray>Реестр печатей: <white>$registeredWax, $registeredSeal, $registeredInitials<gray>.")
-                    1 -> listOf("<aqua>Прохор:</aqua> <gray>Карточка дела даёт <white>$archiveTotal монет<gray> и знак <white>$registeredSeal<gray>.", "<gray>Воск <white>$registeredWax<gray>, инициалы <white>$registeredInitials<gray>.")
-                    2 -> listOf("<aqua>Прохор:</aqua> <gray>Сверил два корешка: сумма <white>$archiveTotal<gray>.", "<gray>Допущенная печать — <white>$registeredWax / $registeredSeal / $registeredInitials<gray>.")
-                    else -> listOf("<aqua>Прохор:</aqua> <gray>Карточка <white>$entryReference<gray> зарегистрирована на <white>$archiveTotal монет<gray>.", duplicateReference?.let { "<red>Но такой же корешок уже лежит в деле <white>$it<red>." } ?: "<gray>Повторной карточки в этом окне нет.")
-                }
-
-            InvestigationWitness.GORDEY ->
-                when (gordeyVariant) {
-                    0 -> listOf("<red>Гордей:</red> <gray>На самом листе вижу: <white>$documentWax, $documentSeal, $documentInitials<gray>.", "<dark_gray>Бумага цела; $oddity")
-                    1 -> listOf("<red>Гордей:</red> <gray>Под лампой проявились <white>$documentSeal<gray> и подпись <white>$documentInitials<gray>.", "<gray>Воск <white>$documentWax<gray>. <dark_gray>$oddity")
-                    2 -> listOf("<red>Гордей:</red> <gray>Оттиск на ведомости: <white>$documentWax / $documentSeal / $documentInitials<gray>.", "<dark_gray>Следов переклейки нет; $oddity")
-                    else -> listOf("<red>Гордей:</red> <gray>Лист не вскрывали. На нём <white>$documentWax, $documentSeal, $documentInitials<gray>.", "<dark_gray>Подозрительно выглядит другое: $oddity")
-                }
-
-            InvestigationWitness.AGATA ->
-                when (agataVariant) {
-                    0 -> listOf("<light_purple>Агата:</light_purple> <gray>Почерк и нажим совпадают с образцом <white>$registeredInitials<gray>.", "<gray>На листе стоят инициалы <white>$documentInitials<gray>.")
-                    1 -> listOf("<light_purple>Агата:</light_purple> <gray>Под лупой воск выглядит как <white>$documentWax<gray>.", "<gray>В реестре для этого окна указан <white>$registeredWax<gray>.")
-                    2 -> listOf("<light_purple>Агата:</light_purple> <gray>Контур документа — <white>$documentSeal<gray>; эталон — <white>$registeredSeal<gray>.", "<dark_gray>Свечной след на полях к оттиску не относится.")
-                    else -> listOf("<light_purple>Агата:</light_purple> <gray>Сверка трёх признаков: <white>$documentWax / $documentSeal / $documentInitials<gray>.", "<gray>Эталон: <white>$registeredWax / $registeredSeal / $registeredInitials<gray>.")
-                }
-
-            InvestigationWitness.TIKHON ->
-                when (tikhonVariant) {
-                    0 -> listOf("<blue>Тихон:</blue> <gray>На складе пересчитано: <white>$inspectedQuantity × $inspectedGoods<gray>.", "<gray>Накладная требует <white>$declaredQuantity × $declaredGoods<gray>.")
-                    1 -> listOf("<blue>Тихон:</blue> <gray>Бирки груза читаются как <white>$inspectedGoods<gray>, мест <white>$inspectedQuantity<gray>.", duplicateReference?.let { "<yellow>Номер ещё встречается в карточке <white>$it<yellow>." } ?: "<gray>Другого корешка с этим номером нет.")
-                    2 -> listOf("<blue>Тихон:</blue> <gray>Приёмка дала <white>$inspectedQuantity<gray> мест; в ведомости <white>$declaredQuantity<gray>.", "<gray>Содержимое: <white>$inspectedGoods<gray>.")
-                    else -> listOf("<blue>Тихон:</blue> <gray>Груз и реестр связаны кодом <white>$entryReference<gray>.", duplicateReference?.let { "<red>Этот код уже связан с делом <white>$it<red>." } ?: "<gray>Связь единственная.")
-                }
+    private fun legacyConclusion(verdict: InvestigationVerdict): InvestigationConclusion =
+        when (verdict) {
+            InvestigationVerdict.AMOUNT_MISMATCH -> InvestigationConclusion("Ошибка в сумме", listOf("Цифры ведомости не сходятся."))
+            InvestigationVerdict.FORGED_SEAL -> InvestigationConclusion("Поддельная печать", listOf("Один признак печати не из реестра."))
+            InvestigationVerdict.CARGO_SUBSTITUTION -> InvestigationConclusion("Подмена груза", listOf("Содержимое или число мест подменено."))
+            InvestigationVerdict.DUPLICATE_ENTRY -> InvestigationConclusion("Повторная запись", listOf("Один груз провели по реестру дважды."))
+            InvestigationVerdict.CLEAN -> InvestigationConclusion("Сделка чиста", listOf("Подозрительная деталь была уловкой."))
         }
 
     private fun sealMatches(): Boolean =
@@ -251,7 +406,7 @@ object InvestigationCaseGenerator {
         random: Random,
         previous: InvestigationCase? = null,
     ): InvestigationCase {
-        repeat(12) {
+        repeat(24) {
             val generated = generateOnce(random)
             if (previous == null || generated.fingerprint() != previous.fingerprint()) return generated
         }
@@ -259,98 +414,46 @@ object InvestigationCaseGenerator {
     }
 
     private fun generateOnce(random: Random): InvestigationCase {
-        val verdict = InvestigationVerdict.entries.random(random)
-        val goods = GOODS.random(random)
+        val caseNumber = randomCaseNumber(random)
+        val generated = InvestigationStoryCatalog.generate(random, caseNumber)
         val quantity = QUANTITIES.random(random)
         val unitPrice = UNIT_PRICES.random(random)
         val expected = quantity * unitPrice
         val seal = SEALS.random(random)
         val wax = WAXES.random(random)
         val initials = INITIALS.random(random)
-        var announced = expected
-        var archive = expected
-        var documentSeal = seal
-        var documentWax = wax
-        var documentInitials = initials
-        var amountTrap = AmountTrap.NONE
-        var sealTrap = SealTrap.NONE
-        var observedGoods = goods
-        var observedQuantity = quantity
-        var cargoTrap = CargoTrap.NONE
-        var ledgerTrap = LedgerTrap.NONE
-        var duplicateReference: String? = null
-
-        when (verdict) {
-            InvestigationVerdict.AMOUNT_MISMATCH -> {
-                amountTrap = listOf(AmountTrap.ARITHMETIC, AmountTrap.ARCHIVE_COPY).random(random)
-                val delta = DELTAS.random(random) * if (random.nextBoolean()) 1 else -1
-                if (amountTrap == AmountTrap.ARITHMETIC) announced = expected + delta else archive = expected + delta
-            }
-
-            InvestigationVerdict.FORGED_SEAL -> {
-                sealTrap = listOf(SealTrap.SYMBOL, SealTrap.WAX, SealTrap.INITIALS).random(random)
-                when (sealTrap) {
-                    SealTrap.SYMBOL -> documentSeal = SEALS.filterNot { it == seal }.random(random)
-                    SealTrap.WAX -> documentWax = WAXES.filterNot { it == wax }.random(random)
-                    SealTrap.INITIALS -> documentInitials = INITIALS.filterNot { it == initials }.random(random)
-                    SealTrap.NONE -> Unit
-                }
-            }
-
-            InvestigationVerdict.CARGO_SUBSTITUTION -> {
-                cargoTrap = listOf(CargoTrap.GOODS, CargoTrap.QUANTITY).random(random)
-                if (cargoTrap == CargoTrap.GOODS) {
-                    observedGoods = GOODS.filterNot { it == goods }.random(random)
-                } else {
-                    observedQuantity = (quantity + listOf(-7, -5, -3, 4, 6, 9).random(random)).coerceAtLeast(1)
-                }
-            }
-
-            InvestigationVerdict.DUPLICATE_ENTRY -> {
-                ledgerTrap = LedgerTrap.DUPLICATE
-            }
-
-            InvestigationVerdict.CLEAN -> Unit
-        }
-
-        val caseNumber = randomCaseNumber(random)
-        if (ledgerTrap == LedgerTrap.DUPLICATE) {
-            do {
-                duplicateReference = randomCaseNumber(random)
-            } while (duplicateReference == caseNumber)
-        }
-
         return InvestigationCase(
             caseNumber = caseNumber,
-            seller = SELLERS.random(random),
-            goods = goods,
+            seller = generated.seller,
+            goods = generated.goods,
             quantity = quantity,
             unitPrice = unitPrice,
-            announcedTotal = announced,
-            archiveTotal = archive,
+            announcedTotal = expected,
+            archiveTotal = expected,
             registeredSeal = seal,
-            documentSeal = documentSeal,
+            documentSeal = seal,
             registeredWax = wax,
-            documentWax = documentWax,
+            documentWax = wax,
             registeredInitials = initials,
-            documentInitials = documentInitials,
-            oddity = ODDITIES.random(random),
-            amountTrap = amountTrap,
-            sealTrap = sealTrap,
-            verdict = verdict,
+            documentInitials = initials,
+            oddity = generated.narrative.suspiciousLead,
+            amountTrap = AmountTrap.NONE,
+            sealTrap = SealTrap.NONE,
+            verdict = generated.correctVerdict,
             stavrVariant = random.nextInt(4),
             prokhorVariant = random.nextInt(4),
             gordeyVariant = random.nextInt(4),
-            manifestGoods = goods,
-            observedGoods = observedGoods,
+            manifestGoods = generated.goods,
+            observedGoods = generated.goods,
             manifestQuantity = quantity,
-            observedQuantity = observedQuantity,
+            observedQuantity = quantity,
             ledgerReference = caseNumber,
-            duplicateReference = duplicateReference,
-            cargoTrap = cargoTrap,
-            ledgerTrap = ledgerTrap,
+            duplicateReference = null,
+            cargoTrap = CargoTrap.NONE,
+            ledgerTrap = LedgerTrap.NONE,
             agataVariant = random.nextInt(4),
             tikhonVariant = random.nextInt(4),
+            narrative = generated.narrative,
         ).validated()
     }
 
@@ -358,25 +461,21 @@ object InvestigationCaseGenerator {
         "${CASE_PREFIXES.random(random)}-${random.nextInt(1000, 10000)}"
 
     private val CASE_PREFIXES = listOf("А", "Б", "В", "Г", "Д", "К", "М", "Р", "Т")
-    private val SELLERS = listOf("купец Авдей", "артель Ладоги", "лавка Кручины", "мастер Путята", "обоз Милована", "гость Нежата", "двор Вышаты", "торговый дом Яромира")
-    private val GOODS = listOf("тюки шёлка", "мешки зерна", "ящики красителя", "связки инструментов", "кипы бумаги", "брусья тиса", "короба пряностей", "листы меди", "мотки шерсти", "бутыли масла")
     private val QUANTITIES = listOf(12, 16, 18, 20, 24, 28, 32, 36, 40, 48, 54, 60, 64, 72, 80, 96)
     private val UNIT_PRICES = listOf(3, 4, 5, 6, 7, 8, 9, 11, 12, 14, 15, 18, 20, 24)
-    private val DELTAS = listOf(7, 9, 11, 13, 17, 21, 25, 27, 33, 40)
     private val SEALS = listOf("сокол", "ключ", "ладья", "дубовый лист", "башня", "волчья голова", "звезда", "молот")
     private val WAXES = listOf("алый воск", "синий воск", "зелёный воск", "чёрный воск", "янтарный воск")
     private val INITIALS = listOf("АК", "БР", "ВЛ", "ГС", "ДМ", "КТ", "НР", "ПФ")
-    private val ODDITIES =
-        listOf(
-            "обоз опоздал к первому колоколу",
-            "два ящика перевязаны новой бечевой",
-            "дата написана бледнее остального текста",
-            "партии выдали новый номер после дождя",
-            "продавец трижды переспросил имя писаря",
-            "на полях остался след от свечного воска",
-            "одна бирка пришита ниткой другого цвета",
-            "свидетель видел груз у боковых ворот",
-            "верхний лист пахнет свежей мятой",
-            "на обложке зачёркнуто старое место хранения",
-        )
+}
+
+private fun witnessKeys(): Set<String> = InvestigationWitness.entries.map(InvestigationWitness::commandValue).toSet()
+
+private fun verdictKeys(): Set<String> = InvestigationVerdict.entries.map(InvestigationVerdict::commandValue).toSet()
+
+private fun validateLegacyText(value: String) {
+    require(value.isNotBlank() && value.length <= 140 && value.none(Char::isISOControl)) { "Invalid investigation text" }
+}
+
+private fun validateNarrativeText(value: String, maxLength: Int) {
+    require(value.isNotBlank() && value.length <= maxLength && value.none(Char::isISOControl)) { "Invalid investigation narrative text" }
 }

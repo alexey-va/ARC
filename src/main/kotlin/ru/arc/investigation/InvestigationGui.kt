@@ -1,7 +1,6 @@
 package ru.arc.investigation
 
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui
-import org.bukkit.Material
 import org.bukkit.entity.Player
 import ru.arc.ARC
 import ru.arc.config.Config
@@ -35,25 +34,30 @@ object InvestigationGui {
             staticPane(width = 9, height = 3) {
                 item(4, 0) {
                     style(InvestigationGuiRole.DOSSIER)
-                    display("<gold><bold>Ревизорская проба")
+                    display("<gold><bold>Как проходит расследование")
                     lore(
                         listOf(
-                            "<gray>Фома выдаст случайное торговое дело.",
-                            "<gray>За <white>${policy.duration.seconds} секунд <gray>сверьте документы",
-                            "<gray>и показания пяти сотрудников бюро.",
+                            "<gray>Вы получите одно торговое происшествие",
+                            "<gray>с вопросом, который нужно разрешить.",
                             "",
-                            "<yellow>Три показания откроют вердикт.",
-                            "<gray>Остальные помогут распознать уловку.",
+                            "<white>1. <gray>Опросите сотрудников лично.",
+                            "<white>2. <gray>Восстановите пять событий по времени.",
+                            "<white>3. <gray>Сверьте показания и найдите уловку.",
+                            "<white>4. <gray>Выберите точную реконструкцию.",
+                            "",
+                            "<yellow>После трёх показаний можно рискнуть.",
+                            "<gray>Пять показаний открывают полную картину.",
                         ),
                     )
                 }
                 item(2, 1) {
                     style(InvestigationGuiRole.START)
-                    display("<green><bold>Взять дело")
+                    display("<green><bold>Взять новое дело")
                     lore(
                         listOf(
                             "<gray>Взнос: <gold>${InvestigationModule.money(policy.feeMinor)} <white>💰",
-                            "<gray>Награда за вердикт: <gold>${InvestigationModule.money(policy.rewardMinor)} <white>💰",
+                            "<gray>Награда: <gold>${InvestigationModule.money(policy.rewardMinor)} <white>💰",
+                            "<gray>На расследование: <white>${policy.duration.seconds} секунд",
                             "<gray>Повтор: <white>${formatCooldown(policy.cooldown.toMinutes())}",
                             "",
                             cooldownLine(latest),
@@ -67,10 +71,10 @@ object InvestigationGui {
                     display("<aqua><bold>Заказы бюро")
                     lore(
                         listOf(
-                            "<gray>Бюро покупает чернила, книги",
-                            "<gray>и золотые слитки по повышенной ставке.",
+                            "<gray>Поставляйте бюро книги, чернила",
+                            "<gray>и золото по отдельным контрактам.",
                             "",
-                            "<aqua>Открыть книгу контрактов.",
+                            "<aqua>Открыть книгу заказов.",
                         ),
                     )
                     onClick { InvestigationModule.openContracts(player) }
@@ -79,40 +83,79 @@ object InvestigationGui {
         }
 
     internal fun buildCase(player: Player, record: InvestigationJournalRecord): ChestGui =
-        gui(guiConfig.string("case.title", "<dark_gray>Ревизорская проба"), 4, player, guiConfig) {
+        gui(guiConfig.string("case.title", "<dark_gray>Материалы расследования"), 5, player, guiConfig) {
             background()
-            staticPane(width = 9, height = 4) {
+            staticPane(width = 9, height = 5) {
                 item(4, 0) {
                     style(InvestigationGuiRole.DOSSIER)
-                    display("<gold><bold>Ведомость ${record.case.caseNumber}")
-                    lore(record.case.dossier() + listOf("", timeLine(record), "<gray>Показания: <white>${record.clueCount()}/5"))
+                    display("<gold><bold>${record.case.displayTitle()}")
+                    lore(wrapInvestigationLore(record.case.dossier()))
                 }
-
-                witnessItem(0, player, record, InvestigationWitness.STAVR, InvestigationGuiRole.STAVR, "Глашатай Ставр", "стол у входа")
-                witnessItem(2, player, record, InvestigationWitness.PROKHOR, InvestigationGuiRole.PROKHOR, "Архивариус Прохор", "стол у входа")
-                witnessItem(4, player, record, InvestigationWitness.GORDEY, InvestigationGuiRole.GORDEY, "Пристав Гордей", "патруль первого этажа")
-                witnessItem(6, player, record, InvestigationWitness.AGATA, InvestigationGuiRole.AGATA, "Почерковед Агата", "второй этаж")
-                witnessItem(8, player, record, InvestigationWitness.TIKHON, InvestigationGuiRole.TIKHON, "Счётовод Тихон", "второй этаж")
-
-                verdictItem(0, player, record, InvestigationVerdict.AMOUNT_MISMATCH, InvestigationGuiRole.AMOUNT, "Ошибка в сумме", "Цифры ведомости не сходятся.")
-                verdictItem(2, player, record, InvestigationVerdict.FORGED_SEAL, InvestigationGuiRole.SEAL, "Поддельная печать", "Знак, воск или подпись не из реестра.")
-                verdictItem(4, player, record, InvestigationVerdict.CARGO_SUBSTITUTION, InvestigationGuiRole.CARGO, "Подмена груза", "Содержимое или число мест подменено.")
-                verdictItem(6, player, record, InvestigationVerdict.DUPLICATE_ENTRY, InvestigationGuiRole.DUPLICATE, "Повторная запись", "Один груз проведён по реестру дважды.")
-                verdictItem(8, player, record, InvestigationVerdict.CLEAN, InvestigationGuiRole.CLEAN, "Сделка чиста", "Подозрительная деталь была уловкой.")
-
-                item(4, 3) {
-                    material(Material.CLOCK)
-                    display("<yellow><bold>Правило бюро")
+                item(8, 0) {
+                    style(InvestigationGuiRole.STATUS)
+                    display("<yellow><bold>Ход расследования")
                     lore(
                         listOf(
-                            "<gray>После трёх показаний можно рискнуть.",
-                            "<gray>Ошибочный вердикт сразу закрывает дело.",
-                            "<gray>Пять показаний позволяют сверить сумму,",
-                            "<gray>печать, груз и записи реестра.",
+                            timeLine(record),
+                            "<gray>Показания: <white>${record.clueCount()}/5",
+                            "<gray>Сверки: <white>${record.case.crossChecks(record.cluesMask).size}/${record.case.totalCrossChecks()}",
+                            "",
+                            if (record.clueCount() >= InvestigationService.MIN_CLUES) {
+                                "<green>Можно вынести вердикт."
+                            } else {
+                                "<dark_gray>Нужно ещё ${InvestigationService.MIN_CLUES - record.clueCount()} показания."
+                            },
                         ),
                     )
                 }
-                item(8, 3) {
+
+                witnessItem(0, player, record, InvestigationWitness.STAVR, InvestigationGuiRole.STAVR, "стол у входа")
+                witnessItem(2, player, record, InvestigationWitness.PROKHOR, InvestigationGuiRole.PROKHOR, "стол у входа")
+                witnessItem(4, player, record, InvestigationWitness.GORDEY, InvestigationGuiRole.GORDEY, "патруль первого этажа")
+                witnessItem(6, player, record, InvestigationWitness.AGATA, InvestigationGuiRole.AGATA, "второй этаж")
+                witnessItem(8, player, record, InvestigationWitness.TIKHON, InvestigationGuiRole.TIKHON, "второй этаж")
+
+                item(2, 2) {
+                    style(InvestigationGuiRole.TIMELINE)
+                    display("<aqua><bold>Хронология")
+                    lore(wrapInvestigationLore(listOf("<gray>События в установленном порядке:", "") + record.case.timeline(record.cluesMask)))
+                }
+                item(6, 2) {
+                    style(InvestigationGuiRole.CROSS_CHECK)
+                    display("<light_purple><bold>Сверка показаний")
+                    val checks = record.case.crossChecks(record.cluesMask)
+                    lore(wrapInvestigationLore(
+                        if (checks.isEmpty()) {
+                            listOf(
+                                "<gray>Пока ни одна пара показаний",
+                                "<gray>не раскрывает общего противоречия.",
+                                "",
+                                "<dark_gray>Опросите ещё одного сотрудника.",
+                            )
+                        } else {
+                            listOf("<gray>Установленные связи:", "") + checks
+                        },
+                    ))
+                }
+
+                InvestigationVerdict.entries.forEachIndexed { index, verdict ->
+                    verdictItem(index * 2, player, record, verdict, VERDICT_ROLES[index])
+                }
+
+                item(4, 4) {
+                    style(InvestigationGuiRole.RULES)
+                    display("<yellow><bold>Цена ошибки")
+                    lore(
+                        listOf(
+                            "<gray>Выберите не тип нарушения, а версию,",
+                            "<gray>которая объясняет всю цепочку событий.",
+                            "",
+                            "<red>Ошибочная версия сразу закрывает дело.",
+                            "<dark_gray>Закрыть меню можно клавишей Esc.",
+                        ),
+                    )
+                }
+                item(8, 4) {
                     style(InvestigationGuiRole.CONTRACTS)
                     display("<aqua>Заказы бюро")
                     lore(listOf("<gray>Открыть ресурсные контракты.", "<dark_gray>Таймер продолжит идти."))
@@ -127,25 +170,24 @@ object InvestigationGui {
         record: InvestigationJournalRecord,
         witness: InvestigationWitness,
         role: InvestigationGuiRole,
-        name: String,
         location: String,
     ) {
         item(x, 1) {
             style(role)
-            display(if (record.hasClue(witness)) "<green><bold>$name" else "<yellow><bold>$name")
+            display(if (record.hasClue(witness)) "<green><bold>${witness.displayName}" else "<yellow><bold>${witness.displayName}")
             lore(
                 if (record.hasClue(witness)) {
-                    record.case.testimony(witness) + listOf("", "<green>Показание записано.")
+                    wrapInvestigationLore(record.case.testimony(witness)) + listOf("", "<green>Показание записано.")
                 } else {
                     listOf(
-                        "<gray>Найдите свидетеля: <white>$location<gray>.",
-                        "<gray>Нажмите по NPC, чтобы услышать показание.",
+                        "<gray>Где искать: <white>$location<gray>.",
+                        "<gray>Этот человек видел один этап истории.",
                         "",
-                        "<dark_gray>Из ведомости нельзя опрашивать удалённо.",
+                        "<dark_gray>Опрос проводится только лично.",
                     )
                 },
             )
-            onClick { player.sendActionBar(TextUtil.mm("<yellow>Поговорите со свидетелем лично: <white>$location<yellow>.")) }
+            onClick { player.sendActionBar(TextUtil.mm("<yellow>Найдите свидетеля лично: <white>$location<yellow>.")) }
         }
     }
 
@@ -155,20 +197,26 @@ object InvestigationGui {
         record: InvestigationJournalRecord,
         verdict: InvestigationVerdict,
         role: InvestigationGuiRole,
-        name: String,
-        description: String,
     ) {
-        item(x, 2) {
+        val conclusion = record.case.conclusion(verdict)
+        item(x, 3) {
             style(role)
-            display(if (record.clueCount() >= InvestigationService.MIN_CLUES) "<gold><bold>$name" else "<dark_gray><bold>$name")
+            display(
+                if (record.clueCount() >= InvestigationService.MIN_CLUES) {
+                    "<gold><bold>${conclusion.title}"
+                } else {
+                    "<dark_gray><bold>${conclusion.title}"
+                },
+            )
             lore(
                 listOf(
-                    "<gray>$description",
+                    "<gray>Одна из пяти возможных реконструкций.",
+                    "<gray>Сопоставьте её со всей хронологией.",
                     "",
                     if (record.clueCount() >= InvestigationService.MIN_CLUES) {
-                        "<red>Нажмите, чтобы вынести окончательный вердикт."
+                        "<red>Нажмите, чтобы вынести вердикт."
                     } else {
-                        "<dark_gray>Нужно хотя бы три показания."
+                        "<dark_gray>Откроется после трёх показаний."
                     },
                 ),
             )
@@ -205,4 +253,44 @@ object InvestigationGui {
             else -> "раз в $hours ч $remainder мин"
         }
     }
+
+    private val VERDICT_ROLES =
+        listOf(
+            InvestigationGuiRole.THEORY_ONE,
+            InvestigationGuiRole.THEORY_TWO,
+            InvestigationGuiRole.THEORY_THREE,
+            InvestigationGuiRole.THEORY_FOUR,
+            InvestigationGuiRole.THEORY_FIVE,
+        )
 }
+
+private val MINI_MESSAGE_TAG = Regex("<[^>]+>")
+
+/** Wrap dynamic Russian evidence before it becomes lore; Minecraft does not wrap lore itself. */
+internal fun wrapInvestigationLore(
+    lines: List<String>,
+    maxVisibleCharacters: Int = 46,
+): List<String> =
+    lines.flatMap { line ->
+        if (line.isBlank()) return@flatMap listOf("")
+        val wrapped = mutableListOf<String>()
+        var current = StringBuilder()
+        var visible = 0
+        line.trim().split(Regex("\\s+")).forEach { word ->
+            val wordLength = word.replace(MINI_MESSAGE_TAG, "").length
+            if (visible > 0 && visible + 1 + wordLength > maxVisibleCharacters) {
+                wrapped += current.toString()
+                current = StringBuilder("<dark_gray>  ").append(word)
+                visible = 2 + wordLength
+            } else {
+                if (visible > 0) {
+                    current.append(' ')
+                    visible++
+                }
+                current.append(word)
+                visible += wordLength
+            }
+        }
+        if (current.isNotEmpty()) wrapped += current.toString()
+        wrapped
+    }

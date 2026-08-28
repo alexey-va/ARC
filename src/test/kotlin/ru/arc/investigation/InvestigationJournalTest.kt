@@ -23,6 +23,7 @@ class InvestigationJournalTest : StringSpec({
 
         reloaded.records().single() shouldBe withClue
         reloaded.open(UUID.fromString(prepared.playerId)) shouldBe withClue
+        reloaded.records().single().case.narrative shouldBe prepared.case.narrative
     }
 
     "journal rejects skipped money transitions and forgotten clues" {
