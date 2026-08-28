@@ -107,9 +107,12 @@ class InvestigationCaseGeneratorTest : StringSpec({
             narrative.crossChecks.size shouldBe 5
             narrative.conclusions.keys shouldBe InvestigationVerdict.entries.map(InvestigationVerdict::commandValue).toSet()
             narrative.conclusions.values.map(InvestigationConclusion::title).distinct().size shouldBe 5
+            narrative.requester.isNullOrBlank() shouldBe false
+            narrative.stakes?.size shouldBe 2
 
             witnesses.forEach { witness ->
                 case.testimony(witness).all(String::isNotBlank) shouldBe true
+                requireNotNull(narrative.testimonies[witness.commandValue]).lines.size shouldBe 3
             }
             everyThreeWitnessRouteUnlocksAComparison(narrative) shouldBe true
         }

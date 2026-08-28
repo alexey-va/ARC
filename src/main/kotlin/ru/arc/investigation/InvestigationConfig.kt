@@ -98,5 +98,4 @@ enum class InvestigationGuiRole(val configKey: String, val fallback: Material) {
     START("start", Material.EMERALD),
     CONTRACTS("contracts", Material.CHEST),
     CASE_FILE("case-file", Material.BOOK),
-    TESTIMONY("testimony", Material.PAPER),
 }

@@ -17,6 +17,10 @@ class InvestigationCaseFileTest : StringSpec({
                 .replace(Regex("\\s+"), " ")
 
         visible shouldContain "Что произошло"
+        visible shouldContain "Кто обратился"
+        visible shouldContain requireNotNull(record.case.narrative?.requester)
+        visible shouldContain "Почему это важно"
+        requireNotNull(record.case.narrative?.stakes).forEach { visible shouldContain it }
         visible shouldContain "Главный вопрос"
         visible shouldContain record.case.question()
         visible shouldContain "Что делать"
@@ -34,7 +38,7 @@ class InvestigationCaseFileTest : StringSpec({
         val firstTwoMask = base.case.witnesses().take(2).fold(0) { mask, witness -> mask or witness.bit }
         val lore = InvestigationCaseFile.caseFileLore(base.copy(cluesMask = firstTwoMask))
 
-        lore.count { "<green>✔" in it } shouldBe 2
+        lore.count { "<white>✔</white>" in it } shouldBe 2
         lore.joinToString("\n").let { text ->
             base.case.witnesses().map(InvestigationWitness::displayName).forEach { text shouldContain it }
         }
@@ -42,7 +46,7 @@ class InvestigationCaseFileTest : StringSpec({
 
     "simplified investigation roles keep one task card and one focused verdict flow" {
         InvestigationGuiRole.entries.map(InvestigationGuiRole::configKey) shouldContainAll
-            listOf("next-step", "evidence", "choose-verdict", "return-to-foma", "back", "case-file", "testimony")
+            listOf("next-step", "evidence", "choose-verdict", "return-to-foma", "back", "case-file")
         InvestigationGuiRole.entries.map(InvestigationGuiRole::configKey).toSet().intersect(
             setOf("status", "timeline", "cross-check", "rules"),
         ).isEmpty() shouldBe true
@@ -52,6 +56,23 @@ class InvestigationCaseFileTest : StringSpec({
         InvestigationGui.CASE_ROWS shouldBe 5
         InvestigationGui.WITNESS_ROW shouldBe 2
         InvestigationGui.INFO_ROW shouldBe 4
+    }
+
+    "collected testimony is complete in the main materials card" {
+        val base = activeCaseRecord()
+        val witness = base.case.witnesses().first()
+        val record = base.copy(cluesMask = witness.bit)
+        val visible =
+            witnessLore(record, witness)
+                .joinToString(" ") { it.replace(Regex("<[^>]+>"), "") }
+                .replace(Regex("\\s+"), " ")
+
+        base.case.testimony(witness).forEach { line ->
+            visible shouldContain line.replace(Regex("<[^>]+>"), "").replace(Regex("\\s+"), " ")
+        }
+        visible shouldContain "Слова свидетеля"
+        visible shouldContain "Что это устанавливает"
+        visible shouldNotContain "Нажмите, чтобы перечитать"
     }
 
     "all custom money glyphs declare an explicit white color" {

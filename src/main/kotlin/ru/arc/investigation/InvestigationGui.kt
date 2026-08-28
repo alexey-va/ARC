@@ -30,14 +30,6 @@ object InvestigationGui {
         GuiUtils.constructAndShowAsync({ buildVerdicts(player, record) }, player)
     }
 
-    fun openTestimony(
-        player: Player,
-        record: InvestigationJournalRecord,
-        witness: InvestigationWitness,
-    ) {
-        GuiUtils.constructAndShowAsync({ buildTestimony(player, record, witness) }, player)
-    }
-
     internal fun buildHub(
         player: Player,
         latest: InvestigationJournalRecord?,
@@ -159,23 +151,6 @@ object InvestigationGui {
             }
         }
 
-    internal fun buildTestimony(
-        player: Player,
-        record: InvestigationJournalRecord,
-        witness: InvestigationWitness,
-    ): ChestGui =
-        gui(guiConfig.string("testimony.title", "<dark_gray>Показание свидетеля"), 3, player, guiConfig) {
-            background()
-            staticPane(width = 9, height = 3) {
-                item(4, 1) {
-                    style(InvestigationGuiRole.TESTIMONY)
-                    material(Material.matchMaterial(witness.itemMaterial) ?: Material.PAPER)
-                    display("<gold><bold>${witness.displayName}")
-                    lore(wrapInvestigationLore(record.case.testimony(witness)))
-                }
-            }
-        }
-
     internal fun buildVerdicts(player: Player, record: InvestigationJournalRecord): ChestGui =
         gui(guiConfig.string("verdict.title", "<dark_gray>Выберите версию"), 3, player, guiConfig) {
             background()
@@ -212,26 +187,9 @@ object InvestigationGui {
         item(x, y) {
             material(Material.matchMaterial(witness.itemMaterial) ?: Material.PAPER)
             display(if (record.hasClue(witness)) "<green><bold>${witness.displayName}" else "<yellow><bold>${witness.displayName}")
-            lore(
-                if (record.hasClue(witness)) {
-                    listOf(
-                        "<green>Показание записано.",
-                        "",
-                        "<aqua>Нажмите, чтобы перечитать.",
-                    )
-                } else {
-                    listOf(
-                        "<gray>Где искать: <white>${witness.locationHint}<gray>.",
-                        "<gray>Этот человек видел один этап истории.",
-                        "",
-                        "<dark_gray>Опрос проводится только лично.",
-                    )
-                },
-            )
-            onClick {
-                if (record.hasClue(witness)) {
-                    openTestimony(player, record, witness)
-                } else {
+            lore(witnessLore(record, witness))
+            if (!record.hasClue(witness)) {
+                onClick {
                     player.sendActionBar(TextUtil.mm("<yellow>Найдите свидетеля лично: <white>${witness.locationHint}<yellow>."))
                 }
             }
@@ -350,6 +308,47 @@ object InvestigationGui {
     internal const val CASE_ROWS = 5
     internal const val WITNESS_ROW = 2
     internal const val INFO_ROW = 4
+}
+
+internal fun witnessLore(
+    record: InvestigationJournalRecord,
+    witness: InvestigationWitness,
+): List<String> {
+    if (!record.hasClue(witness)) {
+        return listOf(
+            "<gray>Где искать: <white>${witness.locationHint}<gray>.",
+            "<gray>Этот человек видел один этап истории.",
+            "",
+            "<dark_gray>Опрос проводится только лично.",
+        )
+    }
+
+    val moment = record.case.timelineBeat(witness)
+    val comparisons = record.case.crossChecksFor(witness, record.cluesMask).take(2)
+    val comparisonLore =
+        if (comparisons.isEmpty()) {
+            listOf("<dark_gray>Нужны слова ещё одного связанного свидетеля.")
+        } else {
+            comparisons.map { "<white>✔</white> <gray>$it" }
+        }
+    return wrapInvestigationLore(
+        listOf(
+            "<green>Показание записано.",
+            "",
+            "<gold><bold>Слова свидетеля",
+        ) + record.case.testimony(witness) +
+            listOf(
+                "",
+                "<aqua><bold>Что это устанавливает",
+                if (moment == null) {
+                    "<dark_gray>Момент не отделён от старого дела."
+                } else {
+                    "<gray>${moment.time} <white>•</white> <white>${moment.event}"
+                },
+                "",
+                "<light_purple><bold>Связи с другими показаниями",
+            ) + comparisonLore,
+    )
 }
 
 private val MINI_MESSAGE_TAG = Regex("<[^>]+>")

@@ -187,7 +187,7 @@ object InvestigationModule : PluginModule {
                 } else {
                     player.sendActionBar(TextUtil.mm("<gray>Это показание уже сохранено в материалах дела."))
                 }
-                InvestigationGui.openTestimony(player, result.record, witness)
+                InvestigationGui.openCase(player, result.record)
             }
             is InvestigationClueResult.Expired -> timeout(player)
             InvestigationClueResult.NoActiveCase -> player.sendActionBar(TextUtil.mm("<gray>Сначала возьмите дело у Фомы."))
@@ -367,7 +367,7 @@ object InvestigationModule : PluginModule {
         val conclusion = record.case.conclusion(record.case.verdict)
         val heading = if (success) "<green><bold>Вердикт принят.</bold>" else "<red><bold>Вердикт неверен.</bold>"
         player.sendMessage(TextUtil.mm("$heading <gold>${conclusion.title}</gold>"))
-        conclusion.explanation.forEach { player.sendMessage(TextUtil.mm("<gray>• $it")) }
+        conclusion.explanation.forEach { player.sendMessage(TextUtil.mm("<white>•</white> <gray>$it")) }
         if (success) {
             player.sendMessage(
                 TextUtil.mm(

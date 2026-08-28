@@ -93,8 +93,13 @@ data class InvestigationTimelineBeat(
 data class InvestigationTestimony(
     val lines: List<String>,
 ) {
-    fun validated(): InvestigationTestimony {
-        require(lines.size in 2..4) { "Investigation testimony must have 2..4 lines" }
+    fun validated(
+        minimumLines: Int = 2,
+        maximumLines: Int = 4,
+    ): InvestigationTestimony {
+        require(lines.size in minimumLines..maximumLines) {
+            "Investigation testimony must have $minimumLines..$maximumLines lines"
+        }
         lines.forEach { validateNarrativeText(it, 150) }
         return this
     }
@@ -147,15 +152,27 @@ data class InvestigationNarrative(
     val conclusions: Map<String, InvestigationConclusion>,
     /** Embedded roster keeps an already paid case stable across config reloads. */
     val witnesses: List<InvestigationWitness>? = null,
+    /** Optional on legacy records; schema 4 makes the human stakes explicit. */
+    val requester: String? = null,
+    val stakes: List<String>? = null,
 ) {
     fun validated(correct: InvestigationVerdict): InvestigationNarrative {
         require(schemaVersion in LEGACY_SCHEMA..CURRENT_SCHEMA) { "Unsupported investigation narrative schema" }
         require(PLOT_ID.matches(plotId)) { "Invalid investigation plot id" }
         validateNarrativeText(title, 72)
-        require(briefing.size in 2..4) { "Investigation briefing must have 2..4 lines" }
+        val currentNarrative = schemaVersion >= IMMERSIVE_SCHEMA
+        require(briefing.size in if (currentNarrative) 3..5 else 2..4) {
+            "Investigation briefing has an invalid line count"
+        }
         briefing.forEach { validateNarrativeText(it, 140) }
         validateNarrativeText(question, 140)
         validateNarrativeText(suspiciousLead, 140)
+        if (currentNarrative) {
+            validateNarrativeText(requireNotNull(requester) { "Investigation requester is missing" }, 160)
+            val narrativeStakes = requireNotNull(stakes) { "Investigation stakes are missing" }
+            require(narrativeStakes.size in 2..3) { "Investigation stakes must have 2..3 lines" }
+            narrativeStakes.forEach { validateNarrativeText(it, 160) }
+        }
 
         val roster = witnessRoster()
         require(roster.size == WITNESS_COUNT) { "Investigation must have five witnesses" }
@@ -171,7 +188,9 @@ data class InvestigationNarrative(
         require(timeline.map(InvestigationTimelineBeat::witness).toSet() == witnessKeys) { "Every witness must own one timeline event" }
 
         require(testimonies.keys == witnessKeys) { "Investigation testimony roster is incomplete" }
-        testimonies.values.forEach(InvestigationTestimony::validated)
+        testimonies.values.forEach {
+            if (currentNarrative) it.validated(minimumLines = 3, maximumLines = 5) else it.validated()
+        }
 
         require(crossChecks.size >= WITNESS_COUNT) { "Investigation needs at least five cross-checks" }
         crossChecks.forEach { it.validated(witnessMap) }
@@ -204,7 +223,8 @@ data class InvestigationNarrative(
 
     companion object {
         const val LEGACY_SCHEMA = 2
-        const val CURRENT_SCHEMA = 3
+        const val IMMERSIVE_SCHEMA = 4
+        const val CURRENT_SCHEMA = IMMERSIVE_SCHEMA
         const val WITNESS_COUNT = 5
         private val PLOT_ID = Regex("[a-z0-9][a-z0-9_-]{2,47}")
     }
@@ -326,8 +346,23 @@ data class InvestigationCase(
 
     fun dossier(): List<String> =
         narrative?.let { story ->
-            listOf("<gold><bold>Дело $caseNumber</bold> <dark_gray>· <white>${story.title}") +
-                story.briefing.map { "<gray>$it" } +
+            val humanContext =
+                if (story.requester == null || story.stakes.isNullOrEmpty()) {
+                    emptyList()
+                } else {
+                    listOf(
+                        "",
+                        "<aqua><bold>Кто обратился",
+                        "<gray>${story.requester}",
+                        "",
+                        "<light_purple><bold>Почему это важно",
+                    ) + story.stakes.map { "<gray>$it" }
+                }
+            listOf(
+                "<gold><bold>Дело $caseNumber</bold> <dark_gray>· <white>${story.title}",
+                "",
+                "<yellow><bold>Что произошло",
+            ) + story.briefing.map { "<gray>$it" } + humanContext +
                 listOf("", "<yellow>Вопрос: <white>${story.question}", "<dark_gray>Зацепка: ${story.suspiciousLead}")
         } ?: legacyDossier()
 
@@ -339,16 +374,30 @@ data class InvestigationCase(
         narrative?.timeline?.sortedBy(InvestigationTimelineBeat::order)?.map { beat ->
             val witness = requireNotNull(witness(beat.witness))
             if (mask and witness.bit != 0) {
-                "<gray>${beat.time} <dark_gray>• <white>${beat.event}"
+                "<gray>${beat.time} <white>•</white> <white>${beat.event}"
             } else {
-                "<dark_gray>${beat.time} • событие ещё не установлено"
+                "<dark_gray>${beat.time} <white>•</white> событие ещё не установлено"
             }
         } ?: listOf("<dark_gray>Старое дело не содержит отдельной хронологии.")
+
+    fun timelineBeat(witness: InvestigationWitness): InvestigationTimelineBeat? =
+        narrative?.timeline?.firstOrNull { it.witness == witness.commandValue }
 
     fun crossChecks(mask: Int): List<String> =
         narrative?.let { story ->
             val witnessMap = witnesses().associateBy(InvestigationWitness::commandValue)
-            story.crossChecks.filter { it.unlocked(mask, witnessMap) }.map { "<green>✔ <gray>${it.insight}" }
+            story.crossChecks.filter { it.unlocked(mask, witnessMap) }.map { "<white>✔</white> <gray>${it.insight}" }
+        }.orEmpty()
+
+    fun crossChecksFor(
+        witness: InvestigationWitness,
+        mask: Int,
+    ): List<String> =
+        narrative?.let { story ->
+            val witnessMap = witnesses().associateBy(InvestigationWitness::commandValue)
+            story.crossChecks
+                .filter { witness.commandValue in it.pairKey() && it.unlocked(mask, witnessMap) }
+                .map(InvestigationCrossCheck::insight)
         }.orEmpty()
 
     fun totalCrossChecks(): Int = narrative?.crossChecks?.size ?: 0

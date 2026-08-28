@@ -4,8 +4,6 @@ hub:
   title: "<dark_gray>Бюро расследований"
 case:
   title: "<dark_gray>Материалы расследования"
-testimony:
-  title: "<dark_gray>Показание свидетеля"
 verdict:
   title: "<dark_gray>Выберите версию"
 
@@ -24,4 +22,3 @@ items:
   start: { material: WRITABLE_BOOK }
   contracts: { material: CHEST }
   case-file: { material: BOOK }
-  testimony: { material: PAPER }

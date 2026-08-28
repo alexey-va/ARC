@@ -69,15 +69,28 @@ object InvestigationCaseFile : Listener {
     internal fun caseFileLore(record: InvestigationJournalRecord): List<String> {
         val story = record.case.narrative
         val briefing = story?.briefing ?: record.case.dossier().map { it.replace(Regex("<[^>]+>"), "") }.take(3)
+        val humanContext =
+            if (story?.requester == null || story.stakes.isNullOrEmpty()) {
+                emptyList()
+            } else {
+                listOf(
+                    "",
+                    "<aqua><bold>Кто обратился",
+                    "<gray>${story.requester}",
+                    "",
+                    "<light_purple><bold>Почему это важно",
+                ) + story.stakes.map { "<gray>$it" }
+            }
         val witnesses =
             record.case.witnesses().mapIndexed { index, witness ->
-                val mark = if (record.hasClue(witness)) "<green>✔" else "<yellow>${index + 1}."
+                val mark = if (record.hasClue(witness)) "<white>✔</white>" else "<yellow>${index + 1}."
                 "$mark <white>${witness.displayName} <dark_gray>— <gray>${witness.locationHint}"
             }
         return wrapInvestigationLore(
             listOf(
                 "<gold><bold>Что произошло",
             ) + briefing.map { "<gray>$it" } +
+                humanContext +
                 listOf(
                     "",
                     "<yellow><bold>Главный вопрос",

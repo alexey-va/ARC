@@ -51,6 +51,8 @@ private data class StoryTemplate(
     val goods: String,
     val title: String,
     val briefing: List<String>,
+    val requester: String,
+    val stakes: List<String>,
     val question: String,
     val suspiciousLead: String,
     val variables: Map<String, List<String>>,
@@ -66,13 +68,14 @@ private data class StoryTemplate(
         globalVariables: Map<String, List<String>>,
     ): StoryTemplate {
         require(PLOT_ID.matches(plotId)) { "Invalid investigation plot id: $plotId" }
-        require(briefing.size in 2..4) { "$plotId briefing must have 2..4 lines" }
+        require(briefing.size in 3..5) { "$plotId briefing must have 3..5 lines" }
+        require(stakes.size in 2..3) { "$plotId stakes must have 2..3 lines" }
         require(timeline.size == InvestigationNarrative.WITNESS_COUNT) { "$plotId timeline must have five events" }
         require(timeline.map(StoryTimelineTemplate::order) == (1..5).toList()) { "$plotId timeline order must be 1..5" }
         require(witnessKeys.distinct().size == InvestigationNarrative.WITNESS_COUNT) { "$plotId must use five distinct witnesses" }
         require(witnessKeys.all(witnesses::containsKey)) { "$plotId uses an unknown witness" }
         require(testimonies.keys == witnessKeys.toSet()) { "$plotId testimony roster is incomplete" }
-        require(testimonies.values.all { it.size in 2..4 }) { "$plotId testimony must have 2..4 lines per witness" }
+        require(testimonies.values.all { it.size in 3..5 }) { "$plotId testimony must have 3..5 lines per witness" }
         require(crossChecks.size >= InvestigationNarrative.WITNESS_COUNT) { "$plotId needs at least five cross-checks" }
         require(crossChecks.all { it.first in witnessKeys && it.second in witnessKeys && it.first != it.second }) {
             "$plotId cross-check uses an invalid witness pair"
@@ -127,13 +130,16 @@ private data class StoryTemplate(
                 crossChecks = crossChecks.map { InvestigationCrossCheck(it.first, it.second, render(it.insight)) },
                 conclusions = conclusionSlots,
                 witnesses = roster,
+                requester = render(requester),
+                stakes = stakes.map(render),
             ).validated(correct)
         return GeneratedInvestigationStory(render(seller), render(goods), correct, narrative)
     }
 
     private fun allText(): List<String> =
-        listOf(seller, goods, title, question, suspiciousLead) +
+        listOf(seller, goods, title, requester, question, suspiciousLead) +
             briefing +
+            stakes +
             variables.values.flatten() +
             timeline.flatMap { listOf(it.time, it.event) } +
             testimonies.values.flatten() +
@@ -255,6 +261,8 @@ internal class InvestigationStoryCatalog private constructor(
                 goods = config.stringOrNull("$root.goods") ?: "{goods}",
                 title = requiredString(config, "$root.title"),
                 briefing = config.stringList("$root.briefing"),
+                requester = requiredString(config, "$root.requester"),
+                stakes = config.stringList("$root.stakes"),
                 question = requiredString(config, "$root.question"),
                 suspiciousLead = requiredString(config, "$root.suspicious-lead"),
                 variables = parseVariables(config, "$root.variables"),
