@@ -14,7 +14,9 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import java.nio.file.LinkOption
+import java.nio.file.NoSuchFileException
 import java.nio.file.Path
+import java.nio.file.attribute.BasicFileAttributes
 import java.security.MessageDigest
 import java.util.UUID
 
@@ -26,6 +28,12 @@ data class PlayerBuildBookTemplate(
     val schematicSha256: String,
     val blockCount: Int,
 )
+
+internal sealed interface PlayerBuildBookDigestInspection {
+    data object Missing : PlayerBuildBookDigestInspection
+    data class Ready(val sha256: String) : PlayerBuildBookDigestInspection
+    data class Failed(val failure: Throwable) : PlayerBuildBookDigestInspection
+}
 
 internal data class PreparedPlayerBuildBookTemplate(
     val creatorId: UUID,
@@ -110,44 +118,68 @@ object PlayerBuildBookStore {
         return digest.digest().joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
     }
 
-    fun schematicSha256(buildingId: String): String? = runCatching {
+    internal fun inspectSchematic(buildingId: String): PlayerBuildBookDigestInspection = try {
         require(buildingId.matches(Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,159}")))
         val root = resolvedSchematicsRoot()
         val target = root.resolve(buildingId)
-        require(target.parent == root && isRegularFile(target))
-        sha256(target)
-    }.getOrNull()
+        require(target.parent == root) { "Player build-book inspection escaped the schematic root" }
+        if (inspectRegularFile(target)) {
+            PlayerBuildBookDigestInspection.Ready(sha256(target))
+        } else {
+            PlayerBuildBookDigestInspection.Missing
+        }
+    } catch (failure: Throwable) {
+        PlayerBuildBookDigestInspection.Failed(failure)
+    }
 
-    fun contentSha256(buildingId: String): String? = runCatching {
-        require(buildingId.matches(Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,159}")))
-        val root = resolvedSchematicsRoot()
-        val target = root.resolve(buildingId)
-        require(target.parent == root && isRegularFile(target))
-        val building = BuildingManager.getBuilding(buildingId) ?: return@runCatching null
-        val clipboard = building.clipboard
-        val minimum = clipboard.minimumPoint
-        val maximum = clipboard.maximumPoint
-        val digest = MessageDigest.getInstance("SHA-256")
-        val sizeX = maximum.x() - minimum.x() + 1
-        val sizeY = maximum.y() - minimum.y() + 1
-        val sizeZ = maximum.z() - minimum.z() + 1
-        digest.update("$sizeX:$sizeY:$sizeZ\n".toByteArray(StandardCharsets.UTF_8))
-        clipboard.region.asSequence()
-            .mapNotNull { position ->
-                val data = BukkitAdapter.adapt(clipboard.getFullBlock(position))
-                if (data.material.isAir) null else BuilderClipboardBlock(
-                    position.x() - minimum.x(),
-                    position.y() - minimum.y(),
-                    position.z() - minimum.z(),
-                    data.asString,
+    fun schematicSha256(buildingId: String): String? =
+        (inspectSchematic(buildingId) as? PlayerBuildBookDigestInspection.Ready)?.sha256
+
+    internal fun inspectContent(buildingId: String): PlayerBuildBookDigestInspection {
+        return try {
+            require(buildingId.matches(Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,159}")))
+            val root = resolvedSchematicsRoot()
+            val target = root.resolve(buildingId)
+            require(target.parent == root) { "Player build-book inspection escaped the schematic root" }
+            if (!inspectRegularFile(target)) {
+                PlayerBuildBookDigestInspection.Missing
+            } else {
+                val building = checkNotNull(BuildingManager.getBuilding(buildingId)) {
+                    "Player build-book schematic could not be decoded"
+                }
+                val clipboard = building.clipboard
+                val minimum = clipboard.minimumPoint
+                val maximum = clipboard.maximumPoint
+                val digest = MessageDigest.getInstance("SHA-256")
+                val sizeX = maximum.x() - minimum.x() + 1
+                val sizeY = maximum.y() - minimum.y() + 1
+                val sizeZ = maximum.z() - minimum.z() + 1
+                digest.update("$sizeX:$sizeY:$sizeZ\n".toByteArray(StandardCharsets.UTF_8))
+                clipboard.region.asSequence()
+                    .mapNotNull { position ->
+                        val data = BukkitAdapter.adapt(clipboard.getFullBlock(position))
+                        if (data.material.isAir) null else BuilderClipboardBlock(
+                            position.x() - minimum.x(),
+                            position.y() - minimum.y(),
+                            position.z() - minimum.z(),
+                            data.asString,
+                        )
+                    }
+                    .sortedWith(compareBy<BuilderClipboardBlock> { it.dy }.thenBy { it.dx }.thenBy { it.dz })
+                    .forEach { block ->
+                        digest.update("${block.dx}:${block.dy}:${block.dz}:${block.blockData}\n".toByteArray(StandardCharsets.UTF_8))
+                    }
+                PlayerBuildBookDigestInspection.Ready(
+                    digest.digest().joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) },
                 )
             }
-            .sortedWith(compareBy<BuilderClipboardBlock> { it.dy }.thenBy { it.dx }.thenBy { it.dz })
-            .forEach { block ->
-                digest.update("${block.dx}:${block.dy}:${block.dz}:${block.blockData}\n".toByteArray(StandardCharsets.UTF_8))
-            }
-        digest.digest().joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
-    }.getOrNull()
+        } catch (failure: Throwable) {
+            PlayerBuildBookDigestInspection.Failed(failure)
+        }
+    }
+
+    fun contentSha256(buildingId: String): String? =
+        (inspectContent(buildingId) as? PlayerBuildBookDigestInspection.Ready)?.sha256
 
     private fun resolvedSchematicsRoot(): Path {
         val configured = ARC.instance.dataPath.resolve("schematics")
@@ -204,6 +236,15 @@ object PlayerBuildBookStore {
         }
 
     private fun isRegularFile(path: Path): Boolean = Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
+
+    /** Returns false only for a proven absent path; inaccessible or unsafe paths fail closed. */
+    private fun inspectRegularFile(path: Path): Boolean = try {
+        val attributes = Files.readAttributes(path, BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+        require(attributes.isRegularFile) { "Player build-book schematic is not a regular file" }
+        true
+    } catch (_: NoSuchFileException) {
+        false
+    }
 
     private fun sha256(path: Path): String = Files.newInputStream(path).use { input ->
         val digest = MessageDigest.getInstance("SHA-256")

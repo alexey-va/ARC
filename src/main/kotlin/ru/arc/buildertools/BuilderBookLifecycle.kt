@@ -11,10 +11,8 @@ import ru.arc.ARC
 import ru.arc.autobuild.BuildBookCodec
 import ru.arc.autobuild.BuildBookData
 import ru.arc.autobuild.BuildBookItems
-import ru.arc.autobuild.BuildBookSettings
 import ru.arc.autobuild.BuildBookTransform
 import ru.arc.autobuild.BuildingManager
-import ru.arc.autobuild.PlayerBuildBookLimitException
 import ru.arc.autobuild.PlayerBuildBookStore
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.hooks.HookRegistry
@@ -54,6 +52,8 @@ internal data class BuilderBookLifecycleHealth(
     val deliveryWaitingForSpace: Int,
     val registryReady: Boolean,
     val registryFailed: Boolean,
+    val draftJournalReady: Boolean,
+    val draftJournalFailed: Boolean,
     val recoveryBlocked: Boolean,
 )
 
@@ -71,6 +71,7 @@ internal class BuilderBookLifecycle(
     private val storageExecutor: ExecutorService,
     private val operationLocks: BuilderOperationLocks,
     private val host: BuilderBookLifecycleHost,
+    draftJournal: BuilderDraftJournal,
 ) : AutoCloseable {
     private data class PendingMint(
         val kind: BuilderBookMintKind,
@@ -84,6 +85,15 @@ internal class BuilderBookLifecycle(
 
     private val pricing = BuilderBookPricing(config)
     private val debugLine = StructuredDebugLine("ARC_BUILDER_TOOLS")
+    private val drafts = BuilderDraftLifecycle(
+        config = config,
+        messages = messages,
+        taskScope = taskScope,
+        storageExecutor = storageExecutor,
+        operationLocks = operationLocks,
+        host = host,
+        journal = draftJournal,
+    )
     private val registry: BuilderBookRegistry? = if (config.bookContractsEnabled) {
         runCatching {
             BuilderBookSqlRegistry(
@@ -145,9 +155,10 @@ internal class BuilderBookLifecycle(
 
     fun start() {
         check(!closed) { "Builder-book lifecycle is closed" }
-        if (config.bookContractsEnabled) {
-            checkNotNull(
-                taskScope.runTimer(100L, 100L) {
+        checkNotNull(
+            taskScope.runTimer(100L, 100L) {
+                drafts.retryLockedPlayers()
+                if (config.bookContractsEnabled) {
                     (operationLocks.bookLockedPlayerIds() + deliveryWaitingForSpace).toList()
                         .mapNotNull(Bukkit::getPlayer)
                         .filter(Player::isOnline)
@@ -155,18 +166,24 @@ internal class BuilderBookLifecycle(
                     if (registryReady) {
                         Bukkit.getOnlinePlayers().forEach { player -> auctionCoordinator?.onPlayerAvailable(player) }
                     }
-                },
-            ) { "Builder-book delivery retry task was not scheduled" }
-        }
+                }
+            },
+        ) { "Builder-book delivery retry task was not scheduled" }
+        drafts.start()
         initializeContracts()
     }
 
-    fun health(): BuilderBookLifecycleHealth = BuilderBookLifecycleHealth(
-        deliveryWaitingForSpace = deliveryWaitingForSpace.size,
-        registryReady = registryReady,
-        registryFailed = registryFailed,
-        recoveryBlocked = recoveryBlocked,
-    )
+    fun health(): BuilderBookLifecycleHealth {
+        val draftHealth = drafts.health()
+        return BuilderBookLifecycleHealth(
+            deliveryWaitingForSpace = deliveryWaitingForSpace.size,
+            registryReady = registryReady,
+            registryFailed = registryFailed,
+            draftJournalReady = draftHealth.ready,
+            draftJournalFailed = draftHealth.failed,
+            recoveryBlocked = recoveryBlocked || draftHealth.recoveryBlocked,
+        )
+    }
 
     fun ensureAvailable(player: Player) {
         if (!player.hasPermission("arc.build.book.use")) fail("errors.no-permission")
@@ -177,7 +194,7 @@ internal class BuilderBookLifecycle(
         when (args.firstOrNull()?.lowercase(Locale.ROOT)) {
             null, "guide", "help" -> showGuide(player)
             "status" -> showStatus(player)
-            "draft" -> createDraft(player, args.drop(1))
+            "draft" -> drafts.createDraft(player, args.drop(1))
             "activate" -> prepareActivation(player)
             "copy" -> prepareCopy(player)
             "sell" -> sell(player, args.getOrNull(1))
@@ -274,12 +291,14 @@ internal class BuilderBookLifecycle(
     }
 
     fun onPlayerAvailable(player: Player) {
+        drafts.onPlayerAvailable(player)
         recoverDeliveries(player)
         if (registryReady) auctionCoordinator?.onPlayerAvailable(player)
     }
 
     fun onPlayerQuit(playerId: UUID) {
         pendingMints.remove(playerId)
+        drafts.onPlayerQuit(playerId)
     }
 
     fun onGeneralRecoveryFinished() {
@@ -296,6 +315,10 @@ internal class BuilderBookLifecycle(
     }
 
     private fun showStatus(player: Player) {
+        if (drafts.hasPending(player.uniqueId)) {
+            drafts.showPendingStatus(player)
+            return
+        }
         val now = System.currentTimeMillis()
         val playerId = player.uniqueId
         val quote = pendingMints[playerId]?.takeIf { it.expiresAtMillis > now }
@@ -405,73 +428,6 @@ internal class BuilderBookLifecycle(
                 ),
             )
         }
-    }
-
-    private fun createDraft(player: Player, rawTitle: List<String>) {
-        host.ensureCopyPermission(player)
-        if (!player.hasPermission("arc.build.book.create")) fail("errors.no-permission")
-        val clipboard = host.currentClipboard(player.uniqueId) ?: fail("errors.expired")
-        val held = player.inventory.itemInMainHand
-        if (!isPlainBook(held)) fail("book.material-required")
-        if (held.amount > 1 && player.inventory.firstEmpty() == -1) fail("book.inventory-full")
-        val title = rawTitle.joinToString(" ").trim().ifEmpty { BuildBookSettings.defaultTitle }
-        if (title.length > 48 || title.any(Char::isISOControl)) fail("book.invalid-name")
-        val prepared = try {
-            PlayerBuildBookStore.prepare(player.uniqueId, clipboard)
-        } catch (failure: Throwable) {
-            error("Could not prepare player build book for ${player.name}: type=${BuilderToolsFailureType.of(failure)}")
-            fail("book.failed")
-        }
-        if (!operationLocks.tryBookLock(player.uniqueId)) fail("errors.busy")
-        val expectedBook = held.clone()
-        send(player, "book.draft-saving")
-        writeAsync(
-            action = { PlayerBuildBookStore.persist(prepared) },
-            callback = { template, failure ->
-                operationLocks.unlockBook(player.uniqueId)
-                if (!player.isOnline) return@writeAsync
-                when {
-                    failure is PlayerBuildBookLimitException -> send(player, "book.limit")
-                    failure != null || template == null -> {
-                        error(
-                            "Could not persist player build book for ${player.name}: " +
-                                "type=${BuilderToolsFailureType.of(failure)}",
-                        )
-                        send(player, "book.failed")
-                    }
-                    !isPlainBook(player.inventory.itemInMainHand) ||
-                        player.inventory.itemInMainHand.amount != expectedBook.amount ||
-                        !player.inventory.itemInMainHand.isSimilar(expectedBook) -> send(player, "book.source-changed")
-                    else -> try {
-                        PlayerBuildBookStore.register(template)
-                        val data = BuildBookData(
-                            buildingId = template.buildingId,
-                            title = title,
-                            playerCreated = true,
-                            creatorId = player.uniqueId,
-                            creatorName = player.name,
-                            blueprintId = UUID.randomUUID(),
-                            contentSha256 = template.contentSha256,
-                            schematicSha256 = template.schematicSha256,
-                            blockCount = template.blockCount,
-                            cooldownSeconds = 0,
-                        ).validated()
-                        replaceOneHeldBook(player, player.inventory.itemInMainHand, BuildBookItems.create(data))
-                        send(
-                            player,
-                            "book.draft-created",
-                            mapOf("name" to displayTitle(title), "count" to messages.literal(clipboard.blocks.size)),
-                        )
-                    } catch (unexpected: Throwable) {
-                        error(
-                            "Could not deliver player build-book draft for ${player.name}: " +
-                                "type=${BuilderToolsFailureType.of(unexpected)}",
-                        )
-                        send(player, "book.failed")
-                    }
-                }
-            },
-        )
     }
 
     private fun prepareActivation(player: Player) {
@@ -1316,11 +1272,6 @@ internal class BuilderBookLifecycle(
         .append(Component.space())
         .append(Component.text("💰", NamedTextColor.WHITE))
 
-    private fun isPlainBook(item: ItemStack): Boolean {
-        if (item.type != Material.BOOK || item.amount <= 0) return false
-        return item.clone().also { it.amount = 1 }.isSimilar(ItemStack(Material.BOOK))
-    }
-
     private fun replaceOneHeldBook(player: Player, held: ItemStack, replacement: ItemStack) {
         if (held.amount == 1) {
             player.inventory.setItemInMainHand(replacement)
@@ -1357,6 +1308,7 @@ internal class BuilderBookLifecycle(
         closed = true
         auctionCoordinator?.close()
         statusVerifier?.close()
+        drafts.close()
         pendingMints.clear()
         deliveryWaitingForSpace.clear()
         deliveryRecoveries.clear()

@@ -273,6 +273,17 @@ locales:
         <#8c8c8c>  • <click:run_command:'/builder clear'><#92bed8>/builder clear</#92bed8></click> <#969696>— скрыть контур.
     book:
       draft-saving: "<prefix><#e6fff3>Сохраняем чертёж…"
+      draft-recovery-starting: "<prefix><#e6fff3>Проверяем незавершённые черновики после перезапуска…"
+      draft-pending: |-
+        <prefix><#ff9f0f>Сохранённый черновик ожидает безопасной выдачи.
+        <#8c8c8c>  • <#e6fff3>Возьмите обычную книгу в основную руку.
+        <#8c8c8c>  • <click:run_command:'/builder book draft'><#92bed8>/builder book draft</#92bed8></click> <#e6fff3>— завершить выдачу; выделять заново не нужно.
+      draft-recovering: |-
+        <prefix><#ff9f0f>Завершаем безопасную запись черновика.
+        <#8c8c8c>  • <#e6fff3>Не перемещайте книгу; проверка повторится автоматически.
+      draft-recovery-failed: |-
+        <prefix><#ff9f0f>Незавершённое сохранение не содержало готового чертежа.
+        <#8c8c8c>  • <#e6fff3>Скопируйте область ещё раз — лимит не занят.
       guide:
         - "<prefix><#e6fff3><bold>Как создать книгу строительства"
         - "<#8c8c8c>  1. <click:run_command:'/builder wand'><#92bed8>/builder wand</#92bed8></click> <#e6fff3>— получить селектор."
@@ -306,6 +317,10 @@ locales:
           <#8c8c8c>  • <#e6fff3>Название: <#92bed8><name>
           <#8c8c8c>  • <#e6fff3>ПКМ по земле — превью.
           <#8c8c8c>  • <#e6fff3>ПКМ в воздух — настройка положения.
+        draft-recovery: |-
+          <prefix><#ff9f0f>Черновик сохранён и ожидает выдачи.
+          <#8c8c8c>  • <#e6fff3>Возьмите обычную книгу в основную руку.
+          <#8c8c8c>  • <click:run_command:'/builder book draft'><#92bed8>/builder book draft</#92bed8></click> <#e6fff3>— продолжить с сохранённого шага.
         preview: |-
           <prefix><#2bba43>Этап 5/7: превью открыто.
           <#8c8c8c>  • <#e6fff3>Контур обновляется постоянно.
@@ -335,6 +350,11 @@ locales:
         <#8c8c8c>  • <#e6fff3>ПКМ по земле — превью.
         <#8c8c8c>  • <#e6fff3>ПКМ в воздух или Shift + ПКМ — меню положения.
         <#8c8c8c>  • <#e6fff3>После проверки: <click:run_command:'/builder book activate'><#92bed8>/builder book activate</#92bed8></click>
+      draft-recovered: |-
+        <prefix><#2bba43>Сохранённый черновик восстановлен.
+        <#8c8c8c>  • <#e6fff3>Название: <#92bed8><name>
+        <#8c8c8c>  • <#e6fff3>Блоков: <#92bed8><count> <#8c8c8c>• <#969696>оплаты не было
+        <#8c8c8c>  • <#e6fff3>ПКМ по земле — проверить превью.
       material-required: "<prefix><#ff9f0f>Держите обычную книгу в основной руке."
       inventory-full: "<prefix><#ff9f0f>Освободите один слот для книги строительства."
       invalid-name: "<prefix><#c42323>Название: от 1 до 48 обычных символов."
@@ -691,6 +711,17 @@ locales:
         <dark_gray>  • <click:run_command:'/builder clear'><aqua>/builder clear</aqua></click> <gray>— hide the outline.
     book:
       draft-saving: "<prefix><gray>Saving the blueprint…"
+      draft-recovery-starting: "<prefix><gray>Checking unfinished drafts after restart…"
+      draft-pending: |-
+        <prefix><yellow>Your saved draft is waiting for safe delivery.
+        <dark_gray>  • <gray>Hold a plain book in your main hand.
+        <dark_gray>  • <click:run_command:'/builder book draft'><aqua>/builder book draft</aqua></click> <gray>— finish delivery; no reselection needed.
+      draft-recovering: |-
+        <prefix><yellow>Finishing the durable draft record.
+        <dark_gray>  • <gray>Do not move the book; recovery retries automatically.
+      draft-recovery-failed: |-
+        <prefix><yellow>The interrupted save had no complete blueprint.
+        <dark_gray>  • <gray>Copy the area again; it did not consume your limit.
       guide:
         - "<prefix><white><bold>Build-book guide"
         - "<dark_gray>  1. <aqua>/builder wand <gray>— get the selector."
@@ -723,6 +754,10 @@ locales:
           <dark_gray>  • <gray>Name: <white><name>
           <dark_gray>  • <gray>Right-click ground — preview.
           <dark_gray>  • <gray>Right-click air — edit position.
+        draft-recovery: |-
+          <prefix><yellow>Your blueprint is saved and waiting for draft delivery.
+          <dark_gray>  • <gray>Hold a plain book in your main hand.
+          <dark_gray>  • <click:run_command:'/builder book draft'><aqua>/builder book draft</aqua></click> <gray>— resume the saved step.
         preview: |-
           <prefix><green>Step 5/7: preview is open.
           <dark_gray>  • <gray>The outline updates continuously.
@@ -750,6 +785,11 @@ locales:
         <dark_gray>  • <gray><count> blocks • no charge
         <dark_gray>  • <gray>Preview and adjust it.
         <dark_gray>  • <aqua>/builder book activate <gray>— calculate quote.
+      draft-recovered: |-
+        <prefix><green>Saved draft recovered.
+        <dark_gray>  • <gray>Name: <white><name>
+        <dark_gray>  • <gray><count> blocks • no charge
+        <dark_gray>  • <gray>Right-click ground to inspect its preview.
       material-required: "<prefix><yellow>Hold a plain book in your main hand."
       inventory-full: "<prefix><yellow>Free one slot or hold a single plain book."
       invalid-name: "<prefix><red>Use 1–48 ordinary characters for the name."

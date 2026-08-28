@@ -11,12 +11,16 @@ class BuilderToolsRuntimeHealthTest : FunSpec({
         contribution.state shouldBe RuntimeHealthState.UP
         contribution.recoveryBacklog shouldBe 0
         contribution.activeLeases shouldBe 0
-        contribution.schemas shouldBe mapOf("book_registry" to BuilderBookSqlRegistry.CURRENT_SCHEMA_VERSION)
+        contribution.schemas shouldBe mapOf(
+            "builder_drafts" to BuilderDraftRecord.CURRENT_SCHEMA_VERSION,
+            "book_registry" to BuilderBookSqlRegistry.CURRENT_SCHEMA_VERSION,
+        )
         contribution.dependencies shouldBe mapOf(
             "lands" to true,
             "coreprotect" to true,
             "shop" to true,
             "book_registry" to true,
+            "builder_drafts" to true,
         )
     }
 
@@ -46,6 +50,20 @@ class BuilderToolsRuntimeHealthTest : FunSpec({
 
         contribution.state shouldBe RuntimeHealthState.DEGRADED
         contribution.dependencies["book_registry"] shouldBe false
+    }
+
+    test("draft journal remains a fail-closed startup dependency") {
+        val starting = BuilderToolsRuntimeHealth.contribution(
+            healthyInputs().copy(draftJournalReady = false),
+        )
+        starting.state shouldBe RuntimeHealthState.STARTING
+        starting.dependencies["builder_drafts"] shouldBe false
+
+        val failed = BuilderToolsRuntimeHealth.contribution(
+            healthyInputs().copy(draftJournalReady = false, draftJournalFailed = true),
+        )
+        failed.state shouldBe RuntimeHealthState.DOWN
+        failed.dependencies["builder_drafts"] shouldBe false
     }
 
     test("missing enabled shop degrades tools and publishes the failed dependency") {
@@ -90,4 +108,6 @@ private fun healthyInputs() = BuilderToolsRuntimeHealthInputs(
     bookContractsEnabled = true,
     bookRegistryReady = true,
     bookRegistryFailed = false,
+    draftJournalReady = true,
+    draftJournalFailed = false,
 )

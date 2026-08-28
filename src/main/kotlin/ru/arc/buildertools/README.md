@@ -136,7 +136,18 @@ may restore exact `after` states to `before` plus the escrowed inventory.
 Unexpected third-party states stop the module for operator review. Offline
 player inventory restoration occurs at join before the record is acknowledged.
 Every forward and rollback block change is also submitted to the public
-CoreProtect API. Registered player books add a network-wide MySQL barrier:
+CoreProtect API.
+
+Free draft issuance has its own durable two-phase journal. ARC first records the
+content-addressed schematic identity, then publishes the file, and acknowledges
+the record only after the exact draft is present in the player's locked
+inventory. A disconnect or shutdown before delivery resumes at login or the
+next `/builder book draft`; a crash after inventory delivery is reconciled by
+the immutable blueprint UUID instead of issuing a second item. Failed writes
+without a complete schematic are acknowledged without consuming the player's
+permanent-blueprint limit.
+
+Registered player books add a network-wide MySQL barrier:
 each physical item carries a blueprint UUID, instance UUID, and positive
 generation, while MySQL is the authority for its owner and generation. Before
 the local journal is created, core's shared
@@ -177,8 +188,10 @@ The bundled `modules/builder-tools.yml` is disabled by default. The tracked
 survival mirror enables `book-contracts` and its MySQL connection, while
 `modules/builder-tools-runtime.yml` enables the module for `allowed-worlds:
 ["*"]`; spawn and parkour remain off. No code path rewrites shop prices.
-Journal records live below `plugins/ARC/data/builder-tools-journal/` and are
-server-owned runtime state, never configuration deployment input.
+Operation journal records live below
+`plugins/ARC/data/builder-tools-journal/`; pending free drafts live below
+`plugins/ARC/data/builder-book-draft-journal/`. Both are server-owned runtime
+state, never configuration deployment input.
 The `book-contracts.mysql` pool owns the three `arc_builder_book_*` domain
 tables and the single shared `arc_one_time_uses` table. It must not introduce a
 feature-local replay table. Shop pricing is read-only; ARC never changes

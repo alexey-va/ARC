@@ -21,6 +21,8 @@ internal data class BuilderToolsRuntimeHealthInputs(
     val bookContractsEnabled: Boolean,
     val bookRegistryReady: Boolean,
     val bookRegistryFailed: Boolean,
+    val draftJournalReady: Boolean,
+    val draftJournalFailed: Boolean,
 ) {
     init {
         listOf(
@@ -38,11 +40,14 @@ internal object BuilderToolsRuntimeHealth {
         val coreProtectReady = !input.coreProtectRequired || input.coreProtectAvailable
         val shopReady = !input.shopRequired || input.shopAvailable
         val registryReady = !input.bookContractsEnabled || (input.bookRegistryReady && !input.bookRegistryFailed)
+        val draftJournalReady = input.draftJournalReady && !input.draftJournalFailed
         val backlog = saturatedAdd(input.recoveryPlayers, input.deliveryWaitingForSpace)
         val leases = saturatedAdd(input.activeOperations, input.bookLockedPlayers)
         val state = when {
-            input.closed || input.recoveryBlocked || !landsReady || !coreProtectReady -> RuntimeHealthState.DOWN
-            input.recovering || (input.bookContractsEnabled && !input.bookRegistryReady && !input.bookRegistryFailed) ->
+            input.closed || input.recoveryBlocked || input.draftJournalFailed || !landsReady || !coreProtectReady ->
+                RuntimeHealthState.DOWN
+            input.recovering || !input.draftJournalReady ||
+                (input.bookContractsEnabled && !input.bookRegistryReady && !input.bookRegistryFailed) ->
                 RuntimeHealthState.STARTING
             input.bookRegistryFailed || !shopReady || backlog > 0 -> RuntimeHealthState.DEGRADED
             else -> RuntimeHealthState.UP
@@ -51,16 +56,16 @@ internal object BuilderToolsRuntimeHealth {
             state = state,
             recoveryBacklog = backlog,
             activeLeases = leases,
-            schemas = if (input.bookContractsEnabled) {
-                mapOf("book_registry" to BuilderBookSqlRegistry.CURRENT_SCHEMA_VERSION)
-            } else {
-                emptyMap()
+            schemas = buildMap {
+                put("builder_drafts", BuilderDraftRecord.CURRENT_SCHEMA_VERSION)
+                if (input.bookContractsEnabled) put("book_registry", BuilderBookSqlRegistry.CURRENT_SCHEMA_VERSION)
             },
             dependencies = linkedMapOf(
                 "lands" to landsReady,
                 "coreprotect" to coreProtectReady,
                 "shop" to shopReady,
                 "book_registry" to registryReady,
+                "builder_drafts" to draftJournalReady,
             ),
         )
     }

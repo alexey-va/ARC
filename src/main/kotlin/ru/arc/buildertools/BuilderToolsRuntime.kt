@@ -266,6 +266,7 @@ internal class BuilderToolsRuntime(
                 taskScope = taskScope,
                 storageExecutor = storageExecutor,
                 operationLocks = operationLocks,
+                draftJournal = BuilderDraftJournal(plugin.dataPath, BuilderPlan.ABSOLUTE_MAX_CHANGES),
                 host = object : BuilderBookLifecycleHost {
                     override fun ensureOperationalContext(player: Player) =
                         this@BuilderToolsRuntime.ensureOperationalContext(player)
@@ -1301,6 +1302,8 @@ internal class BuilderToolsRuntime(
                     bookContractsEnabled = config.bookContractsEnabled,
                     bookRegistryReady = bookHealth.registryReady,
                     bookRegistryFailed = bookHealth.registryFailed,
+                    draftJournalReady = bookHealth.draftJournalReady,
+                    draftJournalFailed = bookHealth.draftJournalFailed,
                 ),
             ),
         )
