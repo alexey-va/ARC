@@ -128,7 +128,8 @@ data class BuildBookData(
 }
 
 object BuildBookSettings {
-    private val config: Config get() = ConfigManager.ofModule(ARC.instance.dataPath, "auto-build.yml")
+    private const val CONFIG_FILE = "auto-build.yml"
+    private val config: Config get() = ConfigManager.ofModule(ARC.instance.dataPath, CONFIG_FILE)
 
     val maxOffset: Int get() = config.integer("build-book.player-copy.max-offset", 16)
     val maxBooksPerPlayer: Int get() = config.integer("build-book.player-copy.max-per-player", 24)
@@ -136,6 +137,7 @@ object BuildBookSettings {
     val defaultTitle: String get() = config.string("build-book.player-copy.default-name", "Моя постройка")
 
     fun validate() {
+        config.mergeMissingFromBundled(ConfigManager.bundledModuleResource(CONFIG_FILE))
         require(maxOffset in 0..64) { "Build-book max-offset must be between 0 and 64" }
         require(maxBooksPerPlayer in 1..100) { "Build-book max-per-player must be between 1 and 100" }
         require(customModelData >= 0) { "Build-book custom-model-data cannot be negative" }

@@ -12,6 +12,7 @@ group = "ARC"
 version = "1.0"
 description = "ARC"
 val pluginVersion = version.toString()
+val arcCoreVersion = "2.1.2"
 
 java { toolchain { languageVersion.set(JavaLanguageVersion.of(25)) } }
 kotlin { jvmToolchain(25) }
@@ -48,13 +49,13 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.10.2")
 
     implementation(kotlin("stdlib"))
-    implementation("ru.ruscrafting.arc:arc-core:2.0.3")
-    implementation("ru.ruscrafting.arc:arc-core-logging:2.0.3")
-    implementation("ru.ruscrafting.arc:arc-core-metrics:2.0.3")
-    implementation("ru.ruscrafting.arc:arc-core-redis:2.0.3")
-    implementation("ru.ruscrafting.arc:arc-core-sql:2.0.3")
-    implementation("ru.ruscrafting.arc:arc-core-paper:2.0.3")
-    implementation("ru.ruscrafting.arc:arc-core-ai:2.0.3")
+    implementation("ru.ruscrafting.arc:arc-core:$arcCoreVersion")
+    implementation("ru.ruscrafting.arc:arc-core-logging:$arcCoreVersion")
+    implementation("ru.ruscrafting.arc:arc-core-metrics:$arcCoreVersion")
+    implementation("ru.ruscrafting.arc:arc-core-redis:$arcCoreVersion")
+    implementation("ru.ruscrafting.arc:arc-core-sql:$arcCoreVersion")
+    implementation("ru.ruscrafting.arc:arc-core-paper:$arcCoreVersion")
+    implementation("ru.ruscrafting.arc:arc-core-ai:$arcCoreVersion")
 
     // snakeyaml-engine comes transitively from arc-core
 
@@ -128,7 +129,7 @@ dependencies {
     testImplementation(libs.org.junit.jupiter.junit.jupiter.engine)
     testImplementation(libs.org.junit.jupiter.junit.jupiter.params)
     testImplementation(libs.com.thedeanda.lorem)
-    testImplementation("ru.ruscrafting.arc:arc-core-paper-testing:2.0.3")
+    testImplementation("ru.ruscrafting.arc:arc-core-paper-testing:$arcCoreVersion")
     testImplementation("org.mockito:mockito-core:5.14.2")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
@@ -143,7 +144,7 @@ dependencies {
     testImplementation("io.mockk:mockk:1.14.7")
 
     // Testcontainers — integration tests source set
-    "integrationTestImplementation"("ru.ruscrafting.arc:arc-core-integration-testing:2.0.3")
+    "integrationTestImplementation"("ru.ruscrafting.arc:arc-core-integration-testing:$arcCoreVersion")
     "integrationTestImplementation"("org.testcontainers:testcontainers-junit-jupiter:2.0.5")
     // Integration tests reuse all test dependencies (Kotest, MockK, Paper API, etc.)
     "integrationTestImplementation"(sourceSets.test.get().output)

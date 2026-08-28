@@ -213,6 +213,11 @@ The bundled `modules/builder-tools.yml` is disabled by default. The tracked
 survival mirror enables `book-contracts` and its MySQL connection, while
 `modules/builder-tools-runtime.yml` enables the module for `allowed-worlds:
 ["*"]`; spawn and parkour remain off. No code path rewrites shop prices.
+Before Building validates the shared `modules/auto-build.yml`, it additively
+merges any newly packaged keys. Existing node-specific values and unknown
+operator sections remain unchanged, while new book-editor text becomes
+available in the same JAR startup instead of disabling the module after an
+out-of-order config rollout.
 Operation journal records live below
 `plugins/ARC/data/builder-tools-journal/`; pending free drafts live below
 `plugins/ARC/data/builder-book-draft-journal/`. Both are server-owned runtime

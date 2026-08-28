@@ -11,6 +11,7 @@ import ru.arc.autobuild.BuildBookSettings
 import ru.arc.config.ConfigManager
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.TestTaskScheduler
+import java.nio.file.Files
 
 class BuildBookEditorPresentationTest : KotestTestBase({
     val plain = PlainTextComponentSerializer.plainText()
@@ -38,6 +39,43 @@ class BuildBookEditorPresentationTest : KotestTestBase({
                 "Изменения сохраняются сразу; открытое превью обновляется вместе с книгой.",
                 "• Esc — закрыть настройку •",
             )
+        }
+
+        it("merge-forwards new editor text without replacing operator settings") {
+            val path = ConfigManager.moduleYamlPath(dataPath, "auto-build.yml")
+            val original = Files.readString(path)
+            try {
+                Files.writeString(
+                    path,
+                    """
+                    build-book:
+                      player-copy:
+                        max-offset: 12
+                        max-per-player: 17
+                        custom-model-data: 0
+                        default-name: Operator draft
+                    operator-only:
+                      keep: true
+                    """.trimIndent() + "\n",
+                )
+                ConfigManager.clear()
+
+                BuildBookSettings.validate()
+                val merged = ConfigManager.ofModule(dataPath, "auto-build.yml")
+                merged.int("build-book.player-copy.max-offset") shouldBe 12
+                merged.string("build-book.player-copy.default-name") shouldBe "Operator draft"
+                merged.boolean("operator-only.keep") shouldBe true
+                merged.string("build-book.editor.title") shouldBe "<dark_gray>Настройка книги"
+                merged.string("build-book.editor.preview-protection-denied.name") shouldBe
+                    "<#ff9f0f><bold>Положение недоступно"
+
+                val afterFirstValidation = Files.readString(path)
+                BuildBookSettings.validate()
+                Files.readString(path) shouldBe afterFirstValidation
+            } finally {
+                Files.writeString(path, original)
+                ConfigManager.clear()
+            }
         }
 
         it("explicitly disables italics on every final name and lore root") {
