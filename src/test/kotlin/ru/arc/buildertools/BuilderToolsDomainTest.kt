@@ -634,6 +634,45 @@ class BuilderToolsDomainTest : FunSpec({
         }
     }
 
+    test("undo reverses ordinary materials without reissuing a consumed build book") {
+        val now = 1_800_000_000_000L
+        val change = BuilderBlockChange(
+            BuilderBlockPos(worldId, 4, 70, 8),
+            "minecraft:air",
+            "minecraft:stone",
+        )
+        val book = BuilderItemAmount("AAAA", "minecraft:book", 1)
+        val stone = BuilderItemAmount("BBBB", "minecraft:stone", 4)
+        val ordinary = BuilderPlan(
+            id = UUID.randomUUID(),
+            playerId = playerId,
+            kind = BuilderPlanKind.FILL,
+            changes = listOf(change),
+            costs = listOf(stone),
+            rewards = emptyList(),
+            createdAtMillis = now,
+            expiresAtMillis = now + 30_000,
+        )
+        BuilderUndoRules.exchangeFor(ordinary) shouldBe BuilderUndoExchange(
+            costs = emptyList(),
+            rewards = listOf(stone),
+        )
+
+        val builtFromBook = ordinary.copy(
+            kind = BuilderPlanKind.BUILD_BOOK,
+            costs = listOf(book),
+            bookBlueprintId = UUID.randomUUID(),
+            bookInstanceId = UUID.randomUUID(),
+            bookInstanceGeneration = 1,
+            bookBuildingId = "player-blueprint.schem",
+            bookSchematicSha256 = "a".repeat(64),
+        )
+        BuilderUndoRules.exchangeFor(builtFromBook) shouldBe BuilderUndoExchange(
+            costs = emptyList(),
+            rewards = emptyList(),
+        )
+    }
+
     test("recovery distinguishes never-applied and possibly-applied phases") {
         BuilderRecoveryRules.action(
             BuilderJournalPhase.PREPARED,

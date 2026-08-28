@@ -975,12 +975,13 @@ internal class BuilderToolsRuntime(
         val changes = source.plan.changes.asReversed().map { change ->
             BuilderBlockChange(change.position, change.afterBlockData, change.beforeBlockData)
         }
+        val exchange = BuilderUndoRules.exchangeFor(source.plan)
         val plan = newPlan(
             player = player,
             kind = BuilderPlanKind.UNDO,
             changes = changes,
-            costs = source.plan.rewards,
-            rewards = source.plan.costs,
+            costs = exchange.costs,
+            rewards = exchange.rewards,
             sourceRecordId = source.operationId,
         )
         preparePlan(player, plan)

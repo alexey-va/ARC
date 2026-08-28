@@ -86,7 +86,10 @@
   fill/paste/deconstruction/crown operations neither consume nor produce items
   and never damage a tool. A registered build book remains paid and single-use
   in every game mode; creative cannot bypass its UUID ledger. Changing game
-  mode after preview invalidates the plan.
+  mode after preview invalidates the plan. Undoing a completed book build
+  removes its blocks but does not manufacture a replacement for the permanently
+  consumed book instance; material-backed operations still reverse their exact
+  costs and rewards.
 
 `/builder` is the only public command root. The former `/deconstruction`,
 `/crown`, and `/buildtools` roots are deliberately not registered. Existing

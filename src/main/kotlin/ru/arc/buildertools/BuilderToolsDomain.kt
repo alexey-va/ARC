@@ -210,6 +210,25 @@ data class BuilderPlan(
     }
 }
 
+internal data class BuilderUndoExchange(
+    val costs: List<BuilderItemAmount>,
+    val rewards: List<BuilderItemAmount>,
+)
+
+/** Inventory side of an inverse operation; world changes are reversed separately. */
+internal object BuilderUndoRules {
+    fun exchangeFor(source: BuilderPlan): BuilderUndoExchange {
+        require(source.kind != BuilderPlanKind.UNDO) { "An undo operation cannot be its own source" }
+        return BuilderUndoExchange(
+            costs = source.rewards,
+            // A successful book build permanently consumes its MySQL instance.
+            // Reissuing the removed ItemStack would create a locally active-looking
+            // bearer that the authoritative one-time ledger must reject as stale.
+            rewards = if (source.kind == BuilderPlanKind.BUILD_BOOK) emptyList() else source.costs,
+        )
+    }
+}
+
 data class BuilderJournalRecord(
     val schemaVersion: Int = CURRENT_SCHEMA_VERSION,
     val operationId: UUID,
