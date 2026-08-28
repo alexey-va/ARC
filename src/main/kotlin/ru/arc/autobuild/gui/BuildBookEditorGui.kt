@@ -70,14 +70,6 @@ object BuildBookEditorGui {
                 }, 5, 1)
                 addItem(rotationItem(data), 7, 1)
                 addItem(actionItem("reset", Material.REPEATER) { BuildBookTransform() }, 2, 3)
-                addItem(
-                    actionItem("close", Material.LIME_DYE) {
-                        player.closeInventory()
-                        null
-                    },
-                    6,
-                    3,
-                )
             },
         )
         gui.setOnTopClick { it.isCancelled = true }
@@ -165,14 +157,24 @@ object BuildBookEditorGui {
         lore: List<Component>,
         click: ((InventoryClickEvent) -> Unit)? = null,
     ): GuiItem {
-        val stack = ItemStack(material)
-        stack.editMeta { meta ->
-            TextUtil.strip(name)?.let(meta::displayName)
-            meta.lore(lore.mapNotNull(TextUtil::strip))
-        }
-        return GuiItems.create(stack) { event ->
+        return GuiItems.create(BuildBookEditorPresentation.item(material, name, lore)) { event ->
             event.isCancelled = true
             click?.invoke(event)
         }
     }
+}
+
+/** Final item presentation shared by every visible editor control. */
+internal object BuildBookEditorPresentation {
+    fun item(
+        material: Material,
+        name: Component,
+        lore: List<Component>,
+    ): ItemStack =
+        ItemStack(material).apply {
+            editMeta { meta ->
+                TextUtil.strip(name)?.let(meta::displayName)
+                meta.lore(lore.mapNotNull(TextUtil::strip))
+            }
+        }
 }

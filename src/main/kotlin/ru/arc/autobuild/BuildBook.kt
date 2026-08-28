@@ -159,7 +159,6 @@ object BuildBookSettings {
         "build-book.editor.axis-z.name",
         "build-book.editor.rotation.name",
         "build-book.editor.reset.name",
-        "build-book.editor.close.name",
     )
     private val REQUIRED_LISTS = setOf(
         "build-book.lore",
@@ -169,7 +168,6 @@ object BuildBookSettings {
         "build-book.editor.axis-z.lore",
         "build-book.editor.rotation.lore",
         "build-book.editor.reset.lore",
-        "build-book.editor.close.lore",
     )
 }
 
