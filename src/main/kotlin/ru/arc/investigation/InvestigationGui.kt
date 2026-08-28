@@ -17,7 +17,8 @@ object InvestigationGui {
 
     fun openHub(player: Player, latest: InvestigationJournalRecord?) {
         val policy = InvestigationModule.configOrNull() ?: return
-        GuiUtils.constructAndShowAsync({ buildHub(player, latest, policy) }, player)
+        val bypassCooldown = player.hasPermission(InvestigationModule.COOLDOWN_BYPASS_PERMISSION)
+        GuiUtils.constructAndShowAsync({ buildHub(player, latest, policy, bypassCooldown) }, player)
     }
 
     fun openCase(player: Player, record: InvestigationJournalRecord) {
@@ -28,6 +29,7 @@ object InvestigationGui {
         player: Player,
         latest: InvestigationJournalRecord?,
         policy: InvestigationConfig,
+        bypassCooldown: Boolean,
     ): ChestGui =
         gui(guiConfig.string("hub.title", "<dark_gray>Бюро расследований"), 3, player, guiConfig) {
             background()
@@ -58,9 +60,13 @@ object InvestigationGui {
                             "<gray>Взнос: <gold>${InvestigationModule.money(policy.feeMinor)} <white>💰",
                             "<gray>Награда: <gold>${InvestigationModule.money(policy.rewardMinor)} <white>💰",
                             "<gray>На расследование: <white>${policy.duration.seconds} секунд",
-                            "<gray>Повтор: <white>${formatCooldown(policy.cooldown.toMinutes())}",
+                            if (bypassCooldown) {
+                                "<gray>Повтор: <aqua>без ожидания для администратора"
+                            } else {
+                                "<gray>Повтор: <white>${formatCooldown(policy.cooldown.toMinutes())}"
+                            },
                             "",
-                            cooldownLine(latest),
+                            cooldownLine(latest, bypassCooldown),
                             "<green>Нажмите, чтобы оплатить и начать.",
                         ),
                     )
@@ -229,9 +235,13 @@ object InvestigationGui {
         fromConfig(guiConfig, "items.${role.configKey}")
     }
 
-    private fun cooldownLine(latest: InvestigationJournalRecord?): String {
+    private fun cooldownLine(
+        latest: InvestigationJournalRecord?,
+        bypassCooldown: Boolean,
+    ): String {
         val until = latest?.cooldownUntil ?: return "<gray>Готово к выдаче."
         if (until <= System.currentTimeMillis()) return "<gray>Готово к выдаче."
+        if (bypassCooldown) return "<aqua>Админ-доступ: <white>перерыв пропущен."
         val seconds = ((until - System.currentTimeMillis()) + 999L) / 1_000L
         val hours = seconds / 3_600L
         val minutes = seconds % 3_600L / 60L

@@ -63,7 +63,10 @@ class InvestigationService(
 
     fun balanceMinor(playerId: UUID): Long? = wallet.balanceMinor(playerId)
 
-    fun start(playerId: UUID): InvestigationStartResult {
+    fun start(
+        playerId: UUID,
+        bypassCooldown: Boolean = false,
+    ): InvestigationStartResult {
         if (!enabled()) return InvestigationStartResult.Disabled
         if (!wallet.available) return InvestigationStartResult.EconomyUnavailable
         if (!activeOperations.add(playerId)) return InvestigationStartResult.Busy
@@ -77,8 +80,10 @@ class InvestigationService(
                 }
             }
             val now = clock()
-            journal.latest(playerId)?.cooldownUntil?.takeIf { it > now }?.let {
-                return InvestigationStartResult.Cooldown(it)
+            if (!bypassCooldown) {
+                journal.latest(playerId)?.cooldownUntil?.takeIf { it > now }?.let {
+                    return InvestigationStartResult.Cooldown(it)
+                }
             }
             val fee = feeMinor()
             val reward = rewardMinor()

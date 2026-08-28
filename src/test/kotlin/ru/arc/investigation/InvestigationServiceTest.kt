@@ -55,6 +55,24 @@ class InvestigationServiceTest : StringSpec({
         fixture.wallet.balance shouldBe 90_000L
     }
 
+    "cooldown bypass starts another paid case without weakening the active-case lock" {
+        val fixture = InvestigationFixture()
+        val first = fixture.service.start(fixture.playerId) as InvestigationStartResult.Started
+
+        fixture.service.start(fixture.playerId, bypassCooldown = true) shouldBe InvestigationStartResult.AlreadyActive(first.record)
+        fixture.service.collectClue(fixture.playerId, InvestigationWitness.STAVR)
+        fixture.service.collectClue(fixture.playerId, InvestigationWitness.GORDEY)
+        fixture.service.collectClue(fixture.playerId, InvestigationWitness.TIKHON)
+        val wrong = InvestigationVerdict.entries.first { it != first.record.case.verdict }
+        fixture.service.submitVerdict(fixture.playerId, wrong)::class shouldBe InvestigationVerdictResult.Wrong::class
+
+        fixture.service.start(fixture.playerId)::class shouldBe InvestigationStartResult.Cooldown::class
+        fixture.service.start(fixture.playerId, bypassCooldown = true)::class shouldBe InvestigationStartResult.Started::class
+        fixture.wallet.withdrawals shouldBe 2
+        fixture.wallet.deposits shouldBe 0
+        fixture.wallet.balance shouldBe 80_000L
+    }
+
     "timeout is durable and cannot be answered after the deadline" {
         val fixture = InvestigationFixture()
         fixture.service.start(fixture.playerId) as InvestigationStartResult.Started

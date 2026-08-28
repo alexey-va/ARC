@@ -93,6 +93,8 @@ permissions:
   arc.admin:
     description: Administer ARC
     default: op
+    children:
+      arc.investigations.cooldown.bypass: true
   arc.audit:
     description: Inspect ARC audit data
     default: op
@@ -199,6 +201,9 @@ permissions:
   arc.invest.max.30:
     description: Hold up to 30 units of one ARC stock
     default: false
+  arc.investigations.cooldown.bypass:
+    description: Bypass the cooldown between paid bureau investigations
+    default: op
   arc.furniture.admin:
     description: Preview and confirm ItemsAdder furniture cleanup
     default: op

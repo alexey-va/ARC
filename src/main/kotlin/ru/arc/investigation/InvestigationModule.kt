@@ -16,6 +16,8 @@ object InvestigationModule : PluginModule {
     override val name = "Investigations"
     override val priority = 83
 
+    internal const val COOLDOWN_BYPASS_PERMISSION = "arc.investigations.cooldown.bypass"
+
     @Volatile private var config: InvestigationConfig? = null
     private var journal: InvestigationJournal? = null
     private var service: InvestigationService? = null
@@ -68,7 +70,12 @@ object InvestigationModule : PluginModule {
             player.sendActionBar(TextUtil.mm("<yellow>Фома уже убрал ведомость. Подойдите к нему снова."))
             return
         }
-        when (val result = currentService.start(player.uniqueId)) {
+        when (
+            val result = currentService.start(
+                player.uniqueId,
+                bypassCooldown = player.hasPermission(COOLDOWN_BYPASS_PERMISSION),
+            )
+        ) {
             is InvestigationStartResult.Started -> {
                 player.sendMessage(
                     TextUtil.mm(
