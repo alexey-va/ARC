@@ -86,9 +86,11 @@ class RedisAuditRepository private constructor(
          */
         fun create(): RedisAuditRepository {
             val config = ConfigManager.of(ARC.instance.dataPath, "modules/audit.yml")
+            val auditConfig = AuditConfig(config)
             val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+            val localServer = checkNotNull(ARC.serverName) { "ARC server name is not initialized" }
 
-            val saveIntervalTicks = config.integer("save-interval", 20).toLong()
+            val saveIntervalTicks = auditConfig.saveInterval
             val saveIntervalMs = saveIntervalTicks * 50 // Convert ticks to ms
 
             val repo =
@@ -98,6 +100,8 @@ class RedisAuditRepository private constructor(
                     updateChannel = "arc.audit-invalidate.v2",
                     scope = scope,
                     syncMode = RedisSyncMode.INVALIDATION,
+                    localSyncOrigin = localServer,
+                    invalidationCoalesceWindow = auditConfig.invalidationCoalesceSeconds.seconds,
                 ) {
                     // Weight, pruning and clear-all operate on the complete audit set.
                     loadAllOnStart(true)

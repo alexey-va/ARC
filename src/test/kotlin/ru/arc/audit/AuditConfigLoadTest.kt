@@ -24,6 +24,7 @@ class AuditConfigLoadTest {
         writeAuditYaml(
             """
             save-interval: 40
+            invalidation-coalesce-seconds: 7
             prune-interval: 12000
             max-age-seconds: 604800
             max-weight: 50000
@@ -65,6 +66,7 @@ class AuditConfigLoadTest {
     fun `save interval loaded from YAML`() {
         val cfg = AuditConfig.fromFile(tempDir)
         assertEquals(40L, cfg.saveInterval)
+        assertEquals(7, cfg.invalidationCoalesceSeconds)
     }
 
     @Test
@@ -145,6 +147,7 @@ class AuditConfigLoadTest {
     fun `default config uses sensible defaults`() {
         val cfg = TestAuditConfig()
         assertEquals(20L, cfg.saveInterval)
+        assertEquals(5, cfg.invalidationCoalesceSeconds)
         assertEquals(20, cfg.pageSize)
         assertFalse(cfg.balanceHistoryEnabled)
     }

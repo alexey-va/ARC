@@ -8,7 +8,7 @@ McFine **Paper/Purpur** plugin — treasure hunts, stock market, board, and cros
 
 - **Java 25** (Temurin)
 - **Gradle 9.2.1**
-- Published `arc-core 2.1.2` artifacts from the public RusCrafting repository
+- Published `arc-core 2.1.3` artifacts from the public RusCrafting repository
 
 ## Build
 

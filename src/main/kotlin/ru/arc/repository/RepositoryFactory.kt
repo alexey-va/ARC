@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import ru.arc.ARC
 import ru.arc.repository.redis.RedisSyncMode
 import ru.arc.util.Common
+import kotlin.time.Duration
 
 /**
  * ARC convenience wrapper — injects [ARC.redisManager] and [Common.gson].
@@ -14,6 +15,8 @@ inline fun <reified T : Entity> redisRepo(
     updateChannel: String,
     scope: CoroutineScope,
     syncMode: RedisSyncMode = RedisSyncMode.ENTITY,
+    localSyncOrigin: String? = null,
+    invalidationCoalesceWindow: Duration = Duration.ZERO,
     configure: RepoConfig.Builder<T>.() -> Unit = {},
 ): CachedRepository<T> {
     val redis = ARC.redisManager
@@ -26,6 +29,8 @@ inline fun <reified T : Entity> redisRepo(
         updateChannel = updateChannel,
         scope = scope,
         syncMode = syncMode,
+        localSyncOrigin = localSyncOrigin,
+        invalidationCoalesceWindow = invalidationCoalesceWindow,
         configure = configure,
     )
 }

@@ -203,19 +203,58 @@ class AuditData(
     // ==================== Mergeable Implementation ====================
 
     override fun merge(other: AuditData) {
-        val merged = linkedMapOf<String, Transaction>()
-        (transactions.toList() + other.transactions.toList()).forEach { candidate ->
-            val current = merged[candidate.mergeKey]
-            if (
-                current == null ||
-                candidate.occurrenceCount > current.occurrenceCount ||
-                (candidate.occurrenceCount == current.occurrenceCount && candidate.timestamp2 > current.timestamp2)
-            ) {
-                merged[candidate.mergeKey] = candidate.copy()
+        if (hasEquivalentTransactions(other.transactions)) return
+
+        val expectedSize = transactions.size + other.transactions.size
+        val mapCapacity = ((expectedSize / 0.75f) + 1).toInt().coerceAtLeast(16)
+        val merged = HashMap<String, Transaction>(mapCapacity)
+
+        transactions.forEach { candidate ->
+            val mergeKey = candidate.mergeKey
+            val current = merged[mergeKey]
+            if (candidate.winsOver(current)) {
+                merged[mergeKey] = candidate
             }
         }
+
+        other.transactions.forEach { candidate ->
+            val mergeKey = candidate.mergeKey
+            val current = merged[mergeKey]
+            if (candidate.winsOver(current)) {
+                // Keep the cache independent from the deserialized sync snapshot.
+                // Existing local records stay in place when snapshots are identical.
+                merged[mergeKey] = candidate.copy()
+            }
+        }
+
+        val ordered = merged.values.toMutableList().apply { sortBy(Transaction::timestamp) }
+        if (hasSameTransactionOrder(ordered)) return
+
         transactions.clear()
-        merged.values.sortedBy(Transaction::timestamp).forEach(transactions::add)
+        transactions.addAll(ordered)
+    }
+
+    private fun Transaction.winsOver(current: Transaction?): Boolean =
+        current == null ||
+            occurrenceCount > current.occurrenceCount ||
+            (occurrenceCount == current.occurrenceCount && timestamp2 > current.timestamp2)
+
+    private fun hasEquivalentTransactions(other: Collection<Transaction>): Boolean {
+        val localIterator = transactions.iterator()
+        val remoteIterator = other.iterator()
+        while (localIterator.hasNext() && remoteIterator.hasNext()) {
+            if (localIterator.next() != remoteIterator.next()) return false
+        }
+        return !localIterator.hasNext() && !remoteIterator.hasNext()
+    }
+
+    private fun hasSameTransactionOrder(ordered: List<Transaction>): Boolean {
+        if (transactions.size != ordered.size) return false
+        val current = transactions.iterator()
+        ordered.forEach { expected ->
+            if (!current.hasNext() || current.next() !== expected) return false
+        }
+        return !current.hasNext()
     }
 }
 

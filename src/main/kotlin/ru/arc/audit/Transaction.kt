@@ -57,6 +57,9 @@ data class Transaction(
     @SerializedName("x")
     val context: EconomyLedgerContext? = null,
 ) {
+    @Transient
+    private var cachedMergeKey: String? = null
+
     /**
      * Является ли транзакция доходом.
      */
@@ -90,10 +93,31 @@ data class Transaction(
     val normalizedStatus: EconomyEventStatus get() = context?.normalizedStatus ?: EconomyEventStatus.SUCCEEDED
 
     val mergeKey: String
-        get() =
-            eventId?.takeIf(String::isNotBlank)?.let { "event:$it" }
-                ?: listOf(timestamp, type, comment, normalizedSource, normalizedFlow, normalizedCurrency, normalizedServer, origin.orEmpty())
-                    .joinToString("|") { it.toString() }
+        get() {
+            cachedMergeKey?.let { return it }
+            val key =
+                eventId?.takeIf(String::isNotBlank)?.let { "event:$it" }
+                    ?: buildString(128) {
+                        append("legacy:")
+                        append(timestamp)
+                        append('|')
+                        append(type)
+                        append('|')
+                        append(comment)
+                        append('|')
+                        append(normalizedSource)
+                        append('|')
+                        append(normalizedFlow)
+                        append('|')
+                        append(normalizedCurrency)
+                        append('|')
+                        append(normalizedServer)
+                        append('|')
+                        append(origin.orEmpty())
+                    }
+            cachedMergeKey = key
+            return key
+        }
 
     /**
      * Агрегировать с другой транзакцией того же типа.

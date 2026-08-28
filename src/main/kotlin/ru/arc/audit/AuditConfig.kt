@@ -16,6 +16,10 @@ open class AuditConfig(
     open val saveInterval: Long
         get() = config.integer("save-interval", 20).toLong()
 
+    /** Maximum delay used to coalesce repeated remote invalidations for one player. */
+    open val invalidationCoalesceSeconds: Int
+        get() = config.integer("invalidation-coalesce-seconds", 5).coerceIn(0, 60)
+
     /** Interval for pruning old data (ticks) */
     open val pruneInterval: Long
         get() = config.integer("prune-interval", 6000).toLong()
