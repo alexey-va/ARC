@@ -32,7 +32,7 @@ class BuilderBookSqlRegistryIntegrationTest : StringSpec({
                 registry.issuePaidMint(mint.transactionId, 10L).await().status shouldBe BuilderBookMintStatus.ISSUED
                 registry.markDelivered(mint.instanceId, mint.transactionId, 11L).await() shouldBe true
 
-                mysql.endpoint.connect().use { connection ->
+                mysql.endpoint.copy(username = "root", password = settings.rootPassword).connect().use { connection ->
                     connection.createStatement().use { statement ->
                         statement.execute(
                             "CREATE TRIGGER arc_builder_fail_claim BEFORE INSERT ON arc_one_time_uses " +
@@ -48,7 +48,7 @@ class BuilderBookSqlRegistryIntegrationTest : StringSpec({
                 reserved.status shouldBe BuilderBookInstanceStatus.RESERVED
                 reserved.reservationOperationId shouldBe operationId
 
-                mysql.endpoint.connect().use { connection ->
+                mysql.endpoint.copy(username = "root", password = settings.rootPassword).connect().use { connection ->
                     connection.createStatement().use { statement ->
                         statement.execute("DROP TRIGGER arc_builder_fail_claim")
                     }
