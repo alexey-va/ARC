@@ -34,12 +34,13 @@ class BuilderToolsRuntimeHealthTest : FunSpec({
                 recoveryBlocked = true,
                 recoveryPlayers = 2,
                 deliveryWaitingForSpace = 3,
+                reservationReleaseBacklog = 6,
                 activeOperations = 1,
                 bookLockedPlayers = 4,
             ),
         )
         failed.state shouldBe RuntimeHealthState.DOWN
-        failed.recoveryBacklog shouldBe 5
+        failed.recoveryBacklog shouldBe 11
         failed.activeLeases shouldBe 5
     }
 
@@ -50,6 +51,16 @@ class BuilderToolsRuntimeHealthTest : FunSpec({
 
         contribution.state shouldBe RuntimeHealthState.DEGRADED
         contribution.dependencies["book_registry"] shouldBe false
+    }
+
+    test("an exact reservation release retry is visible without taking unrelated books down") {
+        val contribution = BuilderToolsRuntimeHealth.contribution(
+            healthyInputs().copy(reservationReleaseBacklog = 1),
+        )
+
+        contribution.state shouldBe RuntimeHealthState.DEGRADED
+        contribution.recoveryBacklog shouldBe 1
+        contribution.dependencies["book_registry"] shouldBe true
     }
 
     test("draft journal remains a fail-closed startup dependency") {
@@ -97,6 +108,7 @@ private fun healthyInputs() = BuilderToolsRuntimeHealthInputs(
     recoveryBlocked = false,
     recoveryPlayers = 0,
     deliveryWaitingForSpace = 0,
+    reservationReleaseBacklog = 0,
     activeOperations = 0,
     bookLockedPlayers = 0,
     landsRequired = true,

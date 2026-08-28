@@ -159,7 +159,9 @@ pre-mutation rollback releases the shared claim and returns the domain row to
 `AVAILABLE`. Unknown outcomes retain both recovery identities. The core ledger
 holds a MySQL advisory lock across the external operation, so two duplicated
 items carrying the same instance UUID cannot both build, copy, or reserve
-concurrently.
+concurrently. A transient release failure is retried every five seconds with
+the same claim UUID; it appears in the bounded health backlog instead of
+leaving that book reserved until the next restart.
 
 Auction listing adds a separate `AVAILABLE -> LISTED` compare-and-set and an
 exact lease UUID copied into the auction ItemStack. The zAuctionHouse blacklist
@@ -181,6 +183,12 @@ calls are never blindly retried. Startup reconciles the exact transaction
 reason and amount from RedisEconomy history, finishes paid issuance, refunds a
 proven failed issue, restores pending delivery, and quarantines ambiguous money
 states for manual review.
+
+Free draft delivery also has a durable two-phase journal. After asynchronous
+schematic verification returns, recovery takes a fresh main-thread inventory
+snapshot—including the cursor item—before deciding whether to issue or
+acknowledge the draft. A player cannot turn storage latency into stale item
+evidence or a second delivery.
 
 ## Runtime ownership
 

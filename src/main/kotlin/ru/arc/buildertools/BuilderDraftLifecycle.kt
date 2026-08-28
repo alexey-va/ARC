@@ -32,7 +32,34 @@ internal data class BuilderDraftLifecycleHealth(
 internal data class BuilderDraftInventoryEvidence(
     val matchingItems: Int,
     val conflictingItems: Int,
-)
+) {
+    companion object {
+        /** Captures the current main-thread view immediately before a recovery decision. */
+        fun capture(player: Player, record: BuilderDraftRecord): BuilderDraftInventoryEvidence {
+            check(Bukkit.isPrimaryThread()) { "Builder-draft inventory evidence must be captured on the primary thread" }
+            val presented = sequence {
+                player.inventory.contents.filterNotNull().forEach { yield(it) }
+                player.itemOnCursor.takeUnless { it.type.isAir }?.let { yield(it) }
+            }
+                .mapNotNull(BuildBookCodec::read)
+                .filter { data -> data.draft && data.blueprintId == record.blueprintId }
+                .toList()
+            val matching = presented.count { data -> matches(record, data) }
+            return BuilderDraftInventoryEvidence(matching, presented.size - matching)
+        }
+
+        private fun matches(record: BuilderDraftRecord, data: BuildBookData): Boolean =
+            data.draft &&
+                data.creatorId == record.playerId &&
+                data.creatorName == record.playerName &&
+                data.blueprintId == record.blueprintId &&
+                data.buildingId == record.buildingId &&
+                data.title == record.title &&
+                data.contentSha256 == record.contentSha256 &&
+                data.schematicSha256 == record.schematicSha256 &&
+                data.blockCount == record.blockCount
+    }
+}
 
 /**
  * Durable free-draft issuance. The journal is committed before the schematic is
@@ -280,7 +307,6 @@ internal class BuilderDraftLifecycle(
             if (announce) send(player, "errors.busy")
             return
         }
-        val inventoryEvidence = draftInventoryEvidence(player, record)
         writeAsync(
             action = { PlayerBuildBookStore.inspectSchematic(record.buildingId) },
             callback = recovery@{ inspection, failure ->
@@ -328,6 +354,10 @@ internal class BuilderDraftLifecycle(
                     }
                 }
                 uncertainAcknowledgements -= record.operationId
+                // Storage inspection is asynchronous. Re-snapshot the locked
+                // inventory now so a moved cursor/item cannot make the journal
+                // acknowledge stale evidence or issue a second draft.
+                val inventoryEvidence = BuilderDraftInventoryEvidence.capture(player, record)
                 when (
                     BuilderDraftRecoveryRules.action(
                         record,
@@ -529,27 +559,6 @@ internal class BuilderDraftLifecycle(
         finishRecovery(player.uniqueId)
         if (player.isOnline) send(player, "book.manual-review")
     }
-
-    private fun draftInventoryEvidence(player: Player, record: BuilderDraftRecord): BuilderDraftInventoryEvidence {
-        val presented = player.inventory.contents
-            .filterNotNull()
-            .mapNotNull(BuildBookCodec::read)
-            .filter { data -> data.draft && data.blueprintId == record.blueprintId }
-            .toList()
-        val matching = presented.count { data -> matches(record, data) }
-        return BuilderDraftInventoryEvidence(matching, presented.size - matching)
-    }
-
-    private fun matches(record: BuilderDraftRecord, data: BuildBookData): Boolean =
-        data.draft &&
-            data.creatorId == record.playerId &&
-            data.creatorName == record.playerName &&
-            data.blueprintId == record.blueprintId &&
-            data.buildingId == record.buildingId &&
-            data.title == record.title &&
-            data.contentSha256 == record.contentSha256 &&
-            data.schematicSha256 == record.schematicSha256 &&
-            data.blockCount == record.blockCount
 
     private fun draftData(record: BuilderDraftRecord): BuildBookData = BuildBookData(
         buildingId = record.buildingId,

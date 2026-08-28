@@ -1291,6 +1291,7 @@ internal class BuilderToolsRuntime(
                     recoveryBlocked = recoveryBlocked || bookHealth.recoveryBlocked,
                     recoveryPlayers = recoveryByPlayer.size,
                     deliveryWaitingForSpace = bookHealth.deliveryWaitingForSpace,
+                    reservationReleaseBacklog = bookHealth.reservationReleaseBacklog,
                     activeOperations = operationLocks.activeOperationCount,
                     bookLockedPlayers = operationLocks.bookLockedPlayerCount,
                     landsRequired = config.requireLands,

@@ -19,7 +19,6 @@ import ru.arc.hooks.HookRegistry
 import ru.arc.onetime.OneTimeUseClaim
 import ru.arc.onetime.OneTimeUseClaimResult
 import ru.arc.onetime.OneTimeUseCommitResult
-import ru.arc.onetime.OneTimeUseReleaseResult
 import ru.arc.sql.SqlRuntime
 import ru.arc.text.LocalizedMiniMessage
 import ru.arc.observability.StructuredDebugLine
@@ -50,6 +49,7 @@ internal interface BuilderBookLifecycleHost {
 
 internal data class BuilderBookLifecycleHealth(
     val deliveryWaitingForSpace: Int,
+    val reservationReleaseBacklog: Int,
     val registryReady: Boolean,
     val registryFailed: Boolean,
     val draftJournalReady: Boolean,
@@ -105,6 +105,33 @@ internal class BuilderBookLifecycle(
     } else {
         null
     }
+    private val releaseQueue = registry?.let { activeRegistry ->
+        BuilderBookReleaseQueue(
+            release = activeRegistry.oneTimeUses::release,
+            runSync = { action -> taskScope.runSync(action) },
+            onPending = { claim, result, failure ->
+                warn(
+                    "Builder-book reservation release queued for retry: instance={} operation={} type={} result={}",
+                    claim.identity.useId,
+                    claim.claimId,
+                    BuilderToolsFailureType.of(failure),
+                    result,
+                )
+            },
+            onRecovered = { claim ->
+                info(
+                    "Builder-book reservation release recovered: instance={} operation={}",
+                    claim.identity.useId,
+                    claim.claimId,
+                )
+            },
+            onCallbackFailure = { failure ->
+                error(
+                    "Builder-book reservation release callback failed: type=${BuilderToolsFailureType.of(failure)}",
+                )
+            },
+        )
+    }
     private val mintCoordinator = registry?.let { registry ->
         BuilderBookMintCoordinator(
             registry = registry,
@@ -158,6 +185,7 @@ internal class BuilderBookLifecycle(
         checkNotNull(
             taskScope.runTimer(100L, 100L) {
                 drafts.retryLockedPlayers()
+                releaseQueue?.retryPending()
                 if (config.bookContractsEnabled) {
                     (operationLocks.bookLockedPlayerIds() + deliveryWaitingForSpace).toList()
                         .mapNotNull(Bukkit::getPlayer)
@@ -177,6 +205,7 @@ internal class BuilderBookLifecycle(
         val draftHealth = drafts.health()
         return BuilderBookLifecycleHealth(
             deliveryWaitingForSpace = deliveryWaitingForSpace.size,
+            reservationReleaseBacklog = releaseQueue?.pendingCount ?: 0,
             registryReady = registryReady,
             registryFailed = registryFailed,
             draftJournalReady = draftHealth.ready,
@@ -247,7 +276,7 @@ internal class BuilderBookLifecycle(
 
     fun releasePlanReservation(plan: BuilderPlan) {
         if (plan.bookInstanceId == null) return
-        val activeRegistry = registry ?: run {
+        val queue = releaseQueue ?: run {
             recoveryBlocked = true
             return
         }
@@ -255,20 +284,7 @@ internal class BuilderBookLifecycle(
             recoveryBlocked = true
             return
         }
-        activeRegistry.oneTimeUses.release(BuilderBookOneTimeUse.claim(plan, serverName)).whenComplete { released, failure ->
-            taskScope.runSync {
-                if (
-                    failure != null ||
-                    (released != OneTimeUseReleaseResult.RELEASED && released != OneTimeUseReleaseResult.ALREADY_RELEASED)
-                ) {
-                    recoveryBlocked = true
-                    error(
-                        "Builder-book reservation release failed for ${plan.id}: " +
-                            "type=${BuilderToolsFailureType.of(failure)} result=$released",
-                    )
-                }
-            }
-        }
+        queue.request(BuilderBookOneTimeUse.claim(plan, serverName))
     }
 
     fun commitPlanReservation(plan: BuilderPlan, complete: (Boolean, Throwable?) -> Unit) {
@@ -755,22 +771,11 @@ internal class BuilderBookLifecycle(
 
     private fun releaseSource(claim: OneTimeUseClaim?, done: () -> Unit = {}) {
         if (claim == null) return done()
-        val activeRegistry = registry ?: return done()
-        activeRegistry.oneTimeUses.release(claim).whenComplete { released, failure ->
-            taskScope.runSync {
-                if (
-                    failure != null ||
-                    (released != OneTimeUseReleaseResult.RELEASED && released != OneTimeUseReleaseResult.ALREADY_RELEASED)
-                ) {
-                    warn(
-                        "Builder-book copy source release requires recovery: source={} operation={}",
-                        claim.identity.useId,
-                        claim.claimId,
-                    )
-                }
-                done()
-            }
+        val queue = releaseQueue ?: run {
+            recoveryBlocked = true
+            return done()
         }
+        queue.request(claim, done)
     }
 
     private fun sourceBookClaim(mint: BuilderBookMint): OneTimeUseClaim? {
@@ -1237,22 +1242,12 @@ internal class BuilderBookLifecycle(
                     playerId = checkNotNull(instance.reservationPlayerId),
                     serverName = checkNotNull(instance.reservationServer),
                 )
-                activeRegistry.oneTimeUses.release(OneTimeUseClaim.acquired(request, newlyCreated = false))
-                    .whenComplete { released, failure ->
-                        taskScope.runSync {
-                            if (
-                                failure != null ||
-                                (released != OneTimeUseReleaseResult.RELEASED &&
-                                    released != OneTimeUseReleaseResult.ALREADY_RELEASED)
-                            ) {
-                                recoveryBlocked = true
-                                error(
-                                    "Builder-book recovered reservation could not be released: ${instance.reservationOperationId}",
-                                    failure ?: IllegalStateException("release rejected"),
-                                )
-                            }
-                        }
-                    }
+                val queue = releaseQueue ?: run {
+                    recoveryBlocked = true
+                    error("Builder-book release recovery queue is unavailable: ${instance.reservationOperationId}")
+                    return@runSync
+                }
+                queue.request(OneTimeUseClaim.acquired(request, newlyCreated = false))
             }
         }
     }
@@ -1309,6 +1304,7 @@ internal class BuilderBookLifecycle(
         auctionCoordinator?.close()
         statusVerifier?.close()
         drafts.close()
+        releaseQueue?.close()
         pendingMints.clear()
         deliveryWaitingForSpace.clear()
         deliveryRecoveries.clear()

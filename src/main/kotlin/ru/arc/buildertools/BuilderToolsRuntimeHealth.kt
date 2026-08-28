@@ -10,6 +10,7 @@ internal data class BuilderToolsRuntimeHealthInputs(
     val recoveryBlocked: Boolean,
     val recoveryPlayers: Int,
     val deliveryWaitingForSpace: Int,
+    val reservationReleaseBacklog: Int,
     val activeOperations: Int,
     val bookLockedPlayers: Int,
     val landsRequired: Boolean,
@@ -28,6 +29,7 @@ internal data class BuilderToolsRuntimeHealthInputs(
         listOf(
             recoveryPlayers,
             deliveryWaitingForSpace,
+            reservationReleaseBacklog,
             activeOperations,
             bookLockedPlayers,
         ).forEach { require(it >= 0) { "Builder-tools health counters must not be negative" } }
@@ -41,7 +43,10 @@ internal object BuilderToolsRuntimeHealth {
         val shopReady = !input.shopRequired || input.shopAvailable
         val registryReady = !input.bookContractsEnabled || (input.bookRegistryReady && !input.bookRegistryFailed)
         val draftJournalReady = input.draftJournalReady && !input.draftJournalFailed
-        val backlog = saturatedAdd(input.recoveryPlayers, input.deliveryWaitingForSpace)
+        val backlog = saturatedAdd(
+            saturatedAdd(input.recoveryPlayers, input.deliveryWaitingForSpace),
+            input.reservationReleaseBacklog,
+        )
         val leases = saturatedAdd(input.activeOperations, input.bookLockedPlayers)
         val state = when {
             input.closed || input.recoveryBlocked || input.draftJournalFailed || !landsReady || !coreProtectReady ->
