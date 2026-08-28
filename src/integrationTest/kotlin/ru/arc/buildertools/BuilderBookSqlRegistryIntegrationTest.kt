@@ -1,5 +1,6 @@
 package ru.arc.buildertools
 
+import io.kotest.assertions.throwables.shouldThrowAny
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
@@ -17,6 +18,51 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 class BuilderBookSqlRegistryIntegrationTest : StringSpec({
+    "domain reservation survives a one-time ledger failure and is recoverable" {
+        val settings = MySqlTestSettings(image = "mysql:8.4.10", database = "arc_test")
+        MySqlTestService.start(settings).use { mysql ->
+            val mint = paidMint()
+            openRegistry(mysql.endpoint).use { registry ->
+                registry.initialize().await()
+                val prepared = mint.preparedVersion()
+                val started = prepared.withdrawalStarted()
+                registry.prepareMint(prepared).await() shouldBe true
+                registry.transitionMint(prepared, started).await() shouldBe started
+                registry.transitionMint(started, mint).await() shouldBe mint
+                registry.issuePaidMint(mint.transactionId, 10L).await().status shouldBe BuilderBookMintStatus.ISSUED
+                registry.markDelivered(mint.instanceId, mint.transactionId, 11L).await() shouldBe true
+
+                mysql.endpoint.connect().use { connection ->
+                    connection.createStatement().use { statement ->
+                        statement.execute(
+                            "CREATE TRIGGER arc_builder_fail_claim BEFORE INSERT ON arc_one_time_uses " +
+                                "FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'injected claim failure'",
+                        )
+                    }
+                }
+
+                val operationId = UUID.randomUUID()
+                val request = bookUseRequest(mint, operationId)
+                shouldThrowAny { registry.oneTimeUses.claim(request).await() }
+                val reserved = checkNotNull(registry.loadInstance(mint.instanceId).await())
+                reserved.status shouldBe BuilderBookInstanceStatus.RESERVED
+                reserved.reservationOperationId shouldBe operationId
+
+                mysql.endpoint.connect().use { connection ->
+                    connection.createStatement().use { statement ->
+                        statement.execute("DROP TRIGGER arc_builder_fail_claim")
+                    }
+                }
+
+                registry.oneTimeUses.claim(request).await() shouldBe
+                    OneTimeUseClaimResult.Acquired(OneTimeUseClaim.acquired(request, newlyCreated = true))
+                registry.oneTimeUses.release(OneTimeUseClaim.acquired(request, newlyCreated = false)).await() shouldBe
+                    OneTimeUseReleaseResult.RELEASED
+                registry.loadInstance(mint.instanceId).await()?.status shouldBe BuilderBookInstanceStatus.AVAILABLE
+            }
+        }
+    }
+
     "MySQL migrations, delivery, contention, idempotency and open-mint uniqueness are durable" {
         val settings = MySqlTestSettings(image = "mysql:8.4.10", database = "arc_test")
         MySqlTestService.start(settings).use { mysql ->

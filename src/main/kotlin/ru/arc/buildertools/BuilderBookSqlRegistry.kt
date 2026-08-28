@@ -72,10 +72,11 @@ internal interface BuilderBookRegistry : AutoCloseable {
 
 /**
  * MySQL owner for builder-book domain rows plus its shared one-time-use
- * partition. [oneTimeUses] keeps core's advisory lock across the world or
- * delivery operation, mirrors claim/commit/release into the book instance row,
- * and reacquires the exact durable claim when restart recovery completes a
- * previously journaled operation.
+ * partition. [oneTimeUses] first persists the recoverable domain reservation,
+ * then keeps core's advisory lock across the world or delivery operation. It
+ * mirrors commit/release into the book instance row and reacquires the exact
+ * durable claim when restart recovery completes a previously journaled
+ * operation.
  */
 internal class BuilderBookSqlRegistry(
     private val runtime: SqlRuntime,
@@ -88,6 +89,14 @@ internal class BuilderBookSqlRegistry(
         clock = clock,
     )
     private val activeOneTimeClaims = ConcurrentHashMap<UUID, OneTimeUseClaim>()
+    private val claimCoordinator = BuilderBookClaimCoordinator(
+        reserveDomain = ::reserveBookIdentity,
+        claimDurably = durableOneTimeUses::claim,
+        commitDurably = durableOneTimeUses::commit,
+        consumeDomain = ::consumeBookIdentity,
+        releaseDomain = ::releaseBookIdentity,
+        onAcquired = { claim -> activeOneTimeClaims[claim.claimId] = claim },
+    )
     override val oneTimeUses: OneTimeUseLedger get() = this
     override val activeClaims: Int get() = durableOneTimeUses.activeClaims
     override fun initialize(): CompletableFuture<Unit> = runtime.executor.submit {
@@ -312,30 +321,7 @@ internal class BuilderBookSqlRegistry(
     }
 
     override fun claim(request: OneTimeUseClaimRequest): CompletableFuture<OneTimeUseClaimResult> =
-        durableOneTimeUses.claim(request).thenCompose { claimed ->
-            if (claimed !is OneTimeUseClaimResult.Acquired) {
-                return@thenCompose CompletableFuture.completedFuture(claimed)
-            }
-            activeOneTimeClaims[claimed.claim.claimId] = claimed.claim
-            reserveBookIdentity(claimed.claim).handle { domainResult, failure -> domainResult to failure }
-                .thenCompose { (domainResult, failure) ->
-                    when {
-                        failure != null -> abandonAfterFailure(claimed.claim, failure)
-                        domainResult is OneTimeUseClaimResult.Acquired -> CompletableFuture.completedFuture(claimed)
-                        domainResult == OneTimeUseClaimResult.AlreadyConsumed ->
-                            durableOneTimeUses.commit(claimed.claim).whenComplete { _, _ ->
-                                removeActiveClaim(claimed.claim)
-                            }.thenApply { committed ->
-                                check(
-                                    committed == OneTimeUseCommitResult.COMMITTED ||
-                                        committed == OneTimeUseCommitResult.ALREADY_COMMITTED,
-                                ) { "Could not reconcile consumed builder-book identity" }
-                                OneTimeUseClaimResult.AlreadyConsumed
-                            }
-                        else -> closeRejectedClaim(claimed.claim, checkNotNull(domainResult))
-                    }
-                }
-        }
+        claimCoordinator.claim(request)
 
     override fun commit(claim: OneTimeUseClaim): CompletableFuture<OneTimeUseCommitResult> =
         ensureActiveClaim(claim).thenCompose { acquired ->
@@ -376,13 +362,13 @@ internal class BuilderBookSqlRegistry(
             }
         }
 
-    private fun reserveBookIdentity(claim: OneTimeUseClaim): CompletableFuture<OneTimeUseClaimResult> =
+    private fun reserveBookIdentity(request: OneTimeUseClaimRequest): CompletableFuture<BuilderBookDomainReservation> =
         runtime.executor.transaction { connection ->
-            val request = claim.asRequest()
+            val recoveryClaim = OneTimeUseClaim.acquired(request, newlyCreated = false)
             val instance = loadInstance(connection, request.identity.useId, true)
-                ?: return@transaction OneTimeUseClaimResult.Missing
+                ?: return@transaction BuilderBookDomainReservation(OneTimeUseClaimResult.Missing)
             val blueprint = loadBlueprint(connection, instance.blueprintId, true)
-                ?: return@transaction OneTimeUseClaimResult.Missing
+                ?: return@transaction BuilderBookDomainReservation(OneTimeUseClaimResult.Missing)
             val expectedFingerprint = BuilderBookOneTimeUse.fingerprint(
                 blueprint.blueprintId,
                 instance.generation,
@@ -390,16 +376,22 @@ internal class BuilderBookSqlRegistry(
                 blueprint.schematicSha256,
             )
             if (request.identity.fingerprint != expectedFingerprint || request.claimantId != instance.ownerId) {
-                return@transaction OneTimeUseClaimResult.IdentityConflict
+                return@transaction BuilderBookDomainReservation(OneTimeUseClaimResult.IdentityConflict)
             }
             when (instance.status) {
-                BuilderBookInstanceStatus.CONSUMED -> return@transaction OneTimeUseClaimResult.AlreadyConsumed
+                BuilderBookInstanceStatus.CONSUMED ->
+                    return@transaction BuilderBookDomainReservation(OneTimeUseClaimResult.AlreadyConsumed)
                 BuilderBookInstanceStatus.RESERVED -> {
-                    if (!instance.matches(claim)) return@transaction OneTimeUseClaimResult.Busy
-                    return@transaction OneTimeUseClaimResult.Acquired(claim)
+                    if (!instance.matches(recoveryClaim)) {
+                        return@transaction BuilderBookDomainReservation(OneTimeUseClaimResult.Busy)
+                    }
+                    return@transaction BuilderBookDomainReservation(
+                        result = OneTimeUseClaimResult.Acquired(recoveryClaim),
+                        newlyReserved = false,
+                    )
                 }
                 BuilderBookInstanceStatus.AVAILABLE -> Unit
-                else -> return@transaction OneTimeUseClaimResult.Busy
+                else -> return@transaction BuilderBookDomainReservation(OneTimeUseClaimResult.Busy)
             }
 
             connection.prepareStatement(
@@ -414,7 +406,11 @@ internal class BuilderBookSqlRegistry(
                 statement.setString(5, request.identity.useId.toString())
                 check(statement.executeUpdate() == 1) { "Builder-book one-time claim raced after row lock" }
             }
-            OneTimeUseClaimResult.Acquired(claim)
+            val newClaim = OneTimeUseClaim.acquired(request, newlyCreated = true)
+            BuilderBookDomainReservation(
+                result = OneTimeUseClaimResult.Acquired(newClaim),
+                newlyReserved = true,
+            )
         }
 
     private fun consumeBookIdentity(claim: OneTimeUseClaim): CompletableFuture<Boolean> =
@@ -487,41 +483,6 @@ internal class BuilderBookSqlRegistry(
                     else -> durableOneTimeUses.commit(claim).whenComplete { _, _ -> removeActiveClaim(claim) }
                 }
             }
-
-    private fun closeRejectedClaim(
-        claim: OneTimeUseClaim,
-        result: OneTimeUseClaimResult,
-    ): CompletableFuture<OneTimeUseClaimResult> {
-        val cleanup = if (claim.newlyCreated) {
-            durableOneTimeUses.release(claim).thenApply { released ->
-                check(
-                    released == OneTimeUseReleaseResult.RELEASED ||
-                        released == OneTimeUseReleaseResult.ALREADY_RELEASED,
-                ) { "Could not release rejected builder-book claim" }
-            }
-        } else {
-            durableOneTimeUses.abandon(claim).thenApply { abandoned ->
-                check(
-                    abandoned == OneTimeUseAbandonResult.RETAINED_FOR_RECOVERY ||
-                        abandoned == OneTimeUseAbandonResult.ALREADY_COMMITTED,
-                ) { "Could not retain rejected builder-book recovery claim" }
-            }
-        }
-        return cleanup.whenComplete { _, _ -> removeActiveClaim(claim) }.thenApply { result }
-    }
-
-    private fun abandonAfterFailure(
-        claim: OneTimeUseClaim,
-        failure: Throwable,
-    ): CompletableFuture<OneTimeUseClaimResult> {
-        val outcome = CompletableFuture<OneTimeUseClaimResult>()
-        durableOneTimeUses.abandon(claim).whenComplete { _, abandonFailure ->
-            removeActiveClaim(claim)
-            if (abandonFailure != null) failure.addSuppressed(abandonFailure)
-            outcome.completeExceptionally(failure)
-        }
-        return outcome
-    }
 
     private fun abandonAfterCommitFailure(
         claim: OneTimeUseClaim,

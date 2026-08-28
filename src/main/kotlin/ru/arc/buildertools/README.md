@@ -160,11 +160,16 @@ permanent-blueprint limit.
 Registered player books add a network-wide MySQL barrier:
 each physical item carries a blueprint UUID, instance UUID, and positive
 generation, while MySQL is the authority for its owner and generation. Before
-the local journal is created, core's shared
-`arc_one_time_uses` table claims the instance UUID under purpose
-`arc.builder_book` with that generation in the fingerprint, while the domain
-row verifies the owner and moves `AVAILABLE -> RESERVED`. A committed build
-changes both ledgers to `COMMITTED`/`CONSUMED`; a proven
+the local journal is created, the domain row verifies the owner and first moves
+`AVAILABLE -> RESERVED`, durably recording the operation, player, and backend
+needed by startup recovery. Core's shared `arc_one_time_uses` table then claims
+the instance UUID under purpose `arc.builder_book`, with that generation in the
+fingerprint, before any payment, inventory, or world mutation. A crash or an
+unknown ledger failure between those barriers therefore leaves a discoverable
+domain reservation that recovery can reacquire and release instead of an
+orphaned UUID claim. The live failure path immediately queues that same exact
+claim for release; startup reconciliation remains the crash fallback. A
+committed build changes both ledgers to `COMMITTED`/`CONSUMED`; a proven
 pre-mutation rollback releases the shared claim and returns the domain row to
 `AVAILABLE`. Unknown outcomes retain both recovery identities. The core ledger
 holds a MySQL advisory lock across the external operation, so two duplicated

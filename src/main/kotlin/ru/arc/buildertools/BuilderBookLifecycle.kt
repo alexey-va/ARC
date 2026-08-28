@@ -251,6 +251,7 @@ internal class BuilderBookLifecycle(
         activeRegistry.oneTimeUses.claim(BuilderBookOneTimeUse.request(plan, serverName)).whenComplete { result, failure ->
             taskScope.runSync {
                 if (failure != null || result == null) {
+                    releasePlanReservation(plan)
                     operationLocks.unlockBook(player.uniqueId)
                     operationLocks.unlock(plan)
                     send(player, "book.registry-unavailable")
@@ -634,6 +635,7 @@ internal class BuilderBookLifecycle(
         activeRegistry.oneTimeUses.claim(sourceClaimRequest).whenComplete { reservation, failure ->
             taskScope.runSync {
                 if (failure != null || reservation == null) {
+                    releaseSource(OneTimeUseClaim.acquired(sourceClaimRequest, newlyCreated = false))
                     operationLocks.unlockBook(player.uniqueId)
                     send(player, "book.registry-unavailable")
                 } else if (reservation is OneTimeUseClaimResult.Acquired) {
