@@ -20,20 +20,34 @@ enum class InvestigationVerdict(val commandValue: String) {
     }
 }
 
-enum class InvestigationWitness(
+data class InvestigationWitness(
     val commandValue: String,
-    val bit: Int,
     val displayName: String,
+    val locationHint: String,
+    val itemMaterial: String,
+    val bit: Int,
 ) {
-    STAVR("stavr", 1, "Глашатай Ставр"),
-    PROKHOR("prokhor", 2, "Архивариус Прохор"),
-    GORDEY("gordey", 4, "Пристав Гордей"),
-    AGATA("agata", 8, "Почерковед Агата"),
-    TIKHON("tikhon", 16, "Счётовод Тихон"),
-    ;
+    fun validated(): InvestigationWitness {
+        require(KEY_PATTERN.matches(commandValue)) { "Invalid investigation witness key" }
+        validateNarrativeText(displayName, 48)
+        validateNarrativeText(locationHint, 72)
+        require(MATERIAL_PATTERN.matches(itemMaterial)) { "Invalid investigation witness material" }
+        require(bit in listOf(1, 2, 4, 8, 16)) { "Invalid investigation witness bit" }
+        return this
+    }
 
     companion object {
-        fun parse(raw: String?): InvestigationWitness? = entries.firstOrNull { it.commandValue == raw?.lowercase() }
+        private val KEY_PATTERN = Regex("[a-z][a-z0-9_-]{2,31}")
+        private val MATERIAL_PATTERN = Regex("[A-Z][A-Z0-9_]{1,63}")
+
+        val LEGACY: List<InvestigationWitness> =
+            listOf(
+                InvestigationWitness("stavr", "Глашатай Ставр", "стол у входа", "BELL", 1),
+                InvestigationWitness("prokhor", "Архивариус Прохор", "стол у входа", "BOOK", 2),
+                InvestigationWitness("gordey", "Пристав Гордей", "патруль первого этажа", "SHIELD", 4),
+                InvestigationWitness("agata", "Почерковед Агата", "второй этаж", "FEATHER", 8),
+                InvestigationWitness("tikhon", "Счётовод Тихон", "второй этаж", "BARREL", 16),
+            )
     }
 }
 
@@ -67,9 +81,9 @@ data class InvestigationTimelineBeat(
     val witness: String,
     val event: String,
 ) {
-    fun validated(): InvestigationTimelineBeat {
+    fun validated(witnessKeys: Set<String>): InvestigationTimelineBeat {
         require(order in 1..5) { "Invalid investigation timeline order" }
-        require(InvestigationWitness.parse(witness) != null) { "Invalid investigation timeline witness" }
+        require(witness in witnessKeys) { "Invalid investigation timeline witness" }
         validateNarrativeText(time, 40)
         validateNarrativeText(event, 120)
         return this
@@ -91,17 +105,17 @@ data class InvestigationCrossCheck(
     val second: String,
     val insight: String,
 ) {
-    fun validated(): InvestigationCrossCheck {
-        val firstWitness = requireNotNull(InvestigationWitness.parse(first)) { "Invalid first cross-check witness" }
-        val secondWitness = requireNotNull(InvestigationWitness.parse(second)) { "Invalid second cross-check witness" }
+    fun validated(witnesses: Map<String, InvestigationWitness>): InvestigationCrossCheck {
+        val firstWitness = requireNotNull(witnesses[first]) { "Invalid first cross-check witness" }
+        val secondWitness = requireNotNull(witnesses[second]) { "Invalid second cross-check witness" }
         require(firstWitness != secondWitness) { "A cross-check needs two witnesses" }
         validateNarrativeText(insight, 140)
         return this
     }
 
-    fun unlocked(mask: Int): Boolean {
-        val firstWitness = requireNotNull(InvestigationWitness.parse(first))
-        val secondWitness = requireNotNull(InvestigationWitness.parse(second))
+    fun unlocked(mask: Int, witnesses: Map<String, InvestigationWitness>): Boolean {
+        val firstWitness = requireNotNull(witnesses[first])
+        val secondWitness = requireNotNull(witnesses[second])
         return mask and firstWitness.bit != 0 && mask and secondWitness.bit != 0
     }
 
@@ -131,9 +145,11 @@ data class InvestigationNarrative(
     val testimonies: Map<String, InvestigationTestimony>,
     val crossChecks: List<InvestigationCrossCheck>,
     val conclusions: Map<String, InvestigationConclusion>,
+    /** Embedded roster keeps an already paid case stable across config reloads. */
+    val witnesses: List<InvestigationWitness>? = null,
 ) {
     fun validated(correct: InvestigationVerdict): InvestigationNarrative {
-        require(schemaVersion == CURRENT_SCHEMA) { "Unsupported investigation narrative schema" }
+        require(schemaVersion in LEGACY_SCHEMA..CURRENT_SCHEMA) { "Unsupported investigation narrative schema" }
         require(PLOT_ID.matches(plotId)) { "Invalid investigation plot id" }
         validateNarrativeText(title, 72)
         require(briefing.size in 2..4) { "Investigation briefing must have 2..4 lines" }
@@ -141,18 +157,26 @@ data class InvestigationNarrative(
         validateNarrativeText(question, 140)
         validateNarrativeText(suspiciousLead, 140)
 
-        require(timeline.size == InvestigationWitness.entries.size) { "Investigation timeline must have five events" }
-        timeline.forEach(InvestigationTimelineBeat::validated)
-        require(timeline.map(InvestigationTimelineBeat::order).toSet() == (1..5).toSet()) { "Investigation timeline order is incomplete" }
-        require(timeline.map(InvestigationTimelineBeat::witness).toSet() == witnessKeys()) { "Every witness must own one timeline event" }
+        val roster = witnessRoster()
+        require(roster.size == WITNESS_COUNT) { "Investigation must have five witnesses" }
+        roster.forEach(InvestigationWitness::validated)
+        require(roster.map(InvestigationWitness::commandValue).distinct().size == WITNESS_COUNT) { "Investigation witnesses must be unique" }
+        require(roster.map(InvestigationWitness::bit) == listOf(1, 2, 4, 8, 16)) { "Investigation witness bits must follow roster order" }
+        val witnessMap = roster.associateBy(InvestigationWitness::commandValue)
+        val witnessKeys = witnessMap.keys
 
-        require(testimonies.keys == witnessKeys()) { "Investigation testimony roster is incomplete" }
+        require(timeline.size == WITNESS_COUNT) { "Investigation timeline must have five events" }
+        timeline.forEach { it.validated(witnessKeys) }
+        require(timeline.map(InvestigationTimelineBeat::order).toSet() == (1..5).toSet()) { "Investigation timeline order is incomplete" }
+        require(timeline.map(InvestigationTimelineBeat::witness).toSet() == witnessKeys) { "Every witness must own one timeline event" }
+
+        require(testimonies.keys == witnessKeys) { "Investigation testimony roster is incomplete" }
         testimonies.values.forEach(InvestigationTestimony::validated)
 
-        require(crossChecks.size >= InvestigationWitness.entries.size) { "Investigation needs at least five cross-checks" }
-        crossChecks.forEach(InvestigationCrossCheck::validated)
+        require(crossChecks.size >= WITNESS_COUNT) { "Investigation needs at least five cross-checks" }
+        crossChecks.forEach { it.validated(witnessMap) }
         require(crossChecks.map(InvestigationCrossCheck::pairKey).distinct().size == crossChecks.size) { "Investigation cross-check pairs must be unique" }
-        require(anyThreeWitnessesUnlockCrossCheck()) { "Every three-witness path must unlock a cross-check" }
+        require(anyThreeWitnessesUnlockCrossCheck(roster, witnessMap)) { "Every three-witness path must unlock a cross-check" }
 
         require(conclusions.keys == verdictKeys()) { "Investigation must offer five reconstructions" }
         conclusions.values.forEach(InvestigationConclusion::validated)
@@ -161,13 +185,17 @@ data class InvestigationNarrative(
         return this
     }
 
-    private fun anyThreeWitnessesUnlockCrossCheck(): Boolean {
-        val witnesses = InvestigationWitness.entries
+    fun witnessRoster(): List<InvestigationWitness> = witnesses ?: InvestigationWitness.LEGACY
+
+    private fun anyThreeWitnessesUnlockCrossCheck(
+        witnesses: List<InvestigationWitness>,
+        witnessMap: Map<String, InvestigationWitness>,
+    ): Boolean {
         for (first in witnesses.indices) {
             for (second in first + 1 until witnesses.size) {
                 for (third in second + 1 until witnesses.size) {
                     val mask = witnesses[first].bit or witnesses[second].bit or witnesses[third].bit
-                    if (crossChecks.none { it.unlocked(mask) }) return false
+                    if (crossChecks.none { it.unlocked(mask, witnessMap) }) return false
                 }
             }
         }
@@ -175,7 +203,9 @@ data class InvestigationNarrative(
     }
 
     companion object {
-        const val CURRENT_SCHEMA = 2
+        const val LEGACY_SCHEMA = 2
+        const val CURRENT_SCHEMA = 3
+        const val WITNESS_COUNT = 5
         private val PLOT_ID = Regex("[a-z0-9][a-z0-9_-]{2,47}")
     }
 }
@@ -287,6 +317,11 @@ data class InvestigationCase(
 
     fun displayTitle(): String = narrative?.title ?: "Ведомость $caseNumber"
 
+    fun witnesses(): List<InvestigationWitness> = narrative?.witnessRoster() ?: InvestigationWitness.LEGACY
+
+    fun witness(key: String?): InvestigationWitness? =
+        witnesses().firstOrNull { it.commandValue == key?.lowercase() }
+
     fun question(): String = narrative?.question ?: "Какой из документов содержит решающее расхождение?"
 
     fun dossier(): List<String> =
@@ -303,7 +338,7 @@ data class InvestigationCase(
 
     fun timeline(mask: Int): List<String> =
         narrative?.timeline?.sortedBy(InvestigationTimelineBeat::order)?.map { beat ->
-            val witness = requireNotNull(InvestigationWitness.parse(beat.witness))
+            val witness = requireNotNull(witness(beat.witness))
             if (mask and witness.bit != 0) {
                 "<gray>${beat.time} <dark_gray>• <white>${beat.event}"
             } else {
@@ -312,7 +347,10 @@ data class InvestigationCase(
         } ?: listOf("<dark_gray>Старое дело не содержит отдельной хронологии.")
 
     fun crossChecks(mask: Int): List<String> =
-        narrative?.crossChecks?.filter { it.unlocked(mask) }?.map { "<green>✔ <gray>${it.insight}" }.orEmpty()
+        narrative?.let { story ->
+            val witnessMap = witnesses().associateBy(InvestigationWitness::commandValue)
+            story.crossChecks.filter { it.unlocked(mask, witnessMap) }.map { "<green>✔ <gray>${it.insight}" }
+        }.orEmpty()
 
     fun totalCrossChecks(): Int = narrative?.crossChecks?.size ?: 0
 
@@ -374,12 +412,13 @@ data class InvestigationCase(
         )
 
     private fun legacyTestimony(witness: InvestigationWitness): List<String> =
-        when (witness) {
-            InvestigationWitness.STAVR -> listOf("<gold>Ставр:</gold> <gray>Я объявлял: <white>$declaredQuantity × $unitPrice<gray>, итог <white>$announcedTotal<gray>.", "<dark_gray>$oddity")
-            InvestigationWitness.PROKHOR -> listOf("<aqua>Прохор:</aqua> <gray>В архивной копии итог <white>$archiveTotal<gray>.", "<gray>Реестр печатей: <white>$registeredWax, $registeredSeal, $registeredInitials<gray>.")
-            InvestigationWitness.GORDEY -> listOf("<red>Гордей:</red> <gray>На листе: <white>$documentWax, $documentSeal, $documentInitials<gray>.", "<dark_gray>Бумага цела; $oddity")
-            InvestigationWitness.AGATA -> listOf("<light_purple>Агата:</light_purple> <gray>Сверила почерк, воск и оттиск.", "<gray>На листе стоят инициалы <white>$documentInitials<gray>.")
-            InvestigationWitness.TIKHON -> listOf("<blue>Тихон:</blue> <gray>На складе: <white>$inspectedQuantity × $inspectedGoods<gray>.", "<gray>Накладная требует <white>$declaredQuantity × $declaredGoods<gray>.")
+        when (witness.commandValue) {
+            "stavr" -> listOf("<gold>Ставр:</gold> <gray>Я объявлял: <white>$declaredQuantity × $unitPrice<gray>, итог <white>$announcedTotal<gray>.", "<dark_gray>$oddity")
+            "prokhor" -> listOf("<aqua>Прохор:</aqua> <gray>В архивной копии итог <white>$archiveTotal<gray>.", "<gray>Реестр печатей: <white>$registeredWax, $registeredSeal, $registeredInitials<gray>.")
+            "gordey" -> listOf("<red>Гордей:</red> <gray>На листе: <white>$documentWax, $documentSeal, $documentInitials<gray>.", "<dark_gray>Бумага цела; $oddity")
+            "agata" -> listOf("<light_purple>Агата:</light_purple> <gray>Сверила почерк, воск и оттиск.", "<gray>На листе стоят инициалы <white>$documentInitials<gray>.")
+            "tikhon" -> listOf("<blue>Тихон:</blue> <gray>На складе: <white>$inspectedQuantity × $inspectedGoods<gray>.", "<gray>Накладная требует <white>$declaredQuantity × $declaredGoods<gray>.")
+            else -> error("Legacy investigation does not contain witness ${witness.commandValue}")
         }
 
     private fun legacyConclusion(verdict: InvestigationVerdict): InvestigationConclusion =
@@ -401,21 +440,26 @@ data class InvestigationCase(
     }
 }
 
-object InvestigationCaseGenerator {
+class InvestigationCaseGenerator internal constructor(
+    private val catalog: InvestigationStoryCatalog,
+) {
     fun generate(
         random: Random,
         previous: InvestigationCase? = null,
     ): InvestigationCase {
         repeat(24) {
-            val generated = generateOnce(random)
+            val generated = generateOnce(random, previous?.narrative?.plotId)
             if (previous == null || generated.fingerprint() != previous.fingerprint()) return generated
         }
-        return generateOnce(random)
+        return generateOnce(random, previous?.narrative?.plotId)
     }
 
-    private fun generateOnce(random: Random): InvestigationCase {
+    private fun generateOnce(
+        random: Random,
+        excludedPlotId: String?,
+    ): InvestigationCase {
         val caseNumber = randomCaseNumber(random)
-        val generated = InvestigationStoryCatalog.generate(random, caseNumber)
+        val generated = catalog.generate(random, caseNumber, excludedPlotId)
         val quantity = QUANTITIES.random(random)
         val unitPrice = UNIT_PRICES.random(random)
         val expected = quantity * unitPrice
@@ -467,8 +511,6 @@ object InvestigationCaseGenerator {
     private val WAXES = listOf("алый воск", "синий воск", "зелёный воск", "чёрный воск", "янтарный воск")
     private val INITIALS = listOf("АК", "БР", "ВЛ", "ГС", "ДМ", "КТ", "НР", "ПФ")
 }
-
-private fun witnessKeys(): Set<String> = InvestigationWitness.entries.map(InvestigationWitness::commandValue).toSet()
 
 private fun verdictKeys(): Set<String> = InvestigationVerdict.entries.map(InvestigationVerdict::commandValue).toSet()
 

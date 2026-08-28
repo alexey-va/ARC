@@ -37,7 +37,7 @@ class InvestigationConfig(private val config: Config) {
         )
     }
 
-    fun validated(): InvestigationConfig {
+    fun validated(witnessKeys: Set<String>): InvestigationConfig {
         if (!enabled) return this
         require(WORLD_PATTERN.matches(world)) { "Invalid investigation world" }
         require(feeMinor in 1L..MAX_MONEY_MINOR && rewardMinor in (feeMinor + 1L)..MAX_MONEY_MINOR) {
@@ -46,12 +46,16 @@ class InvestigationConfig(private val config: Config) {
         require(duration in Duration.ofSeconds(30)..Duration.ofMinutes(5)) { "Investigation duration must be 30s..5m" }
         require(cooldown in Duration.ofHours(1)..Duration.ofDays(7)) { "Investigation cooldown must be 1h..7d" }
         require(GROUP_PATTERN.matches(contractGroup)) { "Invalid investigation contract group" }
-        NPC_ROLES.map(::point).forEach { point ->
+        require(witnessKeys.size in 5..24 && witnessKeys.all(WITNESS_KEY_PATTERN::matches)) {
+            "Investigation witness registry is invalid"
+        }
+        val npcRoles = listOf("foma") + witnessKeys.sorted()
+        npcRoles.map(::point).forEach { point ->
             require(point.npcId > 0) { "Investigation NPC id must be positive" }
             require(listOf(point.x, point.y, point.z, point.radius).all(Double::isFinite)) { "Investigation NPC point must be finite" }
             require(point.radius in 1.0..8.0) { "Investigation NPC radius must be 1..8 blocks" }
         }
-        require(NPC_ROLES.map(::point).map(InvestigationNpcPoint::npcId).distinct().size == NPC_ROLES.size) {
+        require(npcRoles.map(::point).map(InvestigationNpcPoint::npcId).distinct().size == npcRoles.size) {
             "Investigation NPC ids must be unique"
         }
         return this
@@ -68,11 +72,14 @@ class InvestigationConfig(private val config: Config) {
     companion object {
         private val WORLD_PATTERN = Regex("[a-z0-9_./-]{1,64}")
         private val GROUP_PATTERN = Regex("[a-z0-9][a-z0-9_-]{2,47}")
+        private val WITNESS_KEY_PATTERN = Regex("[a-z][a-z0-9_-]{2,31}")
         private const val MAX_MONEY_MINOR = 100_000_000L
-        private val NPC_ROLES = listOf("foma", "stavr", "prokhor", "gordey", "agata", "tikhon")
 
-        fun load(dataPath: Path): InvestigationConfig =
-            InvestigationConfig(ConfigManager.of(dataPath, "modules/investigations.yml")).validated()
+        fun load(
+            dataPath: Path,
+            witnessKeys: Set<String>,
+        ): InvestigationConfig =
+            InvestigationConfig(ConfigManager.of(dataPath, "modules/investigations.yml")).validated(witnessKeys)
     }
 }
 
@@ -82,11 +89,6 @@ enum class InvestigationGuiRole(val configKey: String, val fallback: Material) {
     TIMELINE("timeline", Material.RECOVERY_COMPASS),
     CROSS_CHECK("cross-check", Material.COMPARATOR),
     RULES("rules", Material.REDSTONE_TORCH),
-    STAVR("stavr", Material.BELL),
-    PROKHOR("prokhor", Material.BOOK),
-    GORDEY("gordey", Material.SHIELD),
-    AGATA("agata", Material.SPYGLASS),
-    TIKHON("tikhon", Material.BARREL),
     THEORY_ONE("theory-one", Material.PAPER),
     THEORY_TWO("theory-two", Material.MAP),
     THEORY_THREE("theory-three", Material.NAME_TAG),

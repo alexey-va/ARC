@@ -19,6 +19,7 @@ object InvestigationModule : PluginModule {
     internal const val COOLDOWN_BYPASS_PERMISSION = "arc.investigations.cooldown.bypass"
 
     @Volatile private var config: InvestigationConfig? = null
+    @Volatile private var catalog: InvestigationStoryCatalog? = null
     private var journal: InvestigationJournal? = null
     private var service: InvestigationService? = null
     private val tasks = LifecycleTaskScope()
@@ -26,18 +27,36 @@ object InvestigationModule : PluginModule {
     val available: Boolean get() = config?.enabled == true && service != null
 
     override fun init() {
-        start(InvestigationConfig.load(ARC.instance.dataPath))
+        val loadedCatalog = InvestigationStoryCatalog.load(ARC.instance.dataPath)
+        start(InvestigationConfig.load(ARC.instance.dataPath, loadedCatalog.witnessKeys), loadedCatalog)
     }
 
     override fun reload() {
+        val loadedCatalog =
+            runCatching { InvestigationStoryCatalog.load(ARC.instance.dataPath) }
+                .onFailure { warn("Investigations reload rejected; current catalog remains active: {}", it.message ?: it::class.java.simpleName) }
+                .getOrNull() ?: return
+        val unresolvedWitnessKeys =
+            journal
+                ?.records()
+                .orEmpty()
+                .filterNot { it.status.resolved }
+                .flatMap { it.case.witnesses() }
+                .map(InvestigationWitness::commandValue)
+                .toSet()
+        val loadedConfig =
+            runCatching { InvestigationConfig.load(ARC.instance.dataPath, loadedCatalog.witnessKeys + unresolvedWitnessKeys) }
+                .onFailure { warn("Investigations reload rejected; current policy remains active: {}", it.message ?: it::class.java.simpleName) }
+                .getOrNull() ?: return
         shutdownRuntime()
-        start(InvestigationConfig.load(ARC.instance.dataPath))
+        start(loadedConfig, loadedCatalog)
     }
 
     override fun shutdown() {
         shutdownRuntime()
         tasks.close()
         config = null
+        catalog = null
     }
 
     fun open(player: Player) {
@@ -98,9 +117,32 @@ object InvestigationModule : PluginModule {
         }
     }
 
-    fun collect(player: Player, witness: InvestigationWitness) {
+    fun collect(player: Player, witnessKey: String) {
         val currentConfig = config ?: return unavailable(player)
         val currentService = service ?: return unavailable(player)
+        val current = currentService.current(player.uniqueId)
+        val witness = current?.case?.witness(witnessKey)
+        if (witness == null) {
+            val knownWitness = catalog?.witnesses?.get(witnessKey.lowercase(Locale.ROOT))
+            if (knownWitness == null) {
+                player.sendActionBar(TextUtil.mm("<gray>Этот человек не относится к бюро расследований."))
+            } else if (current == null) {
+                player.sendMessage(
+                    TextUtil.mm(
+                        "<gold>${knownWitness.displayName}:</gold> <gray>${ambientReply(knownWitness.key)} " +
+                            "Если вам нужны показания, сначала возьмите дело у Фомы.",
+                    ),
+                )
+            } else {
+                player.sendMessage(
+                    TextUtil.mm(
+                        "<gold>${knownWitness.displayName}:</gold> <gray>По делу ${current.case.caseNumber} меня не опрашивали. " +
+                            "Ищите тех пятерых, кого Фома отметил в ведомости.",
+                    ),
+                )
+            }
+            return
+        }
         if (!near(player, currentConfig.point(witness.commandValue))) {
             player.sendActionBar(TextUtil.mm("<yellow>Подойдите ближе к свидетелю."))
             return
@@ -124,6 +166,7 @@ object InvestigationModule : PluginModule {
             is InvestigationClueResult.Expired -> timeout(player)
             InvestigationClueResult.NoActiveCase -> player.sendActionBar(TextUtil.mm("<gray>Сначала возьмите дело у Фомы."))
             InvestigationClueResult.Busy -> player.sendActionBar(TextUtil.mm("<yellow>Запись уже обновляется."))
+            InvestigationClueResult.UnknownWitness -> player.sendActionBar(TextUtil.mm("<gray>Этот свидетель не относится к делу."))
             InvestigationClueResult.ManualReview -> player.sendActionBar(TextUtil.mm("<red>Дело заморожено для ручной сверки."))
             InvestigationClueResult.PersistenceFailure -> player.sendActionBar(TextUtil.mm("<red>Показание не удалось записать. Оно не засчитано."))
         }
@@ -160,11 +203,17 @@ object InvestigationModule : PluginModule {
 
     internal fun configOrNull(): InvestigationConfig? = config
 
+    internal fun witnessKeys(): List<String> = catalog?.witnessKeys?.sorted().orEmpty()
+
     internal fun money(minor: Long): String =
         java.math.BigDecimal.valueOf(minor, 2).stripTrailingZeros().toPlainString()
 
-    private fun start(loaded: InvestigationConfig) {
+    private fun start(
+        loaded: InvestigationConfig,
+        loadedCatalog: InvestigationStoryCatalog,
+    ) {
         config = loaded
+        catalog = loadedCatalog
         if (!loaded.enabled) {
             info("Investigations module disabled by configuration")
             return
@@ -180,6 +229,7 @@ object InvestigationModule : PluginModule {
                 rewardMinor = { requireNotNull(config).rewardMinor },
                 duration = { requireNotNull(config).duration },
                 cooldown = { requireNotNull(config).cooldown },
+                caseGenerator = InvestigationCaseGenerator(loadedCatalog),
                 runSync = { action -> tasks.runSync(epoch, action) },
                 random = Random(SecureRandom().nextLong()),
             )
@@ -189,7 +239,7 @@ object InvestigationModule : PluginModule {
             warn("Investigation {} requires manual review at stage {}", record.transactionId, record.status.name.lowercase(Locale.ROOT))
         }
         tasks.runTimer(epoch, 20L, 20L, loadedService::expireAll)
-        info("Investigations module initialized for six bureau NPCs")
+        info("Investigations module initialized with {} cases and {} witnesses", loadedCatalog.storyCount, loadedCatalog.witnessKeys.size)
     }
 
     private fun shutdownRuntime() {
@@ -222,6 +272,24 @@ object InvestigationModule : PluginModule {
         val minutes = seconds % 3_600L / 60L
         return if (hours > 0L) "${hours}ч ${minutes}м" else "${minutes.coerceAtLeast(1L)}м"
     }
+
+    private fun ambientReply(witnessKey: String): String =
+        when (witnessKey) {
+            "stavr" -> "Колокол помнит цену лучше покупателя, но хуже архива."
+            "prokhor" -> "У любой красивой версии должен быть номер страницы."
+            "gordey" -> "Проход свободен. Чужие пломбы и моё терпение — не трогать."
+            "agata" -> "Подлинный штрих ещё не делает правдивым весь документ."
+            "tikhon" -> "Если сумма выглядит круглой, проверьте, кто обрезал углы."
+            "mikula" -> "Товар можно узнать по узору, но цену — только по истории."
+            "vlada" -> "Случайность случается один раз. Второй раз она уже требует акта."
+            "ratsha" -> "Весы отвечают на поставленный вопрос, а не на тот, что вы забыли."
+            "zhdan" -> "Груз выдаёт себя не весом, а тем, как режет плечо верёвка."
+            "elisey" -> "Печать подтверждает оттиск. Смысл листа придётся доказать отдельно."
+            "marfa" -> "У воска хорошая память, особенно когда его пытались греть второй раз."
+            "varvara" -> "Короткий путь бывает самым долгим, если кто-то переставил отметки."
+            "domna" -> "На торгах слушайте тех, кто молчит после собственной ставки."
+            else -> "Сегодня в зале достаточно странных сделок и без новых показаний."
+        }
 
     private fun sendResolution(
         player: Player,

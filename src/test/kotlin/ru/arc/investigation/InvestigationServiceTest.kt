@@ -12,9 +12,7 @@ class InvestigationServiceTest : StringSpec({
     "correct verdict after three witnesses charges once and rewards once" {
         val fixture = InvestigationFixture()
         val started = fixture.service.start(fixture.playerId) as InvestigationStartResult.Started
-        fixture.service.collectClue(fixture.playerId, InvestigationWitness.STAVR) as InvestigationClueResult.Evidence
-        fixture.service.collectClue(fixture.playerId, InvestigationWitness.PROKHOR) as InvestigationClueResult.Evidence
-        fixture.service.collectClue(fixture.playerId, InvestigationWitness.AGATA) as InvestigationClueResult.Evidence
+        fixture.collect(started.record, 0, 1, 2)
 
         val result = fixture.service.submitVerdict(fixture.playerId, started.record.case.verdict)
         val duplicate = fixture.service.submitVerdict(fixture.playerId, started.record.case.verdict)
@@ -30,20 +28,30 @@ class InvestigationServiceTest : StringSpec({
     "two witnesses are not enough to gamble" {
         val fixture = InvestigationFixture()
         val started = fixture.service.start(fixture.playerId) as InvestigationStartResult.Started
-        fixture.service.collectClue(fixture.playerId, InvestigationWitness.STAVR)
-        fixture.service.collectClue(fixture.playerId, InvestigationWitness.TIKHON)
+        fixture.collect(started.record, 0, 1)
 
         fixture.service.submitVerdict(fixture.playerId, started.record.case.verdict) shouldBe InvestigationVerdictResult.NeedClues(2)
         fixture.wallet.deposits shouldBe 0
         fixture.journal.open(fixture.playerId)?.status shouldBe InvestigationStatus.ACTIVE
     }
 
+    "a witness outside the paid roster cannot set another clue bit" {
+        val fixture = InvestigationFixture()
+        val started = fixture.service.start(fixture.playerId) as InvestigationStartResult.Started
+        val rosterKeys = started.record.case.witnesses().map(InvestigationWitness::commandValue).toSet()
+        val outsider =
+            bundledInvestigationCatalogForTest.witnesses.values
+                .first { it.key !in rosterKeys }
+                .snapshot(1)
+
+        fixture.service.collectClue(fixture.playerId, outsider) shouldBe InvestigationClueResult.UnknownWitness
+        fixture.journal.open(fixture.playerId)?.cluesMask shouldBe 0
+    }
+
     "wrong verdict closes the paid case without a reward and keeps the cooldown" {
         val fixture = InvestigationFixture()
         val started = fixture.service.start(fixture.playerId) as InvestigationStartResult.Started
-        fixture.service.collectClue(fixture.playerId, InvestigationWitness.STAVR)
-        fixture.service.collectClue(fixture.playerId, InvestigationWitness.GORDEY)
-        fixture.service.collectClue(fixture.playerId, InvestigationWitness.TIKHON)
+        fixture.collect(started.record, 0, 1, 2)
         val wrong = InvestigationVerdict.entries.first { it != started.record.case.verdict }
 
         fixture.service.submitVerdict(fixture.playerId, wrong)::class shouldBe InvestigationVerdictResult.Wrong::class
@@ -60,9 +68,7 @@ class InvestigationServiceTest : StringSpec({
         val first = fixture.service.start(fixture.playerId) as InvestigationStartResult.Started
 
         fixture.service.start(fixture.playerId, bypassCooldown = true) shouldBe InvestigationStartResult.AlreadyActive(first.record)
-        fixture.service.collectClue(fixture.playerId, InvestigationWitness.STAVR)
-        fixture.service.collectClue(fixture.playerId, InvestigationWitness.GORDEY)
-        fixture.service.collectClue(fixture.playerId, InvestigationWitness.TIKHON)
+        fixture.collect(first.record, 0, 1, 2)
         val wrong = InvestigationVerdict.entries.first { it != first.record.case.verdict }
         fixture.service.submitVerdict(fixture.playerId, wrong)::class shouldBe InvestigationVerdictResult.Wrong::class
 
@@ -75,10 +81,8 @@ class InvestigationServiceTest : StringSpec({
 
     "timeout is durable and cannot be answered after the deadline" {
         val fixture = InvestigationFixture()
-        fixture.service.start(fixture.playerId) as InvestigationStartResult.Started
-        fixture.service.collectClue(fixture.playerId, InvestigationWitness.STAVR)
-        fixture.service.collectClue(fixture.playerId, InvestigationWitness.PROKHOR)
-        fixture.service.collectClue(fixture.playerId, InvestigationWitness.AGATA)
+        val started = fixture.service.start(fixture.playerId) as InvestigationStartResult.Started
+        fixture.collect(started.record, 0, 1, 2)
         fixture.now += 90_010L
 
         fixture.service.submitVerdict(fixture.playerId, InvestigationVerdict.CLEAN)::class shouldBe InvestigationVerdictResult.Expired::class
@@ -105,9 +109,7 @@ class InvestigationServiceTest : StringSpec({
     "interrupted reward is completed from history without a second deposit" {
         val fixture = InvestigationFixture().also { it.wallet.ambiguousDeposit = true }
         val started = fixture.service.start(fixture.playerId) as InvestigationStartResult.Started
-        fixture.service.collectClue(fixture.playerId, InvestigationWitness.STAVR)
-        fixture.service.collectClue(fixture.playerId, InvestigationWitness.PROKHOR)
-        fixture.service.collectClue(fixture.playerId, InvestigationWitness.AGATA)
+        fixture.collect(started.record, 0, 1, 2)
 
         fixture.service.submitVerdict(fixture.playerId, started.record.case.verdict) shouldBe InvestigationVerdictResult.ManualReview
         fixture.wallet.deposits shouldBe 1
@@ -145,10 +147,20 @@ private class InvestigationFixture {
             rewardMinor = { 30_000L },
             duration = { Duration.ofSeconds(90) },
             cooldown = { Duration.ofHours(20) },
+            caseGenerator = investigationCaseGeneratorForTest(),
             runSync = { it() },
             clock = { now },
             random = Random(42),
         )
+
+    fun collect(
+        record: InvestigationJournalRecord,
+        vararg witnessIndexes: Int,
+    ) {
+        witnessIndexes.forEach { index ->
+            service.collectClue(playerId, record.case.witnesses()[index]) as InvestigationClueResult.Evidence
+        }
+    }
 }
 
 private class MutableInvestigationWallet : InvestigationWallet {

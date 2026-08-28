@@ -5,7 +5,6 @@ import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.tabComplete
 import ru.arc.investigation.InvestigationModule
 import ru.arc.investigation.InvestigationVerdict
-import ru.arc.investigation.InvestigationWitness
 
 /** Thin, proximity-checked bridge used by the Denizen-owned bureau NPCs. */
 object InvestigationSubCommand : SubCommand {
@@ -13,7 +12,7 @@ object InvestigationSubCommand : SubCommand {
     override val defaultName = "investigation"
     override val defaultPermission: String? = null
     override val defaultDescription = "Открыть бюро расследований"
-    override val defaultUsage = "/arc investigation [open|clue <stavr|prokhor|gordey|agata|tikhon>|verdict <amount|seal|cargo|duplicate|clean>]"
+    override val defaultUsage = "/arc investigation [open|clue <witness>|verdict <amount|seal|cargo|duplicate|clean>]"
     override val defaultPlayerOnly = true
 
     override fun isAvailable(): Boolean = InvestigationModule.available
@@ -23,7 +22,7 @@ object InvestigationSubCommand : SubCommand {
         when (args.firstOrNull()?.lowercase() ?: "open") {
             "open", "menu" -> InvestigationModule.open(player)
             "clue" -> {
-                val witness = InvestigationWitness.parse(args.getOrNull(1))
+                val witness = args.getOrNull(1)?.lowercase()?.takeIf(WITNESS_KEY::matches)
                 if (witness == null) sendUsage(sender) else InvestigationModule.collect(player, witness)
             }
             "verdict" -> {
@@ -40,10 +39,12 @@ object InvestigationSubCommand : SubCommand {
             1 -> listOf("open", "clue", "verdict").tabComplete(args[0])
             2 ->
                 when (args[0].lowercase()) {
-                    "clue" -> InvestigationWitness.entries.map(InvestigationWitness::commandValue).tabComplete(args[1])
+                    "clue" -> InvestigationModule.witnessKeys().tabComplete(args[1])
                     "verdict" -> InvestigationVerdict.entries.map(InvestigationVerdict::commandValue).tabComplete(args[1])
                     else -> null
                 }
             else -> null
         }
+
+    private val WITNESS_KEY = Regex("[a-z][a-z0-9_-]{2,31}")
 }

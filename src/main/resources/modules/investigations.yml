@@ -11,6 +11,14 @@ scene:
     gordey: { id: 374, x: -57.4479, y: 72.0, z: -7.5857, radius: 8.0 }
     agata: { id: 375, x: -60.7692, y: 78.0625, z: -9.2809, radius: 4.5 }
     tikhon: { id: 376, x: -62.8715, y: 78.0625, z: -9.6508, radius: 4.5 }
+    mikula: { id: 377, x: -62.25, y: 72.0, z: 13.1, radius: 4.5 }
+    vlada: { id: 378, x: -64.1, y: 72.0, z: 13.1, radius: 4.5 }
+    ratsha: { id: 379, x: -62.25, y: 72.0, z: -13.1, radius: 4.5 }
+    zhdan: { id: 380, x: -64.1, y: 72.0, z: -13.1, radius: 4.5 }
+    elisey: { id: 381, x: -58.0, y: 78.0, z: 9.5, radius: 4.5 }
+    marfa: { id: 382, x: -60.0, y: 78.0, z: 9.5, radius: 4.5 }
+    varvara: { id: 383, x: -54.0, y: 78.0, z: -9.5, radius: 4.5 }
+    domna: { id: 384, x: -54.0, y: 78.0, z: 9.5, radius: 4.5 }
 
 challenge:
   fee: "100.00"

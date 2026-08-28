@@ -25,6 +25,7 @@ sealed interface InvestigationClueResult {
     data object NoActiveCase : InvestigationClueResult
     data object Busy : InvestigationClueResult
     data object ManualReview : InvestigationClueResult
+    data object UnknownWitness : InvestigationClueResult
     data object PersistenceFailure : InvestigationClueResult
 }
 
@@ -48,6 +49,7 @@ class InvestigationService(
     private val rewardMinor: () -> Long,
     private val duration: () -> Duration,
     private val cooldown: () -> Duration,
+    private val caseGenerator: InvestigationCaseGenerator,
     private val runSync: ((() -> Unit) -> Unit),
     private val clock: () -> Long = System::currentTimeMillis,
     private val random: Random = Random.Default,
@@ -91,7 +93,7 @@ class InvestigationService(
                 InvestigationJournalRecord(
                     transactionId = UUID.randomUUID().toString(),
                     playerId = playerId.toString(),
-                    case = InvestigationCaseGenerator.generate(random, journal.latest(playerId)?.case),
+                    case = caseGenerator.generate(random, journal.latest(playerId)?.case),
                     feeMinor = fee,
                     rewardMinor = reward,
                     createdAt = now,
@@ -178,17 +180,18 @@ class InvestigationService(
                     ?: return InvestigationClueResult.PersistenceFailure
                 return InvestigationClueResult.Expired(failed)
             }
-            if (record.hasClue(witness)) {
-                return InvestigationClueResult.Evidence(record, record.case.testimony(witness), false)
+            val caseWitness = record.case.witness(witness.commandValue) ?: return InvestigationClueResult.UnknownWitness
+            if (record.hasClue(caseWitness)) {
+                return InvestigationClueResult.Evidence(record, record.case.testimony(caseWitness), false)
             }
             val updated =
                 record.copy(
                     updatedAt = nextTime(record.updatedAt),
-                    cluesMask = record.cluesMask or witness.bit,
-                    evidence = "clue_${witness.commandValue}",
+                    cluesMask = record.cluesMask or caseWitness.bit,
+                    evidence = "clue_${caseWitness.commandValue}",
                 )
             if (!journal.persist(updated)) return InvestigationClueResult.PersistenceFailure
-            return InvestigationClueResult.Evidence(updated, updated.case.testimony(witness), true)
+            return InvestigationClueResult.Evidence(updated, updated.case.testimony(caseWitness), true)
         } finally {
             activeOperations.remove(playerId)
         }

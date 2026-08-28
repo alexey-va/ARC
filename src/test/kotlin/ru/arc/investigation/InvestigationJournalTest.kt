@@ -16,7 +16,7 @@ class InvestigationJournalTest : StringSpec({
         journal.persist(prepared) shouldBe true
         journal.persist(prepared.withdrawalStarted()) shouldBe true
         journal.persist(prepared.active()) shouldBe true
-        val withClue = prepared.active().copy(updatedAt = 5L, cluesMask = InvestigationWitness.STAVR.bit)
+        val withClue = prepared.active().copy(updatedAt = 5L, cluesMask = prepared.case.witnesses().first().bit)
         journal.persist(withClue) shouldBe true
 
         val reloaded = FileInvestigationJournal(root)
@@ -92,13 +92,28 @@ class InvestigationJournalTest : StringSpec({
             .fromJson(Common.prettyGson.toJson(decoded), InvestigationJournalRecord::class.java)
             .validated() shouldBe decoded
     }
+
+    "schema two narrative snapshots retain the original five witnesses" {
+        val story =
+            bundledInvestigationCatalogForTest.generatePlot(
+                plotId = "side_gate_switch",
+                random = Random(7),
+                caseNumber = "А-2002",
+            )
+        val legacyNarrative =
+            story.narrative
+                .copy(schemaVersion = 2, witnesses = null)
+                .validated(story.correctVerdict)
+
+        legacyNarrative.witnessRoster() shouldBe InvestigationWitness.LEGACY
+    }
 })
 
 private fun preparedRecord() =
     InvestigationJournalRecord(
         transactionId = UUID.randomUUID().toString(),
         playerId = UUID.randomUUID().toString(),
-        case = InvestigationCaseGenerator.generate(Random(1)),
+        case = investigationCaseGeneratorForTest().generate(Random(1)),
         feeMinor = 10_000L,
         rewardMinor = 30_000L,
         createdAt = 1L,

@@ -11,11 +11,6 @@ items:
   timeline: { material: RECOVERY_COMPASS }
   cross-check: { material: COMPARATOR }
   rules: { material: REDSTONE_TORCH }
-  stavr: { material: BELL }
-  prokhor: { material: BOOK }
-  gordey: { material: SHIELD }
-  agata: { material: FEATHER }
-  tikhon: { material: BARREL }
   theory-one: { material: PAPER }
   theory-two: { material: MAP }
   theory-three: { material: NAME_TAG }

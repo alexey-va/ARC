@@ -1,6 +1,7 @@
 package ru.arc.investigation
 
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui
+import org.bukkit.Material
 import org.bukkit.entity.Player
 import ru.arc.ARC
 import ru.arc.config.Config
@@ -115,11 +116,9 @@ object InvestigationGui {
                     )
                 }
 
-                witnessItem(0, player, record, InvestigationWitness.STAVR, InvestigationGuiRole.STAVR, "стол у входа")
-                witnessItem(2, player, record, InvestigationWitness.PROKHOR, InvestigationGuiRole.PROKHOR, "стол у входа")
-                witnessItem(4, player, record, InvestigationWitness.GORDEY, InvestigationGuiRole.GORDEY, "патруль первого этажа")
-                witnessItem(6, player, record, InvestigationWitness.AGATA, InvestigationGuiRole.AGATA, "второй этаж")
-                witnessItem(8, player, record, InvestigationWitness.TIKHON, InvestigationGuiRole.TIKHON, "второй этаж")
+                record.case.witnesses().forEachIndexed { index, witness ->
+                    witnessItem(index * 2, player, record, witness)
+                }
 
                 item(2, 2) {
                     style(InvestigationGuiRole.TIMELINE)
@@ -157,7 +156,6 @@ object InvestigationGui {
                             "<gray>которая объясняет всю цепочку событий.",
                             "",
                             "<red>Ошибочная версия сразу закрывает дело.",
-                            "<dark_gray>Закрыть меню можно клавишей Esc.",
                         ),
                     )
                 }
@@ -175,25 +173,23 @@ object InvestigationGui {
         player: Player,
         record: InvestigationJournalRecord,
         witness: InvestigationWitness,
-        role: InvestigationGuiRole,
-        location: String,
     ) {
         item(x, 1) {
-            style(role)
+            material(Material.matchMaterial(witness.itemMaterial) ?: Material.PAPER)
             display(if (record.hasClue(witness)) "<green><bold>${witness.displayName}" else "<yellow><bold>${witness.displayName}")
             lore(
                 if (record.hasClue(witness)) {
                     wrapInvestigationLore(record.case.testimony(witness)) + listOf("", "<green>Показание записано.")
                 } else {
                     listOf(
-                        "<gray>Где искать: <white>$location<gray>.",
+                        "<gray>Где искать: <white>${witness.locationHint}<gray>.",
                         "<gray>Этот человек видел один этап истории.",
                         "",
                         "<dark_gray>Опрос проводится только лично.",
                     )
                 },
             )
-            onClick { player.sendActionBar(TextUtil.mm("<yellow>Найдите свидетеля лично: <white>$location<yellow>.")) }
+            onClick { player.sendActionBar(TextUtil.mm("<yellow>Найдите свидетеля лично: <white>${witness.locationHint}<yellow>.")) }
         }
     }
 

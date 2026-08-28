@@ -320,6 +320,7 @@ open class ARC : JavaPlugin() {
                 "modules/cross-server-spy.yml",
                 "modules/contracts.yml",
                 "modules/investigations.yml",
+                "modules/investigation-cases.yml",
                 "modules/auction.yml",
                 "modules/treasure-hunt.yml",
                 "modules/mobspawn.yml",
