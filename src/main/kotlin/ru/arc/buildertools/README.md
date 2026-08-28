@@ -179,7 +179,9 @@ the row to `AVAILABLE` and removes the token. Every older physical duplicate is
 permanently stale after that transition. Online recovery rechecks unresolved
 tokenized items every five seconds with rate-limited retries; timeouts and
 missing delivery evidence remain fail-closed instead of making a second
-physical copy usable.
+physical copy usable. If the recipient disconnects while either transfer
+callback is in flight, ARC leaves the offline inventory untouched and resumes
+the exact MySQL/token transition after reconnect.
 
 Book payment is separately journaled before touching RedisEconomy. Provider
 calls are never blindly retried. Startup reconciles the exact transaction

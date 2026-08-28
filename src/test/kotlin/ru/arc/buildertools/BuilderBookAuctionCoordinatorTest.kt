@@ -124,6 +124,66 @@ class BuilderBookAuctionCoordinatorTest : TestBase() {
     }
 
     @Test
+    fun `transfer start completion after disconnect leaves the pending token for join recovery`() {
+        val buyer = server.addPlayer("OfflineBuyer")
+        fixture.port.result = BuilderBookAuctionListingResult.Listed("42")
+        fixture.port.removeOnSuccess = true
+        fixture.registry.deferTransferStart = true
+
+        fixture.sell()
+        fixture.port.deliver(buyer)
+
+        assertEquals(BuilderBookInstanceStatus.TRANSFER_PENDING, fixture.registry.instance.status)
+        assertEquals(1, ru.arc.autobuild.BuildBookCodec.read(buyer.inventory.itemInMainHand)?.instanceGeneration)
+        assertTrue(BuilderBookAuctionTokenCodec.read(buyer.inventory.itemInMainHand) != null)
+        buyer.disconnect()
+
+        fixture.registry.completeDeferredTransferStart()
+
+        assertEquals(BuilderBookInstanceStatus.TRANSFER_PENDING, fixture.registry.instance.status)
+        assertEquals(1, ru.arc.autobuild.BuildBookCodec.read(buyer.inventory.itemInMainHand)?.instanceGeneration)
+        assertTrue(BuilderBookAuctionTokenCodec.read(buyer.inventory.itemInMainHand) != null)
+        assertFalse(fixture.locked)
+
+        buyer.reconnect()
+        fixture.coordinator.onPlayerAvailable(buyer)
+
+        assertEquals(BuilderBookInstanceStatus.AVAILABLE, fixture.registry.instance.status)
+        assertEquals(2, ru.arc.autobuild.BuildBookCodec.read(buyer.inventory.itemInMainHand)?.instanceGeneration)
+        assertNull(BuilderBookAuctionTokenCodec.read(buyer.inventory.itemInMainHand))
+    }
+
+    @Test
+    fun `transfer commit completion after disconnect keeps the staged token for join recovery`() {
+        val buyer = server.addPlayer("OfflineBuyer")
+        fixture.port.result = BuilderBookAuctionListingResult.Listed("42")
+        fixture.port.removeOnSuccess = true
+        fixture.registry.deferTransferCompletion = true
+
+        fixture.sell()
+        fixture.port.deliver(buyer)
+
+        assertEquals(BuilderBookInstanceStatus.AVAILABLE, fixture.registry.instance.status)
+        assertEquals(2, ru.arc.autobuild.BuildBookCodec.read(buyer.inventory.itemInMainHand)?.instanceGeneration)
+        assertTrue(BuilderBookAuctionTokenCodec.read(buyer.inventory.itemInMainHand) != null)
+        buyer.disconnect()
+
+        fixture.registry.completeDeferredTransferCompletion()
+
+        assertEquals(BuilderBookInstanceStatus.AVAILABLE, fixture.registry.instance.status)
+        assertEquals(2, ru.arc.autobuild.BuildBookCodec.read(buyer.inventory.itemInMainHand)?.instanceGeneration)
+        assertTrue(BuilderBookAuctionTokenCodec.read(buyer.inventory.itemInMainHand) != null)
+        assertFalse(fixture.locked)
+
+        buyer.reconnect()
+        fixture.coordinator.onPlayerAvailable(buyer)
+
+        assertEquals(BuilderBookInstanceStatus.AVAILABLE, fixture.registry.instance.status)
+        assertEquals(2, ru.arc.autobuild.BuildBookCodec.read(buyer.inventory.itemInMainHand)?.instanceGeneration)
+        assertNull(BuilderBookAuctionTokenCodec.read(buyer.inventory.itemInMainHand))
+    }
+
+    @Test
     fun `ordinary auction guard finds a player book inside a bundle`() {
         val bundle = ItemStack(Material.BUNDLE)
         val meta = bundle.itemMeta as BundleMeta
@@ -261,6 +321,10 @@ private class AuctionRegistry(
     data: BuildBookData,
 ) : BuilderBookRegistry {
     var failCompletedCallbackOnce = false
+    var deferTransferStart = false
+    var deferTransferCompletion = false
+    private var deferredTransferStart: Pair<CompletableFuture<BuilderBookAuctionTransferResult>, BuilderBookAuctionTransferResult>? = null
+    private var deferredTransferCompletion: Pair<CompletableFuture<Boolean>, Boolean>? = null
     var instance = BuilderBookInstance(
         instanceId = requireNotNull(data.instanceId),
         blueprintId = requireNotNull(data.blueprintId),
@@ -350,7 +414,13 @@ private class AuctionRegistry(
             reservedAtMillis = now,
             lastAuctionLeaseId = leaseId,
         ).validated()
-        return CompletableFuture.completedFuture(BuilderBookAuctionTransferResult.Pending(instance.generation))
+        val result = BuilderBookAuctionTransferResult.Pending(instance.generation)
+        if (deferTransferStart) {
+            return CompletableFuture<BuilderBookAuctionTransferResult>().also { future ->
+                deferredTransferStart = future to result
+            }
+        }
+        return CompletableFuture.completedFuture(result)
     }
 
     override fun completeAuctionTransfer(
@@ -379,7 +449,24 @@ private class AuctionRegistry(
             failCompletedCallbackOnce = false
             return CompletableFuture.failedFuture(IllegalStateException("unknown fixture outcome"))
         }
+        if (deferTransferCompletion) {
+            return CompletableFuture<Boolean>().also { future ->
+                deferredTransferCompletion = future to true
+            }
+        }
         return CompletableFuture.completedFuture(true)
+    }
+
+    fun completeDeferredTransferStart() {
+        val (future, result) = checkNotNull(deferredTransferStart)
+        deferredTransferStart = null
+        future.complete(result)
+    }
+
+    fun completeDeferredTransferCompletion() {
+        val (future, result) = checkNotNull(deferredTransferCompletion)
+        deferredTransferCompletion = null
+        future.complete(result)
     }
 
     override fun listedForServer(serverName: String): CompletableFuture<List<BuilderBookInstance>> =

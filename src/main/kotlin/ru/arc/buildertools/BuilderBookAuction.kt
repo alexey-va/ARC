@@ -440,6 +440,10 @@ internal class BuilderBookAuctionCoordinator(
         generation: Int,
         successPath: String,
     ) {
+        if (!player.isOnline) {
+            finishRecoveryAttempt(player, token)
+            return
+        }
         if (!stageTokenGeneration(player, token, generation)) {
             warn(
                 "Builder-book auction token could not be staged: instance={} lease={} generation={}",
@@ -479,6 +483,10 @@ internal class BuilderBookAuctionCoordinator(
         generation: Int,
         successPath: String,
     ) {
+        if (!player.isOnline) {
+            finishRecoveryAttempt(player, token)
+            return
+        }
         if (!stripCompletedToken(player, token, generation)) {
             warn(
                 "Builder-book completed auction transfer lacks one exact item: instance={} lease={} generation={}",
