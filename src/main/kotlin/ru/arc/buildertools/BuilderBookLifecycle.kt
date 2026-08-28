@@ -40,6 +40,7 @@ internal interface BuilderBookLifecycleHost {
     fun ensureCopyPermission(player: Player)
     fun currentClipboard(playerId: UUID): BuilderClipboard?
     fun currentSelection(player: Player): BuilderSelection?
+    fun currentSelectionPoints(player: Player): BuilderSelectionPoints
     fun startJournaledOperation(player: Player, plan: BuilderPlan, plannedMode: GameMode)
     fun localJournalRecord(operationId: UUID): BuilderJournalRecord?
     fun awaitingPlayerRecovery(operationId: UUID): Boolean
@@ -394,6 +395,7 @@ internal class BuilderBookLifecycle(
         val previewOpen = held?.takeIf { it.draft }?.let { BuildingManager.hasExactOpenPreview(player, it) } == true
         val clipboard = host.currentClipboard(playerId)
         val selection = host.currentSelection(player)
+        val selectionPoints = host.currentSelectionPoints(player)
         val stage = BuilderBookJourney.resolve(
             BuilderBookJourneySnapshot(
                 hasQuote = quote != null,
@@ -404,6 +406,8 @@ internal class BuilderBookLifecycle(
                 active = held?.available == true,
                 hasClipboard = clipboard != null,
                 hasSelection = selection != null,
+                hasFirstPoint = selectionPoints.first != null,
+                hasSecondPoint = selectionPoints.second != null,
             ),
         )
         when (stage) {
@@ -419,6 +423,22 @@ internal class BuilderBookLifecycle(
             BuilderBookJourneyStage.AUCTION_LOCKED,
             BuilderBookJourneyStage.START,
             -> send(player, stage.messagePath)
+            BuilderBookJourneyStage.FIRST_POINT,
+            BuilderBookJourneyStage.SECOND_POINT,
+            -> {
+                val point = checkNotNull(
+                    if (stage == BuilderBookJourneyStage.FIRST_POINT) selectionPoints.first else selectionPoints.second,
+                )
+                send(
+                    player,
+                    stage.messagePath,
+                    mapOf(
+                        "x" to messages.literal(point.x),
+                        "y" to messages.literal(point.y),
+                        "z" to messages.literal(point.z),
+                    ),
+                )
+            }
             BuilderBookJourneyStage.PREVIEW,
             BuilderBookJourneyStage.DRAFT,
             -> send(player, stage.messagePath, mapOf("name" to displayTitle(checkNotNull(held).title)))

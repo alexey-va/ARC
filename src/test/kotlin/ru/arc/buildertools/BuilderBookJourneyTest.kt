@@ -11,6 +11,8 @@ class BuilderBookJourneyTest : FunSpec({
     test("status resolver follows the complete guided creation journey") {
         val cases = listOf(
             BuilderBookJourneySnapshot() to BuilderBookJourneyStage.START,
+            BuilderBookJourneySnapshot(hasFirstPoint = true) to BuilderBookJourneyStage.FIRST_POINT,
+            BuilderBookJourneySnapshot(hasSecondPoint = true) to BuilderBookJourneyStage.SECOND_POINT,
             BuilderBookJourneySnapshot(hasSelection = true) to BuilderBookJourneyStage.SELECTION,
             BuilderBookJourneySnapshot(hasSelection = true, hasClipboard = true) to BuilderBookJourneyStage.CLIPBOARD,
             BuilderBookJourneySnapshot(hasClipboard = true, draft = true) to BuilderBookJourneyStage.DRAFT,
@@ -53,6 +55,8 @@ class BuilderBookJourneyTest : FunSpec({
     test("every journey stage owns one stable configured message path") {
         BuilderBookJourneyStage.entries.map(BuilderBookJourneyStage::messagePath) shouldContainExactly listOf(
             "book.status.start",
+            "book.status.first-point",
+            "book.status.second-point",
             "book.status.selection",
             "book.status.clipboard",
             "book.status.draft",
@@ -95,6 +99,10 @@ class BuilderBookJourneyTest : FunSpec({
         config.string("locales.en.book.status.changed") shouldContain "/builder book status"
         config.string("locales.ru.book.preview-required") shouldContain "ПКМ"
         config.string("locales.en.book.preview-required") shouldContain "right-click"
+        config.string("locales.ru.book.status.first-point") shouldContain "ПКМ"
+        config.string("locales.en.book.status.first-point") shouldContain "right-click"
+        config.string("locales.ru.book.status.second-point") shouldContain "ЛКМ"
+        config.string("locales.en.book.status.second-point") shouldContain "left-click"
     }
 
     test("dense dynamic messages keep one fact per physical chat line") {

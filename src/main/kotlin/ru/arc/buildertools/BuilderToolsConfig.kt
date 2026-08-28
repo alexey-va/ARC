@@ -210,6 +210,8 @@ class BuilderToolsConfig(
                 "book.draft-recovered",
                 "book.draft-recovery-failed",
                 "book.status.start",
+                "book.status.first-point",
+                "book.status.second-point",
                 "book.status.selection",
                 "book.status.clipboard",
                 "book.status.draft",
@@ -281,6 +283,8 @@ class BuilderToolsConfig(
                 "items.none",
                 "items.summary",
                 "status.selection",
+                "status.selection-first",
+                "status.selection-second",
                 "status.plan",
                 "status.idle",
             ) + BuilderPlanKind.entries.map { kind ->

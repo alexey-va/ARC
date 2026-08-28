@@ -259,6 +259,7 @@ locales:
         - "<#8c8c8c>  • <click:run_command:'/builder crown reroll'><#92bed8>/builder crown reroll</#92bed8></click> <#e6fff3>— показать другой вариант."
         - "<#8c8c8c>  • <click:run_command:'/builder crown place'><#92bed8>/builder crown place</#92bed8></click> <#e6fff3>— построить вариант."
         - "<#8c8c8c>  • <#969696>В выживании листва берётся из инвентаря."
+        - "<#8c8c8c>  • <#969696>В творческом режиме материалы не расходуются."
       status:
         - "<prefix><#e6fff3><bold>Текущая крона"
         - "<#8c8c8c>  • <#e6fff3>Форма: <#92bed8><shape> <#8c8c8c>• <#e6fff3>радиус: <#92bed8><radius>"
@@ -305,6 +306,14 @@ locales:
           <prefix><#ff9f0f>Этап 1/7: сначала выделите будущую постройку.
           <#8c8c8c>  • <click:run_command:'/builder wand'><#92bed8>/builder wand</#92bed8></click> <#e6fff3>— селектор.
           <#8c8c8c>  • <#e6fff3>ЛКМ и ПКМ — две точки.
+        first-point: |-
+          <prefix><#ff9f0f>Этап 1/7: первая точка выбрана.
+          <#8c8c8c>  • <#e6fff3>Координаты: <#92bed8><x>, <y>, <z>
+          <#8c8c8c>  • <#e6fff3>Отметьте вторую точку <#92bed8>ПКМ<#e6fff3>.
+        second-point: |-
+          <prefix><#ff9f0f>Этап 1/7: вторая точка выбрана.
+          <#8c8c8c>  • <#e6fff3>Координаты: <#92bed8><x>, <y>, <z>
+          <#8c8c8c>  • <#e6fff3>Отметьте первую точку <#92bed8>ЛКМ<#e6fff3>.
         selection: |-
           <prefix><#2bba43>Этап 2/7: область выделена.
           <#8c8c8c>  • <#e6fff3>Размер: <#92bed8><x> × <y> × <z> <#8c8c8c>• <#e6fff3><volume> блоков
@@ -522,6 +531,14 @@ locales:
       none: "нет"
       summary: "предметов: <items> • видов: <types>"
     status:
+      selection-first: |-
+        <prefix><#ff9f0f>Выделение не завершено.
+        <#8c8c8c>  • <#e6fff3>Первая точка: <#92bed8><x>, <y>, <z>
+        <#8c8c8c>  • <#e6fff3>Отметьте вторую точку <#92bed8>ПКМ<#e6fff3>.
+      selection-second: |-
+        <prefix><#ff9f0f>Выделение не завершено.
+        <#8c8c8c>  • <#e6fff3>Вторая точка: <#92bed8><x>, <y>, <z>
+        <#8c8c8c>  • <#e6fff3>Отметьте первую точку <#92bed8>ЛКМ<#e6fff3>.
       selection: |-
         <prefix><#e6fff3>Выделено: <#92bed8><x> × <y> × <z>
         <#8c8c8c>  • <#e6fff3>Объём: <#92bed8><volume>
@@ -658,7 +675,10 @@ locales:
       lore:
         - "<gray>Left-click a face to preview a crown"
         - "<gray>Right-click to confirm the shown plan"
-        - "<dark_gray>Every leaf is consumed from inventory"
+        - "<dark_gray>In survival, leaves come from your inventory"
+        - "<dark_gray>In creative, materials are not consumed"
+        - "<reset>"
+        - "<dark_gray>• <aqua>/builder crown help <gray>— settings"
       received: "<prefix><green>Your plain brush is now the crown brush."
       inventory-full: "<prefix><yellow>Free one slot or hold a single brush."
       material-required: |-
@@ -689,7 +709,7 @@ locales:
           natural: "natural"
           wild: "wild"
       help:
-        - "<prefix><white>Crowns use ordinary leaves from your inventory."
+        - "<prefix><white><bold>Crown settings"
         - "<dark_gray>  • <aqua>/builder crown wand <gray>— bind a plain brush"
         - "<dark_gray>  • <aqua>/builder crown palette oak_leaves,birch_leaves"
         - "<dark_gray>  • <aqua>/builder crown shape natural|round|wide|tall"
@@ -698,6 +718,8 @@ locales:
         - "<dark_gray>  • <aqua>/builder crown noise smooth|natural|wild"
         - "<dark_gray>  • <aqua>/builder crown reroll <gray>— new variant"
         - "<dark_gray>  • <aqua>/builder crown place <gray>— confirm"
+        - "<dark_gray>  • <gray>In survival, leaves come from your inventory."
+        - "<dark_gray>  • <gray>In creative, materials are not consumed."
       status:
         - "<prefix><white>Crown settings:"
         - "<dark_gray>  • <gray>Shape: <aqua><shape></aqua>; radius: <aqua><radius></aqua>"
@@ -743,6 +765,14 @@ locales:
           <prefix><yellow>Step 1/7: select the build area.
           <dark_gray>  • <aqua>/builder wand <gray>— selector.
           <dark_gray>  • <gray>Left/right-click the two corners.
+        first-point: |-
+          <prefix><yellow>Step 1/7: the first point is selected.
+          <dark_gray>  • <gray>Coordinates: <white><x>, <y>, <z>
+          <dark_gray>  • <gray>Select the second point with right-click.
+        second-point: |-
+          <prefix><yellow>Step 1/7: the second point is selected.
+          <dark_gray>  • <gray>Coordinates: <white><x>, <y>, <z>
+          <dark_gray>  • <gray>Select the first point with left-click.
         selection: |-
           <prefix><green>Step 2/7: area selected.
           <dark_gray>  • <gray>Size: <white><x>×<y>×<z></white> • <volume> blocks
@@ -947,6 +977,14 @@ locales:
       none: "none"
       summary: "items: <items> • types: <types>"
     status:
+      selection-first: |-
+        <prefix><yellow>The selection is incomplete.
+        <dark_gray>  • <gray>First point: <white><x>, <y>, <z>
+        <dark_gray>  • <gray>Select the second point with right-click.
+      selection-second: |-
+        <prefix><yellow>The selection is incomplete.
+        <dark_gray>  • <gray>Second point: <white><x>, <y>, <z>
+        <dark_gray>  • <gray>Select the first point with left-click.
       selection: |-
         <prefix><gray>Selected: <white><x>×<y>×<z>
         <dark_gray>  • <gray>Volume: <white><volume> <dark_gray>• <gray>no plan ready

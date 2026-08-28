@@ -281,6 +281,9 @@ internal class BuilderToolsRuntime(
                     override fun currentSelection(player: Player): BuilderSelection? =
                         selectionOrNull(player)
 
+                    override fun currentSelectionPoints(player: Player): BuilderSelectionPoints =
+                        selections.points(player.uniqueId, player.world.uid)
+
                     override fun startJournaledOperation(player: Player, plan: BuilderPlan, plannedMode: GameMode) =
                         this@BuilderToolsRuntime.startJournaledOperation(player, plan, plannedMode)
 
@@ -1068,10 +1071,29 @@ internal class BuilderToolsRuntime(
         val active = operationLocks.operation(player.uniqueId)
         val plan = previews.plan(player.uniqueId)
         val selection = selectionOrNull(player)
+        val selectionPoints = selections.points(player.uniqueId, player.world.uid)
         when {
             active != null -> send(player, "status.plan", mapOf("kind" to kindLabel(player, active.record.plan.kind), "count" to messages.literal(active.appliedChanges), "total" to messages.literal(active.record.plan.changes.size)))
             plan != null -> send(player, "status.plan", mapOf("kind" to kindLabel(player, plan.kind), "count" to messages.literal(0), "total" to messages.literal(plan.changes.size)))
             selection != null -> send(player, "status.selection", mapOf("x" to messages.literal(selection.sizeX), "y" to messages.literal(selection.sizeY), "z" to messages.literal(selection.sizeZ), "volume" to messages.literal(selection.volume)))
+            selectionPoints.first != null -> send(
+                player,
+                "status.selection-first",
+                mapOf(
+                    "x" to messages.literal(selectionPoints.first.x),
+                    "y" to messages.literal(selectionPoints.first.y),
+                    "z" to messages.literal(selectionPoints.first.z),
+                ),
+            )
+            selectionPoints.second != null -> send(
+                player,
+                "status.selection-second",
+                mapOf(
+                    "x" to messages.literal(selectionPoints.second.x),
+                    "y" to messages.literal(selectionPoints.second.y),
+                    "z" to messages.literal(selectionPoints.second.z),
+                ),
+            )
             else -> send(player, "status.idle")
         }
     }

@@ -23,12 +23,14 @@ class BuilderSelectionControllerTest : FunSpec({
 
         selections.set(playerId, first, first = true) shouldBe BuilderSelectionUpdate(null, worldReset = false)
         selections.first(playerId, firstWorldId) shouldBe first
+        selections.points(playerId, firstWorldId) shouldBe BuilderSelectionPoints(first, null)
         selections.selection(playerId, firstWorldId) shouldBe null
 
         selections.set(playerId, second, first = false) shouldBe BuilderSelectionUpdate(
             BuilderSelection(first, second),
             worldReset = false,
         )
+        selections.points(playerId, firstWorldId) shouldBe BuilderSelectionPoints(first, second)
         selections.selection(playerId, firstWorldId) shouldBe BuilderSelection(first, second)
         selections.selection(playerId, secondWorldId) shouldBe null
     }
@@ -42,6 +44,7 @@ class BuilderSelectionControllerTest : FunSpec({
         selections.set(playerId, oldSecond, first = false)
 
         selections.set(playerId, newSecond, first = false) shouldBe BuilderSelectionUpdate(null, worldReset = true)
+        selections.points(playerId, secondWorldId) shouldBe BuilderSelectionPoints(null, newSecond)
         selections.first(playerId, firstWorldId) shouldBe null
         selections.first(playerId, secondWorldId) shouldBe null
         selections.selection(playerId, firstWorldId) shouldBe null

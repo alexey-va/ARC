@@ -9,6 +9,11 @@ internal data class BuilderSelectionUpdate(
     val worldReset: Boolean,
 )
 
+internal data class BuilderSelectionPoints(
+    val first: BuilderBlockPos?,
+    val second: BuilderBlockPos?,
+)
+
 /**
  * Owns one player's two-corner selection from the first point through visual
  * cleanup. All methods are Paper-primary-thread only.
@@ -49,15 +54,22 @@ internal class BuilderSelectionController(
     }
 
     fun selection(playerId: UUID, viewerWorldId: UUID): BuilderSelection? {
-        val draft = drafts[playerId] ?: return null
-        val first = draft.first ?: return null
-        val second = draft.second ?: return null
-        if (first.worldId != second.worldId || first.worldId != viewerWorldId) return null
+        val points = points(playerId, viewerWorldId)
+        val first = points.first ?: return null
+        val second = points.second ?: return null
         return BuilderSelection(first, second)
     }
 
+    fun points(playerId: UUID, viewerWorldId: UUID): BuilderSelectionPoints {
+        val draft = drafts[playerId]
+        return BuilderSelectionPoints(
+            first = draft?.first?.takeIf { it.worldId == viewerWorldId },
+            second = draft?.second?.takeIf { it.worldId == viewerWorldId },
+        )
+    }
+
     fun first(playerId: UUID, viewerWorldId: UUID): BuilderBlockPos? =
-        drafts[playerId]?.first?.takeIf { it.worldId == viewerWorldId }
+        points(playerId, viewerWorldId).first
 
     fun clear(playerId: UUID): Boolean = drafts.remove(playerId) != null
 

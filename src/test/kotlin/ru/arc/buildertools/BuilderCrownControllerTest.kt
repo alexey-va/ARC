@@ -3,6 +3,7 @@ package ru.arc.buildertools
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
@@ -16,12 +17,31 @@ import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.Plugin
+import ru.arc.config.Config
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import ru.arc.text.LocaleCatalog
 import ru.arc.text.LocalizedMiniMessage
+import java.nio.file.Files
 import java.util.UUID
 
 class BuilderCrownControllerTest : FunSpec({
+    test("bundled crown guidance states survival cost and creative exemption") {
+        val config = Config(Files.createTempDirectory("arc-builder-crown-guidance-"), "modules/builder-tools.yml")
+        val russian = (
+            config.stringList("locales.ru.crown-brush.lore") +
+                config.stringList("locales.ru.crown.help")
+        ).joinToString("\n").lowercase()
+        val english = (
+            config.stringList("locales.en.crown-brush.lore") +
+                config.stringList("locales.en.crown.help")
+        ).joinToString("\n").lowercase()
+
+        russian shouldContain "в выживании"
+        russian shouldContain "в творческом"
+        english shouldContain "in survival"
+        english shouldContain "in creative"
+    }
+
     test("brush keeps its legacy identity and explicit non-italic presentation") {
         MockBukkitTestRuntime.open().use { paper ->
             val plugin = paper.createSimplePlugin("BuilderCrownBrushTest")

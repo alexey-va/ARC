@@ -14,10 +14,14 @@ internal data class BuilderBookJourneySnapshot(
     val active: Boolean = false,
     val hasClipboard: Boolean = false,
     val hasSelection: Boolean = false,
+    val hasFirstPoint: Boolean = false,
+    val hasSecondPoint: Boolean = false,
 )
 
 internal enum class BuilderBookJourneyStage(val messagePath: String) {
     START("book.status.start"),
+    FIRST_POINT("book.status.first-point"),
+    SECOND_POINT("book.status.second-point"),
     SELECTION("book.status.selection"),
     CLIPBOARD("book.status.clipboard"),
     DRAFT("book.status.draft"),
@@ -38,6 +42,8 @@ internal object BuilderBookJourney {
         snapshot.active -> BuilderBookJourneyStage.ACTIVE
         snapshot.hasClipboard -> BuilderBookJourneyStage.CLIPBOARD
         snapshot.hasSelection -> BuilderBookJourneyStage.SELECTION
+        snapshot.hasFirstPoint -> BuilderBookJourneyStage.FIRST_POINT
+        snapshot.hasSecondPoint -> BuilderBookJourneyStage.SECOND_POINT
         else -> BuilderBookJourneyStage.START
     }
 }
