@@ -25,6 +25,17 @@ import ru.arc.util.Logging.warn
 import ru.arc.util.RandomUtils
 import java.util.concurrent.ThreadLocalRandom
 
+/** Exact outcome of applying an editor transform to the currently visible preview. */
+internal enum class PreviewTransformUpdateResult(
+    val allowsBookUpdate: Boolean = false,
+) {
+    NO_PREVIEW(allowsBookUpdate = true),
+    UPDATED(allowsBookUpdate = true),
+    PREVIEW_INACTIVE,
+    BOOK_MISMATCH,
+    PROTECTION_DENIED,
+}
+
 /**
  * Represents an active construction site with state management.
  * Uses State Pattern for clean lifecycle management.
@@ -344,20 +355,31 @@ class ConstructionSite(
         relative.z().toDouble(),
     )
 
-    fun refreshPreview(next: BuildBookData): Boolean {
-        if (state != ConstructionState.DisplayingOutline || !acceptsPreviewUpdate(next)) return false
+    fun refreshPreview(next: BuildBookData): Boolean =
+        refreshPreviewResult(next) == PreviewTransformUpdateResult.UPDATED
+
+    internal fun refreshPreviewResult(
+        next: BuildBookData,
+        buildPermissionCheck: () -> Boolean = ::canBuild,
+    ): PreviewTransformUpdateResult {
+        if (state != ConstructionState.DisplayingOutline) {
+            return PreviewTransformUpdateResult.PREVIEW_INACTIVE
+        }
+        if (!acceptsPreviewUpdate(next)) {
+            return PreviewTransformUpdateResult.BOOK_MISMATCH
+        }
         val previous = transform
         transform = next.transform.validated()
         chunks.clear()
-        if (!canBuild() && !player.hasPermission("arc.admin")) {
+        if (!buildPermissionCheck() && !player.hasPermission("arc.admin")) {
             transform = previous
             chunks.clear()
-            return false
+            return PreviewTransformUpdateResult.PROTECTION_DENIED
         }
         bookData = next
         display?.stop()
         display = Display(this).also { it.showBorder(displaySeconds) }
-        return true
+        return PreviewTransformUpdateResult.UPDATED
     }
 
     internal fun acceptsPreviewUpdate(next: BuildBookData): Boolean {

@@ -14,6 +14,7 @@ import ru.arc.autobuild.BuildBookItems
 import ru.arc.autobuild.BuildBookTransform
 import ru.arc.autobuild.BuildingManager
 import ru.arc.autobuild.PlayerBuildBookStore
+import ru.arc.autobuild.PreviewTransformUpdateResult
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.hooks.HookRegistry
 import ru.arc.onetime.OneTimeUseClaim
@@ -748,7 +749,8 @@ internal class BuilderBookLifecycle(
                 }
                 val previewRefreshed = sourceClaim == null && runCatching {
                     inventoryBooksWithInstance(player, instanceId).singleOrNull()?.second?.let { deliveredBook ->
-                        BuildingManager.updatePendingTransform(player, deliveredBook) == true
+                        BuildingManager.updatePendingTransform(player, deliveredBook) ==
+                            PreviewTransformUpdateResult.UPDATED
                     } == true
                 }.getOrElse { failure ->
                     warn(

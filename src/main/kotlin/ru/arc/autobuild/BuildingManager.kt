@@ -441,9 +441,9 @@ object BuildingManager {
     }
 
     @JvmStatic
-    fun updatePendingTransform(player: Player, next: BuildBookData): Boolean? {
-        val site = pendingSites[player.uniqueId] ?: return null
-        return site.refreshPreview(next)
+    internal fun updatePendingTransform(player: Player, next: BuildBookData): PreviewTransformUpdateResult {
+        val site = pendingSites[player.uniqueId] ?: return PreviewTransformUpdateResult.NO_PREVIEW
+        return site.refreshPreviewResult(next)
     }
 
     // ==================== Utilities ====================

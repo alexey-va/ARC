@@ -152,7 +152,9 @@ object BuildBookSettings {
         "build-book.editor.title",
         "build-book.editor.invalid",
         "build-book.editor.no-permission",
-        "build-book.editor.preview-blocked",
+        "build-book.editor.preview-inactive.name",
+        "build-book.editor.preview-book-mismatch.name",
+        "build-book.editor.preview-protection-denied.name",
         "build-book.editor.overview.name",
         "build-book.editor.axis-x.name",
         "build-book.editor.axis-y.name",
@@ -168,6 +170,9 @@ object BuildBookSettings {
         "build-book.editor.axis-z.lore",
         "build-book.editor.rotation.lore",
         "build-book.editor.reset.lore",
+        "build-book.editor.preview-inactive.lore",
+        "build-book.editor.preview-book-mismatch.lore",
+        "build-book.editor.preview-protection-denied.lore",
     )
 }
 

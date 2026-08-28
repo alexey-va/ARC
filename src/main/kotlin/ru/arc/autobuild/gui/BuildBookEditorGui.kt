@@ -20,6 +20,7 @@ import ru.arc.autobuild.BuildBookItems
 import ru.arc.autobuild.BuildBookSettings
 import ru.arc.autobuild.BuildBookTransform
 import ru.arc.autobuild.BuildingManager
+import ru.arc.autobuild.PreviewTransformUpdateResult
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import ru.arc.gui.GuiItems
@@ -48,6 +49,7 @@ object BuildBookEditorGui {
             TextHolder.deserialize(TextUtil.toLegacy(config.string("build-book.editor.title"))),
             ARC.instance,
         )
+        val feedback = BuildBookEditorFeedbackController(refresh = gui::update)
         gui.addPane(
             Slot.fromXY(0, 0),
             OutlinePane(9, 4, Pane.Priority.LOWEST).apply {
@@ -59,21 +61,22 @@ object BuildBookEditorGui {
             Slot.fromXY(0, 0),
             StaticPane(9, 4).apply {
                 addItem(overview(data), 4, 0)
-                addItem(axisItem("axis-x", Material.REDSTONE_TORCH, data.transform.offsetX) { click ->
+                addItem(axisItem("axis-x", Material.REDSTONE_TORCH, data.transform.offsetX, feedback) { click ->
                     data.transform.offset(dx = click.delta())
                 }, 1, 1)
-                addItem(axisItem("axis-y", Material.SCAFFOLDING, data.transform.offsetY) { click ->
+                addItem(axisItem("axis-y", Material.SCAFFOLDING, data.transform.offsetY, feedback) { click ->
                     data.transform.offset(dy = click.delta())
                 }, 3, 1)
-                addItem(axisItem("axis-z", Material.RECOVERY_COMPASS, data.transform.offsetZ) { click ->
+                addItem(axisItem("axis-z", Material.RECOVERY_COMPASS, data.transform.offsetZ, feedback) { click ->
                     data.transform.offset(dz = click.delta())
                 }, 5, 1)
-                addItem(rotationItem(data), 7, 1)
-                addItem(actionItem("reset", Material.REPEATER) { BuildBookTransform() }, 2, 3)
+                addItem(rotationItem(data, feedback), 7, 1)
+                addItem(actionItem("reset", Material.REPEATER, feedback) { BuildBookTransform() }, 2, 3)
             },
         )
         gui.setOnTopClick { it.isCancelled = true }
         gui.setOnBottomClick { it.isCancelled = true }
+        gui.setOnClose { feedback.close() }
         return gui
     }
 
@@ -95,35 +98,45 @@ object BuildBookEditorGui {
         path: String,
         material: Material,
         value: Int,
+        feedback: BuildBookEditorFeedbackController,
         change: (InventoryClickEvent) -> BuildBookTransform,
     ): GuiItem = item(
         material,
         text("build-book.editor.$path.name"),
         config.componentList("build-book.editor.$path.lore") { tag("value", Component.text(value)) },
-    ) { event -> applyChange(event, change(event)) }
+    ) { event, source -> applyChange(event, source, feedback, change(event)) }
 
-    private fun rotationItem(data: BuildBookData): GuiItem = item(
+    private fun rotationItem(
+        data: BuildBookData,
+        feedback: BuildBookEditorFeedbackController,
+    ): GuiItem = item(
         Material.CLOCK,
         text("build-book.editor.rotation.name"),
         config.componentList("build-book.editor.rotation.lore") {
             tag("value", Component.text(data.transform.rotation))
         },
-    ) { event ->
+    ) { event, source ->
         val delta = if (event.isRightClick) 90 else -90
-        applyChange(event, data.transform.rotate(delta))
+        applyChange(event, source, feedback, data.transform.rotate(delta))
     }
 
     private fun actionItem(
         path: String,
         material: Material,
+        feedback: BuildBookEditorFeedbackController,
         change: () -> BuildBookTransform?,
     ): GuiItem = item(
         material,
         text("build-book.editor.$path.name"),
         config.componentList("build-book.editor.$path.lore"),
-    ) { event -> change()?.let { applyChange(event, it) } }
+    ) { event, source -> change()?.let { applyChange(event, source, feedback, it) } }
 
-    private fun applyChange(event: InventoryClickEvent, nextTransform: BuildBookTransform) {
+    private fun applyChange(
+        event: InventoryClickEvent,
+        source: GuiItem,
+        feedback: BuildBookEditorFeedbackController,
+        nextTransform: BuildBookTransform,
+    ) {
         event.isCancelled = true
         val player = event.whoClicked as? Player ?: return
         val held = player.inventory.itemInMainHand
@@ -134,8 +147,17 @@ object BuildBookEditorGui {
             return
         }
         val next = current.copy(transform = nextTransform.validated()).validated()
-        if (BuildingManager.updatePendingTransform(player, next) == false) {
-            player.sendMessage(text("build-book.editor.preview-blocked"))
+        val previewResult = BuildingManager.updatePendingTransform(player, next)
+        if (!previewResult.allowsBookUpdate) {
+            val feedbackPath = when (previewResult) {
+                PreviewTransformUpdateResult.PREVIEW_INACTIVE -> "preview-inactive"
+                PreviewTransformUpdateResult.BOOK_MISMATCH -> "preview-book-mismatch"
+                PreviewTransformUpdateResult.PROTECTION_DENIED -> "preview-protection-denied"
+                PreviewTransformUpdateResult.NO_PREVIEW,
+                PreviewTransformUpdateResult.UPDATED,
+                -> error("Accepted preview result cannot render rejection feedback: $previewResult")
+            }
+            feedback.show(source.item, feedbackState(feedbackPath))
             return
         }
         player.inventory.setItemInMainHand(BuildBookCodec.update(held, next))
@@ -151,30 +173,62 @@ object BuildBookEditorGui {
     private fun text(path: String): Component =
         requireNotNull(config.componentOrNull(path)) { "Missing build-book editor text '$path'" }
 
+    private fun feedbackState(path: String): BuildBookEditorItemState = BuildBookEditorPresentation.state(
+        text("build-book.editor.$path.name"),
+        config.componentList("build-book.editor.$path.lore"),
+    )
+
     private fun item(
         material: Material,
         name: Component,
         lore: List<Component>,
-        click: ((InventoryClickEvent) -> Unit)? = null,
+        click: ((InventoryClickEvent, GuiItem) -> Unit)? = null,
     ): GuiItem {
-        return GuiItems.create(BuildBookEditorPresentation.item(material, name, lore)) { event ->
+        lateinit var guiItem: GuiItem
+        guiItem = GuiItems.create(BuildBookEditorPresentation.item(material, name, lore)) { event ->
             event.isCancelled = true
-            click?.invoke(event)
+            click?.invoke(event, guiItem)
+        }
+        return guiItem
+    }
+}
+
+internal data class BuildBookEditorItemState(
+    val name: Component,
+    val lore: List<Component>,
+) {
+    fun applyTo(item: ItemStack) {
+        item.editMeta { meta ->
+            meta.displayName(name)
+            meta.lore(lore)
         }
     }
 }
 
 /** Final item presentation shared by every visible editor control. */
 internal object BuildBookEditorPresentation {
+    fun state(
+        name: Component,
+        lore: List<Component>,
+    ): BuildBookEditorItemState = BuildBookEditorItemState(
+        name = requireNotNull(TextUtil.strip(name)),
+        lore = lore.mapNotNull(TextUtil::strip),
+    )
+
+    fun capture(item: ItemStack): BuildBookEditorItemState {
+        val meta = item.itemMeta
+        return state(
+            requireNotNull(meta.displayName()) { "Build-book editor item is missing a display name" },
+            meta.lore().orEmpty(),
+        )
+    }
+
     fun item(
         material: Material,
         name: Component,
         lore: List<Component>,
     ): ItemStack =
         ItemStack(material).apply {
-            editMeta { meta ->
-                TextUtil.strip(name)?.let(meta::displayName)
-                meta.lore(lore.mapNotNull(TextUtil::strip))
-            }
+            state(name, lore).applyTo(this)
         }
 }
