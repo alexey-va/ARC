@@ -12,6 +12,36 @@ import ru.arc.config.Config
 import java.nio.file.Files
 
 class BuilderToolsExperienceTest : FunSpec({
+    test("builder root exposes only the guided public command contract") {
+        BuilderRootCommand.suggestions() shouldBe listOf(
+            "help",
+            "wand",
+            "clear",
+            "fill",
+            "copy",
+            "book",
+            "paste",
+            "deconstruct",
+            "crown",
+            "confirm",
+            "cancel",
+            "undo",
+            "status",
+        )
+        BuilderRootCommand.parse("WAND") shouldBe BuilderRootCommand.WAND
+        BuilderRootCommand.parse("pos1") shouldBe null
+        BuilderRootCommand.parse("pos2") shouldBe null
+        BuilderRootCommand.parse("stop") shouldBe null
+        BuilderRootCommand.parse(null) shouldBe null
+    }
+
+    test("only status and canonical cancel remain available during an operation") {
+        BuilderRootCommand.entries.filter(BuilderRootCommand::safeDuringOperation) shouldBe listOf(
+            BuilderRootCommand.CANCEL,
+            BuilderRootCommand.STATUS,
+        )
+    }
+
     test("operation progress is shown immediately, periodically, and on completion") {
         BuilderProgressCadence.shouldRender(1, completed = false) shouldBe true
         BuilderProgressCadence.shouldRender(2, completed = false) shouldBe false

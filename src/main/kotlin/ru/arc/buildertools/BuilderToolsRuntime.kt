@@ -398,10 +398,7 @@ internal class BuilderToolsRuntime(
     ): List<String> {
         if (sender !is Player || !hasUsePermission(sender)) return emptyList()
         if (args.size == 1) {
-            return filterPrefix(
-                listOf("help", "wand", "pos1", "pos2", "clear", "fill", "copy", "book", "paste", "deconstruct", "crown", "confirm", "cancel", "undo", "status"),
-                args[0],
-            )
+            return filterPrefix(BuilderRootCommand.suggestions(), args[0])
         }
         if (args.size == 2 && args[0].equals("confirm", true)) return filterPrefix(listOf("buy"), args[1])
         if (args.size == 2 && args[0].equals("book", true)) {
@@ -416,30 +413,27 @@ internal class BuilderToolsRuntime(
 
     private fun handleBuilder(player: Player, args: Array<out String>) {
         ensureAvailable(player)
-        when (args.firstOrNull()?.lowercase(Locale.ROOT) ?: "help") {
-            "help" -> messages.renderLines("help", locale(player)).forEach(player::sendMessage)
-            "wand" -> giveWand(player)
-            "pos1" -> setCommandPosition(player, first = true)
-            "pos2" -> setCommandPosition(player, first = false)
-            "clear" -> clearSelection(player)
-            "fill" -> preparePlan(player, fillController.plan(player, materialArgument(player, args.getOrNull(1))))
-            "copy" -> {
+        when (BuilderRootCommand.parse(args.firstOrNull()) ?: BuilderRootCommand.HELP) {
+            BuilderRootCommand.HELP -> messages.renderLines("help", locale(player)).forEach(player::sendMessage)
+            BuilderRootCommand.WAND -> giveWand(player)
+            BuilderRootCommand.CLEAR -> clearSelection(player)
+            BuilderRootCommand.FILL -> preparePlan(player, fillController.plan(player, materialArgument(player, args.getOrNull(1))))
+            BuilderRootCommand.COPY -> {
                 val copied = clipboardController.copy(player)
                 send(player, "clipboard.saved", mapOf("count" to messages.literal(copied.blocks.size)))
             }
-            "book" -> books.handleCommand(player, args.drop(1))
-            "paste" -> preparePlan(player, clipboardController.planPaste(player))
-            "deconstruct" -> preparePlan(player, deconstructionController.plan(player))
-            "crown" -> crown.handle(player, args.drop(1))
-            "confirm" -> when (args.getOrNull(1)?.lowercase(Locale.ROOT)) {
+            BuilderRootCommand.BOOK -> books.handleCommand(player, args.drop(1))
+            BuilderRootCommand.PASTE -> preparePlan(player, clipboardController.planPaste(player))
+            BuilderRootCommand.DECONSTRUCT -> preparePlan(player, deconstructionController.plan(player))
+            BuilderRootCommand.CROWN -> crown.handle(player, args.drop(1))
+            BuilderRootCommand.CONFIRM -> when (args.getOrNull(1)?.lowercase(Locale.ROOT)) {
                 null -> confirm(player)
                 "buy" -> confirm(player, buyMissing = true)
                 else -> messages.renderLines("help", locale(player)).forEach(player::sendMessage)
             }
-            "cancel", "stop" -> cancelPlan(player)
-            "undo" -> prepareUndo(player)
-            "status" -> showStatus(player)
-            else -> messages.renderLines("help", locale(player)).forEach(player::sendMessage)
+            BuilderRootCommand.CANCEL -> cancelPlan(player)
+            BuilderRootCommand.UNDO -> prepareUndo(player)
+            BuilderRootCommand.STATUS -> showStatus(player)
         }
     }
 
@@ -493,11 +487,6 @@ internal class BuilderToolsRuntime(
             )
             meta.persistentDataContainer.set(wandKey, PersistentDataType.BYTE, 1)
         }
-    }
-
-    private fun setCommandPosition(player: Player, first: Boolean) {
-        val target = player.getTargetBlockExact(48) ?: player.location.block
-        setPosition(player, target.location, first)
     }
 
     private fun setPosition(player: Player, location: Location, first: Boolean) {

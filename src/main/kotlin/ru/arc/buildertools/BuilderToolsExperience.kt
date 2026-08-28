@@ -14,6 +14,40 @@ internal object BuilderGameModePolicy {
     fun usesInventory(gameMode: GameMode): Boolean = gameMode == GameMode.SURVIVAL
 }
 
+/**
+ * The complete public command surface for builder tools.
+ *
+ * Keeping parsing, suggestions, and in-operation controls on this one contract
+ * prevents undocumented compatibility shortcuts from bypassing the guided
+ * selector workflow.
+ */
+internal enum class BuilderRootCommand(
+    val literal: String,
+    val safeDuringOperation: Boolean = false,
+) {
+    HELP("help"),
+    WAND("wand"),
+    CLEAR("clear"),
+    FILL("fill"),
+    COPY("copy"),
+    BOOK("book"),
+    PASTE("paste"),
+    DECONSTRUCT("deconstruct"),
+    CROWN("crown"),
+    CONFIRM("confirm"),
+    CANCEL("cancel", safeDuringOperation = true),
+    UNDO("undo"),
+    STATUS("status", safeDuringOperation = true),
+    ;
+
+    companion object {
+        fun parse(raw: String?): BuilderRootCommand? =
+            entries.firstOrNull { it.literal.equals(raw, ignoreCase = true) }
+
+        fun suggestions(): List<String> = entries.map(BuilderRootCommand::literal)
+    }
+}
+
 internal data class BuilderPendingPlan(
     val plan: BuilderPlan,
     val gameMode: GameMode,

@@ -199,7 +199,7 @@ internal class BuilderOperationLocks(plugin: Plugin) : Listener, AutoCloseable {
         }
         val normalized = event.message.trim().lowercase(Locale.ROOT).split(Regex("\\s+"))
         val safeControl = normalized.firstOrNull() == "/builder" &&
-            normalized.getOrNull(1) in setOf("status", "cancel", "stop")
+            BuilderRootCommand.parse(normalized.getOrNull(1))?.safeDuringOperation == true
         if (!safeControl) event.isCancelled = true
     }
 
