@@ -95,6 +95,7 @@ locales:
       - "<#8c8c8c>  • <#92bed8>/builder undo <#e6fff3>— подготовить отмену"
     errors:
       disabled: "<prefix><#ff9f0f>Строительные инструменты — только на survival."
+      player-only: "<prefix><#c42323>Команда доступна только игрокам."
       no-permission: "<prefix><#c42323>У вас нет доступа к этому инструменту."
       game-mode: |-
         <prefix><#c42323>Режим недоступен для инструментов строителя.
@@ -552,6 +553,7 @@ locales:
       - "<prefix><white>/builder undo <gray>— revert the latest operation"
     errors:
       disabled: "<prefix><yellow>Builder tools are available only on survival servers."
+      player-only: "<prefix><red>This command is available only to players."
       no-permission: "<prefix><red>You do not have access to this tool."
       game-mode: |-
         <prefix><red>This game mode is not supported.

@@ -139,6 +139,7 @@ class BuilderToolsConfig(
             scalarPaths = setOf(
                 "prefix",
                 "errors.disabled",
+                "errors.player-only",
                 "errors.no-permission",
                 "errors.game-mode",
                 "errors.game-mode-changed",

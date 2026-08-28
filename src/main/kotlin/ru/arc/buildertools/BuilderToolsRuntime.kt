@@ -370,7 +370,7 @@ internal class BuilderToolsRuntime(
 
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
         val player = sender as? Player ?: run {
-            sender.sendMessage("Builder tools are player-only.")
+            sender.sendMessage(messages.render("errors.player-only"))
             return true
         }
         try {

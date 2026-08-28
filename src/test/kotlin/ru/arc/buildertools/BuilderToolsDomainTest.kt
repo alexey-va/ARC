@@ -6,12 +6,14 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextDecoration
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.GameMode
 import org.bukkit.Material
 import org.bukkit.block.data.Waterlogged
 import org.bukkit.block.data.type.Slab
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.Plugin
+import org.bukkit.plugin.PluginDescriptionFile
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import ru.arc.config.Config
@@ -124,6 +126,23 @@ class BuilderToolsDomainTest : FunSpec({
 
         config.validated()
         missing shouldBe emptyList()
+    }
+
+    test("player-only command rejection is localized through the validated catalog") {
+        val temporaryDirectory = Files.createTempDirectory("arc-builder-tools-command-locale-")
+        val base = Config(temporaryDirectory, "modules/builder-tools.yml")
+        val runtimeOverride = Config(temporaryDirectory, "modules/builder-tools-runtime.yml").apply {
+            setBoolean("enabled", true)
+            setStringList("allowed-worlds", listOf("*"))
+        }
+        val config = BuilderToolsConfig(base, runtimeOverride).validated()
+        val messages = config.messages()
+        val plain = PlainTextComponentSerializer.plainText()
+
+        plain.serialize(messages.render("errors.player-only", "ru-RU")) shouldBe
+            "◇ Команда доступна только игрокам."
+        plain.serialize(messages.render("errors.player-only", "en-US")) shouldBe
+            "◇ This command is available only to players."
     }
 
     test("pending plans bind their confirmation game mode atomically") {
@@ -388,6 +407,26 @@ class BuilderToolsDomainTest : FunSpec({
         BuilderPermissionPolicy.canUseAny(permissions("arc.build.book.sell")) shouldBe true
         BuilderPermissionPolicy.canUseAny(permissions("arc.build.book.use")) shouldBe true
         BuilderPermissionPolicy.canUseAny(permissions()) shouldBe false
+    }
+
+    test("build-book create permission grants the declared sell and use children") {
+        MockBukkitTestRuntime.open().use { paper ->
+            val plugin = paper.createSimplePlugin("BuilderPermissionContract")
+            val description = checkNotNull(javaClass.classLoader.getResourceAsStream("plugin.yml"))
+                .use(::PluginDescriptionFile)
+            val required = setOf("arc.build.book.create", "arc.build.book.sell", "arc.build.book.use")
+            description.permissions
+                .filter { it.name in required }
+                .sortedBy { it.name == "arc.build.book.create" }
+                .forEach(paper.server.pluginManager::addPermission)
+            val player = paper.addPlayer("BookSeller")
+
+            player.addAttachment(plugin, "arc.build.book.create", true)
+            player.recalculatePermissions()
+
+            player.hasPermission("arc.build.book.sell") shouldBe true
+            player.hasPermission("arc.build.book.use") shouldBe true
+        }
     }
 
     test("permission policy applies canonical selection and hourly tiers under absolute bounds") {
