@@ -4,13 +4,16 @@ hub:
   title: "<dark_gray>Бюро расследований"
 case:
   title: "<dark_gray>Материалы расследования"
+verdict:
+  title: "<dark_gray>Выберите версию"
 
 items:
-  dossier: { material: SPYGLASS }
-  status: { material: CLOCK }
-  timeline: { material: RECOVERY_COMPASS }
-  cross-check: { material: COMPARATOR }
-  rules: { material: REDSTONE_TORCH }
+  dossier: { material: WRITABLE_BOOK }
+  next-step: { material: COMPASS }
+  evidence: { material: RECOVERY_COMPASS }
+  choose-verdict: { material: TARGET }
+  return-to-foma: { material: EMERALD }
+  back: { material: BLUE_STAINED_GLASS_PANE }
   theory-one: { material: PAPER }
   theory-two: { material: MAP }
   theory-three: { material: NAME_TAG }
@@ -18,3 +21,4 @@ items:
   theory-five: { material: LIME_DYE }
   start: { material: WRITABLE_BOOK }
   contracts: { material: CHEST }
+  case-file: { material: BOOK }

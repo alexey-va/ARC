@@ -11,17 +11,19 @@ class InvestigationResourcesTest : StringSpec({
 
         module shouldContain "enabled: false"
         gui shouldContain "material: WRITABLE_BOOK"
-        gui shouldContain "material: SPYGLASS"
         gui shouldContain "material: CHEST"
-        gui shouldContain "cross-check: { material: COMPARATOR }"
-        gui shouldContain "timeline: { material: RECOVERY_COMPASS }"
+        gui shouldContain "next-step: { material: COMPASS }"
+        gui shouldContain "evidence: { material: RECOVERY_COMPASS }"
+        gui shouldContain "choose-verdict: { material: TARGET }"
+        gui shouldContain "return-to-foma: { material: EMERALD }"
+        gui shouldContain "case-file: { material: BOOK }"
         gui shouldContain "theory-five: { material: LIME_DYE }"
         gui shouldNotContain "customModelData"
         gui shouldNotContain "arc:"
         gui shouldNotContain "HOPPER"
         gui shouldNotContain "confirmation:"
-        gui shouldNotContain "back:"
         gui shouldNotContain "confirm:"
         gui shouldNotContain "cancel:"
+        gui shouldNotContain "close:"
     }
 })

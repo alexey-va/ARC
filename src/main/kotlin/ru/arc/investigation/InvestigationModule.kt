@@ -1,5 +1,6 @@
 package ru.arc.investigation
 
+import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import ru.arc.ARC
 import ru.arc.contracts.NpcContractsGui
@@ -27,6 +28,7 @@ object InvestigationModule : PluginModule {
     val available: Boolean get() = config?.enabled == true && service != null
 
     override fun init() {
+        Bukkit.getPluginManager().registerEvents(InvestigationCaseFile, ARC.instance)
         val loadedCatalog = InvestigationStoryCatalog.load(ARC.instance.dataPath)
         start(InvestigationConfig.load(ARC.instance.dataPath, loadedCatalog.witnessKeys), loadedCatalog)
     }
@@ -72,11 +74,19 @@ object InvestigationModule : PluginModule {
         }
         val current = currentService.current(player.uniqueId)
         if (current?.status == InvestigationStatus.MANUAL_REVIEW) {
+            InvestigationCaseFile.remove(player)
             player.sendMessage(TextUtil.mm("<red>Фома:</red> <gray>Это дело заморожено для ручной сверки. Повторного списания не будет."))
             return
         }
         if (current?.status == InvestigationStatus.ACTIVE) {
-            InvestigationGui.openCase(player, current)
+            if (!InvestigationCaseFile.issue(player, current)) {
+                player.sendActionBar(TextUtil.mm("<yellow>Освободите один слот: Фома не смог вернуть предмет «Дело»."))
+            }
+            if (current.clueCount() >= InvestigationService.MIN_CLUES) {
+                InvestigationGui.openVerdicts(player, current)
+            } else {
+                InvestigationGui.openCase(player, current)
+            }
         } else {
             InvestigationGui.openHub(player, currentService.latest(player.uniqueId))
         }
@@ -89,6 +99,10 @@ object InvestigationModule : PluginModule {
             player.sendActionBar(TextUtil.mm("<yellow>Фома уже убрал ведомость. Подойдите к нему снова."))
             return
         }
+        if (!InvestigationCaseFile.canIssue(player)) {
+            player.sendActionBar(TextUtil.mm("<yellow>Освободите один слот инвентаря для предмета «Дело». Деньги не списаны."))
+            return
+        }
         when (
             val result = currentService.start(
                 player.uniqueId,
@@ -96,16 +110,27 @@ object InvestigationModule : PluginModule {
             )
         ) {
             is InvestigationStartResult.Started -> {
+                player.closeInventory()
+                InvestigationCaseFile.issue(player, result.record)
+                val firstWitness = result.record.case.witnesses().first()
                 player.sendMessage(
                     TextUtil.mm(
-                        "<gold>Фома:</gold> <gray>Дело оплачено. <white>${result.record.case.displayTitle()}</white>. " +
-                            "У вас <white>${currentConfig.duration.seconds} секунд<gray>.",
+                        "<gold>Фома:</gold> <gray>Оплата принята. Вот ваше <gold>дело ${result.record.case.caseNumber}</gold>: " +
+                            "<white>${result.record.case.displayTitle()}</white>.",
                     ),
                 )
-                player.sendMessage(TextUtil.mm("<yellow>Нужно установить:</yellow> <white>${result.record.case.question()}"))
+                player.sendMessage(
+                    TextUtil.mm(
+                        "<yellow>С чего начать:</yellow> <gray>откройте инвентарь, прочитайте предмет <gold>«Дело»</gold>, " +
+                            "затем найдите <white>${firstWitness.displayName}</white> — ${firstWitness.locationHint}. " +
+                            "ПКМ предметом снова откроет материалы.",
+                    ),
+                )
+            }
+            is InvestigationStartResult.AlreadyActive -> {
+                InvestigationCaseFile.issue(player, result.record)
                 InvestigationGui.openCase(player, result.record)
             }
-            is InvestigationStartResult.AlreadyActive -> InvestigationGui.openCase(player, result.record)
             is InvestigationStartResult.Cooldown -> player.sendActionBar(TextUtil.mm("<yellow>Новое дело будет доступно через <white>${formatRemaining(result.until)}<yellow>."))
             InvestigationStartResult.InsufficientFunds -> player.sendActionBar(TextUtil.mm("<red>Недостаточно монет для ревизорской пробы."))
             InvestigationStartResult.EconomyUnavailable -> player.sendActionBar(TextUtil.mm("<red>Касса временно не отвечает. Деньги не списаны."))
@@ -149,6 +174,7 @@ object InvestigationModule : PluginModule {
         }
         when (val result = currentService.collectClue(player.uniqueId, witness)) {
             is InvestigationClueResult.Evidence -> {
+                InvestigationCaseFile.issue(player, result.record)
                 if (result.firstRead) {
                     result.lines.forEach { player.sendMessage(TextUtil.mm(it)) }
                     val count = result.record.clueCount()
@@ -173,14 +199,22 @@ object InvestigationModule : PluginModule {
     }
 
     fun submit(player: Player, verdict: InvestigationVerdict) {
+        val currentConfig = config ?: return unavailable(player)
+        if (!near(player, currentConfig.point("foma"))) {
+            player.closeInventory()
+            player.sendActionBar(TextUtil.mm("<yellow>Вердикт принимает только Фома. Вернитесь к нему."))
+            return
+        }
         val currentService = service ?: return unavailable(player)
         when (val result = currentService.submitVerdict(player.uniqueId, verdict)) {
             is InvestigationVerdictResult.Success -> {
                 player.closeInventory()
+                InvestigationCaseFile.remove(player, result.record.transactionId)
                 sendResolution(player, result.record, true)
             }
             is InvestigationVerdictResult.Wrong -> {
                 player.closeInventory()
+                InvestigationCaseFile.remove(player, result.record.transactionId)
                 sendResolution(player, result.record, false)
             }
             is InvestigationVerdictResult.NeedClues -> player.sendActionBar(TextUtil.mm("<yellow>Нужно хотя бы три показания. Сейчас: <white>${result.collected}/5<yellow>."))
@@ -190,6 +224,7 @@ object InvestigationModule : PluginModule {
             InvestigationVerdictResult.EconomyUnavailable -> player.sendActionBar(TextUtil.mm("<red>Касса не отвечает. Вердикт не зафиксирован — попробуйте ещё раз до конца времени."))
             InvestigationVerdictResult.ManualReview -> {
                 player.closeInventory()
+                InvestigationCaseFile.remove(player)
                 player.sendMessage(TextUtil.mm("<red>Фома:</red> <gray>Вердикт верен, но выплата требует ручной сверки. Повторно её не запускайте."))
             }
             InvestigationVerdictResult.PersistenceFailure -> player.sendActionBar(TextUtil.mm("<red>Вердикт не удалось записать. Попробуйте ещё раз."))
@@ -199,6 +234,17 @@ object InvestigationModule : PluginModule {
     fun openContracts(player: Player) {
         val currentConfig = config ?: return unavailable(player)
         NpcContractsGui.openList(player, currentConfig.contractGroup)
+    }
+
+    fun openCaseFile(player: Player, transactionId: String) {
+        val current = service?.current(player.uniqueId)
+        if (current?.status == InvestigationStatus.ACTIVE && current.transactionId == transactionId) {
+            InvestigationCaseFile.issue(player, current)
+            InvestigationGui.openCase(player, current)
+            return
+        }
+        InvestigationCaseFile.remove(player, transactionId)
+        player.sendActionBar(TextUtil.mm("<gray>Это дело уже закрыто. Ведомость убрана."))
     }
 
     internal fun configOrNull(): InvestigationConfig? = config
@@ -259,6 +305,7 @@ object InvestigationModule : PluginModule {
 
     private fun timeout(player: Player) {
         player.closeInventory()
+        InvestigationCaseFile.remove(player)
         player.sendMessage(TextUtil.mm("<red><bold>Время вышло.</bold> <gray>Фома закрыл ведомость без выплаты."))
     }
 

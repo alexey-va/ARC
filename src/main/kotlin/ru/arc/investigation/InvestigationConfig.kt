@@ -85,10 +85,11 @@ class InvestigationConfig(private val config: Config) {
 
 enum class InvestigationGuiRole(val configKey: String, val fallback: Material) {
     DOSSIER("dossier", Material.WRITABLE_BOOK),
-    STATUS("status", Material.CLOCK),
-    TIMELINE("timeline", Material.RECOVERY_COMPASS),
-    CROSS_CHECK("cross-check", Material.COMPARATOR),
-    RULES("rules", Material.REDSTONE_TORCH),
+    NEXT_STEP("next-step", Material.COMPASS),
+    EVIDENCE("evidence", Material.RECOVERY_COMPASS),
+    CHOOSE_VERDICT("choose-verdict", Material.TARGET),
+    RETURN_TO_FOMA("return-to-foma", Material.EMERALD),
+    BACK("back", Material.BLUE_STAINED_GLASS_PANE),
     THEORY_ONE("theory-one", Material.PAPER),
     THEORY_TWO("theory-two", Material.MAP),
     THEORY_THREE("theory-three", Material.NAME_TAG),
@@ -96,4 +97,5 @@ enum class InvestigationGuiRole(val configKey: String, val fallback: Material) {
     THEORY_FIVE("theory-five", Material.LIME_DYE),
     START("start", Material.EMERALD),
     CONTRACTS("contracts", Material.CHEST),
+    CASE_FILE("case-file", Material.BOOK),
 }
