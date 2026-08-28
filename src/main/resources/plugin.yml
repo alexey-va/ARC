@@ -177,9 +177,6 @@ permissions:
   arc.portal.bypass:
     description: Bypass ARC portal restrictions
     default: op
-  arc.portal.origin.gate:
-    description: Use the experimental ItemsAdder origin-gate portal animation
-    default: op
   arc.portal.teleport.by.other:
     description: Allow other players' portals to teleport you
     default: false

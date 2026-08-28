@@ -78,13 +78,18 @@ portal:
   message: <dark_green>Недалеко появляется портал...
   # Дистанция отображения частиц
   particle-distance: 50.0
-  # Экспериментальный ItemDisplay-портал. Требует arc.portal.origin.gate.
+  # ItemDisplay-портал с выбором вида через LuckPerms meta arc-portal-style.
   # В переносимом default отключён; серверный override задаёт ItemsAdder ID.
   # Все параметры ниже применяются после /arc reload, без рестарта Paper.
   origin-gate:
     enabled: false
-    astral-item: ""
-    chaos-item: ""
+    default-style: origin
+    items:
+      origin: ""
+      astral: ""
+      chaos: ""
+      solar: ""
+      void: ""
     opening-start-tick: 0
     opening-duration-ticks: 66
     # smooth — равномерно; dramatic — заряд и резкое раскрытие.

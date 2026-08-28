@@ -91,6 +91,7 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
     private var task: ScheduledTask? = null
     private var originGate: PortalOriginGateController? = null
     private var originGateSettings: PortalOriginGateSettings? = null
+    private var originGateStyle: PortalVisualStyle? = null
 
     companion object {
         private val occupiedBlocks = ConcurrentHashMap.newKeySet<Block>()
@@ -199,11 +200,17 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
         base: Block,
     ) {
         val settings = PortalOriginGateSettings.load(config) ?: return
-        if (!shouldUseOriginGate(enabled = true, hasPermission = owner.hasPermission(ORIGIN_GATE_PERMISSION))) return
+        val style =
+            resolvePortalVisualStyle(
+                settings.defaultStyle,
+                HookRegistry.luckPermsHook?.getCachedMeta(owner.uniqueId, PORTAL_STYLE_META_KEY),
+            )
+        if (!style.usesOriginGate) return
         originGateSettings = settings
+        originGateStyle = style
         originGate =
             PortalOriginGateController(settings) {
-                BukkitPortalOriginGate.spawn(base, settings, owner.location.clone())
+                BukkitPortalOriginGate.spawn(base, settings, style, owner.location.clone())
             }
     }
 
@@ -404,6 +411,7 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
         settings: PortalOriginGateSettings,
     ) {
         val cb = centerBlock ?: return
+        val style = originGateStyle ?: return
         val fullPlayers = ArrayList<Player>()
         val reducedPlayers = ArrayList<Player>()
         for (candidate in nearbyPlayers) {
@@ -412,7 +420,7 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
             else fullPlayers.add(candidate)
         }
         val center = cb.location.clone().add(0.5, settings.verticalOffset, 0.5)
-        BukkitPortalOriginGate.renderSuction(center, phase.get(), settings, fullPlayers, reducedPlayers)
+        BukkitPortalOriginGate.renderSuction(center, phase.get(), settings, style, fullPlayers, reducedPlayers)
     }
 
     private fun inPortal(player: Player, location: Location): Boolean {
@@ -425,6 +433,7 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
         originGate?.remove()
         originGate = null
         originGateSettings = null
+        originGateStyle = null
         centerBlock?.let(::releasePortal)
         player?.let { portals.remove(it.uniqueId, this) }
         clearBlockPackets()

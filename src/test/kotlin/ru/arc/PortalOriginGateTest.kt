@@ -9,19 +9,19 @@ import io.kotest.matchers.shouldBe
 import kotlin.math.sqrt
 
 class PortalOriginGateTest : FreeSpec({
-    "origin-gate permission" - {
-        "requires both the feature flag and the exact permission" {
-            shouldUseOriginGate(enabled = true, hasPermission = true).shouldBeTrue()
-            shouldUseOriginGate(enabled = false, hasPermission = true).shouldBeFalse()
-            shouldUseOriginGate(enabled = true, hasPermission = false).shouldBeFalse()
+    "origin-gate style" - {
+        "uses the configured default without player metadata" {
+            resolvePortalVisualStyle(PortalVisualStyle.ORIGIN, null) shouldBe PortalVisualStyle.ORIGIN
+            resolvePortalVisualStyle(PortalVisualStyle.ORIGIN, "") shouldBe PortalVisualStyle.ORIGIN
+            resolvePortalVisualStyle(PortalVisualStyle.ORIGIN, "unknown") shouldBe PortalVisualStyle.ORIGIN
         }
 
-        "is declared as an operator-only experimental permission" {
-            val descriptor = checkNotNull(PortalOriginGateTest::class.java.getResource("/plugin.yml")).readText()
-            descriptor.contains("arc.portal.origin.gate:").shouldBeTrue()
-            descriptor.substringAfter("arc.portal.origin.gate:").substringBefore("arc.items.catalog.use:")
-                .contains("default: op")
-                .shouldBeTrue()
+        "accepts every player-selectable style and keeps legacy available" {
+            PortalVisualStyle.entries.forEach { style ->
+                resolvePortalVisualStyle(PortalVisualStyle.ORIGIN, " ${style.id.uppercase()} ") shouldBe style
+            }
+            PortalVisualStyle.LEGACY.usesOriginGate.shouldBeFalse()
+            PortalVisualStyle.ORIGIN.usesOriginGate.shouldBeTrue()
         }
     }
 
@@ -29,20 +29,28 @@ class PortalOriginGateTest : FreeSpec({
         "normalizes valid ItemsAdder ids and accepts bounded animation values" {
             val settings =
                 settings(
-                    astral = " Origin_Gate_Portals:Astral_Portal ",
+                    origin = " Origin_Gate_Portals:Origin_Portal ",
                     openingSoundId = " Minecraft:Block.End_Portal.Spawn ",
                 )
 
             settings.shouldNotBeNull()
-            settings.astralItemId shouldBe "origin_gate_portals:astral_portal"
-            settings.chaosItemId shouldBe "origin_gate_portals:chaos_portal"
+            settings.defaultStyle shouldBe PortalVisualStyle.ORIGIN
+            settings.itemIds shouldBe
+                mapOf(
+                    PortalVisualStyle.ORIGIN to "origin_gate_portals:origin_portal",
+                    PortalVisualStyle.ASTRAL to "origin_gate_portals:astral_portal",
+                    PortalVisualStyle.CHAOS to "origin_gate_portals:chaos_portal",
+                    PortalVisualStyle.SOLAR to "origin_gate_portals:solar_portal",
+                    PortalVisualStyle.VOID to "origin_gate_portals:void_portal",
+                )
             settings.openingCurve shouldBe OriginGateOpeningCurve.DRAMATIC
             settings.openingSoundDelayTicks shouldBe 40
             settings.openingSoundId shouldBe "minecraft:block.end_portal.spawn"
         }
 
         "fails closed for invalid ids and resource-heavy bounds" {
-            settings(astral = "not namespaced").shouldBeNull()
+            settings(origin = "not namespaced").shouldBeNull()
+            settings(defaultStyle = "unknown").shouldBeNull()
             settings(openingDuration = 0).shouldBeNull()
             settings(openingDuration = 201).shouldBeNull()
             settings(openingCurve = "linear").shouldBeNull()
@@ -66,8 +74,10 @@ class PortalOriginGateTest : FreeSpec({
             val defaults = checkNotNull(PortalOriginGateTest::class.java.getResource("/modules/misc.yml")).readText()
             val originGate = defaults.substringAfter("origin-gate:").substringBefore("# DUST_COLOR_TRANSITION")
             originGate.contains("enabled: false").shouldBeTrue()
-            originGate.contains("astral-item: \"\"").shouldBeTrue()
-            originGate.contains("chaos-item: \"\"").shouldBeTrue()
+            originGate.contains("default-style: origin").shouldBeTrue()
+            listOf("origin", "astral", "chaos", "solar", "void").forEach { style ->
+                originGate.contains("$style: \"\"").shouldBeTrue()
+            }
         }
     }
 
@@ -99,7 +109,6 @@ class PortalOriginGateTest : FreeSpec({
 
             controller.beginClosing()
             controller.beginClosing()
-            handle.prepareClosingCount shouldBe 1
             repeat(12) { controller.tickClosing().shouldBeTrue() }
             controller.tickClosing().shouldBeFalse()
             handle.scales.last() shouldBe 0.02f
@@ -172,8 +181,12 @@ class PortalOriginGateTest : FreeSpec({
 })
 
 private fun settings(
+    defaultStyle: String = "origin",
+    origin: String = "origin_gate_portals:origin_portal",
     astral: String = "origin_gate_portals:astral_portal",
     chaos: String = "origin_gate_portals:chaos_portal",
+    solar: String = "origin_gate_portals:solar_portal",
+    void: String = "origin_gate_portals:void_portal",
     openingDuration: Int = 66,
     openingCurve: String = "dramatic",
     closingDuration: Int = 12,
@@ -191,8 +204,15 @@ private fun settings(
     suctionTurns: Double = 2.25,
 ): PortalOriginGateSettings? =
     PortalOriginGateSettings.validated(
-        astralItemId = astral,
-        chaosItemId = chaos,
+        defaultStyle = defaultStyle,
+        itemIds =
+            mapOf(
+                PortalVisualStyle.ORIGIN to origin,
+                PortalVisualStyle.ASTRAL to astral,
+                PortalVisualStyle.CHAOS to chaos,
+                PortalVisualStyle.SOLAR to solar,
+                PortalVisualStyle.VOID to void,
+            ),
         openingStartTick = 0,
         openingDurationTicks = openingDuration,
         openingCurve = openingCurve,
@@ -222,7 +242,6 @@ private fun settings(
 private class RecordingOriginGateHandle : PortalOriginGateHandle {
     val scales = mutableListOf<Float>()
     var playOpeningSoundCount = 0
-    var prepareClosingCount = 0
     var removeCount = 0
 
     override fun updateScale(multiplier: Float) {
@@ -231,10 +250,6 @@ private class RecordingOriginGateHandle : PortalOriginGateHandle {
 
     override fun playOpeningSound() {
         playOpeningSoundCount++
-    }
-
-    override fun prepareClosing() {
-        prepareClosingCount++
     }
 
     override fun remove() {

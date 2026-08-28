@@ -96,4 +96,9 @@ class LuckPermsHook(
             .loadUser(uuid)
             .thenApply { it.cachedData.metaData.getMetaValue(key) }
     }
+
+    fun getCachedMeta(
+        uuid: UUID,
+        key: String,
+    ): String? = userManager.getUser(uuid)?.cachedData?.metaData?.getMetaValue(key)
 }

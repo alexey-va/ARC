@@ -23,12 +23,32 @@ import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.sin
 
-internal const val ORIGIN_GATE_PERMISSION = "arc.portal.origin.gate"
+internal const val PORTAL_STYLE_META_KEY = "arc-portal-style"
 
-internal fun shouldUseOriginGate(
-    enabled: Boolean,
-    hasPermission: Boolean,
-): Boolean = enabled && hasPermission
+internal enum class PortalVisualStyle(val id: String) {
+    LEGACY("legacy"),
+    ORIGIN("origin"),
+    ASTRAL("astral"),
+    CHAOS("chaos"),
+    SOLAR("solar"),
+    VOID("void");
+
+    val usesOriginGate: Boolean
+        get() = this != LEGACY
+
+    companion object {
+        fun parse(value: String?): PortalVisualStyle? =
+            value
+                ?.trim()
+                ?.takeIf(String::isNotEmpty)
+                ?.let { normalized -> entries.firstOrNull { style -> style.id.equals(normalized, ignoreCase = true) } }
+    }
+}
+
+internal fun resolvePortalVisualStyle(
+    defaultStyle: PortalVisualStyle,
+    playerPreference: String?,
+): PortalVisualStyle = PortalVisualStyle.parse(playerPreference) ?: defaultStyle
 
 internal enum class OriginGateOpeningCurve {
     SMOOTH,
@@ -41,8 +61,8 @@ internal enum class OriginGateOpeningCurve {
 }
 
 internal data class PortalOriginGateSettings(
-    val astralItemId: String,
-    val chaosItemId: String,
+    val defaultStyle: PortalVisualStyle,
+    val itemIds: Map<PortalVisualStyle, String>,
     val openingStartTick: Int,
     val openingDurationTicks: Int,
     val openingCurve: OriginGateOpeningCurve,
@@ -79,8 +99,11 @@ internal data class PortalOriginGateSettings(
             if (!config.bool("$path.enabled", false)) return null
 
             return validated(
-                astralItemId = config.string("$path.astral-item", ""),
-                chaosItemId = config.string("$path.chaos-item", ""),
+                defaultStyle = config.string("$path.default-style", PortalVisualStyle.ORIGIN.id),
+                itemIds =
+                    ORIGIN_GATE_STYLES.associateWith { style ->
+                        config.string("$path.items.${style.id}", "")
+                    },
                 openingStartTick = config.integer("$path.opening-start-tick", 0),
                 openingDurationTicks = config.integer("$path.opening-duration-ticks", 66),
                 openingCurve = config.string("$path.opening-curve", "dramatic"),
@@ -113,8 +136,8 @@ internal data class PortalOriginGateSettings(
         }
 
         internal fun validated(
-            astralItemId: String,
-            chaosItemId: String,
+            defaultStyle: String,
+            itemIds: Map<PortalVisualStyle, String>,
             openingStartTick: Int,
             openingDurationTicks: Int,
             openingCurve: String,
@@ -140,12 +163,14 @@ internal data class PortalOriginGateSettings(
             suctionParticleSize: Float,
             suctionCoreCount: Int,
         ): PortalOriginGateSettings? {
-            val normalizedAstral = astralItemId.trim().lowercase()
-            val normalizedChaos = chaosItemId.trim().lowercase()
+            val normalizedDefaultStyle = PortalVisualStyle.parse(defaultStyle) ?: return null
+            val normalizedItemIds =
+                ORIGIN_GATE_STYLES.associateWith { style ->
+                    itemIds[style]?.trim()?.lowercase().orEmpty()
+                }
             val normalizedSound = openingSoundId.trim().lowercase()
             val normalizedOpeningCurve = OriginGateOpeningCurve.parse(openingCurve) ?: return null
-            if (normalizedAstral.length !in 3..128 || !namespacedId.matches(normalizedAstral)) return null
-            if (normalizedChaos.length !in 3..128 || !namespacedId.matches(normalizedChaos)) return null
+            if (normalizedItemIds.values.any { id -> id.length !in 3..128 || !namespacedId.matches(id) }) return null
             if (openingStartTick !in 0..58) return null
             if (openingDurationTicks !in 1..200 || closingDurationTicks !in 1..60) return null
             if (openingSoundDelayTicks !in 0..openingDurationTicks) return null
@@ -175,8 +200,8 @@ internal data class PortalOriginGateSettings(
             if (suctionCoreCount !in 0..24) return null
 
             return PortalOriginGateSettings(
-                astralItemId = normalizedAstral,
-                chaosItemId = normalizedChaos,
+                defaultStyle = normalizedDefaultStyle,
+                itemIds = normalizedItemIds,
                 openingStartTick = openingStartTick,
                 openingDurationTicks = openingDurationTicks,
                 openingCurve = normalizedOpeningCurve,
@@ -210,8 +235,6 @@ internal interface PortalOriginGateHandle {
     fun updateScale(multiplier: Float)
 
     fun playOpeningSound()
-
-    fun prepareClosing()
 
     fun remove()
 }
@@ -255,7 +278,6 @@ internal class PortalOriginGateController(
         if (removed || closing) return
         closing = true
         closingTicks = 0
-        activeHandle.prepareClosing()
         activeHandle.updateScale(1f)
     }
 
@@ -387,12 +409,13 @@ internal object BukkitPortalOriginGate {
     fun spawn(
         base: Block,
         settings: PortalOriginGateSettings,
+        style: PortalVisualStyle,
         viewerLocation: Location,
     ): PortalOriginGateHandle? {
         if (!Bukkit.getPluginManager().isPluginEnabled("ItemsAdder")) return null
 
-        val astral = item(settings.astralItemId) ?: return missing(settings.astralItemId)
-        val chaos = item(settings.chaosItemId) ?: return missing(settings.chaosItemId)
+        val itemId = settings.itemIds[style] ?: return null
+        val portalItem = item(itemId) ?: return missing(itemId)
         val location =
             base.location.clone().add(
                 0.5,
@@ -413,8 +436,8 @@ internal object BukkitPortalOriginGate {
         return try {
             val created = base.world.spawn(location, ItemDisplay::class.java)
             display = created
-            configure(created, astral, settings)
-            BukkitPortalOriginGateHandle(created, chaos, location, settings)
+            configure(created, portalItem, settings)
+            BukkitPortalOriginGateHandle(created, location, settings)
         } catch (failure: Exception) {
             display?.remove()
             warn(
@@ -449,10 +472,10 @@ internal object BukkitPortalOriginGate {
 
     private fun configure(
         display: ItemDisplay,
-        astral: ItemStack,
+        portalItem: ItemStack,
         settings: PortalOriginGateSettings,
     ) {
-        display.setItemStack(astral)
+        display.setItemStack(portalItem)
         display.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.FIXED
         display.billboard = Display.Billboard.FIXED
         display.brightness = Display.Brightness(15, 15)
@@ -477,6 +500,7 @@ internal object BukkitPortalOriginGate {
         center: Location,
         tick: Int,
         settings: PortalOriginGateSettings,
+        style: PortalVisualStyle,
         fullReceivers: Collection<Player>,
         reducedReceivers: Collection<Player>,
     ) {
@@ -487,6 +511,7 @@ internal object BukkitPortalOriginGate {
             settings.suctionStreams,
             settings.suctionPointsPerStream,
             settings,
+            style,
             fullReceivers,
         )
         if (tick % 2 == 0) {
@@ -496,6 +521,7 @@ internal object BukkitPortalOriginGate {
                 settings.reducedSuctionStreams,
                 settings.reducedSuctionPointsPerStream,
                 settings,
+                style,
                 reducedReceivers,
             )
         }
@@ -507,15 +533,17 @@ internal object BukkitPortalOriginGate {
         streams: Int,
         pointsPerStream: Int,
         settings: PortalOriginGateSettings,
+        style: PortalVisualStyle,
         receivers: Collection<Player>,
     ) {
         if (receivers.isEmpty()) return
+        val palette = particlePalette(style)
         val primaryDust =
-            Particle.DustTransition(SUCTION_START_COLOR, SUCTION_END_COLOR, settings.suctionParticleSize)
+            Particle.DustTransition(palette.primaryStart, palette.primaryEnd, settings.suctionParticleSize)
         val secondaryDust =
             Particle.DustTransition(
-                SUCTION_ACCENT_START_COLOR,
-                SUCTION_ACCENT_END_COLOR,
+                palette.accentStart,
+                palette.accentEnd,
                 settings.suctionParticleSize * 0.8f,
             )
         val offsets =
@@ -569,7 +597,6 @@ internal object BukkitPortalOriginGate {
 
     private class BukkitPortalOriginGateHandle(
         private val display: ItemDisplay,
-        private val chaos: ItemStack,
         private val soundLocation: Location,
         private val settings: PortalOriginGateSettings,
     ) : PortalOriginGateHandle {
@@ -586,20 +613,69 @@ internal object BukkitPortalOriginGate {
             if (display.isValid) playOpeningSound(soundLocation, settings)
         }
 
-        override fun prepareClosing() {
-            if (!display.isValid) return
-            display.setItemStack(chaos)
-        }
-
         override fun remove() {
             if (display.isValid) display.remove()
         }
     }
 
-    private val SUCTION_START_COLOR = Color.fromRGB(154, 55, 255)
-    private val SUCTION_END_COLOR = Color.fromRGB(35, 205, 255)
-    private val SUCTION_ACCENT_START_COLOR = Color.fromRGB(46, 94, 255)
-    private val SUCTION_ACCENT_END_COLOR = Color.fromRGB(255, 75, 214)
+    private data class OriginGateParticlePalette(
+        val primaryStart: Color,
+        val primaryEnd: Color,
+        val accentStart: Color,
+        val accentEnd: Color,
+    )
+
+    private fun particlePalette(style: PortalVisualStyle): OriginGateParticlePalette =
+        when (style) {
+            PortalVisualStyle.ORIGIN ->
+                OriginGateParticlePalette(
+                    rgb(52, 225, 183),
+                    rgb(35, 205, 255),
+                    rgb(68, 255, 144),
+                    rgb(169, 255, 92),
+                )
+            PortalVisualStyle.ASTRAL ->
+                OriginGateParticlePalette(
+                    rgb(154, 55, 255),
+                    rgb(35, 205, 255),
+                    rgb(46, 94, 255),
+                    rgb(255, 75, 214),
+                )
+            PortalVisualStyle.CHAOS ->
+                OriginGateParticlePalette(
+                    rgb(255, 55, 75),
+                    rgb(142, 0, 42),
+                    rgb(255, 117, 60),
+                    rgb(177, 36, 255),
+                )
+            PortalVisualStyle.SOLAR ->
+                OriginGateParticlePalette(
+                    rgb(255, 164, 42),
+                    rgb(255, 232, 84),
+                    rgb(255, 87, 26),
+                    rgb(255, 199, 64),
+                )
+            PortalVisualStyle.VOID ->
+                OriginGateParticlePalette(
+                    rgb(135, 42, 255),
+                    rgb(34, 7, 82),
+                    rgb(223, 64, 255),
+                    rgb(48, 63, 255),
+                )
+            PortalVisualStyle.LEGACY ->
+                OriginGateParticlePalette(
+                    rgb(121, 56, 163),
+                    rgb(0, 0, 0),
+                    rgb(74, 38, 117),
+                    rgb(20, 20, 35),
+                )
+        }
+
+    private fun rgb(
+        red: Int,
+        green: Int,
+        blue: Int,
+    ): Color = Color.fromRGB(red, green, blue)
 }
 
 private const val TINY_SCALE_MULTIPLIER = 0.02f
@@ -608,3 +684,4 @@ private const val DRAMATIC_CHARGE_SCALE = 0.12f
 private const val SUCTION_CYCLE_TICKS = 24
 private const val SUCTION_TRAIL_SPACING = 0.055
 private const val MAX_SUCTION_PARTICLES_PER_TICK = 64
+private val ORIGIN_GATE_STYLES = PortalVisualStyle.entries.filter(PortalVisualStyle::usesOriginGate)

@@ -29,7 +29,6 @@ also be declared with an explicit default in `src/main/resources/plugin.yml`.
 | `arc.join-message-gui` | `arc.join.message.gui` |
 | `arc.leafdecay.bypass` | `arc.leaf.decay.bypass` |
 | `arc.locpool.admin` | `arc.location.pool.admin` |
-| `arc.portal.origin-gate` | `arc.portal.origin.gate` |
 | `arc.portal.tp-by-other` | `arc.portal.teleport.by.other` |
 | `arc.portal.tp-other` | `arc.portal.teleport.other` |
 | `arc.pouch` | `arc.pouch.give` |
@@ -43,3 +42,8 @@ also be declared with an explicit default in `src/main/resources/plugin.yml`.
 
 The former names are not runtime aliases. Deploy the matching LuckPerms desired
 state together with the ARC JAR so grants and checks switch as one rollout.
+
+Portal appearance is a player setting, not a permission. It is stored in the
+LuckPerms meta key `arc-portal-style`; supported values are `legacy`, `origin`,
+`astral`, `chaos`, `solar`, and `void`. If the key is absent or invalid, ARC
+uses `portal.origin-gate.default-style` from `modules/misc.yml`.

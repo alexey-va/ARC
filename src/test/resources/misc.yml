@@ -10,8 +10,13 @@ portal:
   enabled: false
   origin-gate:
     enabled: false
-    astral-item: ""
-    chaos-item: ""
+    default-style: origin
+    items:
+      origin: ""
+      astral: ""
+      chaos: ""
+      solar: ""
+      void: ""
 
 bees:
   enabled: false
