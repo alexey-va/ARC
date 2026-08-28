@@ -211,8 +211,7 @@ activate_itemsadder_mirror() {
   fi
   if [[ -n "$("${IA_MIRROR_RSYNC_CLI:-rsync}" -rlcni --delete \
     "${mirror_source_itemsadder}/storage/" "${mirror_target_itemsadder}/storage/")" ]]; then
-    python3 - "${mirror_source_itemsadder}/storage" "${mirror_target_itemsadder}/storage" <<'PY' ||
-      die "Survival ItemsAdder storage drifted semantically during reload"
+    if ! python3 - "${mirror_source_itemsadder}/storage" "${mirror_target_itemsadder}/storage" <<'PY'
 import sys
 from pathlib import Path
 
@@ -249,6 +248,9 @@ for relative_path in sorted(source_files):
     elif source.read_bytes() != target.read_bytes():
         raise RuntimeError(f"ItemsAdder cache differs: {relative_path}")
 PY
+    then
+      die "Survival ItemsAdder storage drifted semantically during reload"
+    fi
     log "ItemsAdder storage was reordered during reload; semantic cache mappings remain identical"
   fi
   log "ItemsAdder reload completed on ${IA_MIRROR_TARGET_SESSION}"

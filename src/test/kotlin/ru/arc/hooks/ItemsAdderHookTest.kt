@@ -590,6 +590,75 @@ class ItemsAdderHookTest :
                 Files.exists(backupRoot.resolve(".lock")).shouldBeFalse()
             }
 
+            "rejects semantic ItemsAdder cache drift after the survival reload" {
+                val directory = Files.createTempDirectory("arc-resourcepack-sync-survival-cache-drift")
+                val networkRoot = directory.resolve("network")
+                val sourceItemsAdder = networkRoot.resolve("classic/plugins/ItemsAdder")
+                val targetItemsAdder = networkRoot.resolve("classic_survival/plugins/ItemsAdder")
+                val resourcePackZip = sourceItemsAdder.resolve("output/generated.zip")
+                val uploadedZip = directory.resolve("uploaded.zip")
+                val fakeAws = directory.resolve("fake-aws.sh")
+                val fakeTmux = directory.resolve("fake-tmux.sh")
+                val targetLog = networkRoot.resolve("classic_survival/logs/latest.log")
+                val script = BundledResourcePackSyncScript.install(directory.resolve("arc-data"))
+
+                sourceItemsAdder.resolve("contents").let { Files.createDirectories(it) }
+                sourceItemsAdder.resolve("storage").let { path ->
+                    Files.createDirectories(path)
+                    path.resolve("items_ids_cache.yml").writeText("PAPER:\n  demo:item: 42\n")
+                }
+                targetItemsAdder.resolve("contents").let { Files.createDirectories(it) }
+                targetItemsAdder.resolve("storage").let { Files.createDirectories(it) }
+                Files.createDirectories(resourcePackZip.parent)
+                Files.createDirectories(targetLog.parent)
+                targetLog.writeText("[00:00:00] server ready\n")
+                ZipOutputStream(Files.newOutputStream(resourcePackZip)).use { output ->
+                    output.putNextEntry(ZipEntry("pack.mcmeta"))
+                    output.write(
+                        """{"pack":{"description":"ready","min_format":75,"max_format":75}}"""
+                            .toByteArray(),
+                    )
+                    output.closeEntry()
+                }
+                fakeAws.writeText(fakeAwsUploaderScript())
+                fakeAws.toFile().setExecutable(true).shouldBeTrue()
+                fakeTmux.writeText(
+                    """
+                    |#!/bin/sh
+                    |case "${'$'}1" in
+                    |  list-sessions)
+                    |    printf '%s\n' survival
+                    |    ;;
+                    |  send-keys)
+                    |    printf '%s\n' 'PAPER:' '  demo:item: 99' > "${'$'}FAKE_TARGET_STORAGE/items_ids_cache.yml"
+                    |    printf '%s\n' '[00:00:01] [Server thread/WARN]: Ресурсы • Reload completed.' >> "${'$'}FAKE_TARGET_LOG"
+                    |    ;;
+                    |  *)
+                    |    exit 2
+                    |    ;;
+                    |esac
+                    """.trimMargin(),
+                )
+                fakeTmux.toFile().setExecutable(true).shouldBeTrue()
+
+                ResourcePackSyncScript(
+                    script,
+                    processEnvironment = {
+                        testEnvironment() +
+                            mapOf(
+                                "AWS_CLI" to fakeAws.toAbsolutePath().toString(),
+                                "CAPTURED_UPLOAD" to uploadedZip.toAbsolutePath().toString(),
+                                "RP_NOTIFY_ENABLED" to "0",
+                                "IA_MIRROR_ENABLED" to "1",
+                                "IA_MIRROR_TMUX_CLI" to fakeTmux.toAbsolutePath().toString(),
+                                "FAKE_TARGET_LOG" to targetLog.toAbsolutePath().toString(),
+                                "FAKE_TARGET_STORAGE" to
+                                    targetItemsAdder.resolve("storage").toAbsolutePath().toString(),
+                            )
+                    },
+                ).publish(resourcePackZip).shouldBeFalse()
+            }
+
             "rejects a survival mirror target that is not a server directory name" {
                 val directory = Files.createTempDirectory("arc-resourcepack-sync-mirror-traversal")
                 val sourceItemsAdder = directory.resolve("network/classic/plugins/ItemsAdder")
