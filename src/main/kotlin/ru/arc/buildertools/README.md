@@ -130,6 +130,13 @@ error. A confirmed `APPLYING` predecessor is safe to roll back; an actually
 unknown outcome freezes further builder mutations until restart recovery can
 reconcile the journal without guessing.
 
+Submitting the `COMMITTED` transition is an explicit rollback boundary. While
+that write—or the matching build-book claim commit—is in flight, quit, cancel,
+and module shutdown leave the completed mutation to its durable callback or
+restart recovery. Only a proven failed write returns the operation to the
+rollback-safe state; this prevents a successful commit from racing an offline
+rollback into a `COMMITTED` journal whose world and inventory were reverted.
+
 On startup, records are phase-sensitive and fail-closed. `PREPARED` permits
 only the untouched `before` state and never restores an inventory; `APPLYING`
 may restore exact `after` states to `before` plus the escrowed inventory.

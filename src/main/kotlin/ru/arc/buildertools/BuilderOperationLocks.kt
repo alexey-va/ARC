@@ -33,6 +33,17 @@ import org.bukkit.plugin.Plugin
 import java.util.Locale
 import java.util.UUID
 
+internal enum class BuilderCommitBoundary {
+    /** The durable record is not committed, so interruption may still roll the mutation back. */
+    ROLLBACK_SAFE,
+
+    /** The COMMITTED transition has been submitted and its durable outcome is not known yet. */
+    COMMIT_IN_FLIGHT,
+
+    /** A durable outcome is ambiguous or its downstream book claim still needs restart recovery. */
+    RECOVERY_REQUIRED,
+}
+
 internal data class BuilderActiveOperation(
     var record: BuilderJournalRecord,
     val gameMode: GameMode,
@@ -40,8 +51,34 @@ internal data class BuilderActiveOperation(
     var mutationBatches: Int = 0,
     var inventoryMutated: Boolean = false,
     var cancelled: Boolean = false,
-    var uncertainCommit: Boolean = false,
-)
+) {
+    var commitBoundary: BuilderCommitBoundary = BuilderCommitBoundary.ROLLBACK_SAFE
+        private set
+
+    val interruptionDeferred: Boolean
+        get() = commitBoundary != BuilderCommitBoundary.ROLLBACK_SAFE
+
+    fun beginCommit() {
+        check(commitBoundary == BuilderCommitBoundary.ROLLBACK_SAFE) {
+            "Builder operation already crossed its rollback-safe commit boundary"
+        }
+        commitBoundary = BuilderCommitBoundary.COMMIT_IN_FLIGHT
+    }
+
+    fun markCommitFailureKnown() {
+        check(commitBoundary == BuilderCommitBoundary.COMMIT_IN_FLIGHT) {
+            "Builder operation has no in-flight commit to reject"
+        }
+        commitBoundary = BuilderCommitBoundary.ROLLBACK_SAFE
+    }
+
+    fun requireCommitRecovery() {
+        check(commitBoundary != BuilderCommitBoundary.ROLLBACK_SAFE) {
+            "Builder operation cannot require commit recovery before commit starts"
+        }
+        commitBoundary = BuilderCommitBoundary.RECOVERY_REQUIRED
+    }
+}
 
 /**
  * Primary-thread owner of Builder Tools' player and block mutation locks.

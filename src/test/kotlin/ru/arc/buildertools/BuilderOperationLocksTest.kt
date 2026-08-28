@@ -1,6 +1,7 @@
 package ru.arc.buildertools
 
 import io.kotest.core.spec.style.FunSpec
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import org.bukkit.GameMode
 import org.bukkit.Material
@@ -83,6 +84,26 @@ class BuilderOperationLocksTest : FunSpec({
         }
     }
 
+    test("commit boundary defers interruption until the durable outcome is known") {
+        val operation = activeOperation()
+
+        operation.interruptionDeferred shouldBe false
+        operation.beginCommit()
+        operation.commitBoundary shouldBe BuilderCommitBoundary.COMMIT_IN_FLIGHT
+        operation.interruptionDeferred shouldBe true
+        shouldThrow<IllegalStateException> { operation.beginCommit() }
+
+        operation.markCommitFailureKnown()
+        operation.commitBoundary shouldBe BuilderCommitBoundary.ROLLBACK_SAFE
+        operation.interruptionDeferred shouldBe false
+
+        operation.beginCommit()
+        operation.requireCommitRecovery()
+        operation.commitBoundary shouldBe BuilderCommitBoundary.RECOVERY_REQUIRED
+        operation.interruptionDeferred shouldBe true
+        operation.requireCommitRecovery()
+    }
+
     test("book locks deny every command and reject a second player lease") {
         MockBukkitTestRuntime.open().use { paper ->
             val plugin = paper.createSimplePlugin("BuilderBookLocksTest")
@@ -123,6 +144,23 @@ class BuilderOperationLocksTest : FunSpec({
         }
     }
 })
+
+private fun activeOperation(): BuilderActiveOperation {
+    val plan = plan(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID())
+    return BuilderActiveOperation(
+        BuilderJournalRecord(
+            operationId = plan.id,
+            playerId = plan.playerId,
+            playerName = "Builder",
+            phase = BuilderJournalPhase.APPLYING,
+            plan = plan,
+            inventoryBefore = PaperPlayerStateEnvelope(payloadBase64 = "AAAA", sha256 = "a".repeat(64)),
+            createdAtMillis = plan.createdAtMillis,
+            updatedAtMillis = plan.createdAtMillis,
+        ).validated(),
+        GameMode.SURVIVAL,
+    )
+}
 
 private fun plan(operationId: UUID, playerId: UUID, worldId: UUID): BuilderPlan {
     val now = 1_800_000_000_000L

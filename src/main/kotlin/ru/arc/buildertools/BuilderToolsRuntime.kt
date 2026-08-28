@@ -874,17 +874,19 @@ internal class BuilderToolsRuntime(
             updatedAtMillis = now,
             committedAtMillis = now,
         )
+        operation.beginCommit()
         writeAsync(
             action = { journal.transition(operation.record, committed) },
             callback = { durable, failure ->
                 if (failure != null || durable == null) {
                     if (failure is BuilderJournalUnknownOutcomeException) {
-                        operation.uncertainCommit = true
+                        operation.requireCommitRecovery()
                         recoveryBlocked = true
                         error("Builder-tools commit outcome requires restart recovery for ${operation.record.operationId}", failure)
                         send(player, "errors.recovering")
                         return@writeAsync
                     }
+                    operation.markCommitFailureKnown()
                     rollback(player, operation, failure?.message ?: "commit durability failed")
                     return@writeAsync
                 }
@@ -897,7 +899,7 @@ internal class BuilderToolsRuntime(
                 } else {
                     books.commitPlanReservation(durable.plan) { consumed, consumeFailure ->
                         if (!consumed) {
-                            operation.uncertainCommit = true
+                            operation.requireCommitRecovery()
                             recoveryBlocked = true
                             error(
                                 "Builder-book consume outcome requires restart recovery for ${durable.operationId}: " +
@@ -1007,6 +1009,15 @@ internal class BuilderToolsRuntime(
     private fun cancelPlan(player: Player) {
         val active = operationLocks.operation(player.uniqueId)
         if (active != null) {
+            if (active.interruptionDeferred) {
+                throw BuilderUserFailure(
+                    if (active.commitBoundary == BuilderCommitBoundary.RECOVERY_REQUIRED) {
+                        "errors.recovering"
+                    } else {
+                        "errors.busy"
+                    },
+                )
+            }
             active.cancelled = true
             if (active.appliedChanges > 0 || active.inventoryMutated) rollback(player, active, "cancelled")
             else send(player, "plan.cancelled")
@@ -1323,7 +1334,7 @@ internal class BuilderToolsRuntime(
         books.onPlayerQuit(event.player.uniqueId)
         crown.clearPlayer(event.player.uniqueId)
         val operation = operationLocks.operation(event.player.uniqueId) ?: return
-        if (operation.uncertainCommit) return
+        if (operation.interruptionDeferred) return
         operation.cancelled = true
         if (operation.appliedChanges > 0 || operation.inventoryMutated) rollback(event.player, operation, "disconnect")
         else acknowledgeCancelled(operation)
@@ -1382,7 +1393,7 @@ internal class BuilderToolsRuntime(
         crown.close()
         previews.close()
         operationLocks.operations().forEach { operation ->
-            if (operation.uncertainCommit) {
+            if (operation.interruptionDeferred) {
                 finishOperation(operation)
                 return@forEach
             }
