@@ -55,6 +55,7 @@ internal class BuilderOperationLocks(plugin: Plugin) : Listener, AutoCloseable {
     private val activeOperations = mutableMapOf<UUID, BuilderActiveOperation>()
     private val lockedBlocks = mutableMapOf<BuilderBlockPos, UUID>()
     private val bookLockedPlayers = mutableSetOf<UUID>()
+    private val recoveryLockedPlayers = mutableSetOf<UUID>()
     private var closed = false
 
     init {
@@ -101,11 +102,23 @@ internal class BuilderOperationLocks(plugin: Plugin) : Listener, AutoCloseable {
         bookLockedPlayers.remove(playerId)
     }
 
+    fun lockRecovery(playerId: UUID) {
+        check(!closed) { "Builder operation locks are closed" }
+        recoveryLockedPlayers.add(playerId)
+    }
+
+    fun unlockRecovery(playerId: UUID) {
+        recoveryLockedPlayers.remove(playerId)
+    }
+
     fun bookLockedPlayerIds(): Set<UUID> = bookLockedPlayers.toSet()
 
     fun isBookLocked(playerId: UUID): Boolean = playerId in bookLockedPlayers
 
-    fun isPlayerLocked(playerId: UUID): Boolean = playerId in activeOperations || playerId in bookLockedPlayers
+    fun isRecoveryLocked(playerId: UUID): Boolean = playerId in recoveryLockedPlayers
+
+    fun isPlayerLocked(playerId: UUID): Boolean =
+        playerId in activeOperations || playerId in bookLockedPlayers || playerId in recoveryLockedPlayers
 
     val activeOperationCount: Int get() = activeOperations.size
     val bookLockedPlayerCount: Int get() = bookLockedPlayers.size
@@ -143,7 +156,7 @@ internal class BuilderOperationLocks(plugin: Plugin) : Listener, AutoCloseable {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     fun onCommandDuringOperation(event: PlayerCommandPreprocessEvent) {
         if (!isPlayerLocked(event.player.uniqueId)) return
-        if (isBookLocked(event.player.uniqueId)) {
+        if (isBookLocked(event.player.uniqueId) || isRecoveryLocked(event.player.uniqueId)) {
             event.isCancelled = true
             return
         }
@@ -238,5 +251,6 @@ internal class BuilderOperationLocks(plugin: Plugin) : Listener, AutoCloseable {
         activeOperations.clear()
         lockedBlocks.clear()
         bookLockedPlayers.clear()
+        recoveryLockedPlayers.clear()
     }
 }

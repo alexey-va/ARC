@@ -307,6 +307,7 @@ internal class BuilderBookLifecycle(
     }
 
     fun onPlayerAvailable(player: Player) {
+        if (operationLocks.isRecoveryLocked(player.uniqueId)) return
         drafts.onPlayerAvailable(player)
         recoverDeliveries(player)
         if (registryReady) auctionCoordinator?.onPlayerAvailable(player)
@@ -961,7 +962,7 @@ internal class BuilderBookLifecycle(
     }
 
     private fun recoverDeliveries(player: Player) {
-        if (!registryReady || !player.isOnline) return
+        if (!registryReady || !player.isOnline || operationLocks.isRecoveryLocked(player.uniqueId)) return
         if (!deliveryRecoveries.add(player.uniqueId)) return
         val activeRegistry = registry ?: run {
             deliveryRecoveries -= player.uniqueId

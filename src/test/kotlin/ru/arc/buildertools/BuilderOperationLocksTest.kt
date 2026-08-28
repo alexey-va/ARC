@@ -102,6 +102,26 @@ class BuilderOperationLocksTest : FunSpec({
             }
         }
     }
+
+    test("player recovery lock denies even builder controls until exact recovery finishes") {
+        MockBukkitTestRuntime.open().use { paper ->
+            val plugin = paper.createSimplePlugin("BuilderRecoveryLocksTest")
+            val player = paper.addPlayer("RecoveringBuilder")
+
+            BuilderOperationLocks(plugin).use { locks ->
+                locks.lockRecovery(player.uniqueId)
+                locks.isPlayerLocked(player.uniqueId) shouldBe true
+                locks.isRecoveryLocked(player.uniqueId) shouldBe true
+
+                val status = PlayerCommandPreprocessEvent(player, "/builder status")
+                paper.callEvent(status)
+                status.isCancelled shouldBe true
+
+                locks.unlockRecovery(player.uniqueId)
+                locks.isPlayerLocked(player.uniqueId) shouldBe false
+            }
+        }
+    }
 })
 
 private fun plan(operationId: UUID, playerId: UUID, worldId: UUID): BuilderPlan {

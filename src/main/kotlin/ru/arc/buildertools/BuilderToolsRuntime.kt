@@ -164,8 +164,8 @@ internal class BuilderToolsRuntime(
     private val crown: BuilderCrownController
     private val books: BuilderBookLifecycle
     private val operationLocks: BuilderOperationLocks
+    private val playerRecoveries: BuilderPlayerRecoveryCoordinator
     private val committedRecords = mutableMapOf<UUID, BuilderJournalRecord>()
-    private val recoveryByPlayer = mutableMapOf<UUID, BuilderJournalRecord>()
     private val consumedUndoSources = mutableSetOf<UUID>()
     private var recovering = true
     private var recoveryBlocked = false
@@ -185,6 +185,7 @@ internal class BuilderToolsRuntime(
         var initializedPreviews: BuilderPreviewSessions? = null
         var initializedCrown: BuilderCrownController? = null
         var initializedBooks: BuilderBookLifecycle? = null
+        var initializedPlayerRecoveries: BuilderPlayerRecoveryCoordinator? = null
         try {
             Bukkit.getPluginManager().registerEvents(this, plugin)
             previews = BuilderPreviewSessions(
@@ -285,10 +286,10 @@ internal class BuilderToolsRuntime(
 
                     override fun localJournalRecord(operationId: UUID): BuilderJournalRecord? =
                         committedRecords[operationId]
-                            ?: recoveryByPlayer.values.firstOrNull { it.operationId == operationId }
+                            ?: playerRecoveries.record(operationId)
 
                     override fun awaitingPlayerRecovery(operationId: UUID): Boolean =
-                        recoveryByPlayer.values.any { it.operationId == operationId }
+                        playerRecoveries.record(operationId) != null
 
                     override fun recoveryInProgress(): Boolean = recovering
 
@@ -296,6 +297,57 @@ internal class BuilderToolsRuntime(
                         this@BuilderToolsRuntime.send(player, path, values)
                 },
             ).also { initializedBooks = it }
+            playerRecoveries = BuilderPlayerRecoveryCoordinator(
+                taskScope = taskScope,
+                operationLocks = operationLocks,
+                playerLookup = Bukkit::getPlayer,
+                restoreInventory = { player, record ->
+                    stateService.restoreInventoryAndVerify(player, stateCodec.decode(record.inventoryBefore))
+                },
+                acknowledgeAsync = { record, complete ->
+                    writeAsync(
+                        action = { journal.acknowledgeExactly(record) },
+                        callback = { acknowledged, failure ->
+                            complete(
+                                when {
+                                    failure != null -> failure
+                                    acknowledged == true -> null
+                                    else -> IllegalStateException(
+                                        "Builder-tools exact recovery acknowledgement was rejected",
+                                    )
+                                },
+                            )
+                        },
+                    )
+                },
+                releaseReservation = books::releasePlanReservation,
+                onTerminalFailure = { record, failure ->
+                    recoveryBlocked = true
+                    error("Builder-tools player recovery failed for ${record.operationId}", failure)
+                    Bukkit.getPlayer(record.playerId)
+                        ?.takeIf(Player::isOnline)
+                        ?.let { send(it, "errors.recovering") }
+                },
+                onAcknowledgementPending = { record, failure ->
+                    warn(
+                        "Builder-tools player recovery acknowledgement queued for retry: operation={} type={}",
+                        record.operationId,
+                        BuilderToolsFailureType.of(failure),
+                    )
+                    Bukkit.getPlayer(record.playerId)
+                        ?.takeIf(Player::isOnline)
+                        ?.let { send(it, "errors.recovering") }
+                },
+                onAcknowledgementRecovered = { record ->
+                    info(
+                        "Builder-tools player recovery acknowledgement recovered: operation={}",
+                        record.operationId,
+                    )
+                },
+                onResolved = { playerId ->
+                    Bukkit.getPlayer(playerId)?.takeIf(Player::isOnline)?.let(books::onPlayerAvailable)
+                },
+            ).also { initializedPlayerRecoveries = it }
             publishRuntimeHealth()
             checkNotNull(taskScope.runTimer(0L, HEALTH_PUBLISH_PERIOD_TICKS, ::publishRuntimeHealth)) {
                 "Builder-tools health publication task was not scheduled"
@@ -304,6 +356,7 @@ internal class BuilderToolsRuntime(
             books.start()
         } catch (failure: Throwable) {
             HandlerList.unregisterAll(this)
+            initializedPlayerRecoveries?.close()
             initializedBooks?.close()
             initializedCrown?.close()
             initializedPreviews?.close()
@@ -397,7 +450,7 @@ internal class BuilderToolsRuntime(
     }
 
     private fun ensureOperationalContext(player: Player) {
-        if (recovering || recoveryBlocked || books.health().recoveryBlocked || player.uniqueId in recoveryByPlayer) {
+        if (recovering || recoveryBlocked || books.health().recoveryBlocked || playerRecoveries.contains(player.uniqueId)) {
             throw BuilderUserFailure("errors.recovering")
         }
         if (!BuilderGameModePolicy.allows(player.gameMode)) throw BuilderUserFailure("errors.game-mode")
@@ -742,10 +795,15 @@ internal class BuilderToolsRuntime(
         }
         try {
             revalidatePlan(player, record.plan)
-            check(BuilderInventory.removeCosts(player.inventory, record.plan.costs)) { "planned costs disappeared" }
-            if (record.plan.toolDamage > 0) player.damageItemStack(EquipmentSlot.HAND, record.plan.toolDamage)
+            if (record.plan.costs.isNotEmpty()) {
+                operation.inventoryMutated = true
+                check(BuilderInventory.removeCosts(player.inventory, record.plan.costs)) { "planned costs disappeared" }
+            }
+            if (record.plan.toolDamage > 0) {
+                operation.inventoryMutated = true
+                player.damageItemStack(EquipmentSlot.HAND, record.plan.toolDamage)
+            }
             player.updateInventory()
-            operation.inventoryMutated = record.plan.costs.isNotEmpty() || record.plan.toolDamage > 0
         } catch (failure: Throwable) {
             rollback(player, operation, failure.message ?: "pre-apply validation failed")
             return
@@ -796,9 +854,13 @@ internal class BuilderToolsRuntime(
                 taskScope.runLater(1L) { runMutationBatch(player, operation) }
                 return
             }
-            check(BuilderInventory.addRewards(player.inventory, operation.record.plan.rewards)) { "planned rewards no longer fit" }
+            if (operation.record.plan.rewards.isNotEmpty()) {
+                operation.inventoryMutated = true
+                check(BuilderInventory.addRewards(player.inventory, operation.record.plan.rewards)) {
+                    "planned rewards no longer fit"
+                }
+            }
             player.updateInventory()
-            operation.inventoryMutated = operation.inventoryMutated || operation.record.plan.rewards.isNotEmpty()
             commitMutation(player, operation)
         } catch (failure: Throwable) {
             rollback(player, operation, failure.message ?: "mutation failed")
@@ -866,6 +928,7 @@ internal class BuilderToolsRuntime(
 
     private fun rollback(player: Player, operation: BuilderActiveOperation, reason: String) {
         var failure: Throwable? = null
+        var recoveryAccepted = false
         try {
             for (index in operation.appliedChanges - 1 downTo 0) {
                 val change = operation.record.plan.changes[index]
@@ -881,44 +944,46 @@ internal class BuilderToolsRuntime(
                     coreProtect?.logChange(operation.record.playerName, block.location, after, before)
                 }
             }
-            if (player.isOnline && !player.isDead) {
-                stateService.restoreInventoryAndVerify(player, stateCodec.decode(operation.record.inventoryBefore))
-            } else if (operation.inventoryMutated) {
-                recoveryByPlayer[player.uniqueId] = operation.record
+            if (closed) {
+                if (player.isOnline && !player.isDead) {
+                    stateService.restoreInventoryAndVerify(player, stateCodec.decode(operation.record.inventoryBefore))
+                }
+                books.releasePlanReservation(operation.record.plan)
+                recoveryAccepted = true
+            } else {
+                recoveryAccepted = playerRecoveries.add(
+                    operation.record,
+                    inventoryRestored = !operation.inventoryMutated,
+                )
             }
         } catch (rollbackFailure: Throwable) {
             failure = rollbackFailure
             recoveryBlocked = true
+            if (!closed) {
+                runCatching { playerRecoveries.hold(operation.record) }.onFailure { holdFailure ->
+                    error(
+                        "Builder-tools could not retain recovery hold for ${operation.record.operationId}",
+                        holdFailure,
+                    )
+                }
+            }
             error("Builder-tools rollback requires operator attention for ${operation.record.operationId}", rollbackFailure)
         }
         finishOperation(operation)
-        if (failure == null) books.releasePlanReservation(operation.record.plan)
-        if (failure == null && player.isOnline) send(player, "operation.rolled-back")
-        if (failure == null && player.uniqueId !in recoveryByPlayer) {
-            writeAsync(action = { journal.acknowledge(operation.record.operationId) }, callback = { _, acknowledgeFailure ->
-                if (acknowledgeFailure != null) warn("Builder-tools could not acknowledge rolled-back operation {}", operation.record.operationId)
-            })
-        }
+        if (failure == null && recoveryAccepted && player.isOnline) send(player, "operation.rolled-back")
         warn(debugLine.line("event" to "rolled_back", "operation" to operation.record.operationId, "player" to operation.record.playerId, "reason" to reason))
     }
 
     private fun failBeforeMutation(player: Player, operation: BuilderActiveOperation, failure: Throwable?) {
+        val recoveryAccepted = playerRecoveries.add(operation.record, inventoryRestored = true)
         finishOperation(operation)
-        books.releasePlanReservation(operation.record.plan)
-        send(player, "operation.rolled-back")
+        if (recoveryAccepted) send(player, "operation.rolled-back")
         failure?.let { warn("Builder-tools durability barrier failed: {}", it.message) }
-        writeAsync(action = { journal.acknowledge(operation.record.operationId) }, callback = { _, acknowledgeFailure ->
-            if (acknowledgeFailure != null) {
-                recoveryBlocked = true
-                warn("Builder-tools could not acknowledge failed operation {}", operation.record.operationId)
-            }
-        })
     }
 
     private fun acknowledgeCancelled(operation: BuilderActiveOperation) {
+        playerRecoveries.add(operation.record, inventoryRestored = true)
         finishOperation(operation)
-        books.releasePlanReservation(operation.record.plan)
-        writeAsync(action = { journal.acknowledge(operation.record.operationId) }, callback = { _, _ -> })
     }
 
     private fun finishOperation(operation: BuilderActiveOperation) = operationLocks.finish(operation)
@@ -1130,6 +1195,18 @@ internal class BuilderToolsRuntime(
                 } catch (recoveryFailure: Throwable) {
                     recoveryBlocked = true
                     recovering = false
+                    loaded.asSequence()
+                        .map { it.value }
+                        .filter { it.phase == BuilderJournalPhase.APPLYING }
+                        .filterNot { playerRecoveries.contains(it.playerId) }
+                        .forEach { record ->
+                            runCatching { playerRecoveries.hold(record) }.onFailure { holdFailure ->
+                                error(
+                                    "Builder-tools could not retain startup recovery hold for ${record.operationId}",
+                                    holdFailure,
+                                )
+                            }
+                        }
                     error("Builder-tools recovery stopped on ambiguous state", recoveryFailure)
                 }
             },
@@ -1140,7 +1217,7 @@ internal class BuilderToolsRuntime(
         recovering = false
         cleanupOldRecords()
         books.onGeneralRecoveryFinished()
-        info(debugLine.line("event" to "recovery_ready", "records" to recordCount, "pending_players" to recoveryByPlayer.size))
+        info(debugLine.line("event" to "recovery_ready", "records" to recordCount, "pending_players" to playerRecoveries.pendingCount))
     }
 
     /** Returns true when the durable record may be acknowledged immediately. */
@@ -1160,14 +1237,8 @@ internal class BuilderToolsRuntime(
             }
         }
         if (record.phase == BuilderJournalPhase.PREPARED) return true
-        val player = Bukkit.getPlayer(record.playerId)
-        if (player?.isOnline == true && !player.isDead) {
-            stateService.restoreInventoryAndVerify(player, stateCodec.decode(record.inventoryBefore))
-            return true
-        } else {
-            recoveryByPlayer[record.playerId] = record
-            return false
-        }
+        playerRecoveries.add(record)
+        return false
     }
 
     private fun markSourceUndone(sourceId: UUID) {
@@ -1241,24 +1312,7 @@ internal class BuilderToolsRuntime(
 
     @EventHandler(priority = EventPriority.LOWEST)
     fun onJoin(event: PlayerJoinEvent) {
-        val record = recoveryByPlayer[event.player.uniqueId]
-        if (record != null) {
-            try {
-                stateService.restoreInventoryAndVerify(event.player, stateCodec.decode(record.inventoryBefore))
-                recoveryByPlayer.remove(event.player.uniqueId)
-                books.releasePlanReservation(record.plan)
-                writeAsync(action = {
-                    check(journal.acknowledge(record.operationId)) { "Builder-tools player recovery acknowledgement failed" }
-                }, callback = { _, failure ->
-                    if (failure != null) recoveryByPlayer[event.player.uniqueId] = record
-                })
-                info(debugLine.line("event" to "player_recovered", "operation" to record.operationId, "player" to record.playerId))
-            } catch (failure: Throwable) {
-                recoveryBlocked = true
-                error("Builder-tools player recovery failed for ${record.operationId}", failure)
-            }
-        }
-        books.onPlayerAvailable(event.player)
+        if (!playerRecoveries.onPlayerAvailable(event.player)) books.onPlayerAvailable(event.player)
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -1289,7 +1343,7 @@ internal class BuilderToolsRuntime(
                     closed = closed,
                     recovering = recovering,
                     recoveryBlocked = recoveryBlocked || bookHealth.recoveryBlocked,
-                    recoveryPlayers = recoveryByPlayer.size,
+                    recoveryPlayers = playerRecoveries.pendingCount,
                     deliveryWaitingForSpace = bookHealth.deliveryWaitingForSpace,
                     reservationReleaseBacklog = bookHealth.reservationReleaseBacklog,
                     activeOperations = operationLocks.activeOperationCount,
@@ -1326,9 +1380,7 @@ internal class BuilderToolsRuntime(
         publishRuntimeHealth()
         HandlerList.unregisterAll(this)
         crown.close()
-        books.close()
         previews.close()
-        taskScope.close()
         operationLocks.operations().forEach { operation ->
             if (operation.uncertainCommit) {
                 finishOperation(operation)
@@ -1338,6 +1390,9 @@ internal class BuilderToolsRuntime(
             if (player != null && (operation.appliedChanges > 0 || operation.inventoryMutated)) rollback(player, operation, "plugin shutdown")
             else finishOperation(operation)
         }
+        playerRecoveries.close()
+        books.close()
+        taskScope.close()
         storageExecutor.shutdownNow()
         shop.close()
         operationLocks.close()

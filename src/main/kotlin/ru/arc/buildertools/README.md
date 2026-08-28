@@ -134,7 +134,10 @@ On startup, records are phase-sensitive and fail-closed. `PREPARED` permits
 only the untouched `before` state and never restores an inventory; `APPLYING`
 may restore exact `after` states to `before` plus the escrowed inventory.
 Unexpected third-party states stop the module for operator review. Offline
-player inventory restoration occurs at join before the record is acknowledged.
+player inventory restoration occurs at join under a value lock. The exact
+journal record is then acknowledged idempotently; a transient filesystem
+failure retries every five seconds without restoring the inventory twice, and
+the player cannot move value or start book recovery until acknowledgement.
 Every forward and rollback block change is also submitted to the public
 CoreProtect API.
 

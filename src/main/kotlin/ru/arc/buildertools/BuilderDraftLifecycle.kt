@@ -225,7 +225,7 @@ internal class BuilderDraftLifecycle(
     }
 
     fun onPlayerAvailable(player: Player) {
-        if (!ready) return
+        if (!ready || operationLocks.isRecoveryLocked(player.uniqueId)) return
         if (player.uniqueId in conflictedPlayers) {
             send(player, "book.manual-review")
             return

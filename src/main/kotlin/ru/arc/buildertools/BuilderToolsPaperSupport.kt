@@ -24,6 +24,7 @@ import ru.arc.hooks.HookRegistry
 import ru.arc.paper.playerstate.NativePaperItemStackBinaryCodec
 import ru.arc.paper.playerstate.PaperPlayerStateCodec
 import ru.arc.paper.playerstate.PaperPlayerStateEnvelope
+import ru.arc.persistence.DurableAcknowledgementOutcome
 import ru.arc.persistence.DurableRecord
 import ru.arc.persistence.DurableRecordJournal
 import ru.arc.util.Logging.warn
@@ -132,6 +133,20 @@ internal class BuilderJournalStore(
     fun loadAll(): List<DurableRecord<BuilderJournalRecord>> = journal.loadAll()
 
     fun acknowledge(operationId: java.util.UUID): Boolean = journal.acknowledge(operationId.toString())
+
+    fun acknowledgeExactly(record: BuilderJournalRecord): Boolean = when (
+        journal.acknowledgeExactly(
+            recordId = record.operationId.toString(),
+            expected = record.validated(maxChanges),
+            sameContent = { expected, current -> expected == current },
+        )
+    ) {
+        DurableAcknowledgementOutcome.ACKNOWLEDGED,
+        DurableAcknowledgementOutcome.ALREADY_ACKNOWLEDGED,
+        -> true
+        DurableAcknowledgementOutcome.CONTENT_MISMATCH ->
+            error("Builder-tools recovery acknowledgement found different durable content")
+    }
 }
 
 internal class BuilderJournalTransitionRejectedException(cause: Throwable) : RuntimeException(cause)
