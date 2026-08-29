@@ -39,3 +39,4 @@ chests:
   particle-extra: 0.05
   distance: 20.0
   sound: ambient.basalt_deltas.additions
+  sound-period-ticks: 100

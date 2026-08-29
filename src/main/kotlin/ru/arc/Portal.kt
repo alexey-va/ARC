@@ -399,10 +399,10 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
             val portalParticleOffset = config.real("portal.portal-particle.offset", 0.3).toFloat()
             ParticleManager.queue(ParticleBuilder(portalParticle).count(portalParticleCount)
                 .location(cb.getRelative(0, 1, 0).location.add(0.5, 0.5, 0.5)).receivers(nearPlayers)
-                .extra(portalParticleExtra).offset(portalParticleOffset.toDouble(), portalParticleOffset.toDouble(), portalParticleOffset.toDouble()).spawn())
+                .extra(portalParticleExtra).offset(portalParticleOffset.toDouble(), portalParticleOffset.toDouble(), portalParticleOffset.toDouble()))
             ParticleManager.queue(ParticleBuilder(portalParticle).count(portalParticleCount)
                 .location(cb.getRelative(0, 2, 0).location.add(0.5, 0.5, 0.5)).receivers(nearPlayers)
-                .extra(portalParticleExtra).offset(portalParticleOffset.toDouble(), portalParticleOffset.toDouble(), portalParticleOffset.toDouble()).spawn())
+                .extra(portalParticleExtra).offset(portalParticleOffset.toDouble(), portalParticleOffset.toDouble(), portalParticleOffset.toDouble()))
         }
     }
 

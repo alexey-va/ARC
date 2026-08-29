@@ -9,10 +9,10 @@ plugins {
 }
 
 group = "ARC"
-version = "1.0"
+version = "1.1.0"
 description = "ARC"
 val pluginVersion = version.toString()
-val arcCoreVersion = "2.1.3"
+val arcCoreVersion = "2.2.0"
 
 java { toolchain { languageVersion.set(JavaLanguageVersion.of(25)) } }
 kotlin { jvmToolchain(25) }

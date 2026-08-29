@@ -173,4 +173,25 @@ class ArcConfigurationConventionTest {
             "ARC plugin.yml is missing static permissions: ${(referenced - declared).sorted()}",
         )
     }
+
+    @Test
+    fun `particle builders are queued before they are spawned`() {
+        val eagerQueueCall = Regex("ParticleManager\\.queue(?:Sync)?\\(.{0,1200}?\\.spawn\\(\\)\\)")
+        val offenders = mutableListOf<Path>()
+
+        Files.walk(Path.of("src", "main", "kotlin")).use { paths ->
+            paths
+                .filter(Files::isRegularFile)
+                .filter { it.toString().endsWith(".kt") }
+                .forEach { path ->
+                    val compact = Files.readString(path).replace(Regex("\\s+"), "")
+                    if (eagerQueueCall.containsMatchIn(compact)) offenders.add(path)
+                }
+        }
+
+        assertTrue(
+            offenders.isEmpty(),
+            "ParticleManager owns spawn timing; do not call spawn() before queueing:\n${offenders.joinToString("\n")}",
+        )
+    }
 }
