@@ -112,7 +112,7 @@ object RedisModule : PluginModule {
  */
 object NetworkModule : PluginModule {
     override val name = "Network"
-    override val priority = 15
+    override val priority = 20
 
     override fun init() {
         val redis = ARC.redisManager ?: return
@@ -132,7 +132,7 @@ object NetworkModule : PluginModule {
  */
 object HooksModule : PluginModule {
     override val name = "Hooks"
-    override val priority = 20
+    override val priority = 15
 
     override fun init() {
         val registry = HookRegistry()

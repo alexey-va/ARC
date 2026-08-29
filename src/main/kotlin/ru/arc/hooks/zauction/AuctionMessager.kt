@@ -16,7 +16,10 @@ class AuctionMessager(
 
     fun send(itemDtoList: List<AuctionItemDto>) {
         try {
-            redis.publish(channel, Common.gson.toJson(itemDtoList))
+            // Every scheduled broadcast is the complete shared-auction snapshot.
+            // Publishing it as a partial update would leave sold, returned, or
+            // expired listings stuck in ProxyARC's in-memory Discord feed.
+            redis.publish(channelAll, Common.gson.toJson(itemDtoList))
         } catch (e: Exception) {
             error("Error sending auction items", e)
         }

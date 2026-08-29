@@ -9,7 +9,7 @@ discord-categories:
   - tools
   - weapons
   - misc
-# Как часто обновлять кэш/рассылку (секунды; зависит от кода Stock/Auction)
+# Как часто обновлять Discord-витрину (в игровых тиках; 1200 = 60 секунд)
 refresh-rate: 1200
-# Транслировать ли новые лоты в широковещание
-broadcast-items: false
+# Публиковать полный снимок активных лотов в Discord через ProxyARC
+broadcast-items: true

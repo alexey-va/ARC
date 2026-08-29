@@ -41,14 +41,14 @@ class CoreModulesTest : TestBase() {
         @DisplayName("NetworkModule has correct name and priority")
         fun testNetworkModule() {
             assertEquals("Network", NetworkModule.name)
-            assertEquals(15, NetworkModule.priority)
+            assertEquals(20, NetworkModule.priority)
         }
 
         @Test
         @DisplayName("HooksModule has correct name and priority")
         fun testHooksModule() {
             assertEquals("Hooks", HooksModule.name)
-            assertEquals(20, HooksModule.priority)
+            assertEquals(15, HooksModule.priority)
         }
 
         @Test
@@ -121,6 +121,7 @@ class CoreModulesTest : TestBase() {
             assertTrue(RedisModule.priority < ConfigModule.priority)
             assertTrue(NetworkModule.priority < ConfigModule.priority)
             assertTrue(HooksModule.priority < ConfigModule.priority)
+            assertTrue(HooksModule.priority < NetworkModule.priority)
             assertTrue(AiModule.priority < ConfigModule.priority)
             assertTrue(EconomyModule.priority < ConfigModule.priority)
         }
