@@ -26,6 +26,18 @@ object InvestigationGui {
         GuiUtils.constructAndShowAsync({ buildCase(player, record) }, player)
     }
 
+    /**
+     * Focused response shown only after a physical click on a witness NPC.
+     * The case-file GUI deliberately keeps every collected statement inline.
+     */
+    fun openTestimony(
+        player: Player,
+        record: InvestigationJournalRecord,
+        witness: InvestigationWitness,
+    ) {
+        GuiUtils.constructAndShowAsync({ buildTestimony(player, record, witness) }, player)
+    }
+
     fun openVerdicts(player: Player, record: InvestigationJournalRecord) {
         GuiUtils.constructAndShowAsync({ buildVerdicts(player, record) }, player)
     }
@@ -173,6 +185,23 @@ object InvestigationGui {
                     display("<aqua>Вернуться к материалам")
                     lore(listOf("<gray>Ещё раз проверить показания и хронологию."))
                     onClick { openCase(player, record) }
+                }
+            }
+        }
+
+    internal fun buildTestimony(
+        player: Player,
+        record: InvestigationJournalRecord,
+        witness: InvestigationWitness,
+    ): ChestGui =
+        gui(guiConfig.string("testimony.title", "<dark_gray>Показание свидетеля"), 3, player, guiConfig) {
+            background()
+            staticPane(width = 9, height = 3) {
+                item(4, 1) {
+                    style(InvestigationGuiRole.TESTIMONY)
+                    material(Material.matchMaterial(witness.itemMaterial) ?: Material.PAPER)
+                    display("<gold><bold>${witness.displayName}")
+                    lore(focusedTestimonyLore(record, witness))
                 }
             }
         }
@@ -350,6 +379,12 @@ internal fun witnessLore(
             ) + comparisonLore,
     )
 }
+
+/** Only the selected witness's own words belong on the click-focused screen. */
+internal fun focusedTestimonyLore(
+    record: InvestigationJournalRecord,
+    witness: InvestigationWitness,
+): List<String> = wrapInvestigationLore(record.case.testimony(witness))
 
 private val MINI_MESSAGE_TAG = Regex("<[^>]+>")
 

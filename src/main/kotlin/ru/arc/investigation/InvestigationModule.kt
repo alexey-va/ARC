@@ -148,6 +148,19 @@ object InvestigationModule : PluginModule {
     }
 
     fun collect(player: Player, witnessKey: String) {
+        collect(player, witnessKey, requireProximity = true)
+    }
+
+    /** A Citizens click is already authoritative proof that the player reached this NPC. */
+    fun collectFromNpcClick(player: Player, witnessKey: String) {
+        collect(player, witnessKey, requireProximity = false)
+    }
+
+    private fun collect(
+        player: Player,
+        witnessKey: String,
+        requireProximity: Boolean,
+    ) {
         val currentConfig = config ?: return unavailable(player)
         val currentService = service ?: return unavailable(player)
         val current = currentService.current(player.uniqueId)
@@ -173,7 +186,7 @@ object InvestigationModule : PluginModule {
             }
             return
         }
-        if (!near(player, currentConfig.point(witness.commandValue))) {
+        if (requireProximity && !near(player, currentConfig.point(witness.commandValue))) {
             player.sendActionBar(TextUtil.mm("<yellow>Подойдите ближе к свидетелю."))
             return
         }
@@ -187,7 +200,7 @@ object InvestigationModule : PluginModule {
                 } else {
                     player.sendActionBar(TextUtil.mm("<gray>Это показание уже сохранено в материалах дела."))
                 }
-                InvestigationGui.openCase(player, result.record)
+                InvestigationGui.openTestimony(player, result.record, witness)
             }
             is InvestigationClueResult.Expired -> timeout(player)
             InvestigationClueResult.NoActiveCase -> player.sendActionBar(TextUtil.mm("<gray>Сначала возьмите дело у Фомы."))

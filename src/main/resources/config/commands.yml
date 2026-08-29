@@ -14,8 +14,8 @@ commands:
     name: investigation
     aliases: [расследование]
     permission: ''
-    player-only: true
-    usage: /arc investigation [open|clue <stavr|prokhor|gordey>|verdict <amount|seal|clean>]
+    player-only: false
+    usage: /arc investigation [open|clue <свидетель>|verdict <версия>]
   help:
     name: help
     aliases: [ ]

@@ -75,6 +75,22 @@ class InvestigationCaseFileTest : StringSpec({
         visible shouldNotContain "Нажмите, чтобы перечитать"
     }
 
+    "witness click focus contains only that witness statement" {
+        val record = activeCaseRecord()
+        val witness = record.case.witnesses().first()
+        val visible =
+            focusedTestimonyLore(record, witness)
+                .joinToString(" ") { it.replace(Regex("<[^>]+>"), "") }
+                .replace(Regex("\\s+"), " ")
+
+        record.case.testimony(witness).forEach { line ->
+            visible shouldContain line.replace(Regex("<[^>]+>"), "").replace(Regex("\\s+"), " ")
+        }
+        visible shouldNotContain "Что это устанавливает"
+        visible shouldNotContain "Связи с другими показаниями"
+        visible shouldNotContain witness.displayName
+    }
+
     "all custom money glyphs declare an explicit white color" {
         val lore = InvestigationCaseFile.caseFileLore(activeCaseRecord()).joinToString("\n")
         lore shouldContain "<white>💰</white>"
