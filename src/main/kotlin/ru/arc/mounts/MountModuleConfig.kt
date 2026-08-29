@@ -45,9 +45,13 @@ open class MountModuleConfig(private val config: Config) {
     open val walkingSpeedScale: Double get() = config.double("movement.walking-speed-scale", 0.16)
     open val flyingSpeedScale: Double get() = config.double("movement.flying-speed-scale", 0.55)
     open val swimmingSpeedScale: Double get() = config.double("movement.swimming-speed-scale", 0.45)
-    open val acceleration: Double get() = config.double("movement.acceleration", 0.28)
-    open val deceleration: Double get() = config.double("movement.deceleration", 0.38)
-    open val turnSmoothing: Double get() = config.double("movement.turn-smoothing", 0.32)
+    open val motionTiming: MountMotionTiming
+        get() =
+            MountMotionTiming(
+                accelerationTime = config.duration("movement.acceleration-time", Duration.ofMillis(900)),
+                decelerationTime = config.duration("movement.deceleration-time", Duration.ofMillis(350)),
+                turnTime = config.duration("movement.turn-time", Duration.ofMillis(200)),
+            )
     open val sprintMultiplier: Double get() = config.double("movement.sprint-multiplier", 1.15)
     open val jumpVelocity: Double get() = config.double("movement.jump-velocity", 0.5)
     open val verticalSpeedRatio: Double get() = config.double("movement.vertical-speed-ratio", 0.75)
@@ -114,6 +118,7 @@ open class MountModuleConfig(private val config: Config) {
                     abilities = abilities("$root.abilities", abilityUpgrades),
                     appearance = appearance("$root.appearance"),
                     skins = skinList(root, id),
+                    motion = motion("$root.motion"),
                 )
             }
         return MountCatalog(definitions)
@@ -138,9 +143,7 @@ open class MountModuleConfig(private val config: Config) {
         require(walkingSpeedScale > 0.0 && walkingSpeedScale.isFinite()) { "walking-speed-scale must be positive" }
         require(flyingSpeedScale > 0.0 && flyingSpeedScale.isFinite()) { "flying-speed-scale must be positive" }
         require(swimmingSpeedScale > 0.0 && swimmingSpeedScale.isFinite()) { "swimming-speed-scale must be positive" }
-        require(acceleration in 0.0..1.0) { "Mount acceleration must be between 0 and 1" }
-        require(deceleration in 0.0..1.0) { "Mount deceleration must be between 0 and 1" }
-        require(turnSmoothing in 0.0..1.0) { "Mount turn-smoothing must be between 0 and 1" }
+        motionTiming
         require(sprintMultiplier >= 1.0 && sprintMultiplier.isFinite()) { "Mount sprint-multiplier must be at least 1" }
         require(jumpVelocity > 0.0 && jumpVelocity.isFinite()) { "Mount jump-velocity must be positive" }
         require(verticalSpeedRatio > 0.0 && verticalSpeedRatio.isFinite()) { "Mount vertical-speed-ratio must be positive" }
@@ -159,6 +162,13 @@ open class MountModuleConfig(private val config: Config) {
     }
 
     open fun message(path: String, fallback: String): String = config.string("messages.$path", fallback)
+
+    private fun motion(root: String): MountMotionOverride =
+        MountMotionOverride(
+            accelerationTime = config.durationOrNull("$root.acceleration-time"),
+            decelerationTime = config.durationOrNull("$root.deceleration-time"),
+            turnTime = config.durationOrNull("$root.turn-time"),
+        )
 
     private fun levelList(root: String, mountId: String): List<MountLevelDefinition> =
         config.list<Map<String, Any?>>("$root.levels").mapIndexed { index, raw ->

@@ -1,11 +1,13 @@
 package ru.arc.mounts
 
+import java.time.Duration
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -237,6 +239,7 @@ data class MountDefinition(
     val abilities: MountAbilities = MountAbilities(),
     val appearance: MountAppearance = MountAppearance(),
     val skins: List<MountSkinDefinition> = emptyList(),
+    val motion: MountMotionOverride = MountMotionOverride(),
 ) {
     init {
         require(validId(id)) { "Invalid mount id: $id" }
@@ -424,6 +427,49 @@ data class MotionVector(
     }
 }
 
+data class MountMotionTiming(
+    val accelerationTime: Duration,
+    val decelerationTime: Duration,
+    val turnTime: Duration,
+) {
+    init {
+        validateMotionDuration(accelerationTime, "acceleration time")
+        validateMotionDuration(decelerationTime, "deceleration time")
+        validateMotionDuration(turnTime, "turn time")
+    }
+}
+
+data class MountMotionOverride(
+    val accelerationTime: Duration? = null,
+    val decelerationTime: Duration? = null,
+    val turnTime: Duration? = null,
+) {
+    init {
+        accelerationTime?.let { validateMotionDuration(it, "acceleration time override") }
+        decelerationTime?.let { validateMotionDuration(it, "deceleration time override") }
+        turnTime?.let { validateMotionDuration(it, "turn time override") }
+    }
+
+    fun resolve(defaults: MountMotionTiming): MountMotionTiming =
+        MountMotionTiming(
+            accelerationTime = accelerationTime ?: defaults.accelerationTime,
+            decelerationTime = decelerationTime ?: defaults.decelerationTime,
+            turnTime = turnTime ?: defaults.turnTime,
+        )
+}
+
+data class MountMotionState(
+    val direction: MotionVector = MotionVector.ZERO,
+    val speed: Double = 0.0,
+) {
+    init {
+        require(speed.isFinite() && speed >= 0.0) { "Mount motion speed must be finite and non-negative" }
+    }
+
+    val velocity: MotionVector
+        get() = direction.normalized() * speed
+}
+
 object MountMotion {
     fun planarDirection(yawDegrees: Float, input: MountInputState): MotionVector {
         val yaw = Math.toRadians(yawDegrees.toDouble())
@@ -432,19 +478,46 @@ object MountMotion {
         return (forward * input.forwardAxis + right * input.strafeAxis).normalizedHorizontal()
     }
 
-    fun smooth(current: MotionVector, target: MotionVector, acceleration: Double, deceleration: Double): MotionVector {
-        val factor = if (target.length > current.length) acceleration else deceleration
-        val bounded = factor.coerceIn(0.0, 1.0)
-        return MotionVector(
-            current.x + (target.x - current.x) * bounded,
-            current.y + (target.y - current.y) * bounded,
-            current.z + (target.z - current.z) * bounded,
-        )
-    }
-
-    fun smoothYaw(current: Float, target: Float, factor: Double): Float {
-        val delta = ((target - current + 540.0f) % 360.0f) - 180.0f
-        return current + delta * factor.coerceIn(0.0, 1.0).toFloat()
+    fun advance(
+        current: MountMotionState,
+        targetVelocity: MotionVector,
+        timing: MountMotionTiming,
+        handlingMultiplier: Double,
+    ): MountMotionState {
+        require(handlingMultiplier.isFinite() && handlingMultiplier > 0.0) {
+            "Mount handling multiplier must be positive and finite"
+        }
+        val targetSpeed = targetVelocity.length
+        val targetDirection = targetVelocity.normalized()
+        val currentDirection = current.direction.normalized()
+        val reversing =
+            current.speed > MOTION_EPSILON &&
+                targetSpeed > MOTION_EPSILON &&
+                currentDirection.dot(targetDirection) <= REVERSE_DOT_THRESHOLD
+        if (reversing) {
+            val speedFactor = responseFactor(timing.decelerationTime, handlingMultiplier)
+            val nextSpeed = current.speed * (1.0 - speedFactor)
+            val reverseThreshold = (targetSpeed * RESPONSE_REMAINDER).coerceIn(MOTION_EPSILON, STOP_SPEED_THRESHOLD)
+            return if (nextSpeed <= reverseThreshold) {
+                MountMotionState(direction = targetDirection, speed = 0.0)
+            } else {
+                MountMotionState(direction = currentDirection, speed = nextSpeed)
+            }
+        }
+        val speedDuration = if (targetSpeed > current.speed) timing.accelerationTime else timing.decelerationTime
+        val speedFactor = responseFactor(speedDuration, handlingMultiplier)
+        val smoothedSpeed = current.speed + (targetSpeed - current.speed) * speedFactor
+        val nextSpeed = if (targetSpeed <= MOTION_EPSILON && smoothedSpeed <= STOP_SPEED_THRESHOLD) 0.0 else smoothedSpeed
+        val nextDirection =
+            if (current.speed <= MOTION_EPSILON || current.direction.length <= MOTION_EPSILON) {
+                targetDirection
+            } else if (targetSpeed <= MOTION_EPSILON) {
+                currentDirection
+            } else {
+                val turnFactor = responseFactor(timing.turnTime, handlingMultiplier)
+                (currentDirection * (1.0 - turnFactor) + targetDirection * turnFactor).normalized()
+            }
+        return MountMotionState(nextDirection, nextSpeed)
     }
 
     fun facingYaw(motion: MotionVector, fallback: Float): Float {
@@ -470,7 +543,30 @@ object MountMotion {
         val raw = MotionVector(planar.x * maximumSpeed, vertical, planar.z * maximumSpeed)
         return if (raw.length > maximumSpeed && maximumSpeed > 0.0) raw.normalized() * maximumSpeed else raw
     }
+
+    private fun responseFactor(duration: Duration, handlingMultiplier: Double): Double {
+        if (duration.isZero) return 1.0
+        val ticks = duration.toNanos() / TICK_NANOS.toDouble()
+        if (ticks <= 0.0) return 1.0
+        return 1.0 - RESPONSE_REMAINDER.pow(handlingMultiplier / ticks)
+    }
+
+    private const val TICK_NANOS = 50_000_000L
+    private const val RESPONSE_REMAINDER = 0.05
+    private const val MOTION_EPSILON = 1.0e-9
+    private const val STOP_SPEED_THRESHOLD = 0.01
+    private const val REVERSE_DOT_THRESHOLD = -0.5
 }
+
+private fun MotionVector.dot(other: MotionVector): Double = x * other.x + y * other.y + z * other.z
+
+private fun validateMotionDuration(duration: Duration, name: String) {
+    require(!duration.isNegative && duration <= MAX_MOTION_RESPONSE_TIME) {
+        "Mount $name must be between 0s and ${MAX_MOTION_RESPONSE_TIME.seconds}s"
+    }
+}
+
+private val MAX_MOTION_RESPONSE_TIME: Duration = Duration.ofSeconds(10)
 
 enum class SneakGestureResult {
     NONE,

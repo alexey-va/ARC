@@ -85,6 +85,7 @@ private data class MountSession(
     var lastActiveAtMillis: Long = System.currentTimeMillis(),
     var ticks: Long = 0L,
     var riderMountHidden: Boolean = false,
+    var motionState: MountMotionState = MountMotionState(),
 )
 
 class MountSessionController(
@@ -468,17 +469,25 @@ class MountSessionController(
         val sprint = if (session.input.sprint) config.sprintMultiplier * session.sprintMultiplier else 1.0
         val abilitySpeed = activeAbilitySpeedMultiplier(session.abilityUpgrades)
         val maximumSpeed = (session.speed * speedScale * sprint * abilitySpeed).coerceAtMost(config.maximumSpeedBlocksPerTick)
+        val planar = MountMotion.planarDirection(player.location.yaw, session.input)
+        val timing = session.definition.motion.resolve(config.motionTiming)
         if (session.definition.movement == MountMovement.WALKING && entity is Horse) {
+            session.motionState =
+                MountMotion.advance(
+                    current = session.motionState,
+                    targetVelocity = planar * maximumSpeed,
+                    timing = timing,
+                    handlingMultiplier = session.handlingMultiplier,
+                )
             configureNativeHorseMotion(
                 horse = entity,
-                maximumSpeedBlocksPerTick = maximumSpeed,
+                maximumSpeedBlocksPerTick = session.motionState.speed,
                 jumpVelocity = walkingJumpVelocity(config.jumpVelocity, session.definition.abilities),
                 stepHeight = session.walkingStepHeight,
             )
             entity.fallDistance = 0.0f
             return
         }
-        val planar = MountMotion.planarDirection(player.location.yaw, session.input)
         val target =
             when (session.definition.movement) {
                 MountMovement.WALKING -> planar * maximumSpeed
@@ -494,36 +503,32 @@ class MountSessionController(
                     pitchInfluence = config.flightPitchInfluence,
                 )
             }
-        val current = entity.velocity.toMotion()
-
+        session.motionState =
+            MountMotion.advance(
+                current = session.motionState,
+                targetVelocity = target,
+                timing = timing,
+                handlingMultiplier = session.handlingMultiplier,
+            )
+        val controlledVelocity = session.motionState.velocity
+        val currentVertical = entity.velocity.y
         val velocity =
             if (session.definition.movement == MountMovement.WALKING) {
-                val horizontal =
-                    MountMotion.smooth(
-                        MotionVector(current.x, 0.0, current.z),
-                        target,
-                        (config.acceleration * session.handlingMultiplier).coerceAtMost(1.0),
-                        (config.deceleration * session.handlingMultiplier).coerceAtMost(1.0),
-                    )
                 val vertical =
                     if (session.input.jump && entity.isOnGround) {
                         walkingJumpVelocity(config.jumpVelocity, session.definition.abilities)
+                    } else {
+                        currentVertical
                     }
-                    else current.y
-                MotionVector(horizontal.x, vertical, horizontal.z)
+                MotionVector(controlledVelocity.x, vertical, controlledVelocity.z)
             } else {
-                MountMotion.smooth(
-                    current,
-                    target,
-                    (config.acceleration * session.handlingMultiplier).coerceAtMost(1.0),
-                    (config.deceleration * session.handlingMultiplier).coerceAtMost(1.0),
-                )
+                controlledVelocity
             }
 
         entity.velocity = constrainPhasingVelocity(entity, velocity).toBukkit()
         entity.fallDistance = 0.0f
-        val targetYaw = MountMotion.facingYaw(target, entity.yaw)
-        entity.setRotation(MountMotion.smoothYaw(entity.yaw, targetYaw, config.turnSmoothing), 0.0f)
+        val targetYaw = MountMotion.facingYaw(controlledVelocity, entity.yaw)
+        entity.setRotation(targetYaw, 0.0f)
     }
 
     private fun emitTrail(entity: LivingEntity, session: MountSession) {
@@ -596,7 +601,6 @@ class MountSessionController(
     private val MountInputState.hasMovementIntent: Boolean
         get() = forward || backward || left || right || jump || sneak
 
-    private fun Vector.toMotion() = MotionVector(x, y, z)
     private fun MotionVector.toBukkit() = Vector(x, y, z)
 
     companion object {
@@ -634,7 +638,11 @@ internal fun configureNativeHorseMotion(
 }
 
 internal fun nativeHorseMovementAttribute(maximumSpeedBlocksPerTick: Double): Double =
-    (maximumSpeedBlocksPerTick / HORSE_ATTRIBUTE_BLOCKS_PER_TICK).coerceIn(0.01, 1.0)
+    if (maximumSpeedBlocksPerTick <= 0.0) {
+        0.0
+    } else {
+        (maximumSpeedBlocksPerTick / HORSE_ATTRIBUTE_BLOCKS_PER_TICK).coerceIn(0.01, 1.0)
+    }
 
 internal fun maintainMountMobState(mob: Mob) {
     (mob as? Bat)?.setAwake(true)

@@ -8,6 +8,7 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import net.luckperms.api.node.types.PermissionNode
+import java.time.Duration
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
@@ -121,8 +122,68 @@ class MountDomainTest : StringSpec({
         straight.z.shouldBeExactly(1.0)
     }
 
-    "yaw interpolation takes the shortest path across 360 degrees" {
-        MountMotion.smoothYaw(350f, 10f, 0.5) shouldBe 360f
+    "acceleration time controls a gradual speed ramp independently of entity velocity" {
+        val timing =
+            MountMotionTiming(
+                accelerationTime = Duration.ofMillis(900),
+                decelerationTime = Duration.ofMillis(350),
+                turnTime = Duration.ofMillis(200),
+            )
+        var state = MountMotionState()
+
+        state = MountMotion.advance(state, MotionVector(0.0, 0.0, 1.0), timing, handlingMultiplier = 1.0)
+        state.speed shouldBe (0.1534 plusOrMinus 0.0001)
+        repeat(17) {
+            state = MountMotion.advance(state, MotionVector(0.0, 0.0, 1.0), timing, handlingMultiplier = 1.0)
+        }
+
+        state.speed shouldBe (0.95 plusOrMinus 1.0e-9)
+        state.velocity shouldBe MotionVector(0.0, 0.0, state.speed)
+    }
+
+    "reversing brakes before accelerating in the opposite direction" {
+        val timing =
+            MountMotionTiming(
+                accelerationTime = Duration.ofMillis(900),
+                decelerationTime = Duration.ofMillis(350),
+                turnTime = Duration.ofMillis(200),
+            )
+        var state = MountMotionState(direction = MotionVector(0.0, 0.0, 1.0), speed = 1.0)
+
+        state = MountMotion.advance(state, MotionVector(0.0, 0.0, -1.0), timing, handlingMultiplier = 1.0)
+
+        (state.speed < 1.0) shouldBe true
+        state.direction shouldBe MotionVector(0.0, 0.0, 1.0)
+        repeat(12) {
+            state = MountMotion.advance(state, MotionVector(0.0, 0.0, -1.0), timing, handlingMultiplier = 1.0)
+        }
+        (state.velocity.z < 0.0) shouldBe true
+        (state.speed < 0.5) shouldBe true
+    }
+
+    "turn time bends the controlled direction without changing speed" {
+        val timing =
+            MountMotionTiming(
+                accelerationTime = Duration.ofMillis(900),
+                decelerationTime = Duration.ofMillis(350),
+                turnTime = Duration.ofMillis(200),
+            )
+        val state = MountMotionState(direction = MotionVector(0.0, 0.0, 1.0), speed = 1.0)
+
+        val turned = MountMotion.advance(state, MotionVector(1.0, 0.0, 0.0), timing, handlingMultiplier = 1.0)
+
+        turned.speed shouldBeExactly 1.0
+        (turned.direction.x > 0.0) shouldBe true
+        (turned.direction.z > 0.0) shouldBe true
+    }
+
+    "motion timing rejects negative or impractically slow responses" {
+        shouldThrow<IllegalArgumentException> {
+            MountMotionTiming(Duration.ofMillis(-1), Duration.ofMillis(350), Duration.ofMillis(200))
+        }
+        shouldThrow<IllegalArgumentException> {
+            MountMotionTiming(Duration.ofSeconds(11), Duration.ofMillis(350), Duration.ofMillis(200))
+        }
     }
 
     "airborne controls use space to ascend and shift to descend" {

@@ -2,6 +2,7 @@ package ru.arc.mounts
 
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.doubles.plusOrMinus
+import io.kotest.matchers.doubles.shouldBeExactly
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
@@ -76,6 +77,7 @@ class MountSessionControllerTest : StringSpec({
         verify(exactly = 1) { movementSpeed.baseValue = nativeHorseMovementAttribute(0.42) }
         verify(exactly = 1) { horse.jumpStrength = 0.5 }
         verify(exactly = 1) { stepHeight.baseValue = 1.1 }
+        nativeHorseMovementAttribute(0.0) shouldBeExactly 0.0
         nativeHorseMovementAttribute(1.05) shouldBe (0.5 plusOrMinus 1.0e-9)
     }
 

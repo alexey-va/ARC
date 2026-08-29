@@ -5,6 +5,7 @@ import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import org.bukkit.Material
 import java.nio.file.Files
+import java.time.Duration
 
 class MountModuleConfigTest : StringSpec({
     "bundled catalog exposes the full production collection" {
@@ -97,6 +98,12 @@ class MountModuleConfigTest : StringSpec({
         config.hideFlyingMountPitch shouldBe 35.0
         config.showFlyingMountPitch shouldBe 20.0
         config.compensateAirborneMining shouldBe true
+        config.motionTiming shouldBe
+            MountMotionTiming(
+                accelerationTime = Duration.ofMillis(900),
+                decelerationTime = Duration.ofMillis(350),
+                turnTime = Duration.ofMillis(200),
+            )
         config.tuning.speedPercentages shouldBe listOf(50, 65, 80, 90, 100)
         config.tuning.walkingStepHeightsHundredths shouldBe listOf(110, 150, 200, 300, 400)
         config.tuning.walkingMaxStepHeightByLevelHundredths shouldBe listOf(110, 200, 400)
@@ -172,6 +179,43 @@ class MountModuleConfigTest : StringSpec({
 
         val levels = checkNotNull(MountModuleConfig.load(dataPath).catalog()["bee"]).levels
         levels.map(MountLevelDefinition::scaleMultiplier) shouldBe listOf(0.8, 1.0)
+    }
+
+    "per-mount motion timing overrides inherit unspecified global values" {
+        val dataPath = Files.createTempDirectory("arc-mounts-motion-override-")
+        val moduleDir = Files.createDirectories(dataPath.resolve("modules"))
+        Files.writeString(
+            moduleDir.resolve("mounts.yml"),
+            """
+            enabled: false
+            movement:
+              acceleration-time: 900ms
+              deceleration-time: 350ms
+              turn-time: 200ms
+            mounts:
+              bee:
+                type: flying
+                entity: BEE
+                item: BEE_SPAWN_EGG
+                name: Bee
+                acquisition: Test
+                motion:
+                  acceleration-time: 0s
+                  turn-time: 400ms
+                levels:
+                  - {speed: 1.0, price: 1}
+            """.trimIndent(),
+        )
+
+        val config = MountModuleConfig.load(dataPath)
+        val timing = checkNotNull(config.catalog()["bee"]).motion.resolve(config.motionTiming)
+
+        timing shouldBe
+            MountMotionTiming(
+                accelerationTime = Duration.ZERO,
+                decelerationTime = Duration.ofMillis(350),
+                turnTime = Duration.ofMillis(400),
+            )
     }
 })
 

@@ -22,6 +22,12 @@ Native production replacement for `Denizen/scripts/activities/rideable_mobs.dsc`
   expensive final sprint and improves speed, steering and sprint response. An
   optional per-level `scale` multiplies the selected base or skin appearance;
   omitted values remain `1.0` for backward-compatible visuals.
+- Mount speed is controller-owned and ramps independently of vanilla entity
+  friction. `movement.acceleration-time`, `deceleration-time` and `turn-time`
+  set global response times; `0s` restores instant response. A mount may
+  override any of them under `mounts.<id>.motion`. Opposite input brakes close
+  to zero before the new direction accelerates, and horses keep native riding
+  while ARC ramps their movement-speed attribute.
 - Appearance is deterministic. ARC fixes age, scale and variants, clears random
   entity equipment, then applies only the configured skin equipment. Zombie
   baby, iron guard and diamond warlord are separate unlockable skins.

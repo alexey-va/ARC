@@ -29,6 +29,8 @@ For example, 65% speed and a 1.10-block step height are `arc.mounts.horse.tuning
 
 The resolved speed and step height are copied into the mount session at summon time. Non-horse walking mounts use ARC velocity plus the native `STEP_HEIGHT` attribute. Horses retain native ridden movement and charged jumping, while ARC applies the configured speed, jump strength, and selected step height continuously.
 
+ARC keeps its own motion state instead of feeding Minecraft-mutated entity velocity back into the controller. Global `movement.acceleration-time`, `movement.deceleration-time`, and `movement.turn-time` values describe the time to reach about 95% of the requested response at handling multiplier `1.0`; higher-level handling shortens those times. Set a value to `0s` for instant response. Any mount may override individual values under `mounts.<id>.motion`, with omitted values inherited from the global block. A reverse input brakes nearly to zero before acceleration changes direction.
+
 Flying sessions have two rider comfort features enabled by default:
 
 - `rider-view.hide-flying-mount` sends rider-only invisibility metadata after the camera reaches `hide-at-pitch`; `show-at-pitch` is a lower return threshold that prevents flicker. Other players continue to see the mount, and the client keeps the vehicle relationship.

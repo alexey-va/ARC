@@ -20,9 +20,10 @@ movement:
   walking-speed-scale: 0.16
   flying-speed-scale: 0.55
   swimming-speed-scale: 0.45
-  acceleration: 0.28
-  deceleration: 0.38
-  turn-smoothing: 0.32
+  # 0s restores instant response. Individual mounts may override these under mounts.<id>.motion.
+  acceleration-time: 900ms
+  deceleration-time: 350ms
+  turn-time: 200ms
   sprint-multiplier: 1.15
   jump-velocity: 0.5
   vertical-speed-ratio: 0.75
