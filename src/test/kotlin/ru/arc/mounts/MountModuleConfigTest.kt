@@ -98,6 +98,8 @@ class MountModuleConfigTest : StringSpec({
         config.hideFlyingMountPitch shouldBe 35.0
         config.showFlyingMountPitch shouldBe 20.0
         config.compensateAirborneMining shouldBe true
+        config.quickSummonSneakSwapHands shouldBe true
+        config.quickSummonWhistle shouldBe true
         config.motionTiming shouldBe
             MountMotionTiming(
                 accelerationTime = Duration.ofMillis(900),

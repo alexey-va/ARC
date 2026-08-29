@@ -16,8 +16,68 @@ import org.junit.jupiter.api.Test
 import ru.arc.TestBase
 import ru.arc.util.customModelDataOrNull
 import java.time.Duration
+import java.util.concurrent.CompletableFuture
 
 class MountGuiControllerTest : TestBase() {
+    @Test
+    fun `detail menu selects a favorite and recovers one reusable whistle`() {
+        val mount = testMount()
+        var favoriteMountId: String? = null
+        val ownership = mockk<MountOwnership> {
+            every { profile(any(), mount) } returns MountProfile(1, false, false)
+            every { favoriteMountId(any()) } answers { favoriteMountId }
+            every { setFavoriteMount(any(), mount) } answers {
+                favoriteMountId = mount.id
+                CompletableFuture.completedFuture(null)
+            }
+        }
+        val config = mockk<MountModuleConfig> {
+            every { detailTitle } returns "Маунт: <mount>"
+            every { sessionDuration } returns Duration.ofHours(12)
+            every { idleTimeout } returns Duration.ofMinutes(5)
+            every { purchasesEnabled } returns true
+            every { quickSummonSneakSwapHands } returns true
+            every { quickSummonWhistle } returns true
+            every { tuning } returns
+                MountTuningDefinition(
+                    speedPercentages = listOf(50, 65, 80, 90, 100),
+                    walkingStepHeightsHundredths = listOf(110, 150, 200, 300, 400),
+                    walkingMaxStepHeightByLevelHundredths = listOf(110, 200, 400),
+                )
+            every { guiStyle(any()) } returns MountGuiItemStyle()
+            every { message(any(), any()) } answers { secondArg() }
+        }
+        val controller =
+            mountGuiController(
+                configProvider = { config },
+                catalogProvider = { MountCatalog(listOf(mount)) },
+                ownership = ownership,
+                wallet = mockk { every { balanceMinor(any()) } returns 1_000_000L },
+                purchases = mockk(relaxed = true),
+                sessions = mockk(relaxed = true),
+            )
+        val player = server.addPlayer("FavoriteChooser")
+
+        controller.start()
+        try {
+            controller.openDetail(player, mount.id)
+            plainName(player.openInventory.topInventory.getItem(13)) shouldBe "Выбрать любимым"
+            plainName(player.openInventory.topInventory.getItem(40)) shouldBe "Получить свисток"
+
+            controller.onClick(clickEvent(player.openInventory, 13))
+            server.scheduler.performOneTick()
+            favoriteMountId shouldBe mount.id
+            plainName(player.openInventory.topInventory.getItem(13)) shouldBe "Любимый маунт"
+
+            controller.onClick(clickEvent(player.openInventory, 40))
+            player.inventory.contents.count { it?.type == Material.GOAT_HORN } shouldBe 1
+            controller.onClick(clickEvent(player.openInventory, 40))
+            player.inventory.contents.count { it?.type == Material.GOAT_HORN } shouldBe 1
+        } finally {
+            controller.shutdown()
+        }
+    }
+
     @Test
     fun `collection prioritizes unlocked mounts while preserving catalog order inside each group`() {
         val firstLocked = testMount().copy(id = "locked-first", displayName = "Первый закрытый")
@@ -54,6 +114,7 @@ class MountGuiControllerTest : TestBase() {
         val ownership = mockk<MountOwnership> {
             every { profile(any(), locked) } returns MountProfile(0, false, false)
             every { profile(any(), owned) } returns MountProfile(2, false, false)
+            every { favoriteMountId(any()) } returns null
         }
         val config = mockk<MountModuleConfig> {
             every { listTitle } returns "Коллекция маунтов"
@@ -61,8 +122,7 @@ class MountGuiControllerTest : TestBase() {
             every { guiStyle(any()) } returns MountGuiItemStyle()
         }
         val controller =
-            MountGuiController(
-                plugin = plugin,
+            mountGuiController(
                 configProvider = { config },
                 catalogProvider = { MountCatalog(listOf(locked, owned)) },
                 ownership = ownership,
@@ -107,6 +167,7 @@ class MountGuiControllerTest : TestBase() {
             )
         val ownership = mockk<MountOwnership> {
             every { profile(any(), any()) } returns MountProfile(1, false, false)
+            every { favoriteMountId(any()) } returns null
         }
         val config = mockk<MountModuleConfig> {
             every { listTitle } returns "Коллекция маунтов"
@@ -114,8 +175,7 @@ class MountGuiControllerTest : TestBase() {
             every { guiStyle(any()) } answers { styles[firstArg()] ?: MountGuiItemStyle() }
         }
         val controller =
-            MountGuiController(
-                plugin = plugin,
+            mountGuiController(
                 configProvider = { config },
                 catalogProvider = { MountCatalog(listOf(walking, flying, swimming)) },
                 ownership = ownership,
@@ -156,6 +216,7 @@ class MountGuiControllerTest : TestBase() {
         val profile = MountProfile(level = 2, glowOwned = false, glowDisabled = false, selectedSpeedPercentage = 65, selectedStepHeightHundredths = 150)
         val ownership = mockk<MountOwnership> {
             every { profile(any(), mount) } returns profile
+            every { favoriteMountId(any()) } returns null
         }
         val config = mockk<MountModuleConfig> {
             every { detailTitle } returns "Маунт: <mount>"
@@ -172,8 +233,7 @@ class MountGuiControllerTest : TestBase() {
             lastArg<(MountPurchaseResult) -> Unit>()(MountPurchaseResult.Success)
         }
         val controller =
-            MountGuiController(
-                plugin = plugin,
+            mountGuiController(
                 configProvider = { config },
                 catalogProvider = { MountCatalog(listOf(mount)) },
                 ownership = ownership,
@@ -213,6 +273,27 @@ class MountGuiControllerTest : TestBase() {
             ClickType.LEFT,
             InventoryAction.PICKUP_ALL,
         )
+
+    private fun mountGuiController(
+        configProvider: () -> MountModuleConfig,
+        catalogProvider: () -> MountCatalog,
+        ownership: MountOwnership,
+        wallet: MountWallet,
+        purchases: MountPurchaseCoordinator,
+        sessions: MountSessionController,
+    ): MountGuiController {
+        val summons = MountSummonService(configProvider, catalogProvider, ownership, sessions)
+        return MountGuiController(
+            plugin = plugin,
+            configProvider = configProvider,
+            catalogProvider = catalogProvider,
+            ownership = ownership,
+            wallet = wallet,
+            purchases = purchases,
+            summons = summons,
+            quickSummons = MountQuickSummonController(plugin, configProvider, summons),
+        )
+    }
 
     private fun plainName(stack: org.bukkit.inventory.ItemStack?): String =
         PlainTextComponentSerializer.plainText().serialize(checkNotNull(stack?.itemMeta?.displayName()))

@@ -18,6 +18,8 @@ enum class MountGuiItemRole(val configKey: String) {
     CATEGORY_SWIMMING("category-swimming"),
     INFO("info"),
     BALANCE("balance"),
+    FAVORITE("favorite"),
+    WHISTLE("whistle"),
     CONFIRM("confirm"),
     CANCEL("cancel"),
 }
@@ -34,6 +36,8 @@ open class MountModuleConfig(private val config: Config) {
     open val sessionDuration: Duration get() = config.duration("session-duration", Duration.ofMinutes(10))
     open val adminSessionDuration: Duration get() = config.duration("admin-session-duration", Duration.ofSeconds(5))
     open val purchasesEnabled: Boolean get() = config.bool("purchases-enabled", false)
+    open val quickSummonSneakSwapHands: Boolean get() = config.bool("quick-summon.sneak-swap-hands", true)
+    open val quickSummonWhistle: Boolean get() = config.bool("quick-summon.whistle", true)
     open val idleTimeout: Duration get() = config.duration("safety.idle-timeout", Duration.ofMinutes(5))
     open val summonCooldown: Duration get() = config.duration("safety.summon-cooldown", Duration.ofSeconds(2))
     open val riderKnockoffDamage: Double get() = config.double("safety.rider-knockoff-damage", 6.0)

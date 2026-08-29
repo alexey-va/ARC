@@ -27,6 +27,7 @@ object MountModule : PluginModule {
     private var journal: MountPurchaseJournal? = null
     private var purchases: MountPurchaseCoordinator? = null
     private var sessions: MountSessionController? = null
+    private var quickSummons: MountQuickSummonController? = null
     private var gui: MountGuiController? = null
 
     override fun init() {
@@ -92,6 +93,19 @@ object MountModule : PluginModule {
                 runSync = { task -> Tasks.scheduler.runSync(Runnable(task)) },
                 onStateChanged = ::publishMetrics,
             )
+        val summonService =
+            MountSummonService(
+                configProvider = ::requiredConfig,
+                catalogProvider = ::requiredCatalog,
+                ownership = loadedOwnership,
+                sessions = controller,
+            )
+        val quickSummonController =
+            MountQuickSummonController(
+                plugin = ARC.instance,
+                configProvider = ::requiredConfig,
+                summons = summonService,
+            )
         coordinator.recover(loadedCatalog) { record ->
             warn("Mount purchase {} requires manual review at stage {}", record.transactionId, record.status.name.lowercase(Locale.ROOT))
         }
@@ -103,16 +117,19 @@ object MountModule : PluginModule {
                 ownership = loadedOwnership,
                 wallet = wallet,
                 purchases = coordinator,
-                sessions = controller,
+                summons = summonService,
+                quickSummons = quickSummonController,
             )
 
         catalog = loadedCatalog
         ownership = loadedOwnership
         purchases = coordinator
         sessions = controller
+        quickSummons = quickSummonController
         gui = guiController
         try {
             controller.start()
+            quickSummonController.start()
             guiController.start()
             bindCommands(guiController, loadedOwnership, controller)
         } catch (failure: Throwable) {
@@ -127,6 +144,8 @@ object MountModule : PluginModule {
         bindUnavailableCommands()
         gui?.shutdown()
         gui = null
+        quickSummons?.shutdown()
+        quickSummons = null
         sessions?.shutdown()
         sessions = null
         purchases?.clear()

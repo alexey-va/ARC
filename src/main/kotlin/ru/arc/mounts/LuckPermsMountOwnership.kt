@@ -40,6 +40,20 @@ class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership
         )
     }
 
+    override fun favoriteMountId(playerId: UUID): String? =
+        directPositiveStringSuffix(
+            luckPerms.userManager.getUser(playerId)?.nodes.orEmpty(),
+            MOUNT_FAVORITE_PERMISSION_PREFIX,
+            MountDefinition::validId,
+        )
+
+    override fun setFavoriteMount(playerId: UUID, mount: MountDefinition): CompletableFuture<Void> =
+        setExclusiveStatePermission(
+            playerId,
+            MOUNT_FAVORITE_PERMISSION_PREFIX,
+            favoriteMountPermission(mount.id),
+        )
+
     override fun grantLevel(playerId: UUID, mount: MountDefinition, level: Int): CompletableFuture<Void> {
         require(level in 1..mount.maxLevel) { "Invalid ${mount.id} level: $level" }
         return luckPerms.userManager.modifyUser(playerId) { user ->
@@ -194,4 +208,16 @@ internal fun directPositiveNumericSuffix(nodes: Collection<Node>, prefix: String
         .filter { it.value && it.permission.startsWith(prefix) }
         .mapNotNull { it.permission.removePrefix(prefix).takeIf(String::isNotEmpty)?.toIntOrNull() }
         .filter { it > 0 }
+        .minOrNull()
+
+internal fun directPositiveStringSuffix(
+    nodes: Collection<Node>,
+    prefix: String,
+    isValid: (String) -> Boolean,
+): String? =
+    nodes.filterIsInstance<PermissionNode>()
+        .asSequence()
+        .filter { it.value && it.permission.startsWith(prefix) }
+        .map { it.permission.removePrefix(prefix) }
+        .filter(isValid)
         .minOrNull()

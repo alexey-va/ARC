@@ -38,6 +38,23 @@ Flying sessions have two rider comfort features enabled by default:
 
 The collection list always places unlocked mounts before locked mounts while preserving catalog order inside both groups. Menu lore uses real empty lore rows between state, characteristics, profile/acquisition, and action sections.
 
+## Favorite and quick summon
+
+An owned mount can be selected as the favorite from its detail screen in `/mount`. The selection is stored as exactly one direct positive LuckPerms node:
+
+```text
+arc.mounts.favorite.<mount>
+```
+
+Saving a new favorite removes every older direct node with the `arc.mounts.favorite.` prefix. A favorite is resolved against the current catalog and current ownership on every summon, so deleting a catalog entry or revoking its levels cannot leave a usable stale shortcut.
+
+The favorite has two server-side quick summon paths:
+
+- sneak + the client's **swap item with offhand** action (`Shift + F` with default controls); the swap is intercepted only when the player already has a favorite, otherwise vanilla hand swapping remains unchanged;
+- right-click with the reusable **Свисток маунта**, issued from the favorite mount's detail screen. The whistle stores only an ARC item marker and always summons the currently selected favorite.
+
+Both paths use the same summon service as the collection and detail menu. World, water, vehicle, cooldown, tuning, skin, glow, and ability checks therefore remain identical. `quick-summon.sneak-swap-hands` and `quick-summon.whistle` independently disable the two entry points; both default to `true` when omitted by an older runtime mirror.
+
 ## Administration
 
 `/mount admin grant-all <player>` grants the maximum configured level of every catalog mount. It does not grant glow, skins, or ability upgrades; those remain independent ownership records.

@@ -10,6 +10,12 @@ controls:
   double-sneak-window: 450ms
   hint-cooldown: 5s
 
+quick-summon:
+  # Uses the client's "swap item with offhand" action, F by default, while sneaking.
+  sneak-swap-hands: true
+  # Reusable PDC-marked goat horn issued from the mount details menu.
+  whistle: true
+
 rider-view:
   # Hide only from the rider, with hysteresis to prevent flicker near the threshold.
   hide-flying-mount: true
@@ -68,6 +74,13 @@ messages:
   water-required: "<aqua>Водного маунта можно призвать только в воде."
   summon-cooldown: "<yellow>Подождите немного перед повторным призывом."
   spawn-failed: "<red>Не удалось призвать маунта."
+  favorite-not-selected: "<yellow>Сначала выберите любимого маунта в /mount."
+  favorite-unavailable: "<red>Любимый маунт больше недоступен. Выберите другого в /mount."
+  favorite-saved: "<green>Любимый маунт выбран: <white><mount><green>."
+  whistle-given: "<green>Свисток маунта добавлен в инвентарь."
+  whistle-already-owned: "<yellow>Свисток уже лежит у вас в инвентаре."
+  whistle-disabled: "<yellow>Свисток маунта отключён на этом сервере."
+  inventory-full: "<red>Освободите место в инвентаре."
   purchases-disabled: "<yellow>Покупки маунтов доступны на спавне."
   purchase-success: "<green>Покупка сохранена!"
   setting-saved: "<green>Настройка сохранена."

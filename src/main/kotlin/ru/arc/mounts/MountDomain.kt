@@ -331,6 +331,13 @@ class MountCatalog(definitions: Collection<MountDefinition>) {
     operator fun get(id: String): MountDefinition? = byId[id.lowercase(Locale.ROOT)]
 }
 
+internal const val MOUNT_FAVORITE_PERMISSION_PREFIX = "arc.mounts.favorite."
+
+internal fun favoriteMountPermission(mountId: String): String {
+    require(MountDefinition.validId(mountId)) { "Invalid favorite mount id: $mountId" }
+    return "$MOUNT_FAVORITE_PERMISSION_PREFIX$mountId"
+}
+
 data class MountPermissionSubject(
     val uniqueId: UUID,
     val name: String,
@@ -357,6 +364,10 @@ data class MountProfile(
 
 interface MountOwnership {
     fun profile(subject: MountPermissionSubject, mount: MountDefinition): MountProfile
+
+    fun favoriteMountId(playerId: UUID): String?
+
+    fun setFavoriteMount(playerId: UUID, mount: MountDefinition): CompletableFuture<Void>
 
     fun grantLevel(playerId: UUID, mount: MountDefinition, level: Int): CompletableFuture<Void>
 

@@ -14,6 +14,7 @@ import org.bukkit.inventory.InventoryHolder
 import org.bukkit.inventory.ItemFlag
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.java.JavaPlugin
+import ru.arc.core.Tasks
 import ru.arc.util.Logging.error
 import ru.arc.util.TextUtil
 import java.time.Duration
@@ -73,7 +74,8 @@ class MountGuiController(
     private val ownership: MountOwnership,
     private val wallet: MountWallet,
     private val purchases: MountPurchaseCoordinator,
-    private val sessions: MountSessionController,
+    private val summons: MountSummonService,
+    private val quickSummons: MountQuickSummonController,
 ) : Listener {
     @Volatile private var active = false
 
@@ -99,6 +101,7 @@ class MountGuiController(
         ownedOnly: Boolean,
     ) {
         val catalog = catalogProvider()
+        val favoriteMountId = summons.favoriteMountId(player.uniqueId)
         val profiles = catalog.all.associateWith { mount -> ownership.profile(subject(player), mount) }
         val matching =
             catalog.all.filter { mount ->
@@ -115,7 +118,7 @@ class MountGuiController(
         fill(inventory)
         slots.forEach { (slot, mountId) ->
             val mount = catalog[mountId] ?: return@forEach
-            inventory.setItem(slot, mountIcon(mount, checkNotNull(profiles[mount])))
+            inventory.setItem(slot, mountIcon(mount, checkNotNull(profiles[mount]), favorite = mount.id == favoriteMountId))
         }
         if (page > 0) inventory.setItem(LIST_PREVIOUS_SLOT, styledItem(MountGuiItemRole.PREVIOUS, Material.ARROW, "<#92bed8>Предыдущая страница", listOf("<#969696>${page}/${pageCount}")))
         if (page + 1 < pageCount) inventory.setItem(LIST_NEXT_SLOT, styledItem(MountGuiItemRole.NEXT, Material.ARROW, "<#92bed8>Следующая страница", listOf("<#969696>${page + 2}/${pageCount}")))
@@ -144,6 +147,9 @@ class MountGuiController(
                     "<#e6fff3>ЛКМ <#8c8c8c>призвать полученного маунта",
                     "<#e6fff3>ПКМ <#8c8c8c>открыть развитие и облики",
                     "",
+                    "<#ffacd5>Shift + F <#8c8c8c>призвать любимого маунта",
+                    "<#ffacd5>Свисток <#8c8c8c>выдаётся в карточке маунта",
+                    "",
                     "<#92bed8>Полёт",
                     "<#8c8c8c>Space — вверх",
                     "<#8c8c8c>Shift — вниз",
@@ -168,11 +174,14 @@ class MountGuiController(
         val inventory = Bukkit.createInventory(holder, DETAIL_SIZE, component(config.detailTitle.replace("<mount>", escape(mount.displayName))))
         holder.backingInventory = inventory
         fill(inventory)
-        inventory.setItem(DETAIL_ICON_SLOT, mountIcon(mount, profile, detailed = true))
+        val favorite = summons.favoriteMountId(player.uniqueId) == mount.id
+        inventory.setItem(DETAIL_ICON_SLOT, mountIcon(mount, profile, detailed = true, favorite = favorite))
+        inventory.setItem(DETAIL_FAVORITE_SLOT, favoriteItem(profile, favorite))
         inventory.setItem(DETAIL_UPGRADE_SLOT, upgradeItem(mount, profile))
         inventory.setItem(DETAIL_SUMMON_SLOT, summonItem(profile, config.sessionDuration))
         inventory.setItem(DETAIL_GLOW_SLOT, glowItem(mount, profile))
         inventory.setItem(DETAIL_SKINS_SLOT, skinsItem(mount, profile))
+        inventory.setItem(DETAIL_WHISTLE_SLOT, whistleMenuItem(favorite))
         abilitySlots.forEach { (slot, abilityId) ->
             mount.ability(abilityId)?.let { inventory.setItem(slot, abilityItem(profile, it)) }
         }
@@ -302,7 +311,7 @@ class MountGuiController(
             else -> {
                 val mount = holder.mountsBySlot[event.rawSlot]?.let(catalogProvider()::get) ?: return
                 val profile = ownership.profile(subject(player), mount)
-                if (profile.unlocked && event.isLeftClick) summon(player, mount, profile) else openDetail(player, mount.id)
+                if (profile.unlocked && event.isLeftClick) summon(player, mount) else openDetail(player, mount.id)
             }
         }
     }
@@ -321,8 +330,10 @@ class MountGuiController(
         }
         when (slot) {
             DETAIL_BACK_SLOT -> openList(player)
-            DETAIL_SUMMON_SLOT -> if (profile.unlocked) summon(player, mount, profile) else bass(player)
+            DETAIL_FAVORITE_SLOT -> selectFavorite(player, mount)
+            DETAIL_SUMMON_SLOT -> if (profile.unlocked) summon(player, mount) else bass(player)
             DETAIL_SKINS_SLOT -> if (profile.unlocked) openSkins(player, mount) else bass(player)
+            DETAIL_WHISTLE_SLOT -> quickSummons.giveWhistle(player)
             DETAIL_UPGRADE_SLOT -> {
                 openProgression(player, mount)
             }
@@ -423,42 +434,44 @@ class MountGuiController(
         }
     }
 
-    private fun summon(player: Player, mount: MountDefinition, profile: MountProfile) {
-        val level = mount.level(profile.level)
-        val tuning = configProvider().tuning
-        val skin = mount.skin(profile.activeSkinId)
-        val result =
-            sessions.spawn(
-                player = player,
-                definition = mount,
-                speed = tuning.speed(level.speed, profile.selectedSpeedPercentage),
-                walkingStepHeight = tuning.stepHeight(profile.level, profile.selectedStepHeightHundredths),
-                handlingMultiplier = level.handlingMultiplier,
-                sprintMultiplier = level.sprintMultiplier,
-                durationMillis = configProvider().sessionDuration.toMillis(),
-                glow = profile.glowEnabled,
-                scaleMultiplier = level.scaleMultiplier,
-                skin = skin,
-                abilityUpgrades = mount.abilities.upgrades.filter { profile.ownsAbility(it.id) },
-            )
-        if (result == MountSpawnResult.SUCCESS) {
+    private fun summon(player: Player, mount: MountDefinition) {
+        val outcome = summons.summon(player, mount)
+        if (outcome == MountSummonOutcome.SUCCESS) {
             player.closeInventory()
             return
         }
-        val (path, fallback) =
-            when (result) {
-                MountSpawnResult.ALREADY_RIDING -> "already-riding" to "<red>Вы уже используете маунта."
-                MountSpawnResult.ALREADY_IN_VEHICLE -> "already-in-vehicle" to "<red>Сначала покиньте текущее транспортное средство."
-                MountSpawnResult.WORLD_NOT_ALLOWED -> "world-not-allowed" to "<red>В этом мире маунты недоступны."
-                MountSpawnResult.WATER_REQUIRED -> "water-required" to "<aqua>Водного маунта можно призвать только в воде."
-                MountSpawnResult.COOLDOWN -> "summon-cooldown" to "<yellow>Подождите немного перед повторным призывом."
-                MountSpawnResult.INVALID_ENTITY,
-                MountSpawnResult.SPAWN_FAILED,
-                -> "spawn-failed" to "<red>Не удалось призвать маунта."
-                MountSpawnResult.SUCCESS -> return
-            }
-        send(player, path, fallback)
-        bass(player)
+        summons.sendFeedback(player, outcome)
+    }
+
+    private fun selectFavorite(player: Player, mount: MountDefinition) {
+        summons.selectFavorite(player, mount).whenComplete { outcome, failure ->
+            Tasks.scheduler.runSync(
+                Runnable {
+                    if (!active || !player.isOnline) return@Runnable
+                    when {
+                        failure != null || outcome == MountFavoriteSelectionOutcome.PERSISTENCE_FAILED -> {
+                            error("Unable to save favorite mount for {}: {}", player.name, failure?.javaClass?.simpleName ?: "persistence_failed")
+                            send(player, "setting-failed", "<red>Не удалось сохранить настройку.")
+                            bass(player)
+                        }
+                        outcome == MountFavoriteSelectionOutcome.NOT_UNLOCKED -> {
+                            send(player, "not-unlocked", "<red>Сначала разблокируйте маунта.")
+                            bass(player)
+                        }
+                        else -> {
+                            val configured =
+                                configProvider().message(
+                                    "favorite-saved",
+                                    "<green>Любимый маунт выбран: <white><mount><green>.",
+                                )
+                            player.sendMessage(component(configured.replace("<mount>", escape(mount.displayName))))
+                            click(player)
+                            openDetail(player, mount.id)
+                        }
+                    }
+                },
+            )
+        }
     }
 
     private fun handlePurchaseResult(
@@ -508,8 +521,14 @@ class MountGuiController(
         }
     }
 
-    private fun mountIcon(mount: MountDefinition, profile: MountProfile, detailed: Boolean = false): ItemStack {
+    private fun mountIcon(
+        mount: MountDefinition,
+        profile: MountProfile,
+        detailed: Boolean = false,
+        favorite: Boolean = false,
+    ): ItemStack {
         val lore = buildList {
+            if (favorite) add("<gold>★ Любимый маунт")
             add(if (profile.unlocked) "<green>✔ Получен" else "<red>✘ Пока не получен")
             add("${mount.rarity.color}${mount.rarity.displayName}")
             if (detailed && mount.description.isNotEmpty()) {
@@ -553,6 +572,55 @@ class MountGuiController(
             glint = profile.unlocked,
         )
     }
+
+    private fun favoriteItem(profile: MountProfile, selected: Boolean): ItemStack =
+        when {
+            !profile.unlocked ->
+                styledItem(
+                    MountGuiItemRole.FAVORITE,
+                    Material.GRAY_DYE,
+                    "<gray>Любимый маунт недоступен",
+                    listOf("<gray>Сначала получите этого маунта."),
+                )
+            selected ->
+                styledItem(
+                    MountGuiItemRole.FAVORITE,
+                    Material.NETHER_STAR,
+                    "<gold>Любимый маунт",
+                    listOf(
+                        "<green>Выбран для быстрого вызова",
+                        "",
+                        "<gray>Shift + F или свисток — призвать",
+                    ),
+                    glint = true,
+                )
+            else ->
+                styledItem(
+                    MountGuiItemRole.FAVORITE,
+                    Material.NETHER_STAR,
+                    "<gold>Выбрать любимым",
+                    listOf(
+                        "<gray>Сделать этого маунта целью",
+                        "<gray>для Shift + F и свистка.",
+                        "",
+                        "<green>Нажмите, чтобы выбрать",
+                    ),
+                )
+        }
+
+    private fun whistleMenuItem(favoriteSelected: Boolean): ItemStack =
+        styledItem(
+            MountGuiItemRole.WHISTLE,
+            Material.GOAT_HORN,
+            "<#ffacd5>Получить свисток",
+            buildList {
+                add("<#8c8c8c>ПКМ свистком призывает")
+                add("<#8c8c8c>текущего любимого маунта.")
+                add("")
+                add(if (favoriteSelected) "<#e6fff3>Нажмите, чтобы получить" else "<yellow>Сначала выберите любимого маунта")
+            },
+            glint = favoriteSelected,
+        )
 
     private fun upgradeItem(mount: MountDefinition, profile: MountProfile): ItemStack {
         val tuning = configProvider().tuning
@@ -897,12 +965,14 @@ class MountGuiController(
 
         private const val DETAIL_SIZE = 45
         private const val DETAIL_ICON_SLOT = 4
+        private const val DETAIL_FAVORITE_SLOT = 13
         private const val DETAIL_UPGRADE_SLOT = 20
         private const val DETAIL_SUMMON_SLOT = 22
         private const val DETAIL_GLOW_SLOT = 24
         private const val DETAIL_SKINS_SLOT = 31
         private val DETAIL_ABILITY_SLOTS = listOf(29, 30, 32, 33)
         private const val DETAIL_BACK_SLOT = 36
+        private const val DETAIL_WHISTLE_SLOT = 40
 
         private const val TUNING_SIZE = 54
         private const val TUNING_INFO_SLOT = 4

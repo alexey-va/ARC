@@ -48,6 +48,21 @@ class MountDomainTest : StringSpec({
         mount.abilityPermission("night-vision") shouldBe "arc.mounts.bee.ability.night-vision"
         mount.speedTuningPermission(65) shouldBe "arc.mounts.bee.tuning.speed.65"
         mount.stepHeightTuningPermission(110) shouldBe "arc.mounts.bee.tuning.step-height.110"
+        favoriteMountPermission(mount.id) shouldBe "arc.mounts.favorite.bee"
+    }
+
+    "favorite state accepts only positive valid mount ids and resolves duplicate direct nodes deterministically" {
+        directPositiveStringSuffix(
+            listOf(
+                permissionNode("${MOUNT_FAVORITE_PERMISSION_PREFIX}zombie"),
+                permissionNode("${MOUNT_FAVORITE_PERMISSION_PREFIX}bee"),
+                permissionNode("${MOUNT_FAVORITE_PERMISSION_PREFIX}BAD"),
+                permissionNode("${MOUNT_FAVORITE_PERMISSION_PREFIX}bat", value = false),
+                permissionNode("arc.mounts.bee.1"),
+            ),
+            MOUNT_FAVORITE_PERMISSION_PREFIX,
+            MountDefinition::validId,
+        ) shouldBe "bee"
     }
 
     "disabled glow permission wins after glow was purchased" {
@@ -286,10 +301,10 @@ private fun airborne(input: MountInputState, planar: MotionVector, pitch: Float 
         pitchInfluence = 0.65,
     )
 
-private fun permissionNode(permissionName: String): PermissionNode =
+private fun permissionNode(permissionName: String, value: Boolean = true): PermissionNode =
     mockk {
         every { permission } returns permissionName
-        every { value } returns true
+        every { this@mockk.value } returns value
     }
 
 internal fun testMount() =
@@ -350,6 +365,9 @@ private class TestOwnership : MountOwnership {
             ownedAbilities,
         )
     }
+
+    override fun favoriteMountId(playerId: UUID): String? = null
+    override fun setFavoriteMount(playerId: UUID, mount: MountDefinition) = CompletableFuture.completedFuture<Void>(null)
 
     override fun grantLevel(playerId: UUID, mount: MountDefinition, level: Int) = CompletableFuture.completedFuture<Void>(null)
     override fun revokeLevel(playerId: UUID, mount: MountDefinition, level: Int) = CompletableFuture.completedFuture<Void>(null)

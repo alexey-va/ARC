@@ -343,6 +343,20 @@ private class MutableOwnership : MountOwnership {
     val abilityPermissions = hashSetOf<String>()
     private val directPermissions = hashSetOf<String>()
 
+    override fun favoriteMountId(playerId: UUID): String? =
+        directPermissions
+            .asSequence()
+            .filter { it.startsWith(MOUNT_FAVORITE_PERMISSION_PREFIX) }
+            .map { it.removePrefix(MOUNT_FAVORITE_PERMISSION_PREFIX) }
+            .filter(MountDefinition::validId)
+            .minOrNull()
+
+    override fun setFavoriteMount(playerId: UUID, mount: MountDefinition): CompletableFuture<Void> =
+        write {
+            directPermissions.removeIf { it.startsWith(MOUNT_FAVORITE_PERMISSION_PREFIX) }
+            directPermissions += favoriteMountPermission(mount.id)
+        }
+
     fun addDirect(permission: String) {
         directPermissions += permission
     }
