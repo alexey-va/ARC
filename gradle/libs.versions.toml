@@ -36,7 +36,7 @@ me-clip-placeholderapi = "2.11.5"
 net-advancedplugins-advancedenchantments = "8.7.4"
 net-citizensnpcs-citizens-main = "2.0.42-SNAPSHOT"
 net-luckperms-api = "5.4"
-net-william278-huskhomes = "4.4.5"
+net-william278-huskhomes = "4.9.10"
 org-apache-logging-log4j-log4j-api = "2.23.0"
 org-apache-logging-log4j-log4j-core = "2.23.0"
 org-eclipse-jetty-websocket-websocket-client = "9.4.54.v20240208"
@@ -84,7 +84,7 @@ me-clip-placeholderapi = { module = "me.clip:placeholderapi", version.ref = "me-
 net-advancedplugins-advancedenchantments = { module = "net.advancedplugins:AdvancedEnchantments", version.ref = "net-advancedplugins-advancedenchantments" }
 net-citizensnpcs-citizens-main = { module = "net.citizensnpcs:citizens-main", version.ref = "net-citizensnpcs-citizens-main" }
 net-luckperms-api = { module = "net.luckperms:api", version.ref = "net-luckperms-api" }
-net-william278-huskhomes = { module = "net.william278:huskhomes", version.ref = "net-william278-huskhomes" }
+net-william278-huskhomes = { module = "net.william278.huskhomes:huskhomes-bukkit", version.ref = "net-william278-huskhomes" }
 org-apache-logging-log4j-log4j-api = { module = "org.apache.logging.log4j:log4j-api", version.ref = "org-apache-logging-log4j-log4j-api" }
 org-apache-logging-log4j-log4j-core = { module = "org.apache.logging.log4j:log4j-core", version.ref = "org-apache-logging-log4j-log4j-core" }
 org-eclipse-jetty-websocket-websocket-client = { module = "org.eclipse.jetty.websocket:websocket-client", version.ref = "org-eclipse-jetty-websocket-websocket-client" }

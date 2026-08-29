@@ -34,6 +34,7 @@ repositories {
     maven("https://maven.citizensnpcs.co/repo")
     maven("https://repo.extendedclip.com/content/repositories/placeholderapi/")
     maven("https://repo.codemc.io/repository/maven-public/")
+    maven("https://repo.william278.net/releases/")
     maven("https://repo.rus-crafting.ru/grocermc/")
     maven("https://repo.viaversion.com")
     maven("https://jitpack.io")

@@ -2,8 +2,12 @@ package ru.arc.hooks
 
 import net.william278.huskhomes.api.HuskHomesAPI
 import net.william278.huskhomes.event.HomeCreateEvent
+import net.william278.huskhomes.event.RandomTeleportEvent
+import net.william278.huskhomes.event.TeleportBackEvent
+import net.william278.huskhomes.event.TeleportEvent
 import net.william278.huskhomes.event.TeleportWarmupEvent
 import net.william278.huskhomes.position.Position
+import net.william278.huskhomes.teleport.Teleport
 import net.william278.huskhomes.teleport.TimedTeleport
 import net.william278.huskhomes.user.BukkitUser
 import net.william278.huskhomes.user.OnlineUser
@@ -11,6 +15,7 @@ import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.OfflinePlayer
 import org.bukkit.entity.Player
+import org.bukkit.event.Cancellable
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
@@ -25,16 +30,43 @@ import ru.arc.util.Logging.info
 import kotlin.math.abs
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
+import java.util.UUID
 
-class HuskHomesHook : Listener {
+class HuskHomesHook internal constructor(
+    private val portalLauncher: (UUID, HuskTeleport) -> Unit,
+) : Listener {
+
+    constructor() : this(
+        { playerId, teleport -> Portal(playerId, PortalData(HUSK, teleport, null, null)) },
+    )
 
     @EventHandler
     fun husk(event: TeleportWarmupEvent) {
+        intercept(event, event.timedTeleport)
+    }
+
+    @EventHandler
+    fun husk(event: TeleportEvent) {
+        intercept(event, event.teleport)
+    }
+
+    @EventHandler
+    fun husk(event: TeleportBackEvent) {
+        intercept(event, event.teleport)
+    }
+
+    @EventHandler
+    fun husk(event: RandomTeleportEvent) {
+        intercept(event, event.teleport)
+    }
+
+    private fun intercept(event: Cancellable, teleport: Teleport) {
+        val timedTeleport = teleport as? TimedTeleport ?: return
+        val teleporter = timedTeleport.teleporter as? BukkitUser ?: return
+        if (teleporter.player.hasPermission(PORTAL_BYPASS_PERMISSION)) return
+
         event.isCancelled = true
-        val teleporter = event.timedTeleport.teleporter
-        if (teleporter is BukkitUser) {
-            Portal(teleporter.uuid, PortalData(HUSK, HuskTeleport(event.timedTeleport), null, null))
-        }
+        portalLauncher(teleporter.uuid, HuskTeleport(timedTeleport))
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -44,7 +76,7 @@ class HuskHomesHook : Listener {
         val expected = HomePositionSnapshot.from(event.position)
         val setRespawn = homeName.endsWith("home")
 
-        // HuskHomes 4.4.5 fires HomeCreateEvent before validation and persistence.
+        // HuskHomes fires HomeCreateEvent before validation and persistence.
         // Read the home back on the next tick so onboarding only observes a real result.
         delayed(1L) {
             val player = Bukkit.getPlayer(ownerId)?.takeIf { it.isOnline } ?: return@delayed
@@ -119,6 +151,10 @@ class HuskHomesHook : Listener {
     class HuskTeleport(val teleport: TimedTeleport) {
         fun getPlayer(): OfflinePlayer =
             Bukkit.getOfflinePlayer((teleport.teleporter as OnlineUser).uuid)
+    }
+
+    companion object {
+        private const val PORTAL_BYPASS_PERMISSION = "arc.portal.bypass"
     }
 }
 
