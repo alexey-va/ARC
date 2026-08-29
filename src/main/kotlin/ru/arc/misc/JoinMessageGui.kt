@@ -1,114 +1,89 @@
 package ru.arc.misc
 
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui
+import com.github.stefvanschie.inventoryframework.pane.PaginatedPane
 import org.bukkit.Material
 import org.bukkit.entity.Player
+import org.bukkit.inventory.ItemFlag
 import ru.arc.ARC
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
+import ru.arc.core.sync
 import ru.arc.gui.gui
 import ru.arc.hooks.HookRegistry
 import ru.arc.util.GuiUtils
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
+import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
 import ru.arc.util.fromConfig
-import ru.arc.config.material
-import ru.arc.config.materialSet
-import ru.arc.config.particle
-import ru.arc.config.sound
-import ru.arc.core.sync
 
-/**
- * GUI for selecting join/leave messages.
- */
+/** GUI for selecting the network-wide join and leave phrases published by ProxyARC. */
 object JoinMessageGuiFactory {
     private val config: Config by lazy {
         ConfigManager.of(ARC.instance.dataFolder.toPath(), "modules/misc.yml")
     }
 
-    /**
-     * Parsed message item ready for display.
-     */
     private data class MessageItem(
         val displayName: String,
         val message: String,
         val permission: String?,
-        val rank: String,
         val material: Material,
+        val customModelData: Int,
         val isCurrent: Boolean,
-        val parsedMessage: String,
         val lore: List<String>,
     )
 
-    /**
-     * Configuration for message parsing.
-     */
     private data class MessageConfig(
         val defaultLore: List<String>,
         val forbiddenLore: List<String>,
         val currentLore: List<String>,
-        val selectedMaterial: Material,
         val showAll: Boolean,
         val maxLen: Int,
         val spacesPadding: Int,
         val messagePrefix: String,
-        val defaultDisplayName: String,
         val commonRank: String,
     )
 
-    /**
-     * Create the join/leave message selection GUI.
-     */
     private fun create(
         player: Player,
         isJoin: Boolean,
         currentMessages: Set<String>,
-        startPage: Int = 0,
+        catalog: JoinMessageCatalog,
+        startPage: Int,
     ): ChestGui {
         val cfg = config
         val prefix = if (isJoin) "join-message-gui." else "leave-message-gui."
-        val rows = cfg.int("join-message-gui.rows", 6)
+        val rows = cfg.int("join-message-gui.rows", 6).coerceIn(2, 6)
         val title = cfg.string("${prefix}title", if (isJoin) "&8Сообщения при входе" else "&8Сообщения при выходе")
-
-        val messageItems = parseMessageItems(cfg, prefix, player, isJoin, currentMessages)
+        val messageItems = parseMessageItems(catalog.entries(isJoin), player, isJoin, currentMessages, prefix)
+        lateinit var pages: PaginatedPane
 
         return gui(title, rows, player, cfg) {
-            // Background for nav bar
+            contentBackground()
             navBackground()
 
-            // Message items
             pagination(0 until (rows - 1)) {
                 items(messageItems) { item ->
                     material(item.material)
-                    display(item.displayName)
-                    lore(item.lore)
-                    flags(
-                        org.bukkit.inventory.ItemFlag.HIDE_ATTRIBUTES,
-                        org.bukkit.inventory.ItemFlag.HIDE_ENCHANTS,
-                    )
+                    if (item.customModelData > 0) modelData(item.customModelData)
+                    display(nonItalic(item.displayName))
+                    lore(item.lore.map(::nonItalic))
+                    flags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ENCHANTS)
 
                     onClick { event ->
                         val clicker = event.whoClicked as? Player ?: return@onClick
-
-                        // Check permission
                         if (item.permission != null && !clicker.hasPermission(item.permission)) {
                             clicker.sendMessage(
                                 cfg.component(
                                     "${prefix}forbidden-temp-display",
-                                    "<dark_red>Вы не можете использовать это сообщение!",
+                                    "<red>Эта фраза пока недоступна.",
                                 ),
                             )
                             return@onClick
                         }
 
-                        if (HookRegistry.luckPermsHook == null) {
-                            error("LuckPerms hook is not available")
-                            return@onClick
-                        }
-
-                        val currentPage = 0 // Will need pane reference for real page
-
+                        val currentPage = pages.page
                         JoinMessagesManager
                             .updateMessageAsync(
                                 player = clicker.name,
@@ -125,23 +100,13 @@ object JoinMessageGuiFactory {
                     }
                 }
             }
+            pages = checkNotNull(paginatedContentPane())
 
-            // Navigation bar
             navBar {
-                back(
-                    slot = 0,
-                    configKey = "join-message-gui.back-button",
-                )
-
-                button(3) {
-                    display("<gold>Назад")
-                    lore(listOf("<gray>Перейти к предыдущей странице"))
-                    fromConfig(cfg, "join-message-gui.prev-button")
-                    onClick { /* Handled by pagination */ }
-                }
-
+                back(slot = 0, configKey = "join-message-gui.back-button")
+                prevPage(slot = 3, configKey = "join-message-gui.prev-button")
                 button(4) {
-                    display("<gold>Сменить режим")
+                    display("<italic:false><gold>Сменить режим")
                     lore(emptyList())
                     fromConfig(cfg, "${prefix}switch-button")
                     onClick { event ->
@@ -149,175 +114,95 @@ object JoinMessageGuiFactory {
                         show(clicker, !isJoin, 0)
                     }
                 }
-
-                button(5) {
-                    display("<gold>Далее")
-                    lore(listOf("<gray>Перейти к следующей странице"))
-                    fromConfig(cfg, "join-message-gui.next-button")
-                    onClick { /* Handled by pagination */ }
-                }
+                nextPage(slot = 5, configKey = "join-message-gui.next-button")
             }
-        }.also { gui ->
-            // Set initial page if needed
-            // Note: This requires access to the pagination pane which our DSL doesn't expose yet
+
+            onBuild {
+                pages.page = startPage.coerceIn(0, (pages.pages - 1).coerceAtLeast(0))
+            }
         }
     }
 
-    /**
-     * Show the GUI to a player.
-     */
     fun show(
         player: Player,
         isJoin: Boolean = true,
         startPage: Int = 0,
     ) {
-        JoinMessagesManager.getOrCreateAsync(player.name).whenComplete { data, failure ->
-            if (failure != null) {
-                reportFailure(player, "load messages", failure)
-                return@whenComplete
-            }
-            val currentMessages =
-                if (isJoin) {
-                    data.joinMessages.toSet()
-                } else {
-                    data.leaveMessages.toSet()
+        JoinMessageCatalogManager.currentAsync()
+            .thenCombine(JoinMessagesManager.getOrCreateAsync(player.name)) { catalog, messages ->
+                catalog to messages
+            }.whenComplete { result, failure ->
+                if (failure != null || result == null) {
+                    reportFailure(player, "load synchronized message catalog", failure ?: IllegalStateException("Missing catalog"))
+                    return@whenComplete
                 }
-            GuiUtils.constructAndShowAsync(
-                { create(player, isJoin, currentMessages, startPage) },
-                player,
-            )
-        }
+                val (catalog, data) = result
+                val currentMessages = if (isJoin) data.joinMessages.toSet() else data.leaveMessages.toSet()
+                GuiUtils.constructAndShowAsync(
+                    { create(player, isJoin, currentMessages, catalog, startPage) },
+                    player,
+                )
+            }
     }
 
-    // ==================== Message Parsing ====================
-
-    /**
-     * Parse all message items from config.
-     */
     private fun parseMessageItems(
-        cfg: Config,
-        prefix: String,
+        entries: List<JoinMessageCatalogEntry>,
         player: Player,
         isJoin: Boolean,
         currentMessages: Set<String>,
+        prefix: String,
     ): List<MessageItem> {
-        val msgConfig = loadMessageConfig(cfg, prefix)
+        val msgConfig = loadMessageConfig(prefix)
         val unseenMessages = currentMessages.toMutableSet()
-        val messages = cfg.list<Map<String, Any>>("${prefix}messages")
-
-        val items = mutableListOf<MessageItem>()
-        var id = 1
-
-        for (map in messages) {
-            parseMessageItem(map, id, player, msgConfig, cfg, prefix, currentMessages)?.let { item ->
-                unseenMessages.remove(item.message)
-                items.add(item)
+        val items =
+            entries.mapNotNull { entry ->
+                val permission = entry.permission
+                if (!msgConfig.showAll && permission != null && !player.hasPermission(permission)) {
+                    return@mapNotNull null
+                }
+                unseenMessages.remove(entry.message)
+                val isCurrent = entry.message in currentMessages
+                val parsedMessage = HookRegistry.papiHook?.parse(entry.message, player) ?: entry.message
+                val material = JoinMessageMaterial.resolve(entry.material)
+                if (material == Material.PAPER && entry.material != "PAPER") {
+                    warn("Unknown material '{}' for join message '{}'; using PAPER", entry.material, entry.id)
+                }
+                MessageItem(
+                    displayName = entry.displayName,
+                    message = entry.message,
+                    permission = permission,
+                    material = material,
+                    customModelData = entry.customModelData,
+                    isCurrent = isCurrent,
+                    lore = buildMessageLore(permission, player, isCurrent, msgConfig, parsedMessage, entry.rank),
+                )
             }
-            id++
-        }
 
         cleanupUnseenMessages(player, isJoin, unseenMessages)
         return items
     }
 
-    /**
-     * Load message display configuration.
-     */
-    private fun loadMessageConfig(
-        cfg: Config,
-        prefix: String,
-    ): MessageConfig =
+    private fun loadMessageConfig(prefix: String): MessageConfig =
         MessageConfig(
-            defaultLore =
-                cfg.list(
-                    "${prefix}default-lore",
-                    listOf(
-                        "<dark_gray> > <gray>Привелегия: <gold>%rank%",
-                        "<white>%prefix%%message%",
-                    ),
-                ),
-            forbiddenLore =
-                cfg.list(
-                    "${prefix}forbidden-lore",
-                    listOf(
-                        "<red>Это вам пока недоступно!",
-                        "",
-                    ),
-                ),
-            currentLore =
-                cfg.list(
-                    "${prefix}current-lore",
-                    listOf(
-                        "<green>Это ваше текущее сообщение",
-                        "",
-                    ),
-                ),
-            selectedMaterial = cfg.material("${prefix}selected-material", Material.ENDER_PEARL),
-            showAll = cfg.bool("${prefix}show-all", true),
-            maxLen = cfg.int("${prefix}max-len", 60),
-            spacesPadding = cfg.int("${prefix}spaces-padding", 3),
-            messagePrefix = cfg.string("${prefix}prefix", "<dark_green>❖ "),
-            defaultDisplayName = cfg.string("${prefix}default-display-name", "<gold>Сообщение %id%"),
-            commonRank = cfg.string("${prefix}common-rank", "<green>Для всех"),
+            defaultLore = config.list("${prefix}default-lore", listOf("<white>%prefix%%message%")),
+            forbiddenLore = config.list("${prefix}forbidden-lore", listOf("<red>Эта фраза пока недоступна.")),
+            currentLore = config.list("${prefix}current-lore", listOf("<green>Выбрано")),
+            showAll = config.bool("${prefix}show-all", true),
+            maxLen = config.int("${prefix}max-len", 80),
+            spacesPadding = config.int("${prefix}spaces-padding", 3),
+            messagePrefix = config.string("${prefix}prefix", if (prefix.startsWith("join")) "<dark_green>❖ " else "<dark_red>❖ "),
+            commonRank = config.string("${prefix}common-rank", "<green>Для всех"),
         )
 
-    /**
-     * Parse a single message item from config map.
-     */
-    private fun parseMessageItem(
-        map: Map<String, Any>,
-        id: Int,
-        player: Player,
-        msgConfig: MessageConfig,
-        cfg: Config,
-        prefix: String,
-        currentMessages: Set<String>,
-    ): MessageItem? {
-        return try {
-            val displayName =
-                (map["display-name"] as? String ?: msgConfig.defaultDisplayName)
-                    .replace("%id%", id.toString())
-            val message = map["message"] as? String ?: return null
-            val permission = map["permission"] as? String
-            val rank = map["rank"] as? String ?: msgConfig.commonRank
-            val material = Material.valueOf((map["material"] as? String ?: "PAPER").uppercase())
-
-            // Skip if no permission and not showing all
-            if (!msgConfig.showAll && permission != null && !player.hasPermission(permission)) {
-                return null
-            }
-
-            val isCurrent = message in currentMessages
-            val parsedMessage = HookRegistry.papiHook?.parse(message, player) ?: message
-            val lore = buildMessageLore(permission, player, isCurrent, msgConfig, parsedMessage, rank)
-
-            MessageItem(
-                displayName = displayName,
-                message = message,
-                permission = permission,
-                rank = rank,
-                material = if (isCurrent) msgConfig.selectedMaterial else material,
-                isCurrent = isCurrent,
-                parsedMessage = parsedMessage,
-                lore = lore,
-            )
-        } catch (e: Exception) {
-            error("Error while parsing message: {}", map, e)
-            null
-        }
-    }
-
-    /**
-     * Build lore for message item.
-     */
     private fun buildMessageLore(
         permission: String?,
         player: Player,
         isCurrent: Boolean,
         msgConfig: MessageConfig,
         parsedMessage: String,
-        rank: String,
+        configuredRank: String,
     ): List<String> {
+        val rank = configuredRank.ifBlank { msgConfig.commonRank }
         val loreLines =
             buildList {
                 if (permission != null && !player.hasPermission(permission)) {
@@ -327,38 +212,26 @@ object JoinMessageGuiFactory {
                 }
                 addAll(msgConfig.defaultLore)
             }.map { line ->
-                line
-                    .replace("%message%", parsedMessage)
+                line.replace("%message%", parsedMessage)
                     .replace("%rank%", rank)
                     .replace("%prefix%", msgConfig.messagePrefix)
             }
 
-        return if (loreLines.isNotEmpty()) {
-            val last = loreLines.last()
-            loreLines.dropLast(1) + TextUtil.splitLoreString(last, msgConfig.maxLen, msgConfig.spacesPadding)
-        } else {
-            loreLines
-        }
+        if (loreLines.isEmpty()) return emptyList()
+        val last = loreLines.last()
+        return loreLines.dropLast(1) + TextUtil.splitLoreString(last, msgConfig.maxLen, msgConfig.spacesPadding)
     }
 
-    /**
-     * Clean up messages that no longer exist in config.
-     */
     private fun cleanupUnseenMessages(
         player: Player,
         isJoin: Boolean,
         unseenMessages: Set<String>,
     ) {
         if (unseenMessages.isEmpty()) return
-
-        info("Player {} has unseen messages: {}", player.name, unseenMessages)
-        JoinMessagesManager
-            .removeMessagesAsync(player.name, unseenMessages, isJoin)
-            .whenComplete { _, failure ->
-                if (failure != null) {
-                    reportFailure(player, "remove unavailable messages", failure)
-                }
-            }
+        info("Player {} has selected phrases missing from catalog: {}", player.name, unseenMessages)
+        JoinMessagesManager.removeMessagesAsync(player.name, unseenMessages, isJoin).whenComplete { _, failure ->
+            if (failure != null) reportFailure(player, "remove unavailable messages", failure)
+        }
     }
 
     private fun reportFailure(
@@ -371,9 +244,12 @@ object JoinMessageGuiFactory {
             player.sendMessage(
                 config.component(
                     "join-message-gui.error",
-                    "<red>Не удалось обновить сообщения. Попробуйте ещё раз.",
+                    "<red>Меню фраз сейчас недоступно. Попробуйте ещё раз.",
                 ),
             )
         }
     }
+
+    internal fun nonItalic(value: String): String =
+        if (value.startsWith("<italic:")) value else "<italic:false>$value"
 }

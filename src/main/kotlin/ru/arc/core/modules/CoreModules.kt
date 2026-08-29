@@ -28,6 +28,7 @@ import ru.arc.eliteloot.EliteLootManager
 import ru.arc.hooks.HookRegistry
 import ru.arc.leafdecay.LeafDecayManager
 import ru.arc.misc.JoinMessagesManager
+import ru.arc.misc.JoinMessageCatalogManager
 import ru.arc.mobspawn.MobSpawnManager
 import ru.arc.network.NetworkRegistry
 import ru.arc.config.ArcRedisConfig
@@ -588,11 +589,13 @@ object JoinMessagesModule : PluginModule {
     override val priority = 82
 
     override fun init() {
+        JoinMessageCatalogManager.init()
         JoinMessagesManager.init()
     }
 
     override fun shutdown() {
         JoinMessagesManager.shutdown()
+        JoinMessageCatalogManager.shutdown()
     }
 }
 
