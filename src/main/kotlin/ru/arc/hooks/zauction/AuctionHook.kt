@@ -6,7 +6,6 @@ import fr.maxlego08.zauctionhouse.api.category.CategoryManager
 import fr.maxlego08.zauctionhouse.api.item.Item
 import fr.maxlego08.zauctionhouse.api.item.StorageType
 import fr.maxlego08.zauctionhouse.api.item.items.AuctionItem
-import net.kyori.adventure.text.TextComponent
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Bukkit
 import ru.arc.ARC
@@ -101,28 +100,27 @@ internal class AuctionHook : AutoCloseable {
         // placeholders and dereferences the player. The Discord feed needs the
         // stored lot itself, not a viewer-specific menu item.
         val stack = (item as? AuctionItem)?.itemStack
-        var display: String? = item.itemDisplay
+        val plainText = PlainTextComponentSerializer.plainText()
+        val meta = stack?.itemMeta
+        var display: String? =
+            meta?.takeIf { it.hasDisplayName() }
+                ?.displayName()
+                ?.let(plainText::serialize)
+                ?.trim()
+                ?.takeIf(String::isNotBlank)
         if (display.isNullOrBlank()) {
-            val meta = stack?.itemMeta
-            if (meta != null && meta.hasDisplayName()) {
-                val name = meta.displayName()
-                if (name is TextComponent) {
-                    display = PlainTextComponentSerializer.plainText().serialize(name)
-                }
-            }
-            if (display.isNullOrBlank()) {
-                val translator = HookRegistry.translatorHook
-                display = if (translator != null && stack != null) {
-                    translator.translate(stack)
-                } else {
-                    item.translationKey.takeIf(String::isNotBlank) ?: "предмет"
-                }
-            }
+            display = stack?.let { HookRegistry.translatorHook?.translate(it) }
+        }
+        if (display.isNullOrBlank()) {
+            display = item.itemDisplay?.takeIf(String::isNotBlank)
+        }
+        if (display.isNullOrBlank()) {
+            display = item.translationKey.takeIf(String::isNotBlank) ?: "предмет"
         }
 
-        val lore = stack?.itemMeta?.lore()
-            ?.filterIsInstance<TextComponent>()
-            ?.map { it.content() }
+        val lore = meta?.lore()
+            ?.map(plainText::serialize)
+            ?.filter(String::isNotBlank)
             ?: emptyList()
 
         return AuctionItemDto(
