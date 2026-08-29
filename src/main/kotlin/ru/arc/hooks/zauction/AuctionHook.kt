@@ -5,16 +5,19 @@ import fr.maxlego08.zauctionhouse.api.AuctionPlugin
 import fr.maxlego08.zauctionhouse.api.category.CategoryManager
 import fr.maxlego08.zauctionhouse.api.item.Item
 import fr.maxlego08.zauctionhouse.api.item.StorageType
+import fr.maxlego08.zauctionhouse.api.item.items.AuctionItem
 import net.kyori.adventure.text.TextComponent
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Bukkit
 import ru.arc.ARC
 import ru.arc.config.AuctionConfig
 import ru.arc.core.ScheduledTask
-import ru.arc.core.repeatingAsync
+import ru.arc.core.async
+import ru.arc.core.repeating
 import ru.arc.core.ticks
 import ru.arc.hooks.HookRegistry
 import ru.arc.util.Logging.info
+import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
 
 internal class AuctionHook : AutoCloseable {
@@ -53,13 +56,14 @@ internal class AuctionHook : AutoCloseable {
         cancelTasks()
         auctionManager ?: return
         broadcastItemsTask =
-            repeatingAsync(
+            repeating(
                 AuctionConfig.refreshRate.ticks,
                 delay = AuctionConfig.refreshRate.ticks,
             ) {
-                if (!AuctionConfig.broadcastItems) return@repeatingAsync
-                val messager = auctionMessager ?: return@repeatingAsync
-                messager.send(getAuctionItems())
+                if (!AuctionConfig.broadcastItems) return@repeating
+                val messager = auctionMessager ?: return@repeating
+                val snapshot = getAuctionItems()
+                async { messager.send(snapshot) }
             }
     }
 
@@ -78,7 +82,13 @@ internal class AuctionHook : AutoCloseable {
         val manager = auctionManager ?: return emptyList()
         return manager.getItems(StorageType.LISTED)
             .filter { !it.isExpired }
-            .mapNotNull { fromAuctionItem(resolveCategory(it), it) }
+            .mapNotNull { item ->
+                runCatching { fromAuctionItem(resolveCategory(item), item) }
+                    .onFailure { error ->
+                        warn("Skipping auction listing {} while building Discord snapshot", item.id, error)
+                    }
+                    .getOrNull()
+            }
     }
 
     private fun resolveCategory(item: Item): String =
@@ -87,10 +97,13 @@ internal class AuctionHook : AutoCloseable {
     private fun fromAuctionItem(category: String, item: Item): AuctionItemDto? {
         if (item.isExpired) return null
 
-        val stack = item.buildItemStack(null)
+        // zAuctionHouse v4's buildItemStack(Player) renders interactive GUI
+        // placeholders and dereferences the player. The Discord feed needs the
+        // stored lot itself, not a viewer-specific menu item.
+        val stack = (item as? AuctionItem)?.itemStack
         var display: String? = item.itemDisplay
         if (display.isNullOrBlank()) {
-            val meta = stack.itemMeta
+            val meta = stack?.itemMeta
             if (meta != null && meta.hasDisplayName()) {
                 val name = meta.displayName()
                 if (name is TextComponent) {
@@ -99,15 +112,15 @@ internal class AuctionHook : AutoCloseable {
             }
             if (display.isNullOrBlank()) {
                 val translator = HookRegistry.translatorHook
-                display = if (translator != null) {
+                display = if (translator != null && stack != null) {
                     translator.translate(stack)
                 } else {
-                    stack.type.name.replace("_", "").lowercase()
+                    item.translationKey.takeIf(String::isNotBlank) ?: "предмет"
                 }
             }
         }
 
-        val lore = stack.itemMeta?.lore()
+        val lore = stack?.itemMeta?.lore()
             ?.filterIsInstance<TextComponent>()
             ?.map { it.content() }
             ?: emptyList()
