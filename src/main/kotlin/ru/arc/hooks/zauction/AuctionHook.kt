@@ -78,12 +78,8 @@ internal class AuctionHook : AutoCloseable {
         val manager = auctionManager ?: return emptyList()
         return manager.getItems(StorageType.LISTED)
             .filter { !it.isExpired }
-            .filter { matchesConfiguredCategory(it) }
             .mapNotNull { fromAuctionItem(resolveCategory(it), it) }
     }
-
-    private fun matchesConfiguredCategory(item: Item): Boolean =
-        AuctionConfig.categories.any { item.hasCategory(it) }
 
     private fun resolveCategory(item: Item): String =
         AuctionConfig.categories.firstOrNull { item.hasCategory(it) } ?: "misc"

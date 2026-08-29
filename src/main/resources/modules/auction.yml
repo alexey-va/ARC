@@ -4,7 +4,7 @@
 
 # Категории для группировки лотов (строковые теги)
 discord-categories:
-  - block
+  - blocks
   - potions
   - tools
   - weapons
