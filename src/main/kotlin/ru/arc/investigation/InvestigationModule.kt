@@ -9,9 +9,30 @@ import ru.arc.core.PluginModule
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
+import java.nio.file.Path
 import java.security.SecureRandom
 import java.util.Locale
 import kotlin.random.Random
+
+internal data class InvestigationRuntimeConfig(
+    val config: InvestigationConfig,
+    val catalog: InvestigationStoryCatalog?,
+)
+
+internal fun loadInvestigationRuntimeConfig(
+    dataPath: Path,
+    additionalWitnessKeys: Set<String> = emptySet(),
+    catalogLoader: () -> InvestigationStoryCatalog = { InvestigationStoryCatalog.load(dataPath) },
+): InvestigationRuntimeConfig {
+    val config = InvestigationConfig.load(dataPath, emptySet())
+    if (!config.enabled) return InvestigationRuntimeConfig(config, null)
+
+    val catalog = catalogLoader()
+    return InvestigationRuntimeConfig(
+        config = InvestigationConfig.load(dataPath, catalog.witnessKeys + additionalWitnessKeys),
+        catalog = catalog,
+    )
+}
 
 object InvestigationModule : PluginModule {
     override val name = "Investigations"
@@ -29,15 +50,11 @@ object InvestigationModule : PluginModule {
 
     override fun init() {
         Bukkit.getPluginManager().registerEvents(InvestigationCaseFile, ARC.instance)
-        val loadedCatalog = InvestigationStoryCatalog.load(ARC.instance.dataPath)
-        start(InvestigationConfig.load(ARC.instance.dataPath, loadedCatalog.witnessKeys), loadedCatalog)
+        val loaded = loadInvestigationRuntimeConfig(ARC.instance.dataPath)
+        start(loaded.config, loaded.catalog)
     }
 
     override fun reload() {
-        val loadedCatalog =
-            runCatching { InvestigationStoryCatalog.load(ARC.instance.dataPath) }
-                .onFailure { warn("Investigations reload rejected; current catalog remains active: {}", it.message ?: it::class.java.simpleName) }
-                .getOrNull() ?: return
         val unresolvedWitnessKeys =
             journal
                 ?.records()
@@ -46,12 +63,12 @@ object InvestigationModule : PluginModule {
                 .flatMap { it.case.witnesses() }
                 .map(InvestigationWitness::commandValue)
                 .toSet()
-        val loadedConfig =
-            runCatching { InvestigationConfig.load(ARC.instance.dataPath, loadedCatalog.witnessKeys + unresolvedWitnessKeys) }
-                .onFailure { warn("Investigations reload rejected; current policy remains active: {}", it.message ?: it::class.java.simpleName) }
+        val loaded =
+            runCatching { loadInvestigationRuntimeConfig(ARC.instance.dataPath, unresolvedWitnessKeys) }
+                .onFailure { warn("Investigations reload rejected; current runtime remains active: {}", it.message ?: it::class.java.simpleName) }
                 .getOrNull() ?: return
         shutdownRuntime()
-        start(loadedConfig, loadedCatalog)
+        start(loaded.config, loaded.catalog)
     }
 
     override fun shutdown() {
@@ -280,17 +297,18 @@ object InvestigationModule : PluginModule {
 
     private fun start(
         loaded: InvestigationConfig,
-        loadedCatalog: InvestigationStoryCatalog,
+        loadedCatalog: InvestigationStoryCatalog?,
     ) {
         config = loaded
         catalog = loadedCatalog
+        if (!loaded.enabled) {
+            info("Investigations disabled by configuration; story catalog load skipped")
+            return
+        }
+        val activeCatalog = requireNotNull(loadedCatalog) { "Enabled investigations require a story catalog" }
         val epoch = tasks.restart()
         tasks.runTimer(epoch, 20L, 20L) {
             Bukkit.getOnlinePlayers().forEach { player -> InvestigationCaseFile.cleanupExpired(player) }
-        }
-        if (!loaded.enabled) {
-            info("Investigations module disabled by configuration")
-            return
         }
         val loadedJournal = FileInvestigationJournal(ARC.instance.dataPath)
         val loadedService =
@@ -302,7 +320,7 @@ object InvestigationModule : PluginModule {
                 rewardMinor = { requireNotNull(config).rewardMinor },
                 duration = { requireNotNull(config).duration },
                 cooldown = { requireNotNull(config).cooldown },
-                caseGenerator = InvestigationCaseGenerator(loadedCatalog),
+                caseGenerator = InvestigationCaseGenerator(activeCatalog),
                 runSync = { action -> tasks.runSync(epoch, action) },
                 random = Random(SecureRandom().nextLong()),
             )
@@ -317,7 +335,7 @@ object InvestigationModule : PluginModule {
                 InvestigationTargetGlow.refresh(player, loadedService.current(player.uniqueId), loaded)
             }
         }
-        info("Investigations module initialized with {} cases and {} witnesses", loadedCatalog.storyCount, loadedCatalog.witnessKeys.size)
+        info("Investigations module initialized with {} cases and {} witnesses", activeCatalog.storyCount, activeCatalog.witnessKeys.size)
     }
 
     private fun shutdownRuntime() {
