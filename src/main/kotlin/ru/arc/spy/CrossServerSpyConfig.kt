@@ -18,6 +18,8 @@ data class CrossServerSpySettings(
     val privateMessageCommands: Set<String>,
     val replyCommands: Set<String>,
     val sensitiveCommands: Set<String>,
+    val commandTemplate: String,
+    val privateMessageTemplate: String,
 ) {
     fun serverLabel(server: String): String = serverLabels[server] ?: server
 }
@@ -57,6 +59,18 @@ open class CrossServerSpyConfig(
                         config.stringList("security.sensitive-commands", DEFAULT_SENSITIVE_COMMANDS.toList()),
                         DEFAULT_SENSITIVE_COMMANDS,
                     ),
+                commandTemplate =
+                    normalizeTemplate(
+                        config.string("display.command", DEFAULT_COMMAND_TEMPLATE),
+                        DEFAULT_COMMAND_TEMPLATE,
+                        setOf("server", "sender", "content"),
+                    ),
+                privateMessageTemplate =
+                    normalizeTemplate(
+                        config.string("display.private-message", DEFAULT_PRIVATE_MESSAGE_TEMPLATE),
+                        DEFAULT_PRIVATE_MESSAGE_TEMPLATE,
+                        setOf("server", "sender", "target", "content"),
+                    ),
             )
 
     companion object {
@@ -78,6 +92,12 @@ open class CrossServerSpyConfig(
                 "totp",
             )
         val DEFAULT_SERVER_LABELS = listOf("spawn=Спавн", "survival=Выживание", "parkour=Паркур")
+        const val DEFAULT_COMMAND_TEMPLATE =
+            "<dark_purple>К<dark_green>Шпион<gray>[<dark_gray><sender><gray>]" +
+                "[<dark_gray><server><gray>]: <white><content>"
+        const val DEFAULT_PRIVATE_MESSAGE_TEMPLATE =
+            "<dark_green>Шпион<gray>[<dark_gray><sender> <gray>-> <dark_gray><target><gray>]" +
+                "[<dark_gray><server><gray>] <white><content>"
 
         fun load(dataPath: Path): CrossServerSpyConfig =
             CrossServerSpyConfig(ConfigManager.ofModule(dataPath, "cross-server-spy.yml"))
@@ -113,6 +133,17 @@ open class CrossServerSpyConfig(
                 .filter(COMMAND_RULE_PATTERN::matches)
                 .toCollection(linkedSetOf())
                 .ifEmpty { fallback }
+
+        private fun normalizeTemplate(
+            raw: String,
+            fallback: String,
+            requiredPlaceholders: Set<String>,
+        ): String =
+            raw.takeIf { candidate ->
+                candidate.length in 1..512 &&
+                    candidate.none(Char::isISOControl) &&
+                    requiredPlaceholders.all { placeholder -> "<$placeholder>" in candidate }
+            } ?: fallback
 
         internal fun normalizeToken(raw: String): String =
             raw.trim().removePrefix("/").lowercase(Locale.ROOT)

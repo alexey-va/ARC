@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+OPS_ROOT="$(cd -- "$PROJECT_ROOT/../.deploy-ruscrafting-ops" && pwd)"
+OUTPUT="$PROJECT_ROOT/build/reports/visual-preview"
+CLIENT_JAR=""
+RESOURCE_PACK="${RUSCRAFTING_RESOURCE_PACK:-}"
+
+while (($#)); do
+  case "$1" in
+    --ops-root)
+      OPS_ROOT="$2"
+      shift 2
+      ;;
+    --output)
+      OUTPUT="$2"
+      shift 2
+      ;;
+    --client-jar)
+      CLIENT_JAR="$2"
+      shift 2
+      ;;
+    --resource-pack)
+      RESOURCE_PACK="$2"
+      shift 2
+      ;;
+    *)
+      echo "unknown argument: $1" >&2
+      exit 2
+      ;;
+  esac
+done
+
+COMMAND=(
+  python3 -B
+  "$OPS_ROOT/.agents/skills/design-ruscrafting-surfaces/scripts/render_plugin_surface_dump.py"
+  --manifest "$PROJECT_ROOT/visual-preview.yml"
+  --project-root "$PROJECT_ROOT"
+  --output "$OUTPUT"
+)
+
+if [[ -n "$CLIENT_JAR" ]]; then
+  COMMAND+=(--client-jar "$CLIENT_JAR")
+fi
+if [[ -n "$RESOURCE_PACK" ]]; then
+  COMMAND+=(--resource-pack "$RESOURCE_PACK")
+fi
+
+exec "${COMMAND[@]}"

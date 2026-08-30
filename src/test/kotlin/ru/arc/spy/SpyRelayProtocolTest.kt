@@ -4,6 +4,7 @@ import com.google.gson.JsonParser
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import ru.arc.config.ConfigManager
 import java.nio.file.Files
@@ -106,8 +107,31 @@ class SpyRelayProtocolTest : FreeSpec({
                 targetName = "Target",
                 content = "<click:run_command:'/op me'>hello</click>",
             )
-        val rendered = PlainTextComponentSerializer.plainText().serialize(SpyMessageRenderer.render(message, "Выживание"))
-        rendered shouldBe "[Выживание] ЛС • SourcePlayer → Target: <click:run_command:'/op me'>hello</click>"
+        val rendered =
+            PlainTextComponentSerializer.plainText().serialize(
+                SpyMessageRenderer.render(message, "Выживание", testSettings()),
+            )
+        rendered shouldBe
+            "Шпион[SourcePlayer -> Target][Выживание] <click:run_command:'/op me'>hello</click>"
+    }
+
+    "renderer mirrors the local CMI CommandSpy anatomy before remote metadata" {
+        val component = SpyMessageRenderer.render(commandMessage(now), "Выживание", testSettings())
+        PlainTextComponentSerializer.plainText().serialize(component) shouldBe
+            "КШпион[SourcePlayer][Выживание]: /warp market"
+        LegacyComponentSerializer.legacySection().serialize(component) shouldBe
+            "§5К§2Шпион§7[§8SourcePlayer§7][§8Выживание§7]: §f/warp market"
+    }
+
+    "configuration falls back when a display template loses required placeholders" {
+        val folder = Files.createTempDirectory("cross-server-spy-display-config")
+        val config = ConfigManager.create(folder, "test.yml", "cross-server-spy-display-test")
+        config.setString("display.command", "<red>Команда без данных")
+        config.setString("display.private-message", "<green><sender> -> <target>: <content>")
+
+        val settings = CrossServerSpyConfig(config).settings
+        settings.commandTemplate shouldBe CrossServerSpyConfig.DEFAULT_COMMAND_TEMPLATE
+        settings.privateMessageTemplate shouldBe CrossServerSpyConfig.DEFAULT_PRIVATE_MESSAGE_TEMPLATE
     }
 })
 
@@ -136,4 +160,6 @@ internal fun testSettings(): CrossServerSpySettings =
         privateMessageCommands = setOf("msg", "tell"),
         replyCommands = setOf("reply", "r"),
         sensitiveCommands = CrossServerSpyConfig.DEFAULT_SENSITIVE_COMMANDS,
+        commandTemplate = CrossServerSpyConfig.DEFAULT_COMMAND_TEMPLATE,
+        privateMessageTemplate = CrossServerSpyConfig.DEFAULT_PRIVATE_MESSAGE_TEMPLATE,
     )

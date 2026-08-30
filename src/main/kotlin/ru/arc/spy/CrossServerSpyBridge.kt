@@ -138,7 +138,7 @@ class CrossServerSpyBridge(
                     log.warn("Unable to read CMI spy policy for remote {} event", message.type.name.lowercase(), it)
                     return
                 }
-        val rendered = SpyMessageRenderer.render(message, settings.serverLabel(origin))
+        val rendered = SpyMessageRenderer.render(message, settings.serverLabel(origin), settings)
         Bukkit.getOnlinePlayers().forEach { viewer ->
             runCatching {
                 val shouldDeliver =

@@ -1,0 +1,28 @@
+schema: 1
+plugin: ARC Cross-Server Spy
+minecraft-version: 1.21.11
+minecraft-client-sha1: ba2df812c2d12e0219c489c4cd9a5e1f0760f5bd
+gallery-accent: '#00AA00'
+
+sources:
+  spy:
+    path: src/main/resources/modules/cross-server-spy.yml
+    root: display
+
+placeholders:
+  server: Выживание
+  sender: Alexey23
+  target: NorthAlex
+  content: /warp market
+
+surfaces:
+  chat-blocks:
+    - id: command-spy
+      text: spy:command
+      placeholders:
+        sender: ArchitectureMax
+        content: /warp market
+    - id: private-message-spy
+      text: spy:private-message
+      placeholders:
+        content: Ок, у ворот.
