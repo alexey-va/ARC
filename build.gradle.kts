@@ -215,6 +215,7 @@ val schedulingModuleResources =
 
 tasks {
     processResources {
+        inputs.property("pluginVersion", pluginVersion)
         filesMatching("plugin.yml") {
             expand(
                 "version" to pluginVersion,
