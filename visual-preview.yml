@@ -11,12 +11,15 @@ sources:
 
 placeholders:
   server: Выживание
+  marker: CSpy
   sender: Alexey23
   target: NorthAlex
   content: /warp market
 
 surfaces:
   chat-blocks:
+    - id: server-hover
+      text: spy:server-hover
     - id: command-spy
       text: spy:command
       placeholders:
@@ -25,4 +28,5 @@ surfaces:
     - id: private-message-spy
       text: spy:private-message
       placeholders:
+        marker: Spy
         content: Ок, у ворот.

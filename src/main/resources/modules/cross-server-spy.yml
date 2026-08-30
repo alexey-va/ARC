@@ -8,17 +8,20 @@ allowed-servers:
   - survival
   - parkour
 
-# Compact labels shown only on remote spy lines.
+# Compact labels shown only when hovering the CSpy/Spy technical marker.
 server-labels:
   - spawn=Спавн
   - survival=Выживание
   - parkour=Паркур
 
-# Mirrors CMI's local Spy.Command / Spy.Chat anatomy. Dynamic values are inserted
-# as literal Adventure text, so player commands and messages never become markup.
+# Mirrors CMI's local CSpy / Spy anatomy. The source server stays out of the
+# visible line and is attached to the technical marker as a hover tooltip.
+# Dynamic values are inserted as literal Adventure text, so player commands and
+# messages never become markup.
 display:
-  command: '<dark_purple>К<dark_green>Шпион<gray>[<dark_gray><sender><gray>][<dark_gray><server><gray>]: <white><content>'
-  private-message: '<dark_green>Шпион<gray>[<dark_gray><sender> <gray>-> <dark_gray><target><gray>][<dark_gray><server><gray>] <white><content>'
+  server-hover: 'Сервер: <server>'
+  command: '<marker><gray>[<dark_gray><sender><gray>]: <white><content>'
+  private-message: '<marker><gray>[<dark_gray><sender> <gray>-> <dark_gray><target><gray>] <white><content>'
 
 limits:
   max-payload-bytes: 8192

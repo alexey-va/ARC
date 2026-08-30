@@ -4,6 +4,8 @@ import com.google.gson.JsonParser
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.event.HoverEvent
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import ru.arc.config.ConfigManager
@@ -100,7 +102,7 @@ class SpyRelayProtocolTest : FreeSpec({
         settings.sensitiveCommands shouldBe setOf("cmi usermeta")
     }
 
-    "renderer keeps remote content literal and identifies the source server" {
+    "renderer keeps remote content literal and identifies the source server only on hover" {
         val message =
             commandMessage(now).copy(
                 type = SpyRelayType.CHAT,
@@ -108,19 +110,24 @@ class SpyRelayProtocolTest : FreeSpec({
                 content = "<click:run_command:'/op me'>hello</click>",
             )
         val rendered =
-            PlainTextComponentSerializer.plainText().serialize(
-                SpyMessageRenderer.render(message, "Выживание", testSettings()),
-            )
-        rendered shouldBe
-            "Шпион[SourcePlayer -> Target][Выживание] <click:run_command:'/op me'>hello</click>"
+            SpyMessageRenderer.render(message, "Выживание", testSettings())
+        PlainTextComponentSerializer.plainText().serialize(rendered) shouldBe
+            "Spy[SourcePlayer -> Target] <click:run_command:'/op me'>hello</click>"
+        val hover = rendered.firstHoverEvent()
+        hover shouldNotBe null
+        hover!!.action() shouldBe HoverEvent.Action.SHOW_TEXT
+        PlainTextComponentSerializer.plainText().serialize(hover.value() as Component) shouldBe "Сервер: Выживание"
     }
 
-    "renderer mirrors the local CMI CommandSpy anatomy before remote metadata" {
+    "renderer mirrors the local CMI CommandSpy anatomy without visible remote metadata" {
         val component = SpyMessageRenderer.render(commandMessage(now), "Выживание", testSettings())
         PlainTextComponentSerializer.plainText().serialize(component) shouldBe
-            "КШпион[SourcePlayer][Выживание]: /warp market"
+            "CSpy[SourcePlayer]: /warp market"
         LegacyComponentSerializer.legacySection().serialize(component) shouldBe
-            "§5К§2Шпион§7[§8SourcePlayer§7][§8Выживание§7]: §f/warp market"
+            "§5C§2Spy§7[§8SourcePlayer§7]: §f/warp market"
+        val hover = component.firstHoverEvent()
+        hover shouldNotBe null
+        PlainTextComponentSerializer.plainText().serialize(hover!!.value() as Component) shouldBe "Сервер: Выживание"
     }
 
     "configuration falls back when a display template loses required placeholders" {
@@ -128,10 +135,12 @@ class SpyRelayProtocolTest : FreeSpec({
         val config = ConfigManager.create(folder, "test.yml", "cross-server-spy-display-test")
         config.setString("display.command", "<red>Команда без данных")
         config.setString("display.private-message", "<green><sender> -> <target>: <content>")
+        config.setString("display.server-hover", "Сервер скрыт")
 
         val settings = CrossServerSpyConfig(config).settings
         settings.commandTemplate shouldBe CrossServerSpyConfig.DEFAULT_COMMAND_TEMPLATE
         settings.privateMessageTemplate shouldBe CrossServerSpyConfig.DEFAULT_PRIVATE_MESSAGE_TEMPLATE
+        settings.serverHoverTemplate shouldBe CrossServerSpyConfig.DEFAULT_SERVER_HOVER_TEMPLATE
     }
 })
 
@@ -160,6 +169,10 @@ internal fun testSettings(): CrossServerSpySettings =
         privateMessageCommands = setOf("msg", "tell"),
         replyCommands = setOf("reply", "r"),
         sensitiveCommands = CrossServerSpyConfig.DEFAULT_SENSITIVE_COMMANDS,
+        serverHoverTemplate = CrossServerSpyConfig.DEFAULT_SERVER_HOVER_TEMPLATE,
         commandTemplate = CrossServerSpyConfig.DEFAULT_COMMAND_TEMPLATE,
         privateMessageTemplate = CrossServerSpyConfig.DEFAULT_PRIVATE_MESSAGE_TEMPLATE,
     )
+
+private fun Component.firstHoverEvent(): HoverEvent<*>? =
+    hoverEvent() ?: children().firstNotNullOfOrNull(Component::firstHoverEvent)

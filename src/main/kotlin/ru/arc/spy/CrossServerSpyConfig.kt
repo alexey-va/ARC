@@ -18,6 +18,7 @@ data class CrossServerSpySettings(
     val privateMessageCommands: Set<String>,
     val replyCommands: Set<String>,
     val sensitiveCommands: Set<String>,
+    val serverHoverTemplate: String,
     val commandTemplate: String,
     val privateMessageTemplate: String,
 ) {
@@ -59,17 +60,23 @@ open class CrossServerSpyConfig(
                         config.stringList("security.sensitive-commands", DEFAULT_SENSITIVE_COMMANDS.toList()),
                         DEFAULT_SENSITIVE_COMMANDS,
                     ),
+                serverHoverTemplate =
+                    normalizeTemplate(
+                        config.string("display.server-hover", DEFAULT_SERVER_HOVER_TEMPLATE),
+                        DEFAULT_SERVER_HOVER_TEMPLATE,
+                        setOf("server"),
+                    ),
                 commandTemplate =
                     normalizeTemplate(
                         config.string("display.command", DEFAULT_COMMAND_TEMPLATE),
                         DEFAULT_COMMAND_TEMPLATE,
-                        setOf("server", "sender", "content"),
+                        setOf("marker", "sender", "content"),
                     ),
                 privateMessageTemplate =
                     normalizeTemplate(
                         config.string("display.private-message", DEFAULT_PRIVATE_MESSAGE_TEMPLATE),
                         DEFAULT_PRIVATE_MESSAGE_TEMPLATE,
-                        setOf("server", "sender", "target", "content"),
+                        setOf("marker", "sender", "target", "content"),
                     ),
             )
 
@@ -92,12 +99,11 @@ open class CrossServerSpyConfig(
                 "totp",
             )
         val DEFAULT_SERVER_LABELS = listOf("spawn=Спавн", "survival=Выживание", "parkour=Паркур")
+        const val DEFAULT_SERVER_HOVER_TEMPLATE = "Сервер: <server>"
         const val DEFAULT_COMMAND_TEMPLATE =
-            "<dark_purple>К<dark_green>Шпион<gray>[<dark_gray><sender><gray>]" +
-                "[<dark_gray><server><gray>]: <white><content>"
+            "<marker><gray>[<dark_gray><sender><gray>]: <white><content>"
         const val DEFAULT_PRIVATE_MESSAGE_TEMPLATE =
-            "<dark_green>Шпион<gray>[<dark_gray><sender> <gray>-> <dark_gray><target><gray>]" +
-                "[<dark_gray><server><gray>] <white><content>"
+            "<marker><gray>[<dark_gray><sender> <gray>-> <dark_gray><target><gray>] <white><content>"
 
         fun load(dataPath: Path): CrossServerSpyConfig =
             CrossServerSpyConfig(ConfigManager.ofModule(dataPath, "cross-server-spy.yml"))
