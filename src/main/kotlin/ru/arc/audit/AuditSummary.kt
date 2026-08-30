@@ -120,7 +120,7 @@ private data class AdminShopItemKey(
     val customItemId: String?,
 )
 
-private data class EconomyActionKey(
+internal data class EconomyActionKey(
     val source: String,
     val action: String,
 )
@@ -159,7 +159,7 @@ private class MutableJobRewardStats {
         )
 }
 
-private class JobsRewardsSummary {
+internal class JobsRewardsSummary {
     private val components = linkedMapOf<JobRewardKey, MutableJobRewardStats>()
     var income = 0.0
         private set
@@ -284,7 +284,7 @@ private class MutableAdminShopItemStats {
         part?.takeIf { total > 0.0 }?.div(total)?.coerceIn(0.0, 1.0)
 }
 
-private class AdminShopSalesSummary {
+internal class AdminShopSalesSummary {
     private val items = linkedMapOf<AdminShopItemKey, MutableAdminShopItemStats>()
     var income = 0.0
         private set
@@ -464,6 +464,7 @@ internal fun buildAuditSummary(
     val attemptsByAction = linkedMapOf<String, Long>()
     val attemptsBySource = linkedMapOf<String, Long>()
     val contextPresent = linkedMapOf<String, Long>()
+    val contextApplicable = linkedMapOf<String, Long>()
     val adminShopSales = AdminShopSalesSummary()
     val jobsRewards = JobsRewardsSummary()
     val concentrationGroupStats =
@@ -522,6 +523,18 @@ internal fun buildAuditSummary(
                 if (present) contextPresent.merge(field, 1L, Long::plus)
             }
             val source = transaction.normalizedSource.label
+            if (
+                transaction.normalizedRecordKind == EconomyRecordKind.TRANSACTION &&
+                transaction.normalizedSource in setOf(EconomySource.SHOP, EconomySource.AUTOSELL)
+            ) {
+                contextApplicable.merge("items", 1L, Long::plus)
+            }
+            if (
+                transaction.normalizedRecordKind == EconomyRecordKind.TRANSACTION &&
+                transaction.normalizedSource == EconomySource.JOBS
+            ) {
+                contextApplicable.merge("jobsBreakdown", 1L, Long::plus)
+            }
             val action = transaction.normalizedAction.label
             val accountKey = context?.accountId?.takeIf(String::isNotBlank) ?: auditData.name.lowercase()
             adminShopSales.add(accountKey, transaction)
@@ -585,12 +598,18 @@ internal fun buildAuditSummary(
         listOf("balance", "session", "world", "counterparty", "items", "correlation", "providerTimestamp", "action", "jobsBreakdown")
             .associateWith { field ->
                 val present = contextPresent[field] ?: 0L
+                val total = contextApplicable[field] ?: contextEligible
                 linkedMapOf(
                     "present" to present,
-                    "total" to contextEligible,
-                    "ratio" to if (contextEligible == 0L) 0.0 else present.toDouble() / contextEligible,
+                    "total" to total,
+                    "ratio" to if (total == 0L) 0.0 else present.toDouble() / total,
                 )
             }
+
+    val unclassifiedRecords = listOf("unknown", "legacy").sumOf { sources[it]?.records ?: 0L }
+    val unclassifiedOperations = listOf("unknown", "legacy").sumOf { sources[it]?.operations ?: 0L }
+    val unclassifiedAmount = listOf("unknown", "legacy").sumOf { (sources[it]?.income ?: 0.0) + (sources[it]?.expense ?: 0.0) }
+    val totalAbsoluteAmount = sources.values.sumOf { it.income + it.expense }
 
     val recentEvents =
         allRecords
@@ -648,6 +667,17 @@ internal fun buildAuditSummary(
                 "knownSupplyNet" to minted - burned,
                 "vaultObservedNet" to observedNet,
                 "supplyCoverage" to "known_mint_burn_only; bank_interest_and_transfer_fees_require_separate_reconciliation",
+            ),
+        "sourceCoverage" to
+            linkedMapOf(
+                "classifiedRecords" to (records - unclassifiedRecords),
+                "unclassifiedRecords" to unclassifiedRecords,
+                "classifiedRecordRatio" to if (records == 0L) 1.0 else (records - unclassifiedRecords).toDouble() / records,
+                "classifiedOperationRatio" to if (operations == 0L) 1.0 else (operations - unclassifiedOperations).toDouble() / operations,
+                "classifiedAmountRatio" to if (totalAbsoluteAmount == 0.0) 1.0 else (totalAbsoluteAmount - unclassifiedAmount) / totalAbsoluteAmount,
+                "unclassifiedOperations" to unclassifiedOperations,
+                "unclassifiedAbsoluteAmount" to unclassifiedAmount,
+                "unclassifiedSources" to listOf("unknown", "legacy"),
             ),
         "sources" to ranked(sources, "source"),
         "concentrationGroups" to
@@ -861,4 +891,413 @@ private fun derivePersistedAnomalies(
             best?.let(rapid::add)
         }
     return (large + rapid).sortedByDescending { abs((it["amount"] as Number).toDouble()) }.take(limit)
+}
+
+/**
+ * One-pass, bounded-memory counterpart of [buildAuditSummary].
+ *
+ * SQL feeds this accumulator in chronological order. It retains aggregates,
+ * the last requested events, and only the active rapid-income windows; it
+ * never materializes the full result set.
+ */
+internal class StreamingAuditSummary(
+    private val generatedAt: Long,
+    private val since: Long,
+    private val limit: Int,
+    private val serverFilter: String?,
+    private val rapidWindowMillis: Long,
+    private val rapidAmount: Double,
+    private val rapidTransactions: Int,
+    private val largeTransactionAmount: Double,
+    private val slimefunBuyOnlyPolicyEnabled: Boolean,
+    private val slimefunBuyOnlyPolicyActivatedAt: Long,
+    private val shopMaterials: Set<String>,
+    private val concentrationGroups: Map<String, Set<String>>,
+) {
+    private data class IncomePoint(val timestamp: Long, val amount: Double, val operations: Int)
+    private data class RapidState(
+        val points: ArrayDeque<IncomePoint> = ArrayDeque(),
+        var amount: Double = 0.0,
+        var operations: Int = 0,
+        var best: Map<String, Any?>? = null,
+    )
+
+    private val sources = linkedMapOf<String, MutableAuditStats>()
+    private val actions = linkedMapOf<EconomyActionKey, MutableAuditStats>()
+    private val players = linkedMapOf<String, MutableAuditStats>()
+    private val unknownOrigins = linkedMapOf<String, MutableAuditStats>()
+    private val attemptsByStatus = linkedMapOf<String, Long>()
+    private val attemptsByAction = linkedMapOf<String, Long>()
+    private val attemptsBySource = linkedMapOf<String, Long>()
+    private val contextPresent = linkedMapOf<String, Long>()
+    private val contextApplicable = linkedMapOf<String, Long>()
+    private val adminShopSales = AdminShopSalesSummary()
+    private val jobsRewards = JobsRewardsSummary()
+    private val concentrationGroupStats = concentrationGroups.mapValues { MutableAuditStats(trackBalanceProfile = true) }
+    private val recentEvents = ArrayDeque<Pair<String, Transaction>>()
+    private val recentFailures = ArrayDeque<Pair<String, Transaction>>()
+    private val recentPolicyViolations = ArrayDeque<Pair<String, Transaction>>()
+    private val policyPlayers = linkedSetOf<String>()
+    private val rapidStates = linkedMapOf<List<String>, RapidState>()
+    private val largeAnomalies = mutableListOf<Map<String, Any?>>()
+    private var policyRecords = 0L
+    private var policyOperations = 0L
+    private var policyIncome = 0.0
+    private var minted = 0.0
+    private var burned = 0.0
+    private var transferIn = 0.0
+    private var transferOut = 0.0
+    private var adjustments = 0.0
+    private var unknownNet = 0.0
+    private var internalNet = 0.0
+    private var observedNet = 0.0
+    private var operations = 0L
+    private var records = 0L
+    private var attempts = 0L
+    private var enrichedRecords = 0L
+    private var contextEligible = 0L
+    private var boundaryExcludedRecords = 0L
+    private var boundaryExcludedOperations = 0L
+    private var boundaryExcludedAbsoluteAmount = 0.0
+    private var futureExcludedRecords = 0L
+    private var futureExcludedOperations = 0L
+    private var futureExcludedAbsoluteAmount = 0.0
+    private var oldest: Long? = null
+    private var newest: Long? = null
+
+    fun accept(event: AuditEvent) {
+        val player = event.playerName
+        val transaction = event.transaction
+        if (transaction.timestamp2 < since) return
+        if (!serverFilter.isNullOrBlank() && transaction.normalizedServer != serverFilter) return
+        if (transaction.timestamp < since) {
+            boundaryExcludedRecords++
+            boundaryExcludedOperations += transaction.occurrenceCount
+            boundaryExcludedAbsoluteAmount += transaction.absoluteAmount
+            return
+        }
+        if (transaction.timestamp2 > generatedAt) {
+            futureExcludedRecords++
+            futureExcludedOperations += transaction.occurrenceCount
+            futureExcludedAbsoluteAmount += transaction.absoluteAmount
+            return
+        }
+        retainRecent(recentEvents, player to transaction)
+        if (transaction.normalizedStatus in setOf(EconomyEventStatus.FAILED, EconomyEventStatus.CANCELLED)) {
+            retainRecent(recentFailures, player to transaction)
+        }
+        if (transaction.normalizedRecordKind == EconomyRecordKind.ATTEMPT) {
+            attempts += transaction.occurrenceCount
+            attemptsByStatus.merge(transaction.normalizedStatus.name.lowercase(), transaction.occurrenceCount.toLong(), Long::plus)
+            attemptsByAction.merge(transaction.context?.action?.ifBlank { "unknown" } ?: "unknown", transaction.occurrenceCount.toLong(), Long::plus)
+            attemptsBySource.merge(transaction.normalizedSource.label, transaction.occurrenceCount.toLong(), Long::plus)
+            observeCoverage(transaction)
+            return
+        }
+        if (transaction.normalizedStatus !in setOf(EconomyEventStatus.SUCCEEDED, EconomyEventStatus.REVERTED)) return
+
+        contextEligible++
+        if (transaction.context != null) enrichedRecords++
+        observeContext(transaction)
+        val context = transaction.context
+        val source = transaction.normalizedSource.label
+        if (
+            transaction.normalizedRecordKind == EconomyRecordKind.TRANSACTION &&
+            transaction.normalizedSource in setOf(EconomySource.SHOP, EconomySource.AUTOSELL)
+        ) {
+            contextApplicable.merge("items", 1L, Long::plus)
+        }
+        if (
+            transaction.normalizedRecordKind == EconomyRecordKind.TRANSACTION &&
+            transaction.normalizedSource == EconomySource.JOBS
+        ) {
+            contextApplicable.merge("jobsBreakdown", 1L, Long::plus)
+        }
+        val action = transaction.normalizedAction.label
+        val accountKey = context?.accountId?.takeIf(String::isNotBlank) ?: player.lowercase()
+        adminShopSales.add(accountKey, transaction)
+        jobsRewards.add(accountKey, transaction)
+        sources.computeIfAbsent(source) { MutableAuditStats(trackBalanceProfile = true) }
+            .add(accountKey, transaction, since)
+        concentrationGroups.forEach { (groupId, groupSources) ->
+            if (source in groupSources) concentrationGroupStats.getValue(groupId).add(accountKey, transaction, since)
+        }
+        actions.computeIfAbsent(EconomyActionKey(source, action)) { MutableAuditStats(trackBalanceProfile = true) }
+            .add(accountKey, transaction, since)
+        players.computeIfAbsent(player) { MutableAuditStats() }.add(accountKey, transaction, since)
+        if (transaction.normalizedSource == EconomySource.UNKNOWN) {
+            unknownOrigins.computeIfAbsent(transaction.origin.orEmpty().ifBlank { "unresolved" }) { MutableAuditStats() }
+                .add(accountKey, transaction, since)
+        }
+
+        when (transaction.normalizedFlow) {
+            EconomyFlow.MINT -> minted += transaction.amount.coerceAtLeast(0.0)
+            EconomyFlow.BURN -> burned += (-transaction.amount).coerceAtLeast(0.0)
+            EconomyFlow.TRANSFER ->
+                if (transaction.amount > 0) transferIn += transaction.amount else transferOut += abs(transaction.amount)
+            EconomyFlow.ADJUSTMENT -> adjustments += transaction.amount
+            EconomyFlow.INTERNAL -> internalNet += transaction.amount
+            EconomyFlow.UNKNOWN -> unknownNet += transaction.amount
+        }
+        if (transaction.normalizedFlow != EconomyFlow.INTERNAL) observedNet += transaction.amount
+        operations += transaction.occurrenceCount
+        records++
+        observeCoverage(transaction)
+        observePolicy(player, transaction)
+        observeAnomalies(player, transaction)
+    }
+
+    fun finish(anomalies: List<EconomyAnomaly>): Map<String, Any?> {
+        fun ranked(stats: Map<String, MutableAuditStats>, labelName: String): List<Map<String, Any?>> =
+            stats.entries.sortedByDescending { it.value.volume() }.take(limit)
+                .map { it.value.toMap(labelName, it.key) }
+
+        val contextCoverage =
+            listOf("balance", "session", "world", "counterparty", "items", "correlation", "providerTimestamp", "action", "jobsBreakdown")
+                .associateWith { field ->
+                    val present = contextPresent[field] ?: 0L
+                    val total = contextApplicable[field] ?: contextEligible
+                    linkedMapOf(
+                        "present" to present,
+                        "total" to total,
+                        "ratio" to if (total == 0L) 0.0 else present.toDouble() / total,
+                    )
+                }
+        val unclassifiedRecords = listOf("unknown", "legacy").sumOf { sources[it]?.records ?: 0L }
+        val unclassifiedOperations = listOf("unknown", "legacy").sumOf { sources[it]?.operations ?: 0L }
+        val unclassifiedAmount = listOf("unknown", "legacy").sumOf { (sources[it]?.income ?: 0.0) + (sources[it]?.expense ?: 0.0) }
+        val totalAbsoluteAmount = sources.values.sumOf { it.income + it.expense }
+        val rapidAnomalies = rapidStates.values.mapNotNull(RapidState::best)
+        val derivedAnomalies =
+            (largeAnomalies + rapidAnomalies)
+                .sortedByDescending { abs((it["amount"] as Number).toDouble()) }
+                .take(limit)
+        val policyViolations =
+            linkedMapOf(
+                "policies" to
+                    listOf(
+                        linkedMapOf(
+                            "policy" to EconomyPolicy.SLIMEFUN_BUY_ONLY,
+                            "enabled" to slimefunBuyOnlyPolicyEnabled,
+                            "activatedAt" to slimefunBuyOnlyPolicyActivatedAt.takeIf { it > 0L },
+                            "records" to policyRecords,
+                            "operations" to policyOperations,
+                            "income" to policyIncome,
+                            "players" to policyPlayers.size,
+                        ),
+                    ),
+                "recent" to
+                    recentPolicyViolations.toList().asReversed().map { entry ->
+                        LinkedHashMap(ledgerEventMap(entry)).apply {
+                            put("policy", EconomyPolicy.SLIMEFUN_BUY_ONLY)
+                            put("evidence", "persisted_admin_shop_sale_after_policy_activation")
+                        }
+                    },
+            )
+
+        return linkedMapOf(
+            "ledgerSchemaVersion" to 2,
+            "generatedAt" to generatedAt,
+            "since" to since,
+            "serverFilter" to serverFilter,
+            "windowBoundary" to
+                linkedMapOf(
+                    "exact" to (boundaryExcludedRecords == 0L && futureExcludedRecords == 0L),
+                    "excludedCrossingRecords" to boundaryExcludedRecords,
+                    "excludedCrossingOperations" to boundaryExcludedOperations,
+                    "excludedCrossingAbsoluteAmount" to boundaryExcludedAbsoluteAmount,
+                    "excludedFutureRecords" to futureExcludedRecords,
+                    "excludedFutureOperations" to futureExcludedOperations,
+                    "excludedFutureAbsoluteAmount" to futureExcludedAbsoluteAmount,
+                    "evidence" to "records crossing since or extending past generatedAt are excluded because their amount cannot be split exactly",
+                ),
+            "coverage" to
+                linkedMapOf(
+                    "oldest" to oldest,
+                    "newest" to newest,
+                    "records" to records,
+                    "operations" to operations,
+                    "players" to players.size,
+                    "attempts" to attempts,
+                    "enrichedRecords" to enrichedRecords,
+                ),
+            "totals" to
+                linkedMapOf(
+                    "minted" to minted,
+                    "burned" to burned,
+                    "classifiedMintBurnNet" to minted - burned,
+                    "transferIn" to transferIn,
+                    "transferOut" to transferOut,
+                    "transferNet" to transferIn - transferOut,
+                    "adjustments" to adjustments,
+                    "unknownNet" to unknownNet,
+                    "internalNet" to internalNet,
+                    "knownSupplyNet" to minted - burned,
+                    "vaultObservedNet" to observedNet,
+                    "supplyCoverage" to "known_mint_burn_only; bank_interest_and_transfer_fees_require_separate_reconciliation",
+                ),
+            "sourceCoverage" to
+                linkedMapOf(
+                    "classifiedRecords" to (records - unclassifiedRecords),
+                    "unclassifiedRecords" to unclassifiedRecords,
+                    "classifiedRecordRatio" to if (records == 0L) 1.0 else (records - unclassifiedRecords).toDouble() / records,
+                    "classifiedOperationRatio" to if (operations == 0L) 1.0 else (operations - unclassifiedOperations).toDouble() / operations,
+                    "classifiedAmountRatio" to if (totalAbsoluteAmount == 0.0) 1.0 else (totalAbsoluteAmount - unclassifiedAmount) / totalAbsoluteAmount,
+                    "unclassifiedOperations" to unclassifiedOperations,
+                    "unclassifiedAbsoluteAmount" to unclassifiedAmount,
+                    "unclassifiedSources" to listOf("unknown", "legacy"),
+                ),
+            "sources" to ranked(sources, "source"),
+            "concentrationGroups" to
+                linkedMapOf(
+                    "selection" to
+                        linkedMapOf(
+                            "requestedGroups" to concentrationGroups.toSortedMap().mapValues { (_, value) -> value.sorted() },
+                            "complete" to true,
+                        ),
+                    "groups" to
+                        concentrationGroups.keys.sorted().map { groupId ->
+                            LinkedHashMap(concentrationGroupStats.getValue(groupId).toMap("group", groupId)).apply {
+                                put("sources", concentrationGroups.getValue(groupId).sorted())
+                            }
+                        },
+                ),
+            "actions" to
+                actions.entries.sortedByDescending { it.value.volume() }.take(limit).map { (key, stats) ->
+                    LinkedHashMap(stats.toMap("source", key.source)).apply { put("action", key.action) }
+                },
+            "balanceProfileEvidence" to
+                linkedMapOf(
+                    "distributionUnit" to "per_player_window_mint_or_burn_total",
+                    "percentileMethod" to "nearest_rank",
+                    "bucketMinutes" to ACTIVITY_BUCKET_MINUTES,
+                    "unit" to "unique_player_source_or_action_bucket",
+                    "interpretation" to "five_minute_presence_proxy_not_measured_session_duration",
+                ),
+            "attempts" to
+                linkedMapOf(
+                    "total" to attempts,
+                    "byStatus" to attemptsByStatus.toSortedMap(),
+                    "byAction" to attemptsByAction.toSortedMap(),
+                    "bySource" to attemptsBySource.toSortedMap(),
+                ),
+            "contextCoverage" to contextCoverage,
+            "adminShopSales" to adminShopSales.toMap(limit, shopMaterials),
+            "jobsRewards" to jobsRewards.toMap(limit),
+            "topPlayers" to ranked(players, "player"),
+            "unknownOrigins" to ranked(unknownOrigins, "origin"),
+            "policyViolations" to policyViolations,
+            "recentAnomalies" to
+                anomalies.filter { anomaly ->
+                    anomaly.timestamp >= since && (serverFilter.isNullOrBlank() || anomaly.server == serverFilter)
+                }.takeLast(limit),
+            "derivedAnomalies" to derivedAnomalies,
+            "recentEvents" to recentEvents.toList().asReversed().map(::ledgerEventMap),
+            "recentFailures" to recentFailures.toList().asReversed().map(::ledgerEventMap),
+        )
+    }
+
+    private fun observeContext(transaction: Transaction) {
+        val context = transaction.context
+        linkedMapOf(
+            "balance" to (context?.balanceBefore != null && context.balanceAfter != null),
+            "session" to !context?.sessionId.isNullOrBlank(),
+            "world" to !context?.world.isNullOrBlank(),
+            "counterparty" to (context?.counterparty != null),
+            "items" to !context?.normalizedItems.isNullOrEmpty(),
+            "correlation" to !context?.correlationId.isNullOrBlank(),
+            "providerTimestamp" to (context?.providerTimestamp != null),
+            "action" to !context?.action.isNullOrBlank(),
+            "jobsBreakdown" to !context?.normalizedJobBreakdown.isNullOrEmpty(),
+        ).forEach { (field, present) ->
+            if (present) contextPresent.merge(field, 1L, Long::plus)
+        }
+    }
+
+    private fun observeCoverage(transaction: Transaction) {
+        oldest = minOf(oldest ?: transaction.timestamp, transaction.timestamp)
+        newest = maxOf(newest ?: transaction.timestamp2, transaction.timestamp2)
+    }
+
+    private fun observePolicy(player: String, transaction: Transaction) {
+        if (
+            !EconomyPolicy.isSlimefunBuyOnlyViolation(
+                amount = transaction.amount,
+                source = transaction.normalizedSource,
+                flow = transaction.normalizedFlow,
+                context = transaction.context,
+                eventTimestamp = transaction.context?.providerTimestamp ?: transaction.timestamp2,
+                enabled = slimefunBuyOnlyPolicyEnabled,
+                activatedAt = slimefunBuyOnlyPolicyActivatedAt,
+            )
+        ) return
+        policyRecords++
+        policyOperations += transaction.occurrenceCount
+        policyIncome += transaction.amount.coerceAtLeast(0.0)
+        policyPlayers += player.lowercase()
+        retainRecent(recentPolicyViolations, player to transaction)
+    }
+
+    private fun observeAnomalies(player: String, transaction: Transaction) {
+        if (largeTransactionAmount > 0.0 && abs(transaction.amount) >= largeTransactionAmount) {
+            largeAnomalies +=
+                linkedMapOf(
+                    "kind" to "large_persisted_aggregate",
+                    "player" to player,
+                    "amount" to transaction.amount,
+                    "operations" to transaction.occurrenceCount,
+                    "source" to transaction.normalizedSource.label,
+                    "flow" to transaction.normalizedFlow.label,
+                    "server" to transaction.normalizedServer,
+                    "currency" to transaction.normalizedCurrency,
+                    "timestamp" to transaction.timestamp2,
+                )
+            largeAnomalies.sortByDescending { abs((it["amount"] as Number).toDouble()) }
+            if (largeAnomalies.size > limit) largeAnomalies.removeLast()
+        }
+        if (
+            transaction.amount <= 0.0 ||
+            transaction.normalizedFlow in setOf(EconomyFlow.ADJUSTMENT, EconomyFlow.INTERNAL)
+        ) return
+        val key =
+            listOf(
+                player.lowercase(),
+                transaction.normalizedSource.label,
+                transaction.normalizedServer,
+                transaction.normalizedCurrency,
+            )
+        val state = rapidStates.computeIfAbsent(key) { RapidState() }
+        val now = transaction.timestamp2
+        state.points.addLast(IncomePoint(now, transaction.amount, transaction.occurrenceCount))
+        state.amount += transaction.amount
+        state.operations += transaction.occurrenceCount
+        while (state.points.isNotEmpty() && state.points.first().timestamp < now - rapidWindowMillis) {
+            val removed = state.points.removeFirst()
+            state.amount -= removed.amount
+            state.operations -= removed.operations
+        }
+        if (state.amount >= rapidAmount || state.operations >= rapidTransactions) {
+            val candidate =
+                linkedMapOf<String, Any?>(
+                    "kind" to "rapid_income_persisted",
+                    "player" to player,
+                    "amount" to state.amount,
+                    "operations" to state.operations,
+                    "source" to key[1],
+                    "server" to key[2],
+                    "currency" to key[3],
+                    "timestamp" to now,
+                    "windowMillis" to rapidWindowMillis,
+                )
+            if (state.best == null || state.amount > (state.best!!["amount"] as Number).toDouble()) state.best = candidate
+        }
+    }
+
+    private fun retainRecent(
+        records: ArrayDeque<Pair<String, Transaction>>,
+        record: Pair<String, Transaction>,
+    ) {
+        records.addLast(record)
+        while (records.size > limit) records.removeFirst()
+    }
 }

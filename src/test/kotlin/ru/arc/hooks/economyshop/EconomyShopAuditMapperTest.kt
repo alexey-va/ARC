@@ -22,6 +22,9 @@ class EconomyShopAuditMapperTest : FreeSpec({
             listOf(100.0, 110.00000000000001, 114.99999999999999, 125.0)
         EconomyShopAuditMapper.sourceForContext("auto_sell_chest", EconomySource.SHOP) shouldBe EconomySource.AUTOSELL
         EconomyShopAuditMapper.sourceForContext("sell_all_command", EconomySource.SHOP) shouldBe EconomySource.SHOP
+        EconomyShopAuditMapper.pendingAmountCandidates("SELL_ALL_COMMAND", 50.0, listOf(2.0)) shouldBe listOf(50.0)
+        EconomyShopAuditMapper.pendingAmountCandidates("AUTO_SELL_CHEST", 50.0, listOf(1.0, 1.25)) shouldBe
+            listOf(50.0, 62.5)
     }
 
     "keeps cancellation and failure separate without inventing a currency delta" {

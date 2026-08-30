@@ -8,6 +8,7 @@ import kotlin.math.abs
 /** Correlates a structured shop attempt with RedisEconomy's later balance event. */
 object EconomyPendingContextTracker {
     private data class Pending(
+        val token: String,
         val expectedAmounts: List<Double>,
         val context: EconomyLedgerContext,
         val source: EconomySource?,
@@ -22,9 +23,9 @@ object EconomyPendingContextTracker {
         context: EconomyLedgerContext,
         now: Long,
         source: EconomySource? = null,
-    ) {
-        val amount = expectedAmount?.takeIf(Double::isFinite) ?: return
-        register(playerId, listOf(amount), context, now, source)
+    ): String? {
+        val amount = expectedAmount?.takeIf(Double::isFinite) ?: return null
+        return register(playerId, listOf(amount), context, now, source)
     }
 
     fun register(
@@ -33,12 +34,15 @@ object EconomyPendingContextTracker {
         context: EconomyLedgerContext,
         now: Long,
         source: EconomySource? = null,
-    ) {
+    ): String? {
         val amounts = expectedAmounts.asSequence().filter(Double::isFinite).distinct().toList()
-        if (amounts.isEmpty()) return
+        if (amounts.isEmpty()) return null
+        val token = UUID.randomUUID().toString()
         val queue = pending.computeIfAbsent(playerId) { ConcurrentLinkedDeque() }
-        queue.addLast(Pending(amounts, context, source, now + TTL_MILLIS))
+        queue.removeIf { it.expiresAt < now }
+        queue.addLast(Pending(token, amounts, context, source, now + TTL_MILLIS))
         while (queue.size > MAX_PENDING_PER_PLAYER) queue.pollFirst()
+        return token
     }
 
     fun consume(playerId: UUID, amount: Double, now: Long, source: EconomySource? = null): EconomyLedgerContext? {
@@ -51,6 +55,26 @@ object EconomyPendingContextTracker {
         if (match != null) queue.remove(match)
         if (queue.isEmpty()) pending.remove(playerId, queue)
         return match?.context?.asTransaction()
+    }
+
+    fun cancel(playerId: UUID, token: String) {
+        val queue = pending[playerId] ?: return
+        queue.removeIf { it.token == token }
+        if (queue.isEmpty()) pending.remove(playerId, queue)
+    }
+
+    fun cancelMatching(playerId: UUID, amount: Double, source: EconomySource? = null) {
+        val queue = pending[playerId] ?: return
+        val match = queue.firstOrNull { candidate ->
+            (source == null || candidate.source == source) &&
+                candidate.expectedAmounts.any { approximatelyEqualMoney(it, amount) }
+        }
+        if (match != null) queue.remove(match)
+        if (queue.isEmpty()) pending.remove(playerId, queue)
+    }
+
+    fun clear(playerId: UUID) {
+        pending.remove(playerId)
     }
 
     internal fun clear() = pending.clear()

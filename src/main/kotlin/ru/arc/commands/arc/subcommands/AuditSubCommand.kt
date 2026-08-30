@@ -4,6 +4,7 @@ import org.bukkit.command.CommandSender
 import ru.arc.audit.AuditFilter
 import ru.arc.audit.AuditManager
 import ru.arc.commands.arc.*
+import ru.arc.core.Tasks
 import ru.arc.xserver.playerlist.PlayerManager
 
 /**
@@ -34,8 +35,7 @@ object AuditSubCommand : SubCommand {
 
         // /arc audit clearall
         if (firstArg.equals("clearall", ignoreCase = true)) {
-            AuditManager.clearAll()
-            sender.sendMessage(CommandConfig.auditCleared())
+            completeClear(sender, AuditManager.clearAll()) { CommandConfig.auditCleared() }
             return true
         }
 
@@ -43,8 +43,7 @@ object AuditSubCommand : SubCommand {
 
         // /arc audit <player> clear
         if (args.size >= 2 && args[1].equals("clear", ignoreCase = true)) {
-            AuditManager.clear(playerName)
-            sender.sendMessage(CommandConfig.auditClearedFor(playerName))
+            completeClear(sender, AuditManager.clear(playerName)) { CommandConfig.auditClearedFor(playerName) }
             return true
         }
 
@@ -71,6 +70,27 @@ object AuditSubCommand : SubCommand {
             2 -> (listOf("1", "2", "3", "4", "5", "clear") + filters).tabComplete(args[1])
             3 -> filters.tabComplete(args[2])
             else -> null
+        }
+    }
+
+    private fun completeClear(
+        sender: CommandSender,
+        completion: java.util.concurrent.CompletableFuture<Int>,
+        success: () -> net.kyori.adventure.text.Component,
+    ) {
+        if (completion.isDone) {
+            runCatching(completion::join)
+                .onSuccess { sender.sendMessage(success()) }
+                .onFailure { sender.sendMessage("Audit clear failed; see server log") }
+            return
+        }
+        completion.whenComplete { _, failure ->
+            Tasks.scheduler.runSync(
+                Runnable {
+                    if (failure == null) sender.sendMessage(success())
+                    else sender.sendMessage("Audit clear failed; see server log")
+                },
+            )
         }
     }
 }

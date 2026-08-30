@@ -8,11 +8,14 @@ import ru.arc.core.Tasks
 import ru.arc.core.modules.EconomyModule
 import ru.arc.metrics.MetricsModule
 import ru.arc.util.Logging.error
+import ru.arc.util.Logging.info
 import ru.arc.xserver.playerlist.PlayerManager
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Менеджер аудита экономических операций.
@@ -27,6 +30,7 @@ object AuditManager {
     private lateinit var service: AuditService
     private lateinit var config: AuditConfig
     private var balanceHistoryTask: ru.arc.core.ScheduledTask? = null
+    private val migrationReport = AtomicReference<AuditMigrationReport?>()
     private val sessionTracker = EconomySessionTracker()
 
     private val balanceHistoryPath: Path by lazy {
@@ -40,18 +44,54 @@ object AuditManager {
      */
     @JvmStatic
     fun init() {
+        migrationReport.set(null)
         val scheduler = Tasks.scheduler
         config = AuditConfig.load()
 
-        val repository: AuditRepository = if (ARC.redisManager != null) {
-            RedisAuditRepository.create()
-        } else {
-            InMemoryAuditRepository()
-        }
-
         val monitor = EconomyAuditMonitor(config, registryProvider = MetricsModule::registry)
+        val redisStore =
+            if (config.storageMode == AuditStorageMode.SQL) {
+                null
+            } else {
+                RedisAuditEventStore(
+                    if (ARC.redisManager != null) RedisAuditRepository.create() else InMemoryAuditRepository(),
+                )
+            }
+        val sqlStore =
+            if (config.storageMode == AuditStorageMode.REDIS) {
+                null
+            } else {
+                SqlAuditEventStore.open(
+                    config = requireNotNull(config.mysql) { "Audit MySQL config is required" },
+                    telemetry = AuditStorageTelemetry(MetricsModule::registry, config.storageMode),
+                    writerSettings =
+                        AuditWriterSettings(
+                            batchSize = config.writeBatchSize,
+                            flushIntervalMillis = config.writeFlushIntervalMillis,
+                            maximumPendingEvents = config.maximumPendingEvents,
+                            retryIntervalMillis = config.writeRetryIntervalMillis,
+                            shutdownTimeoutSeconds = config.shutdownTimeoutSeconds.toLong(),
+                            jobsCoalesceWindowMillis = config.jobsCoalesceWindowSeconds * 1_000L,
+                            jobsCoalesceMaximumEvents = config.jobsCoalesceMaximumEvents,
+                        ),
+                    maintenanceSettings =
+                        AuditMaintenanceSettings(
+                            enabled = ARC.serverName.equals(config.cleanupOwnerServer, ignoreCase = true),
+                            policy = AuditRetentionPolicy(config.retentionDays, config.jobsRawRetentionDays),
+                            intervalHours = config.cleanupIntervalHours.toLong(),
+                            maxCompactionDaysPerRun = config.maxCompactionDaysPerRun,
+                            deleteBatchSize = config.cleanupDeleteBatchSize,
+                        ),
+                )
+            }
+        val store =
+            when (config.storageMode) {
+                AuditStorageMode.REDIS -> requireNotNull(redisStore)
+                AuditStorageMode.DUAL -> DualWriteAuditEventStore(requireNotNull(redisStore), requireNotNull(sqlStore))
+                AuditStorageMode.SQL -> requireNotNull(sqlStore)
+            }
         service = AuditService(
-            repository = repository,
+            eventStore = store,
             config = config,
             scheduler = scheduler,
             monitor = monitor,
@@ -59,6 +99,26 @@ object AuditManager {
         )
 
         service.start()
+        if (
+            config.storageMode == AuditStorageMode.DUAL &&
+            ARC.serverName.equals(config.migrationOwnerServer, ignoreCase = true)
+        ) {
+            AuditLegacyMigration(requireNotNull(redisStore), requireNotNull(sqlStore), config.migrationBatchSize).migrate()
+                .whenComplete { report, failure ->
+                    if (failure != null) {
+                        error("Audit Redis-to-SQL migration failed", failure)
+                    } else {
+                        migrationReport.set(report)
+                        info(
+                            "Audit Redis-to-SQL migration finished: scanned={}, inserted={}, duplicates={}, failed={}",
+                            report.scanned,
+                            report.inserted,
+                            report.duplicates,
+                            report.failed,
+                        )
+                    }
+                }
+        }
         ensureBalanceHistoryDirectory()
         startBalanceHistoryTask(scheduler)
     }
@@ -68,6 +128,7 @@ object AuditManager {
      */
     @JvmStatic
     fun init(customService: AuditService, customConfig: AuditConfig = AuditConfig.default()) {
+        migrationReport.set(null)
         service = customService
         config = customConfig
         service.start()
@@ -141,6 +202,7 @@ object AuditManager {
     fun leave(player: Player) {
         service.playerLeft(player.name)
         sessionTracker.left(player.uniqueId, player.world.name, System.currentTimeMillis())
+        EconomyPendingContextTracker.clear(player.uniqueId)
     }
 
     @JvmStatic
@@ -208,6 +270,13 @@ object AuditManager {
     fun weight(): Long = service.totalWeight()
 
     @JvmStatic
+    fun weightAsync(): CompletableFuture<Long> = service.totalWeightAsync()
+
+    @JvmStatic
+    fun storageStatusAsync(): CompletableFuture<AuditStorageStatus> =
+        service.storageStatusAsync().thenApply { status -> status.copy(migration = migrationReport.get()) }
+
+    @JvmStatic
     fun economySummary(
         hours: Int,
         limit: Int,
@@ -216,6 +285,16 @@ object AuditManager {
         concentrationGroups: Map<String, Set<String>> = emptyMap(),
     ): Map<String, Any?> =
         service.economySummary(hours, limit, serverFilter, shopMaterials, concentrationGroups)
+
+    @JvmStatic
+    fun economySummaryAsync(
+        hours: Int,
+        limit: Int,
+        serverFilter: String? = null,
+        shopMaterials: Set<String> = emptySet(),
+        concentrationGroups: Map<String, Set<String>> = emptyMap(),
+    ): CompletableFuture<Map<String, Any?>> =
+        service.economySummaryAsync(hours, limit, serverFilter, shopMaterials, concentrationGroups)
 
     @JvmStatic
     fun economySummarySince(
@@ -228,6 +307,16 @@ object AuditManager {
         service.economySummarySince(sinceEpochMs, limit, serverFilter, shopMaterials, concentrationGroups)
 
     @JvmStatic
+    fun economySummarySinceAsync(
+        sinceEpochMs: Long,
+        limit: Int,
+        serverFilter: String? = null,
+        shopMaterials: Set<String> = emptySet(),
+        concentrationGroups: Map<String, Set<String>> = emptyMap(),
+    ): CompletableFuture<Map<String, Any?>> =
+        service.economySummarySinceAsync(sinceEpochMs, limit, serverFilter, shopMaterials, concentrationGroups)
+
+    @JvmStatic
     fun sendAudit(audience: Audience, playerName: String, page: Int, filter: AuditFilter) {
         service.sendAudit(audience, playerName, page, filter)
     }
@@ -235,14 +324,10 @@ object AuditManager {
     // ==================== Clear ====================
 
     @JvmStatic
-    fun clear(playerName: String) {
-        service.clearPlayer(playerName)
-    }
+    fun clear(playerName: String): CompletableFuture<Int> = service.clearPlayerAsync(playerName)
 
     @JvmStatic
-    fun clearAll() {
-        service.clearAll()
-    }
+    fun clearAll(): CompletableFuture<Int> = service.clearAllAsync()
 
     // ==================== Service Access ====================
 

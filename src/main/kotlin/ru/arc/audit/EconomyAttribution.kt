@@ -22,6 +22,7 @@ enum class EconomySource(val label: String, val type: Type) {
     QUESTS("quests", Type.QUEST),
     GAMBLING("gambling", Type.GAMBLING),
     PUBLIC_PROJECTS("public_projects", Type.ARC),
+    FARMS("farms", Type.ARC),
     DUNGEON_ENTRY("dungeon_entry", Type.ARC),
     MOUNTS("mounts", Type.ARC),
     CMI("cmi", Type.CMI),
@@ -240,7 +241,11 @@ object EconomyAttributionResolver {
             haystack.contains("arc-mount:") || haystack.contains("arc-mount-refund:") -> EconomySource.MOUNTS
             haystack.contains("reset balance") || haystack.contains("set balance") -> EconomySource.BALANCE_SET
             haystack.contains("commandgive") || haystack.contains("commandtake") -> EconomySource.ADMIN_COMMAND
-            haystack.contains("gamingmesh.jobs") || haystack.contains("zrips.jobs") -> EconomySource.JOBS
+            haystack.contains("net.minecraft.commands.execution.tasks.executecommand") -> EconomySource.ADMIN_COMMAND
+            haystack.contains("gamingmesh.jobs") ||
+                haystack.contains("zrips.jobs") ||
+                haystack.contains("ruscrafting.ecojobs") -> EconomySource.JOBS
+            haystack.contains("ru.ruscrafting.farms") -> EconomySource.FARMS
             haystack.contains("autosellchest") -> EconomySource.AUTOSELL
             haystack.contains("economyshopgui") -> EconomySource.SHOP
             haystack.contains("customfishing") -> EconomySource.CUSTOM_FISHING

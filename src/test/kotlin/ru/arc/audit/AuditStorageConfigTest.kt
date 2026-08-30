@@ -48,9 +48,23 @@ class AuditStorageConfigTest {
                   socket-timeout-ms: 9000
                   validation-timeout-ms: 1000
                   max-lifetime-ms: 900000
+                writer:
+                  batch-size: 250
+                  flush-interval-ms: 250
+                  maximum-pending-events: 12000
+                  retry-interval-ms: 1500
+                  jobs-coalesce-window-seconds: 75
+                  jobs-coalesce-maximum-events: 900
               migration:
                 owner-server: survival
                 batch-size: 750
+              cleanup:
+                owner-server: survival
+                interval-hours: 24
+                retention-days: 30
+                jobs-raw-retention-days: 7
+                max-compaction-days-per-run: 5
+                delete-batch-size: 10000
             """.trimIndent(),
         )
 
@@ -60,6 +74,18 @@ class AuditStorageConfigTest {
         assertEquals(17, config.shutdownTimeoutSeconds)
         assertEquals("survival", config.migrationOwnerServer)
         assertEquals(750, config.migrationBatchSize)
+        assertEquals(250, config.writeBatchSize)
+        assertEquals(250L, config.writeFlushIntervalMillis)
+        assertEquals(12_000, config.maximumPendingEvents)
+        assertEquals(1_500L, config.writeRetryIntervalMillis)
+        assertEquals(75, config.jobsCoalesceWindowSeconds)
+        assertEquals(900, config.jobsCoalesceMaximumEvents)
+        assertEquals(24, config.cleanupIntervalHours)
+        assertEquals("survival", config.cleanupOwnerServer)
+        assertEquals(30, config.retentionDays)
+        assertEquals(7, config.jobsRawRetentionDays)
+        assertEquals(5, config.maxCompactionDaysPerRun)
+        assertEquals(10_000, config.cleanupDeleteBatchSize)
         val mysql = requireNotNull(config.mysql)
         assertEquals("db.internal", mysql.host)
         assertEquals(3307, mysql.port)
@@ -97,6 +123,18 @@ class AuditStorageConfigTest {
               shutdown-timeout-seconds: 500
               migration:
                 batch-size: 2
+              mysql:
+                writer:
+                  batch-size: 50000
+                  flush-interval-ms: 1
+                  maximum-pending-events: 10
+                  retry-interval-ms: 1
+              cleanup:
+                interval-hours: 100
+                retention-days: 2
+                jobs-raw-retention-days: 90
+                max-compaction-days-per-run: 100
+                delete-batch-size: 2
             """.trimIndent(),
         )
 
@@ -104,6 +142,15 @@ class AuditStorageConfigTest {
 
         assertEquals(60, config.shutdownTimeoutSeconds)
         assertEquals(100, config.migrationBatchSize)
+        assertEquals(1_000, config.writeBatchSize)
+        assertEquals(25L, config.writeFlushIntervalMillis)
+        assertEquals(1_000, config.maximumPendingEvents)
+        assertEquals(100L, config.writeRetryIntervalMillis)
+        assertEquals(24, config.cleanupIntervalHours)
+        assertEquals(7, config.retentionDays)
+        assertEquals(7, config.jobsRawRetentionDays)
+        assertEquals(31, config.maxCompactionDaysPerRun)
+        assertEquals(1_000, config.cleanupDeleteBatchSize)
     }
 
     @Test

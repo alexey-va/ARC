@@ -31,12 +31,12 @@
 
 **Interfaces:**
 - Produces: `AuditEvent(playerName: String, transaction: Transaction)`, `AuditPage(records: List<Transaction>, totalRecords: Long)`, `AuditStorageMode`, `AuditStorageStatus`, and `AuditEventStore` methods `append`, `page`, `scan`, `count`, `clearPlayer`, `clearAll`, `prune`, `status`, `close`.
-- Produces: `AuditConfig.storageMode`, `mysql`, `migrationOwnerServer`, `migrationBatchSize`, and `shutdownTimeoutSeconds`.
+- Produces: `AuditConfig.storageMode`, `mysql`, `migrationOwnerServer`, `migrationBatchSize`, `writeBatchSize`, `writeFlushIntervalMillis`, `maximumPendingEvents`, `cleanupIntervalHours`, `jobsRawRetentionDays`, `retentionDays`, `cleanupDeleteBatchSize`, and `shutdownTimeoutSeconds`.
 
 - [ ] **Step 1: Write failing storage-config and event-contract tests**
 
-  Cover normalized modes, mandatory SQL fields, safe bounds, stable event IDs,
-  filter-aware page requests, and redacted connection diagnostics.
+  Cover normalized modes, mandatory SQL fields, writer/cleanup bounds, stable
+  event IDs, filter-aware page requests, and redacted connection diagnostics.
 
 - [ ] **Step 2: Run the focused tests and verify RED**
 
@@ -62,12 +62,17 @@
 
 **Files:**
 - Create: `src/main/kotlin/ru/arc/audit/SqlAuditEventStore.kt`
+- Create: `src/main/kotlin/ru/arc/audit/AuditWriteBatcher.kt`
 - Create: `src/test/kotlin/ru/arc/audit/AuditSqlCodecTest.kt`
+- Create: `src/test/kotlin/ru/arc/audit/AuditWriteBatcherTest.kt`
+- Create: `src/test/kotlin/ru/arc/audit/AuditRetentionPolicyTest.kt`
 - Create: `src/integrationTest/kotlin/ru/arc/audit/SqlAuditEventStoreIntegrationTest.kt`
 
 **Interfaces:**
 - Consumes: `AuditEventStore`, `AuditEvent`, `AuditPage`, `AuditStorageStatus`, `SqlConnectionConfig`.
-- Produces: `SqlAuditEventStore.open(config, metrics)` and schema version `1` under migration namespace `arc_audit`.
+- Produces: `SqlAuditEventStore.open(config, metrics)`, bounded asynchronous
+  `AuditWriteBatcher`, daily Jobs compaction/general retention, and schema version
+  `1` under migration namespace `arc_audit`.
 
 - [ ] **Step 1: Write failing codec unit tests**
 
@@ -79,25 +84,39 @@
 
   Run: `./gradlew --offline test --tests ru.arc.audit.AuditSqlCodecTest`
 
-- [ ] **Step 3: Implement codec, migration DDL, append, page, scan, count, delete, and bounded prune**
+- [ ] **Step 3: Write failing asynchronous batching and retention tests**
 
-  Use `INSERT IGNORE`, prepared statements, chronological scan order, player and
-  server/time indexes, batches of at most 10,000 deletes, and no raw payload logs.
+  Prove producers return without JDBC, one flush writes one batch, a failed batch
+  retries unchanged, queue capacity is bounded, structured Jobs payouts retain
+  exact money/action totals while coalescing a 60-second window, Jobs compaction
+  uses complete UTC days, and general retention cannot delete inside the
+  configured window.
 
-- [ ] **Step 4: Run codec tests and verify GREEN**
+- [ ] **Step 4: Run batching and retention tests and verify RED**
 
-  Run: `./gradlew --offline test --tests ru.arc.audit.AuditSqlCodecTest`
+  Run: `./gradlew --offline test --tests ru.arc.audit.AuditWriteBatcherTest --tests ru.arc.audit.AuditRetentionPolicyTest`
 
-- [ ] **Step 5: Write real MySQL integration tests**
+- [ ] **Step 5: Implement codec, migration DDL, async batch writer, page, scan, count, delete, and daily maintenance**
+
+  Use `INSERT IGNORE`, prepared-statement batches of at most 250 events, a 250 ms
+  flush trigger, chronological scan order, player and server/time indexes,
+  a bounded 60-second Jobs accumulator, transactional deterministic Jobs daily
+  compaction, deletes of at most 10,000 rows, and no raw payload logs.
+
+- [ ] **Step 6: Run unit tests and verify GREEN**
+
+  Run: `./gradlew --offline test --tests ru.arc.audit.AuditSqlCodecTest --tests ru.arc.audit.AuditWriteBatcherTest --tests ru.arc.audit.AuditRetentionPolicyTest`
+
+- [ ] **Step 7: Write real MySQL integration tests**
 
   Verify duplicate replay inserts once, page/filter ordering, chronological scan,
   cross-server selection, player/all deletion, retention, and reopen migration.
 
-- [ ] **Step 6: Run integration tests on the Docker-capable runner**
+- [ ] **Step 8: Run integration tests on the Docker-capable runner**
 
   Run: `./gradlew integrationTest --tests ru.arc.audit.SqlAuditEventStoreIntegrationTest`
 
-- [ ] **Step 7: Commit SQL storage**
+- [ ] **Step 9: Commit SQL storage**
 
   Run: `git add src/main/kotlin/ru/arc/audit/SqlAuditEventStore.kt src/test src/integrationTest && git commit -m "feat: persist audit events in MySQL"`
 
@@ -298,4 +317,3 @@
   Record source commits, CI URLs, artifact SHA-256, deploy IDs, live JAR hashes,
   PIDs/readiness, migration report, SQL counts/totals, dashboard status, and six
   Spark profile URLs. Do not delete legacy Redis audit data.
-

@@ -28,6 +28,33 @@ class EconomyAuditTest : FreeSpec({
             attribution.reason shouldBe "Deposit"
         }
 
+        "classifies ArcEcoJobs batch payouts as Jobs" {
+            val attribution =
+                EconomyAttributionResolver.resolve(
+                    "Deposit\nCall:ru.ruscrafting.ecojobs.payout.RewardBatcher",
+                    15.0,
+                    "vault",
+                    "survival",
+                )
+
+            attribution.metadata.source shouldBe EconomySource.JOBS
+            attribution.metadata.flow shouldBe EconomyFlow.MINT
+        }
+
+        "classifies current RusCrafting and command origins without unknown leakage" {
+            val cases =
+                mapOf(
+                    "ru.ruscrafting.farms.paper.VaultFarmEconomyGateway" to EconomySource.FARMS,
+                    "net.advancedplugins.ae.features.enchanter.PaymentHandler" to EconomySource.ADVANCED_ENCHANTMENTS,
+                    "net.minecraft.commands.execution.tasks.ExecuteCommand" to EconomySource.ADMIN_COMMAND,
+                )
+
+            cases.forEach { (origin, expected) ->
+                EconomyAttributionResolver.resolve("Deposit\nCall:$origin", 10.0, "vault", "survival")
+                    .metadata.source shouldBe expected
+            }
+        }
+
         "classifies player payments as transfers without a call trace" {
             val attribution = EconomyAttributionResolver.resolve("Payment", -50.0, "vault", "spawn")
 

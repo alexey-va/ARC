@@ -81,6 +81,9 @@ data class AuditStorageStatus(
     val ready: Boolean,
     val schemaVersion: Int? = null,
     val eventCount: Long? = null,
+    val redisEventCount: Long? = null,
+    val sqlEventCount: Long? = null,
+    val pendingEvents: Int? = null,
     val migration: AuditMigrationReport? = null,
     val detail: String? = null,
 )

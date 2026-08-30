@@ -22,21 +22,21 @@ object OpsEconomyAuditHandlers {
         val result =
             LinkedHashMap(
                 if (sinceEpochMs != null) {
-                    AuditManager.economySummarySince(
+                    AuditManager.economySummarySinceAsync(
                         sinceEpochMs,
                         safeLimit,
                         serverFilter,
                         shopMaterials,
                         concentrationGroups,
-                    )
+                    ).get(15, TimeUnit.SECONDS)
                 } else {
-                    AuditManager.economySummary(
+                    AuditManager.economySummaryAsync(
                         hours ?: 24,
                         safeLimit,
                         serverFilter,
                         shopMaterials,
                         concentrationGroups,
-                    )
+                    ).get(15, TimeUnit.SECONDS)
                 },
             )
         result["autoSellAudit"] = AutoSellAuditModule.summary()
@@ -100,7 +100,8 @@ object OpsEconomyAuditHandlers {
             }
         result["ledgerScope"] = "network-shared server-player shards"
         result["recentAnomaliesScope"] = "local process since last ARC start"
-        result["auditWeight"] = AuditManager.weight()
+        result["auditWeight"] = AuditManager.weightAsync().get(5, TimeUnit.SECONDS)
+        result["auditStorage"] = AuditManager.storageStatusAsync().get(5, TimeUnit.SECONDS)
         return result
     }
 

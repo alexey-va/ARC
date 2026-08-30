@@ -56,15 +56,22 @@ internal class EconomyShopGuiAuditListener(
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onPreTransaction(event: PreTransactionEvent) {
-        if (event.transactionType.name != AUTO_SELL_ACTION.uppercase()) return
         val priceComponents = priceComponents(event.prices, event.price)
-        val baseVaultPrice = vaultPrice(event.prices, priceComponents) ?: return
-        val expectedPayouts = EconomyShopAuditMapper.autoSellPayoutCandidates(baseVaultPrice, autoSellMultipliers())
-        if (expectedPayouts.isEmpty()) return
+        val vaultPrice = vaultPrice(event.prices, priceComponents) ?: return
+        val action = event.transactionType.name.lowercase()
+        val mapped = EconomyShopAuditMapper.map(event.transactionType.name, "SUCCESS", vaultPrice)
+        val expectedAmounts =
+            EconomyShopAuditMapper.pendingAmountCandidates(
+                event.transactionType.name,
+                requireNotNull(mapped.requestedAmount),
+                autoSellMultipliers(),
+            )
+        if (expectedAmounts.isEmpty()) return
 
         val capturedAt = now()
         val player = event.player
         val session = AuditManager.session(player.uniqueId, player.world.name)
+        val isSale = event.transactionType.name.contains("SELL")
         val context =
             EconomyLedgerContext(
                 recordKind = EconomyRecordKind.ATTEMPT,
@@ -74,20 +81,22 @@ internal class EconomyShopGuiAuditListener(
                 world = session?.world ?: player.world.name,
                 sessionId = session?.sessionId,
                 sessionStartedAt = session?.startedAt,
-                action = AUTO_SELL_ACTION,
+                action = action,
                 shopId = shopId(event.items, event.shopItem),
-                items = items(event.items, event.shopItem, event.amount, player, baseVaultPrice, true),
+                items = items(event.items, event.shopItem, event.amount, player, vaultPrice, isSale),
                 priceComponents = priceComponents.mapKeys { (key, _) -> "base:$key" },
                 capturedAt = capturedAt,
             )
         EconomyPendingContextTracker.register(
             player.uniqueId,
-            expectedPayouts,
+            expectedAmounts,
             context,
             capturedAt,
-            EconomySource.AUTOSELL,
+            mapped.source,
         )
-        AutoSellAuditModule.recordPreTransaction(context.items.orEmpty().sumOf { it.quantity ?: 0 })
+        if (mapped.source == EconomySource.AUTOSELL) {
+            AutoSellAuditModule.recordPreTransaction(context.items.orEmpty().sumOf { it.quantity ?: 0 })
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -148,8 +157,8 @@ internal class EconomyShopGuiAuditListener(
             metadata,
             context,
         )
-        if (succeeded && requestedAmount != null) {
-            EconomyPendingContextTracker.register(player.uniqueId, requestedAmount, context, capturedAt, source)
+        if (!succeeded && requestedAmount != null) {
+            EconomyPendingContextTracker.cancelMatching(player.uniqueId, requestedAmount, source)
         }
     }
 
@@ -301,6 +310,17 @@ internal object EconomyShopAuditMapper {
             .sorted()
             .toList()
     }
+
+    fun pendingAmountCandidates(
+        transactionType: String,
+        requestedAmount: Double,
+        autoSellMultipliers: Collection<Double>,
+    ): List<Double> =
+        if (transactionType.equals(AUTO_SELL_ACTION, ignoreCase = true)) {
+            autoSellPayoutCandidates(requestedAmount, autoSellMultipliers)
+        } else {
+            listOf(requestedAmount)
+        }
 
     fun sourceForContext(action: String?, fallback: EconomySource): EconomySource =
         if (action == AUTO_SELL_ACTION) EconomySource.AUTOSELL else fallback

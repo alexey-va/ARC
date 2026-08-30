@@ -16,7 +16,9 @@ open class AuditConfig(
 ) {
     private val storage get() = config.section("storage")
     private val mysqlSection get() = storage.section("mysql")
+    private val writerSection get() = mysqlSection.section("writer")
     private val migrationSection get() = storage.section("migration")
+    private val cleanupSection get() = storage.section("cleanup")
 
     open val storageMode: AuditStorageMode
         get() = AuditStorageMode.parse(storage.string("mode", "redis"))
@@ -29,6 +31,42 @@ open class AuditConfig(
 
     open val migrationBatchSize: Int
         get() = migrationSection.int("batch-size", 500).coerceIn(100, 10_000)
+
+    open val writeBatchSize: Int
+        get() = writerSection.int("batch-size", 250).coerceIn(1, 1_000)
+
+    open val writeFlushIntervalMillis: Long
+        get() = writerSection.long("flush-interval-ms", 250L).coerceIn(25L, 5_000L)
+
+    open val maximumPendingEvents: Int
+        get() = writerSection.int("maximum-pending-events", 10_000).coerceIn(1_000, 100_000)
+
+    open val writeRetryIntervalMillis: Long
+        get() = writerSection.long("retry-interval-ms", 1_000L).coerceIn(100L, 60_000L)
+
+    open val jobsCoalesceWindowSeconds: Int
+        get() = writerSection.int("jobs-coalesce-window-seconds", 60).coerceIn(1, 300)
+
+    open val jobsCoalesceMaximumEvents: Int
+        get() = writerSection.int("jobs-coalesce-maximum-events", 1_000).coerceIn(10, 10_000)
+
+    open val cleanupIntervalHours: Int
+        get() = cleanupSection.int("interval-hours", 24).coerceIn(1, 24)
+
+    open val cleanupOwnerServer: String
+        get() = cleanupSection.string("owner-server", "survival").trim().lowercase().ifBlank { "survival" }
+
+    open val retentionDays: Int
+        get() = cleanupSection.int("retention-days", 30).coerceIn(7, 365)
+
+    open val jobsRawRetentionDays: Int
+        get() = cleanupSection.int("jobs-raw-retention-days", 7).coerceIn(1, retentionDays)
+
+    open val maxCompactionDaysPerRun: Int
+        get() = cleanupSection.int("max-compaction-days-per-run", 7).coerceIn(1, 31)
+
+    open val cleanupDeleteBatchSize: Int
+        get() = cleanupSection.int("delete-batch-size", 10_000).coerceIn(1_000, 100_000)
 
     open val mysql: SqlConnectionConfig?
         get() {
@@ -193,6 +231,18 @@ class TestAuditConfig(
     override val migrationOwnerServer: String = "survival",
     override val migrationBatchSize: Int = 500,
     override val mysql: SqlConnectionConfig? = null,
+    override val writeBatchSize: Int = 250,
+    override val writeFlushIntervalMillis: Long = 250L,
+    override val maximumPendingEvents: Int = 10_000,
+    override val writeRetryIntervalMillis: Long = 1_000L,
+    override val jobsCoalesceWindowSeconds: Int = 60,
+    override val jobsCoalesceMaximumEvents: Int = 1_000,
+    override val cleanupIntervalHours: Int = 24,
+    override val cleanupOwnerServer: String = "survival",
+    override val retentionDays: Int = 30,
+    override val jobsRawRetentionDays: Int = 7,
+    override val maxCompactionDaysPerRun: Int = 7,
+    override val cleanupDeleteBatchSize: Int = 10_000,
     override val saveInterval: Long = 20,
     override val pruneInterval: Long = 6000,
     override val maxAgeSeconds: Int = 86400 * 30,
@@ -228,6 +278,18 @@ class TestAuditConfig(
         migrationOwnerServer: String = this.migrationOwnerServer,
         migrationBatchSize: Int = this.migrationBatchSize,
         mysql: SqlConnectionConfig? = this.mysql,
+        writeBatchSize: Int = this.writeBatchSize,
+        writeFlushIntervalMillis: Long = this.writeFlushIntervalMillis,
+        maximumPendingEvents: Int = this.maximumPendingEvents,
+        writeRetryIntervalMillis: Long = this.writeRetryIntervalMillis,
+        jobsCoalesceWindowSeconds: Int = this.jobsCoalesceWindowSeconds,
+        jobsCoalesceMaximumEvents: Int = this.jobsCoalesceMaximumEvents,
+        cleanupIntervalHours: Int = this.cleanupIntervalHours,
+        cleanupOwnerServer: String = this.cleanupOwnerServer,
+        retentionDays: Int = this.retentionDays,
+        jobsRawRetentionDays: Int = this.jobsRawRetentionDays,
+        maxCompactionDaysPerRun: Int = this.maxCompactionDaysPerRun,
+        cleanupDeleteBatchSize: Int = this.cleanupDeleteBatchSize,
         saveInterval: Long = this.saveInterval,
         pruneInterval: Long = this.pruneInterval,
         maxAgeSeconds: Int = this.maxAgeSeconds,
@@ -260,6 +322,18 @@ class TestAuditConfig(
             migrationOwnerServer,
             migrationBatchSize,
             mysql,
+            writeBatchSize,
+            writeFlushIntervalMillis,
+            maximumPendingEvents,
+            writeRetryIntervalMillis,
+            jobsCoalesceWindowSeconds,
+            jobsCoalesceMaximumEvents,
+            cleanupIntervalHours,
+            cleanupOwnerServer,
+            retentionDays,
+            jobsRawRetentionDays,
+            maxCompactionDaysPerRun,
+            cleanupDeleteBatchSize,
             saveInterval,
             pruneInterval,
             maxAgeSeconds,

@@ -11,6 +11,7 @@ import ru.arc.util.Logging.info
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil.mm
+import java.util.concurrent.CompletableFuture
 
 /**
  * Core audit service with business logic.
@@ -22,14 +23,33 @@ import ru.arc.util.TextUtil.mm
  * @param scheduler Task scheduler (for prune task)
  * @param timeProvider Time source (for testing)
  */
-class AuditService(
-    private val repository: AuditRepository,
+class AuditService private constructor(
+    private val repository: AuditRepository?,
+    private val eventStore: AuditEventStore?,
     private val config: AuditConfig = AuditConfig.default(),
     private val scheduler: TaskScheduler? = null,
     private val timeProvider: TimeProvider = SystemTimeProvider,
     private val monitor: EconomyAuditMonitor? = null,
     private val localServer: String? = null,
 ) {
+    constructor(
+        repository: AuditRepository,
+        config: AuditConfig = AuditConfig.default(),
+        scheduler: TaskScheduler? = null,
+        timeProvider: TimeProvider = SystemTimeProvider,
+        monitor: EconomyAuditMonitor? = null,
+        localServer: String? = null,
+    ) : this(repository, null, config, scheduler, timeProvider, monitor, localServer)
+
+    constructor(
+        eventStore: AuditEventStore,
+        config: AuditConfig = AuditConfig.default(),
+        scheduler: TaskScheduler? = null,
+        timeProvider: TimeProvider = SystemTimeProvider,
+        monitor: EconomyAuditMonitor? = null,
+        localServer: String? = null,
+    ) : this(null, eventStore, config, scheduler, timeProvider, monitor, localServer)
+
     private val maximumEconomyWindowMillis = 31L * 24 * 60 * 60 * 1_000
     private var pruneTask: ScheduledTask? = null
 
@@ -39,7 +59,7 @@ class AuditService(
      * Start background tasks.
      */
     fun start() {
-        scheduler?.let {
+        if (repository != null) scheduler?.let {
             pruneTask = it.runTimerAsync(config.pruneInterval, config.pruneInterval) {
                 pruneOldData()
             }
@@ -59,7 +79,7 @@ class AuditService(
      */
     fun shutdown() {
         stop()
-        repository.shutdown()
+        eventStore?.close() ?: repository?.shutdown()
     }
 
     // ==================== Player Context ====================
@@ -68,14 +88,14 @@ class AuditService(
      * Player joined - add to context.
      */
     fun playerJoined(name: String) {
-        repository.addContext(name.lowercase())
+        repository?.addContext(name.lowercase())
     }
 
     /**
      * Player left - remove from context.
      */
     fun playerLeft(name: String) {
-        repository.removeContext(name.lowercase())
+        repository?.removeContext(name.lowercase())
     }
 
     // ==================== Operations ====================
@@ -96,6 +116,30 @@ class AuditService(
             return
         }
         val occurredAt = timeProvider.currentTimeMillis()
+        eventStore?.let { store ->
+            val transaction =
+                Transaction(
+                    type = type,
+                    amount = amount,
+                    comment = comment.take(240),
+                    timestamp = occurredAt,
+                    timestamp2 = occurredAt,
+                    source = metadata.source,
+                    flow = metadata.flow,
+                    currency = metadata.currency,
+                    server = metadata.server,
+                    origin = metadata.origin,
+                    context = context,
+                )
+            store.append(AuditEvent(playerName, transaction)).whenComplete { _, failure ->
+                if (failure != null) {
+                    error("Failed to persist economy audit event for {}", playerName, failure)
+                    monitor?.persistenceFailure(metadata)
+                }
+            }
+            return
+        }
+        val repository = requireNotNull(repository)
         val entityId = entityId(playerName, metadata)
         repository.getOrCreate(entityId) {
             AuditData.create(playerName, entityId.takeIf { ':' in it })
@@ -183,13 +227,45 @@ class AuditService(
      * Get total transaction count across all players.
      */
     fun totalWeight(): Long {
-        return repository.all().sumOf { it.transactions.size.toLong() }
+        return repository?.all()?.sumOf { it.transactions.size.toLong() } ?: -1L
     }
+
+    fun totalWeightAsync(): CompletableFuture<Long> =
+        eventStore?.count() ?: CompletableFuture.completedFuture(totalWeight())
+
+    fun storageStatusAsync(): CompletableFuture<AuditStorageStatus> =
+        eventStore?.status()
+            ?: CompletableFuture.completedFuture(
+                AuditStorageStatus(
+                    mode = AuditStorageMode.REDIS,
+                    ready = true,
+                    eventCount = totalWeight(),
+                    redisEventCount = totalWeight(),
+                    detail = "legacy_repository",
+                ),
+            )
 
     /**
      * Send formatted audit to audience.
      */
     fun sendAudit(audience: Audience, playerName: String, page: Int, filter: AuditFilter) {
+        eventStore?.let { store ->
+            store.page(AuditPageRequest(playerName, page.coerceAtLeast(1), config.pageSize, filter))
+                .whenComplete { result, failure ->
+                    val message =
+                        if (failure != null) {
+                            error("Failed to query economy audit data for {}", playerName, failure)
+                            noDataMessage(playerName)
+                        } else if (result.totalRecords == 0L) {
+                            noDataMessage(playerName)
+                        } else {
+                            formatAuditPage(result, playerName, page, filter)
+                        }
+                    val delivery = Runnable { audience.sendMessage(message) }
+                    scheduler?.runSync(delivery) ?: delivery.run()
+                }
+            return
+        }
         val data = getAuditData(playerName)
         if (data == null || data.transactions.isEmpty()) {
             audience.sendMessage(noDataMessage(playerName))
@@ -204,6 +280,7 @@ class AuditService(
      * Get player's audit data.
      */
     fun getAuditData(playerName: String): AuditData? {
+        val repository = repository ?: return null
         val matches = playerData(playerName)
         if (matches.isEmpty()) return null
         if (matches.size == 1) return matches.single()
@@ -221,6 +298,7 @@ class AuditService(
         shopMaterials: Set<String> = emptySet(),
         concentrationGroups: Map<String, Set<String>> = emptyMap(),
     ): Map<String, Any?> {
+        require(eventStore == null) { "Use economySummaryAsync for event-store audit queries" }
         val safeHours = hours.coerceIn(1, 24 * 31)
         val now = timeProvider.currentTimeMillis()
         return economySummaryAt(
@@ -240,11 +318,77 @@ class AuditService(
         shopMaterials: Set<String> = emptySet(),
         concentrationGroups: Map<String, Set<String>> = emptyMap(),
     ): Map<String, Any?> {
+        require(eventStore == null) { "Use economySummarySinceAsync for event-store audit queries" }
         val now = timeProvider.currentTimeMillis()
         require(sinceEpochMs in (now - maximumEconomyWindowMillis)..<now) {
             "since_epoch_ms must be in the past and within the last 31 days"
         }
         return economySummaryAt(sinceEpochMs, now, limit, serverFilter, shopMaterials, concentrationGroups)
+    }
+
+    fun economySummaryAsync(
+        hours: Int,
+        limit: Int,
+        serverFilter: String? = null,
+        shopMaterials: Set<String> = emptySet(),
+        concentrationGroups: Map<String, Set<String>> = emptyMap(),
+    ): CompletableFuture<Map<String, Any?>> {
+        val safeHours = hours.coerceIn(1, 24 * 31)
+        val now = timeProvider.currentTimeMillis()
+        return economySummaryAtAsync(
+            now - safeHours * 60L * 60L * 1000L,
+            now,
+            limit,
+            serverFilter,
+            shopMaterials,
+            concentrationGroups,
+        )
+    }
+
+    fun economySummarySinceAsync(
+        sinceEpochMs: Long,
+        limit: Int,
+        serverFilter: String? = null,
+        shopMaterials: Set<String> = emptySet(),
+        concentrationGroups: Map<String, Set<String>> = emptyMap(),
+    ): CompletableFuture<Map<String, Any?>> {
+        val now = timeProvider.currentTimeMillis()
+        require(sinceEpochMs in (now - maximumEconomyWindowMillis)..<now) {
+            "since_epoch_ms must be in the past and within the last 31 days"
+        }
+        return economySummaryAtAsync(sinceEpochMs, now, limit, serverFilter, shopMaterials, concentrationGroups)
+    }
+
+    private fun economySummaryAtAsync(
+        sinceEpochMs: Long,
+        generatedAt: Long,
+        limit: Int,
+        serverFilter: String?,
+        shopMaterials: Set<String>,
+        concentrationGroups: Map<String, Set<String>>,
+    ): CompletableFuture<Map<String, Any?>> {
+        val store = eventStore
+            ?: return CompletableFuture.completedFuture(
+                economySummaryAt(sinceEpochMs, generatedAt, limit, serverFilter, shopMaterials, concentrationGroups),
+            )
+        val normalizedServer = serverFilter?.trim()?.lowercase()?.takeIf { it.isNotEmpty() && it != "all" }
+        val accumulator =
+            StreamingAuditSummary(
+                generatedAt = generatedAt,
+                since = sinceEpochMs,
+                limit = limit.coerceIn(1, 100),
+                serverFilter = normalizedServer,
+                rapidWindowMillis = config.rapidIncomeWindowSeconds * 1_000L,
+                rapidAmount = config.rapidIncomeAmount,
+                rapidTransactions = config.rapidIncomeTransactions,
+                largeTransactionAmount = config.largeTransactionAmount,
+                slimefunBuyOnlyPolicyEnabled = config.slimefunBuyOnlyPolicyEnabled,
+                slimefunBuyOnlyPolicyActivatedAt = config.slimefunBuyOnlyPolicyActivatedAt,
+                shopMaterials = shopMaterials,
+                concentrationGroups = concentrationGroups,
+            )
+        return store.scan(AuditScanRequest(sinceEpochMs, generatedAt, normalizedServer), accumulator::accept)
+            .thenApply { accumulator.finish(monitor?.recent(100).orEmpty()) }
     }
 
     private fun economySummaryAt(
@@ -256,7 +400,7 @@ class AuditService(
         concentrationGroups: Map<String, Set<String>>,
     ): Map<String, Any?> =
         buildAuditSummary(
-            data = repository.all(),
+            data = requireNotNull(repository).all(),
             generatedAt = generatedAt,
             since = sinceEpochMs,
             limit = limit.coerceIn(1, 100),
@@ -278,24 +422,40 @@ class AuditService(
      * Clear specific player's audit.
      */
     fun clearPlayer(playerName: String) {
+        clearPlayerAsync(playerName)
+    }
+
+    fun clearPlayerAsync(playerName: String): CompletableFuture<Int> {
+        eventStore?.let { return it.clearPlayer(playerName) }
+        var removed = 0
         ownedData().filter { it.name.equals(playerName, ignoreCase = true) }.forEach { data ->
             synchronized(data) {
+                removed += data.transactions.size
                 data.clear()
-                repository.save(data)
+                requireNotNull(repository).save(data)
             }
         }
+        return CompletableFuture.completedFuture(removed)
     }
 
     /**
      * Clear all audit data.
      */
     fun clearAll() {
+        clearAllAsync()
+    }
+
+    fun clearAllAsync(): CompletableFuture<Int> {
+        eventStore?.let { return it.clearAll() }
+        var removed = 0
         ownedData().forEach { data ->
             synchronized(data) {
+                removed += data.transactions.size
                 data.clear()
-                repository.save(data)
+                requireNotNull(repository).save(data)
             }
         }
+        return CompletableFuture.completedFuture(removed)
     }
 
     // ==================== Maintenance ====================
@@ -304,6 +464,7 @@ class AuditService(
      * Enforce retention first, then shorten the window if the global weight is still too high.
      */
     fun pruneOldData() {
+        if (repository == null) return
         val now = timeProvider.currentTimeMillis()
         trimAll(config.maxAgeSeconds * 1000L, now)
         trimGlobalWeight(if (localServer == null) config.maxWeight else config.shardMaxWeight)
@@ -313,7 +474,7 @@ class AuditService(
         ownedData().forEach { data ->
             synchronized(data) {
                 if (data.trim(maxAgeMillis, config.maxTransactions, now) > 0) {
-                    repository.save(data)
+                    requireNotNull(repository).save(data)
                 }
             }
         }
@@ -335,15 +496,16 @@ class AuditService(
         oldest.forEach { (data, transactions) ->
             synchronized(data) {
                 transactions.forEach(data.transactions::remove)
-                repository.save(data)
+                requireNotNull(repository).save(data)
             }
         }
     }
 
     private fun playerData(playerName: String): List<AuditData> =
-        repository.all().filter { it.name.equals(playerName, ignoreCase = true) }
+        requireNotNull(repository).all().filter { it.name.equals(playerName, ignoreCase = true) }
 
     private fun ownedData(): List<AuditData> {
+        val repository = repository ?: return emptyList()
         val server = localServer?.trim()?.lowercase()?.takeIf(String::isNotEmpty) ?: return repository.all().toList()
         return repository.all().filter { data ->
             data.storageId?.startsWith("$server:") == true || (server == "spawn" && data.storageId.isNullOrBlank())
@@ -385,6 +547,25 @@ class AuditService(
             add(formatFooter(playerName, safePage, totalPages, filter))
         }
 
+        return mm(lines.joinToString("\n"))
+    }
+
+    private fun formatAuditPage(
+        result: AuditPage,
+        playerName: String,
+        page: Int,
+        filter: AuditFilter,
+    ): Component {
+        val totalPages = maxOf(1, ((result.totalRecords + config.pageSize - 1L) / config.pageSize).toInt())
+        val safePage = page.coerceIn(1, totalPages)
+        val start = config.pageSize * (safePage - 1)
+        val lines = buildList {
+            add(formatHeader(playerName))
+            result.records.forEachIndexed { index, transaction ->
+                add(formatTransaction(start + index + 1, transaction))
+            }
+            add(formatFooter(playerName, safePage, totalPages, filter))
+        }
         return mm(lines.joinToString("\n"))
     }
 

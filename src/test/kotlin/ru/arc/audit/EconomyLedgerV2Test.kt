@@ -209,6 +209,29 @@ class EconomyLedgerV2Test : FreeSpec({
             EconomyPendingContextTracker.consume(playerId, 50.0, 1_101)?.correlationId shouldBe "unscoped"
         }
 
+        "removes a failed pre-transaction without disturbing an equal Jobs payout" {
+            val playerId = UUID.randomUUID()
+            EconomyPendingContextTracker.register(
+                playerId,
+                50.0,
+                EconomyLedgerContext(correlationId = "jobs"),
+                1_000,
+                EconomySource.JOBS,
+            )
+            EconomyPendingContextTracker.register(
+                playerId,
+                50.0,
+                EconomyLedgerContext(correlationId = "failed-shop"),
+                1_001,
+                EconomySource.SHOP,
+            )
+
+            EconomyPendingContextTracker.cancelMatching(playerId, 50.0, EconomySource.SHOP)
+
+            EconomyPendingContextTracker.consume(playerId, 50.0, 1_100, EconomySource.SHOP) shouldBe null
+            EconomyPendingContextTracker.consume(playerId, 50.0, 1_101, EconomySource.JOBS)?.correlationId shouldBe "jobs"
+        }
+
         "pairs complementary sides of one player transfer" {
             val debit =
                 EconomyTransferCorrelationTracker.correlate(
@@ -278,6 +301,7 @@ class EconomyLedgerV2Test : FreeSpec({
             val totals = summary["totals"] as Map<*, *>
             val attempts = summary["attempts"] as Map<*, *>
             val coverage = summary["contextCoverage"] as Map<*, *>
+            val sourceCoverage = summary["sourceCoverage"] as Map<*, *>
             val actions = summary["actions"] as List<*>
 
             summary["ledgerSchemaVersion"] shouldBe 2
@@ -286,6 +310,11 @@ class EconomyLedgerV2Test : FreeSpec({
             (attempts["byStatus"] as Map<*, *>)["failed"] shouldBe 1L
             coverage.containsKey("balance") shouldBe true
             coverage.containsKey("action") shouldBe true
+            ((coverage["items"] as Map<*, *>)["total"]) shouldBe 1L
+            ((coverage["items"] as Map<*, *>)["ratio"]) shouldBe 1.0
+            sourceCoverage["classifiedRecordRatio"] shouldBe 1.0
+            sourceCoverage["classifiedOperationRatio"] shouldBe 1.0
+            sourceCoverage["classifiedAmountRatio"] shouldBe 1.0
             (actions.single() as Map<*, *>)["action"] shouldBe "shop_sell"
             (summary["recentFailures"] as List<*>).shouldHaveSize(1)
             (summary["recentEvents"] as List<*>).shouldHaveSize(2)

@@ -47,13 +47,25 @@ accumulator. The accumulator retains aggregate maps, sliding rapid-income
 windows, and only the requested number of recent records; it does not collect
 the entire result set.
 
-Retention is time-based. The SQL store deletes rows older than
-`max-age-seconds` in bounded batches. The old heap-oriented weight limits remain
-accepted in Redis mode but do not constrain SQL history.
+Retention is time-based and maintenance runs once per day on the configured
+survival owner only. Before SQL, high-frequency structured Jobs payouts are
+coalesced for at most 60 seconds per player/server/action. The combined row
+keeps the exact summed amount, payout occurrences and bounded per-job action
+breakdown; actual Vault deposits are never delayed. High-volume Jobs records
+older than seven days are then transactionally replaced with deterministic
+per-day aggregates carrying summed amount and occurrence count. All remaining
+records older than thirty days are deleted in batches of at most 10,000. The old
+heap-oriented weight limits remain accepted in Redis mode but do not constrain
+SQL history.
 
 ## Failure and lifecycle rules
 
-- Database work runs only on the bounded `SqlRuntime` executor.
+- Database work runs only on the bounded `SqlRuntime` executor. Paper producers
+  append to a bounded in-process buffer and never execute or await JDBC. One
+  writer drains up to 250 events per transaction, flushing at least every 250
+  milliseconds. The Jobs minute accumulator and SQL queue are both hard-bounded;
+  failed batches retry intact and saturation is reported instead of allowing
+  unbounded heap growth.
 - Append failures increment existing persistence-failure telemetry and remain
   visible in runtime health.
 - Dual mode attempts both writes and reports partial failures explicitly.
@@ -78,4 +90,3 @@ is not the audit system of record.
 4. Switch all nodes to `sql` and restart once.
 5. Prove active version, SQL health, no audit Redis repository, stable TPS, and
    materially lower allocation rate with fresh Spark profiles.
-
