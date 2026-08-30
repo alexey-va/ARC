@@ -339,6 +339,27 @@ class EconomyAuditTest : FreeSpec({
             monitor.recent(10).single().kind shouldBe "rapid_income"
         }
 
+        "does not treat routine Jobs micro-payout frequency as rapid income" {
+            val config =
+                TestAuditConfig(
+                    largeTransactionAmount = 1_000_000.0,
+                    rapidIncomeAmount = 250_000.0,
+                    rapidIncomeTransactions = 3,
+                    anomalyCooldownSeconds = 60,
+                )
+            val monitor = EconomyAuditMonitor(config)
+            val jobs = AuditMetadata(EconomySource.JOBS, EconomyFlow.MINT, server = "survival")
+            val cmi = AuditMetadata(EconomySource.CMI, EconomyFlow.MINT, server = "survival")
+
+            repeat(4) { monitor.observe("Builder", 1.0, jobs, "BlockPlace") }
+
+            monitor.recent(10) shouldBe emptyList()
+
+            repeat(3) { monitor.observe("Admin", 1.0, cmi, "Reward") }
+
+            monitor.recent(10).single().source shouldBe "cmi"
+        }
+
         "records Jobs profession and activity metrics without target or player labels" {
             val registry = SimpleMeterRegistry()
             val monitor = EconomyAuditMonitor(TestAuditConfig(), { registry })

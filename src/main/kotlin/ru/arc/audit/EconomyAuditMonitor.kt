@@ -333,7 +333,9 @@ class EconomyAuditMonitor(
             total = window.total
             window
         }
-        if (total >= config.rapidIncomeAmount || count >= config.rapidIncomeTransactions) {
+        val countThresholdReached =
+            metadata.source != EconomySource.JOBS && count >= config.rapidIncomeTransactions
+        if (total >= config.rapidIncomeAmount || countThresholdReached) {
             emit("rapid_income", player, total, metadata, "$count transactions; last=$reason", now)
         }
     }
