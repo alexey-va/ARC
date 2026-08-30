@@ -156,10 +156,14 @@ data class ResourceContractState(
         }
         require(acceptedQuantity <= definition.targetQuantity) { "Contract state exceeds target quantity" }
         require(spentMinor <= definition.budgetMinor) { "Contract state exceeds budget" }
-        require(Math.multiplyExact(acceptedQuantity, definition.payoutMinorPerUnit) == spentMinor) {
+        require(
+            acceptedQuantity == 0L && spentMinor == 0L ||
+                ContractRankPolicy.payoutAllowed(definition.payoutMinorPerUnit, acceptedQuantity, spentMinor),
+        ) {
             "Contract state quantity and spend disagree"
         }
-        require(perPlayerQuantity.values.all { it <= definition.perPlayerQuantityCap }) {
+        val maximumPlayerCap = ContractRankPolicy.MAXIMUM.playerCap(definition.perPlayerQuantityCap)
+        require(perPlayerQuantity.values.all { it <= maximumPlayerCap }) {
             "Contract state exceeds a player cap"
         }
         recentReceipts.forEach { (key, receipt) ->
@@ -172,7 +176,7 @@ data class ResourceContractState(
             ) {
                 "Invalid contract receipt"
             }
-            require(Math.multiplyExact(receipt.quantity, definition.payoutMinorPerUnit) == receipt.payoutMinor) {
+            require(ContractRankPolicy.payoutAllowed(definition.payoutMinorPerUnit, receipt.quantity, receipt.payoutMinor)) {
                 "Contract receipt quantity and payout disagree"
             }
             require(perPlayerQuantity[receipt.playerId].orZero() >= receipt.quantity) {
@@ -271,6 +275,8 @@ sealed interface ContractSubmissionPlan {
         val payoutMinor: Long,
         val expectedRevision: Long,
         val plannedAt: Long,
+        val playerCapBasisPoints: Int = ContractRankPolicy.BASE_BASIS_POINTS,
+        val payoutBasisPoints: Int = ContractRankPolicy.BASE_BASIS_POINTS,
     ) : ContractSubmissionPlan
 
     data class Duplicate(
@@ -298,6 +304,7 @@ object ResourceContractEngine {
         requestedQuantity: Int,
         now: Long,
         reservations: Collection<ContractQuotaReservation> = emptyList(),
+        policy: ContractRankPolicy = ContractRankPolicy.IDENTITY,
     ): ContractSubmissionPlan {
         if (submissionId.isBlank() || submissionId.length > ResourceContractState.MAX_SUBMISSION_ID_LENGTH ||
             playerId.isBlank() || playerId.length > ResourceContractState.MAX_PLAYER_ID_LENGTH ||
@@ -338,7 +345,8 @@ object ResourceContractEngine {
             return ContractSubmissionPlan.Rejected(SubmissionRejection.QUANTITY_EXHAUSTED)
         }
         val budgetRemaining = (definition.budgetMinor - accountedPayout).coerceAtLeast(0L)
-        val budgetUnits = budgetRemaining / definition.payoutMinorPerUnit
+        val payoutMinorPerUnit = policy.payoutMinorPerUnit(definition.payoutMinorPerUnit)
+        val budgetUnits = budgetRemaining / payoutMinorPerUnit
         if (budgetUnits == 0L) {
             return ContractSubmissionPlan.Rejected(SubmissionRejection.BUDGET_EXHAUSTED)
         }
@@ -347,7 +355,8 @@ object ResourceContractEngine {
                 .filter { it.playerId == playerId }
                 .fold(0L) { total, reservation -> Math.addExact(total, reservation.quantity) }
         val playerAccepted = Math.addExact(state.perPlayerQuantity[playerId].orZero(), playerReserved)
-        val playerRemaining = (definition.perPlayerQuantityCap - playerAccepted).coerceAtLeast(0L)
+        val playerCap = policy.playerCap(definition.perPlayerQuantityCap)
+        val playerRemaining = (playerCap - playerAccepted).coerceAtLeast(0L)
         if (playerRemaining == 0L) {
             return ContractSubmissionPlan.Rejected(SubmissionRejection.PLAYER_CAP_REACHED)
         }
@@ -370,7 +379,7 @@ object ResourceContractEngine {
                 },
             )
         }
-        val payout = Math.multiplyExact(accepted, definition.payoutMinorPerUnit)
+        val payout = Math.multiplyExact(accepted, payoutMinorPerUnit)
         check(payout <= budgetRemaining) { "Planned payout exceeds remaining budget" }
 
         return ContractSubmissionPlan.Accepted(
@@ -381,6 +390,8 @@ object ResourceContractEngine {
             payoutMinor = payout,
             expectedRevision = state.revision,
             plannedAt = now,
+            playerCapBasisPoints = policy.playerCapBasisPoints,
+            payoutBasisPoints = policy.payoutBasisPoints,
         )
     }
 
@@ -401,6 +412,15 @@ object ResourceContractEngine {
         require(state.revision == plan.expectedRevision) { SubmissionRejection.STALE_STATE.label }
         require(state.contractId == definition.id) { SubmissionRejection.WINDOW_MISMATCH.label }
         require(plan.acceptedQuantity > 0L && plan.payoutMinor > 0L) { "Cannot commit an empty submission" }
+        val policy = ContractRankPolicy(plan.playerCapBasisPoints, plan.payoutBasisPoints)
+        require(
+            Math.multiplyExact(plan.acceptedQuantity, policy.payoutMinorPerUnit(definition.payoutMinorPerUnit)) ==
+                plan.payoutMinor,
+        ) { "Submission payout does not match rank policy" }
+        require(
+            Math.addExact(state.perPlayerQuantity[plan.playerId].orZero(), plan.acceptedQuantity) <=
+                policy.playerCap(definition.perPlayerQuantityCap),
+        ) { "Submission exceeds rank player cap" }
 
         return commitAccepted(
             definition = definition,
@@ -433,7 +453,7 @@ object ResourceContractEngine {
             return ContractCommitResult(state, it, changed = false)
         }
         require(state.contractId == definition.id) { SubmissionRejection.WINDOW_MISMATCH.label }
-        require(Math.multiplyExact(reservation.quantity, definition.payoutMinorPerUnit) == reservation.payoutMinor) {
+        require(ContractRankPolicy.payoutAllowed(definition.payoutMinorPerUnit, reservation.quantity, reservation.payoutMinor)) {
             "Reservation payout does not match contract policy"
         }
         return commitAccepted(
@@ -463,7 +483,12 @@ object ResourceContractEngine {
         require(nextQuantity <= definition.targetQuantity) { "Submission exceeds contract quantity" }
         require(nextSpent <= definition.budgetMinor) { "Submission exceeds contract budget" }
         val playerQuantity = Math.addExact(state.perPlayerQuantity[playerId].orZero(), quantity)
-        require(playerQuantity <= definition.perPlayerQuantityCap) { "Submission exceeds player cap" }
+        require(playerQuantity <= ContractRankPolicy.MAXIMUM.playerCap(definition.perPlayerQuantityCap)) {
+            "Submission exceeds player cap"
+        }
+        require(ContractRankPolicy.payoutAllowed(definition.payoutMinorPerUnit, quantity, payoutMinor)) {
+            "Submission payout does not match released policy bounds"
+        }
 
         val receipt =
             ContractSubmissionReceipt(
@@ -520,7 +545,7 @@ object ResourceContractEngine {
             "Contract reservation set contains duplicate ids"
         }
         active.forEach { reservation ->
-            require(Math.multiplyExact(reservation.quantity, definition.payoutMinorPerUnit) == reservation.payoutMinor) {
+            require(ContractRankPolicy.payoutAllowed(definition.payoutMinorPerUnit, reservation.quantity, reservation.payoutMinor)) {
                 "Contract reservation payout does not match policy"
             }
         }

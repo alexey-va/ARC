@@ -122,6 +122,7 @@ class ContractSubmissionCoordinator(
         submissionId: String,
         playerId: String,
         requestedQuantity: Int,
+        policy: ContractRankPolicy = ContractRankPolicy.IDENTITY,
     ): ContractSubmissionOutcome {
         val records =
             try {
@@ -164,6 +165,7 @@ class ContractSubmissionCoordinator(
                     requestedQuantity = requestedQuantity,
                     now = clock(),
                     reservations = reservations,
+                    policy = policy,
                 )
             } catch (_: Throwable) {
                 return ContractSubmissionOutcome.Unavailable(submissionId)

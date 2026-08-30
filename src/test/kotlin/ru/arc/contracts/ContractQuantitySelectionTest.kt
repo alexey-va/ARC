@@ -49,6 +49,17 @@ class ContractQuantitySelectionTest : StringSpec({
         ContractQuantitySelector.adjust(selection, decrease = true, jumpToBoundary = false) shouldBe 32
         ContractQuantitySelector.adjust(selection, decrease = true, jumpToBoundary = true) shouldBe 32
     }
+
+    "rank payout rate controls both budget capacity and displayed payout" {
+        val selection = ContractQuantitySelector.select(
+            view(unspentBudgetMinor = 1_000).copy(playerPayoutMinorPerUnit = 112L),
+            availableItems = 100,
+        )
+
+        selection.maximum shouldBe 8
+        selection.payoutMinor shouldBe 0L
+        selection.canSubmit shouldBe false
+    }
 })
 
 private fun view(
@@ -84,4 +95,7 @@ private fun view(
         playerAcceptedQuantity = 1_000L - playerRemaining,
         playerReservedQuantity = 0L,
         playerRemainingQuantity = playerRemaining,
+        playerPayoutMinorPerUnit = 100L,
+        capBasisPoints = 10_000,
+        payoutBasisPoints = 10_000,
     )

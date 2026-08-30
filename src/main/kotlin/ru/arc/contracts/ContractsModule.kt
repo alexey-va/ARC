@@ -10,6 +10,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import org.bukkit.Bukkit
+import org.bukkit.entity.Player
 import ru.arc.ARC
 import ru.arc.core.PluginModule
 import ru.arc.metrics.MetricsModule
@@ -69,6 +70,9 @@ data class ResourceContractPlayerView(
     val playerAcceptedQuantity: Long,
     val playerReservedQuantity: Long,
     val playerRemainingQuantity: Long,
+    val playerPayoutMinorPerUnit: Long,
+    val capBasisPoints: Int,
+    val payoutBasisPoints: Int,
 )
 
 sealed interface SeasonDungeonLaunchPreparationOutcome {
@@ -494,10 +498,12 @@ object ContractsManager {
 
     @JvmStatic
     fun submit(
-        playerId: UUID,
+        player: Player,
         contractId: String,
         requestedQuantity: Int,
     ): CompletableFuture<ContractSubmissionOutcome> {
+        val playerId = player.uniqueId
+        val policy = ContractRankPolicyResolver.resolve(player)
         val submissionId = "arc-${UUID.randomUUID()}"
         val result = CompletableFuture<ContractSubmissionOutcome>()
         val currentScope = submissionScope
@@ -532,6 +538,7 @@ object ContractsManager {
                                     submissionId,
                                     playerId.toString(),
                                     requestedQuantity,
+                                    policy,
                                 )
                             }
                         val projected =
@@ -809,6 +816,7 @@ object ContractsManager {
         playerId: UUID,
         group: String? = null,
         now: Long = System.currentTimeMillis(),
+        policy: ContractRankPolicy = ContractRankPolicy.IDENTITY,
     ): List<ResourceContractPlayerView> =
         currentRuntimeViews(now)
             .asSequence()
@@ -820,15 +828,19 @@ object ContractsManager {
                     runtime.reservations.asSequence()
                         .filter { it.playerId == playerKey }
                         .fold(0L) { total, reservation -> Math.addExact(total, reservation.quantity) }
+                val effectiveCap = policy.playerCap(runtime.definition.perPlayerQuantityCap)
                 ResourceContractPlayerView(
                     contract = runtime.view,
                     minSubmissionQuantity = runtime.definition.minSubmissionQuantity,
                     maxSubmissionQuantity = runtime.definition.maxSubmissionQuantity,
-                    perPlayerQuantityCap = runtime.definition.perPlayerQuantityCap,
+                    perPlayerQuantityCap = effectiveCap,
                     playerAcceptedQuantity = accepted,
                     playerReservedQuantity = reserved,
                     playerRemainingQuantity =
-                        (runtime.definition.perPlayerQuantityCap - accepted - reserved).coerceAtLeast(0L),
+                        (effectiveCap - accepted - reserved).coerceAtLeast(0L),
+                    playerPayoutMinorPerUnit = policy.payoutMinorPerUnit(runtime.definition.payoutMinorPerUnit),
+                    capBasisPoints = policy.playerCapBasisPoints,
+                    payoutBasisPoints = policy.payoutBasisPoints,
                 )
             }.toList()
 

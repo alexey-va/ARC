@@ -500,9 +500,16 @@ object ContractSubmissionJournalEngine {
                 plan.acceptedQuantity <= plan.requestedQuantity.toLong() &&
                 plan.acceptedQuantity <= definition.maxSubmissionQuantity.toLong() &&
                 plan.acceptedQuantity <= definition.targetQuantity &&
-                plan.acceptedQuantity <= definition.perPlayerQuantityCap,
+                plan.acceptedQuantity <= ContractRankPolicy(plan.playerCapBasisPoints, plan.payoutBasisPoints)
+                    .playerCap(definition.perPlayerQuantityCap),
         ) { "Journal plan quantity exceeds contract policy" }
-        require(Math.multiplyExact(plan.acceptedQuantity, definition.payoutMinorPerUnit) == plan.payoutMinor) {
+        require(
+            Math.multiplyExact(
+                plan.acceptedQuantity,
+                ContractRankPolicy(plan.playerCapBasisPoints, plan.payoutBasisPoints)
+                    .payoutMinorPerUnit(definition.payoutMinorPerUnit),
+            ) == plan.payoutMinor,
+        ) {
             "Journal plan payout does not match contract policy"
         }
         require(plan.payoutMinor <= definition.budgetMinor) { "Journal plan payout exceeds contract budget" }

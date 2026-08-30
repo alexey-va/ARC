@@ -135,7 +135,7 @@ object ContractsSubCommand : SubCommand {
             return
         }
         player.sendMessage(TextUtil.mm("<gray>Проверяю ресурсы и резерв контракта…"))
-        ContractsManager.submit(player.uniqueId, contractId, quantity).whenComplete { outcome, failure ->
+        ContractsManager.submit(player, contractId, quantity).whenComplete { outcome, failure ->
             Tasks.scheduler.runSync(
                 Runnable {
                     if (!player.isOnline) return@Runnable

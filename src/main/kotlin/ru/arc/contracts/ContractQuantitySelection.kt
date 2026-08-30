@@ -19,7 +19,7 @@ object ContractQuantitySelector {
         val contract = view.contract
         val budgetUnits =
             (contract.budgetMinor - contract.spentMinor - contract.reservedMinor)
-                .coerceAtLeast(0L) / contract.payoutMinorPerUnit
+                .coerceAtLeast(0L) / view.playerPayoutMinorPerUnit
         val maximum =
             minOf(
                 availableItems.coerceAtLeast(0).toLong(),
@@ -38,7 +38,7 @@ object ContractQuantitySelector {
             minimum = view.minSubmissionQuantity,
             maximum = maximum,
             selected = selected,
-            payoutMinor = Math.multiplyExact(selected.toLong(), contract.payoutMinorPerUnit),
+            payoutMinor = Math.multiplyExact(selected.toLong(), view.playerPayoutMinorPerUnit),
         )
     }
 

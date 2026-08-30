@@ -95,6 +95,42 @@ class ContractDomainTest : StringSpec({
             .state.status shouldBe ContractStatus.COMPLETED
     }
 
+    "rank policy raises personal cap and payout while consuming the same server budget" {
+        val policy = ContractRankPolicy(playerCapBasisPoints = 15_000, payoutBasisPoints = 11_200)
+        val initial = ResourceContractState.empty(definition)
+        val first = ResourceContractEngine.plan(
+            definition, initial, "ranked-1", "player-1", 32, 1_500L, policy = policy,
+        ) as ContractSubmissionPlan.Accepted
+
+        first.acceptedQuantity shouldBe 32L
+        first.payoutMinor shouldBe 8_960L
+        val afterFirst = ResourceContractEngine.commit(definition, initial, first, 1_501L).state
+        val second = ResourceContractEngine.plan(
+            definition, afterFirst, "ranked-2", "player-1", 32, 1_502L, policy = policy,
+        ) as ContractSubmissionPlan.Accepted
+        second.acceptedQuantity shouldBe 28L
+        second.payoutMinor shouldBe 7_840L
+        val afterSecond = ResourceContractEngine.commit(definition, afterFirst, second, 1_503L).state
+
+        afterSecond.perPlayerQuantity["player-1"] shouldBe 60L
+        afterSecond.spentMinor shouldBe 16_800L
+        afterSecond.validatedAgainst(definition) shouldBe afterSecond
+    }
+
+    "boosted payout is bounded by remaining budget at the effective rate" {
+        val constrained = definition.copy(budgetMinor = 3_000L, targetQuantity = 100L)
+        val policy = ContractRankPolicy(playerCapBasisPoints = 20_000, payoutBasisPoints = 11_200)
+        val plan = ResourceContractEngine.plan(
+            constrained, ResourceContractState.empty(constrained), "rank-budget", "player-1", 32, 1_500L,
+            policy = policy,
+        ) as ContractSubmissionPlan.Accepted
+
+        plan.acceptedQuantity shouldBe 10L
+        plan.payoutMinor shouldBe 2_800L
+        ResourceContractEngine.commit(constrained, ResourceContractState.empty(constrained), plan, 1_501L)
+            .state.status shouldBe ContractStatus.COMPLETED
+    }
+
     "replays a committed submission id without paying twice" {
         val initial = ResourceContractState.empty(definition)
         val plan =

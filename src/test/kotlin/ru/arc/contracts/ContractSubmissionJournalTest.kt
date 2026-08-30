@@ -85,6 +85,24 @@ class ContractSubmissionJournalTest : StringSpec({
         cancelled.quotaReservation() shouldBe null
     }
 
+    "journals a bounded rank-boosted payout as the exact durable reservation" {
+        val boostedPlan = ResourceContractEngine.plan(
+            definition,
+            ResourceContractState.empty(definition),
+            "boosted-journal",
+            "player-1",
+            8,
+            1_500L,
+            policy = ContractRankPolicy(15_000, 11_200),
+        ) as ContractSubmissionPlan.Accepted
+        val boostedPayload = payload(8)
+
+        val record = ContractSubmissionJournalEngine.prepare(definition, boostedPlan, listOf(boostedPayload), 1_500L)
+
+        record.payoutMinor shouldBe 2_240L
+        record.quotaReservation() shouldBe ContractQuotaReservation("boosted-journal", "player-1", 8L, 2_240L)
+    }
+
     "cancels an item-removal intent only when the adapter proved no mutation" {
         val started = ContractSubmissionJournalEngine.beginItemRemoval(prepared("no-removal"), 1_501L)
         val cancelled = ContractSubmissionJournalEngine.confirmNoItemsRemoved(started, "inventory_changed_before_remove", 1_502L)

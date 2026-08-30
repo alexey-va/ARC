@@ -29,7 +29,8 @@ object NpcContractsGui {
             player.sendActionBar(TextUtil.mm("<red>Эта книга заказов настроена неверно."))
             return
         }
-        GuiUtils.constructAndShowAsync({ buildList(player, group) }, player)
+        val policy = ContractRankPolicyResolver.resolve(player)
+        GuiUtils.constructAndShowAsync({ buildList(player, group, policy) }, player)
     }
 
     fun openDetail(
@@ -38,12 +39,13 @@ object NpcContractsGui {
         contractId: String,
         requestedQuantity: Int? = null,
     ) {
-        GuiUtils.constructAndShowAsync({ buildDetail(player, group, contractId, requestedQuantity) }, player)
+        val policy = ContractRankPolicyResolver.resolve(player)
+        GuiUtils.constructAndShowAsync({ buildDetail(player, group, contractId, requestedQuantity, policy) }, player)
     }
 
-    internal fun buildList(player: Player, group: String): ChestGui {
+    internal fun buildList(player: Player, group: String, policy: ContractRankPolicy): ChestGui {
         val views =
-            ContractsManager.currentPlayerViews(player.uniqueId, group)
+            ContractsManager.currentPlayerViews(player.uniqueId, group, policy = policy)
                 .filter { it.contract.status != ContractStatus.EXPIRED.label }
         return gui(boardString(group, "list.title", "<dark_gray>Книга заказов"), 3, player, contractGuiConfig) {
             background()
@@ -85,7 +87,9 @@ object NpcContractsGui {
                                     "remaining" to view.contract.remainingQuantity.toString(),
                                     "target" to view.contract.targetQuantity.toString(),
                                     "player_remaining" to view.playerRemainingQuantity.toString(),
-                                    "payout" to formatContractMoney(view.contract.payoutMinorPerUnit),
+                                    "payout" to formatContractMoney(view.playerPayoutMinorPerUnit),
+                                    "cap_bonus" to ((view.capBasisPoints / 100) - 100).toString(),
+                                    "payout_bonus" to ((view.payoutBasisPoints / 100) - 100).toString(),
                                     "ends_at" to formatTime(view.contract.windowEndsAt),
                                     "action" to action(view, selectable),
                                 ),
@@ -97,6 +101,7 @@ object NpcContractsGui {
                                     "<gray>У вас в инвентаре: <white><available>",
                                     "<gray>Ваш лимит: <white><player_remaining>",
                                     "<gray>Награда: <gold><payout> <white>💰</white> <gray>за единицу",
+                                    "<gray>Ранг: <gold>+<cap_bonus>% <gray>к лимиту • <gold>+<payout_bonus>% <gray>к выплате",
                                     "<gray>До: <white><ends_at>",
                                     "",
                                     "<action>",
@@ -121,11 +126,12 @@ object NpcContractsGui {
         group: String,
         contractId: String,
         requestedQuantity: Int?,
+        policy: ContractRankPolicy,
     ): ChestGui {
         val view =
-            ContractsManager.currentPlayerViews(player.uniqueId, group)
+            ContractsManager.currentPlayerViews(player.uniqueId, group, policy = policy)
                 .firstOrNull { it.contract.id == contractId }
-                ?: return buildList(player, group)
+                ?: return buildList(player, group, policy)
         val available = PaperContractItems.countPlain(player, view.contract.itemKey)
         val selection = ContractQuantitySelector.select(view, available, requestedQuantity)
         val material = PaperContractItems.material(view.contract.itemKey) ?: Material.PAPER
@@ -180,11 +186,17 @@ object NpcContractsGui {
                     tags(
                         mapOf(
                             "payout" to formatContractMoney(selection.payoutMinor),
-                            "per_unit" to formatContractMoney(view.contract.payoutMinorPerUnit),
+                            "per_unit" to formatContractMoney(view.playerPayoutMinorPerUnit),
+                            "payout_bonus" to ((view.payoutBasisPoints / 100) - 100).toString(),
                         ),
                     )
                     display("<gold><bold>Выплата:</bold> <payout> <white>💰</white>")
-                    lore(listOf("<gray>Ставка: <gold><per_unit> <white>💰</white> <gray>за единицу."))
+                    lore(
+                        listOf(
+                            "<gray>Ставка: <gold><per_unit> <white>💰</white> <gray>за единицу.",
+                            "<gray>Надбавка ранга: <gold>+<payout_bonus>%",
+                        ),
+                    )
                     fromConfig(contractGuiConfig, "detail.payout")
                 }
                 item(4, 1) {
@@ -274,7 +286,7 @@ object NpcContractsGui {
     ) {
         player.closeInventory()
         player.sendActionBar(message(group, "messages.processing", "<gray>Проверяем ресурсы и запись в книге…"))
-        ContractsManager.submit(player.uniqueId, contractId, quantity).whenComplete { outcome, failure ->
+        ContractsManager.submit(player, contractId, quantity).whenComplete { outcome, failure ->
             Tasks.scheduler.runSync(
                 Runnable {
                     if (!player.isOnline) return@Runnable
