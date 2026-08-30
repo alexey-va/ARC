@@ -3,6 +3,8 @@ package ru.arc.investigation
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertSame
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.fail
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -31,5 +33,28 @@ class InvestigationModuleConfigTest {
 
         assertFalse(loaded.config.enabled)
         assertNull(loaded.catalog)
+    }
+
+    @Test
+    fun `enabled investigations load the catalog before witness validation`() {
+        val modules = Files.createDirectories(tempDir.resolve("modules"))
+        val bundledConfig =
+            requireNotNull(InvestigationModuleConfigTest::class.java.getResourceAsStream("/modules/investigations.yml"))
+                .bufferedReader()
+                .use { it.readText() }
+                .replaceFirst("enabled: false", "enabled: true")
+        Files.writeString(modules.resolve("investigations.yml"), bundledConfig)
+        val catalog = bundledInvestigationCatalogForTest
+        var catalogLoaded = false
+
+        val loaded =
+            loadInvestigationRuntimeConfig(tempDir) {
+                catalogLoaded = true
+                catalog
+            }
+
+        assertTrue(catalogLoaded)
+        assertTrue(loaded.config.enabled)
+        assertSame(catalog, loaded.catalog)
     }
 }

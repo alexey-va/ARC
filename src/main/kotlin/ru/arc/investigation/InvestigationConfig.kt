@@ -75,11 +75,14 @@ class InvestigationConfig(private val config: Config) {
         private val WITNESS_KEY_PATTERN = Regex("[a-z][a-z0-9_-]{2,31}")
         private const val MAX_MONEY_MINOR = 100_000_000L
 
+        internal fun read(dataPath: Path): InvestigationConfig =
+            InvestigationConfig(ConfigManager.of(dataPath, "modules/investigations.yml"))
+
         fun load(
             dataPath: Path,
             witnessKeys: Set<String>,
         ): InvestigationConfig =
-            InvestigationConfig(ConfigManager.of(dataPath, "modules/investigations.yml")).validated(witnessKeys)
+            read(dataPath).validated(witnessKeys)
     }
 }
 

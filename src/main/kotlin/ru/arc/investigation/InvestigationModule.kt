@@ -24,12 +24,12 @@ internal fun loadInvestigationRuntimeConfig(
     additionalWitnessKeys: Set<String> = emptySet(),
     catalogLoader: () -> InvestigationStoryCatalog = { InvestigationStoryCatalog.load(dataPath) },
 ): InvestigationRuntimeConfig {
-    val config = InvestigationConfig.load(dataPath, emptySet())
+    val config = InvestigationConfig.read(dataPath)
     if (!config.enabled) return InvestigationRuntimeConfig(config, null)
 
     val catalog = catalogLoader()
     return InvestigationRuntimeConfig(
-        config = InvestigationConfig.load(dataPath, catalog.witnessKeys + additionalWitnessKeys),
+        config = config.validated(catalog.witnessKeys + additionalWitnessKeys),
         catalog = catalog,
     )
 }
