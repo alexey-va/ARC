@@ -3,6 +3,8 @@ package ru.arc.audit
 import ru.arc.ARC
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
+import ru.arc.sql.SqlConnectionConfig
+import ru.arc.sql.SqlSslMode
 import java.nio.file.Path
 
 /**
@@ -12,6 +14,46 @@ import java.nio.file.Path
 open class AuditConfig(
     private val config: Config,
 ) {
+    private val storage get() = config.section("storage")
+    private val mysqlSection get() = storage.section("mysql")
+    private val migrationSection get() = storage.section("migration")
+
+    open val storageMode: AuditStorageMode
+        get() = AuditStorageMode.parse(storage.string("mode", "redis"))
+
+    open val shutdownTimeoutSeconds: Int
+        get() = storage.int("shutdown-timeout-seconds", 15).coerceIn(1, 60)
+
+    open val migrationOwnerServer: String
+        get() = migrationSection.string("owner-server", "survival").trim().lowercase().ifBlank { "survival" }
+
+    open val migrationBatchSize: Int
+        get() = migrationSection.int("batch-size", 500).coerceIn(100, 10_000)
+
+    open val mysql: SqlConnectionConfig?
+        get() {
+            if (storageMode == AuditStorageMode.REDIS) return null
+            val sslModeText = mysqlSection.string("ssl-mode", SqlSslMode.VERIFY_IDENTITY.name)
+            val sslMode =
+                SqlSslMode.entries.firstOrNull { it.name.equals(sslModeText.trim(), ignoreCase = true) }
+                    ?: throw IllegalArgumentException("Unsupported audit MySQL ssl-mode: $sslModeText")
+            return SqlConnectionConfig(
+                host = mysqlSection.string("host").trim().also { require(it.isNotEmpty()) { "Audit MySQL host is required" } },
+                port = mysqlSection.int("port", 3306),
+                database = mysqlSection.string("database").trim().also { require(it.isNotEmpty()) { "Audit MySQL database is required" } },
+                username = mysqlSection.string("username").trim().also { require(it.isNotEmpty()) { "Audit MySQL username is required" } },
+                password = mysqlSection.string("password").also { require(it.isNotBlank()) { "Audit MySQL password is required" } },
+                sslMode = sslMode,
+                minimumIdle = mysqlSection.int("pool.minimum-idle", 1).coerceIn(0, 64),
+                maximumPoolSize = mysqlSection.int("pool.maximum-size", 2).coerceIn(1, 64),
+                connectionTimeoutMs = mysqlSection.long("pool.connection-timeout-ms", 10_000L),
+                socketTimeoutMs = mysqlSection.long("pool.socket-timeout-ms", 30_000L),
+                validationTimeoutMs = mysqlSection.long("pool.validation-timeout-ms", 5_000L),
+                maxLifetimeMs = mysqlSection.long("pool.max-lifetime-ms", 1_700_000L),
+                failFast = true,
+            )
+        }
+
     /** Interval for saving to Redis (ticks) */
     open val saveInterval: Long
         get() = config.integer("save-interval", 20).toLong()
@@ -146,6 +188,11 @@ open class AuditConfig(
  * Test implementation of AuditConfig with explicit values.
  */
 class TestAuditConfig(
+    override val storageMode: AuditStorageMode = AuditStorageMode.REDIS,
+    override val shutdownTimeoutSeconds: Int = 15,
+    override val migrationOwnerServer: String = "survival",
+    override val migrationBatchSize: Int = 500,
+    override val mysql: SqlConnectionConfig? = null,
     override val saveInterval: Long = 20,
     override val pruneInterval: Long = 6000,
     override val maxAgeSeconds: Int = 86400 * 30,
@@ -176,6 +223,11 @@ class TestAuditConfig(
      * Creates a copy with modified values.
      */
     fun copy(
+        storageMode: AuditStorageMode = this.storageMode,
+        shutdownTimeoutSeconds: Int = this.shutdownTimeoutSeconds,
+        migrationOwnerServer: String = this.migrationOwnerServer,
+        migrationBatchSize: Int = this.migrationBatchSize,
+        mysql: SqlConnectionConfig? = this.mysql,
         saveInterval: Long = this.saveInterval,
         pruneInterval: Long = this.pruneInterval,
         maxAgeSeconds: Int = this.maxAgeSeconds,
@@ -203,6 +255,11 @@ class TestAuditConfig(
         noDataMessage: String = this.noDataMessage,
     ): TestAuditConfig =
         TestAuditConfig(
+            storageMode,
+            shutdownTimeoutSeconds,
+            migrationOwnerServer,
+            migrationBatchSize,
+            mysql,
             saveInterval,
             pruneInterval,
             maxAgeSeconds,

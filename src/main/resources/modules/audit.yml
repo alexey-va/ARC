@@ -1,0 +1,55 @@
+# ARC economy audit storage. Production starts in dual mode for migration and
+# switches to sql only after Redis/SQL totals are verified.
+storage:
+  mode: redis
+  shutdown-timeout-seconds: 15
+  mysql:
+    host: 127.0.0.1
+    port: 3306
+    database: common
+    username: arc
+    password: change-me
+    ssl-mode: VERIFY_IDENTITY
+    pool:
+      minimum-idle: 1
+      maximum-size: 2
+      connection-timeout-ms: 10000
+      socket-timeout-ms: 30000
+      validation-timeout-ms: 5000
+      max-lifetime-ms: 1700000
+  migration:
+    owner-server: survival
+    batch-size: 500
+
+save-interval: 20
+invalidation-coalesce-seconds: 5
+prune-interval: 6000
+max-age-seconds: 2592000
+max-weight: 100000
+shard-max-weight: 100000
+max-transactions: 50000
+balance-history: false
+aggregation-window-seconds: 10
+
+monitoring:
+  enabled: true
+  large-transaction-amount: 100000.0
+  rapid-income-window-seconds: 300
+  rapid-income-amount: 250000.0
+  rapid-income-transactions: 40
+  anomaly-cooldown-seconds: 300
+  policies:
+    slimefun-buy-only:
+      enabled: false
+      activated-at: 0
+
+messages:
+  page-size: 20
+  header-format: "<gold>%player_name%'s Audit Data"
+  transaction-format: '<hover:show_text:"<gray>%comment%"><gray>%counter%. <gray>[%date%] <white>%type% <gold>%amount%</hover>'
+  income-format: '<green>+%amount%'
+  expense-format: '<red>-%amount%'
+  footer-format: '%prev%<gray>Page <gold>%page% <gray>of <gold>%total_pages%%next%'
+  prev-page: '<click:run_command:/arc audit %player_name% %prev_page% %filter%><gold><'
+  next-page: '<click:run_command:/arc audit %player_name% %next_page% %filter%><gold>>'
+  no-audit-data: '<red>No audit data found for %player_name%'
