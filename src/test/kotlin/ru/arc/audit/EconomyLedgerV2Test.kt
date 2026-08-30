@@ -6,6 +6,7 @@ import io.kotest.matchers.doubles.shouldBeExactly
 import io.kotest.matchers.shouldBe
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import ru.arc.core.TestTimeProvider
+import ru.arc.hooks.consumePendingEconomyContext
 import ru.arc.util.Common
 import java.util.UUID
 
@@ -194,6 +195,19 @@ class EconomyLedgerV2Test : FreeSpec({
 
             EconomyPendingContextTracker.consume(playerId, 50.0, 1_100, EconomySource.SHOP)?.correlationId shouldBe "shop"
             EconomyPendingContextTracker.consume(playerId, 50.0, 1_101, EconomySource.JOBS)?.correlationId shouldBe "jobs"
+        }
+
+        "uses an AutoSell pre-transaction when RedisEconomy reports the shared shop provider" {
+            val playerId = UUID.randomUUID()
+            EconomyPendingContextTracker.register(
+                playerId,
+                62.5,
+                EconomyLedgerContext(correlationId = "autosell", action = "auto_sell_chest"),
+                1_000,
+                EconomySource.AUTOSELL,
+            )
+
+            consumePendingEconomyContext(playerId, 62.5, 1_100, EconomySource.SHOP)?.correlationId shouldBe "autosell"
         }
 
         "does not use an unscoped pending context as a source wildcard" {

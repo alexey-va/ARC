@@ -23,6 +23,19 @@ import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import java.util.UUID
 
+internal fun consumePendingEconomyContext(
+    playerId: UUID,
+    amount: Double,
+    now: Long,
+    source: EconomySource,
+): EconomyLedgerContext? =
+    EconomyPendingContextTracker.consume(playerId, amount, now, source)
+        ?: if (source == EconomySource.SHOP) {
+            EconomyPendingContextTracker.consume(playerId, amount, now, EconomySource.AUTOSELL)
+        } else {
+            null
+        }
+
 class RedisEcoListener : Listener {
     @EventHandler
     fun onTransaction(event: TransactionEvent) {
@@ -163,7 +176,7 @@ class RedisEcoListener : Listener {
         val balance = amount?.let { delta -> observedAfter?.let { EconomyBalanceObservation.inferredFromAfter(delta, it) } }
         val pending =
             if (amount != null && source in setOf(EconomySource.JOBS, EconomySource.SHOP, EconomySource.AUTOSELL)) {
-                EconomyPendingContextTracker.consume(playerId, amount, capturedAt, source)
+                consumePendingEconomyContext(playerId, amount, capturedAt, source)
             } else {
                 null
             }
