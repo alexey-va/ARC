@@ -28,6 +28,7 @@ data class AuditWriterSettings(
     val shutdownTimeoutSeconds: Long,
     val jobsCoalesceWindowMillis: Long = 60_000L,
     val jobsCoalesceMaximumEvents: Int = 1_000,
+    val jobsCoalescingEnabled: Boolean = true,
 ) {
     init {
         require(batchSize > 0) { "Audit SQL batch size must be positive" }
@@ -212,6 +213,7 @@ class SqlAuditEventStore private constructor(
             windowMillis = writerSettings.jobsCoalesceWindowMillis,
             maximumPendingEvents = writerSettings.maximumPendingEvents,
             maximumEventsPerGroup = writerSettings.jobsCoalesceMaximumEvents,
+            enabled = writerSettings.jobsCoalescingEnabled,
             sink = ::appendToBatcher,
             onCoalesced = { inputEvents -> telemetry?.coalesced(inputEvents) },
         )

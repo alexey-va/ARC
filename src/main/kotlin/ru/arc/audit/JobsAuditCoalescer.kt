@@ -13,6 +13,7 @@ internal class JobsAuditCoalescer(
     private val windowMillis: Long,
     private val maximumPendingEvents: Int,
     private val maximumEventsPerGroup: Int,
+    private val enabled: Boolean = true,
     private val onCoalesced: (Int) -> Unit = {},
     private val sink: (AuditEvent) -> CompletableFuture<AuditAppendResult>,
 ) {
@@ -118,6 +119,7 @@ internal class JobsAuditCoalescer(
     }
 
     private fun key(event: AuditEvent): Key? {
+        if (!enabled) return null
         val transaction = event.transaction
         val context = transaction.context ?: return null
         if (

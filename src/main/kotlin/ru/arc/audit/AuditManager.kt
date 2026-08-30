@@ -73,6 +73,7 @@ object AuditManager {
                             shutdownTimeoutSeconds = config.shutdownTimeoutSeconds.toLong(),
                             jobsCoalesceWindowMillis = config.jobsCoalesceWindowSeconds * 1_000L,
                             jobsCoalesceMaximumEvents = config.jobsCoalesceMaximumEvents,
+                            jobsCoalescingEnabled = config.storageMode == AuditStorageMode.SQL,
                         ),
                     maintenanceSettings =
                         AuditMaintenanceSettings(

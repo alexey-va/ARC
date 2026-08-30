@@ -42,6 +42,25 @@ class JobsAuditCoalescerTest : StringSpec({
         written.size shouldBe 1
         coalescer.pendingCount shouldBe 0
     }
+
+    "preserves event identity when coalescing is disabled for dual-write migration" {
+        val written = mutableListOf<AuditEvent>()
+        val coalescer = JobsAuditCoalescer(
+            windowMillis = 60_000,
+            maximumPendingEvents = 100,
+            maximumEventsPerGroup = 100,
+            enabled = false,
+        ) { event ->
+            written += event
+            CompletableFuture.completedFuture(AuditAppendResult(true))
+        }
+
+        coalescer.append(jobEvent("event-1", 4.25, 1_000, "builder", 12)).join()
+        coalescer.append(jobEvent("event-2", 2.75, 2_000, "builder", 8)).join()
+
+        written.map { it.transaction.eventId } shouldBe listOf("event-1", "event-2")
+        coalescer.pendingCount shouldBe 0
+    }
 })
 
 private fun jobEvent(eventId: String, amount: Double, at: Long, job: String, actions: Int): AuditEvent =
