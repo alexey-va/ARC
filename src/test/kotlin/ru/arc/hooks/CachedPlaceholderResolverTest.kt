@@ -93,6 +93,25 @@ class CachedPlaceholderResolverTest :
                 calls shouldBe 1
             }
 
+            it("strips section-sign formatting only in explicit plain mode") {
+                var calls = 0
+                val formatted = "§e1§6д §e19§6ч §rR&D &6"
+                val resolver = CachedPlaceholderResolver(
+                    delegate = { _, _ ->
+                        calls++
+                        formatted
+                    },
+                )
+
+                resolver.resolve(firstPlayer, "cache_30_demo_time") shouldBe formatted
+                resolver.resolve(firstPlayer, "cache_plain_30_demo_time") shouldBe
+                    "1д 19ч R&D &6"
+                resolver.resolve(firstPlayer, "cache_30_demo_time") shouldBe formatted
+                resolver.resolve(firstPlayer, "cache_plain_30_demo_time") shouldBe
+                    "1д 19ч R&D &6"
+                calls shouldBe 2
+            }
+
             it("supports a PlaceholderAPI expansion without parameters") {
                 var calls = 0
                 val resolver = CachedPlaceholderResolver(
@@ -130,6 +149,18 @@ class CachedPlaceholderResolverTest :
                 oversized.resolve(firstPlayer, "cache_30_demo_value") shouldBe "long"
                 oversized.resolve(firstPlayer, "cache_30_demo_value") shouldBe "long"
                 oversizedCalls shouldBe 2
+
+                var plainOversizedCalls = 0
+                val plainOversized = CachedPlaceholderResolver(
+                    delegate = { _, _ ->
+                        plainOversizedCalls++
+                        "§elong"
+                    },
+                    maxValueLength = 3,
+                )
+                plainOversized.resolve(firstPlayer, "cache_plain_30_demo_value") shouldBe "long"
+                plainOversized.resolve(firstPlayer, "cache_plain_30_demo_value") shouldBe "long"
+                plainOversizedCalls shouldBe 2
             }
 
             it("keeps a bounded access-order LRU") {
@@ -177,10 +208,51 @@ class CachedPlaceholderResolverTest :
                     "cache_30_REL_demo_value",
                     "cache_30_${overlong}_value",
                     "cache_0001_demo_value",
+                    "cache_plain_0_demo_value",
+                    "cache_plain_301_demo_value",
+                    "cache_plain_30",
+                    "cache_plain_plain_30_demo_value",
+                    "cache_plain_30_arc_cache_30_demo_value",
+                    "cache_999999999999999999999_demo_value",
+                    "cache_plain_999999999999999999999_demo_value",
                 )
 
                 invalid.forEach { resolver.resolve(firstPlayer, it).shouldBeNull() }
                 calls shouldBe 0
+            }
+
+            it("accepts the exact inner limit and rejects one character more in both modes") {
+                var calls = 0
+                val resolver = CachedPlaceholderResolver(
+                    delegate = { _, _ ->
+                        calls++
+                        "ok"
+                    },
+                )
+                val exact = "x".repeat(CachedPlaceholderResolver.MAX_INNER_LENGTH)
+                val over = "x".repeat(CachedPlaceholderResolver.MAX_INNER_LENGTH + 1)
+
+                resolver.resolve(firstPlayer, "cache_300_$exact") shouldBe "ok"
+                resolver.resolve(firstPlayer, "cache_plain_300_$exact") shouldBe "ok"
+                resolver.resolve(firstPlayer, "cache_300_$over").shouldBeNull()
+                resolver.resolve(firstPlayer, "cache_plain_300_$over").shouldBeNull()
+                calls shouldBe 2
+            }
+
+            it("strips full legacy hex sequences and preserves dangling or unknown markers") {
+                val values = ArrayDeque(
+                    listOf(
+                        "§x§A§b§C§d§E§fHex",
+                        "tail§ and unknown§z",
+                    ),
+                )
+                val resolver = CachedPlaceholderResolver(
+                    delegate = { _, _ -> values.removeFirst() },
+                )
+
+                resolver.resolve(firstPlayer, "cache_plain_30_demo_hex") shouldBe "Hex"
+                resolver.resolve(firstPlayer, "cache_plain_30_demo_unknown") shouldBe
+                    "tail§ and unknown§z"
             }
 
             it("blocks indirect cache re-entry and removes the guard afterwards") {

@@ -60,6 +60,7 @@ enabling a global PlaceholderAPI cache:
 ```text
 %arc_cache_<ttl-seconds>_<inner-placeholder-without-percent-signs>%
 %arc_cache_30_cmi_user_stats_PlayTime%
+%arc_cache_plain_30_cmi_user_stats_PlayTime%
 ```
 
 The TTL must be an integer from 1 to 300 seconds. Cache entries are isolated by
@@ -71,6 +72,12 @@ call asynchronously. The inner placeholder is limited to 160 characters;
 results longer than 2048 characters and unknown results are returned but not
 cached. Concurrent misses may resolve the same value more than once so ARC never
 blocks one expansion thread on another expansion's threading requirements.
+
+The opt-in `cache_plain` form uses the same cache contract but removes legacy
+Minecraft section-sign formatting codes (`§0`–`§f`, `§k`–`§o`, `§r`, and
+`§x`) from a resolved value before caching it. It is intended for MiniMessage
+surfaces that otherwise truncate multi-part legacy-formatted values. The
+ordinary `cache` form continues to preserve the expansion result exactly.
 
 ## License
 

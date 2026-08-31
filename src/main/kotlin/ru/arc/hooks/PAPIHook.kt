@@ -57,6 +57,7 @@ class PAPIHook internal constructor(
         "%arc_particles%",
         "%arc_worldname%",
         "%arc_cache_<1-300 seconds>_<placeholder_without_percent_signs>%",
+        "%arc_cache_plain_<1-300 seconds>_<placeholder_without_percent_signs>%",
     )
 
     internal fun clearPlaceholderCache() = cachedPlaceholderResolver.clear()

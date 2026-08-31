@@ -21,6 +21,7 @@ internal class CachedPlaceholderResolver(
         val playerId: UUID?,
         val ttlSeconds: Int,
         val innerPlaceholder: String,
+        val outputMode: OutputMode,
     )
 
     private data class CacheEntry(
@@ -31,7 +32,13 @@ internal class CachedPlaceholderResolver(
     private data class Request(
         val ttlSeconds: Int,
         val innerPlaceholder: String,
+        val outputMode: OutputMode,
     )
+
+    private enum class OutputMode {
+        PRESERVE,
+        PLAIN,
+    }
 
     private val lock = Any()
     private val resolving = ThreadLocal.withInitial { false }
@@ -55,7 +62,12 @@ internal class CachedPlaceholderResolver(
         val request = parseRequest(params) ?: return null
         if (resolving.get()) return null
 
-        val key = CacheKey(player?.uniqueId, request.ttlSeconds, request.innerPlaceholder)
+        val key = CacheKey(
+            player?.uniqueId,
+            request.ttlSeconds,
+            request.innerPlaceholder,
+            request.outputMode,
+        )
         val ttlNanos = request.ttlSeconds * NANOS_PER_SECOND
         val missGeneration =
             synchronized(lock) {
@@ -70,7 +82,7 @@ internal class CachedPlaceholderResolver(
             }
 
         val token = "%${request.innerPlaceholder}%"
-        val value =
+        val resolved =
             try {
                 resolving.set(true)
                 delegate(player, token)
@@ -78,7 +90,12 @@ internal class CachedPlaceholderResolver(
                 resolving.remove()
             }
 
-        if (value == token || value.length > maxValueLength) return value
+        if (resolved == token) return resolved
+        val value = when (request.outputMode) {
+            OutputMode.PRESERVE -> resolved
+            OutputMode.PLAIN -> stripLegacySectionFormatting(resolved)
+        }
+        if (resolved.length > maxValueLength || value.length > maxValueLength) return value
 
         return synchronized(lock) {
             val storedAtNanos = ticker()
@@ -120,7 +137,14 @@ internal class CachedPlaceholderResolver(
         if (!params.startsWith(PREFIX, ignoreCase = true)) return null
         if (params.length > MAX_PARAMS_LENGTH) return null
 
-        val body = params.substring(PREFIX.length)
+        var body = params.substring(PREFIX.length)
+        val outputMode =
+            if (body.startsWith(PLAIN_MODE_PREFIX, ignoreCase = true)) {
+                body = body.substring(PLAIN_MODE_PREFIX.length)
+                OutputMode.PLAIN
+            } else {
+                OutputMode.PRESERVE
+            }
         val ttlSeparator = body.indexOf('_')
         if (ttlSeparator <= 0) return null
 
@@ -136,7 +160,28 @@ internal class CachedPlaceholderResolver(
         if (inner.startsWith("arc_cache_", ignoreCase = true)) return null
         if (inner.startsWith("rel_", ignoreCase = true)) return null
 
-        return Request(ttlSeconds, inner)
+        return Request(ttlSeconds, inner, outputMode)
+    }
+
+    private fun stripLegacySectionFormatting(value: String): String {
+        if ('§' !in value) return value
+
+        val plain = StringBuilder(value.length)
+        var index = 0
+        while (index < value.length) {
+            val character = value[index]
+            if (
+                character == '§' &&
+                index + 1 < value.length &&
+                value[index + 1].lowercaseChar() in LEGACY_FORMAT_CODES
+            ) {
+                index += 2
+                continue
+            }
+            plain.append(character)
+            index++
+        }
+        return plain.toString()
     }
 
     companion object {
@@ -146,9 +191,11 @@ internal class CachedPlaceholderResolver(
         internal const val DEFAULT_CAPACITY = 4096
         internal const val DEFAULT_MAX_VALUE_LENGTH = 2048
         private const val PREFIX = "cache_"
+        private const val PLAIN_MODE_PREFIX = "plain_"
         private const val MAX_TTL_TEXT_LENGTH = 3
         private const val MAX_PARAMS_LENGTH =
-            PREFIX.length + MAX_TTL_TEXT_LENGTH + 1 + MAX_INNER_LENGTH
+            PREFIX.length + PLAIN_MODE_PREFIX.length + MAX_TTL_TEXT_LENGTH + 1 + MAX_INNER_LENGTH
         private const val NANOS_PER_SECOND = 1_000_000_000L
+        private const val LEGACY_FORMAT_CODES = "0123456789abcdefklmnorx"
     }
 }
