@@ -65,7 +65,7 @@ class EMListener internal constructor(
             event.player.sendMessage(
                 config.component(
                     "chests.quest-locked-message",
-                    "<#c42323>Этот сундук доступен только во время нужного задания.",
+                    "<white></white> <dark_gray>» <#c42323>Сундук доступен только по заданию.",
                 ),
             )
         }
