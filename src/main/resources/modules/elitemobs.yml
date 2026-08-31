@@ -40,4 +40,4 @@ chests:
   distance: 20.0
   sound: ambient.basalt_deltas.additions
   sound-period-ticks: 100
-  quest-locked-message: '<#c42323>Этот сундук доступен только во время нужного задания.'
+  quest-locked-message: '<white></white> <dark_gray>» <#c42323>Сундук доступен только по заданию.'
