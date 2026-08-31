@@ -23,6 +23,7 @@ import ru.arc.core.whenCompleteSync
 import ru.arc.hooks.HookRegistry
 import ru.arc.hooks.zauction.AuctionShowcaseListing
 import ru.arc.hooks.zauction.AuctionShowcaseOpenResult
+import ru.arc.util.customModelDataOrNull
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import java.util.Locale
@@ -33,13 +34,23 @@ internal object AuctionShowcasePlanner {
     fun select(
         listings: List<AuctionShowcaseListing>,
         slotCount: Int,
-        offset: Int,
+        page: Int,
     ): List<AuctionShowcaseListing?> {
         require(slotCount > 0) { "slotCount must be positive" }
-        val distinct = listings.distinctBy(AuctionShowcaseListing::id)
+        val distinct =
+            listings.distinctBy { listing ->
+                listing.item.type to listing.item.customModelDataOrNull
+            }
         if (distinct.isEmpty()) return List(slotCount) { null }
-        val start = Math.floorMod(offset, distinct.size)
-        return List(slotCount) { slot -> distinct[(start + slot) % distinct.size] }
+        val start =
+            if (distinct.size <= slotCount) {
+                0
+            } else {
+                Math.floorMod(page.toLong() * slotCount, distinct.size.toLong()).toInt()
+            }
+        return List(slotCount) { slot ->
+            if (slot < distinct.size) distinct[(start + slot) % distinct.size] else null
+        }
     }
 }
 
@@ -58,14 +69,14 @@ internal class AuctionShowcaseManager {
     private val clickTimes = mutableMapOf<UUID, Long>()
 
     private var config: OriginSpawnConfig? = null
-    private var cycleOffset = 0
+    private var cyclePage = 0
     private var rotation = 0f
 
     fun apply(next: OriginSpawnConfig) {
         config = next
         val token = tasks.restart()
         removeEntities()
-        cycleOffset = 0
+        cyclePage = 0
         rotation = 0f
         if (!next.enabled || !next.showcaseEnabled) return
 
@@ -138,8 +149,10 @@ internal class AuctionShowcaseManager {
     private fun refresh(advance: Boolean) {
         if (pedestals.isEmpty()) return
         val listings = HookRegistry.auctionHook?.showcaseListings().orEmpty()
-        if (advance && listings.isNotEmpty()) cycleOffset = (cycleOffset + 1) % listings.size
-        val selected = AuctionShowcasePlanner.select(listings, pedestals.size, cycleOffset)
+        if (advance && listings.isNotEmpty()) {
+            cyclePage = if (cyclePage == Int.MAX_VALUE) 0 else cyclePage + 1
+        }
+        val selected = AuctionShowcasePlanner.select(listings, pedestals.size, cyclePage)
         pedestals.zip(selected).forEachIndexed { index, (pedestal, listing) ->
             render(pedestal, listing, emptyLabel = index == 0 && listings.isEmpty())
         }
@@ -198,7 +211,7 @@ internal class AuctionShowcaseManager {
         item.transformation =
             Transformation(Vector3f(), AxisAngle4f(), Vector3f(ITEM_SCALE, ITEM_SCALE, ITEM_SCALE), AxisAngle4f())
 
-        val text = world.spawn(floor.clone().add(0.0, 2.52, 0.0), TextDisplay::class.java)
+        val text = world.spawn(floor.clone().add(0.0, 3.62, 0.0), TextDisplay::class.java)
         configureDisplay(text)
         text.billboard = Display.Billboard.CENTER
         text.alignment = TextDisplay.TextAlignment.CENTER
@@ -208,8 +221,8 @@ internal class AuctionShowcaseManager {
         text.isSeeThrough = false
 
         val interaction = world.spawn(floor.clone().add(0.0, 0.08, 0.0), Interaction::class.java)
-        interaction.interactionWidth = 1.55f
-        interaction.interactionHeight = 2.95f
+        interaction.interactionWidth = 2.8f
+        interaction.interactionHeight = 4.15f
         interaction.isResponsive = false
         interaction.isPersistent = false
         interaction.isInvulnerable = true
@@ -226,8 +239,8 @@ internal class AuctionShowcaseManager {
         display.shadowRadius = 0f
         display.shadowStrength = 0f
         display.viewRange = 1.5f
-        display.displayWidth = 2f
-        display.displayHeight = 3.2f
+        display.displayWidth = 4f
+        display.displayHeight = 4.5f
         display.isPersistent = false
         display.setGravity(false)
         display.isInvulnerable = true
@@ -262,6 +275,6 @@ internal class AuctionShowcaseManager {
 
     private companion object {
         const val ENTITY_TAG = "arc_origin_auction_showcase"
-        const val ITEM_SCALE = 1.25f
+        const val ITEM_SCALE = 3.75f
     }
 }

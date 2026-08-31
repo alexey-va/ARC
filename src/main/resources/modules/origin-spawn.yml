@@ -13,19 +13,19 @@ chunks:
 
 auction-showcase:
   enabled: false
-  cycle-ticks: 100
+  cycle-ticks: 300
   rotation-ticks: 2
   click-debounce-millis: 500
 
-  # Two groups of three beside the hall's side carpets. The central corridor,
-  # Ratibor, the bailiff route and the herald crowd remain clear.
+  # Four side stands plus two rear stands flanking Ratibor. The rear pair sits
+  # on the central carpet, clear of both staircases and the middle aisle.
   pedestals:
     - { x: -58.5, y: 72.08, z: -4.5, yaw: 0 }
     - { x: -61.5, y: 72.08, z: -4.5, yaw: 0 }
-    - { x: -64.5, y: 72.08, z: -4.5, yaw: 0 }
+    - { x: -64.5, y: 72.08, z: -2.5, yaw: 0 }
     - { x: -58.5, y: 72.08, z: 4.5, yaw: 180 }
     - { x: -61.5, y: 72.08, z: 4.5, yaw: 180 }
-    - { x: -64.5, y: 72.08, z: 4.5, yaw: 180 }
+    - { x: -64.5, y: 72.08, z: 2.5, yaw: 180 }
 
   text:
     listing: |-

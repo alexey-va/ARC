@@ -2,28 +2,61 @@ package ru.arc.origin
 
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.collections.shouldContainExactly
+import io.mockk.every
 import io.mockk.mockk
+import org.bukkit.Material
 import org.bukkit.inventory.ItemStack
+import org.bukkit.inventory.meta.ItemMeta
 import ru.arc.hooks.zauction.AuctionShowcaseListing
 
 class AuctionShowcasePlannerTest :
     FreeSpec({
-        "cycles six distinct pedestals through the active listing ring" {
-            val listings = (1..8).map(::listing)
+        "switches the whole showcase to the next page of six visual items" {
+            val materials =
+                listOf(
+                    Material.STONE,
+                    Material.DIRT,
+                    Material.COBBLESTONE,
+                    Material.OAK_LOG,
+                    Material.IRON_INGOT,
+                    Material.GOLD_INGOT,
+                    Material.DIAMOND,
+                    Material.EMERALD,
+                )
+            val listings = materials.mapIndexed { index, material -> listing(index + 1, material) }
 
             AuctionShowcasePlanner.select(listings, 6, 0).map { it?.id }
                 .shouldContainExactly(1, 2, 3, 4, 5, 6)
             AuctionShowcasePlanner.select(listings, 6, 1).map { it?.id }
-                .shouldContainExactly(2, 3, 4, 5, 6, 7)
+                .shouldContainExactly(7, 8, 1, 2, 3, 4)
         }
 
-        "fills all six pedestals by repeating the active listing ring" {
-            val listings = listOf(listing(1), listing(2), listing(2), listing(3), listing(4))
+        "never repeats the same visual item to fill empty pedestals" {
+            val listings =
+                listOf(
+                    listing(1, Material.STONE),
+                    listing(2, Material.STONE),
+                    listing(3, Material.DIRT),
+                    listing(4, Material.COBBLESTONE),
+                    listing(5, Material.OAK_LOG),
+                )
 
             AuctionShowcasePlanner.select(listings, 6, 0).map { it?.id }
-                .shouldContainExactly(1, 2, 3, 4, 1, 2)
+                .shouldContainExactly(1, 3, 4, 5, null, null)
             AuctionShowcasePlanner.select(listings, 6, 1).map { it?.id }
-                .shouldContainExactly(2, 3, 4, 1, 2, 3)
+                .shouldContainExactly(1, 3, 4, 5, null, null)
+        }
+
+        "treats custom models on the same base material as different visuals" {
+            val listings =
+                listOf(
+                    listing(1, Material.STICK, 11137),
+                    listing(2, Material.STICK, 11138),
+                    listing(3, Material.STICK, 11137),
+                )
+
+            AuctionShowcasePlanner.select(listings, 6, 0).map { it?.id }
+                .shouldContainExactly(1, 2, null, null, null, null)
         }
 
         "renders a fully empty state when no listing is active" {
@@ -32,11 +65,28 @@ class AuctionShowcasePlannerTest :
         }
     })
 
-private fun listing(id: Int): AuctionShowcaseListing =
+private fun listing(
+    id: Int,
+    material: Material = Material.STONE,
+    customModelData: Int? = null,
+): AuctionShowcaseListing =
     AuctionShowcaseListing(
         id = id,
-        item = mockk<ItemStack>(relaxed = true),
+        item = stack(material, customModelData),
         itemName = "Камень $id",
         sellerName = "Seller$id",
         price = id.toString(),
     )
+
+private fun stack(
+    material: Material,
+    customModelData: Int?,
+): ItemStack {
+    val meta = mockk<ItemMeta>(relaxed = true)
+    every { meta.hasCustomModelData() } returns (customModelData != null)
+    customModelData?.let { value -> every { meta.customModelData } returns value }
+    return mockk {
+        every { type } returns material
+        every { itemMeta } returns meta
+    }
+}
