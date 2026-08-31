@@ -40,6 +40,12 @@ commands:
     permission: ''
     player-only: true
     usage: /arc chat <local|global>
+  commandhide:
+    name: commandhide
+    aliases: [cmdhide, command-hide]
+    permission: arc.command.hide.admin
+    player-only: false
+    usage: /arc commandhide [allow|restrict|status] [player]
   npc-chat:
     name: npc-chat
     aliases: [ ]
@@ -170,6 +176,27 @@ commands:
     permission: arc.sound.follow
     usage: /arc soundfollow <player> <namespace:sound>
 messages:
+  commandhide:
+    usage: '<#92bed8>Команды <#666666>· <#92bed8>/arc commandhide [режим] [игрок]'
+    player-offline: '<#92bed8>Команды <#666666>· <#92bed8><player> <#c42323>не на этом сервере.'
+    allowed: '<#92bed8>Команды <#666666>· <#92bed8><player><#e6fff3>: <#2bba43>все команды открыты<#e6fff3>.'
+    restricted: '<#92bed8>Команды <#666666>· <#92bed8><player><#e6fff3>: <#ff9f0f>ограничения включены<#e6fff3>.'
+    still-allowed: '<#92bed8>Команды <#666666>· <#92bed8><player><#e6fff3>: <#ff9f0f>обход ещё активен <#666666>— <#e6fff3>группа/OP.'
+    saved-but-not-effective: '<#92bed8>Команды <#666666>· <#92bed8><player><#e6fff3>: право есть, но обход не активен.'
+    status-managed: '<#92bed8>Команды <#666666>· <#92bed8><player><#e6fff3>: прямой полный доступ.'
+    status-inherited: '<#92bed8>Команды <#666666>· <#92bed8><player><#e6fff3>: доступ через группу/OP.'
+    status-external: '<#92bed8>Команды <#666666>· <#92bed8><player><#e6fff3>: внешняя прямая выдача.'
+    status-restricted: '<#92bed8>Команды <#666666>· <#92bed8><player><#e6fff3>: ограничения активны.'
+    status-failed: '<#92bed8>Команды <#666666>· <#c42323>Не удалось проверить <#92bed8><player><#c42323>.'
+    busy: '<#92bed8>Команды <#666666>· <#92bed8><player><#e6fff3>: доступ уже изменяется.'
+    failed: '<#92bed8>Команды <#666666>· <#c42323>Не удалось изменить доступ <#92bed8><player><#c42323>.'
+    command-tree-refresh-failed: '<#92bed8>Команды <#666666>· <#92bed8><player><#e6fff3>: дерево обновится при входе.'
+    conflicting-deny: '<#92bed8>Команды <#666666>· <#92bed8><player><#c42323>: мешает прямой запрет LuckPerms.'
+    unmanaged-grant: '<#92bed8>Команды <#666666>· <#92bed8><player><#ff9f0f>: чужая выдача не изменена.'
+    saved-while-offline: '<#92bed8>Команды <#666666>· <#92bed8><player><#e6fff3>: сохранено, игрок вышел.'
+    module-disabled: '<#92bed8>Команды <#666666>· <#ff9f0f>Фильтр команд выключен в конфигурации<#e6fff3>.'
+    bypass-disabled: '<#92bed8>Команды <#666666>· <#c42323>Право обхода не настроено<#e6fff3>.'
+    provider-unavailable: '<#92bed8>Команды <#666666>· <#c42323>LuckPerms сейчас недоступен<#e6fff3>.'
   pouch:
     unknown: '<red>Неизвестный мешочек: <white>%pouch%<gray>. Список: <white>/arc pouch list'
     invalid: '<red>Мешочек <white>%pouch%<red> временно недоступен из-за ошибки настройки.'

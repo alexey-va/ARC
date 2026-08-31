@@ -9,6 +9,7 @@ import ru.arc.commands.arc.subcommands.BaltopSubCommand
 import ru.arc.commands.arc.subcommands.BoardSubCommand
 import ru.arc.commands.arc.subcommands.BuySubCommand
 import ru.arc.commands.arc.subcommands.ChatSubCommand
+import ru.arc.commands.arc.subcommands.CommandHideSubCommand
 import ru.arc.commands.arc.subcommands.ContractsSubCommand
 import ru.arc.commands.arc.subcommands.EliteLootSubCommand
 import ru.arc.commands.arc.subcommands.EmshopSubCommand
@@ -60,6 +61,7 @@ class ArcCommand :
             ReloadSubCommand,
             BoardSubCommand,
             ChatSubCommand,
+            CommandHideSubCommand(),
             ContractsSubCommand,
             InvestigationSubCommand,
             BaltopSubCommand,

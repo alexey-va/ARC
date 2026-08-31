@@ -2,6 +2,9 @@
 #
 # Игрок получает ограничения группы, когда у него есть arc.command.hide.<group>.
 # arc.command.hide.bypass отключает все ограничения для сотрудника.
+# /arc commandhide allow|restrict|status управляет прямой выдачей этого bypass
+# для точного онлайн-игрока и не трогает чужие LuckPerms nodes;
+# право администратора: arc.command.hide.admin.
 enabled: true
 bypass-permission: "arc.command.hide.bypass"
 

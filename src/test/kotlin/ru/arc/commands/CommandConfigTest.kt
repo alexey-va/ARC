@@ -1,6 +1,9 @@
 
 package ru.arc.commands
 
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.minimessage.tag.Tag
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
@@ -11,6 +14,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import ru.arc.TestBase
 import ru.arc.commands.arc.CommandConfig
+import ru.arc.util.TextUtils
 
 /**
  * Tests for CommandConfig message and metadata loading.
@@ -47,6 +51,19 @@ class CommandConfigTest : TestBase() {
 
             assertNotNull(result)
             // Component should contain the replacement
+        }
+
+        @Test
+        @DisplayName("get() with component resolver keeps dynamic text literal")
+        fun testGetWithComponentResolver() {
+            val result =
+                CommandConfig.get(
+                    "test.key",
+                    "<gray>Hello <name>!",
+                    TagResolver.resolver("name", Tag.inserting(Component.text("<red>Literal"))),
+                )
+
+            assertEquals("Hello <red>Literal!", TextUtils.plain(result))
         }
 
         @Test

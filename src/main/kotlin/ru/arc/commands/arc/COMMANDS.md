@@ -389,6 +389,29 @@ pouches:
 
 ## Администрирование
 
+### /arc commandhide
+
+Быстро выдаёт или снимает у точного онлайн-игрока постоянный прямой
+`arc.command.hide.bypass`. Изменение сохраняется через LuckPerms по UUID и
+сразу обновляет список и tab-complete команд игрока.
+
+| Параметр  | Значение                 |
+|-----------|--------------------------|
+| **Право** | `arc.command.hide.admin` |
+
+```bash
+/arc commandhide allow Steve     # открыть все команды
+/arc commandhide restrict Steve  # вернуть настроенные ограничения
+/arc commandhide status Steve    # показать источник полного доступа
+```
+
+`restrict` удаляет только прямую выдачу этой команды. Если bypass остаётся от
+группы, OP или другого контекстного/временного права, ARC не удаляет его молча,
+а сообщает администратору, что полный доступ всё ещё действует.
+Собственная выдача ARC помечается meta-маркером в LuckPerms. Чужие прямые
+выдачи и запреты команда не перезаписывает: `status` показывает внешний
+источник, а `allow`/`restrict` возвращают безопасный конфликт.
+
 ### /arc reload
 
 Перезагрузка всей конфигурации плагина.
@@ -828,6 +851,7 @@ lp group moderator permission set arc.rtp.respawn true
 | Право                     | Описание                           |
 |---------------------------|------------------------------------|
 | `arc.admin`               | Reload, repo, logger, emshop, test |
+| `arc.command.hide.admin`  | Управление полным доступом к командам |
 | `arc.jobs.boost.give` | Выдача бустов                      |
 | `arc.treasure.pool.admin`     | Управление наградами               |
 | `arc.location.pool.admin`       | Управление пулами локаций          |
@@ -839,6 +863,7 @@ lp group moderator permission set arc.rtp.respawn true
 ```bash
 lp group admin parent add moderator
 lp group admin permission set arc.admin true
+lp group admin permission set arc.command.hide.admin true
 lp group admin permission set arc.jobs.boost.give true
 lp group admin permission set arc.treasure.pool.admin true
 lp group admin permission set arc.location.pool.admin true
@@ -864,6 +889,7 @@ lp group admin permission set arc.x true
 | `arc.sound.follow`        | `/arc soundfollow`                                                    | Модератор |
 | `arc.rtp.respawn`         | `/arc respawnonrtp`                                                   | Модератор |
 | `arc.admin`               | `/arc reload`, `/arc repo`, `/arc logger`, `/arc emshop`, `/arc test` | Админ     |
+| `arc.command.hide.admin`  | `/arc commandhide`                                                 | Админ     |
 | `arc.jobs.boost.give` | `/arc giveboost`                                                      | Админ     |
 | `arc.treasure.pool.admin`     | `/arc treasures`                                                      | Админ     |
 | `arc.pouch.give`               | `/arc pouch`                                                          | Админ     |

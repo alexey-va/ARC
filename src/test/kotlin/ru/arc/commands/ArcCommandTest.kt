@@ -1,6 +1,7 @@
 package ru.arc.commands
 
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -89,6 +90,37 @@ class ArcCommandTest : TestBase() {
             assertTrue(result)
             // Should receive success message (component-based)
             assertTrue(player.hasReceivedMessage(), "Reload should send a confirmation message")
+        }
+    }
+
+    // ==================== CommandHide Subcommand ====================
+
+    @Nested
+    @DisplayName("/arc commandhide")
+    inner class CommandHideTests {
+        @Test
+        @DisplayName("Without exact admin permission - sends no permission message")
+        fun testCommandHideNoPermission() {
+            assertFalse(player.hasPermission("arc.command.hide.admin"))
+
+            val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("commandhide", "status", player.name))
+
+            assertTrue(result)
+            assertTrue(player.hasReceivedMessage(), "Should deny CommandHide administration")
+        }
+
+        @Test
+        @DisplayName("Tab completion exposes command and bounded actions only with admin permission")
+        fun testCommandHideTabPermission() {
+            val denied = requireNotNull(arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("command")))
+            assertFalse(denied.contains("commandhide"))
+
+            player.addAttachment(plugin, "arc.command.hide.admin", true)
+            val roots = requireNotNull(arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("command")))
+            val actions = requireNotNull(arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("commandhide", "")))
+
+            assertTrue(roots.contains("commandhide"))
+            assertEquals(listOf("allow", "status", "restrict"), actions)
         }
     }
 

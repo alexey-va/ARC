@@ -8,6 +8,9 @@ sources:
   spy:
     path: src/main/resources/modules/cross-server-spy.yml
     root: display
+  commandhide:
+    path: src/main/resources/config/commands.yml
+    root: messages.commandhide
 
 placeholders:
   server: Выживание
@@ -15,8 +18,13 @@ placeholders:
   sender: Alexey23
   target: NorthAlex
   content: /warp market
+  player: ArchitectureMax
 
 surfaces:
+  chat:
+    - source: commandhide
+      include: ['*']
+
   chat-blocks:
     - id: server-hover
       text: spy:server-hover

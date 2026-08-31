@@ -1,6 +1,7 @@
 package ru.arc.commands.arc
 
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import ru.arc.ARC
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
@@ -70,6 +71,13 @@ object CommandConfig {
         }
         return TextUtil.mm(str, true)
     }
+
+    /** Inserts dynamic components without parsing their text as MiniMessage markup. */
+    fun get(
+        key: String,
+        default: String,
+        resolver: TagResolver,
+    ): Component = TextUtil.mm(config.string("messages.$key", default), resolver)
 
     // ==================== Common Messages ====================
 

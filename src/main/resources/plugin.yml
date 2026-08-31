@@ -236,6 +236,9 @@ permissions:
   arc.command.hide.bypass:
     description: Bypass all CommandHide groups
     default: op
+  arc.command.hide.admin:
+    description: Manage per-player CommandHide bypass grants
+    default: op
   arc.mounts.admin:
     description: Administer mount ownership and summon test mounts
     default: op

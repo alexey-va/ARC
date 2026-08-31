@@ -290,6 +290,11 @@ open class ARC : JavaPlugin() {
                 debug("Saved bundled resource: {}", resource)
             }
         }
+
+        val commandsConfig = ConfigManager.of(dataFolder.toPath().resolve("config"), "commands.yml")
+        if (commandsConfig.mergeMissingFromBundled("config/commands.yml")) {
+            debug("Added missing bundled keys to config/commands.yml")
+        }
     }
 
     private fun initLogging() {
