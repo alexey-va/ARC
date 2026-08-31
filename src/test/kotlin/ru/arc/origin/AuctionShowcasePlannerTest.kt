@@ -13,15 +13,17 @@ class AuctionShowcasePlannerTest :
 
             AuctionShowcasePlanner.select(listings, 6, 0).map { it?.id }
                 .shouldContainExactly(1, 2, 3, 4, 5, 6)
-            AuctionShowcasePlanner.select(listings, 6, 6).map { it?.id }
-                .shouldContainExactly(7, 8, 1, 2, 3, 4)
+            AuctionShowcasePlanner.select(listings, 6, 1).map { it?.id }
+                .shouldContainExactly(2, 3, 4, 5, 6, 7)
         }
 
-        "does not repeat a listing when fewer than six are active" {
-            val listings = listOf(listing(1), listing(2), listing(2), listing(3))
+        "fills all six pedestals by repeating the active listing ring" {
+            val listings = listOf(listing(1), listing(2), listing(2), listing(3), listing(4))
 
             AuctionShowcasePlanner.select(listings, 6, 0).map { it?.id }
-                .shouldContainExactly(1, 2, 3, null, null, null)
+                .shouldContainExactly(1, 2, 3, 4, 1, 2)
+            AuctionShowcasePlanner.select(listings, 6, 1).map { it?.id }
+                .shouldContainExactly(2, 3, 4, 1, 2, 3)
         }
 
         "renders a fully empty state when no listing is active" {
@@ -36,5 +38,5 @@ private fun listing(id: Int): AuctionShowcaseListing =
         item = mockk<ItemStack>(relaxed = true),
         itemName = "Камень $id",
         sellerName = "Seller$id",
-        price = "$id₽",
+        price = id.toString(),
     )

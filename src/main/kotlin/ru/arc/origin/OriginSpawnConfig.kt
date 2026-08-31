@@ -40,7 +40,7 @@ internal class OriginSpawnConfig private constructor(
         source
             .component(
                 "auction-showcase.text.listing",
-                "<#f2b84b><name>\n<#969696>Продавец: <seller>\n<#ffacd5>Цена: <price>",
+                "<#f2b84b><name>\n<#969696>Продавец: <seller>\n<#ffacd5>Цена: <price> <white><bold:false>💰</bold></white>",
             ) {
                 tag("name", Component.text(itemName))
                 tag("seller", Component.text(seller))
@@ -107,7 +107,7 @@ internal class OriginSpawnConfig private constructor(
                         maxInFlight = source.integer("chunks.max-in-flight", 8).coerceIn(1, 32),
                     ),
                 showcaseEnabled = showcaseEnabled,
-                cycleTicks = source.long("auction-showcase.cycle-ticks", 240L).coerceIn(20L, 72_000L),
+                cycleTicks = source.long("auction-showcase.cycle-ticks", 100L).coerceIn(20L, 72_000L),
                 rotationTicks = source.long("auction-showcase.rotation-ticks", 2L).coerceIn(1L, 20L),
                 clickDebounceMillis =
                     source.long("auction-showcase.click-debounce-millis", 500L).coerceIn(100L, 5_000L),

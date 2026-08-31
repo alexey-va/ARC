@@ -39,9 +39,7 @@ internal object AuctionShowcasePlanner {
         val distinct = listings.distinctBy(AuctionShowcaseListing::id)
         if (distinct.isEmpty()) return List(slotCount) { null }
         val start = Math.floorMod(offset, distinct.size)
-        return List(slotCount) { slot ->
-            if (slot >= distinct.size) null else distinct[(start + slot) % distinct.size]
-        }
+        return List(slotCount) { slot -> distinct[(start + slot) % distinct.size] }
     }
 }
 
@@ -110,8 +108,7 @@ internal class AuctionShowcaseManager {
         }
         hook.openShowcaseListing(player, listingId) { result ->
             when (result) {
-                AuctionShowcaseOpenResult.ConfirmationOpened -> refresh(advance = false)
-                AuctionShowcaseOpenResult.OwnAuctionOpened,
+                AuctionShowcaseOpenResult.ConfirmationOpened,
                 AuctionShowcaseOpenResult.InsufficientFunds,
                 AuctionShowcaseOpenResult.Busy,
                 -> Unit
@@ -141,7 +138,7 @@ internal class AuctionShowcaseManager {
     private fun refresh(advance: Boolean) {
         if (pedestals.isEmpty()) return
         val listings = HookRegistry.auctionHook?.showcaseListings().orEmpty()
-        if (advance && listings.isNotEmpty()) cycleOffset = (cycleOffset + pedestals.size) % listings.size
+        if (advance && listings.isNotEmpty()) cycleOffset = (cycleOffset + 1) % listings.size
         val selected = AuctionShowcasePlanner.select(listings, pedestals.size, cycleOffset)
         pedestals.zip(selected).forEachIndexed { index, (pedestal, listing) ->
             render(pedestal, listing, emptyLabel = index == 0 && listings.isEmpty())
@@ -174,7 +171,7 @@ internal class AuctionShowcaseManager {
                 Transformation(
                     Vector3f(),
                     AxisAngle4f(rotation, 0f, 1f, 0f),
-                    Vector3f(0.82f, 0.82f, 0.82f),
+                    Vector3f(ITEM_SCALE, ITEM_SCALE, ITEM_SCALE),
                     AxisAngle4f(),
                 )
         }
@@ -193,15 +190,15 @@ internal class AuctionShowcaseManager {
                 AxisAngle4f(),
             )
 
-        val item = world.spawn(floor.clone().add(0.0, 1.12, 0.0), ItemDisplay::class.java)
+        val item = world.spawn(floor.clone().add(0.0, 1.22, 0.0), ItemDisplay::class.java)
         configureDisplay(item)
         item.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.GROUND
         item.interpolationDelay = 0
         item.interpolationDuration = (config?.rotationTicks ?: 2L).toInt()
         item.transformation =
-            Transformation(Vector3f(), AxisAngle4f(), Vector3f(0.82f, 0.82f, 0.82f), AxisAngle4f())
+            Transformation(Vector3f(), AxisAngle4f(), Vector3f(ITEM_SCALE, ITEM_SCALE, ITEM_SCALE), AxisAngle4f())
 
-        val text = world.spawn(floor.clone().add(0.0, 2.18, 0.0), TextDisplay::class.java)
+        val text = world.spawn(floor.clone().add(0.0, 2.52, 0.0), TextDisplay::class.java)
         configureDisplay(text)
         text.billboard = Display.Billboard.CENTER
         text.alignment = TextDisplay.TextAlignment.CENTER
@@ -211,8 +208,8 @@ internal class AuctionShowcaseManager {
         text.isSeeThrough = false
 
         val interaction = world.spawn(floor.clone().add(0.0, 0.08, 0.0), Interaction::class.java)
-        interaction.interactionWidth = 1.35f
-        interaction.interactionHeight = 2.55f
+        interaction.interactionWidth = 1.55f
+        interaction.interactionHeight = 2.95f
         interaction.isResponsive = false
         interaction.isPersistent = false
         interaction.isInvulnerable = true
@@ -229,8 +226,8 @@ internal class AuctionShowcaseManager {
         display.shadowRadius = 0f
         display.shadowStrength = 0f
         display.viewRange = 1.5f
-        display.displayWidth = 1.5f
-        display.displayHeight = 2.75f
+        display.displayWidth = 2f
+        display.displayHeight = 3.2f
         display.isPersistent = false
         display.setGravity(false)
         display.isInvulnerable = true
@@ -265,5 +262,6 @@ internal class AuctionShowcaseManager {
 
     private companion object {
         const val ENTITY_TAG = "arc_origin_auction_showcase"
+        const val ITEM_SCALE = 1.25f
     }
 }

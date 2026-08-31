@@ -170,7 +170,7 @@ internal class AuctionHook : AutoCloseable {
         return manager
             .getItems(StorageType.LISTED)
             .asSequence()
-            .filter(Item::isActivelyListed)
+            .filter { it.status in SHOWCASE_VISIBLE_STATUSES }
             .distinctBy(Item::getId)
             .sortedBy(Item::getId)
             .mapNotNull(::showcaseListing)
@@ -198,8 +198,17 @@ internal class AuctionHook : AutoCloseable {
             return
         }
         if (item.sellerUniqueId == player.uniqueId) {
-            manager.openMainAuction(player)
-            callback(AuctionShowcaseOpenResult.OwnAuctionOpened)
+            openConfirmation(
+                player = player,
+                item = item,
+                manager = manager,
+                plugin = plugin,
+                status = ItemStatus.IS_REMOVE_CONFIRM,
+                singleInventory = Inventories.REMOVE_CONFIRM,
+                multipleInventory = Inventories.REMOVE_INVENTORY_CONFIRM,
+                ignoredPlayer = null,
+                callback = callback,
+            )
             return
         }
 
@@ -249,31 +258,51 @@ internal class AuctionHook : AutoCloseable {
                 callback(AuctionShowcaseOpenResult.Stale)
                 return@whenCompleteSync
             }
-            cache.set(PlayerCacheKey.ITEM_SHOW, current)
-            cache.set(PlayerCacheKey.CURRENT_PAGE, 1)
             cache.set(PlayerCacheKey.PURCHASE_ITEM, false)
-
-            plugin.auctionClusterBridge
-                .notifyItemStatusChange(current, ItemStatus.AVAILABLE, ItemStatus.IS_PURCHASE_CONFIRM)
-                .whenCompleteSync(tasks) { _, transitionFailure ->
-                    if (transitionFailure != null) {
-                        cache.remove(PlayerCacheKey.ITEM_SHOW, PlayerCacheKey.CURRENT_PAGE)
-                        warn("Failed to reserve auction showcase listing {} for confirmation", listingId, transitionFailure)
-                        callback(AuctionShowcaseOpenResult.Failed)
-                        return@whenCompleteSync
-                    }
-                    current.status = ItemStatus.IS_PURCHASE_CONFIRM
-                    manager.updateListedItems(current, false, player)
-                    val inventory =
-                        if ((current as? AuctionItem)?.itemStacks?.size ?: 0 > 1) {
-                            Inventories.PURCHASE_INVENTORY_CONFIRM
-                        } else {
-                            Inventories.PURCHASE_CONFIRM
-                        }
-                    plugin.inventoriesLoader.openInventory(player, inventory)
-                    callback(AuctionShowcaseOpenResult.ConfirmationOpened)
-                }
+            openConfirmation(
+                player = player,
+                item = current,
+                manager = manager,
+                plugin = plugin,
+                status = ItemStatus.IS_PURCHASE_CONFIRM,
+                singleInventory = Inventories.PURCHASE_CONFIRM,
+                multipleInventory = Inventories.PURCHASE_INVENTORY_CONFIRM,
+                ignoredPlayer = player,
+                callback = callback,
+            )
         }
+    }
+
+    private fun openConfirmation(
+        player: Player,
+        item: Item,
+        manager: AuctionManager,
+        plugin: AuctionPlugin,
+        status: ItemStatus,
+        singleInventory: Inventories,
+        multipleInventory: Inventories,
+        ignoredPlayer: Player?,
+        callback: (AuctionShowcaseOpenResult) -> Unit,
+    ) {
+        val cache = manager.getCache(player)
+        cache.set(PlayerCacheKey.ITEM_SHOW, item)
+        cache.set(PlayerCacheKey.CURRENT_PAGE, 1)
+        plugin.auctionClusterBridge
+            .notifyItemStatusChange(item, ItemStatus.AVAILABLE, status)
+            .whenCompleteSync(tasks) { _, failure ->
+                if (failure != null) {
+                    cache.remove(PlayerCacheKey.ITEM_SHOW, PlayerCacheKey.CURRENT_PAGE)
+                    warn("Failed to reserve auction showcase listing {} for confirmation", item.id, failure)
+                    callback(AuctionShowcaseOpenResult.Failed)
+                    return@whenCompleteSync
+                }
+                item.status = status
+                manager.updateListedItems(item, false, ignoredPlayer)
+                val inventory =
+                    if ((item as? AuctionItem)?.itemStacks?.size ?: 0 > 1) multipleInventory else singleInventory
+                plugin.inventoriesLoader.openInventory(player, inventory)
+                callback(AuctionShowcaseOpenResult.ConfirmationOpened)
+            }
     }
 
     private fun findActive(manager: AuctionManager, listingId: Int): Item? =
@@ -295,8 +324,7 @@ internal class AuctionHook : AutoCloseable {
                 ?: item.itemDisplay?.trim()?.takeIf(String::isNotBlank)
                 ?: item.translationKey.trim().takeIf(String::isNotBlank)
                 ?: "Предмет"
-        val symbol = item.auctionEconomy?.symbol?.trim().orEmpty()
-        val price = TextUtil.formatAmount(item.price.toDouble()) + symbol.takeIf(String::isNotBlank).orEmpty()
+        val price = TextUtil.formatAmount(item.price.toDouble())
         return AuctionShowcaseListing(
             id = item.id,
             item = stack,
@@ -321,6 +349,11 @@ internal class AuctionHook : AutoCloseable {
 
     private fun <T> getProvider(clazz: Class<T>): T? =
         ARC.instance.server.servicesManager.getRegistration(clazz)?.provider
+
+    private companion object {
+        val SHOWCASE_VISIBLE_STATUSES =
+            setOf(ItemStatus.AVAILABLE, ItemStatus.IS_PURCHASE_CONFIRM, ItemStatus.IS_REMOVE_CONFIRM)
+    }
 }
 
 internal data class AuctionShowcaseListing(
@@ -333,8 +366,6 @@ internal data class AuctionShowcaseListing(
 
 internal sealed interface AuctionShowcaseOpenResult {
     data object ConfirmationOpened : AuctionShowcaseOpenResult
-
-    data object OwnAuctionOpened : AuctionShowcaseOpenResult
 
     data object InsufficientFunds : AuctionShowcaseOpenResult
 

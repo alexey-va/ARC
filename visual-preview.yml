@@ -158,7 +158,7 @@ surfaces:
       placeholders:
         name: Незеритовый меч
         seller: CraftMaster
-        price: '12 500₽'
+        price: '12 500'
     - id: auction-showcase-empty
       text: origin-showcase:text.empty
 

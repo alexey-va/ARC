@@ -18,6 +18,7 @@ class OriginSpawnConfigTest :
                 val plan = OriginChunkPlanner.plan(config.chunkRegion)
 
                 config.enabled shouldBe false
+                config.cycleTicks shouldBe 100L
                 plan.size shouldBe 759
                 plan.first() shouldBe OriginChunkKey(0, -1)
                 plan.toSet().size shouldBe 759
@@ -64,7 +65,7 @@ class OriginSpawnConfigTest :
                 val rendered = config.listingText("<red>Меч", "<bold>Игрок", "<click:run_command:/op>10")
 
                 PlainTextComponentSerializer.plainText().serialize(rendered) shouldBe
-                    "<red>Меч\nПродавец: <bold>Игрок\nЦена: <click:run_command:/op>10"
+                    "<red>Меч\nПродавец: <bold>Игрок\nЦена: <click:run_command:/op>10 💰"
             } finally {
                 directory.toFile().deleteRecursively()
             }

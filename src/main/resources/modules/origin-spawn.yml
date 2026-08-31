@@ -13,7 +13,7 @@ chunks:
 
 auction-showcase:
   enabled: false
-  cycle-ticks: 240
+  cycle-ticks: 100
   rotation-ticks: 2
   click-debounce-millis: 500
 
@@ -31,7 +31,7 @@ auction-showcase:
     listing: |-
       <#f2b84b><name>
       <#969696>Продавец: <seller>
-      <#ffacd5>Цена: <price>
+      <#ffacd5>Цена: <price> <white><bold:false>💰</bold></white>
     empty: '<#969696>Сейчас нет активных лотов'
 
   messages:
