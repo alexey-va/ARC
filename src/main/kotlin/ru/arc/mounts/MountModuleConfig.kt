@@ -433,7 +433,10 @@ open class MountModuleConfig(private val config: Config) {
             .getOrElse { throw IllegalArgumentException("Mount '$mountId' has invalid rarity '$raw'") }
 
     companion object {
-        fun load(dataPath: Path): MountModuleConfig =
-            MountModuleConfig(ConfigManager.ofModule(dataPath, "mounts.yml")).validated()
+        fun load(dataPath: Path): MountModuleConfig {
+            val source = ConfigManager.ofModule(dataPath, "mounts.yml")
+            source.mergeMissingFromBundled("modules/mounts.yml")
+            return MountModuleConfig(source).validated()
+        }
     }
 }

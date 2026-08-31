@@ -5,6 +5,7 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import org.bukkit.Material
+import ru.arc.config.ConfigManager
 import java.nio.file.Files
 import java.time.Duration
 
@@ -159,6 +160,53 @@ class MountModuleConfigTest : StringSpec({
         config.tuning.walkingMaxStepHeightByLevelHundredths shouldBe listOf(110, 200, 400)
     }
 
+    "existing runtime config merges new bundled mount features without replacing server gates" {
+        val dataPath = Files.createTempDirectory("arc-mounts-merge-forward-")
+        val moduleDir = Files.createDirectories(dataPath.resolve("modules"))
+        val file = moduleDir.resolve("mounts.yml")
+        Files.writeString(
+            file,
+            """
+            enabled: true
+            ownership-migration-complete: true
+            purchases-enabled: true
+            allowed-worlds: [operator_world]
+            gui:
+              items:
+                background: {material: GRAY_STAINED_GLASS_PANE, customModelData: 11000}
+            mounts:
+              operator_mount:
+                type: walking
+                entity: PIG
+                item: PIG_SPAWN_EGG
+                name: Operator mount
+                acquisition: Operator catalog
+                levels:
+                  - {speed: 1.0, price: 1}
+            """.trimIndent() + "\n",
+        )
+
+        val config = MountModuleConfig.load(dataPath)
+
+        config.enabled shouldBe true
+        config.purchasesEnabled shouldBe true
+        config.allowedWorlds shouldBe setOf("operator_world")
+        config.guiStyle(MountGuiItemRole.BACKGROUND) shouldBe
+            MountGuiItemStyle(Material.GRAY_STAINED_GLASS_PANE, 11000)
+        config.quickSummonWhistle shouldBe true
+        config.guiText("common.footer-open", "") shouldBe
+            "<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#e6fff3> — открыть"
+        config.catalog().all.map(MountDefinition::id).toSet() shouldBe
+            bundledConfig("merge-forward-catalog").catalog().all.map(MountDefinition::id).toSet() + "operator_mount"
+        checkNotNull(config.catalog()["ravager"]).behaviors.single() shouldBe
+            checkNotNull(bundledConfig("merge-forward-ravager").catalog()["ravager"]).behaviors.single()
+
+        val merged = Files.readString(file)
+        ConfigManager.ofModule(dataPath, "mounts.yml")
+            .mergeMissingFromBundled("modules/mounts.yml") shouldBe false
+        Files.readString(file) shouldBe merged
+    }
+
     "bundled GUI remains resource-pack neutral" {
         val config = bundledConfig("generic-gui")
 
@@ -232,7 +280,7 @@ class MountModuleConfigTest : StringSpec({
             """
             enabled: false
             mounts:
-              bee:
+              test_bee:
                 type: flying
                 entity: BEE
                 item: BEE_SPAWN_EGG
@@ -244,7 +292,7 @@ class MountModuleConfigTest : StringSpec({
             """.trimIndent(),
         )
 
-        val levels = checkNotNull(MountModuleConfig.load(dataPath).catalog()["bee"]).levels
+        val levels = checkNotNull(MountModuleConfig.load(dataPath).catalog()["test_bee"]).levels
         levels.map(MountLevelDefinition::scaleMultiplier) shouldBe listOf(0.8, 1.0)
     }
 
@@ -260,7 +308,7 @@ class MountModuleConfigTest : StringSpec({
                 """
                 enabled: false
                 mounts:
-                  bee:
+                  test_bee:
                     type: flying
                     entity: BEE
                     item: BEE_SPAWN_EGG
@@ -289,7 +337,7 @@ class MountModuleConfigTest : StringSpec({
               deceleration-time: 350ms
               turn-time: 200ms
             mounts:
-              bee:
+              test_bee:
                 type: flying
                 entity: BEE
                 item: BEE_SPAWN_EGG
@@ -304,7 +352,7 @@ class MountModuleConfigTest : StringSpec({
         )
 
         val config = MountModuleConfig.load(dataPath)
-        val timing = checkNotNull(config.catalog()["bee"]).motion.resolve(config.motionTiming)
+        val timing = checkNotNull(config.catalog()["test_bee"]).motion.resolve(config.motionTiming)
 
         timing shouldBe
             MountMotionTiming(
