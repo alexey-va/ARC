@@ -11,6 +11,11 @@ import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
 
+private const val MIN_MOUNT_APPEARANCE_SCALE = 0.0625
+private const val MAX_MOUNT_APPEARANCE_SCALE = 16.0
+private const val MIN_MOUNT_SIZE_MULTIPLIER = 0.1
+private const val MAX_MOUNT_SIZE_MULTIPLIER = 10.0
+
 enum class MountMovement(val displayName: String) {
     WALKING("Пеший"),
     FLYING("Летающий"),
@@ -114,8 +119,8 @@ data class MountSizeOptionDefinition(
     init {
         require(MountDefinition.validId(id)) { "Invalid mount size option id: $id" }
         require(displayName.isNotBlank() && displayName.length <= 48) { "Mount size option '$id' name is invalid" }
-        require(multiplier.isFinite() && multiplier in 0.75..1.35) {
-            "Mount size option '$id' multiplier must be between 0.75 and 1.35"
+        require(multiplier.isFinite() && multiplier in MIN_MOUNT_SIZE_MULTIPLIER..MAX_MOUNT_SIZE_MULTIPLIER) {
+            "Mount size option '$id' multiplier must be between $MIN_MOUNT_SIZE_MULTIPLIER and $MAX_MOUNT_SIZE_MULTIPLIER"
         }
         require(minimumLevel in 1..16) { "Mount size option '$id' minimum level must be between 1 and 16" }
     }
@@ -140,7 +145,9 @@ data class MountAppearance(
     val equipment: Map<MountEquipmentSlot, String> = emptyMap(),
 ) {
     init {
-        require(scale.isFinite() && scale in 0.35..4.0) { "Mount appearance scale must be between 0.35 and 4.0" }
+        require(scale.isFinite() && scale in MIN_MOUNT_APPEARANCE_SCALE..MAX_MOUNT_APPEARANCE_SCALE) {
+            "Mount appearance scale must be between $MIN_MOUNT_APPEARANCE_SCALE and $MAX_MOUNT_APPEARANCE_SCALE"
+        }
         require(variant == null || APPEARANCE_VALUE_PATTERN.matches(variant)) { "Invalid mount appearance variant: $variant" }
         require(secondaryVariant == null || APPEARANCE_VALUE_PATTERN.matches(secondaryVariant)) {
             "Invalid mount appearance secondary variant: $secondaryVariant"
@@ -238,6 +245,47 @@ data class MountRamBehavior(
     }
 }
 
+data class MountTrampleBehavior(
+    override val id: String,
+    override val displayName: String,
+    override val description: List<String> =
+        listOf(
+            "Враждебные мобы под корпусом",
+            "получают урон во время движения.",
+        ),
+    val cooldown: Duration = Duration.ofSeconds(1),
+    val minimumSpeedFraction: Double = 0.2,
+    val horizontalPadding: Double = 0.2,
+    val downwardReach: Double = 0.6,
+    val damage: Double = 2.0,
+    val maximumTargets: Int = 4,
+) : MountBehaviorDefinition {
+    init {
+        require(MountDefinition.validId(id)) { "Invalid mount trample behavior id: $id" }
+        require(displayName.isNotBlank() && displayName.length <= 64) { "Mount trample behavior '$id' name is invalid" }
+        require(description.isNotEmpty() && description.size <= 4) {
+            "Mount trample behavior '$id' description must contain 1..4 rows"
+        }
+        require(description.all { it.isNotBlank() && it.length <= 64 }) {
+            "Mount trample behavior '$id' description rows must contain 1..64 characters"
+        }
+        require(cooldown in Duration.ofMillis(500)..Duration.ofSeconds(5)) {
+            "Mount trample behavior '$id' cooldown must be between 500ms and 5s"
+        }
+        require(minimumSpeedFraction.isFinite() && minimumSpeedFraction in 0.1..1.0) {
+            "Mount trample behavior '$id' minimum speed fraction must be between 0.1 and 1"
+        }
+        require(horizontalPadding.isFinite() && horizontalPadding in 0.0..1.0) {
+            "Mount trample behavior '$id' horizontal padding must be between 0 and 1"
+        }
+        require(downwardReach.isFinite() && downwardReach in 0.1..2.0) {
+            "Mount trample behavior '$id' downward reach must be between 0.1 and 2"
+        }
+        require(damage.isFinite() && damage in 0.5..6.0) { "Mount trample behavior '$id' damage must be between 0.5 and 6" }
+        require(maximumTargets in 1..8) { "Mount trample behavior '$id' maximum targets must be between 1 and 8" }
+    }
+}
+
 data class MountHighJumpAbility(
     val displayName: String,
     val multiplier: Double,
@@ -255,6 +303,24 @@ enum class MountAbilityEffect {
     NIGHT_VISION,
     FIRE_RESISTANCE,
     DOLPHINS_GRACE,
+    RESISTANCE,
+    REGENERATION,
+    SPEED,
+    SLOW_FALLING,
+    STRENGTH,
+}
+
+data class MountPassiveAbilityDefinition(
+    val id: String,
+    val displayName: String,
+    val effect: MountAbilityEffect,
+    val amplifier: Int = 0,
+) {
+    init {
+        require(MountDefinition.validId(id)) { "Invalid mount passive ability id: $id" }
+        require(displayName.isNotBlank() && displayName.length <= 64) { "Mount passive ability '$id' name is invalid" }
+        require(amplifier in 0..2) { "Mount passive ability '$id' amplifier must be between 0 and 2" }
+    }
 }
 
 data class MountAbilityUpgradeDefinition(
@@ -283,9 +349,13 @@ data class MountAbilityUpgradeDefinition(
 data class MountAbilities(
     val highJump: MountHighJumpAbility? = null,
     val upgrades: List<MountAbilityUpgradeDefinition> = emptyList(),
+    val passives: List<MountPassiveAbilityDefinition> = emptyList(),
 ) {
     val displayNames: List<String>
-        get() = listOfNotNull(highJump?.displayName) + upgrades.map(MountAbilityUpgradeDefinition::displayName)
+        get() =
+            listOfNotNull(highJump?.displayName) +
+                passives.map(MountPassiveAbilityDefinition::displayName) +
+                upgrades.map(MountAbilityUpgradeDefinition::displayName)
 }
 
 data class MountSkinDefinition(
@@ -341,12 +411,19 @@ data class MountDefinition(
         require(abilities.upgrades.map(MountAbilityUpgradeDefinition::id).toSet().size == abilities.upgrades.size) {
             "Mount '$id' ability upgrade ids must be unique"
         }
+        require(abilities.passives.size <= 3) { "Mount '$id' supports at most three passive abilities" }
+        require(abilities.passives.map(MountPassiveAbilityDefinition::id).toSet().size == abilities.passives.size) {
+            "Mount '$id' passive ability ids must be unique"
+        }
         require(activeAbilitySpeedMultiplier(abilities.upgrades) <= 1.5) {
             "Mount '$id' combined ability speed multiplier exceeds 1.5"
         }
         require(
             movement == MountMovement.SWIMMING ||
-                abilities.upgrades.none { it.effect == MountAbilityEffect.WATER_BREATHING || it.effect == MountAbilityEffect.DOLPHINS_GRACE },
+                (abilities.upgrades.map(MountAbilityUpgradeDefinition::effect) +
+                    abilities.passives.map(MountPassiveAbilityDefinition::effect)).none {
+                    it == MountAbilityEffect.WATER_BREATHING || it == MountAbilityEffect.DOLPHINS_GRACE
+                },
         ) { "Mount '$id' aquatic abilities require swimming movement" }
         require(skins.size <= MAX_SKINS) { "Mount '$id' has more than $MAX_SKINS skins" }
         require(skins.map(MountSkinDefinition::id).toSet().size == skins.size) { "Mount '$id' skin ids must be unique" }
@@ -366,10 +443,19 @@ data class MountDefinition(
             "Mount '$id' behavior ids must be unique"
         }
         require(behaviors.filterIsInstance<MountRamBehavior>().size <= 1) { "Mount '$id' supports at most one ram behavior" }
+        require(behaviors.filterIsInstance<MountTrampleBehavior>().size <= 1) { "Mount '$id' supports at most one trample behavior" }
         val appearances = listOf(appearance) + skins.map(MountSkinDefinition::appearance)
         val sizeMultipliers = sizeOptions.map(MountSizeOptionDefinition::multiplier).ifEmpty { listOf(1.0) }
-        require(levels.all { level -> appearances.all { base -> sizeMultipliers.all { size -> base.scale * level.scaleMultiplier * size in 0.35..4.0 } } }) {
-            "Mount '$id' level scale produces an appearance outside 0.35..4.0"
+        require(
+            levels.all { level ->
+                appearances.all { base ->
+                    sizeMultipliers.all { size ->
+                        base.scale * level.scaleMultiplier * size in MIN_MOUNT_APPEARANCE_SCALE..MAX_MOUNT_APPEARANCE_SCALE
+                    }
+                }
+            },
+        ) {
+            "Mount '$id' level scale produces an appearance outside $MIN_MOUNT_APPEARANCE_SCALE..$MAX_MOUNT_APPEARANCE_SCALE"
         }
     }
 
@@ -426,7 +512,7 @@ data class MountDefinition(
         private val ID_PATTERN = Regex("[a-z0-9][a-z0-9_-]{1,31}")
         private const val MAX_LEVELS = 16
         private const val MAX_SKINS = 16
-        private const val MAX_SIZE_OPTIONS = 3
+        private const val MAX_SIZE_OPTIONS = 5
         const val DEFAULT_SKIN_ID = "default"
 
         fun validId(value: String): Boolean = ID_PATTERN.matches(value)
@@ -498,8 +584,8 @@ data class MountRuntimeSettings(
         require(sprintMultiplier.isFinite() && sprintMultiplier in 1.0..2.0) {
             "Mount runtime sprint multiplier must be between 1.0 and 2.0"
         }
-        require(scaleMultiplier.isFinite() && scaleMultiplier in 0.35..4.0) {
-            "Mount runtime scale multiplier must be between 0.35 and 4.0"
+        require(scaleMultiplier.isFinite() && scaleMultiplier in MIN_MOUNT_SIZE_MULTIPLIER..MAX_MOUNT_SIZE_MULTIPLIER) {
+            "Mount runtime scale multiplier must be between $MIN_MOUNT_SIZE_MULTIPLIER and $MAX_MOUNT_SIZE_MULTIPLIER"
         }
     }
 }

@@ -9,9 +9,9 @@ Each configured level unlocks a maximum base speed. Walking levels also unlock a
 - `tuning.speed-percentages` selects a percentage of the current level speed;
 - `tuning.walking-step-heights` contains exact selectable native step heights in blocks;
 - `tuning.walking-max-step-height-by-level` defines the non-decreasing ceiling unlocked by each level.
-- `mounts.<id>.size-tuning` optionally exposes two or three authored size profiles for that specific entity, each with a bounded multiplier and level gate.
+- `mounts.<id>.size-tuning` optionally exposes up to five authored size profiles for that specific entity, each with a bounded multiplier and level gate.
 
-The bundled catalog uses the same mechanics selectively instead of giving every mount identical switches. The horse and fox have authored jump multipliers; the skeleton and Enderman can unlock night vision; the horse, Ravager and bee expose three size profiles. Fox/Breeze motion is deliberately responsive, while camel/Ravager motion keeps more weight.
+The bundled catalog uses the same mechanics selectively instead of giving every mount identical switches. The horse and fox have authored jump multipliers; the skeleton and Enderman can unlock night vision; the horse, Ravager and bee expose the intentionally comic `×0.1 / ×1 / ×2 / ×3` profiles. The catalog also contains fixed authored extremes: the `×10` Mega Pig, the `×10` Bee Airship, the `×0.1` Pocket Ghast and the `×3` Giant Warden. Fox/Breeze motion is deliberately responsive, while camel/Ravager and the giant mounts keep more weight.
 
 With no saved choice, the maximum unlocked value is active. A saved lower choice persists after an upgrade. If a level is revoked, an out-of-range step height is clamped to the new ceiling at runtime.
 
@@ -31,7 +31,9 @@ For example, 65% speed and a 1.10-block step height are `arc.mounts.horse.tuning
 
 ## Runtime behavior
 
-Speed, step height, level/size scale, skin, glow and owned abilities resolve into one immutable runtime snapshot. A successful setting write reconciles the complete snapshot into the active ride on the main thread, so speed, step height, glow, skins and trails update immediately. Growing size is first checked against a feet-anchored prospective bounding box; a blocked growth remains saved for the next safe summon without creating mixed visual/session state. Non-horse walking mounts use ARC velocity plus the native `STEP_HEIGHT` attribute. Horses retain native ridden movement and charged jumping, while ARC applies the configured speed, jump strength and selected step height continuously.
+Speed, step height, level/size scale, skin, glow and owned abilities resolve into one immutable runtime snapshot. A successful setting write reconciles the complete snapshot into the active ride on the main thread, so speed, step height, glow, skins and trails update immediately. Growing size is first checked against a feet-anchored prospective bounding box; a blocked growth remains saved for the next safe summon without creating mixed visual/session state. The accepted effective entity-scale range matches the native `0.0625..16` attribute contract, while player-facing tuning multipliers are bounded to `0.1..10` and every composed catalog appearance is validated before enable. Non-horse walking mounts use ARC velocity plus the native `STEP_HEIGHT` attribute. Horses retain native ridden movement and charged jumping, while ARC applies the configured speed, jump strength and selected step height continuously.
+
+Mounts may also declare `abilities.passive.<id>`. These effects require no purchase and are refreshed only while that exact mount session is active. The current fun set uses resistance/strength on the Mega Pig, regeneration on the Bee Airship, fire resistance on the Pocket Ghast, night vision/strength/resistance on the Giant Warden, and slow falling on the Pocket Chicken. Passive names are rendered as inherent features in the mount card instead of appearing as purchasable upgrades.
 
 ARC keeps its own motion state instead of feeding Minecraft-mutated entity velocity back into the controller. Global `movement.acceleration-time`, `movement.deceleration-time`, and `movement.turn-time` values describe the time to reach about 95% of the requested response at handling multiplier `1.0`; higher-level handling shortens those times. Set a value to `0s` for instant response. Any mount may override individual values under `mounts.<id>.motion`, with omitted values inherited from the global block. A reverse input brakes nearly to zero before acceleration changes direction.
 
@@ -48,7 +50,9 @@ Skin cards describe only changes from the mount's base appearance. Unsupported o
 
 ## Typed mount behaviors
 
-Inherent ride mechanics live under `mounts.<id>.behaviors` and are separate from permanent potion upgrades. Every behavior owns a short player-facing description shown in the mount card. The initial `ram` behavior uses a fresh sprint-forward press, a bounded acceleration request window, one short active window and one target. Its swept corridor accepts only living `Enemy` entities ahead of the mount, excluding players, bosses, passive mobs and every ARC mount. Damage is applied once through `target.damage(damage, rider)`, preserving ordinary Paper damage events, armor, resistance, protection-plugin cancellation, kill attribution and loot hooks. No custom health write, block damage, extra velocity or protection bypass exists.
+Inherent ride mechanics live under `mounts.<id>.behaviors` and are separate from permanent potion upgrades. Every behavior owns a short player-facing description shown in the mount card. The `ram` behavior uses a fresh sprint-forward press, a bounded acceleration request window, one short active window and one target. Its swept corridor accepts only living `Enemy` entities ahead of the mount, excluding players, bosses, passive mobs and every ARC mount.
+
+The `trample` behavior covers hostile mobs underneath a moving mount's authored body volume. It has a minimum movement fraction, bounded downward/horizontal reach, a per-target cooldown and a maximum target count. Ravager uses a 2-damage one-second **Топот**; Mega Pig uses the same typed mechanic as a wider 3-damage **Землетрясение**. Both behaviors apply damage through `target.damage(damage, rider)`, preserving ordinary Paper damage events, armor, resistance, protection-plugin cancellation, kill attribution and loot hooks. Neither behavior writes health directly, damages blocks, adds velocity or bypasses protection.
 
 ## Favorite and quick summon
 

@@ -277,9 +277,10 @@ class MountGuiControllerTest : TestBase() {
                 movement = MountMovement.WALKING,
                 sizeOptions =
                     listOf(
-                        MountSizeOptionDefinition("compact", "Компактный", 0.9),
-                        MountSizeOptionDefinition("standard", "Обычный", 1.0),
-                        MountSizeOptionDefinition("massive", "Крупный", 1.15, minimumLevel = 3),
+                        MountSizeOptionDefinition("keychain", "Брелок ×0.1", 0.1),
+                        MountSizeOptionDefinition("standard", "Обычный ×1", 1.0),
+                        MountSizeOptionDefinition("huge", "Огромный ×2", 2.0, minimumLevel = 2),
+                        MountSizeOptionDefinition("absurd", "Абсурдный ×3", 3.0, minimumLevel = 3),
                     ),
             )
         val tuning =
@@ -310,7 +311,7 @@ class MountGuiControllerTest : TestBase() {
         every { purchases.setSpeedTuning(any(), mount, tuning, 90, any()) } answers {
             lastArg<(MountPurchaseResult) -> Unit>()(MountPurchaseResult.Success)
         }
-        every { purchases.setSizeTuning(any(), mount, "compact", any()) } answers {
+        every { purchases.setSizeTuning(any(), mount, "keychain", any()) } answers {
             lastArg<(MountPurchaseResult) -> Unit>()(MountPurchaseResult.Success)
         }
         val controller =
@@ -337,16 +338,17 @@ class MountGuiControllerTest : TestBase() {
             plainName(player.openInventory.topInventory.getItem(30)) shouldBe "Подъём: 1.50 блока"
             player.openInventory.topInventory.getItem(30)?.itemMeta?.enchantmentGlintOverride shouldBe true
             plainName(player.openInventory.topInventory.getItem(33)) shouldBe "Подъём: 4.00 блока"
-            plainName(player.openInventory.topInventory.getItem(39)) shouldBe "Размер: компактный"
-            plainName(player.openInventory.topInventory.getItem(40)) shouldBe "Размер: обычный"
-            plainName(player.openInventory.topInventory.getItem(41)) shouldBe "Размер: крупный"
-
-            controller.onClick(clickEvent(player.openInventory, 40))
-            controller.onClick(clickEvent(player.openInventory, 41))
-            verify(exactly = 0) { purchases.setSizeTuning(any(), any(), any(), any()) }
+            plainName(player.openInventory.topInventory.getItem(38)) shouldBe "Размер: брелок ×0.1"
+            plainName(player.openInventory.topInventory.getItem(39)) shouldBe "Размер: обычный ×1"
+            plainName(player.openInventory.topInventory.getItem(41)) shouldBe "Размер: огромный ×2"
+            plainName(player.openInventory.topInventory.getItem(42)) shouldBe "Размер: абсурдный ×3"
 
             controller.onClick(clickEvent(player.openInventory, 39))
-            verify(exactly = 1) { purchases.setSizeTuning(any(), mount, "compact", any()) }
+            controller.onClick(clickEvent(player.openInventory, 42))
+            verify(exactly = 0) { purchases.setSizeTuning(any(), any(), any(), any()) }
+
+            controller.onClick(clickEvent(player.openInventory, 38))
+            verify(exactly = 1) { purchases.setSizeTuning(any(), mount, "keychain", any()) }
 
             controller.onClick(clickEvent(player.openInventory, 33))
             verify(exactly = 0) { purchases.setStepHeightTuning(any(), any(), any(), any(), any()) }

@@ -288,7 +288,7 @@ class MountGuiController(
             }
         val sizeSlots =
             mount.sizeOptions.takeIf { it.size > 1 }
-                ?.let { TUNING_SIZE_SLOTS.zip(it.map(MountSizeOptionDefinition::id)).toMap() }
+                ?.let { tuningSizeSlots(it.size).zip(it.map(MountSizeOptionDefinition::id)).toMap() }
                 .orEmpty()
         val holder =
             MountMenuHolder(
@@ -845,6 +845,14 @@ class MountGuiController(
         }
 
     private fun subject(player: Player) = MountPermissionSubject(player.uniqueId, player.name, player::hasPermission)
+
+    private fun tuningSizeSlots(count: Int): List<Int> =
+        when (count) {
+            2 -> listOf(39, 41)
+            3 -> listOf(39, 40, 41)
+            4 -> listOf(38, 39, 41, 42)
+            else -> listOf(38, 39, 40, 41, 42)
+        }
     private fun send(player: Player, path: String, fallback: String) = player.sendMessage(component(configProvider().message(path, fallback)))
     private fun click(player: Player) = player.playSound(player.location, Sound.UI_BUTTON_CLICK, 0.7f, 1.1f)
     private fun bass(player: Player) = player.playSound(player.location, Sound.BLOCK_NOTE_BLOCK_BASS, 0.8f, 0.8f)
@@ -929,7 +937,6 @@ class MountGuiController(
         private const val TUNING_LEVEL_SLOT = 13
         private val TUNING_SPEED_SLOTS = listOf(20, 21, 22, 23, 24)
         private val TUNING_STEP_SLOTS = listOf(29, 30, 31, 32, 33)
-        private val TUNING_SIZE_SLOTS = listOf(39, 40, 41)
         private const val TUNING_NOT_APPLICABLE_SLOT = 31
         private const val TUNING_BACK_SLOT = 45
         private const val SKINS_SIZE = 54

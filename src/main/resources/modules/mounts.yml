@@ -659,9 +659,10 @@ mounts:
       equipment:
         saddle: SADDLE
     size-tuning:
-      - {id: compact, name: "Компактный", multiplier: 0.88, minimum-level: 1}
-      - {id: standard, name: "Обычный", multiplier: 1.00, minimum-level: 1}
-      - {id: massive, name: "Крупный", multiplier: 1.12, minimum-level: 3}
+      - {id: keychain, name: "Брелок ×0.1", multiplier: 0.10, minimum-level: 1}
+      - {id: standard, name: "Обычный ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: huge, name: "Огромный ×2", multiplier: 2.00, minimum-level: 2}
+      - {id: absurd, name: "Абсурдный ×3", multiplier: 3.00, minimum-level: 3}
     skins:
       royal_white:
         name: "Королевская белая"
@@ -857,9 +858,10 @@ mounts:
     appearance:
       scale: 0.82
     size-tuning:
-      - {id: compact, name: "Компактный", multiplier: 0.90, minimum-level: 1}
-      - {id: standard, name: "Обычный", multiplier: 1.00, minimum-level: 1}
-      - {id: massive, name: "Крупный", multiplier: 1.15, minimum-level: 3}
+      - {id: keychain, name: "Брелок ×0.1", multiplier: 0.10, minimum-level: 1}
+      - {id: standard, name: "Обычный ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: huge, name: "Огромный ×2", multiplier: 2.00, minimum-level: 2}
+      - {id: absurd, name: "Абсурдный ×3", multiplier: 3.00, minimum-level: 3}
     behaviors:
       ravager-ram:
         type: ram
@@ -876,6 +878,18 @@ mounts:
         reach: 1.25
         lateral-padding: 0.35
         damage: 4.0
+      ravager-trample:
+        type: trample
+        name: "Топот"
+        description:
+          - "Враждебные мобы под корпусом"
+          - "получают урон во время движения."
+        cooldown: 1s
+        minimum-speed-fraction: 0.2
+        horizontal-padding: 0.25
+        downward-reach: 0.75
+        damage: 2.0
+        maximum-targets: 4
     skins:
       starlight:
         name: "Звёздный комплект"
@@ -970,9 +984,10 @@ mounts:
       baby: false
       scale: 1.55
     size-tuning:
-      - {id: compact, name: "Компактный", multiplier: 0.82, minimum-level: 1}
-      - {id: standard, name: "Обычный", multiplier: 1.00, minimum-level: 1}
-      - {id: massive, name: "Крупный", multiplier: 1.18, minimum-level: 3}
+      - {id: keychain, name: "Брелок ×0.1", multiplier: 0.10, minimum-level: 1}
+      - {id: standard, name: "Обычный ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: huge, name: "Огромный ×2", multiplier: 2.00, minimum-level: 2}
+      - {id: absurd, name: "Абсурдный ×3", multiplier: 3.00, minimum-level: 3}
     skins:
       starlight:
         name: "Звёздный комплект"
@@ -1450,6 +1465,231 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 2800000
+  # Нарочито абсурдная коллекция: размеры и эффекты важнее реализма.
+  mega_pig:
+    type: walking
+    item: PIG_SPAWN_EGG
+    entity: PIG
+    name: "Мегасвинья"
+    rarity: legendary
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Свинья размером с дом."
+      - "Никакого реализма — только ×10"
+      - "и убедительный топот."
+    abilities:
+      passive:
+        thick-hide:
+          name: "Толстая шкура"
+          effect: RESISTANCE
+          amplifier: 1
+        bacon-power:
+          name: "Беконная мощь"
+          effect: STRENGTH
+          amplifier: 0
+    motion:
+      acceleration-time: 1500ms
+      deceleration-time: 650ms
+      turn-time: 380ms
+    levels:
+      - {speed: 1.6, handling: 0.9, sprint: 1, price: 1000000}
+      - {speed: 2.6, handling: 1, sprint: 1.03, price: 5000000}
+      - {speed: 5.4, handling: 1.28, sprint: 1.12, price: 35000000}
+    buy-glow: 1000000
+    appearance:
+      baby: false
+      scale: 10
+    size-tuning:
+      - {id: colossal, name: "Гигант ×10", multiplier: 1.00, minimum-level: 1}
+    behaviors:
+      mega-trample:
+        type: trample
+        name: "Землетрясение"
+        description:
+          - "Враждебные мобы под свиньёй"
+          - "получают урон от её шага."
+        cooldown: 1s
+        minimum-speed-fraction: 0.15
+        horizontal-padding: 0.4
+        downward-reach: 1.0
+        damage: 3.0
+        maximum-targets: 6
+    skins:
+      starlight:
+        name: "Звёздная мегасвинья"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 5000000
+      shadow:
+        name: "Теневая мегасвинья"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 12000000
+  colossal_bee:
+    type: flying
+    item: BEE_SPAWN_EGG
+    entity: BEE
+    name: "Пчелиный дирижабль"
+    rarity: legendary
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Пчела ×10, которая заслоняет солнце"
+      - "и возит всадника как дирижабль."
+    abilities:
+      passive:
+        honey-reserve:
+          name: "Медовый запас"
+          effect: REGENERATION
+          amplifier: 0
+    levels:
+      - {speed: 0.55, handling: 0.9, sprint: 1, price: 1000000}
+      - {speed: 0.9, handling: 1, sprint: 1.03, price: 5000000}
+      - {speed: 1.7, handling: 1.28, sprint: 1.12, price: 35000000}
+    buy-glow: 1000000
+    appearance:
+      baby: false
+      scale: 10
+    size-tuning:
+      - {id: colossal, name: "Дирижабль ×10", multiplier: 1.00, minimum-level: 1}
+    skins:
+      starlight:
+        name: "Звёздный дирижабль"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 5000000
+      cloud:
+        name: "Облачный дирижабль"
+        item: WHITE_DYE
+        preset: cloud
+        price: 12000000
+  pocket_ghast:
+    type: flying
+    item: GHAST_SPAWN_EGG
+    entity: GHAST
+    name: "Карманный гаст"
+    rarity: epic
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Гаст ×0.1: выглядит как брелок,"
+      - "но честно возит взрослого игрока."
+    abilities:
+      passive:
+        nether-bubble:
+          name: "Пузырь Нижнего мира"
+          effect: FIRE_RESISTANCE
+          amplifier: 0
+    levels:
+      - {speed: 0.52, handling: 0.9, sprint: 1, price: 500000}
+      - {speed: 0.85, handling: 1, sprint: 1.03, price: 2500000}
+      - {speed: 1.6, handling: 1.28, sprint: 1.12, price: 20000000}
+    buy-glow: 600000
+    appearance:
+      scale: 0.1
+    size-tuning:
+      - {id: pocket, name: "Карманный ×0.1", multiplier: 1.00, minimum-level: 1}
+    skins:
+      soulfire:
+        name: "Карманное пламя душ"
+        item: SOUL_LANTERN
+        preset: soulfire
+        price: 2500000
+      cloud:
+        name: "Карманное облако"
+        item: WHITE_DYE
+        preset: cloud
+        price: 5500000
+  mega_warden:
+    type: walking
+    item: WARDEN_SPAWN_EGG
+    entity: WARDEN
+    name: "Громадный хранитель"
+    rarity: legendary
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Хранитель ×3 для поездок,"
+      - "после которых обычные маунты"
+      - "кажутся декоративными."
+    abilities:
+      passive:
+        echo-sight:
+          name: "Эхолокация"
+          effect: NIGHT_VISION
+          amplifier: 0
+        ancient-force:
+          name: "Древняя сила"
+          effect: STRENGTH
+          amplifier: 0
+        deep-armor:
+          name: "Глубинная броня"
+          effect: RESISTANCE
+          amplifier: 0
+    motion:
+      acceleration-time: 1400ms
+      deceleration-time: 600ms
+      turn-time: 360ms
+    levels:
+      - {speed: 1.6, handling: 0.9, sprint: 1, price: 1000000}
+      - {speed: 2.6, handling: 1, sprint: 1.03, price: 5000000}
+      - {speed: 5.4, handling: 1.28, sprint: 1.12, price: 35000000}
+    buy-glow: 1000000
+    appearance:
+      scale: 3
+    size-tuning:
+      - {id: giant, name: "Исполин ×3", multiplier: 1.00, minimum-level: 1}
+    skins:
+      shadow:
+        name: "Теневой исполин"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 5000000
+      soulfire:
+        name: "Хранитель душ"
+        item: SOUL_LANTERN
+        preset: soulfire
+        price: 12000000
+  pocket_chicken:
+    type: walking
+    item: CHICKEN_SPAWN_EGG
+    entity: CHICKEN
+    name: "Карманная курица"
+    rarity: uncommon
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Курица с режимом брелока ×0.1"
+      - "и совершенно лишними ×2 и ×3."
+    abilities:
+      high-jump:
+        name: "Панический подскок"
+        multiplier: 1.35
+      passive:
+        feather:
+          name: "Пёрышко"
+          effect: SLOW_FALLING
+          amplifier: 0
+    levels:
+      - {speed: 1.45, handling: 0.9, sprint: 1, price: 100000}
+      - {speed: 2.35, handling: 1, sprint: 1.03, price: 500000}
+      - {speed: 5, handling: 1.28, sprint: 1.12, price: 8000000}
+    buy-glow: 200000
+    appearance:
+      baby: false
+      scale: 1
+    size-tuning:
+      - {id: keychain, name: "Брелок ×0.1", multiplier: 0.10, minimum-level: 1}
+      - {id: standard, name: "Обычная ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: huge, name: "Огромная ×2", multiplier: 2.00, minimum-level: 2}
+      - {id: absurd, name: "Абсурдная ×3", multiplier: 3.00, minimum-level: 3}
+    skins:
+      starlight:
+        name: "Звёздная курица"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 650000
+      flame:
+        name: "Огненная курица"
+        item: BLAZE_POWDER
+        preset: flame
+        price: 1400000
   guardian:
     type: swimming
     item: GUARDIAN_SPAWN_EGG

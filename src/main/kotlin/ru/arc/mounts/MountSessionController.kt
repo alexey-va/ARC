@@ -86,6 +86,7 @@ private data class MountSession(
     var motionState: MountMotionState = MountMotionState(),
     var ramState: MountRamState = MountRamState(),
     var previousBoundingBox: BoundingBox? = null,
+    val trampleDamageAtMillis: MutableMap<UUID, Long> = hashMapOf(),
 )
 
 class MountSessionController(
@@ -187,7 +188,9 @@ class MountSessionController(
             return MountSessionUpdateResult.UNSAFE_APPEARANCE
         }
         session.settings = settings
-        plugin.server.getPlayer(playerId)?.let { refreshAbilityEffects(it, settings.abilityUpgrades) }
+        plugin.server.getPlayer(playerId)?.let {
+            refreshAbilityEffects(it, session.definition.abilities.passives, settings.abilityUpgrades)
+        }
         return MountSessionUpdateResult.APPLIED
     }
 
@@ -477,11 +480,12 @@ class MountSessionController(
                     session.ticks++
                     (entity as? Mob)?.let(::maintainMountMobState)
                     if (session.ticks == 1L || session.ticks % ABILITY_REFRESH_TICKS == 0L) {
-                        refreshAbilityEffects(player, session.settings.abilityUpgrades)
+                        refreshAbilityEffects(player, session.definition.abilities.passives, session.settings.abilityUpgrades)
                     }
                     updateRiderMountVisibility(player, entity, session)
                     val maximumSpeed = move(player, entity, session)
                     updateRamBehavior(player, entity, session, maximumSpeed)
+                    updateTrampleBehavior(player, entity, session, maximumSpeed, now)
                     emitTrail(entity, session)
                 }
             }
@@ -666,17 +670,7 @@ class MountSessionController(
             .asSequence()
             .filterIsInstance<LivingEntity>()
             .filter { candidate ->
-                candidate is Enemy &&
-                    candidate !is Boss &&
-                    candidate.uniqueId != mount.uniqueId &&
-                    candidate.uniqueId != player.uniqueId &&
-                    candidate.isValid &&
-                    !candidate.isDead &&
-                    candidate.health > 0.0 &&
-                    !candidate.isInvulnerable &&
-                    !playerByEntity.containsKey(candidate.uniqueId) &&
-                    !candidate.persistentDataContainer.has(mountIdKey, PersistentDataType.STRING) &&
-                    mount.hasLineOfSight(candidate) &&
+                isHostileMountTarget(player, mount, candidate) &&
                     sweptRamIntersects(
                         previousBox.toRamBounds(),
                         currentBox.toRamBounds(),
@@ -695,19 +689,69 @@ class MountSessionController(
             .firstOrNull()
     }
 
+    private fun updateTrampleBehavior(
+        player: Player,
+        mount: LivingEntity,
+        session: MountSession,
+        maximumSpeed: Double,
+        nowMillis: Long,
+    ) {
+        val behavior = session.definition.behaviors.filterIsInstance<MountTrampleBehavior>().firstOrNull() ?: return
+        if (!trampleSpeedEligible(session.motionState.speed, maximumSpeed, behavior.minimumSpeedFraction)) return
+        val cooldownMillis = behavior.cooldown.toMillis()
+        session.trampleDamageAtMillis.entries.removeIf { nowMillis - it.value > cooldownMillis * 2L }
+        val box = mount.boundingBox.clone()
+        box.expand(behavior.horizontalPadding, 0.05, behavior.horizontalPadding)
+        box.expandDirectional(0.0, -behavior.downwardReach, 0.0)
+        val targets =
+            mount.world.getNearbyEntities(box)
+                .asSequence()
+                .filterIsInstance<LivingEntity>()
+                .filter { isHostileMountTarget(player, mount, it) }
+                .filter {
+                    trampleCooldownReady(session.trampleDamageAtMillis[it.uniqueId], nowMillis, cooldownMillis)
+                }
+                .sortedBy { it.uniqueId.toString() }
+                .take(behavior.maximumTargets)
+                .toList()
+        if (targets.isEmpty()) return
+        targets.forEach { target ->
+            session.trampleDamageAtMillis[target.uniqueId] = nowMillis
+            target.damage(behavior.damage, player)
+            val impact = target.location.add(0.0, target.height * 0.3, 0.0)
+            mount.world.spawnParticle(Particle.CLOUD, impact, 5, 0.2, 0.08, 0.2, 0.03)
+        }
+        mount.world.playSound(mount.location, Sound.ENTITY_RAVAGER_STEP, 0.8f, 0.75f)
+    }
+
+    private fun isHostileMountTarget(player: Player, mount: LivingEntity, candidate: LivingEntity): Boolean =
+        candidate is Enemy &&
+            candidate !is Boss &&
+            candidate.uniqueId != mount.uniqueId &&
+            candidate.uniqueId != player.uniqueId &&
+            candidate.isValid &&
+            !candidate.isDead &&
+            candidate.health > 0.0 &&
+            !candidate.isInvulnerable &&
+            !playerByEntity.containsKey(candidate.uniqueId) &&
+            !candidate.persistentDataContainer.has(mountIdKey, PersistentDataType.STRING) &&
+            mount.hasLineOfSight(candidate)
+
     private fun BoundingBox.toRamBounds(): MountRamBounds = MountRamBounds(minX, minZ, maxX, maxZ)
 
-    private fun refreshAbilityEffects(player: Player, abilities: Collection<MountAbilityUpgradeDefinition>) {
-        abilities.forEach { ability ->
-            val effectType =
-                when (ability.effect) {
-                    MountAbilityEffect.WATER_BREATHING -> PotionEffectType.WATER_BREATHING
-                    MountAbilityEffect.NIGHT_VISION -> PotionEffectType.NIGHT_VISION
-                    MountAbilityEffect.FIRE_RESISTANCE -> PotionEffectType.FIRE_RESISTANCE
-                    MountAbilityEffect.DOLPHINS_GRACE -> PotionEffectType.DOLPHINS_GRACE
-                }
+    private fun refreshAbilityEffects(
+        player: Player,
+        passives: Collection<MountPassiveAbilityDefinition>,
+        upgrades: Collection<MountAbilityUpgradeDefinition>,
+    ) {
+        passives.forEach { ability ->
             player.addPotionEffect(
-                PotionEffect(effectType, ABILITY_EFFECT_DURATION_TICKS, 0, false, false, true),
+                PotionEffect(ability.effect.potionEffectType(), ABILITY_EFFECT_DURATION_TICKS, ability.amplifier, false, false, true),
+            )
+        }
+        upgrades.forEach { ability ->
+            player.addPotionEffect(
+                PotionEffect(ability.effect.potionEffectType(), ABILITY_EFFECT_DURATION_TICKS, 0, false, false, true),
             )
         }
     }
@@ -774,6 +818,25 @@ class MountSessionController(
         return runCatching { !entity.wouldCollideUsing(candidate) }.getOrDefault(false)
     }
 }
+
+internal fun MountAbilityEffect.potionEffectType(): PotionEffectType =
+    when (this) {
+        MountAbilityEffect.WATER_BREATHING -> PotionEffectType.WATER_BREATHING
+        MountAbilityEffect.NIGHT_VISION -> PotionEffectType.NIGHT_VISION
+        MountAbilityEffect.FIRE_RESISTANCE -> PotionEffectType.FIRE_RESISTANCE
+        MountAbilityEffect.DOLPHINS_GRACE -> PotionEffectType.DOLPHINS_GRACE
+        MountAbilityEffect.RESISTANCE -> PotionEffectType.RESISTANCE
+        MountAbilityEffect.REGENERATION -> PotionEffectType.REGENERATION
+        MountAbilityEffect.SPEED -> PotionEffectType.SPEED
+        MountAbilityEffect.SLOW_FALLING -> PotionEffectType.SLOW_FALLING
+        MountAbilityEffect.STRENGTH -> PotionEffectType.STRENGTH
+    }
+
+internal fun trampleSpeedEligible(currentSpeed: Double, maximumSpeed: Double, minimumFraction: Double): Boolean =
+    maximumSpeed > 0.0 && currentSpeed >= maximumSpeed * minimumFraction
+
+internal fun trampleCooldownReady(lastDamageAtMillis: Long?, nowMillis: Long, cooldownMillis: Long): Boolean =
+    lastDamageAtMillis == null || nowMillis >= lastDamageAtMillis && nowMillis - lastDamageAtMillis >= cooldownMillis
 
 internal fun mountAppearanceMayGrow(
     current: MountAppearance,

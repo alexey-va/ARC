@@ -18,6 +18,7 @@ import org.bukkit.entity.Player
 import org.bukkit.entity.Vex
 import org.bukkit.event.entity.CreatureSpawnEvent
 import org.bukkit.event.entity.EntityDamageEvent
+import org.bukkit.potion.PotionEffectType
 import org.bukkit.util.BoundingBox
 import java.util.UUID
 
@@ -182,5 +183,22 @@ class MountSessionControllerTest : StringSpec({
         verify(exactly = 1) { blockBreakSpeed.addTransientModifier(modifier) }
         verify(exactly = 2) { blockBreakSpeed.removeModifier(modifier.key) }
         airborneMiningCompensationAmount() shouldBe 4.0
+    }
+
+    "every passive mount effect resolves to its exact Paper potion type" {
+        MountAbilityEffect.RESISTANCE.potionEffectType() shouldBe PotionEffectType.RESISTANCE
+        MountAbilityEffect.REGENERATION.potionEffectType() shouldBe PotionEffectType.REGENERATION
+        MountAbilityEffect.SPEED.potionEffectType() shouldBe PotionEffectType.SPEED
+        MountAbilityEffect.SLOW_FALLING.potionEffectType() shouldBe PotionEffectType.SLOW_FALLING
+        MountAbilityEffect.STRENGTH.potionEffectType() shouldBe PotionEffectType.STRENGTH
+    }
+
+    "trample requires movement and enforces a per-target cooldown" {
+        trampleSpeedEligible(currentSpeed = 0.19, maximumSpeed = 1.0, minimumFraction = 0.2) shouldBe false
+        trampleSpeedEligible(currentSpeed = 0.2, maximumSpeed = 1.0, minimumFraction = 0.2) shouldBe true
+        trampleSpeedEligible(currentSpeed = 1.0, maximumSpeed = 0.0, minimumFraction = 0.2) shouldBe false
+        trampleCooldownReady(lastDamageAtMillis = null, nowMillis = 1_000, cooldownMillis = 1_000) shouldBe true
+        trampleCooldownReady(lastDamageAtMillis = 500, nowMillis = 1_499, cooldownMillis = 1_000) shouldBe false
+        trampleCooldownReady(lastDamageAtMillis = 500, nowMillis = 1_500, cooldownMillis = 1_000) shouldBe true
     }
 })

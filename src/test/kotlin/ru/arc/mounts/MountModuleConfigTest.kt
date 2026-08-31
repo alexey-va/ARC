@@ -14,10 +14,10 @@ class MountModuleConfigTest : StringSpec({
         val config = bundledConfig("catalog")
         val catalog = config.catalog()
 
-        catalog.all shouldHaveSize 30
+        catalog.all shouldHaveSize 35
         catalog.all.groupingBy(MountDefinition::movement).eachCount() shouldBe
-            mapOf(MountMovement.WALKING to 12, MountMovement.FLYING to 12, MountMovement.SWIMMING to 6)
-        catalog.all.map(MountDefinition::id).toSet().size shouldBe 30
+            mapOf(MountMovement.WALKING to 15, MountMovement.FLYING to 14, MountMovement.SWIMMING to 6)
+        catalog.all.map(MountDefinition::id).toSet().size shouldBe 35
         catalog["blaze"]?.price(1) shouldBe null
         catalog["happy_ghast"]?.movement shouldBe MountMovement.FLYING
         catalog["dolphin"]?.movement shouldBe MountMovement.SWIMMING
@@ -80,7 +80,7 @@ class MountModuleConfigTest : StringSpec({
         horse.abilities.highJump?.multiplier shouldBe 1.25
         fox.abilities.highJump?.displayName shouldBe "Лисий прыжок"
         fox.abilities.highJump?.multiplier shouldBe 1.35
-        catalog.all.filterNot { it.id in setOf("goat", "frog", "horse", "fox") }
+        catalog.all.filterNot { it.id in setOf("goat", "frog", "horse", "fox", "pocket_chicken") }
             .all { it.abilities.highJump == null } shouldBe true
         catalog.all.filter { it.movement == MountMovement.SWIMMING }.all { mount ->
             mount.ability("water-breathing") != null && mount.ability("night-vision") != null
@@ -90,6 +90,12 @@ class MountModuleConfigTest : StringSpec({
             catalog[it]?.ability("night-vision")?.effect == MountAbilityEffect.NIGHT_VISION
         } shouldBe true
         setOf("strider", "blaze", "ghast", "happy_ghast").all { catalog[it]?.ability("fire-resistance") != null } shouldBe true
+        checkNotNull(catalog["mega_pig"]).abilities.passives.map(MountPassiveAbilityDefinition::effect) shouldBe
+            listOf(MountAbilityEffect.RESISTANCE, MountAbilityEffect.STRENGTH)
+        checkNotNull(catalog["colossal_bee"]).abilities.passives.single().effect shouldBe MountAbilityEffect.REGENERATION
+        checkNotNull(catalog["pocket_ghast"]).abilities.passives.single().effect shouldBe MountAbilityEffect.FIRE_RESISTANCE
+        checkNotNull(catalog["mega_warden"]).abilities.passives.map(MountPassiveAbilityDefinition::effect) shouldBe
+            listOf(MountAbilityEffect.NIGHT_VISION, MountAbilityEffect.STRENGTH, MountAbilityEffect.RESISTANCE)
     }
 
     "authored sizes and motion make representative mounts feel distinct" {
@@ -97,8 +103,8 @@ class MountModuleConfigTest : StringSpec({
         val catalog = config.catalog()
         val defaults = config.motionTiming
 
-        checkNotNull(catalog["horse"]).sizeOptions.map(MountSizeOptionDefinition::multiplier) shouldBe listOf(0.88, 1.0, 1.12)
-        checkNotNull(catalog["bee"]).sizeOptions.map(MountSizeOptionDefinition::multiplier) shouldBe listOf(0.82, 1.0, 1.18)
+        checkNotNull(catalog["horse"]).sizeOptions.map(MountSizeOptionDefinition::multiplier) shouldBe listOf(0.1, 1.0, 2.0, 3.0)
+        checkNotNull(catalog["bee"]).sizeOptions.map(MountSizeOptionDefinition::multiplier) shouldBe listOf(0.1, 1.0, 2.0, 3.0)
         checkNotNull(catalog["fox"]).motion.resolve(defaults) shouldBe
             MountMotionTiming(Duration.ofMillis(550), Duration.ofMillis(250), Duration.ofMillis(130))
         checkNotNull(catalog["camel"]).motion.resolve(defaults) shouldBe
@@ -113,10 +119,10 @@ class MountModuleConfigTest : StringSpec({
         val catalog = bundledConfig("ravager-quality").catalog()
         val ravager = checkNotNull(catalog["ravager"])
 
-        ravager.sizeOptions.map(MountSizeOptionDefinition::id) shouldBe listOf("compact", "standard", "massive")
-        ravager.sizeOptions.map(MountSizeOptionDefinition::multiplier) shouldBe listOf(0.9, 1.0, 1.15)
+        ravager.sizeOptions.map(MountSizeOptionDefinition::id) shouldBe listOf("keychain", "standard", "huge", "absurd")
+        ravager.sizeOptions.map(MountSizeOptionDefinition::multiplier) shouldBe listOf(0.1, 1.0, 2.0, 3.0)
         ravager.sizeOptions.last().minimumLevel shouldBe 3
-        val ram = ravager.behaviors.single() as MountRamBehavior
+        val ram = ravager.behaviors.filterIsInstance<MountRamBehavior>().single()
         ram.displayName shouldBe "Таран"
         ram.description shouldBe
             listOf(
@@ -126,10 +132,26 @@ class MountModuleConfigTest : StringSpec({
             )
         ram.damage shouldBe 4.0
         ram.cooldown shouldBe Duration.ofSeconds(4)
+        val trample = ravager.behaviors.filterIsInstance<MountTrampleBehavior>().single()
+        trample.displayName shouldBe "Топот"
+        trample.damage shouldBe 2.0
+        trample.cooldown shouldBe Duration.ofSeconds(1)
+        trample.maximumTargets shouldBe 4
         ravager.skin("starlight")?.trail?.displayName shouldBe "Звёздный след"
         ravager.skin("starlight")?.trail?.count shouldBe 3
         ravager.skin("shadow")?.trail?.displayName shouldBe "След душ"
         ravager.skin("shadow")?.trail?.count shouldBe 4
+    }
+
+    "absurd catalog mounts retain their authored effective scale" {
+        val catalog = bundledConfig("absurd-scales").catalog()
+
+        checkNotNull(catalog["mega_pig"]).appearance.scale shouldBe 10.0
+        checkNotNull(catalog["colossal_bee"]).appearance.scale shouldBe 10.0
+        checkNotNull(catalog["pocket_ghast"]).appearance.scale shouldBe 0.1
+        checkNotNull(catalog["mega_warden"]).appearance.scale shouldBe 3.0
+        checkNotNull(catalog["pocket_chicken"]).sizeOptions.map(MountSizeOptionDefinition::multiplier) shouldBe
+            listOf(0.1, 1.0, 2.0, 3.0)
     }
 
     "every catalog appearance, material, entity and particle matches the exact Paper API" {
@@ -198,8 +220,8 @@ class MountModuleConfigTest : StringSpec({
             "<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#e6fff3> — открыть"
         config.catalog().all.map(MountDefinition::id).toSet() shouldBe
             bundledConfig("merge-forward-catalog").catalog().all.map(MountDefinition::id).toSet() + "operator_mount"
-        checkNotNull(config.catalog()["ravager"]).behaviors.single() shouldBe
-            checkNotNull(bundledConfig("merge-forward-ravager").catalog()["ravager"]).behaviors.single()
+        checkNotNull(config.catalog()["ravager"]).behaviors shouldBe
+            checkNotNull(bundledConfig("merge-forward-ravager").catalog()["ravager"]).behaviors
 
         val merged = Files.readString(file)
         ConfigManager.ofModule(dataPath, "mounts.yml")

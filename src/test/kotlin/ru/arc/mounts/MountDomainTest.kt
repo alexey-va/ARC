@@ -264,6 +264,28 @@ class MountDomainTest : StringSpec({
         activeAbilitySpeedMultiplier(listOf(ability)) shouldBeExactly 1.0
     }
 
+    "passive abilities are bounded and aquatic passives stay on swimming mounts" {
+        MountPassiveAbilityDefinition("armor", "Броня", MountAbilityEffect.RESISTANCE, amplifier = 2).amplifier shouldBe 2
+        shouldThrow<IllegalArgumentException> {
+            MountPassiveAbilityDefinition("armor", "Броня", MountAbilityEffect.RESISTANCE, amplifier = 3)
+        }
+        shouldThrow<IllegalArgumentException> {
+            testMount().copy(
+                abilities =
+                    MountAbilities(
+                        passives =
+                            listOf(
+                                MountPassiveAbilityDefinition(
+                                    "gills",
+                                    "Жабры",
+                                    MountAbilityEffect.WATER_BREATHING,
+                                ),
+                            ),
+                    ),
+            )
+        }
+    }
+
     "mount definitions reject invalid level prices and speeds" {
         shouldThrow<IllegalArgumentException> {
             testMount().copy(levels = listOf(MountLevelDefinition(speed = 0.0, price = 1.0)))
@@ -287,7 +309,7 @@ class MountDomainTest : StringSpec({
         shouldThrow<IllegalArgumentException> {
             mount.copy(
                 levels = listOf(MountLevelDefinition(speed = 1.0, price = 1.0, scaleMultiplier = 2.0)),
-                appearance = MountAppearance(scale = 2.1),
+                appearance = MountAppearance(scale = 10.0),
             )
         }
     }
@@ -310,6 +332,17 @@ class MountDomainTest : StringSpec({
         mount.effectiveSizeOption("massive", 2)?.id shouldBe "standard"
         mount.effectiveAppearance(mount.level(3).scaleMultiplier * checkNotNull(mount.sizeOption("massive")).multiplier, null).scale shouldBe
             (0.943 plusOrMinus 1.0e-9)
+    }
+
+    "comic mount scales stay inside the native attribute envelope" {
+        MountAppearance(scale = 0.0625).scale shouldBeExactly 0.0625
+        MountAppearance(scale = 16.0).scale shouldBeExactly 16.0
+        MountSizeOptionDefinition("tiny", "Крошечный", 0.1).multiplier shouldBeExactly 0.1
+        MountSizeOptionDefinition("giant", "Гигант", 10.0).multiplier shouldBeExactly 10.0
+        shouldThrow<IllegalArgumentException> { MountAppearance(scale = 0.0624) }
+        shouldThrow<IllegalArgumentException> { MountAppearance(scale = 16.1) }
+        shouldThrow<IllegalArgumentException> { MountSizeOptionDefinition("tiny", "Крошечный", 0.09) }
+        shouldThrow<IllegalArgumentException> { MountSizeOptionDefinition("giant", "Гигант", 10.1) }
     }
 
     "size tuning rejects catalogs without one standard option" {

@@ -76,6 +76,30 @@ sources:
     path: src/main/resources/modules/mounts.yml
     root: mounts.bee
     include: [name, description]
+  mounts-ravager:
+    path: src/main/resources/modules/mounts.yml
+    root: mounts.ravager
+    include: [name, description, 'behaviors.*.name', 'behaviors.*.description']
+  mounts-mega-pig:
+    path: src/main/resources/modules/mounts.yml
+    root: mounts.mega_pig
+    include: [name, description, 'abilities.passive.*.name', 'behaviors.*.name', 'behaviors.*.description']
+  mounts-colossal-bee:
+    path: src/main/resources/modules/mounts.yml
+    root: mounts.colossal_bee
+    include: [name, description, 'abilities.passive.*.name']
+  mounts-pocket-ghast:
+    path: src/main/resources/modules/mounts.yml
+    root: mounts.pocket_ghast
+    include: [name, description, 'abilities.passive.*.name']
+  mounts-mega-warden:
+    path: src/main/resources/modules/mounts.yml
+    root: mounts.mega_warden
+    include: [name, description, 'abilities.passive.*.name']
+  mounts-pocket-chicken:
+    path: src/main/resources/modules/mounts.yml
+    root: mounts.pocket_chicken
+    include: [name, description, 'abilities.high-jump.name', 'abilities.passive.*.name']
   mounts-night-vision:
     path: src/main/resources/modules/mounts.yml
     root: ability-upgrades.night-vision
@@ -103,14 +127,14 @@ placeholders:
   page: '1'
   pages: '2'
   category: Все
-  shown: '30'
-  total: '30'
+  shown: '35'
+  total: '35'
   owned-action: только полученные
   speed: '5.4'
   speed-percent: '100'
   step: '2.00'
-  size: крупный
-  feature: Таран
+  size: абсурдный ×3
+  feature: Топот
   session: '12 ч'
   idle: '5 мин'
   owned: '2'
@@ -120,7 +144,7 @@ placeholders:
   maximum-step: '4.00'
   percentage: '100'
   actual-speed: '5.4'
-  scale: '1.15'
+  scale: '3'
   trail: След душ
   price: '2 500 000'
   balance: '8 000 000'
@@ -188,6 +212,12 @@ surfaces:
     - source: mounts-horse
     - source: mounts-fox
     - source: mounts-bee
+    - source: mounts-ravager
+    - source: mounts-mega-pig
+    - source: mounts-colossal-bee
+    - source: mounts-pocket-ghast
+    - source: mounts-mega-warden
+    - source: mounts-pocket-chicken
     - source: mounts-night-vision
 
   inventories:
@@ -223,10 +253,13 @@ surfaces:
             - {ref: 'mounts-ui:copy.detail.description-line', placeholders: {mount-description: 'дорогой, грозный'}}
             - {ref: 'mounts-ui:copy.detail.description-line', placeholders: {mount-description: 'и удивительно быстрый.'}}
             - 'mounts-ui:copy.detail.mount-stats-core-lore'
-            - 'mounts-ui:copy.detail.behavior-line'
+            - {ref: 'mounts-ui:copy.detail.behavior-line', placeholders: {feature: Таран}}
             - {ref: 'mounts-ui:copy.detail.behavior-description', placeholders: {behavior-description: 'Нажмите спринт при движении вперёд.'}}
             - {ref: 'mounts-ui:copy.detail.behavior-description', placeholders: {behavior-description: 'Первый враждебный моб на пути'}}
             - {ref: 'mounts-ui:copy.detail.behavior-description', placeholders: {behavior-description: 'получит урон при столкновении.'}}
+            - {ref: 'mounts-ui:copy.detail.behavior-line', placeholders: {feature: Топот}}
+            - {ref: 'mounts-ui:copy.detail.behavior-description', placeholders: {behavior-description: 'Враждебные мобы под корпусом'}}
+            - {ref: 'mounts-ui:copy.detail.behavior-description', placeholders: {behavior-description: 'получают урон во время движения.'}}
         - {slot: 13, material: NETHER_STAR, name: 'mounts-ui:copy.detail.favorite-selected-name', lore: 'mounts-ui:copy.detail.favorite-selected-lore'}
         - {slot: 20, material: COMPARATOR, name: 'mounts-ui:copy.detail.upgrade-name', lore: ['mounts-ui:copy.detail.upgrade-lore', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-open']}
         - {slot: 22, material: SADDLE, name: 'mounts-ui:copy.detail.summon-name', lore: ['mounts-ui:copy.detail.summon-lore', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-summon']}
@@ -234,6 +267,34 @@ surfaces:
         - {slot: 31, material: LEATHER_HORSE_ARMOR, name: 'mounts-ui:copy.detail.skins-name', lore: ['mounts-ui:copy.detail.skins-lore', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-open']}
         - {slot: 36, material: BLUE_STAINED_GLASS_PANE, itemsadder: 'arc:left_gray', name: 'mounts-ui:copy.common.back-name', lore: ['mounts-ui:copy.detail.back-description', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-back']}
         - {slot: 40, material: GOAT_HORN, name: 'mounts-ui:copy.detail.whistle-owned-name', lore: 'mounts-ui:copy.detail.whistle-owned-lore'}
+
+    - id: mounts-detail-mega-pig
+      extends: mounts-detail-ravager
+      placeholders:
+        mount: Мегасвинья
+        rarity: '<light_purple>Легендарный'
+        type-value: '<gray>Пеший'
+        level: '3'
+        max-level: '3'
+        speed: '5.4'
+        step: '2.00'
+        skin: Звёздная мегасвинья
+        size: гигант ×10
+      items:
+        - slot: 4
+          material: PIG_SPAWN_EGG
+          name: 'mounts-ui:copy.list.mount-owned-name'
+          lore:
+            - 'mounts-ui:copy.detail.mount-state-lore'
+            - {ref: 'mounts-ui:copy.detail.description-line', placeholders: {mount-description: 'Свинья размером с дом.'}}
+            - {ref: 'mounts-ui:copy.detail.description-line', placeholders: {mount-description: 'Никакого реализма — только ×10'}}
+            - {ref: 'mounts-ui:copy.detail.description-line', placeholders: {mount-description: 'и убедительный топот.'}}
+            - 'mounts-ui:copy.detail.mount-stats-core-lore'
+            - {ref: 'mounts-ui:copy.detail.innate-ability-line', placeholders: {ability: Толстая шкура}}
+            - {ref: 'mounts-ui:copy.detail.innate-ability-line', placeholders: {ability: Беконная мощь}}
+            - {ref: 'mounts-ui:copy.detail.behavior-line', placeholders: {feature: Землетрясение}}
+            - {ref: 'mounts-ui:copy.detail.behavior-description', placeholders: {behavior-description: 'Враждебные мобы под свиньёй'}}
+            - {ref: 'mounts-ui:copy.detail.behavior-description', placeholders: {behavior-description: 'получают урон от её шага.'}}
 
     - id: mounts-detail-horse-trait-size
       title: 'mounts-ui:detail-title'
@@ -353,9 +414,10 @@ surfaces:
         - {slot: 31, material: GRASS_BLOCK, name: 'mounts-ui:copy.progression.step-selected-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.common.selected'], placeholders: {step: '2.00'}}
         - {slot: 32, material: PISTON, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.progression.step-high-warning', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {step: '3.00'}}
         - {slot: 33, material: GOAT_HORN, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.progression.step-high-warning', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {step: '4.00'}}
-        - {slot: 39, material: RABBIT_HIDE, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {size: компактный, scale: '0.9'}}
-        - {slot: 40, material: ARMOR_STAND, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {size: обычный, scale: '1'}}
-        - {slot: 41, material: HEAVY_CORE, name: 'mounts-ui:copy.progression.size-selected-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.selected'], placeholders: {size: крупный, scale: '1.15'}}
+        - {slot: 38, material: RABBIT_HIDE, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {size: 'брелок ×0.1', scale: '0.1'}}
+        - {slot: 39, material: ARMOR_STAND, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {size: 'обычный ×1', scale: '1'}}
+        - {slot: 41, material: HEAVY_CORE, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {size: 'огромный ×2', scale: '2'}}
+        - {slot: 42, material: DRAGON_EGG, name: 'mounts-ui:copy.progression.size-selected-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.selected'], placeholders: {size: 'абсурдный ×3', scale: '3'}}
         - {slot: 45, material: BLUE_STAINED_GLASS_PANE, itemsadder: 'arc:left_gray', name: 'mounts-ui:copy.common.back-name', lore: ['mounts-ui:copy.progression.back-description', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-back']}
 
     - id: mounts-progression-locked
@@ -376,9 +438,10 @@ surfaces:
         - {slot: 31, material: BARRIER, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.progression.mount-required'], placeholders: {step: '2.00'}}
         - {slot: 32, material: BARRIER, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.progression.step-high-warning', 'mounts-ui:copy.progression.mount-required'], placeholders: {step: '3.00'}}
         - {slot: 33, material: BARRIER, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.progression.step-high-warning', 'mounts-ui:copy.progression.mount-required'], placeholders: {step: '4.00'}}
-        - {slot: 39, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.mount-required'], placeholders: {size: компактный, scale: '0.9'}}
-        - {slot: 40, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.mount-required'], placeholders: {size: обычный, scale: '1'}}
-        - {slot: 41, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.mount-required'], placeholders: {size: крупный, scale: '1.15'}}
+        - {slot: 38, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.mount-required'], placeholders: {size: 'брелок ×0.1', scale: '0.1'}}
+        - {slot: 39, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.mount-required'], placeholders: {size: 'обычный ×1', scale: '1'}}
+        - {slot: 41, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.mount-required'], placeholders: {size: 'огромный ×2', scale: '2'}}
+        - {slot: 42, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.mount-required'], placeholders: {size: 'абсурдный ×3', scale: '3'}}
         - {slot: 45, material: BLUE_STAINED_GLASS_PANE, itemsadder: 'arc:left_gray', name: 'mounts-ui:copy.common.back-name', lore: ['mounts-ui:copy.progression.back-description', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-back']}
 
     - id: mounts-progression-owned-gated
@@ -392,7 +455,7 @@ surfaces:
         maximum-speed: '1.65'
         step: '1.10'
         maximum-step: '1.10'
-        size: обычный
+        size: обычный ×1
       items:
         - {slot: 4, material: RECOVERY_COMPASS, name: 'mounts-ui:copy.progression.info-name', lore: 'mounts-ui:copy.progression.info-lore'}
         - {slot: 13, material: EMERALD, name: 'mounts-ui:copy.progression.level-name', lore: ['mounts-ui:copy.progression.level-speed-upgrade', 'mounts-ui:copy.progression.level-increase', 'mounts-ui:copy.progression.level-handling', 'mounts-ui:copy.progression.level-sprint', 'mounts-ui:copy.progression.level-step-upgrade', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.price', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-open-purchase'], placeholders: {speed-before: '1.65', speed-after: '2.65', step-before: '1.10', step-after: '2.00', increase: '61', handling: '1', sprint: '1.03', price: '2 500 000'}}
@@ -406,9 +469,10 @@ surfaces:
         - {slot: 31, material: BARRIER, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.progression.unlocks-at-level'], placeholders: {step: '2.00', level: '2'}}
         - {slot: 32, material: BARRIER, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.progression.step-high-warning', 'mounts-ui:copy.progression.unlocks-at-level'], placeholders: {step: '3.00', level: '3'}}
         - {slot: 33, material: BARRIER, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.progression.step-high-warning', 'mounts-ui:copy.progression.unlocks-at-level'], placeholders: {step: '4.00', level: '3'}}
-        - {slot: 39, material: RABBIT_HIDE, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {size: компактный, scale: '0.9'}}
-        - {slot: 40, material: ARMOR_STAND, name: 'mounts-ui:copy.progression.size-selected-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.selected'], placeholders: {size: обычный, scale: '1'}}
-        - {slot: 41, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.unlocks-at-level'], placeholders: {size: крупный, scale: '1.15', level: '3'}}
+        - {slot: 38, material: RABBIT_HIDE, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {size: 'брелок ×0.1', scale: '0.1'}}
+        - {slot: 39, material: ARMOR_STAND, name: 'mounts-ui:copy.progression.size-selected-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.selected'], placeholders: {size: 'обычный ×1', scale: '1'}}
+        - {slot: 41, material: HEAVY_CORE, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {size: 'огромный ×2', scale: '2'}}
+        - {slot: 42, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.unlocks-at-level'], placeholders: {size: 'абсурдный ×3', scale: '3', level: '3'}}
         - {slot: 45, material: BLUE_STAINED_GLASS_PANE, itemsadder: 'arc:left_gray', name: 'mounts-ui:copy.common.back-name', lore: ['mounts-ui:copy.progression.back-description', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-back']}
 
     - id: mounts-skins-ravager
@@ -436,15 +500,15 @@ surfaces:
       extends: mounts-confirm-ready
       items:
         - {<<: *confirm_info, slot: 13, lore: ['mounts-ui:copy.confirm.mount-line', 'mounts-ui:copy.confirm.permanent-line', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.price', 'mounts-ui:copy.common.balance', 'mounts-ui:copy.common.missing'], placeholders: {skin: Звёздный комплект, price: '2 500 000', balance: '1 500 000', missing: '1 000 000'}}
-        - {slot: 15, material: GREEN_STAINED_GLASS_PANE, itemsadder: 'arc:confirm_gray', name: 'mounts-ui:copy.confirm.insufficient-name'}
+        - {slot: 15, material: GREEN_STAINED_GLASS_PANE, itemsadder: 'arc:confirm_gray', name: 'mounts-ui:copy.confirm.insufficient-name', lore: []}
 
     - id: mounts-confirm-loading
       extends: mounts-confirm-ready
       items:
-        - {slot: 15, material: GREEN_STAINED_GLASS_PANE, itemsadder: 'arc:confirm_gray', name: 'mounts-ui:copy.confirm.loading-name'}
+        - {slot: 15, material: GREEN_STAINED_GLASS_PANE, itemsadder: 'arc:confirm_gray', name: 'mounts-ui:copy.confirm.loading-name', lore: []}
 
     - id: mounts-confirm-unavailable
       extends: mounts-confirm-ready
       items:
         - {<<: *confirm_info, slot: 13, lore: ['mounts-ui:copy.confirm.mount-line', 'mounts-ui:copy.confirm.permanent-line', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.price', 'mounts-ui:copy.confirm.economy-unavailable-line']}
-        - {slot: 15, material: GREEN_STAINED_GLASS_PANE, itemsadder: 'arc:confirm_gray', name: 'mounts-ui:copy.confirm.unavailable-name'}
+        - {slot: 15, material: GREEN_STAINED_GLASS_PANE, itemsadder: 'arc:confirm_gray', name: 'mounts-ui:copy.confirm.unavailable-name', lore: []}

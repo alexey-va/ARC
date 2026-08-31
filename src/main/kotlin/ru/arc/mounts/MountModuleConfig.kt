@@ -268,6 +268,7 @@ open class MountModuleConfig(private val config: Config) {
             val type = config.string("$path.type", "").trim().lowercase(Locale.ROOT)
             when (type) {
                 "ram" -> ramBehavior(path, id, mountId)
+                "trample" -> trampleBehavior(path, id, mountId)
                 else -> throw IllegalArgumentException("Mount '$mountId' behavior '$id' has invalid type '$type'")
             }
         }
@@ -315,6 +316,41 @@ open class MountModuleConfig(private val config: Config) {
         )
     }
 
+    private fun trampleBehavior(path: String, id: String, mountId: String): MountTrampleBehavior {
+        val allowedKeys =
+            setOf(
+                "type",
+                "name",
+                "description",
+                "cooldown",
+                "minimum-speed-fraction",
+                "horizontal-padding",
+                "downward-reach",
+                "damage",
+                "maximum-targets",
+            )
+        val unknown = config.keys(path) - allowedKeys
+        require(unknown.isEmpty()) { "Mount '$mountId' behavior '$id' has unknown fields: ${unknown.sorted()}" }
+        return MountTrampleBehavior(
+            id = id,
+            displayName = config.string("$path.name", "Топот").trim(),
+            description =
+                config.stringList(
+                    "$path.description",
+                    listOf(
+                        "Враждебные мобы под корпусом",
+                        "получают урон во время движения.",
+                    ),
+                ).map(String::trim).filter(String::isNotEmpty),
+            cooldown = config.duration("$path.cooldown", Duration.ofSeconds(1)),
+            minimumSpeedFraction = config.double("$path.minimum-speed-fraction", 0.2),
+            horizontalPadding = config.double("$path.horizontal-padding", 0.2),
+            downwardReach = config.double("$path.downward-reach", 0.6),
+            damage = config.double("$path.damage", 2.0),
+            maximumTargets = config.integer("$path.maximum-targets", 4),
+        )
+    }
+
     private fun appearance(path: String, fallback: MountAppearance = MountAppearance()): MountAppearance {
         val equipment =
             MountEquipmentSlot.entries.mapNotNull { slot ->
@@ -357,20 +393,40 @@ open class MountModuleConfig(private val config: Config) {
 
     private fun abilities(path: String, availableUpgrades: Map<String, MountAbilityUpgradeDefinition>): MountAbilities {
         val abilityIds = config.keys(path)
-        require(abilityIds.all { it == "high-jump" || it == "upgrades" }) {
-            "Unknown mount abilities: ${abilityIds - setOf("high-jump", "upgrades")}"
+        val allowedKeys = setOf("high-jump", "passive", "upgrades")
+        require(abilityIds.all { it in allowedKeys }) {
+            "Unknown mount abilities: ${abilityIds - allowedKeys}"
         }
         val upgrades = config.stringList("$path.upgrades").map { rawId ->
             val id = rawId.trim().lowercase(Locale.ROOT)
             availableUpgrades[id] ?: throw IllegalArgumentException("Unknown mount ability upgrade '$rawId'")
         }
+        val passives = passiveAbilities("$path.passive")
         val highJumpPath = "$path.high-jump"
-        if (config.keys(highJumpPath).isEmpty()) return MountAbilities(upgrades = upgrades)
+        if (config.keys(highJumpPath).isEmpty()) return MountAbilities(upgrades = upgrades, passives = passives)
         val displayName = config.stringOrNull("$highJumpPath.name")?.trim().orEmpty()
         val multiplier = config.doubleOrNull("$highJumpPath.multiplier")
             ?: throw IllegalArgumentException("Mount high-jump multiplier is required")
-        return MountAbilities(MountHighJumpAbility(displayName, multiplier), upgrades)
+        return MountAbilities(MountHighJumpAbility(displayName, multiplier), upgrades, passives)
     }
+
+    private fun passiveAbilities(path: String): List<MountPassiveAbilityDefinition> =
+        config.keys(path).map { rawId ->
+            val id = rawId.lowercase(Locale.ROOT)
+            require(id == rawId && MountDefinition.validId(id)) { "Mount passive ability id '$rawId' must be normalized" }
+            val passivePath = "$path.$id"
+            val allowedKeys = setOf("name", "effect", "amplifier")
+            val unknown = config.keys(passivePath) - allowedKeys
+            require(unknown.isEmpty()) { "Mount passive ability '$id' has unknown fields: ${unknown.sorted()}" }
+            val rawEffect = config.string("$passivePath.effect", id).trim().uppercase(Locale.ROOT).replace('-', '_')
+            MountPassiveAbilityDefinition(
+                id = id,
+                displayName = config.string("$passivePath.name", id).trim(),
+                effect = runCatching { MountAbilityEffect.valueOf(rawEffect) }
+                    .getOrElse { throw IllegalArgumentException("Mount passive ability '$id' has invalid effect '$rawEffect'") },
+                amplifier = config.integer("$passivePath.amplifier", 0),
+            )
+        }
 
     private fun trail(path: String): MountTrailDefinition? {
         val particle = config.stringOrNull("$path.particle")?.trim()?.takeIf(String::isNotEmpty) ?: return null

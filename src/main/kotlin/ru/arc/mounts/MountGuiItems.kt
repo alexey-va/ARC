@@ -153,6 +153,15 @@ internal class MountGuiItems(
                                 ),
                             )
                         }
+                        mount.abilities.passives.forEach { ability ->
+                            add(
+                                copy(
+                                    "detail.innate-ability-line",
+                                    "<#8c8c8c>Особенность: <#ffacd5><ability>",
+                                    "ability" to escape(ability.displayName),
+                                ),
+                            )
+                        }
                         mount.abilities.upgrades.forEach { ability ->
                             add(
                                 copy(
@@ -608,8 +617,9 @@ internal class MountGuiItems(
         val selected = available && mount.effectiveSizeOption(profile.selectedSizeId, profile.level)?.id == option.id
         val material =
             when (option.id) {
-                "compact" -> Material.RABBIT_HIDE
-                "massive" -> Material.HEAVY_CORE
+                "compact", "keychain" -> Material.RABBIT_HIDE
+                "massive", "huge" -> Material.HEAVY_CORE
+                "absurd" -> Material.DRAGON_EGG
                 else -> Material.ARMOR_STAND
             }
         return item(
