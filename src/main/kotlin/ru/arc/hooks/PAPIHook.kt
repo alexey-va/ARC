@@ -9,7 +9,17 @@ import ru.arc.config.ConfigManager
 import ru.arc.jobs.JobsModule
 import ru.arc.xserver.playerlist.PlayerManager
 
-class PAPIHook : PlaceholderExpansion() {
+class PAPIHook internal constructor(
+    private val cachedPlaceholderResolver: CachedPlaceholderResolver,
+) : PlaceholderExpansion() {
+
+    constructor() : this(
+        CachedPlaceholderResolver(
+            delegate = { player, token ->
+                PlaceholderAPI.setPlaceholders(player, token)
+            },
+        ),
+    )
 
     companion object {
         private val config = ConfigManager.of(ARC.instance.dataPath, "modules/misc.yml")
@@ -27,6 +37,8 @@ class PAPIHook : PlaceholderExpansion() {
         return when {
             params.equals("players", ignoreCase = true) ->
                 PlayerManager.getPlayerNames().joinToString(", ")
+            params.startsWith("cache_", ignoreCase = true) ->
+                cachedPlaceholderResolver.resolve(player, params)
             player == null -> null
             params.split("_")[0] == "jobsboosts" -> jobsBoosts(player, params)
             params.startsWith("rubycount") -> formatRubyCount(player)
@@ -44,7 +56,10 @@ class PAPIHook : PlaceholderExpansion() {
         "%arc_guildrank%",
         "%arc_particles%",
         "%arc_worldname%",
+        "%arc_cache_<1-300 seconds>_<placeholder_without_percent_signs>%",
     )
+
+    internal fun clearPlaceholderCache() = cachedPlaceholderResolver.clear()
 
     private fun jobsBoosts(player: OfflinePlayer, params: String): String {
         if (!HookRegistry.jobsEnabled) return ""

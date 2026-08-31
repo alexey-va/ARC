@@ -144,6 +144,7 @@ class HookRegistry(
 
     fun setupHooks() {
         check(!isClosed) { "HookRegistry is closed" }
+        papiHook?.clearPlaceholderCache()
         registerVanillaEvents()
         registerHooks()
     }
@@ -161,6 +162,7 @@ class HookRegistry(
         cleanup(failures) { emHook?.close() }
         cleanup(failures) { auctionHook?.close() }
         cleanup(failures) { citizensHook?.close() }
+        cleanup(failures) { papiHook?.clearPlaceholderCache() }
         cleanup(failures) { papiHook?.unregister() }
         if (jobsEnabled) {
             cleanup(failures, stopJobs)

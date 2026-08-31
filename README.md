@@ -52,6 +52,26 @@ Dependencies are enabled per module. Optional integrations include Citizens,
 ItemsAdder, Jobs, BetterStructures, EliteMobs, and PlaceholderAPI. Survival
 building assistance is owned by the standalone ArcBuilder repository.
 
+### Selective PlaceholderAPI cache
+
+Expensive player or server placeholders can be cached explicitly without
+enabling a global PlaceholderAPI cache:
+
+```text
+%arc_cache_<ttl-seconds>_<inner-placeholder-without-percent-signs>%
+%arc_cache_30_cmi_user_stats_PlayTime%
+```
+
+The TTL must be an integer from 1 to 300 seconds. Cache entries are isolated by
+player UUID (or by a separate server context), TTL, and the exact inner
+placeholder. Relational (`rel_...`) and nested `arc_cache_...` placeholders are
+intentionally unsupported. A miss is resolved synchronously on the caller's
+thread, so this helper does not make an unsafe third-party expansion safe to
+call asynchronously. The inner placeholder is limited to 160 characters;
+results longer than 2048 characters and unknown results are returned but not
+cached. Concurrent misses may resolve the same value more than once so ARC never
+blocks one expansion thread on another expansion's threading requirements.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
