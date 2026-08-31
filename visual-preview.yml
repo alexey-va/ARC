@@ -56,6 +56,10 @@ sources:
   commandhide:
     path: src/main/resources/config/commands.yml
     root: messages.commandhide
+  elitemobs:
+    path: src/main/resources/modules/elitemobs.yml
+    root: chests
+    include: [quest-locked-message]
   mounts-ui:
     path: src/main/resources/modules/mounts.yml
     root: gui
@@ -161,6 +165,8 @@ surfaces:
   chat:
     - source: commandhide
       include: ['*']
+    - source: elitemobs
+      include: [quest-locked-message]
 
   chat-blocks:
     - id: server-hover
