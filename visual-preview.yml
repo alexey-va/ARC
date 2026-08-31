@@ -76,6 +76,9 @@ sources:
     path: src/main/resources/modules/mounts.yml
     root: ability-upgrades.night-vision
     include: [name, description]
+  origin-showcase:
+    path: src/main/resources/modules/origin-spawn.yml
+    root: auction-showcase
 placeholders:
   server: Выживание
   marker: CSpy
@@ -83,6 +86,8 @@ placeholders:
   target: NorthAlex
   content: /warp market
   player: ArchitectureMax
+  name: Незеритовый меч
+  seller: CraftMaster
   action: открыть
   mount: Разоритель
   rarity: '<light_purple>Эпический'
@@ -135,6 +140,24 @@ placeholders:
   variant: тёмно-коричневый
 
 surfaces:
+  hud:
+    - id: auction-showcase-stale
+      actionbar: origin-showcase:messages.stale
+    - id: auction-showcase-unavailable
+      actionbar: origin-showcase:messages.unavailable
+    - id: auction-showcase-failed
+      actionbar: origin-showcase:messages.failed
+
+  world:
+    - id: auction-showcase-listing
+      text: origin-showcase:text.listing
+      placeholders:
+        name: Незеритовый меч
+        seller: CraftMaster
+        price: '12 500₽'
+    - id: auction-showcase-empty
+      text: origin-showcase:text.empty
+
   chat:
     - source: commandhide
       include: ['*']

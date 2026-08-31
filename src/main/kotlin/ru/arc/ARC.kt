@@ -22,7 +22,6 @@ import ru.arc.commands.arc.subcommands.TreasuresSubCommand
 import ru.arc.commands.chat.ChatModeAliasCommand
 import ru.arc.commandhide.CommandHideModule
 import ru.arc.citizens.NpcChunkTicketModule
-import ru.arc.chunks.ArcChunkTickets
 import ru.arc.config.ConfigManager
 import ru.arc.config.LocationPoolConfig
 import ru.arc.core.ModuleRegistry
@@ -64,6 +63,8 @@ import ru.arc.network.NetworkRegistry
 import ru.arc.redis.RedisManager
 import ru.arc.ops.OpsHttpModule
 import ru.arc.onboarding.OnboardingModule
+import ru.arc.origin.OriginSpawnModule
+import ru.arc.paper.chunk.PaperChunkTicketRegistry
 import ru.arc.restart.RestartModule
 import ru.arc.rtp.RtpPlayerRegistry
 import ru.arc.scheduled.ScheduledCommandsModule
@@ -95,6 +96,9 @@ open class ARC : JavaPlugin() {
 
     var locationPoolConfig: LocationPoolConfig? = null
 
+    internal lateinit var chunkTicketRegistry: PaperChunkTicketRegistry
+        private set
+
     // ==================== Lifecycle ====================
 
     override fun onLoad() {
@@ -112,6 +116,7 @@ open class ARC : JavaPlugin() {
         }
 
         PaperArcRuntime.installScheduling(this)
+        chunkTicketRegistry = PaperChunkTicketRegistry(this)
         RtpPlayerRegistry.initialize(dataPath)
         registerModules()
         PaperArcRuntime.installModuleLifecycleReporting(
@@ -147,7 +152,10 @@ open class ARC : JavaPlugin() {
         info("Stopping ARC plugin")
         Portal.removeAll()
         ModuleRegistry.shutdownAll()
-        ArcChunkTickets.shutdown()
+        if (::chunkTicketRegistry.isInitialized) {
+            runCatching(chunkTicketRegistry::close)
+                .onFailure { error("Failed to close ARC chunk ticket registry", it) }
+        }
         pluginMessenger?.shutdown()
         pluginMessenger = null
         GuiDefaults.reset()
@@ -184,6 +192,7 @@ open class ARC : JavaPlugin() {
             NetworkModule,
             HooksModule,
             NpcChunkTicketModule,
+            OriginSpawnModule,
             AiModule,
             EconomyModule,
             // Configuration (priority 30-49)
@@ -316,6 +325,7 @@ open class ARC : JavaPlugin() {
                 "modules/redis.yml",
                 "modules/ops-http.yml",
                 "modules/citizens-chunk-tickets.yml",
+                "modules/origin-spawn.yml",
                 "modules/announce.yml",
                 "modules/scheduled-commands.yml",
                 "modules/restart.yml",

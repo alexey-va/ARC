@@ -4,8 +4,9 @@ import net.citizensnpcs.api.CitizensAPI
 import org.bukkit.Bukkit
 import org.bukkit.World
 import ru.arc.ARC
-import ru.arc.chunks.ArcChunkTicketLease
-import ru.arc.chunks.ArcChunkTickets
+import ru.arc.paper.chunk.PaperChunkTicketAcquireResult
+import ru.arc.paper.chunk.PaperChunkTicketLease
+import ru.arc.paper.chunk.PaperChunkTicketRegistry
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import java.util.Locale
@@ -25,8 +26,9 @@ import java.util.Locale
  */
 internal class NpcChunkTicketManager(
     private val config: () -> NpcChunkTicketConfig,
+    private val ticketRegistry: PaperChunkTicketRegistry,
 ) {
-    private val leases = linkedMapOf<NpcChunkKey, ArcChunkTicketLease>()
+    private val leases = linkedMapOf<NpcChunkKey, PaperChunkTicketLease>()
     private val pendingTickets = linkedMapOf<NpcChunkKey, Long>()
 
     private var desiredTickets: Set<NpcChunkKey> = emptySet()
@@ -120,7 +122,14 @@ internal class NpcChunkTicketManager(
                 releaseObsoleteTickets()
                 return@whenComplete
             }
-            ArcChunkTickets.acquire(chunk)?.let { leases[key] = it }
+            when (val acquired = ticketRegistry.acquire(chunk)) {
+                is PaperChunkTicketAcquireResult.Acquired -> leases[key] = acquired.lease
+                is PaperChunkTicketAcquireResult.Failed ->
+                    warn("Failed to acquire Citizens NPC chunk ticket {}:{},{}", key.world, key.x, key.z, acquired.failure)
+                PaperChunkTicketAcquireResult.RegistryClosed -> Unit
+                PaperChunkTicketAcquireResult.WorldUnavailable ->
+                    warn("Cannot acquire Citizens NPC chunk ticket because world {} is unavailable", key.world)
+            }
             releaseObsoleteTickets()
         }
     }

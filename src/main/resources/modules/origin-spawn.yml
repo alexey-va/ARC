@@ -1,0 +1,40 @@
+# Origin is the public spawn world. Keep this source default portable; the
+# production profile enables it and owns the exact world coordinates below.
+enabled: false
+world: rc_origin_spawn
+
+# BlueMap Origin mask: X -256..256, Z -192..160. Chunk bounds are inclusive.
+chunks:
+  min-x: -16
+  max-x: 16
+  min-z: -12
+  max-z: 10
+  max-in-flight: 8
+
+auction-showcase:
+  enabled: false
+  cycle-ticks: 240
+  rotation-ticks: 2
+  click-debounce-millis: 500
+
+  # Two groups of three beside the hall's side carpets. The central corridor,
+  # Ratibor, the bailiff route and the herald crowd remain clear.
+  pedestals:
+    - { x: -58.5, y: 72.08, z: -4.5, yaw: 0 }
+    - { x: -61.5, y: 72.08, z: -4.5, yaw: 0 }
+    - { x: -64.5, y: 72.08, z: -4.5, yaw: 0 }
+    - { x: -58.5, y: 72.08, z: 4.5, yaw: 180 }
+    - { x: -61.5, y: 72.08, z: 4.5, yaw: 180 }
+    - { x: -64.5, y: 72.08, z: 4.5, yaw: 180 }
+
+  text:
+    listing: |-
+      <#f2b84b><name>
+      <#969696>Продавец: <seller>
+      <#ffacd5>Цена: <price>
+    empty: '<#969696>Сейчас нет активных лотов'
+
+  messages:
+    stale: '<#ff9f0f>Лот уже недоступен — витрина обновлена'
+    unavailable: '<#ff9f0f>Аукцион сейчас недоступен'
+    failed: '<#ff9f0f>Не удалось открыть лот — попробуйте ещё раз'

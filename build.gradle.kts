@@ -109,10 +109,10 @@ dependencies {
     compileOnly(libs.io.josemmo.yamipa)
     compileOnly(libs.net.luckperms.api)
     compileOnly(libs.fr.black.eyes.lootchest)
-    // Exact API extracted from the active zAuctionHouse 4.0.1.2 release; the
+    // Exact API extracted from the active zAuctionHouse 4.0.1.3 release; the
     // upstream project does not publish this release to Maven repositories.
     // This remains compile-only and is never shaded into ARC.
-    compileOnly(files("libs/zauctionhouse-api-4.0.1.2.jar"))
+    compileOnly(files("libs/zauctionhouse-api-4.0.1.3.jar"))
     compileOnly(libs.com.github.zrips.jobs)
     compileOnly(libs.bank.bank)
     // API-compatible compile baseline for the active 4.5.13 runtime; never

@@ -11,31 +11,33 @@ object NpcChunkTicketModule : PluginModule {
     override val priority = 21
 
     private var config = NpcChunkTicketConfig.load(ARC.instance.dataPath)
-    private val manager = NpcChunkTicketManager { config }
+    private var manager: NpcChunkTicketManager? = null
     private var reconcileTask: ScheduledTask? = null
 
     override fun init() {
         config = NpcChunkTicketConfig.load(ARC.instance.dataPath)
+        manager = NpcChunkTicketManager({ config }, ARC.instance.chunkTicketRegistry)
         startTask()
     }
 
     override fun reload() {
         config = NpcChunkTicketConfig.load(ARC.instance.dataPath)
         startTask()
-        manager.reconcile()
+        manager?.reconcile()
     }
 
     override fun shutdown() {
         reconcileTask?.cancel()
         reconcileTask = null
-        manager.shutdown()
+        manager?.shutdown()
+        manager = null
     }
 
     private fun startTask() {
         reconcileTask?.cancel()
         reconcileTask =
             repeating(period = config.reconcileIntervalTicks.ticks, delay = 40.ticks) {
-                manager.reconcile()
+                manager?.reconcile()
             }
     }
 }
