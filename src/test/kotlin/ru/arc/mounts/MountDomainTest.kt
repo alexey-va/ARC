@@ -48,6 +48,9 @@ class MountDomainTest : StringSpec({
         mount.abilityPermission("night-vision") shouldBe "arc.mounts.bee.ability.night-vision"
         mount.speedTuningPermission(65) shouldBe "arc.mounts.bee.tuning.speed.65"
         mount.stepHeightTuningPermission(110) shouldBe "arc.mounts.bee.tuning.step-height.110"
+        mount.copy(
+            sizeOptions = listOf(MountSizeOptionDefinition("standard", "Обычный", 1.0)),
+        ).sizeTuningPermission("standard") shouldBe "arc.mounts.bee.tuning.size.standard"
         favoriteMountPermission(mount.id) shouldBe "arc.mounts.favorite.bee"
     }
 
@@ -285,6 +288,46 @@ class MountDomainTest : StringSpec({
             mount.copy(
                 levels = listOf(MountLevelDefinition(speed = 1.0, price = 1.0, scaleMultiplier = 2.0)),
                 appearance = MountAppearance(scale = 2.1),
+            )
+        }
+    }
+
+    "authored size tuning composes with level and appearance scale" {
+        val mount =
+            testMount().copy(
+                appearance = MountAppearance(scale = 0.82),
+                sizeOptions =
+                    listOf(
+                        MountSizeOptionDefinition("compact", "Компактный", 0.9),
+                        MountSizeOptionDefinition("standard", "Обычный", 1.0),
+                        MountSizeOptionDefinition("massive", "Крупный", 1.15, minimumLevel = 3),
+                    ),
+            )
+
+        checkNotNull(mount.sizeOption("massive")).multiplier shouldBeExactly 1.15
+        mount.sizeOption("missing")?.id shouldBe "standard"
+        mount.availableSizeOptions(2).map(MountSizeOptionDefinition::id) shouldBe listOf("compact", "standard")
+        mount.effectiveSizeOption("massive", 2)?.id shouldBe "standard"
+        mount.effectiveAppearance(mount.level(3).scaleMultiplier * checkNotNull(mount.sizeOption("massive")).multiplier, null).scale shouldBe
+            (0.943 plusOrMinus 1.0e-9)
+    }
+
+    "size tuning rejects catalogs without one standard option" {
+        shouldThrow<IllegalArgumentException> {
+            testMount().copy(sizeOptions = listOf(MountSizeOptionDefinition("compact", "Компактный", 0.9)))
+        }
+        shouldThrow<IllegalArgumentException> {
+            testMount().copy(
+                sizeOptions =
+                    listOf(
+                        MountSizeOptionDefinition("standard", "Обычный", 1.0),
+                        MountSizeOptionDefinition("standard-2", "Ещё обычный", 1.0),
+                ),
+            )
+        }
+        shouldThrow<IllegalArgumentException> {
+            testMount().copy(
+                sizeOptions = listOf(MountSizeOptionDefinition("standard", "Обычный", 1.0, minimumLevel = 2)),
             )
         }
     }

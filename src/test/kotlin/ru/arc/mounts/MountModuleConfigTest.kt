@@ -1,5 +1,6 @@
 package ru.arc.mounts
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
@@ -69,18 +70,65 @@ class MountModuleConfigTest : StringSpec({
         val catalog = bundledConfig("abilities").catalog()
         val goat = checkNotNull(catalog["goat"])
         val frog = checkNotNull(catalog["frog"])
+        val horse = checkNotNull(catalog["horse"])
+        val fox = checkNotNull(catalog["fox"])
 
         goat.abilities.highJump?.displayName shouldBe "Высокий прыжок"
         goat.abilities.highJump?.multiplier shouldBe 1.8
         frog.abilities.highJump?.multiplier shouldBe 1.55
-        catalog.all.filterNot { it.id in setOf("goat", "frog") }.all { it.abilities.highJump == null } shouldBe true
+        horse.abilities.highJump?.multiplier shouldBe 1.25
+        fox.abilities.highJump?.displayName shouldBe "Лисий прыжок"
+        fox.abilities.highJump?.multiplier shouldBe 1.35
+        catalog.all.filterNot { it.id in setOf("goat", "frog", "horse", "fox") }
+            .all { it.abilities.highJump == null } shouldBe true
         catalog.all.filter { it.movement == MountMovement.SWIMMING }.all { mount ->
             mount.ability("water-breathing") != null && mount.ability("night-vision") != null
         } shouldBe true
         catalog["dolphin"]?.ability("dolphins-grace")?.speedMultiplier shouldBe 1.15
-        catalog["bat"]?.ability("night-vision")?.effect shouldBe MountAbilityEffect.NIGHT_VISION
-        catalog["phantom"]?.ability("night-vision")?.effect shouldBe MountAbilityEffect.NIGHT_VISION
+        setOf("skeleton", "enderman", "bat", "phantom").all {
+            catalog[it]?.ability("night-vision")?.effect == MountAbilityEffect.NIGHT_VISION
+        } shouldBe true
         setOf("strider", "blaze", "ghast", "happy_ghast").all { catalog[it]?.ability("fire-resistance") != null } shouldBe true
+    }
+
+    "authored sizes and motion make representative mounts feel distinct" {
+        val config = bundledConfig("mount-personality")
+        val catalog = config.catalog()
+        val defaults = config.motionTiming
+
+        checkNotNull(catalog["horse"]).sizeOptions.map(MountSizeOptionDefinition::multiplier) shouldBe listOf(0.88, 1.0, 1.12)
+        checkNotNull(catalog["bee"]).sizeOptions.map(MountSizeOptionDefinition::multiplier) shouldBe listOf(0.82, 1.0, 1.18)
+        checkNotNull(catalog["fox"]).motion.resolve(defaults) shouldBe
+            MountMotionTiming(Duration.ofMillis(550), Duration.ofMillis(250), Duration.ofMillis(130))
+        checkNotNull(catalog["camel"]).motion.resolve(defaults) shouldBe
+            MountMotionTiming(Duration.ofMillis(1_200), Duration.ofMillis(550), Duration.ofMillis(320))
+        checkNotNull(catalog["ravager"]).motion.resolve(defaults) shouldBe
+            MountMotionTiming(Duration.ofMillis(1_300), Duration.ofMillis(550), Duration.ofMillis(320))
+        checkNotNull(catalog["breeze"]).motion.resolve(defaults) shouldBe
+            MountMotionTiming(Duration.ofMillis(350), Duration.ofMillis(250), Duration.ofMillis(120))
+    }
+
+    "ravager has authored size tuning, a guarded ram and visible localized trails" {
+        val catalog = bundledConfig("ravager-quality").catalog()
+        val ravager = checkNotNull(catalog["ravager"])
+
+        ravager.sizeOptions.map(MountSizeOptionDefinition::id) shouldBe listOf("compact", "standard", "massive")
+        ravager.sizeOptions.map(MountSizeOptionDefinition::multiplier) shouldBe listOf(0.9, 1.0, 1.15)
+        ravager.sizeOptions.last().minimumLevel shouldBe 3
+        val ram = ravager.behaviors.single() as MountRamBehavior
+        ram.displayName shouldBe "Таран"
+        ram.description shouldBe
+            listOf(
+                "Нажмите спринт при движении вперёд.",
+                "Первый враждебный моб на пути",
+                "получит урон при столкновении.",
+            )
+        ram.damage shouldBe 4.0
+        ram.cooldown shouldBe Duration.ofSeconds(4)
+        ravager.skin("starlight")?.trail?.displayName shouldBe "Звёздный след"
+        ravager.skin("starlight")?.trail?.count shouldBe 3
+        ravager.skin("shadow")?.trail?.displayName shouldBe "След душ"
+        ravager.skin("shadow")?.trail?.count shouldBe 4
     }
 
     "every catalog appearance, material, entity and particle matches the exact Paper API" {
@@ -117,6 +165,23 @@ class MountModuleConfigTest : StringSpec({
         MountGuiItemRole.entries.forEach { role ->
             config.guiStyle(role) shouldBe MountGuiItemStyle()
         }
+    }
+
+    "bundled GUI copy owns the dark titles and thirteen-row collection guide" {
+        val config = bundledConfig("gui-copy")
+
+        config.listTitle shouldBe "<color:#20252b><bold>Коллекция маунтов</bold>"
+        config.detailTitle shouldBe "<color:#20252b><bold><mount></bold>"
+        config.progressionTitle shouldBe "<color:#20252b><bold>Развитие маунта</bold>"
+        config.skinsTitle shouldBe "<color:#20252b><bold>Облики маунта</bold>"
+        config.confirmTitle shouldBe "<color:#20252b><bold>Покупка маунта</bold>"
+        config.guiText("list.guide-name", "") shouldBe "<color:#92bed8>Путеводитель по коллекции"
+        // Display name plus twelve lore rows is the intentionally retained thirteen-row tooltip.
+        config.guiLines("list.guide-lore", emptyList()) shouldHaveSize 12
+        config.guiText("common.action-footer", "").contains("▶") shouldBe true
+        config.guiText("list.mount-acquirable-name", "") shouldBe "<color:#92bed8><mount>"
+        config.guiText("detail.whistle-disabled-name", "") shouldBe "<color:#969696>Свисток недоступен"
+        config.guiText("progression.mount-required", "") shouldBe "<color:#c42323>Сначала получите маунта"
     }
 
     "runtime GUI overlay accepts material and custom model data" {
@@ -181,6 +246,35 @@ class MountModuleConfigTest : StringSpec({
 
         val levels = checkNotNull(MountModuleConfig.load(dataPath).catalog()["bee"]).levels
         levels.map(MountLevelDefinition::scaleMultiplier) shouldBe listOf(0.8, 1.0)
+    }
+
+    "size tuning rejects malformed level gates and unknown fields" {
+        listOf(
+            "{id: standard, name: Standard, multiplier: 1.0, minimum-level: nope}",
+            "{id: standard, name: Standard, multiplier: 1.0, minimum-leevl: 1}",
+        ).forEachIndexed { index, option ->
+            val dataPath = Files.createTempDirectory("arc-mounts-size-invalid-$index-")
+            val moduleDir = Files.createDirectories(dataPath.resolve("modules"))
+            Files.writeString(
+                moduleDir.resolve("mounts.yml"),
+                """
+                enabled: false
+                mounts:
+                  bee:
+                    type: flying
+                    entity: BEE
+                    item: BEE_SPAWN_EGG
+                    name: Bee
+                    acquisition: Test
+                    levels:
+                      - {speed: 1.0, price: 1}
+                    size-tuning:
+                      - $option
+                """.trimIndent(),
+            )
+
+            shouldThrow<IllegalArgumentException> { MountModuleConfig.load(dataPath).catalog() }
+        }
     }
 
     "per-mount motion timing overrides inherit unspecified global values" {

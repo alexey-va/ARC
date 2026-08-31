@@ -1,8 +1,53 @@
 schema: 1
-plugin: ARC Cross-Server Spy
+plugin: ARC
 minecraft-version: 1.21.11
 minecraft-client-sha1: ba2df812c2d12e0219c489c4cd9a5e1f0760f5bd
-gallery-accent: '#00AA00'
+gallery-accent: '#92bed8'
+
+resource-pack:
+  url: https://storage.yandexcloud.net/ruscraftinresources/RusCraftingResource.zip
+  sha256-url: https://storage.yandexcloud.net/ruscraftinresources/RusCraftingResource.zip.sha256
+
+custom-items:
+  arc:background:
+    material: GRAY_STAINED_GLASS_PANE
+    model: assets/arc/models/gui/background.json
+  arc:left_gray:
+    material: BLUE_STAINED_GLASS_PANE
+    model: assets/arc/models/gui/left_gray.json
+  arc:left_blue_gray:
+    material: BLUE_STAINED_GLASS_PANE
+    model: assets/arc/models/gui/left_blue_gray.json
+  arc:right_blue_gray:
+    material: BLUE_STAINED_GLASS_PANE
+    model: assets/arc/models/gui/right_blue_gray.json
+  arc:comment_gray:
+    material: BLUE_STAINED_GLASS_PANE
+    model: assets/arc/models/gui/comment_gray.json
+  arc:confirm_gray:
+    material: GREEN_STAINED_GLASS_PANE
+    model: assets/arc/models/gui/confirm_gray.json
+  arc:cancel:
+    material: RED_STAINED_GLASS_PANE
+    model: assets/arc/models/gui/cancel.json
+  arc:mount_category_all:
+    material: COMPASS
+    model: assets/arc/models/gui/mount_category_all.json
+  arc:mount_category_flying:
+    material: FEATHER
+    model: assets/arc/models/gui/mount_category_flying.json
+  arc:mount_category_walking:
+    material: SADDLE
+    model: assets/arc/models/gui/mount_category_walking.json
+  arc:mount_category_swimming:
+    material: HEART_OF_THE_SEA
+    model: assets/arc/models/gui/mount_category_swimming.json
+
+glyphs:
+  - character: '💰'
+    path: '@pack/assets/arc/textures/glyphs/coin.png'
+    height: 9
+    ascent: 8
 
 sources:
   spy:
@@ -11,7 +56,26 @@ sources:
   commandhide:
     path: src/main/resources/config/commands.yml
     root: messages.commandhide
-
+  mounts-ui:
+    path: src/main/resources/modules/mounts.yml
+    root: gui
+    include: [list-title, detail-title, progression-title, skins-title, confirm-title, 'copy.*']
+  mounts-horse:
+    path: src/main/resources/modules/mounts.yml
+    root: mounts.horse
+    include: [name, description, abilities.high-jump.name]
+  mounts-fox:
+    path: src/main/resources/modules/mounts.yml
+    root: mounts.fox
+    include: [name, description, abilities.high-jump.name]
+  mounts-bee:
+    path: src/main/resources/modules/mounts.yml
+    root: mounts.bee
+    include: [name, description]
+  mounts-night-vision:
+    path: src/main/resources/modules/mounts.yml
+    root: ability-upgrades.night-vision
+    include: [name, description]
 placeholders:
   server: Выживание
   marker: CSpy
@@ -19,6 +83,56 @@ placeholders:
   target: NorthAlex
   content: /warp market
   player: ArchitectureMax
+  action: открыть
+  mount: Разоритель
+  rarity: '<light_purple>Эпический'
+  type-value: '<gray>Пеший'
+  level: '3'
+  max-level: '3'
+  skin: Теневой комплект
+  acquisition: Магазин маунтов на спавне
+  page: '1'
+  pages: '2'
+  category: Все
+  shown: '30'
+  total: '30'
+  owned-action: только полученные
+  speed: '5.4'
+  speed-percent: '100'
+  step: '2.00'
+  size: крупный
+  feature: Таран
+  session: '12 ч'
+  idle: '5 мин'
+  owned: '2'
+  available: '3'
+  current-speed: '5.4'
+  maximum-speed: '5.4'
+  maximum-step: '4.00'
+  percentage: '100'
+  actual-speed: '5.4'
+  scale: '1.15'
+  trail: След душ
+  price: '2 500 000'
+  balance: '8 000 000'
+  remaining: '5 500 000'
+  missing: '1 000 000'
+  ability: Грация дельфина
+  mount-description: Описание маунта
+  behavior-description: Описание особенности
+  ability-description: Описание способности
+  increase: '15'
+  speed-before: '3.5'
+  speed-after: '5.4'
+  step-before: '1.10'
+  step-after: '2.00'
+  handling: '1.28'
+  sprint: '1.12'
+  age: взрослый
+  equipment: незеритовый комплект
+  pattern: полосатый
+  value: '12'
+  variant: тёмно-коричневый
 
 surfaces:
   chat:
@@ -38,3 +152,270 @@ surfaces:
       placeholders:
         marker: Spy
         content: Ок, у ворот.
+
+  fragments:
+    - source: mounts-ui
+      include: ['copy.*']
+    - source: mounts-horse
+    - source: mounts-fox
+    - source: mounts-bee
+    - source: mounts-night-vision
+
+  inventories:
+    - id: mounts-list-representative
+      title: 'mounts-ui:list-title'
+      rows: 6
+      filler: GRAY_STAINED_GLASS_PANE
+      background-item: arc:background
+      items:
+        - {slot: 4, material: BLUE_STAINED_GLASS_PANE, itemsadder: 'arc:comment_gray', name: 'mounts-ui:copy.list.guide-name', lore: 'mounts-ui:copy.list.guide-lore'}
+        - &mount_owned {slot: 10, material: RAVAGER_SPAWN_EGG, name: 'mounts-ui:copy.list.mount-owned-name', lore: ['mounts-ui:copy.list.mount-owned-core', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.list.mount-owned-footer']}
+        - {<<: *mount_owned, slot: 11, material: HORSE_SPAWN_EGG, placeholders: {mount: Лошадь, rarity: '<green>Необычный', type-value: '<gray>Пеший', level: '2', max-level: '3', skin: Классический}}
+        - {<<: *mount_owned, slot: 12, material: BEE_SPAWN_EGG, placeholders: {mount: Пчела, rarity: '<white>Обычный', type-value: '<green>Летающий', level: '1', max-level: '3', skin: Классический}}
+        - &mount_acquirable {slot: 13, material: ZOMBIE_SPAWN_EGG, name: 'mounts-ui:copy.list.mount-acquirable-name', lore: ['mounts-ui:copy.list.mount-acquirable-core', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.list.mount-acquirable-footer'], placeholders: {mount: Зомби, rarity: '<white>Обычный', acquisition: Магазин маунтов на спавне}}
+        - &mount_locked {slot: 14, material: BLAZE_SPAWN_EGG, name: 'mounts-ui:copy.list.mount-locked-name', lore: 'mounts-ui:copy.list.mount-locked-core', placeholders: {mount: Блэйз, rarity: '<gold>Легендарный', acquisition: Сезонная или событийная награда}}
+        - {<<: *mount_acquirable, slot: 15, material: DOLPHIN_SPAWN_EGG, placeholders: {mount: Дельфин, rarity: '<white>Обычный', acquisition: Магазин маунтов на спавне}}
+        - {slot: 45, material: BLUE_STAINED_GLASS_PANE, itemsadder: 'arc:left_gray', name: 'mounts-ui:copy.common.back-name', lore: ['mounts-ui:copy.list.back-description', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-back']}
+        - {slot: 49, material: COMPASS, itemsadder: 'arc:mount_category_all', name: 'mounts-ui:copy.list.filter-name', lore: ['mounts-ui:copy.list.filter-stats', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.list.filter-footer']}
+        - {slot: 50, material: BLUE_STAINED_GLASS_PANE, itemsadder: 'arc:right_blue_gray', name: 'mounts-ui:copy.list.next-name', lore: ['mounts-ui:copy.list.page', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.list.next-footer']}
+
+    - id: mounts-detail-ravager
+      title: 'mounts-ui:detail-title'
+      rows: 5
+      filler: GRAY_STAINED_GLASS_PANE
+      background-item: arc:background
+      items:
+        - slot: 4
+          material: RAVAGER_SPAWN_EGG
+          name: 'mounts-ui:copy.list.mount-owned-name'
+          lore:
+            - 'mounts-ui:copy.detail.mount-state-lore'
+            - {ref: 'mounts-ui:copy.detail.description-line', placeholders: {mount-description: 'Тяжёлый престижный таран:'}}
+            - {ref: 'mounts-ui:copy.detail.description-line', placeholders: {mount-description: 'дорогой, грозный'}}
+            - {ref: 'mounts-ui:copy.detail.description-line', placeholders: {mount-description: 'и удивительно быстрый.'}}
+            - 'mounts-ui:copy.detail.mount-stats-core-lore'
+            - 'mounts-ui:copy.detail.behavior-line'
+            - {ref: 'mounts-ui:copy.detail.behavior-description', placeholders: {behavior-description: 'Нажмите спринт при движении вперёд.'}}
+            - {ref: 'mounts-ui:copy.detail.behavior-description', placeholders: {behavior-description: 'Первый враждебный моб на пути'}}
+            - {ref: 'mounts-ui:copy.detail.behavior-description', placeholders: {behavior-description: 'получит урон при столкновении.'}}
+        - {slot: 13, material: NETHER_STAR, name: 'mounts-ui:copy.detail.favorite-selected-name', lore: 'mounts-ui:copy.detail.favorite-selected-lore'}
+        - {slot: 20, material: COMPARATOR, name: 'mounts-ui:copy.detail.upgrade-name', lore: ['mounts-ui:copy.detail.upgrade-lore', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-open']}
+        - {slot: 22, material: SADDLE, name: 'mounts-ui:copy.detail.summon-name', lore: ['mounts-ui:copy.detail.summon-lore', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-summon']}
+        - {slot: 24, material: GLOW_INK_SAC, name: 'mounts-ui:copy.detail.glow-enabled-name', lore: ['mounts-ui:copy.detail.glow-enabled-lore', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-disable']}
+        - {slot: 31, material: LEATHER_HORSE_ARMOR, name: 'mounts-ui:copy.detail.skins-name', lore: ['mounts-ui:copy.detail.skins-lore', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-open']}
+        - {slot: 36, material: BLUE_STAINED_GLASS_PANE, itemsadder: 'arc:left_gray', name: 'mounts-ui:copy.common.back-name', lore: ['mounts-ui:copy.detail.back-description', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-back']}
+        - {slot: 40, material: GOAT_HORN, name: 'mounts-ui:copy.detail.whistle-owned-name', lore: 'mounts-ui:copy.detail.whistle-owned-lore'}
+
+    - id: mounts-detail-horse-trait-size
+      title: 'mounts-ui:detail-title'
+      rows: 5
+      filler: GRAY_STAINED_GLASS_PANE
+      background-item: arc:background
+      placeholders:
+        mount: Лошадь
+        rarity: '<green>Необычный'
+        type-value: '<gray>Пеший'
+        level: '3'
+        max-level: '3'
+        speed: '5'
+        step: '2.00'
+        skin: Королевская белая
+        size: обычный
+        ability: Уверенный прыжок
+      items:
+        - slot: 4
+          material: HORSE_SPAWN_EGG
+          name: 'mounts-ui:copy.list.mount-owned-name'
+          lore:
+            - 'mounts-ui:copy.detail.mount-state-lore'
+            - {ref: 'mounts-ui:copy.detail.description-line', placeholders: {mount-description: 'Классика путешествий:'}}
+            - {ref: 'mounts-ui:copy.detail.description-line', placeholders: {mount-description: 'сильный галоп, уверенный прыжок'}}
+            - {ref: 'mounts-ui:copy.detail.description-line', placeholders: {mount-description: 'и три варианта размера.'}}
+            - 'mounts-ui:copy.detail.mount-stats-core-lore'
+            - 'mounts-ui:copy.detail.innate-ability-line'
+        - {slot: 13, material: NETHER_STAR, name: 'mounts-ui:copy.detail.favorite-selected-name', lore: 'mounts-ui:copy.detail.favorite-selected-lore'}
+        - {slot: 20, material: COMPARATOR, name: 'mounts-ui:copy.detail.upgrade-name', lore: ['mounts-ui:copy.detail.upgrade-lore', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-open']}
+        - {slot: 22, material: SADDLE, name: 'mounts-ui:copy.detail.summon-name', lore: ['mounts-ui:copy.detail.summon-lore', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-summon']}
+        - {slot: 24, material: GLOW_INK_SAC, name: 'mounts-ui:copy.detail.glow-enabled-name', lore: ['mounts-ui:copy.detail.glow-enabled-lore', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-disable']}
+        - {slot: 31, material: LEATHER_HORSE_ARMOR, name: 'mounts-ui:copy.detail.skins-name', lore: ['mounts-ui:copy.detail.skins-lore', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-open']}
+        - {slot: 36, material: BLUE_STAINED_GLASS_PANE, itemsadder: 'arc:left_gray', name: 'mounts-ui:copy.common.back-name', lore: ['mounts-ui:copy.detail.back-description', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-back']}
+        - {slot: 40, material: GOAT_HORN, name: 'mounts-ui:copy.detail.whistle-owned-name', lore: 'mounts-ui:copy.detail.whistle-owned-lore'}
+
+    - id: mounts-detail-locked-disabled
+      title: 'mounts-ui:detail-title'
+      rows: 5
+      filler: GRAY_STAINED_GLASS_PANE
+      background-item: arc:background
+      items:
+        - slot: 4
+          material: BLAZE_SPAWN_EGG
+          name: 'mounts-ui:copy.list.mount-locked-name'
+          placeholders: {mount: Блэйз, acquisition: Сезонная или событийная награда}
+          lore:
+            - 'mounts-ui:copy.detail.mount-locked-state'
+            - 'mounts-ui:copy.list.rarity-legendary'
+            - 'mounts-ui:copy.common.blank'
+            - {ref: 'mounts-ui:copy.detail.description-line', placeholders: {mount-description: 'Наследный сезонный маунт'}}
+            - {ref: 'mounts-ui:copy.detail.description-line', placeholders: {mount-description: 'старой коллекции.'}}
+            - 'mounts-ui:copy.common.blank'
+            - 'mounts-ui:copy.detail.locked-acquisition'
+        - {slot: 13, material: GRAY_DYE, name: 'mounts-ui:copy.detail.favorite-locked-name', lore: 'mounts-ui:copy.detail.favorite-locked-lore'}
+        - {slot: 20, material: COMPARATOR, name: 'mounts-ui:copy.detail.upgrade-name', lore: 'mounts-ui:copy.detail.upgrade-locked-lore', placeholders: {level: '0', max-level: '3'}}
+        - {slot: 22, material: BARRIER, name: 'mounts-ui:copy.detail.summon-locked-name', lore: 'mounts-ui:copy.detail.summon-locked-lore'}
+        - {slot: 24, material: GRAY_DYE, name: 'mounts-ui:copy.detail.glow-locked-name', lore: 'mounts-ui:copy.detail.glow-locked-lore'}
+        - {slot: 31, material: GRAY_DYE, name: 'mounts-ui:copy.detail.skins-locked-name', lore: 'mounts-ui:copy.detail.skins-locked-lore'}
+        - {slot: 36, material: BLUE_STAINED_GLASS_PANE, itemsadder: 'arc:left_gray', name: 'mounts-ui:copy.common.back-name', lore: ['mounts-ui:copy.detail.back-description', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-back']}
+        - {slot: 40, material: GRAY_DYE, name: 'mounts-ui:copy.detail.whistle-favorite-required-name', lore: 'mounts-ui:copy.detail.whistle-favorite-required-lore'}
+
+    - id: mounts-detail-ability-whistle-matrix
+      title: 'mounts-ui:detail-title'
+      rows: 5
+      filler: GRAY_STAINED_GLASS_PANE
+      background-item: arc:background
+      items:
+        - {slot: 10, material: GRAY_DYE, name: 'mounts-ui:copy.detail.whistle-disabled-name', lore: 'mounts-ui:copy.detail.whistle-disabled-lore'}
+        - {slot: 11, material: GRAY_DYE, name: 'mounts-ui:copy.detail.whistle-favorite-required-name', lore: 'mounts-ui:copy.detail.whistle-favorite-required-lore'}
+        - {slot: 12, material: GRAY_DYE, name: 'mounts-ui:copy.detail.whistle-full-name', lore: 'mounts-ui:copy.detail.whistle-full-lore'}
+        - {slot: 13, material: GOAT_HORN, name: 'mounts-ui:copy.detail.whistle-available-name', lore: ['mounts-ui:copy.detail.whistle-available-lore', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-get']}
+        - {slot: 14, material: GOAT_HORN, name: 'mounts-ui:copy.detail.whistle-owned-name', lore: 'mounts-ui:copy.detail.whistle-owned-lore'}
+        - slot: 29
+          material: NAUTILUS_SHELL
+          name: 'mounts-ui:copy.detail.ability-available-name'
+          placeholders: {price: '1 500 000'}
+          lore:
+            - {ref: 'mounts-ui:copy.detail.ability-description', placeholders: {ability-description: 'Даёт дельфиний эффект'}}
+            - {ref: 'mounts-ui:copy.detail.ability-description', placeholders: {ability-description: 'и ускоряет маунта в воде.'}}
+            - 'mounts-ui:copy.detail.ability-speed'
+            - 'mounts-ui:copy.common.price'
+            - 'mounts-ui:copy.common.blank'
+            - 'mounts-ui:copy.common.footer-open-purchase'
+        - slot: 31
+          material: NAUTILUS_SHELL
+          name: 'mounts-ui:copy.detail.ability-owned-name'
+          lore:
+            - {ref: 'mounts-ui:copy.detail.ability-description', placeholders: {ability-description: 'Даёт дельфиний эффект'}}
+            - {ref: 'mounts-ui:copy.detail.ability-description', placeholders: {ability-description: 'и ускоряет маунта в воде.'}}
+            - 'mounts-ui:copy.detail.ability-speed'
+            - 'mounts-ui:copy.detail.ability-owned'
+        - slot: 33
+          material: NAUTILUS_SHELL
+          name: 'mounts-ui:copy.detail.ability-available-name'
+          lore:
+            - {ref: 'mounts-ui:copy.detail.ability-description', placeholders: {ability-description: 'Даёт дельфиний эффект'}}
+            - {ref: 'mounts-ui:copy.detail.ability-description', placeholders: {ability-description: 'и ускоряет маунта в воде.'}}
+            - 'mounts-ui:copy.progression.mount-required'
+        - {slot: 36, material: BLUE_STAINED_GLASS_PANE, itemsadder: 'arc:left_gray', name: 'mounts-ui:copy.common.back-name', lore: ['mounts-ui:copy.detail.back-description', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-back']}
+
+    - id: mounts-progression-ravager
+      title: 'mounts-ui:progression-title'
+      rows: 6
+      filler: GRAY_STAINED_GLASS_PANE
+      background-item: arc:background
+      items:
+        - {slot: 4, material: RECOVERY_COMPASS, name: 'mounts-ui:copy.progression.info-name', lore: 'mounts-ui:copy.progression.info-lore'}
+        - {slot: 13, material: NETHER_STAR, name: 'mounts-ui:copy.progression.max-level-name', lore: 'mounts-ui:copy.progression.max-level-lore'}
+        - &speed {slot: 20, material: LEATHER_BOOTS, name: 'mounts-ui:copy.progression.speed-name', lore: ['mounts-ui:copy.progression.speed-lore', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {percentage: '50', actual-speed: '2.7'}}
+        - {<<: *speed, slot: 21, material: CHAINMAIL_BOOTS, placeholders: {percentage: '65', actual-speed: '3.51'}}
+        - {<<: *speed, slot: 22, material: IRON_BOOTS, placeholders: {percentage: '80', actual-speed: '4.32'}}
+        - {<<: *speed, slot: 23, material: GOLDEN_BOOTS, placeholders: {percentage: '90', actual-speed: '4.86'}}
+        - {slot: 24, material: DIAMOND_BOOTS, name: 'mounts-ui:copy.progression.speed-selected-name', lore: ['mounts-ui:copy.progression.speed-lore', 'mounts-ui:copy.common.selected'], placeholders: {percentage: '100', actual-speed: '5.4'}}
+        - &step {slot: 29, material: OAK_SLAB, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {step: '1.10'}}
+        - {<<: *step, slot: 30, material: OAK_STAIRS, placeholders: {step: '1.50'}}
+        - {slot: 31, material: GRASS_BLOCK, name: 'mounts-ui:copy.progression.step-selected-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.common.selected'], placeholders: {step: '2.00'}}
+        - {slot: 32, material: PISTON, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.progression.step-high-warning', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {step: '3.00'}}
+        - {slot: 33, material: GOAT_HORN, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.progression.step-high-warning', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {step: '4.00'}}
+        - {slot: 39, material: RABBIT_HIDE, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {size: компактный, scale: '0.9'}}
+        - {slot: 40, material: ARMOR_STAND, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {size: обычный, scale: '1'}}
+        - {slot: 41, material: HEAVY_CORE, name: 'mounts-ui:copy.progression.size-selected-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.selected'], placeholders: {size: крупный, scale: '1.15'}}
+        - {slot: 45, material: BLUE_STAINED_GLASS_PANE, itemsadder: 'arc:left_gray', name: 'mounts-ui:copy.common.back-name', lore: ['mounts-ui:copy.progression.back-description', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-back']}
+
+    - id: mounts-progression-locked
+      title: 'mounts-ui:progression-title'
+      rows: 6
+      filler: GRAY_STAINED_GLASS_PANE
+      background-item: arc:background
+      items:
+        - {slot: 4, material: RECOVERY_COMPASS, name: 'mounts-ui:copy.progression.info-name', lore: 'mounts-ui:copy.progression.info-locked-lore'}
+        - {slot: 13, material: EMERALD, name: 'mounts-ui:copy.progression.unlock-name', lore: ['mounts-ui:copy.progression.level-speed-initial', 'mounts-ui:copy.progression.level-handling', 'mounts-ui:copy.progression.level-step-initial', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.price', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-open-purchase'], placeholders: {speed: '1.65', handling: '0.9', step: '1.10', price: '500 000'}}
+        - {slot: 20, material: GRAY_DYE, name: 'mounts-ui:copy.progression.speed-name', lore: 'mounts-ui:copy.progression.mount-required', placeholders: {percentage: '50'}}
+        - {slot: 21, material: GRAY_DYE, name: 'mounts-ui:copy.progression.speed-name', lore: 'mounts-ui:copy.progression.mount-required', placeholders: {percentage: '65'}}
+        - {slot: 22, material: GRAY_DYE, name: 'mounts-ui:copy.progression.speed-name', lore: 'mounts-ui:copy.progression.mount-required', placeholders: {percentage: '80'}}
+        - {slot: 23, material: GRAY_DYE, name: 'mounts-ui:copy.progression.speed-name', lore: 'mounts-ui:copy.progression.mount-required', placeholders: {percentage: '90'}}
+        - {slot: 24, material: GRAY_DYE, name: 'mounts-ui:copy.progression.speed-name', lore: 'mounts-ui:copy.progression.mount-required', placeholders: {percentage: '100'}}
+        - {slot: 29, material: BARRIER, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.progression.mount-required'], placeholders: {step: '1.10'}}
+        - {slot: 30, material: BARRIER, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.progression.mount-required'], placeholders: {step: '1.50'}}
+        - {slot: 31, material: BARRIER, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.progression.mount-required'], placeholders: {step: '2.00'}}
+        - {slot: 32, material: BARRIER, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.progression.step-high-warning', 'mounts-ui:copy.progression.mount-required'], placeholders: {step: '3.00'}}
+        - {slot: 33, material: BARRIER, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.progression.step-high-warning', 'mounts-ui:copy.progression.mount-required'], placeholders: {step: '4.00'}}
+        - {slot: 39, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.mount-required'], placeholders: {size: компактный, scale: '0.9'}}
+        - {slot: 40, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.mount-required'], placeholders: {size: обычный, scale: '1'}}
+        - {slot: 41, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.mount-required'], placeholders: {size: крупный, scale: '1.15'}}
+        - {slot: 45, material: BLUE_STAINED_GLASS_PANE, itemsadder: 'arc:left_gray', name: 'mounts-ui:copy.common.back-name', lore: ['mounts-ui:copy.progression.back-description', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-back']}
+
+    - id: mounts-progression-owned-gated
+      title: 'mounts-ui:progression-title'
+      rows: 6
+      filler: GRAY_STAINED_GLASS_PANE
+      background-item: arc:background
+      placeholders:
+        level: '2'
+        current-speed: '1.65'
+        maximum-speed: '1.65'
+        step: '1.10'
+        maximum-step: '1.10'
+        size: обычный
+      items:
+        - {slot: 4, material: RECOVERY_COMPASS, name: 'mounts-ui:copy.progression.info-name', lore: 'mounts-ui:copy.progression.info-lore'}
+        - {slot: 13, material: EMERALD, name: 'mounts-ui:copy.progression.level-name', lore: ['mounts-ui:copy.progression.level-speed-upgrade', 'mounts-ui:copy.progression.level-increase', 'mounts-ui:copy.progression.level-handling', 'mounts-ui:copy.progression.level-sprint', 'mounts-ui:copy.progression.level-step-upgrade', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.price', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-open-purchase'], placeholders: {speed-before: '1.65', speed-after: '2.65', step-before: '1.10', step-after: '2.00', increase: '61', handling: '1', sprint: '1.03', price: '2 500 000'}}
+        - {slot: 20, material: LEATHER_BOOTS, name: 'mounts-ui:copy.progression.speed-name', lore: ['mounts-ui:copy.progression.speed-lore', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {percentage: '50', actual-speed: '0.83'}}
+        - {slot: 21, material: CHAINMAIL_BOOTS, name: 'mounts-ui:copy.progression.speed-name', lore: ['mounts-ui:copy.progression.speed-lore', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {percentage: '65', actual-speed: '1.07'}}
+        - {slot: 22, material: IRON_BOOTS, name: 'mounts-ui:copy.progression.speed-name', lore: ['mounts-ui:copy.progression.speed-lore', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {percentage: '80', actual-speed: '1.32'}}
+        - {slot: 23, material: GOLDEN_BOOTS, name: 'mounts-ui:copy.progression.speed-name', lore: ['mounts-ui:copy.progression.speed-lore', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {percentage: '90', actual-speed: '1.48'}}
+        - {slot: 24, material: DIAMOND_BOOTS, name: 'mounts-ui:copy.progression.speed-selected-name', lore: ['mounts-ui:copy.progression.speed-lore', 'mounts-ui:copy.common.selected'], placeholders: {percentage: '100', actual-speed: '1.65'}}
+        - {slot: 29, material: OAK_SLAB, name: 'mounts-ui:copy.progression.step-selected-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.common.selected'], placeholders: {step: '1.10'}}
+        - {slot: 30, material: BARRIER, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.progression.unlocks-at-level'], placeholders: {step: '1.50', level: '2'}}
+        - {slot: 31, material: BARRIER, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.progression.unlocks-at-level'], placeholders: {step: '2.00', level: '2'}}
+        - {slot: 32, material: BARRIER, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.progression.step-high-warning', 'mounts-ui:copy.progression.unlocks-at-level'], placeholders: {step: '3.00', level: '3'}}
+        - {slot: 33, material: BARRIER, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.progression.step-high-warning', 'mounts-ui:copy.progression.unlocks-at-level'], placeholders: {step: '4.00', level: '3'}}
+        - {slot: 39, material: RABBIT_HIDE, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {size: компактный, scale: '0.9'}}
+        - {slot: 40, material: ARMOR_STAND, name: 'mounts-ui:copy.progression.size-selected-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.selected'], placeholders: {size: обычный, scale: '1'}}
+        - {slot: 41, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.unlocks-at-level'], placeholders: {size: крупный, scale: '1.15', level: '3'}}
+        - {slot: 45, material: BLUE_STAINED_GLASS_PANE, itemsadder: 'arc:left_gray', name: 'mounts-ui:copy.common.back-name', lore: ['mounts-ui:copy.progression.back-description', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-back']}
+
+    - id: mounts-skins-ravager
+      title: 'mounts-ui:skins-title'
+      rows: 6
+      filler: GRAY_STAINED_GLASS_PANE
+      background-item: arc:background
+      items:
+        - {slot: 10, material: SADDLE, name: 'mounts-ui:copy.skins.classic-available-name', lore: ['mounts-ui:copy.skins.classic-description', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select']}
+        - {slot: 11, material: AMETHYST_SHARD, name: 'mounts-ui:copy.skins.skin-buy-name', lore: ['mounts-ui:copy.skins.trail', 'mounts-ui:copy.common.price', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-open-purchase'], placeholders: {skin: Звёздный комплект, trail: Звёздный след, price: '2 500 000'}}
+        - {slot: 12, material: ECHO_SHARD, name: 'mounts-ui:copy.skins.skin-selected-name', lore: ['mounts-ui:copy.skins.trail', 'mounts-ui:copy.common.selected'], placeholders: {skin: Теневой комплект, trail: След душ}}
+        - {slot: 45, material: BLUE_STAINED_GLASS_PANE, itemsadder: 'arc:left_gray', name: 'mounts-ui:copy.common.back-name', lore: ['mounts-ui:copy.skins.back-description', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-back']}
+
+    - id: mounts-confirm-ready
+      title: 'mounts-ui:confirm-title'
+      rows: 3
+      filler: GRAY_STAINED_GLASS_PANE
+      background-item: arc:background
+      items:
+        - {slot: 11, material: RED_STAINED_GLASS_PANE, itemsadder: 'arc:cancel', name: 'mounts-ui:copy.confirm.cancel-name', lore: ['mounts-ui:copy.confirm.cancel-description', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-cancel']}
+        - &confirm_info {slot: 13, material: SUNFLOWER, name: 'mounts-ui:copy.confirm.info-name', lore: ['mounts-ui:copy.confirm.mount-line', 'mounts-ui:copy.confirm.permanent-line', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.price', 'mounts-ui:copy.common.balance', 'mounts-ui:copy.common.remaining'], placeholders: {skin: Звёздный комплект, price: '2 500 000', balance: '8 000 000', remaining: '5 500 000'}}
+        - {slot: 15, material: GREEN_STAINED_GLASS_PANE, itemsadder: 'arc:confirm_gray', name: 'mounts-ui:copy.confirm.accept-name', lore: ['mounts-ui:copy.common.debit', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-buy']}
+
+    - id: mounts-confirm-insufficient
+      extends: mounts-confirm-ready
+      items:
+        - {<<: *confirm_info, slot: 13, lore: ['mounts-ui:copy.confirm.mount-line', 'mounts-ui:copy.confirm.permanent-line', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.price', 'mounts-ui:copy.common.balance', 'mounts-ui:copy.common.missing'], placeholders: {skin: Звёздный комплект, price: '2 500 000', balance: '1 500 000', missing: '1 000 000'}}
+        - {slot: 15, material: GREEN_STAINED_GLASS_PANE, itemsadder: 'arc:confirm_gray', name: 'mounts-ui:copy.confirm.insufficient-name'}
+
+    - id: mounts-confirm-loading
+      extends: mounts-confirm-ready
+      items:
+        - {slot: 15, material: GREEN_STAINED_GLASS_PANE, itemsadder: 'arc:confirm_gray', name: 'mounts-ui:copy.confirm.loading-name'}
+
+    - id: mounts-confirm-unavailable
+      extends: mounts-confirm-ready
+      items:
+        - {<<: *confirm_info, slot: 13, lore: ['mounts-ui:copy.confirm.mount-line', 'mounts-ui:copy.confirm.permanent-line', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.price', 'mounts-ui:copy.confirm.economy-unavailable-line']}
+        - {slot: 15, material: GREEN_STAINED_GLASS_PANE, itemsadder: 'arc:confirm_gray', name: 'mounts-ui:copy.confirm.unavailable-name'}

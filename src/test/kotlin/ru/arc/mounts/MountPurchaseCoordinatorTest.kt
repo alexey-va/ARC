@@ -98,6 +98,51 @@ class MountPurchaseCoordinatorTest : StringSpec({
         fixture.wallet.withdrawals shouldBe 0
     }
 
+    "authored size tuning respects its level gate and remains free" {
+        val mount =
+            testMount().copy(
+                sizeOptions =
+                    listOf(
+                        MountSizeOptionDefinition("standard", "Обычный", 1.0),
+                        MountSizeOptionDefinition("massive", "Крупный", 1.15, minimumLevel = 3),
+                    ),
+            )
+        val fixture = PurchaseFixture(mount).also { it.ownership.level = 2 }
+        var locked: MountPurchaseResult? = null
+        var selected: MountPurchaseResult? = null
+
+        fixture.coordinator.setSizeTuning(fixture.subject(), mount, "massive") { locked = it }
+        fixture.ownership.level = 3
+        fixture.coordinator.setSizeTuning(fixture.subject(), mount, "massive") { selected = it }
+
+        locked shouldBe MountPurchaseResult.NotForSale
+        selected shouldBe MountPurchaseResult.Success
+        fixture.ownership.selectedSizeId shouldBe "massive"
+        fixture.wallet.withdrawals shouldBe 0
+    }
+
+    "unavailable saved size resolves to the effective level default" {
+        val mount =
+            testMount().copy(
+                sizeOptions =
+                    listOf(
+                        MountSizeOptionDefinition("standard", "Обычный", 1.0),
+                        MountSizeOptionDefinition("massive", "Крупный", 1.15, minimumLevel = 3),
+                    ),
+            )
+        val fixture = PurchaseFixture(mount).also {
+            it.ownership.level = 1
+            it.ownership.selectedSizeId = "massive"
+        }
+        var result: MountPurchaseResult? = null
+
+        fixture.coordinator.setSizeTuning(fixture.subject(), mount, "standard") { result = it }
+
+        result shouldBe MountPurchaseResult.AlreadyOwned
+        fixture.ownership.selectedSizeId shouldBe "massive"
+        fixture.wallet.withdrawals shouldBe 0
+    }
+
     "unavailable balance cancels the prepared record without blocking future purchases" {
         val fixture = PurchaseFixture().also { it.wallet.balanceAvailable = false }
         var result: MountPurchaseResult? = null
@@ -337,6 +382,7 @@ private class MutableOwnership : MountOwnership {
     var glowDisabled = false
     var selectedSpeedPercentage: Int? = null
     var selectedStepHeightHundredths: Int? = null
+    var selectedSizeId: String? = null
     var failWrites = false
     val skinPermissions = hashSetOf<String>()
     val activeSkinPermissions = hashSetOf<String>()
@@ -374,6 +420,7 @@ private class MutableOwnership : MountOwnership {
                 .mapTo(hashSetOf(), MountAbilityUpgradeDefinition::id),
             selectedSpeedPercentage,
             selectedStepHeightHundredths,
+            selectedSizeId,
         )
 
     override fun grantLevel(playerId: UUID, mount: MountDefinition, level: Int): CompletableFuture<Void> =
@@ -442,6 +489,13 @@ private class MutableOwnership : MountOwnership {
             selectedStepHeightHundredths = hundredths
             directPermissions.removeIf { it.startsWith(mount.stepHeightTuningPermissionPrefix) }
             directPermissions += mount.stepHeightTuningPermission(hundredths)
+        }
+
+    override fun setSizeTuning(playerId: UUID, mount: MountDefinition, sizeId: String): CompletableFuture<Void> =
+        write {
+            selectedSizeId = sizeId
+            directPermissions.removeIf { it.startsWith(mount.sizeTuningPermissionPrefix) }
+            directPermissions += mount.sizeTuningPermission(sizeId)
         }
 
     override fun hasDirectPermission(playerId: UUID, permission: String): CompletableFuture<Boolean> =

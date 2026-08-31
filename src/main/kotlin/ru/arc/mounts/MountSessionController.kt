@@ -9,6 +9,8 @@ import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.attribute.Attribute
 import org.bukkit.attribute.AttributeModifier
 import org.bukkit.entity.Bat
+import org.bukkit.entity.Boss
+import org.bukkit.entity.Enemy
 import org.bukkit.entity.Horse
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Mob
@@ -31,6 +33,7 @@ import org.bukkit.plugin.java.JavaPlugin
 import org.bukkit.potion.PotionEffect
 import org.bukkit.potion.PotionEffectType
 import org.bukkit.util.Vector
+import org.bukkit.util.BoundingBox
 import ru.arc.core.ScheduledTask
 import ru.arc.core.TaskScheduler
 import ru.arc.util.Logging.warn
@@ -70,12 +73,7 @@ private data class MountSession(
     val playerId: UUID,
     val entityId: UUID,
     val definition: MountDefinition,
-    val speed: Double,
-    val walkingStepHeight: Double,
-    val handlingMultiplier: Double,
-    val sprintMultiplier: Double,
-    val skin: MountSkinDefinition?,
-    val abilityUpgrades: List<MountAbilityUpgradeDefinition>,
+    var settings: MountRuntimeSettings,
     val expiresAtMillis: Long,
     val sneakGesture: DoubleSneakGesture,
     var input: MountInputState = MountInputState(),
@@ -86,6 +84,8 @@ private data class MountSession(
     var ticks: Long = 0L,
     var riderMountHidden: Boolean = false,
     var motionState: MountMotionState = MountMotionState(),
+    var ramState: MountRamState = MountRamState(),
+    var previousBoundingBox: BoundingBox? = null,
 )
 
 class MountSessionController(
@@ -136,23 +136,68 @@ class MountSessionController(
 
     fun activeSessionCount(): Int = sessionsByPlayer.size
 
+    fun reconcileSettings(
+        playerId: UUID,
+        expectedMountId: String,
+        settings: MountRuntimeSettings,
+    ): MountSessionUpdateResult {
+        val session = sessionsByPlayer[playerId] ?: return MountSessionUpdateResult.NO_ACTIVE_SESSION
+        if (session.definition.id != expectedMountId) return MountSessionUpdateResult.DIFFERENT_MOUNT
+        val entity = plugin.server.getEntity(session.entityId) as? LivingEntity ?: return MountSessionUpdateResult.ENTITY_MISSING
+        if (!entity.isValid) return MountSessionUpdateResult.ENTITY_MISSING
+        require(settings.skin == null || session.definition.skin(settings.skin.id) == settings.skin) {
+            "Active mount skin is not configured for ${session.definition.id}"
+        }
+        require(settings.abilityUpgrades.all { session.definition.ability(it.id) == it }) {
+            "Active mount ability is not configured for ${session.definition.id}"
+        }
+        val previous = session.settings
+        val previousAppearance = session.definition.effectiveAppearance(previous.scaleMultiplier, previous.skin)
+        val replacementAppearance = session.definition.effectiveAppearance(settings.scaleMultiplier, settings.skin)
+        val geometryMayGrow =
+            mountAppearanceMayGrow(
+                previousAppearance,
+                replacementAppearance,
+                MountAppearanceApplicator.supportsAge(entity.type),
+            )
+        if (!canApplyScale(entity, previousAppearance.scale, replacementAppearance.scale)) {
+            return MountSessionUpdateResult.UNSAFE_APPEARANCE
+        }
+        val applied =
+            runCatching {
+                MountAppearanceApplicator.apply(entity, replacementAppearance)
+                if (geometryMayGrow && entity.wouldCollideUsing(entity.boundingBox.clone())) {
+                    error("Replacement mount appearance collides with the world")
+                }
+                entity.isGlowing = settings.glow
+                if (session.definition.movement == MountMovement.WALKING) {
+                    configureWalkingStepHeight(entity, settings.walkingStepHeight)
+                }
+            }.isSuccess
+        if (!applied) {
+            runCatching {
+                MountAppearanceApplicator.apply(entity, previousAppearance)
+                entity.isGlowing = previous.glow
+                if (session.definition.movement == MountMovement.WALKING) {
+                    configureWalkingStepHeight(entity, previous.walkingStepHeight)
+                }
+            }.onFailure {
+                warn("Unable to roll back active mount appearance for {}: {}", session.definition.id, it.javaClass.simpleName)
+            }
+            return MountSessionUpdateResult.UNSAFE_APPEARANCE
+        }
+        session.settings = settings
+        plugin.server.getPlayer(playerId)?.let { refreshAbilityEffects(it, settings.abilityUpgrades) }
+        return MountSessionUpdateResult.APPLIED
+    }
+
     fun spawn(
         player: Player,
         definition: MountDefinition,
-        speed: Double,
-        walkingStepHeight: Double,
-        handlingMultiplier: Double = 1.0,
-        sprintMultiplier: Double = 1.0,
+        settings: MountRuntimeSettings,
         durationMillis: Long,
-        glow: Boolean,
-        scaleMultiplier: Double = 1.0,
-        skin: MountSkinDefinition? = null,
-        abilityUpgrades: List<MountAbilityUpgradeDefinition> = emptyList(),
     ): MountSpawnResult {
         val config = configProvider()
-        require(walkingStepHeight.isFinite() && walkingStepHeight in 0.6..4.0) {
-            "Walking mount step height must be between 0.60 and 4.00 blocks"
-        }
         val now = System.currentTimeMillis()
         lastSummonAt.entries.removeIf { now - it.value >= config.summonCooldown.toMillis() }
         if (sessionsByPlayer.containsKey(player.uniqueId)) return MountSpawnResult.ALREADY_RIDING
@@ -171,7 +216,12 @@ class MountSessionController(
         ) {
             return MountSpawnResult.WATER_REQUIRED
         }
-        require(abilityUpgrades.all { definition.ability(it.id) == it }) { "Active mount ability is not configured for ${definition.id}" }
+        require(settings.skin == null || definition.skin(settings.skin.id) == settings.skin) {
+            "Active mount skin is not configured for ${definition.id}"
+        }
+        require(settings.abilityUpgrades.all { definition.ability(it.id) == it }) {
+            "Active mount ability is not configured for ${definition.id}"
+        }
 
         val entityType = runCatching { org.bukkit.entity.EntityType.valueOf(definition.entityType) }.getOrNull()
             ?: return MountSpawnResult.INVALID_ENTITY
@@ -202,7 +252,7 @@ class MountSessionController(
         }
 
         return try {
-            configureEntity(spawned, definition, glow, player, skin, walkingStepHeight, scaleMultiplier)
+            configureEntity(spawned, definition, settings, player)
             if (!spawned.addPassenger(player)) {
                 spawned.remove()
                 return MountSpawnResult.SPAWN_FAILED
@@ -212,14 +262,10 @@ class MountSessionController(
                     playerId = player.uniqueId,
                     entityId = spawned.uniqueId,
                     definition = definition,
-                    speed = speed,
-                    walkingStepHeight = walkingStepHeight,
-                    handlingMultiplier = handlingMultiplier,
-                    sprintMultiplier = sprintMultiplier,
-                    skin = skin,
-                    abilityUpgrades = abilityUpgrades,
+                    settings = settings,
                     expiresAtMillis = System.currentTimeMillis() + durationMillis.coerceAtLeast(1L),
                     sneakGesture = DoubleSneakGesture(config.doubleSneakWindow.toMillis()),
+                    previousBoundingBox = spawned.boundingBox.clone(),
                 )
             sessionsByPlayer[player.uniqueId] = session
             playerByEntity[spawned.uniqueId] = player.uniqueId
@@ -431,10 +477,11 @@ class MountSessionController(
                     session.ticks++
                     (entity as? Mob)?.let(::maintainMountMobState)
                     if (session.ticks == 1L || session.ticks % ABILITY_REFRESH_TICKS == 0L) {
-                        refreshAbilityEffects(player, session.abilityUpgrades)
+                        refreshAbilityEffects(player, session.settings.abilityUpgrades)
                     }
                     updateRiderMountVisibility(player, entity, session)
-                    move(player, entity, session)
+                    val maximumSpeed = move(player, entity, session)
+                    updateRamBehavior(player, entity, session, maximumSpeed)
                     emitTrail(entity, session)
                 }
             }
@@ -458,7 +505,7 @@ class MountSessionController(
             .onFailure { warn("Unable to update rider-only mount visibility for {}: {}", player.name, it.javaClass.simpleName) }
     }
 
-    private fun move(player: Player, entity: LivingEntity, session: MountSession) {
+    private fun move(player: Player, entity: LivingEntity, session: MountSession): Double {
         val config = configProvider()
         val speedScale =
             when (session.definition.movement) {
@@ -466,9 +513,9 @@ class MountSessionController(
                 MountMovement.FLYING -> config.flyingSpeedScale
                 MountMovement.SWIMMING -> config.swimmingSpeedScale
             }
-        val sprint = if (session.input.sprint) config.sprintMultiplier * session.sprintMultiplier else 1.0
-        val abilitySpeed = activeAbilitySpeedMultiplier(session.abilityUpgrades)
-        val maximumSpeed = (session.speed * speedScale * sprint * abilitySpeed).coerceAtMost(config.maximumSpeedBlocksPerTick)
+        val sprint = if (session.input.sprint) config.sprintMultiplier * session.settings.sprintMultiplier else 1.0
+        val abilitySpeed = activeAbilitySpeedMultiplier(session.settings.abilityUpgrades)
+        val maximumSpeed = (session.settings.speed * speedScale * sprint * abilitySpeed).coerceAtMost(config.maximumSpeedBlocksPerTick)
         val planar = MountMotion.planarDirection(player.location.yaw, session.input)
         val timing = session.definition.motion.resolve(config.motionTiming)
         if (session.definition.movement == MountMovement.WALKING && entity is Horse) {
@@ -477,16 +524,16 @@ class MountSessionController(
                     current = session.motionState,
                     targetVelocity = planar * maximumSpeed,
                     timing = timing,
-                    handlingMultiplier = session.handlingMultiplier,
+                    handlingMultiplier = session.settings.handlingMultiplier,
                 )
             configureNativeHorseMotion(
                 horse = entity,
                 maximumSpeedBlocksPerTick = session.motionState.speed,
                 jumpVelocity = walkingJumpVelocity(config.jumpVelocity, session.definition.abilities),
-                stepHeight = session.walkingStepHeight,
+                stepHeight = session.settings.walkingStepHeight,
             )
             entity.fallDistance = 0.0f
-            return
+            return maximumSpeed
         }
         val target =
             when (session.definition.movement) {
@@ -508,7 +555,7 @@ class MountSessionController(
                 current = session.motionState,
                 targetVelocity = target,
                 timing = timing,
-                handlingMultiplier = session.handlingMultiplier,
+                handlingMultiplier = session.settings.handlingMultiplier,
             )
         val controlledVelocity = session.motionState.velocity
         val currentVertical = entity.velocity.y
@@ -529,15 +576,126 @@ class MountSessionController(
         entity.fallDistance = 0.0f
         val targetYaw = MountMotion.facingYaw(controlledVelocity, entity.yaw)
         entity.setRotation(targetYaw, 0.0f)
+        return maximumSpeed
     }
 
     private fun emitTrail(entity: LivingEntity, session: MountSession) {
-        val trail = session.skin?.trail ?: return
+        val trail = session.settings.skin?.trail ?: return
         if (session.ticks % trail.intervalTicks != 0L) return
         val particle = runCatching { Particle.valueOf(trail.particle) }.getOrNull() ?: return
         if (particle.dataType != Void::class.java && particle.dataType != java.lang.Void::class.java) return
-        entity.world.spawnParticle(particle, entity.location, trail.count, 0.12, 0.12, 0.12, 0.0)
+        val box = entity.boundingBox
+        val origin =
+            mountTrailOrigin(
+                MountTrailBounds(box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ),
+                entity.yaw,
+                session.motionState.direction,
+                trail,
+            )
+        val location = org.bukkit.Location(entity.world, origin.x, origin.y, origin.z)
+        entity.world.spawnParticle(particle, location, trail.count, trail.spread, trail.spread, trail.spread, trail.speed)
     }
+
+    private fun updateRamBehavior(
+        player: Player,
+        entity: LivingEntity,
+        session: MountSession,
+        maximumSpeed: Double,
+    ) {
+        val behavior = session.definition.behaviors.filterIsInstance<MountRamBehavior>().firstOrNull()
+        val currentBox = entity.boundingBox.clone()
+        if (behavior == null) {
+            session.previousBoundingBox = currentBox
+            return
+        }
+        val previousBox = session.previousBoundingBox ?: currentBox
+        val requestedForward = MountMotion.planarDirection(player.location.yaw, MountInputState(forward = true))
+        val speedFraction =
+            actualMountForwardSpeedFraction(
+                previousBox.toRamBounds(),
+                currentBox.toRamBounds(),
+                maximumSpeed,
+                requestedForward,
+            )
+        val transition =
+            advanceMountRam(
+                current = session.ramState,
+                behavior = behavior,
+                tick = session.ticks,
+                input = session.input,
+                grounded = entity.isOnGround,
+                speedFraction = speedFraction,
+            )
+        session.ramState = transition.state
+        if (transition.activated) {
+            val chargeLocation = entity.location.add(0.0, entity.height * 0.45, 0.0)
+            entity.world.playSound(chargeLocation, Sound.ENTITY_RAVAGER_ROAR, 0.75f, 1.15f)
+            entity.world.spawnParticle(Particle.CLOUD, chargeLocation, 12, 0.45, 0.2, 0.45, 0.04)
+        }
+        if (session.ramState.phase == MountRamPhase.ACTIVE) {
+            val target = selectRamTarget(player, entity, previousBox, currentBox, session.motionState.direction, behavior)
+            if (target != null) {
+                session.ramState = consumeMountRam(session.ramState)
+                target.damage(behavior.damage, player)
+                val impactLocation = target.location.add(0.0, target.height * 0.55, 0.0)
+                entity.world.playSound(impactLocation, Sound.ENTITY_RAVAGER_ATTACK, 0.9f, 1.0f)
+                entity.world.spawnParticle(Particle.CRIT, impactLocation, 16, 0.35, 0.3, 0.35, 0.18)
+                entity.world.spawnParticle(Particle.CLOUD, impactLocation, 6, 0.25, 0.2, 0.25, 0.04)
+            }
+        }
+        session.previousBoundingBox = currentBox
+    }
+
+    private fun selectRamTarget(
+        player: Player,
+        mount: LivingEntity,
+        previousBox: BoundingBox,
+        currentBox: BoundingBox,
+        motionDirection: MotionVector,
+        behavior: MountRamBehavior,
+    ): LivingEntity? {
+        val forward =
+            motionDirection.normalizedHorizontal().takeUnless { it == MotionVector.ZERO }
+                ?: MountMotion.planarDirection(mount.yaw, MountInputState(forward = true))
+        val corridor = previousBox.clone().union(currentBox.clone())
+        corridor.expandDirectional(forward.x * behavior.reach, 0.0, forward.z * behavior.reach)
+        corridor.expand(behavior.lateralPadding, 0.25, behavior.lateralPadding)
+        val centerX = currentBox.centerX
+        val centerZ = currentBox.centerZ
+        return mount.world.getNearbyEntities(corridor)
+            .asSequence()
+            .filterIsInstance<LivingEntity>()
+            .filter { candidate ->
+                candidate is Enemy &&
+                    candidate !is Boss &&
+                    candidate.uniqueId != mount.uniqueId &&
+                    candidate.uniqueId != player.uniqueId &&
+                    candidate.isValid &&
+                    !candidate.isDead &&
+                    candidate.health > 0.0 &&
+                    !candidate.isInvulnerable &&
+                    !playerByEntity.containsKey(candidate.uniqueId) &&
+                    !candidate.persistentDataContainer.has(mountIdKey, PersistentDataType.STRING) &&
+                    mount.hasLineOfSight(candidate) &&
+                    sweptRamIntersects(
+                        previousBox.toRamBounds(),
+                        currentBox.toRamBounds(),
+                        candidate.boundingBox.toRamBounds(),
+                        forward,
+                        behavior.reach,
+                        behavior.lateralPadding,
+                    )
+            }
+            .sortedWith(
+                compareBy<LivingEntity> {
+                    val box = it.boundingBox
+                    ((box.centerX - centerX) * forward.x + (box.centerZ - centerZ) * forward.z)
+                }.thenBy { it.uniqueId.toString() },
+            )
+            .firstOrNull()
+    }
+
+    private fun BoundingBox.toRamBounds(): MountRamBounds = MountRamBounds(minX, minZ, maxX, maxZ)
 
     private fun refreshAbilityEffects(player: Player, abilities: Collection<MountAbilityUpgradeDefinition>) {
         abilities.forEach { ability ->
@@ -557,24 +715,21 @@ class MountSessionController(
     private fun configureEntity(
         entity: LivingEntity,
         definition: MountDefinition,
-        glow: Boolean,
+        settings: MountRuntimeSettings,
         player: Player,
-        skin: MountSkinDefinition?,
-        walkingStepHeight: Double,
-        scaleMultiplier: Double,
     ) {
         entity.customName(Component.text(player.name, NamedTextColor.GRAY))
         entity.isCustomNameVisible = false
         entity.isPersistent = false
-        entity.isGlowing = glow
+        entity.isGlowing = settings.glow
         configureMountDurability(entity)
         entity.setGravity(definition.movement == MountMovement.WALKING)
         if (definition.movement == MountMovement.WALKING) {
-            configureWalkingStepHeight(entity, walkingStepHeight)
+            configureWalkingStepHeight(entity, settings.walkingStepHeight)
         }
         (entity as? Mob)?.let(::configureMountMob)
         (entity as? Horse)?.let { configureNativeHorse(it, player) }
-        MountAppearanceApplicator.apply(entity, definition.effectiveAppearance(scaleMultiplier, skin))
+        MountAppearanceApplicator.apply(entity, definition.effectiveAppearance(settings.scaleMultiplier, settings.skin))
         tagEntity(entity, definition, player)
     }
 
@@ -607,6 +762,39 @@ class MountSessionController(
         private const val ABILITY_REFRESH_TICKS = 20L
         private const val ABILITY_EFFECT_DURATION_TICKS = 280
     }
+
+    private fun canApplyScale(
+        entity: LivingEntity,
+        currentScale: Double,
+        replacementScale: Double,
+    ): Boolean {
+        if (replacementScale <= currentScale) return true
+        val ratio = replacementScale / currentScale
+        val candidate = scaledMountBoundingBox(entity.boundingBox, ratio)
+        return runCatching { !entity.wouldCollideUsing(candidate) }.getOrDefault(false)
+    }
+}
+
+internal fun mountAppearanceMayGrow(
+    current: MountAppearance,
+    replacement: MountAppearance,
+    supportsAge: Boolean,
+): Boolean = replacement.scale > current.scale || (supportsAge && current.baby && !replacement.baby)
+
+internal fun scaledMountBoundingBox(current: BoundingBox, ratio: Double): BoundingBox {
+    require(ratio.isFinite() && ratio > 0.0) { "Mount bounding-box ratio must be positive and finite" }
+    val halfWidth = (current.maxX - current.minX) * ratio / 2.0
+    val halfDepth = (current.maxZ - current.minZ) * ratio / 2.0
+    val centerX = current.centerX
+    val centerZ = current.centerZ
+    return BoundingBox(
+        centerX - halfWidth,
+        current.minY,
+        centerZ - halfDepth,
+        centerX + halfWidth,
+        current.minY + (current.maxY - current.minY) * ratio,
+        centerZ + halfDepth,
+    )
 }
 
 internal fun configureMountMob(mob: Mob) {

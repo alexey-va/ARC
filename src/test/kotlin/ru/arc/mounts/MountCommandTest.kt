@@ -25,7 +25,7 @@ class MountCommandTest : StringSpec({
         fixture.command.onCommand(fixture.player, fixture.bukkitCommand, "mount", emptyArray()) shouldBe true
 
         verify(exactly = 1) { fixture.openMenu(fixture.player) }
-        verify(exactly = 0) { fixture.sessions.spawn(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { fixture.sessions.spawn(any(), any(), any(), any()) }
     }
 
     "admin summon uses a configured level instead of arbitrary raw speed" {
@@ -34,14 +34,18 @@ class MountCommandTest : StringSpec({
             fixture.sessions.spawn(
                 player = fixture.player,
                 definition = mount,
-                speed = mount.level(3).speed,
-                walkingStepHeight = 4.0,
-                handlingMultiplier = mount.level(3).handlingMultiplier,
-                sprintMultiplier = mount.level(3).sprintMultiplier,
+                settings =
+                    MountRuntimeSettings(
+                        speed = mount.level(3).speed,
+                        walkingStepHeight = 4.0,
+                        handlingMultiplier = mount.level(3).handlingMultiplier,
+                        sprintMultiplier = mount.level(3).sprintMultiplier,
+                        scaleMultiplier = mount.level(3).scaleMultiplier,
+                        skin = mount.skin("baby"),
+                        glow = false,
+                        abilityUpgrades = mount.abilities.upgrades,
+                    ),
                 durationMillis = 10_000L,
-                glow = false,
-                skin = mount.skin("baby"),
-                abilityUpgrades = mount.abilities.upgrades,
             )
         } returns MountSpawnResult.SUCCESS
 
@@ -56,14 +60,18 @@ class MountCommandTest : StringSpec({
             fixture.sessions.spawn(
                 player = fixture.player,
                 definition = mount,
-                speed = 0.9,
-                walkingStepHeight = 4.0,
-                handlingMultiplier = 1.28,
-                sprintMultiplier = 1.12,
+                settings =
+                    MountRuntimeSettings(
+                        speed = 0.9,
+                        walkingStepHeight = 4.0,
+                        handlingMultiplier = 1.28,
+                        sprintMultiplier = 1.12,
+                        scaleMultiplier = 1.0,
+                        skin = mount.skin("baby"),
+                        glow = false,
+                        abilityUpgrades = mount.abilities.upgrades,
+                    ),
                 durationMillis = 10_000L,
-                glow = false,
-                skin = mount.skin("baby"),
-                abilityUpgrades = mount.abilities.upgrades,
             )
         }
     }
@@ -78,7 +86,7 @@ class MountCommandTest : StringSpec({
             arrayOf("admin", "summon", "bee"),
         ) shouldBe true
 
-        verify(exactly = 0) { fixture.sessions.spawn(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { fixture.sessions.spawn(any(), any(), any(), any()) }
         fixture.command.onTabComplete(fixture.player, fixture.bukkitCommand, "mount", arrayOf(""))
             .shouldContainExactly("help", "menu")
     }

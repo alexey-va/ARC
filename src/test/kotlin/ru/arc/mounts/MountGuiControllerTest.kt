@@ -46,6 +46,8 @@ class MountGuiControllerTest : TestBase() {
                 )
             every { guiStyle(any()) } returns MountGuiItemStyle()
             every { message(any(), any()) } answers { secondArg() }
+            every { guiText(any(), any()) } answers { secondArg() }
+            every { guiLines(any(), any()) } answers { secondArg() }
         }
         val controller =
             mountGuiController(
@@ -62,12 +64,13 @@ class MountGuiControllerTest : TestBase() {
         try {
             controller.openDetail(player, mount.id)
             plainName(player.openInventory.topInventory.getItem(13)) shouldBe "Выбрать любимым"
-            plainName(player.openInventory.topInventory.getItem(40)) shouldBe "Получить свисток"
+            plainName(player.openInventory.topInventory.getItem(40)) shouldBe "Свисток недоступен"
 
             controller.onClick(clickEvent(player.openInventory, 13))
             server.scheduler.performOneTick()
             favoriteMountId shouldBe mount.id
             plainName(player.openInventory.topInventory.getItem(13)) shouldBe "Любимый маунт"
+            plainName(player.openInventory.topInventory.getItem(40)) shouldBe "Получить свисток"
 
             controller.onClick(clickEvent(player.openInventory, 40))
             player.inventory.contents.count { it?.type == Material.GOAT_HORN } shouldBe 1
@@ -120,6 +123,8 @@ class MountGuiControllerTest : TestBase() {
             every { listTitle } returns "Коллекция маунтов"
             every { this@mockk.tuning } returns tuning
             every { guiStyle(any()) } returns MountGuiItemStyle()
+            every { guiText(any(), any()) } answers { secondArg() }
+            every { guiLines(any(), any()) } answers { secondArg() }
         }
         val controller =
             mountGuiController(
@@ -140,8 +145,67 @@ class MountGuiControllerTest : TestBase() {
             plainName(first) shouldBe "Полученный"
             val lore = checkNotNull(first.itemMeta.lore()).map(PlainTextComponentSerializer.plainText()::serialize)
             lore.none { "●" in it } shouldBe true
-            lore.count(String::isEmpty).shouldBeGreaterThanOrEqual(3)
+            lore.count(String::isEmpty).shouldBeGreaterThanOrEqual(2)
             lore.filter(String::isNotEmpty).first() shouldBe "✔ Получен"
+            val guide = checkNotNull(player.openInventory.topInventory.getItem(4))
+            (1 + checkNotNull(guide.itemMeta.lore()).size) shouldBe 13
+            plainName(player.openInventory.topInventory.getItem(53)) shouldBe " "
+        } finally {
+            controller.shutdown()
+        }
+    }
+
+    @Test
+    fun `priced unowned mount is actionable while truly locked mount is passive`() {
+        val pricedUnowned = testMount().copy(id = "priced", displayName = "Доступный")
+        val lockedBase = testMount()
+        val trulyLocked =
+            lockedBase.copy(
+                id = "truly-locked",
+                displayName = "Закрытый",
+                levels = lockedBase.levels.mapIndexed { index, level -> if (index == 0) level.copy(price = null) else level },
+            )
+        val tuning = MountTuningDefinition(listOf(50, 100), listOf(110, 200, 400), listOf(110, 200, 400))
+        val config = interactionConfig(tuning)
+        val ownership = mockk<MountOwnership> {
+            every { profile(any(), pricedUnowned) } returns MountProfile(0, false, false)
+            every { profile(any(), trulyLocked) } returns MountProfile(0, false, false)
+            every { favoriteMountId(any()) } returns null
+        }
+        val controller =
+            mountGuiController(
+                configProvider = { config },
+                catalogProvider = { MountCatalog(listOf(pricedUnowned, trulyLocked)) },
+                ownership = ownership,
+                wallet = mockk(relaxed = true),
+                purchases = mockk(relaxed = true),
+                sessions = mockk(relaxed = true),
+            )
+        val player = server.addPlayer("AcquisitionRider")
+
+        controller.start()
+        try {
+            controller.openList(player)
+
+            val pricedLore =
+                checkNotNull(player.openInventory.topInventory.getItem(10)?.itemMeta?.lore())
+                    .map(PlainTextComponentSerializer.plainText()::serialize)
+            pricedLore.first() shouldBe "Доступен к получению"
+            pricedLore.last() shouldBe "[▶] ЛКМ — открыть получение"
+
+            val lockedLore =
+                checkNotNull(player.openInventory.topInventory.getItem(11)?.itemMeta?.lore())
+                    .map(PlainTextComponentSerializer.plainText()::serialize)
+            lockedLore.none { "▶" in it } shouldBe true
+
+            controller.onClick(clickEvent(player.openInventory, 10))
+            player.openInventory.topInventory.size shouldBe 54
+            plainName(player.openInventory.topInventory.getItem(21)) shouldBe "Скорость: 100%"
+
+            controller.openList(player)
+            controller.onClick(clickEvent(player.openInventory, 11))
+            player.openInventory.topInventory.size shouldBe 54
+            plainName(player.openInventory.topInventory.getItem(11)) shouldBe "Закрытый"
         } finally {
             controller.shutdown()
         }
@@ -173,6 +237,8 @@ class MountGuiControllerTest : TestBase() {
             every { listTitle } returns "Коллекция маунтов"
             every { this@mockk.tuning } returns tuning
             every { guiStyle(any()) } answers { styles[firstArg()] ?: MountGuiItemStyle() }
+            every { guiText(any(), any()) } answers { secondArg() }
+            every { guiLines(any(), any()) } answers { secondArg() }
         }
         val controller =
             mountGuiController(
@@ -206,7 +272,16 @@ class MountGuiControllerTest : TestBase() {
 
     @Test
     fun `progression submenu exposes selected tuning and routes a free speed change`() {
-        val mount = testMount().copy(movement = MountMovement.WALKING)
+        val mount =
+            testMount().copy(
+                movement = MountMovement.WALKING,
+                sizeOptions =
+                    listOf(
+                        MountSizeOptionDefinition("compact", "Компактный", 0.9),
+                        MountSizeOptionDefinition("standard", "Обычный", 1.0),
+                        MountSizeOptionDefinition("massive", "Крупный", 1.15, minimumLevel = 3),
+                    ),
+            )
         val tuning =
             MountTuningDefinition(
                 speedPercentages = listOf(50, 65, 80, 90, 100),
@@ -224,12 +299,18 @@ class MountGuiControllerTest : TestBase() {
             every { sessionDuration } returns Duration.ofHours(12)
             every { idleTimeout } returns Duration.ofMinutes(5)
             every { purchasesEnabled } returns true
+            every { quickSummonWhistle } returns true
             every { this@mockk.tuning } returns tuning
             every { guiStyle(any()) } returns MountGuiItemStyle()
             every { message(any(), any()) } answers { secondArg() }
+            every { guiText(any(), any()) } answers { secondArg() }
+            every { guiLines(any(), any()) } answers { secondArg() }
         }
         val purchases = mockk<MountPurchaseCoordinator>(relaxed = true)
         every { purchases.setSpeedTuning(any(), mount, tuning, 90, any()) } answers {
+            lastArg<(MountPurchaseResult) -> Unit>()(MountPurchaseResult.Success)
+        }
+        every { purchases.setSizeTuning(any(), mount, "compact", any()) } answers {
             lastArg<(MountPurchaseResult) -> Unit>()(MountPurchaseResult.Success)
         }
         val controller =
@@ -250,9 +331,22 @@ class MountGuiControllerTest : TestBase() {
 
             plainName(player.openInventory.topInventory.getItem(21)) shouldBe "Скорость: 65%"
             player.openInventory.topInventory.getItem(21)?.itemMeta?.enchantmentGlintOverride shouldBe true
+            checkNotNull(player.openInventory.topInventory.getItem(21)?.itemMeta?.lore())
+                .map(PlainTextComponentSerializer.plainText()::serialize)
+                .none { "▶" in it } shouldBe true
             plainName(player.openInventory.topInventory.getItem(30)) shouldBe "Подъём: 1.50 блока"
             player.openInventory.topInventory.getItem(30)?.itemMeta?.enchantmentGlintOverride shouldBe true
             plainName(player.openInventory.topInventory.getItem(33)) shouldBe "Подъём: 4.00 блока"
+            plainName(player.openInventory.topInventory.getItem(39)) shouldBe "Размер: компактный"
+            plainName(player.openInventory.topInventory.getItem(40)) shouldBe "Размер: обычный"
+            plainName(player.openInventory.topInventory.getItem(41)) shouldBe "Размер: крупный"
+
+            controller.onClick(clickEvent(player.openInventory, 40))
+            controller.onClick(clickEvent(player.openInventory, 41))
+            verify(exactly = 0) { purchases.setSizeTuning(any(), any(), any(), any()) }
+
+            controller.onClick(clickEvent(player.openInventory, 39))
+            verify(exactly = 1) { purchases.setSizeTuning(any(), mount, "compact", any()) }
 
             controller.onClick(clickEvent(player.openInventory, 33))
             verify(exactly = 0) { purchases.setStepHeightTuning(any(), any(), any(), any(), any()) }
@@ -265,14 +359,321 @@ class MountGuiControllerTest : TestBase() {
         }
     }
 
-    private fun clickEvent(view: org.bukkit.inventory.InventoryView, rawSlot: Int) =
-        InventoryClickEvent(
+    @Test
+    fun `ravager skins show only real deltas and localized visible trails`() {
+        val trail =
+            MountTrailDefinition(
+                particle = "END_ROD",
+                displayName = "Звёздный след",
+                count = 3,
+                backOffset = 0.28,
+                heightRatio = 0.38,
+            )
+        val ravager =
+            testMount().copy(
+                id = "ravager",
+                movement = MountMovement.WALKING,
+                entityType = "RAVAGER",
+                displayName = "Разоритель",
+                appearance = MountAppearance(scale = 0.82),
+                skins =
+                    listOf(
+                        MountSkinDefinition(
+                            id = "starlight",
+                            displayName = "Звёздный комплект",
+                            iconMaterial = "AMETHYST_SHARD",
+                            price = 2_500_000.0,
+                            appearance = MountAppearance(scale = 0.82),
+                            trail = trail,
+                        ),
+                    ),
+            )
+        val profile = MountProfile(level = 3, glowOwned = false, glowDisabled = false, ownedSkinIds = setOf("starlight"))
+        val ownership = mockk<MountOwnership> {
+            every { profile(any(), ravager) } returns profile
+            every { favoriteMountId(any()) } returns null
+        }
+        val tuning = MountTuningDefinition(listOf(50, 100), listOf(110, 200, 400), listOf(110, 200, 400))
+        val config = mockk<MountModuleConfig> {
+            every { detailTitle } returns "Разоритель"
+            every { skinsTitle } returns "Облики маунта"
+            every { sessionDuration } returns Duration.ofHours(12)
+            every { idleTimeout } returns Duration.ofMinutes(5)
+            every { purchasesEnabled } returns true
+            every { quickSummonWhistle } returns true
+            every { this@mockk.tuning } returns tuning
+            every { guiStyle(any()) } returns MountGuiItemStyle()
+            every { message(any(), any()) } answers { secondArg() }
+            every { guiText(any(), any()) } answers { secondArg() }
+            every { guiLines(any(), any()) } answers { secondArg() }
+        }
+        val controller =
+            mountGuiController(
+                configProvider = { config },
+                catalogProvider = { MountCatalog(listOf(ravager)) },
+                ownership = ownership,
+                wallet = mockk(relaxed = true),
+                purchases = mockk(relaxed = true),
+                sessions = mockk(relaxed = true),
+            )
+        val player = server.addPlayer("RavagerStylist")
+
+        controller.start()
+        try {
+            controller.openDetail(player, ravager.id)
+            controller.onClick(clickEvent(player.openInventory, 31))
+
+            val classicLore = checkNotNull(player.openInventory.topInventory.getItem(10)?.itemMeta?.lore())
+                .map(PlainTextComponentSerializer.plainText()::serialize)
+            classicLore.any { "0.82" in it || "взрослый" in it } shouldBe false
+            classicLore.first() shouldBe "Базовый облик без следа."
+
+            val starlightLore = checkNotNull(player.openInventory.topInventory.getItem(11)?.itemMeta?.lore())
+                .map(PlainTextComponentSerializer.plainText()::serialize)
+            starlightLore.any { it == "След: Звёздный след" } shouldBe true
+            starlightLore.any { "END_ROD" in it || "0.82" in it || "взрослый" in it } shouldBe false
+        } finally {
+            controller.shutdown()
+        }
+    }
+
+    @Test
+    fun `purchase confirmation owns the balance decision and insufficient accept is a no-op`() {
+        val mount = testMount()
+        val ownership = mockk<MountOwnership> {
+            every { profile(any(), mount) } returns MountProfile(1, false, false)
+            every { favoriteMountId(any()) } returns null
+        }
+        val tuning = MountTuningDefinition(listOf(50, 100), listOf(110, 200, 400), listOf(110, 200, 400))
+        val config = mockk<MountModuleConfig> {
+            every { detailTitle } returns "Маунт"
+            every { confirmTitle } returns "Покупка маунта"
+            every { sessionDuration } returns Duration.ofHours(12)
+            every { idleTimeout } returns Duration.ofMinutes(5)
+            every { purchasesEnabled } returns true
+            every { quickSummonWhistle } returns true
+            every { this@mockk.tuning } returns tuning
+            every { guiStyle(any()) } returns MountGuiItemStyle()
+            every { message(any(), any()) } answers { secondArg() }
+            every { guiText(any(), any()) } answers { secondArg() }
+            every { guiLines(any(), any()) } answers { secondArg() }
+        }
+        val purchases = mockk<MountPurchaseCoordinator>(relaxed = true)
+        val controller =
+            mountGuiController(
+                configProvider = { config },
+                catalogProvider = { MountCatalog(listOf(mount)) },
+                ownership = ownership,
+                wallet = mockk { every { balanceMinor(any()) } returns 500_000L },
+                purchases = purchases,
+                sessions = mockk(relaxed = true),
+            )
+        val player = server.addPlayer("CarefulBuyer")
+
+        controller.start()
+        try {
+            controller.openDetail(player, mount.id)
+            controller.onClick(clickEvent(player.openInventory, 24))
+
+            plainName(player.openInventory.topInventory.getItem(15)) shouldBe "Недостаточно средств"
+            val info = checkNotNull(player.openInventory.topInventory.getItem(13)?.itemMeta?.lore())
+                .map(PlainTextComponentSerializer.plainText()::serialize)
+            info.any { it.startsWith("Баланс: ") } shouldBe true
+            info.any { it.startsWith("Не хватает: ") } shouldBe true
+
+            controller.onClick(clickEvent(player.openInventory, 15))
+            verify(exactly = 0) { purchases.purchaseGlow(any(), any(), any()) }
+        } finally {
+            controller.shutdown()
+        }
+    }
+
+    @Test
+    fun `detail progression skins and confirmation ignore every non-left click`() {
+        val mount = testMount()
+        val tuning = MountTuningDefinition(listOf(50, 100), listOf(110, 200, 400), listOf(110, 200, 400))
+        val config = interactionConfig(tuning)
+        val profile = MountProfile(level = 1, glowOwned = false, glowDisabled = false)
+        val ownership = mockk<MountOwnership> {
+            every { profile(any(), mount) } returns profile
+            every { favoriteMountId(any()) } returns null
+            every { setFavoriteMount(any(), mount) } returns CompletableFuture.completedFuture(null)
+        }
+        val purchases = mockk<MountPurchaseCoordinator>(relaxed = true)
+        val controller =
+            mountGuiController(
+                configProvider = { config },
+                catalogProvider = { MountCatalog(listOf(mount)) },
+                ownership = ownership,
+                wallet = mockk { every { balanceMinor(any()) } returns 1_000_000L },
+                purchases = purchases,
+                sessions = mockk(relaxed = true),
+            )
+        val player = server.addPlayer("ExactLeftRider")
+        val nonLeftClicks =
+            listOf(
+                ClickType.RIGHT,
+                ClickType.SHIFT_LEFT,
+                ClickType.SHIFT_RIGHT,
+                ClickType.NUMBER_KEY,
+                ClickType.MIDDLE,
+                ClickType.DOUBLE_CLICK,
+            )
+
+        controller.start()
+        try {
+            controller.openDetail(player, mount.id)
+            nonLeftClicks.forEach { controller.onClick(clickEvent(player.openInventory, 13, it)) }
+            verify(exactly = 0) { ownership.setFavoriteMount(any(), any()) }
+
+            controller.onClick(clickEvent(player.openInventory, 20))
+            nonLeftClicks.forEach { controller.onClick(clickEvent(player.openInventory, 20, it)) }
+            verify(exactly = 0) { purchases.setSpeedTuning(any(), any(), any(), any(), any()) }
+
+            controller.onClick(clickEvent(player.openInventory, 45))
+            controller.onClick(clickEvent(player.openInventory, 31))
+            nonLeftClicks.forEach {
+                controller.onClick(clickEvent(player.openInventory, 11, it))
+                player.openInventory.topInventory.size shouldBe 54
+            }
+
+            controller.onClick(clickEvent(player.openInventory, 11))
+            nonLeftClicks.forEach {
+                controller.onClick(clickEvent(player.openInventory, 15, it))
+                controller.onClick(clickEvent(player.openInventory, 11, it))
+                player.openInventory.topInventory.size shouldBe 27
+            }
+            verify(exactly = 0) { purchases.purchaseSkin(any(), any(), any(), any()) }
+        } finally {
+            controller.shutdown()
+        }
+    }
+
+    @Test
+    fun `list controls accept only their advertised exact clicks`() {
+        val mounts =
+            (0 until 30).map { index ->
+                testMount().copy(id = "bee-$index", displayName = "Маунт $index")
+            }
+        val tuning = MountTuningDefinition(listOf(50, 100), listOf(110, 200, 400), listOf(110, 200, 400))
+        val config = interactionConfig(tuning)
+        val ownership = mockk<MountOwnership> {
+            every { profile(any(), any()) } returns MountProfile(level = 1, glowOwned = false, glowDisabled = false)
+            every { favoriteMountId(any()) } returns null
+        }
+        val sessions = mockk<MountSessionController>(relaxed = true) {
+            every { spawn(any(), any(), any(), any()) } returns MountSpawnResult.ALREADY_RIDING
+        }
+        val controller =
+            mountGuiController(
+                configProvider = { config },
+                catalogProvider = { MountCatalog(mounts) },
+                ownership = ownership,
+                wallet = mockk(relaxed = true),
+                purchases = mockk(relaxed = true),
+                sessions = sessions,
+            )
+        val player = server.addPlayer("ListClickRider")
+        val nonLeftClicks =
+            listOf(
+                ClickType.RIGHT,
+                ClickType.SHIFT_LEFT,
+                ClickType.SHIFT_RIGHT,
+                ClickType.NUMBER_KEY,
+                ClickType.MIDDLE,
+                ClickType.DOUBLE_CLICK,
+            )
+        val unsupportedCardAndFilterClicks = nonLeftClicks - ClickType.RIGHT
+
+        controller.start()
+        try {
+            nonLeftClicks.forEach {
+                controller.openList(player)
+                controller.onClick(clickEvent(player.openInventory, 50, it))
+                plainName(player.openInventory.topInventory.getItem(10)) shouldBe "Маунт 0"
+
+                controller.onClick(clickEvent(player.openInventory, 45, it))
+                player.openInventory.topInventory.size shouldBe 54
+            }
+
+            controller.openList(player)
+            controller.onClick(clickEvent(player.openInventory, 50))
+            plainName(player.openInventory.topInventory.getItem(10)) shouldBe "Маунт 28"
+            nonLeftClicks.forEach {
+                controller.onClick(clickEvent(player.openInventory, 48, it))
+                plainName(player.openInventory.topInventory.getItem(10)) shouldBe "Маунт 28"
+            }
+
+            unsupportedCardAndFilterClicks.forEach {
+                controller.openList(player)
+                controller.onClick(clickEvent(player.openInventory, 49, it))
+                player.openInventory.topInventory.getItem(49)?.itemMeta?.enchantmentGlintOverride shouldBe false
+
+                controller.onClick(clickEvent(player.openInventory, 10, it))
+                player.openInventory.topInventory.size shouldBe 54
+            }
+            verify(exactly = 0) { sessions.spawn(any(), any(), any(), any()) }
+
+            controller.openList(player)
+            controller.onClick(clickEvent(player.openInventory, 49, ClickType.RIGHT))
+            player.openInventory.topInventory.getItem(49)?.itemMeta?.enchantmentGlintOverride shouldBe true
+
+            controller.openList(player)
+            controller.onClick(clickEvent(player.openInventory, 49))
+            player.openInventory.topInventory.getItem(49)?.type shouldBe Material.FEATHER
+
+            controller.openList(player)
+            controller.onClick(clickEvent(player.openInventory, 10, ClickType.RIGHT))
+            player.openInventory.topInventory.size shouldBe 45
+        } finally {
+            controller.shutdown()
+        }
+    }
+
+    private fun clickEvent(
+        view: org.bukkit.inventory.InventoryView,
+        rawSlot: Int,
+        clickType: ClickType = ClickType.LEFT,
+    ): InventoryClickEvent {
+        val action =
+            when (clickType) {
+                ClickType.RIGHT -> InventoryAction.PICKUP_HALF
+                ClickType.SHIFT_LEFT,
+                ClickType.SHIFT_RIGHT,
+                -> InventoryAction.MOVE_TO_OTHER_INVENTORY
+                ClickType.NUMBER_KEY -> InventoryAction.HOTBAR_SWAP
+                ClickType.MIDDLE -> InventoryAction.CLONE_STACK
+                ClickType.DOUBLE_CLICK -> InventoryAction.COLLECT_TO_CURSOR
+                else -> InventoryAction.PICKUP_ALL
+            }
+        return InventoryClickEvent(
             view,
             InventoryType.SlotType.CONTAINER,
             rawSlot,
-            ClickType.LEFT,
-            InventoryAction.PICKUP_ALL,
+            clickType,
+            action,
+            if (clickType == ClickType.NUMBER_KEY) 0 else -1,
         )
+    }
+
+    private fun interactionConfig(tuning: MountTuningDefinition) =
+        mockk<MountModuleConfig> {
+            every { listTitle } returns "Коллекция маунтов"
+            every { detailTitle } returns "Маунт: <mount>"
+            every { progressionTitle } returns "Развитие: <mount>"
+            every { skinsTitle } returns "Облики: <mount>"
+            every { confirmTitle } returns "Подтверждение"
+            every { sessionDuration } returns Duration.ofHours(12)
+            every { idleTimeout } returns Duration.ofMinutes(5)
+            every { purchasesEnabled } returns true
+            every { quickSummonWhistle } returns true
+            every { backCommand } returns ""
+            every { this@mockk.tuning } returns tuning
+            every { guiStyle(any()) } returns MountGuiItemStyle()
+            every { message(any(), any()) } answers { secondArg() }
+            every { guiText(any(), any()) } answers { secondArg() }
+            every { guiLines(any(), any()) } answers { secondArg() }
+        }
 
     private fun mountGuiController(
         configProvider: () -> MountModuleConfig,

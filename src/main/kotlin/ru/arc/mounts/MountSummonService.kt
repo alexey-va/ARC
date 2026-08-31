@@ -51,22 +51,24 @@ class MountSummonService(
         val profile = ownership.profile(subject(player), mount)
         if (!profile.unlocked) return MountSummonOutcome.FAVORITE_UNAVAILABLE
         val config = configProvider()
-        val level = mount.level(profile.level)
         val result =
             sessions.spawn(
                 player = player,
                 definition = mount,
-                speed = config.tuning.speed(level.speed, profile.selectedSpeedPercentage),
-                walkingStepHeight = config.tuning.stepHeight(profile.level, profile.selectedStepHeightHundredths),
-                handlingMultiplier = level.handlingMultiplier,
-                sprintMultiplier = level.sprintMultiplier,
+                settings = runtimeSettings(config, mount, profile),
                 durationMillis = config.sessionDuration.toMillis(),
-                glow = profile.glowEnabled,
-                scaleMultiplier = level.scaleMultiplier,
-                skin = mount.skin(profile.activeSkinId),
-                abilityUpgrades = mount.abilities.upgrades.filter { profile.ownsAbility(it.id) },
             )
         return result.toSummonOutcome()
+    }
+
+    fun refreshActive(player: Player, mount: MountDefinition): MountSessionUpdateResult {
+        val profile = ownership.profile(subject(player), mount)
+        if (!profile.unlocked) return MountSessionUpdateResult.NO_ACTIVE_SESSION
+        return sessions.reconcileSettings(
+            playerId = player.uniqueId,
+            expectedMountId = mount.id,
+            settings = runtimeSettings(configProvider(), mount, profile),
+        )
     }
 
     fun sendFeedback(player: Player, outcome: MountSummonOutcome) {
@@ -91,6 +93,25 @@ class MountSummonService(
     }
 
     private fun subject(player: Player) = MountPermissionSubject(player.uniqueId, player.name, player::hasPermission)
+
+    private fun runtimeSettings(
+        config: MountModuleConfig,
+        mount: MountDefinition,
+        profile: MountProfile,
+    ): MountRuntimeSettings {
+        val level = mount.level(profile.level)
+        val sizeMultiplier = mount.effectiveSizeOption(profile.selectedSizeId, profile.level)?.multiplier ?: 1.0
+        return MountRuntimeSettings(
+            speed = config.tuning.speed(level.speed, profile.selectedSpeedPercentage),
+            walkingStepHeight = config.tuning.stepHeight(profile.level, profile.selectedStepHeightHundredths),
+            handlingMultiplier = level.handlingMultiplier,
+            sprintMultiplier = level.sprintMultiplier,
+            scaleMultiplier = level.scaleMultiplier * sizeMultiplier,
+            skin = mount.skin(profile.activeSkinId),
+            glow = profile.glowEnabled,
+            abilityUpgrades = mount.abilities.upgrades.filter { profile.ownsAbility(it.id) },
+        )
+    }
 }
 
 private fun MountSpawnResult.toSummonOutcome(): MountSummonOutcome =

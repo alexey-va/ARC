@@ -105,6 +105,22 @@ data class MountTuningDefinition(
     }
 }
 
+data class MountSizeOptionDefinition(
+    val id: String,
+    val displayName: String,
+    val multiplier: Double,
+    val minimumLevel: Int = 1,
+) {
+    init {
+        require(MountDefinition.validId(id)) { "Invalid mount size option id: $id" }
+        require(displayName.isNotBlank() && displayName.length <= 48) { "Mount size option '$id' name is invalid" }
+        require(multiplier.isFinite() && multiplier in 0.75..1.35) {
+            "Mount size option '$id' multiplier must be between 0.75 and 1.35"
+        }
+        require(minimumLevel in 1..16) { "Mount size option '$id' minimum level must be between 1 and 16" }
+    }
+}
+
 enum class MountEquipmentSlot(val configKey: String) {
     HEAD("head"),
     CHEST("chest"),
@@ -145,17 +161,80 @@ data class MountAppearance(
 
 data class MountTrailDefinition(
     val particle: String,
+    val displayName: String,
     val intervalTicks: Int = 4,
     val count: Int = 1,
+    val backOffset: Double = 0.2,
+    val heightRatio: Double = 0.45,
+    val spread: Double = 0.12,
+    val speed: Double = 0.0,
 ) {
     init {
         require(PARTICLE_PATTERN.matches(particle)) { "Invalid mount trail particle: $particle" }
+        require(displayName.isNotBlank() && displayName.length <= 64) { "Mount trail display name is invalid" }
         require(intervalTicks in 2..40) { "Mount trail interval must be between 2 and 40 ticks" }
         require(count in 1..8) { "Mount trail count must be between 1 and 8" }
+        require(backOffset.isFinite() && backOffset in 0.0..2.0) { "Mount trail back offset must be between 0 and 2" }
+        require(heightRatio.isFinite() && heightRatio in 0.0..1.0) { "Mount trail height ratio must be between 0 and 1" }
+        require(spread.isFinite() && spread in 0.0..1.0) { "Mount trail spread must be between 0 and 1" }
+        require(speed.isFinite() && speed in 0.0..1.0) { "Mount trail speed must be between 0 and 1" }
     }
 
     companion object {
         private val PARTICLE_PATTERN = Regex("[A-Z0-9_]{2,64}")
+    }
+}
+
+enum class MountBehaviorTrigger {
+    SPRINT_FORWARD_PRESS,
+}
+
+sealed interface MountBehaviorDefinition {
+    val id: String
+    val displayName: String
+    val description: List<String>
+}
+
+data class MountRamBehavior(
+    override val id: String,
+    override val displayName: String,
+    override val description: List<String> =
+        listOf(
+            "Нажмите спринт при движении вперёд.",
+            "Первый враждебный моб на пути",
+            "получит урон при столкновении.",
+        ),
+    val trigger: MountBehaviorTrigger = MountBehaviorTrigger.SPRINT_FORWARD_PRESS,
+    val cooldown: Duration = Duration.ofSeconds(4),
+    val requestWindow: Duration = Duration.ofMillis(1_200),
+    val activeWindowTicks: Int = 8,
+    val minimumSpeedFraction: Double = 0.65,
+    val reach: Double = 1.25,
+    val lateralPadding: Double = 0.35,
+    val damage: Double = 4.0,
+) : MountBehaviorDefinition {
+    init {
+        require(MountDefinition.validId(id)) { "Invalid mount behavior id: $id" }
+        require(displayName.isNotBlank() && displayName.length <= 64) { "Mount ram behavior '$id' name is invalid" }
+        require(description.isNotEmpty() && description.size <= 4) { "Mount ram behavior '$id' description must contain 1..4 rows" }
+        require(description.all { it.isNotBlank() && it.length <= 64 }) {
+            "Mount ram behavior '$id' description rows must contain 1..64 characters"
+        }
+        require(cooldown in Duration.ofSeconds(2)..Duration.ofSeconds(30)) {
+            "Mount ram behavior '$id' cooldown must be between 2s and 30s"
+        }
+        require(requestWindow in Duration.ofMillis(100)..Duration.ofSeconds(2)) {
+            "Mount ram behavior '$id' request window must be between 100ms and 2s"
+        }
+        require(activeWindowTicks in 1..12) { "Mount ram behavior '$id' active window must be between 1 and 12 ticks" }
+        require(minimumSpeedFraction.isFinite() && minimumSpeedFraction in 0.4..1.0) {
+            "Mount ram behavior '$id' minimum speed fraction must be between 0.4 and 1"
+        }
+        require(reach.isFinite() && reach in 0.25..2.0) { "Mount ram behavior '$id' reach must be between 0.25 and 2" }
+        require(lateralPadding.isFinite() && lateralPadding in 0.0..1.0) {
+            "Mount ram behavior '$id' lateral padding must be between 0 and 1"
+        }
+        require(damage.isFinite() && damage in 0.5..6.0) { "Mount ram behavior '$id' damage must be between 0.5 and 6" }
     }
 }
 
@@ -239,6 +318,8 @@ data class MountDefinition(
     val abilities: MountAbilities = MountAbilities(),
     val appearance: MountAppearance = MountAppearance(),
     val skins: List<MountSkinDefinition> = emptyList(),
+    val sizeOptions: List<MountSizeOptionDefinition> = emptyList(),
+    val behaviors: List<MountBehaviorDefinition> = emptyList(),
     val motion: MountMotionOverride = MountMotionOverride(),
 ) {
     init {
@@ -270,8 +351,24 @@ data class MountDefinition(
         require(skins.size <= MAX_SKINS) { "Mount '$id' has more than $MAX_SKINS skins" }
         require(skins.map(MountSkinDefinition::id).toSet().size == skins.size) { "Mount '$id' skin ids must be unique" }
         require(skins.none { it.id == DEFAULT_SKIN_ID }) { "Mount '$id' cannot redefine the default skin" }
+        require(sizeOptions.size <= MAX_SIZE_OPTIONS) { "Mount '$id' has more than $MAX_SIZE_OPTIONS size options" }
+        require(sizeOptions.map(MountSizeOptionDefinition::id).toSet().size == sizeOptions.size) {
+            "Mount '$id' size option ids must be unique"
+        }
+        require(sizeOptions.isEmpty() || sizeOptions.count { it.multiplier == 1.0 } == 1) {
+            "Mount '$id' size options must define exactly one standard multiplier"
+        }
+        require(defaultSizeOption == null || defaultSizeOption?.minimumLevel == 1) {
+            "Mount '$id' standard size option must be available at level 1"
+        }
+        require(sizeOptions.all { it.minimumLevel <= maxLevel }) { "Mount '$id' size option requires an unavailable level" }
+        require(behaviors.map(MountBehaviorDefinition::id).toSet().size == behaviors.size) {
+            "Mount '$id' behavior ids must be unique"
+        }
+        require(behaviors.filterIsInstance<MountRamBehavior>().size <= 1) { "Mount '$id' supports at most one ram behavior" }
         val appearances = listOf(appearance) + skins.map(MountSkinDefinition::appearance)
-        require(levels.all { level -> appearances.all { base -> base.scale * level.scaleMultiplier in 0.35..4.0 } }) {
+        val sizeMultipliers = sizeOptions.map(MountSizeOptionDefinition::multiplier).ifEmpty { listOf(1.0) }
+        require(levels.all { level -> appearances.all { base -> sizeMultipliers.all { size -> base.scale * level.scaleMultiplier * size in 0.35..4.0 } } }) {
             "Mount '$id' level scale produces an appearance outside 0.35..4.0"
         }
     }
@@ -287,14 +384,30 @@ data class MountDefinition(
     fun effectiveAppearance(scaleMultiplier: Double, skin: MountSkinDefinition?): MountAppearance =
         (skin?.appearance ?: appearance).scaledBy(scaleMultiplier)
 
+    val defaultSizeOption: MountSizeOptionDefinition? get() = sizeOptions.firstOrNull { it.multiplier == 1.0 }
+
+    fun sizeOption(id: String?): MountSizeOptionDefinition? = sizeOptions.firstOrNull { it.id == id } ?: defaultSizeOption
+
+    fun availableSizeOptions(level: Int): List<MountSizeOptionDefinition> = sizeOptions.filter { it.minimumLevel <= level }
+
+    fun effectiveSizeOption(id: String?, level: Int): MountSizeOptionDefinition? {
+        val available = availableSizeOptions(level)
+        return available.firstOrNull { it.id == id }
+            ?: available.firstOrNull { it.multiplier == 1.0 }
+            ?: available.firstOrNull()
+    }
+
     fun levelPermission(level: Int): String = "arc.mounts.$id.$level"
 
     val speedTuningPermissionPrefix: String get() = "arc.mounts.$id.tuning.speed."
     val stepHeightTuningPermissionPrefix: String get() = "arc.mounts.$id.tuning.step-height."
+    val sizeTuningPermissionPrefix: String get() = "arc.mounts.$id.tuning.size."
 
     fun speedTuningPermission(percentage: Int): String = "$speedTuningPermissionPrefix$percentage"
 
     fun stepHeightTuningPermission(hundredths: Int): String = "$stepHeightTuningPermissionPrefix$hundredths"
+
+    fun sizeTuningPermission(sizeId: String): String = "$sizeTuningPermissionPrefix$sizeId"
 
     val glowPermission: String get() = "arc.mounts.$id.glow"
     val glowDisabledPermission: String get() = "arc.mounts.$id.glow.disabled"
@@ -313,6 +426,7 @@ data class MountDefinition(
         private val ID_PATTERN = Regex("[a-z0-9][a-z0-9_-]{1,31}")
         private const val MAX_LEVELS = 16
         private const val MAX_SKINS = 16
+        private const val MAX_SIZE_OPTIONS = 3
         const val DEFAULT_SKIN_ID = "default"
 
         fun validId(value: String): Boolean = ID_PATTERN.matches(value)
@@ -353,6 +467,7 @@ data class MountProfile(
     val ownedAbilityIds: Set<String> = emptySet(),
     val selectedSpeedPercentage: Int? = null,
     val selectedStepHeightHundredths: Int? = null,
+    val selectedSizeId: String? = null,
 ) {
     val unlocked: Boolean get() = level > 0
     val glowEnabled: Boolean get() = glowOwned && !glowDisabled
@@ -360,6 +475,41 @@ data class MountProfile(
     fun ownsSkin(skinId: String): Boolean = skinId == MountDefinition.DEFAULT_SKIN_ID || skinId in ownedSkinIds
 
     fun ownsAbility(abilityId: String): Boolean = abilityId in ownedAbilityIds
+}
+
+data class MountRuntimeSettings(
+    val speed: Double,
+    val walkingStepHeight: Double,
+    val handlingMultiplier: Double,
+    val sprintMultiplier: Double,
+    val scaleMultiplier: Double,
+    val skin: MountSkinDefinition?,
+    val glow: Boolean,
+    val abilityUpgrades: List<MountAbilityUpgradeDefinition>,
+) {
+    init {
+        require(speed.isFinite() && speed > 0.0) { "Mount runtime speed must be positive and finite" }
+        require(walkingStepHeight.isFinite() && walkingStepHeight in 0.6..4.0) {
+            "Walking mount step height must be between 0.60 and 4.00 blocks"
+        }
+        require(handlingMultiplier.isFinite() && handlingMultiplier in 0.5..2.0) {
+            "Mount runtime handling multiplier must be between 0.5 and 2.0"
+        }
+        require(sprintMultiplier.isFinite() && sprintMultiplier in 1.0..2.0) {
+            "Mount runtime sprint multiplier must be between 1.0 and 2.0"
+        }
+        require(scaleMultiplier.isFinite() && scaleMultiplier in 0.35..4.0) {
+            "Mount runtime scale multiplier must be between 0.35 and 4.0"
+        }
+    }
+}
+
+enum class MountSessionUpdateResult {
+    APPLIED,
+    NO_ACTIVE_SESSION,
+    DIFFERENT_MOUNT,
+    ENTITY_MISSING,
+    UNSAFE_APPEARANCE,
 }
 
 interface MountOwnership {
@@ -392,6 +542,9 @@ interface MountOwnership {
     fun setSpeedTuning(playerId: UUID, mount: MountDefinition, percentage: Int): CompletableFuture<Void>
 
     fun setStepHeightTuning(playerId: UUID, mount: MountDefinition, hundredths: Int): CompletableFuture<Void>
+
+    fun setSizeTuning(playerId: UUID, mount: MountDefinition, sizeId: String): CompletableFuture<Void> =
+        CompletableFuture.failedFuture(UnsupportedOperationException("Mount size tuning persistence is unavailable"))
 
     fun hasDirectPermission(playerId: UUID, permission: String): CompletableFuture<Boolean>
 

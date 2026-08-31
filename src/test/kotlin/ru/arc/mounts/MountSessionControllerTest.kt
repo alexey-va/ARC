@@ -60,6 +60,24 @@ class MountSessionControllerTest : StringSpec({
         verify(exactly = 1) { stepHeight.baseValue = 1.1 }
     }
 
+    "live size growth keeps feet anchored while expanding the full hitbox" {
+        val scaled = scaledMountBoundingBox(BoundingBox(-0.5, 10.0, -1.0, 0.5, 12.0, 1.0), 1.5)
+
+        scaled.minY shouldBeExactly 10.0
+        scaled.maxY shouldBeExactly 13.0
+        scaled.minX shouldBeExactly -0.75
+        scaled.maxX shouldBeExactly 0.75
+        scaled.minZ shouldBeExactly -1.5
+        scaled.maxZ shouldBeExactly 1.5
+    }
+
+    "appearance growth includes an age transition from baby to adult" {
+        mountAppearanceMayGrow(MountAppearance(baby = true), MountAppearance(baby = false), supportsAge = true) shouldBe true
+        mountAppearanceMayGrow(MountAppearance(baby = true), MountAppearance(baby = false), supportsAge = false) shouldBe false
+        mountAppearanceMayGrow(MountAppearance(scale = 0.9), MountAppearance(scale = 1.1), supportsAge = false) shouldBe true
+        mountAppearanceMayGrow(MountAppearance(scale = 1.1), MountAppearance(scale = 0.9), supportsAge = true) shouldBe false
+    }
+
     "horses use native ridden physics with ARC speed and jump values" {
         val horse = mockk<Horse>(relaxed = true)
         val player = mockk<Player>(relaxed = true)

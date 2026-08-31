@@ -23,9 +23,12 @@ import org.bukkit.inventory.ItemStack
 import java.util.Locale
 
 internal object MountAppearanceApplicator {
+    fun supportsAge(entityType: EntityType): Boolean =
+        entityType.entityClass?.let { Ageable::class.java.isAssignableFrom(it) } == true
+
     fun validate(entityType: EntityType, appearance: MountAppearance, label: String) {
         val entityClass = entityType.entityClass ?: throw IllegalArgumentException("$label has no entity class")
-        require(!appearance.baby || Ageable::class.java.isAssignableFrom(entityClass)) {
+        require(!appearance.baby || supportsAge(entityType)) {
             "$label requests a baby form unsupported by $entityType"
         }
         val primaryValues: Set<String> =

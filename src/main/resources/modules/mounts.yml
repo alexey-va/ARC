@@ -55,10 +55,299 @@ safety:
   rider-knockoff-damage: 6.0
 
 gui:
-  list-title: "<dark_gray><bold>Коллекция маунтов"
-  detail-title: "<dark_gray><bold>Маунт: <mount>"
-  progression-title: "<dark_gray><bold>Развитие: <mount>"
-  skins-title: "<dark_gray><bold>Облики: <mount>"
+  copy:
+    common:
+      blank: ""
+      action-footer: "<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#e6fff3> — <action>"
+      action-footer-warning: "<#8c8c8c>[<#ff9f0f>▶<#8c8c8c>] <#ff9f0f>ЛКМ<#e6fff3> — <action>"
+      footer-back: "<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#e6fff3> — вернуться"
+      footer-open: "<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#e6fff3> — открыть"
+      footer-open-purchase: "<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#e6fff3> — открыть покупку"
+      footer-select: "<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#e6fff3> — выбрать"
+      footer-summon: "<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#e6fff3> — призвать"
+      footer-enable: "<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#e6fff3> — включить"
+      footer-disable: "<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#e6fff3> — выключить"
+      footer-get: "<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#e6fff3> — получить"
+      footer-buy: "<#8c8c8c>[<#ff9f0f>▶<#8c8c8c>] <#ff9f0f>ЛКМ<#e6fff3> — купить"
+      footer-cancel: "<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#e6fff3> — отменить"
+      selected: "<#2bba43>Выбрано"
+      purchases-at-spawn: "<#ff9f0f>Покупка доступна на спавне."
+      back-name: "<#92bed8>Назад"
+      price: "<#8c8c8c>Цена: <#ffacd5><price> <white><bold:false>💰</bold></white>"
+      balance: "<#8c8c8c>Баланс: <#ffacd5><balance> <white><bold:false>💰</bold></white>"
+      remaining: "<#8c8c8c>Останется: <#ffacd5><remaining> <white><bold:false>💰</bold></white>"
+      missing: "<#c42323>Не хватает: <#ffacd5><missing> <white><bold:false>💰</bold></white>"
+      debit: "<#8c8c8c>Будет списано: <#ffacd5><price> <white><bold:false>💰</bold></white>"
+      duration-hours: "<value> ч"
+      duration-minutes: "<value> мин"
+      duration-seconds: "<value> сек"
+    list:
+      type-walking-color: "<gray>"
+      type-flying-color: "<green>"
+      type-swimming-color: "<aqua>"
+      type-walking-name: "Пеший"
+      type-flying-name: "Летающий"
+      type-swimming-name: "Водный"
+      rarity-common: "<white>Обычный"
+      rarity-uncommon: "<green>Необычный"
+      rarity-rare: "<aqua>Редкий"
+      rarity-epic: "<light_purple>Эпический"
+      rarity-legendary: "<gold>Легендарный"
+      previous-name: "<#92bed8>Предыдущая страница"
+      previous-action: "перейти назад"
+      previous-footer: "<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#e6fff3> — перейти назад"
+      next-name: "<#92bed8>Следующая страница"
+      next-action: "перейти вперёд"
+      next-footer: "<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#e6fff3> — перейти вперёд"
+      page: "<#8c8c8c>Страница: <#e6fff3><page>/<pages>"
+      filter-name: "<#92bed8>Фильтр коллекции"
+      filter-category-all: "Все"
+      filter-category-flying: "Воздушные"
+      filter-category-walking: "Наземные"
+      filter-category-swimming: "Водные"
+      filter-show-all: "показать все"
+      filter-show-owned: "только полученные"
+      filter-stats:
+        - "<#8c8c8c>Категория: <#e6fff3><category>"
+        - "<#8c8c8c>Показано: <#e6fff3><shown>/<total>"
+      filter-footer: "<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#e6fff3> — сменить <#8c8c8c>· <#92bed8>ПКМ<#e6fff3> — <owned-action>"
+      mount-owned-name: "<#ffacd5><mount>"
+      mount-owned-core:
+        - "<#2bba43>✔ Получен"
+        - "<rarity>"
+        - ""
+        - "<#8c8c8c>Тип: <type-value>"
+        - "<#8c8c8c>Уровень: <#e6fff3><level>/<max-level>"
+        - "<#8c8c8c>Облик: <#e6fff3><skin>"
+      mount-owned-footer: "<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#e6fff3> — призвать <#8c8c8c>· <#92bed8>ПКМ<#e6fff3> — открыть"
+      mount-acquirable-name: "<#92bed8><mount>"
+      mount-acquirable-core:
+        - "<#ff9f0f>Доступен к получению"
+        - "<rarity>"
+        - ""
+        - "<#8c8c8c>Получение: <#e6fff3><acquisition>"
+      mount-acquirable-footer: "<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#e6fff3> — открыть получение"
+      mount-locked-name: "<#969696><mount>"
+      mount-locked-core:
+        - "<#c42323>✘ Не получен"
+        - "<rarity>"
+        - ""
+        - "<#8c8c8c>Получение: <#e6fff3><acquisition>"
+      back-description: "<#8c8c8c>Вернуться в главное меню."
+      guide-name: "<#92bed8>Путеводитель по коллекции"
+      guide-lore:
+        - "<#8c8c8c>ЛКМ — призвать полученного маунта"
+        - "<#8c8c8c>ПКМ — открыть развитие и облики"
+        - ""
+        - "<#8c8c8c>Shift + F — призвать любимого маунта"
+        - "<#8c8c8c>Свисток — получить в карточке маунта"
+        - ""
+        - "<#92bed8>Полёт"
+        - "<#8c8c8c>Space — вверх"
+        - "<#8c8c8c>Shift — вниз"
+        - "<#8c8c8c>Взгляд вниз скрывает маунта из кадра"
+        - ""
+        - "<#8c8c8c>Двойной Shift — спешиться"
+    detail:
+      back-description: "<#8c8c8c>Вернуться к коллекции."
+      mount-locked-state: "<#c42323>✘ Не получен"
+      locked-acquisition: "<#8c8c8c>Получение: <#e6fff3><acquisition>"
+      description-line: "<#e6fff3><mount-description>"
+      innate-ability-line: "<#8c8c8c>Особенность: <#ffacd5><ability>"
+      effect-owned-line: "<#8c8c8c>Эффект: <#ffacd5><ability>"
+      upgrade-available-line: "<#8c8c8c>Улучшение: <#92bed8><ability> <#969696>(не куплено)"
+      behavior-line: "<#8c8c8c>Особенность: <#ffacd5><feature>"
+      behavior-description: "<#8c8c8c><behavior-description>"
+      mount-state-lore:
+        - "<#ffacd5>★ Любимый маунт"
+        - "<#2bba43>✔ Получен"
+        - "<rarity>"
+        - ""
+      mount-stats-core-lore:
+        - ""
+        - "<#92bed8>Характеристики"
+        - "<#8c8c8c>Тип: <type-value>"
+        - "<#8c8c8c>Уровень: <#e6fff3><level>/<max-level>"
+        - "<#8c8c8c>Скорость: <#e6fff3><speed>"
+        - "<#8c8c8c>Подъём: <#e6fff3><step> блока"
+        - "<#8c8c8c>Облик: <#e6fff3><skin>"
+      favorite-selected-name: "<#ffacd5>Любимый маунт"
+      favorite-selected-lore:
+        - "<#2bba43>Выбран для быстрого призыва."
+        - ""
+        - "<#8c8c8c>Shift + F или свисток — призвать."
+      favorite-locked-name: "<#969696>Любимый маунт недоступен"
+      favorite-locked-lore:
+        - "<#8c8c8c>Сначала получите этого маунта."
+      favorite-available-name: "<#ffacd5>Выбрать любимым"
+      favorite-available-lore:
+        - "<#8c8c8c>Использовать для Shift + F и свистка."
+      upgrade-name: "<#92bed8>Развитие и тюнинг"
+      upgrade-lore:
+        - "<#8c8c8c>Уровень: <#e6fff3><level>/<max-level>"
+        - "<#8c8c8c>Скорость: <#e6fff3><speed-percent>%"
+        - "<#8c8c8c>Подъём: <#e6fff3><step> блока"
+        - "<#8c8c8c>Размер: <#e6fff3><size>"
+      upgrade-locked-lore:
+        - "<#8c8c8c>Уровень: <#e6fff3><level>/<max-level>"
+      summon-name: "<#92bed8>Призвать маунта"
+      summon-lore:
+        - "<#8c8c8c>Сессия: <#e6fff3><session>"
+        - "<#8c8c8c>Исчезнет без движения через <#e6fff3><idle>"
+      summon-locked-name: "<#c42323>Маунт недоступен"
+      summon-locked-lore:
+        - "<#8c8c8c>Сначала получите первый уровень."
+      glow-enabled-name: "<#2bba43>Свечение: включено"
+      glow-disabled-name: "<#969696>Свечение: выключено"
+      glow-enabled-lore:
+        - "<#8c8c8c>Свечение куплено навсегда."
+      glow-locked-name: "<#969696>Свечение недоступно"
+      glow-locked-lore:
+        - "<#8c8c8c>Сначала получите маунта."
+      glow-buy-name: "<#92bed8>Купить свечение"
+      glow-unavailable-name: "<#969696>Свечение недоступно"
+      glow-unavailable-lore:
+        - "<#8c8c8c>Это украшение не продаётся."
+      skins-name: "<#ffacd5>Облики и украшения"
+      skins-lore:
+        - "<#8c8c8c>Выбран: <#e6fff3><skin>"
+        - "<#8c8c8c>Получено: <#e6fff3><owned>/<available>"
+      skins-locked-name: "<#969696>Облики недоступны"
+      skins-locked-lore:
+        - "<#8c8c8c>Сначала получите маунта."
+      ability-owned-name: "<#2bba43><ability>"
+      ability-available-name: "<#92bed8><ability>"
+      ability-description: "<#8c8c8c><ability-description>"
+      ability-speed: "<#8c8c8c>Скорость маунта: <#2bba43>+<increase>%"
+      ability-owned: "<#2bba43>Куплено навсегда"
+      whistle-owned-name: "<#2bba43>Свисток уже получен"
+      whistle-owned-lore:
+        - "<#8c8c8c>Он лежит у вас в инвентаре."
+      whistle-disabled-name: "<#969696>Свисток недоступен"
+      whistle-disabled-lore:
+        - "<#8c8c8c>Он отключён на этом сервере."
+      whistle-favorite-required-name: "<#969696>Свисток недоступен"
+      whistle-favorite-required-lore:
+        - "<#8c8c8c>Сначала выберите любимого маунта."
+      whistle-full-name: "<#969696>Нет места для свистка"
+      whistle-full-lore:
+        - "<#8c8c8c>Освободите слот в инвентаре."
+      whistle-available-name: "<#ffacd5>Получить свисток"
+      whistle-available-lore:
+        - "<#8c8c8c>ПКМ свистком — призвать любимого маунта."
+    progression:
+      back-description: "<#8c8c8c>Вернуться к маунту."
+      size-scale: "<#8c8c8c>Масштаб: <#e6fff3>×<scale>"
+      mount-required: "<#c42323>Сначала получите маунта"
+      unlocks-at-level: "<#ff9f0f>Откроется на уровне <level>"
+      higher-level: "выше"
+      info-name: "<#92bed8>Профиль движения"
+      info-locked-lore:
+        - "<#8c8c8c>Уровень открывает максимум характеристик."
+        - "<#8c8c8c>Вы сами выбираете значение внутри предела."
+        - ""
+        - "<#c42323>Сначала получите маунта ниже."
+      info-lore:
+        - "<#8c8c8c>Уровень открывает максимум характеристик."
+        - "<#8c8c8c>Вы сами выбираете значение внутри предела."
+        - ""
+        - "<#8c8c8c>Скорость: <#e6fff3><current-speed> <#8c8c8c>/ <maximum-speed>"
+        - "<#8c8c8c>Подъём: <#e6fff3><step> <#8c8c8c>/ <maximum-step> блока"
+        - "<#8c8c8c>Размер: <#e6fff3><size>"
+        - ""
+        - "<#969696>Тюнинг бесплатный и сохраняется между серверами."
+      max-level-name: "<#2bba43>Максимальный уровень"
+      max-level-lore:
+        - "<#8c8c8c>Все пределы характеристик открыты."
+      special-name: "<#969696>Особое развитие"
+      special-lore:
+        - "<#8c8c8c><acquisition>"
+      level-name: "<#92bed8>Уровень <level>"
+      unlock-name: "<#92bed8>Получить маунта"
+      level-speed-upgrade: "<#8c8c8c>Скорость: <#e6fff3><speed-before> <#8c8c8c>→ <#2bba43><speed-after>"
+      level-speed-initial: "<#8c8c8c>Скорость: <#e6fff3><speed>"
+      level-increase: "<#8c8c8c>Прирост: <#2bba43>+<increase>%"
+      level-handling: "<#8c8c8c>Управляемость: <#e6fff3>×<handling>"
+      level-sprint: "<#8c8c8c>Форсаж: <#e6fff3>×<sprint>"
+      level-step-initial: "<#8c8c8c>Макс. подъём: <#e6fff3><step> блока"
+      level-step-upgrade: "<#8c8c8c>Макс. подъём: <#e6fff3><step-before> <#8c8c8c>→ <#2bba43><step-after> блока"
+      speed-name: "<#92bed8>Скорость: <percentage>%"
+      speed-selected-name: "<#2bba43>Скорость: <percentage>%"
+      speed-lore:
+        - "<#8c8c8c>Фактически: <#e6fff3><actual-speed>"
+        - "<#8c8c8c>От максимума уровня: <#e6fff3><percentage>%"
+      step-name: "<#92bed8>Подъём: <step> блока"
+      step-selected-name: "<#2bba43>Подъём: <step> блока"
+      step-lore:
+        - "<#8c8c8c>Маунт автоматически заходит"
+        - "<#8c8c8c>на препятствия этой высоты."
+      step-high-warning: "<#ff9f0f>Высокий подъём неудобен под низким потолком."
+      step-not-applicable-name: "<#969696>Подъём не используется"
+      step-not-applicable-lore:
+        - "<#8c8c8c>Эта настройка доступна только пешим маунтам."
+      size-name: "<#92bed8>Размер: <size>"
+      size-selected-name: "<#2bba43>Размер: <size>"
+    skins:
+      back-description: "<#8c8c8c>Вернуться к маунту."
+      classic-name: "Классический"
+      classic-selected-name: "<#2bba43>Классический"
+      classic-available-name: "<#e6fff3>Классический"
+      classic-description: "<#8c8c8c>Базовый облик без следа."
+      trail: "<#8c8c8c>След: <#e6fff3><trail>"
+      age: "<#8c8c8c>Возраст: <#e6fff3><age>"
+      age-baby: "малыш"
+      age-adult: "взрослый"
+      size: "<#8c8c8c>Размер: <#e6fff3>×<scale>"
+      variant: "<#8c8c8c>Вариант: <#e6fff3><variant>"
+      pattern: "<#8c8c8c>Узор: <#e6fff3><pattern>"
+      equipment: "<#8c8c8c>Экипировка: <#e6fff3><equipment>"
+      equipment-none: "без экипировки"
+      equipment-netherite: "незеритовый комплект"
+      equipment-diamond: "алмазный комплект"
+      equipment-iron: "железный комплект"
+      equipment-golden: "золотой комплект"
+      equipment-special: "особый комплект"
+      base-variant: "<#8c8c8c>Вариант базового облика без следа."
+      variants:
+        cold: "холодный"
+        temperate: "умеренный"
+        warm: "тропический"
+        red: "рыжий"
+        snow: "снежный"
+        brown: "коричневый"
+        white: "белый"
+        black: "чёрный"
+        creamy: "кремовый"
+        chestnut: "каштановый"
+        gray: "серый"
+        dark-brown: "тёмно-коричневый"
+      skin-selected-name: "<#2bba43><skin>"
+      skin-owned-name: "<#ffacd5><skin>"
+      skin-buy-name: "<#969696><skin>"
+      special-reward: "<#ff9f0f>Особая награда"
+    confirm:
+      cancel-name: "<#c42323>Отменить"
+      cancel-description: "<#8c8c8c>Вернуться без покупки."
+      unavailable-name: "<#c42323>Экономика недоступна"
+      insufficient-name: "<#c42323>Недостаточно средств"
+      accept-name: "<#ff9f0f>Подтвердить покупку"
+      loading-name: "<#969696>Покупка выполняется…"
+      economy-unavailable-line: "<#c42323>Баланс сейчас недоступен"
+      info-name: "<#ffacd5><skin>"
+      level-name: "<#92bed8>Уровень <level>"
+      maximum-speed: "<#8c8c8c>Максимальная скорость: <#e6fff3><speed>"
+      maximum-step: "<#8c8c8c>Максимальный подъём: <#e6fff3><step> блока"
+      glow-name: "<#92bed8>Свечение"
+      glow-permanent-line: "<#8c8c8c>Косметика покупается навсегда."
+      ability-name: "<#92bed8><ability>"
+      ability-description: "<#8c8c8c><ability-description>"
+      mount-line: "<#8c8c8c>Маунт: <#e6fff3><mount>"
+      permanent-line: "<#8c8c8c>Облик покупается навсегда."
+  list-title: "<#20252b><bold>Коллекция маунтов</bold>"
+  detail-title: "<#20252b><bold><mount></bold>"
+  progression-title: "<#20252b><bold>Развитие маунта</bold>"
+  skins-title: "<#20252b><bold>Облики маунта</bold>"
+  confirm-title: "<#20252b><bold>Покупка маунта</bold>"
   back-command: m
 
 messages:
@@ -83,7 +372,10 @@ messages:
   inventory-full: "<red>Освободите место в инвентаре."
   purchases-disabled: "<yellow>Покупки маунтов доступны на спавне."
   purchase-success: "<green>Покупка сохранена!"
+  purchase-success-next-summon: "<yellow>Покупка сохранена; новый облик применится при следующем безопасном призыве."
   setting-saved: "<green>Настройка сохранена."
+  setting-applied: "<green>Настройка сохранена и применена к активному маунту."
+  setting-next-summon: "<yellow>Настройка сохранена и применится при следующем призыве."
   purchase-busy: "<yellow>Предыдущая операция ещё выполняется."
   already-owned: "<yellow>Это уже выбрано или куплено."
   invalid-level: "<red>Сначала купите предыдущий уровень."
@@ -102,28 +394,32 @@ ability-upgrades:
   water-breathing:
     name: "Дыхание глубин"
     description:
-      - "Позволяет дышать под водой всё время поездки."
+      - "Позволяет дышать под водой"
+      - "всё время поездки."
     item: HEART_OF_THE_SEA
     price: 400000
     effect: WATER_BREATHING
   night-vision:
-    name: "Зрение глубин"
+    name: "Сумеречное зрение"
     description:
-      - "Освещает тёмные пещеры и океанские впадины."
+      - "Освещает ночные дороги,"
+      - "пещеры и океанские глубины."
     item: GLOW_INK_SAC
     price: 650000
     effect: NIGHT_VISION
   fire-resistance:
     name: "Жаропрочная упряжь"
     description:
-      - "Защищает всадника от огня и лавы во время поездки."
+      - "Защищает всадника от огня и лавы"
+      - "всё время поездки."
     item: MAGMA_CREAM
     price: 750000
     effect: FIRE_RESISTANCE
   dolphins-grace:
     name: "Грация дельфина"
     description:
-      - "Даёт дельфиний эффект и ускоряет маунта в воде."
+      - "Даёт дельфиний эффект"
+      - "и ускоряет маунта в воде."
     item: NAUTILUS_SHELL
     price: 1500000
     effect: DOLPHINS_GRACE
@@ -134,20 +430,31 @@ cosmetics:
     name: "Звёздный комплект"
     item: AMETHYST_SHARD
     trail:
+      name: "Звёздный след"
       particle: END_ROD
       interval-ticks: 3
-      count: 2
+      count: 3
+      back-offset: 0.28
+      height-ratio: 0.38
+      spread: 0.16
+      speed: 0.01
   shadow:
     name: "Теневой комплект"
     item: ECHO_SHARD
     trail:
+      name: "След душ"
       particle: SOUL
       interval-ticks: 4
-      count: 2
+      count: 4
+      back-offset: 0.24
+      height-ratio: 0.42
+      spread: 0.18
+      speed: 0.015
   flame:
     name: "Огненный комплект"
     item: BLAZE_POWDER
     trail:
+      name: "Огненный след"
       particle: FLAME
       interval-ticks: 3
       count: 2
@@ -155,6 +462,7 @@ cosmetics:
     name: "Пламя душ"
     item: SOUL_LANTERN
     trail:
+      name: "Пламя душ"
       particle: SOUL_FIRE_FLAME
       interval-ticks: 3
       count: 2
@@ -162,6 +470,7 @@ cosmetics:
     name: "Облачный комплект"
     item: WHITE_DYE
     trail:
+      name: "Облачный след"
       particle: CLOUD
       interval-ticks: 3
       count: 2
@@ -169,6 +478,7 @@ cosmetics:
     name: "Океанический комплект"
     item: NAUTILUS_SHELL
     trail:
+      name: "Океанический след"
       particle: NAUTILUS
       interval-ticks: 3
       count: 2
@@ -183,7 +493,8 @@ mounts:
     rarity: common
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Надёжный городской ходок с полностью фиксируемой внешностью."
+      - "Надёжный городской ходок"
+      - "с полностью фиксируемой внешностью."
     levels:
       - {speed: 1.35, handling: 0.9, sprint: 1, price: 50000}
       - {speed: 2.25, handling: 1, sprint: 1.03, price: 250000}
@@ -237,7 +548,10 @@ mounts:
     rarity: common
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Сухой, лёгкий и отзывчивый всадник для первых дальних поездок."
+      - "Сухой, лёгкий и отзывчивый всадник"
+      - "для первых дальних поездок."
+    abilities:
+      upgrades: [night-vision]
     levels:
       - {speed: 1.35, handling: 0.9, sprint: 1, price: 50000}
       - {speed: 2.25, handling: 1, sprint: 1.03, price: 250000}
@@ -264,7 +578,8 @@ mounts:
     rarity: common
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Тот самый Скорен. Маленький, но амбициозный."
+      - "Тот самый Скорен."
+      - "Маленький, но амбициозный."
     levels:
       - {speed: 1.35, handling: 0.9, sprint: 1, price: 50000}
       - {speed: 2.25, handling: 1, sprint: 1.03, price: 250000}
@@ -294,7 +609,10 @@ mounts:
     rarity: rare
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Высокий странник Бездны с резким разгоном и теневыми обликами."
+      - "Высокий странник Бездны"
+      - "с резким разгоном и теневыми обликами."
+    abilities:
+      upgrades: [night-vision]
     levels:
       - {speed: 1.55, handling: 0.9, sprint: 1, price: 250000}
       - {speed: 2.5, handling: 1, sprint: 1.03, price: 1200000}
@@ -321,7 +639,13 @@ mounts:
     rarity: uncommon
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Классика путешествий: понятное управление и сильный поздний галоп."
+      - "Классика путешествий:"
+      - "сильный галоп, уверенный прыжок"
+      - "и три варианта размера."
+    abilities:
+      high-jump:
+        name: "Уверенный прыжок"
+        multiplier: 1.25
     levels:
       - {speed: 1.45, handling: 0.9, sprint: 1, price: 100000}
       - {speed: 2.35, handling: 1, sprint: 1.03, price: 500000}
@@ -334,6 +658,10 @@ mounts:
       secondary-variant: NONE
       equipment:
         saddle: SADDLE
+    size-tuning:
+      - {id: compact, name: "Компактный", multiplier: 0.88, minimum-level: 1}
+      - {id: standard, name: "Обычный", multiplier: 1.00, minimum-level: 1}
+      - {id: massive, name: "Крупный", multiplier: 1.12, minimum-level: 3}
     skins:
       royal_white:
         name: "Королевская белая"
@@ -365,7 +693,13 @@ mounts:
     rarity: uncommon
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Спокойный караванщик, созданный для долгих дорог и дорогих сбруй."
+      - "Спокойный караванщик"
+      - "с плавным разгоном"
+      - "для долгих дорог и дорогих сбруй."
+    motion:
+      acceleration-time: 1200ms
+      deceleration-time: 550ms
+      turn-time: 320ms
     levels:
       - {speed: 1.45, handling: 0.9, sprint: 1, price: 100000}
       - {speed: 2.35, handling: 1, sprint: 1.03, price: 500000}
@@ -395,7 +729,8 @@ mounts:
     rarity: uncommon
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Упрямый покоритель склонов с особенно высоким прыжком."
+      - "Упрямый покоритель склонов"
+      - "с особенно высоким прыжком."
     abilities:
       high-jump:
         name: "Высокий прыжок"
@@ -427,7 +762,17 @@ mounts:
     rarity: uncommon
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Юркая рыжая спутница, особенно приятная на узких улицах."
+      - "Юркая рыжая спутница"
+      - "для узких улиц"
+      - "и прыжков через препятствия."
+    abilities:
+      high-jump:
+        name: "Лисий прыжок"
+        multiplier: 1.35
+    motion:
+      acceleration-time: 550ms
+      deceleration-time: 250ms
+      turn-time: 130ms
     levels:
       - {speed: 1.45, handling: 0.9, sprint: 1, price: 100000}
       - {speed: 2.35, handling: 1, sprint: 1.03, price: 500000}
@@ -458,7 +803,9 @@ mounts:
     rarity: uncommon
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Пружинистый ходок с высоким прыжком и отличным финальным разгоном."
+      - "Пружинистый ходок"
+      - "с высоким прыжком"
+      - "и отличным финальным разгоном."
     abilities:
       high-jump:
         name: "Пружинный прыжок"
@@ -495,7 +842,13 @@ mounts:
     rarity: epic
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Тяжёлый престижный таран: дорогой, грозный и удивительно быстрый."
+      - "Тяжёлый престижный таран:"
+      - "дорогой, грозный"
+      - "и удивительно быстрый."
+    motion:
+      acceleration-time: 1300ms
+      deceleration-time: 550ms
+      turn-time: 320ms
     levels:
       - {speed: 1.65, handling: 0.9, sprint: 1, price: 500000}
       - {speed: 2.65, handling: 1, sprint: 1.03, price: 2500000}
@@ -503,6 +856,26 @@ mounts:
     buy-glow: 600000
     appearance:
       scale: 0.82
+    size-tuning:
+      - {id: compact, name: "Компактный", multiplier: 0.90, minimum-level: 1}
+      - {id: standard, name: "Обычный", multiplier: 1.00, minimum-level: 1}
+      - {id: massive, name: "Крупный", multiplier: 1.15, minimum-level: 3}
+    behaviors:
+      ravager-ram:
+        type: ram
+        name: "Таран"
+        description:
+          - "Нажмите спринт при движении вперёд."
+          - "Первый враждебный моб на пути"
+          - "получит урон при столкновении."
+        trigger: sprint-forward-press
+        cooldown: 4s
+        request-window: 1200ms
+        active-window-ticks: 8
+        minimum-speed-fraction: 0.65
+        reach: 1.25
+        lateral-padding: 0.35
+        damage: 4.0
     skins:
       starlight:
         name: "Звёздный комплект"
@@ -522,7 +895,9 @@ mounts:
     rarity: rare
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Древний добряк для коллекционеров, любящих размеренный старт и мощный финиш."
+      - "Древний добряк для коллекционеров:"
+      - "размеренный старт"
+      - "и мощный финиш."
     levels:
       - {speed: 1.55, handling: 0.9, sprint: 1, price: 250000}
       - {speed: 2.5, handling: 1, sprint: 1.03, price: 1200000}
@@ -550,7 +925,9 @@ mounts:
     rarity: rare
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Редкий спутник Нижнего мира с жаркими следами и уверенным форсажем."
+      - "Редкий спутник Нижнего мира"
+      - "с жаркими следами"
+      - "и уверенным форсажем."
     abilities:
       upgrades: [fire-resistance]
     levels:
@@ -582,7 +959,8 @@ mounts:
     rarity: common
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Дружелюбный первый воздушный маунт."
+      - "Дружелюбный первый воздушный маунт"
+      - "с тремя вариантами размера."
     levels:
       - {speed: 0.42, handling: 0.9, sprint: 1, price: 50000}
       - {speed: 0.72, handling: 1, sprint: 1.03, price: 250000}
@@ -591,6 +969,10 @@ mounts:
     appearance:
       baby: false
       scale: 1.55
+    size-tuning:
+      - {id: compact, name: "Компактный", multiplier: 0.82, minimum-level: 1}
+      - {id: standard, name: "Обычный", multiplier: 1.00, minimum-level: 1}
+      - {id: massive, name: "Крупный", multiplier: 1.18, minimum-level: 3}
     skins:
       starlight:
         name: "Звёздный комплект"
@@ -610,7 +992,8 @@ mounts:
     rarity: uncommon
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Невозможная черепаха, которая всё-таки летает."
+      - "Невозможная черепаха,"
+      - "которая всё-таки летает."
     levels:
       - {speed: 0.45, handling: 0.9, sprint: 1, price: 100000}
       - {speed: 0.76, handling: 1, sprint: 1.03, price: 500000}
@@ -638,7 +1021,8 @@ mounts:
     rarity: rare
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Манёвренный воздушный собрат обычной лягушки."
+      - "Манёвренный воздушный собрат"
+      - "обычной лягушки."
     levels:
       - {speed: 0.48, handling: 0.9, sprint: 1, price: 250000}
       - {speed: 0.8, handling: 1, sprint: 1.03, price: 1200000}
@@ -671,7 +1055,8 @@ mounts:
     rarity: legendary
     acquisition: "Сезонная или событийная награда"
     description:
-      - "Наследный сезонный маунт старой коллекции."
+      - "Наследный сезонный маунт"
+      - "старой коллекции."
     abilities:
       upgrades: [fire-resistance]
     levels:
@@ -700,7 +1085,8 @@ mounts:
     rarity: uncommon
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Лёгкий музыкальный проводник с мягкими поворотами в воздухе."
+      - "Лёгкий музыкальный проводник"
+      - "с мягкими поворотами в воздухе."
     levels:
       - {speed: 0.45, handling: 0.9, sprint: 1, price: 100000}
       - {speed: 0.76, handling: 1, sprint: 1.03, price: 500000}
@@ -727,7 +1113,8 @@ mounts:
     rarity: uncommon
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Яркий воздушный разведчик с несколькими фиксированными расцветками."
+      - "Яркий воздушный разведчик"
+      - "с набором фиксированных расцветок."
     levels:
       - {speed: 0.45, handling: 0.9, sprint: 1, price: 100000}
       - {speed: 0.76, handling: 1, sprint: 1.03, price: 500000}
@@ -760,7 +1147,9 @@ mounts:
     rarity: uncommon
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Компактный ночной пилот для пещер, башен и тесных пролётов."
+      - "Компактный ночной пилот"
+      - "для пещер, башен"
+      - "и тесных пролётов."
     abilities:
       upgrades: [night-vision]
     levels:
@@ -789,7 +1178,8 @@ mounts:
     rarity: epic
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Эфирный боевой силуэт для тех, кому мало просто летать."
+      - "Эфирный боевой силуэт"
+      - "для тех, кому мало просто летать."
     levels:
       - {speed: 0.52, handling: 0.9, sprint: 1, scale: 1, price: 500000}
       - {speed: 0.85, handling: 1, sprint: 1.03, scale: 1, price: 2500000}
@@ -816,7 +1206,13 @@ mounts:
     rarity: epic
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Живой порыв ветра с резкой реакцией и облачными украшениями."
+      - "Живой порыв ветра"
+      - "с мгновенной реакцией"
+      - "и облачными украшениями."
+    motion:
+      acceleration-time: 350ms
+      deceleration-time: 250ms
+      turn-time: 120ms
     levels:
       - {speed: 0.52, handling: 0.9, sprint: 1, price: 500000}
       - {speed: 0.85, handling: 1, sprint: 1.03, price: 2500000}
@@ -843,7 +1239,9 @@ mounts:
     rarity: epic
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Ночной хищник с широким силуэтом и дорогим звёздным следом."
+      - "Ночной хищник"
+      - "с широким силуэтом"
+      - "и дорогим звёздным следом."
     abilities:
       upgrades: [night-vision]
     levels:
@@ -872,7 +1270,8 @@ mounts:
     rarity: legendary
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Огромный престижный корабль Нижнего мира."
+      - "Огромный престижный корабль"
+      - "Нижнего мира."
     abilities:
       upgrades: [fire-resistance]
     levels:
@@ -901,7 +1300,8 @@ mounts:
     rarity: legendary
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Дружелюбный флагман воздушной коллекции."
+      - "Дружелюбный флагман"
+      - "воздушной коллекции."
     abilities:
       upgrades: [fire-resistance]
     levels:
@@ -961,7 +1361,8 @@ mounts:
     rarity: uncommon
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Милый подводный спутник с редкими расцветками."
+      - "Милый подводный спутник"
+      - "с редкими расцветками."
     abilities:
       upgrades: [water-breathing, night-vision]
     levels:
@@ -996,7 +1397,9 @@ mounts:
     rarity: uncommon
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Мягкий подводный транспорт для тихих экспедиций и тёмных глубин."
+      - "Мягкий подводный транспорт"
+      - "для тихих экспедиций"
+      - "и тёмных глубин."
     abilities:
       upgrades: [water-breathing, night-vision]
     levels:
@@ -1025,7 +1428,8 @@ mounts:
     rarity: rare
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Редкий светящийся проводник, оставляющий заметный океанический след."
+      - "Редкий светящийся проводник"
+      - "с заметным океаническим следом."
     abilities:
       upgrades: [water-breathing, night-vision]
     levels:
@@ -1054,7 +1458,8 @@ mounts:
     rarity: epic
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Бронированный властелин глубин с дорогой эпической отделкой."
+      - "Бронированный властелин глубин"
+      - "с дорогой эпической отделкой."
     abilities:
       upgrades: [water-breathing, night-vision]
     levels:
@@ -1083,7 +1488,9 @@ mounts:
     rarity: rare
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Надёжная морская путешественница с плавным разгоном и сильным финалом."
+      - "Надёжная морская путешественница"
+      - "с плавным разгоном"
+      - "и сильным финалом."
     abilities:
       upgrades: [water-breathing, night-vision]
     levels:

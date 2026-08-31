@@ -232,6 +232,9 @@ tasks {
     test {
         useJUnitPlatform()
         systemProperty("arc.test.unit", "true")
+        // MockK/ByteBuddy must self-attach inside the Java 25 test worker. Without
+        // these test-only flags it can wait forever for an external attach helper.
+        jvmArgs("-Djdk.attach.allowAttachSelf=true", "-XX:+EnableDynamicAgentLoading")
     }
 
     // Never let the plain archive race with or overwrite the deployable

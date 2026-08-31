@@ -7,6 +7,7 @@ import org.bukkit.Sound
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
+import org.bukkit.event.inventory.ClickType
 import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.event.inventory.InventoryDragEvent
 import org.bukkit.inventory.Inventory
@@ -17,9 +18,7 @@ import org.bukkit.plugin.java.JavaPlugin
 import ru.arc.core.Tasks
 import ru.arc.util.Logging.error
 import ru.arc.util.TextUtil
-import java.time.Duration
 import kotlin.math.ceil
-import kotlin.math.roundToInt
 
 private enum class MountScreen { LIST, DETAIL, PROGRESSION, SKINS, CONFIRM }
 
@@ -54,6 +53,7 @@ private class MountMenuHolder(
     val screen: MountScreen,
     val mountId: String? = null,
     val page: Int = 0,
+    val pageCount: Int = 1,
     val filter: MountFilter = MountFilter.ALL,
     val ownedOnly: Boolean = false,
     val mountsBySlot: Map<Int, String> = emptyMap(),
@@ -61,7 +61,9 @@ private class MountMenuHolder(
     val abilitiesBySlot: Map<Int, String> = emptyMap(),
     val speedPercentagesBySlot: Map<Int, Int> = emptyMap(),
     val stepHeightsBySlot: Map<Int, Int> = emptyMap(),
+    val sizeOptionsBySlot: Map<Int, String> = emptyMap(),
     val confirmAction: ConfirmAction? = null,
+    var confirmEnabled: Boolean = false,
 ) : InventoryHolder {
     lateinit var backingInventory: Inventory
     override fun getInventory(): Inventory = backingInventory
@@ -78,6 +80,7 @@ class MountGuiController(
     private val quickSummons: MountQuickSummonController,
 ) : Listener {
     @Volatile private var active = false
+    private val items = MountGuiItems(configProvider, quickSummons)
 
     fun start() {
         active = true
@@ -87,7 +90,7 @@ class MountGuiController(
     fun shutdown() {
         active = false
         plugin.server.onlinePlayers
-            .filter { it.openInventory.topInventory.holder is MountMenuHolder }
+            .filter { player -> runCatching { player.openInventory.topInventory.holder is MountMenuHolder }.getOrDefault(false) }
             .forEach(Player::closeInventory)
         org.bukkit.event.HandlerList.unregisterAll(this)
     }
@@ -100,6 +103,7 @@ class MountGuiController(
         filter: MountFilter,
         ownedOnly: Boolean,
     ) {
+        val config = configProvider()
         val catalog = catalogProvider()
         val favoriteMountId = summons.favoriteMountId(player.uniqueId)
         val profiles = catalog.all.associateWith { mount -> ownership.profile(subject(player), mount) }
@@ -112,28 +116,91 @@ class MountGuiController(
         val page = requestedPage.coerceIn(0, pageCount - 1)
         val pageMounts = visible.drop(page * LIST_CONTENT_SLOTS.size).take(LIST_CONTENT_SLOTS.size)
         val slots = LIST_CONTENT_SLOTS.zip(pageMounts.map(MountDefinition::id)).toMap()
-        val holder = MountMenuHolder(MountScreen.LIST, page = page, filter = filter, ownedOnly = ownedOnly, mountsBySlot = slots)
-        val inventory = Bukkit.createInventory(holder, LIST_SIZE, component(configProvider().listTitle))
+        val holder =
+            MountMenuHolder(
+                MountScreen.LIST,
+                page = page,
+                pageCount = pageCount,
+                filter = filter,
+                ownedOnly = ownedOnly,
+                mountsBySlot = slots,
+            )
+        val inventory = Bukkit.createInventory(holder, LIST_SIZE, component(config.listTitle))
         holder.backingInventory = inventory
         fill(inventory)
         slots.forEach { (slot, mountId) ->
             val mount = catalog[mountId] ?: return@forEach
-            inventory.setItem(slot, mountIcon(mount, checkNotNull(profiles[mount]), favorite = mount.id == favoriteMountId))
+            inventory.setItem(slot, items.mountIcon(mount, checkNotNull(profiles[mount]), favorite = mount.id == favoriteMountId))
         }
-        if (page > 0) inventory.setItem(LIST_PREVIOUS_SLOT, styledItem(MountGuiItemRole.PREVIOUS, Material.ARROW, "<#92bed8>Предыдущая страница", listOf("<#969696>${page}/${pageCount}")))
-        if (page + 1 < pageCount) inventory.setItem(LIST_NEXT_SLOT, styledItem(MountGuiItemRole.NEXT, Material.ARROW, "<#92bed8>Следующая страница", listOf("<#969696>${page + 2}/${pageCount}")))
+        if (page > 0) {
+            inventory.setItem(
+                LIST_PREVIOUS_SLOT,
+                styledItem(
+                    MountGuiItemRole.PREVIOUS,
+                    Material.ARROW,
+                    config.guiText("list.previous-name", "<#92bed8>Предыдущая страница"),
+                    listOf(
+                        copy(
+                            "list.page",
+                            "<#8c8c8c>Страница: <#e6fff3><page>/<pages>",
+                            "page" to (page + 1).toString(),
+                            "pages" to pageCount.toString(),
+                        ),
+                        "",
+                        config.guiText("list.previous-footer", actionFooter(config.guiText("list.previous-action", "перейти назад"))),
+                    ),
+                ),
+            )
+        }
+        if (page + 1 < pageCount) {
+            inventory.setItem(
+                LIST_NEXT_SLOT,
+                styledItem(
+                    MountGuiItemRole.NEXT,
+                    Material.ARROW,
+                    config.guiText("list.next-name", "<#92bed8>Следующая страница"),
+                    listOf(
+                        copy(
+                            "list.page",
+                            "<#8c8c8c>Страница: <#e6fff3><page>/<pages>",
+                            "page" to (page + 1).toString(),
+                            "pages" to pageCount.toString(),
+                        ),
+                        "",
+                        config.guiText("list.next-footer", actionFooter(config.guiText("list.next-action", "перейти вперёд"))),
+                    ),
+                ),
+            )
+        }
         inventory.setItem(
             LIST_FILTER_SLOT,
             styledItem(
                 filter.styleRole,
                 filter.icon,
-                "<#92bed8>Каталог — <white>${filter.title}",
-                listOf(
-                    "<#e6fff3>ЛКМ <#8c8c8c>сменить категорию",
-                    "<#e6fff3>ПКМ <#8c8c8c>${if (ownedOnly) "показать всю коллекцию" else "оставить только полученных"}",
-                    "",
-                    "<#969696>Показано <white>${visible.size}<#969696> из <white>${catalog.all.size}",
-                ),
+                config.guiText("list.filter-name", "<#92bed8>Фильтр коллекции"),
+                copyLines(
+                    "list.filter-stats",
+                    listOf(
+                        "<#8c8c8c>Категория: <#e6fff3><category>",
+                        "<#8c8c8c>Показано: <#e6fff3><shown>/<total>",
+                    ),
+                    "category" to config.guiText("list.filter-category-${filter.name.lowercase()}", filter.title),
+                    "shown" to visible.size.toString(),
+                    "total" to catalog.all.size.toString(),
+                ) +
+                    listOf(
+                        "",
+                        copy(
+                            "list.filter-footer",
+                            "<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#e6fff3> — сменить <#8c8c8c>· <#92bed8>ПКМ<#e6fff3> — <owned-action>",
+                            "owned-action" to
+                                if (ownedOnly) {
+                                    config.guiText("list.filter-show-all", "показать все")
+                                } else {
+                                    config.guiText("list.filter-show-owned", "только полученные")
+                                },
+                        ),
+                    ),
                 glint = ownedOnly,
             ),
         )
@@ -142,25 +209,35 @@ class MountGuiController(
             styledItem(
                 MountGuiItemRole.INFO,
                 Material.BOOK,
-                "<#92bed8>Путеводитель по коллекции",
-                listOf(
-                    "<#e6fff3>ЛКМ <#8c8c8c>призвать полученного маунта",
-                    "<#e6fff3>ПКМ <#8c8c8c>открыть развитие и облики",
-                    "",
-                    "<#ffacd5>Shift + F <#8c8c8c>призвать любимого маунта",
-                    "<#ffacd5>Свисток <#8c8c8c>выдаётся в карточке маунта",
-                    "",
-                    "<#92bed8>Полёт",
-                    "<#8c8c8c>Space — вверх",
-                    "<#8c8c8c>Shift — вниз",
-                    "<#8c8c8c>Взгляд вниз скрывает маунта из кадра",
-                    "",
-                    "<#ffacd5>Двойной Shift <#8c8c8c>спешиться",
+                config.guiText("list.guide-name", "<#92bed8>Путеводитель по коллекции"),
+                config.guiLines(
+                    "list.guide-lore",
+                    listOf(
+                        "<#8c8c8c>ЛКМ — призвать полученного маунта",
+                        "<#8c8c8c>ПКМ — открыть развитие и облики",
+                        "",
+                        "<#8c8c8c>Shift + F — призвать любимого маунта",
+                        "<#8c8c8c>Свисток — получить в карточке маунта",
+                        "",
+                        "<#92bed8>Полёт",
+                        "<#8c8c8c>Space — вверх",
+                        "<#8c8c8c>Shift — вниз",
+                        "<#8c8c8c>Взгляд вниз скрывает маунта из кадра",
+                        "",
+                        "<#8c8c8c>Двойной Shift — спешиться",
+                    ),
                 ),
             ),
         )
-        inventory.setItem(LIST_BALANCE_SLOT, balanceItem(player))
-        inventory.setItem(LIST_BACK_SLOT, styledItem(MountGuiItemRole.BACK, Material.BLUE_STAINED_GLASS_PANE, "<#92bed8>Назад", listOf("<#8c8c8c>Вернуться в главное меню")))
+        inventory.setItem(
+            LIST_BACK_SLOT,
+            styledItem(
+                MountGuiItemRole.BACK,
+                Material.BLUE_STAINED_GLASS_PANE,
+                config.guiText("common.back-name", "<#92bed8>Назад"),
+                actionLore(listOf(config.guiText("list.back-description", "<#8c8c8c>Вернуться в главное меню.")), "вернуться"),
+            ),
+        )
         player.openInventory(inventory)
         click(player)
     }
@@ -175,17 +252,25 @@ class MountGuiController(
         holder.backingInventory = inventory
         fill(inventory)
         val favorite = summons.favoriteMountId(player.uniqueId) == mount.id
-        inventory.setItem(DETAIL_ICON_SLOT, mountIcon(mount, profile, detailed = true, favorite = favorite))
-        inventory.setItem(DETAIL_FAVORITE_SLOT, favoriteItem(profile, favorite))
-        inventory.setItem(DETAIL_UPGRADE_SLOT, upgradeItem(mount, profile))
-        inventory.setItem(DETAIL_SUMMON_SLOT, summonItem(profile, config.sessionDuration))
-        inventory.setItem(DETAIL_GLOW_SLOT, glowItem(mount, profile))
-        inventory.setItem(DETAIL_SKINS_SLOT, skinsItem(mount, profile))
-        inventory.setItem(DETAIL_WHISTLE_SLOT, whistleMenuItem(favorite))
+        inventory.setItem(DETAIL_ICON_SLOT, items.mountIcon(mount, profile, detailed = true, favorite = favorite))
+        inventory.setItem(DETAIL_FAVORITE_SLOT, items.favoriteItem(profile, favorite))
+        inventory.setItem(DETAIL_UPGRADE_SLOT, items.upgradeItem(mount, profile))
+        inventory.setItem(DETAIL_SUMMON_SLOT, items.summonItem(profile, config.sessionDuration))
+        inventory.setItem(DETAIL_GLOW_SLOT, items.glowItem(mount, profile))
+        inventory.setItem(DETAIL_SKINS_SLOT, items.skinsItem(mount, profile))
+        inventory.setItem(DETAIL_WHISTLE_SLOT, items.whistleMenuItem(player, summons.favoriteMountId(player.uniqueId)))
         abilitySlots.forEach { (slot, abilityId) ->
-            mount.ability(abilityId)?.let { inventory.setItem(slot, abilityItem(profile, it)) }
+            mount.ability(abilityId)?.let { inventory.setItem(slot, items.abilityItem(profile, it)) }
         }
-        inventory.setItem(DETAIL_BACK_SLOT, styledItem(MountGuiItemRole.BACK, Material.BLUE_STAINED_GLASS_PANE, "<aqua>Назад", listOf("<gray>К списку маунтов")))
+        inventory.setItem(
+            DETAIL_BACK_SLOT,
+            styledItem(
+                MountGuiItemRole.BACK,
+                Material.BLUE_STAINED_GLASS_PANE,
+                config.guiText("common.back-name", "<#92bed8>Назад"),
+                actionLore(listOf(config.guiText("detail.back-description", "<#8c8c8c>Вернуться к коллекции.")), "вернуться"),
+            ),
+        )
         player.openInventory(inventory)
         click(player)
     }
@@ -201,12 +286,17 @@ class MountGuiController(
             } else {
                 emptyMap()
             }
+        val sizeSlots =
+            mount.sizeOptions.takeIf { it.size > 1 }
+                ?.let { TUNING_SIZE_SLOTS.zip(it.map(MountSizeOptionDefinition::id)).toMap() }
+                .orEmpty()
         val holder =
             MountMenuHolder(
                 MountScreen.PROGRESSION,
                 mount.id,
                 speedPercentagesBySlot = speedSlots,
                 stepHeightsBySlot = stepSlots,
+                sizeOptionsBySlot = sizeSlots,
             )
         val inventory =
             Bukkit.createInventory(
@@ -216,34 +306,48 @@ class MountGuiController(
             )
         holder.backingInventory = inventory
         fill(inventory)
-        inventory.setItem(TUNING_INFO_SLOT, progressionInfoItem(mount, profile, tuning))
-        inventory.setItem(TUNING_LEVEL_SLOT, levelUpgradeItem(mount, profile))
+        inventory.setItem(TUNING_INFO_SLOT, items.progressionInfoItem(mount, profile, tuning))
+        inventory.setItem(TUNING_LEVEL_SLOT, items.levelUpgradeItem(mount, profile))
         speedSlots.forEach { (slot, percentage) ->
-            inventory.setItem(slot, speedTuningItem(mount, profile, tuning, percentage))
+            inventory.setItem(slot, items.speedTuningItem(mount, profile, tuning, percentage))
         }
         if (mount.movement == MountMovement.WALKING) {
             stepSlots.forEach { (slot, hundredths) ->
-                inventory.setItem(slot, stepHeightTuningItem(profile, tuning, hundredths))
+                inventory.setItem(slot, items.stepHeightTuningItem(profile, tuning, hundredths))
             }
         } else {
             inventory.setItem(
                 TUNING_NOT_APPLICABLE_SLOT,
                 item(
                     if (mount.movement == MountMovement.FLYING) Material.FEATHER else Material.HEART_OF_THE_SEA,
-                    "<gray>Высота шага не используется",
-                    listOf("<gray>Эта настройка доступна только пешим маунтам."),
+                    config.guiText("progression.step-not-applicable-name", "<#969696>Подъём не используется"),
+                    config.guiLines(
+                        "progression.step-not-applicable-lore",
+                        listOf("<#8c8c8c>Эта настройка доступна только пешим маунтам."),
+                    ),
                 ),
             )
         }
+        sizeSlots.forEach { (slot, sizeId) ->
+            mount.sizeOptions.firstOrNull { it.id == sizeId }?.let { option ->
+                inventory.setItem(slot, items.sizeTuningItem(mount, profile, option))
+            }
+        }
         inventory.setItem(
             TUNING_BACK_SLOT,
-            styledItem(MountGuiItemRole.BACK, Material.BLUE_STAINED_GLASS_PANE, "<aqua>Назад", listOf("<gray>К маунту")),
+            styledItem(
+                MountGuiItemRole.BACK,
+                Material.BLUE_STAINED_GLASS_PANE,
+                config.guiText("common.back-name", "<#92bed8>Назад"),
+                actionLore(listOf(config.guiText("progression.back-description", "<#8c8c8c>Вернуться к маунту.")), "вернуться"),
+            ),
         )
         player.openInventory(inventory)
         click(player)
     }
 
     private fun openSkins(player: Player, mount: MountDefinition) {
+        val config = configProvider()
         val profile = ownership.profile(subject(player), mount)
         val allSkinIds = listOf(MountDefinition.DEFAULT_SKIN_ID) + mount.skins.map(MountSkinDefinition::id)
         val slots = SKIN_CONTENT_SLOTS.zip(allSkinIds).toMap()
@@ -252,25 +356,74 @@ class MountGuiController(
             Bukkit.createInventory(
                 holder,
                 SKINS_SIZE,
-                component(configProvider().skinsTitle.replace("<mount>", escape(mount.displayName))),
+                component(config.skinsTitle.replace("<mount>", escape(mount.displayName))),
             )
         holder.backingInventory = inventory
         fill(inventory)
-        slots.forEach { (slot, skinId) -> inventory.setItem(slot, skinItem(mount, profile, skinId)) }
-        inventory.setItem(SKINS_BACK_SLOT, styledItem(MountGuiItemRole.BACK, Material.BLUE_STAINED_GLASS_PANE, "<aqua>Назад", listOf("<gray>К развитию маунта")))
+        slots.forEach { (slot, skinId) -> inventory.setItem(slot, items.skinItem(mount, profile, skinId)) }
+        inventory.setItem(
+            SKINS_BACK_SLOT,
+            styledItem(
+                MountGuiItemRole.BACK,
+                Material.BLUE_STAINED_GLASS_PANE,
+                config.guiText("common.back-name", "<#92bed8>Назад"),
+                actionLore(listOf(config.guiText("skins.back-description", "<#8c8c8c>Вернуться к маунту.")), "вернуться"),
+            ),
+        )
         player.openInventory(inventory)
         click(player)
     }
 
     private fun openConfirm(player: Player, mount: MountDefinition, action: ConfirmAction) {
+        val config = configProvider()
         val holder = MountMenuHolder(MountScreen.CONFIRM, mount.id, confirmAction = action)
-        val inventory = Bukkit.createInventory(holder, CONFIRM_SIZE, component("<dark_gray><bold>Подтверждение покупки"))
+        val inventory = Bukkit.createInventory(holder, CONFIRM_SIZE, component(config.confirmTitle))
         holder.backingInventory = inventory
         fill(inventory, Material.BLACK_STAINED_GLASS_PANE)
         val (name, price, description) = confirmationDetails(mount, action)
-        inventory.setItem(CONFIRM_INFO_SLOT, item(Material.SUNFLOWER, name, description + listOf("", "<gray>Цена: <yellow>${TextUtil.formatAmount(price)}<white>💰")))
-        inventory.setItem(CONFIRM_CANCEL_SLOT, styledItem(MountGuiItemRole.CANCEL, Material.RED_CONCRETE, "<red>Отмена", listOf("<gray>Вернуться без покупки")))
-        inventory.setItem(CONFIRM_ACCEPT_SLOT, styledItem(MountGuiItemRole.CONFIRM, Material.LIME_CONCRETE, "<green>Подтвердить", listOf("<gray>С баланса будет списано", "<yellow>${TextUtil.formatAmount(price)}<white>💰"), glint = true))
+        val balance = wallet.balanceMinor(player.uniqueId)
+        val priceMinor = price.toExactMinor()
+        holder.confirmEnabled = balance != null && balance >= priceMinor
+        val economyLore =
+            buildList {
+                addAll(description)
+                add("")
+                add(moneyLine("common.price", "price", priceMinor, "Цена"))
+                if (balance == null) {
+                    add(config.guiText("confirm.economy-unavailable-line", "<#c42323>Баланс сейчас недоступен"))
+                } else {
+                    add(moneyLine("common.balance", "balance", balance, "Баланс"))
+                    if (balance >= priceMinor) {
+                        add(moneyLine("common.remaining", "remaining", balance - priceMinor, "Останется"))
+                    } else {
+                        add(moneyLine("common.missing", "missing", priceMinor - balance, "Не хватает", "<#c42323>"))
+                    }
+                }
+            }
+        inventory.setItem(CONFIRM_INFO_SLOT, item(Material.SUNFLOWER, name, economyLore))
+        inventory.setItem(
+            CONFIRM_CANCEL_SLOT,
+            styledItem(
+                MountGuiItemRole.CANCEL,
+                Material.RED_CONCRETE,
+                config.guiText("confirm.cancel-name", "<#c42323>Отменить"),
+                actionLore(listOf(config.guiText("confirm.cancel-description", "<#8c8c8c>Вернуться без покупки.")), "отменить"),
+            ),
+        )
+        inventory.setItem(
+            CONFIRM_ACCEPT_SLOT,
+            when {
+                balance == null -> styledItem(MountGuiItemRole.CONFIRM, Material.GRAY_CONCRETE, config.guiText("confirm.unavailable-name", "<#c42323>Экономика недоступна"), emptyList())
+                balance < priceMinor -> styledItem(MountGuiItemRole.CONFIRM, Material.GRAY_CONCRETE, config.guiText("confirm.insufficient-name", "<#c42323>Недостаточно средств"), emptyList())
+                else ->
+                    styledItem(
+                        MountGuiItemRole.CONFIRM,
+                        Material.ORANGE_CONCRETE,
+                        config.guiText("confirm.accept-name", "<#ff9f0f>Подтвердить покупку"),
+                        actionLore(listOf(moneyLine("common.debit", "price", priceMinor, "Будет списано")), "купить", "<#ff9f0f>"),
+                    )
+            },
+        )
         player.openInventory(inventory)
         click(player)
     }
@@ -281,6 +434,11 @@ class MountGuiController(
         event.isCancelled = true
         val player = event.whoClicked as? Player ?: return
         if (event.clickedInventory !== event.view.topInventory) return
+        when (event.click) {
+            ClickType.LEFT -> Unit
+            ClickType.RIGHT -> if (holder.screen != MountScreen.LIST) return
+            else -> return
+        }
         when (holder.screen) {
             MountScreen.LIST -> handleListClick(player, holder, event)
             MountScreen.DETAIL -> handleDetailClick(player, holder, event.rawSlot)
@@ -297,21 +455,30 @@ class MountGuiController(
 
     private fun handleListClick(player: Player, holder: MountMenuHolder, event: InventoryClickEvent) {
         when (event.rawSlot) {
-            LIST_BACK_SLOT -> {
+            LIST_BACK_SLOT -> if (event.click == ClickType.LEFT) {
                 player.closeInventory()
                 configProvider().backCommand.takeIf(String::isNotBlank)?.let(player::performCommand)
                 click(player)
             }
-            LIST_PREVIOUS_SLOT -> openListPage(player, holder.page - 1, holder.filter, holder.ownedOnly)
-            LIST_NEXT_SLOT -> openListPage(player, holder.page + 1, holder.filter, holder.ownedOnly)
-            LIST_FILTER_SLOT -> {
-                if (event.isRightClick) openListPage(player, 0, holder.filter, !holder.ownedOnly)
-                else openListPage(player, 0, holder.filter.next(), holder.ownedOnly)
+            LIST_PREVIOUS_SLOT -> if (event.click == ClickType.LEFT && holder.page > 0) {
+                openListPage(player, holder.page - 1, holder.filter, holder.ownedOnly)
+            }
+            LIST_NEXT_SLOT -> if (event.click == ClickType.LEFT && holder.page + 1 < holder.pageCount) {
+                openListPage(player, holder.page + 1, holder.filter, holder.ownedOnly)
+            }
+            LIST_FILTER_SLOT -> when (event.click) {
+                ClickType.LEFT -> openListPage(player, 0, holder.filter.next(), holder.ownedOnly)
+                ClickType.RIGHT -> openListPage(player, 0, holder.filter, !holder.ownedOnly)
+                else -> Unit
             }
             else -> {
                 val mount = holder.mountsBySlot[event.rawSlot]?.let(catalogProvider()::get) ?: return
                 val profile = ownership.profile(subject(player), mount)
-                if (profile.unlocked && event.isLeftClick) summon(player, mount) else openDetail(player, mount.id)
+                when {
+                    profile.unlocked && event.click == ClickType.LEFT -> summon(player, mount)
+                    profile.unlocked && event.click == ClickType.RIGHT -> openDetail(player, mount.id)
+                    !profile.unlocked && mount.price(1) != null && event.click == ClickType.LEFT -> openProgression(player, mount)
+                }
             }
         }
     }
@@ -322,29 +489,36 @@ class MountGuiController(
         holder.abilitiesBySlot[slot]?.let { abilityId ->
             val ability = mount.ability(abilityId) ?: return
             when {
-                !profile.unlocked || profile.ownsAbility(abilityId) -> bass(player)
-                !configProvider().purchasesEnabled -> purchasesDisabled(player)
+                !profile.unlocked || profile.ownsAbility(abilityId) -> Unit
+                !configProvider().purchasesEnabled -> Unit
                 else -> openConfirm(player, mount, ConfirmAction.Ability(abilityId))
             }
             return
         }
         when (slot) {
             DETAIL_BACK_SLOT -> openList(player)
-            DETAIL_FAVORITE_SLOT -> selectFavorite(player, mount)
-            DETAIL_SUMMON_SLOT -> if (profile.unlocked) summon(player, mount) else bass(player)
-            DETAIL_SKINS_SLOT -> if (profile.unlocked) openSkins(player, mount) else bass(player)
-            DETAIL_WHISTLE_SLOT -> quickSummons.giveWhistle(player)
+            DETAIL_FAVORITE_SLOT -> if (profile.unlocked && summons.favoriteMountId(player.uniqueId) != mount.id) selectFavorite(player, mount)
+            DETAIL_SUMMON_SLOT -> if (profile.unlocked) summon(player, mount)
+            DETAIL_SKINS_SLOT -> if (profile.unlocked) openSkins(player, mount)
+            DETAIL_WHISTLE_SLOT -> {
+                val hasFavorite = summons.favoriteMountId(player.uniqueId) != null
+                val hasWhistle = player.inventory.contents.any(quickSummons::isWhistle)
+                if (hasFavorite && !hasWhistle && configProvider().quickSummonWhistle && player.inventory.firstEmpty() >= 0) {
+                    quickSummons.giveWhistle(player)
+                    openDetail(player, mount.id)
+                }
+            }
             DETAIL_UPGRADE_SLOT -> {
-                openProgression(player, mount)
+                if (profile.unlocked || mount.price(1) != null) openProgression(player, mount)
             }
             DETAIL_GLOW_SLOT -> {
                 when {
-                    !profile.unlocked -> bass(player)
+                    !profile.unlocked -> Unit
                     profile.glowOwned -> purchases.setGlowEnabled(subject(player), mount, !profile.glowEnabled) {
                         handlePurchaseResult(player, mount, it, purchase = false)
                     }
-                    mount.glowPrice == null -> bass(player)
-                    !configProvider().purchasesEnabled -> purchasesDisabled(player)
+                    mount.glowPrice == null -> Unit
+                    !configProvider().purchasesEnabled -> Unit
                     else -> openConfirm(player, mount, ConfirmAction.Glow)
                 }
             }
@@ -360,13 +534,14 @@ class MountGuiController(
             TUNING_LEVEL_SLOT -> {
                 val target = profile.level + 1
                 when {
-                    target > mount.maxLevel || mount.price(target) == null -> bass(player)
-                    !configProvider().purchasesEnabled -> purchasesDisabled(player)
+                    target > mount.maxLevel || mount.price(target) == null -> Unit
+                    !configProvider().purchasesEnabled -> Unit
                     else -> openConfirm(player, mount, ConfirmAction.Level(target))
                 }
             }
             else -> {
                 holder.speedPercentagesBySlot[slot]?.let { percentage ->
+                    if (!profile.unlocked || tuning.speedPercentage(profile.selectedSpeedPercentage) == percentage) return
                     purchases.setSpeedTuning(subject(player), mount, tuning, percentage) {
                         handlePurchaseResult(player, mount, it, purchase = false, reopen = MountScreen.PROGRESSION)
                     }
@@ -374,10 +549,18 @@ class MountGuiController(
                 }
                 holder.stepHeightsBySlot[slot]?.let { hundredths ->
                     if (!profile.unlocked || hundredths !in tuning.availableStepHeightsHundredths(profile.level)) {
-                        bass(player)
                         return
                     }
+                    if (tuning.stepHeightHundredths(profile.level, profile.selectedStepHeightHundredths) == hundredths) return
                     purchases.setStepHeightTuning(subject(player), mount, tuning, hundredths) {
+                        handlePurchaseResult(player, mount, it, purchase = false, reopen = MountScreen.PROGRESSION)
+                    }
+                    return
+                }
+                holder.sizeOptionsBySlot[slot]?.let { sizeId ->
+                    val option = mount.sizeOptions.firstOrNull { it.id == sizeId } ?: return
+                    if (!profile.unlocked || option.minimumLevel > profile.level || mount.effectiveSizeOption(profile.selectedSizeId, profile.level)?.id == sizeId) return
+                    purchases.setSizeTuning(subject(player), mount, sizeId) {
                         handlePurchaseResult(player, mount, it, purchase = false, reopen = MountScreen.PROGRESSION)
                     }
                 }
@@ -390,14 +573,14 @@ class MountGuiController(
         val skinId = holder.skinsBySlot[slot] ?: if (slot == SKINS_BACK_SLOT) return openDetail(player, mount.id) else return
         val profile = ownership.profile(subject(player), mount)
         if (profile.ownsSkin(skinId)) {
+            if (profile.activeSkinId == skinId) return
             purchases.setActiveSkin(subject(player), mount, skinId) {
                 handlePurchaseResult(player, mount, it, purchase = false, reopen = MountScreen.SKINS)
             }
             return
         }
         val skin = mount.skin(skinId) ?: return
-        if (skin.price == null) return bass(player)
-        if (!configProvider().purchasesEnabled) return purchasesDisabled(player)
+        if (skin.price == null || !configProvider().purchasesEnabled) return
         openConfirm(player, mount, ConfirmAction.Skin(skinId))
     }
 
@@ -411,6 +594,17 @@ class MountGuiController(
                 else -> openDetail(player, mount.id)
             }
             CONFIRM_ACCEPT_SLOT -> {
+                if (!holder.confirmEnabled) return
+                holder.confirmEnabled = false
+                holder.backingInventory.setItem(
+                    CONFIRM_ACCEPT_SLOT,
+                    styledItem(
+                        MountGuiItemRole.CONFIRM,
+                        Material.GRAY_CONCRETE,
+                        configProvider().guiText("confirm.loading-name", "<#969696>Покупка выполняется…"),
+                        emptyList(),
+                    ),
+                )
                 val callback: (MountPurchaseResult) -> Unit = { result ->
                     handlePurchaseResult(
                         player,
@@ -484,7 +678,21 @@ class MountGuiController(
         if (!active || !player.isOnline) return
         when (result) {
             MountPurchaseResult.Success -> {
-                send(player, if (purchase) "purchase-success" else "setting-saved", if (purchase) "<green>Покупка сохранена!" else "<green>Настройка сохранена.")
+                val update = summons.refreshActive(player, mount)
+                val (path, fallback) =
+                    if (purchase && update == MountSessionUpdateResult.UNSAFE_APPEARANCE) {
+                        "purchase-success-next-summon" to
+                            "<yellow>Покупка сохранена; новый облик применится при следующем безопасном призыве."
+                    } else if (purchase) {
+                        "purchase-success" to "<green>Покупка сохранена!"
+                    } else if (update == MountSessionUpdateResult.UNSAFE_APPEARANCE) {
+                        "setting-next-summon" to "<yellow>Настройка сохранена и применится при следующем призыве."
+                    } else if (update == MountSessionUpdateResult.APPLIED) {
+                        "setting-applied" to "<green>Настройка сохранена и применена к активному маунту."
+                    } else {
+                        "setting-saved" to "<green>Настройка сохранена."
+                    }
+                send(player, path, fallback)
                 click(player)
                 reopen(player, mount, reopen)
             }
@@ -521,371 +729,78 @@ class MountGuiController(
         }
     }
 
-    private fun mountIcon(
-        mount: MountDefinition,
-        profile: MountProfile,
-        detailed: Boolean = false,
-        favorite: Boolean = false,
-    ): ItemStack {
-        val lore = buildList {
-            if (favorite) add("<gold>★ Любимый маунт")
-            add(if (profile.unlocked) "<green>✔ Получен" else "<red>✘ Пока не получен")
-            add("${mount.rarity.color}${mount.rarity.displayName}")
-            if (detailed && mount.description.isNotEmpty()) {
-                add("")
-                mount.description.forEach { add("<#e6fff3>${escape(it)}") }
-            }
-            add("")
-            add("<#92bed8>Характер")
-            add("<#8c8c8c>Тип  ${movementColor(mount.movement)}${mount.movement.displayName}")
-            mount.abilities.displayNames.forEach { ability ->
-                add("<#8c8c8c>Особенность  <#ffacd5>${escape(ability)}")
-            }
-            if (profile.unlocked) {
-                val tuning = configProvider().tuning
-                val selectedSpeed = tuning.speedPercentage(profile.selectedSpeedPercentage)
-                add("")
-                add("<#92bed8>Ваш профиль")
-                add("<#8c8c8c>Уровень  <white>${profile.level}<#969696>/${mount.maxLevel}")
-                add("<#8c8c8c>Скорость  <white>${formatSpeed(tuning.speed(mount.speed(profile.level), profile.selectedSpeedPercentage))} <#969696>($selectedSpeed%)")
-                if (mount.movement == MountMovement.WALKING) {
-                    add("<#8c8c8c>Подъём  <white>${formatHeight(tuning.stepHeight(profile.level, profile.selectedStepHeightHundredths))} блока")
-                }
-                add("<#8c8c8c>Облик  <white>${escape(skinName(mount, profile.activeSkinId))}")
-            } else {
-                add("")
-                add("<#92bed8>Как получить")
-                add("<#e6fff3>${escape(mount.acquisition)}")
-            }
-            if (!detailed) {
-                add("")
-                if (profile.unlocked) {
-                    add("<#e6fff3>ЛКМ <#8c8c8c>призвать")
-                    add("<#92bed8>ПКМ <#8c8c8c>развитие и облики")
-                } else add("<#e6fff3>Нажмите <#8c8c8c>изучить маунта")
-            }
-        }
-        return item(
-            Material.matchMaterial(mount.iconMaterial) ?: Material.PAPER,
-            if (profile.unlocked) "<#ffacd5>${escape(mount.displayName)}" else "<#969696>${escape(mount.displayName)}",
-            lore,
-            glint = profile.unlocked,
-        )
-    }
-
-    private fun favoriteItem(profile: MountProfile, selected: Boolean): ItemStack =
-        when {
-            !profile.unlocked ->
-                styledItem(
-                    MountGuiItemRole.FAVORITE,
-                    Material.GRAY_DYE,
-                    "<gray>Любимый маунт недоступен",
-                    listOf("<gray>Сначала получите этого маунта."),
-                )
-            selected ->
-                styledItem(
-                    MountGuiItemRole.FAVORITE,
-                    Material.NETHER_STAR,
-                    "<gold>Любимый маунт",
-                    listOf(
-                        "<green>Выбран для быстрого вызова",
-                        "",
-                        "<gray>Shift + F или свисток — призвать",
-                    ),
-                    glint = true,
-                )
-            else ->
-                styledItem(
-                    MountGuiItemRole.FAVORITE,
-                    Material.NETHER_STAR,
-                    "<gold>Выбрать любимым",
-                    listOf(
-                        "<gray>Сделать этого маунта целью",
-                        "<gray>для Shift + F и свистка.",
-                        "",
-                        "<green>Нажмите, чтобы выбрать",
-                    ),
-                )
-        }
-
-    private fun whistleMenuItem(favoriteSelected: Boolean): ItemStack =
-        styledItem(
-            MountGuiItemRole.WHISTLE,
-            Material.GOAT_HORN,
-            "<#ffacd5>Получить свисток",
-            buildList {
-                add("<#8c8c8c>ПКМ свистком призывает")
-                add("<#8c8c8c>текущего любимого маунта.")
-                add("")
-                add(if (favoriteSelected) "<#e6fff3>Нажмите, чтобы получить" else "<yellow>Сначала выберите любимого маунта")
-            },
-            glint = favoriteSelected,
-        )
-
-    private fun upgradeItem(mount: MountDefinition, profile: MountProfile): ItemStack {
-        val tuning = configProvider().tuning
-        return item(
-            Material.COMPARATOR,
-            "<gold>Развитие и тюнинг",
-            buildList {
-                add("<gray>Уровень: <yellow>${profile.level}<gray>/${mount.maxLevel}")
-                if (profile.unlocked) {
-                    add("<gray>Скорость: <white>${tuning.speedPercentage(profile.selectedSpeedPercentage)}% <dark_gray>от доступной")
-                    if (mount.movement == MountMovement.WALKING) {
-                        add("<gray>Высота шага: <white>${formatHeight(tuning.stepHeight(profile.level, profile.selectedStepHeightHundredths))} блока")
-                    }
-                }
-                add("")
-                add("<gray>Повышайте уровень и настраивайте")
-                add("<gray>характеристики под себя.")
-                add("")
-                add("<green>Нажмите, чтобы открыть")
-            },
-            glint = profile.level >= mount.maxLevel,
-        )
-    }
-
-    private fun levelUpgradeItem(mount: MountDefinition, profile: MountProfile): ItemStack {
-        val next = profile.level + 1
-        return when {
-            profile.level >= mount.maxLevel -> item(Material.NETHER_STAR, "<gold><bold>Максимальный уровень", listOf("<gray>Все пределы характеристик открыты.", "<gray>Текущие значения можно менять ниже."), glint = true)
-            mount.price(next) == null -> item(Material.BARRIER, if (profile.unlocked) "<red>Особое улучшение" else "<red>Особый маунт", listOf("<gray>Этот уровень получается другим способом.", "<white>${escape(mount.acquisition)}"))
-            else -> {
-                val level = mount.level(next)
-                val tuning = configProvider().tuning
-                val previousSpeed = if (profile.level > 0) mount.speed(profile.level) else null
-                val delta = previousSpeed?.let { (((level.speed / it) - 1.0) * 100.0).roundToInt() }
-                val final = next == mount.maxLevel
-                item(
-                    if (final) Material.NETHER_STAR else Material.EMERALD,
-                    if (final) "<gold><bold>ФИНАЛЬНЫЙ РЫВОК" else if (profile.unlocked) "<green>Улучшить до уровня $next" else "<green>Получить маунта",
-                    buildList {
-                        if (previousSpeed != null) add("<gray>Скорость: <white>${formatSpeed(previousSpeed)} <dark_gray>→ <${if (final) "gold" else "green"}>${formatSpeed(level.speed)}")
-                        else add("<gray>Скорость: <white>${formatSpeed(level.speed)}")
-                        if (delta != null) add("<gray>Прирост: <${if (final) "gold" else "green"}>+$delta%")
-                        add("<gray>Управляемость: <white>×${formatMultiplier(level.handlingMultiplier)}")
-                        if (level.sprintMultiplier > 1.0) add("<gray>Форсаж: <white>×${formatMultiplier(level.sprintMultiplier)}")
-                        if (mount.movement == MountMovement.WALKING) {
-                            val previousHeight = if (profile.level > 0) tuning.maximumStepHeightHundredths(profile.level) else null
-                            val nextHeight = tuning.maximumStepHeightHundredths(next)
-                            if (previousHeight == null) {
-                                add("<gray>Макс. подъём: <white>${formatHeight(nextHeight / 100.0)} блока")
-                            } else if (previousHeight != nextHeight) {
-                                add("<gray>Макс. подъём: <white>${formatHeight(previousHeight / 100.0)} <dark_gray>→ <green>${formatHeight(nextHeight / 100.0)} блока")
-                            }
-                        }
-                        add("")
-                        add("<gray>Цена: <yellow>${TextUtil.formatAmount(checkNotNull(level.price))}<white>💰")
-                        if (final) add("<gold>Дорогая престижная цель — и реально быстрый маунт.")
-                        add("")
-                        add(if (configProvider().purchasesEnabled) "<green>Нажмите для подтверждения" else "<yellow>Покупки доступны на спавне")
-                    },
-                    glint = final,
-                )
-            }
-        }
-    }
-
-    private fun progressionInfoItem(
-        mount: MountDefinition,
-        profile: MountProfile,
-        tuning: MountTuningDefinition,
-    ): ItemStack =
-        item(
-            Material.RECOVERY_COMPASS,
-            "<gold>Профиль движения",
-            buildList {
-                add("<gray>Уровень открывает максимум характеристик.")
-                add("<gray>Вы сами выбираете значение внутри предела.")
-                add("")
-                if (!profile.unlocked) {
-                    add("<red>Сначала получите маунта ниже.")
-                } else {
-                    val levelSpeed = mount.speed(profile.level)
-                    add("<gray>Скорость: <white>${formatSpeed(tuning.speed(levelSpeed, profile.selectedSpeedPercentage))} <dark_gray>/ ${formatSpeed(levelSpeed)}")
-                    if (mount.movement == MountMovement.WALKING) {
-                        add("<gray>Высота шага: <white>${formatHeight(tuning.stepHeight(profile.level, profile.selectedStepHeightHundredths))} <dark_gray>/ ${formatHeight(tuning.maximumStepHeightHundredths(profile.level) / 100.0)} блока")
-                    }
-                    add("")
-                    add("<dark_gray>Тюнинг бесплатный и сохраняется между серверами.")
-                }
-            },
-        )
-
-    private fun speedTuningItem(
-        mount: MountDefinition,
-        profile: MountProfile,
-        tuning: MountTuningDefinition,
-        percentage: Int,
-    ): ItemStack {
-        val selected = profile.unlocked && tuning.speedPercentage(profile.selectedSpeedPercentage) == percentage
-        val material =
-            if (!profile.unlocked) Material.GRAY_DYE
-            else SPEED_TUNING_MATERIALS[tuning.speedPercentages.indexOf(percentage).coerceAtLeast(0)]
-        return item(
-            material,
-            if (selected) "<green>Скорость: $percentage%" else "<aqua>Скорость: $percentage%",
-            buildList {
-                if (profile.unlocked) {
-                    add("<gray>Фактически: <white>${formatSpeed(mount.speed(profile.level) * percentage / 100.0)}")
-                    add("<gray>От максимума уровня: <white>$percentage%")
-                    add("")
-                    add(if (selected) "<green>Выбрано" else "<green>Нажмите, чтобы выбрать")
-                } else {
-                    add("<red>Сначала получите маунта")
-                }
-            },
-            glint = selected,
-        )
-    }
-
-    private fun stepHeightTuningItem(
-        profile: MountProfile,
-        tuning: MountTuningDefinition,
-        hundredths: Int,
-    ): ItemStack {
-        val available = profile.unlocked && hundredths <= tuning.maximumStepHeightHundredths(profile.level)
-        val selected = available && tuning.stepHeightHundredths(profile.level, profile.selectedStepHeightHundredths) == hundredths
-        val requiredLevel =
-            tuning.walkingMaxStepHeightByLevelHundredths.indexOfFirst { it >= hundredths }
-                .takeIf { it >= 0 }
-                ?.plus(1)
-        val material =
-            if (!available) Material.BARRIER
-            else STEP_TUNING_MATERIALS[tuning.walkingStepHeightsHundredths.indexOf(hundredths).coerceAtLeast(0)]
-        return item(
-            material,
-            if (selected) "<green>Подъём: ${formatHeight(hundredths / 100.0)} блока" else "<yellow>Подъём: ${formatHeight(hundredths / 100.0)} блока",
-            buildList {
-                add("<gray>Маунт автоматически заходит")
-                add("<gray>на препятствия этой высоты.")
-                if (hundredths >= 300) {
-                    add("<yellow>Высокий подъём работает как карабканье")
-                    add("<yellow>и может быть неудобен под низким потолком.")
-                }
-                add("")
-                when {
-                    !profile.unlocked -> add("<red>Сначала получите маунта")
-                    !available -> add("<red>Откроется на уровне ${requiredLevel ?: "выше"}")
-                    selected -> add("<green>Выбрано")
-                    else -> add("<green>Нажмите, чтобы выбрать")
-                }
-            },
-            glint = selected,
-        )
-    }
-
-    private fun summonItem(profile: MountProfile, duration: Duration): ItemStack =
-        if (profile.unlocked) item(Material.SADDLE, "<gold>Призвать маунта", listOf("<gray>Максимальная сессия: <white>${formatDuration(duration)}", "<gray>Без движения маунт исчезнет через <white>${formatDuration(configProvider().idleTimeout)}", "", "<green>Нажмите, чтобы призвать"))
-        else item(Material.BARRIER, "<red>Маунт недоступен", listOf("<gray>Сначала получите первый уровень."))
-
-    private fun glowItem(mount: MountDefinition, profile: MountProfile): ItemStack =
-        when {
-            !profile.unlocked -> item(Material.GRAY_DYE, "<gray>Свечение недоступно", listOf("<gray>Сначала получите маунта."))
-            profile.glowOwned -> item(if (profile.glowEnabled) Material.GLOW_INK_SAC else Material.INK_SAC, if (profile.glowEnabled) "<red>Выключить свечение" else "<green>Включить свечение", listOf("<gray>Свечение куплено навсегда.", "", "<green>Нажмите для переключения"), glint = profile.glowEnabled)
-            mount.glowPrice != null -> item(Material.GLOW_INK_SAC, "<green>Купить свечение", listOf("<gray>Цена: <yellow>${TextUtil.formatAmount(mount.glowPrice)}<white>💰", "", if (configProvider().purchasesEnabled) "<green>Нажмите для подтверждения" else "<yellow>Покупки доступны на спавне"))
-            else -> item(Material.BARRIER, "<red>Свечение недоступно", listOf("<gray>Это украшение не продаётся."))
-        }
-
-    private fun skinsItem(mount: MountDefinition, profile: MountProfile): ItemStack =
-        if (!profile.unlocked) item(Material.GRAY_DYE, "<gray>Облики недоступны", listOf("<gray>Сначала получите маунта."))
-        else item(Material.LEATHER_HORSE_ARMOR, "<light_purple>Облики и украшения", listOf("<gray>Выбран: <white>${escape(skinName(mount, profile.activeSkinId))}", "<gray>Получено: <white>${profile.ownedSkinIds.size + 1}/${mount.skins.size + 1}", "", "<green>Нажмите, чтобы открыть"), glint = profile.activeSkinId != MountDefinition.DEFAULT_SKIN_ID)
-
-    private fun abilityItem(
-        profile: MountProfile,
-        ability: MountAbilityUpgradeDefinition,
-    ): ItemStack {
-        val owned = profile.ownsAbility(ability.id)
-        return item(
-            Material.matchMaterial(ability.iconMaterial) ?: Material.PAPER,
-            if (owned) "<aqua>${escape(ability.displayName)}" else "<green>${escape(ability.displayName)}",
-            buildList {
-                ability.description.forEach { add("<gray>${escape(it)}") }
-                if (ability.speedMultiplier > 1.0) {
-                    add("<gray>Скорость маунта: <aqua>+${((ability.speedMultiplier - 1.0) * 100.0).roundToInt()}%")
-                }
-                add("")
-                when {
-                    !profile.unlocked -> add("<red>Сначала получите маунта")
-                    owned -> add("<green>Куплено навсегда")
-                    else -> {
-                        add("<gray>Цена: <yellow>${TextUtil.formatAmount(ability.price)}<white>💰")
-                        add(if (configProvider().purchasesEnabled) "<green>Нажмите для подтверждения" else "<yellow>Покупки доступны на спавне")
-                    }
-                }
-            },
-            glint = owned,
-        )
-    }
-
-    private fun skinItem(mount: MountDefinition, profile: MountProfile, skinId: String): ItemStack {
-        if (skinId == MountDefinition.DEFAULT_SKIN_ID) {
-            return item(mount.appearance.equipment.values.firstOrNull()?.let(Material::matchMaterial) ?: Material.SADDLE, "<white>Классический", appearanceLore(mount.appearance) + listOf("", if (profile.activeSkinId == skinId) "<green>Выбран" else "<green>Нажмите, чтобы выбрать"), glint = profile.activeSkinId == skinId)
-        }
-        val skin = checkNotNull(mount.skin(skinId))
-        val owned = profile.ownsSkin(skinId)
-        return item(
-            Material.matchMaterial(skin.iconMaterial) ?: Material.LEATHER_HORSE_ARMOR,
-            if (owned) "<light_purple>${escape(skin.displayName)}" else "<gray>${escape(skin.displayName)}",
-            appearanceLore(skin.appearance) + buildList {
-                skin.trail?.let { add("<gray>След: <white>${escape(it.particle.lowercase().replace('_', ' '))}") }
-                add("")
-                when {
-                    profile.activeSkinId == skinId -> add("<green>Выбран")
-                    owned -> add("<green>Нажмите, чтобы выбрать")
-                    skin.price != null -> {
-                        add("<gray>Цена: <yellow>${TextUtil.formatAmount(skin.price)}<white>💰")
-                        add(if (configProvider().purchasesEnabled) "<green>Нажмите для подтверждения" else "<yellow>Покупки доступны на спавне")
-                    }
-                    else -> add("<gold>Особая награда")
-                }
-            },
-            glint = profile.activeSkinId == skinId,
-        )
-    }
-
-    private fun appearanceLore(appearance: MountAppearance): List<String> = buildList {
-        add("<gray>Возраст: <white>${if (appearance.baby) "малыш" else "взрослый"}")
-        if (appearance.scale != 1.0) add("<gray>Размер: <white>×${formatMultiplier(appearance.scale)}")
-        appearance.variant?.let { add("<gray>Вариант: <white>${escape(it.lowercase().replace('_', ' '))}") }
-        if (appearance.equipment.isNotEmpty()) add("<gray>Экипировка: <white>${appearance.equipment.size} предмет(а)")
-    }
-
     private fun confirmationDetails(mount: MountDefinition, action: ConfirmAction): Triple<String, Double, List<String>> =
         when (action) {
             is ConfirmAction.Level -> {
                 val level = mount.level(action.level)
                 Triple(
-                    if (action.level == mount.maxLevel) "<gold><bold>ФИНАЛЬНЫЙ РЫВОК" else "<green>Уровень ${action.level}",
+                    copy(
+                        "confirm.level-name",
+                        "<#92bed8>Уровень <level>",
+                        "level" to action.level.toString(),
+                    ),
                     checkNotNull(level.price),
                     buildList {
-                        add("<gray>${escape(mount.displayName)}")
-                        add("<gray>Максимальная скорость: <white>${formatSpeed(level.speed)}")
+                        add(copy("confirm.mount-line", "<#8c8c8c>Маунт: <#e6fff3><mount>", "mount" to escape(mount.displayName)))
+                        add(
+                            copy(
+                                "confirm.maximum-speed",
+                                "<#8c8c8c>Максимальная скорость: <#e6fff3><speed>",
+                                "speed" to formatSpeed(level.speed),
+                            ),
+                        )
                         if (mount.movement == MountMovement.WALKING) {
-                            add("<gray>Максимальный подъём: <white>${formatHeight(configProvider().tuning.maximumStepHeightHundredths(action.level) / 100.0)} блока")
+                            add(
+                                copy(
+                                    "confirm.maximum-step",
+                                    "<#8c8c8c>Максимальный подъём: <#e6fff3><step> блока",
+                                    "step" to formatHeight(configProvider().tuning.maximumStepHeightHundredths(action.level) / 100.0),
+                                ),
+                            )
                         }
                     },
                 )
             }
-            ConfirmAction.Glow -> Triple("<green>Свечение", checkNotNull(mount.glowPrice), listOf("<gray>${escape(mount.displayName)}", "<gray>Косметика покупается навсегда"))
+            ConfirmAction.Glow ->
+                Triple(
+                    copy("confirm.glow-name", "<#92bed8>Свечение"),
+                    checkNotNull(mount.glowPrice),
+                    listOf(
+                        copy("confirm.mount-line", "<#8c8c8c>Маунт: <#e6fff3><mount>", "mount" to escape(mount.displayName)),
+                        copy("confirm.glow-permanent-line", "<#8c8c8c>Косметика покупается навсегда."),
+                    ),
+                )
             is ConfirmAction.Skin -> {
                 val skin = checkNotNull(mount.skin(action.skinId))
-                Triple("<light_purple>${escape(skin.displayName)}", checkNotNull(skin.price), listOf("<gray>${escape(mount.displayName)}", "<gray>Облик покупается навсегда"))
+                Triple(
+                    copy("confirm.info-name", "<#ffacd5><skin>", "skin" to escape(skin.displayName)),
+                    checkNotNull(skin.price),
+                    listOf(
+                        copy("confirm.mount-line", "<#8c8c8c>Маунт: <#e6fff3><mount>", "mount" to escape(mount.displayName)),
+                        copy("confirm.permanent-line", "<#8c8c8c>Облик покупается навсегда."),
+                    ),
+                )
             }
             is ConfirmAction.Ability -> {
                 val ability = checkNotNull(mount.ability(action.abilityId))
                 Triple(
-                    "<aqua>${escape(ability.displayName)}",
+                    copy(
+                        "confirm.ability-name",
+                        "<#92bed8><ability>",
+                        "ability" to escape(ability.displayName),
+                    ),
                     ability.price,
-                    listOf("<gray>${escape(mount.displayName)}") + ability.description.map { "<gray>${escape(it)}" },
+                    listOf(copy("confirm.mount-line", "<#8c8c8c>Маунт: <#e6fff3><mount>", "mount" to escape(mount.displayName))) +
+                        ability.description.map {
+                            copy(
+                                "confirm.ability-description",
+                                "<#8c8c8c><ability-description>",
+                                "ability-description" to escape(it),
+                            )
+                        },
                 )
             }
         }
-
-    private fun balanceItem(player: Player): ItemStack {
-        val balance = wallet.balanceMinor(player.uniqueId)
-        return styledItem(MountGuiItemRole.BALANCE, Material.SUNFLOWER, "<#ffacd5>Баланс", listOf(if (balance != null) "<white>${TextUtil.formatAmount(balance.minorToDouble())}<#ffacd5>💰" else "<red>Экономика недоступна"))
-    }
 
     private fun purchasesDisabled(player: Player) {
         send(player, "purchases-disabled", "<yellow>Покупки маунтов доступны на спавне.")
@@ -935,23 +850,59 @@ class MountGuiController(
     private fun bass(player: Player) = player.playSound(player.location, Sound.BLOCK_NOTE_BLOCK_BASS, 0.8f, 0.8f)
     private fun component(text: String): Component = TextUtil.mm(text, true)
     private fun escape(value: String): String = value.replace("<", "\\<").replace(">", "\\>")
-    private fun movementColor(movement: MountMovement): String = when (movement) {
-        MountMovement.WALKING -> "<gray>"
-        MountMovement.FLYING -> "<green>"
-        MountMovement.SWIMMING -> "<aqua>"
+    private fun copy(path: String, fallback: String, vararg values: Pair<String, String>): String =
+        fillTemplate(configProvider().guiText(path, fallback), *values)
+
+    private fun copyLines(path: String, fallback: List<String>, vararg values: Pair<String, String>): List<String> =
+        configProvider().guiLines(path, fallback).map { fillTemplate(it, *values) }
+
+    private fun fillTemplate(template: String, vararg values: Pair<String, String>): String =
+        values.fold(template) { current, (key, value) -> current.replace("<$key>", value) }
+
+    private fun actionFooter(action: String, accent: String = "<#92bed8>"): String {
+        val composedPath =
+            when (action) {
+                "вернуться" -> "common.footer-back"
+                "открыть" -> "common.footer-open"
+                "открыть покупку" -> "common.footer-open-purchase"
+                "выбрать" -> "common.footer-select"
+                "призвать" -> "common.footer-summon"
+                "включить" -> "common.footer-enable"
+                "выключить" -> "common.footer-disable"
+                "получить" -> "common.footer-get"
+                "купить" -> "common.footer-buy"
+                "отменить" -> "common.footer-cancel"
+                else -> null
+            }
+        composedPath?.let { path ->
+            configProvider().guiText(path, "").takeIf(String::isNotEmpty)?.let { return it }
+        }
+        val path = if (accent == "<#ff9f0f>") "common.action-footer-warning" else "common.action-footer"
+        val fallback = "<#8c8c8c>[${accent}▶<#8c8c8c>] ${accent}ЛКМ<#e6fff3> — <action>"
+        return configProvider().guiText(path, fallback).replace("<action>", action)
     }
-    private fun skinName(mount: MountDefinition, skinId: String): String = if (skinId == MountDefinition.DEFAULT_SKIN_ID) "Классический" else mount.skin(skinId)?.displayName ?: "Классический"
+
+    private fun actionLore(
+        content: List<String>,
+        action: String,
+        accent: String = "<#92bed8>",
+    ): List<String> = content.dropLastWhile(String::isEmpty) + "" + actionFooter(action, accent)
+
+    private fun moneyLine(
+        path: String,
+        placeholder: String,
+        amountMinor: Long,
+        fallbackLabel: String,
+        fallbackColor: String = "<#8c8c8c>",
+    ): String =
+        copy(
+            path,
+            "$fallbackColor$fallbackLabel: <#ffacd5><$placeholder> <white><bold:false>💰</bold></white>",
+            placeholder to TextUtil.formatAmount(amountMinor.minorToDouble()),
+        )
+
     private fun formatSpeed(value: Double): String = "%.2f".format(java.util.Locale.ROOT, value).trimEnd('0').trimEnd('.')
     private fun formatHeight(value: Double): String = "%.2f".format(java.util.Locale.ROOT, value)
-    private fun formatMultiplier(value: Double): String = "%.2f".format(java.util.Locale.ROOT, value).trimEnd('0').trimEnd('.')
-    private fun formatDuration(duration: Duration): String {
-        val seconds = duration.seconds.coerceAtLeast(1L)
-        return when {
-            seconds % 3_600L == 0L -> "${seconds / 3_600L} ч"
-            seconds % 60L == 0L -> "${seconds / 60L} мин"
-            else -> "$seconds сек"
-        }
-    }
 
     companion object {
         private const val LIST_SIZE = 54
@@ -961,7 +912,6 @@ class MountGuiController(
         private const val LIST_FILTER_SLOT = 49
         private const val LIST_INFO_SLOT = 4
         private const val LIST_NEXT_SLOT = 50
-        private const val LIST_BALANCE_SLOT = 53
 
         private const val DETAIL_SIZE = 45
         private const val DETAIL_ICON_SLOT = 4
@@ -979,25 +929,9 @@ class MountGuiController(
         private const val TUNING_LEVEL_SLOT = 13
         private val TUNING_SPEED_SLOTS = listOf(20, 21, 22, 23, 24)
         private val TUNING_STEP_SLOTS = listOf(29, 30, 31, 32, 33)
+        private val TUNING_SIZE_SLOTS = listOf(39, 40, 41)
         private const val TUNING_NOT_APPLICABLE_SLOT = 31
         private const val TUNING_BACK_SLOT = 45
-        private val SPEED_TUNING_MATERIALS =
-            listOf(
-                Material.LEATHER_BOOTS,
-                Material.CHAINMAIL_BOOTS,
-                Material.IRON_BOOTS,
-                Material.GOLDEN_BOOTS,
-                Material.DIAMOND_BOOTS,
-            )
-        private val STEP_TUNING_MATERIALS =
-            listOf(
-                Material.OAK_SLAB,
-                Material.OAK_STAIRS,
-                Material.GRASS_BLOCK,
-                Material.PISTON,
-                Material.GOAT_HORN,
-            )
-
         private const val SKINS_SIZE = 54
         private val SKIN_CONTENT_SLOTS = listOf(10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34)
         private const val SKINS_BACK_SLOT = 45

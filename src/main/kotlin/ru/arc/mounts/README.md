@@ -12,25 +12,47 @@ Native production replacement for `Denizen/scripts/activities/rideable_mobs.dsc`
   transitions remain correct; hold and release Space for their charged jump.
   Flying and swimming mounts use WASD, Space to ascend and Shift to descend.
   Every mount uses double Shift to dismount; a single Shift never ends the ride.
-- Typed per-mount abilities are configured under `abilities`. The mountain goat
-  and frog have inherent high jumps. Contextual permanent upgrades are bought
-  from the detail screen: water breathing and night vision for aquatic mounts,
-  fire resistance for Nether mounts, and a speed-enhancing dolphin grace for
-  the dolphin. Effects are refreshed while riding and expire naturally after
+- Typed per-mount abilities are configured under `abilities`. The mountain
+  goat, frog, horse and fox have authored jump strengths. Contextual permanent
+  upgrades are bought from the detail screen: night vision also fits the
+  skeleton and Enderman, water breathing supports aquatic mounts, fire
+  resistance protects Nether mounts, and dolphin grace accelerates the
+  dolphin. Effects are refreshed while riding and expire naturally after
   dismount without removing unrelated player effects.
 - Every mount has three progression levels. The third level is the deliberately
   expensive final sprint and improves speed, steering and sprint response. An
   optional per-level `scale` multiplies the selected base or skin appearance;
   omitted values remain `1.0` for backward-compatible visuals.
+- Individual mounts may expose authored `size-tuning` profiles. These are not a
+  global percentage slider: every profile has a player-facing name, a bounded
+  multiplier and an optional level gate. The horse, Ravager and bee ship with
+  compact, standard and large profiles; the large profile unlocks at level 3.
 - Mount speed is controller-owned and ramps independently of vanilla entity
   friction. `movement.acceleration-time`, `deceleration-time` and `turn-time`
   set global response times; `0s` restores instant response. A mount may
   override any of them under `mounts.<id>.motion`. Opposite input brakes close
   to zero before the new direction accelerates, and horses keep native riding
   while ARC ramps their movement-speed attribute.
+- Motion overrides give representative mounts a distinct weight without a
+  second controller: the fox and Breeze react quickly, while the camel and
+  Ravager accelerate and turn more deliberately.
 - Appearance is deterministic. ARC fixes age, scale and variants, clears random
   entity equipment, then applies only the configured skin equipment. Zombie
   baby, iron guard and diamond warlord are separate unlockable skins.
+- Cosmetic trails use the live scaled bounding box and movement direction to
+  emit behind the body instead of at the entity origin. Their localized name,
+  cadence, density, rear offset, height, spread and speed are catalog data.
+- Settings are reconciled into an active ride as one immutable snapshot after
+  LuckPerms persistence succeeds. Speed, step height, glow, skin, trail,
+  abilities and safe size changes therefore take effect without resummoning.
+  If a larger hitbox would intersect blocks, the saved size is deferred until
+  the next safe summon instead of partially mutating the current ride.
+- Typed `behaviors` are separate from purchasable potion abilities. The
+  Ravager's `ram` is requested by a fresh sprint-forward press, waits for the
+  mount to accelerate, then attempts one standard player-attributed hit on the
+  first hostile mob in its swept path. It never targets players or passive
+  mobs, never damages blocks, never bypasses a cancelled damage event and has a
+  four-second cooldown even when the hit misses or is denied.
 - The temporary vehicle entity is invulnerable and absorbs damage without
   ending the ride. Ordinary rider damage still applies; one hit whose final
   post-reduction damage reaches `safety.rider-knockoff-damage` dismisses the
@@ -56,6 +78,9 @@ All access, ownership and settings use only `arc.mounts.*`:
 - `arc.mounts.<mount>.skin.<skin>` — skin ownership;
 - `arc.mounts.<mount>.skin.active.<skin>` — selected skin marker;
 - `arc.mounts.<mount>.ability.<ability>` — permanent contextual ability;
+- `arc.mounts.<mount>.tuning.speed.<percentage>` — selected speed profile;
+- `arc.mounts.<mount>.tuning.step-height.<hundredths>` — selected step height;
+- `arc.mounts.<mount>.tuning.size.<size>` — selected authored size profile;
 - `arc.mounts.admin` — all `/mount admin ...` operations.
 
 The command surface is deliberately unified:
@@ -103,8 +128,9 @@ the exact debit, refund or direct permission can be proven.
 
 The bundled and live file is `plugins/ARC/modules/mounts.yml`. It owns the
 catalog, rarity, descriptions, three level price/speed/handling/scale values,
-deterministic base appearance, skins, equipment and cosmetic trails. Spawn and
-survival keep separate tracked copies for their world and purchasing policies.
+deterministic base appearance, skins, equipment, authored size profiles,
+behaviors and cosmetic trail geometry. Spawn, survival and parkour keep
+separate tracked copies for their world and purchasing policies.
 
 Metrics use no player or transaction labels:
 

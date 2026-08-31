@@ -180,6 +180,24 @@ class MountPurchaseCoordinator(
         }
     }
 
+    fun setSizeTuning(
+        subject: MountPermissionSubject,
+        mount: MountDefinition,
+        sizeId: String,
+        callback: (MountPurchaseResult) -> Unit,
+    ) {
+        val profile = ownership.profile(subject, mount)
+        if (!profile.unlocked) return callback(MountPurchaseResult.NotUnlocked)
+        val option = mount.sizeOptions.firstOrNull { it.id == sizeId } ?: return callback(MountPurchaseResult.NotForSale)
+        if (option.minimumLevel > profile.level) return callback(MountPurchaseResult.NotForSale)
+        if (mount.effectiveSizeOption(profile.selectedSizeId, profile.level)?.id == option.id) {
+            return callback(MountPurchaseResult.AlreadyOwned)
+        }
+        runSetting(subject.uniqueId, callback) {
+            ownership.setSizeTuning(subject.uniqueId, mount, option.id)
+        }
+    }
+
     fun recover(catalog: MountCatalog, onManualReview: (MountPurchaseJournalRecord) -> Unit) {
         journal.records().filter { !it.status.terminal || it.status == MountPurchaseJournalStatus.MANUAL_REVIEW }.forEach { record ->
             val mount = catalog[record.mountId]

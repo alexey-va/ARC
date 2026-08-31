@@ -32,7 +32,7 @@ class MountQuickSummonControllerTest : TestBase() {
         }
 
         event.isCancelled shouldBe true
-        verify(exactly = 1) { fixture.sessions.spawn(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        verify(exactly = 1) { fixture.sessions.spawn(any(), any(), any(), any()) }
     }
 
     @Test
@@ -51,7 +51,7 @@ class MountQuickSummonControllerTest : TestBase() {
         }
 
         event.isCancelled shouldBe false
-        verify(exactly = 0) { fixture.sessions.spawn(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { fixture.sessions.spawn(any(), any(), any(), any()) }
     }
 
     @Test
@@ -80,7 +80,7 @@ class MountQuickSummonControllerTest : TestBase() {
 
         fixture.controller.isWhistle(whistle) shouldBe true
         event.isCancelled shouldBe true
-        verify(exactly = 1) { fixture.sessions.spawn(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        verify(exactly = 1) { fixture.sessions.spawn(any(), any(), any(), any()) }
     }
 
     @Test
@@ -100,7 +100,7 @@ class MountQuickSummonControllerTest : TestBase() {
             every { profile(any(), mount) } returns MountProfile(1, false, false)
         }
         val sessions = mockk<MountSessionController> {
-            every { spawn(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns MountSpawnResult.SUCCESS
+            every { spawn(any(), any(), any(), any()) } returns MountSpawnResult.SUCCESS
         }
         val config = mockk<MountModuleConfig> {
             every { quickSummonSneakSwapHands } returns true

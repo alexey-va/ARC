@@ -9,6 +9,9 @@ Each configured level unlocks a maximum base speed. Walking levels also unlock a
 - `tuning.speed-percentages` selects a percentage of the current level speed;
 - `tuning.walking-step-heights` contains exact selectable native step heights in blocks;
 - `tuning.walking-max-step-height-by-level` defines the non-decreasing ceiling unlocked by each level.
+- `mounts.<id>.size-tuning` optionally exposes two or three authored size profiles for that specific entity, each with a bounded multiplier and level gate.
+
+The bundled catalog uses the same mechanics selectively instead of giving every mount identical switches. The horse and fox have authored jump multipliers; the skeleton and Enderman can unlock night vision; the horse, Ravager and bee expose three size profiles. Fox/Breeze motion is deliberately responsive, while camel/Ravager motion keeps more weight.
 
 With no saved choice, the maximum unlocked value is active. A saved lower choice persists after an upgrade. If a level is revoked, an out-of-range step height is clamped to the new ceiling at runtime.
 
@@ -21,13 +24,14 @@ Ownership and player settings use only the `arc.mounts.*` namespace. Tuning is s
 ```text
 arc.mounts.<mount>.tuning.speed.<percentage>
 arc.mounts.<mount>.tuning.step-height.<hundredths>
+arc.mounts.<mount>.tuning.size.<size-id>
 ```
 
-For example, 65% speed and a 1.10-block step height are `arc.mounts.horse.tuning.speed.65` and `arc.mounts.horse.tuning.step-height.110`. Setters remove older nodes with the same exact prefix before writing the new state, so spawn and survival resolve one shared choice.
+For example, 65% speed and a 1.10-block step height are `arc.mounts.horse.tuning.speed.65` and `arc.mounts.horse.tuning.step-height.110`; the Ravager's large profile is `arc.mounts.ravager.tuning.size.massive`. Setters remove older nodes with the same exact prefix before writing the new state, so every server resolves one shared choice.
 
 ## Runtime behavior
 
-The resolved speed and step height are copied into the mount session at summon time. Non-horse walking mounts use ARC velocity plus the native `STEP_HEIGHT` attribute. Horses retain native ridden movement and charged jumping, while ARC applies the configured speed, jump strength, and selected step height continuously.
+Speed, step height, level/size scale, skin, glow and owned abilities resolve into one immutable runtime snapshot. A successful setting write reconciles the complete snapshot into the active ride on the main thread, so speed, step height, glow, skins and trails update immediately. Growing size is first checked against a feet-anchored prospective bounding box; a blocked growth remains saved for the next safe summon without creating mixed visual/session state. Non-horse walking mounts use ARC velocity plus the native `STEP_HEIGHT` attribute. Horses retain native ridden movement and charged jumping, while ARC applies the configured speed, jump strength and selected step height continuously.
 
 ARC keeps its own motion state instead of feeding Minecraft-mutated entity velocity back into the controller. Global `movement.acceleration-time`, `movement.deceleration-time`, and `movement.turn-time` values describe the time to reach about 95% of the requested response at handling multiplier `1.0`; higher-level handling shortens those times. Set a value to `0s` for instant response. Any mount may override individual values under `mounts.<id>.motion`, with omitted values inherited from the global block. A reverse input brakes nearly to zero before acceleration changes direction.
 
@@ -37,6 +41,14 @@ Flying sessions have two rider comfort features enabled by default:
 - `movement.compensate-airborne-mining` adds a transient `BLOCK_BREAK_SPEED` modifier only for the duration of a flying session. Its ×5 result cancels Minecraft's ×0.2 airborne mining penalty without affecting the player's ground speed after dismount.
 
 The collection list always places unlocked mounts before locked mounts while preserving catalog order inside both groups. Menu lore uses real empty lore rows between state, characteristics, profile/acquisition, and action sections.
+
+The collection no longer spends a permanent slot on balance. Price, balance and the exact remainder or shortage are shown together only in the purchase confirmation. Actionable lore ends in the shared `[▶] ЛКМ — результат` footer after one blank row, and the handler accepts only the exact click type printed there. Selected, truly locked, disabled, completed and loading states have neither the footer nor a click handler. A not-yet-owned mount with a configured first-level price is a separate actionable acquisition state; it is labelled `Доступен к получению` and opens progression instead of masquerading as locked. The full collection guide intentionally remains 13 visible rows by owner decision.
+
+Skin cards describe only changes from the mount's base appearance. Unsupported or unchanged age, inherited scale and raw enum/particle identifiers are omitted. Trails carry localized names and emit from a rear-body anchor derived from the current scaled bounding box, so effects remain visible on small and large entities.
+
+## Typed mount behaviors
+
+Inherent ride mechanics live under `mounts.<id>.behaviors` and are separate from permanent potion upgrades. Every behavior owns a short player-facing description shown in the mount card. The initial `ram` behavior uses a fresh sprint-forward press, a bounded acceleration request window, one short active window and one target. Its swept corridor accepts only living `Enemy` entities ahead of the mount, excluding players, bosses, passive mobs and every ARC mount. Damage is applied once through `target.damage(damage, rider)`, preserving ordinary Paper damage events, armor, resistance, protection-plugin cancellation, kill attribution and loot hooks. No custom health write, block damage, extra velocity or protection bypass exists.
 
 ## Favorite and quick summon
 

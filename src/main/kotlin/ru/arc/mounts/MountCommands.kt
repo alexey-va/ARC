@@ -119,15 +119,18 @@ class MountCommand(
             sessions.spawn(
                 player = player,
                 definition = mount,
-                speed = configuredLevel.speed,
-                walkingStepHeight = config().tuning.stepHeight(level, null),
-                handlingMultiplier = configuredLevel.handlingMultiplier,
-                sprintMultiplier = configuredLevel.sprintMultiplier,
+                settings =
+                    MountRuntimeSettings(
+                        speed = configuredLevel.speed,
+                        walkingStepHeight = config().tuning.stepHeight(level, null),
+                        handlingMultiplier = configuredLevel.handlingMultiplier,
+                        sprintMultiplier = configuredLevel.sprintMultiplier,
+                        scaleMultiplier = configuredLevel.scaleMultiplier,
+                        skin = skin,
+                        glow = false,
+                        abilityUpgrades = mount.abilities.upgrades,
+                    ),
                 durationMillis = config().adminSessionDuration.toMillis(),
-                glow = false,
-                scaleMultiplier = configuredLevel.scaleMultiplier,
-                skin = skin,
-                abilityUpgrades = mount.abilities.upgrades,
             )
         if (result != MountSpawnResult.SUCCESS) {
             player.sendMessage(TextUtil.mm("<red>Не удалось призвать маунта: <white>${result.name.lowercase()}<red>.", true))

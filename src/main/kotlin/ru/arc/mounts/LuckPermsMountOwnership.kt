@@ -28,15 +28,22 @@ class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership
         val directNodes = luckPerms.userManager.getUser(subject.uniqueId)?.nodes.orEmpty()
         val selectedSpeedPercentage = directPositiveNumericSuffix(directNodes, mount.speedTuningPermissionPrefix)
         val selectedStepHeightHundredths = directPositiveNumericSuffix(directNodes, mount.stepHeightTuningPermissionPrefix)
+        val selectedSizeId =
+            directPositiveStringSuffix(
+                directNodes,
+                mount.sizeTuningPermissionPrefix,
+                { candidate -> mount.sizeOptions.any { it.id == candidate && it.minimumLevel <= level } },
+            )
         return MountProfile(
-            level,
-            glowOwned,
-            glowDisabled,
-            ownedSkinIds,
-            activeSkinId,
-            ownedAbilityIds,
-            selectedSpeedPercentage,
-            selectedStepHeightHundredths,
+            level = level,
+            glowOwned = glowOwned,
+            glowDisabled = glowDisabled,
+            ownedSkinIds = ownedSkinIds,
+            activeSkinId = activeSkinId,
+            ownedAbilityIds = ownedAbilityIds,
+            selectedSpeedPercentage = selectedSpeedPercentage,
+            selectedStepHeightHundredths = selectedStepHeightHundredths,
+            selectedSizeId = selectedSizeId,
         )
     }
 
@@ -164,6 +171,19 @@ class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership
             mount.stepHeightTuningPermissionPrefix,
             mount.stepHeightTuningPermission(hundredths),
         )
+
+    override fun setSizeTuning(
+        playerId: UUID,
+        mount: MountDefinition,
+        sizeId: String,
+    ): CompletableFuture<Void> {
+        require(mount.sizeOptions.any { it.id == sizeId }) { "Unknown ${mount.id} size option: $sizeId" }
+        return setExclusiveStatePermission(
+            playerId,
+            mount.sizeTuningPermissionPrefix,
+            mount.sizeTuningPermission(sizeId),
+        )
+    }
 
     override fun hasDirectPermission(playerId: UUID, permission: String): CompletableFuture<Boolean> {
         val loaded = luckPerms.userManager.getUser(playerId)

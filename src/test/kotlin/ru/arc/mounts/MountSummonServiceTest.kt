@@ -22,7 +22,7 @@ class MountSummonServiceTest : TestBase() {
         val player = server.addPlayer("NoFavorite")
 
         service.summonFavorite(player) shouldBe MountSummonOutcome.FAVORITE_NOT_SELECTED
-        verify(exactly = 0) { sessions.spawn(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { sessions.spawn(any(), any(), any(), any()) }
     }
 
     @Test
@@ -37,7 +37,7 @@ class MountSummonServiceTest : TestBase() {
         val player = server.addPlayer("FormerRider")
 
         service.summonFavorite(player) shouldBe MountSummonOutcome.FAVORITE_UNAVAILABLE
-        verify(exactly = 0) { sessions.spawn(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { sessions.spawn(any(), any(), any(), any()) }
     }
 
     @Test
@@ -63,15 +63,18 @@ class MountSummonServiceTest : TestBase() {
                 spawn(
                     player = any(),
                     definition = mount,
-                    speed = 0.39,
-                    walkingStepHeight = 1.5,
-                    handlingMultiplier = 1.0,
-                    sprintMultiplier = 1.0,
+                    settings =
+                        MountRuntimeSettings(
+                            speed = 0.39,
+                            walkingStepHeight = 1.5,
+                            handlingMultiplier = 1.0,
+                            sprintMultiplier = 1.0,
+                            scaleMultiplier = 1.0,
+                            skin = mount.skin("baby"),
+                            glow = true,
+                            abilityUpgrades = listOf(checkNotNull(mount.ability("night-vision"))),
+                        ),
                     durationMillis = Duration.ofHours(12).toMillis(),
-                    glow = true,
-                    scaleMultiplier = 1.0,
-                    skin = mount.skin("baby"),
-                    abilityUpgrades = listOf(checkNotNull(mount.ability("night-vision"))),
                 )
             } returns MountSpawnResult.SUCCESS
         }
@@ -98,6 +101,52 @@ class MountSummonServiceTest : TestBase() {
         service.selectFavorite(player, mount).join() shouldBe MountFavoriteSelectionOutcome.NOT_UNLOCKED
         service.selectFavorite(player, mount).join() shouldBe MountFavoriteSelectionOutcome.SUCCESS
         verify(exactly = 1) { ownership.setFavoriteMount(player.uniqueId, mount) }
+    }
+
+    @Test
+    fun `live refresh sends one complete size and appearance snapshot to the active session`() {
+        val mount =
+            testMount().copy(
+                sizeOptions =
+                    listOf(
+                        MountSizeOptionDefinition("standard", "Обычный", 1.0),
+                        MountSizeOptionDefinition("massive", "Крупный", 1.15, minimumLevel = 2),
+                    ),
+            )
+        val profile =
+            MountProfile(
+                level = 2,
+                glowOwned = true,
+                glowDisabled = false,
+                ownedSkinIds = setOf("baby"),
+                activeSkinId = "baby",
+                ownedAbilityIds = setOf("night-vision"),
+                selectedSpeedPercentage = 65,
+                selectedStepHeightHundredths = 150,
+                selectedSizeId = "massive",
+            )
+        val ownership = mockk<MountOwnership> { every { profile(any(), mount) } returns profile }
+        val sessions = mockk<MountSessionController> {
+            every { reconcileSettings(any(), mount.id, any()) } returns MountSessionUpdateResult.APPLIED
+        }
+        val service = service(mount, ownership, sessions)
+        val player = server.addPlayer("LiveRider")
+
+        service.refreshActive(player, mount) shouldBe MountSessionUpdateResult.APPLIED
+        verify(exactly = 1) {
+            sessions.reconcileSettings(
+                player.uniqueId,
+                mount.id,
+                match {
+                    it.speed == 0.39 &&
+                        it.walkingStepHeight == 1.5 &&
+                        it.scaleMultiplier == 1.15 &&
+                        it.skin == mount.skin("baby") &&
+                        it.glow &&
+                        it.abilityUpgrades.map(MountAbilityUpgradeDefinition::id) == listOf("night-vision")
+                },
+            )
+        }
     }
 
     @Test

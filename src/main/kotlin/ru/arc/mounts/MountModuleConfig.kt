@@ -66,10 +66,11 @@ open class MountModuleConfig(private val config: Config) {
     open val compensateAirborneMining: Boolean get() = config.bool("movement.compensate-airborne-mining", true)
     open val postFlightSlowFalling: Duration get() = config.duration("safety.post-flight-slow-falling", Duration.ofSeconds(8))
     open val backCommand: String get() = config.string("gui.back-command", "m").trim().removePrefix("/")
-    open val listTitle: String get() = config.string("gui.list-title", "<dark_gray><bold>Маунты")
-    open val detailTitle: String get() = config.string("gui.detail-title", "<dark_gray><bold>Маунт: <mount>")
-    open val progressionTitle: String get() = config.string("gui.progression-title", "<dark_gray><bold>Развитие: <mount>")
-    open val skinsTitle: String get() = config.string("gui.skins-title", "<dark_gray><bold>Облики: <mount>")
+    open val listTitle: String get() = config.string("gui.list-title", "<#20252b><bold>Коллекция маунтов</bold>")
+    open val detailTitle: String get() = config.string("gui.detail-title", "<#20252b><bold><mount></bold>")
+    open val progressionTitle: String get() = config.string("gui.progression-title", "<#20252b><bold>Развитие маунта</bold>")
+    open val skinsTitle: String get() = config.string("gui.skins-title", "<#20252b><bold>Облики маунта</bold>")
+    open val confirmTitle: String get() = config.string("gui.confirm-title", "<#20252b><bold>Покупка маунта</bold>")
 
     open val tuning: MountTuningDefinition
         get() =
@@ -122,6 +123,8 @@ open class MountModuleConfig(private val config: Config) {
                     abilities = abilities("$root.abilities", abilityUpgrades),
                     appearance = appearance("$root.appearance"),
                     skins = skinList(root, id),
+                    sizeOptions = sizeOptionList(root, id),
+                    behaviors = behaviorList(root, id),
                     motion = motion("$root.motion"),
                 )
             }
@@ -161,11 +164,28 @@ open class MountModuleConfig(private val config: Config) {
         require(maximumHeightAboveWorld in 0..256) { "Mount maximum-height-above-world must be between 0 and 256" }
         tuning
         MountGuiItemRole.entries.forEach(::guiStyle)
+        require(
+            guiLines(
+                "detail.mount-state-lore",
+                listOf("favorite", "owned", "rarity", ""),
+            ).size >= 4,
+        ) { "Mount GUI detail.mount-state-lore must contain at least four rows" }
+        require(
+            guiLines(
+                "detail.mount-stats-core-lore",
+                listOf("", "heading", "type", "level", "speed", "step", "skin"),
+            ).size >= 7,
+        ) { "Mount GUI detail.mount-stats-core-lore must contain at least seven rows" }
         catalog()
         return this
     }
 
     open fun message(path: String, fallback: String): String = config.string("messages.$path", fallback)
+
+    open fun guiText(path: String, fallback: String): String = config.string("gui.copy.$path", fallback)
+
+    open fun guiLines(path: String, fallback: List<String>): List<String> =
+        config.stringList("gui.copy.$path", fallback)
 
     private fun motion(root: String): MountMotionOverride =
         MountMotionOverride(
@@ -213,6 +233,86 @@ open class MountModuleConfig(private val config: Config) {
                 trail = trail("$path.trail") ?: presetPath?.let { trail("$it.trail") },
             )
         }
+    }
+
+    private fun sizeOptionList(root: String, mountId: String): List<MountSizeOptionDefinition> =
+        config.list<Map<String, Any?>>("$root.size-tuning").mapIndexed { index, raw ->
+            val allowedKeys = setOf("id", "name", "multiplier", "minimum-level")
+            val unknown = raw.keys.map(Any?::toString).toSet() - allowedKeys
+            require(unknown.isEmpty()) {
+                "Mount '$mountId' size option ${index + 1} has unknown fields: ${unknown.sorted()}"
+            }
+            val rawId = raw["id"]?.toString()?.trim().orEmpty()
+            val id = rawId.lowercase(Locale.ROOT)
+            require(id == rawId && MountDefinition.validId(id)) {
+                "Mount '$mountId' size option ${index + 1} has an invalid normalized id '$rawId'"
+            }
+            val minimumLevel =
+                raw["minimum-level"]?.let { value ->
+                    value.toString().toIntOrNull()
+                        ?: throw IllegalArgumentException("Mount '$mountId' size option '$id' minimum-level is not an integer")
+                } ?: 1
+            MountSizeOptionDefinition(
+                id = id,
+                displayName = raw["name"]?.toString()?.trim().orEmpty(),
+                multiplier = requiredDouble(raw["multiplier"], "Mount '$mountId' size option '$id' multiplier"),
+                minimumLevel = minimumLevel,
+            )
+        }
+
+    private fun behaviorList(root: String, mountId: String): List<MountBehaviorDefinition> =
+        config.keys("$root.behaviors").map { rawId ->
+            val id = rawId.lowercase(Locale.ROOT)
+            require(id == rawId && MountDefinition.validId(id)) { "Mount '$mountId' behavior id '$rawId' must be normalized" }
+            val path = "$root.behaviors.$id"
+            val type = config.string("$path.type", "").trim().lowercase(Locale.ROOT)
+            when (type) {
+                "ram" -> ramBehavior(path, id, mountId)
+                else -> throw IllegalArgumentException("Mount '$mountId' behavior '$id' has invalid type '$type'")
+            }
+        }
+
+    private fun ramBehavior(path: String, id: String, mountId: String): MountRamBehavior {
+        val allowedKeys =
+            setOf(
+                "type",
+                "name",
+                "description",
+                "trigger",
+                "cooldown",
+                "request-window",
+                "active-window-ticks",
+                "minimum-speed-fraction",
+                "reach",
+                "lateral-padding",
+                "damage",
+            )
+        val unknown = config.keys(path) - allowedKeys
+        require(unknown.isEmpty()) { "Mount '$mountId' behavior '$id' has unknown fields: ${unknown.sorted()}" }
+        val rawTrigger = config.string("$path.trigger", "sprint-forward-press").trim().uppercase(Locale.ROOT).replace('-', '_')
+        val trigger = runCatching { MountBehaviorTrigger.valueOf(rawTrigger) }
+            .getOrElse { throw IllegalArgumentException("Mount '$mountId' behavior '$id' has invalid trigger '$rawTrigger'") }
+        return MountRamBehavior(
+            id = id,
+            displayName = config.string("$path.name", "Таран").trim(),
+            description =
+                config.stringList(
+                    "$path.description",
+                    listOf(
+                        "Нажмите спринт при движении вперёд.",
+                        "Первый враждебный моб на пути",
+                        "получит урон при столкновении.",
+                    ),
+                ).map(String::trim).filter(String::isNotEmpty),
+            trigger = trigger,
+            cooldown = config.duration("$path.cooldown", Duration.ofSeconds(4)),
+            requestWindow = config.duration("$path.request-window", Duration.ofMillis(1_200)),
+            activeWindowTicks = config.integer("$path.active-window-ticks", 8),
+            minimumSpeedFraction = config.double("$path.minimum-speed-fraction", 0.65),
+            reach = config.double("$path.reach", 1.25),
+            lateralPadding = config.double("$path.lateral-padding", 0.35),
+            damage = config.double("$path.damage", 4.0),
+        )
     }
 
     private fun appearance(path: String, fallback: MountAppearance = MountAppearance()): MountAppearance {
@@ -276,10 +376,26 @@ open class MountModuleConfig(private val config: Config) {
         val particle = config.stringOrNull("$path.particle")?.trim()?.takeIf(String::isNotEmpty) ?: return null
         return MountTrailDefinition(
             particle = particle.uppercase(Locale.ROOT),
+            displayName = config.string("$path.name", localizedTrailName(particle)).trim(),
             intervalTicks = config.integer("$path.interval-ticks", 4),
             count = config.integer("$path.count", 1),
+            backOffset = config.double("$path.back-offset", 0.2),
+            heightRatio = config.double("$path.height-ratio", 0.45),
+            spread = config.double("$path.spread", 0.12),
+            speed = config.double("$path.speed", 0.0),
         )
     }
+
+    private fun localizedTrailName(particle: String): String =
+        when (particle.trim().uppercase(Locale.ROOT)) {
+            "END_ROD" -> "Звёздный след"
+            "SOUL" -> "След душ"
+            "FLAME" -> "Огненный след"
+            "SOUL_FIRE_FLAME" -> "Пламя душ"
+            "CLOUD" -> "Облачный след"
+            "NAUTILUS" -> "Океанический след"
+            else -> particle.trim().lowercase(Locale.ROOT).replace('_', ' ')
+        }
 
     private fun normalizedAppearanceValue(raw: String?): String? =
         raw?.trim()?.takeIf(String::isNotEmpty)?.uppercase(Locale.ROOT)
