@@ -22,9 +22,7 @@ data class ArcParkourSettings(
     val gui: Config,
     val categories: List<ParkourCategoryDefinition>,
     val background: ConfigItemSpec,
-    val close: ConfigItemSpec,
     val back: ConfigItemSpec,
-    val guide: ConfigItemSpec,
 )
 
 data class ParkourCategoryDefinition(
@@ -35,7 +33,7 @@ data class ParkourCategoryDefinition(
     val courseName: String,
     val courseDisplay: String,
     val icon: Material,
-    val courseIcon: Material,
+    val courseIcons: List<Material>,
     val display: String,
     val description: List<String>,
 )
@@ -63,7 +61,7 @@ class ArcParkourConfig(
                     courseName = bounded(gui.string("$root.course-name", "Трасса <number>"), 64, "category '$id' course name"),
                     courseDisplay = bounded(gui.string("$root.course-display", "<#92bed8><bold><course>"), 96, "category '$id' course display"),
                     icon = material("$root.material", Material.LEATHER_BOOTS),
-                    courseIcon = material("$root.course-material", Material.STONE_PRESSURE_PLATE),
+                    courseIcons = courseIcons(root),
                     display = bounded(gui.string("$root.display", id), 96, "category '$id' display"),
                     description = boundedLines(gui.stringList("$root.description"), 4, "category '$id' description"),
                 )
@@ -87,10 +85,18 @@ class ArcParkourConfig(
             gui = gui,
             categories = categories,
             background = item("background", Material.GRAY_STAINED_GLASS_PANE),
-            close = item("close", Material.BARRIER),
             back = item("back", Material.BLUE_STAINED_GLASS_PANE),
-            guide = item("guide", Material.BOOK),
         )
+    }
+
+    private fun courseIcons(root: String): List<Material> {
+        val configured = gui.stringList("$root.course-materials")
+        val raw = configured.ifEmpty { listOf(gui.string("$root.course-material", Material.FEATHER.name)) }
+        require(raw.size in 1..16) { "Parkour category '$root' must declare 1..16 course materials" }
+        return raw.mapIndexed { index, value ->
+            Material.matchMaterial(value.trim())
+                ?: throw IllegalArgumentException("Parkour material '$root.course-materials[$index]' is invalid: '$value'")
+        }
     }
 
     private fun item(path: String, fallback: Material): ConfigItemSpec {

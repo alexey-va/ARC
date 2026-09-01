@@ -1,5 +1,7 @@
 package ru.arc.parkour
 
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Bukkit
 import org.bukkit.Material
@@ -50,8 +52,6 @@ class ArcParkourMenuController(
         visible.forEachIndexed { index, category ->
             inventory.setItem(ROOT_CATEGORY_SLOTS[index], categoryItem(category))
         }
-        inventory.setItem(CLOSE_SLOT, item(settings.close))
-        inventory.setItem(GUIDE_SLOT, item(settings.guide))
         player.openInventory(inventory)
         click(player)
     }
@@ -83,7 +83,6 @@ class ArcParkourMenuController(
             inventory.setItem(COURSE_SLOTS[index], courseItem(category.definition, course))
         }
         inventory.setItem(BACK_SLOT, item(settings.back))
-        inventory.setItem(GUIDE_SLOT, item(settings.guide))
         player.openInventory(inventory)
         click(player)
     }
@@ -116,12 +115,7 @@ class ArcParkourMenuController(
         val player = event.whoClicked as? Player ?: return
         if (event.rawSlot !in 0 until event.view.topInventory.size) return
         when (holder.screen) {
-            ParkourMenuScreen.ROOT -> {
-                when (event.rawSlot) {
-                    CLOSE_SLOT -> player.closeInventory()
-                    else -> holder.categorySlots[event.rawSlot]?.let { openCategory(player, it) }
-                }
-            }
+            ParkourMenuScreen.ROOT -> holder.categorySlots[event.rawSlot]?.let { openCategory(player, it) }
 
             ParkourMenuScreen.CATEGORY -> {
                 when (event.rawSlot) {
@@ -179,7 +173,8 @@ class ArcParkourMenuController(
                 settings.gui.string("copy.action-start", "<#92bed8>Нажмите — начать трассу"),
             )
         val display = template(category.courseDisplay, "course" to escape(card.displayName))
-        return item(category.courseIcon, display, lore, glint = card.course.completed)
+        val icon = category.courseIcons[(card.sequence - 1) % category.courseIcons.size]
+        return item(icon, display, lore, glint = card.course.completed)
     }
 
     private fun fill(inventory: Inventory) {
@@ -219,7 +214,7 @@ class ArcParkourMenuController(
             }
         }
 
-    private fun title(value: String) = TextUtil.mm(value, true)
+    private fun title(value: String) = parkourItemText(value)
 
     private fun template(template: String, vararg values: Pair<String, String>): String =
         values.fold(template) { current, (key, value) -> current.replace("<$key>", value) }
@@ -236,8 +231,9 @@ class ArcParkourMenuController(
         private const val MENU_SIZE = 27
         private val ROOT_CATEGORY_SLOTS = listOf(10, 12, 14, 16, 11, 13, 15)
         private val COURSE_SLOTS = (10..16).toList()
-        private const val CLOSE_SLOT = 18
         private const val BACK_SLOT = 18
-        private const val GUIDE_SLOT = 22
     }
 }
+
+internal fun parkourItemText(value: String): Component =
+    TextUtil.mm(value, true).decoration(TextDecoration.ITALIC, false)

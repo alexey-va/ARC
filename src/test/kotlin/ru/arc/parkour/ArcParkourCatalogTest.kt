@@ -3,6 +3,7 @@ package ru.arc.parkour
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.Material
 
 class ArcParkourCatalogTest : StringSpec({
@@ -56,6 +57,12 @@ class ArcParkourCatalogTest : StringSpec({
         formatParkourMillis(61_234) shouldBe "01:01.234"
         formatParkourMillis(3_661_007) shouldBe "61:01.007"
     }
+
+    "menu text explicitly disables inherited item italics" {
+        parkourItemText("<#7bd88f><bold>Лёгкая 1").decoration(TextDecoration.ITALIC) shouldBe
+            TextDecoration.State.FALSE
+        parkourItemText(" ").decoration(TextDecoration.ITALIC) shouldBe TextDecoration.State.FALSE
+    }
 })
 
 private fun category(
@@ -71,7 +78,7 @@ private fun category(
     courseName = courseName,
     courseDisplay = "<#92bed8><bold><course>",
     icon = Material.LEATHER_BOOTS,
-    courseIcon = Material.STONE_PRESSURE_PLATE,
+    courseIcons = listOf(Material.FEATHER),
     display = id,
     description = listOf(id),
 )

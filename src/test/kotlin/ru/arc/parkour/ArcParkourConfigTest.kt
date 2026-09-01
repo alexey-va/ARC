@@ -22,6 +22,8 @@ class ArcParkourConfigTest : StringSpec({
             settings.hudEnabled shouldBe true
             settings.categories.map { it.id } shouldContainExactly listOf("easy", "medium", "hard", "extreme")
             settings.categories.flatMap { it.prefixes } shouldContainExactly listOf("easy", "med", "diff", "ex")
+            settings.categories.first().courseIcons shouldContainExactly
+                listOf(Material.FEATHER, Material.RABBIT_FOOT, Material.SLIME_BALL, Material.HONEYCOMB, Material.SUGAR, Material.WIND_CHARGE, Material.FIREWORK_ROCKET)
             settings.background.material shouldBe Material.GRAY_STAINED_GLASS_PANE
             settings.background.modelData shouldBe null
             settings.back.modelData shouldBe null

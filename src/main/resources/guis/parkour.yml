@@ -15,12 +15,6 @@ copy:
 background:
   material: GRAY_STAINED_GLASS_PANE
 
-close:
-  material: BARRIER
-  display: '<#969696>Закрыть'
-  lore:
-    - '<#8c8c8c>Вернуться в игру.'
-
 back:
   material: BLUE_STAINED_GLASS_PANE
   display: '<#92bed8>Назад'
@@ -28,16 +22,6 @@ back:
     - '<#8c8c8c>Вернуться к выбору сложности.'
     - ''
     - '<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>Нажмите<#f2f0e6> — вернуться'
-
-guide:
-  material: BOOK
-  display: '<#92bed8><bold>Как играть'
-  lore:
-    - '<#f2f0e6>Выберите сложность и трассу.'
-    - '<#f2f0e6>Наступайте на точки строго по порядку.'
-    - ''
-    - '<#8c8c8c>Предметы в хотбаре возвращают к точке,'
-    - '<#8c8c8c>перезапускают или завершают попытку.'
 
 categories:
   easy:
@@ -47,7 +31,7 @@ categories:
     course-name: 'Лёгкая <number>'
     course-display: '<#7bd88f><bold><course>'
     material: LEATHER_BOOTS
-    course-material: OAK_PRESSURE_PLATE
+    course-materials: [FEATHER, RABBIT_FOOT, SLIME_BALL, HONEYCOMB, SUGAR, WIND_CHARGE, FIREWORK_ROCKET]
     display: '<#7bd88f><bold>Лёгкие трассы'
     description:
       - '<#f2f0e6>Короткие маршруты для разминки'
@@ -59,7 +43,7 @@ categories:
     course-name: 'Средняя <number>'
     course-display: '<#5fb3ff><bold><course>'
     material: IRON_BOOTS
-    course-material: STONE_PRESSURE_PLATE
+    course-materials: [AMETHYST_SHARD, PRISMARINE_CRYSTALS, COPPER_INGOT, ECHO_SHARD, ENDER_PEARL, BLAZE_POWDER, FIREWORK_STAR]
     display: '<#5fb3ff><bold>Средние трассы'
     description:
       - '<#f2f0e6>Больше точности, темпа'
@@ -71,7 +55,7 @@ categories:
     course-name: 'Сложная <number>'
     course-display: '<#e3b341><bold><course>'
     material: DIAMOND_BOOTS
-    course-material: HEAVY_WEIGHTED_PRESSURE_PLATE
+    course-materials: [TARGET, TOTEM_OF_UNDYING, TRIDENT, OBSIDIAN, ENDER_EYE, DIAMOND, NETHER_STAR]
     display: '<#e3b341><bold>Сложные трассы'
     description:
       - '<#f2f0e6>Маршруты для уверенного паркура'
@@ -83,7 +67,7 @@ categories:
     course-name: 'Экстремальная <number>'
     course-display: '<#d84a4a><bold><course>'
     material: NETHERITE_BOOTS
-    course-material: POLISHED_BLACKSTONE_PRESSURE_PLATE
+    course-materials: [BLAZE_ROD, MAGMA_CREAM, FIRE_CHARGE, GHAST_TEAR, NETHERITE_SCRAP, RESPAWN_ANCHOR, DRAGON_BREATH]
     display: '<#d84a4a><bold>Экстремальные трассы'
     description:
       - '<#f2f0e6>Самые требовательные маршруты.'
