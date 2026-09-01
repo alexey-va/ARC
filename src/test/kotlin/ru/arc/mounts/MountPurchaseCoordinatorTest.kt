@@ -143,6 +143,17 @@ class MountPurchaseCoordinatorTest : StringSpec({
         fixture.wallet.withdrawals shouldBe 0
     }
 
+    "rider view auto-hide is a free per-mount setting" {
+        val fixture = PurchaseFixture().also { it.ownership.level = 1 }
+        var result: MountPurchaseResult? = null
+
+        fixture.coordinator.setRiderViewAutoHide(fixture.subject(), fixture.mount, false) { result = it }
+
+        result shouldBe MountPurchaseResult.Success
+        fixture.ownership.riderViewAutoHide shouldBe false
+        fixture.wallet.withdrawals shouldBe 0
+    }
+
     "unavailable balance cancels the prepared record without blocking future purchases" {
         val fixture = PurchaseFixture().also { it.wallet.balanceAvailable = false }
         var result: MountPurchaseResult? = null
@@ -383,6 +394,7 @@ private class MutableOwnership : MountOwnership {
     var selectedSpeedPercentage: Int? = null
     var selectedStepHeightHundredths: Int? = null
     var selectedSizeId: String? = null
+    var riderViewAutoHide: Boolean? = null
     var failWrites = false
     val skinPermissions = hashSetOf<String>()
     val activeSkinPermissions = hashSetOf<String>()
@@ -421,6 +433,7 @@ private class MutableOwnership : MountOwnership {
             selectedSpeedPercentage,
             selectedStepHeightHundredths,
             selectedSizeId,
+            riderViewAutoHide,
         )
 
     override fun grantLevel(playerId: UUID, mount: MountDefinition, level: Int): CompletableFuture<Void> =
@@ -496,6 +509,17 @@ private class MutableOwnership : MountOwnership {
             selectedSizeId = sizeId
             directPermissions.removeIf { it.startsWith(mount.sizeTuningPermissionPrefix) }
             directPermissions += mount.sizeTuningPermission(sizeId)
+        }
+
+    override fun setRiderViewAutoHide(
+        playerId: UUID,
+        mount: MountDefinition,
+        enabled: Boolean,
+    ): CompletableFuture<Void> =
+        write {
+            riderViewAutoHide = enabled
+            directPermissions.removeIf { it.startsWith(mount.riderViewTuningPermissionPrefix) }
+            directPermissions += mount.riderViewTuningPermission(enabled)
         }
 
     override fun hasDirectPermission(playerId: UUID, permission: String): CompletableFuture<Boolean> =

@@ -246,7 +246,9 @@ class MountGuiController(
         val config = configProvider()
         val mount = catalogProvider()[mountId] ?: return openList(player)
         val profile = ownership.profile(subject(player), mount)
-        val abilitySlots = DETAIL_ABILITY_SLOTS.zip(mount.abilities.upgrades.map(MountAbilityUpgradeDefinition::id)).toMap()
+        val abilitySlots = centeredDetailAbilitySlots(mount.abilities.upgrades.size)
+            .zip(mount.abilities.upgrades.map(MountAbilityUpgradeDefinition::id))
+            .toMap()
         val holder = MountMenuHolder(MountScreen.DETAIL, mount.id, abilitiesBySlot = abilitySlots)
         val inventory = Bukkit.createInventory(holder, DETAIL_SIZE, component(config.detailTitle.replace("<mount>", escape(mount.displayName))))
         holder.backingInventory = inventory
@@ -333,6 +335,7 @@ class MountGuiController(
                 inventory.setItem(slot, items.sizeTuningItem(mount, profile, option))
             }
         }
+        inventory.setItem(TUNING_RIDER_VIEW_SLOT, items.riderViewTuningItem(profile))
         inventory.setItem(
             TUNING_BACK_SLOT,
             styledItem(
@@ -537,6 +540,12 @@ class MountGuiController(
                     target > mount.maxLevel || mount.price(target) == null -> Unit
                     !configProvider().purchasesEnabled -> Unit
                     else -> openConfirm(player, mount, ConfirmAction.Level(target))
+                }
+            }
+            TUNING_RIDER_VIEW_SLOT -> {
+                if (!profile.unlocked) return
+                purchases.setRiderViewAutoHide(subject(player), mount, !(profile.riderViewAutoHide ?: true)) {
+                    handlePurchaseResult(player, mount, it, purchase = false, reopen = MountScreen.PROGRESSION)
                 }
             }
             else -> {
@@ -927,10 +936,9 @@ class MountGuiController(
         private const val DETAIL_UPGRADE_SLOT = 20
         private const val DETAIL_SUMMON_SLOT = 22
         private const val DETAIL_GLOW_SLOT = 24
-        private const val DETAIL_SKINS_SLOT = 31
-        private val DETAIL_ABILITY_SLOTS = listOf(29, 30, 32, 33)
+        private const val DETAIL_SKINS_SLOT = 40
         private const val DETAIL_BACK_SLOT = 36
-        private const val DETAIL_WHISTLE_SLOT = 40
+        private const val DETAIL_WHISTLE_SLOT = 42
 
         private const val TUNING_SIZE = 54
         private const val TUNING_INFO_SLOT = 4
@@ -939,6 +947,7 @@ class MountGuiController(
         private val TUNING_STEP_SLOTS = listOf(29, 30, 31, 32, 33)
         private const val TUNING_NOT_APPLICABLE_SLOT = 31
         private const val TUNING_BACK_SLOT = 45
+        private const val TUNING_RIDER_VIEW_SLOT = 49
         private const val SKINS_SIZE = 54
         private val SKIN_CONTENT_SLOTS = listOf(10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34)
         private const val SKINS_BACK_SLOT = 45
@@ -949,6 +958,15 @@ class MountGuiController(
         private const val CONFIRM_ACCEPT_SLOT = 15
     }
 }
+
+internal fun centeredDetailAbilitySlots(count: Int): List<Int> =
+    when (count.coerceIn(0, 4)) {
+        0 -> emptyList()
+        1 -> listOf(31)
+        2 -> listOf(30, 32)
+        3 -> listOf(29, 31, 33)
+        else -> listOf(29, 30, 32, 33)
+    }
 
 internal fun prioritizeUnlockedMounts(
     mounts: List<MountDefinition>,

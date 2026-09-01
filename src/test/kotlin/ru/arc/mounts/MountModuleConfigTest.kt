@@ -14,10 +14,30 @@ class MountModuleConfigTest : StringSpec({
         val config = bundledConfig("catalog")
         val catalog = config.catalog()
 
-        catalog.all shouldHaveSize 35
+        catalog.all shouldHaveSize 50
         catalog.all.groupingBy(MountDefinition::movement).eachCount() shouldBe
-            mapOf(MountMovement.WALKING to 15, MountMovement.FLYING to 14, MountMovement.SWIMMING to 6)
-        catalog.all.map(MountDefinition::id).toSet().size shouldBe 35
+            mapOf(MountMovement.WALKING to 30, MountMovement.FLYING to 12, MountMovement.SWIMMING to 8)
+        catalog.all.map(MountDefinition::id).toSet().size shouldBe 50
+        setOf(
+            "cat",
+            "wolf",
+            "armadillo",
+            "llama",
+            "ocelot",
+            "panda",
+            "pufferfish",
+            "magma_cube",
+            "mooshroom",
+            "tadpole",
+            "polar_bear",
+            "copper_golem",
+            "iron_golem",
+            "trader_llama",
+            "snow_golem",
+            "villager",
+            "wandering_trader",
+            "skeleton_horse",
+        ).all { catalog[it] != null } shouldBe true
         catalog["blaze"]?.price(1) shouldBe null
         catalog["happy_ghast"]?.movement shouldBe MountMovement.FLYING
         catalog["dolphin"]?.movement shouldBe MountMovement.SWIMMING
@@ -80,20 +100,22 @@ class MountModuleConfigTest : StringSpec({
         horse.abilities.highJump?.multiplier shouldBe 1.25
         fox.abilities.highJump?.displayName shouldBe "Лисий прыжок"
         fox.abilities.highJump?.multiplier shouldBe 1.35
-        catalog.all.filterNot { it.id in setOf("goat", "frog", "horse", "fox", "pocket_chicken") }
+        catalog.all.filterNot {
+            it.id in setOf("goat", "frog", "horse", "fox", "pocket_chicken", "magma_cube", "skeleton_horse")
+        }
             .all { it.abilities.highJump == null } shouldBe true
         catalog.all.filter { it.movement == MountMovement.SWIMMING }.all { mount ->
-            mount.ability("water-breathing") != null && mount.ability("night-vision") != null
+            (mount.ability("water-breathing") != null || mount.abilities.passives.any { it.effect == MountAbilityEffect.WATER_BREATHING }) &&
+                mount.ability("night-vision") != null
         } shouldBe true
         catalog["dolphin"]?.ability("dolphins-grace")?.speedMultiplier shouldBe 1.15
         setOf("skeleton", "enderman", "bat", "phantom").all {
             catalog[it]?.ability("night-vision")?.effect == MountAbilityEffect.NIGHT_VISION
         } shouldBe true
         setOf("strider", "blaze", "ghast", "happy_ghast").all { catalog[it]?.ability("fire-resistance") != null } shouldBe true
-        checkNotNull(catalog["mega_pig"]).abilities.passives.map(MountPassiveAbilityDefinition::effect) shouldBe
-            listOf(MountAbilityEffect.RESISTANCE, MountAbilityEffect.STRENGTH)
-        checkNotNull(catalog["colossal_bee"]).abilities.passives.single().effect shouldBe MountAbilityEffect.REGENERATION
-        checkNotNull(catalog["pocket_ghast"]).abilities.passives.single().effect shouldBe MountAbilityEffect.FIRE_RESISTANCE
+        checkNotNull(catalog["pig"]).abilities.passives.single().effect shouldBe MountAbilityEffect.SPEED
+        checkNotNull(catalog["bee"]).abilities.passives.single().effect shouldBe MountAbilityEffect.REGENERATION
+        checkNotNull(catalog["ghast"]).abilities.passives.single().effect shouldBe MountAbilityEffect.FIRE_RESISTANCE
         checkNotNull(catalog["mega_warden"]).abilities.passives.map(MountPassiveAbilityDefinition::effect) shouldBe
             listOf(MountAbilityEffect.NIGHT_VISION, MountAbilityEffect.STRENGTH, MountAbilityEffect.RESISTANCE)
     }
@@ -104,7 +126,7 @@ class MountModuleConfigTest : StringSpec({
         val defaults = config.motionTiming
 
         checkNotNull(catalog["horse"]).sizeOptions.map(MountSizeOptionDefinition::multiplier) shouldBe listOf(0.1, 1.0, 2.0, 3.0)
-        checkNotNull(catalog["bee"]).sizeOptions.map(MountSizeOptionDefinition::multiplier) shouldBe listOf(0.1, 1.0, 2.0, 3.0)
+        checkNotNull(catalog["bee"]).sizeOptions.map(MountSizeOptionDefinition::multiplier) shouldBe listOf(0.1, 0.5, 1.0, 3.0, 10.0)
         checkNotNull(catalog["fox"]).motion.resolve(defaults) shouldBe
             MountMotionTiming(Duration.ofMillis(550), Duration.ofMillis(250), Duration.ofMillis(130))
         checkNotNull(catalog["camel"]).motion.resolve(defaults) shouldBe
@@ -146,12 +168,17 @@ class MountModuleConfigTest : StringSpec({
     "absurd catalog mounts retain their authored effective scale" {
         val catalog = bundledConfig("absurd-scales").catalog()
 
-        checkNotNull(catalog["mega_pig"]).appearance.scale shouldBe 10.0
-        checkNotNull(catalog["colossal_bee"]).appearance.scale shouldBe 10.0
-        checkNotNull(catalog["pocket_ghast"]).appearance.scale shouldBe 0.1
-        checkNotNull(catalog["mega_warden"]).appearance.scale shouldBe 3.0
+        catalog["mega_pig"] shouldBe null
+        catalog["colossal_bee"] shouldBe null
+        catalog["pocket_ghast"] shouldBe null
+        checkNotNull(catalog["pig"]).sizeOptions.map(MountSizeOptionDefinition::multiplier) shouldBe
+            listOf(0.1, 0.5, 1.0, 3.0, 10.0)
+        checkNotNull(catalog["ghast"]).sizeOptions.map(MountSizeOptionDefinition::multiplier) shouldBe
+            listOf(0.1, 0.5, 1.0, 3.0, 10.0)
+        checkNotNull(catalog["mega_warden"]).sizeOptions.map(MountSizeOptionDefinition::multiplier) shouldBe
+            listOf(0.1, 0.5, 1.0, 3.0, 10.0)
         checkNotNull(catalog["pocket_chicken"]).sizeOptions.map(MountSizeOptionDefinition::multiplier) shouldBe
-            listOf(0.1, 1.0, 2.0, 3.0)
+            listOf(0.1, 0.5, 1.0, 3.0, 10.0)
     }
 
     "every catalog appearance, material, entity and particle matches the exact Paper API" {

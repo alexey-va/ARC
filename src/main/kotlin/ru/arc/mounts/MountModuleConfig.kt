@@ -407,7 +407,15 @@ open class MountModuleConfig(private val config: Config) {
         val displayName = config.stringOrNull("$highJumpPath.name")?.trim().orEmpty()
         val multiplier = config.doubleOrNull("$highJumpPath.multiplier")
             ?: throw IllegalArgumentException("Mount high-jump multiplier is required")
-        return MountAbilities(MountHighJumpAbility(displayName, multiplier), upgrades, passives)
+        return MountAbilities(
+            MountHighJumpAbility(
+                displayName,
+                multiplier,
+                config.stringList("$highJumpPath.description").map(String::trim).filter(String::isNotEmpty),
+            ),
+            upgrades,
+            passives,
+        )
     }
 
     private fun passiveAbilities(path: String): List<MountPassiveAbilityDefinition> =
@@ -415,7 +423,7 @@ open class MountModuleConfig(private val config: Config) {
             val id = rawId.lowercase(Locale.ROOT)
             require(id == rawId && MountDefinition.validId(id)) { "Mount passive ability id '$rawId' must be normalized" }
             val passivePath = "$path.$id"
-            val allowedKeys = setOf("name", "effect", "amplifier")
+            val allowedKeys = setOf("name", "effect", "amplifier", "description")
             val unknown = config.keys(passivePath) - allowedKeys
             require(unknown.isEmpty()) { "Mount passive ability '$id' has unknown fields: ${unknown.sorted()}" }
             val rawEffect = config.string("$passivePath.effect", id).trim().uppercase(Locale.ROOT).replace('-', '_')
@@ -425,6 +433,7 @@ open class MountModuleConfig(private val config: Config) {
                 effect = runCatching { MountAbilityEffect.valueOf(rawEffect) }
                     .getOrElse { throw IllegalArgumentException("Mount passive ability '$id' has invalid effect '$rawEffect'") },
                 amplifier = config.integer("$passivePath.amplifier", 0),
+                description = config.stringList("$passivePath.description").map(String::trim).filter(String::isNotEmpty),
             )
         }
 

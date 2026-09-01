@@ -120,6 +120,9 @@ gui:
         - "<#8c8c8c>Уровень: <#e6fff3><level>/<max-level>"
         - "<#8c8c8c>Облик: <#e6fff3><skin>"
       mount-owned-footer: "<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>ЛКМ<#e6fff3> — призвать <#8c8c8c>· <#92bed8>ПКМ<#e6fff3> — открыть"
+      features-title: "<#92bed8>Особенности"
+      feature-name: "<#ffacd5>• <feature>"
+      feature-description: "<#8c8c8c>  <feature-description>"
       mount-acquirable-name: "<#92bed8><mount>"
       mount-acquirable-core:
         - "<#ff9f0f>Доступен к получению"
@@ -154,6 +157,7 @@ gui:
       locked-acquisition: "<#8c8c8c>Получение: <#e6fff3><acquisition>"
       description-line: "<#e6fff3><mount-description>"
       innate-ability-line: "<#8c8c8c>Особенность: <#ffacd5><ability>"
+      innate-description: "<#8c8c8c><ability-description>"
       effect-owned-line: "<#8c8c8c>Эффект: <#ffacd5><ability>"
       upgrade-available-line: "<#8c8c8c>Улучшение: <#92bed8><ability> <#969696>(не куплено)"
       behavior-line: "<#8c8c8c>Особенность: <#ffacd5><feature>"
@@ -287,6 +291,12 @@ gui:
         - "<#8c8c8c>Эта настройка доступна только пешим маунтам."
       size-name: "<#92bed8>Размер: <size>"
       size-selected-name: "<#2bba43>Размер: <size>"
+      rider-view-auto-name: "<#2bba43>Корпус: скрывается"
+      rider-view-visible-name: "<#92bed8>Корпус: всегда виден"
+      rider-view-lore:
+        - "<#8c8c8c>Скрывает маунта только для всадника,"
+        - "<#8c8c8c>когда корпус перекрывает обзор."
+        - "<#8c8c8c>У гигантов срабатывает раньше."
     skins:
       back-description: "<#8c8c8c>Вернуться к маунту."
       classic-name: "Классический"
@@ -579,17 +589,35 @@ mounts:
     acquisition: "Магазин маунтов на спавне"
     description:
       - "Тот самый Скорен."
-      - "Маленький, но амбициозный."
+      - "От брелока ×0.1 до дома ×10."
+    abilities:
+      passive:
+        pig-acceleration:
+          name: "Свинячий разгон"
+          effect: SPEED
+          amplifier: 1
+          description:
+            - "После спешивания оставляет Скорость II."
+    motion:
+      acceleration-time: 350ms
+      deceleration-time: 250ms
+      turn-time: 120ms
     levels:
-      - {speed: 1.35, handling: 0.9, sprint: 1, price: 50000}
-      - {speed: 2.25, handling: 1, sprint: 1.03, price: 250000}
-      - {speed: 4.8, handling: 1.28, sprint: 1.12, price: 5000000}
+      - {speed: 1.65, handling: 0.9, sprint: 1, price: 50000}
+      - {speed: 2.7, handling: 1, sprint: 1.03, price: 250000}
+      - {speed: 5.6, handling: 1.28, sprint: 1.12, price: 5000000}
     buy-glow: 100000
     appearance:
       baby: false
-      scale: 1.05
+      scale: 1
       equipment:
         saddle: SADDLE
+    size-tuning:
+      - {id: keychain, name: "Брелок ×0.1", multiplier: 0.10, minimum-level: 1}
+      - {id: compact, name: "Компактный ×0.5", multiplier: 0.50, minimum-level: 1}
+      - {id: standard, name: "Обычный ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: giant, name: "Гигант ×3", multiplier: 3.00, minimum-level: 2}
+      - {id: colossal, name: "Дом ×10", multiplier: 10.00, minimum-level: 3}
     skins:
       starlight:
         name: "Звёздный комплект"
@@ -912,6 +940,14 @@ mounts:
       - "Древний добряк для коллекционеров:"
       - "размеренный старт"
       - "и мощный финиш."
+    abilities:
+      passive:
+        ancient-instinct:
+          name: "Древнее чутьё"
+          effect: HASTE
+          amplifier: 0
+          description:
+            - "Ускоряет добычу блоков во время экспедиции."
     levels:
       - {speed: 1.55, handling: 0.9, sprint: 1, price: 250000}
       - {speed: 2.5, handling: 1, sprint: 1.03, price: 1200000}
@@ -974,7 +1010,15 @@ mounts:
     acquisition: "Магазин маунтов на спавне"
     description:
       - "Дружелюбный первый воздушный маунт"
-      - "с тремя вариантами размера."
+      - "от брелока до живого дирижабля."
+    abilities:
+      passive:
+        honey-reserve:
+          name: "Медовый запас"
+          effect: REGENERATION
+          amplifier: 0
+          description:
+            - "Постепенно восстанавливает здоровье всадника."
     levels:
       - {speed: 0.42, handling: 0.9, sprint: 1, price: 50000}
       - {speed: 0.72, handling: 1, sprint: 1.03, price: 250000}
@@ -982,12 +1026,13 @@ mounts:
     buy-glow: 100000
     appearance:
       baby: false
-      scale: 1.55
+      scale: 1
     size-tuning:
       - {id: keychain, name: "Брелок ×0.1", multiplier: 0.10, minimum-level: 1}
+      - {id: compact, name: "Компактная ×0.5", multiplier: 0.50, minimum-level: 1}
       - {id: standard, name: "Обычный ×1", multiplier: 1.00, minimum-level: 1}
-      - {id: huge, name: "Огромный ×2", multiplier: 2.00, minimum-level: 2}
-      - {id: absurd, name: "Абсурдный ×3", multiplier: 3.00, minimum-level: 3}
+      - {id: giant, name: "Гигантская ×3", multiplier: 3.00, minimum-level: 2}
+      - {id: colossal, name: "Дирижабль ×10", multiplier: 10.00, minimum-level: 3}
     skins:
       starlight:
         name: "Звёздный комплект"
@@ -1130,6 +1175,14 @@ mounts:
     description:
       - "Яркий воздушный разведчик"
       - "с набором фиксированных расцветок."
+    abilities:
+      passive:
+        feathered-landing:
+          name: "Перьевой планер"
+          effect: SLOW_FALLING
+          amplifier: 0
+          description:
+            - "Смягчает падение после воздушной поездки."
     levels:
       - {speed: 0.45, handling: 0.9, sprint: 1, price: 100000}
       - {speed: 0.76, handling: 1, sprint: 1.03, price: 500000}
@@ -1137,8 +1190,14 @@ mounts:
     buy-glow: 200000
     appearance:
       baby: false
-      scale: 2.25
+      scale: 1
       variant: RED
+    size-tuning:
+      - {id: keychain, name: "Крошечный ×0.1", multiplier: 0.10, minimum-level: 1}
+      - {id: compact, name: "Компактный ×0.5", multiplier: 0.50, minimum-level: 1}
+      - {id: standard, name: "Обычный ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: giant, name: "Гигантский ×3", multiplier: 3.00, minimum-level: 2}
+      - {id: colossal, name: "Авиалайнер ×10", multiplier: 10.00, minimum-level: 3}
     skins:
       blue:
         name: "Синий ара"
@@ -1285,17 +1344,30 @@ mounts:
     rarity: legendary
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Огромный престижный корабль"
-      - "Нижнего мира."
+      - "Корабль Нижнего мира:"
+      - "от брелока до небесной крепости."
     abilities:
       upgrades: [fire-resistance]
+      passive:
+        nether-bubble:
+          name: "Пузырь Нижнего мира"
+          effect: FIRE_RESISTANCE
+          amplifier: 0
+          description:
+            - "Постоянно защищает всадника от огня и лавы."
     levels:
       - {speed: 0.55, handling: 0.9, sprint: 1, price: 1000000}
       - {speed: 0.9, handling: 1, sprint: 1.03, price: 5000000}
       - {speed: 1.7, handling: 1.28, sprint: 1.12, price: 35000000}
     buy-glow: 1000000
     appearance:
-      scale: 0.58
+      scale: 1
+    size-tuning:
+      - {id: keychain, name: "Карманный ×0.1", multiplier: 0.10, minimum-level: 1}
+      - {id: compact, name: "Компактный ×0.5", multiplier: 0.50, minimum-level: 1}
+      - {id: standard, name: "Обычный ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: giant, name: "Крепость ×3", multiplier: 3.00, minimum-level: 2}
+      - {id: colossal, name: "Небоход ×10", multiplier: 10.00, minimum-level: 3}
     skins:
       starlight:
         name: "Звёздный комплект"
@@ -1417,6 +1489,13 @@ mounts:
       - "и тёмных глубин."
     abilities:
       upgrades: [water-breathing, night-vision]
+      passive:
+        ink-lung:
+          name: "Чернильные жабры"
+          effect: WATER_BREATHING
+          amplifier: 0
+          description:
+            - "Позволяет дышать под водой без улучшений."
     levels:
       - {speed: 0.56, handling: 0.9, sprint: 1, price: 100000}
       - {speed: 0.92, handling: 1, sprint: 1.03, price: 500000}
@@ -1465,164 +1544,869 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 2800000
-  # Нарочито абсурдная коллекция: размеры и эффекты важнее реализма.
-  mega_pig:
+  cat:
     type: walking
-    item: PIG_SPAWN_EGG
-    entity: PIG
-    name: "Мегасвинья"
+    item: CAT_SPAWN_EGG
+    entity: CAT
+    name: "Кот"
+    rarity: uncommon
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Ночной разведчик с мягкими лапами"
+      - "и совершенно немягким размером ×10."
+    abilities:
+      passive:
+        cat-eyes:
+          name: "Кошачьи глаза"
+          effect: NIGHT_VISION
+          amplifier: 0
+          description:
+            - "Позволяет всаднику видеть в полной темноте."
+    levels:
+      - {speed: 1.45, handling: 0.9, sprint: 1, price: 100000}
+      - {speed: 2.35, handling: 1, sprint: 1.03, price: 500000}
+      - {speed: 5, handling: 1.28, sprint: 1.12, price: 8000000}
+    buy-glow: 200000
+    appearance: {baby: false, scale: 1}
+    size-tuning:
+      - {id: keychain, name: "Котёнок ×0.1", multiplier: 0.10, minimum-level: 1}
+      - {id: compact, name: "Компактный ×0.5", multiplier: 0.50, minimum-level: 1}
+      - {id: standard, name: "Обычный ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: giant, name: "Тигр ×3", multiplier: 3.00, minimum-level: 2}
+      - {id: colossal, name: "Котодом ×10", multiplier: 10.00, minimum-level: 3}
+    skins:
+      starlight:
+        name: "Звёздный кот"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 650000
+      shadow:
+        name: "Теневой кот"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 1400000
+  wolf:
+    type: walking
+    item: WOLF_SPAWN_EGG
+    entity: WOLF
+    name: "Волк"
+    rarity: rare
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Быстрый охотник, который усиливает"
+      - "и ноги, и оружие всадника."
+    abilities:
+      passive:
+        pack-pace:
+          name: "Темп стаи"
+          effect: SPEED
+          amplifier: 0
+          description:
+            - "Оставляет всаднику ускорение после поездки."
+        pack-strength:
+          name: "Сила стаи"
+          effect: STRENGTH
+          amplifier: 0
+          description:
+            - "Усиливает атаки всадника."
+    levels:
+      - {speed: 1.55, handling: 0.9, sprint: 1, price: 250000}
+      - {speed: 2.5, handling: 1, sprint: 1.03, price: 1200000}
+      - {speed: 5.2, handling: 1.28, sprint: 1.12, price: 12000000}
+    buy-glow: 350000
+    appearance: {baby: false, scale: 1}
+    size-tuning:
+      - {id: compact, name: "Щенок ×0.5", multiplier: 0.50, minimum-level: 1}
+      - {id: standard, name: "Обычный ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: giant, name: "Лютоволк ×3", multiplier: 3.00, minimum-level: 2}
+      - {id: colossal, name: "Вожак ×10", multiplier: 10.00, minimum-level: 3}
+    skins:
+      starlight:
+        name: "Звёздный волк"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 1200000
+      shadow:
+        name: "Теневой волк"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 2800000
+  armadillo:
+    type: walking
+    item: ARMADILLO_SPAWN_EGG
+    entity: ARMADILLO
+    name: "Броненосец"
+    rarity: uncommon
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Бронированный низкий транспорт"
+      - "для тех, кто не любит получать урон."
+    abilities:
+      passive:
+        shell-armor:
+          name: "Живая броня"
+          effect: RESISTANCE
+          amplifier: 1
+          description:
+            - "Даёт всаднику Сопротивление II."
+    levels:
+      - {speed: 1.45, handling: 0.9, sprint: 1, price: 100000}
+      - {speed: 2.35, handling: 1, sprint: 1.03, price: 500000}
+      - {speed: 5, handling: 1.28, sprint: 1.12, price: 8000000}
+    buy-glow: 200000
+    appearance: {baby: false, scale: 1}
+    size-tuning:
+      - {id: keychain, name: "Клубок ×0.1", multiplier: 0.10, minimum-level: 1}
+      - {id: standard, name: "Обычный ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: giant, name: "Бронешар ×3", multiplier: 3.00, minimum-level: 2}
+      - {id: colossal, name: "Крепость ×10", multiplier: 10.00, minimum-level: 3}
+    skins:
+      starlight:
+        name: "Звёздный панцирь"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 650000
+      shadow:
+        name: "Теневой панцирь"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 1400000
+  llama:
+    type: walking
+    item: LLAMA_SPAWN_EGG
+    entity: LLAMA
+    name: "Лама"
+    rarity: uncommon
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Караванный маунт с устойчивой походкой"
+      - "и мягким аварийным приземлением."
+    abilities:
+      passive:
+        caravan-balance:
+          name: "Баланс каравана"
+          effect: SLOW_FALLING
+          amplifier: 0
+          description:
+            - "Смягчает падение всадника с высоты."
+    levels:
+      - {speed: 1.45, handling: 0.9, sprint: 1, price: 100000}
+      - {speed: 2.35, handling: 1, sprint: 1.03, price: 500000}
+      - {speed: 5, handling: 1.28, sprint: 1.12, price: 8000000}
+    buy-glow: 200000
+    appearance: {baby: false, scale: 1}
+    size-tuning:
+      - {id: compact, name: "Компактная ×0.5", multiplier: 0.50, minimum-level: 1}
+      - {id: standard, name: "Обычная ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: giant, name: "Караван ×3", multiplier: 3.00, minimum-level: 2}
+      - {id: colossal, name: "Шагающая башня ×10", multiplier: 10.00, minimum-level: 3}
+    skins:
+      starlight:
+        name: "Звёздный караван"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 650000
+      shadow:
+        name: "Теневой караван"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 1400000
+  ocelot:
+    type: walking
+    item: OCELOT_SPAWN_EGG
+    entity: OCELOT
+    name: "Оцелот"
+    rarity: rare
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Джунглевый спринтер"
+      - "для резких и тихих вылазок."
+    abilities:
+      passive:
+        jungle-sprint:
+          name: "Джунглевый спринт"
+          effect: SPEED
+          amplifier: 1
+          description:
+            - "Даёт всаднику Скорость II."
+    levels:
+      - {speed: 1.55, handling: 0.9, sprint: 1, price: 250000}
+      - {speed: 2.5, handling: 1, sprint: 1.03, price: 1200000}
+      - {speed: 5.2, handling: 1.28, sprint: 1.12, price: 12000000}
+    buy-glow: 350000
+    appearance: {baby: false, scale: 1}
+    size-tuning:
+      - {id: keychain, name: "Котёнок ×0.1", multiplier: 0.10, minimum-level: 1}
+      - {id: standard, name: "Обычный ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: giant, name: "Ягуар ×3", multiplier: 3.00, minimum-level: 2}
+      - {id: colossal, name: "Джунгли ×10", multiplier: 10.00, minimum-level: 3}
+    skins:
+      starlight:
+        name: "Звёздный оцелот"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 1200000
+      shadow:
+        name: "Теневой оцелот"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 2800000
+  panda:
+    type: walking
+    item: PANDA_SPAWN_EGG
+    entity: PANDA
+    name: "Панда"
+    rarity: rare
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Тяжёлый медик на бамбуковом топливе"
+      - "с режимом гигантского пуфика."
+    abilities:
+      passive:
+        bamboo-rest:
+          name: "Бамбуковый отдых"
+          effect: REGENERATION
+          amplifier: 0
+          description:
+            - "Постепенно восстанавливает здоровье всадника."
+        soft-armor:
+          name: "Мягкая броня"
+          effect: RESISTANCE
+          amplifier: 0
+          description:
+            - "Снижает входящий урон."
+    levels:
+      - {speed: 1.55, handling: 0.9, sprint: 1, price: 250000}
+      - {speed: 2.5, handling: 1, sprint: 1.03, price: 1200000}
+      - {speed: 5.2, handling: 1.28, sprint: 1.12, price: 12000000}
+    buy-glow: 350000
+    appearance: {baby: false, scale: 1}
+    size-tuning:
+      - {id: compact, name: "Пандочка ×0.5", multiplier: 0.50, minimum-level: 1}
+      - {id: standard, name: "Обычная ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: giant, name: "Пуфик ×3", multiplier: 3.00, minimum-level: 2}
+      - {id: colossal, name: "Панда-гора ×10", multiplier: 10.00, minimum-level: 3}
+    skins:
+      starlight:
+        name: "Звёздная панда"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 1200000
+      shadow:
+        name: "Теневая панда"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 2800000
+  pufferfish:
+    type: swimming
+    item: PUFFERFISH_SPAWN_EGG
+    entity: PUFFERFISH
+    name: "Иглобрюх"
+    rarity: rare
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Подводный шар с характером"
+      - "и аварийной бронёй из иголок."
+    abilities:
+      upgrades: [night-vision]
+      passive:
+        bubble-breath:
+          name: "Воздушный пузырь"
+          effect: WATER_BREATHING
+          amplifier: 0
+          description:
+            - "Позволяет всаднику дышать под водой."
+        needle-armor:
+          name: "Игольчатая броня"
+          effect: RESISTANCE
+          amplifier: 0
+          description:
+            - "Снижает входящий урон всаднику."
+    levels:
+      - {speed: 0.6, handling: 0.9, sprint: 1, price: 250000}
+      - {speed: 0.98, handling: 1, sprint: 1.03, price: 1200000}
+      - {speed: 1.85, handling: 1.28, sprint: 1.12, price: 12000000}
+    buy-glow: 350000
+    appearance: {scale: 1}
+    size-tuning:
+      - {id: keychain, name: "Пузырёк ×0.1", multiplier: 0.10, minimum-level: 1}
+      - {id: standard, name: "Обычный ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: giant, name: "Мина ×3", multiplier: 3.00, minimum-level: 2}
+      - {id: colossal, name: "Морская мина ×10", multiplier: 10.00, minimum-level: 3}
+    skins:
+      ocean:
+        name: "Океанический иглобрюх"
+        item: NAUTILUS_SHELL
+        preset: ocean
+        price: 1200000
+      starlight:
+        name: "Звёздный иглобрюх"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 2800000
+  magma_cube:
+    type: walking
+    item: MAGMA_CUBE_SPAWN_EGG
+    entity: MAGMA_CUBE
+    name: "Магмовый куб"
+    rarity: epic
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Прыгающая печка Нижнего мира"
+      - "с режимом десятикратного бедствия."
+    abilities:
+      high-jump:
+        name: "Магмовый батут"
+        multiplier: 1.8
+        description:
+          - "Запускает наземного маунта заметно выше."
+      passive:
+        molten-core:
+          name: "Расплавленное ядро"
+          effect: FIRE_RESISTANCE
+          amplifier: 0
+          description:
+            - "Защищает всадника от огня и лавы."
+    levels:
+      - {speed: 1.6, handling: 0.9, sprint: 1, price: 500000}
+      - {speed: 2.6, handling: 1, sprint: 1.03, price: 2500000}
+      - {speed: 5.4, handling: 1.28, sprint: 1.12, price: 20000000}
+    buy-glow: 600000
+    appearance: {scale: 1}
+    size-tuning:
+      - {id: keychain, name: "Искра ×0.1", multiplier: 0.10, minimum-level: 1}
+      - {id: standard, name: "Обычный ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: giant, name: "Печь ×3", multiplier: 3.00, minimum-level: 2}
+      - {id: colossal, name: "Магмоблок ×10", multiplier: 10.00, minimum-level: 3}
+    skins:
+      flame:
+        name: "Огненное ядро"
+        item: BLAZE_POWDER
+        preset: flame
+        price: 2500000
+      soulfire:
+        name: "Ядро душ"
+        item: SOUL_LANTERN
+        preset: soulfire
+        price: 5500000
+  mooshroom:
+    type: walking
+    item: MOOSHROOM_SPAWN_EGG
+    entity: MOOSHROOM
+    name: "Мушрум"
+    rarity: rare
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Грибная полевая лечебница"
+      - "на четырёх ногах."
+    abilities:
+      passive:
+        mushroom-stew:
+          name: "Грибной бульон"
+          effect: REGENERATION
+          amplifier: 0
+          description:
+            - "Постепенно восстанавливает здоровье всадника."
+    levels:
+      - {speed: 1.55, handling: 0.9, sprint: 1, price: 250000}
+      - {speed: 2.5, handling: 1, sprint: 1.03, price: 1200000}
+      - {speed: 5.2, handling: 1.28, sprint: 1.12, price: 12000000}
+    buy-glow: 350000
+    appearance: {baby: false, scale: 1}
+    size-tuning:
+      - {id: compact, name: "Грибочек ×0.5", multiplier: 0.50, minimum-level: 1}
+      - {id: standard, name: "Обычный ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: giant, name: "Грибница ×3", multiplier: 3.00, minimum-level: 2}
+      - {id: colossal, name: "Грибной остров ×10", multiplier: 10.00, minimum-level: 3}
+    skins:
+      starlight:
+        name: "Звёздный мушрум"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 1200000
+      shadow:
+        name: "Теневой мушрум"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 2800000
+  tadpole:
+    type: swimming
+    item: TADPOLE_BUCKET
+    entity: TADPOLE
+    name: "Головастик"
+    rarity: uncommon
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Крошечная торпеда, которая умеет"
+      - "стать нелепо огромной."
+    abilities:
+      upgrades: [night-vision]
+      passive:
+        tadpole-gills:
+          name: "Жабры головастика"
+          effect: WATER_BREATHING
+          amplifier: 0
+          description:
+            - "Позволяет всаднику дышать под водой."
+        tadpole-torpedo:
+          name: "Живая торпеда"
+          effect: DOLPHINS_GRACE
+          amplifier: 0
+          description:
+            - "Ускоряет самостоятельное плавание всадника."
+    levels:
+      - {speed: 0.56, handling: 0.9, sprint: 1, price: 100000}
+      - {speed: 0.92, handling: 1, sprint: 1.03, price: 500000}
+      - {speed: 1.75, handling: 1.28, sprint: 1.12, price: 8000000}
+    buy-glow: 200000
+    appearance: {scale: 1}
+    size-tuning:
+      - {id: keychain, name: "Капля ×0.1", multiplier: 0.10, minimum-level: 1}
+      - {id: standard, name: "Обычный ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: giant, name: "Торпеда ×3", multiplier: 3.00, minimum-level: 2}
+      - {id: colossal, name: "Подлодка ×10", multiplier: 10.00, minimum-level: 3}
+    skins:
+      ocean:
+        name: "Океанический головастик"
+        item: NAUTILUS_SHELL
+        preset: ocean
+        price: 650000
+      starlight:
+        name: "Звёздный головастик"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 1400000
+  polar_bear:
+    type: walking
+    item: POLAR_BEAR_SPAWN_EGG
+    entity: POLAR_BEAR
+    name: "Белый медведь"
+    rarity: epic
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Арктический танк, который защищает"
+      - "всадника и давит врагов под собой."
+    abilities:
+      passive:
+        arctic-force:
+          name: "Арктическая сила"
+          effect: STRENGTH
+          amplifier: 0
+          description:
+            - "Усиливает атаки всадника."
+        winter-coat:
+          name: "Зимняя шкура"
+          effect: RESISTANCE
+          amplifier: 0
+          description:
+            - "Снижает входящий урон."
+    behaviors:
+      bear-trample:
+        type: trample
+        name: "Медвежий топот"
+        description:
+          - "Враждебные мобы под медведем"
+          - "получают урон во время движения."
+        cooldown: 1s
+        minimum-speed-fraction: 0.2
+        horizontal-padding: 0.25
+        downward-reach: 0.8
+        damage: 2.5
+        maximum-targets: 4
+    levels:
+      - {speed: 1.6, handling: 0.9, sprint: 1, price: 500000}
+      - {speed: 2.6, handling: 1, sprint: 1.03, price: 2500000}
+      - {speed: 5.4, handling: 1.28, sprint: 1.12, price: 20000000}
+    buy-glow: 600000
+    appearance: {baby: false, scale: 1}
+    size-tuning:
+      - {id: compact, name: "Медвежонок ×0.5", multiplier: 0.50, minimum-level: 1}
+      - {id: standard, name: "Обычный ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: giant, name: "Арктический танк ×3", multiplier: 3.00, minimum-level: 2}
+      - {id: colossal, name: "Айсберг ×10", multiplier: 10.00, minimum-level: 3}
+    skins:
+      starlight:
+        name: "Звёздный медведь"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 2500000
+      shadow:
+        name: "Полярная тень"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 5500000
+  copper_golem:
+    type: walking
+    item: COPPER_GOLEM_SPAWN_EGG
+    entity: COPPER_GOLEM
+    name: "Медный голем"
+    rarity: epic
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Заводной помощник, превращающий"
+      - "поездку в рабочую смену."
+    abilities:
+      passive:
+        copper-tools:
+          name: "Медные инструменты"
+          effect: HASTE
+          amplifier: 1
+          description:
+            - "Даёт всаднику Спешку II."
+        lucky-button:
+          name: "Счастливая кнопка"
+          effect: LUCK
+          amplifier: 0
+          description:
+            - "Даёт всаднику эффект удачи."
+    levels:
+      - {speed: 1.6, handling: 0.9, sprint: 1, price: 500000}
+      - {speed: 2.6, handling: 1, sprint: 1.03, price: 2500000}
+      - {speed: 5.4, handling: 1.28, sprint: 1.12, price: 20000000}
+    buy-glow: 600000
+    appearance: {scale: 1}
+    size-tuning:
+      - {id: keychain, name: "Заводной ×0.1", multiplier: 0.10, minimum-level: 1}
+      - {id: compact, name: "Компактный ×0.5", multiplier: 0.50, minimum-level: 1}
+      - {id: standard, name: "Обычный ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: giant, name: "Механизм ×3", multiplier: 3.00, minimum-level: 2}
+      - {id: colossal, name: "Медный завод ×10", multiplier: 10.00, minimum-level: 3}
+    skins:
+      starlight:
+        name: "Звёздная медь"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 2500000
+      shadow:
+        name: "Тёмная патина"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 5500000
+  iron_golem:
+    type: walking
+    item: IRON_GOLEM_SPAWN_EGG
+    entity: IRON_GOLEM
+    name: "Железный голем"
     rarity: legendary
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Свинья размером с дом."
-      - "Никакого реализма — только ×10"
-      - "и убедительный топот."
+      - "Шагающая крепость для всадника"
+      - "и каток для враждебных мобов."
     abilities:
       passive:
-        thick-hide:
-          name: "Толстая шкура"
+        iron-fist:
+          name: "Железный кулак"
+          effect: STRENGTH
+          amplifier: 1
+          description:
+            - "Даёт всаднику Силу II."
+        iron-shell:
+          name: "Железная оболочка"
           effect: RESISTANCE
           amplifier: 1
-        bacon-power:
-          name: "Беконная мощь"
-          effect: STRENGTH
-          amplifier: 0
-    motion:
-      acceleration-time: 1500ms
-      deceleration-time: 650ms
-      turn-time: 380ms
-    levels:
-      - {speed: 1.6, handling: 0.9, sprint: 1, price: 1000000}
-      - {speed: 2.6, handling: 1, sprint: 1.03, price: 5000000}
-      - {speed: 5.4, handling: 1.28, sprint: 1.12, price: 35000000}
-    buy-glow: 1000000
-    appearance:
-      baby: false
-      scale: 10
-    size-tuning:
-      - {id: colossal, name: "Гигант ×10", multiplier: 1.00, minimum-level: 1}
+          description:
+            - "Даёт всаднику Сопротивление II."
     behaviors:
-      mega-trample:
+      iron-trample:
         type: trample
-        name: "Землетрясение"
+        name: "Железный марш"
         description:
-          - "Враждебные мобы под свиньёй"
-          - "получают урон от её шага."
+          - "Враждебные мобы под големом"
+          - "получают урон от каждого прохода."
         cooldown: 1s
         minimum-speed-fraction: 0.15
         horizontal-padding: 0.4
         downward-reach: 1.0
-        damage: 3.0
+        damage: 3.5
         maximum-targets: 6
+    levels:
+      - {speed: 1.65, handling: 0.9, sprint: 1, price: 1000000}
+      - {speed: 2.7, handling: 1, sprint: 1.03, price: 5000000}
+      - {speed: 5.6, handling: 1.28, sprint: 1.12, price: 35000000}
+    buy-glow: 1000000
+    appearance: {scale: 1}
+    size-tuning:
+      - {id: keychain, name: "Фигурка ×0.1", multiplier: 0.10, minimum-level: 1}
+      - {id: standard, name: "Обычный ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: giant, name: "Крепость ×3", multiplier: 3.00, minimum-level: 2}
+      - {id: colossal, name: "Мегаполис ×10", multiplier: 10.00, minimum-level: 3}
     skins:
       starlight:
-        name: "Звёздная мегасвинья"
+        name: "Звёздное железо"
         item: AMETHYST_SHARD
         preset: starlight
         price: 5000000
       shadow:
-        name: "Теневая мегасвинья"
+        name: "Тёмное железо"
         item: ECHO_SHARD
         preset: shadow
         price: 12000000
-  colossal_bee:
-    type: flying
-    item: BEE_SPAWN_EGG
-    entity: BEE
-    name: "Пчелиный дирижабль"
-    rarity: legendary
+  trader_llama:
+    type: walking
+    item: TRADER_LLAMA_SPAWN_EGG
+    entity: TRADER_LLAMA
+    name: "Лама торговца"
+    rarity: rare
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Пчела ×10, которая заслоняет солнце"
-      - "и возит всадника как дирижабль."
+      - "Караванная удача с быстрыми ногами"
+      - "и привычкой уходить в закат."
     abilities:
       passive:
-        honey-reserve:
-          name: "Медовый запас"
-          effect: REGENERATION
+        caravan-luck:
+          name: "Удача каравана"
+          effect: LUCK
           amplifier: 0
+          description:
+            - "Даёт всаднику эффект удачи."
+        trader-pace:
+          name: "Срочная доставка"
+          effect: SPEED
+          amplifier: 0
+          description:
+            - "Оставляет всаднику ускорение."
     levels:
-      - {speed: 0.55, handling: 0.9, sprint: 1, price: 1000000}
-      - {speed: 0.9, handling: 1, sprint: 1.03, price: 5000000}
-      - {speed: 1.7, handling: 1.28, sprint: 1.12, price: 35000000}
-    buy-glow: 1000000
-    appearance:
-      baby: false
-      scale: 10
+      - {speed: 1.55, handling: 0.9, sprint: 1, price: 250000}
+      - {speed: 2.5, handling: 1, sprint: 1.03, price: 1200000}
+      - {speed: 5.2, handling: 1.28, sprint: 1.12, price: 12000000}
+    buy-glow: 350000
+    appearance: {baby: false, scale: 1}
     size-tuning:
-      - {id: colossal, name: "Дирижабль ×10", multiplier: 1.00, minimum-level: 1}
+      - {id: compact, name: "Компактная ×0.5", multiplier: 0.50, minimum-level: 1}
+      - {id: standard, name: "Обычная ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: giant, name: "Караван ×3", multiplier: 3.00, minimum-level: 2}
+      - {id: colossal, name: "Торговый центр ×10", multiplier: 10.00, minimum-level: 3}
     skins:
       starlight:
-        name: "Звёздный дирижабль"
+        name: "Звёздный караван"
         item: AMETHYST_SHARD
         preset: starlight
-        price: 5000000
-      cloud:
-        name: "Облачный дирижабль"
-        item: WHITE_DYE
-        preset: cloud
-        price: 12000000
-  pocket_ghast:
-    type: flying
-    item: GHAST_SPAWN_EGG
-    entity: GHAST
-    name: "Карманный гаст"
+        price: 1200000
+      shadow:
+        name: "Теневой караван"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 2800000
+  snow_golem:
+    type: walking
+    item: SNOW_GOLEM_SPAWN_EGG
+    entity: SNOW_GOLEM
+    name: "Снежный голем"
+    rarity: uncommon
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Лёгкий зимний транспорт"
+      - "с мягким падением и быстрым отходом."
+    abilities:
+      passive:
+        snow-drift:
+          name: "Снежный дрейф"
+          effect: SLOW_FALLING
+          amplifier: 0
+          description:
+            - "Смягчает падение всадника."
+        winter-dash:
+          name: "Зимний рывок"
+          effect: SPEED
+          amplifier: 0
+          description:
+            - "Оставляет всаднику ускорение."
+    levels:
+      - {speed: 1.45, handling: 0.9, sprint: 1, price: 100000}
+      - {speed: 2.35, handling: 1, sprint: 1.03, price: 500000}
+      - {speed: 5, handling: 1.28, sprint: 1.12, price: 8000000}
+    buy-glow: 200000
+    appearance: {scale: 1}
+    size-tuning:
+      - {id: keychain, name: "Снеговичок ×0.1", multiplier: 0.10, minimum-level: 1}
+      - {id: standard, name: "Обычный ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: giant, name: "Сугроб ×3", multiplier: 3.00, minimum-level: 2}
+      - {id: colossal, name: "Снежная гора ×10", multiplier: 10.00, minimum-level: 3}
+    skins:
+      starlight:
+        name: "Звёздный снег"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 650000
+      shadow:
+        name: "Тёмный снег"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 1400000
+  villager:
+    type: walking
+    item: VILLAGER_SPAWN_EGG
+    entity: VILLAGER
+    name: "Крестьянин"
+    rarity: rare
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Самый сомнительный общественный транспорт"
+      - "с неожиданно полезной аурой."
+    abilities:
+      passive:
+        village-luck:
+          name: "Деревенская удача"
+          effect: LUCK
+          amplifier: 0
+          description:
+            - "Даёт всаднику эффект удачи."
+        village-care:
+          name: "Забота деревни"
+          effect: REGENERATION
+          amplifier: 0
+          description:
+            - "Постепенно восстанавливает здоровье."
+    levels:
+      - {speed: 1.55, handling: 0.9, sprint: 1, price: 250000}
+      - {speed: 2.5, handling: 1, sprint: 1.03, price: 1200000}
+      - {speed: 5.2, handling: 1.28, sprint: 1.12, price: 12000000}
+    buy-glow: 350000
+    appearance: {baby: false, scale: 1}
+    size-tuning:
+      - {id: keychain, name: "Мини-житель ×0.1", multiplier: 0.10, minimum-level: 1}
+      - {id: standard, name: "Обычный ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: giant, name: "Староста ×3", multiplier: 3.00, minimum-level: 2}
+      - {id: colossal, name: "Деревня ×10", multiplier: 10.00, minimum-level: 3}
+    skins:
+      starlight:
+        name: "Звёздный крестьянин"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 1200000
+      shadow:
+        name: "Теневой крестьянин"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 2800000
+  wandering_trader:
+    type: walking
+    item: WANDERING_TRADER_SPAWN_EGG
+    entity: WANDERING_TRADER
+    name: "Странствующий торговец"
+    rarity: rare
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Передвижной рынок, который наконец"
+      - "движется туда, куда нужно вам."
+    abilities:
+      passive:
+        road-luck:
+          name: "Удача странника"
+          effect: LUCK
+          amplifier: 0
+          description:
+            - "Даёт всаднику эффект удачи."
+        road-legs:
+          name: "Дорожные ноги"
+          effect: SPEED
+          amplifier: 0
+          description:
+            - "Оставляет всаднику ускорение."
+    levels:
+      - {speed: 1.55, handling: 0.9, sprint: 1, price: 250000}
+      - {speed: 2.5, handling: 1, sprint: 1.03, price: 1200000}
+      - {speed: 5.2, handling: 1.28, sprint: 1.12, price: 12000000}
+    buy-glow: 350000
+    appearance: {scale: 1}
+    size-tuning:
+      - {id: keychain, name: "Ларёк ×0.1", multiplier: 0.10, minimum-level: 1}
+      - {id: standard, name: "Обычный ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: giant, name: "Рынок ×3", multiplier: 3.00, minimum-level: 2}
+      - {id: colossal, name: "Гипермаркет ×10", multiplier: 10.00, minimum-level: 3}
+    skins:
+      starlight:
+        name: "Звёздный торговец"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 1200000
+      shadow:
+        name: "Теневой торговец"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 2800000
+  skeleton_horse:
+    type: walking
+    item: SKELETON_HORSE_SPAWN_EGG
+    entity: SKELETON_HORSE
+    name: "Лошадь-скелет"
     rarity: epic
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Гаст ×0.1: выглядит как брелок,"
-      - "но честно возит взрослого игрока."
+      - "Ночная костяная кавалерия"
+      - "с высоким прыжком и быстрым отходом."
     abilities:
+      high-jump:
+        name: "Костяной галоп"
+        multiplier: 1.55
+        description:
+          - "Прыгает выше обычных наземных маунтов."
       passive:
-        nether-bubble:
-          name: "Пузырь Нижнего мира"
-          effect: FIRE_RESISTANCE
+        grave-sight:
+          name: "Могильный взгляд"
+          effect: NIGHT_VISION
           amplifier: 0
+          description:
+            - "Позволяет всаднику видеть в темноте."
+        deathless-pace:
+          name: "Неутомимый галоп"
+          effect: SPEED
+          amplifier: 0
+          description:
+            - "Оставляет всаднику ускорение."
     levels:
-      - {speed: 0.52, handling: 0.9, sprint: 1, price: 500000}
-      - {speed: 0.85, handling: 1, sprint: 1.03, price: 2500000}
-      - {speed: 1.6, handling: 1.28, sprint: 1.12, price: 20000000}
+      - {speed: 1.6, handling: 0.9, sprint: 1, price: 500000}
+      - {speed: 2.6, handling: 1, sprint: 1.03, price: 2500000}
+      - {speed: 5.4, handling: 1.28, sprint: 1.12, price: 20000000}
     buy-glow: 600000
-    appearance:
-      scale: 0.1
+    appearance: {baby: false, scale: 1}
     size-tuning:
-      - {id: pocket, name: "Карманный ×0.1", multiplier: 1.00, minimum-level: 1}
+      - {id: keychain, name: "Костяшка ×0.1", multiplier: 0.10, minimum-level: 1}
+      - {id: standard, name: "Обычная ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: giant, name: "Кавалерия ×3", multiplier: 3.00, minimum-level: 2}
+      - {id: colossal, name: "Конец света ×10", multiplier: 10.00, minimum-level: 3}
     skins:
       soulfire:
-        name: "Карманное пламя душ"
+        name: "Кавалерия душ"
         item: SOUL_LANTERN
         preset: soulfire
         price: 2500000
-      cloud:
-        name: "Карманное облако"
-        item: WHITE_DYE
-        preset: cloud
+      shadow:
+        name: "Теневая кавалерия"
+        item: ECHO_SHARD
+        preset: shadow
         price: 5500000
+  # Нарочито абсурдная коллекция: один моб, много размеров, никаких дублей.
   mega_warden:
     type: walking
     item: WARDEN_SPAWN_EGG
     entity: WARDEN
-    name: "Громадный хранитель"
+    name: "Хранитель"
     rarity: legendary
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Хранитель ×3 для поездок,"
-      - "после которых обычные маунты"
-      - "кажутся декоративными."
+      - "Глубинный тяжеловес"
+      - "с размерами от ×0.1 до ×10."
     abilities:
       passive:
         echo-sight:
           name: "Эхолокация"
           effect: NIGHT_VISION
           amplifier: 0
+          description:
+            - "Позволяет видеть даже в полной темноте."
         ancient-force:
           name: "Древняя сила"
           effect: STRENGTH
           amplifier: 0
+          description:
+            - "Усиливает атаки всадника."
         deep-armor:
           name: "Глубинная броня"
           effect: RESISTANCE
           amplifier: 0
+          description:
+            - "Снижает получаемый всадником урон."
     motion:
       acceleration-time: 1400ms
       deceleration-time: 600ms
@@ -1633,9 +2417,13 @@ mounts:
       - {speed: 5.4, handling: 1.28, sprint: 1.12, price: 35000000}
     buy-glow: 1000000
     appearance:
-      scale: 3
+      scale: 1
     size-tuning:
-      - {id: giant, name: "Исполин ×3", multiplier: 1.00, minimum-level: 1}
+      - {id: keychain, name: "Эхо-брелок ×0.1", multiplier: 0.10, minimum-level: 1}
+      - {id: compact, name: "Компактный ×0.5", multiplier: 0.50, minimum-level: 1}
+      - {id: standard, name: "Обычный ×1", multiplier: 1.00, minimum-level: 1}
+      - {id: giant, name: "Исполин ×3", multiplier: 3.00, minimum-level: 2}
+      - {id: colossal, name: "Катаклизм ×10", multiplier: 10.00, minimum-level: 3}
     skins:
       shadow:
         name: "Теневой исполин"
@@ -1651,21 +2439,25 @@ mounts:
     type: walking
     item: CHICKEN_SPAWN_EGG
     entity: CHICKEN
-    name: "Карманная курица"
+    name: "Курица"
     rarity: uncommon
     acquisition: "Магазин маунтов на спавне"
     description:
-      - "Курица с режимом брелока ×0.1"
-      - "и совершенно лишними ×2 и ×3."
+      - "От карманной паники ×0.1"
+      - "до куриного титана ×10."
     abilities:
       high-jump:
         name: "Панический подскок"
         multiplier: 1.35
+        description:
+          - "Подпрыгивает выше обычных наземных маунтов."
       passive:
         feather:
           name: "Пёрышко"
           effect: SLOW_FALLING
           amplifier: 0
+          description:
+            - "Смягчает падение всадника после прыжка."
     levels:
       - {speed: 1.45, handling: 0.9, sprint: 1, price: 100000}
       - {speed: 2.35, handling: 1, sprint: 1.03, price: 500000}
@@ -1676,9 +2468,10 @@ mounts:
       scale: 1
     size-tuning:
       - {id: keychain, name: "Брелок ×0.1", multiplier: 0.10, minimum-level: 1}
+      - {id: compact, name: "Компактная ×0.5", multiplier: 0.50, minimum-level: 1}
       - {id: standard, name: "Обычная ×1", multiplier: 1.00, minimum-level: 1}
-      - {id: huge, name: "Огромная ×2", multiplier: 2.00, minimum-level: 2}
-      - {id: absurd, name: "Абсурдная ×3", multiplier: 3.00, minimum-level: 3}
+      - {id: giant, name: "Гигантская ×3", multiplier: 3.00, minimum-level: 2}
+      - {id: colossal, name: "Куриный титан ×10", multiplier: 10.00, minimum-level: 3}
     skins:
       starlight:
         name: "Звёздная курица"

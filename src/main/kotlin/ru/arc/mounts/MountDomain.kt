@@ -289,11 +289,15 @@ data class MountTrampleBehavior(
 data class MountHighJumpAbility(
     val displayName: String,
     val multiplier: Double,
+    val description: List<String> = emptyList(),
 ) {
     init {
         require(displayName.isNotBlank() && displayName.length <= 64) { "Mount high-jump display name is invalid" }
         require(multiplier.isFinite() && multiplier in 1.05..3.0) {
             "Mount high-jump multiplier must be between 1.05 and 3.0"
+        }
+        require(description.size <= 3 && description.all { it.isNotBlank() && it.length <= 64 }) {
+            "Mount high-jump description is invalid"
         }
     }
 }
@@ -308,6 +312,8 @@ enum class MountAbilityEffect {
     SPEED,
     SLOW_FALLING,
     STRENGTH,
+    HASTE,
+    LUCK,
 }
 
 data class MountPassiveAbilityDefinition(
@@ -315,11 +321,15 @@ data class MountPassiveAbilityDefinition(
     val displayName: String,
     val effect: MountAbilityEffect,
     val amplifier: Int = 0,
+    val description: List<String> = emptyList(),
 ) {
     init {
         require(MountDefinition.validId(id)) { "Invalid mount passive ability id: $id" }
         require(displayName.isNotBlank() && displayName.length <= 64) { "Mount passive ability '$id' name is invalid" }
         require(amplifier in 0..2) { "Mount passive ability '$id' amplifier must be between 0 and 2" }
+        require(description.size <= 3 && description.all { it.isNotBlank() && it.length <= 64 }) {
+            "Mount passive ability '$id' description is invalid"
+        }
     }
 }
 
@@ -488,12 +498,16 @@ data class MountDefinition(
     val speedTuningPermissionPrefix: String get() = "arc.mounts.$id.tuning.speed."
     val stepHeightTuningPermissionPrefix: String get() = "arc.mounts.$id.tuning.step-height."
     val sizeTuningPermissionPrefix: String get() = "arc.mounts.$id.tuning.size."
+    val riderViewTuningPermissionPrefix: String get() = "arc.mounts.$id.tuning.rider-view."
 
     fun speedTuningPermission(percentage: Int): String = "$speedTuningPermissionPrefix$percentage"
 
     fun stepHeightTuningPermission(hundredths: Int): String = "$stepHeightTuningPermissionPrefix$hundredths"
 
     fun sizeTuningPermission(sizeId: String): String = "$sizeTuningPermissionPrefix$sizeId"
+
+    fun riderViewTuningPermission(autoHide: Boolean): String =
+        "$riderViewTuningPermissionPrefix${if (autoHide) "auto-hide" else "always-visible"}"
 
     val glowPermission: String get() = "arc.mounts.$id.glow"
     val glowDisabledPermission: String get() = "arc.mounts.$id.glow.disabled"
@@ -554,6 +568,7 @@ data class MountProfile(
     val selectedSpeedPercentage: Int? = null,
     val selectedStepHeightHundredths: Int? = null,
     val selectedSizeId: String? = null,
+    val riderViewAutoHide: Boolean? = null,
 ) {
     val unlocked: Boolean get() = level > 0
     val glowEnabled: Boolean get() = glowOwned && !glowDisabled
@@ -572,6 +587,7 @@ data class MountRuntimeSettings(
     val skin: MountSkinDefinition?,
     val glow: Boolean,
     val abilityUpgrades: List<MountAbilityUpgradeDefinition>,
+    val riderViewAutoHide: Boolean = true,
 ) {
     init {
         require(speed.isFinite() && speed > 0.0) { "Mount runtime speed must be positive and finite" }
@@ -631,6 +647,9 @@ interface MountOwnership {
 
     fun setSizeTuning(playerId: UUID, mount: MountDefinition, sizeId: String): CompletableFuture<Void> =
         CompletableFuture.failedFuture(UnsupportedOperationException("Mount size tuning persistence is unavailable"))
+
+    fun setRiderViewAutoHide(playerId: UUID, mount: MountDefinition, enabled: Boolean): CompletableFuture<Void> =
+        CompletableFuture.failedFuture(UnsupportedOperationException("Mount rider-view tuning persistence is unavailable"))
 
     fun hasDirectPermission(playerId: UUID, permission: String): CompletableFuture<Boolean>
 

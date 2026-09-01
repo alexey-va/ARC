@@ -34,6 +34,18 @@ class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership
                 mount.sizeTuningPermissionPrefix,
                 { candidate -> mount.sizeOptions.any { it.id == candidate && it.minimumLevel <= level } },
             )
+        val riderViewAutoHide =
+            when (
+                directPositiveStringSuffix(
+                    directNodes,
+                    mount.riderViewTuningPermissionPrefix,
+                    { it == "auto-hide" || it == "always-visible" },
+                )
+            ) {
+                "auto-hide" -> true
+                "always-visible" -> false
+                else -> null
+            }
         return MountProfile(
             level = level,
             glowOwned = glowOwned,
@@ -44,6 +56,7 @@ class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership
             selectedSpeedPercentage = selectedSpeedPercentage,
             selectedStepHeightHundredths = selectedStepHeightHundredths,
             selectedSizeId = selectedSizeId,
+            riderViewAutoHide = riderViewAutoHide,
         )
     }
 
@@ -184,6 +197,17 @@ class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership
             mount.sizeTuningPermission(sizeId),
         )
     }
+
+    override fun setRiderViewAutoHide(
+        playerId: UUID,
+        mount: MountDefinition,
+        enabled: Boolean,
+    ): CompletableFuture<Void> =
+        setExclusiveStatePermission(
+            playerId,
+            mount.riderViewTuningPermissionPrefix,
+            mount.riderViewTuningPermission(enabled),
+        )
 
     override fun hasDirectPermission(playerId: UUID, permission: String): CompletableFuture<Boolean> {
         val loaded = luckPerms.userManager.getUser(playerId)

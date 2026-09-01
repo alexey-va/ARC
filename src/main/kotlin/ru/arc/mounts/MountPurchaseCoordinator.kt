@@ -198,6 +198,20 @@ class MountPurchaseCoordinator(
         }
     }
 
+    fun setRiderViewAutoHide(
+        subject: MountPermissionSubject,
+        mount: MountDefinition,
+        enabled: Boolean,
+        callback: (MountPurchaseResult) -> Unit,
+    ) {
+        val profile = ownership.profile(subject, mount)
+        if (!profile.unlocked) return callback(MountPurchaseResult.NotUnlocked)
+        if ((profile.riderViewAutoHide ?: true) == enabled) return callback(MountPurchaseResult.AlreadyOwned)
+        runSetting(subject.uniqueId, callback) {
+            ownership.setRiderViewAutoHide(subject.uniqueId, mount, enabled)
+        }
+    }
+
     fun recover(catalog: MountCatalog, onManualReview: (MountPurchaseJournalRecord) -> Unit) {
         journal.records().filter { !it.status.terminal || it.status == MountPurchaseJournalStatus.MANUAL_REVIEW }.forEach { record ->
             val mount = catalog[record.mountId]

@@ -162,13 +162,18 @@ class MountSessionControllerTest : StringSpec({
         isAquaticEnvironment(inWaterOrBubbleColumn = false, blockIsLiquid = false) shouldBe false
     }
 
-    "only a flying mount is hidden after the rider looks clearly downward" {
-        nextRiderMountHidden(MountMovement.FLYING, false, 34.9f, 35.0f, 20.0f) shouldBe false
-        nextRiderMountHidden(MountMovement.FLYING, false, 35.0f, 35.0f, 20.0f) shouldBe true
-        nextRiderMountHidden(MountMovement.FLYING, true, 20.1f, 35.0f, 20.0f) shouldBe true
-        nextRiderMountHidden(MountMovement.FLYING, true, 20.0f, 35.0f, 20.0f) shouldBe false
-        nextRiderMountHidden(MountMovement.WALKING, true, 90.0f, 35.0f, 20.0f) shouldBe false
-        nextRiderMountHidden(MountMovement.SWIMMING, true, 90.0f, 35.0f, 20.0f) shouldBe false
+    "rider-selected auto-hide uses hysteresis and can be disabled" {
+        nextRiderMountHidden(true, false, 34.9f, 35.0f, 20.0f) shouldBe false
+        nextRiderMountHidden(true, false, 35.0f, 35.0f, 20.0f) shouldBe true
+        nextRiderMountHidden(true, true, 20.1f, 35.0f, 20.0f) shouldBe true
+        nextRiderMountHidden(true, true, 20.0f, 35.0f, 20.0f) shouldBe false
+        nextRiderMountHidden(false, true, 90.0f, 35.0f, 20.0f) shouldBe false
+    }
+
+    "giant mounts leave the rider view sooner than regular mounts" {
+        riderViewPitchThresholds(1.0, 35.0f, 20.0f) shouldBe (35.0f to 20.0f)
+        riderViewPitchThresholds(2.0, 35.0f, 20.0f) shouldBe (10.0f to -5.0f)
+        riderViewPitchThresholds(10.0, 35.0f, 20.0f) shouldBe (-10.0f to -25.0f)
     }
 
     "flying mount mining compensation is transient and exactly cancels the airborne penalty" {

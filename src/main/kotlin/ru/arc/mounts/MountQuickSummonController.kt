@@ -5,6 +5,7 @@ import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.Sound
 import org.bukkit.entity.Player
+import org.bukkit.event.Event
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.HandlerList
@@ -56,12 +57,14 @@ class MountQuickSummonController(
         summons.sendFeedback(player, summons.summonFavorite(player))
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     fun onUseWhistle(event: PlayerInteractEvent) {
         if (!active || !configProvider().quickSummonWhistle) return
         if (event.action !in RIGHT_CLICK_ACTIONS || !isWhistle(event.item)) return
         if (!event.player.hasPermission(USE_PERMISSION)) return
 
+        event.setUseInteractedBlock(Event.Result.DENY)
+        event.setUseItemInHand(Event.Result.DENY)
         event.isCancelled = true
         summons.sendFeedback(event.player, summons.summonFavorite(event.player))
     }

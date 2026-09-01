@@ -84,6 +84,38 @@ class MountQuickSummonControllerTest : TestBase() {
     }
 
     @Test
+    @Suppress("DEPRECATION")
+    fun `cancelled air click still reaches the ARC whistle through Bukkit dispatch`() {
+        val fixture = fixture(favoriteSelected = true)
+        val player = server.addPlayer("CancelledWhistleRider")
+        player.addAttachment(plugin, "arc.mounts.use", true)
+        val event =
+            PlayerInteractEvent(
+                player,
+                Action.RIGHT_CLICK_AIR,
+                fixture.controller.createWhistle(),
+                null,
+                BlockFace.SELF,
+                EquipmentSlot.HAND,
+            ).also { it.isCancelled = true }
+
+        fixture.controller.start()
+        try {
+            val handler =
+                MountQuickSummonController::class.java
+                    .getDeclaredMethod("onUseWhistle", PlayerInteractEvent::class.java)
+                    .getAnnotation(org.bukkit.event.EventHandler::class.java)
+            handler.ignoreCancelled shouldBe false
+            fixture.controller.onUseWhistle(event)
+        } finally {
+            fixture.controller.shutdown()
+        }
+
+        event.isCancelled shouldBe true
+        verify(exactly = 1) { fixture.sessions.spawn(any(), any(), any(), any()) }
+    }
+
+    @Test
     fun `menu recovery gives at most one whistle in the player inventory`() {
         val fixture = fixture(favoriteSelected = true)
         val player = server.addPlayer("WhistleKeeper")

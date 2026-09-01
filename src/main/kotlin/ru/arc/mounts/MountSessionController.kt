@@ -494,14 +494,22 @@ class MountSessionController(
 
     private fun updateRiderMountVisibility(player: Player, entity: LivingEntity, session: MountSession) {
         val config = configProvider()
+        val appearanceScale =
+            session.definition.effectiveAppearance(session.settings.scaleMultiplier, session.settings.skin).scale
+        val (hideAtPitch, showAtPitch) =
+            riderViewPitchThresholds(
+                appearanceScale,
+                config.hideFlyingMountPitch.toFloat(),
+                config.showFlyingMountPitch.toFloat(),
+            )
         val hidden =
             config.hideFlyingMountFromRider &&
                 nextRiderMountHidden(
-                    session.definition.movement,
+                    session.settings.riderViewAutoHide,
                     session.riderMountHidden,
                     player.location.pitch,
-                    config.hideFlyingMountPitch.toFloat(),
-                    config.showFlyingMountPitch.toFloat(),
+                    hideAtPitch,
+                    showAtPitch,
                 )
         if (hidden == session.riderMountHidden) return
         session.riderMountHidden = hidden
@@ -830,6 +838,8 @@ internal fun MountAbilityEffect.potionEffectType(): PotionEffectType =
         MountAbilityEffect.SPEED -> PotionEffectType.SPEED
         MountAbilityEffect.SLOW_FALLING -> PotionEffectType.SLOW_FALLING
         MountAbilityEffect.STRENGTH -> PotionEffectType.STRENGTH
+        MountAbilityEffect.HASTE -> PotionEffectType.HASTE
+        MountAbilityEffect.LUCK -> PotionEffectType.LUCK
     }
 
 internal fun trampleSpeedEligible(currentSpeed: Double, maximumSpeed: Double, minimumFraction: Double): Boolean =
@@ -951,15 +961,26 @@ internal fun isAquaticEnvironment(inWaterOrBubbleColumn: Boolean, blockIsLiquid:
     inWaterOrBubbleColumn || blockIsLiquid
 
 internal fun nextRiderMountHidden(
-    movement: MountMovement,
+    autoHide: Boolean,
     currentlyHidden: Boolean,
     pitch: Float,
     hideAtPitch: Float,
     showAtPitch: Float,
 ): Boolean {
-    if (movement != MountMovement.FLYING || !pitch.isFinite()) return false
+    if (!autoHide || !pitch.isFinite()) return false
     return if (currentlyHidden) pitch > showAtPitch else pitch >= hideAtPitch
 }
+
+internal fun riderViewPitchThresholds(
+    appearanceScale: Double,
+    defaultHideAtPitch: Float,
+    defaultShowAtPitch: Float,
+): Pair<Float, Float> =
+    when {
+        appearanceScale >= 5.0 -> -10.0f to -25.0f
+        appearanceScale >= 2.0 -> 10.0f to -5.0f
+        else -> defaultHideAtPitch to defaultShowAtPitch
+    }
 
 internal fun airborneMiningCompensationAmount(): Double = 4.0
 

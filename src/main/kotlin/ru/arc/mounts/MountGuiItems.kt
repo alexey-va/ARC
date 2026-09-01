@@ -78,6 +78,7 @@ internal class MountGuiItems(
                                 )
                         }
                     addAll(copyLines(path, fallback, *commonValues))
+                    addAll(mountFeatureLore(mount))
                     when {
                         profile.unlocked -> {
                             add("")
@@ -152,6 +153,15 @@ internal class MountGuiItems(
                                     "ability" to escape(ability.displayName),
                                 ),
                             )
+                            highJumpDescription(ability).forEach { description ->
+                                add(
+                                    copy(
+                                        "detail.innate-description",
+                                        "<#8c8c8c><ability-description>",
+                                        "ability-description" to escape(description),
+                                    ),
+                                )
+                            }
                         }
                         mount.abilities.passives.forEach { ability ->
                             add(
@@ -161,6 +171,15 @@ internal class MountGuiItems(
                                     "ability" to escape(ability.displayName),
                                 ),
                             )
+                            passiveDescription(ability).forEach { description ->
+                                add(
+                                    copy(
+                                        "detail.innate-description",
+                                        "<#8c8c8c><ability-description>",
+                                        "ability-description" to escape(description),
+                                    ),
+                                )
+                            }
                         }
                         mount.abilities.upgrades.forEach { ability ->
                             add(
@@ -618,8 +637,8 @@ internal class MountGuiItems(
         val material =
             when (option.id) {
                 "compact", "keychain" -> Material.RABBIT_HIDE
-                "massive", "huge" -> Material.HEAVY_CORE
-                "absurd" -> Material.DRAGON_EGG
+                "giant", "massive", "huge" -> Material.HEAVY_CORE
+                "absurd", "colossal" -> Material.DRAGON_EGG
                 else -> Material.ARMOR_STAND
             }
         return item(
@@ -652,6 +671,36 @@ internal class MountGuiItems(
                 }
             },
             glint = selected,
+        )
+    }
+
+    fun riderViewTuningItem(profile: MountProfile): ItemStack {
+        val enabled = profile.riderViewAutoHide ?: true
+        return item(
+            if (!profile.unlocked) Material.GRAY_DYE else if (enabled) Material.ENDER_EYE else Material.GLASS,
+            copy(
+                if (enabled) "progression.rider-view-auto-name" else "progression.rider-view-visible-name",
+                if (enabled) "<#2bba43>Корпус: скрывается" else "<#92bed8>Корпус: всегда виден",
+            ),
+            buildList {
+                addAll(
+                    copyLines(
+                        "progression.rider-view-lore",
+                        listOf(
+                            "<#8c8c8c>Скрывает маунта только для всадника,",
+                            "<#8c8c8c>когда корпус перекрывает обзор.",
+                            "<#8c8c8c>У гигантов срабатывает раньше.",
+                        ),
+                    ),
+                )
+                if (!profile.unlocked) {
+                    add(copy("progression.mount-required", "<#c42323>Сначала получите маунта"))
+                } else {
+                    add("")
+                    add(actionFooter(if (enabled) "оставлять видимым" else "скрывать автоматически"))
+                }
+            },
+            glint = profile.unlocked && enabled,
         )
     }
 
@@ -1052,7 +1101,57 @@ internal class MountGuiItems(
             }
         return copy("skins.equipment-$key", fallback)
     }
+
     private fun formatSpeed(value: Double): String = "%.2f".format(java.util.Locale.ROOT, value).trimEnd('0').trimEnd('.')
+
+    private fun mountFeatureLore(mount: MountDefinition): List<String> {
+        val features =
+            buildList<Pair<String, List<String>>> {
+                mount.abilities.highJump?.let { add(it.displayName to highJumpDescription(it)) }
+                mount.abilities.passives.forEach { add(it.displayName to passiveDescription(it)) }
+                mount.behaviors.forEach { add(it.displayName to it.description) }
+            }
+        if (features.isEmpty()) return emptyList()
+        return buildList {
+            add("")
+            add(copy("list.features-title", "<#92bed8>Особенности"))
+            features.forEach { (name, descriptions) ->
+                add(copy("list.feature-name", "<#ffacd5>• <feature>", "feature" to escape(name)))
+                descriptions.forEach { description ->
+                    add(
+                        copy(
+                            "list.feature-description",
+                            "<#8c8c8c>  <feature-description>",
+                            "feature-description" to escape(description),
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    private fun highJumpDescription(ability: MountHighJumpAbility): List<String> =
+        ability.description.ifEmpty { listOf("Прыжок усилен в ×${formatMultiplier(ability.multiplier)}.") }
+
+    private fun passiveDescription(ability: MountPassiveAbilityDefinition): List<String> =
+        ability.description.ifEmpty {
+            listOf(
+                when (ability.effect) {
+                    MountAbilityEffect.WATER_BREATHING -> "Позволяет всаднику дышать под водой."
+                    MountAbilityEffect.NIGHT_VISION -> "Темнота больше не мешает обзору."
+                    MountAbilityEffect.FIRE_RESISTANCE -> "Защищает всадника от огня и лавы."
+                    MountAbilityEffect.DOLPHINS_GRACE -> "Ускоряет всадника в воде."
+                    MountAbilityEffect.RESISTANCE -> "Снижает входящий урон всаднику."
+                    MountAbilityEffect.REGENERATION -> "Постепенно восстанавливает здоровье."
+                    MountAbilityEffect.SPEED -> "Ускоряет всадника после спешивания."
+                    MountAbilityEffect.SLOW_FALLING -> "Смягчает падение всадника."
+                    MountAbilityEffect.STRENGTH -> "Усиливает атаки всадника."
+                    MountAbilityEffect.HASTE -> "Ускоряет добычу блоков всадником."
+                    MountAbilityEffect.LUCK -> "Даёт всаднику эффект удачи."
+                },
+            )
+        }
+
     private fun formatHeight(value: Double): String = "%.2f".format(java.util.Locale.ROOT, value)
     private fun formatMultiplier(value: Double): String = "%.2f".format(java.util.Locale.ROOT, value).trimEnd('0').trimEnd('.')
     private fun formatDuration(duration: Duration): String {

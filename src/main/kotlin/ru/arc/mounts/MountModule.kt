@@ -57,7 +57,7 @@ object MountModule : PluginModule {
             return
         }
         if (loadedConfig.hideFlyingMountFromRider && HookRegistry.packetEventsHook == null) {
-            warn("Rider-only flying mount visibility is unavailable because PacketEvents is not active")
+            warn("Rider-only mount visibility is unavailable because PacketEvents is not active")
         }
 
         val loadedCatalog = loadedConfig.catalog()
