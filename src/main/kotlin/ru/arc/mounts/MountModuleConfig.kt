@@ -212,10 +212,19 @@ open class MountModuleConfig(private val config: Config) {
 
     private fun skinList(root: String, mountId: String): List<MountSkinDefinition> {
         val baseAppearance = appearance("$root.appearance")
-        return config.keys("$root.skins").map { rawId ->
+        val skinEntries =
+            config.keys("$root.skins").map { rawId -> rawId to "$root.skins.$rawId" } +
+                if (config.bool("$root.include-shared-skins", true)) {
+                    config.keys("shared-skins").map { rawId -> rawId to "shared-skins.$rawId" }
+                } else {
+                    emptyList()
+                }
+        require(skinEntries.map(Pair<String, String>::first).distinct().size == skinEntries.size) {
+            "Mount '$mountId' has a skin id that conflicts with a shared skin"
+        }
+        return skinEntries.map { (rawId, path) ->
             val id = rawId.lowercase(Locale.ROOT)
             require(id == rawId && MountDefinition.validId(id)) { "Mount '$mountId' skin id '$rawId' must be normalized" }
-            val path = "$root.skins.$id"
             val presetId = config.stringOrNull("$path.preset")?.trim()?.lowercase(Locale.ROOT)
             if (presetId != null) require(MountDefinition.validId(presetId) && presetId in config.keys("cosmetics")) {
                 "Mount '$mountId' skin '$id' has unknown cosmetic preset '$presetId'"
@@ -502,6 +511,10 @@ open class MountModuleConfig(private val config: Config) {
         return MountTrailDefinition(
             particle = particle.uppercase(Locale.ROOT),
             displayName = config.string("$path.name", localizedTrailName(particle)).trim(),
+            pattern =
+                runCatching {
+                    MountTrailPattern.valueOf(config.string("$path.pattern", "scatter").trim().uppercase(Locale.ROOT).replace('-', '_'))
+                }.getOrElse { throw IllegalArgumentException("Mount trail '$path' has an invalid pattern") },
             intervalTicks = config.integer("$path.interval-ticks", 4),
             count = config.integer("$path.count", 1),
             backOffset = config.double("$path.back-offset", 0.2),

@@ -10,6 +10,8 @@ import org.bukkit.attribute.Attribute
 import org.bukkit.attribute.AttributeModifier
 import org.bukkit.entity.Bat
 import org.bukkit.entity.Boss
+import org.bukkit.entity.Creeper
+import org.bukkit.entity.EnderDragon
 import org.bukkit.entity.Enemy
 import org.bukkit.entity.Horse
 import org.bukkit.entity.LivingEntity
@@ -23,6 +25,8 @@ import org.bukkit.event.entity.CreatureSpawnEvent
 import org.bukkit.event.entity.EntityCombustEvent
 import org.bukkit.event.entity.EntityDamageEvent
 import org.bukkit.event.entity.EntityDismountEvent
+import org.bukkit.event.entity.EntityExplodeEvent
+import org.bukkit.event.entity.ExplosionPrimeEvent
 import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerInputEvent
@@ -444,6 +448,16 @@ class MountSessionController(
         if (playerByEntity.containsKey(event.entity.uniqueId)) event.isCancelled = true
     }
 
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    fun onExplosionPrime(event: ExplosionPrimeEvent) {
+        if (playerByEntity.containsKey(event.entity.uniqueId)) event.isCancelled = true
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    fun onEntityExplode(event: EntityExplodeEvent) {
+        if (playerByEntity.containsKey(event.entity.uniqueId)) event.isCancelled = true
+    }
+
     @EventHandler fun onQuit(event: PlayerQuitEvent) = remove(event.player.uniqueId, MountRemovalReason.QUIT)
     @EventHandler fun onDeath(event: PlayerDeathEvent) = remove(event.entity.uniqueId, MountRemovalReason.DIED)
     @EventHandler fun onWorldChange(event: PlayerChangedWorldEvent) = remove(event.player.uniqueId, MountRemovalReason.CHANGED_WORLD)
@@ -607,15 +621,25 @@ class MountSessionController(
         val particle = runCatching { Particle.valueOf(trail.particle) }.getOrNull() ?: return
         if (particle.dataType != Void::class.java && particle.dataType != java.lang.Void::class.java) return
         val box = entity.boundingBox
-        val origin =
-            mountTrailOrigin(
+        val points =
+            mountTrailPoints(
                 MountTrailBounds(box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ),
                 entity.yaw,
                 session.motionState.direction,
                 trail,
+                session.ticks,
             )
-        val location = org.bukkit.Location(entity.world, origin.x, origin.y, origin.z)
-        entity.world.spawnParticle(particle, location, trail.count, trail.spread, trail.spread, trail.spread, trail.speed)
+        if (trail.pattern == MountTrailPattern.SCATTER) {
+            val origin = points.single()
+            val location = org.bukkit.Location(entity.world, origin.x, origin.y, origin.z)
+            entity.world.spawnParticle(particle, location, trail.count, trail.spread, trail.spread, trail.spread, trail.speed)
+        } else {
+            val fineSpread = trail.spread * 0.15
+            points.forEach { point ->
+                val location = org.bukkit.Location(entity.world, point.x, point.y, point.z)
+                entity.world.spawnParticle(particle, location, 1, fineSpread, fineSpread, fineSpread, trail.speed)
+            }
+        }
     }
 
     private fun updateRamBehavior(
@@ -921,10 +945,15 @@ internal fun nativeHorseMovementAttribute(maximumSpeedBlocksPerTick: Double): Do
 
 internal fun maintainMountMobState(mob: Mob) {
     (mob as? Bat)?.setAwake(true)
+    (mob as? Creeper)?.apply {
+        setIgnited(false)
+        setExplosionRadius(0)
+    }
+    (mob as? EnderDragon)?.phase = EnderDragon.Phase.HOVER
 }
 
 internal fun constrainPhasingVelocity(entity: LivingEntity, desired: MotionVector): MotionVector {
-    if (entity !is Vex && !entity.hasNoPhysics()) return desired
+    if (entity !is Vex && entity !is EnderDragon && !entity.hasNoPhysics()) return desired
     return constrainVelocity(desired) { delta ->
         entity.wouldCollideUsing(
             entity.boundingBox.clone().expandDirectional(delta.x, delta.y, delta.z),

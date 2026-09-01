@@ -1,7 +1,7 @@
 schema: 1
 plugin: ARC
-minecraft-version: 1.21.11
-minecraft-client-sha1: ba2df812c2d12e0219c489c4cd9a5e1f0760f5bd
+minecraft-version: 26.1.2
+minecraft-client-sha1: 4e618f09a0c649dde3fdf829df443ce0b8831e65
 gallery-accent: '#92bed8'
 
 resource-pack:
@@ -64,68 +64,32 @@ sources:
     path: src/main/resources/modules/mounts.yml
     root: gui
     include: [list-title, detail-title, progression-title, skins-title, confirm-title, 'copy.*']
-  mounts-horse:
-    path: src/main/resources/modules/mounts.yml
-    root: mounts.horse
-    include: [name, description, abilities.high-jump.name]
-  mounts-fox:
-    path: src/main/resources/modules/mounts.yml
-    root: mounts.fox
-    include: [name, description, abilities.high-jump.name]
-  mounts-bee:
-    path: src/main/resources/modules/mounts.yml
-    root: mounts.bee
-    include: [name, description, 'abilities.passive.*.name', 'abilities.passive.*.description']
-  mounts-ravager:
-    path: src/main/resources/modules/mounts.yml
-    root: mounts.ravager
-    include: [name, description, 'behaviors.*.name', 'behaviors.*.description']
-  mounts-pig:
-    path: src/main/resources/modules/mounts.yml
-    root: mounts.pig
-    include: [name, description, 'abilities.passive.*.name', 'abilities.passive.*.description']
-  mounts-ghast:
-    path: src/main/resources/modules/mounts.yml
-    root: mounts.ghast
-    include: [name, description, 'abilities.passive.*.name', 'abilities.passive.*.description']
-  mounts-iron-golem:
-    path: src/main/resources/modules/mounts.yml
-    root: mounts.iron_golem
-    include: [name, description, 'abilities.passive.*.name', 'abilities.passive.*.description', 'behaviors.*.name', 'behaviors.*.description']
-  mounts-copper-golem:
-    path: src/main/resources/modules/mounts.yml
-    root: mounts.copper_golem
-    include: [name, description, 'abilities.passive.*.name', 'abilities.passive.*.description']
-  mounts-mega-warden:
-    path: src/main/resources/modules/mounts.yml
-    root: mounts.mega_warden
-    include: [name, description, 'abilities.passive.*.name']
-  mounts-pocket-chicken:
-    path: src/main/resources/modules/mounts.yml
-    root: mounts.pocket_chicken
-    include: [name, description, 'abilities.high-jump.name', 'abilities.passive.*.name']
-  mounts-night-vision:
-    path: src/main/resources/modules/mounts.yml
-    root: ability-upgrades.night-vision
-    include: [name, description]
-  mounts-new-passives:
+  mounts-catalog:
     path: src/main/resources/modules/mounts.yml
     root: mounts
     include:
-      - 'zombie.abilities.passive.*.name'
-      - 'zombie.abilities.passive.*.description'
-      - 'camel.abilities.passive.*.name'
-      - 'camel.abilities.passive.*.description'
-      - 'turtle.abilities.passive.*.name'
-      - 'turtle.abilities.passive.*.description'
-      - 'frog2.abilities.passive.*.name'
-      - 'frog2.abilities.passive.*.description'
-      - 'allay.abilities.passive.*.name'
-      - 'allay.abilities.passive.*.description'
-      - 'vex.abilities.passive.*.name'
-      - 'vex.abilities.passive.*.description'
-      - 'breeze.abilities.passive.*.name'
-      - 'breeze.abilities.passive.*.description'
+      - '*.name'
+      - '*.description'
+      - '*.acquisition'
+      - '*.abilities.high-jump.name'
+      - '*.abilities.high-jump.description'
+      - '*.abilities.passive.*.name'
+      - '*.abilities.passive.*.description'
+      - '*.behaviors.*.name'
+      - '*.behaviors.*.description'
+      - '*.skins.*.name'
+  mounts-abilities:
+    path: src/main/resources/modules/mounts.yml
+    root: ability-upgrades
+    include: ['*.name', '*.description']
+  mounts-cosmetics:
+    path: src/main/resources/modules/mounts.yml
+    root: cosmetics
+    include: ['*.name', '*.trail.name']
+  mounts-shared-skins:
+    path: src/main/resources/modules/mounts.yml
+    root: shared-skins
+    include: ['*.name']
   mounts-size-defaults:
     path: src/main/resources/modules/mounts.yml
     root: size-tuning-defaults
@@ -153,8 +117,8 @@ placeholders:
   page: '1'
   pages: '2'
   category: Все
-  shown: '50'
-  total: '50'
+  shown: '72'
+  total: '72'
   owned-action: только полученные
   speed: '5.4'
   speed-percent: '100'
@@ -236,18 +200,10 @@ surfaces:
   fragments:
     - source: mounts-ui
       include: ['copy.*']
-    - source: mounts-horse
-    - source: mounts-fox
-    - source: mounts-bee
-    - source: mounts-ravager
-    - source: mounts-pig
-    - source: mounts-ghast
-    - source: mounts-iron-golem
-    - source: mounts-copper-golem
-    - source: mounts-mega-warden
-    - source: mounts-pocket-chicken
-    - source: mounts-night-vision
-    - source: mounts-new-passives
+    - source: mounts-catalog
+    - source: mounts-abilities
+    - source: mounts-cosmetics
+    - source: mounts-shared-skins
     - source: mounts-size-defaults
 
   inventories:
@@ -274,7 +230,7 @@ surfaces:
         - &mount_owned {slot: 11, material: HORSE_SPAWN_EGG, name: 'mounts-ui:copy.list.mount-owned-name', lore: ['mounts-ui:copy.list.mount-owned-core', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.list.mount-owned-footer'], placeholders: {mount: Лошадь, rarity: '<green>Необычный', type-value: '<gray>Пеший', level: '2', max-level: '3', skin: Классический}}
         - {<<: *mount_owned, slot: 12, material: BEE_SPAWN_EGG, placeholders: {mount: Пчела, rarity: '<white>Обычный', type-value: '<green>Летающий', level: '1', max-level: '3', skin: Классический}}
         - &mount_acquirable {slot: 13, material: ZOMBIE_SPAWN_EGG, name: 'mounts-ui:copy.list.mount-acquirable-name', lore: ['mounts-ui:copy.list.mount-acquirable-core', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.list.mount-acquirable-footer'], placeholders: {mount: Зомби, rarity: '<white>Обычный', acquisition: Магазин маунтов на спавне}}
-        - &mount_locked {slot: 14, material: BLAZE_SPAWN_EGG, name: 'mounts-ui:copy.list.mount-locked-name', lore: 'mounts-ui:copy.list.mount-locked-core', placeholders: {mount: Блэйз, rarity: '<gold>Легендарный', acquisition: Сезонная или событийная награда}}
+        - &mount_locked {slot: 14, material: ENDER_DRAGON_SPAWN_EGG, name: 'mounts-ui:copy.list.mount-locked-name', lore: 'mounts-ui:copy.list.mount-locked-core', placeholders: {mount: Эндер-дракон, rarity: '<gold>Легендарный', acquisition: Только команда администратора}}
         - {<<: *mount_acquirable, slot: 15, material: DOLPHIN_SPAWN_EGG, placeholders: {mount: Дельфин, rarity: '<white>Обычный', acquisition: Магазин маунтов на спавне}}
         - {slot: 45, material: BLUE_STAINED_GLASS_PANE, itemsadder: 'arc:left_gray', name: 'mounts-ui:copy.common.back-name', lore: ['mounts-ui:copy.list.back-description', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-back']}
         - {slot: 49, material: COMPASS, itemsadder: 'arc:mount_category_all', name: 'mounts-ui:copy.list.filter-name', lore: ['mounts-ui:copy.list.filter-stats', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.list.filter-footer']}
@@ -374,17 +330,24 @@ surfaces:
       rows: 5
       filler: GRAY_STAINED_GLASS_PANE
       background-item: arc:background
+      placeholders:
+        mount: Эндер-дракон
+        rarity: '<gold>Легендарный'
+        type-value: '<green>Летающий'
+        level: '0'
+        max-level: '3'
+        acquisition: Только команда администратора
       items:
         - slot: 4
-          material: BLAZE_SPAWN_EGG
+          material: ENDER_DRAGON_SPAWN_EGG
           name: 'mounts-ui:copy.list.mount-locked-name'
-          placeholders: {mount: Блэйз, acquisition: Сезонная или событийная награда}
+          placeholders: {mount: Эндер-дракон, acquisition: Только команда администратора}
           lore:
             - 'mounts-ui:copy.detail.mount-locked-state'
             - 'mounts-ui:copy.list.rarity-legendary'
             - 'mounts-ui:copy.common.blank'
-            - {ref: 'mounts-ui:copy.detail.description-line', placeholders: {mount-description: 'Наследный сезонный маунт'}}
-            - {ref: 'mounts-ui:copy.detail.description-line', placeholders: {mount-description: 'старой коллекции.'}}
+            - {ref: 'mounts-ui:copy.detail.description-line', placeholders: {mount-description: 'Финальный админский маунт:'}}
+            - {ref: 'mounts-ui:copy.detail.description-line', placeholders: {mount-description: 'огромный, летающий и не продаётся.'}}
             - 'mounts-ui:copy.common.blank'
             - 'mounts-ui:copy.detail.locked-acquisition'
         - {slot: 13, material: GRAY_DYE, name: 'mounts-ui:copy.detail.favorite-locked-name', lore: 'mounts-ui:copy.detail.favorite-locked-lore'}
@@ -528,6 +491,11 @@ surfaces:
         - {slot: 10, material: SADDLE, name: 'mounts-ui:copy.skins.classic-available-name', lore: ['mounts-ui:copy.skins.classic-description', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select']}
         - {slot: 11, material: AMETHYST_SHARD, name: 'mounts-ui:copy.skins.skin-buy-name', lore: ['mounts-ui:copy.skins.trail', 'mounts-ui:copy.common.price', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-open-purchase'], placeholders: {skin: Звёздный комплект, trail: Звёздный след, price: '2 500 000'}}
         - {slot: 12, material: ECHO_SHARD, name: 'mounts-ui:copy.skins.skin-selected-name', lore: ['mounts-ui:copy.skins.trail', 'mounts-ui:copy.common.selected'], placeholders: {skin: Теневой комплект, trail: След душ}}
+        - {slot: 13, material: LIGHTNING_ROD, name: 'mounts-ui:copy.skins.skin-buy-name', lore: ['mounts-ui:copy.skins.trail', 'mounts-ui:copy.common.price', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-open-purchase'], placeholders: {skin: Электрическая спираль, trail: Электрическая спираль, price: '900 000'}}
+        - {slot: 14, material: ENDER_PEARL, name: 'mounts-ui:copy.skins.skin-buy-name', lore: ['mounts-ui:copy.skins.trail', 'mounts-ui:copy.common.price', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-open-purchase'], placeholders: {skin: Портальные кольца, trail: Портальные кольца, price: '1 100 000'}}
+        - {slot: 15, material: POTION, name: 'mounts-ui:copy.skins.skin-buy-name', lore: ['mounts-ui:copy.skins.trail', 'mounts-ui:copy.common.price', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-open-purchase'], placeholders: {skin: Ведьмина двойная лента, trail: Ведьмина двойная лента, price: '1 250 000'}}
+        - {slot: 16, material: ENCHANTED_BOOK, name: 'mounts-ui:copy.skins.skin-buy-name', lore: ['mounts-ui:copy.skins.trail', 'mounts-ui:copy.common.price', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-open-purchase'], placeholders: {skin: Руническая орбита, trail: Руническая орбита, price: '1 400 000'}}
+        - {slot: 17, material: GLOW_INK_SAC, name: 'mounts-ui:copy.skins.skin-buy-name', lore: ['mounts-ui:copy.skins.trail', 'mounts-ui:copy.common.price', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-open-purchase'], placeholders: {skin: Световой пульс, trail: Световой пульс, price: '1 600 000'}}
         - {slot: 45, material: BLUE_STAINED_GLASS_PANE, itemsadder: 'arc:left_gray', name: 'mounts-ui:copy.common.back-name', lore: ['mounts-ui:copy.skins.back-description', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-back']}
 
     - id: mounts-confirm-ready

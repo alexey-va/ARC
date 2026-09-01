@@ -11,6 +11,8 @@ import org.bukkit.attribute.Attribute
 import org.bukkit.attribute.AttributeInstance
 import org.bukkit.attribute.AttributeModifier
 import org.bukkit.entity.Bat
+import org.bukkit.entity.Creeper
+import org.bukkit.entity.EnderDragon
 import org.bukkit.entity.Horse
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Mob
@@ -41,6 +43,20 @@ class MountSessionControllerTest : StringSpec({
         verify(exactly = 2) { bat.setAwake(true) }
     }
 
+    "dangerous mount mobs remain inert while the controller owns movement" {
+        val creeper = mockk<Creeper>(relaxed = true)
+        val dragon = mockk<EnderDragon>(relaxed = true)
+
+        configureMountMob(creeper)
+        configureMountMob(dragon)
+        maintainMountMobState(creeper)
+        maintainMountMobState(dragon)
+
+        verify(exactly = 2) { creeper.setIgnited(false) }
+        verify(exactly = 2) { creeper.setExplosionRadius(0) }
+        verify(exactly = 2) { dragon.phase = EnderDragon.Phase.HOVER }
+    }
+
     "vex mount sweeps its full path and slides along a wall instead of phasing through it" {
         val vex = mockk<Vex>(relaxed = true)
         every { vex.boundingBox } returns BoundingBox(0.0, 0.0, 0.0, 0.4, 0.8, 0.4)
@@ -49,6 +65,16 @@ class MountSessionControllerTest : StringSpec({
         }
 
         constrainPhasingVelocity(vex, MotionVector(1.2, 0.0, 0.4)) shouldBe MotionVector(0.0, 0.0, 0.4)
+    }
+
+    "ender dragon mount cannot enter blocks with any part of its hitbox" {
+        val dragon = mockk<EnderDragon>(relaxed = true)
+        every { dragon.boundingBox } returns BoundingBox(0.0, 0.0, 0.0, 4.0, 4.0, 8.0)
+        every { dragon.wouldCollideUsing(any()) } answers {
+            firstArg<BoundingBox>().maxX > 4.5
+        }
+
+        constrainPhasingVelocity(dragon, MotionVector(0.8, 0.2, 0.0)) shouldBe MotionVector(0.0, 0.2, 0.0)
     }
 
     "walking mounts step over a full block without a manual jump" {

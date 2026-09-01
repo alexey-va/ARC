@@ -451,6 +451,7 @@ cosmetics:
     trail:
       name: "Звёздный след"
       particle: END_ROD
+      pattern: spiral
       interval-ticks: 3
       count: 3
       back-offset: 0.28
@@ -463,6 +464,7 @@ cosmetics:
     trail:
       name: "След душ"
       particle: SOUL
+      pattern: double-helix
       interval-ticks: 4
       count: 4
       back-offset: 0.24
@@ -475,32 +477,123 @@ cosmetics:
     trail:
       name: "Огненный след"
       particle: FLAME
+      pattern: pulse
       interval-ticks: 3
-      count: 2
+      count: 6
   soulfire:
     name: "Пламя душ"
     item: SOUL_LANTERN
     trail:
       name: "Пламя душ"
       particle: SOUL_FIRE_FLAME
+      pattern: orbit
       interval-ticks: 3
-      count: 2
+      count: 6
   cloud:
     name: "Облачный комплект"
     item: WHITE_DYE
     trail:
       name: "Облачный след"
       particle: CLOUD
+      pattern: ring
       interval-ticks: 3
-      count: 2
+      count: 8
   ocean:
     name: "Океанический комплект"
     item: NAUTILUS_SHELL
     trail:
       name: "Океанический след"
       particle: NAUTILUS
+      pattern: spiral
       interval-ticks: 3
-      count: 2
+      count: 6
+  electric:
+    name: "Электрическая спираль"
+    item: LIGHTNING_ROD
+    trail:
+      name: "Электрическая спираль"
+      particle: ELECTRIC_SPARK
+      pattern: spiral
+      interval-ticks: 2
+      count: 7
+      back-offset: 0.3
+      height-ratio: 0.48
+      spread: 0.05
+      speed: 0.02
+  portal:
+    name: "Портальные кольца"
+    item: ENDER_PEARL
+    trail:
+      name: "Портальные кольца"
+      particle: REVERSE_PORTAL
+      pattern: ring
+      interval-ticks: 3
+      count: 8
+      back-offset: 0.32
+      height-ratio: 0.5
+      spread: 0.04
+      speed: 0.01
+  witchcraft:
+    name: "Ведьмина двойная лента"
+    item: POTION
+    trail:
+      name: "Ведьмина двойная лента"
+      particle: WITCH
+      pattern: double-helix
+      interval-ticks: 2
+      count: 8
+      back-offset: 0.28
+      height-ratio: 0.5
+      spread: 0.04
+      speed: 0.01
+  enchanted:
+    name: "Руническая орбита"
+    item: ENCHANTED_BOOK
+    trail:
+      name: "Руническая орбита"
+      particle: ENCHANT
+      pattern: orbit
+      interval-ticks: 3
+      count: 7
+      back-offset: 0.28
+      height-ratio: 0.5
+      spread: 0.03
+      speed: 0.01
+  glow:
+    name: "Световой пульс"
+    item: GLOW_INK_SAC
+    trail:
+      name: "Световой пульс"
+      particle: GLOW
+      pattern: pulse
+      interval-ticks: 3
+      count: 8
+      back-offset: 0.3
+      height-ratio: 0.48
+      spread: 0.04
+      speed: 0.01
+
+shared-skins:
+  electric-spiral:
+    name: "Электрическая спираль"
+    preset: electric
+    price: 900000
+  portal-rings:
+    name: "Портальные кольца"
+    preset: portal
+    price: 1100000
+  witch-helix:
+    name: "Ведьмина двойная лента"
+    preset: witchcraft
+    price: 1250000
+  enchanted-orbit:
+    name: "Руническая орбита"
+    preset: enchanted
+    price: 1400000
+  glow-pulse:
+    name: "Световой пульс"
+    preset: glow
+    price: 1600000
 
 mounts:
   # Optional level scale multiplies appearance.scale; omit it to keep 1.0.
@@ -2610,3 +2703,939 @@ mounts:
         item: AMETHYST_SHARD
         preset: starlight
         price: 2800000
+  hoglin:
+    type: walking
+    item: HOGLIN_SPAWN_EGG
+    entity: HOGLIN
+    name: "Хоглин"
+    rarity: epic
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Тяжёлый незерский таран,"
+      - "который разбрасывает врагов с дороги."
+    abilities:
+      passive:
+        nether-hide:
+          name: "Незерская шкура"
+          effect: RESISTANCE
+          amplifier: 0
+          description:
+            - "Даёт всаднику Сопротивление I."
+    behaviors:
+      hoglin-ram:
+        type: ram
+        name: "Клыкастый таран"
+        description:
+          - "Нажмите спринт при движении вперёд."
+          - "Первый враждебный моб получит урон."
+        cooldown: 4s
+        damage: 4.5
+      hoglin-trample:
+        type: trample
+        name: "Тяжёлый топот"
+        description:
+          - "Враги под корпусом получают урон"
+          - "во время движения."
+        damage: 2.5
+        maximum-targets: 4
+    motion:
+      acceleration-time: 1100ms
+      deceleration-time: 500ms
+      turn-time: 280ms
+    levels:
+      - {speed: 1.6, handling: 0.9, sprint: 1, price: 500000}
+      - {speed: 2.6, handling: 1, sprint: 1.03, price: 2500000}
+      - {speed: 5.4, handling: 1.28, sprint: 1.12, price: 20000000}
+    buy-glow: 600000
+    appearance: {baby: false, scale: 1}
+    skins:
+      soulfire:
+        name: "Клыки душ"
+        item: SOUL_LANTERN
+        preset: soulfire
+        price: 2500000
+      shadow:
+        name: "Багровая тень"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 5500000
+  shulker:
+    type: flying
+    item: SHULKER_SPAWN_EGG
+    entity: SHULKER
+    name: "Шалкер"
+    rarity: rare
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Летающая коробка с открытой крышкой"
+      - "и неожиданно мягкой посадкой."
+    abilities:
+      passive:
+        shell:
+          name: "Панцирь шалкера"
+          effect: RESISTANCE
+          amplifier: 0
+          description:
+            - "Снижает входящий урон."
+        levitation-brake:
+          name: "Воздушный тормоз"
+          effect: SLOW_FALLING
+          amplifier: 0
+          description:
+            - "Страхует всадника после полёта."
+    levels:
+      - {speed: 0.55, handling: 0.9, sprint: 1, price: 250000}
+      - {speed: 0.95, handling: 1, sprint: 1.03, price: 1200000}
+      - {speed: 1.9, handling: 1.28, sprint: 1.12, price: 12000000}
+    buy-glow: 350000
+    appearance: {scale: 1}
+    skins:
+      starlight:
+        name: "Звёздный шалкер"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 1200000
+      shadow:
+        name: "Шалкер Бездны"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 2800000
+  endermite:
+    type: walking
+    item: ENDERMITE_SPAWN_EGG
+    entity: ENDERMITE
+    name: "Эндермит"
+    rarity: common
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Крошечная межмировая табуретка,"
+      - "которая бегает быстрее здравого смысла."
+    abilities:
+      passive:
+        ender-rush:
+          name: "Эндер-рывок"
+          effect: SPEED
+          amplifier: 1
+          description:
+            - "Даёт всаднику Скорость II."
+    levels:
+      - {speed: 1.8, handling: 0.95, sprint: 1, price: 50000}
+      - {speed: 2.9, handling: 1.05, sprint: 1.03, price: 250000}
+      - {speed: 5.8, handling: 1.28, sprint: 1.12, price: 5000000}
+    buy-glow: 100000
+    appearance: {scale: 1.2}
+    skins:
+      starlight:
+        name: "Звёздный эндермит"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 350000
+      shadow:
+        name: "Эндермит Бездны"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 750000
+  piglin:
+    type: walking
+    item: PIGLIN_SPAWN_EGG
+    entity: PIGLIN
+    name: "Пиглин"
+    rarity: uncommon
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Золотолюбивый проводник,"
+      - "который не превращается вне Незера."
+    abilities:
+      passive:
+        gold-instinct:
+          name: "Золотое чутьё"
+          effect: LUCK
+          amplifier: 0
+          description:
+            - "Даёт всаднику эффект удачи."
+        nether-blood:
+          name: "Кровь Незера"
+          effect: FIRE_RESISTANCE
+          amplifier: 0
+          description:
+            - "Защищает всадника от огня и лавы."
+    levels:
+      - {speed: 1.5, handling: 0.9, sprint: 1, price: 100000}
+      - {speed: 2.45, handling: 1, sprint: 1.03, price: 500000}
+      - {speed: 5.1, handling: 1.28, sprint: 1.12, price: 8000000}
+    buy-glow: 200000
+    appearance: {baby: false, scale: 1}
+    skins:
+      flame:
+        name: "Позолоченный пиглин"
+        item: GOLD_INGOT
+        preset: flame
+        price: 650000
+      shadow:
+        name: "Чёрное золото"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 1400000
+  wither_skeleton:
+    type: walking
+    item: WITHER_SKELETON_SPAWN_EGG
+    entity: WITHER_SKELETON
+    name: "Скелет-иссушитель"
+    rarity: epic
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Высокий незерский всадник"
+      - "для огненных дорог и тяжёлых драк."
+    abilities:
+      passive:
+        wither-force:
+          name: "Сила иссушения"
+          effect: STRENGTH
+          amplifier: 0
+          description:
+            - "Усиливает атаки всадника."
+        ash-proof:
+          name: "Жар костей"
+          effect: FIRE_RESISTANCE
+          amplifier: 0
+          description:
+            - "Защищает всадника от огня и лавы."
+    levels:
+      - {speed: 1.6, handling: 0.9, sprint: 1, price: 500000}
+      - {speed: 2.6, handling: 1, sprint: 1.03, price: 2500000}
+      - {speed: 5.4, handling: 1.28, sprint: 1.12, price: 20000000}
+    buy-glow: 600000
+    appearance: {scale: 1}
+    skins:
+      soulfire:
+        name: "Иссушитель душ"
+        item: SOUL_LANTERN
+        preset: soulfire
+        price: 2500000
+      shadow:
+        name: "Чёрный скелет"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 5500000
+  vindicator:
+    type: walking
+    item: VINDICATOR_SPAWN_EGG
+    entity: VINDICATOR
+    name: "Поборник"
+    rarity: rare
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Злой рейдер с топором,"
+      - "который любит прямые маршруты."
+    abilities:
+      passive:
+        raid-force:
+          name: "Ярость рейда"
+          effect: STRENGTH
+          amplifier: 0
+          description:
+            - "Даёт всаднику Силу I."
+    behaviors:
+      vindicator-ram:
+        type: ram
+        name: "Прорыв строя"
+        description:
+          - "Спринт вперёд сбивает первого"
+          - "враждебного моба на пути."
+        cooldown: 4s
+        damage: 3.0
+    levels:
+      - {speed: 1.55, handling: 0.9, sprint: 1, price: 250000}
+      - {speed: 2.55, handling: 1, sprint: 1.03, price: 1200000}
+      - {speed: 5.2, handling: 1.28, sprint: 1.12, price: 12000000}
+    buy-glow: 350000
+    appearance: {scale: 1}
+    skins:
+      starlight:
+        name: "Звёздный поборник"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 1200000
+      shadow:
+        name: "Ночной рейдер"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 2800000
+  creaking:
+    type: walking
+    item: CREAKING_SPAWN_EGG
+    entity: CREAKING
+    name: "Скрипун"
+    rarity: epic
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Живая бледная древесина,"
+      - "которая идёт, пока на неё смотрят."
+    abilities:
+      passive:
+        pale-bark:
+          name: "Бледная кора"
+          effect: RESISTANCE
+          amplifier: 1
+          description:
+            - "Даёт всаднику Сопротивление II."
+        night-roots:
+          name: "Ночные корни"
+          effect: NIGHT_VISION
+          amplifier: 0
+          description:
+            - "Освещает тёмные леса и пещеры."
+    motion:
+      acceleration-time: 1200ms
+      deceleration-time: 450ms
+      turn-time: 300ms
+    levels:
+      - {speed: 1.55, handling: 0.9, sprint: 1, price: 500000}
+      - {speed: 2.5, handling: 1, sprint: 1.03, price: 2500000}
+      - {speed: 5.2, handling: 1.28, sprint: 1.12, price: 20000000}
+    buy-glow: 600000
+    appearance: {scale: 1}
+    skins:
+      starlight:
+        name: "Светлый скрипун"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 2500000
+      shadow:
+        name: "Сердце чащи"
+        item: CREAKING_HEART
+        preset: shadow
+        price: 5500000
+  creeper:
+    type: walking
+    item: CREEPER_SPAWN_EGG
+    entity: CREEPER
+    name: "Крипер"
+    rarity: rare
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Бесшумный зелёный транспорт."
+      - "Фитиль обезврежен системой ARC."
+    abilities:
+      passive:
+        silent-fuse:
+          name: "Тихий фитиль"
+          effect: SPEED
+          amplifier: 0
+          description:
+            - "Даёт всаднику Скорость I."
+        blast-padding:
+          name: "Взрывная прокладка"
+          effect: RESISTANCE
+          amplifier: 0
+          description:
+            - "Снижает входящий урон."
+    levels:
+      - {speed: 1.6, handling: 0.9, sprint: 1, price: 250000}
+      - {speed: 2.65, handling: 1, sprint: 1.03, price: 1200000}
+      - {speed: 5.4, handling: 1.28, sprint: 1.12, price: 12000000}
+    buy-glow: 350000
+    appearance: {scale: 1}
+    skins:
+      starlight:
+        name: "Звёздный крипер"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 1200000
+      shadow:
+        name: "Тихий ужас"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 2800000
+  elder_guardian:
+    type: swimming
+    item: ELDER_GUARDIAN_SPAWN_EGG
+    entity: ELDER_GUARDIAN
+    name: "Древний страж"
+    rarity: legendary
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Океанский исполин,"
+      - "который превращает глубину в крепость."
+    abilities:
+      upgrades: [water-breathing, night-vision]
+      passive:
+        elder-shell:
+          name: "Древний панцирь"
+          effect: RESISTANCE
+          amplifier: 1
+          description:
+            - "Даёт всаднику Сопротивление II."
+    motion:
+      acceleration-time: 1200ms
+      deceleration-time: 500ms
+      turn-time: 300ms
+    levels:
+      - {speed: 0.65, handling: 0.9, sprint: 1, price: 1000000}
+      - {speed: 1.08, handling: 1, sprint: 1.03, price: 5000000}
+      - {speed: 2.05, handling: 1.28, sprint: 1.12, price: 35000000}
+    buy-glow: 1000000
+    appearance: {scale: 1}
+    skins:
+      ocean:
+        name: "Владыка монумента"
+        item: NAUTILUS_SHELL
+        preset: ocean
+        price: 5000000
+      shadow:
+        name: "Страж Бездны"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 12000000
+  silverfish:
+    type: walking
+    item: SILVERFISH_SPAWN_EGG
+    entity: SILVERFISH
+    name: "Чешуйница"
+    rarity: common
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Каменная заноза на максималках:"
+      - "низкая, быстрая и очень юркая."
+    abilities:
+      passive:
+        stone-skitter:
+          name: "Каменный шорох"
+          effect: SPEED
+          amplifier: 1
+          description:
+            - "Даёт всаднику Скорость II."
+    levels:
+      - {speed: 1.85, handling: 0.95, sprint: 1, price: 50000}
+      - {speed: 3, handling: 1.05, sprint: 1.03, price: 250000}
+      - {speed: 6, handling: 1.28, sprint: 1.12, price: 5000000}
+    buy-glow: 100000
+    appearance: {scale: 1.2}
+    skins:
+      starlight:
+        name: "Кристальная чешуйница"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 350000
+      shadow:
+        name: "Глубинная чешуйница"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 750000
+  witch:
+    type: walking
+    item: WITCH_SPAWN_EGG
+    entity: WITCH
+    name: "Ведьма"
+    rarity: rare
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Передвижная алхимическая лавка"
+      - "с удачей и медленным лечением."
+    abilities:
+      passive:
+        field-potion:
+          name: "Походное зелье"
+          effect: REGENERATION
+          amplifier: 0
+          description:
+            - "Постепенно восстанавливает здоровье."
+        witch-luck:
+          name: "Ведьмина удача"
+          effect: LUCK
+          amplifier: 0
+          description:
+            - "Даёт всаднику эффект удачи."
+    levels:
+      - {speed: 1.5, handling: 0.9, sprint: 1, price: 250000}
+      - {speed: 2.45, handling: 1, sprint: 1.03, price: 1200000}
+      - {speed: 5.1, handling: 1.28, sprint: 1.12, price: 12000000}
+    buy-glow: 350000
+    appearance: {scale: 1}
+    skins:
+      starlight:
+        name: "Аметистовая ведьма"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 1200000
+      shadow:
+        name: "Ведьма Бездны"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 2800000
+  camel_husk:
+    type: walking
+    item: CAMEL_HUSK_SPAWN_EGG
+    entity: CAMEL_HUSK
+    name: "Верблюд-кадавр"
+    rarity: epic
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Мёртвый корабль пустыни,"
+      - "которому больше не нужна вода."
+    abilities:
+      passive:
+        dry-hide:
+          name: "Сухая шкура"
+          effect: RESISTANCE
+          amplifier: 0
+          description:
+            - "Даёт всаднику Сопротивление I."
+        desert-pace:
+          name: "Пустынный ход"
+          effect: SPEED
+          amplifier: 0
+          description:
+            - "Даёт всаднику Скорость I."
+    motion:
+      acceleration-time: 1300ms
+      deceleration-time: 550ms
+      turn-time: 320ms
+    levels:
+      - {speed: 1.55, handling: 0.9, sprint: 1, price: 500000}
+      - {speed: 2.55, handling: 1, sprint: 1.03, price: 2500000}
+      - {speed: 5.25, handling: 1.28, sprint: 1.12, price: 20000000}
+    buy-glow: 600000
+    appearance:
+      baby: false
+      scale: 1
+      equipment:
+        saddle: SADDLE
+    skins:
+      flame:
+        name: "Песчаная буря"
+        item: BLAZE_POWDER
+        preset: flame
+        price: 2500000
+      shadow:
+        name: "Мёртвый караван"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 5500000
+  stray:
+    type: walking
+    item: STRAY_SPAWN_EGG
+    entity: STRAY
+    name: "Зимогор"
+    rarity: uncommon
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Ледяной скелет для снежных дорог"
+      - "и ночных переходов."
+    abilities:
+      upgrades: [night-vision]
+      passive:
+        snow-step:
+          name: "Снежный шаг"
+          effect: SPEED
+          amplifier: 0
+          description:
+            - "Даёт всаднику Скорость I."
+    levels:
+      - {speed: 1.5, handling: 0.9, sprint: 1, price: 100000}
+      - {speed: 2.45, handling: 1, sprint: 1.03, price: 500000}
+      - {speed: 5.1, handling: 1.28, sprint: 1.12, price: 8000000}
+    buy-glow: 200000
+    appearance: {scale: 1}
+    skins:
+      starlight:
+        name: "Полярный зимогор"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 650000
+      shadow:
+        name: "Чёрный лёд"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 1400000
+  parched:
+    type: walking
+    item: PARCHED_SPAWN_EGG
+    entity: PARCHED
+    name: "Пустынник"
+    rarity: uncommon
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Высохший скелет жарких земель,"
+      - "который не боится открытого огня."
+    abilities:
+      passive:
+        desert-fire:
+          name: "Пустынный жар"
+          effect: FIRE_RESISTANCE
+          amplifier: 0
+          description:
+            - "Защищает всадника от огня и лавы."
+        dry-wind:
+          name: "Сухой ветер"
+          effect: SPEED
+          amplifier: 0
+          description:
+            - "Даёт всаднику Скорость I."
+    levels:
+      - {speed: 1.5, handling: 0.9, sprint: 1, price: 100000}
+      - {speed: 2.45, handling: 1, sprint: 1.03, price: 500000}
+      - {speed: 5.1, handling: 1.28, sprint: 1.12, price: 8000000}
+    buy-glow: 200000
+    appearance: {scale: 1}
+    skins:
+      flame:
+        name: "Красный песок"
+        item: BLAZE_POWDER
+        preset: flame
+        price: 650000
+      shadow:
+        name: "Ночная пустыня"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 1400000
+  zoglin:
+    type: walking
+    item: ZOGLIN_SPAWN_EGG
+    entity: ZOGLIN
+    name: "Зоглин"
+    rarity: epic
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Неживой таран без тормозов,"
+      - "созданный для самого тяжёлого топота."
+    abilities:
+      passive:
+        dead-weight:
+          name: "Мёртвый вес"
+          effect: RESISTANCE
+          amplifier: 0
+          description:
+            - "Даёт всаднику Сопротивление I."
+    behaviors:
+      zoglin-trample:
+        type: trample
+        name: "Мёртвый топот"
+        description:
+          - "Враги под зоглином получают урон"
+          - "во время движения."
+        damage: 3.0
+        maximum-targets: 5
+    motion:
+      acceleration-time: 1150ms
+      deceleration-time: 500ms
+      turn-time: 300ms
+    levels:
+      - {speed: 1.6, handling: 0.9, sprint: 1, price: 500000}
+      - {speed: 2.6, handling: 1, sprint: 1.03, price: 2500000}
+      - {speed: 5.4, handling: 1.28, sprint: 1.12, price: 20000000}
+    buy-glow: 600000
+    appearance: {baby: false, scale: 1}
+    skins:
+      soulfire:
+        name: "Зоглин душ"
+        item: SOUL_LANTERN
+        preset: soulfire
+        price: 2500000
+      shadow:
+        name: "Чёрный зоглин"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 5500000
+  nautilus:
+    type: swimming
+    item: NAUTILUS_SPAWN_EGG
+    entity: NAUTILUS
+    name: "Наутилус"
+    rarity: rare
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Новый океанский скакун"
+      - "для быстрых подводных экспедиций."
+    abilities:
+      upgrades: [water-breathing, night-vision, dolphins-grace]
+    levels:
+      - {speed: 0.65, handling: 0.9, sprint: 1, price: 250000}
+      - {speed: 1.08, handling: 1, sprint: 1.03, price: 1200000}
+      - {speed: 2.05, handling: 1.28, sprint: 1.12, price: 12000000}
+    buy-glow: 350000
+    appearance: {baby: false, scale: 1}
+    skins:
+      ocean:
+        name: "Океанический наутилус"
+        item: NAUTILUS_SHELL
+        preset: ocean
+        price: 1200000
+      starlight:
+        name: "Звёздный наутилус"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 2800000
+  zombie_nautilus:
+    type: swimming
+    item: ZOMBIE_NAUTILUS_SPAWN_EGG
+    entity: ZOMBIE_NAUTILUS
+    name: "Зомби-наутилус"
+    rarity: epic
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Утопленная кавалерия,"
+      - "которая не устает в глубинах."
+    abilities:
+      upgrades: [water-breathing, night-vision]
+      passive:
+        drowned-shell:
+          name: "Мёртвый панцирь"
+          effect: RESISTANCE
+          amplifier: 0
+          description:
+            - "Снижает входящий урон."
+    levels:
+      - {speed: 0.65, handling: 0.9, sprint: 1, price: 500000}
+      - {speed: 1.08, handling: 1, sprint: 1.03, price: 2500000}
+      - {speed: 2.05, handling: 1.28, sprint: 1.12, price: 20000000}
+    buy-glow: 600000
+    appearance: {baby: false, scale: 1}
+    skins:
+      ocean:
+        name: "Утопленный наутилус"
+        item: NAUTILUS_SHELL
+        preset: ocean
+        price: 2500000
+      shadow:
+        name: "Наутилус Бездны"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 5500000
+  bogged:
+    type: walking
+    item: BOGGED_SPAWN_EGG
+    entity: BOGGED
+    name: "Болотник"
+    rarity: uncommon
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Заросший мхом скелет,"
+      - "который приносит болотную живучесть."
+    abilities:
+      passive:
+        moss-healing:
+          name: "Целебный мох"
+          effect: REGENERATION
+          amplifier: 0
+          description:
+            - "Постепенно восстанавливает здоровье."
+        swamp-luck:
+          name: "Болотное чутьё"
+          effect: LUCK
+          amplifier: 0
+          description:
+            - "Даёт всаднику эффект удачи."
+    levels:
+      - {speed: 1.5, handling: 0.9, sprint: 1, price: 100000}
+      - {speed: 2.45, handling: 1, sprint: 1.03, price: 500000}
+      - {speed: 5.1, handling: 1.28, sprint: 1.12, price: 8000000}
+    buy-glow: 200000
+    appearance: {scale: 1}
+    skins:
+      ocean:
+        name: "Глубинный болотник"
+        item: NAUTILUS_SHELL
+        preset: ocean
+        price: 650000
+      shadow:
+        name: "Тёмный мох"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 1400000
+  piglin_brute:
+    type: walking
+    item: PIGLIN_BRUTE_SPAWN_EGG
+    entity: PIGLIN_BRUTE
+    name: "Брутальный пиглин"
+    rarity: epic
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Позолоченный тяжеловес"
+      - "для силового прорыва через толпу."
+    abilities:
+      passive:
+        brute-force:
+          name: "Грубая сила"
+          effect: STRENGTH
+          amplifier: 1
+          description:
+            - "Даёт всаднику Силу II."
+        bastion-armor:
+          name: "Броня бастиона"
+          effect: RESISTANCE
+          amplifier: 0
+          description:
+            - "Снижает входящий урон."
+    behaviors:
+      brute-ram:
+        type: ram
+        name: "Штурм бастиона"
+        description:
+          - "Спринт вперёд наносит урон"
+          - "первому враждебному мобу."
+        cooldown: 4s
+        damage: 4.0
+    levels:
+      - {speed: 1.55, handling: 0.9, sprint: 1, price: 500000}
+      - {speed: 2.55, handling: 1, sprint: 1.03, price: 2500000}
+      - {speed: 5.25, handling: 1.28, sprint: 1.12, price: 20000000}
+    buy-glow: 600000
+    appearance: {baby: false, scale: 1}
+    skins:
+      flame:
+        name: "Золотой брут"
+        item: GOLD_BLOCK
+        preset: flame
+        price: 2500000
+      shadow:
+        name: "Брут Бездны"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 5500000
+  pillager:
+    type: walking
+    item: PILLAGER_SPAWN_EGG
+    entity: PILLAGER
+    name: "Разбойник"
+    rarity: uncommon
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Быстрый участник рейда"
+      - "с хорошим чутьём на добычу."
+    abilities:
+      passive:
+        raid-scout:
+          name: "Разведчик рейда"
+          effect: SPEED
+          amplifier: 0
+          description:
+            - "Даёт всаднику Скорость I."
+        pillage-luck:
+          name: "Чутьё на добычу"
+          effect: LUCK
+          amplifier: 0
+          description:
+            - "Даёт всаднику эффект удачи."
+    levels:
+      - {speed: 1.55, handling: 0.9, sprint: 1, price: 100000}
+      - {speed: 2.55, handling: 1, sprint: 1.03, price: 500000}
+      - {speed: 5.25, handling: 1.28, sprint: 1.12, price: 8000000}
+    buy-glow: 200000
+    appearance: {scale: 1}
+    skins:
+      starlight:
+        name: "Звёздный разбойник"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 650000
+      shadow:
+        name: "Ночной дозор"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 1400000
+  evoker:
+    type: walking
+    item: EVOKER_SPAWN_EGG
+    entity: EVOKER
+    name: "Заклинатель"
+    rarity: epic
+    acquisition: "Магазин маунтов на спавне"
+    description:
+      - "Маг рейда, превращённый"
+      - "в мобильный талисман всадника."
+    abilities:
+      passive:
+        totem-pulse:
+          name: "Импульс тотема"
+          effect: REGENERATION
+          amplifier: 0
+          description:
+            - "Постепенно восстанавливает здоровье."
+        arcane-luck:
+          name: "Магическая удача"
+          effect: LUCK
+          amplifier: 1
+          description:
+            - "Даёт всаднику Удачу II."
+    levels:
+      - {speed: 1.5, handling: 0.9, sprint: 1, price: 500000}
+      - {speed: 2.45, handling: 1, sprint: 1.03, price: 2500000}
+      - {speed: 5.1, handling: 1.28, sprint: 1.12, price: 20000000}
+    buy-glow: 600000
+    appearance: {scale: 1}
+    skins:
+      starlight:
+        name: "Аметистовый заклинатель"
+        item: AMETHYST_SHARD
+        preset: starlight
+        price: 2500000
+      shadow:
+        name: "Заклинатель Бездны"
+        item: ECHO_SHARD
+        preset: shadow
+        price: 5500000
+  ender_dragon:
+    type: flying
+    item: ENDER_DRAGON_SPAWN_EGG
+    entity: ENDER_DRAGON
+    name: "Эндер-дракон"
+    rarity: legendary
+    acquisition: "Только команда администратора"
+    description:
+      - "Финальный админский маунт:"
+      - "огромный, летающий и не продаётся."
+    abilities:
+      passive:
+        dragon-might:
+          name: "Мощь дракона"
+          effect: STRENGTH
+          amplifier: 1
+          description:
+            - "Даёт всаднику Силу II."
+        dragon-scales:
+          name: "Чешуя дракона"
+          effect: RESISTANCE
+          amplifier: 1
+          description:
+            - "Даёт всаднику Сопротивление II."
+        void-sight:
+          name: "Зрение Бездны"
+          effect: NIGHT_VISION
+          amplifier: 0
+          description:
+            - "Позволяет видеть в полной темноте."
+    motion:
+      acceleration-time: 1600ms
+      deceleration-time: 700ms
+      turn-time: 420ms
+    levels:
+      - {speed: 0.7, handling: 0.9, sprint: 1}
+      - {speed: 1.15, handling: 1, sprint: 1.03}
+      - {speed: 2.3, handling: 1.28, sprint: 1.12}
+    appearance: {scale: 0.65}
+    include-shared-skins: false
+    skins:
+      shadow:
+        name: "Дракон Бездны"
+        item: DRAGON_HEAD
+        preset: shadow
+      soulfire:
+        name: "Дракон душ"
+        item: SOUL_LANTERN
+        preset: soulfire
+      electric-spiral:
+        name: "Электрическая спираль"
+        preset: electric
+      portal-rings:
+        name: "Портальные кольца"
+        preset: portal
+      witch-helix:
+        name: "Ведьмина двойная лента"
+        preset: witchcraft
+      enchanted-orbit:
+        name: "Руническая орбита"
+        preset: enchanted
+      glow-pulse:
+        name: "Световой пульс"
+        preset: glow

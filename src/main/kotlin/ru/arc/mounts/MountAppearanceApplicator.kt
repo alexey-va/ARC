@@ -11,11 +11,14 @@ import org.bukkit.entity.Axolotl
 import org.bukkit.entity.Fox
 import org.bukkit.entity.Frog
 import org.bukkit.entity.Horse
+import org.bukkit.entity.Hoglin
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Llama
 import org.bukkit.entity.MushroomCow
 import org.bukkit.entity.Parrot
+import org.bukkit.entity.PiglinAbstract
 import org.bukkit.entity.Rabbit
+import org.bukkit.entity.Shulker
 import org.bukkit.entity.Zombie
 import org.bukkit.entity.EntityType
 import org.bukkit.inventory.EquipmentSlot
@@ -67,6 +70,9 @@ internal object MountAppearanceApplicator {
             entity.setCanBreakDoors(false)
             entity.stopDrowning()
         }
+        (entity as? PiglinAbstract)?.setImmuneToZombification(true)
+        (entity as? Hoglin)?.setImmuneToZombification(true)
+        (entity as? Shulker)?.setPeek(100.0f)
     }
 
     private fun fixAge(entity: LivingEntity, baby: Boolean) {

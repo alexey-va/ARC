@@ -167,9 +167,19 @@ data class MountAppearance(
     }
 }
 
+enum class MountTrailPattern {
+    SCATTER,
+    SPIRAL,
+    RING,
+    DOUBLE_HELIX,
+    ORBIT,
+    PULSE,
+}
+
 data class MountTrailDefinition(
     val particle: String,
     val displayName: String,
+    val pattern: MountTrailPattern = MountTrailPattern.SCATTER,
     val intervalTicks: Int = 4,
     val count: Int = 1,
     val backOffset: Double = 0.2,

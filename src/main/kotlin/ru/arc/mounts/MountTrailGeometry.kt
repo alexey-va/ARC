@@ -2,6 +2,8 @@ package ru.arc.mounts
 
 import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sin
 
 data class MountTrailBounds(
@@ -26,12 +28,7 @@ internal fun mountTrailOrigin(
     motionDirection: MotionVector,
     trail: MountTrailDefinition,
 ): MotionVector {
-    val forward =
-        motionDirection.normalizedHorizontal().takeUnless { it == MotionVector.ZERO }
-            ?: run {
-                val yaw = Math.toRadians(yawDegrees.toDouble().takeIf(Double::isFinite) ?: 0.0)
-                MotionVector(-sin(yaw), 0.0, cos(yaw))
-            }
+    val forward = mountTrailForward(yawDegrees, motionDirection)
     val width = bounds.maxX - bounds.minX
     val depth = bounds.maxZ - bounds.minZ
     val halfBodyAlongForward = abs(forward.x) * width / 2.0 + abs(forward.z) * depth / 2.0
@@ -42,3 +39,71 @@ internal fun mountTrailOrigin(
         z = (bounds.minZ + bounds.maxZ) / 2.0 - forward.z * rearDistance,
     )
 }
+
+internal fun mountTrailPoints(
+    bounds: MountTrailBounds,
+    yawDegrees: Float,
+    motionDirection: MotionVector,
+    trail: MountTrailDefinition,
+    ticks: Long,
+): List<MotionVector> {
+    val origin = mountTrailOrigin(bounds, yawDegrees, motionDirection, trail)
+    if (trail.pattern == MountTrailPattern.SCATTER) return listOf(origin)
+
+    val forward = mountTrailForward(yawDegrees, motionDirection)
+    val right = MotionVector(forward.z, 0.0, -forward.x)
+    val width = bounds.maxX - bounds.minX
+    val height = bounds.maxY - bounds.minY
+    val depth = bounds.maxZ - bounds.minZ
+    val bodyScale = min(max(width, depth), max(height, 0.5))
+    val radius = (bodyScale * 0.22).coerceIn(0.18, 2.0)
+    val phase = ticks.toDouble() * 0.34
+
+    return List(trail.count) { index ->
+        val fraction = index.toDouble() / trail.count
+        val ringAngle = phase + fraction * Math.PI * 2.0
+        when (trail.pattern) {
+            MountTrailPattern.SPIRAL ->
+                trailPoint(origin, forward, right, ringAngle, radius, index * 0.12)
+            MountTrailPattern.RING ->
+                trailPoint(origin, forward, right, ringAngle, radius, 0.0)
+            MountTrailPattern.DOUBLE_HELIX -> {
+                val pair = index / 2
+                val angle = phase - pair * 0.72 + if (index % 2 == 0) 0.0 else Math.PI
+                trailPoint(origin, forward, right, angle, radius, pair * 0.14)
+            }
+            MountTrailPattern.ORBIT ->
+                MotionVector(
+                    origin.x + right.x * cos(ringAngle) * radius + forward.x * sin(ringAngle) * radius,
+                    origin.y + sin(ringAngle * 2.0) * radius * 0.28,
+                    origin.z + right.z * cos(ringAngle) * radius + forward.z * sin(ringAngle) * radius,
+                )
+            MountTrailPattern.PULSE -> {
+                val pulseRadius = radius * (0.45 + 0.55 * ((sin(phase) + 1.0) / 2.0))
+                trailPoint(origin, forward, right, ringAngle, pulseRadius, 0.0)
+            }
+            MountTrailPattern.SCATTER -> origin
+        }
+    }
+}
+
+private fun mountTrailForward(yawDegrees: Float, motionDirection: MotionVector): MotionVector =
+    motionDirection.normalizedHorizontal().takeUnless { it == MotionVector.ZERO }
+        ?: run {
+            val yaw = Math.toRadians(yawDegrees.toDouble().takeIf(Double::isFinite) ?: 0.0)
+            MotionVector(-sin(yaw), 0.0, cos(yaw))
+        }
+
+private fun trailPoint(
+    origin: MotionVector,
+    forward: MotionVector,
+    right: MotionVector,
+    angle: Double,
+    radius: Double,
+    rearward: Double,
+): MotionVector =
+    MotionVector(
+        origin.x - forward.x * rearward + right.x * cos(angle) * radius,
+        origin.y + sin(angle) * radius,
+        origin.z - forward.z * rearward + right.z * cos(angle) * radius,
+    )

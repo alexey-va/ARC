@@ -14,10 +14,10 @@ class MountModuleConfigTest : StringSpec({
         val config = bundledConfig("catalog")
         val catalog = config.catalog()
 
-        catalog.all shouldHaveSize 50
+        catalog.all shouldHaveSize 72
         catalog.all.groupingBy(MountDefinition::movement).eachCount() shouldBe
-            mapOf(MountMovement.WALKING to 30, MountMovement.FLYING to 12, MountMovement.SWIMMING to 8)
-        catalog.all.map(MountDefinition::id).toSet().size shouldBe 50
+            mapOf(MountMovement.WALKING to 47, MountMovement.FLYING to 14, MountMovement.SWIMMING to 11)
+        catalog.all.map(MountDefinition::id).toSet().size shouldBe 72
         setOf(
             "cat",
             "wolf",
@@ -37,6 +37,28 @@ class MountModuleConfigTest : StringSpec({
             "villager",
             "wandering_trader",
             "skeleton_horse",
+            "hoglin",
+            "shulker",
+            "endermite",
+            "piglin",
+            "wither_skeleton",
+            "vindicator",
+            "creaking",
+            "creeper",
+            "elder_guardian",
+            "silverfish",
+            "witch",
+            "camel_husk",
+            "stray",
+            "parched",
+            "zoglin",
+            "nautilus",
+            "zombie_nautilus",
+            "bogged",
+            "piglin_brute",
+            "pillager",
+            "evoker",
+            "ender_dragon",
         ).all { catalog[it] != null } shouldBe true
         catalog["blaze"]?.price(1) shouldBe null
         catalog["happy_ghast"]?.movement shouldBe MountMovement.FLYING
@@ -44,6 +66,15 @@ class MountModuleConfigTest : StringSpec({
         catalog["vex"]?.levels?.map(MountLevelDefinition::scaleMultiplier) shouldBe listOf(1.0, 1.0, 1.0)
         catalog.all.all { it.levels.size == 3 } shouldBe true
         catalog.all.all { it.skins.size >= 2 } shouldBe true
+        catalog.all.all { it.skins.size >= 7 } shouldBe true
+        catalog.all.all { mount ->
+            setOf("electric-spiral", "portal-rings", "witch-helix", "enchanted-orbit", "glow-pulse")
+                .all { mount.skin(it) != null }
+        } shouldBe true
+        catalog.all.last().id shouldBe "ender_dragon"
+        checkNotNull(catalog["ender_dragon"]).levels.all { it.price == null } shouldBe true
+        checkNotNull(catalog["ender_dragon"]).skins.all { it.price == null } shouldBe true
+        checkNotNull(catalog["ender_dragon"]).acquisition shouldBe "Только команда администратора"
     }
 
     "maximum level is a fast and intentionally expensive final sprint" {
@@ -80,7 +111,17 @@ class MountModuleConfigTest : StringSpec({
 
         zombie.appearance.baby shouldBe false
         zombie.appearance.equipment shouldBe emptyMap()
-        zombie.skins.map(MountSkinDefinition::id) shouldBe listOf("baby", "iron_guard", "diamond_warlord")
+        zombie.skins.map(MountSkinDefinition::id) shouldBe
+            listOf(
+                "baby",
+                "iron_guard",
+                "diamond_warlord",
+                "electric-spiral",
+                "portal-rings",
+                "witch-helix",
+                "enchanted-orbit",
+                "glow-pulse",
+            )
         zombie.skin("baby")?.appearance?.baby shouldBe true
         zombie.skin("iron_guard")?.appearance?.equipment?.get(MountEquipmentSlot.CHEST) shouldBe "IRON_CHESTPLATE"
         zombie.skin("diamond_warlord")?.appearance?.equipment?.get(MountEquipmentSlot.MAIN_HAND) shouldBe "NETHERITE_SWORD"
@@ -166,6 +207,11 @@ class MountModuleConfigTest : StringSpec({
         ravager.skin("starlight")?.trail?.count shouldBe 3
         ravager.skin("shadow")?.trail?.displayName shouldBe "След душ"
         ravager.skin("shadow")?.trail?.count shouldBe 4
+        ravager.skin("electric-spiral")?.trail?.pattern shouldBe MountTrailPattern.SPIRAL
+        ravager.skin("portal-rings")?.trail?.pattern shouldBe MountTrailPattern.RING
+        ravager.skin("witch-helix")?.trail?.pattern shouldBe MountTrailPattern.DOUBLE_HELIX
+        ravager.skin("enchanted-orbit")?.trail?.pattern shouldBe MountTrailPattern.ORBIT
+        ravager.skin("glow-pulse")?.trail?.pattern shouldBe MountTrailPattern.PULSE
     }
 
     "absurd catalog mounts retain their authored effective scale" {

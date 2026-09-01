@@ -39,8 +39,8 @@ cd ~/RusCrafting/ruscrafting-ops && ./scripts/mc arc classic classic_survival
 ## Features
 
 Treasure hunts, stock simulation, auction (Redis pub/sub), x-server
-announcements, and native cross-server mounts with progression, cosmetics,
-abilities, and player tuning.
+announcements, and 72 native cross-server mounts with progression, cosmetics,
+typed abilities, player tuning, and command-only comic extremes.
 
 Mount configuration and permission-state contract: [`docs/mounts.md`](docs/mounts.md).
 
