@@ -11,8 +11,8 @@ import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-private const val MIN_MOUNT_APPEARANCE_SCALE = 0.0625
-private const val MAX_MOUNT_APPEARANCE_SCALE = 16.0
+internal const val MIN_MOUNT_APPEARANCE_SCALE = 0.0625
+internal const val MAX_MOUNT_APPEARANCE_SCALE = 16.0
 private const val MIN_MOUNT_SIZE_MULTIPLIER = 0.1
 private const val MAX_MOUNT_SIZE_MULTIPLIER = 10.0
 
@@ -115,6 +115,7 @@ data class MountSizeOptionDefinition(
     val displayName: String,
     val multiplier: Double,
     val minimumLevel: Int = 1,
+    val grantOnly: Boolean = false,
 ) {
     init {
         require(MountDefinition.validId(id)) { "Invalid mount size option id: $id" }
@@ -484,10 +485,11 @@ data class MountDefinition(
 
     fun sizeOption(id: String?): MountSizeOptionDefinition? = sizeOptions.firstOrNull { it.id == id } ?: defaultSizeOption
 
-    fun availableSizeOptions(level: Int): List<MountSizeOptionDefinition> = sizeOptions.filter { it.minimumLevel <= level }
+    fun availableSizeOptions(level: Int, ownedSizeIds: Set<String> = emptySet()): List<MountSizeOptionDefinition> =
+        sizeOptions.filter { it.minimumLevel <= level && (!it.grantOnly || it.id in ownedSizeIds) }
 
-    fun effectiveSizeOption(id: String?, level: Int): MountSizeOptionDefinition? {
-        val available = availableSizeOptions(level)
+    fun effectiveSizeOption(id: String?, level: Int, ownedSizeIds: Set<String> = emptySet()): MountSizeOptionDefinition? {
+        val available = availableSizeOptions(level, ownedSizeIds)
         return available.firstOrNull { it.id == id }
             ?: available.firstOrNull { it.multiplier == 1.0 }
             ?: available.firstOrNull()
@@ -498,6 +500,7 @@ data class MountDefinition(
     val speedTuningPermissionPrefix: String get() = "arc.mounts.$id.tuning.speed."
     val stepHeightTuningPermissionPrefix: String get() = "arc.mounts.$id.tuning.step-height."
     val sizeTuningPermissionPrefix: String get() = "arc.mounts.$id.tuning.size."
+    val sizeOwnershipPermissionPrefix: String get() = "arc.mounts.$id.size."
     val riderViewTuningPermissionPrefix: String get() = "arc.mounts.$id.tuning.rider-view."
 
     fun speedTuningPermission(percentage: Int): String = "$speedTuningPermissionPrefix$percentage"
@@ -505,6 +508,8 @@ data class MountDefinition(
     fun stepHeightTuningPermission(hundredths: Int): String = "$stepHeightTuningPermissionPrefix$hundredths"
 
     fun sizeTuningPermission(sizeId: String): String = "$sizeTuningPermissionPrefix$sizeId"
+
+    fun sizeOwnershipPermission(sizeId: String): String = "$sizeOwnershipPermissionPrefix$sizeId"
 
     fun riderViewTuningPermission(autoHide: Boolean): String =
         "$riderViewTuningPermissionPrefix${if (autoHide) "auto-hide" else "always-visible"}"
@@ -565,6 +570,7 @@ data class MountProfile(
     val ownedSkinIds: Set<String> = emptySet(),
     val activeSkinId: String = MountDefinition.DEFAULT_SKIN_ID,
     val ownedAbilityIds: Set<String> = emptySet(),
+    val ownedSizeIds: Set<String> = emptySet(),
     val selectedSpeedPercentage: Int? = null,
     val selectedStepHeightHundredths: Int? = null,
     val selectedSizeId: String? = null,
@@ -576,6 +582,8 @@ data class MountProfile(
     fun ownsSkin(skinId: String): Boolean = skinId == MountDefinition.DEFAULT_SKIN_ID || skinId in ownedSkinIds
 
     fun ownsAbility(abilityId: String): Boolean = abilityId in ownedAbilityIds
+
+    fun ownsSize(option: MountSizeOptionDefinition): Boolean = !option.grantOnly || option.id in ownedSizeIds
 }
 
 data class MountRuntimeSettings(
@@ -640,6 +648,12 @@ interface MountOwnership {
     fun grantAbility(playerId: UUID, mount: MountDefinition, ability: MountAbilityUpgradeDefinition): CompletableFuture<Void>
 
     fun revokeAbility(playerId: UUID, mount: MountDefinition, ability: MountAbilityUpgradeDefinition): CompletableFuture<Void>
+
+    fun grantSize(playerId: UUID, mount: MountDefinition, size: MountSizeOptionDefinition): CompletableFuture<Void> =
+        CompletableFuture.failedFuture(UnsupportedOperationException("Mount size ownership persistence is unavailable"))
+
+    fun revokeSize(playerId: UUID, mount: MountDefinition, size: MountSizeOptionDefinition): CompletableFuture<Void> =
+        CompletableFuture.failedFuture(UnsupportedOperationException("Mount size ownership persistence is unavailable"))
 
     fun setSpeedTuning(playerId: UUID, mount: MountDefinition, percentage: Int): CompletableFuture<Void>
 

@@ -342,7 +342,7 @@ internal class MountGuiItems(
                 "max-level" to mount.maxLevel.toString(),
                 "speed-percent" to tuning.speedPercentage(profile.selectedSpeedPercentage).toString(),
                 "step" to formatHeight(tuning.stepHeight(profile.level, profile.selectedStepHeightHundredths)),
-                "size" to escape(mount.effectiveSizeOption(profile.selectedSizeId, profile.level)?.displayName?.lowercase().orEmpty()),
+                "size" to escape(mount.effectiveSizeOption(profile.selectedSizeId, profile.level, profile.ownedSizeIds)?.displayName?.lowercase().orEmpty()),
             )
         val content =
             if (!profile.unlocked) {
@@ -521,7 +521,7 @@ internal class MountGuiItems(
                     "maximum-speed" to formatSpeed(levelSpeed),
                     "step" to formatHeight(tuning.stepHeight(profile.level, profile.selectedStepHeightHundredths)),
                     "maximum-step" to formatHeight(tuning.maximumStepHeightHundredths(profile.level) / 100.0),
-                    "size" to escape(mount.effectiveSizeOption(profile.selectedSizeId, profile.level)?.displayName?.lowercase().orEmpty()),
+                    "size" to escape(mount.effectiveSizeOption(profile.selectedSizeId, profile.level, profile.ownedSizeIds)?.displayName?.lowercase().orEmpty()),
                 ).filterIndexed { index, _ ->
                     (index != 4 || mount.movement == MountMovement.WALKING) &&
                         (index != 5 || mount.sizeOptions.isNotEmpty())
@@ -632,8 +632,9 @@ internal class MountGuiItems(
         profile: MountProfile,
         option: MountSizeOptionDefinition,
     ): ItemStack {
-        val available = profile.unlocked && option.minimumLevel <= profile.level
-        val selected = available && mount.effectiveSizeOption(profile.selectedSizeId, profile.level)?.id == option.id
+        val entitled = profile.ownsSize(option)
+        val available = profile.unlocked && option.minimumLevel <= profile.level && entitled
+        val selected = available && mount.effectiveSizeOption(profile.selectedSizeId, profile.level, profile.ownedSizeIds)?.id == option.id
         val material =
             when (option.id) {
                 "compact", "keychain" -> Material.RABBIT_HIDE
@@ -655,6 +656,10 @@ internal class MountGuiItems(
                 )
                 when {
                     !profile.unlocked -> add(copy("progression.mount-required", "<#c42323>Сначала получите маунта"))
+                    option.grantOnly && !entitled -> {
+                        add(copy("progression.size-special", "<#ff9f0f>Особый размер"))
+                        add(copy("progression.size-special-source", "<#8c8c8c>Награда событий и особых активностей."))
+                    }
                     !available ->
                         add(
                             copy(

@@ -120,6 +120,41 @@ class MountSessionControllerTest : StringSpec({
         shouldCancelMountDamage(MountDamageTarget.RIDER, EntityDamageEvent.DamageCause.FALL) shouldBe false
     }
 
+    "fire-resistant mount protection covers every vanilla fire and lava damage cause" {
+        setOf(
+            EntityDamageEvent.DamageCause.FIRE,
+            EntityDamageEvent.DamageCause.FIRE_TICK,
+            EntityDamageEvent.DamageCause.LAVA,
+            EntityDamageEvent.DamageCause.HOT_FLOOR,
+            EntityDamageEvent.DamageCause.CAMPFIRE,
+        ).all(::isRiderFireDamageCause) shouldBe true
+        isRiderFireDamageCause(EntityDamageEvent.DamageCause.ENTITY_ATTACK) shouldBe false
+        isRiderFireDamageCause(EntityDamageEvent.DamageCause.FALL) shouldBe false
+        shouldCancelMountDamage(
+            MountDamageTarget.RIDER,
+            EntityDamageEvent.DamageCause.FIRE_TICK,
+            riderFireProtected = true,
+        ) shouldBe true
+        shouldCancelMountDamage(
+            MountDamageTarget.RIDER,
+            EntityDamageEvent.DamageCause.FIRE_TICK,
+            riderFireProtected = false,
+        ) shouldBe false
+    }
+
+    "fire-resistant mount extinguishes the rider instead of leaving the fire overlay" {
+        val protectedRider = mockk<Player>(relaxed = true)
+        every { protectedRider.fireTicks } returns 80
+        val ordinaryRider = mockk<Player>(relaxed = true)
+        every { ordinaryRider.fireTicks } returns 80
+
+        extinguishRiderFire(protectedRider, fireProtected = true)
+        extinguishRiderFire(ordinaryRider, fireProtected = false)
+
+        verify(exactly = 1) { protectedRider.fireTicks = 0 }
+        verify(exactly = 0) { ordinaryRider.fireTicks = any() }
+    }
+
     "vanilla dismount is blocked until double sneak authorizes it" {
         shouldCancelUnauthorizedDismount(allowDismount = false, cancellable = true) shouldBe true
         shouldCancelUnauthorizedDismount(allowDismount = true, cancellable = true) shouldBe false

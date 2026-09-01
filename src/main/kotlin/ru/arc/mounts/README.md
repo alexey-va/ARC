@@ -23,10 +23,10 @@ Native production replacement for `Denizen/scripts/activities/rideable_mobs.dsc`
   expensive final sprint and improves speed, steering and sprint response. An
   optional per-level `scale` multiplies the selected base or skin appearance;
   omitted values remain `1.0` for backward-compatible visuals.
-- Individual mounts may expose authored `size-tuning` profiles. These are not a
-  global percentage slider: every profile has a player-facing name, a bounded
-  multiplier and an optional level gate. The horse, Ravager and bee ship with
-  compact, standard and large profiles; the large profile unlocks at level 3.
+- Every mount exposes an ordinary size plus command-only comic extremes. A
+  selected size remains a free setting, but `grant-only` sizes require a
+  separate ownership node and never unlock from a purchased level. Authored
+  intermediate profiles may still use level gates.
 - Mount speed is controller-owned and ramps independently of vanilla entity
   friction. `movement.acceleration-time`, `deceleration-time` and `turn-time`
   set global response times; `0s` restores instant response. A mount may
@@ -78,6 +78,7 @@ All access, ownership and settings use only `arc.mounts.*`:
 - `arc.mounts.<mount>.skin.<skin>` — skin ownership;
 - `arc.mounts.<mount>.skin.active.<skin>` — selected skin marker;
 - `arc.mounts.<mount>.ability.<ability>` — permanent contextual ability;
+- `arc.mounts.<mount>.size.<size>` — ownership of a grant-only extreme size;
 - `arc.mounts.<mount>.tuning.speed.<percentage>` — selected speed profile;
 - `arc.mounts.<mount>.tuning.step-height.<hundredths>` — selected step height;
 - `arc.mounts.<mount>.tuning.size.<size>` — selected authored size profile;
@@ -87,9 +88,9 @@ The command surface is deliberately unified:
 
 - `/mount admin summon <mount> [level] [skin]` — short test ride using the
   selected configured level, never an arbitrary raw speed;
-- `/mount admin grant <level|skin|glow|ability> <player> <mount> [value]` — grant an
+- `/mount admin grant <level|skin|glow|ability|size> <player> <mount> [value]` — grant an
   exact ownership node;
-- `/mount admin revoke <level|skin|glow|ability> <player> <mount> [value]` — revoke an
+- `/mount admin revoke <level|skin|glow|ability|size> <player> <mount> [value]` — revoke an
   exact ownership node and any dependent active skin/glow setting.
 
 `/mount admin summon zombie 3 baby` is the administrator smoke command. No

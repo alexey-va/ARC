@@ -568,7 +568,12 @@ class MountGuiController(
                 }
                 holder.sizeOptionsBySlot[slot]?.let { sizeId ->
                     val option = mount.sizeOptions.firstOrNull { it.id == sizeId } ?: return
-                    if (!profile.unlocked || option.minimumLevel > profile.level || mount.effectiveSizeOption(profile.selectedSizeId, profile.level)?.id == sizeId) return
+                    if (
+                        !profile.unlocked ||
+                        option.minimumLevel > profile.level ||
+                        !profile.ownsSize(option) ||
+                        mount.effectiveSizeOption(profile.selectedSizeId, profile.level, profile.ownedSizeIds)?.id == sizeId
+                    ) return
                     purchases.setSizeTuning(subject(player), mount, sizeId) {
                         handlePurchaseResult(player, mount, it, purchase = false, reopen = MountScreen.PROGRESSION)
                     }

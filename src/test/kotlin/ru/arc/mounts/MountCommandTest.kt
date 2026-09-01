@@ -120,14 +120,22 @@ class MountCommandTest : StringSpec({
     }
 
     "admin completion follows the unified command tree" {
-        val fixture = commandFixture(catalog, admin = true)
+        val specialMount =
+            mount.copy(
+                sizeOptions =
+                    listOf(
+                        MountSizeOptionDefinition("standard", "Обычный", 1.0),
+                        MountSizeOptionDefinition("colossal", "Колоссальный", 10.0, grantOnly = true),
+                    ),
+            )
+        val fixture = commandFixture(MountCatalog(listOf(specialMount)), admin = true)
 
         fixture.command.onTabComplete(fixture.player, fixture.bukkitCommand, "mount", arrayOf(""))
             .shouldContainExactly("admin", "help", "menu")
         fixture.command.onTabComplete(fixture.player, fixture.bukkitCommand, "mount", arrayOf("admin", ""))
             .shouldContainExactly("grant", "grant-all", "revoke", "summon")
         fixture.command.onTabComplete(fixture.player, fixture.bukkitCommand, "mount", arrayOf("admin", "grant", ""))
-            .shouldContainExactly("ability", "glow", "level", "skin")
+            .shouldContainExactly("ability", "glow", "level", "size", "skin")
         fixture.command.onTabComplete(
             fixture.player,
             fixture.bukkitCommand,
@@ -140,6 +148,38 @@ class MountCommandTest : StringSpec({
             "mount",
             arrayOf("admin", "grant", "ability", "Rider", "bee", ""),
         ).shouldContainExactly("night-vision")
+        fixture.command.onTabComplete(
+            fixture.player,
+            fixture.bukkitCommand,
+            "mount",
+            arrayOf("admin", "grant", "size", "Rider", "bee", ""),
+        ).shouldContainExactly("colossal")
+    }
+
+    "admin can grant and revoke command-only sizes" {
+        val special = MountSizeOptionDefinition("colossal", "Колоссальный", 10.0, grantOnly = true)
+        val specialMount =
+            mount.copy(
+                sizeOptions = listOf(MountSizeOptionDefinition("standard", "Обычный", 1.0), special),
+            )
+        val fixture = commandFixture(MountCatalog(listOf(specialMount)), admin = true)
+
+        fixture.command.onCommand(
+            fixture.console,
+            fixture.bukkitCommand,
+            "mount",
+            arrayOf("admin", "grant", "size", "Rider", "bee", "colossal"),
+        ) shouldBe true
+        fixture.command.onCommand(
+            fixture.console,
+            fixture.bukkitCommand,
+            "mount",
+            arrayOf("admin", "revoke", "size", "Rider", "bee", "colossal"),
+        ) shouldBe true
+        fixture.scheduler.executeImmediate()
+
+        verify(exactly = 1) { fixture.ownership.grantSize(fixture.playerId, specialMount, special) }
+        verify(exactly = 1) { fixture.ownership.revokeSize(fixture.playerId, specialMount, special) }
     }
 
     "admin can grant every mount at its maximum level in one command" {
@@ -220,6 +260,8 @@ private fun commandFixture(catalog: MountCatalog, admin: Boolean = false): Mount
         every { revokeGlow(any(), any()) } returns CompletableFuture.completedFuture(null)
         every { grantAbility(any(), any(), any()) } returns CompletableFuture.completedFuture(null)
         every { revokeAbility(any(), any(), any()) } returns CompletableFuture.completedFuture(null)
+        every { grantSize(any(), any(), any()) } returns CompletableFuture.completedFuture(null)
+        every { revokeSize(any(), any(), any()) } returns CompletableFuture.completedFuture(null)
     }
     val config = mockk<MountModuleConfig> {
         every { adminSessionDuration } returns java.time.Duration.ofSeconds(10)

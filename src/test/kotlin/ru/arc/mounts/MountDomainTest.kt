@@ -48,9 +48,11 @@ class MountDomainTest : StringSpec({
         mount.abilityPermission("night-vision") shouldBe "arc.mounts.bee.ability.night-vision"
         mount.speedTuningPermission(65) shouldBe "arc.mounts.bee.tuning.speed.65"
         mount.stepHeightTuningPermission(110) shouldBe "arc.mounts.bee.tuning.step-height.110"
-        mount.copy(
+        val sized = mount.copy(
             sizeOptions = listOf(MountSizeOptionDefinition("standard", "Обычный", 1.0)),
-        ).sizeTuningPermission("standard") shouldBe "arc.mounts.bee.tuning.size.standard"
+        )
+        sized.sizeTuningPermission("standard") shouldBe "arc.mounts.bee.tuning.size.standard"
+        sized.sizeOwnershipPermission("keychain") shouldBe "arc.mounts.bee.size.keychain"
         favoriteMountPermission(mount.id) shouldBe "arc.mounts.favorite.bee"
     }
 
@@ -332,6 +334,25 @@ class MountDomainTest : StringSpec({
         mount.effectiveSizeOption("massive", 2)?.id shouldBe "standard"
         mount.effectiveAppearance(mount.level(3).scaleMultiplier * checkNotNull(mount.sizeOption("massive")).multiplier, null).scale shouldBe
             (0.943 plusOrMinus 1.0e-9)
+    }
+
+    "grant-only sizes need ownership and fall back to the ordinary size" {
+        val mount =
+            testMount().copy(
+                sizeOptions =
+                    listOf(
+                        MountSizeOptionDefinition("keychain", "Крошечный", 0.1, grantOnly = true),
+                        MountSizeOptionDefinition("standard", "Обычный", 1.0),
+                        MountSizeOptionDefinition("colossal", "Колоссальный", 10.0, grantOnly = true),
+                    ),
+            )
+
+        mount.availableSizeOptions(3).map(MountSizeOptionDefinition::id) shouldBe listOf("standard")
+        mount.effectiveSizeOption("colossal", 3)?.id shouldBe "standard"
+        mount.availableSizeOptions(3, setOf("keychain", "colossal")).map(MountSizeOptionDefinition::id) shouldBe
+            listOf("keychain", "standard", "colossal")
+        mount.effectiveSizeOption("colossal", 3, setOf("colossal"))?.id shouldBe "colossal"
+        MountProfile(3, false, false, ownedSizeIds = setOf("keychain")).ownsSize(mount.sizeOptions.first()) shouldBe true
     }
 
     "comic mount scales stay inside the native attribute envelope" {

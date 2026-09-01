@@ -354,10 +354,11 @@ class MountGuiControllerTest : TestBase() {
                 movement = MountMovement.WALKING,
                 sizeOptions =
                     listOf(
-                        MountSizeOptionDefinition("keychain", "Брелок ×0.1", 0.1),
+                        MountSizeOptionDefinition("keychain", "Брелок ×0.1", 0.1, grantOnly = true),
                         MountSizeOptionDefinition("standard", "Обычный ×1", 1.0),
                         MountSizeOptionDefinition("huge", "Огромный ×2", 2.0, minimumLevel = 2),
                         MountSizeOptionDefinition("absurd", "Абсурдный ×3", 3.0, minimumLevel = 3),
+                        MountSizeOptionDefinition("colossal", "Колоссальный ×10", 10.0, grantOnly = true),
                     ),
             )
         val tuning =
@@ -366,7 +367,15 @@ class MountGuiControllerTest : TestBase() {
                 walkingStepHeightsHundredths = listOf(110, 150, 200, 300, 400),
                 walkingMaxStepHeightByLevelHundredths = listOf(110, 200, 400),
             )
-        val profile = MountProfile(level = 2, glowOwned = false, glowDisabled = false, selectedSpeedPercentage = 65, selectedStepHeightHundredths = 150)
+        val profile =
+            MountProfile(
+                level = 2,
+                glowOwned = false,
+                glowDisabled = false,
+                ownedSizeIds = setOf("keychain"),
+                selectedSpeedPercentage = 65,
+                selectedStepHeightHundredths = 150,
+            )
         val ownership = mockk<MountOwnership> {
             every { profile(any(), mount) } returns profile
             every { favoriteMountId(any()) } returns null
@@ -420,11 +429,17 @@ class MountGuiControllerTest : TestBase() {
             plainName(player.openInventory.topInventory.getItem(33)) shouldBe "Подъём: 4.00 блока"
             plainName(player.openInventory.topInventory.getItem(38)) shouldBe "Размер: брелок ×0.1"
             plainName(player.openInventory.topInventory.getItem(39)) shouldBe "Размер: обычный ×1"
-            plainName(player.openInventory.topInventory.getItem(41)) shouldBe "Размер: огромный ×2"
-            plainName(player.openInventory.topInventory.getItem(42)) shouldBe "Размер: абсурдный ×3"
+            plainName(player.openInventory.topInventory.getItem(40)) shouldBe "Размер: огромный ×2"
+            plainName(player.openInventory.topInventory.getItem(41)) shouldBe "Размер: абсурдный ×3"
+            plainName(player.openInventory.topInventory.getItem(42)) shouldBe "Размер: колоссальный ×10"
+            player.openInventory.topInventory.getItem(42)?.type shouldBe Material.BARRIER
+            checkNotNull(player.openInventory.topInventory.getItem(42)?.itemMeta?.lore())
+                .map(PlainTextComponentSerializer.plainText()::serialize)
+                .any { it == "Особый размер" } shouldBe true
             plainName(player.openInventory.topInventory.getItem(49)) shouldBe "Корпус: скрывается"
 
             controller.onClick(clickEvent(player.openInventory, 39))
+            controller.onClick(clickEvent(player.openInventory, 41))
             controller.onClick(clickEvent(player.openInventory, 42))
             verify(exactly = 0) { purchases.setSizeTuning(any(), any(), any(), any()) }
 

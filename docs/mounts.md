@@ -9,9 +9,9 @@ Each configured level unlocks a maximum base speed. Walking levels also unlock a
 - `tuning.speed-percentages` selects a percentage of the current level speed;
 - `tuning.walking-step-heights` contains exact selectable native step heights in blocks;
 - `tuning.walking-max-step-height-by-level` defines the non-decreasing ceiling unlocked by each level.
-- `mounts.<id>.size-tuning` optionally exposes up to five authored size profiles for that specific entity, each with a bounded multiplier and level gate.
+- `mounts.<id>.size-tuning` optionally adds authored intermediate profiles. `size-tuning-defaults` also supplies every mount with an ordinary profile and two grant-only comic extremes.
 
-The bundled catalog uses the same mechanics selectively instead of giving every mount identical switches. The horse and fox have authored jump multipliers; the skeleton and Enderman can unlock night vision; the horse, Ravager and bee expose the intentionally comic `×0.1 / ×1 / ×2 / ×3` profiles. The catalog also contains fixed authored extremes: the `×10` Mega Pig, the `×10` Bee Airship, the `×0.1` Pocket Ghast and the `×3` Giant Warden. Fox/Breeze motion is deliberately responsive, while camel/Ravager and the giant mounts keep more weight.
+The tiny and colossal profiles are deliberately not level rewards: a player must own `arc.mounts.<mount>.size.<size-id>`, issued by `/mount admin grant size ...` or another reward system. The selected state remains a separate `tuning.size` node, so revoking an entitlement safely removes the matching selection. Most mounts use ×10; already enlarged base models receive the largest safe multiplier inside the native scale envelope. Authored ×0.5, ×2 and ×3 profiles remain ordinary level-gated tuning.
 
 With no saved choice, the maximum unlocked value is active. A saved lower choice persists after an upgrade. If a level is revoked, an out-of-range step height is clamped to the new ceiling at runtime.
 
@@ -25,6 +25,7 @@ Ownership and player settings use only the `arc.mounts.*` namespace. Tuning is s
 arc.mounts.<mount>.tuning.speed.<percentage>
 arc.mounts.<mount>.tuning.step-height.<hundredths>
 arc.mounts.<mount>.tuning.size.<size-id>
+arc.mounts.<mount>.size.<grant-only-size-id>
 ```
 
 For example, 65% speed and a 1.10-block step height are `arc.mounts.horse.tuning.speed.65` and `arc.mounts.horse.tuning.step-height.110`; the Ravager's large profile is `arc.mounts.ravager.tuning.size.massive`. Setters remove older nodes with the same exact prefix before writing the new state, so every server resolves one shared choice.
@@ -33,7 +34,7 @@ For example, 65% speed and a 1.10-block step height are `arc.mounts.horse.tuning
 
 Speed, step height, level/size scale, skin, glow and owned abilities resolve into one immutable runtime snapshot. A successful setting write reconciles the complete snapshot into the active ride on the main thread, so speed, step height, glow, skins and trails update immediately. Growing size is first checked against a feet-anchored prospective bounding box; a blocked growth remains saved for the next safe summon without creating mixed visual/session state. The accepted effective entity-scale range matches the native `0.0625..16` attribute contract, while player-facing tuning multipliers are bounded to `0.1..10` and every composed catalog appearance is validated before enable. Non-horse walking mounts use ARC velocity plus the native `STEP_HEIGHT` attribute. Horses retain native ridden movement and charged jumping, while ARC applies the configured speed, jump strength and selected step height continuously.
 
-Mounts may also declare `abilities.passive.<id>`. These effects require no purchase and are refreshed only while that exact mount session is active. The current fun set uses resistance/strength on the Mega Pig, regeneration on the Bee Airship, fire resistance on the Pocket Ghast, night vision/strength/resistance on the Giant Warden, and slow falling on the Pocket Chicken. Passive names are rendered as inherent features in the mount card instead of appearing as purchasable upgrades.
+Mounts may also declare `abilities.passive.<id>`. These effects require no purchase and are refreshed only while that exact mount session is active. Every bundled mount now has at least one inherent ability, passive, upgrade, or typed behavior. Passive names are rendered as inherent features in the mount card instead of appearing as purchasable upgrades.
 
 ARC keeps its own motion state instead of feeding Minecraft-mutated entity velocity back into the controller. Global `movement.acceleration-time`, `movement.deceleration-time`, and `movement.turn-time` values describe the time to reach about 95% of the requested response at handling multiplier `1.0`; higher-level handling shortens those times. Set a value to `0s` for instant response. Any mount may override individual values under `mounts.<id>.motion`, with omitted values inherited from the global block. A reverse input brakes nearly to zero before acceleration changes direction.
 
@@ -73,4 +74,4 @@ Both paths use the same summon service as the collection and detail menu. World,
 
 ## Administration
 
-`/mount admin grant-all <player>` grants the maximum configured level of every catalog mount. It does not grant glow, skins, or ability upgrades; those remain independent ownership records.
+`/mount admin grant-all <player>` grants the maximum configured level of every catalog mount. It does not grant glow, skins, ability upgrades, or grant-only sizes; those remain independent ownership records. Use `/mount admin grant size <player> <mount> <size-id>` and the matching `revoke` command for extreme sizes.

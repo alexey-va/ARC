@@ -415,8 +415,8 @@ class MountSessionController(
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     fun onRiderDamage(event: EntityDamageEvent) {
         val player = event.entity as? Player ?: return
-        if (!sessionsByPlayer.containsKey(player.uniqueId)) return
-        if (shouldCancelMountDamage(MountDamageTarget.RIDER, event.cause)) {
+        val session = sessionsByPlayer[player.uniqueId] ?: return
+        if (shouldCancelMountDamage(MountDamageTarget.RIDER, event.cause, session.hasRiderFireProtection())) {
             event.isCancelled = true
         }
     }
@@ -432,6 +432,15 @@ class MountSessionController(
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     fun onCombust(event: EntityCombustEvent) {
+        val player = event.entity as? Player
+        if (player != null) {
+            val session = sessionsByPlayer[player.uniqueId] ?: return
+            if (session.hasRiderFireProtection()) {
+                event.isCancelled = true
+                extinguishRiderFire(player, fireProtected = true)
+            }
+            return
+        }
         if (playerByEntity.containsKey(event.entity.uniqueId)) event.isCancelled = true
     }
 
@@ -478,6 +487,7 @@ class MountSessionController(
                     session.input = player.currentInput.toState()
                     if (session.input.hasMovementIntent) session.lastActiveAtMillis = now
                     session.ticks++
+                    extinguishRiderFire(player, session.hasRiderFireProtection())
                     (entity as? Mob)?.let(::maintainMountMobState)
                     if (session.ticks == 1L || session.ticks % ABILITY_REFRESH_TICKS == 0L) {
                         refreshAbilityEffects(player, session.definition.abilities.passives, session.settings.abilityUpgrades)
@@ -825,6 +835,10 @@ class MountSessionController(
         val candidate = scaledMountBoundingBox(entity.boundingBox, ratio)
         return runCatching { !entity.wouldCollideUsing(candidate) }.getOrDefault(false)
     }
+
+    private fun MountSession.hasRiderFireProtection(): Boolean =
+        definition.abilities.passives.any { it.effect == MountAbilityEffect.FIRE_RESISTANCE } ||
+            settings.abilityUpgrades.any { it.effect == MountAbilityEffect.FIRE_RESISTANCE }
 }
 
 internal fun MountAbilityEffect.potionEffectType(): PotionEffectType =
@@ -949,7 +963,26 @@ internal fun configureMountDurability(entity: LivingEntity) {
 internal fun shouldCancelMountDamage(
     target: MountDamageTarget,
     cause: EntityDamageEvent.DamageCause,
-): Boolean = target == MountDamageTarget.MOUNT || cause == EntityDamageEvent.DamageCause.SUFFOCATION
+    riderFireProtected: Boolean = false,
+): Boolean =
+    target == MountDamageTarget.MOUNT ||
+        cause == EntityDamageEvent.DamageCause.SUFFOCATION ||
+        target == MountDamageTarget.RIDER && riderFireProtected && isRiderFireDamageCause(cause)
+
+internal fun isRiderFireDamageCause(cause: EntityDamageEvent.DamageCause): Boolean =
+    when (cause) {
+        EntityDamageEvent.DamageCause.FIRE,
+        EntityDamageEvent.DamageCause.FIRE_TICK,
+        EntityDamageEvent.DamageCause.LAVA,
+        EntityDamageEvent.DamageCause.HOT_FLOOR,
+        EntityDamageEvent.DamageCause.CAMPFIRE,
+        -> true
+        else -> false
+    }
+
+internal fun extinguishRiderFire(player: Player, fireProtected: Boolean) {
+    if (fireProtected && player.fireTicks > 0) player.fireTicks = 0
+}
 
 internal fun shouldCancelUnauthorizedDismount(allowDismount: Boolean, cancellable: Boolean): Boolean =
     !allowDismount && cancellable

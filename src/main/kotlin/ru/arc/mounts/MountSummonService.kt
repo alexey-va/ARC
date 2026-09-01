@@ -100,7 +100,7 @@ class MountSummonService(
         profile: MountProfile,
     ): MountRuntimeSettings {
         val level = mount.level(profile.level)
-        val sizeMultiplier = mount.effectiveSizeOption(profile.selectedSizeId, profile.level)?.multiplier ?: 1.0
+        val sizeMultiplier = mount.effectiveSizeOption(profile.selectedSizeId, profile.level, profile.ownedSizeIds)?.multiplier ?: 1.0
         return MountRuntimeSettings(
             speed = config.tuning.speed(level.speed, profile.selectedSpeedPercentage),
             walkingStepHeight = config.tuning.stepHeight(profile.level, profile.selectedStepHeightHundredths),

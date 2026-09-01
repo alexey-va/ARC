@@ -108,6 +108,28 @@ sources:
     path: src/main/resources/modules/mounts.yml
     root: ability-upgrades.night-vision
     include: [name, description]
+  mounts-new-passives:
+    path: src/main/resources/modules/mounts.yml
+    root: mounts
+    include:
+      - 'zombie.abilities.passive.*.name'
+      - 'zombie.abilities.passive.*.description'
+      - 'camel.abilities.passive.*.name'
+      - 'camel.abilities.passive.*.description'
+      - 'turtle.abilities.passive.*.name'
+      - 'turtle.abilities.passive.*.description'
+      - 'frog2.abilities.passive.*.name'
+      - 'frog2.abilities.passive.*.description'
+      - 'allay.abilities.passive.*.name'
+      - 'allay.abilities.passive.*.description'
+      - 'vex.abilities.passive.*.name'
+      - 'vex.abilities.passive.*.description'
+      - 'breeze.abilities.passive.*.name'
+      - 'breeze.abilities.passive.*.description'
+  mounts-size-defaults:
+    path: src/main/resources/modules/mounts.yml
+    root: size-tuning-defaults
+    include: ['*.*']
   origin-showcase:
     path: src/main/resources/modules/origin-spawn.yml
     root: auction-showcase
@@ -225,6 +247,8 @@ surfaces:
     - source: mounts-mega-warden
     - source: mounts-pocket-chicken
     - source: mounts-night-vision
+    - source: mounts-new-passives
+    - source: mounts-size-defaults
 
   inventories:
     - id: mounts-list-representative
@@ -428,10 +452,11 @@ surfaces:
         - {slot: 31, material: GRASS_BLOCK, name: 'mounts-ui:copy.progression.step-selected-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.common.selected'], placeholders: {step: '2.00'}}
         - {slot: 32, material: PISTON, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.progression.step-high-warning', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {step: '3.00'}}
         - {slot: 33, material: GOAT_HORN, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.progression.step-high-warning', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {step: '4.00'}}
-        - {slot: 38, material: RABBIT_HIDE, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {size: 'брелок ×0.1', scale: '0.1'}}
+        - {slot: 38, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.size-special', 'mounts-ui:copy.progression.size-special-source'], placeholders: {size: 'брелок ×0.1', scale: '0.1'}}
         - {slot: 39, material: ARMOR_STAND, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {size: 'обычный ×1', scale: '1'}}
-        - {slot: 41, material: HEAVY_CORE, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {size: 'огромный ×2', scale: '2'}}
-        - {slot: 42, material: DRAGON_EGG, name: 'mounts-ui:copy.progression.size-selected-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.selected'], placeholders: {size: 'абсурдный ×3', scale: '3'}}
+        - {slot: 40, material: HEAVY_CORE, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {size: 'огромный ×2', scale: '2'}}
+        - {slot: 41, material: DRAGON_EGG, name: 'mounts-ui:copy.progression.size-selected-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.selected'], placeholders: {size: 'абсурдный ×3', scale: '3'}}
+        - {slot: 42, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.size-special', 'mounts-ui:copy.progression.size-special-source'], placeholders: {size: 'колоссальный ×10', scale: '10'}}
         - {slot: 45, material: BLUE_STAINED_GLASS_PANE, itemsadder: 'arc:left_gray', name: 'mounts-ui:copy.common.back-name', lore: ['mounts-ui:copy.progression.back-description', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-back']}
         - {slot: 49, material: ENDER_EYE, name: 'mounts-ui:copy.progression.rider-view-auto-name', lore: ['mounts-ui:copy.progression.rider-view-lore', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select']}
 
@@ -455,8 +480,9 @@ surfaces:
         - {slot: 33, material: BARRIER, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.progression.step-high-warning', 'mounts-ui:copy.progression.mount-required'], placeholders: {step: '4.00'}}
         - {slot: 38, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.mount-required'], placeholders: {size: 'брелок ×0.1', scale: '0.1'}}
         - {slot: 39, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.mount-required'], placeholders: {size: 'обычный ×1', scale: '1'}}
-        - {slot: 41, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.mount-required'], placeholders: {size: 'огромный ×2', scale: '2'}}
-        - {slot: 42, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.mount-required'], placeholders: {size: 'абсурдный ×3', scale: '3'}}
+        - {slot: 40, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.mount-required'], placeholders: {size: 'огромный ×2', scale: '2'}}
+        - {slot: 41, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.mount-required'], placeholders: {size: 'абсурдный ×3', scale: '3'}}
+        - {slot: 42, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.mount-required'], placeholders: {size: 'колоссальный ×10', scale: '10'}}
         - {slot: 45, material: BLUE_STAINED_GLASS_PANE, itemsadder: 'arc:left_gray', name: 'mounts-ui:copy.common.back-name', lore: ['mounts-ui:copy.progression.back-description', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-back']}
         - {slot: 49, material: GRAY_DYE, name: 'mounts-ui:copy.progression.rider-view-auto-name', lore: ['mounts-ui:copy.progression.rider-view-lore', 'mounts-ui:copy.progression.mount-required']}
 
@@ -485,10 +511,11 @@ surfaces:
         - {slot: 31, material: BARRIER, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.progression.unlocks-at-level'], placeholders: {step: '2.00', level: '2'}}
         - {slot: 32, material: BARRIER, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.progression.step-high-warning', 'mounts-ui:copy.progression.unlocks-at-level'], placeholders: {step: '3.00', level: '3'}}
         - {slot: 33, material: BARRIER, name: 'mounts-ui:copy.progression.step-name', lore: ['mounts-ui:copy.progression.step-lore', 'mounts-ui:copy.progression.step-high-warning', 'mounts-ui:copy.progression.unlocks-at-level'], placeholders: {step: '4.00', level: '3'}}
-        - {slot: 38, material: RABBIT_HIDE, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {size: 'брелок ×0.1', scale: '0.1'}}
+        - {slot: 38, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.size-special', 'mounts-ui:copy.progression.size-special-source'], placeholders: {size: 'брелок ×0.1', scale: '0.1'}}
         - {slot: 39, material: ARMOR_STAND, name: 'mounts-ui:copy.progression.size-selected-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.selected'], placeholders: {size: 'обычный ×1', scale: '1'}}
-        - {slot: 41, material: HEAVY_CORE, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {size: 'огромный ×2', scale: '2'}}
-        - {slot: 42, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.unlocks-at-level'], placeholders: {size: 'абсурдный ×3', scale: '3', level: '3'}}
+        - {slot: 40, material: HEAVY_CORE, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select'], placeholders: {size: 'огромный ×2', scale: '2'}}
+        - {slot: 41, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.unlocks-at-level'], placeholders: {size: 'абсурдный ×3', scale: '3', level: '3'}}
+        - {slot: 42, material: BARRIER, name: 'mounts-ui:copy.progression.size-name', lore: ['mounts-ui:copy.progression.size-scale', 'mounts-ui:copy.progression.size-special', 'mounts-ui:copy.progression.size-special-source'], placeholders: {size: 'колоссальный ×10', scale: '10'}}
         - {slot: 45, material: BLUE_STAINED_GLASS_PANE, itemsadder: 'arc:left_gray', name: 'mounts-ui:copy.common.back-name', lore: ['mounts-ui:copy.progression.back-description', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-back']}
         - {slot: 49, material: GLASS, name: 'mounts-ui:copy.progression.rider-view-visible-name', lore: ['mounts-ui:copy.progression.rider-view-lore', 'mounts-ui:copy.common.blank', 'mounts-ui:copy.common.footer-select']}
 

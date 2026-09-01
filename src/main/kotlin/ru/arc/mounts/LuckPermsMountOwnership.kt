@@ -25,6 +25,10 @@ class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership
             mount.abilities.upgrades
                 .filter { subject.hasPermission(mount.abilityPermission(it.id)) }
                 .mapTo(linkedSetOf(), MountAbilityUpgradeDefinition::id)
+        val ownedSizeIds =
+            mount.sizeOptions
+                .filter { it.grantOnly && subject.hasPermission(mount.sizeOwnershipPermission(it.id)) }
+                .mapTo(linkedSetOf(), MountSizeOptionDefinition::id)
         val directNodes = luckPerms.userManager.getUser(subject.uniqueId)?.nodes.orEmpty()
         val selectedSpeedPercentage = directPositiveNumericSuffix(directNodes, mount.speedTuningPermissionPrefix)
         val selectedStepHeightHundredths = directPositiveNumericSuffix(directNodes, mount.stepHeightTuningPermissionPrefix)
@@ -32,7 +36,7 @@ class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership
             directPositiveStringSuffix(
                 directNodes,
                 mount.sizeTuningPermissionPrefix,
-                { candidate -> mount.sizeOptions.any { it.id == candidate && it.minimumLevel <= level } },
+                { candidate -> mount.availableSizeOptions(level, ownedSizeIds).any { it.id == candidate } },
             )
         val riderViewAutoHide =
             when (
@@ -53,6 +57,7 @@ class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership
             ownedSkinIds = ownedSkinIds,
             activeSkinId = activeSkinId,
             ownedAbilityIds = ownedAbilityIds,
+            ownedSizeIds = ownedSizeIds,
             selectedSpeedPercentage = selectedSpeedPercentage,
             selectedStepHeightHundredths = selectedStepHeightHundredths,
             selectedSizeId = selectedSizeId,
@@ -164,6 +169,29 @@ class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership
         require(mount.ability(ability.id) == ability) { "Unknown ${mount.id} ability: ${ability.id}" }
         return luckPerms.userManager.modifyUser(playerId) { user ->
             removePermission(user.data()::remove, user.nodes, mount.abilityPermission(ability.id))
+        }
+    }
+
+    override fun grantSize(
+        playerId: UUID,
+        mount: MountDefinition,
+        size: MountSizeOptionDefinition,
+    ): CompletableFuture<Void> {
+        require(size.grantOnly && mount.sizeOptions.any { it == size }) { "Unknown grant-only ${mount.id} size: ${size.id}" }
+        return luckPerms.userManager.modifyUser(playerId) { user ->
+            user.data().add(permission(mount.sizeOwnershipPermission(size.id)))
+        }
+    }
+
+    override fun revokeSize(
+        playerId: UUID,
+        mount: MountDefinition,
+        size: MountSizeOptionDefinition,
+    ): CompletableFuture<Void> {
+        require(size.grantOnly && mount.sizeOptions.any { it == size }) { "Unknown grant-only ${mount.id} size: ${size.id}" }
+        return luckPerms.userManager.modifyUser(playerId) { user ->
+            removePermission(user.data()::remove, user.nodes, mount.sizeOwnershipPermission(size.id))
+            removePermission(user.data()::remove, user.nodes, mount.sizeTuningPermission(size.id))
         }
     }
 

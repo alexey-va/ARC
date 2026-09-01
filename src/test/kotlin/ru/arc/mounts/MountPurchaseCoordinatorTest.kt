@@ -121,6 +121,29 @@ class MountPurchaseCoordinatorTest : StringSpec({
         fixture.wallet.withdrawals shouldBe 0
     }
 
+    "grant-only size cannot be selected until its entitlement is issued" {
+        val mount =
+            testMount().copy(
+                sizeOptions =
+                    listOf(
+                        MountSizeOptionDefinition("standard", "Обычный", 1.0),
+                        MountSizeOptionDefinition("colossal", "Колоссальный", 10.0, grantOnly = true),
+                    ),
+            )
+        val fixture = PurchaseFixture(mount).also { it.ownership.level = 3 }
+        var locked: MountPurchaseResult? = null
+        var selected: MountPurchaseResult? = null
+
+        fixture.coordinator.setSizeTuning(fixture.subject(), mount, "colossal") { locked = it }
+        fixture.ownership.ownedSizeIds += "colossal"
+        fixture.coordinator.setSizeTuning(fixture.subject(), mount, "colossal") { selected = it }
+
+        locked shouldBe MountPurchaseResult.NotForSale
+        selected shouldBe MountPurchaseResult.Success
+        fixture.ownership.selectedSizeId shouldBe "colossal"
+        fixture.wallet.withdrawals shouldBe 0
+    }
+
     "unavailable saved size resolves to the effective level default" {
         val mount =
             testMount().copy(
@@ -399,6 +422,7 @@ private class MutableOwnership : MountOwnership {
     val skinPermissions = hashSetOf<String>()
     val activeSkinPermissions = hashSetOf<String>()
     val abilityPermissions = hashSetOf<String>()
+    val ownedSizeIds = hashSetOf<String>()
     private val directPermissions = hashSetOf<String>()
 
     override fun favoriteMountId(playerId: UUID): String? =
@@ -421,19 +445,20 @@ private class MutableOwnership : MountOwnership {
 
     override fun profile(subject: MountPermissionSubject, mount: MountDefinition): MountProfile =
         MountProfile(
-            level,
-            glow,
-            glowDisabled,
-            mount.skins.filter { mount.skinPermission(it.id) in skinPermissions }.mapTo(hashSetOf()) { it.id },
-            mount.skins.firstOrNull { mount.activeSkinPermission(it.id) in activeSkinPermissions }?.id
+            level = level,
+            glowOwned = glow,
+            glowDisabled = glowDisabled,
+            ownedSkinIds = mount.skins.filter { mount.skinPermission(it.id) in skinPermissions }.mapTo(hashSetOf()) { it.id },
+            activeSkinId = mount.skins.firstOrNull { mount.activeSkinPermission(it.id) in activeSkinPermissions }?.id
                 ?: MountDefinition.DEFAULT_SKIN_ID,
-            mount.abilities.upgrades
+            ownedAbilityIds = mount.abilities.upgrades
                 .filter { mount.abilityPermission(it.id) in abilityPermissions }
                 .mapTo(hashSetOf(), MountAbilityUpgradeDefinition::id),
-            selectedSpeedPercentage,
-            selectedStepHeightHundredths,
-            selectedSizeId,
-            riderViewAutoHide,
+            ownedSizeIds = ownedSizeIds,
+            selectedSpeedPercentage = selectedSpeedPercentage,
+            selectedStepHeightHundredths = selectedStepHeightHundredths,
+            selectedSizeId = selectedSizeId,
+            riderViewAutoHide = riderViewAutoHide,
         )
 
     override fun grantLevel(playerId: UUID, mount: MountDefinition, level: Int): CompletableFuture<Void> =
@@ -488,6 +513,28 @@ private class MutableOwnership : MountOwnership {
         write {
             abilityPermissions -= mount.abilityPermission(ability.id)
             directPermissions -= mount.abilityPermission(ability.id)
+        }
+
+    override fun grantSize(
+        playerId: UUID,
+        mount: MountDefinition,
+        size: MountSizeOptionDefinition,
+    ): CompletableFuture<Void> =
+        write {
+            ownedSizeIds += size.id
+            directPermissions += mount.sizeOwnershipPermission(size.id)
+        }
+
+    override fun revokeSize(
+        playerId: UUID,
+        mount: MountDefinition,
+        size: MountSizeOptionDefinition,
+    ): CompletableFuture<Void> =
+        write {
+            ownedSizeIds -= size.id
+            directPermissions -= mount.sizeOwnershipPermission(size.id)
+            if (selectedSizeId == size.id) selectedSizeId = null
+            directPermissions -= mount.sizeTuningPermission(size.id)
         }
 
     override fun setSpeedTuning(playerId: UUID, mount: MountDefinition, percentage: Int): CompletableFuture<Void> =

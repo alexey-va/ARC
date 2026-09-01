@@ -6,6 +6,7 @@ import ru.arc.config.ConfigManager
 import java.nio.file.Path
 import java.time.Duration
 import java.util.Locale
+import kotlin.math.floor
 
 enum class MountGuiItemRole(val configKey: String) {
     BACKGROUND("background"),
@@ -109,6 +110,9 @@ open class MountModuleConfig(private val config: Config) {
                 val id = rawId.lowercase(Locale.ROOT)
                 require(id == rawId) { "Mount id '$rawId' must be normalized lowercase" }
                 val root = "mounts.$id"
+                val levels = levelList(root, id)
+                val appearance = appearance("$root.appearance")
+                val skins = skinList(root, id)
                 MountDefinition(
                     id = id,
                     movement = strictMovement(config.string("$root.type", "walking"), id),
@@ -118,12 +122,12 @@ open class MountModuleConfig(private val config: Config) {
                     description = config.stringList("$root.description").map(String::trim).filter(String::isNotEmpty),
                     acquisition = config.string("$root.acquisition", "Магазин маунтов").trim(),
                     rarity = strictRarity(config.string("$root.rarity", "common"), id),
-                    levels = levelList(root, id),
+                    levels = levels,
                     glowPrice = config.doubleOrNull("$root.buy-glow"),
                     abilities = abilities("$root.abilities", abilityUpgrades),
-                    appearance = appearance("$root.appearance"),
-                    skins = skinList(root, id),
-                    sizeOptions = sizeOptionList(root, id),
+                    appearance = appearance,
+                    skins = skins,
+                    sizeOptions = sizeOptionList(root, id, levels, appearance, skins),
                     behaviors = behaviorList(root, id),
                     motion = motion("$root.motion"),
                 )
@@ -235,9 +239,15 @@ open class MountModuleConfig(private val config: Config) {
         }
     }
 
-    private fun sizeOptionList(root: String, mountId: String): List<MountSizeOptionDefinition> =
-        config.list<Map<String, Any?>>("$root.size-tuning").mapIndexed { index, raw ->
-            val allowedKeys = setOf("id", "name", "multiplier", "minimum-level")
+    private fun sizeOptionList(
+        root: String,
+        mountId: String,
+        levels: List<MountLevelDefinition>,
+        appearance: MountAppearance,
+        skins: List<MountSkinDefinition>,
+    ): List<MountSizeOptionDefinition> {
+        val authored = config.list<Map<String, Any?>>("$root.size-tuning").mapIndexed { index, raw ->
+            val allowedKeys = setOf("id", "name", "multiplier", "minimum-level", "grant-only")
             val unknown = raw.keys.map(Any?::toString).toSet() - allowedKeys
             require(unknown.isEmpty()) {
                 "Mount '$mountId' size option ${index + 1} has unknown fields: ${unknown.sorted()}"
@@ -252,13 +262,63 @@ open class MountModuleConfig(private val config: Config) {
                     value.toString().toIntOrNull()
                         ?: throw IllegalArgumentException("Mount '$mountId' size option '$id' minimum-level is not an integer")
                 } ?: 1
+            val grantOnly =
+                raw["grant-only"]?.let { value ->
+                    value as? Boolean
+                        ?: throw IllegalArgumentException("Mount '$mountId' size option '$id' grant-only is not a boolean")
+                } ?: false
             MountSizeOptionDefinition(
                 id = id,
                 displayName = raw["name"]?.toString()?.trim().orEmpty(),
                 multiplier = requiredDouble(raw["multiplier"], "Mount '$mountId' size option '$id' multiplier"),
                 minimumLevel = minimumLevel,
+                grantOnly = grantOnly,
             )
         }
+        val standard = defaultSizeOption("standard", grantOnly = false)
+        val tiny = defaultSizeOption("tiny", grantOnly = true)
+        val giantTemplate = defaultSizeOption("giant", grantOnly = true)
+        val maximumBaseScale =
+            (listOf(appearance) + skins.map(MountSkinDefinition::appearance)).maxOf(MountAppearance::scale) *
+                levels.maxOf(MountLevelDefinition::scaleMultiplier)
+        val safeGiantMultiplier =
+            floor(minOf(giantTemplate.multiplier, MAX_MOUNT_APPEARANCE_SCALE / maximumBaseScale) * 10.0) / 10.0
+        val giant =
+            giantTemplate.copy(
+                displayName =
+                    config.string("size-tuning-defaults.giant.name", "Колоссальный ×<scale>").trim()
+                        .replace("<scale>", formatSizeMultiplier(safeGiantMultiplier)),
+                multiplier = safeGiantMultiplier,
+            )
+        val normalized =
+            authored.map { option ->
+                if (option.multiplier == tiny.multiplier || option.multiplier == giantTemplate.multiplier) {
+                    option.copy(minimumLevel = 1, grantOnly = true)
+                } else {
+                    option
+                }
+            }
+        return buildList {
+            addAll(normalized)
+            if (none { it.multiplier == standard.multiplier }) add(standard)
+            if (none { it.multiplier == tiny.multiplier }) add(tiny)
+            if (none { it.multiplier == giantTemplate.multiplier || it.multiplier == giant.multiplier }) add(giant)
+        }.sortedBy(MountSizeOptionDefinition::multiplier)
+    }
+
+    private fun defaultSizeOption(key: String, grantOnly: Boolean): MountSizeOptionDefinition {
+        val path = "size-tuning-defaults.$key"
+        val multiplier = config.double("$path.multiplier", if (key == "tiny") 0.1 else if (key == "giant") 10.0 else 1.0)
+        return MountSizeOptionDefinition(
+            id = config.string("$path.id", key).trim(),
+            displayName = config.string("$path.name", key).trim().replace("<scale>", formatSizeMultiplier(multiplier)),
+            multiplier = multiplier,
+            grantOnly = grantOnly,
+        )
+    }
+
+    private fun formatSizeMultiplier(value: Double): String =
+        if (value % 1.0 == 0.0) value.toInt().toString() else String.format(Locale.ROOT, "%.1f", value)
 
     private fun behaviorList(root: String, mountId: String): List<MountBehaviorDefinition> =
         config.keys("$root.behaviors").map { rawId ->

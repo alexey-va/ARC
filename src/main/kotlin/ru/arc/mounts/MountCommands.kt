@@ -241,6 +241,24 @@ class MountCommand(
                     )
                 }
             }
+            "size" -> {
+                val sizeId = rawTarget?.lowercase(Locale.ROOT)
+                val size = mount.sizeOptions.firstOrNull { it.id == sizeId && it.grantOnly }
+                if (size == null) {
+                    sender.sendMessage(TextUtil.mm("<red>Укажите особый размер этого маунта.", true))
+                    null
+                } else {
+                    MountAdminMutation(
+                        successLabel =
+                            if (action == "grant") "Особый размер ${size.displayName} выдан"
+                            else "Особый размер ${size.displayName} отозван",
+                        apply = { playerId, definition ->
+                            if (action == "grant") ownership.grantSize(playerId, definition, size)
+                            else ownership.revokeSize(playerId, definition, size)
+                        },
+                    )
+                }
+            }
             "glow" -> {
                 if (rawTarget != null) {
                     sendMutationHelp(sender, label, action)
@@ -272,12 +290,12 @@ class MountCommand(
     private fun sendAdminHelp(sender: CommandSender, label: String) {
         sender.sendMessage(TextUtil.mm("<yellow>/$label admin summon <маунт> [уровень] [облик]", true))
         sender.sendMessage(TextUtil.mm("<yellow>/$label admin grant-all <игрок> <gray>— выдать всех маунтов максимального уровня", true))
-        sender.sendMessage(TextUtil.mm("<yellow>/$label admin grant <level|skin|glow|ability> <игрок> <маунт> [значение]", true))
-        sender.sendMessage(TextUtil.mm("<yellow>/$label admin revoke <level|skin|glow|ability> <игрок> <маунт> [значение]", true))
+        sender.sendMessage(TextUtil.mm("<yellow>/$label admin grant <level|skin|glow|ability|size> <игрок> <маунт> [значение]", true))
+        sender.sendMessage(TextUtil.mm("<yellow>/$label admin revoke <level|skin|glow|ability|size> <игрок> <маунт> [значение]", true))
     }
 
     private fun sendMutationHelp(sender: CommandSender, label: String, action: String) {
-        sender.sendMessage(TextUtil.mm("<red>Использование: /$label admin $action <level|skin|glow|ability> <игрок> <маунт> [значение]", true))
+        sender.sendMessage(TextUtil.mm("<red>Использование: /$label admin $action <level|skin|glow|ability|size> <игрок> <маунт> [значение]", true))
     }
 
     override fun onTabComplete(
@@ -329,6 +347,11 @@ class MountCommand(
                     "level" -> (1..(mount?.maxLevel ?: 3)).map(Int::toString).matching(args[5])
                     "skin" -> mount?.skins.orEmpty().map(MountSkinDefinition::id).matching(args[5])
                     "ability" -> mount?.abilities?.upgrades.orEmpty().map(MountAbilityUpgradeDefinition::id).matching(args[5])
+                    "size" ->
+                        mount?.sizeOptions.orEmpty()
+                            .filter(MountSizeOptionDefinition::grantOnly)
+                            .map(MountSizeOptionDefinition::id)
+                            .matching(args[5])
                     else -> emptyList()
                 }
             }
@@ -344,7 +367,7 @@ class MountCommand(
 
     companion object {
         private const val ADMIN_PERMISSION = "arc.mounts.admin"
-        private val ADMIN_KINDS = listOf("ability", "glow", "level", "skin")
+        private val ADMIN_KINDS = listOf("ability", "glow", "level", "size", "skin")
         private val PLAYER_NAME = Regex("[A-Za-z0-9_]{3,16}")
     }
 }

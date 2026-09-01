@@ -48,6 +48,13 @@ tuning:
   # Level 1 clears ordinary blocks; levels 2 and 3 unlock two- and four-block climbing.
   walking-max-step-height-by-level: [1.10, 2.00, 4.00]
 
+# Every mount receives these extremes. Tiny and giant are reward entitlements,
+# never level purchases; the ordinary size remains a free tuning choice.
+size-tuning-defaults:
+  standard: {id: standard, name: "Обычный ×1", multiplier: 1.0}
+  tiny: {id: keychain, name: "Крошечный ×0.1", multiplier: 0.1}
+  giant: {id: colossal, name: "Колоссальный ×<scale>", multiplier: 10.0}
+
 safety:
   post-flight-slow-falling: 8s
   idle-timeout: 5m
@@ -242,6 +249,8 @@ gui:
     progression:
       back-description: "<#8c8c8c>Вернуться к маунту."
       size-scale: "<#8c8c8c>Масштаб: <#e6fff3>×<scale>"
+      size-special: "<#ff9f0f>Особый размер"
+      size-special-source: "<#8c8c8c>Награда событий и особых активностей."
       mount-required: "<#c42323>Сначала получите маунта"
       unlocks-at-level: "<#ff9f0f>Откроется на уровне <level>"
       higher-level: "выше"
@@ -505,6 +514,14 @@ mounts:
     description:
       - "Надёжный городской ходок"
       - "с полностью фиксируемой внешностью."
+    abilities:
+      passive:
+        undead-tenacity:
+          name: "Мёртвая стойкость"
+          effect: RESISTANCE
+          amplifier: 0
+          description:
+            - "Даёт Сопротивление I во время поездки."
     levels:
       - {speed: 1.35, handling: 0.9, sprint: 1, price: 50000}
       - {speed: 2.25, handling: 1, sprint: 1.03, price: 250000}
@@ -725,6 +742,14 @@ mounts:
       - "Спокойный караванщик"
       - "с плавным разгоном"
       - "для долгих дорог и дорогих сбруй."
+    abilities:
+      passive:
+        desert-endurance:
+          name: "Жар пустыни"
+          effect: FIRE_RESISTANCE
+          amplifier: 0
+          description:
+            - "Защищает всадника от огня и лавы."
     motion:
       acceleration-time: 1200ms
       deceleration-time: 550ms
@@ -1054,6 +1079,14 @@ mounts:
     description:
       - "Невозможная черепаха,"
       - "которая всё-таки летает."
+    abilities:
+      passive:
+        shell-guard:
+          name: "Панцирная защита"
+          effect: RESISTANCE
+          amplifier: 0
+          description:
+            - "Даёт Сопротивление I во время поездки."
     levels:
       - {speed: 0.45, handling: 0.9, sprint: 1, price: 100000}
       - {speed: 0.76, handling: 1, sprint: 1.03, price: 500000}
@@ -1083,6 +1116,14 @@ mounts:
     description:
       - "Манёвренный воздушный собрат"
       - "обычной лягушки."
+    abilities:
+      passive:
+        lucky-midge:
+          name: "Попутный комар"
+          effect: LUCK
+          amplifier: 0
+          description:
+            - "Даёт Удачу I во время поездки."
     levels:
       - {speed: 0.48, handling: 0.9, sprint: 1, price: 250000}
       - {speed: 0.8, handling: 1, sprint: 1.03, price: 1200000}
@@ -1147,6 +1188,14 @@ mounts:
     description:
       - "Лёгкий музыкальный проводник"
       - "с мягкими поворотами в воздухе."
+    abilities:
+      passive:
+        helper-tempo:
+          name: "Рабочий темп"
+          effect: HASTE
+          amplifier: 0
+          description:
+            - "Даёт Спешку I во время поездки."
     levels:
       - {speed: 0.45, handling: 0.9, sprint: 1, price: 100000}
       - {speed: 0.76, handling: 1, sprint: 1.03, price: 500000}
@@ -1254,6 +1303,14 @@ mounts:
     description:
       - "Эфирный боевой силуэт"
       - "для тех, кому мало просто летать."
+    abilities:
+      passive:
+        vexing-fury:
+          name: "Злобный запал"
+          effect: STRENGTH
+          amplifier: 0
+          description:
+            - "Даёт Силу I во время поездки."
     levels:
       - {speed: 0.52, handling: 0.9, sprint: 1, scale: 1, price: 500000}
       - {speed: 0.85, handling: 1, sprint: 1.03, scale: 1, price: 2500000}
@@ -1283,6 +1340,14 @@ mounts:
       - "Живой порыв ветра"
       - "с мгновенной реакцией"
       - "и облачными украшениями."
+    abilities:
+      passive:
+        wind-cushion:
+          name: "Воздушная подушка"
+          effect: SLOW_FALLING
+          amplifier: 0
+          description:
+            - "Смягчает падение после полёта."
     motion:
       acceleration-time: 350ms
       deceleration-time: 250ms

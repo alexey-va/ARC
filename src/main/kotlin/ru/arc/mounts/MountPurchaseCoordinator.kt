@@ -189,8 +189,8 @@ class MountPurchaseCoordinator(
         val profile = ownership.profile(subject, mount)
         if (!profile.unlocked) return callback(MountPurchaseResult.NotUnlocked)
         val option = mount.sizeOptions.firstOrNull { it.id == sizeId } ?: return callback(MountPurchaseResult.NotForSale)
-        if (option.minimumLevel > profile.level) return callback(MountPurchaseResult.NotForSale)
-        if (mount.effectiveSizeOption(profile.selectedSizeId, profile.level)?.id == option.id) {
+        if (option.minimumLevel > profile.level || !profile.ownsSize(option)) return callback(MountPurchaseResult.NotForSale)
+        if (mount.effectiveSizeOption(profile.selectedSizeId, profile.level, profile.ownedSizeIds)?.id == option.id) {
             return callback(MountPurchaseResult.AlreadyOwned)
         }
         runSetting(subject.uniqueId, callback) {

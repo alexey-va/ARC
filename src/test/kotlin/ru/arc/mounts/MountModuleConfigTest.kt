@@ -116,8 +116,10 @@ class MountModuleConfigTest : StringSpec({
         checkNotNull(catalog["pig"]).abilities.passives.single().effect shouldBe MountAbilityEffect.SPEED
         checkNotNull(catalog["bee"]).abilities.passives.single().effect shouldBe MountAbilityEffect.REGENERATION
         checkNotNull(catalog["ghast"]).abilities.passives.single().effect shouldBe MountAbilityEffect.FIRE_RESISTANCE
+        checkNotNull(catalog["magma_cube"]).abilities.passives.single().effect shouldBe MountAbilityEffect.FIRE_RESISTANCE
         checkNotNull(catalog["mega_warden"]).abilities.passives.map(MountPassiveAbilityDefinition::effect) shouldBe
             listOf(MountAbilityEffect.NIGHT_VISION, MountAbilityEffect.STRENGTH, MountAbilityEffect.RESISTANCE)
+        catalog.all.all { it.abilities.displayNames.isNotEmpty() || it.behaviors.isNotEmpty() } shouldBe true
     }
 
     "authored sizes and motion make representative mounts feel distinct" {
@@ -125,7 +127,7 @@ class MountModuleConfigTest : StringSpec({
         val catalog = config.catalog()
         val defaults = config.motionTiming
 
-        checkNotNull(catalog["horse"]).sizeOptions.map(MountSizeOptionDefinition::multiplier) shouldBe listOf(0.1, 1.0, 2.0, 3.0)
+        checkNotNull(catalog["horse"]).sizeOptions.map(MountSizeOptionDefinition::multiplier) shouldBe listOf(0.1, 1.0, 2.0, 3.0, 10.0)
         checkNotNull(catalog["bee"]).sizeOptions.map(MountSizeOptionDefinition::multiplier) shouldBe listOf(0.1, 0.5, 1.0, 3.0, 10.0)
         checkNotNull(catalog["fox"]).motion.resolve(defaults) shouldBe
             MountMotionTiming(Duration.ofMillis(550), Duration.ofMillis(250), Duration.ofMillis(130))
@@ -141,9 +143,10 @@ class MountModuleConfigTest : StringSpec({
         val catalog = bundledConfig("ravager-quality").catalog()
         val ravager = checkNotNull(catalog["ravager"])
 
-        ravager.sizeOptions.map(MountSizeOptionDefinition::id) shouldBe listOf("keychain", "standard", "huge", "absurd")
-        ravager.sizeOptions.map(MountSizeOptionDefinition::multiplier) shouldBe listOf(0.1, 1.0, 2.0, 3.0)
-        ravager.sizeOptions.last().minimumLevel shouldBe 3
+        ravager.sizeOptions.map(MountSizeOptionDefinition::id) shouldBe listOf("keychain", "standard", "huge", "absurd", "colossal")
+        ravager.sizeOptions.map(MountSizeOptionDefinition::multiplier) shouldBe listOf(0.1, 1.0, 2.0, 3.0, 10.0)
+        ravager.sizeOptions.filter(MountSizeOptionDefinition::grantOnly).map(MountSizeOptionDefinition::id) shouldBe
+            listOf("keychain", "colossal")
         val ram = ravager.behaviors.filterIsInstance<MountRamBehavior>().single()
         ram.displayName shouldBe "Таран"
         ram.description shouldBe
@@ -179,6 +182,22 @@ class MountModuleConfigTest : StringSpec({
             listOf(0.1, 0.5, 1.0, 3.0, 10.0)
         checkNotNull(catalog["pocket_chicken"]).sizeOptions.map(MountSizeOptionDefinition::multiplier) shouldBe
             listOf(0.1, 0.5, 1.0, 3.0, 10.0)
+    }
+
+    "every mount receives command-only extreme sizes inside the native scale envelope" {
+        val catalog = bundledConfig("extreme-sizes").catalog()
+
+        catalog.all.all { mount ->
+            val extremes = mount.sizeOptions.filter(MountSizeOptionDefinition::grantOnly)
+            extremes.size == 2 &&
+                extremes.all { it.minimumLevel == 1 } &&
+                extremes.first().multiplier == 0.1 &&
+                extremes.last().multiplier >= 7.6 &&
+                extremes.last().multiplier <= 10.0 &&
+                mount.defaultSizeOption?.grantOnly == false
+        } shouldBe true
+        checkNotNull(catalog["bat"]).sizeOptions.last().multiplier shouldBe 7.6
+        checkNotNull(catalog["bee"]).sizeOptions.last().multiplier shouldBe 10.0
     }
 
     "every catalog appearance, material, entity and particle matches the exact Paper API" {
