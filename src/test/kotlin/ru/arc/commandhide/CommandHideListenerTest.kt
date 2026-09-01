@@ -13,6 +13,8 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import org.bukkit.entity.Player
+import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
 import org.bukkit.event.player.PlayerCommandPreprocessEvent
 import org.bukkit.event.player.PlayerCommandSendEvent
 import org.bukkit.event.player.PlayerJoinEvent
@@ -120,6 +122,19 @@ class CommandHideListenerTest :
             listener.onPlayerJoin(PlayerJoinEvent(player, "joined"))
 
             verify(exactly = 1) { player.updateCommands() }
+        }
+
+        "runs visibility filters after other command tree contributors" {
+            listOf(
+                "onTabComplete" to arrayOf(TabCompleteEvent::class.java),
+                "onPlayerCommandSend" to arrayOf(PlayerCommandSendEvent::class.java),
+                "onBrigadierCommandTree" to arrayOf(AsyncPlayerSendCommandsEvent::class.java),
+            ).forEach { (methodName, parameterTypes) ->
+                CommandHideListener::class.java
+                    .getDeclaredMethod(methodName, *parameterTypes)
+                    .getAnnotation(EventHandler::class.java)
+                    .priority shouldBe EventPriority.MONITOR
+            }
         }
     })
 

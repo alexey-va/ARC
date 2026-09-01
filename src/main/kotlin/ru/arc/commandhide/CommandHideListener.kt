@@ -24,7 +24,7 @@ class CommandHideListener internal constructor(
         policy.blockedMessage?.let(event.player::sendMessage)
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onTabComplete(event: TabCompleteEvent) {
         val player = event.sender as? Player ?: return
         if (!event.isCommand) return
@@ -35,14 +35,14 @@ class CommandHideListener internal constructor(
         }
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST)
+    @EventHandler(priority = EventPriority.MONITOR)
     fun onPlayerCommandSend(event: PlayerCommandSendEvent) {
         val policy = refresh(event.player)
         if (policy.isEmpty) return
         event.commands.removeIf(policy::hidesRoot)
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST)
+    @EventHandler(priority = EventPriority.MONITOR)
     fun onBrigadierCommandTree(event: AsyncPlayerSendCommandsEvent<*>) {
         val policy =
             if (event.isAsynchronous) {
