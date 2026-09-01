@@ -12,6 +12,10 @@ bypass-permission: "arc.command.hide.bypass"
 # plugins -> bukkit:plugins, paper:plugins и т. п.
 strip-command-namespace: true
 
+# Namespaced-дубли (bukkit:plugins, playerwarps:pwarp и т. п.) не показываются
+# ограниченным игрокам, но сами команды не блокируются только из-за namespace.
+hide-namespaced-roots: true
+
 # Политика игрока обновляется сразу при пересборке command tree; TTL страхует
 # изменения permissions, которые не вызвали такую пересборку.
 policy-cache: 5s

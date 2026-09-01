@@ -16,6 +16,7 @@ internal data class ResolvedCommandHideGroup(
 internal class CommandHideSnapshot private constructor(
     val enabled: Boolean,
     val stripCommandNamespace: Boolean,
+    val hideNamespacedRoots: Boolean,
     val bypassPermission: String,
     val policyCacheNanos: Long,
     val blockedMessage: Component?,
@@ -42,6 +43,7 @@ internal class CommandHideSnapshot private constructor(
             CommandHidePolicy(
                 patterns = selected.flatMap(ResolvedCommandHideGroup::patterns),
                 stripCommandNamespace = stripCommandNamespace,
+                hideNamespacedRoots = hideNamespacedRoots,
                 blockedMessage = blockedMessage,
             )
         }
@@ -105,6 +107,7 @@ internal class CommandHideSnapshot private constructor(
             return CommandHideSnapshot(
                 enabled = config.enabled,
                 stripCommandNamespace = config.stripCommandNamespace,
+                hideNamespacedRoots = config.hideNamespacedRoots,
                 bypassPermission = config.bypassPermission.trim().lowercase(Locale.ROOT),
                 policyCacheNanos = TimeUnit.MILLISECONDS.toNanos(config.policyCacheMillis),
                 blockedMessage = config.blockedMessage.takeIf(String::isNotBlank)?.let(TextUtil::mm),

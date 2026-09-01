@@ -55,6 +55,11 @@ LuckPerms API без консольной команды, сбрасывает p
 При `strip-command-namespace: true` первый namespace снимается: `plugins`
 одновременно покрывает `bukkit:plugins`.
 
+`hide-namespaced-roots: true` отдельно скрывает все корневые
+`plugin:command`-дубли у игроков с активной hide-группой. Это правило влияет
+только на видимость: обычный алиас остаётся доступен, а namespaced-вызов не
+блокируется без явного шаблона в `commands`.
+
 ## Выполнение и tab-complete
 
 `PlayerCommandPreprocessEvent` блокирует выполнение. `PlayerCommandSendEvent`
@@ -66,3 +71,5 @@ LuckPerms API без консольной команды, сбрасывает p
 Шаблоны компилируются в token trie. Набор групп игрока кэшируется и
 переиспользует общую скомпилированную policy для одинаковых сочетаний
 permissions. Кэш обновляется при отправке command tree, reload и по TTL.
+После завершения join lifecycle ARC повторно отправляет дерево на следующем
+тике, чтобы первая сборка до загрузки permissions не осталась у клиента.

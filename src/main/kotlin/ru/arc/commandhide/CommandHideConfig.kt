@@ -20,6 +20,9 @@ open class CommandHideModuleConfig(
     open val stripCommandNamespace: Boolean
         get() = config.bool("strip-command-namespace", true)
 
+    open val hideNamespacedRoots: Boolean
+        get() = config.bool("hide-namespaced-roots", true)
+
     open val bypassPermission: String
         get() = config.string("bypass-permission", "arc.command.hide.bypass")
 
@@ -48,6 +51,7 @@ open class CommandHideModuleConfig(
 class TestCommandHideModuleConfig(
     override val enabled: Boolean = true,
     override val stripCommandNamespace: Boolean = true,
+    override val hideNamespacedRoots: Boolean = true,
     override val bypassPermission: String = "",
     override val policyCacheMillis: Long = 5_000L,
     override val blockedMessage: String = "blocked",

@@ -21,6 +21,10 @@ internal object CommandTreePruner {
         val iterator = node.children.iterator()
         while (iterator.hasNext()) {
             val child = iterator.next()
+            if (path.isEmpty() && policy.hidesRoot(child.name)) {
+                iterator.remove()
+                continue
+            }
             val treeToken =
                 if (child is LiteralCommandNode<*>) {
                     CommandTreeToken.Literal(

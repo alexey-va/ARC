@@ -73,7 +73,10 @@ internal object CommandHideManager : CommandHideAdminController {
         check(policies == null && listener == null && tasks == null) { "CommandHideManager is already initialized" }
 
         val resolver = CommandHidePolicyResolver(CommandHideModuleConfig.load(ARC.instance.dataPath))
-        val createdListener = CommandHideListener(resolver)
+        val createdListener =
+            CommandHideListener(resolver) { task ->
+                Bukkit.getScheduler().runTask(ARC.instance, task)
+            }
         val luckPerms =
             if (Bukkit.getPluginManager().isPluginEnabled("LuckPerms")) {
                 ARC.instance.server.servicesManager.load(LuckPerms::class.java)

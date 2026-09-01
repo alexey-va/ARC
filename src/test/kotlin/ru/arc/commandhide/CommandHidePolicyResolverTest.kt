@@ -118,17 +118,46 @@ class CommandHidePolicyResolverTest :
                 resolver.policy(playerId, checker).blocks("/version") shouldBe true
             }
         }
+
+        "namespaced root visibility" - {
+            "restricted players hide namespaced aliases without blocking execution" {
+                val resolver =
+                    CommandHidePolicyResolver(
+                        config(group("player"), hideNamespacedRoots = true),
+                    )
+
+                val policy = resolver.policy(UUID.randomUUID()) { it == "arc.command.hide.player" }
+
+                policy.hidesRoot("playerwarps:pwarp") shouldBe true
+                policy.hidesRoot("pwarp") shouldBe false
+                policy.blocks("/playerwarps:pwarp") shouldBe false
+            }
+
+            "unrestricted players retain namespaced aliases" {
+                val resolver =
+                    CommandHidePolicyResolver(
+                        config(group("player"), hideNamespacedRoots = true),
+                    )
+
+                val policy = resolver.policy(UUID.randomUUID()) { false }
+
+                policy.hidesRoot("playerwarps:pwarp") shouldBe false
+                policy.isEmpty shouldBe true
+            }
+        }
     })
 
 private fun config(
     vararg groups: CommandHideGroupConfig,
     bypassPermission: String = "",
     cacheMillis: Long = 5_000L,
+    hideNamespacedRoots: Boolean = true,
 ): CommandHideModuleConfig =
     TestCommandHideModuleConfig(
         groups = groups.toList(),
         bypassPermission = bypassPermission,
         policyCacheMillis = cacheMillis,
+        hideNamespacedRoots = hideNamespacedRoots,
     )
 
 private fun group(

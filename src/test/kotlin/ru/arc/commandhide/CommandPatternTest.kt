@@ -106,7 +106,13 @@ class CommandPatternTest :
 
             "single wildcard covers both literal and argument tree nodes" {
                 val pattern = CommandPattern.parse("example * **", stripCommandNamespace = true)
-                val policy = CommandHidePolicy(listOf(pattern), true, null)
+                val policy =
+                    CommandHidePolicy(
+                        patterns = listOf(pattern),
+                        stripCommandNamespace = true,
+                        hideNamespacedRoots = false,
+                        blockedMessage = null,
+                    )
 
                 policy.blocksSubtree(
                     listOf(CommandTreeToken.Literal("example"), CommandTreeToken.Argument),
@@ -140,6 +146,7 @@ private fun policy(
     CommandHidePolicy(
         patterns = patterns.map { CommandPattern.parse(it, stripCommandNamespace) },
         stripCommandNamespace = stripCommandNamespace,
+        hideNamespacedRoots = false,
         blockedMessage = null,
     )
 

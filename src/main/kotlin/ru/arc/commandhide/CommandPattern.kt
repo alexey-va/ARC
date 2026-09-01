@@ -184,13 +184,14 @@ internal class CommandPatternIndex private constructor(
 internal class CommandHidePolicy(
     patterns: Collection<CommandPattern>,
     val stripCommandNamespace: Boolean,
+    private val hideNamespacedRoots: Boolean,
     val blockedMessage: Component?,
 ) {
     private val index = CommandPatternIndex.compile(patterns)
 
     val patternCount: Int get() = index.patternCount
 
-    val isEmpty: Boolean get() = patternCount == 0
+    val isEmpty: Boolean get() = patternCount == 0 && !hideNamespacedRoots
 
     fun blocks(command: String): Boolean = blocksTokens(tokenizeCommand(command, stripCommandNamespace))
 
@@ -203,20 +204,27 @@ internal class CommandHidePolicy(
     fun matchTreePath(path: List<CommandTreeToken>): CommandTreeMatch = index.matchTreePath(path)
 
     fun hidesRoot(commandLabel: String): Boolean =
-        index.blocksRootSubtree(normalizeLiteral(commandLabel, stripCommandNamespace))
+        (hideNamespacedRoots && ':' in commandLabel) ||
+            index.blocksRootSubtree(normalizeLiteral(commandLabel, stripCommandNamespace))
 
     fun filterCompletions(
         buffer: String,
         completions: List<String>,
     ): List<String> {
         return completions.filterNot { completion ->
-            completionCandidate(buffer, completion, stripCommandNamespace)?.let(::blocksTokens) == true
+            val namespacedRoot =
+                hideNamespacedRoots &&
+                    completionCandidate(buffer, completion, stripCommandNamespace = false)
+                        ?.firstOrNull()
+                        ?.contains(':') == true
+            namespacedRoot ||
+                completionCandidate(buffer, completion, stripCommandNamespace)?.let(::blocksTokens) == true
         }
     }
 
     companion object {
         fun empty(stripCommandNamespace: Boolean = true): CommandHidePolicy =
-            CommandHidePolicy(emptyList(), stripCommandNamespace, null)
+            CommandHidePolicy(emptyList(), stripCommandNamespace, hideNamespacedRoots = false, blockedMessage = null)
     }
 }
 

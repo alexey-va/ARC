@@ -35,6 +35,19 @@ class CommandTreePrunerTest :
             root.getChild("help").shouldNotBeNull()
         }
 
+        "removes every namespaced root without blocking its ordinary alias" {
+            val root = RootCommandNode<Any>()
+            root.addChild(LiteralArgumentBuilder.literal<Any>("pwarp").build())
+            root.addChild(LiteralArgumentBuilder.literal<Any>("playerwarps:pwarp").build())
+            root.addChild(LiteralArgumentBuilder.literal<Any>("rediseconomy:pay").build())
+
+            CommandTreePruner.prune(root, treePolicy())
+
+            root.getChild("pwarp").shouldNotBeNull()
+            root.getChild("playerwarps:pwarp").shouldBeNull()
+            root.getChild("rediseconomy:pay").shouldBeNull()
+        }
+
         "single wildcard can remove an argument subtree" {
             val root = RootCommandNode<Any>()
             val example = LiteralArgumentBuilder.literal<Any>("example").build()
@@ -80,5 +93,6 @@ private fun treePolicy(vararg patterns: String): CommandHidePolicy =
     CommandHidePolicy(
         patterns.map { CommandPattern.parse(it, stripCommandNamespace = true) },
         stripCommandNamespace = true,
+        hideNamespacedRoots = true,
         blockedMessage = null,
     )

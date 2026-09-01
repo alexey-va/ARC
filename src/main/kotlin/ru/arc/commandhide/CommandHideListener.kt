@@ -7,11 +7,13 @@ import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerCommandPreprocessEvent
 import org.bukkit.event.player.PlayerCommandSendEvent
+import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.server.TabCompleteEvent
 
 class CommandHideListener internal constructor(
     private val policies: CommandHidePolicyResolver,
+    private val runNextTick: (Runnable) -> Unit,
 ) : Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun onPlayerCommand(event: PlayerCommandPreprocessEvent) {
@@ -42,11 +44,31 @@ class CommandHideListener internal constructor(
 
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onBrigadierCommandTree(event: AsyncPlayerSendCommandsEvent<*>) {
-        // Paper normally fires this event once asynchronously and once synchronously
-        // for the same command tree. Permission checks are not async-safe, so handle
-        // only the synchronous pass instead of traversing the tree twice.
-        if (event.isAsynchronous) return
-        CommandTreePruner.prune(event.commandNode, refresh(event.player))
+        val policy =
+            if (event.isAsynchronous) {
+                // Bukkit permission checks are not async-safe. A cached immutable policy
+                // lets repeat command-tree refreshes be pruned on Paper's first pass.
+                policies.cached(event.player.uniqueId) ?: return
+            } else {
+                // Paper always follows its async pass with this synchronous pass on the
+                // same mutable tree, so a cold cache is still handled before serialization.
+                refresh(event.player)
+            }
+        CommandTreePruner.prune(event.commandNode, policy)
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    fun onPlayerJoin(event: PlayerJoinEvent) {
+        val player = event.player
+        runNextTick(
+            Runnable {
+                if (!player.isOnline) return@Runnable
+                // The initial command tree can be built before permission plugins finish
+                // their join lifecycle. Rebuild once afterwards with a fresh policy.
+                policies.invalidate(player.uniqueId)
+                player.updateCommands()
+            },
+        )
     }
 
     @EventHandler
