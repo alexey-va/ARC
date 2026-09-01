@@ -2,9 +2,17 @@ package ru.arc.spy
 
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
+import ru.arc.chat.ChatMode
 import java.util.UUID
 
 class SpyRelayPolicyTest : FreeSpec({
+    "local chat relay excludes global routes and hidden senders" {
+        SpyRelayPolicy.shouldPublishLocalChat("рядом с кузницей", ChatMode.LOCAL, senderHidden = false) shouldBe true
+        SpyRelayPolicy.shouldPublishLocalChat("!всем привет", ChatMode.LOCAL, senderHidden = false) shouldBe false
+        SpyRelayPolicy.shouldPublishLocalChat("всем привет", ChatMode.GLOBAL, senderHidden = false) shouldBe false
+        SpyRelayPolicy.shouldPublishLocalChat("секрет", ChatMode.LOCAL, senderHidden = true) shouldBe false
+    }
+
     "command relay fails closed for hidden senders and every sensitive prefix" {
         SpyRelayPolicy.shouldPublishCommand(
             command = "/warp market",
@@ -73,6 +81,9 @@ class SpyRelayPolicyTest : FreeSpec({
         SpyRelayPolicy.shouldDeliver(chat, sender, "Sender", true, false, false, emptyList()) shouldBe false
         SpyRelayPolicy.shouldDeliver(chat, target, "Target", true, false, false, emptyList()) shouldBe false
         SpyRelayPolicy.shouldDeliver(chat, viewer, "Target", true, false, false, emptyList()) shouldBe false
+
+        val localChat = chat.copy(targetUuid = null, targetName = null)
+        SpyRelayPolicy.shouldDeliver(localChat, viewer, "Viewer", true, false, false, emptyList()) shouldBe true
 
         val command = chat.copy(type = SpyRelayType.COMMAND, targetUuid = null, targetName = null, content = "/warp market")
         SpyRelayPolicy.shouldDeliver(command, viewer, "Viewer", false, true, false, listOf("cmi spawn")) shouldBe false

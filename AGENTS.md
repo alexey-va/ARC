@@ -37,12 +37,13 @@ that false-negative causes ARC to prepend a duplicate prefix.
 
 Cross-server CMI ChatSpy/CommandSpy is owned by
 `src/main/kotlin/ru/arc/spy/` and `modules/cross-server-spy.yml`. Source Paper
-nodes publish bounded, versioned observations to `arc.spy.v1`; destination
-nodes deliver only to UUIDs currently present in CMI's local social-spy or
-command-spy sets. Keep local spy delivery in CMI, skip same-origin Redis events,
-and never relay CMI-blacklisted or authentication commands. The bridge renders
-player content as literal Adventure text, not MiniMessage, and its Redis
-listener must marshal Bukkit access to the Paper main thread.
+nodes publish bounded, versioned command, private-message, and local-chat
+observations to `arc.spy.v1`; global chat stays on its normal network route.
+Destination nodes deliver only to UUIDs currently present in CMI's local
+social-spy or command-spy sets. Keep local spy delivery in CMI, skip same-origin
+Redis events, and never relay CMI-blacklisted or authentication commands. The
+bridge renders player content as literal Adventure text, not MiniMessage, and
+its Redis listener must marshal Bukkit access to the Paper main thread.
 
 ## Runtime & deploy
 

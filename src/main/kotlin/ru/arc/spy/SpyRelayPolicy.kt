@@ -1,5 +1,6 @@
 package ru.arc.spy
 
+import ru.arc.chat.ChatMode
 import java.util.Locale
 import java.util.UUID
 
@@ -9,6 +10,15 @@ data class PrivateSpyMessage(
 )
 
 object SpyRelayPolicy {
+    fun shouldPublishLocalChat(
+        content: String,
+        mode: ChatMode,
+        senderHidden: Boolean,
+    ): Boolean =
+        !senderHidden &&
+            mode == ChatMode.LOCAL &&
+            !content.startsWith('!')
+
     fun shouldPublishCommand(
         command: String,
         senderHidden: Boolean,

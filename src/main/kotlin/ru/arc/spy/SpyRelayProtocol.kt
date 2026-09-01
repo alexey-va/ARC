@@ -79,15 +79,27 @@ object SpyRelayCodec {
         val targetName: String?
         val targetUuid: UUID?
         if (type == SpyRelayType.CHAT) {
-            targetName = json.requiredString("targetName")?.takeIf(::validPlayerName) ?: return null
+            val targetNameElement = json.get("targetName") ?: return null
             val targetUuidElement = json.get("targetUuid") ?: return null
-            targetUuid =
-                when {
-                    targetUuidElement.isJsonNull -> null
-                    targetUuidElement.isJsonPrimitive && targetUuidElement.asJsonPrimitive.isString ->
-                        parseCanonicalUuid(targetUuidElement.asString) ?: return null
-                    else -> return null
-                }
+            if (targetNameElement.isJsonNull) {
+                if (!targetUuidElement.isJsonNull) return null
+                targetName = null
+                targetUuid = null
+            } else {
+                targetName =
+                    targetNameElement
+                        .takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
+                        ?.asString
+                        ?.takeIf(::validPlayerName)
+                        ?: return null
+                targetUuid =
+                    when {
+                        targetUuidElement.isJsonNull -> null
+                        targetUuidElement.isJsonPrimitive && targetUuidElement.asJsonPrimitive.isString ->
+                            parseCanonicalUuid(targetUuidElement.asString) ?: return null
+                        else -> return null
+                    }
+            }
         } else {
             targetName = null
             targetUuid = null

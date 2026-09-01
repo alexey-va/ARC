@@ -27,8 +27,14 @@ object SpyMessageRenderer {
                 SpyRelayType.CHAT -> Component.text("Spy", NamedTextColor.DARK_GREEN)
             }.hoverEvent(serverHover)
 
+        val template =
+            when {
+                message.type == SpyRelayType.COMMAND -> settings.commandTemplate
+                message.targetName == null -> settings.localChatTemplate
+                else -> settings.privateMessageTemplate
+            }
         return miniMessage.deserialize(
-            if (message.type == SpyRelayType.CHAT) settings.privateMessageTemplate else settings.commandTemplate,
+            template,
             component("marker", marker),
             literal("sender", message.senderName),
             literal("target", message.targetName.orEmpty()),

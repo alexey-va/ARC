@@ -30,6 +30,16 @@ class SpyRelayProtocolTest : FreeSpec({
         SpyRelayCodec.decode(SpyRelayCodec.encode(chat), 4096, 1000) shouldBe chat
         SpyRelayCodec.decode(SpyRelayCodec.encode(chat.copy(targetUuid = null)), 4096, 1000) shouldBe
             chat.copy(targetUuid = null)
+
+        val localChat =
+            command.copy(
+                id = UUID.fromString("50000000-0000-0000-0000-000000000005"),
+                type = SpyRelayType.CHAT,
+                targetUuid = null,
+                targetName = null,
+                content = "локальное сообщение",
+            )
+        SpyRelayCodec.decode(SpyRelayCodec.encode(localChat), 4096, 1000) shouldBe localChat
     }
 
     "codec rejects unknown fields, invalid versions, control characters and oversized payloads" {
@@ -100,6 +110,7 @@ class SpyRelayProtocolTest : FreeSpec({
         settings.maxContentLength shouldBe 64
         settings.channel shouldBe CrossServerSpyConfig.DEFAULT_CHANNEL
         settings.sensitiveCommands shouldBe setOf("cmi usermeta")
+        settings.localChatTemplate shouldBe CrossServerSpyConfig.DEFAULT_LOCAL_CHAT_TEMPLATE
     }
 
     "renderer keeps remote content literal and identifies the source server only on hover" {
@@ -130,15 +141,34 @@ class SpyRelayProtocolTest : FreeSpec({
         PlainTextComponentSerializer.plainText().serialize(hover!!.value() as Component) shouldBe "Сервер: Выживание"
     }
 
+    "renderer gives local chat its own target-free spy anatomy" {
+        val localChat =
+            commandMessage(now).copy(
+                type = SpyRelayType.CHAT,
+                targetUuid = null,
+                targetName = null,
+                content = "рядом с кузницей",
+            )
+
+        val component = SpyMessageRenderer.render(localChat, "Выживание", testSettings())
+
+        PlainTextComponentSerializer.plainText().serialize(component) shouldBe
+            "Spy[SourcePlayer]: рядом с кузницей"
+        LegacyComponentSerializer.legacySection().serialize(component) shouldBe
+            "§2Spy§7[§8SourcePlayer§7]: §fрядом с кузницей"
+    }
+
     "configuration falls back when a display template loses required placeholders" {
         val folder = Files.createTempDirectory("cross-server-spy-display-config")
         val config = ConfigManager.create(folder, "test.yml", "cross-server-spy-display-test")
         config.setString("display.command", "<red>Команда без данных")
+        config.setString("display.local-chat", "<green><sender>: сообщение без content")
         config.setString("display.private-message", "<green><sender> -> <target>: <content>")
         config.setString("display.server-hover", "Сервер скрыт")
 
         val settings = CrossServerSpyConfig(config).settings
         settings.commandTemplate shouldBe CrossServerSpyConfig.DEFAULT_COMMAND_TEMPLATE
+        settings.localChatTemplate shouldBe CrossServerSpyConfig.DEFAULT_LOCAL_CHAT_TEMPLATE
         settings.privateMessageTemplate shouldBe CrossServerSpyConfig.DEFAULT_PRIVATE_MESSAGE_TEMPLATE
         settings.serverHoverTemplate shouldBe CrossServerSpyConfig.DEFAULT_SERVER_HOVER_TEMPLATE
     }
@@ -171,6 +201,7 @@ internal fun testSettings(): CrossServerSpySettings =
         sensitiveCommands = CrossServerSpyConfig.DEFAULT_SENSITIVE_COMMANDS,
         serverHoverTemplate = CrossServerSpyConfig.DEFAULT_SERVER_HOVER_TEMPLATE,
         commandTemplate = CrossServerSpyConfig.DEFAULT_COMMAND_TEMPLATE,
+        localChatTemplate = CrossServerSpyConfig.DEFAULT_LOCAL_CHAT_TEMPLATE,
         privateMessageTemplate = CrossServerSpyConfig.DEFAULT_PRIVATE_MESSAGE_TEMPLATE,
     )
 

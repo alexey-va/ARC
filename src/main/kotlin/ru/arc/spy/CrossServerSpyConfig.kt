@@ -20,6 +20,7 @@ data class CrossServerSpySettings(
     val sensitiveCommands: Set<String>,
     val serverHoverTemplate: String,
     val commandTemplate: String,
+    val localChatTemplate: String,
     val privateMessageTemplate: String,
 ) {
     fun serverLabel(server: String): String = serverLabels[server] ?: server
@@ -72,6 +73,12 @@ open class CrossServerSpyConfig(
                         DEFAULT_COMMAND_TEMPLATE,
                         setOf("marker", "sender", "content"),
                     ),
+                localChatTemplate =
+                    normalizeTemplate(
+                        config.string("display.local-chat", DEFAULT_LOCAL_CHAT_TEMPLATE),
+                        DEFAULT_LOCAL_CHAT_TEMPLATE,
+                        setOf("marker", "sender", "content"),
+                    ),
                 privateMessageTemplate =
                     normalizeTemplate(
                         config.string("display.private-message", DEFAULT_PRIVATE_MESSAGE_TEMPLATE),
@@ -101,6 +108,8 @@ open class CrossServerSpyConfig(
         val DEFAULT_SERVER_LABELS = listOf("spawn=Спавн", "survival=Выживание", "parkour=Паркур")
         const val DEFAULT_SERVER_HOVER_TEMPLATE = "Сервер: <server>"
         const val DEFAULT_COMMAND_TEMPLATE =
+            "<marker><gray>[<dark_gray><sender><gray>]: <white><content>"
+        const val DEFAULT_LOCAL_CHAT_TEMPLATE =
             "<marker><gray>[<dark_gray><sender><gray>]: <white><content>"
         const val DEFAULT_PRIVATE_MESSAGE_TEMPLATE =
             "<marker><gray>[<dark_gray><sender> <gray>-> <dark_gray><target><gray>] <white><content>"

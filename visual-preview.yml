@@ -191,6 +191,12 @@ surfaces:
       placeholders:
         sender: ArchitectureMax
         content: /warp market
+    - id: local-chat-spy
+      text: spy:local-chat
+      placeholders:
+        marker: Spy
+        sender: ArchitectureMax
+        content: Рядом с кузницей.
     - id: private-message-spy
       text: spy:private-message
       placeholders:

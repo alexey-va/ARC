@@ -21,6 +21,7 @@ server-labels:
 display:
   server-hover: 'Сервер: <server>'
   command: '<marker><gray>[<dark_gray><sender><gray>]: <white><content>'
+  local-chat: '<marker><gray>[<dark_gray><sender><gray>]: <white><content>'
   private-message: '<marker><gray>[<dark_gray><sender> <gray>-> <dark_gray><target><gray>] <white><content>'
 
 limits:

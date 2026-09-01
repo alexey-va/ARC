@@ -1,5 +1,6 @@
 package ru.arc.spy
 
+import io.papermc.paper.event.player.AsyncChatEvent
 import org.bukkit.Bukkit
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
@@ -7,9 +8,12 @@ import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerCommandPreprocessEvent
 import org.bukkit.plugin.Plugin
+import ru.arc.chat.ChatMode
+import ru.arc.chat.ChatModeService
 import ru.arc.core.Tasks
 import ru.arc.redis.ChannelListener
 import ru.arc.redis.RedisOperations
+import ru.arc.util.TextUtils
 import org.slf4j.LoggerFactory
 import java.util.Locale
 import java.util.UUID
@@ -21,6 +25,7 @@ class CrossServerSpyBridge(
     private val settings: CrossServerSpySettings,
     private val cmi: SpyStateAccess,
     private val now: () -> Long = System::currentTimeMillis,
+    private val chatMode: (UUID) -> ChatMode = ChatModeService::getMode,
 ) : Listener, AutoCloseable {
     private val log = LoggerFactory.getLogger(CrossServerSpyBridge::class.java)
     private val ingress = SpyRelayIngress(localServer, settings)
@@ -96,6 +101,55 @@ class CrossServerSpyBridge(
                 createdAt = now(),
             ),
         )
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun onPlayerChat(event: AsyncChatEvent) {
+        if (!active) return
+        val originalContent =
+            SpyRelayCodec.sanitizeContent(
+                TextUtils.plain(event.originalMessage()),
+                settings.maxContentLength,
+            )
+        val deliveredContent =
+            SpyRelayCodec.sanitizeContent(
+                TextUtils.plain(event.message()),
+                settings.maxContentLength,
+            )
+        if (originalContent.isEmpty() || deliveredContent.isEmpty()) return
+        val player = event.player
+        val publishObservation =
+            Runnable {
+                if (
+                    !active ||
+                    !SpyRelayPolicy.shouldPublishLocalChat(
+                        content = originalContent,
+                        mode = chatMode(player.uniqueId),
+                        senderHidden = cmi.senderHidesChatSpy(player),
+                    )
+                ) {
+                    return@Runnable
+                }
+                publish(
+                    SpyRelayMessage(
+                        id = UUID.randomUUID(),
+                        type = SpyRelayType.CHAT,
+                        senderUuid = player.uniqueId,
+                        senderName = player.name,
+                        targetUuid = null,
+                        targetName = null,
+                        content = deliveredContent,
+                        createdAt = now(),
+                    ),
+                )
+            }
+
+        if (event.isAsynchronous) {
+            runCatching { Tasks.scheduler.runSync(publishObservation) }
+                .onFailure { log.warn("Unable to schedule local chat spy observation", it) }
+        } else {
+            publishObservation.run()
+        }
     }
 
     override fun close() {
