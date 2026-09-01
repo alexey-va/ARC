@@ -145,6 +145,46 @@ class CommandHidePolicyResolverTest :
                 policy.isEmpty shouldBe true
             }
         }
+
+        "default group" - {
+            "applies the player policy before permission plugins finish loading" {
+                val resolver =
+                    CommandHidePolicyResolver(
+                        config(
+                            group("player", commands = listOf("world **")),
+                            defaultGroup = "player",
+                        ),
+                    )
+
+                val policy = resolver.policy(UUID.randomUUID()) { false }
+
+                policy.blocks("/world create") shouldBe true
+                policy.hidesRoot("worldedit:worldedit") shouldBe true
+            }
+
+            "bypass still disables the default policy" {
+                val resolver =
+                    CommandHidePolicyResolver(
+                        config(
+                            group("player", commands = listOf("world **")),
+                            bypassPermission = "arc.command.hide.bypass",
+                            defaultGroup = "player",
+                        ),
+                    )
+
+                val policy = resolver.policy(UUID.randomUUID()) { it == "arc.command.hide.bypass" }
+
+                policy.isEmpty shouldBe true
+            }
+
+            "unknown default group is rejected" {
+                shouldThrow<IllegalArgumentException> {
+                    CommandHidePolicyResolver(
+                        config(group("player"), defaultGroup = "missing"),
+                    )
+                }
+            }
+        }
     })
 
 private fun config(
@@ -152,12 +192,14 @@ private fun config(
     bypassPermission: String = "",
     cacheMillis: Long = 5_000L,
     hideNamespacedRoots: Boolean = true,
+    defaultGroup: String = "",
 ): CommandHideModuleConfig =
     TestCommandHideModuleConfig(
         groups = groups.toList(),
         bypassPermission = bypassPermission,
         policyCacheMillis = cacheMillis,
         hideNamespacedRoots = hideNamespacedRoots,
+        defaultGroup = defaultGroup,
     )
 
 private fun group(

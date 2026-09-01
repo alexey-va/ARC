@@ -60,6 +60,10 @@ LuckPerms API без консольной команды, сбрасывает p
 только на видимость: обычный алиас остаётся доступен, а namespaced-вызов не
 блокируется без явного шаблона в `commands`.
 
+`default-group: player` применяет эту группу, если permission-провайдер ещё не
+успел вернуть ни одной hide-группы. Это закрывает раннее command tree при входе;
+явный `bypass-permission` проверяется первым и по-прежнему отключает ограничения.
+
 ## Выполнение и tab-complete
 
 `PlayerCommandPreprocessEvent` блокирует выполнение. `PlayerCommandSendEvent`

@@ -17,6 +17,7 @@ class CommandHideConfigTest :
                 enabled: true
                 strip-command-namespace: false
                 hide-namespaced-roots: false
+                default-group: player
                 bypass-permission: arc.command.hide.staff
                 policy-cache: 2s
                 blocked-message: blocked
@@ -34,6 +35,7 @@ class CommandHideConfigTest :
             config.enabled shouldBe true
             config.stripCommandNamespace shouldBe false
             config.hideNamespacedRoots shouldBe false
+            config.defaultGroup shouldBe "player"
             config.bypassPermission shouldBe "arc.command.hide.staff"
             config.policyCacheMillis shouldBe 2_000L
             config.groups.map(CommandHideGroupConfig::id) shouldContainExactly listOf("base", "player")

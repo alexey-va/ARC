@@ -16,6 +16,10 @@ strip-command-namespace: true
 # ограниченным игрокам, но сами команды не блокируются только из-за namespace.
 hide-namespaced-roots: true
 
+# До загрузки permissions применяется fail-closed политика обычного игрока.
+# После join дерево пересобирается и bypass/другие группы учитываются точно.
+default-group: "player"
+
 # Политика игрока обновляется сразу при пересборке command tree; TTL страхует
 # изменения permissions, которые не вызвали такую пересборку.
 policy-cache: 5s

@@ -21,6 +21,7 @@ internal class CommandHideSnapshot private constructor(
     val policyCacheNanos: Long,
     val blockedMessage: Component?,
     val groups: List<ResolvedCommandHideGroup>,
+    private val defaultGroup: ResolvedCommandHideGroup?,
 ) {
     private val combinedPolicies = ConcurrentHashMap<List<String>, CommandHidePolicy>()
     private val emptyPolicy = CommandHidePolicy.empty(stripCommandNamespace)
@@ -36,12 +37,13 @@ internal class CommandHideSnapshot private constructor(
         }
 
         val selected = groups.filter { checkPermission(it.permission) }
-        if (selected.isEmpty()) return emptyPolicy
+        val effectiveGroups = selected.ifEmpty { defaultGroup?.let(::listOf).orEmpty() }
+        if (effectiveGroups.isEmpty()) return emptyPolicy
 
-        val key = selected.map(ResolvedCommandHideGroup::id)
+        val key = effectiveGroups.map(ResolvedCommandHideGroup::id)
         return combinedPolicies.computeIfAbsent(key) {
             CommandHidePolicy(
-                patterns = selected.flatMap(ResolvedCommandHideGroup::patterns),
+                patterns = effectiveGroups.flatMap(ResolvedCommandHideGroup::patterns),
                 stripCommandNamespace = stripCommandNamespace,
                 hideNamespacedRoots = hideNamespacedRoots,
                 blockedMessage = blockedMessage,
@@ -103,6 +105,12 @@ internal class CommandHideSnapshot private constructor(
                         patterns = resolve(id),
                     )
                 }
+            val defaultGroupId = config.defaultGroup.trim().lowercase(Locale.ROOT)
+            val defaultGroup =
+                defaultGroupId.takeIf(String::isNotEmpty)?.let { id ->
+                    require(id in rawGroups) { "Unknown command-hide default group '${config.defaultGroup}'" }
+                    groups.first { it.id == id }
+                }
 
             return CommandHideSnapshot(
                 enabled = config.enabled,
@@ -112,6 +120,7 @@ internal class CommandHideSnapshot private constructor(
                 policyCacheNanos = TimeUnit.MILLISECONDS.toNanos(config.policyCacheMillis),
                 blockedMessage = config.blockedMessage.takeIf(String::isNotBlank)?.let(TextUtil::mm),
                 groups = groups,
+                defaultGroup = defaultGroup,
             )
         }
 
