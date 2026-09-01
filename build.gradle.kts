@@ -89,6 +89,9 @@ dependencies {
     compileOnly(libs.dev.espi.protectionstones)
     compileOnly(libs.com.alessiodp.parties.parties.api)
     compileOnly(libs.me.clip.placeholderapi)
+    // Exact optional API baseline used by the native Parkour presentation bridge.
+    // Parkour remains server-provided and is never shaded into ARC.
+    compileOnly("com.github.A5H73Y:Parkour:Parkour-7.2.8-RELEASE.136") { isTransitive = false }
     // Private mirror of the exact server-provided Premium JAR; never shaded.
     compileOnly("ru.ruscrafting.thirdparty:economyshopgui-premium:6.3.0")
     compileOnly(libs.net.william278.huskhomes)

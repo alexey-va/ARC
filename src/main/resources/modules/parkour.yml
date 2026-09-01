@@ -1,0 +1,19 @@
+# Native ARC presentation bridge for the third-party Parkour plugin.
+# Disabled by default; the parkour runtime mirror opts in explicitly.
+enabled: false
+
+integration:
+  intercept-joinall-command: true
+  intercept-legacy-menu: true
+  joinall-permission: parkour.basic.joinall
+  legacy-menu-title: Трассы паркура
+
+hud:
+  enabled: true
+  fade-in-ticks: 5
+  stay-ticks: 35
+  fade-out-ticks: 10
+
+messages:
+  unavailable: '<#c42323>Каталог трасс сейчас недоступен.'
+  no-ready-courses: '<#ff9f0f>Сейчас нет готовых трасс в этой категории.'

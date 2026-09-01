@@ -1,0 +1,113 @@
+titles:
+  root: '<#20252b>Паркур'
+  category: '<#20252b>Паркур — <category>'
+
+copy:
+  spacer: ' '
+  action-open: '<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>Нажмите<#f2f0e6> — открыть трассы'
+  action-start: '<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>Нажмите<#f2f0e6> — начать трассу'
+  ready-count: '<#8c8c8c>Готово трасс: <#f2f0e6><ready>'
+  checkpoints: '<#8c8c8c>Контрольных точек: <#f2f0e6><checkpoints>'
+  players: '<#8c8c8c>Сейчас на трассе: <#f2f0e6><players>'
+  completed: '<#7bd88f>✔ Вы уже проходили эту трассу'
+  not-completed: '<#969696>Ещё не пройдена'
+
+background:
+  material: GRAY_STAINED_GLASS_PANE
+
+close:
+  material: BARRIER
+  display: '<#969696>Закрыть'
+  lore:
+    - '<#8c8c8c>Вернуться в игру.'
+
+back:
+  material: BLUE_STAINED_GLASS_PANE
+  display: '<#92bed8>Назад'
+  lore:
+    - '<#8c8c8c>Вернуться к выбору сложности.'
+    - ''
+    - '<#8c8c8c>[<#92bed8>▶<#8c8c8c>] <#92bed8>Нажмите<#f2f0e6> — вернуться'
+
+guide:
+  material: BOOK
+  display: '<#92bed8><bold>Как играть'
+  lore:
+    - '<#f2f0e6>Выберите сложность и трассу.'
+    - '<#f2f0e6>Наступайте на точки строго по порядку.'
+    - ''
+    - '<#8c8c8c>Предметы в хотбаре возвращают к точке,'
+    - '<#8c8c8c>перезапускают или завершают попытку.'
+
+categories:
+  easy:
+    order: 10
+    prefixes: [easy]
+    name: Лёгкие
+    course-name: 'Лёгкая <number>'
+    course-display: '<#7bd88f><bold><course>'
+    material: LEATHER_BOOTS
+    course-material: OAK_PRESSURE_PLATE
+    display: '<#7bd88f><bold>Лёгкие трассы'
+    description:
+      - '<#f2f0e6>Короткие маршруты для разминки'
+      - '<#f2f0e6>и знакомства с чекпоинтами.'
+  medium:
+    order: 20
+    prefixes: [med]
+    name: Средние
+    course-name: 'Средняя <number>'
+    course-display: '<#5fb3ff><bold><course>'
+    material: IRON_BOOTS
+    course-material: STONE_PRESSURE_PLATE
+    display: '<#5fb3ff><bold>Средние трассы'
+    description:
+      - '<#f2f0e6>Больше точности, темпа'
+      - '<#f2f0e6>и длинных связок прыжков.'
+  hard:
+    order: 30
+    prefixes: [diff]
+    name: Сложные
+    course-name: 'Сложная <number>'
+    course-display: '<#e3b341><bold><course>'
+    material: DIAMOND_BOOTS
+    course-material: HEAVY_WEIGHTED_PRESSURE_PLATE
+    display: '<#e3b341><bold>Сложные трассы'
+    description:
+      - '<#f2f0e6>Маршруты для уверенного паркура'
+      - '<#f2f0e6>без права терять ритм.'
+  extreme:
+    order: 40
+    prefixes: [ex]
+    name: Экстремальные
+    course-name: 'Экстремальная <number>'
+    course-display: '<#d84a4a><bold><course>'
+    material: NETHERITE_BOOTS
+    course-material: POLISHED_BLACKSTONE_PRESSURE_PLATE
+    display: '<#d84a4a><bold>Экстремальные трассы'
+    description:
+      - '<#f2f0e6>Самые требовательные маршруты.'
+      - '<#f2f0e6>Сначала точность, потом скорость.'
+
+hud:
+  join:
+    title: '<#32d6ff><bold>ТРАССА НАЧАЛАСЬ'
+    subtitle: '<#f2f0e6><course> <#8fa6b8>— пройдите все точки'
+  checkpoint:
+    title: '<#e3b341><bold>ТОЧКА <current>/<total>'
+    subtitle: '<#f2f0e6>Маршрут сохранён'
+  checkpoint-all:
+    title: '<#7bd88f><bold>ВСЕ ТОЧКИ'
+    subtitle: '<#f2f0e6>Впереди финиш'
+  death:
+    title: '<#d84a4a><bold>Срыв'
+    subtitle: '<#f2f0e6>Возврат к точке <checkpoint> <#8fa6b8>• падений: <deaths>'
+  restart:
+    title: '<#e3b341><bold>НОВЫЙ ЗАБЕГ'
+    subtitle: '<#f2f0e6><course>'
+  leave:
+    title: '<#969696>Попытка завершена'
+    subtitle: '<#f2f0e6>Вы покинули трассу'
+  finish:
+    title: '<#7bd88f><bold>ТРАССА ПРОЙДЕНА'
+    subtitle: '<#f2f0e6><time> <#8fa6b8>• падений: <deaths>'

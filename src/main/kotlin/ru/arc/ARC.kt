@@ -35,6 +35,7 @@ import ru.arc.core.modules.BoardModule
 import ru.arc.core.modules.ConfigModule
 import ru.arc.metrics.MetricsModule
 import ru.arc.mounts.MountModule
+import ru.arc.parkour.ArcParkourModule
 import ru.arc.core.modules.CooldownModule
 import ru.arc.core.modules.EconomyModule
 import ru.arc.core.modules.EliteLootModule
@@ -227,6 +228,7 @@ open class ARC : JavaPlugin() {
             ChatModeModule,
             CrossServerSpyModule,
             MountModule,
+            ArcParkourModule,
             ItemsCatalogModule,
             CommandHideModule,
             OnboardingModule,
@@ -340,6 +342,7 @@ open class ARC : JavaPlugin() {
                 "modules/treasure-hunt.yml",
                 "modules/mobspawn.yml",
                 "modules/mounts.yml",
+                "modules/parkour.yml",
                 "modules/location-pools.yml",
                 "modules/elite-loot.yml",
                 "modules/onboarding.yml",
@@ -359,6 +362,7 @@ open class ARC : JavaPlugin() {
                 "guis/board.yml",
                 "guis/contracts.yml",
                 "guis/investigations.yml",
+                "guis/parkour.yml",
                 "guis/scheduled-commands.yml",
             )
 
