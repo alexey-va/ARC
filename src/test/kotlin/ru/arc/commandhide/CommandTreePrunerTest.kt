@@ -25,11 +25,13 @@ class CommandTreePrunerTest :
         "removes a fully blocked root and keeps its sibling" {
             val root = RootCommandNode<Any>()
             root.addChild(LiteralArgumentBuilder.literal<Any>("world").build())
+            root.addChild(LiteralArgumentBuilder.literal<Any>("world create").build())
             root.addChild(LiteralArgumentBuilder.literal<Any>("home").build())
 
             CommandTreePruner.prune(root, treePolicy("world **"))
 
             root.getChild("world").shouldBeNull()
+            root.getChild("world create").shouldBeNull()
             root.getChild("home").shouldNotBeNull()
         }
 

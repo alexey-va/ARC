@@ -64,8 +64,8 @@ class CommandHideListenerTest :
 
         "removes completely blocked roots from the player command list" {
             val player = playerWithPermissions("arc.command.hide.player")
-            val listener = listener("plugins **", "pl **")
-            val commands = linkedSetOf("plugins", "pl", "help")
+            val listener = listener("plugins **", "pl **", "world **")
+            val commands = linkedSetOf("plugins", "pl", "world create", "world delete", "help")
             val event = PlayerCommandSendEvent(player, commands)
 
             listener.onPlayerCommandSend(event)

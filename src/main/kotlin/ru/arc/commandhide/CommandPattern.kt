@@ -205,7 +205,8 @@ internal class CommandHidePolicy(
 
     fun hidesRoot(commandLabel: String): Boolean =
         (hideNamespacedRoots && ':' in commandLabel) ||
-            index.blocksRootSubtree(normalizeLiteral(commandLabel, stripCommandNamespace))
+            index.blocksRootSubtree(normalizeLiteral(commandLabel, stripCommandNamespace)) ||
+            blocks(commandLabel)
 
     fun filterCompletions(
         buffer: String,
