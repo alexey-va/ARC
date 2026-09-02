@@ -1,17 +1,19 @@
 package ru.arc.misc
 
-import com.github.stefvanschie.inventoryframework.gui.type.ChestGui
-import org.bukkit.Material
+import net.kyori.adventure.text.Component
+import org.bukkit.Bukkit
 import org.bukkit.entity.Player
+import org.bukkit.inventory.meta.SkullMeta
 import ru.arc.config.Config
-import ru.arc.core.async
 import ru.arc.core.sync
-import ru.arc.gui.gui
+import ru.arc.gui.ArcMenuSchema
+import ru.arc.gui.ArcMenus
 import ru.arc.hooks.HookRegistry
+import ru.arc.paper.menu.PaperMenuItemRenderContext
 import ru.arc.util.CooldownManager
-import ru.arc.util.GuiUtils
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
+import ru.arc.util.TextUtil
 import ru.arc.util.TextUtil.formatAmount
 import ru.arc.util.TextUtil.mm
 import java.util.UUID
@@ -37,14 +39,11 @@ object BaltopGuiFactory {
     private var lastUpdate = 0L
     private var refreshInFlight: CompletableFuture<Void>? = null
 
-    fun create(
+    fun open(
         config: Config,
         player: Player,
         sort: Sort = Sort.TOTAL,
-    ): ChestGui {
-        val rows = config.int("baltop.rows", 6)
-
-        // Sort entries
+    ) {
         val comparator: Comparator<BaltopEntry> =
             when (sort) {
                 Sort.BALANCE -> compareByDescending { it.balance }
@@ -52,86 +51,53 @@ object BaltopGuiFactory {
                 Sort.TOTAL -> compareByDescending { it.total }
             }
         val sortedEntries = cachedEntries.sortedWith(comparator)
-
-        return gui(config, "baltop.title", rows, player) {
-            // Background for content area
-            contentBackground(Material.GRAY_STAINED_GLASS_PANE, 0)
-
-            // Background for nav bar
-            navBackground()
-
-            // Player items
-            pagination(0 until (rows - 1)) {
-                items(sortedEntries) { entry ->
-                    skull(entry.uuid)
-
-                    // Use tags instead of manual .replace()
-                    tag("player", entry.name)
-                    tag("balance", formatAmount(entry.balance))
-                    tag("bank", formatAmount(entry.bank))
-                    tag("total", formatAmount(entry.total))
-
-                    display("<gold><player>")
-                    lore(listOf(
-                        "<gray>Всего: <green><total><white>💰",
-                        "",
-                        "<gray>Баланс: <green><balance><white>💰",
-                        "<gray>Банк: <green><bank><white>💰",
-                    ))
-                    fromConfig(config, "baltop.item")
-
-                    onClick { /* No action on player click */ }
-                }
+        val entries = sortedEntries.map { entry ->
+            val item = ArcMenus.item(
+                "baltop-entry",
+                PaperMenuItemRenderContext(values = mapOf(
+                    "player" to Component.text(entry.name),
+                    "balance" to Component.text(formatAmount(entry.balance)),
+                    "bank" to Component.text(formatAmount(entry.bank)),
+                    "total" to Component.text(formatAmount(entry.total)),
+                )),
+            )
+            (item.itemMeta as? SkullMeta)?.let { meta ->
+                meta.owningPlayer = Bukkit.getOfflinePlayer(entry.uuid)
+                item.itemMeta = meta
             }
-
-            // Navigation bar
-            navBar {
-                back(slot = 0, configKey = "baltop.back")
-
-                prevPage(slot = 3, configKey = "baltop.previous")
-
-                // Sort button
-                button(4) {
-                    material(Material.HOPPER)
-
-                    val sortName =
-                        when (sort) {
-                            Sort.BALANCE -> config.string("baltop.sort.balance")
-                            Sort.BANK -> config.string("baltop.sort.bank")
-                            Sort.TOTAL -> config.string("baltop.sort.total")
-                        }
-
-                    tag("sort", sortName)
-                    display("<gray>Сортировка: <sort>")
-                    lore(emptyList())
-                    fromConfig(config, "baltop.sort")
-
-                    onClick { event ->
-                        val clicker = event.whoClicked as? Player ?: return@onClick
-
-                        if (CooldownManager.cooldown(clicker.uniqueId, "baltop_sort") != 0L) {
-                            clicker.sendMessage(mm(config.string("baltop.sort.cooldown"), true))
-                            return@onClick
-                        }
-
-                        CooldownManager.addCooldown(clicker.uniqueId, "baltop_sort", 1000L)
-
-                        val nextSort =
-                            when (sort) {
-                                Sort.BALANCE -> Sort.BANK
-                                Sort.BANK -> Sort.TOTAL
-                                Sort.TOTAL -> Sort.BALANCE
-                            }
-
-                        async {
-                            GuiUtils.constructAndShowAsync({ create(config, clicker, nextSort) }, clicker)
-                        }
-                    }
-                }
-
-                nextPage(slot = 5, configKey = "baltop.next")
-            }
+            ArcMenus.entry(item, enabled = false)
         }
+        val sortName = when (sort) {
+            Sort.BALANCE -> config.string("baltop.sort.balance")
+            Sort.BANK -> config.string("baltop.sort.bank")
+            Sort.TOTAL -> config.string("baltop.sort.total")
+        }
+        ArcMenus.open(
+            player,
+            ArcMenuSchema.BALTOP,
+            config.component("baltop.title", "<dark_gray>Топ богачей"),
+            elements = mapOf(
+                "back" to ArcMenus.entry(ArcMenus.item(ArcMenuSchema.BALTOP, "back")) { it.closeInventory() },
+                "previous" to ArcMenus.entryWithContext(ArcMenus.item(ArcMenuSchema.BALTOP, "previous")) { it.session.previousPage() },
+                "sort" to ArcMenus.entry(ArcMenus.item(ArcMenuSchema.BALTOP, "sort", PaperMenuItemRenderContext(
+                    values = mapOf("sort" to TextUtil.mm(sortName, true)),
+                ))) { clicker ->
+                    if (CooldownManager.cooldown(clicker.uniqueId, "baltop_sort") != 0L) {
+                        clicker.sendMessage(mm(config.string("baltop.sort.cooldown"), true))
+                    } else {
+                        CooldownManager.addCooldown(clicker.uniqueId, "baltop_sort", 1000L)
+                        val next = when (sort) {
+                            Sort.BALANCE -> Sort.BANK
+                            Sort.BANK -> Sort.TOTAL
+                            Sort.TOTAL -> Sort.BALANCE
+                        }
+                        open(config, clicker, next)
+                    }
+                },
+                "next" to ArcMenus.entryWithContext(ArcMenus.item(ArcMenuSchema.BALTOP, "next")) { it.session.nextPage() },
+            ),
+            regions = mapOf(ArcMenuSchema.BALTOP_ENTRIES to entries),
+        )
     }
 
     /**
@@ -144,8 +110,7 @@ object BaltopGuiFactory {
     ) {
         updateCacheIfNeeded()
             .thenRun {
-                val gui = create(config, player, sort)
-                sync { gui.show(player) }
+                sync { open(config, player, sort) }
             }.exceptionally { failure ->
                 error("Failed to show baltop for {}", player.name, failure.cause ?: failure)
                 sync {

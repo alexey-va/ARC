@@ -26,7 +26,6 @@ import ru.arc.repository.CachedRepository
 import ru.arc.repository.Entity
 import ru.arc.repository.Mergeable
 import ru.arc.repository.redisRepo
-import ru.arc.util.GuiUtils
 import ru.arc.util.ItemUtils.connectedChests
 import ru.arc.util.ItemUtils.extractInventory
 import ru.arc.util.ItemUtils.extractItems
@@ -415,7 +414,7 @@ object PersonalLootModule {
             }
         }
 
-        GuiUtils.constructAndShowAsync({ LootGuiFactory.create(player, lootData) }, player)
+        LootGuiFactory.open(player, lootData)
     }
 
     @JvmStatic

@@ -1,22 +1,20 @@
 package ru.arc.misc
 
-import com.github.stefvanschie.inventoryframework.gui.type.ChestGui
-import com.github.stefvanschie.inventoryframework.pane.PaginatedPane
+import net.kyori.adventure.text.Component
 import org.bukkit.Material
 import org.bukkit.entity.Player
-import org.bukkit.inventory.ItemFlag
 import ru.arc.ARC
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import ru.arc.core.sync
-import ru.arc.gui.gui
+import ru.arc.gui.ArcMenuSchema
+import ru.arc.gui.ArcMenus
 import ru.arc.hooks.HookRegistry
-import ru.arc.util.GuiUtils
+import ru.arc.paper.menu.PaperMenuItemRenderContext
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
-import ru.arc.util.fromConfig
 
 /** GUI for selecting the network-wide join and leave phrases published by ProxyARC. */
 object JoinMessageGuiFactory {
@@ -51,76 +49,58 @@ object JoinMessageGuiFactory {
         currentMessages: Set<String>,
         catalog: JoinMessageCatalog,
         startPage: Int,
-    ): ChestGui {
+    ) {
         val cfg = config
         val prefix = if (isJoin) "join-message-gui." else "leave-message-gui."
-        val rows = cfg.int("join-message-gui.rows", 6).coerceIn(2, 6)
         val title = cfg.string("${prefix}title", if (isJoin) "&8Сообщения при входе" else "&8Сообщения при выходе")
         val messageItems = parseMessageItems(catalog.entries(isJoin), player, isJoin, currentMessages, prefix)
-        lateinit var pages: PaginatedPane
-
-        return gui(title, rows, player, cfg) {
-            contentBackground()
-            navBackground()
-
-            pagination(0 until (rows - 1)) {
-                items(messageItems) { item ->
-                    material(item.material)
-                    if (item.customModelData > 0) modelData(item.customModelData)
-                    display(nonItalic(item.displayName))
-                    lore(item.lore.map(::nonItalic))
-                    flags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ENCHANTS)
-
-                    onClick { event ->
-                        val clicker = event.whoClicked as? Player ?: return@onClick
-                        if (item.permission != null && !clicker.hasPermission(item.permission)) {
-                            clicker.sendMessage(
-                                cfg.component(
-                                    "${prefix}forbidden-temp-display",
-                                    "<red>Эта фраза пока недоступна.",
-                                ),
-                            )
-                            return@onClick
-                        }
-
-                        val currentPage = pages.page
-                        JoinMessagesManager
-                            .updateMessageAsync(
-                                player = clicker.name,
-                                message = item.message,
-                                isJoin = isJoin,
-                                selected = !item.isCurrent,
-                            ).whenComplete { _, failure ->
-                                if (failure != null) {
-                                    reportFailure(clicker, "update message", failure)
-                                } else {
-                                    show(clicker, isJoin, currentPage)
-                                }
-                            }
-                    }
-                }
+        val entries = messageItems.map { item ->
+            val rendered = ArcMenus.item(
+                "join-message-entry",
+                PaperMenuItemRenderContext(
+                    values = mapOf("name" to TextUtil.mm(nonItalic(item.displayName), true)),
+                    repeats = mapOf("lore" to item.lore.map { mapOf("line" to TextUtil.mm(nonItalic(it), true)) }),
+                ),
+            ).withType(item.material)
+            if (item.customModelData > 0) {
+                @Suppress("DEPRECATION")
+                rendered.editMeta { it.setCustomModelData(item.customModelData) }
             }
-            pages = checkNotNull(paginatedContentPane())
-
-            navBar {
-                back(slot = 0, configKey = "join-message-gui.back-button")
-                prevPage(slot = 3, configKey = "join-message-gui.prev-button")
-                button(4) {
-                    display("<italic:false><gold>Сменить режим")
-                    lore(emptyList())
-                    fromConfig(cfg, "${prefix}switch-button")
-                    onClick { event ->
-                        val clicker = event.whoClicked as? Player ?: return@onClick
-                        show(clicker, !isJoin, 0)
-                    }
+            ArcMenus.entryWithContext(rendered) { click ->
+                val clicker = click.player
+                if (item.permission != null && !clicker.hasPermission(item.permission)) {
+                    clicker.sendMessage(cfg.component("${prefix}forbidden-temp-display", "<red>Эта фраза пока недоступна."))
+                    return@entryWithContext
                 }
-                nextPage(slot = 5, configKey = "join-message-gui.next-button")
-            }
-
-            onBuild {
-                pages.page = startPage.coerceIn(0, (pages.pages - 1).coerceAtLeast(0))
+                val currentPage = click.session.pageState()?.pageIndex ?: 0
+                JoinMessagesManager.updateMessageAsync(
+                    player = clicker.name,
+                    message = item.message,
+                    isJoin = isJoin,
+                    selected = !item.isCurrent,
+                ).whenComplete { _, failure ->
+                    if (failure != null) reportFailure(clicker, "update message", failure)
+                    else show(clicker, isJoin, currentPage)
+                }
             }
         }
+        val session = ArcMenus.open(
+            player,
+            ArcMenuSchema.JOIN_MESSAGES,
+            TextUtil.mm(title, true),
+            elements = mapOf(
+                "back" to ArcMenus.entry(ArcMenus.item(ArcMenuSchema.JOIN_MESSAGES, "back")) { it.closeInventory() },
+                "previous" to ArcMenus.entryWithContext(ArcMenus.item(ArcMenuSchema.JOIN_MESSAGES, "previous")) { it.session.previousPage() },
+                "switch" to ArcMenus.entry(ArcMenus.item(
+                    ArcMenuSchema.JOIN_MESSAGES,
+                    "switch",
+                    PaperMenuItemRenderContext(values = mapOf("mode" to Component.text(if (isJoin) "вход" else "выход"))),
+                )) { show(it, !isJoin, 0) },
+                "next" to ArcMenus.entryWithContext(ArcMenus.item(ArcMenuSchema.JOIN_MESSAGES, "next")) { it.session.nextPage() },
+            ),
+            regions = mapOf(ArcMenuSchema.JOIN_MESSAGE_ENTRIES to entries),
+        )
+        session.setPage(startPage.coerceAtLeast(0))
     }
 
     fun show(
@@ -138,10 +118,7 @@ object JoinMessageGuiFactory {
                 }
                 val (catalog, data) = result
                 val currentMessages = if (isJoin) data.joinMessages.toSet() else data.leaveMessages.toSet()
-                GuiUtils.constructAndShowAsync(
-                    { create(player, isJoin, currentMessages, catalog, startPage) },
-                    player,
-                )
+                sync { create(player, isJoin, currentMessages, catalog, startPage) }
             }
     }
 

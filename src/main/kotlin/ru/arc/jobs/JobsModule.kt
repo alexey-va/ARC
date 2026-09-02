@@ -586,13 +586,7 @@ object JobsModule {
     @JvmStatic
     fun openBoostGui(player: Player) {
         val current = runtime ?: return
-        GuiUtils.constructAndShowAsync(
-            {
-                _root_ide_package_.ru.arc.jobs.guis
-                    .createJobsListGui(current.config, player)
-            },
-            player,
-        )
+        _root_ide_package_.ru.arc.jobs.guis.createJobsListGui(current.config, player)
     }
 
     /**

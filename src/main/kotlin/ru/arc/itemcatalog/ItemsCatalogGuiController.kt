@@ -1,20 +1,15 @@
 package ru.arc.itemcatalog
 
-import com.github.stefvanschie.inventoryframework.gui.GuiItem
-import com.github.stefvanschie.inventoryframework.gui.type.ChestGui
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
-import ru.arc.gui.GuiDefaults
-import ru.arc.gui.GuiItems
-import ru.arc.gui.gui
-import ru.arc.gui.onBottomClick
-import ru.arc.gui.onTopClick
-import ru.arc.gui.onTopDrag
-import ru.arc.util.GuiUtils
+import ru.arc.gui.ArcMenuSchema
+import ru.arc.gui.ArcMenus
+import ru.arc.paper.menu.PaperMenuEntry
+import ru.arc.paper.menu.PaperMenuItemRenderContext
 import ru.arc.util.ItemStackFactory
 import ru.arc.util.Logging.info
 import ru.arc.util.TextUtil
@@ -43,9 +38,7 @@ class ItemsCatalogGuiController(
             player.sendMessage(TextUtil.mm(settings.unavailableMessage, true))
             return
         }
-        show(
-            player,
-            pagedMenu(
+        pagedMenu(
                 player = player,
                 title = settings.config.string("gui.root-title", "<dark_gray><bold>Каталог предметов"),
                 entries = entries,
@@ -53,7 +46,6 @@ class ItemsCatalogGuiController(
                 back = player::closeInventory,
                 reopen = { nextPage -> openRoot(player, nextPage) },
                 render = { entry, rootPage -> rootEntryItem(player, snapshot, entry, rootPage) },
-            ),
         )
     }
 
@@ -70,9 +62,7 @@ class ItemsCatalogGuiController(
         val title =
             settings.config.string("gui.group-title", "<dark_gray><bold><group>")
                 .replace("<group>", TextUtils.escapeMM(group.definition.displayName))
-        show(
-            player,
-            pagedMenu(
+        pagedMenu(
                 player = player,
                 title = title,
                 entries = categories,
@@ -89,7 +79,6 @@ class ItemsCatalogGuiController(
                         )
                     }
                 },
-            ),
         )
     }
 
@@ -107,9 +96,7 @@ class ItemsCatalogGuiController(
             settings.config.string("gui.category-title", "<dark_gray><bold><category>")
                 .replace("<category>", TextUtils.escapeMM(category.displayName))
         val fallbackAction = itemAction(snapshot, categoryId, backTarget)
-        show(
-            player,
-            pagedMenu(
+        pagedMenu(
                 player = player,
                 title = title,
                 entries = category.itemIds,
@@ -117,7 +104,6 @@ class ItemsCatalogGuiController(
                 back = { openBack(player, backTarget) },
                 reopen = { nextPage -> openCategory(player, categoryId, nextPage, backTarget) },
                 render = { itemId, _ -> previewItem(player, itemId, snapshot, fallbackAction) },
-            ),
         )
     }
 
@@ -128,9 +114,7 @@ class ItemsCatalogGuiController(
     ) {
         val snapshot = service.currentSnapshot() ?: return openRoot(player, rootPage)
         if (!settings.showAll || !player.canSee(settings.allPermission)) return openRoot(player, rootPage)
-        show(
-            player,
-            pagedMenu(
+        pagedMenu(
                 player = player,
                 title = settings.config.string("gui.all-title", "<dark_gray><bold>Все предметы"),
                 entries = snapshot.registryItemIds,
@@ -138,7 +122,6 @@ class ItemsCatalogGuiController(
                 back = { openRoot(player, rootPage) },
                 reopen = { nextPage -> openAll(player, nextPage, rootPage) },
                 render = { itemId, _ -> previewItem(player, itemId, snapshot, null) },
-            ),
         )
     }
 
@@ -166,32 +149,35 @@ class ItemsCatalogGuiController(
         snapshot: ItemsCatalogSnapshot,
         entry: RootEntry,
         rootPage: Int,
-    ): GuiItem =
+    ): PaperMenuEntry =
         when (entry) {
             RootEntry.All -> {
-                val stack = styledStack(settings.allIcon)
-                decorate(
-                    stack,
-                    settings.allDisplayName,
-                    settings.allDescription.map(::body) +
-                        countLore(snapshot.registryItemIds.size, "предметов") +
-                        actionLore("открыть все предметы"),
-                )
+                val stack = ArcMenus.item(
+                    "catalog-root-entry",
+                    catalogContext(
+                        name = settings.allDisplayName,
+                        categories = 0,
+                        items = snapshot.registryItemIds.size,
+                        action = "Нажмите — открыть все предметы",
+                        description = settings.allDescription,
+                    ),
+                ).withType(Material.valueOf(settings.allIcon.material))
                 clickable(stack) { openAll(player, 0, rootPage) }
             }
 
             is RootEntry.Group -> {
                 val visible = entry.value.categories.filter { player.canSee(it.permissions) }
                 val itemCount = visible.flatMapTo(linkedSetOf(), CatalogCategory::itemIds).size
-                val stack = styledStack(entry.value.definition.icon)
-                decorate(
-                    stack,
-                    entry.value.definition.displayName,
-                    entry.value.definition.description.map(::body) +
-                        countLore(visible.size, "подкатегорий") +
-                        countLore(itemCount, "предметов") +
-                        actionLore("выбрать подкатегорию"),
-                )
+                val stack = ArcMenus.item(
+                    "catalog-root-entry",
+                    catalogContext(
+                        name = entry.value.definition.displayName,
+                        categories = visible.size,
+                        items = itemCount,
+                        action = "Нажмите — выбрать подкатегорию",
+                        description = entry.value.definition.description,
+                    ),
+                ).withType(Material.valueOf(entry.value.definition.icon.material))
                 clickable(stack) { openGroup(player, entry.value.definition.id, 0, rootPage) }
             }
 
@@ -203,14 +189,13 @@ class ItemsCatalogGuiController(
     private fun categoryItem(
         category: CatalogCategory,
         open: () -> Unit,
-    ): GuiItem {
-        val stack = category.iconId?.let(::safeItemStack) ?: styledStack(settings.categoryFallbackIcon)
-        decorate(
-            stack,
-            category.displayName,
-            countLore(category.itemIds.size, "предметов") + actionLore("открыть категорию"),
+    ): PaperMenuEntry {
+        val base = category.iconId?.let(::safeItemStack) ?: styledStack(settings.categoryFallbackIcon)
+        val rendered = ArcMenus.item(
+            "catalog-category",
+            values("name" to category.displayName, "items" to category.itemIds.size.toString(), "action" to "Нажмите — открыть категорию"),
         )
-        return clickable(stack, open)
+        return clickable(applyPresentation(base, rendered), open)
     }
 
     private fun previewItem(
@@ -218,7 +203,7 @@ class ItemsCatalogGuiController(
         namespacedId: String,
         snapshot: ItemsCatalogSnapshot,
         fallbackAction: CatalogClickAction?,
-    ): GuiItem {
+    ): PaperMenuEntry {
         val liveStack = safeItemStack(namespacedId)
         val stack = liveStack ?: unavailableItem(namespacedId)
         stack.amount = 1
@@ -233,24 +218,22 @@ class ItemsCatalogGuiController(
                 )
             }
         val meta = stack.itemMeta
-        if (meta != null) {
-            meta.displayName()?.let { meta.displayName(nonItalic(it)) }
-            val original = meta.lore().orEmpty().take(MAX_ORIGINAL_LORE_LINES).map(::nonItalic)
-            val suffix =
-                buildList {
-                    if (original.isNotEmpty()) add(Component.empty())
-                    add(labelValue("ID", namespacedId))
-                    when (click) {
-                        CatalogItemClick.Give -> addAll(actionLore("получить 1 предмет"))
-                        CatalogItemClick.Recipe -> addAll(actionLore("открыть рецепт"))
-                        is CatalogItemClick.Action -> addAll(actionLore(click.value.hint))
-                        CatalogItemClick.Unavailable -> add(muted("Нет рецепта или действия"))
-                    }
-                }
-            meta.lore(original + suffix)
-            stack.itemMeta = meta
+        val name = meta?.displayName() ?: Component.text(namespacedId)
+        val original = meta?.lore().orEmpty().take(MAX_ORIGINAL_LORE_LINES).map(::nonItalic)
+        val action = when (click) {
+            CatalogItemClick.Give -> "Нажмите — получить 1 предмет"
+            CatalogItemClick.Recipe -> "Нажмите — открыть рецепт"
+            is CatalogItemClick.Action -> "Нажмите — ${click.value.hint}"
+            CatalogItemClick.Unavailable -> "Нет рецепта или действия"
         }
-        return clickable(stack) { handleItemClick(player, namespacedId, click) }
+        val rendered = ArcMenus.item(
+            "catalog-preview",
+            PaperMenuItemRenderContext(
+                values = mapOf("name" to name, "id" to Component.text(namespacedId), "action" to Component.text(action)),
+                repeats = mapOf("original" to original.map { mapOf("line" to it) }),
+            ),
+        )
+        return clickable(applyPresentation(stack, rendered)) { handleItemClick(player, namespacedId, click) }
     }
 
     private fun handleItemClick(
@@ -334,54 +317,44 @@ class ItemsCatalogGuiController(
         requestedPage: Int,
         back: () -> Unit,
         reopen: (Int) -> Unit,
-        render: (T, Int) -> GuiItem,
-    ): ChestGui {
+        render: (T, Int) -> PaperMenuEntry,
+    ) {
         val model = catalogPage(entries, requestedPage, PAGE_SIZE)
         val page = model.page
         val pages = model.pages
         val visible = model.entries
-        return gui(title, 6, player, settings.config) {
-            contentBackground()
-            navBackground()
-            onTopClick { it.isCancelled = true }
-            onBottomClick { it.isCancelled = true }
-            onTopDrag { it.isCancelled = true }
-            staticPane(width = 9, height = 5) {
-                visible.forEachIndexed { index, entry ->
-                    item(index % 9, index / 9, render(entry, page))
-                }
+        val controls = buildMap {
+            put("back", ArcMenus.entry(ArcMenus.item(ArcMenuSchema.ITEM_CATALOG, "back")) { back() })
+            put(
+                "page",
+                ArcMenus.entry(
+                    ArcMenus.item(
+                        ArcMenuSchema.ITEM_CATALOG,
+                        "page",
+                        values(
+                            "page" to (page + 1).toString(),
+                            "pages" to pages.toString(),
+                            "shown" to visible.size.toString(),
+                            "total" to model.totalEntries.toString(),
+                        ),
+                    ),
+                    enabled = false,
+                ),
+            )
+            if (page > 0) {
+                put("previous", ArcMenus.entry(ArcMenus.item(ArcMenuSchema.ITEM_CATALOG, "previous")) { reopen(page - 1) })
             }
-            navBar {
-                back(configKey = "gui.items.back", action = back)
-                if (page > 0) {
-                    button(GuiDefaults.Slots.prev) {
-                        material(GuiDefaults.PrevButton.material)
-                        if (GuiDefaults.PrevButton.modelData != 0) modelData(GuiDefaults.PrevButton.modelData)
-                        display(GuiDefaults.PrevButton.defaultDisplay)
-                        lore(emptyList())
-                        fromConfig(settings.config, "gui.items.previous")
-                        onClick { reopen(page - 1) }
-                    }
-                }
-                button(4) {
-                    val indicator = settings.pageIndicatorIcon
-                    material(Material.valueOf(indicator.material))
-                    if (indicator.customModelData != 0) modelData(indicator.customModelData)
-                    display(accent("Страница ${page + 1} из $pages", bold = false))
-                    loreComponents(listOf(muted("Показано ${visible.size} из ${model.totalEntries}")))
-                }
-                if (page + 1 < pages) {
-                    button(GuiDefaults.Slots.next) {
-                        material(GuiDefaults.NextButton.material)
-                        if (GuiDefaults.NextButton.modelData != 0) modelData(GuiDefaults.NextButton.modelData)
-                        display(GuiDefaults.NextButton.defaultDisplay)
-                        lore(emptyList())
-                        fromConfig(settings.config, "gui.items.next")
-                        onClick { reopen(page + 1) }
-                    }
-                }
+            if (page + 1 < pages) {
+                put("next", ArcMenus.entry(ArcMenus.item(ArcMenuSchema.ITEM_CATALOG, "next")) { reopen(page + 1) })
             }
         }
+        ArcMenus.open(
+            player,
+            ArcMenuSchema.ITEM_CATALOG,
+            TextUtil.mm(title, true),
+            elements = controls,
+            regions = mapOf(ArcMenuSchema.CATALOG_ITEMS to visible.map { render(it, page) }),
+        )
     }
 
     private fun decorate(
@@ -413,11 +386,7 @@ class ItemsCatalogGuiController(
     private fun clickable(
         stack: ItemStack,
         action: () -> Unit,
-    ): GuiItem =
-        GuiItems.create(stack) { event ->
-            event.isCancelled = true
-            action()
-        }
+    ): PaperMenuEntry = ArcMenus.entry(stack) { action() }
 
     private fun openBack(player: Player, target: BackTarget) {
         when (target) {
@@ -426,9 +395,36 @@ class ItemsCatalogGuiController(
         }
     }
 
-    private fun show(player: Player, gui: ChestGui) {
-        GuiUtils.constructAndShowAsync({ gui }, player)
-    }
+    private fun applyPresentation(base: ItemStack, presentation: ItemStack): ItemStack =
+        base.clone().also { target ->
+            val source = presentation.itemMeta
+            target.editMeta { meta ->
+                meta.displayName(source.displayName())
+                meta.lore(source.lore())
+                meta.isHideTooltip = source.isHideTooltip
+                meta.setEnchantmentGlintOverride(source.enchantmentGlintOverride)
+            }
+        }
+
+    private fun catalogContext(
+        name: String,
+        categories: Int,
+        items: Int,
+        action: String,
+        description: List<String>,
+    ) = PaperMenuItemRenderContext(
+        values = mapOf(
+            "name" to TextUtil.mm(name, true),
+            "categories" to Component.text(categories),
+            "items" to Component.text(items),
+            "action" to Component.text(action),
+        ),
+        repeats = mapOf("description" to description.map { mapOf("line" to TextUtil.mm(it, true)) }),
+    )
+
+    private fun values(vararg pairs: Pair<String, String>) = PaperMenuItemRenderContext(
+        values = pairs.associate { (key, value) -> key to TextUtil.mm(value, true) },
+    )
 
     private fun countLore(count: Int, noun: String): List<Component> = listOf(labelValue("В каталоге", "$count $noun"))
 

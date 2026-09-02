@@ -2,153 +2,79 @@ package ru.arc.jobs.guis
 
 import com.gamingmesh.jobs.Jobs
 import com.gamingmesh.jobs.container.Job
-import com.github.stefvanschie.inventoryframework.gui.type.ChestGui
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextDecoration
-import net.kyori.adventure.text.minimessage.tag.Tag
-import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
-import org.bukkit.Material
-import org.bukkit.enchantments.Enchantment
 import org.bukkit.entity.Player
-import org.bukkit.inventory.ItemFlag
+import org.bukkit.inventory.ItemStack
 import ru.arc.config.Config
-import ru.arc.gui.gui
+import ru.arc.gui.ArcMenuSchema
+import ru.arc.gui.ArcMenus
 import ru.arc.jobs.BoostDataEntity
 import ru.arc.jobs.BoostType
 import ru.arc.jobs.JobsModule
-import ru.arc.util.GuiUtils
+import ru.arc.paper.menu.PaperMenuItemRenderContext
 import ru.arc.util.TextUtil.formatAmount
-import ru.arc.util.TextUtil.mm
 
-/**
- * GUI showing list of all jobs with their boost status.
- * Migrated to new GUI DSL.
- */
-fun createJobsListGui(
-    config: Config,
-    player: Player,
-): ChestGui {
-    val data =
-        JobsModule.getBoostData(player.uniqueId)
-            ?: BoostDataEntity(player.uniqueId, HashSet())
-
-    return gui(config, "boost-menu.title", rows = 3, player = player) {
-        // Background
-        background()
-
-        // Jobs list
-        pagination(0 until 2) {
-            items(Jobs.getJobs()) { job ->
-                val boost = calculateBoosts(job, data)
-                val resolver = createResolver(config, player, job, boost, data)
-
-                stack(job.guiItem.clone())
-                display("<job>")
-                lore(listOf(
-                    "<gray>Опыт: <exp_boost>%",
-                    "<gray>Деньги: <money_boost>%",
-                    "<gray>Очки: <points_boost>%",
-                ))
-                fromConfig(config, "boost-menu.job")
-                tagResolver(resolver)
-                flags(ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_ATTRIBUTES)
-
-                // Add enchant glow if player has any boost for this job
-                if (boost.money != 0.0 || boost.exp != 0.0 || boost.points != 0.0) {
-                    enchant(Enchantment.VANISHING_CURSE, 1, true)
-                }
-
-                onClick {
-                    GuiUtils.constructAndShowAsync({ JobBoostGui(job, player, config) }, player)
-                }
-            }
-        }
-
-        // Navigation bar
-        navBar {
-            back(configKey = "boost-menu.back")
-
-            button(4) {
-                material(Material.GREEN_STAINED_GLASS_PANE)
-                display("<green>Купить буст")
-                lore(emptyList())
-                fromConfig(config, "boost-menu.buy")
-                onClick {
-                    GuiUtils.constructAndShowAsync({ BuyBoostGuiFactory.create(player, null, config) }, player)
-                }
-            }
-        }
-    }
-}
-
-/**
- * Data class for calculated boost values.
- */
-private data class CalculatedBoost(
-    val job: Job,
-    val money: Double,
-    val exp: Double,
-    val points: Double,
-)
-
-/**
- * Calculate boost values for a job.
- */
-private fun calculateBoosts(
-    job: Job,
-    data: BoostDataEntity,
-): CalculatedBoost {
-    val boostMoney = data.getBoost(job, BoostType.MONEY) * 100 - 100
-    val boostPoints = data.getBoost(job, BoostType.POINTS) * 100 - 100
-    val boostExp = data.getBoost(job, BoostType.EXP) * 100 - 100
-    return CalculatedBoost(job, boostMoney, boostExp, boostPoints)
-}
-
-/**
- * Create tag resolver for job item display.
- */
-private fun createResolver(
-    config: Config,
-    player: Player,
-    job: Job,
-    boost: CalculatedBoost,
-    data: BoostDataEntity,
-): TagResolver {
-    val prefixUp = config.string("boost-menu.high-prefix", "<green>+ ")
-    val prefixLow = config.string("boost-menu.low-prefix", "<red>- ")
-
-    val moneyBaseBoost = JobsModule.getBoost(player, job.name, BoostType.MONEY) * 100
-    val pointsBaseBoost = JobsModule.getBoost(player, job.name, BoostType.POINTS) * 100
-    val expBaseBoost = JobsModule.getBoost(player, job.name, BoostType.EXP) * 100
-
-    val moneyBoost = boost.money + moneyBaseBoost
-    val pointsBoost = boost.points + pointsBaseBoost
-    val expBoost = boost.exp + expBaseBoost
-
-    fun getPrefix(value: Double): String =
-        when {
-            value > 0 -> prefixUp
-            value < 0 -> prefixLow
-            else -> ""
-        }
-
-    val name: Component =
-        LegacyComponentSerializer
-            .legacyAmpersand()
+fun createJobsListGui(config: Config, player: Player) {
+    val data = JobsModule.getBoostData(player.uniqueId) ?: BoostDataEntity(player.uniqueId, HashSet())
+    val entries = Jobs.getJobs().map { job ->
+        val boost = calculateBoosts(job, data)
+        val money = boost.money + JobsModule.getBoost(player, job.name, BoostType.MONEY) * 100
+        val points = boost.points + JobsModule.getBoost(player, job.name, BoostType.POINTS) * 100
+        val exp = boost.exp + JobsModule.getBoost(player, job.name, BoostType.EXP) * 100
+        val name: Component = LegacyComponentSerializer.legacyAmpersand()
             .deserialize(job.displayName.replace("§", "&"))
             .decoration(TextDecoration.ITALIC, false)
-
-    return TagResolver
-        .builder()
-        .tag("player", Tag.inserting(mm(player.name, true)))
-        .tag("job", Tag.inserting(name))
-        .tag(
-            "money_boost",
-            Tag.inserting(mm(getPrefix(moneyBoost) + formatAmount(kotlin.math.abs(moneyBoost), 4), true)),
-        ).tag("exp_boost", Tag.inserting(mm(getPrefix(expBoost) + formatAmount(kotlin.math.abs(expBoost), 4), true)))
-        .tag(
-            "points_boost",
-            Tag.inserting(mm(getPrefix(pointsBoost) + formatAmount(kotlin.math.abs(pointsBoost), 4), true)),
-        ).build()
+        val presentation = ArcMenus.item(
+            "jobs-entry",
+            PaperMenuItemRenderContext(values = mapOf(
+                "job" to name,
+                "money" to Component.text(signed(config, money)),
+                "exp" to Component.text(signed(config, exp)),
+                "points" to Component.text(signed(config, points)),
+            )),
+        )
+        val item = applyPresentation(job.guiItem.clone(), presentation)
+        if (boost.money != 0.0 || boost.exp != 0.0 || boost.points != 0.0) {
+            item.editMeta { it.setEnchantmentGlintOverride(true) }
+        }
+        ArcMenus.entry(item) { JobBoostGui(job, it, config) }
+    }
+    ArcMenus.open(
+        player,
+        ArcMenuSchema.JOBS_LIST,
+        config.component("boost-menu.title", "<dark_gray>Профессии"),
+        elements = mapOf(
+            "back" to ArcMenus.entry(ArcMenus.item(ArcMenuSchema.JOBS_LIST, "back")) { it.closeInventory() },
+            "buy" to ArcMenus.entry(ArcMenus.item(ArcMenuSchema.JOBS_LIST, "buy")) { BuyBoostGuiFactory.open(it, null, config) },
+        ),
+        regions = mapOf(ArcMenuSchema.JOB_ENTRIES to entries),
+    )
 }
+
+private data class CalculatedBoost(val money: Double, val exp: Double, val points: Double)
+
+private fun calculateBoosts(job: Job, data: BoostDataEntity) = CalculatedBoost(
+    money = data.getBoost(job, BoostType.MONEY) * 100 - 100,
+    points = data.getBoost(job, BoostType.POINTS) * 100 - 100,
+    exp = data.getBoost(job, BoostType.EXP) * 100 - 100,
+)
+
+private fun signed(config: Config, value: Double): String {
+    val prefix = when {
+        value > 0 -> config.string("boost-menu.high-prefix", "+ ")
+        value < 0 -> config.string("boost-menu.low-prefix", "- ")
+        else -> ""
+    }
+    return prefix + formatAmount(kotlin.math.abs(value), 4)
+}
+
+private fun applyPresentation(base: ItemStack, presentation: ItemStack): ItemStack =
+    base.clone().also { target ->
+        val source = presentation.itemMeta
+        target.editMeta { meta ->
+            meta.displayName(source.displayName())
+            meta.lore(source.lore())
+        }
+    }

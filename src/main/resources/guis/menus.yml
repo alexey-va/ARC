@@ -1,0 +1,1012 @@
+# ARC menu catalog. Code owns semantic actions and safe tags; this file owns
+# rows, slots, regions, backgrounds, materials, names and lore composition.
+menus:
+  layouts:
+    investigation-hub:
+      schema-version: 1
+      rows: 3
+      background: { template: background }
+      elements:
+        start: { slot: 13, template: investigation-start }
+        contracts: { slot: 26, template: investigation-contracts }
+    investigation-case:
+      schema-version: 1
+      rows: 5
+      background: { template: background }
+      elements:
+        next-step: { slot: 4, template: investigation-next-step }
+        dossier: { slot: 36, template: investigation-dossier }
+        evidence: { slot: 40, template: investigation-evidence }
+        return: { slot: 44, template: investigation-return }
+      regions:
+        witnesses: { slots: [18, 20, 22, 24, 26] }
+    investigation-verdict:
+      schema-version: 1
+      rows: 3
+      background: { template: background }
+      elements:
+        question: { slot: 4, template: investigation-question }
+        back: { slot: 22, template: investigation-back }
+      regions:
+        verdicts: { slots: [9, 11, 13, 15, 17] }
+    investigation-testimony:
+      schema-version: 1
+      rows: 3
+      background: { template: background }
+      elements:
+        statement: { slot: 13, template: investigation-testimony }
+    contracts-list:
+      schema-version: 1
+      rows: 3
+      background: { template: background }
+      elements:
+        info: { slot: 4, template: contracts-list-info }
+        empty: { slot: 22, template: contracts-list-empty }
+      regions:
+        orders: { slots: [9, 11, 13, 15, 17, 19, 21, 23, 25] }
+    contracts-detail:
+      schema-version: 1
+      rows: 3
+      background: { template: background }
+      elements:
+        resource: { slot: 2, template: contracts-detail-resource }
+        info: { slot: 4, template: contracts-detail-info }
+        payout: { slot: 6, template: contracts-detail-payout }
+        quantity: { slot: 13, template: contracts-detail-quantity }
+        back: { slot: 18, template: contracts-detail-back }
+        confirm: { slot: 26, template: contracts-detail-confirm }
+    scheduled-list:
+      schema-version: 1
+      rows: 6
+      background: { template: background }
+      elements:
+        refresh: { slot: 49, template: scheduled-refresh }
+      regions:
+        entries: { slots: ['0-44'] }
+    elite-loot:
+      schema-version: 1
+      rows: 6
+      background: { template: background }
+      elements:
+        previous: { slot: 45, template: elite-loot-previous }
+        back: { slot: 49, template: elite-loot-back }
+        next: { slot: 53, template: elite-loot-next }
+      regions:
+        items: { slots: ['0-44'] }
+      pagination:
+        region: items
+        previous: previous
+        next: next
+    personal-loot-1:
+      schema-version: 1
+      rows: 1
+      regions:
+        loot: { slots: ['0-8'] }
+    personal-loot-2:
+      schema-version: 1
+      rows: 2
+      regions:
+        loot: { slots: ['0-17'] }
+    personal-loot-3:
+      schema-version: 1
+      rows: 3
+      regions:
+        loot: { slots: ['0-26'] }
+    personal-loot-4:
+      schema-version: 1
+      rows: 4
+      regions:
+        loot: { slots: ['0-35'] }
+    personal-loot-5:
+      schema-version: 1
+      rows: 5
+      regions:
+        loot: { slots: ['0-44'] }
+    personal-loot-6:
+      schema-version: 1
+      rows: 6
+      regions:
+        loot: { slots: ['0-53'] }
+    parkour-root:
+      schema-version: 1
+      rows: 3
+      background: { template: background }
+      regions:
+        categories: { slots: [10, 12, 14, 16, 11, 13, 15] }
+    parkour-category:
+      schema-version: 1
+      rows: 3
+      background: { template: background }
+      elements:
+        back: { slot: 18, template: parkour-back }
+      regions:
+        courses: { slots: ['10-16'] }
+    item-catalog:
+      schema-version: 1
+      rows: 6
+      background: { template: background }
+      elements:
+        back: { slot: 45, template: catalog-back }
+        previous: { slot: 48, template: catalog-previous }
+        page: { slot: 49, template: catalog-page, kind: decoration }
+        next: { slot: 50, template: catalog-next }
+      regions:
+        catalog-items: { slots: ['0-44'] }
+    elite-mobs-shop:
+      schema-version: 1
+      rows: 6
+      elements:
+        change: { slot: 4, template: em-shop-change }
+        update: { slot: 8, template: em-shop-update, kind: decoration }
+      regions:
+        shop-items: { slots: ['9-53'] }
+    scheduled-edit:
+      schema-version: 1
+      rows: 2
+      background: { template: background }
+      elements:
+        command: { slot: 1, template: scheduled-edit-command }
+        id: { slot: 2, template: scheduled-edit-id }
+        schedule-value: { slot: 3, template: scheduled-edit-value-time }
+        schedule-type: { slot: 4, template: scheduled-edit-type }
+        servers: { slot: 5, template: scheduled-edit-servers }
+        enabled: { slot: 7, template: scheduled-edit-enabled }
+        back: { slot: 9, template: scheduled-edit-back }
+        run-now: { slot: 13, template: scheduled-edit-run-now }
+        save: { slot: 17, template: scheduled-edit-save }
+    baltop:
+      schema-version: 1
+      rows: 6
+      background: { template: background }
+      elements:
+        back: { slot: 45, template: baltop-back }
+        previous: { slot: 48, template: menu-previous }
+        sort: { slot: 49, template: baltop-sort }
+        next: { slot: 50, template: menu-next }
+      regions:
+        baltop-entries: { slots: ['0-44'] }
+      pagination: { region: baltop-entries, previous: previous, next: next }
+    join-messages:
+      schema-version: 1
+      rows: 6
+      background: { template: background }
+      elements:
+        back: { slot: 45, template: join-message-back }
+        previous: { slot: 48, template: menu-previous }
+        switch: { slot: 49, template: join-message-switch }
+        next: { slot: 50, template: menu-next }
+      regions:
+        message-entries: { slots: ['0-44'] }
+      pagination: { region: message-entries, previous: previous, next: next }
+    jobs-list:
+      schema-version: 1
+      rows: 3
+      background: { template: background }
+      elements:
+        back: { slot: 18, template: jobs-back }
+        buy: { slot: 22, template: jobs-buy }
+      regions:
+        jobs: { slots: ['0-17'] }
+    job-boosts:
+      schema-version: 1
+      rows: 6
+      background: { template: background }
+      elements:
+        back: { slot: 45, template: jobs-back }
+        buy: { slot: 49, template: jobs-buy }
+      regions:
+        boosts: { slots: ['0-44'] }
+    boost-shop:
+      schema-version: 1
+      rows: 6
+      background: { template: background }
+      elements:
+        type: { slot: 4, template: boost-shop-type }
+        back: { slot: 45, template: jobs-back }
+      regions:
+        offers: { slots: [10, 11, 12, 14, 15, 16, 19, 20, 21, 23, 24, 25, 28, 29, 30, 32, 33, 34, 37, 38, 39, 41, 42, 43] }
+    treasure-pools:
+      schema-version: 1
+      rows: 6
+      background: { template: background }
+      elements:
+        back: { slot: 45, template: treasure-back }
+        previous: { slot: 48, template: menu-previous }
+        next: { slot: 50, template: menu-next }
+        create: { slot: 53, template: treasure-create-pool }
+      regions:
+        pools: { slots: ['0-44'] }
+      pagination: { region: pools, previous: previous, next: next }
+    treasure-pool:
+      schema-version: 1
+      rows: 6
+      background: { template: background }
+      elements:
+        back: { slot: 45, template: treasure-back }
+        previous: { slot: 47, template: menu-previous }
+        next: { slot: 48, template: menu-next }
+        messages: { slot: 49, template: treasure-pool-messages }
+        add-item: { slot: 50, template: treasure-action }
+        add-money: { slot: 51, template: treasure-action }
+        add-command: { slot: 52, template: treasure-action }
+        delete: { slot: 53, template: treasure-delete-pool }
+      regions:
+        treasures: { slots: ['0-44'] }
+      pagination: { region: treasures, previous: previous, next: next }
+    treasure-edit:
+      schema-version: 1
+      rows: 2
+      background: { template: background }
+      elements:
+        weight: { slot: 1, template: treasure-edit-weight }
+        amount: { slot: 2, template: treasure-edit-amount }
+        messages: { slot: 4, template: treasure-edit-messages }
+        delete: { slot: 7, template: treasure-edit-delete }
+        back: { slot: 9, template: treasure-back }
+    board:
+      schema-version: 1
+      rows: 6
+      background: { template: background }
+      elements:
+        back: { slot: 45, template: board-back }
+        previous: { slot: 48, template: menu-previous }
+        next: { slot: 50, template: menu-next }
+        publish: { slot: 53, template: board-publish }
+      regions:
+        board-entries: { slots: ['0-44'] }
+      pagination: { region: board-entries, previous: previous, next: next }
+    board-rate:
+      schema-version: 1
+      rows: 2
+      background: { template: background }
+      elements:
+        up: { slot: 1, template: board-rate-action }
+        down: { slot: 3, template: board-rate-action }
+        report: { slot: 7, template: board-rate-action }
+        back: { slot: 9, template: board-rate-back }
+    board-edit:
+      schema-version: 1
+      rows: 2
+      background: { template: background }
+      elements:
+        title: { slot: 1, template: board-edit-field }
+        description: { slot: 3, template: board-edit-field }
+        color: { slot: 4, template: board-edit-color }
+        icon: { slot: 5, template: board-edit-icon }
+        type: { slot: 7, template: board-edit-type }
+        back: { slot: 9, template: board-back }
+        delete: { slot: 13, template: board-edit-delete }
+        publish: { slot: 17, template: board-edit-submit }
+    mount-list:
+      schema-version: 1
+      rows: 6
+      elements:
+        info: { slot: 4, template: background }
+        back: { slot: 45, template: background }
+        previous: { slot: 48, template: background }
+        filter: { slot: 49, template: background }
+        next: { slot: 50, template: background }
+      regions:
+        mounts: { slots: [10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43] }
+    mount-detail:
+      schema-version: 1
+      rows: 5
+      elements:
+        icon: { slot: 4, template: background }
+        favorite: { slot: 13, template: background }
+        upgrade: { slot: 20, template: background }
+        summon: { slot: 22, template: background }
+        glow: { slot: 24, template: background }
+        back: { slot: 36, template: background }
+        skins: { slot: 40, template: background }
+        whistle: { slot: 42, template: background }
+      regions:
+        abilities: { slots: [29, 30, 31, 32, 33] }
+    mount-progression:
+      schema-version: 1
+      rows: 6
+      elements:
+        info: { slot: 4, template: background }
+        level: { slot: 13, template: background }
+        back: { slot: 45, template: background }
+        rider-view: { slot: 49, template: background }
+      regions:
+        speeds: { slots: ['20-24'] }
+        steps: { slots: ['29-33'] }
+        sizes: { slots: ['38-42'] }
+    mount-skins:
+      schema-version: 1
+      rows: 6
+      elements:
+        back: { slot: 45, template: background }
+      regions:
+        skins: { slots: [10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34] }
+    mount-confirm:
+      schema-version: 1
+      rows: 3
+      elements:
+        cancel: { slot: 11, template: background }
+        info: { slot: 13, template: background }
+        accept: { slot: 15, template: background }
+    stock-symbols:
+      schema-version: 1
+      rows: 4
+      background: { template: background }
+      elements:
+        market: { slot: 4, template: background }
+        back: { slot: 27, template: background }
+        all: { slot: 31, template: background }
+        profile: { slot: 35, template: background }
+      regions:
+        symbols: { slots: ['9-26'] }
+    stock-positions:
+      schema-version: 1
+      rows: 6
+      background: { template: background }
+      elements:
+        back: { slot: 45, template: background }
+        create: { slot: 49, template: background }
+        profile: { slot: 53, template: background }
+      regions:
+        positions: { slots: ['0-44'] }
+    stock-profile:
+      schema-version: 1
+      rows: 2
+      background: { template: background }
+      elements:
+        statistics: { slot: 1, template: background }
+        balance: { slot: 3, template: background }
+        auto: { slot: 5, template: background }
+        back: { slot: 9, template: background }
+    stock-position:
+      schema-version: 1
+      rows: 2
+      background: { template: background }
+      elements:
+        info: { slot: 1, template: background }
+        close: { slot: 7, template: background }
+        back: { slot: 9, template: background }
+    stock-create:
+      schema-version: 1
+      rows: 2
+      background: { template: background }
+      elements:
+        amount: { slot: 0, template: background }
+        type: { slot: 2, template: background }
+        leverage: { slot: 4, template: background }
+        upper: { slot: 6, template: background }
+        lower: { slot: 7, template: background }
+        back: { slot: 9, template: background }
+        create: { slot: 8, template: background }
+    # The store keeps a custom transactional click controller, but its physical
+    # topology is owned by this validated catalog. The region order maps to
+    # logical StoreData slots and therefore may be rearranged freely.
+    store-2:
+      schema-version: 1
+      rows: 2
+      background: { template: background }
+      elements:
+        back: { slot: 9, template: store-back }
+      regions:
+        store-items: { slots: ['0-8'] }
+    store-3:
+      schema-version: 1
+      rows: 3
+      background: { template: background }
+      elements:
+        back: { slot: 18, template: store-back }
+      regions:
+        store-items: { slots: ['0-17'] }
+    store-4:
+      schema-version: 1
+      rows: 4
+      background: { template: background }
+      elements:
+        back: { slot: 27, template: store-back }
+      regions:
+        store-items: { slots: ['0-26'] }
+    store-5:
+      schema-version: 1
+      rows: 5
+      background: { template: background }
+      elements:
+        back: { slot: 36, template: store-back }
+      regions:
+        store-items: { slots: ['0-35'] }
+    store-6:
+      schema-version: 1
+      rows: 6
+      background: { template: background }
+      elements:
+        back: { slot: 45, template: store-back }
+      regions:
+        store-items: { slots: ['0-44'] }
+
+  templates:
+    background:
+      material: GRAY_STAINED_GLASS_PANE
+      hide-tooltip: true
+    store-back:
+      material: BLUE_STAINED_GLASS_PANE
+      custom-model-data: 11013
+      name: '<gray>« Назад'
+      lore: []
+    investigation-start:
+      material: WRITABLE_BOOK
+      name: '<green><bold>Взять дело за <fee> <white>💰</white>'
+      lore:
+        - '<white>Фома выдаст вам предмет <gold>«Дело»<white>.'
+        - '<gray>В нём записаны происшествие, вопрос и свидетели.'
+        - ''
+        - '<gray>Награда: <gold><reward> <white>💰</white>'
+        - '<gray>Время: <white><duration>'
+        - '<gray>Повтор: <white><cooldown>'
+        - ''
+        - '<action>'
+    investigation-contracts:
+      material: CHEST
+      name: '<aqua>Заказы бюро'
+      lore:
+        - '<gray>Отдельные поставки книг, чернил и золота.'
+        - '<action>'
+    investigation-next-step:
+      material: COMPASS
+      name: '<yellow><bold>Что делать сейчас'
+      lore:
+        - '<time>'
+        - '<gray>Показания: <white><clues>/5'
+        - ''
+        - { repeat: directions, text: '<line>' }
+        - { repeat: warnings, text: '<line>' }
+    investigation-dossier:
+      material: WRITABLE_BOOK
+      name: '<gold><bold><title>'
+      lore:
+        - { repeat: dossier, text: '<line>' }
+    investigation-evidence:
+      material: RECOVERY_COMPASS
+      name: '<aqua><bold>Хронология и связи'
+      lore:
+        - '<aqua>Хронология'
+        - { repeat: timeline, text: '<line>' }
+        - ''
+        - { text: '<light_purple>Установленные связи', when: has-links }
+        - { text: '<light_purple>Связи', unless: has-links }
+        - { repeat: links, text: '<line>' }
+    investigation-return:
+      material: EMERALD
+      name: '<green><bold>Вернуться к Фоме'
+      lore:
+        - '<gray>Собрано показаний: <white><clues>/5<gray>.'
+        - { text: '<green>Фома готов принять ваш вердикт.', when: ready }
+        - { text: '<dark_gray>Нужно ещё <missing> показания.', unless: ready }
+        - '<gray>Версии открываются только при разговоре с Фомой.'
+        - '<red>Ошибка сразу закрывает дело.'
+        - ''
+        - '<action>'
+    investigation-witness:
+      material: PAPER
+      name: '<yellow><bold><name>'
+      lore:
+        - { text: '<gray>Где искать: <white><location><gray>.', unless: collected }
+        - { text: '<dark_gray>Опрос проводится только лично.', unless: collected }
+        - { repeat: body, text: '<line>', when: collected }
+    investigation-question:
+      material: TARGET
+      name: '<yellow><bold><question>'
+      lore:
+        - '<gray>Выберите версию, которая объясняет всю цепочку.'
+        - '<red>Ошибочный вердикт сразу закроет дело.'
+    investigation-verdict:
+      material: PAPER
+      name: '<gold><bold><title>'
+      lore:
+        - { repeat: explanation, text: '<gray><line>' }
+        - ''
+        - { text: '<red>Нажмите, чтобы вынести вердикт.', when: ready }
+        - { text: '<dark_gray>Сначала соберите три показания.', unless: ready }
+    investigation-verdict-one:
+      material: PAPER
+      name: '<gold><bold><title>'
+      lore: &verdict-lore
+        - { repeat: explanation, text: '<gray><line>' }
+        - ''
+        - { text: '<red>Нажмите, чтобы вынести вердикт.', when: ready }
+        - { text: '<dark_gray>Сначала соберите три показания.', unless: ready }
+    investigation-verdict-two:
+      material: MAP
+      name: '<gold><bold><title>'
+      lore: *verdict-lore
+    investigation-verdict-three:
+      material: NAME_TAG
+      name: '<gold><bold><title>'
+      lore: *verdict-lore
+    investigation-verdict-four:
+      material: WRITTEN_BOOK
+      name: '<gold><bold><title>'
+      lore: *verdict-lore
+    investigation-verdict-five:
+      material: LIME_DYE
+      name: '<gold><bold><title>'
+      lore: *verdict-lore
+    investigation-back:
+      material: BLUE_STAINED_GLASS_PANE
+      name: '<aqua>Вернуться к материалам'
+      lore:
+        - '<action>'
+    investigation-testimony:
+      material: PAPER
+      name: '<gold><bold><name>'
+      lore:
+        - { repeat: testimony, text: '<line>' }
+    contracts-list-info:
+      material: PAPER
+      name: '<heading>'
+      lore:
+        - '<description-one>'
+        - '<description-two>'
+        - ''
+        - '<white>Выберите заказ ниже.'
+    contracts-list-empty:
+      material: BARRIER
+      name: '<yellow>Сейчас заказов нет'
+      lore: ['<empty>']
+    contracts-order:
+      material: PAPER
+      name: '<gold><bold><contract-name>'
+      lore:
+        - '<gray>Осталось по заказу: <white><remaining><gray>/<white><target>'
+        - '<gray>У вас в инвентаре: <white><available>'
+        - '<gray>Ваш лимит: <white><player-remaining>'
+        - '<gray>Награда: <gold><payout> <white>💰</white> <gray>за единицу'
+        - '<gray>Ранг: <gold>+<cap-bonus>% <gray>к лимиту • <gold>+<payout-bonus>% <gray>к выплате'
+        - '<gray>До: <white><ends-at>'
+        - ''
+        - '<action>'
+    contracts-detail-resource:
+      material: PAPER
+      name: '<gold><bold><contract-name>'
+      lore:
+        - '<gray>У вас: <white><available>'
+        - '<gray>Осталось по заказу: <white><remaining>'
+        - '<gray>Ваш лимит: <white><player-remaining>'
+        - ''
+        - '<dark_gray>Принимаются только обычные предметы'
+        - '<dark_gray>без имени, чар и особых данных.'
+    contracts-detail-info:
+      material: PAPER
+      name: '<heading>'
+      lore:
+        - '<gray>Собрано: <white><accepted><gray>/<white><target>'
+        - '<gray>Участников: <white><contributors>'
+        - ''
+        - '<gray>Объём общий для всего сервера.'
+    contracts-detail-payout:
+      material: GOLD_NUGGET
+      name: '<gold><bold>Выплата:</bold> <payout> <white>💰</white>'
+      lore:
+        - '<gray>Ставка: <gold><per-unit> <white>💰</white> <gray>за единицу.'
+        - '<gray>Надбавка ранга: <gold>+<payout-bonus>%'
+    contracts-detail-quantity:
+      material: PAPER
+      name: '<white><bold>Сдать: <selected>'
+      lore:
+        - '<gray>Минимальная партия: <white><minimum>'
+        - '<gray>Доступно сейчас: <white><maximum>'
+        - ''
+        - '<yellow>ЛКМ <gray>— добавить партию'
+        - '<yellow>ПКМ <gray>— убрать партию'
+        - '<yellow>Shift + ЛКМ <gray>— выбрать максимум'
+        - '<yellow>Shift + ПКМ <gray>— выбрать минимум'
+    contracts-detail-back:
+      material: BLUE_STAINED_GLASS_PANE
+      name: '<yellow><bold>Назад'
+      lore: ['<gray>Вернуться к книге заказов.']
+    contracts-detail-confirm:
+      material: GREEN_STAINED_GLASS_PANE
+      name: '<green><bold>Подтвердить'
+      lore:
+        - { text: '<gray>Будет принято: <white><selected>', when: can-submit }
+        - { text: '<gray>Выплата: <gold><payout> <white>💰</white>', when: can-submit }
+        - { text: '', when: can-submit }
+        - { text: '<green>ЛКМ: подтвердить сдачу.', when: can-submit }
+        - { text: '<red>Сдача недоступна', unless: can-submit }
+        - { text: '<gray>Не хватает минимальной партии.', unless: can-submit }
+    scheduled-refresh:
+      material: CLOCK
+      name: '<yellow>Обновить'
+      lore: ['<gray>Нажмите для обновления списка']
+    scheduled-entry-enabled:
+      material: LIME_CANDLE
+      item-flags: [HIDE_ATTRIBUTES]
+      name: '<green><id>'
+      lore: &scheduled-entry-lore
+        - '<gray><schedule>'
+        - '<dark_gray><command>'
+        - '<gray>Серверы: <white><servers>'
+        - ''
+        - '<action>'
+    scheduled-entry-disabled:
+      material: GRAY_CANDLE
+      item-flags: [HIDE_ATTRIBUTES]
+      name: '<red><id> <gray>(выкл.)'
+      lore: *scheduled-entry-lore
+    elite-loot-previous:
+      material: BLUE_STAINED_GLASS_PANE
+      name: '<gray>« Предыдущая страница'
+      lore: ['', '<dark_gray>Нажмите для перехода']
+    elite-loot-next:
+      material: BLUE_STAINED_GLASS_PANE
+      name: '<gray>Следующая страница »'
+      lore: ['', '<dark_gray>Нажмите для перехода']
+    elite-loot-back:
+      material: BLUE_STAINED_GLASS_PANE
+      name: '<gray>« Назад'
+      lore: ['', '<dark_gray>Вернуться в меню']
+    parkour-category:
+      material: COMPASS
+      name: '<category>'
+      lore:
+        - { repeat: description, text: '<line>' }
+        - ''
+        - '<gray>Готово трасс: <white><ready>'
+        - ''
+        - '<aqua>Нажмите — открыть трассы'
+    parkour-course:
+      material: FEATHER
+      name: '<gold><bold><course>'
+      glint: false
+      lore:
+        - { text: '<green>✔ Вы уже проходили эту трассу', when: completed }
+        - { text: '<gray>Ещё не пройдена', unless: completed }
+        - ''
+        - '<gray>Контрольных точек: <white><checkpoints>'
+        - '<gray>Сейчас на трассе: <white><players>'
+        - ''
+        - '<aqua>Нажмите — начать трассу'
+    parkour-back:
+      material: BLUE_STAINED_GLASS_PANE
+      custom-model-data: 11013
+      name: '<gray>« Назад'
+      lore: []
+    catalog-root-entry:
+      material: CHEST
+      name: '<gold><bold><name>'
+      lore:
+        - { repeat: description, text: '<gray><line>' }
+        - '<gray>Подкатегорий: <white><categories>'
+        - '<gray>Предметов: <white><items>'
+        - ''
+        - '<aqua><action>'
+    catalog-category:
+      material: CHEST
+      name: '<gold><bold><name>'
+      lore:
+        - '<gray>Предметов: <white><items>'
+        - ''
+        - '<aqua><action>'
+    catalog-preview:
+      material: PAPER
+      name: '<name>'
+      lore:
+        - { repeat: original, text: '<line>' }
+        - ''
+        - '<dark_gray>ID: <white><id>'
+        - '<aqua><action>'
+    catalog-back:
+      material: BLUE_STAINED_GLASS_PANE
+      custom-model-data: 11013
+      name: '<gray>« Назад'
+      lore: []
+    catalog-previous:
+      material: BLUE_STAINED_GLASS_PANE
+      name: '<gray>« Предыдущая страница'
+      lore: []
+    catalog-page:
+      material: MAP
+      name: '<gold>Страница <page> из <pages>'
+      lore: ['<gray>Показано <shown> из <total>']
+    catalog-next:
+      material: BLUE_STAINED_GLASS_PANE
+      name: '<gray>Следующая страница »'
+      lore: []
+    em-shop-change:
+      material: GREEN_STAINED_GLASS_PANE
+      name: '<gold>Сменить тип товаров'
+      lore: ['<gray>Текущий тип: <green><type>']
+    em-shop-update:
+      material: PAPER
+      custom-model-data: 31173
+      name: '<gold>Обновление ассортимента'
+      lore:
+        - '<gray>Обновление через: <green><minutes> мин.'
+        - '<gray>Баланс: <green><balance>'
+        - '<dark_gray>Покупатель: <player>'
+    em-shop-item:
+      material: PAPER
+      name: '<name>'
+      lore:
+        - '<gold>Цена: <price>'
+        - ''
+        - { repeat: original, text: '<line>' }
+    scheduled-edit-command:
+      material: COMMAND_BLOCK
+      name: '<green>Команда'
+      lore: ['<white><command>', '', '<gray>Нажмите, чтобы изменить']
+    scheduled-edit-id:
+      material: NAME_TAG
+      name: '<green>ID расписания'
+      lore: ['<white><id>', '', '<gray>Нажмите, чтобы переименовать']
+    scheduled-edit-value-cron:
+      material: CLOCK
+      name: '<green>Расписание'
+      lore: &scheduled-value-lore
+        - '<white><value>'
+        - ''
+        - '<gray>ЛКМ — изменить значение'
+        - { text: '<gray>Shift+ЛКМ — дни недели', when: weekly }
+        - { text: '<dark_gray><hint>', unless: weekly }
+    scheduled-edit-value-interval:
+      material: HOPPER
+      name: '<green>Расписание'
+      lore: *scheduled-value-lore
+    scheduled-edit-value-time:
+      material: PAPER
+      name: '<green>Расписание'
+      lore: *scheduled-value-lore
+    scheduled-edit-type:
+      material: REPEATER
+      name: '<green>Тип расписания'
+      lore: ['<yellow><type>', '', '<gray>Нажмите, чтобы сменить']
+    scheduled-edit-servers:
+      material: COMPASS
+      name: '<green>Серверы'
+      lore: ['<yellow><servers>', '', '<gray>Нажмите, чтобы сменить']
+    scheduled-edit-enabled:
+      material: GRAY_DYE
+      name: '<red>Выключено'
+      lore:
+        - { text: '<green>Включено', when: enabled }
+        - { text: '<red>Выключено', unless: enabled }
+        - '<gray>Нажмите, чтобы переключить'
+    scheduled-edit-enabled-on:
+      material: LIME_DYE
+      name: '<green>Включено'
+      lore: ['<gray>Нажмите, чтобы переключить']
+    scheduled-edit-enabled-off:
+      material: GRAY_DYE
+      name: '<red>Выключено'
+      lore: ['<gray>Нажмите, чтобы переключить']
+    scheduled-edit-back:
+      material: BLUE_STAINED_GLASS_PANE
+      custom-model-data: 11013
+      name: '<gray>« Назад'
+      lore: []
+    scheduled-edit-run-now:
+      material: REDSTONE_BLOCK
+      name: '<gold>Запустить сейчас'
+      lore: ['<gray>Выполнить без ожидания расписания']
+    scheduled-edit-save:
+      material: GREEN_STAINED_GLASS_PANE
+      custom-model-data: 11007
+      name: '<green>Сохранить'
+      lore: ['<gray>Записать в scheduled-commands.yml']
+    baltop-entry:
+      material: PLAYER_HEAD
+      name: '<gold><player>'
+      lore:
+        - '<gray>Всего: <green><total><white>💰'
+        - ''
+        - '<gray>Баланс: <green><balance><white>💰'
+        - '<gray>Банк: <green><bank><white>💰'
+    baltop-sort:
+      material: HOPPER
+      name: '<gray>Сортировка: <white><sort>'
+      lore: ['<aqua>Нажмите — сменить порядок']
+    baltop-back:
+      material: BLUE_STAINED_GLASS_PANE
+      custom-model-data: 11013
+      name: '<gray>« Назад'
+      lore: []
+    menu-previous:
+      material: BLUE_STAINED_GLASS_PANE
+      name: '<gray>« Предыдущая страница'
+      lore: []
+    menu-next:
+      material: BLUE_STAINED_GLASS_PANE
+      name: '<gray>Следующая страница »'
+      lore: []
+    join-message-entry:
+      material: PAPER
+      name: '<name>'
+      lore: [{ repeat: lore, text: '<line>' }]
+    join-message-switch:
+      material: CLOCK
+      name: '<gold>Сменить режим'
+      lore: ['<gray>Сейчас: <white><mode>']
+    join-message-back:
+      material: BLUE_STAINED_GLASS_PANE
+      custom-model-data: 11013
+      name: '<gray>« Назад'
+      lore: []
+    jobs-entry:
+      material: PAPER
+      name: '<job>'
+      lore:
+        - '<gray>Опыт: <white><exp>%'
+        - '<gray>Деньги: <white><money>%'
+        - '<gray>Очки: <white><points>%'
+        - ''
+        - '<aqua>Нажмите — открыть бусты профессии'
+    jobs-back:
+      material: BLUE_STAINED_GLASS_PANE
+      custom-model-data: 11013
+      name: '<gray>« Назад'
+      lore: []
+    jobs-buy:
+      material: GREEN_STAINED_GLASS_PANE
+      name: '<green>Купить буст'
+      lore: ['<gray>Открыть магазин усилений']
+    job-base-boost:
+      material: DIAMOND
+      name: '<gold><type> <green>+<boost>%'
+      lore: ['<gray>Буст от привилегий']
+    job-player-boost:
+      material: DIAMOND
+      name: '<gold><type> <green>+<amount>%'
+      lore: ['<gray>Истечёт через: <white><expire>', '<dark_gray>ID: <id>']
+    boost-shop-type:
+      material: GOLD_INGOT
+      name: '<gold>Тип буста: <yellow><type>'
+      lore: ['', '<gray>Нажмите для смены типа']
+    boost-shop-offer:
+      material: GOLD_INGOT
+      name: '<name>'
+      lore:
+        - { repeat: details, text: '<line>' }
+        - ''
+        - '<gray>Цена: <white><price> <currency>'
+        - '<gray>Усиление: <green><boost>'
+        - '<gray>Время: <white><time>'
+        - '<gray>Тип: <white><type>'
+        - '<gray>Профессии: <white><job>'
+        - '<gray>Ваш баланс: <white><player-currency>'
+        - { text: '<red>У вас уже есть этот буст', when: owned }
+        - { text: '<red>Нет права: <permission>', when: no-permission }
+        - { text: '<red>Не хватает: <currency-lack>', when: no-funds }
+        - { text: '<green>Нажмите — купить', when: available }
+    treasure-pool-entry:
+      material: CHEST
+      name: '<yellow><pool>'
+      lore: ['<gray>Предметов: <white><size>', '<gray>Общий вес: <white><weight>', '', '<aqua>Нажмите — открыть пул']
+    treasure-create-pool:
+      material: LIME_DYE
+      name: '<green>Создать пул'
+      lore: ['<gray>Нажмите и введите уникальный ID']
+    treasure-pool-messages:
+      material: BOOK
+      name: '<gold>Сообщения пула'
+      lore:
+        - { text: '<gray>Нет сообщений пула', when: empty }
+        - { text: '<gray>Сообщений: <white><count>', unless: empty }
+        - { repeat: messages, text: '<dark_gray>• <line>' }
+        - ''
+        - '<yellow>ЛКМ — добавить сообщение'
+        - '<red>ПКМ — очистить все'
+    treasure-action:
+      material: DIAMOND
+      name: '<name>'
+      lore: ['<gray><action>']
+    treasure-delete-pool:
+      material: BARRIER
+      name: '<red>Удалить пул'
+      lore: ['<red>Shift + клик — удалить безвозвратно']
+    treasure-entry:
+      material: CHEST
+      name: '<name>'
+      lore:
+        - { repeat: original, text: '<line>' }
+        - ''
+        - '<gray>Тип: <white><type>'
+        - '<gray>Вес: <white><weight>'
+        - '<yellow>ЛКМ — редактировать'
+        - '<red>ПКМ — удалить'
+    treasure-edit-weight:
+      material: ANVIL
+      name: '<gold>Вес: <white><weight>'
+      lore: ['<gray>Нажмите — изменить вес']
+    treasure-edit-amount:
+      material: PAPER
+      name: '<gold><name>'
+      lore: ['<gray><value>', '', '<gray>Нажмите — изменить']
+    treasure-edit-messages:
+      material: WRITABLE_BOOK
+      name: '<gold>Сообщения'
+      lore:
+        - { text: '<gray>Нет сообщений', when: empty }
+        - { text: '<gray>Сообщений: <white><count>', unless: empty }
+        - { repeat: messages, text: '<dark_gray>• <line>' }
+        - ''
+        - '<yellow>ЛКМ — добавить сообщение'
+        - '<red>ПКМ — очистить все'
+    treasure-edit-delete:
+      material: BARRIER
+      name: '<red>Удалить награду'
+      lore: ['<gray>Нажмите — удалить']
+    treasure-back:
+      material: BLUE_STAINED_GLASS_PANE
+      custom-model-data: 11013
+      name: '<gray>« Назад'
+      lore: []
+    board-contract:
+      material: WRITABLE_BOOK
+      name: '<gold>Заказ сервера: <white><name>'
+      lore:
+        - '<dark_gray>Системное объявление · <status>'
+        - ''
+        - '<gray>Ресурс: <white><item>'
+        - '<gray>Сдано: <white><accepted>/<target> <dark_gray>(<progress>%)'
+        - '<gray>В обработке: <white><reserved>'
+        - '<gray>Осталось: <white><remaining>'
+        - '<gray>Награда: <green><payout>/шт.'
+        - '<gray>Остаток бюджета: <green><budget>'
+        - '<gray>До: <white><ends>'
+        - ''
+        - '<action>'
+    board-contract-empty:
+      material: WRITABLE_BOOK
+      name: '<gold>Заказы сервера'
+      lore: ['<gray>Статус: <state>', '', '<gray>Активных заказов пока нет.', '<gray>Недельный лимит: <green><budget>']
+    board-publish:
+      material: PLAYER_HEAD
+      custom-model-data: 11010
+      name: '<green>Опубликовать объявление'
+      lore: ['<gray>Стоимость: <gold><cost>', '', '<yellow>Нажмите для создания']
+    board-back:
+      material: BLUE_STAINED_GLASS_PANE
+      custom-model-data: 11013
+      name: '<gray>« Назад'
+      lore: []
+    board-rate-action:
+      material: PAPER
+      name: '<name>'
+      lore:
+        - { text: '<dark_red>Вы уже выбрали это действие', when: applied }
+        - { text: '<gray>Нажмите для подтверждения', unless: applied }
+    board-rate-back:
+      material: BLUE_STAINED_GLASS_PANE
+      custom-model-data: 11013
+      name: '<gray>« Назад'
+      lore: []
+    board-edit-field:
+      material: PAPER
+      name: '<name>'
+      lore:
+        - '<white><value>'
+        - { repeat: details, text: '<line>' }
+        - ''
+        - '<gray><action>'
+    board-edit-color:
+      material: YELLOW_DYE
+      name: '<green>Цвет'
+      lore: ['<gray>Цвет панели: <white><color>', '', '<gray>Нажмите — следующий цвет']
+    board-edit-type:
+      material: PAPER
+      name: '<type>'
+      lore: ['<green>Тип сообщения', '<gray>Нажмите — сменить']
+    board-edit-icon:
+      material: PLAYER_HEAD
+      name: '<green>Иконка'
+      lore: ['<gray>Кликните предметом на курсоре, чтобы установить']
+    board-edit-submit:
+      material: GREEN_STAINED_GLASS_PANE
+      custom-model-data: 11007
+      name: '<green><action>'
+      lore: ['<gray>Стоимость: <gold><cost>']
+    board-edit-delete:
+      material: RED_STAINED_GLASS_PANE
+      custom-model-data: 11002
+      name: '<red>Удалить'
+      lore:
+        - { text: '<red>Нажмите ещё раз для подтверждения', when: confirm }
+        - { text: '<gray>Нажмите — удалить объявление', unless: confirm }

@@ -1,6 +1,6 @@
 package ru.arc.board.guis
 
-import com.github.stefvanschie.inventoryframework.gui.type.ChestGui
+import net.kyori.adventure.text.Component
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import ru.arc.ARC
@@ -9,169 +9,60 @@ import ru.arc.board.BoardEntryData
 import ru.arc.board.BoardManager
 import ru.arc.config.BoardConfig
 import ru.arc.config.ConfigManager
-import ru.arc.gui.gui
-import ru.arc.util.GuiUtils
-import ru.arc.util.TextUtil.mm
+import ru.arc.gui.ArcMenuSchema
+import ru.arc.gui.ArcMenus
+import ru.arc.paper.menu.PaperMenuItemRenderContext
 
-/**
- * Factory for creating RateBoardGui.
- */
 object RateBoardGuiFactory {
-    private val boardConfig get() = ConfigManager.ofModule(ARC.instance.dataFolder.toPath(), "board.yml")
+    private val config get() = ConfigManager.ofModule(ARC.instance.dataFolder.toPath(), "board.yml")
 
-    /**
-     * Creates a rating GUI for the given board entry.
-     */
-    fun create(
-        player: Player,
-        entry: BoardEntryData,
-    ): ChestGui {
-        val hasUpRated = entry.hasRated(player) == 1
-        val hasDownRated = entry.hasRated(player) == -1
-        val hasReported = entry.hasReported(player)
-
-        return gui(
-            title = BoardConfig.rateGuiName,
-            rows = 2,
-            player = player,
-            config = boardConfig,
-        ) {
-            background()
-
-            staticPane(0, 0, 9, 2) {
-                // Up vote button
-                item(1, 0) {
-                    material(Material.GREEN_STAINED_GLASS_PANE)
-                    display("<green>Оценить положительно")
-                    lore(emptyList())
-                    fromConfig(boardConfig, "rate-menu.up")
-                    if (hasUpRated) {
-                        display(boardConfig.string("rate-menu.already-rate", "<dark_red>Вы уже поставили эту оценку"))
-                    }
-                    onClick { click ->
-                        val clickedItem = click.currentItem ?: return@onClick
-                        handleUpVote(player, entry, clickedItem) {
-                            GuiUtils.constructAndShowAsync({ create(player, entry) }, player)
-                        }
-                    }
-                }
-
-                // Down vote button
-                item(3, 0) {
-                    material(Material.RED_STAINED_GLASS_PANE)
-                    display("<red>Оценить отрицательно")
-                    lore(emptyList())
-                    fromConfig(boardConfig, "rate-menu.down")
-                    if (hasDownRated) {
-                        display(boardConfig.string("rate-menu.already-rate", "<dark_red>Вы уже поставили эту оценку"))
-                    }
-                    onClick { click ->
-                        val clickedItem = click.currentItem ?: return@onClick
-                        handleDownVote(player, entry, clickedItem) {
-                            GuiUtils.constructAndShowAsync({ create(player, entry) }, player)
-                        }
-                    }
-                }
-
-                // Report button
-                item(7, 0) {
-                    material(Material.PURPLE_STAINED_GLASS_PANE)
-                    display("<dark_red>Пожаловаться")
-                    lore(emptyList())
-                    fromConfig(boardConfig, "rate-menu.report")
-                    if (hasReported) {
-                        display(boardConfig.string("rate-menu.already-report", "<dark_red>Вы уже пожаловались!"))
-                    }
-                    onClick { click ->
-                        val clickedItem = click.currentItem ?: return@onClick
-                        handleReport(player, entry, clickedItem) {
-                            GuiUtils.constructAndShowAsync({ create(player, entry) }, player)
-                        }
-                    }
-                }
-
-                // Back button
-                item(0, 1) {
-                    material(Material.BLUE_STAINED_GLASS_PANE)
-                    modelData(11013)
-                    display("<gray>Назад")
-                    onClick {
-                        GuiUtils.constructAndShowAsync({ BoardGuiFactory.createForPlayer(player) }, player)
-                    }
-                }
-            }
-        }
-    }
-
-    // ==================== Vote Handlers ====================
-
-    private fun handleUpVote(
-        player: Player,
-        entry: BoardEntryData,
-        item: org.bukkit.inventory.ItemStack,
-        refresh: () -> Unit,
-    ) {
-        when (entry.tryRate(player, 1)) {
-            BoardActionResult.NOT_ALLOWED ->
-                showTemporaryMessage(item, "rate-menu.cant-rate", refresh)
-            BoardActionResult.ALREADY_APPLIED ->
-                showTemporaryMessage(item, "rate-menu.already-rate", refresh)
-            BoardActionResult.APPLIED -> {
-                BoardManager.saveEntry(entry)
-                showTemporaryMessage(item, "rate-menu.success-rate", refresh, permanent = true)
-            }
-        }
-    }
-
-    private fun handleDownVote(
-        player: Player,
-        entry: BoardEntryData,
-        item: org.bukkit.inventory.ItemStack,
-        refresh: () -> Unit,
-    ) {
-        when (entry.tryRate(player, -1)) {
-            BoardActionResult.NOT_ALLOWED ->
-                showTemporaryMessage(item, "rate-menu.cant-rate", refresh)
-            BoardActionResult.ALREADY_APPLIED ->
-                showTemporaryMessage(item, "rate-menu.already-rate", refresh)
-            BoardActionResult.APPLIED -> {
-                BoardManager.saveEntry(entry)
-                showTemporaryMessage(item, "rate-menu.success-rate", refresh, permanent = true)
-            }
-        }
-    }
-
-    private fun handleReport(
-        player: Player,
-        entry: BoardEntryData,
-        item: org.bukkit.inventory.ItemStack,
-        refresh: () -> Unit,
-    ) {
-        when (entry.tryReport(player)) {
-            BoardActionResult.NOT_ALLOWED ->
-                showTemporaryMessage(item, "rate-menu.cant-rate", refresh)
-            BoardActionResult.ALREADY_APPLIED ->
-                showTemporaryMessage(item, "rate-menu.already-report", refresh)
-            BoardActionResult.APPLIED -> {
-                BoardManager.saveEntry(entry)
-                showTemporaryMessage(item, "rate-menu.success-report", refresh)
-            }
-        }
-    }
-
-    private fun showTemporaryMessage(
-        item: org.bukkit.inventory.ItemStack,
-        configKey: String,
-        refresh: () -> Unit,
-        permanent: Boolean = false,
-    ) {
-        val ticks = if (permanent) -1L else 60L
-        GuiUtils.temporaryChange(
-            item,
-            mm(boardConfig.string(configKey, configKey), true),
-            null,
-            ticks,
-            refresh,
+    fun open(player: Player, entry: BoardEntryData) {
+        ArcMenus.open(
+            player,
+            ArcMenuSchema.BOARD_RATE,
+            net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(BoardConfig.rateGuiName),
+            elements = mapOf(
+                "up" to action("<green>Оценить положительно", Material.GREEN_STAINED_GLASS_PANE, entry.hasRated(player) == 1) {
+                    handle(player, entry.tryRate(player, 1), "rate-menu.cant-rate", "rate-menu.already-rate", "rate-menu.success-rate") { BoardManager.saveEntry(entry) }
+                    open(player, entry)
+                },
+                "down" to action("<red>Оценить отрицательно", Material.RED_STAINED_GLASS_PANE, entry.hasRated(player) == -1) {
+                    handle(player, entry.tryRate(player, -1), "rate-menu.cant-rate", "rate-menu.already-rate", "rate-menu.success-rate") { BoardManager.saveEntry(entry) }
+                    open(player, entry)
+                },
+                "report" to action("<dark_red>Пожаловаться", Material.PURPLE_STAINED_GLASS_PANE, entry.hasReported(player)) {
+                    handle(player, entry.tryReport(player), "rate-menu.cant-rate", "rate-menu.already-report", "rate-menu.success-report") { BoardManager.saveEntry(entry) }
+                    open(player, entry)
+                },
+                "back" to ArcMenus.entry(ArcMenus.item(ArcMenuSchema.BOARD_RATE, "back")) { BoardGuiFactory.open(it) },
+            ),
         )
+    }
+
+    private fun action(name: String, material: Material, applied: Boolean, block: () -> Unit) = ArcMenus.entry(
+        ArcMenus.item(
+            "board-rate-action",
+            PaperMenuItemRenderContext(
+                values = mapOf("name" to net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(name)),
+                flags = if (applied) setOf("applied") else emptySet(),
+            ),
+        ).withType(material),
+    ) { block() }
+
+    private fun handle(
+        player: Player,
+        result: BoardActionResult,
+        notAllowed: String,
+        already: String,
+        success: String,
+        save: () -> Unit,
+    ) {
+        val key = when (result) {
+            BoardActionResult.NOT_ALLOWED -> notAllowed
+            BoardActionResult.ALREADY_APPLIED -> already
+            BoardActionResult.APPLIED -> success
+        }
+        if (result == BoardActionResult.APPLIED) save()
+        player.sendActionBar(config.component(key, "<gray>$key"))
     }
 }

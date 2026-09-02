@@ -13,6 +13,9 @@ import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.event.inventory.InventoryClickEvent
 import ru.arc.config.StockConfig
+import ru.arc.gui.ArcMenuSchema
+import ru.arc.gui.ArcMenus
+import ru.arc.gui.GuiItems
 import ru.arc.core.modules.EconomyModule
 import ru.arc.stock.StockPlayer
 import ru.arc.stock.StockPlayerManager
@@ -30,7 +33,7 @@ class ProfileMenu(
     private val previous: Int,
     private val symbol: String?,
 ) : ChestGui(
-        2,
+        StockMenuTopology.rows(ArcMenuSchema.STOCK_PROFILE),
         TextHolder.deserialize(
             TextUtil.toLegacy(
                 StockConfig.string("profile-menu.menu-title"),
@@ -51,8 +54,8 @@ class ProfileMenu(
     }
 
     private fun setupNav() {
-        val pane = StaticPane(9, 1)
-        this.addPane(Slot.fromXY(0, 1), pane)
+        val pane = StaticPane(9, StockMenuTopology.rows(ArcMenuSchema.STOCK_PROFILE))
+        this.addPane(Slot.fromXY(0, 0), pane)
 
         back =
             guiItem(Material.BLUE_STAINED_GLASS_PANE) {
@@ -69,11 +72,15 @@ class ProfileMenu(
                 modelData(11013)
                 fromConfig(StockConfig.config(), "locale.profile-menu.back")
             }
-        pane.addItem(back, 0, 0)
+        pane.addItem(
+            back,
+            StockMenuTopology.localX(ArcMenuSchema.STOCK_PROFILE, "back"),
+            StockMenuTopology.localY(ArcMenuSchema.STOCK_PROFILE, "back"),
+        )
     }
 
     private fun setupButtons() {
-        val staticPane = StaticPane(9, 1)
+        val staticPane = StaticPane(9, StockMenuTopology.rows(ArcMenuSchema.STOCK_PROFILE))
         this.addPane(Slot.fromXY(0, 0), staticPane)
         val tagResolver = stockPlayer.tagResolver()
 
@@ -92,7 +99,11 @@ class ProfileMenu(
                 tagResolver(tagResolver)
                 fromConfig(StockConfig.config(), "locale.profile-menu.statistic")
             }
-        staticPane.addItem(statistic, 1, 0)
+        staticPane.addItem(
+            statistic,
+            StockMenuTopology.localX(ArcMenuSchema.STOCK_PROFILE, "statistics"),
+            StockMenuTopology.localY(ArcMenuSchema.STOCK_PROFILE, "statistics"),
+        )
 
         balance =
             guiItem(Material.STICK) {
@@ -107,7 +118,11 @@ class ProfileMenu(
                 tagResolver(tagResolver)
                 fromConfig(StockConfig.config(), "locale.profile-menu.balance")
             }
-        staticPane.addItem(balance, 3, 0)
+        staticPane.addItem(
+            balance,
+            StockMenuTopology.localX(ArcMenuSchema.STOCK_PROFILE, "balance"),
+            StockMenuTopology.localY(ArcMenuSchema.STOCK_PROFILE, "balance"),
+        )
 
         auto =
             guiItem(Material.LEVER) {
@@ -122,7 +137,11 @@ class ProfileMenu(
                 tagResolver(tagResolver)
                 fromConfig(StockConfig.config(), "locale.profile-menu.auto-take")
             }
-        staticPane.addItem(auto, 5, 0)
+        staticPane.addItem(
+            auto,
+            StockMenuTopology.localX(ArcMenuSchema.STOCK_PROFILE, "auto"),
+            StockMenuTopology.localY(ArcMenuSchema.STOCK_PROFILE, "auto"),
+        )
     }
 
     private fun buildAutoTakeItem() =
@@ -158,7 +177,7 @@ class ProfileMenu(
 
     private fun setupBackground() {
         val pane = OutlinePane(9, 2, Pane.Priority.LOWEST)
-        pane.addItem(GuiUtils.background())
+        pane.addItem(GuiItems.create(requireNotNull(ArcMenus.background(ArcMenuSchema.STOCK_PROFILE))))
         pane.setRepeat(true)
         this.addPane(Slot.fromXY(0, 0), pane)
     }

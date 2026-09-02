@@ -16,6 +16,8 @@ import org.bukkit.inventory.ItemFlag
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.java.JavaPlugin
 import ru.arc.core.Tasks
+import ru.arc.gui.ArcMenuSchema
+import ru.arc.gui.ArcMenus
 import ru.arc.util.Logging.error
 import ru.arc.util.TextUtil
 import kotlin.math.ceil
@@ -246,7 +248,7 @@ class MountGuiController(
         val config = configProvider()
         val mount = catalogProvider()[mountId] ?: return openList(player)
         val profile = ownership.profile(subject(player), mount)
-        val abilitySlots = centeredDetailAbilitySlots(mount.abilities.upgrades.size)
+        val abilitySlots = centeredSlots(DETAIL_ABILITY_SLOTS, mount.abilities.upgrades.size)
             .zip(mount.abilities.upgrades.map(MountAbilityUpgradeDefinition::id))
             .toMap()
         val holder = MountMenuHolder(MountScreen.DETAIL, mount.id, abilitiesBySlot = abilitySlots)
@@ -860,13 +862,7 @@ class MountGuiController(
 
     private fun subject(player: Player) = MountPermissionSubject(player.uniqueId, player.name, player::hasPermission)
 
-    private fun tuningSizeSlots(count: Int): List<Int> =
-        when (count) {
-            2 -> listOf(39, 41)
-            3 -> listOf(39, 40, 41)
-            4 -> listOf(38, 39, 41, 42)
-            else -> listOf(38, 39, 40, 41, 42)
-        }
+    private fun tuningSizeSlots(count: Int): List<Int> = centeredSlots(TUNING_SIZE_SLOTS, count)
     private fun send(player: Player, path: String, fallback: String) = player.sendMessage(component(configProvider().message(path, fallback)))
     private fun click(player: Player) = player.playSound(player.location, Sound.UI_BUTTON_CLICK, 0.7f, 1.1f)
     private fun bass(player: Player) = player.playSound(player.location, Sound.BLOCK_NOTE_BLOCK_BASS, 0.8f, 0.8f)
@@ -927,51 +923,71 @@ class MountGuiController(
     private fun formatHeight(value: Double): String = "%.2f".format(java.util.Locale.ROOT, value)
 
     companion object {
-        private const val LIST_SIZE = 54
-        private val LIST_CONTENT_SLOTS = listOf(10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 43)
-        private const val LIST_PREVIOUS_SLOT = 48
-        private const val LIST_BACK_SLOT = 45
-        private const val LIST_FILTER_SLOT = 49
-        private const val LIST_INFO_SLOT = 4
-        private const val LIST_NEXT_SLOT = 50
+        private val LIST_SIZE get() = rows(ArcMenuSchema.MOUNT_LIST)
+        private val LIST_CONTENT_SLOTS get() = region(ArcMenuSchema.MOUNT_LIST, ArcMenuSchema.MOUNT_ENTRIES)
+        private val LIST_PREVIOUS_SLOT get() = slot(ArcMenuSchema.MOUNT_LIST, "previous")
+        private val LIST_BACK_SLOT get() = slot(ArcMenuSchema.MOUNT_LIST, "back")
+        private val LIST_FILTER_SLOT get() = slot(ArcMenuSchema.MOUNT_LIST, "filter")
+        private val LIST_INFO_SLOT get() = slot(ArcMenuSchema.MOUNT_LIST, "info")
+        private val LIST_NEXT_SLOT get() = slot(ArcMenuSchema.MOUNT_LIST, "next")
 
-        private const val DETAIL_SIZE = 45
-        private const val DETAIL_ICON_SLOT = 4
-        private const val DETAIL_FAVORITE_SLOT = 13
-        private const val DETAIL_UPGRADE_SLOT = 20
-        private const val DETAIL_SUMMON_SLOT = 22
-        private const val DETAIL_GLOW_SLOT = 24
-        private const val DETAIL_SKINS_SLOT = 40
-        private const val DETAIL_BACK_SLOT = 36
-        private const val DETAIL_WHISTLE_SLOT = 42
+        private val DETAIL_SIZE get() = rows(ArcMenuSchema.MOUNT_DETAIL)
+        private val DETAIL_ICON_SLOT get() = slot(ArcMenuSchema.MOUNT_DETAIL, "icon")
+        private val DETAIL_FAVORITE_SLOT get() = slot(ArcMenuSchema.MOUNT_DETAIL, "favorite")
+        private val DETAIL_UPGRADE_SLOT get() = slot(ArcMenuSchema.MOUNT_DETAIL, "upgrade")
+        private val DETAIL_SUMMON_SLOT get() = slot(ArcMenuSchema.MOUNT_DETAIL, "summon")
+        private val DETAIL_GLOW_SLOT get() = slot(ArcMenuSchema.MOUNT_DETAIL, "glow")
+        private val DETAIL_SKINS_SLOT get() = slot(ArcMenuSchema.MOUNT_DETAIL, "skins")
+        private val DETAIL_BACK_SLOT get() = slot(ArcMenuSchema.MOUNT_DETAIL, "back")
+        private val DETAIL_WHISTLE_SLOT get() = slot(ArcMenuSchema.MOUNT_DETAIL, "whistle")
+        private val DETAIL_ABILITY_SLOTS get() = region(ArcMenuSchema.MOUNT_DETAIL, ArcMenuSchema.MOUNT_ABILITIES)
 
-        private const val TUNING_SIZE = 54
-        private const val TUNING_INFO_SLOT = 4
-        private const val TUNING_LEVEL_SLOT = 13
-        private val TUNING_SPEED_SLOTS = listOf(20, 21, 22, 23, 24)
-        private val TUNING_STEP_SLOTS = listOf(29, 30, 31, 32, 33)
-        private const val TUNING_NOT_APPLICABLE_SLOT = 31
-        private const val TUNING_BACK_SLOT = 45
-        private const val TUNING_RIDER_VIEW_SLOT = 49
-        private const val SKINS_SIZE = 54
-        private val SKIN_CONTENT_SLOTS = listOf(10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34)
-        private const val SKINS_BACK_SLOT = 45
+        private val TUNING_SIZE get() = rows(ArcMenuSchema.MOUNT_PROGRESSION)
+        private val TUNING_INFO_SLOT get() = slot(ArcMenuSchema.MOUNT_PROGRESSION, "info")
+        private val TUNING_LEVEL_SLOT get() = slot(ArcMenuSchema.MOUNT_PROGRESSION, "level")
+        private val TUNING_SPEED_SLOTS get() = region(ArcMenuSchema.MOUNT_PROGRESSION, ArcMenuSchema.MOUNT_SPEEDS)
+        private val TUNING_STEP_SLOTS get() = region(ArcMenuSchema.MOUNT_PROGRESSION, ArcMenuSchema.MOUNT_STEPS)
+        private val TUNING_SIZE_SLOTS get() = region(ArcMenuSchema.MOUNT_PROGRESSION, ArcMenuSchema.MOUNT_SIZES)
+        private val TUNING_NOT_APPLICABLE_SLOT get() = TUNING_STEP_SLOTS[TUNING_STEP_SLOTS.size / 2]
+        private val TUNING_BACK_SLOT get() = slot(ArcMenuSchema.MOUNT_PROGRESSION, "back")
+        private val TUNING_RIDER_VIEW_SLOT get() = slot(ArcMenuSchema.MOUNT_PROGRESSION, "rider-view")
+        private val SKINS_SIZE get() = rows(ArcMenuSchema.MOUNT_SKINS)
+        private val SKIN_CONTENT_SLOTS get() = region(ArcMenuSchema.MOUNT_SKINS, ArcMenuSchema.MOUNT_SKIN_ENTRIES)
+        private val SKINS_BACK_SLOT get() = slot(ArcMenuSchema.MOUNT_SKINS, "back")
 
-        private const val CONFIRM_SIZE = 27
-        private const val CONFIRM_CANCEL_SLOT = 11
-        private const val CONFIRM_INFO_SLOT = 13
-        private const val CONFIRM_ACCEPT_SLOT = 15
+        private val CONFIRM_SIZE get() = rows(ArcMenuSchema.MOUNT_CONFIRM)
+        private val CONFIRM_CANCEL_SLOT get() = slot(ArcMenuSchema.MOUNT_CONFIRM, "cancel")
+        private val CONFIRM_INFO_SLOT get() = slot(ArcMenuSchema.MOUNT_CONFIRM, "info")
+        private val CONFIRM_ACCEPT_SLOT get() = slot(ArcMenuSchema.MOUNT_CONFIRM, "accept")
+
+        private fun rows(menu: ru.arc.menu.MenuId) = ArcMenus.current().catalog.require(menu).rows * 9
+        private fun slot(menu: ru.arc.menu.MenuId, id: String) = ArcMenus.current().catalog.require(menu).slot(id).index
+        private fun region(menu: ru.arc.menu.MenuId, id: ru.arc.menu.MenuRegionId) =
+            ArcMenus.current().catalog.require(menu).region(id).map { it.index }
     }
 }
 
 internal fun centeredDetailAbilitySlots(count: Int): List<Int> =
-    when (count.coerceIn(0, 4)) {
-        0 -> emptyList()
-        1 -> listOf(31)
-        2 -> listOf(30, 32)
-        3 -> listOf(29, 31, 33)
-        else -> listOf(29, 30, 32, 33)
+    centeredSlots(listOf(29, 30, 31, 32, 33), count.coerceAtMost(4))
+
+private fun centeredSlots(available: List<Int>, count: Int): List<Int> {
+    val requested = count.coerceIn(0, available.size)
+    if (requested == 0) return emptyList()
+    if (requested == available.size) return available
+    if (available.size == 5) return when (requested) {
+        1 -> listOf(available[2])
+        2 -> listOf(available[1], available[3])
+        3 -> listOf(available[0], available[2], available[4])
+        4 -> listOf(available[0], available[1], available[3], available[4])
+        else -> available
     }
+    val pool = if (requested % 2 == 0 && available.size % 2 == 1) {
+        available.filterIndexed { index, _ -> index != available.size / 2 }
+    } else {
+        available
+    }
+    return pool.drop((pool.size - requested) / 2).take(requested)
+}
 
 internal fun prioritizeUnlockedMounts(
     mounts: List<MountDefinition>,

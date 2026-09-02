@@ -15,6 +15,9 @@ import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.event.inventory.InventoryClickEvent
 import ru.arc.config.StockConfig
+import ru.arc.gui.ArcMenuSchema
+import ru.arc.gui.ArcMenus
+import ru.arc.gui.GuiItems
 import ru.arc.util.fromConfig
 import ru.arc.core.ScheduledTask
 import ru.arc.stock.Position
@@ -37,7 +40,7 @@ class PositionCreator(
     private val stockPlayer: StockPlayer,
     private val symbol: String,
 ) : ChestGui(
-    2,
+    StockMenuTopology.rows(ArcMenuSchema.STOCK_CREATE),
     TextHolder.deserialize(
         TextUtil.toLegacy(StockConfig.string("position-creator.menu-title"), "symbol", symbol)
     )
@@ -80,7 +83,7 @@ class PositionCreator(
     }
 
     private fun setupButtons() {
-        val staticPane = StaticPane(9, 1)
+        val staticPane = StaticPane(9, StockMenuTopology.rows(ArcMenuSchema.STOCK_CREATE))
         val resolver = resolver(amount, type, leverage)
 
         amountItem = guiItem(Material.GOLD_INGOT) {
@@ -107,7 +110,7 @@ class PositionCreator(
             ))
             fromConfig(StockConfig.config(), "locale.position-creator.amount")
         }
-        staticPane.addItem(amountItem, 0, 0)
+        staticPane.addItem(amountItem, StockMenuTopology.localX(ArcMenuSchema.STOCK_CREATE, "amount"), StockMenuTopology.localY(ArcMenuSchema.STOCK_CREATE, "amount"))
 
         typeItem = guiItem(
             if (type == Position.Type.BOUGHT) Material.LAPIS_LAZULI else Material.COAL,
@@ -125,7 +128,7 @@ class PositionCreator(
             ))
             fromConfig(StockConfig.config(), "locale.position-creator.type")
         }
-        staticPane.addItem(typeItem, 2, 0)
+        staticPane.addItem(typeItem, StockMenuTopology.localX(ArcMenuSchema.STOCK_CREATE, "type"), StockMenuTopology.localY(ArcMenuSchema.STOCK_CREATE, "type"))
 
         leverageItem = guiItem(Material.LEVER) {
             onClick(::acceptLeverageClick)
@@ -144,7 +147,7 @@ class PositionCreator(
             tagResolver(resolver)
             fromConfig(StockConfig.config(), "locale.position-creator.leverage")
         }
-        staticPane.addItem(leverageItem, 4, 0)
+        staticPane.addItem(leverageItem, StockMenuTopology.localX(ArcMenuSchema.STOCK_CREATE, "leverage"), StockMenuTopology.localY(ArcMenuSchema.STOCK_CREATE, "leverage"))
 
         upperItem = guiItem(Material.SLIME_BLOCK) {
             onClick(::acceptUpperClick)
@@ -163,7 +166,7 @@ class PositionCreator(
             tagResolver(resolver)
             fromConfig(StockConfig.config(), "locale.position-creator.upper")
         }
-        staticPane.addItem(upperItem, 6, 0)
+        staticPane.addItem(upperItem, StockMenuTopology.localX(ArcMenuSchema.STOCK_CREATE, "upper"), StockMenuTopology.localY(ArcMenuSchema.STOCK_CREATE, "upper"))
 
         lowerItem = guiItem(Material.HONEY_BLOCK) {
             onClick(::acceptLowerClick)
@@ -182,7 +185,7 @@ class PositionCreator(
             tagResolver(resolver)
             fromConfig(StockConfig.config(), "locale.position-creator.lower")
         }
-        staticPane.addItem(lowerItem, 7, 0)
+        staticPane.addItem(lowerItem, StockMenuTopology.localX(ArcMenuSchema.STOCK_CREATE, "lower"), StockMenuTopology.localY(ArcMenuSchema.STOCK_CREATE, "lower"))
 
         val canHaveMore = stockPlayer.isBelowMaxStockAmount()
         createItem = guiItem(Material.GREEN_STAINED_GLASS_PANE) {
@@ -214,7 +217,7 @@ class PositionCreator(
                 fromConfig(StockConfig.config(), "locale.position-creator.create-limit")
             }
         }
-        staticPane.addItem(createItem, 8, 0)
+        staticPane.addItem(createItem, StockMenuTopology.localX(ArcMenuSchema.STOCK_CREATE, "create"), StockMenuTopology.localY(ArcMenuSchema.STOCK_CREATE, "create"))
 
         this.addPane(Slot.fromXY(0, 0), staticPane)
     }
@@ -280,8 +283,8 @@ class PositionCreator(
     }
 
     private fun setupNav() {
-        val pane = StaticPane(9, 1)
-        this.addPane(Slot.fromXY(0, 1), pane)
+        val pane = StaticPane(9, StockMenuTopology.rows(ArcMenuSchema.STOCK_CREATE))
+        this.addPane(Slot.fromXY(0, 0), pane)
 
         back = guiItem(Material.BLUE_STAINED_GLASS_PANE) {
             onClick { click ->
@@ -293,12 +296,12 @@ class PositionCreator(
             modelData(11013)
             fromConfig(StockConfig.config(), "locale.position-creator.back")
         }
-        pane.addItem(back, 0, 0)
+        pane.addItem(back, StockMenuTopology.localX(ArcMenuSchema.STOCK_CREATE, "back"), StockMenuTopology.localY(ArcMenuSchema.STOCK_CREATE, "back"))
     }
 
     private fun setupBackground() {
         val pane = OutlinePane(9, 2, Pane.Priority.LOWEST)
-        pane.addItem(GuiUtils.background())
+        pane.addItem(GuiItems.create(requireNotNull(ArcMenus.background(ArcMenuSchema.STOCK_CREATE))))
         pane.setRepeat(true)
         this.addPane(Slot.fromXY(0, 0), pane)
     }

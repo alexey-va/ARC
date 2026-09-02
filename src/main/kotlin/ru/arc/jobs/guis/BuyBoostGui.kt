@@ -2,28 +2,22 @@ package ru.arc.jobs.guis
 
 import com.gamingmesh.jobs.Jobs
 import com.gamingmesh.jobs.container.Job
-import com.github.stefvanschie.inventoryframework.gui.GuiItem
-import com.github.stefvanschie.inventoryframework.gui.type.ChestGui
-import net.kyori.adventure.text.minimessage.tag.Tag
-import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
+import net.kyori.adventure.text.Component
 import org.bukkit.Material
-import org.bukkit.enchantments.Enchantment
 import org.bukkit.entity.Player
-import org.bukkit.inventory.ItemFlag
 import ru.arc.config.Config
 import ru.arc.core.modules.EconomyModule
 import ru.arc.core.sync
-import ru.arc.gui.dynamicGui
+import ru.arc.gui.ArcMenuSchema
+import ru.arc.gui.ArcMenus
 import ru.arc.jobs.BoostType
 import ru.arc.jobs.JobsModule
-import ru.arc.util.GuiUtils
+import ru.arc.paper.menu.PaperMenuEntry
+import ru.arc.paper.menu.PaperMenuItemRenderContext
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
 import ru.arc.util.TextUtil.formatAmount
-import ru.arc.util.guiItem
-import ru.arc.util.itemComponents
-import ru.arc.util.itemLore
 
 /**
  * Factory for creating BuyBoostGui.
@@ -37,12 +31,12 @@ object BuyBoostGuiFactory {
      * @param config Configuration
      * @param currentType Current boost type to display (for type switching)
      */
-    fun create(
+    fun open(
         player: Player,
         job: Job?,
         config: Config,
         currentType: BoostType = BoostType.MONEY,
-    ): ChestGui {
+    ) {
         val boostsByType = loadAllBoosts(config)
 
         // Find first non-empty type
@@ -53,75 +47,30 @@ object BuyBoostGuiFactory {
         val currentBoosts = boostsByType[activeType] ?: emptyList()
         val filteredBoosts = filterBoostsForJob(currentBoosts, job)
 
-        val boostCount = filteredBoosts.size
-        val rows = minOf(6, maxOf(2, (boostCount + 6) / 7 + 2))
-
-        val typeResolver = createTypeResolver(config, activeType)
-
-        return dynamicGui(
-            title = config.string("boostbuy-menu.title", "Магазин бустов"),
-            itemCount = boostCount,
-            minRows = 2,
-            maxRows = 6,
-            navRows = 2, // Top and bottom rows for nav
-            player = player,
-            config = config,
-        ) {
-            background()
-
-            // Boost items pane (rows 1 to rows-2)
-            staticPane(1, 1, 7, rows - 2) {
-                var x = 0
-                var y = 0
-                filteredBoosts.forEach { boost ->
-                    val guiItem =
-                        createBoostItem(boost, player, job, config) {
-                            // Refresh GUI after purchase
-                            GuiUtils.constructAndShowAsync({ create(player, job, config, activeType) }, player)
-                        }
-                    if (guiItem != null) {
-                        if (x == 3) x++ // Skip center column
-                        item(x++, y, guiItem)
-                        if (x == 7) {
-                            x = 0
-                            y++
-                        }
-                    }
-                }
-            }
-
-            navBar {
-                // Back button
-                button(0) {
-                    material(Material.BLUE_STAINED_GLASS_PANE)
-                    modelData(11013)
-                    display("<gray>« Назад")
-                    lore(emptyList())
-                    tagResolver(typeResolver)
-                    fromConfig(config, "boostbuy-menu.back")
-                    onClick {
-                        GuiUtils.constructAndShowAsync({ createJobsListGui(config, player) }, it.whoClicked)
-                    }
-                }
-            }
-
-            // Type switcher at top center
-            staticPane(4, 0, 1, 1) {
-                item(0) {
-                    val typeData = getTypeStackData(activeType)
-                    material(typeData.material)
-                    modelData(typeData.modelData)
-                    display("<gold>Тип буста: <yellow><type>")
-                    lore(listOf("", "<gray>Нажмите для смены типа"))
-                    tagResolver(typeResolver)
-                    fromConfig(config, "boostbuy-menu.type")
-                    onClick {
-                        val nextType = getNextType(activeType, nonEmptyTypes)
-                        GuiUtils.constructAndShowAsync({ create(player, job, config, nextType) }, player)
-                    }
-                }
-            }
+        val entries = filteredBoosts.mapNotNull { boost ->
+            createBoostItem(boost, player, job, config) { open(player, job, config, activeType) }
         }
+        val typeName = config.string("type-names.${activeType.name.lowercase()}", activeType.display)
+        val typeData = getTypeStackData(activeType)
+        val typeItem = ArcMenus.item(
+            ArcMenuSchema.BOOST_SHOP,
+            "type",
+            PaperMenuItemRenderContext(values = mapOf("type" to TextUtil.mm(typeName, true))),
+        ).withType(typeData.material)
+        if (typeData.modelData > 0) {
+            @Suppress("DEPRECATION")
+            typeItem.editMeta { it.setCustomModelData(typeData.modelData) }
+        }
+        ArcMenus.open(
+            player,
+            ArcMenuSchema.BOOST_SHOP,
+            config.component("boostbuy-menu.title", "<dark_gray>Магазин бустов"),
+            elements = mapOf(
+                "type" to ArcMenus.entry(typeItem) { open(it, job, config, getNextType(activeType, nonEmptyTypes)) },
+                "back" to ArcMenus.entry(ArcMenus.item(ArcMenuSchema.BOOST_SHOP, "back")) { createJobsListGui(config, it) },
+            ),
+            regions = mapOf(ArcMenuSchema.BOOST_SHOP_ENTRIES to entries),
+        )
     }
 
     // ==================== Helper Functions ====================
@@ -190,7 +139,7 @@ object BuyBoostGuiFactory {
         job: Job?,
         config: Config,
         onPurchase: () -> Unit,
-    ): GuiItem? {
+    ): PaperMenuEntry? {
         val allJobs = boost.jobs.isEmpty() || boost.jobs.contains("all")
         val allTypes = boost.types.contains(BoostType.ALL) || boost.types.isEmpty()
 
@@ -202,49 +151,46 @@ object BuyBoostGuiFactory {
         val currencyName = config.string("currency-names.${boost.currency.name.lowercase()}", "Money")
         val hasBoost = JobsModule.hasBoost(player, boost.id, boost.jobs, boost.types)
 
-        val lore =
-            when {
-                hasBoost -> config.itemLore("boostbuy-menu.already-have-boost")
-
-                boost.permission.isNotEmpty() && !player.hasPermission(boost.permission) ->
-                    config.itemLore("boostbuy-menu.no-permission")
-
-                !economyCheck.hasEnough -> config.itemLore("boostbuy-menu.not-enough-money")
-
-                else -> boost.lore.ifEmpty { config.itemLore("boostbuy-menu.boost") }
-            }
-
         val playerCurrency = getCurrency(player, boost.currency)
         val boostAmountStr = "${boost.boostAmount * 100}%"
         val typeStr = if (allTypes) "Все" else boost.types.joinToString(", ") { it.name }
         val jobStr = if (allJobs) "Все" else boost.jobs.joinToString(", ") { JobsModule.jobDisplayMinimessage(it) }
+        val values = mapOf(
+            "name" to boost.display,
+            "price" to formatAmount(boost.price),
+            "boost" to boostAmountStr,
+            "currency" to currencyName,
+            "permission" to boost.permission.ifEmpty { "Нет" },
+            "time" to "${boost.seconds / 60} минут",
+            "type" to typeStr,
+            "job" to jobStr,
+            "player-currency" to formatAmount(playerCurrency),
+            "currency-lack" to formatAmount(economyCheck.currencyNeeded),
+        )
+        val flags = when {
+            hasBoost -> setOf("owned")
+            boost.permission.isNotEmpty() && !player.hasPermission(boost.permission) -> setOf("no-permission")
+            !economyCheck.hasEnough -> setOf("no-funds")
+            else -> setOf("available")
+        }
+        val details = boost.lore.map { line ->
+            values.entries.fold(line) { rendered, (key, value) -> rendered.replace("<$key>", value) }
+        }
+        val stack = ArcMenus.item(
+            "boost-shop-offer",
+            PaperMenuItemRenderContext(
+                values = values.mapValues { (_, value) -> TextUtil.mm(value, true) },
+                flags = flags,
+                repeats = mapOf("details" to details.map { mapOf("line" to TextUtil.mm(it, true)) }),
+            ),
+        ).withType(boost.material)
+        if (boost.modelData > 0) {
+            @Suppress("DEPRECATION")
+            stack.editMeta { it.setCustomModelData(boost.modelData) }
+        }
+        if (hasBoost) stack.editMeta { it.setEnchantmentGlintOverride(true) }
 
-        return guiItem(boost.material) {
-            display(boost.display)
-            modelData(boost.modelData)
-
-            tags {
-                "price" to formatAmount(boost.price)
-                "boost" to boostAmountStr
-                "currency" to currencyName
-                "permission" to boost.permission.ifEmpty { "Нет" }
-                "time" to "${boost.seconds / 60} минут"
-                "type" to typeStr
-                "job" to jobStr
-                "player_currency" to formatAmount(playerCurrency)
-                "currency_lack" to formatAmount(economyCheck.currencyNeeded)
-            }
-
-            lore(lore)
-            flags(ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_ATTRIBUTES)
-
-            if (hasBoost) {
-                enchantUnsafe(Enchantment.VANISHING_CURSE, 1)
-            }
-
-            onClick { click ->
-                click.isCancelled = true
-                val clickedItem = click.currentItem ?: return@onClick
+        return ArcMenus.entry(stack) {
                 val coordinator =
                     BoostPurchaseCoordinator(
                         alreadyOwned = {
@@ -283,35 +229,33 @@ object BuyBoostGuiFactory {
                     sync {
                         if (failure != null) {
                             error("Jobs boost purchase failed for {}", player.uniqueId, failure)
-                            showPurchaseMessage(clickedItem, config, "boostbuy-menu.purchase-failed")
+                            showPurchaseMessage(player, config, "boostbuy-menu.purchase-failed")
                             return@sync
                         }
                         when (result) {
                             BoostPurchaseResult.PURCHASED -> onPurchase()
                             BoostPurchaseResult.ALREADY_OWNED ->
-                                showPurchaseMessage(clickedItem, config, "boostbuy-menu.already-have-boost")
+                                showPurchaseMessage(player, config, "boostbuy-menu.already-have-boost")
                             BoostPurchaseResult.NO_PERMISSION ->
-                                showPurchaseMessage(clickedItem, config, "boostbuy-menu.no-permission")
+                                showPurchaseMessage(player, config, "boostbuy-menu.no-permission")
                             BoostPurchaseResult.INSUFFICIENT_FUNDS ->
-                                showPurchaseMessage(clickedItem, config, "boostbuy-menu.not-enough-money")
+                                showPurchaseMessage(player, config, "boostbuy-menu.not-enough-money")
                             BoostPurchaseResult.PAYMENT_FAILED,
                             BoostPurchaseResult.UNAVAILABLE,
                             null,
                             ->
-                                showPurchaseMessage(clickedItem, config, "boostbuy-menu.purchase-failed")
+                                showPurchaseMessage(player, config, "boostbuy-menu.purchase-failed")
                         }
                     }
                 }
-            }
         }
     }
 
     private fun showPurchaseMessage(
-        item: org.bukkit.inventory.ItemStack,
+        player: Player,
         config: Config,
         configKey: String,
     ) {
-        val configuredDisplay = config.itemComponents(configKey).first
         val fallback =
             when (configKey) {
                 "boostbuy-menu.already-have-boost" -> "<red>У вас уже есть этот буст"
@@ -319,22 +263,8 @@ object BuyBoostGuiFactory {
                 "boostbuy-menu.not-enough-money" -> "<red>Недостаточно средств"
                 else -> "<red>Не удалось купить буст"
             }
-        val display = configuredDisplay ?: TextUtil.mm(fallback, true)
-        GuiUtils.temporaryChange(item, display, null, 60) {}
+        player.sendActionBar(config.component(configKey, fallback))
     }
-
-    private fun createTypeResolver(
-        config: Config,
-        currentType: BoostType,
-    ): TagResolver =
-        TagResolver
-            .builder()
-            .tag(
-                "type",
-                Tag.inserting(
-                    TextUtil.mm(config.string("type-names.${currentType.name.lowercase()}", currentType.display), true),
-                ),
-            ).build()
 
     private fun getNextType(
         current: BoostType,

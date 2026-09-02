@@ -10,7 +10,6 @@ import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.tabComplete
 import ru.arc.eliteloot.EliteLootGuiFactory
 import ru.arc.eliteloot.EliteLootManager
-import ru.arc.util.GuiUtils
 import ru.arc.util.customModelDataOrNull
 
 /**
@@ -47,7 +46,7 @@ object EliteLootSubCommand : SubCommand {
     }
 
     private fun openList(player: Player) {
-        GuiUtils.constructAndShowAsync({ EliteLootGuiFactory.create(player) }, player)
+        EliteLootGuiFactory.open(player)
     }
 
     private fun addFromHand(player: Player, args: Array<String>) {

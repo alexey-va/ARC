@@ -10,6 +10,9 @@ import com.github.stefvanschie.inventoryframework.pane.util.Slot
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import ru.arc.config.StockConfig
+import ru.arc.gui.ArcMenuSchema
+import ru.arc.gui.ArcMenus
+import ru.arc.gui.GuiItems
 import ru.arc.util.fromConfig
 import ru.arc.stock.Position
 import ru.arc.stock.StockPlayer
@@ -26,7 +29,7 @@ class PositionMenu(
     private val position: Position,
     private val fromAllPositions: Boolean,
 ) : ChestGui(
-    2,
+    StockMenuTopology.rows(ArcMenuSchema.STOCK_POSITION),
     TextHolder.deserialize(
         TextUtil.toLegacy(
             StockConfig.string("position-menu.menu-title"),
@@ -47,15 +50,23 @@ class PositionMenu(
 
     private fun setupButtons() {
         val resolver = position.resolver()
-        val staticPane = StaticPane(9, 1)
-        staticPane.addItem(infoItem(), 1, 0)
-        staticPane.addItem(closeItem(resolver), 7, 0)
+        val staticPane = StaticPane(9, StockMenuTopology.rows(ArcMenuSchema.STOCK_POSITION))
+        staticPane.addItem(
+            infoItem(),
+            StockMenuTopology.localX(ArcMenuSchema.STOCK_POSITION, "info"),
+            StockMenuTopology.localY(ArcMenuSchema.STOCK_POSITION, "info"),
+        )
+        staticPane.addItem(
+            closeItem(resolver),
+            StockMenuTopology.localX(ArcMenuSchema.STOCK_POSITION, "close"),
+            StockMenuTopology.localY(ArcMenuSchema.STOCK_POSITION, "close"),
+        )
         this.addPane(Slot.fromXY(0, 0), staticPane)
     }
 
     private fun setupNav() {
-        val pane = StaticPane(9, 1)
-        this.addPane(Slot.fromXY(0, 1), pane)
+        val pane = StaticPane(9, StockMenuTopology.rows(ArcMenuSchema.STOCK_POSITION))
+        this.addPane(Slot.fromXY(0, 0), pane)
 
         back = guiItem(Material.BLUE_STAINED_GLASS_PANE) {
             onClick { click ->
@@ -70,7 +81,11 @@ class PositionMenu(
             modelData(11013)
             fromConfig(StockConfig.config(), "locale.position-menu.back")
         }
-        pane.addItem(back, 0, 0)
+        pane.addItem(
+            back,
+            StockMenuTopology.localX(ArcMenuSchema.STOCK_POSITION, "back"),
+            StockMenuTopology.localY(ArcMenuSchema.STOCK_POSITION, "back"),
+        )
     }
 
     private fun closeItem(resolver: net.kyori.adventure.text.minimessage.tag.resolver.TagResolver): GuiItem {
@@ -154,7 +169,7 @@ class PositionMenu(
 
     private fun setupBackground() {
         val pane = OutlinePane(9, 2, Pane.Priority.LOWEST)
-        pane.addItem(GuiUtils.background())
+        pane.addItem(GuiItems.create(requireNotNull(ArcMenus.background(ArcMenuSchema.STOCK_POSITION))))
         pane.setRepeat(true)
         this.addPane(Slot.fromXY(0, 0), pane)
     }

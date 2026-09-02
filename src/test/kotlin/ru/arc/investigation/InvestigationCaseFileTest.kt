@@ -52,12 +52,6 @@ class InvestigationCaseFileTest : StringSpec({
         ).isEmpty() shouldBe true
     }
 
-    "materials screen has breathing room and symmetric edge actions" {
-        InvestigationGui.CASE_ROWS shouldBe 5
-        InvestigationGui.WITNESS_ROW shouldBe 2
-        InvestigationGui.INFO_ROW shouldBe 4
-    }
-
     "collected testimony is complete in the main materials card" {
         val base = activeCaseRecord()
         val witness = base.case.witnesses().first()

@@ -189,7 +189,7 @@ class EMHook internal constructor(
                 check(!closed) { "EMHook is closed" }
                 checkNotNull(shopHolder) { "EMHook is not started" }
             }
-        GuiUtils.constructAndShowAsync({ EmShop(config, player, holder, isGear, this) }, player)
+        EmShop.open(config, player, holder, isGear, this)
     }
 
     fun balance(player: Player): Double = EconomyHandler.checkCurrency(player.uniqueId)

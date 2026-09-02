@@ -1,157 +1,90 @@
 package ru.arc.treasure.core.gui
 
-import com.github.stefvanschie.inventoryframework.gui.type.ChestGui
 import net.kyori.adventure.text.Component
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import ru.arc.TitleInput
 import ru.arc.board.guis.Inputable
-import ru.arc.gui.gui
+import ru.arc.gui.ArcMenuSchema
+import ru.arc.gui.ArcMenus
+import ru.arc.paper.menu.PaperMenuItemRenderContext
 import ru.arc.treasure.core.Treasure
 import ru.arc.treasure.core.TreasureConfig
 import ru.arc.treasure.core.TreasureMessage
 import ru.arc.treasure.core.Treasures
-import ru.arc.util.GuiUtils
 import ru.arc.util.TextUtil
-import ru.arc.util.fromConfig
 
 /**
  * GUI for editing a specific treasure.
  */
 object TreasureGui {
-    private const val ROWS = 2
-
-    fun create(
+    fun open(
         player: Player,
         poolId: String,
         treasure: Treasure,
-    ): ChestGui =
-        gui(
-            title = TreasureConfig.Gui.treasureTitle,
-            rows = ROWS,
-            player = player,
-            config = TreasureConfig.config(),
-        ) {
-            navBackground()
-
-            staticPane(0, 0, 9, ROWS - 1) {
-                // Weight button
-                item(1, 0) {
-                    material(Material.ANVIL)
-                    display(TreasureConfig.Gui.treasureWeight.replace("%weight%", treasure.weight.toString()))
-                    lore(listOf("<gray>ЛКМ - изменить вес"))
-                    fromConfig(TreasureConfig.config(), "gui.treasure.weight")
-                    onClick {
-                        TitleInput(player, WeightInput(player, poolId, treasure), 0)
-                        player.closeInventory()
-                    }
-                }
-
-                // Amount button (for treasures with amount)
-                when (treasure) {
-                    is Treasure.Item -> {
-                        item(2, 0) {
-                            material(Material.PAPER)
-                            display(
-                                TreasureConfig.Gui.treasureAmount
-                                    .replace("%min%", treasure.min.toString())
-                                    .replace("%max%", treasure.max.toString()),
-                            )
-                            lore(listOf("<gray>ЛКМ - изменить количество"))
-                            fromConfig(TreasureConfig.config(), "gui.treasure.amount")
-                            onClick {
-                                TitleInput(player, AmountInput(player, poolId, treasure), 0)
-                                player.closeInventory()
-                            }
-                        }
-                    }
-
-                    is Treasure.Money -> {
-                        item(2, 0) {
-                            material(Material.GOLD_NUGGET)
-                            display(
-                                TreasureConfig.Gui.treasureAmount
-                                    .replace("%min%", treasure.min.toString())
-                                    .replace("%max%", treasure.max.toString()),
-                            )
-                            lore(listOf("<gray>ЛКМ - изменить сумму"))
-                            fromConfig(TreasureConfig.config(), "gui.treasure.amount")
-                            onClick {
-                                TitleInput(player, MoneyAmountInput(player, poolId, treasure), 0)
-                                player.closeInventory()
-                            }
-                        }
-                    }
-
-                    is Treasure.Command -> {
-                        item(2, 0) {
-                            material(Material.COMMAND_BLOCK)
-                            display("<yellow>Команда")
-                            lore(
-                                listOf(
-                                    "<gray>Текущая: <white>${treasure.commands.firstOrNull() ?: "нет"}",
-                                    "<gray>ЛКМ - изменить команду",
-                                ),
-                            )
-                            onClick {
-                                TitleInput(player, CommandInput(player, poolId, treasure), 0)
-                                player.closeInventory()
-                            }
-                        }
-                    }
-
-                    else -> {}
-                }
-
-                // Messages button
-                item(4, 0) {
-                    material(Material.WRITABLE_BOOK)
-                    display(TreasureConfig.Gui.treasureMessages)
-                    lore(
-                        buildList {
-                            if (treasure.messages.isEmpty()) {
-                                add("<gray>Нет сообщений")
-                            } else {
-                                add("<gray>Сообщений: <white>${treasure.messages.size}")
-                                treasure.messages.take(3).forEach { msg ->
-                                    add("<dark_gray>• ${msg.destination.name.lowercase()}: ${msg.text.take(20)}...")
-                                }
-                            }
-                            add("")
-                            add("<yellow>ЛКМ - добавить сообщение")
-                            add("<red>ПКМ - очистить все")
-                        },
-                    )
-                    fromConfig(TreasureConfig.config(), "gui.treasure.messages")
-                    onClick { event ->
-                        if (event.isRightClick) {
-                            val updated = treasure.clearMessages()
-                            Treasures.updateTreasure(poolId, updated)
-                            refreshGui(player, poolId, updated)
-                        } else {
-                            TitleInput(player, MessageInput(player, poolId, treasure), 0)
-                            player.closeInventory()
-                        }
-                    }
-                }
-
-                // Delete button
-                item(7, 0) {
-                    material(Material.BARRIER)
-                    display(TreasureConfig.Gui.treasureDelete)
-                    lore(listOf("<gray>ЛКМ - удалить"))
-                    fromConfig(TreasureConfig.config(), "gui.treasure.delete")
-                    onClick {
-                        Treasures.removeTreasure(poolId, treasure)
-                        backToPool(player, poolId)
-                    }
-                }
+    ) {
+        val elements = buildMap {
+            put("weight", ArcMenus.entry(ArcMenus.item(
+                ArcMenuSchema.TREASURE_EDIT,
+                "weight",
+                values("weight" to treasure.weight.toString()),
+            )) { start(player, WeightInput(player, poolId, treasure)) })
+            amountEntry(player, poolId, treasure)?.let { put("amount", it) }
+            val messages = treasure.messages.take(3).map { message ->
+                mapOf("line" to Component.text("${message.destination.name.lowercase()}: ${message.text.take(20)}…"))
             }
-
-            navBar {
-                back(slot = 0) { backToPool(player, poolId) }
-            }
+            put("messages", ArcMenus.entryWithContext(ArcMenus.item(
+                ArcMenuSchema.TREASURE_EDIT,
+                "messages",
+                PaperMenuItemRenderContext(
+                    values = mapOf("count" to Component.text(treasure.messages.size)),
+                    flags = if (treasure.messages.isEmpty()) setOf("empty") else emptySet(),
+                    repeats = mapOf("messages" to messages),
+                ),
+            )) { click ->
+                if (click.event.isRightClick) {
+                    val updated = treasure.clearMessages()
+                    Treasures.updateTreasure(poolId, updated)
+                    refreshGui(player, poolId, updated)
+                } else start(player, MessageInput(player, poolId, treasure))
+            })
+            put("delete", ArcMenus.entry(ArcMenus.item(ArcMenuSchema.TREASURE_EDIT, "delete")) {
+                Treasures.removeTreasure(poolId, treasure)
+                backToPool(player, poolId)
+            })
+            put("back", ArcMenus.entry(ArcMenus.item(ArcMenuSchema.TREASURE_EDIT, "back")) { backToPool(player, poolId) })
         }
+        ArcMenus.open(
+            player,
+            ArcMenuSchema.TREASURE_EDIT,
+            TextUtil.mm(TreasureConfig.Gui.treasureTitle, true),
+            elements = elements,
+        )
+    }
+
+    private fun amountEntry(player: Player, poolId: String, treasure: Treasure) = when (treasure) {
+        is Treasure.Item -> ArcMenus.entry(ArcMenus.item(
+            ArcMenuSchema.TREASURE_EDIT,
+            "amount",
+            values("name" to "Количество", "value" to "${treasure.min}–${treasure.max}"),
+        ).withType(Material.PAPER)) { start(player, AmountInput(player, poolId, treasure)) }
+        is Treasure.Money -> ArcMenus.entry(ArcMenus.item(
+            ArcMenuSchema.TREASURE_EDIT,
+            "amount",
+            values("name" to "Сумма", "value" to "${treasure.min}–${treasure.max}"),
+        ).withType(Material.GOLD_NUGGET)) { start(player, MoneyAmountInput(player, poolId, treasure)) }
+        is Treasure.Command -> ArcMenus.entry(ArcMenus.item(
+            ArcMenuSchema.TREASURE_EDIT,
+            "amount",
+            values("name" to "Команда", "value" to (treasure.commands.firstOrNull() ?: "нет")),
+        ).withType(Material.COMMAND_BLOCK)) { start(player, CommandInput(player, poolId, treasure)) }
+        else -> null
+    }
+
+    private fun start(player: Player, input: Inputable) {
+        TitleInput(player, input, 0)
+        player.closeInventory()
+    }
 
     // ==================== Helper Functions ====================
 
@@ -160,7 +93,7 @@ object TreasureGui {
         poolId: String,
     ) {
         Treasures.getPool(poolId)?.let { pool ->
-            GuiUtils.constructAndShowAsync({ PoolGui.create(player, pool) }, player)
+            PoolGui.open(player, pool)
         }
     }
 
@@ -169,8 +102,12 @@ object TreasureGui {
         poolId: String,
         treasure: Treasure,
     ) {
-        GuiUtils.constructAndShowAsync({ create(player, poolId, treasure) }, player)
+        open(player, poolId, treasure)
     }
+
+    private fun values(vararg pairs: Pair<String, String>) = PaperMenuItemRenderContext(
+        values = pairs.associate { (key, value) -> key to TextUtil.mm(value, true) },
+    )
 
     // ==================== Input Handlers ====================
 

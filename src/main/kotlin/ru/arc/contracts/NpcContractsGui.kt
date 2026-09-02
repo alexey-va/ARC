@@ -1,6 +1,5 @@
 package ru.arc.contracts
 
-import com.github.stefvanschie.inventoryframework.gui.type.ChestGui
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.minimessage.tag.Tag
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
@@ -10,8 +9,10 @@ import ru.arc.ARC
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import ru.arc.core.Tasks
-import ru.arc.gui.gui
-import ru.arc.util.GuiUtils
+import ru.arc.gui.ArcMenuSchema
+import ru.arc.gui.ArcMenus
+import ru.arc.paper.menu.PaperMenuEntry
+import ru.arc.paper.menu.PaperMenuItemRenderContext
 import ru.arc.util.TextUtil
 import java.time.Instant
 import java.time.ZoneId
@@ -30,7 +31,7 @@ object NpcContractsGui {
             return
         }
         val policy = ContractRankPolicyResolver.resolve(player)
-        GuiUtils.constructAndShowAsync({ buildList(player, group, policy) }, player)
+        openList(player, group, policy)
     }
 
     fun openDetail(
@@ -40,243 +41,187 @@ object NpcContractsGui {
         requestedQuantity: Int? = null,
     ) {
         val policy = ContractRankPolicyResolver.resolve(player)
-        GuiUtils.constructAndShowAsync({ buildDetail(player, group, contractId, requestedQuantity, policy) }, player)
+        openDetail(player, group, contractId, requestedQuantity, policy)
     }
 
-    internal fun buildList(player: Player, group: String, policy: ContractRankPolicy): ChestGui {
+    private fun openList(player: Player, group: String, policy: ContractRankPolicy) {
         val views =
             ContractsManager.currentPlayerViews(player.uniqueId, group, policy = policy)
                 .filter { it.contract.status != ContractStatus.EXPIRED.label }
-        return gui(boardString(group, "list.title", "<dark_gray>Книга заказов"), 3, player, contractGuiConfig) {
-            background()
-            staticPane(width = 9, height = 3) {
-                item(4, 0) {
-                    material(Material.PAPER)
-                    display(boardString(group, "list.heading", "<gold><bold>Книга заказов"))
-                    lore(
-                        listOf(
-                            boardString(group, "list.description-1", "<gray>Здесь принимают нужные ресурсы"),
-                            boardString(group, "list.description-2", "<gray>за указанную награду."),
-                            "",
-                            "<white>Выберите заказ ниже.",
+        val capacity = ArcMenus.current().catalog.require(ArcMenuSchema.CONTRACTS_LIST)
+            .region(ArcMenuSchema.CONTRACT_ORDERS).size
+        val orders = views.take(capacity).map { view -> orderEntry(player, group, view) }
+        val elements = buildMap {
+            put(
+                "info",
+                ArcMenus.entry(
+                    ArcMenus.item(
+                        ArcMenuSchema.CONTRACTS_LIST,
+                        "info",
+                        render(
+                            "heading" to boardString(group, "list.heading", "<gold><bold>Книга заказов"),
+                            "description-one" to boardString(group, "list.description-1", "<gray>Здесь принимают нужные ресурсы"),
+                            "description-two" to boardString(group, "list.description-2", "<gray>за указанную награду."),
                         ),
-                    )
-                    fromConfig(contractGuiConfig, "list.info")
-                }
+                    ),
+                ),
+            )
+            if (orders.isEmpty()) {
+                put(
+                    "empty",
+                    ArcMenus.entry(
+                        ArcMenus.item(
+                            ArcMenuSchema.CONTRACTS_LIST,
+                            "empty",
+                            render("empty" to boardString(group, "list.empty-lore", "<gray>Загляните сюда позже.")),
+                        ),
+                    ),
+                )
+            }
+        }
+        ArcMenus.open(
+            player,
+            ArcMenuSchema.CONTRACTS_LIST,
+            TextUtil.mm(boardString(group, "list.title", "<dark_gray>Книга заказов"), true),
+            elements = elements,
+            regions = mapOf(ArcMenuSchema.CONTRACT_ORDERS to orders),
+        )
+    }
 
-                if (views.isEmpty()) {
-                    item(4, 2) {
-                        material(Material.BARRIER)
-                        display("<yellow>Сейчас заказов нет")
-                        lore(listOf(boardString(group, "list.empty-lore", "<gray>Загляните сюда позже.")))
-                        fromConfig(contractGuiConfig, "list.empty")
-                    }
-                } else {
-                    views.take(LIST_POSITIONS.size).forEachIndexed { index, view ->
-                        val (x, y) = LIST_POSITIONS[index]
-                        val available = PaperContractItems.countPlain(player, view.contract.itemKey)
-                        val selectable = ContractQuantitySelector.select(view, available)
-                        item(x, y) {
-                            // Keep the per-contract material dynamic. A shared fromConfig path would
-                            // persist the first material it sees and turn every later order into it.
-                            material(PaperContractItems.material(view.contract.itemKey) ?: Material.PAPER)
-                            tags(
-                                mapOf(
-                                    "contract_name" to view.contract.displayName,
-                                    "available" to available.toString(),
-                                    "remaining" to view.contract.remainingQuantity.toString(),
-                                    "target" to view.contract.targetQuantity.toString(),
-                                    "player_remaining" to view.playerRemainingQuantity.toString(),
-                                    "payout" to formatContractMoney(view.playerPayoutMinorPerUnit),
-                                    "cap_bonus" to ((view.capBasisPoints / 100) - 100).toString(),
-                                    "payout_bonus" to ((view.payoutBasisPoints / 100) - 100).toString(),
-                                    "ends_at" to formatTime(view.contract.windowEndsAt),
-                                    "action" to action(view, selectable),
-                                ),
-                            )
-                            display("<gold><bold><contract_name>")
-                            lore(
-                                listOf(
-                                    "<gray>Осталось по заказу: <white><remaining><gray>/<white><target>",
-                                    "<gray>У вас в инвентаре: <white><available>",
-                                    "<gray>Ваш лимит: <white><player_remaining>",
-                                    "<gray>Награда: <gold><payout> <white>💰</white> <gray>за единицу",
-                                    "<gray>Ранг: <gold>+<cap_bonus>% <gray>к лимиту • <gold>+<payout_bonus>% <gray>к выплате",
-                                    "<gray>До: <white><ends_at>",
-                                    "",
-                                    "<action>",
-                                ),
-                            )
-                            onClick {
-                                if (selectable.canSubmit && view.contract.status == ContractStatus.OPEN.label) {
-                                    openDetail(player, group, view.contract.id)
-                                } else {
-                                    player.sendActionBar(unavailableReason(group, view, selectable, available))
-                                }
-                            }
-                        }
-                    }
-                }
+    private fun orderEntry(player: Player, group: String, view: ResourceContractPlayerView): PaperMenuEntry {
+        val available = PaperContractItems.countPlain(player, view.contract.itemKey)
+        val selectable = ContractQuantitySelector.select(view, available)
+        val item = ArcMenus.item(
+            "contracts-order",
+            render(
+                "contract-name" to view.contract.displayName,
+                "available" to available.toString(),
+                "remaining" to view.contract.remainingQuantity.toString(),
+                "target" to view.contract.targetQuantity.toString(),
+                "player-remaining" to view.playerRemainingQuantity.toString(),
+                "payout" to formatContractMoney(view.playerPayoutMinorPerUnit),
+                "cap-bonus" to ((view.capBasisPoints / 100) - 100).toString(),
+                "payout-bonus" to ((view.payoutBasisPoints / 100) - 100).toString(),
+                "ends-at" to formatTime(view.contract.windowEndsAt),
+                "action" to action(view, selectable),
+            ),
+        ).withType(PaperContractItems.material(view.contract.itemKey) ?: Material.PAPER)
+        return ArcMenus.entry(item) {
+            if (selectable.canSubmit && view.contract.status == ContractStatus.OPEN.label) {
+                openDetail(it, group, view.contract.id)
+            } else {
+                it.sendActionBar(unavailableReason(group, view, selectable, available))
             }
         }
     }
 
-    internal fun buildDetail(
+    private fun openDetail(
         player: Player,
         group: String,
         contractId: String,
         requestedQuantity: Int?,
         policy: ContractRankPolicy,
-    ): ChestGui {
+    ) {
         val view =
             ContractsManager.currentPlayerViews(player.uniqueId, group, policy = policy)
                 .firstOrNull { it.contract.id == contractId }
-                ?: return buildList(player, group, policy)
+                ?: return openList(player, group, policy)
         val available = PaperContractItems.countPlain(player, view.contract.itemKey)
         val selection = ContractQuantitySelector.select(view, available, requestedQuantity)
         val material = PaperContractItems.material(view.contract.itemKey) ?: Material.PAPER
-
-        return gui(boardString(group, "detail.title", "<dark_gray>Сдать ресурсы"), 3, player, contractGuiConfig) {
-            background()
-            staticPane(width = 9, height = 2) {
-                item(2, 0) {
-                    material(material)
-                    tags(
-                        mapOf(
-                            "contract_name" to view.contract.displayName,
+        val canSubmit = selection.canSubmit
+        ArcMenus.open(
+            player,
+            ArcMenuSchema.CONTRACTS_DETAIL,
+            TextUtil.mm(boardString(group, "detail.title", "<dark_gray>Сдать ресурсы"), true),
+            elements = mapOf(
+                "resource" to ArcMenus.entry(
+                    ArcMenus.item(
+                        ArcMenuSchema.CONTRACTS_DETAIL,
+                        "resource",
+                        render(
+                            "contract-name" to view.contract.displayName,
                             "available" to available.toString(),
                             "remaining" to view.contract.remainingQuantity.toString(),
-                            "player_remaining" to view.playerRemainingQuantity.toString(),
+                            "player-remaining" to view.playerRemainingQuantity.toString(),
                         ),
-                    )
-                    display("<gold><bold><contract_name>")
-                    lore(
-                        listOf(
-                            "<gray>У вас: <white><available>",
-                            "<gray>Осталось по заказу: <white><remaining>",
-                            "<gray>Ваш лимит: <white><player_remaining>",
-                            "",
-                            "<dark_gray>Принимаются только обычные предметы",
-                            "<dark_gray>без имени, чар и особых данных.",
-                        ),
-                    )
-                }
-                item(4, 0) {
-                    material(Material.PAPER)
-                    tags(
-                        mapOf(
+                    ).withType(material),
+                ),
+                "info" to ArcMenus.entry(
+                    ArcMenus.item(
+                        ArcMenuSchema.CONTRACTS_DETAIL,
+                        "info",
+                        render(
+                            "heading" to boardString(group, "detail.info-heading", "<gold><bold>Общий заказ"),
                             "accepted" to view.contract.acceptedQuantity.toString(),
                             "target" to view.contract.targetQuantity.toString(),
                             "contributors" to view.contract.contributors.toString(),
                         ),
-                    )
-                    display(boardString(group, "detail.info-heading", "<gold><bold>Общий заказ"))
-                    lore(
-                        listOf(
-                            "<gray>Собрано: <white><accepted><gray>/<white><target>",
-                            "<gray>Участников: <white><contributors>",
-                            "",
-                            "<gray>Объём общий для всего сервера.",
-                        ),
-                    )
-                    fromConfig(contractGuiConfig, "detail.info")
-                }
-                item(6, 0) {
-                    material(Material.GOLD_NUGGET)
-                    tags(
-                        mapOf(
+                    ),
+                ),
+                "payout" to ArcMenus.entry(
+                    ArcMenus.item(
+                        ArcMenuSchema.CONTRACTS_DETAIL,
+                        "payout",
+                        render(
                             "payout" to formatContractMoney(selection.payoutMinor),
-                            "per_unit" to formatContractMoney(view.playerPayoutMinorPerUnit),
-                            "payout_bonus" to ((view.payoutBasisPoints / 100) - 100).toString(),
+                            "per-unit" to formatContractMoney(view.playerPayoutMinorPerUnit),
+                            "payout-bonus" to ((view.payoutBasisPoints / 100) - 100).toString(),
                         ),
-                    )
-                    display("<gold><bold>Выплата:</bold> <payout> <white>💰</white>")
-                    lore(
-                        listOf(
-                            "<gray>Ставка: <gold><per_unit> <white>💰</white> <gray>за единицу.",
-                            "<gray>Надбавка ранга: <gold>+<payout_bonus>%",
-                        ),
-                    )
-                    fromConfig(contractGuiConfig, "detail.payout")
-                }
-                item(4, 1) {
-                    material(material)
-                    tags(
-                        mapOf(
+                    ),
+                ),
+                "quantity" to ArcMenus.entryWithContext(
+                    ArcMenus.item(
+                        ArcMenuSchema.CONTRACTS_DETAIL,
+                        "quantity",
+                        render(
                             "selected" to selection.selected.toString(),
                             "minimum" to selection.minimum.toString(),
                             "maximum" to selection.maximum.toString(),
                         ),
-                    )
-                    display("<white><bold>Сдать: <selected>")
-                    lore(
-                        listOf(
-                            "<gray>Минимальная партия: <white><minimum>",
-                            "<gray>Доступно сейчас: <white><maximum>",
-                            "",
-                            "<yellow>ЛКМ <gray>— добавить партию",
-                            "<yellow>ПКМ <gray>— убрать партию",
-                            "<yellow>Shift + ЛКМ <gray>— выбрать максимум",
-                            "<yellow>Shift + ПКМ <gray>— выбрать минимум",
-                        ),
-                    )
-                    onClick { event ->
-                        if (!event.isLeftClick && !event.isRightClick) return@onClick
-                        if (selection.canSubmit) {
-                            openDetail(
-                                player,
-                                group,
-                                contractId,
-                                ContractQuantitySelector.adjust(
-                                    selection,
-                                    decrease = event.isRightClick,
-                                    jumpToBoundary = event.isShiftClick,
-                                ),
-                            )
-                        } else {
-                            player.sendActionBar(unavailableReason(group, view, selection, available))
-                        }
+                    ).withType(material),
+                ) { context ->
+                    val event = context.event
+                    if (!event.isLeftClick && !event.isRightClick) return@entryWithContext
+                    if (canSubmit) {
+                        openDetail(
+                            context.player,
+                            group,
+                            contractId,
+                            ContractQuantitySelector.adjust(
+                                selection,
+                                decrease = event.isRightClick,
+                                jumpToBoundary = event.isShiftClick,
+                            ),
+                        )
+                    } else {
+                        context.player.sendActionBar(unavailableReason(group, view, selection, available))
                     }
-                }
-            }
-            navBar {
-                button(0) {
-                    material(Material.BLUE_STAINED_GLASS_PANE)
-                    display("<yellow><bold>Назад")
-                    lore(listOf("<gray>Вернуться к книге заказов."))
-                    fromConfig(contractGuiConfig, "detail.back")
-                    onClick { openList(player, group) }
-                }
-                button(8) {
-                    material(Material.GREEN_STAINED_GLASS_PANE)
-                    tags(
-                        mapOf(
-                            "selected" to selection.selected.toString(),
-                            "payout" to formatContractMoney(selection.payoutMinor),
+                },
+                "back" to ArcMenus.entry(ArcMenus.item(ArcMenuSchema.CONTRACTS_DETAIL, "back")) {
+                    openList(it, group)
+                },
+                "confirm" to ArcMenus.entry(
+                    ArcMenus.item(
+                        ArcMenuSchema.CONTRACTS_DETAIL,
+                        "confirm",
+                        PaperMenuItemRenderContext(
+                            values = mapOf(
+                                "selected" to Component.text(selection.selected),
+                                "payout" to Component.text(formatContractMoney(selection.payoutMinor)),
+                            ),
+                            flags = if (canSubmit) setOf("can-submit") else emptySet(),
                         ),
-                    )
-                    display(if (selection.canSubmit) "<green><bold>Подтвердить" else "<red><bold>Сдача недоступна")
-                    lore(
-                        if (selection.canSubmit) {
-                            listOf(
-                                "<gray>Будет принято: <white><selected>",
-                                "<gray>Выплата: <gold><payout> <white>💰</white>",
-                                "",
-                                "<green>ЛКМ: подтвердить сдачу.",
-                            )
-                        } else {
-                            listOf("<gray>Не хватает минимальной партии.")
-                        },
-                    )
-                    fromConfig(contractGuiConfig, "detail.confirm")
-                    onClick {
-                        if (selection.canSubmit) submit(player, group, contractId, selection.selected)
-                        else player.sendActionBar(unavailableReason(group, view, selection, available))
-                    }
-                }
-            }
-        }
+                    ),
+                    enabled = canSubmit,
+                ) { submit(it, group, contractId, selection.selected) },
+            ),
+        )
     }
+
+    private fun render(vararg values: Pair<String, String>) = PaperMenuItemRenderContext(
+        values = values.associate { (key, value) -> key to TextUtil.mm(value, true) },
+    )
 
     private fun submit(
         player: Player,
@@ -344,8 +289,6 @@ object NpcContractsGui {
         contractGuiConfig.string("boards.$group.$path", contractGuiConfig.string("defaults.$path", fallback))
 
     private fun formatTime(timestamp: Long): String = TIME_FORMAT.format(Instant.ofEpochMilli(timestamp))
-
-    private val LIST_POSITIONS = listOf(0 to 1, 2 to 1, 4 to 1, 6 to 1, 8 to 1, 1 to 2, 3 to 2, 5 to 2, 7 to 2)
 
     private val TIME_FORMAT =
         DateTimeFormatter.ofPattern("dd.MM HH:mm 'МСК'", java.util.Locale.forLanguageTag("ru-RU"))

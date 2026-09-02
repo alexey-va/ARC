@@ -12,7 +12,7 @@ group = "ARC"
 version = "1.2.3"
 description = "ARC"
 val pluginVersion = version.toString()
-val arcCoreVersion = "2.2.0"
+val arcCoreVersion = "2.4.1"
 
 java { toolchain { languageVersion.set(JavaLanguageVersion.of(25)) } }
 kotlin { jvmToolchain(25) }
@@ -27,15 +27,21 @@ kotlin.target.compilations.getByName("integrationTest")
 
 repositories {
     mavenLocal()
+    maven("https://repo.rus-crafting.ru/grocermc/")
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://oss.sonatype.org/content/groups/public/")
     maven("https://repo.alessiodp.com/releases/")
-    maven("https://maven.enginehub.org/repo/")
+    exclusiveContent {
+        forRepository { maven("https://maven.enginehub.org/repo/") }
+        filter {
+            includeGroupByRegex("com\\.sk89q(\\..*)?")
+            includeGroupByRegex("org\\.enginehub(\\..*)?")
+        }
+    }
     maven("https://maven.citizensnpcs.co/repo")
     maven("https://repo.extendedclip.com/content/repositories/placeholderapi/")
     maven("https://repo.codemc.io/repository/maven-public/")
     maven("https://repo.william278.net/releases/")
-    maven("https://repo.rus-crafting.ru/grocermc/")
     maven("https://repo.viaversion.com")
     maven("https://jitpack.io")
     maven("https://mvn-repo.arim.space/lesser-gpl3/")
@@ -56,6 +62,8 @@ dependencies {
     implementation("ru.ruscrafting.arc:arc-core-redis:$arcCoreVersion")
     implementation("ru.ruscrafting.arc:arc-core-sql:$arcCoreVersion")
     implementation("ru.ruscrafting.arc:arc-core-paper:$arcCoreVersion")
+    implementation("ru.ruscrafting.arc:arc-core-menu:$arcCoreVersion")
+    implementation("ru.ruscrafting.arc:arc-core-paper-menu:$arcCoreVersion")
     implementation("ru.ruscrafting.arc:arc-core-ai:$arcCoreVersion")
 
     // snakeyaml-engine comes transitively from arc-core

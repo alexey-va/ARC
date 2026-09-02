@@ -59,6 +59,7 @@ import ru.arc.contracts.ContractsModule
 import ru.arc.investigation.InvestigationModule
 import ru.arc.hooks.HookRegistry
 import ru.arc.gui.GuiDefaults
+import ru.arc.gui.ArcMenus
 import ru.arc.itemcatalog.ItemsCatalogModule
 import ru.arc.network.NetworkRegistry
 import ru.arc.redis.RedisManager
@@ -117,6 +118,7 @@ open class ARC : JavaPlugin() {
         }
 
         PaperArcRuntime.installScheduling(this)
+        ArcMenus.initialize(this, dataPath)
         chunkTicketRegistry = PaperChunkTicketRegistry(this)
         RtpPlayerRegistry.initialize(dataPath)
         registerModules()
@@ -153,6 +155,7 @@ open class ARC : JavaPlugin() {
         info("Stopping ARC plugin")
         Portal.removeAll()
         ModuleRegistry.shutdownAll()
+        ArcMenus.close()
         if (::chunkTicketRegistry.isInitialized) {
             runCatching(chunkTicketRegistry::close)
                 .onFailure { error("Failed to close ARC chunk ticket registry", it) }
@@ -172,6 +175,7 @@ open class ARC : JavaPlugin() {
         Portal.removeAll()
         // Reload YAML from disk before modules re-read configs (announce delay, etc.).
         ConfigManager.reloadAll()
+        ArcMenus.reload()
         ModuleRegistry.reloadAll()
         // Modules may replace channel listeners during reload; restart the subscription once
         // after every module has refreshed its registrations.
@@ -359,6 +363,7 @@ open class ARC : JavaPlugin() {
                 "modules/misc.yml",
                 "config/commands.yml",
                 "guis/defaults.yml",
+                "guis/menus.yml",
                 "guis/board.yml",
                 "guis/contracts.yml",
                 "guis/investigations.yml",

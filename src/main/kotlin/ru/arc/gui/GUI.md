@@ -1,188 +1,121 @@
-# GUI в ARC
+# Конфигурируемые GUI в ARC
 
-Краткая инструкция по созданию игровых меню в стиле проекта (board, scheduled commands, stock).
+Все игровые экраны ARC подключаются к общему каталогу
+`src/main/resources/guis/menus.yml`. Он работает поверх
+`arc-core-menu` и `arc-core-paper-menu` (Inventory Framework остаётся внутренней
+деталью рендера).
 
-## Два паттерна
+## Кто чем управляет
 
-### 1. Список с пагинацией — `GuiDsl`
+| Часть | Владелец |
+|---|---|
+| Число рядов, фон, слоты кнопок, порядок динамических ячеек, пагинация | `menus.layouts` в YAML |
+| Material, ItemsAdder fallback, model data, glint, flags, name и шаблон lore | `menus.templates` в YAML |
+| Допустимые ID кнопок и областей | `ArcMenuSchema.contracts` |
+| Допустимые `<tags>`, условия и повторяемые строки lore | `ArcMenuSchema.textContracts` |
+| Значения тегов, права, цены, бизнес-действия и сохранение | Kotlin-код фичи |
+| Отмена опасных кликов, защита от двойного dispatch, reload и lifecycle | `ArcMenus`/arc-core |
 
-Для каталогов, списков записей, магазинов.
+Конфиг не исполняет команды. Семантическая кнопка `buy` может переехать в
+другой слот или полностью сменить вид, но право на покупку и само списание
+остаются типизированным обработчиком в коде.
 
-```kotlin
-fun buildListGui(player: Player): ChestGui {
-    val cfg = ConfigManager.of(dataPath, "guis/my-feature.yml")
-    return gui(cfg.string("list.title"), 6, player, cfg) {
-        // Ванильные fallback-материалы; production overlay может добавить model data.
-        contentBackground(Material.LIGHT_GRAY_STAINED_GLASS_PANE)
-        navBackground()
+## Layout
 
-        pagination(0 until 5) {
-            items(entries) { entry ->
-                stack(buildEntryItem(cfg, entry))
-                onClick {
-                    it.isCancelled = true
-                    openEditor(player, entry.id)
-                }
-            }
-        }
-
-        navBar {
-            // Кнопка «Назад» — НЕ Material.ARROW, а как в board:
-            back(action = { openParent(player) })
-            // или с configKey из yml:
-            // back(configKey = "list-menu.back") { openParent(player) }
-        }
-    }
-}
-```
-
-**Показывать через:** `GuiUtils.constructAndShowAsync({ buildListGui(player) }, player)`
-
-### 2. Форма редактирования — `ChestGui` + `Inputable` (как `AddBoardGui`)
-
-Для экранов с полями, которые игрок меняет кликом или вводом в чат.
-
-Структура **2 ряда (18 слотов)**:
-
-| Ряд | Слоты         | Содержимое                                                                    |
-|-----|---------------|-------------------------------------------------------------------------------|
-| 0   | 1, 3, 4, 5, 7 | Редактируемые поля (команда, расписание, тип, серверы, вкл/выкл)              |
-| 1   | 0             | **Назад** — ванильный `BLUE_STAINED_GLASS_PANE`, затем `fromConfig`          |
-| 1   | 4             | Доп. действие (запуск сейчас, удаление)                                       |
-| 1   | 8             | **Сохранить** — ванильный `GREEN_STAINED_GLASS_PANE`, затем `fromConfig`      |
-
-```kotlin
-class EditMyGui(player: Player) : ChestGui(2, title), Inputable {
-    init {
-        setupBackground() // OutlinePane + GuiUtils.background() на весь GUI
-        val pane = StaticPane(9, 2)
-        pane.addItem(fieldItem(), 1, 0)
-        pane.addItem(backItem(), 0, 1)
-        pane.addItem(saveItem(), 8, 1)
-        addPane(Slot.fromXY(0, 0), pane)
-    }
-
-    // Текстовый ввод — TitleInput + Inputable
-    private fun fieldItem() = guiItem(Material.PAPER) {
-        onClick { click ->
-            click.isCancelled = true
-            TitleInput(player, this@EditMyGui, 0)
-            click.whoClicked.closeInventory()
-        }
-        display("<green>Название")
-        lore(listOf("<gray>Нажмите, чтобы изменить"))
-        fromConfig(cfg, "edit-menu.field")
-    }
-
-    override fun setParameter(n: Int, s: String) { /* сохранить в draft */ }
-    override fun proceed() { /* обновить GuiItem и show(player) */ }
-}
-```
-
-**Циклические поля** (тип, сервер, цвет) — `onClick` меняет enum и пересобирает `GuiItem`.
-
-## Универсальный default и серверный overlay
-
-- Bundled `src/main/resources` обязан работать с ванильным клиентом: обычные
-  `Material`, тексты и lore, без ItemsAdder ID и без ненулевого
-  `customModelData`.
-- Код задаёт безопасный ванильный fallback и читает item-spec из конфига. Не
-  хардкодить RusCrafting model data в Kotlin.
-- Серверные Material + `customModelData` хранятся только в tracked runtime
-  mirror (`classic*/plugins/ARC/...`). Это overlay конкретного resource pack,
-  а не часть переносимого ARC.
-- Один item-spec должен переопределять пару Material + model data вместе.
-  Источник истины — активный ItemsAdder `contents/arc/configs/items.yml`.
-  Lands можно смотреть только как пример потребителя уже объявленных общих
-  моделей: модели и ID не принадлежат Lands. Не угадывать ID по похожей иконке.
-- Spawn и survival получают одинаковый overlay, если используют один pack.
-- Образец: `guis/board.yml`, `guis/scheduled-commands.yml`.
-- Подключение: `fromConfig(cfg, "edit-menu.save")` в `guiItem { }`.
-- Bundled resource: добавить путь в `ARC.BUNDLED_RESOURCES`.
-
-Bundled default:
+Слоты нумеруются с нуля. Можно перечислять слоты, задавать диапазоны и менять
+порядок — порядок региона является порядком вывода элементов.
 
 ```yaml
-list-menu:
-  back:
-    material: BLUE_STAINED_GLASS_PANE
-    display: "<gray>« Назад"
+menus:
+  layouts:
+    example-shop:
+      schema-version: 1
+      rows: 6
+      background: { template: background }
+      elements:
+        back: { slot: 45, template: back }
+        previous: { slot: 48, template: previous }
+        page: { slot: 49, template: page, kind: decoration }
+        next: { slot: 50, template: next }
+      regions:
+        offers: { slots: [10, 11, 12, 14, 15, 16, '19-25'] }
+      pagination:
+        region: offers
+        previous: previous
+        next: next
+        indicator: page
 ```
 
-RusCrafting runtime overlay:
+Каждый экран обязан иметь контракт в `ArcMenuSchema`. При пропавшей кнопке,
+конфликте слотов, неизвестном шаблоне или лишнем теге новый каталог не
+публикуется. Reload сначала целиком валидирует новую генерацию, затем закрывает
+старые сессии; смешать старый layout с новыми предметами невозможно.
+
+## Предметы и богатый lore
 
 ```yaml
-list-menu:
-  back:
-    material: BLUE_STAINED_GLASS_PANE
-    customModelData: 11013
+menus:
+  templates:
+    offer:
+      material: GOLD_INGOT
+      name: '<gold><name>'
+      lore:
+        - '<gray>Цена: <white><price>'
+        - '<gray>Баланс: <white><balance>'
+        - { text: '<green>Нажмите — купить', when: affordable }
+        - { text: '<red>Не хватает <missing>', unless: affordable }
+        - { repeat: effects, text: '<dark_gray>• <effect> <level>' }
 ```
 
-## Кнопка «Назад» (обязательно как board)
+В `PaperMenuTextContract` для этого шаблона объявляются:
+
+- values: `name`, `price`, `balance`, `missing`;
+- flags: `affordable`;
+- repeats: `effects` со значениями `effect`, `level`.
+
+Любой другой тег — ошибка загрузки. Значения подставляются как Adventure
+components, поэтому имя игрока или внешний текст не может внедрить MiniMessage
+разметку. Условия `when`/`unless` позволяют держать альтернативные состояния в
+одном lore, а `repeat` — выводить произвольное количество характеристик.
+
+## Реализация экрана
 
 ```kotlin
-guiItem(Material.BLUE_STAINED_GLASS_PANE) {
-    display("<gray>« Назад")
-    fromConfig(cfg, "list-menu.back")
-    onClick { /* вернуться на предыдущий GUI */ }
-}
-```
-
-Или через `GuiDefaults.BackButton` / `navBar { back(action = { ... }) }`.
-
-**Не использовать** `Material.ARROW` для навигации — это не стиль ARC.
-
-## Фон
-
-| Зона                   | Универсальный fallback                  | RusCrafting overlay                         |
-|------------------------|------------------------------------------|---------------------------------------------|
-| Контент (ряды 0…n-2)   | `LIGHT_GRAY_STAINED_GLASS_PANE`          | только если pack объявляет отдельную модель |
-| Навбар / общий фон     | `GRAY_STAINED_GLASS_PANE`                | `arc:background`, CMD `11000`                |
-| Назад / страницы       | обычные панели или стрелки               | CMD `11013`, `11009`, `11008`                |
-
-Полный проверенный каталог кнопок находится в
-`classic/plugins/ItemsAdder/AGENTS.md`. Lands
-`Locale/definitions_gui.yml` — живой пример применения фона и навигации, но не
-источник новых ID.
-
-Пустые ряды только с фоном без кнопок — **ошибка UX**: редактируемые элементы должны быть в **верхнем ряду**,
-навигация — в **нижнем**.
-
-## Плейсхолдеры в lore
-
-```kotlin
-tagResolver(
-    TagResolver.resolver("command", Tag.inserting(Component.text(draft.command)))
+ArcMenus.open(
+    player = player,
+    menu = SHOP,
+    title = messages.component("shop.title"),
+    elements = mapOf(
+        "back" to ArcMenus.entry(ArcMenus.item(SHOP, "back")) { openParent(it) },
+    ),
+    regions = mapOf(
+        OFFERS to domainOffers.map { offer ->
+            ArcMenus.entry(renderOffer(offer)) { buy(it, offer.id) }
+        },
+    ),
 )
-lore(listOf("<white><command>", "<gray>Нажмите, чтобы изменить"))
 ```
 
-## Сохранение
+Для контейнеров, из которых реально забирают предметы, используется только
+`ArcMenus.transferEntry`: сначала атомарно резервируется доменный предмет и
+только затем runtime разрешает безопасный pickup. Размещение, hotbar swap,
+drop, creative clone, опасный double-click и drag остаются заблокированы.
 
-1. Draft (mutable) в GUI-сессии.
-2. По «Сохранить» — запись в YAML через `Config.set*` + `save()`.
-3. `config.reload()` и сброс runtime-состояния сервиса при необходимости.
+Биржа, маунты и хранилище имеют специализированные live/transactional
+контроллеры. Они всё равно получают размеры, управляющие слоты и регионы из
+того же валидированного `ArcMenus`-каталога; материалы, name и lore у них
+остаются в их подробных feature-конфигах.
 
-## Чеклист нового GUI
+## Добавление нового GUI
 
-- [ ] Bundled `guis/<feature>.yml` с ванильными материалами и без pack-specific model data
-- [ ] Отдельный tracked production overlay с проверенными Material + CMD на каждом нужном узле
-- [ ] Список: `GuiDsl` + pagination + `LIGHT_GRAY` content
-- [ ] Редактор: 2 ряда, поля сверху, back/save снизу
-- [ ] Назад: ванильный blue pane; RusCrafting overlay — CMD 11013, не хардкод в Kotlin
-- [ ] Текстовые поля: `TitleInput` + `Inputable`
-- [ ] Валидация в `satisfy()`; отмена ввода — `exit` через `isCancelInput` / `onInputCancel`
-- [ ] Показ: `GuiUtils.constructAndShowAsync`
-- [ ] Resource в `BUNDLED_RESOURCES`
-- [ ] Тест доказывает resource-pack-neutral bundled default и чтение runtime overlay
-- [ ] Тесты на бизнес-логику (draft, save, schedule) — GUI через MockBukkit по необходимости
+1. Добавить `MenuId`, `MenuRegionId` и строгий `MenuContract` в
+   `ArcMenuSchema`.
+2. Добавить layout и item templates в `guis/menus.yml`.
+3. Для каждого шаблона с тегами объявить `PaperMenuTextContract`.
+4. В коде передавать только безопасные значения тегов и типизированные actions.
+5. Добавить контрактный тест: bundled-конфиг загружается, нужные слоты и
+   регионы совпадают с семантикой, неизвестный тег отвергается.
+6. Добавить тесты бизнес-переходов и особых click/transfer сценариев.
 
-## Ссылки в коде
-
-- `ru.arc.gui.GuiDsl` — DSL списков
-- `ru.arc.gui.GuiDefaults` — дефолты кнопок из `guis/defaults.yml`
-- `ru.arc.board.guis.AddBoardGui` — эталон формы
-- `ru.arc.board.guis.BoardGuiFactory` — эталон списка
-- `ru.arc.scheduled.guis.EditScheduledCommandGui` — форма с расписанием
-
-**Важно:** пакет GUI не должен называться `*.gui` — конфликтует с `import ru.arc.gui.gui`.
+Полная спецификация платформы и примеры находятся в
+`arc-core/docs/paper-menus.md`.

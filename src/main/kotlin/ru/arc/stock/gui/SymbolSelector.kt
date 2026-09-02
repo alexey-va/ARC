@@ -4,7 +4,6 @@ import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder
 import com.github.stefvanschie.inventoryframework.gui.GuiItem
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui
 import com.github.stefvanschie.inventoryframework.pane.OutlinePane
-import com.github.stefvanschie.inventoryframework.pane.PaginatedPane
 import com.github.stefvanschie.inventoryframework.pane.Pane
 import com.github.stefvanschie.inventoryframework.pane.StaticPane
 import com.github.stefvanschie.inventoryframework.pane.util.Slot
@@ -12,6 +11,9 @@ import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import ru.arc.config.StockConfig
+import ru.arc.gui.ArcMenuSchema
+import ru.arc.gui.ArcMenus
+import ru.arc.gui.GuiItems
 import ru.arc.stock.Stock
 import ru.arc.stock.StockMarket
 import ru.arc.stock.StockPlayer
@@ -25,14 +27,14 @@ import ru.arc.util.modify
 class SymbolSelector(
     private val stockPlayer: StockPlayer,
 ) : ChestGui(
-        4,
+        StockMenuTopology.rows(ArcMenuSchema.STOCK_SYMBOLS),
         TextHolder.deserialize(TextUtil.toLegacy(StockConfig.string("symbol-selector.menu-title"))),
     ) {
     private lateinit var back: GuiItem
     private lateinit var profile: GuiItem
     private lateinit var all: GuiItem
     private lateinit var market: GuiItem
-    private val rows = 4
+    private val rows = StockMenuTopology.rows(ArcMenuSchema.STOCK_SYMBOLS)
 
     init {
         setRows(rows)
@@ -42,7 +44,7 @@ class SymbolSelector(
     }
 
     private fun setupStocks() {
-        val paginatedPane = PaginatedPane(9, rows - 2)
+        val pane = StaticPane(9, rows)
         val guiItemList =
             StockMarket
                 .stocks()
@@ -50,13 +52,15 @@ class SymbolSelector(
                 .filter { StockMarket.isEnabledStock(it) }
                 .sortedBy { if (it.type == Stock.Type.STOCK) 0 else 1 }
                 .map { stockItem(it) }
-        paginatedPane.populateWithGuiItems(guiItemList)
-        this.addPane(Slot.fromXY(0, 1), paginatedPane)
+        StockMenuTopology.region(ArcMenuSchema.STOCK_SYMBOLS, ArcMenuSchema.STOCK_SYMBOL_ENTRIES)
+            .zip(guiItemList)
+            .forEach { (slot, item) -> pane.addItem(item, slot % 9, slot / 9) }
+        this.addPane(Slot.fromXY(0, 0), pane)
     }
 
     private fun setupNav() {
-        val pane = StaticPane(9, 1)
-        this.addPane(Slot.fromXY(0, rows - 1), pane)
+        val pane = StaticPane(9, rows)
+        this.addPane(Slot.fromXY(0, 0), pane)
         val tagResolver = stockPlayer.tagResolver()
 
         back =
@@ -71,7 +75,11 @@ class SymbolSelector(
                 modelData(11013)
                 fromConfig(StockConfig.config(), "locale.symbol-selector.back")
             }
-        pane.addItem(back, 0, 0)
+        pane.addItem(
+            back,
+            StockMenuTopology.localX(ArcMenuSchema.STOCK_SYMBOLS, "back"),
+            StockMenuTopology.localY(ArcMenuSchema.STOCK_SYMBOLS, "back"),
+        )
 
         all =
             guiItem(Material.GREEN_STAINED_GLASS_PANE) {
@@ -93,7 +101,11 @@ class SymbolSelector(
                 )
                 fromConfig(StockConfig.config(), "locale.symbol-selector.all-positions")
             }
-        pane.addItem(all, 4, 0)
+        pane.addItem(
+            all,
+            StockMenuTopology.localX(ArcMenuSchema.STOCK_SYMBOLS, "all"),
+            StockMenuTopology.localY(ArcMenuSchema.STOCK_SYMBOLS, "all"),
+        )
 
         profile =
             guiSkull(stockPlayer.playerUuid) {
@@ -116,10 +128,11 @@ class SymbolSelector(
                 )
                 fromConfig(StockConfig.config(), "locale.symbol-selector.profile")
             }
-        pane.addItem(profile, 8, 0)
-
-        val topNavigation = StaticPane(9, 1)
-        this.addPane(Slot.fromXY(0, 0), topNavigation)
+        pane.addItem(
+            profile,
+            StockMenuTopology.localX(ArcMenuSchema.STOCK_SYMBOLS, "profile"),
+            StockMenuTopology.localY(ArcMenuSchema.STOCK_SYMBOLS, "profile"),
+        )
         market =
             guiItem(Material.BELL) {
                 onClick { click ->
@@ -137,7 +150,11 @@ class SymbolSelector(
                 )
                 fromConfig(StockConfig.config(), "locale.symbol-selector.market")
             }
-        topNavigation.addItem(market, 4, 0)
+        pane.addItem(
+            market,
+            StockMenuTopology.localX(ArcMenuSchema.STOCK_SYMBOLS, "market"),
+            StockMenuTopology.localY(ArcMenuSchema.STOCK_SYMBOLS, "market"),
+        )
     }
 
     private fun stockItem(stock: Stock): GuiItem {
@@ -162,13 +179,8 @@ class SymbolSelector(
 
     private fun setupBackground() {
         val pane = OutlinePane(9, rows, Pane.Priority.LOWEST)
-        pane.addItem(GuiUtils.background())
+        pane.addItem(GuiItems.create(requireNotNull(ArcMenus.background(ArcMenuSchema.STOCK_SYMBOLS))))
         pane.setRepeat(true)
         this.addPane(Slot.fromXY(0, 0), pane)
-
-        val pane2 = OutlinePane(9, 2, Pane.Priority.LOW)
-        pane2.addItem(GuiUtils.background(Material.LIGHT_GRAY_STAINED_GLASS_PANE))
-        pane2.setRepeat(true)
-        this.addPane(Slot.fromXY(0, 1), pane2)
     }
 }

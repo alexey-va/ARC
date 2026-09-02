@@ -49,7 +49,7 @@ object TreasuresSubCommand : SubCommand {
         if (args.isEmpty()) {
             val player = sender.player
             if (player != null) {
-                GuiUtils.constructAndShowAsync({ MainTreasuresGui.create(player) }, player)
+                MainTreasuresGui.open(player)
             } else {
                 showList(sender)
             }
@@ -88,7 +88,7 @@ object TreasuresSubCommand : SubCommand {
             }
             val player = sender.player
             if (player != null) {
-                GuiUtils.constructAndShowAsync({ PoolGui.create(player, pool) }, player)
+                PoolGui.open(player, pool)
             } else {
                 showPoolInfo(sender, pool, poolId)
             }

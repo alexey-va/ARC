@@ -2,6 +2,8 @@ package ru.arc.misc
 
 import com.github.stefvanschie.inventoryframework.gui.GuiItem
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui
+import com.github.stefvanschie.inventoryframework.pane.OutlinePane
+import com.github.stefvanschie.inventoryframework.pane.Pane
 import com.github.stefvanschie.inventoryframework.pane.StaticPane
 import com.github.stefvanschie.inventoryframework.pane.util.Slot
 import org.bukkit.Material
@@ -11,6 +13,8 @@ import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
+import ru.arc.gui.ArcMenuSchema
+import ru.arc.gui.ArcMenus
 import ru.arc.gui.GuiBuilder
 import ru.arc.gui.GuiItems
 import ru.arc.gui.onBottomClick
@@ -23,7 +27,6 @@ import ru.arc.util.GuiUtils
 import ru.arc.util.Logging.debug
 import ru.arc.util.itemComponents
 import kotlin.math.ceil
-import kotlin.math.min
 
 /**
  * Factory for creating StoreGui.
@@ -61,11 +64,14 @@ private class StoreGuiSession(
 ) {
     private lateinit var chestGui: ChestGui
     private lateinit var storePane: StaticPane
-    private var visibleStoreSlots: Int = 0
+    private lateinit var configuredStoreSlots: List<Int>
     private var renderedStoreSlots: List<ItemStack?> = emptyList()
 
     fun build(): ChestGui {
-        val rows = min(6, ceil(store.size.toDouble() / 9).toInt() + 1)
+        val menu = storeMenuForSize(store.size)
+        val layout = ArcMenus.current().catalog.require(menu)
+        val rows = layout.rows
+        configuredStoreSlots = layout.region(ArcMenuSchema.STORE_ITEMS).map { it.index }
         val builder =
             GuiBuilder(
                 config.string("store.title"),
@@ -74,21 +80,33 @@ private class StoreGuiSession(
                 config,
             )
 
-        builder.navBackground()
+        ArcMenus.background(menu)?.let { background ->
+            val backgroundPane = OutlinePane(9, 1, Pane.Priority.LOWEST).apply {
+                addItem(GuiItems.create(background))
+                setRepeat(true)
+            }
+            builder.gui.addPane(Slot.fromXY(0, rows - 1), backgroundPane)
+        }
         builder.onTopDrag { it.isCancelled = true }
         builder.onBottomClick { click -> handleBottomClick(click, ::refreshItems) }
         builder.onTopClick { click -> handleTopClick(click) }
-        visibleStoreSlots = (rows - 1) * 9
-        storePane = StaticPane(9, rows - 1)
+        storePane = StaticPane(9, rows)
         renderedStoreSlots = snapshotVisibleStoreSlots()
         populateStorePane(renderedStoreSlots)
         builder.gui.addPane(Slot.fromXY(0, 0), storePane)
-        builder.navBar {
-            back(configKey = "store.back") {
+        val backSlot = layout.slot("back").index
+        val navigation = StaticPane(9, rows)
+        navigation.addItem(
+            GuiItems.create(
+                ArcMenus.item(menu, "back"),
+            ) {
                 player.closeInventory()
                 player.performCommand(config.string("store.back-command"))
-            }
-        }
+            },
+            backSlot % 9,
+            backSlot / 9,
+        )
+        builder.gui.addPane(Slot.fromXY(0, 0), navigation)
 
         chestGui = builder.build()
         return chestGui
@@ -114,13 +132,14 @@ private class StoreGuiSession(
 
     private fun snapshotVisibleStoreSlots(): List<ItemStack?> {
         val storeSlots = store.getSlots()
-        return List(visibleStoreSlots) { slot -> storeSlots.getOrNull(slot)?.clone() }
+        return List(configuredStoreSlots.size) { slot -> storeSlots.getOrNull(slot)?.clone() }
     }
 
     private fun populateStorePane(items: List<ItemStack?>) {
-        items.forEachIndexed { slot, item ->
+        items.forEachIndexed { storeSlot, item ->
             if (item != null) {
-                storePane.addItem(createStoreGuiItem(item), slot % 9, slot / 9)
+                val inventorySlot = configuredStoreSlots[storeSlot]
+                storePane.addItem(createStoreGuiItem(item), inventorySlot % 9, inventorySlot / 9)
             }
         }
     }
@@ -132,12 +151,13 @@ private class StoreGuiSession(
         slot: Int,
         item: ItemStack?,
     ) {
-        val x = slot % 9
-        val y = slot / 9
+        val inventorySlot = configuredStoreSlots[slot]
+        val x = inventorySlot % 9
+        val y = inventorySlot / 9
         storePane.removeItem(x, y)
 
         if (item == null || item.type == Material.AIR) {
-            chestGui.inventory.setItem(slot, null)
+            chestGui.inventory.setItem(inventorySlot, null)
             return
         }
 
@@ -147,7 +167,7 @@ private class StoreGuiSession(
         // StaticPane applies this UUID only while rendering. Apply it to the one slot sent now as well,
         // so InventoryFramework can still match later clicks without calling ChestGui.update().
         val renderedItem = paneItem.copy().also { it.applyUUID() }
-        chestGui.inventory.setItem(slot, renderedItem.item.clone())
+        chestGui.inventory.setItem(inventorySlot, renderedItem.item.clone())
     }
 
     private fun createStoreGuiItem(original: ItemStack): GuiItem = GuiItems.create(original.clone())
@@ -176,8 +196,8 @@ private class StoreGuiSession(
     }
 
     private fun handleTopClick(click: InventoryClickEvent) {
-        val storeSlot = click.rawSlot
-        if (storeSlot !in 0 until minOf(store.size, visibleStoreSlots)) return
+        val storeSlot = configuredStoreSlots.indexOf(click.rawSlot)
+        if (storeSlot !in 0 until minOf(store.size, configuredStoreSlots.size)) return
 
         click.isCancelled = true
 
@@ -262,3 +282,6 @@ private class StoreGuiSession(
 
     private fun isOnCooldown(player: Player): Boolean = CooldownManager.cooldown(player.uniqueId, "store") != 0L
 }
+
+internal fun storeMenuForSize(storeSize: Int) =
+    checkNotNull(ArcMenuSchema.STORE[(ceil(storeSize.coerceAtLeast(0).toDouble() / 9).toInt() + 1).coerceIn(2, 6)])

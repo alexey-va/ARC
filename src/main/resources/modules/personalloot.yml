@@ -12,6 +12,9 @@ inventories:
 use-bs-loot: true
 # Сколько раз нужно сломать блок, чтобы уничтожить сундук и очистить данные
 max-breaks: 3
+gui:
+  # Размер и доступные слоты управляются layouts personal-loot-1..6 в guis/menus.yml.
+  title: '<dark_gray>Лут данжа'
 messages:
   # При ломании; плейсхолдер <amount> — сколько ударов осталось до разрушения
   break: <red>Этот сундук нужно сломать еще <amount> раз

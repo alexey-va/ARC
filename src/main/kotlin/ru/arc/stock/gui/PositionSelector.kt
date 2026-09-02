@@ -4,7 +4,6 @@ import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder
 import com.github.stefvanschie.inventoryframework.gui.GuiItem
 import com.github.stefvanschie.inventoryframework.gui.type.ChestGui
 import com.github.stefvanschie.inventoryframework.pane.OutlinePane
-import com.github.stefvanschie.inventoryframework.pane.PaginatedPane
 import com.github.stefvanschie.inventoryframework.pane.Pane
 import com.github.stefvanschie.inventoryframework.pane.StaticPane
 import com.github.stefvanschie.inventoryframework.pane.util.Slot
@@ -16,6 +15,9 @@ import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import ru.arc.config.StockConfig
+import ru.arc.gui.ArcMenuSchema
+import ru.arc.gui.ArcMenus
+import ru.arc.gui.GuiItems
 import ru.arc.core.ScheduledTask
 import ru.arc.core.repeating
 import ru.arc.core.ticks
@@ -54,17 +56,12 @@ class PositionSelector(
     private lateinit var create: GuiItem
     private lateinit var profile: GuiItem
     private var refreshTask: ScheduledTask? = null
-    private lateinit var paginatedPane: PaginatedPane
+    private lateinit var positionsPane: StaticPane
     private val positionItemsByUuid = linkedMapOf<java.util.UUID, GuiItem>()
     private var lastRefreshFingerprint: String? = null
 
     init {
-        rows =
-            if (positions == null) {
-                2
-            } else {
-                max(2, min(6, (ceil(positions!!.size / 9.0)).toInt() + 1))
-            }
+        rows = StockMenuTopology.rows(ArcMenuSchema.STOCK_POSITIONS)
         setRows(rows)
 
         setupBackground()
@@ -87,16 +84,18 @@ class PositionSelector(
     }
 
     private fun setupPositions() {
-        paginatedPane = PaginatedPane(9, rows - 1)
-        this.addPane(Slot.fromXY(0, 0), paginatedPane)
+        positionsPane = StaticPane(9, rows)
+        this.addPane(Slot.fromXY(0, 0), positionsPane)
         populatePositions()
     }
 
     private fun populatePositions() {
-        paginatedPane.clear()
+        positionsPane.clear()
         positionItemsByUuid.clear()
         val guiItemList = positions?.map { positionItem(it) } ?: emptyList()
-        paginatedPane.populateWithGuiItems(guiItemList)
+        StockMenuTopology.region(ArcMenuSchema.STOCK_POSITIONS, ArcMenuSchema.STOCK_POSITION_ENTRIES)
+            .zip(guiItemList)
+            .forEach { (slot, item) -> positionsPane.addItem(item, slot % 9, slot / 9) }
         lastRefreshFingerprint = positions?.let { fingerprint(it) }
     }
 
@@ -149,8 +148,8 @@ class PositionSelector(
     }
 
     private fun setupNav() {
-        val pane = StaticPane(9, 1)
-        this.addPane(Slot.fromXY(0, rows - 1), pane)
+        val pane = StaticPane(9, rows)
+        this.addPane(Slot.fromXY(0, 0), pane)
         val tagResolver = customResolver()
 
         back =
@@ -165,7 +164,11 @@ class PositionSelector(
                 modelData(11013)
                 fromConfig(StockConfig.config(), "locale.position-selector.back")
             }
-        pane.addItem(back, 0, 0)
+        pane.addItem(
+            back,
+            StockMenuTopology.localX(ArcMenuSchema.STOCK_POSITIONS, "back"),
+            StockMenuTopology.localY(ArcMenuSchema.STOCK_POSITIONS, "back"),
+        )
 
         val canHaveMore = stockPlayer.isBelowMaxStockAmount() && !(positions != null && positions!!.size >= 9)
         if (symbol != null) {
@@ -218,7 +221,11 @@ class PositionSelector(
                         fromConfig(StockConfig.config(), "locale.position-selector.create-limit")
                     }
                 }
-            pane.addItem(create, 4, 0)
+            pane.addItem(
+                create,
+                StockMenuTopology.localX(ArcMenuSchema.STOCK_POSITIONS, "create"),
+                StockMenuTopology.localY(ArcMenuSchema.STOCK_POSITIONS, "create"),
+            )
         }
 
         profile =
@@ -242,7 +249,11 @@ class PositionSelector(
                 )
                 fromConfig(StockConfig.config(), "locale.position-selector.profile")
             }
-        pane.addItem(profile, 8, 0)
+        pane.addItem(
+            profile,
+            StockMenuTopology.localX(ArcMenuSchema.STOCK_POSITIONS, "profile"),
+            StockMenuTopology.localY(ArcMenuSchema.STOCK_POSITIONS, "profile"),
+        )
     }
 
     private fun customResolver(): TagResolver =
@@ -317,14 +328,9 @@ class PositionSelector(
     }
 
     private fun setupBackground() {
-        val pane = OutlinePane(9, 1, Pane.Priority.LOWEST)
-        pane.addItem(GuiUtils.background())
+        val pane = OutlinePane(9, rows, Pane.Priority.LOWEST)
+        pane.addItem(GuiItems.create(requireNotNull(ArcMenus.background(ArcMenuSchema.STOCK_POSITIONS))))
         pane.setRepeat(true)
-        this.addPane(Slot.fromXY(0, rows - 1), pane)
-
-        val pane2 = OutlinePane(9, rows - 1, Pane.Priority.LOWEST)
-        pane2.addItem(GuiUtils.background(Material.LIGHT_GRAY_STAINED_GLASS_PANE))
-        pane2.setRepeat(true)
-        this.addPane(Slot.fromXY(0, 0), pane2)
+        this.addPane(Slot.fromXY(0, 0), pane)
     }
 }

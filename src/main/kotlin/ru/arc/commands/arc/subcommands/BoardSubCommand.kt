@@ -26,7 +26,7 @@ object BoardSubCommand : SubCommand {
             player.sendMessage(TextUtil.mm("<red>Доска объявлений временно недоступна."))
             return true
         }
-        GuiUtils.constructAndShowAsync({ BoardGuiFactory.create(player) }, player)
+        BoardGuiFactory.open(player)
         return true
     }
 }

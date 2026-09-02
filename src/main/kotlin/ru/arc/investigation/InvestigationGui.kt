@@ -1,13 +1,14 @@
 package ru.arc.investigation
 
-import com.github.stefvanschie.inventoryframework.gui.type.ChestGui
-import org.bukkit.Material
+import net.kyori.adventure.text.Component
 import org.bukkit.entity.Player
 import ru.arc.ARC
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
-import ru.arc.gui.gui
-import ru.arc.util.GuiUtils
+import ru.arc.gui.ArcMenuSchema
+import ru.arc.gui.ArcMenus
+import ru.arc.paper.menu.PaperMenuEntry
+import ru.arc.paper.menu.PaperMenuItemRenderContext
 import ru.arc.util.TextUtil
 import java.time.Instant
 
@@ -19,11 +20,119 @@ object InvestigationGui {
     fun openHub(player: Player, latest: InvestigationJournalRecord?) {
         val policy = InvestigationModule.configOrNull() ?: return
         val bypassCooldown = player.hasPermission(InvestigationModule.COOLDOWN_BYPASS_PERMISSION)
-        GuiUtils.constructAndShowAsync({ buildHub(player, latest, policy, bypassCooldown) }, player)
+        ArcMenus.open(
+            player,
+            ArcMenuSchema.INVESTIGATION_HUB,
+            title("hub.title", "<dark_gray>Бюро расследований"),
+            elements = mapOf(
+                "start" to ArcMenus.entry(
+                    ArcMenus.item(
+                        ArcMenuSchema.INVESTIGATION_HUB,
+                        "start",
+                        render(
+                            values = mapOf(
+                                "fee" to InvestigationModule.money(policy.feeMinor),
+                                "reward" to InvestigationModule.money(policy.rewardMinor),
+                                "duration" to formatDuration(policy.duration.seconds),
+                                "cooldown" to cooldownLine(latest, bypassCooldown),
+                                "action" to "<green>Нажмите — оплата и выдача сразу.",
+                            ),
+                        ),
+                    ),
+                ) { InvestigationModule.startCase(it) },
+                "contracts" to ArcMenus.entry(
+                    ArcMenus.item(
+                        ArcMenuSchema.INVESTIGATION_HUB,
+                        "contracts",
+                        render(values = mapOf("action" to "<aqua>Нажмите, чтобы открыть.")),
+                    ),
+                ) { InvestigationModule.openContracts(it) },
+            ),
+        )
     }
 
     fun openCase(player: Player, record: InvestigationJournalRecord) {
-        GuiUtils.constructAndShowAsync({ buildCase(player, record) }, player)
+        val witnesses = record.case.witnesses().map { witness -> witnessEntry(player, record, witness) }
+        val checks = record.case.crossChecks(record.cluesMask)
+        val ready = record.clueCount() >= InvestigationService.MIN_CLUES
+        ArcMenus.open(
+            player,
+            ArcMenuSchema.INVESTIGATION_CASE,
+            title("case.title", "<dark_gray>Материалы расследования"),
+            elements = mapOf(
+                "next-step" to ArcMenus.entry(
+                    ArcMenus.item(
+                        ArcMenuSchema.INVESTIGATION_CASE,
+                        "next-step",
+                        render(
+                            values = mapOf("time" to timeLine(record), "clues" to record.clueCount().toString()),
+                            repeats = mapOf(
+                                "directions" to nextDirections(record),
+                                "warnings" to if (ready) {
+                                    listOf("", "<red>Вердикт выносится один раз: ошибка закроет дело.")
+                                } else {
+                                    listOf("", "<dark_gray>Фома примет вердикт после трёх показаний.")
+                                },
+                            ),
+                        ),
+                    ),
+                ),
+                "dossier" to ArcMenus.entry(
+                    ArcMenus.item(
+                        ArcMenuSchema.INVESTIGATION_CASE,
+                        "dossier",
+                        render(
+                            values = mapOf("title" to record.case.displayTitle()),
+                            repeats = mapOf("dossier" to wrapInvestigationLore(record.case.dossier())),
+                        ),
+                    ),
+                ),
+                "evidence" to ArcMenus.entry(
+                    ArcMenus.item(
+                        ArcMenuSchema.INVESTIGATION_CASE,
+                        "evidence",
+                        render(
+                            flags = if (checks.isEmpty()) emptySet() else setOf("has-links"),
+                            repeats = mapOf(
+                                "timeline" to wrapInvestigationLore(record.case.timeline(record.cluesMask)),
+                                "links" to if (checks.isEmpty()) {
+                                    listOf("<dark_gray>Опросите ещё свидетелей, чтобы открыть сверки.")
+                                } else {
+                                    wrapInvestigationLore(checks)
+                                },
+                            ),
+                        ),
+                    ),
+                ),
+                "return" to ArcMenus.entry(
+                    ArcMenus.item(
+                        ArcMenuSchema.INVESTIGATION_CASE,
+                        "return",
+                        render(
+                            values = mapOf(
+                                "clues" to record.clueCount().toString(),
+                                "missing" to (InvestigationService.MIN_CLUES - record.clueCount()).coerceAtLeast(0).toString(),
+                                "action" to if (ready) {
+                                    "<green>Вернитесь к Фоме и поговорите с ним."
+                                } else {
+                                    "<yellow>Сначала соберите хотя бы три показания."
+                                },
+                            ),
+                            flags = if (ready) setOf("ready") else emptySet(),
+                        ),
+                    ),
+                ) {
+                    it.sendActionBar(
+                        if (ready) {
+                            TextUtil.mm("<green>Вернитесь к Фоме и поговорите с ним, чтобы вынести вердикт.")
+                        } else {
+                            TextUtil.mm("<yellow>Сначала соберите хотя бы три показания. Сейчас: <white>${record.clueCount()}/5<yellow>.")
+                        },
+                    )
+                },
+            ),
+            regions = mapOf(ArcMenuSchema.WITNESSES to witnesses),
+        )
     }
 
     /**
@@ -35,257 +144,115 @@ object InvestigationGui {
         record: InvestigationJournalRecord,
         witness: InvestigationWitness,
     ) {
-        GuiUtils.constructAndShowAsync({ buildTestimony(player, record, witness) }, player)
+        val item = ArcMenus.item(
+            ArcMenuSchema.INVESTIGATION_TESTIMONY,
+            "statement",
+            render(
+                values = mapOf("name" to witness.displayName),
+                repeats = mapOf("testimony" to focusedTestimonyLore(record, witness)),
+            ),
+        )
+        item.type = org.bukkit.Material.matchMaterial(witness.itemMaterial) ?: item.type
+        ArcMenus.open(
+            player,
+            ArcMenuSchema.INVESTIGATION_TESTIMONY,
+            title("testimony.title", "<dark_gray>Показание свидетеля"),
+            elements = mapOf("statement" to ArcMenus.entry(item)),
+        )
     }
 
     fun openVerdicts(player: Player, record: InvestigationJournalRecord) {
-        GuiUtils.constructAndShowAsync({ buildVerdicts(player, record) }, player)
+        val ready = record.clueCount() >= InvestigationService.MIN_CLUES
+        val verdicts = InvestigationVerdict.entries.mapIndexed { index, verdict ->
+            val conclusion = record.case.conclusion(verdict)
+            ArcMenus.entry(
+                ArcMenus.item(
+                    VERDICT_TEMPLATES[index],
+                    render(
+                        values = mapOf("title" to conclusion.title),
+                        flags = if (ready) setOf("ready") else emptySet(),
+                        repeats = mapOf("explanation" to wrapInvestigationLore(conclusion.explanation)),
+                    ),
+                ),
+                enabled = ready,
+            ) { InvestigationModule.submit(it, verdict) }
+        }
+        ArcMenus.open(
+            player,
+            ArcMenuSchema.INVESTIGATION_VERDICT,
+            title("verdict.title", "<dark_gray>Выберите версию"),
+            elements = mapOf(
+                "question" to ArcMenus.entry(
+                    ArcMenus.item(
+                        ArcMenuSchema.INVESTIGATION_VERDICT,
+                        "question",
+                        render(values = mapOf("question" to record.case.question())),
+                    ),
+                ),
+                "back" to ArcMenus.entry(
+                    ArcMenus.item(
+                        ArcMenuSchema.INVESTIGATION_VERDICT,
+                        "back",
+                        render(values = mapOf("action" to "<gray>Ещё раз проверить показания и хронологию.")),
+                    ),
+                ) { openCase(it, record) },
+            ),
+            regions = mapOf(ArcMenuSchema.VERDICTS to verdicts),
+        )
     }
 
-    internal fun buildHub(
-        player: Player,
-        latest: InvestigationJournalRecord?,
-        policy: InvestigationConfig,
-        bypassCooldown: Boolean,
-    ): ChestGui =
-        gui(guiConfig.string("hub.title", "<dark_gray>Бюро расследований"), 3, player, guiConfig) {
-            background()
-            staticPane(width = 9, height = 3) {
-                item(4, 1) {
-                    style(InvestigationGuiRole.START)
-                    display("<green><bold>Взять дело за ${InvestigationModule.money(policy.feeMinor)} <white>💰</white>")
-                    lore(
-                        listOf(
-                            "<white>Фома выдаст вам предмет <gold>«Дело»<white>.",
-                            "<gray>В нём записаны происшествие, вопрос,",
-                            "<gray>свидетели и точный порядок действий.",
-                            "",
-                            "<yellow>1. <gray>Прочитайте дело в инвентаре.",
-                            "<yellow>2. <gray>Найдите отмеченных свидетелей.",
-                            "<yellow>3. <gray>Соберите хотя бы три показания.",
-                            "<yellow>4. <gray>Выберите верную версию событий.",
-                            "",
-                            "<gray>Награда: <gold>${InvestigationModule.money(policy.rewardMinor)} <white>💰</white>",
-                            "<gray>Время: <white>${formatDuration(policy.duration.seconds)}",
-                            if (bypassCooldown) {
-                                "<gray>Повтор: <aqua>без ожидания для администратора"
-                            } else {
-                                "<gray>Повтор: <white>${formatCooldown(policy.cooldown.toMinutes())}"
-                            },
-                            "",
-                            cooldownLine(latest, bypassCooldown),
-                            "<green>Нажмите — оплата и выдача сразу.",
-                        ),
-                    )
-                    onClick { InvestigationModule.startCase(player) }
-                }
-                item(8, 2) {
-                    style(InvestigationGuiRole.CONTRACTS)
-                    display("<aqua>Заказы бюро")
-                    lore(
-                        listOf(
-                            "<gray>Отдельные поставки книг, чернил и золота.",
-                            "<aqua>Нажмите, чтобы открыть.",
-                        ),
-                    )
-                    onClick { InvestigationModule.openContracts(player) }
-                }
-            }
-        }
-
-    internal fun buildCase(player: Player, record: InvestigationJournalRecord): ChestGui =
-        gui(guiConfig.string("case.title", "<dark_gray>Материалы расследования"), CASE_ROWS, player, guiConfig) {
-            background()
-            staticPane(width = 9, height = CASE_ROWS) {
-                item(4, 0) {
-                    style(InvestigationGuiRole.NEXT_STEP)
-                    display("<yellow><bold>Что делать сейчас")
-                    lore(nextStepLore(record))
-                }
-
-                record.case.witnesses().forEachIndexed { index, witness ->
-                    witnessItem(index * 2, WITNESS_ROW, player, record, witness)
-                }
-
-                item(0, INFO_ROW) {
-                    style(InvestigationGuiRole.DOSSIER)
-                    display("<gold><bold>${record.case.displayTitle()}")
-                    lore(wrapInvestigationLore(record.case.dossier()))
-                }
-                item(4, INFO_ROW) {
-                    style(InvestigationGuiRole.EVIDENCE)
-                    display("<aqua><bold>Хронология и связи")
-                    val checks = record.case.crossChecks(record.cluesMask)
-                    val checkLore =
-                        if (checks.isEmpty()) {
-                            listOf("", "<light_purple>Связи", "<dark_gray>Опросите ещё свидетелей, чтобы открыть сверки.")
-                        } else {
-                            listOf("", "<light_purple>Установленные связи") + checks
-                        }
-                    lore(
-                        wrapInvestigationLore(
-                            listOf("<aqua>Хронология") + record.case.timeline(record.cluesMask) + checkLore,
-                        ),
-                    )
-                }
-                item(8, INFO_ROW) {
-                    style(InvestigationGuiRole.RETURN_TO_FOMA)
-                    display(
-                        if (record.clueCount() >= InvestigationService.MIN_CLUES) {
-                            "<green><bold>Вернуться к Фоме"
-                        } else {
-                            "<dark_gray><bold>Вернуться к Фоме"
-                        },
-                    )
-                    lore(
-                        listOf(
-                            "<gray>Собрано показаний: <white>${record.clueCount()}/5<gray>.",
-                            "",
-                            if (record.clueCount() >= InvestigationService.MIN_CLUES) {
-                                "<green>Фома готов принять ваш вердикт."
-                            } else {
-                                "<dark_gray>Нужно ещё ${InvestigationService.MIN_CLUES - record.clueCount()} показания."
-                            },
-                            "<gray>Версии открываются только при разговоре с Фомой.",
-                            "<red>Ошибка сразу закрывает дело.",
-                        ),
-                    )
-                    onClick {
-                        player.sendActionBar(
-                            if (record.clueCount() >= InvestigationService.MIN_CLUES) {
-                                TextUtil.mm("<green>Вернитесь к Фоме и поговорите с ним, чтобы вынести вердикт.")
-                            } else {
-                                TextUtil.mm("<yellow>Сначала соберите хотя бы три показания. Сейчас: <white>${record.clueCount()}/5<yellow>.")
-                            },
-                        )
-                    }
-                }
-            }
-        }
-
-    internal fun buildVerdicts(player: Player, record: InvestigationJournalRecord): ChestGui =
-        gui(guiConfig.string("verdict.title", "<dark_gray>Выберите версию"), 3, player, guiConfig) {
-            background()
-            staticPane(width = 9, height = 3) {
-                item(4, 0) {
-                    style(InvestigationGuiRole.CHOOSE_VERDICT)
-                    display("<yellow><bold>${record.case.question()}")
-                    lore(
-                        listOf(
-                            "<gray>Выберите версию, которая объясняет всю цепочку.",
-                            "<red>Ошибочный вердикт сразу закроет дело.",
-                        ),
-                    )
-                }
-                InvestigationVerdict.entries.forEachIndexed { index, verdict ->
-                    verdictItem(index * 2, player, record, verdict, VERDICT_ROLES[index])
-                }
-                item(4, 2) {
-                    style(InvestigationGuiRole.BACK)
-                    display("<aqua>Вернуться к материалам")
-                    lore(listOf("<gray>Ещё раз проверить показания и хронологию."))
-                    onClick { openCase(player, record) }
-                }
-            }
-        }
-
-    internal fun buildTestimony(
+    private fun witnessEntry(
         player: Player,
         record: InvestigationJournalRecord,
         witness: InvestigationWitness,
-    ): ChestGui =
-        gui(guiConfig.string("testimony.title", "<dark_gray>Показание свидетеля"), 3, player, guiConfig) {
-            background()
-            staticPane(width = 9, height = 3) {
-                item(4, 1) {
-                    style(InvestigationGuiRole.TESTIMONY)
-                    material(Material.matchMaterial(witness.itemMaterial) ?: Material.PAPER)
-                    display("<gold><bold>${witness.displayName}")
-                    lore(focusedTestimonyLore(record, witness))
-                }
-            }
-        }
-
-    private fun ru.arc.gui.StaticPaneBuilder.witnessItem(
-        x: Int,
-        y: Int,
-        player: Player,
-        record: InvestigationJournalRecord,
-        witness: InvestigationWitness,
-    ) {
-        item(x, y) {
-            material(Material.matchMaterial(witness.itemMaterial) ?: Material.PAPER)
-            display(if (record.hasClue(witness)) "<green><bold>${witness.displayName}" else "<yellow><bold>${witness.displayName}")
-            lore(witnessLore(record, witness))
-            if (!record.hasClue(witness)) {
-                onClick {
-                    player.sendActionBar(TextUtil.mm("<yellow>Найдите свидетеля лично: <white>${witness.locationHint}<yellow>."))
-                }
+    ): PaperMenuEntry {
+        val collected = record.hasClue(witness)
+        val item = ArcMenus.item(
+            "investigation-witness",
+            render(
+                values = mapOf("name" to witness.displayName, "location" to witness.locationHint),
+                flags = if (collected) setOf("collected") else emptySet(),
+                repeats = mapOf("body" to if (collected) witnessLore(record, witness) else emptyList()),
+            ),
+        )
+        item.type = org.bukkit.Material.matchMaterial(witness.itemMaterial) ?: item.type
+        return ArcMenus.entry(item) {
+            if (!collected) {
+                it.sendActionBar(TextUtil.mm("<yellow>Найдите свидетеля лично: <white>${witness.locationHint}<yellow>."))
             }
         }
     }
 
-    private fun ru.arc.gui.StaticPaneBuilder.verdictItem(
-        x: Int,
-        player: Player,
-        record: InvestigationJournalRecord,
-        verdict: InvestigationVerdict,
-        role: InvestigationGuiRole,
-    ) {
-        val conclusion = record.case.conclusion(verdict)
-        item(x, 1) {
-            style(role)
-            display(
-                if (record.clueCount() >= InvestigationService.MIN_CLUES) {
-                    "<gold><bold>${conclusion.title}"
+    private fun title(path: String, fallback: String): Component = TextUtil.mm(guiConfig.string(path, fallback), true)
+
+    private fun render(
+        values: Map<String, String> = emptyMap(),
+        flags: Set<String> = emptySet(),
+        repeats: Map<String, List<String>> = emptyMap(),
+    ) = PaperMenuItemRenderContext(
+        values = values.mapValues { TextUtil.mm(it.value, true) },
+        flags = flags,
+        repeats = repeats.mapValues { (_, lines) -> lines.map { mapOf("line" to TextUtil.mm(it, true)) } },
+    )
+
+    private fun nextDirections(record: InvestigationJournalRecord): List<String> {
+        val nextWitness = record.case.witnesses().firstOrNull { !record.hasClue(it) }
+        return when {
+            record.clueCount() >= InvestigationService.MIN_CLUES -> listOf(
+                "<green>Вернитесь к Фоме: он готов принять вердикт.",
+                if (nextWitness == null) {
+                    "<gray>Вы собрали полную картину: пять показаний."
                 } else {
-                    "<dark_gray><bold>${conclusion.title}"
+                    "<gray>Для полной картины ещё можно опросить ${nextWitness.displayName}."
                 },
             )
-            lore(
-                wrapInvestigationLore(
-                    conclusion.explanation.map { "<gray>$it" } +
-                        listOf("", "<red>Нажмите, чтобы вынести вердикт."),
-                ),
+            nextWitness != null -> listOf(
+                "<white>Найдите: <gold>${nextWitness.displayName}<white>.",
+                "<gray>Место: <white>${nextWitness.locationHint}<gray>.",
+                "<gray>Поговорите с NPC, чтобы записать показание.",
             )
-            onClick { InvestigationModule.submit(player, verdict) }
+            else -> emptyList()
         }
-    }
-
-    private fun nextStepLore(record: InvestigationJournalRecord): List<String> {
-        val nextWitness = record.case.witnesses().firstOrNull { !record.hasClue(it) }
-        val direction =
-            when {
-                record.clueCount() >= InvestigationService.MIN_CLUES ->
-                    listOf(
-                        "<green>Вернитесь к Фоме: он готов принять вердикт.",
-                        if (nextWitness == null) {
-                            "<gray>Вы собрали полную картину: пять показаний."
-                        } else {
-                            "<gray>Для полной картины ещё можно опросить ${nextWitness.displayName}."
-                        },
-                    )
-                nextWitness != null ->
-                    listOf(
-                        "<white>Найдите: <gold>${nextWitness.displayName}<white>.",
-                        "<gray>Место: <white>${nextWitness.locationHint}<gray>.",
-                        "<gray>Поговорите с NPC, чтобы записать показание.",
-                    )
-                else ->
-                    emptyList()
-            }
-        val verdictState =
-            if (record.clueCount() >= InvestigationService.MIN_CLUES) {
-                listOf("", "<red>Вердикт выносится один раз: ошибка закроет дело.")
-            } else {
-                listOf("", "<dark_gray>Фома примет вердикт после трёх показаний.")
-            }
-        return listOf(timeLine(record), "<gray>Показания: <white>${record.clueCount()}/5", "") + direction + verdictState
-    }
-
-    private fun ru.arc.gui.ItemBuilder.style(role: InvestigationGuiRole) {
-        material(role.fallback)
-        fromConfig(guiConfig, "items.${role.configKey}")
     }
 
     private fun cooldownLine(
@@ -325,18 +292,14 @@ object InvestigationGui {
         }
     }
 
-    private val VERDICT_ROLES =
+    private val VERDICT_TEMPLATES =
         listOf(
-            InvestigationGuiRole.THEORY_ONE,
-            InvestigationGuiRole.THEORY_TWO,
-            InvestigationGuiRole.THEORY_THREE,
-            InvestigationGuiRole.THEORY_FOUR,
-            InvestigationGuiRole.THEORY_FIVE,
+            "investigation-verdict-one",
+            "investigation-verdict-two",
+            "investigation-verdict-three",
+            "investigation-verdict-four",
+            "investigation-verdict-five",
         )
-
-    internal const val CASE_ROWS = 5
-    internal const val WITNESS_ROW = 2
-    internal const val INFO_ROW = 4
 }
 
 internal fun witnessLore(

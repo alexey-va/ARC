@@ -1,12 +1,13 @@
 package ru.arc.eliteloot
 
-import com.github.stefvanschie.inventoryframework.gui.type.ChestGui
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
-import ru.arc.gui.gui
+import ru.arc.gui.ArcMenuSchema
+import ru.arc.gui.ArcMenus
+import ru.arc.util.TextUtil
 
 /**
  * GUI for displaying all elite loot items.
@@ -19,34 +20,30 @@ object EliteLootGuiFactory {
         ConfigManager.of(ARC.instance.dataFolder.toPath(), "guis/eliteloot.yml")
     }
 
-    fun create(player: Player): ChestGui {
+    fun open(player: Player) {
         val cfg = config
         val items = buildItemList()
-        val title = cfg.string("title", "Elite Loot")
-        val rows = cfg.integer("rows", 6)
-
-        // Capture nav button config values before entering DSL
-        val prevSlot = cfg.integer("navigation.prev.slot", 0)
-        val nextSlot = cfg.integer("navigation.next.slot", 8)
-        val backSlot = cfg.integer("navigation.back.slot", 4)
         val backCommand = cfg.string("navigation.back.command", "menu")
-
-        return gui(title, rows, player, cfg) {
-            navBackground()
-
-            pagination(0 until (rows - 1)) {
-                items(items) { itemData ->
-                    stack(itemData.stack)
-                    onClick { /* Display only, no action */ }
-                }
-            }
-
-            navBar {
-                prevPage(slot = prevSlot, configKey = "navigation.prev")
-                nextPage(slot = nextSlot, configKey = "navigation.next")
-                back(slot = backSlot, command = backCommand, configKey = "navigation.back")
-            }
-        }
+        ArcMenus.open(
+            player,
+            ArcMenuSchema.ELITE_LOOT,
+            TextUtil.mm(cfg.string("title", "Elite Loot"), true),
+            elements = mapOf(
+                "previous" to ArcMenus.entryWithContext(ArcMenus.item(ArcMenuSchema.ELITE_LOOT, "previous")) {
+                    it.session.previousPage()
+                },
+                "next" to ArcMenus.entryWithContext(ArcMenus.item(ArcMenuSchema.ELITE_LOOT, "next")) {
+                    it.session.nextPage()
+                },
+                "back" to ArcMenus.entry(ArcMenus.item(ArcMenuSchema.ELITE_LOOT, "back")) {
+                    it.closeInventory()
+                    it.performCommand(backCommand)
+                },
+            ),
+            regions = mapOf(
+                ArcMenuSchema.ELITE_LOOT_ITEMS to items.map { ArcMenus.entry(it.stack) },
+            ),
+        )
     }
 
     private data class DecorItemData(
