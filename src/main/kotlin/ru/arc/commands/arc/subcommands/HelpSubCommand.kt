@@ -9,7 +9,10 @@ import org.bukkit.command.CommandSender
 import ru.arc.commands.arc.CommandConfig
 import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.checkPermission
+import ru.arc.commands.arc.player
 import ru.arc.commands.arc.tabComplete
+import ru.arc.helpcenter.HelpCenterModule
+import ru.arc.helpcenter.HelpCenterPage
 
 /**
  * /arc help - показывает список всех доступных субкоманд с описаниями.
@@ -25,6 +28,16 @@ object HelpSubCommand : SubCommand {
     override val defaultUsage = "/arc help [команда]"
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
+        val player = sender.player
+        if (player != null && HelpCenterModule.isAvailable()) {
+            if (args.isEmpty()) {
+                if (HelpCenterModule.open(player)) return true
+            } else {
+                HelpCenterPage.from(args[0])?.let { page ->
+                    if (HelpCenterModule.open(player, page)) return true
+                }
+            }
+        }
         if (args.isNotEmpty()) {
             // Справка по конкретной команде
             showCommandHelp(sender, args[0])
@@ -173,7 +186,10 @@ object HelpSubCommand : SubCommand {
 
     override fun tabComplete(sender: CommandSender, args: Array<String>): List<String>? {
         return when (args.size) {
-            1 -> getAvailableCommands(sender).map { it.name }.tabComplete(args[0])
+            1 -> (
+                listOf("guide", "commands", "travel", "privat") +
+                    getAvailableCommands(sender).map { it.name }
+                ).distinct().tabComplete(args[0])
             else -> null
         }
     }

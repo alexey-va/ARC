@@ -1,0 +1,116 @@
+enabled: true
+
+limits:
+  max-homes: 12
+  max-search-results: 8
+  load-timeout-seconds: 3
+
+# All player-visible copy is configurable. ARC merges new defaults on reload.
+text:
+  root-title: '<#20252b><bold>Помощь и команды'
+  root-body: '<#fff0d8>Все основные действия собраны здесь.<newline><#8d7768>Выберите раздел — нужная команда выполнится прямо из меню.'
+  guide-label: '<#d9864f><bold>С чего начать'
+  guide-tooltip: '<#fff0d8>Короткий маршрут для нового игрока.'
+  commands-label: '<#f4bd6a><bold>Команды'
+  commands-tooltip: '<#fff0d8>Каталог по задачам и поиск.'
+  travel-label: '<#f4bd6a><bold>Перемещения'
+  travel-tooltip: '<#fff0d8>Ваши дома, миры, варпы и возврат.'
+  privat-label: '<#f4bd6a><bold>Приват'
+  privat-tooltip: '<#fff0d8>Поселения, участники и территория.'
+  main-menu-label: '<#fff0d8>Главное меню'
+  main-menu-tooltip: '<#fff0d8>Открыть все игровые разделы сервера.'
+  back-label: '<#8d7768>Назад'
+  root-label: '<#8d7768>К разделам'
+
+  guide-title: '<#20252b><bold>С чего начать'
+  guide-body: '<#d9864f><bold>1. Набор</bold><newline><#fff0d8>Получите стартовые предметы.<newline><newline><#d9864f><bold>2. Мир</bold><newline><#fff0d8>Выберите строительство или добычу.<newline><newline><#d9864f><bold>3. Дом и приват</bold><newline><#fff0d8>Поставьте точку дома и защитите поселением свою базу.'
+  kit-label: '<#f4bd6a><bold>Получить набор'
+  build-label: '<#fff0d8>Мир строительства'
+  mining-label: '<#fff0d8>Мир добычи'
+  rules-label: '<#fff0d8>Правила'
+
+  commands-title: '<#20252b><bold>Каталог команд'
+  commands-body: '<#fff0d8>Выберите задачу или найдите команду по смыслу.<newline><#8d7768>Например: дом, приват, магазин, ранг.'
+  search-input: '<#fff0d8>Что вы хотите сделать?'
+  search-label: '<#f4bd6a><bold>Найти'
+  search-tooltip: '<#fff0d8>Искать по названию команды и задаче.'
+  search-title: '<#20252b><bold>Результаты поиска'
+  search-body: '<#8d7768>Запрос: <#fff0d8><query><newline><#8d7768>Найдено: <#f4bd6a><count>'
+  search-empty: '<#fff0d8>Ничего не найдено. Попробуйте: дом, приват, магазин, ранг.'
+  category-start-label: '<#fff0d8>Начало игры'
+  category-travel-label: '<#fff0d8>Перемещения'
+  category-protection-label: '<#fff0d8>Защита'
+  category-trade-label: '<#fff0d8>Торговля'
+  category-progress-label: '<#fff0d8>Развитие'
+  category-social-label: '<#fff0d8>Общение и сервер'
+  category-start-title: '<#20252b><bold>Начало игры'
+  category-travel-title: '<#20252b><bold>Команды перемещения'
+  category-protection-title: '<#20252b><bold>Защита'
+  category-trade-title: '<#20252b><bold>Торговля'
+  category-progress-title: '<#20252b><bold>Развитие'
+  category-social-title: '<#20252b><bold>Общение и сервер'
+  category-body: '<#fff0d8>Нажмите действие — команда выполнится от вашего имени.'
+  command-label: '<#f4bd6a><bold><label>'
+  command-tooltip: '<#fff0d8><description><newline><#8d7768>/<command>'
+
+  travel-title: '<#20252b><bold>Перемещения'
+  travel-loading: '<#fff0d8>Загружаю ваши дома…'
+  travel-body: '<#8d7768>Дома: <#f4bd6a><homes>/<max_homes><newline><#fff0d8>Выберите дом или другое направление.'
+  travel-empty: '<#fff0d8>У вас пока нет домов. Создайте первый в текущей точке.'
+  travel-limit: '<#8d7768>Свободных слотов нет. Удалите или перенесите существующий дом.'
+  travel-error: '<#fff0d8>Дома сейчас не загрузились, но остальные перемещения доступны.'
+  home-label: '<#f4bd6a><bold><home>'
+  home-tooltip: '<#fff0d8><server> · <world><newline><#8d7768><x>, <y>, <z>'
+  create-home-label: '<#d9864f><bold>Новый дом'
+  create-home-tooltip: '<#fff0d8>Сохранить текущую точку.'
+  home-create-title: '<#20252b><bold>Новый дом'
+  home-create-body: '<#fff0d8>Введите короткое имя без пробелов.<newline><#8d7768>Дом будет создан в вашей текущей точке.'
+  home-name-input: '<#fff0d8>Название дома'
+  home-create-submit: '<#f4bd6a><bold>Создать'
+  home-title: '<#20252b><bold>Дом · <home>'
+  home-body: '<#8d7768>Сервер: <#fff0d8><server><newline><#8d7768>Мир: <#fff0d8><world><newline><#8d7768>Координаты: <#fff0d8><x>, <y>, <z>'
+  home-teleport-label: '<#f4bd6a><bold>Телепортироваться'
+  home-teleport-tooltip: '<#fff0d8>Переместиться в сохранённую точку.'
+  home-relocate-label: '<#fff0d8>Перенести сюда'
+  home-relocate-tooltip: '<#fff0d8>Заменить точку вашим текущим положением. Потребуется подтверждение.'
+  home-delete-label: '<#c42323><bold>Удалить дом'
+  home-delete-tooltip: '<#fff0d8>Удалить сохранённую точку. Потребуется подтверждение.'
+  home-relocate-title: '<#20252b><bold>Перенести · <home>'
+  home-relocate-body: '<#fff0d8>Заменить сохранённую точку дома <#f4bd6a><home> <#fff0d8>вашим текущим положением?'
+  home-relocate-confirm: '<#d9864f><bold>Перенести точку'
+  home-delete-title: '<#20252b><bold>Удаление · <home>'
+  home-delete-body: '<#c42323><bold>Это необратимое действие.<newline><#fff0d8>Дом <#f4bd6a><home> <#fff0d8>будет удалён.'
+  home-delete-confirm: '<#c42323><bold>Удалить навсегда'
+  warps-label: '<#fff0d8>Варпы игроков'
+  spawn-label: '<#fff0d8>Спавн'
+  rtp-label: '<#fff0d8>Случайное место'
+  back-command-label: '<#fff0d8>Вернуться назад'
+  stuck-label: '<#fff0d8>Выбраться на спавн'
+  public-homes-label: '<#fff0d8>Публичные дома'
+  public-homes-tooltip: '<#fff0d8>Посмотреть открытые дома игроков.'
+  invalid-home: '<#c42323>Имя дома: до 32 букв, цифр, _ или - без пробелов.'
+  action-failed: '<#c42323>Команда не выполнилась. Попробуйте ещё раз или сообщите администрации.'
+
+commands:
+  menu: { label: 'Главное меню', description: 'Все игровые разделы', keywords: 'разделы сервер mm' }
+  kit: { label: 'Набор новичка', description: 'Получить стартовые предметы', keywords: 'старт начало вещи' }
+  rules: { label: 'Правила', description: 'Правила игрового сервера', keywords: 'запрещено можно' }
+  tutorial: { label: 'Обучение', description: 'Вернуться к обучению', keywords: 'гайд начало' }
+  warps: { label: 'Варпы игроков', description: 'Публичные точки игроков', keywords: 'телепорт точки' }
+  spawn: { label: 'Спавн', description: 'Вернуться на спавн', keywords: 'телепорт начало' }
+  rtp: { label: 'Случайное место', description: 'Телепорт в случайную безопасную точку', keywords: 'рандом ресурсы' }
+  back: { label: 'Вернуться назад', description: 'Вернуться к прошлой позиции', keywords: 'телепорт смерть' }
+  stuck: { label: 'Выбраться на спавн', description: 'Аварийный возврат со сложного места', keywords: 'застрял помощь' }
+  build: { label: 'Мир строительства', description: 'Перейти в постоянный строительный мир', keywords: 'база строить' }
+  mining: { label: 'Мир добычи', description: 'Перейти в обновляемый ресурсный мир', keywords: 'шахта ресурсы' }
+  privat: { label: 'Приват', description: 'Поселения и защита территории', keywords: 'земля поселение lands защита' }
+  shops: { label: 'Магазины', description: 'Магазины игроков и сервера', keywords: 'рынок купить продать' }
+  sell: { label: 'Быстрая продажа', description: 'Продать подходящие предметы', keywords: 'деньги рынок' }
+  auction: { label: 'Аукцион', description: 'Торговля предметами между игроками', keywords: 'ah рынок купить продать' }
+  rank: { label: 'Ранги', description: 'Текущий ранг и следующие цели', keywords: 'уровень развитие' }
+  rankup: { label: 'Повысить ранг', description: 'Проверить требования повышения', keywords: 'уровень развитие' }
+  jobs: { label: 'Работы', description: 'Профессии и заработок', keywords: 'деньги профессия' }
+  quests: { label: 'Задания', description: 'Активные задания и награды', keywords: 'квест развитие' }
+  stats: { label: 'Навыки', description: 'Характеристики и способности', keywords: 'auraskills развитие' }
+  notes: { label: 'Заметки', description: 'Ваши серверные заметки', keywords: 'список записи' }
+  donate: { label: 'Поддержка и VIP', description: 'Возможности поддержки сервера', keywords: 'донат привилегии' }

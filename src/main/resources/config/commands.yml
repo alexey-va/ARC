@@ -19,7 +19,7 @@ commands:
   help:
     name: help
     aliases: [ ]
-    permission: ''
+    permission: arc.help.ui.use
   reload:
     name: reload
     aliases: [ ]

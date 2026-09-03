@@ -17,6 +17,7 @@ import ru.arc.ARC
 import ru.arc.TestBase
 import ru.arc.commands.arc.ArcCommand
 import ru.arc.commands.arc.subcommands.RespawnOnRtpSubCommand
+import ru.arc.helpcenter.HelpCenterModule
 import ru.arc.rtp.RtpCompletionRequest
 import org.bukkit.command.Command as BukkitCommand
 
@@ -1245,13 +1246,12 @@ class ArcCommandTest : TestBase() {
     @DisplayName("/arc help")
     inner class HelpSubCommandTests {
         @Test
-        @DisplayName("No args - shows all available commands")
+        @DisplayName("No args - opens the native player help center")
         fun testShowAllCommands() {
             val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("help"))
 
             assertTrue(result)
-            // Should receive multiple messages with command list
-            assertTrue(player.hasReceivedMessage())
+            assertTrue(HelpCenterModule.isAvailable())
         }
 
         @Test

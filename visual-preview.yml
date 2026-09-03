@@ -113,6 +113,74 @@ sources:
       - mainblock-body
       - open-lands-label
       - open-lands-tooltip
+  help-center:
+    path: src/main/resources/modules/help-center.yml
+    root: text
+    include:
+      - root-title
+      - root-body
+      - guide-label
+      - guide-tooltip
+      - commands-label
+      - commands-tooltip
+      - travel-label
+      - travel-tooltip
+      - privat-label
+      - privat-tooltip
+      - main-menu-label
+      - main-menu-tooltip
+      - guide-title
+      - guide-body
+      - kit-label
+      - build-label
+      - mining-label
+      - rules-label
+      - commands-title
+      - commands-body
+      - search-label
+      - search-tooltip
+      - search-title
+      - search-body
+      - search-empty
+      - category-start-label
+      - category-travel-label
+      - category-protection-label
+      - category-trade-label
+      - category-progress-label
+      - category-social-label
+      - category-body
+      - command-tooltip
+      - travel-title
+      - travel-loading
+      - travel-body
+      - travel-empty
+      - travel-limit
+      - travel-error
+      - home-label
+      - home-tooltip
+      - create-home-label
+      - create-home-tooltip
+      - home-title
+      - home-body
+      - home-teleport-label
+      - home-teleport-tooltip
+      - home-relocate-label
+      - home-relocate-tooltip
+      - home-delete-label
+      - home-delete-tooltip
+      - home-relocate-title
+      - home-relocate-body
+      - home-relocate-confirm
+      - home-delete-title
+      - home-delete-body
+      - home-delete-confirm
+      - warps-label
+      - spawn-label
+      - rtp-label
+      - back-command-label
+      - stuck-label
+      - public-homes-label
+      - public-homes-tooltip
 placeholders:
   server: Выживание
   marker: CSpy
@@ -178,6 +246,16 @@ placeholders:
   chunks: '18'
   members: '4'
   max_members: '8'
+  homes: '3'
+  max_homes: '8'
+  home: Северная_база
+  world: classic_survival
+  x: '-1842'
+  y: '71'
+  z: '3260'
+  query: телепорт
+  command: warps
+  description: Публичные точки игроков
 
 surfaces:
   dialogs:
@@ -215,6 +293,200 @@ surfaces:
         - {id: instructions, text-key: mainblock-body, width: 500}
       buttons:
         - {id: settings, text-key: open-lands-label, tooltip-key: open-lands-tooltip, width: 220}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-root
+      source: help-center
+      format: reference-multi-action
+      name-key: root-title
+      external-title-key: root-title
+      columns: 2
+      body:
+        - {id: intro, text-key: root-body, width: 500}
+      buttons:
+        - {id: guide, text-key: guide-label, tooltip-key: guide-tooltip, width: 190}
+        - {id: commands, text-key: commands-label, tooltip-key: commands-tooltip, width: 190}
+        - {id: travel, text-key: travel-label, tooltip-key: travel-tooltip, width: 190}
+        - {id: privat, text-key: privat-label, tooltip-key: privat-tooltip, width: 190}
+        - {id: main-menu, text-key: main-menu-label, tooltip-key: main-menu-tooltip, width: 190}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-guide
+      source: help-center
+      format: reference-multi-action
+      name-key: guide-title
+      external-title-key: guide-title
+      columns: 2
+      body:
+        - {id: steps, text-key: guide-body, width: 500}
+      buttons:
+        - {id: kit, text-key: kit-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Получить стартовые предметы, command: 'kit start'}}
+        - {id: build, text-key: build-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Перейти в постоянный строительный мир, command: build}}
+        - {id: mining, text-key: mining-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Перейти в обновляемый ресурсный мир, command: mining}}
+        - {id: homes, text-key: travel-label, tooltip-key: travel-tooltip, width: 190}
+        - {id: privat, text-key: privat-label, tooltip-key: privat-tooltip, width: 190}
+        - {id: rules, text-key: rules-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Правила игрового сервера, command: rules}}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-commands
+      source: help-center
+      format: reference-multi-action
+      name-key: commands-title
+      external-title-key: commands-title
+      columns: 2
+      body:
+        - {id: intro, text-key: commands-body, width: 500}
+      buttons:
+        - {id: search, text-key: search-label, tooltip-key: search-tooltip, width: 190}
+        - {id: start, text-key: category-start-label, tooltip-key: category-body, width: 190}
+        - {id: travel, text-key: category-travel-label, tooltip-key: category-body, width: 190}
+        - {id: protection, text-key: category-protection-label, tooltip-key: category-body, width: 190}
+        - {id: trade, text-key: category-trade-label, tooltip-key: category-body, width: 190}
+        - {id: progress, text-key: category-progress-label, tooltip-key: category-body, width: 190}
+        - {id: social, text-key: category-social-label, tooltip-key: category-body, width: 190}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-search-empty
+      source: help-center
+      format: reference-multi-action
+      name-key: search-title
+      external-title-key: search-title
+      columns: 1
+      body:
+        - {id: summary, text-key: search-body, width: 500, placeholders: {query: телепортироваться к другу, count: '0'}}
+        - {id: empty, text-key: search-empty, width: 500}
+      buttons:
+        - {id: again, text-key: commands-label, tooltip-key: commands-tooltip, width: 220}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-travel-loading
+      source: help-center
+      format: reference-multi-action
+      name-key: travel-title
+      external-title-key: travel-title
+      columns: 1
+      body:
+        - {id: loading, text-key: travel-loading, width: 400}
+      buttons:
+        - {id: back, text-key: main-menu-label, tooltip-key: main-menu-tooltip, width: 220}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-travel-populated
+      source: help-center
+      format: reference-multi-action
+      name-key: travel-title
+      external-title-key: travel-title
+      columns: 3
+      body:
+        - {id: summary, text-key: travel-body, width: 500}
+      buttons:
+        - {id: home-1, text-key: home-label, tooltip-key: home-tooltip, width: 150, placeholders: {home: Северная_база, server: survival, world: classic_survival, x: '-1842', y: '71', z: '3260'}}
+        - {id: home-2, text-key: home-label, tooltip-key: home-tooltip, width: 150, placeholders: {home: Магазин, server: spawn, world: spawn, x: '126', y: '64', z: '-48'}}
+        - {id: home-3, text-key: home-label, tooltip-key: home-tooltip, width: 150, placeholders: {home: Ферма, server: survival, world: classic_survival, x: '9820', y: '68', z: '-12450'}}
+        - {id: create, text-key: create-home-label, tooltip-key: create-home-tooltip, width: 150}
+        - {id: warps, text-key: warps-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Публичные точки игроков, command: warps}}
+        - {id: public-homes, text-key: public-homes-label, tooltip-key: public-homes-tooltip, width: 150}
+        - {id: spawn, text-key: spawn-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Вернуться на спавн, command: spawn}}
+        - {id: rtp, text-key: rtp-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Телепорт в случайную безопасную точку, command: rtp}}
+        - {id: back-command, text-key: back-command-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Вернуться к прошлой позиции, command: back}}
+        - {id: stuck, text-key: stuck-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Аварийный возврат со сложного места, command: stuck}}
+        - {id: build, text-key: build-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Перейти в постоянный строительный мир, command: build}}
+        - {id: mining, text-key: mining-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Перейти в обновляемый ресурсный мир, command: mining}}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-travel-empty
+      source: help-center
+      format: reference-multi-action
+      name-key: travel-title
+      external-title-key: travel-title
+      columns: 2
+      body:
+        - {id: summary, text-key: travel-body, width: 500, placeholders: {homes: '0', max_homes: '5'}}
+        - {id: empty, text-key: travel-empty, width: 500}
+      buttons:
+        - {id: create, text-key: create-home-label, tooltip-key: create-home-tooltip, width: 190}
+        - {id: rtp, text-key: rtp-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Телепорт в случайную безопасную точку, command: rtp}}
+        - {id: spawn, text-key: spawn-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Вернуться на спавн, command: spawn}}
+        - {id: build, text-key: build-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Перейти в постоянный строительный мир, command: build}}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-travel-limit
+      source: help-center
+      format: reference-multi-action
+      name-key: travel-title
+      external-title-key: travel-title
+      columns: 2
+      body:
+        - {id: summary, text-key: travel-body, width: 500, placeholders: {homes: '8', max_homes: '8'}}
+        - {id: limit, text-key: travel-limit, width: 500}
+      buttons:
+        - {id: warps, text-key: warps-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Публичные точки игроков, command: warps}}
+        - {id: rtp, text-key: rtp-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Телепорт в случайную безопасную точку, command: rtp}}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-travel-error
+      source: help-center
+      format: reference-multi-action
+      name-key: travel-title
+      external-title-key: travel-title
+      columns: 2
+      body:
+        - {id: error, text-key: travel-error, width: 500}
+      buttons:
+        - {id: spawn, text-key: spawn-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Вернуться на спавн, command: spawn}}
+        - {id: rtp, text-key: rtp-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Телепорт в случайную безопасную точку, command: rtp}}
+        - {id: stuck, text-key: stuck-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Аварийный возврат со сложного места, command: stuck}}
+        - {id: warps, text-key: warps-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Публичные точки игроков, command: warps}}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-home
+      source: help-center
+      format: reference-multi-action
+      name-key: home-title
+      external-title-key: home-title
+      columns: 2
+      body:
+        - {id: details, text-key: home-body, width: 500}
+      buttons:
+        - {id: teleport, text-key: home-teleport-label, tooltip-key: home-teleport-tooltip, width: 190}
+        - {id: relocate, text-key: home-relocate-label, tooltip-key: home-relocate-tooltip, width: 190}
+        - {id: delete, text-key: home-delete-label, tooltip-key: home-delete-tooltip, width: 190}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-home-relocate
+      source: help-center
+      format: reference-multi-action
+      name-key: home-relocate-title
+      external-title-key: home-relocate-title
+      columns: 1
+      body:
+        - {id: warning, text-key: home-relocate-body, width: 500}
+      buttons:
+        - {id: confirm, text-key: home-relocate-confirm, tooltip-key: home-relocate-body, width: 220}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-home-delete
+      source: help-center
+      format: reference-multi-action
+      name-key: home-delete-title
+      external-title-key: home-delete-title
+      columns: 1
+      body:
+        - {id: warning, text-key: home-delete-body, width: 500}
+      buttons:
+        - {id: confirm, text-key: home-delete-confirm, tooltip-key: home-delete-body, width: 220}
       viewport: [854, 480]
       variants: [{id: default}]
 

@@ -168,6 +168,9 @@ permissions:
   arc.lands.ui.use:
     description: Open the ARC Lands settlement dialog
     default: true
+  arc.help.ui.use:
+    description: Open the ARC player help center
+    default: true
   arc.invest.max.20:
     description: Hold up to 20 units of one ARC stock
     default: false

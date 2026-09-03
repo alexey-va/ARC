@@ -60,6 +60,7 @@ import ru.arc.investigation.InvestigationModule
 import ru.arc.hooks.HookRegistry
 import ru.arc.gui.GuiDefaults
 import ru.arc.gui.ArcMenus
+import ru.arc.helpcenter.HelpCenterModule
 import ru.arc.itemcatalog.ItemsCatalogModule
 import ru.arc.landsui.LandsUiModule
 import ru.arc.network.NetworkRegistry
@@ -236,6 +237,7 @@ open class ARC : JavaPlugin() {
             ArcParkourModule,
             ItemsCatalogModule,
             LandsUiModule,
+            HelpCenterModule,
             CommandHideModule,
             OnboardingModule,
             // Sync systems (priority 100)
@@ -357,6 +359,7 @@ open class ARC : JavaPlugin() {
                 "modules/item-presets.yml",
                 "modules/items-catalog.yml",
                 "modules/lands-ui.yml",
+                "modules/help-center.yml",
                 "modules/pouches.yml",
                 "modules/backpacks.yml",
                 "modules/commands.yml",

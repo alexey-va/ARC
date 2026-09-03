@@ -1,0 +1,435 @@
+package ru.arc.helpcenter
+
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.minimessage.MiniMessage
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
+import org.bukkit.entity.Player
+import ru.arc.core.Tasks
+import ru.arc.gui.ArcMenus
+import ru.arc.paper.menu.PaperDialogActionId
+import ru.arc.paper.menu.PaperDialogBody
+import ru.arc.paper.menu.PaperDialogButton
+import ru.arc.paper.menu.PaperDialogClickContext
+import ru.arc.paper.menu.PaperDialogInputId
+import ru.arc.paper.menu.PaperDialogScreen
+import ru.arc.paper.menu.PaperDialogTextInput
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
+
+class HelpCenterController(
+    private val settings: HelpCenterSettings,
+    private val gateway: HelpCenterGateway,
+    private val openLands: (Player) -> Unit,
+) {
+    private val miniMessage = MiniMessage.miniMessage()
+    private val serial = AtomicLong()
+    private val navigation = ConcurrentHashMap<UUID, Long>()
+    @Volatile private var active = true
+
+    private val catalog: List<HelpCenterCommand> = DEFINITIONS.map { definition ->
+        val configured = settings.command(definition.id)
+        HelpCenterCommand(
+            definition.id,
+            definition.category,
+            HelpCenterCommands.execute(definition.command),
+            configured.label,
+            configured.description,
+            configured.keywords,
+        )
+    }
+    private val catalogById = catalog.associateBy { it.id }
+
+    fun close() {
+        active = false
+        navigation.clear()
+    }
+
+    fun open(player: Player, page: HelpCenterPage = HelpCenterPage.ROOT) {
+        when (page) {
+            HelpCenterPage.ROOT -> openRoot(player)
+            HelpCenterPage.GUIDE -> openGuide(player)
+            HelpCenterPage.COMMANDS -> openCommands(player)
+            HelpCenterPage.TRAVEL -> openTravel(player)
+            HelpCenterPage.PRIVAT -> {
+                markNavigation(player)
+                openLands(player)
+            }
+        }
+    }
+
+    private fun openRoot(player: Player) {
+        markNavigation(player)
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("root-title"),
+                body = listOf(PaperDialogBody(text("root-body"), width = 500)),
+                buttons = listOf(
+                    button("guide", text("guide-label"), text("guide-tooltip")) { openGuide(player) },
+                    button("commands", text("commands-label"), text("commands-tooltip")) { openCommands(player) },
+                    button("travel", text("travel-label"), text("travel-tooltip")) { openTravel(player) },
+                    button("privat", text("privat-label"), text("privat-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
+                    button("main_menu", text("main-menu-label"), text("main-menu-tooltip")) { execute(player, "menu") },
+                ),
+                columns = 2,
+            ),
+        )
+    }
+
+    private fun openGuide(player: Player) {
+        markNavigation(player)
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("guide-title"),
+                body = listOf(PaperDialogBody(text("guide-body"), width = 500)),
+                buttons = listOf(
+                    button("kit", text("kit-label"), commandTooltip("kit")) { execute(player, "kit start") },
+                    button("build", text("build-label"), commandTooltip("build")) { execute(player, "build") },
+                    button("mining", text("mining-label"), commandTooltip("mining")) { execute(player, "mining") },
+                    button("home", text("travel-label"), text("travel-tooltip")) { openTravel(player) },
+                    button("privat", text("privat-label"), text("privat-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
+                    button("rules", text("rules-label"), commandTooltip("rules")) { execute(player, "rules") },
+                ),
+                exitButton = rootButton(player),
+                columns = 2,
+            ),
+        )
+    }
+
+    private fun openCommands(player: Player) {
+        markNavigation(player)
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("commands-title"),
+                body = listOf(PaperDialogBody(text("commands-body"), width = 500)),
+                inputs = listOf(PaperDialogTextInput(SEARCH_INPUT, text("search-input"), maxLength = 48)),
+                buttons = listOf(
+                    contextButton("search", text("search-label"), text("search-tooltip")) { context ->
+                        openSearch(player, context.text(SEARCH_INPUT).orEmpty())
+                    },
+                    categoryButton(player, HelpCenterCategory.START),
+                    categoryButton(player, HelpCenterCategory.TRAVEL),
+                    categoryButton(player, HelpCenterCategory.PROTECTION),
+                    categoryButton(player, HelpCenterCategory.TRADE),
+                    categoryButton(player, HelpCenterCategory.PROGRESS),
+                    categoryButton(player, HelpCenterCategory.SOCIAL),
+                ),
+                exitButton = rootButton(player),
+                columns = 2,
+            ),
+        )
+    }
+
+    private fun openSearch(player: Player, rawQuery: String) {
+        markNavigation(player)
+        val query = rawQuery.trim()
+        val results = HelpCenterPlanner.search(catalog, query, settings.maxSearchResults)
+        val body = mutableListOf(
+            PaperDialogBody(
+                text(
+                    "search-body",
+                    "query" to query.ifEmpty { "все команды" },
+                    "count" to results.size.toString(),
+                ),
+            ),
+        )
+        if (results.isEmpty()) body += PaperDialogBody(text("search-empty"))
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("search-title"),
+                body = body,
+                buttons = results.map { commandButton(player, it) }.ifEmpty {
+                    listOf(button("search_again", text("commands-label"), text("commands-tooltip")) { openCommands(player) })
+                },
+                exitButton = backButton("back", player, ::openCommands),
+                columns = 2,
+            ),
+        )
+    }
+
+    private fun openCategory(player: Player, category: HelpCenterCategory) {
+        markNavigation(player)
+        val entries = catalog.filter { it.category == category }
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("category-${category.configId}-title"),
+                body = listOf(PaperDialogBody(text("category-body"))),
+                buttons = entries.map { commandButton(player, it) },
+                exitButton = backButton("back", player, ::openCommands),
+                columns = 2,
+            ),
+        )
+    }
+
+    private fun openTravel(player: Player) {
+        val token = markNavigation(player)
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("travel-title"),
+                body = listOf(PaperDialogBody(text("travel-loading"))),
+                buttons = listOf(button("root", text("root-label"), text("main-menu-tooltip")) { openRoot(player) }),
+            ),
+        )
+        gateway.loadHomes(player, settings.loadTimeoutSeconds).whenComplete { homes, failure ->
+            Tasks.scheduler.runSync(
+                Runnable {
+                    if (!active || !player.isOnline || navigation[player.uniqueId] != token) return@Runnable
+                    if (failure == null) showTravel(player, homes) else showTravelFailure(player)
+                },
+            )
+        }
+    }
+
+    private fun showTravel(player: Player, snapshot: HelpCenterHomes) {
+        val homes = snapshot.homes
+            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+            .take(settings.maxHomes)
+        val body = mutableListOf(
+            PaperDialogBody(
+                text(
+                    "travel-body",
+                    "homes" to snapshot.usedSlots.toString(),
+                    "max_homes" to snapshot.maxSlots.toString(),
+                ),
+            ),
+        )
+        if (homes.isEmpty()) body += PaperDialogBody(text("travel-empty"))
+        if (snapshot.maxSlots > 0 && snapshot.usedSlots >= snapshot.maxSlots) body += PaperDialogBody(text("travel-limit"))
+        val homeButtons = homes.mapIndexed { index, home ->
+            button(
+                "home_$index",
+                text("home-label", "home" to home.name),
+                text(
+                    "home-tooltip",
+                    "server" to home.server,
+                    "world" to home.world,
+                    "x" to home.x.toString(),
+                    "y" to home.y.toString(),
+                    "z" to home.z.toString(),
+                ),
+            ) { openHome(player, home) }
+        }
+        val createButton = if (snapshot.maxSlots == 0 || snapshot.usedSlots < snapshot.maxSlots) {
+            listOf(button("create_home", text("create-home-label"), text("create-home-tooltip")) { openCreateHome(player) })
+        } else {
+            emptyList()
+        }
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("travel-title"),
+                body = body,
+                buttons = homeButtons + createButton + travelButtons(player),
+                exitButton = rootButton(player),
+                columns = 3,
+            ),
+        )
+    }
+
+    private fun showTravelFailure(player: Player) {
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("travel-title"),
+                body = listOf(PaperDialogBody(text("travel-error"))),
+                buttons = travelButtons(player),
+                exitButton = rootButton(player),
+                columns = 2,
+            ),
+        )
+    }
+
+    private fun openCreateHome(player: Player) {
+        markNavigation(player)
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("home-create-title"),
+                body = listOf(PaperDialogBody(text("home-create-body"))),
+                inputs = listOf(PaperDialogTextInput(HOME_INPUT, text("home-name-input"), maxLength = 32)),
+                buttons = listOf(
+                    contextButton("create_home", text("home-create-submit")) { context ->
+                        val command = runCatching {
+                            HelpCenterCommands.createHome(context.text(HOME_INPUT).orEmpty().trim())
+                        }.getOrNull()
+                        if (command == null) {
+                            player.sendMessage(text("invalid-home"))
+                            openCreateHome(player)
+                        } else {
+                            execute(player, command)
+                        }
+                    },
+                ),
+                exitButton = backButton("back", player, ::openTravel),
+            ),
+        )
+    }
+
+    private fun openHome(player: Player, home: HelpCenterHome) {
+        markNavigation(player)
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("home-title", "home" to home.name),
+                body = listOf(
+                    PaperDialogBody(
+                        text(
+                            "home-body",
+                            "server" to home.server,
+                            "world" to home.world,
+                            "x" to home.x.toString(),
+                            "y" to home.y.toString(),
+                            "z" to home.z.toString(),
+                        ),
+                    ),
+                ),
+                buttons = listOf(
+                    button("teleport", text("home-teleport-label"), text("home-teleport-tooltip")) {
+                        execute(player, HelpCenterCommands.home(home.name))
+                    },
+                    button("relocate", text("home-relocate-label"), text("home-relocate-tooltip")) { openRelocateHome(player, home) },
+                    button("delete", text("home-delete-label"), text("home-delete-tooltip")) { openDeleteHome(player, home) },
+                ),
+                exitButton = backButton("back", player, ::openTravel),
+                columns = 2,
+            ),
+        )
+    }
+
+    private fun openRelocateHome(player: Player, home: HelpCenterHome) {
+        markNavigation(player)
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("home-relocate-title", "home" to home.name),
+                body = listOf(PaperDialogBody(text("home-relocate-body", "home" to home.name))),
+                buttons = listOf(
+                    button("relocate_confirm", text("home-relocate-confirm"), text("home-relocate-body", "home" to home.name)) {
+                        execute(player, HelpCenterCommands.relocateHome(home.name))
+                    },
+                ),
+                exitButton = backButton("back", player, action = { target -> openHome(target, home) }),
+            ),
+        )
+    }
+
+    private fun openDeleteHome(player: Player, home: HelpCenterHome) {
+        markNavigation(player)
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("home-delete-title", "home" to home.name),
+                body = listOf(PaperDialogBody(text("home-delete-body", "home" to home.name))),
+                buttons = listOf(
+                    button("delete_confirm", text("home-delete-confirm"), text("home-delete-body", "home" to home.name)) {
+                        execute(player, HelpCenterCommands.deleteHome(home.name))
+                    },
+                ),
+                exitButton = backButton("back", player, action = { target -> openHome(target, home) }),
+            ),
+        )
+    }
+
+    private fun travelButtons(player: Player): List<PaperDialogButton> = listOf(
+        button("warps", text("warps-label"), commandTooltip("warps")) { execute(player, "warps") },
+        button("public_homes", text("public-homes-label"), text("public-homes-tooltip")) { execute(player, "phome") },
+        button("spawn", text("spawn-label"), commandTooltip("spawn")) { execute(player, "spawn") },
+        button("rtp", text("rtp-label"), commandTooltip("rtp")) { execute(player, "rtp") },
+        button("back_command", text("back-command-label"), commandTooltip("back")) { execute(player, "back") },
+        button("stuck", text("stuck-label"), commandTooltip("stuck")) { execute(player, "stuck") },
+        button("build", text("build-label"), commandTooltip("build")) { execute(player, "build") },
+        button("mining", text("mining-label"), commandTooltip("mining")) { execute(player, "mining") },
+    )
+
+    private fun categoryButton(player: Player, category: HelpCenterCategory): PaperDialogButton =
+        button("category_${category.configId}", text("category-${category.configId}-label"), text("category-body")) {
+            openCategory(player, category)
+        }
+
+    private fun commandButton(player: Player, command: HelpCenterCommand): PaperDialogButton = button(
+        "command_${command.id}",
+        text("command-label", "label" to command.label),
+        text("command-tooltip", "description" to command.description, "command" to command.command),
+    ) {
+        if (command.id == "privat") open(player, HelpCenterPage.PRIVAT) else execute(player, command.command)
+    }
+
+    private fun execute(player: Player, command: String) {
+        markNavigation(player)
+        if (!gateway.execute(player, command)) player.sendMessage(text("action-failed"))
+    }
+
+    private fun commandTooltip(id: String): Component {
+        val command = catalogById.getValue(id)
+        return text("command-tooltip", "description" to command.description, "command" to command.command)
+    }
+
+    private fun rootButton(player: Player): PaperDialogButton = backButton("root", player, ::openRoot, "root-label")
+
+    private fun backButton(
+        id: String,
+        player: Player,
+        action: (Player) -> Unit,
+        label: String = "back-label",
+    ): PaperDialogButton = button(id, text(label)) { action(player) }
+
+    private fun button(
+        id: String,
+        label: Component,
+        tooltip: Component = Component.empty(),
+        action: () -> Unit,
+    ): PaperDialogButton = PaperDialogButton(PaperDialogActionId.of(id), label, tooltip) { action() }
+
+    private fun contextButton(
+        id: String,
+        label: Component,
+        tooltip: Component = Component.empty(),
+        action: (PaperDialogClickContext) -> Unit,
+    ): PaperDialogButton = PaperDialogButton(PaperDialogActionId.of(id), label, tooltip, onClick = action)
+
+    private fun text(key: String, vararg placeholders: Pair<String, String>): Component = miniMessage.deserialize(
+        settings.text(key),
+        TagResolver.resolver(placeholders.map { (name, value) -> Placeholder.unparsed(name, value) }),
+    )
+
+    private fun markNavigation(player: Player): Long = serial.incrementAndGet().also { navigation[player.uniqueId] = it }
+
+    private data class CommandDefinition(val id: String, val category: HelpCenterCategory, val command: String)
+
+    companion object {
+        private val SEARCH_INPUT = PaperDialogInputId.of("search")
+        private val HOME_INPUT = PaperDialogInputId.of("home_name")
+
+        private val DEFINITIONS = listOf(
+            CommandDefinition("menu", HelpCenterCategory.START, "menu"),
+            CommandDefinition("kit", HelpCenterCategory.START, "kit start"),
+            CommandDefinition("rules", HelpCenterCategory.START, "rules"),
+            CommandDefinition("tutorial", HelpCenterCategory.START, "tutorial"),
+            CommandDefinition("warps", HelpCenterCategory.TRAVEL, "warps"),
+            CommandDefinition("spawn", HelpCenterCategory.TRAVEL, "spawn"),
+            CommandDefinition("rtp", HelpCenterCategory.TRAVEL, "rtp"),
+            CommandDefinition("back", HelpCenterCategory.TRAVEL, "back"),
+            CommandDefinition("stuck", HelpCenterCategory.TRAVEL, "stuck"),
+            CommandDefinition("build", HelpCenterCategory.TRAVEL, "build"),
+            CommandDefinition("mining", HelpCenterCategory.TRAVEL, "mining"),
+            CommandDefinition("privat", HelpCenterCategory.PROTECTION, "privat"),
+            CommandDefinition("shops", HelpCenterCategory.TRADE, "shops"),
+            CommandDefinition("sell", HelpCenterCategory.TRADE, "sell"),
+            CommandDefinition("auction", HelpCenterCategory.TRADE, "ah"),
+            CommandDefinition("rank", HelpCenterCategory.PROGRESS, "rank"),
+            CommandDefinition("rankup", HelpCenterCategory.PROGRESS, "rankup"),
+            CommandDefinition("jobs", HelpCenterCategory.PROGRESS, "jobsgui"),
+            CommandDefinition("quests", HelpCenterCategory.PROGRESS, "quests"),
+            CommandDefinition("stats", HelpCenterCategory.PROGRESS, "stats"),
+            CommandDefinition("notes", HelpCenterCategory.SOCIAL, "notes"),
+            CommandDefinition("donate", HelpCenterCategory.SOCIAL, "donate"),
+        )
+    }
+}
