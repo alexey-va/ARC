@@ -11,7 +11,7 @@ class LandsUiPlannerTest : StringSpec({
         val member = UUID.randomUUID()
         val candidateA = UUID.randomUUID()
         val candidateB = UUID.randomUUID()
-        val land = LandsUiLand(7, "Берег", owner, 12, setOf(owner, member), 8, 120.0)
+        val land = LandsUiLand("01KLAND", "Берег", owner, 12, setOf(owner, member), 8, 120.0)
 
         val result = LandsUiPlanner.addablePlayers(
             owner,

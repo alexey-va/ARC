@@ -7,6 +7,7 @@ import org.bukkit.Location
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import ru.arc.ARC
+import ru.arc.lands.offlineLandPlayer
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
@@ -15,8 +16,8 @@ class LandsHook {
     private val integration: LandsIntegration = LandsIntegration.of(ARC.instance)
 
     fun getSpawnLocation(playerUuid: UUID): CompletableFuture<Location?> =
-        integration.getOfflineLandPlayer(playerUuid)
-            .thenApply { it.editLand?.spawn }
+        integration.offlineLandPlayer(playerUuid)
+            .thenApply { it?.editLand?.spawn }
             .exceptionally { null }
 
     fun canBuild(player: Player, chunk: Chunk): Boolean {

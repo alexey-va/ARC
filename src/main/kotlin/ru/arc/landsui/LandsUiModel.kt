@@ -3,7 +3,7 @@ package ru.arc.landsui
 import java.util.UUID
 
 data class LandsUiLand(
-    val id: Int,
+    val id: String,
     val name: String,
     val ownerId: UUID,
     val chunks: Int,

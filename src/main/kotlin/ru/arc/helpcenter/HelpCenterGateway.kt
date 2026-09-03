@@ -7,6 +7,7 @@ import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import ru.arc.ARC
 import ru.arc.core.modules.EconomyModule
+import ru.arc.lands.currentLands
 import ru.arc.util.TextUtil
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
@@ -68,7 +69,7 @@ class BukkitHelpCenterGateway : HelpCenterGateway {
                 if (!Bukkit.getPluginManager().isPluginEnabled("Lands")) return@runCatching null
                 LandsIntegration.of(ARC.instance)
                     .getLandPlayer(player.uniqueId)
-                    ?.lands
+                    ?.currentLands()
                     .orEmpty()
                     .count { it.exists() }
             }.getOrNull(),

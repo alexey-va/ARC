@@ -9,10 +9,13 @@ plugins {
 }
 
 group = "ARC"
-version = "1.2.5"
+version = "1.2.6"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.4.4"
+val landsJar = providers.gradleProperty("landsJar").orNull?.let(::file)
+if (landsJar != null) require(landsJar.isFile) { "Lands JAR does not exist: $landsJar" }
+val landsCompileDependency: Any = landsJar?.let { files(it) } ?: libs.com.github.angeschossen.landsapi
 
 java { toolchain { languageVersion.set(JavaLanguageVersion.of(25)) } }
 kotlin { jvmToolchain(25) }
@@ -103,7 +106,9 @@ dependencies {
     // Private mirror of the exact server-provided Premium JAR; never shaded.
     compileOnly("ru.ruscrafting.thirdparty:economyshopgui-premium:6.3.0")
     compileOnly(libs.net.william278.huskhomes)
-    compileOnly(libs.com.github.angeschossen.landsapi)
+    // CI uses the current public API. Release verification may supply the exact
+    // active server JAR with -PlandsJar=/absolute/path/Lands.jar.
+    compileOnly(landsCompileDependency)
     compileOnly(libs.com.github.milkbowl.vaultapi) {
         exclude(group = "org.bukkit", module = "bukkit")
     }
@@ -142,7 +147,7 @@ dependencies {
     testImplementation(libs.org.junit.jupiter.junit.jupiter.params)
     testImplementation(libs.com.thedeanda.lorem)
     testImplementation("ru.ruscrafting.arc:arc-core-paper-testing:$arcCoreVersion")
-    testImplementation(libs.com.github.angeschossen.landsapi)
+    testImplementation(landsCompileDependency)
     testImplementation("org.mockito:mockito-core:5.14.2")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

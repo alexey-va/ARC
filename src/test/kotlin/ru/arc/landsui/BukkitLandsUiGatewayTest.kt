@@ -9,6 +9,7 @@ import io.mockk.runs
 import io.mockk.verify
 import io.mockk.verifyOrder
 import me.angeschossen.lands.api.LandsIntegration
+import me.angeschossen.lands.api.applicationframework.util.ULID
 import me.angeschossen.lands.api.land.Land
 import me.angeschossen.lands.api.player.LandPlayer
 import org.bukkit.entity.Player
@@ -20,17 +21,20 @@ class BukkitLandsUiGatewayTest : StringSpec({
         val integration = mockk<LandsIntegration>()
         val landPlayer = mockk<LandPlayer>()
         val land = mockk<Land>()
+        val landUlid = mockk<ULID>()
+        val landId = "01KLAND"
         val player = mockk<Player>()
         every { player.uniqueId } returns id
         every { integration.getLandPlayer(id) } returns landPlayer
         every { landPlayer.lands } returns setOf(land)
-        every { land.id } returns 7
+        every { land.ulid } returns landUlid
+        every { landUlid.toString() } returns landId
         every { land.exists() } returns true
         every { landPlayer.setEditLand(land) } just runs
         every { player.performCommand("lands land delete") } returns true
 
         val result = BukkitLandsUiGateway(integration)
-            .selectAndExecute(player, 7, "lands land delete")
+            .selectAndExecute(player, landId, "lands land delete")
 
         result shouldBe LandsUiCommandResult.EXECUTED
         verifyOrder {
@@ -46,10 +50,10 @@ class BukkitLandsUiGatewayTest : StringSpec({
         val player = mockk<Player>()
         every { player.uniqueId } returns id
         every { integration.getLandPlayer(id) } returns landPlayer
-        every { landPlayer.lands } returns emptySet()
+        every { landPlayer.lands } returns emptySet<Land>()
 
         val result = BukkitLandsUiGateway(integration)
-            .selectAndExecute(player, 7, "lands land delete")
+            .selectAndExecute(player, "01KLAND", "lands land delete")
 
         result shouldBe LandsUiCommandResult.LAND_UNAVAILABLE
         verify(exactly = 0) { player.performCommand(any()) }

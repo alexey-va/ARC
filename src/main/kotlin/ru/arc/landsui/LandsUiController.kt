@@ -25,9 +25,9 @@ class LandsUiController(
         val lands = gateway.lands(player)
         val body = mutableListOf(PaperDialogBody(text("root-body", "count" to lands.size.toString())))
         if (lands.isEmpty()) body += PaperDialogBody(text("root-empty"))
-        val buttons = lands.map { land ->
+        val buttons = lands.mapIndexed { index, land ->
             button(
-                "land_${land.id}",
+                "land_$index",
                 text("land-label", "land" to land.name),
                 text(
                     "land-tooltip",
@@ -52,7 +52,7 @@ class LandsUiController(
         )
     }
 
-    private fun openDetails(player: Player, landId: Int) {
+    private fun openDetails(player: Player, landId: String) {
         withLand(player, landId) { land ->
             val role = settings.text(if (land.ownerId == player.uniqueId) "role-owner" else "role-member")
             val buttons = mutableListOf(
@@ -114,7 +114,7 @@ class LandsUiController(
         )
     }
 
-    private fun openRename(player: Player, landId: Int) {
+    private fun openRename(player: Player, landId: String) {
         withLand(player, landId) { land ->
             if (land.ownerId != player.uniqueId) return@withLand openDetails(player, landId)
             ArcMenus.openDialog(
@@ -141,7 +141,7 @@ class LandsUiController(
         }
     }
 
-    private fun openMembers(player: Player, landId: Int) {
+    private fun openMembers(player: Player, landId: String) {
         withLand(player, landId) { land ->
             val memberButtons = land.memberIds
                 .asSequence()
@@ -178,7 +178,7 @@ class LandsUiController(
         }
     }
 
-    private fun openAddMember(player: Player, landId: Int) {
+    private fun openAddMember(player: Player, landId: String) {
         withLand(player, landId) { land ->
             val candidates = LandsUiPlanner.addablePlayers(player.uniqueId, land, gateway.onlinePlayers())
                 .take(settings.maxListedPlayers)
@@ -211,7 +211,7 @@ class LandsUiController(
         }
     }
 
-    private fun openRemoveMember(player: Player, landId: Int, memberName: String) {
+    private fun openRemoveMember(player: Player, landId: String, memberName: String) {
         withLand(player, landId) { land ->
             ArcMenus.openDialog(
                 player,
@@ -229,7 +229,7 @@ class LandsUiController(
         }
     }
 
-    private fun openTerritory(player: Player, landId: Int) {
+    private fun openTerritory(player: Player, landId: String) {
         withLand(player, landId) { land ->
             ArcMenus.openDialog(
                 player,
@@ -251,7 +251,7 @@ class LandsUiController(
         }
     }
 
-    private fun openMainblockGuide(player: Player, landId: Int) {
+    private fun openMainblockGuide(player: Player, landId: String) {
         withLand(player, landId) { land ->
             ArcMenus.openDialog(
                 player,
@@ -281,7 +281,7 @@ class LandsUiController(
         )
     }
 
-    private fun openDanger(player: Player, landId: Int) {
+    private fun openDanger(player: Player, landId: String) {
         withLand(player, landId) { land ->
             if (land.ownerId != player.uniqueId) return@withLand openDetails(player, landId)
             ArcMenus.openDialog(
@@ -304,13 +304,13 @@ class LandsUiController(
         id: String,
         label: String,
         player: Player,
-        landId: Int,
+        landId: String,
         vararg arguments: String,
     ): PaperDialogButton = button(id, text(label)) {
         executeForLand(player, landId) { LandsUiCommands.land(*arguments) }
     }
 
-    private fun executeForLand(player: Player, landId: Int, command: () -> String) {
+    private fun executeForLand(player: Player, landId: String, command: () -> String) {
         val land = gateway.land(player, landId)
         if (land == null) {
             player.sendMessage(text("land-gone"))
@@ -331,7 +331,7 @@ class LandsUiController(
         if (!gateway.execute(player, command)) player.sendMessage(text("action-failed"))
     }
 
-    private fun withLand(player: Player, landId: Int, action: (LandsUiLand) -> Unit) {
+    private fun withLand(player: Player, landId: String, action: (LandsUiLand) -> Unit) {
         val land = gateway.land(player, landId)
         if (land == null) {
             player.sendMessage(text("land-gone"))
