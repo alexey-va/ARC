@@ -133,7 +133,6 @@ class LandsUiController(
                             openCreate(player)
                         } else {
                             val previousIds = gateway.lands(player).mapTo(linkedSetOf()) { it.id }
-                            player.closeDialog()
                             if (gateway.execute(player, command)) {
                                 awaitCreatedLand(player, previousIds, attempt = 0)
                             } else {
@@ -141,7 +140,7 @@ class LandsUiController(
                                 openRoot(player)
                             }
                         }
-                    },
+                    }.closing(),
                 ),
                 exitButton = back("back") { openRoot(player) },
             ),
@@ -165,10 +164,9 @@ class LandsUiController(
                                 player.sendMessage(text("invalid-name"))
                                 openRename(player, landId)
                             } else {
-                                player.closeDialog()
                                 executeForLand(player, landId) { LandsUiCommands.rename(newName) }
                             }
-                        },
+                        }.closing(),
                     ),
                     exitButton = back("back") { openDetails(player, landId) },
                 ),
@@ -235,10 +233,9 @@ class LandsUiController(
                                 player.sendMessage(text("invalid-player"))
                                 openAddMember(player, landId)
                             } else {
-                                player.closeDialog()
                                 executeForLand(player, landId) { LandsUiCommands.addMember(name) }
                             }
-                        },
+                        }.closing(),
                     ) + candidateButtons,
                     exitButton = back("back") { openMembers(player, landId) },
                     columns = 2,

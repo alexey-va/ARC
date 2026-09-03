@@ -106,7 +106,7 @@ class HelpCenterController(
                     button("commands", text("commands-label"), text("commands-tooltip")) { openCommands(player) },
                     button("travel", text("travel-label"), text("travel-tooltip")) { openTravel(player) },
                     button("privat", text("privat-label"), text("privat-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
-                    button("main_menu", text("main-menu-label"), text("main-menu-tooltip")) { execute(player, "menu") },
+                    button("main_menu", text("main-menu-label"), text("main-menu-tooltip")) { execute(player, "menu") }.closing(),
                 ),
                 columns = 2,
             ),
@@ -179,10 +179,10 @@ class HelpCenterController(
     private fun myButtons(player: Player): List<PaperDialogButton> = listOf(
         button("my_homes", text("my-homes-label"), text("my-homes-tooltip")) { openTravel(player) },
         button("my_lands", text("my-lands-label"), text("my-lands-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
-        button("my_rank", text("my-rank-label"), text("my-rank-tooltip")) { execute(player, "rank") },
-        button("my_jobs", text("my-jobs-label"), text("my-jobs-tooltip")) { execute(player, "jobsgui") },
-        button("my_quests", text("my-quests-label"), text("my-quests-tooltip")) { execute(player, "quests") },
-        button("my_skills", text("my-skills-label"), text("my-skills-tooltip")) { execute(player, "skills") },
+        button("my_rank", text("my-rank-label"), text("my-rank-tooltip")) { execute(player, "rank") }.closing(),
+        button("my_jobs", text("my-jobs-label"), text("my-jobs-tooltip")) { execute(player, "jobsgui") }.closing(),
+        button("my_quests", text("my-quests-label"), text("my-quests-tooltip")) { execute(player, "quests") }.closing(),
+        button("my_skills", text("my-skills-label"), text("my-skills-tooltip")) { execute(player, "skills") }.closing(),
     )
 
     private fun openGuide(player: Player) {
@@ -193,14 +193,14 @@ class HelpCenterController(
                 title = text("guide-title"),
                 body = listOf(PaperDialogBody(text("guide-body"), width = 500)),
                 buttons = listOf(
-                    button("kit", text("kit-label"), commandTooltip("kit")) { execute(player, "kit start") },
-                    button("vanilla", text("vanilla-label"), commandTooltip("vanilla")) { execute(player, "pw vanilla") },
-                    button("mining", text("mining-label"), commandTooltip("mining")) { execute(player, "mining") },
-                    button("biomes", text("biomes-label"), commandTooltip("biomes")) { execute(player, "pw survival") },
-                    button("jobs", text("jobs-label"), commandTooltip("jobs")) { execute(player, "jobsgui") },
+                    button("kit", text("kit-label"), commandTooltip("kit")) { execute(player, "kit start") }.closing(),
+                    button("vanilla", text("vanilla-label"), commandTooltip("vanilla")) { execute(player, "pw vanilla") }.closing(),
+                    button("mining", text("mining-label"), commandTooltip("mining")) { execute(player, "mining") }.closing(),
+                    button("biomes", text("biomes-label"), commandTooltip("biomes")) { execute(player, "pw survival") }.closing(),
+                    button("jobs", text("jobs-label"), commandTooltip("jobs")) { execute(player, "jobsgui") }.closing(),
                     button("home", text("travel-label"), text("travel-tooltip")) { openTravel(player) },
                     button("privat", text("privat-label"), text("privat-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
-                    button("rules", text("rules-label"), commandTooltip("rules")) { execute(player, "rules") },
+                    button("rules", text("rules-label"), commandTooltip("rules")) { execute(player, "rules") }.closing(),
                 ),
                 exitButton = rootButton(player),
                 columns = 2,
@@ -370,7 +370,7 @@ class HelpCenterController(
                         } else {
                             execute(player, command)
                         }
-                    },
+                    }.closing(),
                 ),
                 exitButton = backButton("back", player, ::openTravel),
             ),
@@ -398,7 +398,7 @@ class HelpCenterController(
                 buttons = listOf(
                     button("teleport", text("home-teleport-label"), text("home-teleport-tooltip")) {
                         execute(player, HelpCenterCommands.home(home.name))
-                    },
+                    }.closing(),
                     button("relocate", text("home-relocate-label"), text("home-relocate-tooltip")) { openRelocateHome(player, home) },
                     button("delete", text("home-delete-label"), text("home-delete-tooltip")) { openDeleteHome(player, home) },
                 ),
@@ -418,7 +418,7 @@ class HelpCenterController(
                 buttons = listOf(
                     button("relocate_confirm", text("home-relocate-confirm"), text("home-relocate-body", "home" to home.name)) {
                         execute(player, HelpCenterCommands.relocateHome(home.name))
-                    },
+                    }.closing(),
                 ),
                 exitButton = backButton("back", player, action = { target -> openHome(target, home) }),
             ),
@@ -435,7 +435,7 @@ class HelpCenterController(
                 buttons = listOf(
                     button("delete_confirm", text("home-delete-confirm"), text("home-delete-body", "home" to home.name)) {
                         execute(player, HelpCenterCommands.deleteHome(home.name))
-                    },
+                    }.closing(),
                 ),
                 exitButton = backButton("back", player, action = { target -> openHome(target, home) }),
             ),
@@ -443,15 +443,15 @@ class HelpCenterController(
     }
 
     private fun travelButtons(player: Player): List<PaperDialogButton> = listOf(
-        button("warps", text("warps-label"), commandTooltip("warps")) { execute(player, "warps") },
-        button("public_homes", text("public-homes-label"), text("public-homes-tooltip")) { execute(player, "phome") },
-        button("spawn", text("spawn-label"), commandTooltip("spawn")) { execute(player, "spawn") },
-        button("rtp", text("rtp-label"), commandTooltip("rtp")) { execute(player, "rtp") },
-        button("back_command", text("back-command-label"), commandTooltip("back")) { execute(player, "back") },
-        button("stuck", text("stuck-label"), commandTooltip("stuck")) { execute(player, "stuck") },
-        button("vanilla", text("vanilla-label"), commandTooltip("vanilla")) { execute(player, "pw vanilla") },
-        button("mining", text("mining-label"), commandTooltip("mining")) { execute(player, "mining") },
-        button("biomes", text("biomes-label"), commandTooltip("biomes")) { execute(player, "pw survival") },
+        button("warps", text("warps-label"), commandTooltip("warps")) { execute(player, "warps") }.closing(),
+        button("public_homes", text("public-homes-label"), text("public-homes-tooltip")) { execute(player, "phome") }.closing(),
+        button("spawn", text("spawn-label"), commandTooltip("spawn")) { execute(player, "spawn") }.closing(),
+        button("rtp", text("rtp-label"), commandTooltip("rtp")) { execute(player, "rtp") }.closing(),
+        button("back_command", text("back-command-label"), commandTooltip("back")) { execute(player, "back") }.closing(),
+        button("stuck", text("stuck-label"), commandTooltip("stuck")) { execute(player, "stuck") }.closing(),
+        button("vanilla", text("vanilla-label"), commandTooltip("vanilla")) { execute(player, "pw vanilla") }.closing(),
+        button("mining", text("mining-label"), commandTooltip("mining")) { execute(player, "mining") }.closing(),
+        button("biomes", text("biomes-label"), commandTooltip("biomes")) { execute(player, "pw survival") }.closing(),
     )
 
     private fun categoryButton(player: Player, category: HelpCenterCategory): PaperDialogButton =
@@ -459,31 +459,36 @@ class HelpCenterController(
             openCategory(player, category)
         }
 
-    private fun commandButton(player: Player, command: HelpCenterCommand): PaperDialogButton = button(
-        "command_${command.id}",
-        text("command-label", "label" to command.label),
-        text("command-tooltip", "description" to command.description, "command" to command.command),
-    ) {
-        if (command.id == "privat") open(player, HelpCenterPage.PRIVAT) else execute(player, command.command)
+    private fun commandButton(player: Player, command: HelpCenterCommand): PaperDialogButton {
+        val result = button(
+            "command_${command.id}",
+            text("command-label", "label" to command.label),
+            text("command-tooltip", "description" to command.description, "command" to command.command),
+        ) {
+            if (command.id == "privat") open(player, HelpCenterPage.PRIVAT) else execute(player, command.command)
+        }
+        return if (command.id == "privat") result else result.closing()
     }
 
-    private fun searchResultButton(player: Player, entry: HelpCenterSearchEntry): PaperDialogButton = button(
-        "result_${entry.id.replace('-', '_')}",
-        text("command-label", "label" to entry.label),
-        entry.command?.let { command ->
-            text("command-tooltip", "description" to entry.description, "command" to command)
-        } ?: text("search-result-tooltip", "description" to entry.description),
-    ) {
-        when (val action = entry.action) {
-            is HelpCenterSearchAction.Execute -> execute(player, action.command)
-            is HelpCenterSearchAction.OpenPage -> open(player, action.page)
-            HelpCenterSearchAction.CreateHome -> openCreateHome(player)
+    private fun searchResultButton(player: Player, entry: HelpCenterSearchEntry): PaperDialogButton {
+        val result = button(
+            "result_${entry.id.replace('-', '_')}",
+            text("command-label", "label" to entry.label),
+            entry.command?.let { command ->
+                text("command-tooltip", "description" to entry.description, "command" to command)
+            } ?: text("search-result-tooltip", "description" to entry.description),
+        ) {
+            when (val action = entry.action) {
+                is HelpCenterSearchAction.Execute -> execute(player, action.command)
+                is HelpCenterSearchAction.OpenPage -> open(player, action.page)
+                HelpCenterSearchAction.CreateHome -> openCreateHome(player)
+            }
         }
+        return if (entry.action is HelpCenterSearchAction.Execute) result.closing() else result
     }
 
     private fun execute(player: Player, command: String) {
         markNavigation(player)
-        player.closeDialog()
         if (!gateway.execute(player, command)) player.sendMessage(text("action-failed"))
     }
 
@@ -514,6 +519,8 @@ class HelpCenterController(
         tooltip: Component = Component.empty(),
         action: (PaperDialogClickContext) -> Unit,
     ): PaperDialogButton = PaperDialogButton(PaperDialogActionId.of(id), label, tooltip, onClick = action)
+
+    private fun PaperDialogButton.closing(): PaperDialogButton = copy(closeDialogBeforeAction = true)
 
     private fun text(key: String, vararg placeholders: Pair<String, String>): Component = miniMessage.deserialize(
         settings.text(key),
