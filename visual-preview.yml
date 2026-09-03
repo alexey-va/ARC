@@ -119,6 +119,8 @@ sources:
     include:
       - root-title
       - root-body
+      - my-label
+      - my-tooltip
       - guide-label
       - guide-tooltip
       - commands-label
@@ -129,6 +131,22 @@ sources:
       - privat-tooltip
       - main-menu-label
       - main-menu-tooltip
+      - my-title
+      - my-loading
+      - my-body
+      - my-error
+      - my-homes-label
+      - my-homes-tooltip
+      - my-lands-label
+      - my-lands-tooltip
+      - my-rank-label
+      - my-rank-tooltip
+      - my-jobs-label
+      - my-jobs-tooltip
+      - my-quests-label
+      - my-quests-tooltip
+      - my-stats-label
+      - my-stats-tooltip
       - guide-title
       - guide-body
       - kit-label
@@ -142,6 +160,7 @@ sources:
       - search-title
       - search-body
       - search-empty
+      - search-result-tooltip
       - category-start-label
       - category-travel-label
       - category-protection-label
@@ -149,6 +168,7 @@ sources:
       - category-progress-label
       - category-social-label
       - category-body
+      - command-label
       - command-tooltip
       - travel-title
       - travel-loading
@@ -223,6 +243,8 @@ placeholders:
   trail: След душ
   price: '2 500 000'
   balance: '8 000 000'
+  rank: Следопыт
+  lands: '2'
   remaining: '5 500 000'
   missing: '1 000 000'
   ability: Грация дельфина
@@ -256,6 +278,7 @@ placeholders:
   query: телепорт
   command: warps
   description: Публичные точки игроков
+  label: Приват
 
 surfaces:
   dialogs:
@@ -305,11 +328,64 @@ surfaces:
       body:
         - {id: intro, text-key: root-body, width: 500}
       buttons:
+        - {id: my, text-key: my-label, tooltip-key: my-tooltip, width: 190}
         - {id: guide, text-key: guide-label, tooltip-key: guide-tooltip, width: 190}
         - {id: commands, text-key: commands-label, tooltip-key: commands-tooltip, width: 190}
         - {id: travel, text-key: travel-label, tooltip-key: travel-tooltip, width: 190}
         - {id: privat, text-key: privat-label, tooltip-key: privat-tooltip, width: 190}
         - {id: main-menu, text-key: main-menu-label, tooltip-key: main-menu-tooltip, width: 190}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-my-loading
+      source: help-center
+      format: reference-multi-action
+      name-key: my-title
+      external-title-key: my-title
+      columns: 2
+      body:
+        - {id: loading, text-key: my-loading, width: 500}
+      buttons:
+        - {id: homes, text-key: my-homes-label, tooltip-key: my-homes-tooltip, width: 190}
+        - {id: lands, text-key: my-lands-label, tooltip-key: my-lands-tooltip, width: 190}
+        - {id: rank, text-key: my-rank-label, tooltip-key: my-rank-tooltip, width: 190}
+        - {id: jobs, text-key: my-jobs-label, tooltip-key: my-jobs-tooltip, width: 190}
+        - {id: quests, text-key: my-quests-label, tooltip-key: my-quests-tooltip, width: 190}
+        - {id: stats, text-key: my-stats-label, tooltip-key: my-stats-tooltip, width: 190}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-my-populated
+      source: help-center
+      format: reference-multi-action
+      name-key: my-title
+      external-title-key: my-title
+      columns: 2
+      body:
+        - {id: profile, text-key: my-body, width: 500, placeholders: {player: ArchitectureMax, server: survival, rank: Следопыт, balance: '8 000 000', homes: '3', max_homes: '8', lands: '2', world: classic_survival, x: '-1842', y: '71', z: '3260'}}
+      buttons:
+        - {id: homes, text-key: my-homes-label, tooltip-key: my-homes-tooltip, width: 190}
+        - {id: lands, text-key: my-lands-label, tooltip-key: my-lands-tooltip, width: 190}
+        - {id: rank, text-key: my-rank-label, tooltip-key: my-rank-tooltip, width: 190}
+        - {id: jobs, text-key: my-jobs-label, tooltip-key: my-jobs-tooltip, width: 190}
+        - {id: quests, text-key: my-quests-label, tooltip-key: my-quests-tooltip, width: 190}
+        - {id: stats, text-key: my-stats-label, tooltip-key: my-stats-tooltip, width: 190}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-my-error
+      source: help-center
+      format: reference-multi-action
+      name-key: my-title
+      external-title-key: my-title
+      columns: 2
+      body:
+        - {id: error, text-key: my-error, width: 500}
+      buttons:
+        - {id: homes, text-key: my-homes-label, tooltip-key: my-homes-tooltip, width: 190}
+        - {id: lands, text-key: my-lands-label, tooltip-key: my-lands-tooltip, width: 190}
+        - {id: rank, text-key: my-rank-label, tooltip-key: my-rank-tooltip, width: 190}
+        - {id: jobs, text-key: my-jobs-label, tooltip-key: my-jobs-tooltip, width: 190}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -361,6 +437,19 @@ surfaces:
         - {id: empty, text-key: search-empty, width: 500}
       buttons:
         - {id: again, text-key: commands-label, tooltip-key: commands-tooltip, width: 220}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-search-smart
+      source: help-center
+      format: reference-multi-action
+      name-key: search-title
+      external-title-key: search-title
+      columns: 2
+      body:
+        - {id: summary, text-key: search-body, width: 500, placeholders: {query: как удалить моё посиление, count: '1'}}
+      buttons:
+        - {id: delete-land, text-key: command-label, tooltip-key: search-result-tooltip, width: 190, placeholders: {label: Удалить поселение, description: Открыть приват и выбрать поселение для удаления}}
       viewport: [854, 480]
       variants: [{id: default}]
 

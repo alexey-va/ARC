@@ -5,7 +5,8 @@ import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.bukkit.entity.Player
-import ru.arc.core.Tasks
+import ru.arc.core.LifecycleTaskScope
+import ru.arc.core.whenCompleteSync
 import ru.arc.gui.ArcMenus
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
@@ -24,6 +25,7 @@ class HelpCenterController(
     private val openLands: (Player) -> Unit,
 ) {
     private val miniMessage = MiniMessage.miniMessage()
+    private val tasks = LifecycleTaskScope()
     private val serial = AtomicLong()
     private val navigation = ConcurrentHashMap<UUID, Long>()
     @Volatile private var active = true
@@ -40,15 +42,47 @@ class HelpCenterController(
         )
     }
     private val catalogById = catalog.associateBy { it.id }
+    private val searchCatalog: List<HelpCenterSearchEntry> = buildList {
+        catalog.forEach { command ->
+            add(
+                HelpCenterSearchEntry(
+                    id = command.id,
+                    label = command.label,
+                    description = command.description,
+                    keywords = command.keywords,
+                    action = if (command.id == "privat") {
+                        HelpCenterSearchAction.OpenPage(HelpCenterPage.PRIVAT)
+                    } else {
+                        HelpCenterSearchAction.Execute(command.command)
+                    },
+                    command = command.command,
+                ),
+            )
+        }
+        INTENT_DEFINITIONS.forEach { definition ->
+            val configured = settings.intent(definition.id)
+            add(
+                HelpCenterSearchEntry(
+                    id = definition.id,
+                    label = configured.label,
+                    description = configured.description,
+                    keywords = configured.keywords,
+                    action = definition.action,
+                ),
+            )
+        }
+    }
 
     fun close() {
         active = false
         navigation.clear()
+        tasks.close()
     }
 
     fun open(player: Player, page: HelpCenterPage = HelpCenterPage.ROOT) {
         when (page) {
             HelpCenterPage.ROOT -> openRoot(player)
+            HelpCenterPage.MY -> openMy(player)
             HelpCenterPage.GUIDE -> openGuide(player)
             HelpCenterPage.COMMANDS -> openCommands(player)
             HelpCenterPage.TRAVEL -> openTravel(player)
@@ -67,6 +101,7 @@ class HelpCenterController(
                 title = text("root-title"),
                 body = listOf(PaperDialogBody(text("root-body"), width = 500)),
                 buttons = listOf(
+                    button("my", text("my-label"), text("my-tooltip")) { openMy(player) },
                     button("guide", text("guide-label"), text("guide-tooltip")) { openGuide(player) },
                     button("commands", text("commands-label"), text("commands-tooltip")) { openCommands(player) },
                     button("travel", text("travel-label"), text("travel-tooltip")) { openTravel(player) },
@@ -77,6 +112,78 @@ class HelpCenterController(
             ),
         )
     }
+
+    private fun openMy(player: Player) {
+        val token = markNavigation(player)
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("my-title"),
+                body = listOf(PaperDialogBody(text("my-loading"), width = 500)),
+                buttons = myButtons(player),
+                exitButton = rootButton(player),
+                columns = 2,
+            ),
+        )
+        gateway.loadProfile(player, settings.loadTimeoutSeconds).whenCompleteSync(tasks) { profile, failure ->
+            if (!active || !player.isOnline || navigation[player.uniqueId] != token) return@whenCompleteSync
+            if (failure == null && profile != null) showMy(player, profile) else showMyFailure(player)
+        }
+    }
+
+    private fun showMy(player: Player, profile: HelpCenterProfile) {
+        val unavailable = settings.text("not-available")
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("my-title"),
+                body = listOf(
+                    PaperDialogBody(
+                        text(
+                            "my-body",
+                            "player" to profile.playerName,
+                            "server" to profile.server,
+                            "rank" to (profile.rank ?: unavailable),
+                            "balance" to (profile.balance ?: unavailable),
+                            "homes" to (profile.homes?.usedSlots?.toString() ?: unavailable),
+                            "max_homes" to (profile.homes?.maxSlots?.toString() ?: unavailable),
+                            "lands" to (profile.lands?.toString() ?: unavailable),
+                            "world" to profile.world,
+                            "x" to profile.x.toString(),
+                            "y" to profile.y.toString(),
+                            "z" to profile.z.toString(),
+                        ),
+                        width = 500,
+                    ),
+                ),
+                buttons = myButtons(player),
+                exitButton = rootButton(player),
+                columns = 2,
+            ),
+        )
+    }
+
+    private fun showMyFailure(player: Player) {
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("my-title"),
+                body = listOf(PaperDialogBody(text("my-error"), width = 500)),
+                buttons = myButtons(player),
+                exitButton = rootButton(player),
+                columns = 2,
+            ),
+        )
+    }
+
+    private fun myButtons(player: Player): List<PaperDialogButton> = listOf(
+        button("my_homes", text("my-homes-label"), text("my-homes-tooltip")) { openTravel(player) },
+        button("my_lands", text("my-lands-label"), text("my-lands-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
+        button("my_rank", text("my-rank-label"), text("my-rank-tooltip")) { execute(player, "rank") },
+        button("my_jobs", text("my-jobs-label"), text("my-jobs-tooltip")) { execute(player, "jobsgui") },
+        button("my_quests", text("my-quests-label"), text("my-quests-tooltip")) { execute(player, "quests") },
+        button("my_stats", text("my-stats-label"), text("my-stats-tooltip")) { execute(player, "stats") },
+    )
 
     private fun openGuide(player: Player) {
         markNavigation(player)
@@ -127,7 +234,7 @@ class HelpCenterController(
     private fun openSearch(player: Player, rawQuery: String) {
         markNavigation(player)
         val query = rawQuery.trim()
-        val results = HelpCenterPlanner.search(catalog, query, settings.maxSearchResults)
+        val results = HelpCenterPlanner.search(searchCatalog, query, settings.maxSearchResults)
         val body = mutableListOf(
             PaperDialogBody(
                 text(
@@ -143,7 +250,7 @@ class HelpCenterController(
             PaperDialogScreen(
                 title = text("search-title"),
                 body = body,
-                buttons = results.map { commandButton(player, it) }.ifEmpty {
+                buttons = results.map { searchResultButton(player, it) }.ifEmpty {
                     listOf(button("search_again", text("commands-label"), text("commands-tooltip")) { openCommands(player) })
                 },
                 exitButton = backButton("back", player, ::openCommands),
@@ -177,13 +284,9 @@ class HelpCenterController(
                 buttons = listOf(button("root", text("root-label"), text("main-menu-tooltip")) { openRoot(player) }),
             ),
         )
-        gateway.loadHomes(player, settings.loadTimeoutSeconds).whenComplete { homes, failure ->
-            Tasks.scheduler.runSync(
-                Runnable {
-                    if (!active || !player.isOnline || navigation[player.uniqueId] != token) return@Runnable
-                    if (failure == null) showTravel(player, homes) else showTravelFailure(player)
-                },
-            )
+        gateway.loadHomes(player, settings.loadTimeoutSeconds).whenCompleteSync(tasks) { homes, failure ->
+            if (!active || !player.isOnline || navigation[player.uniqueId] != token) return@whenCompleteSync
+            if (failure == null && homes != null) showTravel(player, homes) else showTravelFailure(player)
         }
     }
 
@@ -361,6 +464,20 @@ class HelpCenterController(
         if (command.id == "privat") open(player, HelpCenterPage.PRIVAT) else execute(player, command.command)
     }
 
+    private fun searchResultButton(player: Player, entry: HelpCenterSearchEntry): PaperDialogButton = button(
+        "result_${entry.id.replace('-', '_')}",
+        text("command-label", "label" to entry.label),
+        entry.command?.let { command ->
+            text("command-tooltip", "description" to entry.description, "command" to command)
+        } ?: text("search-result-tooltip", "description" to entry.description),
+    ) {
+        when (val action = entry.action) {
+            is HelpCenterSearchAction.Execute -> execute(player, action.command)
+            is HelpCenterSearchAction.OpenPage -> open(player, action.page)
+            HelpCenterSearchAction.CreateHome -> openCreateHome(player)
+        }
+    }
+
     private fun execute(player: Player, command: String) {
         markNavigation(player)
         if (!gateway.execute(player, command)) player.sendMessage(text("action-failed"))
@@ -403,6 +520,8 @@ class HelpCenterController(
 
     private data class CommandDefinition(val id: String, val category: HelpCenterCategory, val command: String)
 
+    private data class IntentDefinition(val id: String, val action: HelpCenterSearchAction)
+
     companion object {
         private val SEARCH_INPUT = PaperDialogInputId.of("search")
         private val HOME_INPUT = PaperDialogInputId.of("home_name")
@@ -430,6 +549,19 @@ class HelpCenterController(
             CommandDefinition("stats", HelpCenterCategory.PROGRESS, "stats"),
             CommandDefinition("notes", HelpCenterCategory.SOCIAL, "notes"),
             CommandDefinition("donate", HelpCenterCategory.SOCIAL, "donate"),
+        )
+
+        private val INTENT_DEFINITIONS = listOf(
+            IntentDefinition("my", HelpCenterSearchAction.OpenPage(HelpCenterPage.MY)),
+            IntentDefinition("home-create", HelpCenterSearchAction.CreateHome),
+            IntentDefinition("home-move", HelpCenterSearchAction.OpenPage(HelpCenterPage.TRAVEL)),
+            IntentDefinition("home-delete", HelpCenterSearchAction.OpenPage(HelpCenterPage.TRAVEL)),
+            IntentDefinition("land-create", HelpCenterSearchAction.OpenPage(HelpCenterPage.PRIVAT)),
+            IntentDefinition("land-delete", HelpCenterSearchAction.OpenPage(HelpCenterPage.PRIVAT)),
+            IntentDefinition("land-invite", HelpCenterSearchAction.OpenPage(HelpCenterPage.PRIVAT)),
+            IntentDefinition("land-remove", HelpCenterSearchAction.OpenPage(HelpCenterPage.PRIVAT)),
+            IntentDefinition("land-main-block", HelpCenterSearchAction.OpenPage(HelpCenterPage.PRIVAT)),
+            IntentDefinition("land-claim", HelpCenterSearchAction.OpenPage(HelpCenterPage.PRIVAT)),
         )
     }
 }

@@ -6,9 +6,51 @@ import io.kotest.matchers.shouldBe
 
 class HelpCenterPlannerTest : StringSpec({
     val entries = listOf(
-        HelpCenterCommand("privat", HelpCenterCategory.PROTECTION, "privat", "Приват", "Земли и поселения", "земля поселение lands"),
-        HelpCenterCommand("warps", HelpCenterCategory.TRAVEL, "warps", "Варпы", "Публичные точки игроков", "телепорт точки"),
-        HelpCenterCommand("rank", HelpCenterCategory.PROGRESS, "rank", "Ранги", "Серверный прогресс", "уровень развитие"),
+        HelpCenterSearchEntry(
+            "privat",
+            "Приват",
+            "Земли и поселения",
+            "земля поселение lands защита",
+            HelpCenterSearchAction.OpenPage(HelpCenterPage.PRIVAT),
+            command = "privat",
+        ),
+        HelpCenterSearchEntry(
+            "land_delete",
+            "Удалить поселение",
+            "Открыть приват и выбрать поселение для удаления",
+            "как удалить поселение распустить землю снести приват",
+            HelpCenterSearchAction.OpenPage(HelpCenterPage.PRIVAT),
+        ),
+        HelpCenterSearchEntry(
+            "land_remove_member",
+            "Исключить игрока",
+            "Выбрать поселение и убрать участника",
+            "удалить выгнать исключить игрока участника",
+            HelpCenterSearchAction.OpenPage(HelpCenterPage.PRIVAT),
+        ),
+        HelpCenterSearchEntry(
+            "home_move",
+            "Перенести дом",
+            "Выбрать дом и заменить его сохранённую точку",
+            "передвинуть переместить точку дома edithome",
+            HelpCenterSearchAction.OpenPage(HelpCenterPage.TRAVEL),
+        ),
+        HelpCenterSearchEntry(
+            "warps",
+            "Варпы",
+            "Публичные точки игроков",
+            "телепорт точки",
+            HelpCenterSearchAction.Execute("warps"),
+            command = "warps",
+        ),
+        HelpCenterSearchEntry(
+            "rank",
+            "Ранги",
+            "Серверный прогресс",
+            "уровень развитие",
+            HelpCenterSearchAction.Execute("rank"),
+            command = "rank",
+        ),
     )
 
     "finds commands by label description command and configured keywords" {
@@ -18,8 +60,51 @@ class HelpCenterPlannerTest : StringSpec({
         HelpCenterPlanner.search(entries, "прогресс", 5).map { it.id } shouldContainExactly listOf("rank")
     }
 
+    "understands player intent and ignores conversational filler" {
+        HelpCenterPlanner.search(entries, "как удалить моё поселение", 5).first().id shouldBe "land_delete"
+        HelpCenterPlanner.search(entries, "хочу перенести точку дома", 5).first().id shouldBe "home_move"
+    }
+
+    "reduces russian inflections to stable lexical roots" {
+        HelpCenterLexicon.root("поселение") shouldBe HelpCenterLexicon.root("поселения")
+        HelpCenterLexicon.root("земля") shouldBe HelpCenterLexicon.root("землёй")
+        HelpCenterLexicon.root("домами") shouldBe HelpCenterLexicon.root("домах")
+        HelpCenterLexicon.root("удаление") shouldBe HelpCenterLexicon.root("удаления")
+    }
+
+    "tolerates a small typo without turning unrelated results into matches" {
+        HelpCenterPlanner.search(entries, "пириват", 5).first().id shouldBe "privat"
+        HelpCenterPlanner.search(entries, "посиление удалить", 5).map { it.id } shouldContainExactly listOf("land_delete")
+        HelpCenterPlanner.search(entries, "варпс", 5).first().id shouldBe "warps"
+        HelpCenterPlanner.search(entries, "совершенно неизвестная штука", 5) shouldBe emptyList()
+    }
+
+    "uses character trigrams for noisy spelling" {
+        (HelpCenterLexicon.trigramSimilarity("пириват", "приват") > 0.55) shouldBe true
+        (HelpCenterLexicon.trigramSimilarity("посиление", "поселение") > 0.55) shouldBe true
+        (HelpCenterLexicon.trigramSimilarity("поселение", "магазин") < 0.30) shouldBe true
+    }
+
+    "routes natural phrases through the configured production intents" {
+        val intents = HelpCenterConfig.INTENTS.map { (id, text) ->
+            HelpCenterSearchEntry(
+                id = id,
+                label = text.label,
+                description = text.description,
+                keywords = text.keywords,
+                action = HelpCenterSearchAction.OpenPage(HelpCenterPage.ROOT),
+            )
+        }
+
+        HelpCenterPlanner.search(intents, "как удалить моё посиление", 5).map { it.id } shouldContainExactly listOf("land-delete")
+        HelpCenterPlanner.search(intents, "добавь друга в землю", 5).first().id shouldBe "land-invite"
+        HelpCenterPlanner.search(intents, "переставить колокол", 5).first().id shouldBe "land-main-block"
+        HelpCenterPlanner.search(intents, "сделать хом", 5).first().id shouldBe "home-create"
+        HelpCenterPlanner.search(intents, "где мои деньги", 5).first().id shouldBe "my"
+    }
+
     "returns a stable bounded catalog for an empty query" {
-        HelpCenterPlanner.search(entries, "   ", 2).map { it.id } shouldContainExactly listOf("privat", "warps")
+        HelpCenterPlanner.search(entries, "   ", 2).map { it.id } shouldContainExactly listOf("privat", "land_delete")
     }
 
     "builds only bounded player commands" {
@@ -36,6 +121,8 @@ class HelpCenterPlannerTest : StringSpec({
     "resolves public help pages without exposing internal command help" {
         HelpCenterPage.from("travel") shouldBe HelpCenterPage.TRAVEL
         HelpCenterPage.from("перемещения") shouldBe HelpCenterPage.TRAVEL
+        HelpCenterPage.from("моё") shouldBe HelpCenterPage.MY
+        HelpCenterPage.from("мое") shouldBe HelpCenterPage.MY
         HelpCenterPage.from("privat") shouldBe HelpCenterPage.PRIVAT
         HelpCenterPage.from("unknown") shouldBe null
     }

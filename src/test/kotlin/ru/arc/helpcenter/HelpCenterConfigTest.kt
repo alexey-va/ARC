@@ -16,9 +16,11 @@ class HelpCenterConfigTest : StringSpec({
             settings.maxHomes shouldBe 12
             settings.maxSearchResults shouldBe 8
             settings.text("root-title").contains("Помощь") shouldBe true
+            settings.text("my-body").contains("<balance>") shouldBe true
             settings.text("travel-body").contains("<homes>") shouldBe true
             settings.command("privat").label.contains("Приват") shouldBe true
             settings.command("privat").keywords.contains("посел") shouldBe true
+            settings.intent("land-delete").keywords.contains("удал") shouldBe true
         } finally {
             ConfigManager.clear()
             root.toFile().deleteRecursively()

@@ -10,6 +10,12 @@ data class HelpCenterCommandText(
     val keywords: String,
 )
 
+data class HelpCenterIntentText(
+    val label: String,
+    val description: String,
+    val keywords: String,
+)
+
 data class HelpCenterSettings(
     val enabled: Boolean,
     val maxHomes: Int,
@@ -17,10 +23,13 @@ data class HelpCenterSettings(
     val loadTimeoutSeconds: Long,
     private val text: Map<String, String>,
     private val commands: Map<String, HelpCenterCommandText>,
+    private val intents: Map<String, HelpCenterIntentText>,
 ) {
     fun text(key: String): String = text.getValue(key)
 
     fun command(id: String): HelpCenterCommandText = commands.getValue(id)
+
+    fun intent(id: String): HelpCenterIntentText = intents.getValue(id)
 }
 
 class HelpCenterConfig(private val config: Config) {
@@ -44,6 +53,13 @@ class HelpCenterConfig(private val config: Config) {
                     keywords = required("commands.$id.keywords", fallback.keywords),
                 )
             },
+            intents = INTENTS.mapValues { (id, fallback) ->
+                HelpCenterIntentText(
+                    label = required("intents.$id.label", fallback.label),
+                    description = required("intents.$id.description", fallback.description),
+                    keywords = required("intents.$id.keywords", fallback.keywords),
+                )
+            },
         )
     }
 
@@ -63,7 +79,9 @@ class HelpCenterConfig(private val config: Config) {
 
         private val DEFAULT_TEXT = linkedMapOf(
             "root-title" to "<#20252b><bold>Помощь и команды",
-            "root-body" to "<#fff0d8>Все основные действия собраны здесь.<newline><#8d7768>Выберите раздел — нужная команда выполнится прямо из меню.",
+            "root-body" to "<#fff0d8>Все основные действия собраны здесь.<newline><#8d7768>Выберите раздел или опишите задачу в поиске.",
+            "my-label" to "<#d9864f><bold>Моё",
+            "my-tooltip" to "<#fff0d8>Ваш профиль, дома, земли и прогресс.",
             "guide-label" to "<#d9864f><bold>С чего начать",
             "guide-tooltip" to "<#fff0d8>Короткий маршрут для нового игрока.",
             "commands-label" to "<#f4bd6a><bold>Команды",
@@ -76,6 +94,23 @@ class HelpCenterConfig(private val config: Config) {
             "main-menu-tooltip" to "<#fff0d8>Открыть все игровые разделы сервера.",
             "back-label" to "<#8d7768>Назад",
             "root-label" to "<#8d7768>К разделам",
+            "not-available" to "—",
+            "my-title" to "<#20252b><bold>Моё",
+            "my-loading" to "<#fff0d8>Собираю ваш профиль…",
+            "my-body" to "<#d9864f><bold><player></bold> <#8d7768>· <server><newline><#8d7768>Ранг: <#fff0d8><rank> <#8d7768>· Баланс: <#fff0d8><balance><newline><#8d7768>Дома: <#fff0d8><homes>/<max_homes> <#8d7768>· Поселения: <#fff0d8><lands><newline><#8d7768>Сейчас: <#fff0d8><world> · <x>, <y>, <z>",
+            "my-error" to "<#fff0d8>Часть профиля сейчас недоступна. Быстрые разделы всё равно работают.",
+            "my-homes-label" to "<#f4bd6a><bold>Мои дома",
+            "my-homes-tooltip" to "<#fff0d8>Сохранённые точки и перемещения.",
+            "my-lands-label" to "<#f4bd6a><bold>Мои поселения",
+            "my-lands-tooltip" to "<#fff0d8>Территория, участники и настройки.",
+            "my-rank-label" to "<#fff0d8>Мой ранг",
+            "my-rank-tooltip" to "<#fff0d8>Текущий ранг и следующие цели.",
+            "my-jobs-label" to "<#fff0d8>Мои работы",
+            "my-jobs-tooltip" to "<#fff0d8>Профессии, уровни и заработок.",
+            "my-quests-label" to "<#fff0d8>Мои задания",
+            "my-quests-tooltip" to "<#fff0d8>Активные задания и награды.",
+            "my-stats-label" to "<#fff0d8>Мои навыки",
+            "my-stats-tooltip" to "<#fff0d8>Характеристики и способности.",
             "guide-title" to "<#20252b><bold>С чего начать",
             "guide-body" to "<#d9864f><bold>1. Набор</bold><newline><#fff0d8>Получите стартовые предметы.<newline><newline><#d9864f><bold>2. Мир</bold><newline><#fff0d8>Выберите строительство или добычу.<newline><newline><#d9864f><bold>3. Дом и приват</bold><newline><#fff0d8>Поставьте точку дома и защитите поселением свою базу.",
             "kit-label" to "<#f4bd6a><bold>Получить набор",
@@ -83,13 +118,14 @@ class HelpCenterConfig(private val config: Config) {
             "mining-label" to "<#fff0d8>Мир добычи",
             "rules-label" to "<#fff0d8>Правила",
             "commands-title" to "<#20252b><bold>Каталог команд",
-            "commands-body" to "<#fff0d8>Выберите задачу или найдите команду по смыслу.<newline><#8d7768>Например: дом, продать, ранг, варпы.",
+            "commands-body" to "<#fff0d8>Опишите, что хотите сделать — можно обычной фразой.<newline><#8d7768>Поиск понимает формы слов, синонимы и небольшие опечатки.",
             "search-input" to "<#fff0d8>Что вы хотите сделать?",
             "search-label" to "<#f4bd6a><bold>Найти",
-            "search-tooltip" to "<#fff0d8>Искать по названию команды и задаче.",
+            "search-tooltip" to "<#fff0d8>Например: удалить поселение, перенести дом, добавить друга.",
             "search-title" to "<#20252b><bold>Результаты поиска",
             "search-body" to "<#8d7768>Запрос: <#fff0d8><query><newline><#8d7768>Найдено: <#f4bd6a><count>",
-            "search-empty" to "<#fff0d8>Ничего не найдено. Попробуйте: дом, приват, магазин, ранг.",
+            "search-empty" to "<#fff0d8>Не понял запрос. Опишите действие и объект: «перенести дом» или «добавить игрока».",
+            "search-result-tooltip" to "<#fff0d8><description><newline><#8d7768>Открыть нужный раздел",
             "category-start-label" to "<#fff0d8>Начало игры",
             "category-travel-label" to "<#fff0d8>Перемещения",
             "category-protection-label" to "<#fff0d8>Защита",
@@ -167,6 +203,59 @@ class HelpCenterConfig(private val config: Config) {
             "stats" to HelpCenterCommandText("Навыки", "Характеристики и способности", "auraskills развитие"),
             "notes" to HelpCenterCommandText("Заметки", "Ваши серверные заметки", "список записи"),
             "donate" to HelpCenterCommandText("Поддержка и VIP", "Возможности поддержки сервера", "донат привилегии"),
+        )
+
+        internal val INTENTS = linkedMapOf(
+            "my" to HelpCenterIntentText(
+                "Моё",
+                "Открыть личный профиль, дома, земли и прогресс",
+                "мой профиль баланс деньги координаты где я мои данные",
+            ),
+            "home-create" to HelpCenterIntentText(
+                "Создать дом",
+                "Сохранить текущую точку как новый дом",
+                "поставить дом создать хом sethome сохранить точку",
+            ),
+            "home-move" to HelpCenterIntentText(
+                "Перенести дом",
+                "Выбрать дом и заменить его сохранённую точку",
+                "передвинуть переместить перенести точку дома edithome",
+            ),
+            "home-delete" to HelpCenterIntentText(
+                "Удалить дом",
+                "Выбрать сохранённый дом для удаления",
+                "удалить стереть снести дом хом delhome",
+            ),
+            "land-create" to HelpCenterIntentText(
+                "Создать поселение",
+                "Открыть приват и создать новое поселение",
+                "создать основать сделать поселение землю приват",
+            ),
+            "land-delete" to HelpCenterIntentText(
+                "Удалить поселение",
+                "Открыть приват и выбрать поселение для удаления",
+                "как удалить распустить закрыть снести поселение землю приват lands",
+            ),
+            "land-invite" to HelpCenterIntentText(
+                "Добавить игрока в поселение",
+                "Выбрать поселение и пригласить участника",
+                "добавить пригласить позвать друга игрока участника доверить trust",
+            ),
+            "land-remove" to HelpCenterIntentText(
+                "Исключить игрока из поселения",
+                "Выбрать поселение и убрать участника",
+                "удалить выгнать исключить убрать игрока участника untrust",
+            ),
+            "land-main-block" to HelpCenterIntentText(
+                "Перенести блок поселения",
+                "Открыть управление главным блоком поселения",
+                "перенести передвинуть переместить блок колокол костер mainblock",
+            ),
+            "land-claim" to HelpCenterIntentText(
+                "Расширить территорию",
+                "Открыть приват и управление участками",
+                "заприватить занять добавить чанк участок территорию claim",
+            ),
         )
     }
 }

@@ -8,7 +8,9 @@ limits:
 # All player-visible copy is configurable. ARC merges new defaults on reload.
 text:
   root-title: '<#20252b><bold>Помощь и команды'
-  root-body: '<#fff0d8>Все основные действия собраны здесь.<newline><#8d7768>Выберите раздел — нужная команда выполнится прямо из меню.'
+  root-body: '<#fff0d8>Все основные действия собраны здесь.<newline><#8d7768>Выберите раздел или опишите задачу в поиске.'
+  my-label: '<#d9864f><bold>Моё'
+  my-tooltip: '<#fff0d8>Ваш профиль, дома, земли и прогресс.'
   guide-label: '<#d9864f><bold>С чего начать'
   guide-tooltip: '<#fff0d8>Короткий маршрут для нового игрока.'
   commands-label: '<#f4bd6a><bold>Команды'
@@ -21,6 +23,24 @@ text:
   main-menu-tooltip: '<#fff0d8>Открыть все игровые разделы сервера.'
   back-label: '<#8d7768>Назад'
   root-label: '<#8d7768>К разделам'
+  not-available: '—'
+
+  my-title: '<#20252b><bold>Моё'
+  my-loading: '<#fff0d8>Собираю ваш профиль…'
+  my-body: '<#d9864f><bold><player></bold> <#8d7768>· <server><newline><#8d7768>Ранг: <#fff0d8><rank> <#8d7768>· Баланс: <#fff0d8><balance><newline><#8d7768>Дома: <#fff0d8><homes>/<max_homes> <#8d7768>· Поселения: <#fff0d8><lands><newline><#8d7768>Сейчас: <#fff0d8><world> · <x>, <y>, <z>'
+  my-error: '<#fff0d8>Часть профиля сейчас недоступна. Быстрые разделы всё равно работают.'
+  my-homes-label: '<#f4bd6a><bold>Мои дома'
+  my-homes-tooltip: '<#fff0d8>Сохранённые точки и перемещения.'
+  my-lands-label: '<#f4bd6a><bold>Мои поселения'
+  my-lands-tooltip: '<#fff0d8>Территория, участники и настройки.'
+  my-rank-label: '<#fff0d8>Мой ранг'
+  my-rank-tooltip: '<#fff0d8>Текущий ранг и следующие цели.'
+  my-jobs-label: '<#fff0d8>Мои работы'
+  my-jobs-tooltip: '<#fff0d8>Профессии, уровни и заработок.'
+  my-quests-label: '<#fff0d8>Мои задания'
+  my-quests-tooltip: '<#fff0d8>Активные задания и награды.'
+  my-stats-label: '<#fff0d8>Мои навыки'
+  my-stats-tooltip: '<#fff0d8>Характеристики и способности.'
 
   guide-title: '<#20252b><bold>С чего начать'
   guide-body: '<#d9864f><bold>1. Набор</bold><newline><#fff0d8>Получите стартовые предметы.<newline><newline><#d9864f><bold>2. Мир</bold><newline><#fff0d8>Выберите строительство или добычу.<newline><newline><#d9864f><bold>3. Дом и приват</bold><newline><#fff0d8>Поставьте точку дома и защитите поселением свою базу.'
@@ -30,13 +50,14 @@ text:
   rules-label: '<#fff0d8>Правила'
 
   commands-title: '<#20252b><bold>Каталог команд'
-  commands-body: '<#fff0d8>Выберите задачу или найдите команду по смыслу.<newline><#8d7768>Например: дом, приват, магазин, ранг.'
+  commands-body: '<#fff0d8>Опишите, что хотите сделать — можно обычной фразой.<newline><#8d7768>Поиск понимает формы слов, синонимы и небольшие опечатки.'
   search-input: '<#fff0d8>Что вы хотите сделать?'
   search-label: '<#f4bd6a><bold>Найти'
-  search-tooltip: '<#fff0d8>Искать по названию команды и задаче.'
+  search-tooltip: '<#fff0d8>Например: удалить поселение, перенести дом, добавить друга.'
   search-title: '<#20252b><bold>Результаты поиска'
   search-body: '<#8d7768>Запрос: <#fff0d8><query><newline><#8d7768>Найдено: <#f4bd6a><count>'
-  search-empty: '<#fff0d8>Ничего не найдено. Попробуйте: дом, приват, магазин, ранг.'
+  search-empty: '<#fff0d8>Не понял запрос. Опишите действие и объект: «перенести дом» или «добавить игрока».'
+  search-result-tooltip: '<#fff0d8><description><newline><#8d7768>Открыть нужный раздел'
   category-start-label: '<#fff0d8>Начало игры'
   category-travel-label: '<#fff0d8>Перемещения'
   category-protection-label: '<#fff0d8>Защита'
@@ -114,3 +135,17 @@ commands:
   stats: { label: 'Навыки', description: 'Характеристики и способности', keywords: 'auraskills развитие' }
   notes: { label: 'Заметки', description: 'Ваши серверные заметки', keywords: 'список записи' }
   donate: { label: 'Поддержка и VIP', description: 'Возможности поддержки сервера', keywords: 'донат привилегии' }
+
+# Search intents are safe navigation targets. They never execute destructive
+# commands directly; the destination dialog owns selection and confirmation.
+intents:
+  my: { label: 'Моё', description: 'Открыть личный профиль, дома, земли и прогресс', keywords: 'мой профиль баланс деньги координаты где я мои данные' }
+  home-create: { label: 'Создать дом', description: 'Сохранить текущую точку как новый дом', keywords: 'поставить дом создать хом sethome сохранить точку' }
+  home-move: { label: 'Перенести дом', description: 'Выбрать дом и заменить его сохранённую точку', keywords: 'передвинуть переместить перенести точку дома edithome' }
+  home-delete: { label: 'Удалить дом', description: 'Выбрать сохранённый дом для удаления', keywords: 'удалить стереть снести дом хом delhome' }
+  land-create: { label: 'Создать поселение', description: 'Открыть приват и создать новое поселение', keywords: 'создать основать сделать поселение землю приват' }
+  land-delete: { label: 'Удалить поселение', description: 'Открыть приват и выбрать поселение для удаления', keywords: 'как удалить распустить закрыть снести поселение землю приват lands' }
+  land-invite: { label: 'Добавить игрока в поселение', description: 'Выбрать поселение и пригласить участника', keywords: 'добавить пригласить позвать друга игрока участника доверить trust' }
+  land-remove: { label: 'Исключить игрока из поселения', description: 'Выбрать поселение и убрать участника', keywords: 'удалить выгнать исключить убрать игрока участника untrust' }
+  land-main-block: { label: 'Перенести блок поселения', description: 'Открыть управление главным блоком поселения', keywords: 'перенести передвинуть переместить блок колокол костер mainblock' }
+  land-claim: { label: 'Расширить территорию', description: 'Открыть приват и управление участками', keywords: 'заприватить занять добавить чанк участок территорию claim' }
