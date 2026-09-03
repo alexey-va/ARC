@@ -1,7 +1,16 @@
 package ru.arc.helpcenter
 
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.shouldNot
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.contain
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.TextDecoration
+import net.kyori.adventure.text.minimessage.MiniMessage
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import ru.arc.config.ConfigManager
 import java.nio.file.Files
 
@@ -17,7 +26,34 @@ class HelpCenterConfigTest : StringSpec({
             settings.maxSearchResults shouldBe 8
             settings.text("root-title").contains("Помощь") shouldBe true
             settings.text("my-title").contains("Про меня") shouldBe true
-            settings.text("my-body").contains("<balance>") shouldBe true
+            val profileBodies = listOf(
+                settings.text("my-identity"),
+                settings.text("my-summary"),
+                settings.text("my-location"),
+            )
+            profileBodies shouldHaveSize 3
+            profileBodies.joinToString().contains("<balance>") shouldBe true
+            renderedProfileLines(profileBodies).forEach { line ->
+                line shouldNot contain(Regex(" {3,}"))
+            }
+            MiniMessage.miniMessage().deserialize(settings.text("my-summary")).containsBold() shouldBe false
+            MiniMessage.miniMessage().deserialize(settings.text("my-location")).containsBold() shouldBe false
+            listOf(
+                "my-label",
+                "guide-label",
+                "commands-label",
+                "travel-label",
+                "privat-label",
+                "main-menu-label",
+                "my-homes-label",
+                "my-lands-label",
+                "my-rank-label",
+                "my-jobs-label",
+                "my-quests-label",
+                "my-skills-label",
+            ).forEach { key ->
+                MiniMessage.miniMessage().deserialize(settings.text(key)).containsBold() shouldBe false
+            }
             settings.text("travel-body").contains("<homes>") shouldBe true
             settings.text("guide-body").contains("Мир строительства") shouldBe false
             settings.command("privat").label.contains("Поселения") shouldBe true
@@ -50,3 +86,28 @@ class HelpCenterConfigTest : StringSpec({
         }
     }
 })
+
+private fun renderedProfileLines(source: List<String>): List<String> {
+    val placeholders = TagResolver.resolver(
+        mapOf(
+            "player" to "ArchitectureMax",
+            "server" to "survival",
+            "rank" to "Следопыт",
+            "balance" to "8 000 000",
+            "homes" to "3",
+            "max_homes" to "8",
+            "lands" to "2",
+            "world" to "classic_survival",
+            "x" to "-1842",
+            "y" to "71",
+            "z" to "3260",
+        ).map { (key, value) -> Placeholder.unparsed(key, value) },
+    )
+    val plain = PlainTextComponentSerializer.plainText()
+    return source
+        .flatMap { plain.serialize(MiniMessage.miniMessage().deserialize(it, placeholders)).lines() }
+        .filter(String::isNotBlank)
+}
+
+private fun Component.containsBold(): Boolean =
+    decoration(TextDecoration.BOLD) == TextDecoration.State.TRUE || children().any(Component::containsBold)

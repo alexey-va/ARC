@@ -133,7 +133,9 @@ sources:
       - main-menu-tooltip
       - my-title
       - my-loading
-      - my-body
+      - my-identity
+      - my-summary
+      - my-location
       - my-error
       - my-homes-label
       - my-homes-tooltip
@@ -145,12 +147,14 @@ sources:
       - my-jobs-tooltip
       - my-quests-label
       - my-quests-tooltip
-      - my-stats-label
-      - my-stats-tooltip
+      - my-skills-label
+      - my-skills-tooltip
       - guide-title
       - guide-body
       - kit-label
-      - build-label
+      - vanilla-label
+      - biomes-label
+      - jobs-label
       - mining-label
       - rules-label
       - commands-title
@@ -266,6 +270,8 @@ placeholders:
   count: '2'
   land: Берёзовая_гавань
   chunks: '18'
+  max_chunks: '32'
+  selected: Берёзовая_гавань
   members: '4'
   max_members: '8'
   homes: '3'
@@ -351,7 +357,7 @@ surfaces:
         - {id: rank, text-key: my-rank-label, tooltip-key: my-rank-tooltip, width: 190}
         - {id: jobs, text-key: my-jobs-label, tooltip-key: my-jobs-tooltip, width: 190}
         - {id: quests, text-key: my-quests-label, tooltip-key: my-quests-tooltip, width: 190}
-        - {id: stats, text-key: my-stats-label, tooltip-key: my-stats-tooltip, width: 190}
+        - {id: skills, text-key: my-skills-label, tooltip-key: my-skills-tooltip, width: 190}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -362,14 +368,16 @@ surfaces:
       external-title-key: my-title
       columns: 2
       body:
-        - {id: profile, text-key: my-body, width: 500, placeholders: {player: ArchitectureMax, server: survival, rank: Следопыт, balance: '8 000 000', homes: '3', max_homes: '8', lands: '2', world: classic_survival, x: '-1842', y: '71', z: '3260'}}
+        - {id: identity, text-key: my-identity, width: 420, placeholders: {player: ArchitectureMax, server: survival, rank: Следопыт}}
+        - {id: summary, text-key: my-summary, width: 420, placeholders: {balance: '8 000 000', homes: '3', max_homes: '8', lands: '2'}}
+        - {id: location, text-key: my-location, width: 420, placeholders: {world: classic_survival, x: '-1842', y: '71', z: '3260'}}
       buttons:
         - {id: homes, text-key: my-homes-label, tooltip-key: my-homes-tooltip, width: 190}
         - {id: lands, text-key: my-lands-label, tooltip-key: my-lands-tooltip, width: 190}
         - {id: rank, text-key: my-rank-label, tooltip-key: my-rank-tooltip, width: 190}
         - {id: jobs, text-key: my-jobs-label, tooltip-key: my-jobs-tooltip, width: 190}
         - {id: quests, text-key: my-quests-label, tooltip-key: my-quests-tooltip, width: 190}
-        - {id: stats, text-key: my-stats-label, tooltip-key: my-stats-tooltip, width: 190}
+        - {id: skills, text-key: my-skills-label, tooltip-key: my-skills-tooltip, width: 190}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -399,7 +407,9 @@ surfaces:
         - {id: steps, text-key: guide-body, width: 500}
       buttons:
         - {id: kit, text-key: kit-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Получить стартовые предметы, command: 'kit start'}}
-        - {id: build, text-key: build-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Перейти в постоянный строительный мир, command: build}}
+        - {id: vanilla, text-key: vanilla-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Перейти в обычный мир выживания, command: 'pw vanilla'}}
+        - {id: biomes, text-key: biomes-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Перейти в мир выживания с новыми биомами, command: 'pw survival'}}
+        - {id: jobs, text-key: jobs-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Профессии и заработок, command: jobsgui}}
         - {id: mining, text-key: mining-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Перейти в обновляемый ресурсный мир, command: mining}}
         - {id: homes, text-key: travel-label, tooltip-key: travel-tooltip, width: 190}
         - {id: privat, text-key: privat-label, tooltip-key: privat-tooltip, width: 190}
@@ -485,7 +495,7 @@ surfaces:
         - {id: rtp, text-key: rtp-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Телепорт в случайную безопасную точку, command: rtp}}
         - {id: back-command, text-key: back-command-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Вернуться к прошлой позиции, command: back}}
         - {id: stuck, text-key: stuck-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Аварийный возврат со сложного места, command: stuck}}
-        - {id: build, text-key: build-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Перейти в постоянный строительный мир, command: build}}
+        - {id: vanilla, text-key: vanilla-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Перейти в обычный мир выживания, command: 'pw vanilla'}}
         - {id: mining, text-key: mining-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Перейти в обновляемый ресурсный мир, command: mining}}
       viewport: [854, 480]
       variants: [{id: default}]
@@ -503,7 +513,7 @@ surfaces:
         - {id: create, text-key: create-home-label, tooltip-key: create-home-tooltip, width: 190}
         - {id: rtp, text-key: rtp-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Телепорт в случайную безопасную точку, command: rtp}}
         - {id: spawn, text-key: spawn-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Вернуться на спавн, command: spawn}}
-        - {id: build, text-key: build-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Перейти в постоянный строительный мир, command: build}}
+        - {id: vanilla, text-key: vanilla-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Перейти в обычный мир выживания, command: 'pw vanilla'}}
       viewport: [854, 480]
       variants: [{id: default}]
 

@@ -133,29 +133,26 @@ class HelpCenterController(
 
     private fun showMy(player: Player, profile: HelpCenterProfile) {
         val unavailable = settings.text("not-available")
+        val placeholders = arrayOf(
+            "player" to profile.playerName,
+            "server" to profile.server,
+            "rank" to (profile.rank ?: unavailable),
+            "balance" to (profile.balance ?: unavailable),
+            "homes" to (profile.homes?.usedSlots?.toString() ?: unavailable),
+            "max_homes" to (profile.homes?.maxSlots?.toString() ?: unavailable),
+            "lands" to (profile.lands?.toString() ?: unavailable),
+            "world" to profile.world,
+            "x" to profile.x.toString(),
+            "y" to profile.y.toString(),
+            "z" to profile.z.toString(),
+        )
         ArcMenus.openDialog(
             player,
             PaperDialogScreen(
                 title = text("my-title"),
-                body = listOf(
-                    PaperDialogBody(
-                        text(
-                            "my-body",
-                            "player" to profile.playerName,
-                            "server" to profile.server,
-                            "rank" to (profile.rank ?: unavailable),
-                            "balance" to (profile.balance ?: unavailable),
-                            "homes" to (profile.homes?.usedSlots?.toString() ?: unavailable),
-                            "max_homes" to (profile.homes?.maxSlots?.toString() ?: unavailable),
-                            "lands" to (profile.lands?.toString() ?: unavailable),
-                            "world" to profile.world,
-                            "x" to profile.x.toString(),
-                            "y" to profile.y.toString(),
-                            "z" to profile.z.toString(),
-                        ),
-                        width = 500,
-                    ),
-                ),
+                body = listOf("my-identity", "my-summary", "my-location").map { key ->
+                    PaperDialogBody(text(key, *placeholders), width = 420)
+                },
                 buttons = myButtons(player),
                 exitButton = rootButton(player),
                 columns = 2,
