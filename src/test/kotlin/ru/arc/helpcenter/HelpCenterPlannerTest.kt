@@ -127,4 +127,12 @@ class HelpCenterPlannerTest : StringSpec({
         HelpCenterPage.from("privat") shouldBe HelpCenterPage.PRIVAT
         HelpCenterPage.from("unknown") shouldBe null
     }
+
+    "promotes the task hubs that belong on the universal root" {
+        HelpCenterCategory.rootHubs shouldContainExactly listOf(
+            HelpCenterCategory.TRADE,
+            HelpCenterCategory.PROGRESS,
+            HelpCenterCategory.SOCIAL,
+        )
+    }
 })

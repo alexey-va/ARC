@@ -171,6 +171,9 @@ sources:
       - category-trade-label
       - category-progress-label
       - category-social-label
+      - category-trade-tooltip
+      - category-progress-tooltip
+      - category-social-tooltip
       - category-body
       - command-label
       - command-tooltip
@@ -339,6 +342,9 @@ surfaces:
         - {id: commands, text-key: commands-label, tooltip-key: commands-tooltip, width: 190}
         - {id: travel, text-key: travel-label, tooltip-key: travel-tooltip, width: 190}
         - {id: privat, text-key: privat-label, tooltip-key: privat-tooltip, width: 190}
+        - {id: trade, text-key: category-trade-label, tooltip-key: category-trade-tooltip, width: 190}
+        - {id: progress, text-key: category-progress-label, tooltip-key: category-progress-tooltip, width: 190}
+        - {id: social, text-key: category-social-label, tooltip-key: category-social-tooltip, width: 190}
         - {id: main-menu, text-key: main-menu-label, tooltip-key: main-menu-tooltip, width: 190}
       viewport: [854, 480]
       variants: [{id: default}]

@@ -106,6 +106,9 @@ class HelpCenterController(
                     button("commands", text("commands-label"), text("commands-tooltip")) { openCommands(player) },
                     button("travel", text("travel-label"), text("travel-tooltip")) { openTravel(player) },
                     button("privat", text("privat-label"), text("privat-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
+                ) + HelpCenterCategory.rootHubs.map { category ->
+                    rootCategoryButton(player, category)
+                } + listOf(
                     button("main_menu", text("main-menu-label"), text("main-menu-tooltip")) { execute(player, "menu") }.closing(),
                 ),
                 columns = 2,
@@ -258,7 +261,7 @@ class HelpCenterController(
         )
     }
 
-    private fun openCategory(player: Player, category: HelpCenterCategory) {
+    private fun openCategory(player: Player, category: HelpCenterCategory, returnToRoot: Boolean = false) {
         markNavigation(player)
         val entries = catalog.filter { it.category == category }
         ArcMenus.openDialog(
@@ -267,7 +270,7 @@ class HelpCenterController(
                 title = text("category-${category.configId}-title"),
                 body = listOf(PaperDialogBody(text("category-body"))),
                 buttons = entries.map { commandButton(player, it) },
-                exitButton = backButton("back", player, ::openCommands),
+                exitButton = backButton("back", player, if (returnToRoot) ::openRoot else ::openCommands),
                 columns = 2,
             ),
         )
@@ -454,6 +457,15 @@ class HelpCenterController(
     private fun categoryButton(player: Player, category: HelpCenterCategory): PaperDialogButton =
         button("category_${category.configId}", text("category-${category.configId}-label"), text("category-body")) {
             openCategory(player, category)
+        }
+
+    private fun rootCategoryButton(player: Player, category: HelpCenterCategory): PaperDialogButton =
+        button(
+            "root_${category.configId}",
+            text("category-${category.configId}-label"),
+            text("category-${category.configId}-tooltip"),
+        ) {
+            openCategory(player, category, returnToRoot = true)
         }
 
     private fun commandButton(player: Player, command: HelpCenterCommand): PaperDialogButton {

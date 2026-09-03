@@ -26,7 +26,11 @@ enum class HelpCenterCategory(val configId: String) {
     PROTECTION("protection"),
     TRADE("trade"),
     PROGRESS("progress"),
-    SOCIAL("social"),
+    SOCIAL("social");
+
+    companion object {
+        val rootHubs: List<HelpCenterCategory> = listOf(TRADE, PROGRESS, SOCIAL)
+    }
 }
 
 data class HelpCenterCommand(
