@@ -48,6 +48,16 @@ class HelpCenterConfigTest : StringSpec({
                 line shouldNot contain(Regex(" {3,}"))
             }
             profileBodies.joinToString() shouldNot contain("#f0a9c6")
+            listOf(
+                "root-body",
+                "my-label",
+                "commands-label",
+                "my-identity",
+                "my-rank-label",
+                "my-skills-label",
+                "rules-label",
+                "category-progress-label",
+            ).map(settings::text).joinToString() shouldNot contain("#b68cff")
             MiniMessage.miniMessage().deserialize(settings.text("my-summary")).containsBold() shouldBe false
             MiniMessage.miniMessage().deserialize(settings.text("my-location")).containsBold() shouldBe false
             listOf(
