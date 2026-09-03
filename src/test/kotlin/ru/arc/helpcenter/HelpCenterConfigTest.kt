@@ -33,9 +33,21 @@ class HelpCenterConfigTest : StringSpec({
             )
             profileBodies shouldHaveSize 3
             profileBodies.joinToString().contains("<balance>") shouldBe true
-            renderedProfileLines(profileBodies).forEach { line ->
+            val renderedProfile = renderedProfileLines(profileBodies)
+            renderedProfile shouldBe listOf(
+                "ArchitectureMax",
+                "Сервер: survival",
+                "Ранг: Следопыт",
+                "Баланс: 8 000 000",
+                "Дома: 3/8",
+                "Поселения: 2",
+                "Мир: classic_survival",
+                "Координаты: -1842, 71, 3260",
+            )
+            renderedProfile.forEach { line ->
                 line shouldNot contain(Regex(" {3,}"))
             }
+            profileBodies.joinToString() shouldNot contain("#f0a9c6")
             MiniMessage.miniMessage().deserialize(settings.text("my-summary")).containsBold() shouldBe false
             MiniMessage.miniMessage().deserialize(settings.text("my-location")).containsBold() shouldBe false
             listOf(
