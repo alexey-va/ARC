@@ -182,7 +182,7 @@ class HelpCenterController(
         button("my_rank", text("my-rank-label"), text("my-rank-tooltip")) { execute(player, "rank") },
         button("my_jobs", text("my-jobs-label"), text("my-jobs-tooltip")) { execute(player, "jobsgui") },
         button("my_quests", text("my-quests-label"), text("my-quests-tooltip")) { execute(player, "quests") },
-        button("my_stats", text("my-stats-label"), text("my-stats-tooltip")) { execute(player, "stats") },
+        button("my_skills", text("my-skills-label"), text("my-skills-tooltip")) { execute(player, "skills") },
     )
 
     private fun openGuide(player: Player) {
@@ -194,8 +194,10 @@ class HelpCenterController(
                 body = listOf(PaperDialogBody(text("guide-body"), width = 500)),
                 buttons = listOf(
                     button("kit", text("kit-label"), commandTooltip("kit")) { execute(player, "kit start") },
-                    button("build", text("build-label"), commandTooltip("build")) { execute(player, "build") },
+                    button("vanilla", text("vanilla-label"), commandTooltip("vanilla")) { execute(player, "pw vanilla") },
                     button("mining", text("mining-label"), commandTooltip("mining")) { execute(player, "mining") },
+                    button("biomes", text("biomes-label"), commandTooltip("biomes")) { execute(player, "pw survival") },
+                    button("jobs", text("jobs-label"), commandTooltip("jobs")) { execute(player, "jobsgui") },
                     button("home", text("travel-label"), text("travel-tooltip")) { openTravel(player) },
                     button("privat", text("privat-label"), text("privat-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
                     button("rules", text("rules-label"), commandTooltip("rules")) { execute(player, "rules") },
@@ -447,8 +449,9 @@ class HelpCenterController(
         button("rtp", text("rtp-label"), commandTooltip("rtp")) { execute(player, "rtp") },
         button("back_command", text("back-command-label"), commandTooltip("back")) { execute(player, "back") },
         button("stuck", text("stuck-label"), commandTooltip("stuck")) { execute(player, "stuck") },
-        button("build", text("build-label"), commandTooltip("build")) { execute(player, "build") },
+        button("vanilla", text("vanilla-label"), commandTooltip("vanilla")) { execute(player, "pw vanilla") },
         button("mining", text("mining-label"), commandTooltip("mining")) { execute(player, "mining") },
+        button("biomes", text("biomes-label"), commandTooltip("biomes")) { execute(player, "pw survival") },
     )
 
     private fun categoryButton(player: Player, category: HelpCenterCategory): PaperDialogButton =
@@ -480,6 +483,7 @@ class HelpCenterController(
 
     private fun execute(player: Player, command: String) {
         markNavigation(player)
+        player.closeDialog()
         if (!gateway.execute(player, command)) player.sendMessage(text("action-failed"))
     }
 
@@ -536,8 +540,9 @@ class HelpCenterController(
             CommandDefinition("rtp", HelpCenterCategory.TRAVEL, "rtp"),
             CommandDefinition("back", HelpCenterCategory.TRAVEL, "back"),
             CommandDefinition("stuck", HelpCenterCategory.TRAVEL, "stuck"),
-            CommandDefinition("build", HelpCenterCategory.TRAVEL, "build"),
+            CommandDefinition("vanilla", HelpCenterCategory.TRAVEL, "pw vanilla"),
             CommandDefinition("mining", HelpCenterCategory.TRAVEL, "mining"),
+            CommandDefinition("biomes", HelpCenterCategory.TRAVEL, "pw survival"),
             CommandDefinition("privat", HelpCenterCategory.PROTECTION, "privat"),
             CommandDefinition("shops", HelpCenterCategory.TRADE, "shops"),
             CommandDefinition("sell", HelpCenterCategory.TRADE, "sell"),
@@ -546,7 +551,7 @@ class HelpCenterController(
             CommandDefinition("rankup", HelpCenterCategory.PROGRESS, "rankup"),
             CommandDefinition("jobs", HelpCenterCategory.PROGRESS, "jobsgui"),
             CommandDefinition("quests", HelpCenterCategory.PROGRESS, "quests"),
-            CommandDefinition("stats", HelpCenterCategory.PROGRESS, "stats"),
+            CommandDefinition("skills", HelpCenterCategory.PROGRESS, "skills"),
             CommandDefinition("notes", HelpCenterCategory.SOCIAL, "notes"),
             CommandDefinition("donate", HelpCenterCategory.SOCIAL, "donate"),
         )

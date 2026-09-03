@@ -4,6 +4,7 @@ import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import ru.arc.ARC
 import ru.arc.core.PluginModule
+import ru.arc.helpcenter.HelpCenterModule
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
@@ -20,6 +21,7 @@ object LandsUiModule : PluginModule {
     override fun reload() = start(LandsUiConfig.load(ARC.instance.dataPath).snapshot())
 
     override fun shutdown() {
+        controller?.close()
         controller = null
         settings = null
     }
@@ -36,6 +38,7 @@ object LandsUiModule : PluginModule {
     }
 
     private fun start(loaded: LandsUiSettings) {
+        controller?.close()
         controller = null
         settings = loaded
         if (!loaded.enabled) {
@@ -47,7 +50,9 @@ object LandsUiModule : PluginModule {
             warn("Lands UI module disabled because Lands is unavailable")
             return
         }
-        controller = LandsUiController(loaded, BukkitLandsUiGateway())
+        controller = LandsUiController(loaded, BukkitLandsUiGateway()) { player ->
+            HelpCenterModule.open(player)
+        }
         info("Lands UI module initialized")
     }
 }

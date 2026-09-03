@@ -5,7 +5,7 @@ import java.util.Locale
 
 enum class HelpCenterPage(vararg val aliases: String) {
     ROOT("root", "главная"),
-    MY("my", "мое", "моё"),
+    MY("my", "мое", "моё", "про меня"),
     GUIDE("guide", "гайд", "start", "начало"),
     COMMANDS("commands", "команды"),
     TRAVEL("travel", "перемещения", "homes", "дома"),

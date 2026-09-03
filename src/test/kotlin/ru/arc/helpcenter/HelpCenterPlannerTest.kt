@@ -123,6 +123,7 @@ class HelpCenterPlannerTest : StringSpec({
         HelpCenterPage.from("перемещения") shouldBe HelpCenterPage.TRAVEL
         HelpCenterPage.from("моё") shouldBe HelpCenterPage.MY
         HelpCenterPage.from("мое") shouldBe HelpCenterPage.MY
+        HelpCenterPage.from("про меня") shouldBe HelpCenterPage.MY
         HelpCenterPage.from("privat") shouldBe HelpCenterPage.PRIVAT
         HelpCenterPage.from("unknown") shouldBe null
     }

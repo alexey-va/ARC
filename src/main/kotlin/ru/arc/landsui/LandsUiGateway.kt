@@ -13,6 +13,7 @@ interface LandsUiGateway {
     fun onlinePlayers(): List<LandsUiPlayer>
     fun playerName(id: java.util.UUID): String?
     fun execute(player: Player, command: String): Boolean
+    fun select(player: Player, landId: String): Boolean
     fun selectAndExecute(player: Player, landId: String, command: String): LandsUiCommandResult
 }
 
@@ -22,8 +23,10 @@ class BukkitLandsUiGateway internal constructor(
     private val integration: LandsIntegration = LandsIntegration.of(ARC.instance),
 ) : LandsUiGateway {
 
-    override fun lands(player: Player): List<LandsUiLand> =
-        integration.getLandPlayer(player.uniqueId)?.currentLands().orEmpty()
+    override fun lands(player: Player): List<LandsUiLand> {
+        val landPlayer = integration.getLandPlayer(player.uniqueId) ?: return emptyList()
+        val selectedId = landPlayer.editLand?.takeIf { it.exists() }?.ulid?.toString()
+        return landPlayer.currentLands()
             .filter { it.exists() }
             .map { land ->
                 LandsUiLand(
@@ -31,13 +34,16 @@ class BukkitLandsUiGateway internal constructor(
                     name = land.name,
                     ownerId = land.ownerUID,
                     chunks = land.chunksAmount,
+                    maxChunks = land.maxChunks,
                     memberIds = land.trustedPlayerIds() + land.ownerUID,
                     maxMembers = land.maxMembers,
                     balance = land.balance,
+                    selected = land.ulid.toString() == selectedId,
                 )
             }
             .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
             .toList()
+    }
 
     override fun land(player: Player, id: String): LandsUiLand? = lands(player).firstOrNull { it.id == id }
 
@@ -47,6 +53,13 @@ class BukkitLandsUiGateway internal constructor(
     override fun playerName(id: java.util.UUID): String? = Bukkit.getOfflinePlayer(id).name
 
     override fun execute(player: Player, command: String): Boolean = player.performCommand(command)
+
+    override fun select(player: Player, landId: String): Boolean {
+        val landPlayer = integration.getLandPlayer(player.uniqueId) ?: return false
+        val land = landPlayer.currentLands().firstOrNull { it.ulid.toString() == landId && it.exists() } ?: return false
+        landPlayer.setEditLand(land)
+        return true
+    }
 
     override fun selectAndExecute(player: Player, landId: String, command: String): LandsUiCommandResult {
         val landPlayer = integration.getLandPlayer(player.uniqueId) ?: return LandsUiCommandResult.LAND_UNAVAILABLE

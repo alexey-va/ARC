@@ -6,7 +6,7 @@ import ru.arc.config.ConfigManager
 import java.nio.file.Files
 
 class LandsUiConfigTest : StringSpec({
-    "bundled dialog is enabled and explains automatic settlement selection" {
+    "bundled dialog is enabled and explains explicit settlement selection" {
         val root = Files.createTempDirectory("arc-lands-ui-config")
         try {
             ConfigManager.clear()
@@ -14,9 +14,10 @@ class LandsUiConfigTest : StringSpec({
 
             settings.enabled shouldBe true
             settings.maxListedPlayers shouldBe 12
-            settings.text("guide-body").contains("/lands edit НАЗВАНИЕ") shouldBe true
-            settings.text("guide-body").contains("/lands land delete") shouldBe true
-            settings.text("guide-body").contains("выбирается автоматически") shouldBe true
+            settings.text("guide-commands-body").contains("/lands edit НАЗВАНИЕ") shouldBe true
+            settings.text("guide-commands-body").contains("/lands land delete") shouldBe true
+            settings.text("guide-body").contains("текущее поселение", ignoreCase = true) shouldBe true
+            settings.text("created-body").contains("первый чанк") shouldBe true
         } finally {
             ConfigManager.clear()
             root.toFile().deleteRecursively()

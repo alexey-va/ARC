@@ -7,14 +7,19 @@ data class LandsUiLand(
     val name: String,
     val ownerId: UUID,
     val chunks: Int,
+    val maxChunks: Int,
     val memberIds: Set<UUID>,
     val maxMembers: Int,
     val balance: Double,
+    val selected: Boolean,
 )
 
 data class LandsUiPlayer(val id: UUID, val name: String)
 
 object LandsUiPlanner {
+    fun createdLand(previousIds: Set<String>, current: Collection<LandsUiLand>): LandsUiLand? =
+        current.singleOrNull { it.id !in previousIds }
+
     fun addablePlayers(
         viewerId: UUID,
         land: LandsUiLand,
@@ -28,7 +33,7 @@ object LandsUiPlanner {
 }
 
 object LandsUiCommands {
-    private val landToken = Regex("[\\p{L}\\p{N}_-]{1,32}")
+    private val landToken = Regex("[\\p{L}\\p{N}_-]{5,24}")
     private val memberToken = Regex("[A-Za-z0-9_]{3,16}")
     private val fixedArgument = Regex("[a-z]+")
 

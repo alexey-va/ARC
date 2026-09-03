@@ -11,7 +11,7 @@ class LandsUiPlannerTest : StringSpec({
         val member = UUID.randomUUID()
         val candidateA = UUID.randomUUID()
         val candidateB = UUID.randomUUID()
-        val land = LandsUiLand("01KLAND", "Берег", owner, 12, setOf(owner, member), 8, 120.0)
+        val land = LandsUiLand("01KLAND", "Берег", owner, 12, 64, setOf(owner, member), 8, 120.0, selected = true)
 
         val result = LandsUiPlanner.addablePlayers(
             owner,
@@ -27,12 +27,24 @@ class LandsUiPlannerTest : StringSpec({
         result.map { it.name } shouldContainExactly listOf("Alex", "Zed")
     }
 
+    "detects the settlement created after a command without relying on its name" {
+        val owner = UUID.randomUUID()
+        val before = setOf("01KOLD")
+        val old = LandsUiLand("01KOLD", "Дом", owner, 8, 64, setOf(owner), 8, 0.0, selected = false)
+        val created = LandsUiLand("01KNEW", "Новый дом", owner, 1, 64, setOf(owner), 8, 0.0, selected = true)
+
+        LandsUiPlanner.createdLand(before, listOf(old, created)) shouldBe created
+        LandsUiPlanner.createdLand(before, listOf(old)) shouldBe null
+    }
+
     "builds safe Lands 8 selected-settlement commands" {
         LandsUiCommands.addMember("Alex_23") shouldBe "lands land member add Alex_23"
         LandsUiCommands.create("Новый_дом") shouldBe "lands create Новый_дом"
         LandsUiCommands.rename("Новый_Берег") shouldBe "lands land rename Новый_Берег"
         LandsUiCommands.menu() shouldBe "lands menu"
 
+        runCatching { LandsUiCommands.create("Дом") }.isFailure shouldBe true
+        runCatching { LandsUiCommands.create("Слишком_длинное_название_поселения") }.isFailure shouldBe true
         runCatching { LandsUiCommands.land("bad argument") }.isFailure shouldBe true
         runCatching { LandsUiCommands.member("bad-name!") }.isFailure shouldBe true
     }

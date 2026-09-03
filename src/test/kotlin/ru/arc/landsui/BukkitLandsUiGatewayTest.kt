@@ -58,4 +58,34 @@ class BukkitLandsUiGatewayTest : StringSpec({
         result shouldBe LandsUiCommandResult.LAND_UNAVAILABLE
         verify(exactly = 0) { player.performCommand(any()) }
     }
+
+    "reports and explicitly changes the selected settlement" {
+        val id = UUID.randomUUID()
+        val integration = mockk<LandsIntegration>()
+        val landPlayer = mockk<LandPlayer>()
+        val land = mockk<Land>()
+        val landUlid = mockk<ULID>()
+        val player = mockk<Player>()
+        every { player.uniqueId } returns id
+        every { integration.getLandPlayer(id) } returns landPlayer
+        every { landPlayer.lands } returns setOf(land)
+        every { landPlayer.editLand } returns land
+        every { land.ulid } returns landUlid
+        every { landUlid.toString() } returns "01KLAND"
+        every { land.exists() } returns true
+        every { land.name } returns "Берег"
+        every { land.ownerUID } returns id
+        every { land.chunksAmount } returns 4
+        every { land.maxChunks } returns 64
+        every { land.maxMembers } returns 8
+        every { land.balance } returns 0.0
+        every { land.trustedPlayers } returns emptyMap()
+        every { landPlayer.setEditLand(land) } just runs
+
+        val gateway = BukkitLandsUiGateway(integration)
+        gateway.lands(player).single().selected shouldBe true
+        gateway.select(player, "01KLAND") shouldBe true
+
+        verify { landPlayer.setEditLand(land) }
+    }
 })

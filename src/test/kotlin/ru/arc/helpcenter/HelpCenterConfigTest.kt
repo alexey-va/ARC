@@ -16,10 +16,16 @@ class HelpCenterConfigTest : StringSpec({
             settings.maxHomes shouldBe 12
             settings.maxSearchResults shouldBe 8
             settings.text("root-title").contains("Помощь") shouldBe true
+            settings.text("my-title").contains("Про меня") shouldBe true
             settings.text("my-body").contains("<balance>") shouldBe true
             settings.text("travel-body").contains("<homes>") shouldBe true
-            settings.command("privat").label.contains("Приват") shouldBe true
+            settings.text("guide-body").contains("Мир строительства") shouldBe false
+            settings.command("privat").label.contains("Поселения") shouldBe true
             settings.command("privat").keywords.contains("посел") shouldBe true
+            settings.command("skills").label.contains("Навыки") shouldBe true
+            settings.command("vanilla").label.contains("Обычный мир") shouldBe true
+            settings.command("biomes").label.contains("новых биомов") shouldBe true
+            runCatching { settings.command("build") }.isFailure shouldBe true
             settings.intent("land-delete").keywords.contains("удал") shouldBe true
         } finally {
             ConfigManager.clear()
