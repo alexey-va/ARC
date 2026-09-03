@@ -12,6 +12,8 @@ import ru.arc.menu.MenuId
 import ru.arc.menu.MenuRegionId
 import ru.arc.menu.MenuTemplateId
 import ru.arc.paper.menu.PaperMenuConfiguration
+import ru.arc.paper.menu.PaperDialogRuntime
+import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.paper.menu.PaperMenuClickContext
 import ru.arc.paper.menu.PaperMenuContent
 import ru.arc.paper.menu.PaperMenuEntry
@@ -34,6 +36,7 @@ object ArcMenus {
     private val itemFactory = PaperMenuItemFactory()
     private lateinit var dataRoot: Path
     private var runtime: PaperMenuRuntime? = null
+    private var dialogRuntime: PaperDialogRuntime? = null
 
     fun initialize(plugin: Plugin, root: Path) {
         check(runtime == null) { "ARC menu runtime is already initialized" }
@@ -41,6 +44,7 @@ object ArcMenus {
         val disk = ConfigManager.of(root, ArcMenuConfiguration.RESOURCE)
         disk.mergeMissingFromBundled(ArcMenuConfiguration.RESOURCE)
         runtime = PaperMenuRuntime(plugin, BukkitTaskScheduler(plugin), ArcMenuConfiguration.load(root))
+        dialogRuntime = PaperDialogRuntime(plugin)
     }
 
     fun reload() {
@@ -50,6 +54,10 @@ object ArcMenus {
 
     fun current(): PaperMenuConfiguration =
         requireNotNull(runtime) { "ARC menu runtime is not initialized" }.current()
+
+    fun openDialog(player: Player, screen: PaperDialogScreen) {
+        requireNotNull(dialogRuntime) { "ARC dialog runtime is not initialized" }.open(player, screen)
+    }
 
     fun item(
         menu: MenuId,
@@ -118,11 +126,14 @@ object ArcMenus {
     )
 
     fun close() {
+        dialogRuntime?.close()
+        dialogRuntime = null
         runtime?.close()
         runtime = null
     }
 
     internal fun resetForTests() {
+        dialogRuntime = null
         runtime = null
     }
 

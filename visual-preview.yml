@@ -97,6 +97,22 @@ sources:
   origin-showcase:
     path: src/main/resources/modules/origin-spawn.yml
     root: auction-showcase
+  lands-ui:
+    path: src/main/resources/modules/lands-ui.yml
+    root: text
+    include:
+      - root-title
+      - root-body
+      - land-label
+      - land-tooltip
+      - create-label
+      - create-tooltip
+      - guide-label
+      - guide-tooltip
+      - mainblock-title
+      - mainblock-body
+      - open-lands-label
+      - open-lands-tooltip
 placeholders:
   server: Выживание
   marker: CSpy
@@ -157,8 +173,51 @@ placeholders:
   pattern: полосатый
   value: '12'
   variant: тёмно-коричневый
+  count: '2'
+  land: Берёзовая_гавань
+  chunks: '18'
+  members: '4'
+  max_members: '8'
 
 surfaces:
+  dialogs:
+    - id: lands-root
+      source: lands-ui
+      format: reference-multi-action
+      name-key: root-title
+      external-title-key: root-title
+      columns: 2
+      body:
+        - {id: intro, text-key: root-body, width: 400}
+      buttons:
+        - id: land-birch
+          text-key: land-label
+          tooltip-key: land-tooltip
+          width: 150
+          placeholders: {land: Берёзовая_гавань, chunks: 18, members: 4, max_members: 8, balance: '8 000 000'}
+        - id: land-cliff
+          text-key: land-label
+          tooltip-key: land-tooltip
+          width: 150
+          placeholders: {land: Морской_утёс, chunks: 7, members: 2, max_members: 6, balance: '340 000'}
+        - {id: create, text-key: create-label, tooltip-key: create-tooltip, width: 150}
+        - {id: guide, text-key: guide-label, tooltip-key: guide-tooltip, width: 150}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: lands-mainblock
+      source: lands-ui
+      format: reference-multi-action
+      name-key: mainblock-title
+      external-title-key: mainblock-title
+      columns: 1
+      body:
+        - {id: instructions, text-key: mainblock-body, width: 500}
+      buttons:
+        - {id: settings, text-key: open-lands-label, tooltip-key: open-lands-tooltip, width: 220}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
   hud:
     - id: auction-showcase-stale
       actionbar: origin-showcase:messages.stale

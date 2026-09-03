@@ -61,6 +61,7 @@ import ru.arc.hooks.HookRegistry
 import ru.arc.gui.GuiDefaults
 import ru.arc.gui.ArcMenus
 import ru.arc.itemcatalog.ItemsCatalogModule
+import ru.arc.landsui.LandsUiModule
 import ru.arc.network.NetworkRegistry
 import ru.arc.redis.RedisManager
 import ru.arc.ops.OpsHttpModule
@@ -234,6 +235,7 @@ open class ARC : JavaPlugin() {
             MountModule,
             ArcParkourModule,
             ItemsCatalogModule,
+            LandsUiModule,
             CommandHideModule,
             OnboardingModule,
             // Sync systems (priority 100)
@@ -354,6 +356,7 @@ open class ARC : JavaPlugin() {
                 "modules/personalloot.yml",
                 "modules/item-presets.yml",
                 "modules/items-catalog.yml",
+                "modules/lands-ui.yml",
                 "modules/pouches.yml",
                 "modules/backpacks.yml",
                 "modules/commands.yml",

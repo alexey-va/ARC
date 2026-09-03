@@ -1,0 +1,71 @@
+# Native Paper dialog for Lands 8 settlements. ARC owns the presentation and
+# typed actions; Lands remains the authority for permissions, economy and data.
+enabled: true
+
+limits:
+  max-listed-players: 12
+
+text:
+  root-title: '<#20252b><bold>Поселения'
+  root-body: '<#fff0d8>Здесь собраны ваши земли и основные действия.<newline><#8c8c8c>Поселений: <#f4bd6a><count>'
+  root-empty: '<#8c8c8c>У вас пока нет поселений. Создайте первое ниже.'
+  land-label: '<#f4bd6a><bold><land>'
+  land-tooltip: '<#fff0d8><chunks> чанков · <members>/<max_members> участников · <balance> монет'
+  create-label: '<#f4bd6a><bold>Создать поселение'
+  create-tooltip: '<#fff0d8>Введите название прямо в диалоге.'
+  guide-label: '<#fff0d8>Гайд и команды'
+  guide-tooltip: '<#fff0d8>Короткий маршрут и ручные команды Lands.'
+  back-label: '<#8c8c8c>Назад'
+
+  details-title: '<#20252b><bold><land>'
+  details-body: '<#fff0d8><role><newline><#8c8c8c>Территория: <#f4bd6a><chunks> чанков<newline><#8c8c8c>Участники: <#f4bd6a><members>/<max_members><newline><#8c8c8c>Баланс: <#f4bd6a><balance>'
+  role-owner: 'Владелец поселения'
+  role-member: 'Участник поселения'
+  open-lands-label: '<#f4bd6a><bold>Настройки Lands'
+  open-lands-tooltip: '<#fff0d8>Открыть штатное меню этого поселения.'
+  members-label: '<#fff0d8>Участники'
+  territory-label: '<#fff0d8>Территория и точка дома'
+  rename-label: '<#fff0d8>Переименовать'
+  delete-label: '<#c42323><bold>Удалить поселение'
+
+  name-input: '<#fff0d8>Название'
+  player-input: '<#fff0d8>Ник игрока'
+  submit-label: '<#f4bd6a><bold>Продолжить'
+  create-title: '<#20252b><bold>Новое поселение'
+  create-body: '<#fff0d8>Название: буквы, цифры, <#f4bd6a>_ <#fff0d8>или <#f4bd6a>-<#fff0d8>.<newline><#8c8c8c>Пробелы не поддерживаются.'
+  rename-title: '<#20252b><bold>Переименовать <land>'
+  rename-body: '<#fff0d8>Введите новое название поселения.'
+
+  members-title: '<#20252b><bold>Участники · <land>'
+  members-body: '<#fff0d8>Сейчас в поселении: <#f4bd6a><members>/<max_members><#fff0d8>.<newline><#8c8c8c>Нажмите на игрока, чтобы перейти к подтверждению удаления.'
+  add-member-label: '<#f4bd6a><bold>Добавить игрока'
+  member-label: '<#fff0d8><player>'
+  member-tooltip: '<#fff0d8>Убрать <player> из поселения.'
+  add-title: '<#20252b><bold>Добавить · <land>'
+  add-body: '<#fff0d8>Введите точный ник или выберите игрока онлайн.<newline><#8c8c8c>Показано до <limit> доступных игроков.'
+  candidate-label: '<#fff0d8><player>'
+  remove-title: '<#20252b><bold>Убрать участника'
+  remove-body: '<#fff0d8>Убрать <#f4bd6a><player> <#fff0d8>из поселения <#f4bd6a><land><#fff0d8>?'
+  remove-confirm-label: '<#c42323><bold>Убрать <player>'
+
+  territory-title: '<#20252b><bold>Территория · <land>'
+  territory-body: '<#fff0d8>Действия применяются к поселению <#f4bd6a><land><#fff0d8>.<newline><#8c8c8c>Для чанков стойте внутри нужного чанка.'
+  claim-label: '<#f4bd6a><bold>Заприватить чанк'
+  unclaim-label: '<#fff0d8>Освободить чанк'
+  setspawn-label: '<#fff0d8>Поставить точку дома'
+  spawn-label: '<#fff0d8>Телепорт домой'
+  areas-label: '<#fff0d8>Дополнительные регионы'
+  mainblock-label: '<#fff0d8>Главный блок и голограмма'
+  mainblock-title: '<#20252b><bold>Главный блок · <land>'
+  mainblock-body: '<#f4bd6a>Чтобы перенести:<newline><#fff0d8>1. Откройте главный блок поселения.<newline>2. Нажмите <#f4bd6a>ЛКМ <#fff0d8>по колоколу — убрать или перенести.<newline>3. Поставьте блок заново в меню поселения.<newline><#8c8c8c>Повторная установка может стоить денег.<newline><newline><#f4bd6a>ПКМ <#fff0d8>по колоколу включает или выключает голограмму.'
+
+  guide-title: '<#20252b><bold>Приваты · короткий гайд'
+  guide-body: '<#f4bd6a>Создать: <#fff0d8>/lands create НАЗВАНИЕ<newline><#f4bd6a>Выбрать вручную: <#fff0d8>/lands edit НАЗВАНИЕ<newline><#f4bd6a>Приват чанка: <#fff0d8>/lands land claim<newline><#f4bd6a>Пригласить: <#fff0d8>/lands land member add НИК<newline><#f4bd6a>Удалить: <#fff0d8>/lands land delete<newline><newline><#8c8c8c>В меню поселение выбирается автоматически. Перенос главного блока находится в разделе территории.'
+  danger-title: '<#20252b><bold>Удаление · <land>'
+  danger-body: '<#c42323><bold>Это необратимое действие.<newline><#fff0d8>Будет запущено штатное удаление Lands для <#f4bd6a><land><#fff0d8>.'
+  delete-confirm-label: '<#c42323><bold>Удалить навсегда'
+
+  invalid-name: '<#c42323>Название недопустимо. Используйте буквы, цифры, _ или - без пробелов.'
+  invalid-player: '<#c42323>Ник должен содержать 3–16 латинских букв, цифр или _.'
+  land-gone: '<#c42323>Поселение больше недоступно. Список обновлён.'
+  action-failed: '<#c42323>Команда Lands не выполнилась.'

@@ -12,7 +12,7 @@ group = "ARC"
 version = "1.2.3"
 description = "ARC"
 val pluginVersion = version.toString()
-val arcCoreVersion = "2.4.2"
+val arcCoreVersion = "2.4.4"
 
 java { toolchain { languageVersion.set(JavaLanguageVersion.of(25)) } }
 kotlin { jvmToolchain(25) }
@@ -142,6 +142,7 @@ dependencies {
     testImplementation(libs.org.junit.jupiter.junit.jupiter.params)
     testImplementation(libs.com.thedeanda.lorem)
     testImplementation("ru.ruscrafting.arc:arc-core-paper-testing:$arcCoreVersion")
+    testImplementation(libs.com.github.angeschossen.landsapi)
     testImplementation("org.mockito:mockito-core:5.14.2")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

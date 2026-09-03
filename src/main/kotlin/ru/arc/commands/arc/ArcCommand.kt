@@ -25,6 +25,7 @@ import ru.arc.commands.arc.subcommands.ItemsCatalogSubCommand
 import ru.arc.commands.arc.subcommands.JobsboostsSubCommand
 import ru.arc.commands.arc.subcommands.JoinMessageSubCommand
 import ru.arc.commands.arc.subcommands.LocationPoolSubCommand
+import ru.arc.commands.arc.subcommands.LandsSubCommand
 import ru.arc.commands.arc.subcommands.NpcChatSubCommand
 import ru.arc.commands.arc.subcommands.OnboardingSubCommand
 import ru.arc.commands.arc.subcommands.LoggerSubCommand
@@ -88,6 +89,7 @@ class ArcCommand :
             InvestSubCommand,
             StoreSubCommand,
             ItemsCatalogSubCommand,
+            LandsSubCommand,
             GiveBoostSubCommand,
             GiveSubCommand,
             PouchSubCommand,

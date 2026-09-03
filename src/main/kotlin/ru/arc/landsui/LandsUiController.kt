@@ -1,0 +1,371 @@
+package ru.arc.landsui
+
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.minimessage.MiniMessage
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
+import org.bukkit.entity.Player
+import ru.arc.gui.ArcMenus
+import ru.arc.paper.menu.PaperDialogActionId
+import ru.arc.paper.menu.PaperDialogBody
+import ru.arc.paper.menu.PaperDialogButton
+import ru.arc.paper.menu.PaperDialogInputId
+import ru.arc.paper.menu.PaperDialogScreen
+import ru.arc.paper.menu.PaperDialogTextInput
+import java.text.DecimalFormat
+
+class LandsUiController(
+    private val settings: LandsUiSettings,
+    private val gateway: LandsUiGateway,
+) {
+    private val miniMessage = MiniMessage.miniMessage()
+    private val amountFormat = DecimalFormat("#,##0.##")
+
+    fun openRoot(player: Player) {
+        val lands = gateway.lands(player)
+        val body = mutableListOf(PaperDialogBody(text("root-body", "count" to lands.size.toString())))
+        if (lands.isEmpty()) body += PaperDialogBody(text("root-empty"))
+        val buttons = lands.map { land ->
+            button(
+                "land_${land.id}",
+                text("land-label", "land" to land.name),
+                text(
+                    "land-tooltip",
+                    "chunks" to land.chunks.toString(),
+                    "members" to land.memberIds.size.toString(),
+                    "max_members" to land.maxMembers.toString(),
+                    "balance" to amountFormat.format(land.balance),
+                ),
+            ) { openDetails(player, land.id) }
+        } + listOf(
+            button("create", text("create-label"), text("create-tooltip")) { openCreate(player) },
+            button("guide", text("guide-label"), text("guide-tooltip")) { openGuide(player) },
+        )
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("root-title"),
+                body = body,
+                buttons = buttons,
+                columns = 2,
+            ),
+        )
+    }
+
+    private fun openDetails(player: Player, landId: Int) {
+        withLand(player, landId) { land ->
+            val role = settings.text(if (land.ownerId == player.uniqueId) "role-owner" else "role-member")
+            val buttons = mutableListOf(
+                button("lands_menu", text("open-lands-label"), text("open-lands-tooltip")) {
+                    executeForLand(player, land.id, LandsUiCommands::menu)
+                },
+                button("members", text("members-label")) { openMembers(player, land.id) },
+                button("territory", text("territory-label")) { openTerritory(player, land.id) },
+            )
+            if (land.ownerId == player.uniqueId) {
+                buttons += button("rename", text("rename-label")) { openRename(player, land.id) }
+                buttons += button("delete", text("delete-label")) { openDanger(player, land.id) }
+            }
+            ArcMenus.openDialog(
+                player,
+                PaperDialogScreen(
+                    title = text("details-title", "land" to land.name),
+                    body = listOf(
+                        PaperDialogBody(
+                            text(
+                                "details-body",
+                                "role" to role,
+                                "chunks" to land.chunks.toString(),
+                                "members" to land.memberIds.size.toString(),
+                                "max_members" to land.maxMembers.toString(),
+                                "balance" to amountFormat.format(land.balance),
+                            ),
+                        ),
+                    ),
+                    buttons = buttons,
+                    exitButton = back("back") { openRoot(player) },
+                    columns = 2,
+                ),
+            )
+        }
+    }
+
+    private fun openCreate(player: Player) {
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("create-title"),
+                body = listOf(PaperDialogBody(text("create-body"))),
+                inputs = listOf(PaperDialogTextInput(NAME_INPUT, text("name-input"), maxLength = 32)),
+                buttons = listOf(
+                    contextButton("create_submit", text("submit-label")) { context ->
+                        val name = context.text(NAME_INPUT).orEmpty().trim()
+                        val command = runCatching { LandsUiCommands.create(name) }.getOrNull()
+                        if (command == null) {
+                            player.sendMessage(text("invalid-name"))
+                            openCreate(player)
+                        } else {
+                            execute(player, command)
+                        }
+                    },
+                ),
+                exitButton = back("back") { openRoot(player) },
+            ),
+        )
+    }
+
+    private fun openRename(player: Player, landId: Int) {
+        withLand(player, landId) { land ->
+            if (land.ownerId != player.uniqueId) return@withLand openDetails(player, landId)
+            ArcMenus.openDialog(
+                player,
+                PaperDialogScreen(
+                    title = text("rename-title", "land" to land.name),
+                    body = listOf(PaperDialogBody(text("rename-body"))),
+                    inputs = listOf(PaperDialogTextInput(NAME_INPUT, text("name-input"), initial = land.name, maxLength = 32)),
+                    buttons = listOf(
+                        contextButton("rename_submit", text("submit-label")) { context ->
+                            val newName = context.text(NAME_INPUT).orEmpty().trim()
+                            val command = runCatching { LandsUiCommands.rename(newName) }.getOrNull()
+                            if (command == null) {
+                                player.sendMessage(text("invalid-name"))
+                                openRename(player, landId)
+                            } else {
+                                executeForLand(player, landId) { LandsUiCommands.rename(newName) }
+                            }
+                        },
+                    ),
+                    exitButton = back("back") { openDetails(player, landId) },
+                ),
+            )
+        }
+    }
+
+    private fun openMembers(player: Player, landId: Int) {
+        withLand(player, landId) { land ->
+            val memberButtons = land.memberIds
+                .asSequence()
+                .filter { it != land.ownerId }
+                .mapNotNull { memberId -> gateway.playerName(memberId)?.let { memberId to it } }
+                .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.second })
+                .take(settings.maxListedPlayers)
+                .mapIndexed { index, (_, name) ->
+                    button(
+                        "member_$index",
+                        text("member-label", "player" to name),
+                        text("member-tooltip", "player" to name),
+                    ) { openRemoveMember(player, landId, name) }
+                }
+                .toList()
+            ArcMenus.openDialog(
+                player,
+                PaperDialogScreen(
+                    title = text("members-title", "land" to land.name),
+                    body = listOf(
+                        PaperDialogBody(
+                            text(
+                                "members-body",
+                                "members" to land.memberIds.size.toString(),
+                                "max_members" to land.maxMembers.toString(),
+                            ),
+                        ),
+                    ),
+                    buttons = listOf(button("add_member", text("add-member-label")) { openAddMember(player, landId) }) + memberButtons,
+                    exitButton = back("back") { openDetails(player, landId) },
+                    columns = 2,
+                ),
+            )
+        }
+    }
+
+    private fun openAddMember(player: Player, landId: Int) {
+        withLand(player, landId) { land ->
+            val candidates = LandsUiPlanner.addablePlayers(player.uniqueId, land, gateway.onlinePlayers())
+                .take(settings.maxListedPlayers)
+            val candidateButtons = candidates.mapIndexed { index, candidate ->
+                button("candidate_$index", text("candidate-label", "player" to candidate.name)) {
+                    executeForLand(player, landId) { LandsUiCommands.addMember(candidate.name) }
+                }
+            }
+            ArcMenus.openDialog(
+                player,
+                PaperDialogScreen(
+                    title = text("add-title", "land" to land.name),
+                    body = listOf(PaperDialogBody(text("add-body", "limit" to settings.maxListedPlayers.toString()))),
+                    inputs = listOf(PaperDialogTextInput(PLAYER_INPUT, text("player-input"), maxLength = 16)),
+                    buttons = listOf(
+                        contextButton("add_submit", text("submit-label")) { context ->
+                            val name = context.text(PLAYER_INPUT).orEmpty().trim()
+                            if (runCatching { LandsUiCommands.member(name) }.isFailure) {
+                                player.sendMessage(text("invalid-player"))
+                                openAddMember(player, landId)
+                            } else {
+                                executeForLand(player, landId) { LandsUiCommands.addMember(name) }
+                            }
+                        },
+                    ) + candidateButtons,
+                    exitButton = back("back") { openMembers(player, landId) },
+                    columns = 2,
+                ),
+            )
+        }
+    }
+
+    private fun openRemoveMember(player: Player, landId: Int, memberName: String) {
+        withLand(player, landId) { land ->
+            ArcMenus.openDialog(
+                player,
+                PaperDialogScreen(
+                    title = text("remove-title"),
+                    body = listOf(PaperDialogBody(text("remove-body", "player" to memberName, "land" to land.name))),
+                    buttons = listOf(
+                        button("remove_confirm", text("remove-confirm-label", "player" to memberName)) {
+                            executeForLand(player, landId) { LandsUiCommands.removeMember(memberName) }
+                        },
+                    ),
+                    exitButton = back("back") { openMembers(player, landId) },
+                ),
+            )
+        }
+    }
+
+    private fun openTerritory(player: Player, landId: Int) {
+        withLand(player, landId) { land ->
+            ArcMenus.openDialog(
+                player,
+                PaperDialogScreen(
+                    title = text("territory-title", "land" to land.name),
+                    body = listOf(PaperDialogBody(text("territory-body", "land" to land.name))),
+                    buttons = listOf(
+                        commandButton("claim", "claim-label", player, landId, "claim"),
+                        commandButton("unclaim", "unclaim-label", player, landId, "unclaim"),
+                        commandButton("setspawn", "setspawn-label", player, landId, "spawn", "set"),
+                        commandButton("spawn", "spawn-label", player, landId, "spawn"),
+                        commandButton("areas", "areas-label", player, landId, "area", "menu"),
+                        button("mainblock", text("mainblock-label")) { openMainblockGuide(player, landId) },
+                    ),
+                    exitButton = back("back") { openDetails(player, landId) },
+                    columns = 2,
+                ),
+            )
+        }
+    }
+
+    private fun openMainblockGuide(player: Player, landId: Int) {
+        withLand(player, landId) { land ->
+            ArcMenus.openDialog(
+                player,
+                PaperDialogScreen(
+                    title = text("mainblock-title", "land" to land.name),
+                    body = listOf(PaperDialogBody(text("mainblock-body"), width = 500)),
+                    buttons = listOf(
+                        button("lands_menu", text("open-lands-label"), text("open-lands-tooltip")) {
+                            executeForLand(player, landId, LandsUiCommands::menu)
+                        },
+                    ),
+                    exitButton = back("back") { openTerritory(player, landId) },
+                ),
+            )
+        }
+    }
+
+    private fun openGuide(player: Player) {
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("guide-title"),
+                body = listOf(PaperDialogBody(text("guide-body"), width = 500)),
+                buttons = listOf(button("guide_create", text("create-label")) { openCreate(player) }),
+                exitButton = back("back") { openRoot(player) },
+            ),
+        )
+    }
+
+    private fun openDanger(player: Player, landId: Int) {
+        withLand(player, landId) { land ->
+            if (land.ownerId != player.uniqueId) return@withLand openDetails(player, landId)
+            ArcMenus.openDialog(
+                player,
+                PaperDialogScreen(
+                    title = text("danger-title", "land" to land.name),
+                    body = listOf(PaperDialogBody(text("danger-body", "land" to land.name))),
+                    buttons = listOf(
+                        button("delete_confirm", text("delete-confirm-label")) {
+                            executeForLand(player, landId) { LandsUiCommands.land("delete") }
+                        },
+                    ),
+                    exitButton = back("back") { openDetails(player, landId) },
+                ),
+            )
+        }
+    }
+
+    private fun commandButton(
+        id: String,
+        label: String,
+        player: Player,
+        landId: Int,
+        vararg arguments: String,
+    ): PaperDialogButton = button(id, text(label)) {
+        executeForLand(player, landId) { LandsUiCommands.land(*arguments) }
+    }
+
+    private fun executeForLand(player: Player, landId: Int, command: () -> String) {
+        val land = gateway.land(player, landId)
+        if (land == null) {
+            player.sendMessage(text("land-gone"))
+            openRoot(player)
+            return
+        }
+        when (gateway.selectAndExecute(player, land.id, command())) {
+            LandsUiCommandResult.EXECUTED -> Unit
+            LandsUiCommandResult.LAND_UNAVAILABLE -> {
+                player.sendMessage(text("land-gone"))
+                openRoot(player)
+            }
+            LandsUiCommandResult.COMMAND_REJECTED -> player.sendMessage(text("action-failed"))
+        }
+    }
+
+    private fun execute(player: Player, command: String) {
+        if (!gateway.execute(player, command)) player.sendMessage(text("action-failed"))
+    }
+
+    private fun withLand(player: Player, landId: Int, action: (LandsUiLand) -> Unit) {
+        val land = gateway.land(player, landId)
+        if (land == null) {
+            player.sendMessage(text("land-gone"))
+            openRoot(player)
+        } else {
+            action(land)
+        }
+    }
+
+    private fun contextButton(
+        id: String,
+        label: Component,
+        tooltip: Component = Component.empty(),
+        action: (ru.arc.paper.menu.PaperDialogClickContext) -> Unit,
+    ): PaperDialogButton = PaperDialogButton(
+        id = PaperDialogActionId.of(id),
+        label = label,
+        tooltip = tooltip,
+        onClick = { action(it) },
+    )
+
+    private fun button(id: String, label: Component, tooltip: Component = Component.empty(), action: () -> Unit): PaperDialogButton =
+        contextButton(id, label, tooltip) { _ -> action() }
+
+    private fun back(id: String, action: () -> Unit): PaperDialogButton = button(id, text("back-label"), action = action)
+
+    private fun text(key: String, vararg values: Pair<String, String>): Component {
+        val resolver = TagResolver.builder()
+        values.forEach { (name, value) -> resolver.resolver(Placeholder.component(name, Component.text(value))) }
+        return miniMessage.deserialize(settings.text(key), resolver.build())
+    }
+
+    companion object {
+        private val NAME_INPUT = PaperDialogInputId.of("land_name")
+        private val PLAYER_INPUT = PaperDialogInputId.of("player_name")
+    }
+}

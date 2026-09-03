@@ -165,6 +165,9 @@ permissions:
   arc.items.catalog.give:
     description: Give yourself one item by clicking it in the ARC catalog
     default: op
+  arc.lands.ui.use:
+    description: Open the ARC Lands settlement dialog
+    default: true
   arc.invest.max.20:
     description: Hold up to 20 units of one ARC stock
     default: false

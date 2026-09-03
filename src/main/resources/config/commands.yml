@@ -34,6 +34,12 @@ commands:
     permission: arc.items.catalog.use
     player-only: true
     usage: /arc items
+  lands:
+    name: lands
+    aliases: [приват, поселения]
+    permission: arc.lands.ui.use
+    player-only: true
+    usage: /arc lands
   chat:
     name: chat
     aliases: [ ]
