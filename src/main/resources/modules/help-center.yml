@@ -49,7 +49,7 @@ text:
   my-lands-label: '<#5ee39c>Мои поселения'
   my-lands-tooltip: '<#e5f1f5>Территория, участники и настройки.'
   my-rank-label: '<#4f8cff>Мой ранг'
-  my-rank-tooltip: '<#e5f1f5>Текущий ранг и следующие цели.'
+  my-rank-tooltip: '<#e5f1f5>Подробный экран ранга, путей, контрактов, усилений и недельных наград.'
   my-jobs-label: '<#ffc247>Мои работы'
   my-jobs-tooltip: '<#e5f1f5>Профессии, уровни и заработок.'
   my-quests-label: '<#ff9f43>Мои задания'
@@ -205,7 +205,7 @@ commands:
   auction: { label: 'Аукцион', description: 'Торговля предметами между игроками', keywords: 'ah рынок купить продать' }
   bank: { label: 'Банк', description: 'Открыть личный банковский счёт', keywords: 'деньги счет вклад' }
   investments: { label: 'Инвестиции', description: 'Портфель и рынок акций', keywords: 'акции биржа портфель' }
-  rank: { label: 'Ранги', description: 'Текущий ранг и следующие цели', keywords: 'уровень развитие' }
+  rank: { label: 'Ранги', description: 'Ранг, пути, контракты, усиления и награды', keywords: 'уровень развитие контракт пути усиления' }
   rankup: { label: 'Повысить ранг', description: 'Проверить требования повышения', keywords: 'уровень развитие' }
   jobs: { label: 'Работы', description: 'Профессии и заработок', keywords: 'деньги профессия' }
   quests: { label: 'Задания', description: 'Активные задания и награды', keywords: 'квест развитие' }

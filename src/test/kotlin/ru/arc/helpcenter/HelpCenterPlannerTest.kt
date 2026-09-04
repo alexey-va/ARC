@@ -49,7 +49,7 @@ class HelpCenterPlannerTest : StringSpec({
             "Ранги",
             "Серверный прогресс",
             "уровень развитие",
-            HelpCenterSearchAction.Execute("rank"),
+            HelpCenterSearchAction.Execute("rank dialog"),
             command = "rank",
         ),
     )

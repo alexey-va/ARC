@@ -192,7 +192,7 @@ internal class HelpCenterController(
             when (recommendation.id) {
                 HelpCenterRecommendationId.CREATE_HOME -> button("rec_home", text("rec-home-label")) { openCreateHome(player) }
                 HelpCenterRecommendationId.CREATE_LAND -> button("rec_land", text("rec-land-label")) { open(player, HelpCenterPage.PRIVAT) }
-                HelpCenterRecommendationId.RANK_GOAL -> button("rec_rank", text("rec-rank-label")) { execute(player, "rank why") }.closing()
+                HelpCenterRecommendationId.RANK_GOAL -> button("rec_rank", text("rec-rank-label")) { executeCatalog(player, "rank") }.closing()
                 HelpCenterRecommendationId.BATTLE_PASS -> button("rec_bp", text("rec-bp-label")) { executeCatalog(player, "battle-pass") }.closing()
                 HelpCenterRecommendationId.EVENTS -> button("rec_events", text("rec-events-label")) { executeCatalog(player, "events") }.closing()
             }
@@ -864,7 +864,7 @@ internal class HelpCenterController(
                 opensInventory = true,
             ),
             CommandDefinition("investments", HelpCenterCategory.TRADE, "arc-invest", opensInventory = true),
-            CommandDefinition("rank", HelpCenterCategory.PROGRESS, "rank"),
+            CommandDefinition("rank", HelpCenterCategory.PROGRESS, "rank dialog"),
             CommandDefinition("rankup", HelpCenterCategory.PROGRESS, "rankup"),
             CommandDefinition("jobs", HelpCenterCategory.PROGRESS, "jobsgui", opensInventory = true),
             CommandDefinition("quests", HelpCenterCategory.PROGRESS, "quests", opensInventory = true),
