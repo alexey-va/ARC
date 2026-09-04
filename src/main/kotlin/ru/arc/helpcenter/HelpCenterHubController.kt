@@ -224,7 +224,7 @@ internal class HelpCenterHubController(
     fun openDiagnostics(player: Player, problem: HelpCenterProblem) {
         navigation.visit(player) { openDiagnostics(player, problem) }
         val context = gateway.context(player)
-        val label = text("problem-${problem.name.lowercase().replace('_', '-')}-label")
+        val label = plain("problem-${problem.name.lowercase().replace('_', '-')}-label")
         val facts = HelpCenterHubPlanner.diagnosticFacts(problem, context, homesLoaded = null)
         val factsText = facts.joinToString("\n") { fact ->
             val marker = if (fact.positive) "✓" else "•"
@@ -240,7 +240,7 @@ internal class HelpCenterHubController(
         showDialog(
             player,
             PaperDialogScreen(
-                title = label,
+                title = text("diagnostic-title", "problem" to label),
                 body = listOf(
                     PaperDialogBody(text("diagnostic-body", "facts" to factsText), width = 420),
                     PaperDialogBody(text("diagnostic-${problem.name.lowercase().replace('_', '-')}-help"), width = 420),

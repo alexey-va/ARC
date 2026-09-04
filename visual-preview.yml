@@ -332,6 +332,7 @@ sources:
       - problem-cannot-find-player-label
       - problem-lost-item-label
       - problem-command-failed-label
+      - diagnostic-title
       - diagnostic-body
       - recovery-title
       - recovery-body
@@ -339,6 +340,7 @@ sources:
       - settings-body
 placeholders:
   goal: Играть вместе
+  problem: Не получается заприватить
   scope: вся сеть
   server: Выживание
   marker: CSpy
@@ -693,8 +695,9 @@ surfaces:
     - id: help-center-diagnostic
       source: help-center
       format: reference-multi-action
-      name-key: problem-cannot-claim-label
-      external-title-key: problem-cannot-claim-label
+      name-key: diagnostic-title
+      name-placeholders: {problem: Не получается заприватить}
+      external-title-key: diagnostic-title
       columns: 2
       body:
         - {id: facts, text-key: diagnostic-body, width: 500, placeholders: {facts: "✓ система приватов доступна\n• вы уже на территории привата\n✓ вы владелец текущего привата"}}
@@ -1105,8 +1108,9 @@ surfaces:
     - id: help-center-diagnostic-detail
       source: help-center
       format: reference-multi-action
-      name-key: problem-cannot-claim-label
-      external-title-key: problem-cannot-claim-label
+      name-key: diagnostic-title
+      name-placeholders: {problem: Не получается заприватить}
+      external-title-key: diagnostic-title
       columns: 2
       body:
         - {id: facts, text-key: diagnostic-body, width: 420, placeholders: {facts: "✓ система приватов доступна\n• вы уже на территории привата\n✓ вы владелец текущего привата"}}

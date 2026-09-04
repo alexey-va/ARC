@@ -118,12 +118,20 @@ class HelpCenterConfigTest : StringSpec({
             ).forEach { key ->
                 MiniMessage.miniMessage().deserialize(settings.text(key)).containsBold() shouldBe false
             }
-            setOf(
-                settings.text("now-label").substringBefore('>'),
-                settings.text("players-label").substringBefore('>'),
-                settings.text("privat-label").substringBefore('>'),
-                settings.text("category-trade-label").substringBefore('>'),
-            ).size shouldBe 2
+            // Equal navigation roles must keep the same color across both columns.
+            listOf(
+                "now-label", "commands-label", "travel-label", "privat-label",
+                "category-activities-label", "category-progress-label", "category-trade-label",
+                "players-label", "category-technology-label", "category-settings-label",
+                "goal-earn-label", "goal-build-label", "goal-explore-label", "goal-fight-label",
+                "goal-develop-label", "goal-together-label",
+            ).forEach { key ->
+                withClue(key) { MiniMessage.miniMessage().deserialize(settings.text(key)).color()?.value() shouldBe 0x92bed8 }
+            }
+            MiniMessage.miniMessage().deserialize(settings.text("root-title")).color()?.value() shouldBe 0xf4bd6a
+            MiniMessage.miniMessage().deserialize(settings.text("pay-confirm-label")).color()?.value() shouldBe 0x2bba43
+            MiniMessage.miniMessage().deserialize(settings.text("home-delete-confirm")).color()?.value() shouldBe 0xff6b61
+            MiniMessage.miniMessage().deserialize(settings.text("back-label")).color()?.value() shouldBe 0x969696
             settings.text("back-command-label").contains("прежнее место", ignoreCase = true) shouldBe true
             listOf(
                 "favorites-short-label",
