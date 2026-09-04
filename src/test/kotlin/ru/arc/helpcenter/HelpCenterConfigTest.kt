@@ -42,7 +42,7 @@ class HelpCenterConfigTest : StringSpec({
                 "◆ Ранг  Следопыт",
                 "◆ Баланс  8 000 000",
                 "◆ Дома  3/8",
-                "◆ Поселения  2",
+                "◆ Приваты  2",
                 "◆ Мир  classic_survival",
                 "◆ Координаты  -1842, 71, 3260",
                 "◆ Чат  локальный",
@@ -132,6 +132,20 @@ class HelpCenterConfigTest : StringSpec({
                 settings.text("category-trade-label").substringBefore('>'),
             ).size shouldBe 4
             settings.text("back-command-label").contains("прежнее место", ignoreCase = true) shouldBe true
+            listOf(
+                "favorites-short-label",
+                "requests-short-label",
+                "context-short-label",
+                "goals-short-label",
+                "context-item-label",
+                "action-run-label",
+            ).forEach { key ->
+                MiniMessage.miniMessage().deserialize(settings.text(key)).containsBold() shouldBe false
+            }
+            settings.text("requests-body") shouldNot contain("Iris")
+            settings.text("context-body") shouldNot contain("Iris")
+            settings.text("favorites-body").contains("<favorites>") shouldBe true
+            settings.text("diagnostic-body").contains("<facts>") shouldBe true
         } finally {
             ConfigManager.clear()
             root.toFile().deleteRecursively()

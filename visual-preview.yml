@@ -172,6 +172,7 @@ sources:
       - category-technology-tooltip
       - category-settings-label
       - category-settings-tooltip
+      - category-settings-title
       - players-title
       - players-body
       - players-search-label
@@ -233,6 +234,13 @@ sources:
       - command-vote-label
       - command-chat-global-label
       - command-chat-local-label
+      - command-lands-borders-label
+      - command-trails-on-label
+      - command-trails-off-label
+      - command-trails-boost-on-label
+      - command-trails-boost-off-label
+      - command-particles-label
+      - command-tpa-ignore-label
       - command-tooltip
       - travel-title
       - travel-loading
@@ -265,6 +273,60 @@ sources:
       - stuck-label
       - public-homes-label
       - public-homes-tooltip
+      - favorites-short-label
+      - favorites-tooltip
+      - favorites-title
+      - favorites-body
+      - favorite-command-label
+      - recent-command-label
+      - favorite-find-label
+      - action-title
+      - action-body
+      - action-run-label
+      - favorite-add-label
+      - goals-short-label
+      - goals-tooltip
+      - goals-title
+      - goals-body
+      - goal-earn-label
+      - goal-build-label
+      - goal-explore-label
+      - goal-fight-label
+      - goal-develop-label
+      - goal-together-label
+      - context-short-label
+      - context-tooltip
+      - context-title
+      - context-body
+      - context-item-label
+      - item-tooltip
+      - item-title
+      - item-body
+      - item-recipe-label
+      - requests-short-label
+      - requests-tooltip
+      - requests-title
+      - requests-body
+      - check-quests-label
+      - check-battle-pass-label
+      - check-vote-label
+      - check-events-label
+      - check-duels-label
+      - check-privat-label
+      - request-tpa-accept-label
+      - request-tpa-deny-label
+      - request-duel-accept-label
+      - request-duel-deny-label
+      - problem-cannot-teleport-label
+      - problem-cannot-claim-label
+      - problem-cannot-find-player-label
+      - problem-lost-item-label
+      - problem-command-failed-label
+      - diagnostic-body
+      - recovery-title
+      - recovery-body
+      - recovery-tooltip
+      - settings-body
 placeholders:
   server: Выживание
   marker: CSpy
@@ -339,6 +401,8 @@ placeholders:
   max_homes: '8'
   online: '27'
   chat: локальный
+  trails: включено
+  boost: выключено
   home: Северная_база
   world: classic_survival
   x: '-1842'
@@ -348,6 +412,17 @@ placeholders:
   command: warps
   description: Публичные точки игроков
   label: Приват
+  favorites: '4'
+  recent: '3'
+  amount: '1'
+  kind: дополнительный
+  coordinates: '-1842, 71, 3260'
+  item: Кобальтовая кирка
+  hint: есть незавершённый следующий шаг
+  facts: |-
+    ✓ система приватов доступна
+    • вы уже на территории привата
+    ✓ вы владелец текущего привата
 
 surfaces:
   dialogs:
@@ -495,9 +570,184 @@ surfaces:
         - {id: events, text-key: rec-events-label, tooltip-key: now-tooltip, width: 190}
         - {id: homes, text-key: my-homes-label, tooltip-key: my-homes-tooltip, width: 190}
         - {id: lands, text-key: my-lands-label, tooltip-key: my-lands-tooltip, width: 190}
+        - {id: favorites, text-key: favorites-short-label, tooltip-key: favorites-tooltip, width: 190}
+        - {id: requests, text-key: requests-short-label, tooltip-key: requests-tooltip, width: 190}
+        - {id: context, text-key: context-short-label, tooltip-key: context-tooltip, width: 190}
         - {id: guide, text-key: guide-label, tooltip-key: guide-tooltip, width: 190}
       viewport: [854, 480]
       variants: [{id: default}]
+
+    - id: help-center-favorites
+      source: help-center
+      format: reference-multi-action
+      name-key: favorites-title
+      external-title-key: favorites-title
+      columns: 2
+      body:
+        - {id: summary, text-key: favorites-body, width: 500, placeholders: {favorites: '2', recent: '3'}}
+      buttons:
+        - {id: favorite-jobs, text-key: favorite-command-label, tooltip-key: favorites-tooltip, width: 190, placeholders: {label: Работы}}
+        - {id: favorite-rtp, text-key: favorite-command-label, tooltip-key: favorites-tooltip, width: 190, placeholders: {label: Случайное место}}
+        - {id: recent-vote, text-key: recent-command-label, tooltip-key: favorites-tooltip, width: 190, placeholders: {label: Голосование}}
+        - {id: recent-skills, text-key: recent-command-label, tooltip-key: favorites-tooltip, width: 190, placeholders: {label: Навыки}}
+        - {id: find, text-key: favorite-find-label, tooltip-key: favorites-tooltip, width: 190}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-action
+      source: help-center
+      format: reference-multi-action
+      name-key: action-title
+      external-title-key: action-title
+      columns: 2
+      body:
+        - {id: summary, text-key: action-body, width: 500, placeholders: {action: Работы, description: Профессии и заработок, command: jobsgui}}
+      buttons:
+        - {id: run, text-key: action-run-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Профессии и заработок, command: jobsgui}}
+        - {id: favorite, text-key: favorite-add-label, tooltip-key: favorites-tooltip, width: 190}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-goals
+      source: help-center
+      format: reference-multi-action
+      name-key: goals-title
+      external-title-key: goals-title
+      columns: 2
+      body:
+        - {id: intro, text-key: goals-body, width: 500}
+      buttons:
+        - {id: earn, text-key: goal-earn-label, tooltip-key: goals-tooltip, width: 190}
+        - {id: build, text-key: goal-build-label, tooltip-key: goals-tooltip, width: 190}
+        - {id: explore, text-key: goal-explore-label, tooltip-key: goals-tooltip, width: 190}
+        - {id: fight, text-key: goal-fight-label, tooltip-key: goals-tooltip, width: 190}
+        - {id: develop, text-key: goal-develop-label, tooltip-key: goals-tooltip, width: 190}
+        - {id: together, text-key: goal-together-label, tooltip-key: goals-tooltip, width: 190}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-context
+      source: help-center
+      format: reference-multi-action
+      name-key: context-title
+      external-title-key: context-title
+      columns: 2
+      body:
+        - {id: summary, text-key: context-body, width: 500, placeholders: {world: обычный мир, server: survival, coordinates: '-1842, 71, 3260', land: Берёзовая_гавань, item: Кобальтовая кирка}}
+      buttons:
+        - {id: item, text-key: context-item-label, tooltip-key: item-tooltip, width: 190}
+        - {id: travel, text-key: travel-label, tooltip-key: travel-tooltip, width: 190}
+        - {id: privat, text-key: privat-label, tooltip-key: privat-tooltip, width: 190}
+        - {id: goals, text-key: goals-short-label, tooltip-key: goals-tooltip, width: 190}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-item
+      source: help-center
+      format: reference-multi-action
+      name-key: item-title
+      external-title-key: item-title
+      columns: 2
+      body:
+        - {id: summary, text-key: item-body, width: 500, placeholders: {item: Кобальтовая кирка, amount: '1', kind: дополнительный}}
+      buttons:
+        - {id: recipe, text-key: item-recipe-label, tooltip-key: item-tooltip, width: 190}
+        - {id: catalog, text-key: command-label, tooltip-key: item-tooltip, width: 190, placeholders: {label: Новые предметы}}
+        - {id: auction, text-key: command-label, tooltip-key: item-tooltip, width: 190, placeholders: {label: Аукцион}}
+        - {id: sell, text-key: command-label, tooltip-key: item-tooltip, width: 190, placeholders: {label: Быстрая продажа}}
+        - {id: enchants, text-key: command-label, tooltip-key: item-tooltip, width: 190, placeholders: {label: Зачарования}}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-requests
+      source: help-center
+      format: reference-multi-action
+      name-key: requests-title
+      external-title-key: requests-title
+      columns: 2
+      body:
+        - {id: summary, text-key: requests-body, width: 500, placeholders: {hint: есть незавершённый следующий шаг}}
+      buttons:
+        - {id: tpa-accept, text-key: request-tpa-accept-label, tooltip-key: requests-tooltip, width: 190}
+        - {id: tpa-deny, text-key: request-tpa-deny-label, tooltip-key: requests-tooltip, width: 190}
+        - {id: duel-accept, text-key: request-duel-accept-label, tooltip-key: requests-tooltip, width: 190}
+        - {id: duel-deny, text-key: request-duel-deny-label, tooltip-key: requests-tooltip, width: 190}
+        - {id: quests, text-key: check-quests-label, tooltip-key: requests-tooltip, width: 190}
+        - {id: battle-pass, text-key: check-battle-pass-label, tooltip-key: requests-tooltip, width: 190}
+        - {id: vote, text-key: check-vote-label, tooltip-key: requests-tooltip, width: 190}
+        - {id: events, text-key: check-events-label, tooltip-key: requests-tooltip, width: 190}
+        - {id: duels, text-key: check-duels-label, tooltip-key: requests-tooltip, width: 190}
+        - {id: privat, text-key: check-privat-label, tooltip-key: requests-tooltip, width: 190}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-diagnostic
+      source: help-center
+      format: reference-multi-action
+      name-key: problem-cannot-claim-label
+      external-title-key: problem-cannot-claim-label
+      columns: 2
+      body:
+        - {id: facts, text-key: diagnostic-body, width: 500, placeholders: {facts: "✓ система приватов доступна\n• вы уже на территории привата\n✓ вы владелец текущего привата"}}
+      buttons:
+        - {id: privat, text-key: privat-label, tooltip-key: privat-tooltip, width: 190}
+        - {id: context, text-key: context-short-label, tooltip-key: context-tooltip, width: 190}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-recovery
+      source: help-center
+      format: reference-multi-action
+      name-key: recovery-title
+      external-title-key: recovery-title
+      columns: 2
+      body:
+        - {id: intro, text-key: recovery-body, width: 500}
+      buttons:
+        - {id: teleport, text-key: problem-cannot-teleport-label, tooltip-key: recovery-tooltip, width: 190}
+        - {id: claim, text-key: problem-cannot-claim-label, tooltip-key: recovery-tooltip, width: 190}
+        - {id: player, text-key: problem-cannot-find-player-label, tooltip-key: recovery-tooltip, width: 190}
+        - {id: item, text-key: problem-lost-item-label, tooltip-key: recovery-tooltip, width: 190}
+        - {id: command, text-key: problem-command-failed-label, tooltip-key: recovery-tooltip, width: 190}
+        - {id: stuck, text-key: stuck-label, tooltip-key: recovery-tooltip, width: 190}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-settings
+      source: help-center
+      format: reference-multi-action
+      name-key: category-settings-title
+      external-title-key: category-settings-title
+      columns: 2
+      body:
+        - {id: summary, text-key: settings-body, width: 500, placeholders: {chat: локальный, trails: включено, boost: выключено}}
+      buttons:
+        - {id: chat, text-key: command-chat-global-label, tooltip-key: category-settings-tooltip, width: 190}
+        - {id: trails, text-key: command-trails-off-label, tooltip-key: category-settings-tooltip, width: 190}
+        - {id: boost, text-key: command-trails-boost-on-label, tooltip-key: category-settings-tooltip, width: 190}
+        - {id: borders, text-key: command-lands-borders-label, tooltip-key: category-settings-tooltip, width: 190}
+        - {id: particles, text-key: command-particles-label, tooltip-key: category-settings-tooltip, width: 190}
+        - {id: tpa, text-key: command-tpa-ignore-label, tooltip-key: category-settings-tooltip, width: 190}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-settings-alternative
+      source: help-center
+      format: reference-multi-action
+      name-key: category-settings-title
+      external-title-key: category-settings-title
+      columns: 2
+      body:
+        - {id: summary, text-key: settings-body, width: 500, placeholders: {chat: глобальный, trails: выключено, boost: включено}}
+      buttons:
+        - {id: chat, text-key: command-chat-local-label, tooltip-key: category-settings-tooltip, width: 190}
+        - {id: trails, text-key: command-trails-on-label, tooltip-key: category-settings-tooltip, width: 190}
+        - {id: boost, text-key: command-trails-boost-off-label, tooltip-key: category-settings-tooltip, width: 190}
+        - {id: borders, text-key: command-lands-borders-label, tooltip-key: category-settings-tooltip, width: 190}
+        - {id: particles, text-key: command-particles-label, tooltip-key: category-settings-tooltip, width: 190}
+        - {id: tpa, text-key: command-tpa-ignore-label, tooltip-key: category-settings-tooltip, width: 190}
+      viewport: [854, 480]
+      variants: [{id: alternative}]
 
     - id: help-center-players
       source: help-center

@@ -19,6 +19,11 @@ enum class HelpCenterPage(vararg val aliases: String) {
     TECHNOLOGY("technology", "технологии", "предметы"),
     SETTINGS("settings", "настройки"),
     RECOVERY("recovery", "проблема", "что случилось"),
+    FAVORITES("favorites", "избранное", "недавнее"),
+    GOALS("goals", "заняться", "цели"),
+    ITEM("item", "предмет", "в руке"),
+    CONTEXT("context", "рядом", "контекст"),
+    REQUESTS("requests", "запросы", "входящие"),
     ;
 
     companion object {
@@ -83,6 +88,12 @@ data class HelpCenterPlayer(
 )
 
 enum class HelpCenterChatMode { LOCAL, GLOBAL }
+
+data class HelpCenterSettingSnapshot(
+    val chatMode: HelpCenterChatMode,
+    val trailsEnabled: Boolean? = null,
+    val trailBoostEnabled: Boolean? = null,
+)
 
 data class HelpCenterCommand(
     val id: String,

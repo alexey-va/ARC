@@ -26,6 +26,7 @@ internal class HelpCenterController(
     private val openLands: (Player) -> Unit,
     private val inventoryReturn: HelpCenterInventoryReturnRuntime,
     private val inviteToLand: (Player, HelpCenterPlayer) -> Unit,
+    private val preferences: HelpCenterPreferenceStore,
 ) {
     private val miniMessage = MiniMessage.miniMessage()
     private val plainText = PlainTextComponentSerializer.plainText()
@@ -79,11 +80,23 @@ internal class HelpCenterController(
             )
         }
     }
+    private val hub by lazy {
+        HelpCenterHubController(
+            settings = settings,
+            gateway = gateway,
+            preferences = preferences,
+            availableCatalog = ::availableCatalog,
+            executeCatalog = ::executeCatalog,
+            executeRaw = ::execute,
+            openPage = ::open,
+        )
+    }
 
     fun close() {
         active = false
         navigation.clear()
         tasks.close()
+        hub.close()
         inventoryReturn.close()
     }
 
@@ -103,6 +116,11 @@ internal class HelpCenterController(
             HelpCenterPage.TECHNOLOGY -> openCategory(player, HelpCenterCategory.TECHNOLOGY, returnToRoot = true)
             HelpCenterPage.SETTINGS -> openSettings(player)
             HelpCenterPage.RECOVERY -> openRecovery(player)
+            HelpCenterPage.FAVORITES -> hub.openFavorites(player)
+            HelpCenterPage.GOALS -> hub.openGoals(player)
+            HelpCenterPage.ITEM -> hub.openItem(player)
+            HelpCenterPage.CONTEXT -> hub.openContext(player)
+            HelpCenterPage.REQUESTS -> hub.openRequests(player)
         }
     }
 
@@ -179,6 +197,9 @@ internal class HelpCenterController(
                 buttons = recommendationButtons(player, profile) + listOf(
                     button("now_homes", text("my-homes-label"), text("my-homes-tooltip")) { openTravel(player) },
                     button("now_lands", text("my-lands-label"), text("my-lands-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
+                    button("now_favorites", text("favorites-short-label"), text("favorites-tooltip")) { hub.openFavorites(player) },
+                    button("now_requests", text("requests-short-label"), text("requests-tooltip")) { hub.openRequests(player) },
+                    button("now_context", text("context-short-label"), text("context-tooltip")) { hub.openContext(player) },
                     button("now_guide", text("guide-label"), text("guide-tooltip")) { openGuide(player) },
                 ),
                 exitButton = rootButton(player),
@@ -214,6 +235,9 @@ internal class HelpCenterController(
     private fun myButtons(player: Player): List<PaperDialogButton> = listOf(
         button("my_homes", text("my-homes-label"), text("my-homes-tooltip")) { openTravel(player) },
         button("my_lands", text("my-lands-label"), text("my-lands-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
+        button("my_favorites", text("favorites-short-label"), text("favorites-tooltip")) { hub.openFavorites(player) },
+        button("my_requests", text("requests-short-label"), text("requests-tooltip")) { hub.openRequests(player) },
+        button("my_context", text("context-short-label"), text("context-tooltip")) { hub.openContext(player) },
         button("my_rank", text("my-rank-label"), text("my-rank-tooltip")) { executeCatalog(player, "rank") }.closing(),
         button("my_jobs", text("my-jobs-label"), text("my-jobs-tooltip")) { executeCatalog(player, "jobs") }.closing(),
         button("my_quests", text("my-quests-label"), text("my-quests-tooltip")) { executeCatalog(player, "quests") }.closing(),
@@ -228,14 +252,14 @@ internal class HelpCenterController(
                 title = text("guide-title"),
                 body = listOf(PaperDialogBody(text("guide-body"), width = 500)),
                 buttons = listOf(
-                    button("kit", text("kit-label"), commandTooltip("kit")) { execute(player, "kit start") }.closing(),
-                    button("vanilla", text("vanilla-label"), commandTooltip("vanilla")) { execute(player, "pw vanilla") }.closing(),
-                    button("mining", text("mining-label"), commandTooltip("mining")) { execute(player, "mining") }.closing(),
-                    button("biomes", text("biomes-label"), commandTooltip("biomes")) { execute(player, "pw survival") }.closing(),
+                    button("kit", text("kit-label"), commandTooltip("kit")) { executeCatalog(player, "kit") }.closing(),
+                    button("vanilla", text("vanilla-label"), commandTooltip("vanilla")) { executeCatalog(player, "vanilla") }.closing(),
+                    button("mining", text("mining-label"), commandTooltip("mining")) { executeCatalog(player, "mining") }.closing(),
+                    button("biomes", text("biomes-label"), commandTooltip("biomes")) { executeCatalog(player, "biomes") }.closing(),
                     button("jobs", text("jobs-label"), commandTooltip("jobs")) { executeCatalog(player, "jobs") }.closing(),
                     button("home", text("travel-label"), text("travel-tooltip")) { openTravel(player) },
                     button("privat", text("privat-label"), text("privat-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
-                    button("rules", text("rules-label"), commandTooltip("rules")) { execute(player, "rules") }.closing(),
+                    button("rules", text("rules-label"), commandTooltip("rules")) { executeCatalog(player, "rules") }.closing(),
                 ),
                 exitButton = rootButton(player),
                 columns = 2,
@@ -395,21 +419,59 @@ internal class HelpCenterController(
 
     private fun openSettings(player: Player) {
         markNavigation(player)
-        val global = ru.arc.chat.ChatModeService.getMode(player.uniqueId).name == "GLOBAL"
+        val snapshot = gateway.settings(player)
+        val global = snapshot.chatMode == HelpCenterChatMode.GLOBAL
+        val stateIds = setOf("chat-global", "chat-local", "trails-on", "trails-off", "trails-boost-on", "trails-boost-off")
+        val stateButtons = buildList {
+            add(
+                if (global) button("chat_local", text("command-chat-local-label")) { execute(player, "l") }.closing()
+                else button("chat_global", text("command-chat-global-label")) { execute(player, "g") }.closing(),
+            )
+            if (HelpCenterFeature.TRAILS in gateway.features()) {
+                when (snapshot.trailsEnabled) {
+                    true -> add(commandButton(player, catalogById.getValue("trails-off")))
+                    false -> add(commandButton(player, catalogById.getValue("trails-on")))
+                    null -> {
+                        add(commandButton(player, catalogById.getValue("trails-on")))
+                        add(commandButton(player, catalogById.getValue("trails-off")))
+                    }
+                }
+                when (snapshot.trailBoostEnabled) {
+                    true -> add(commandButton(player, catalogById.getValue("trails-boost-off")))
+                    false -> add(commandButton(player, catalogById.getValue("trails-boost-on")))
+                    null -> {
+                        add(commandButton(player, catalogById.getValue("trails-boost-on")))
+                        add(commandButton(player, catalogById.getValue("trails-boost-off")))
+                    }
+                }
+            }
+        }
         ArcMenus.openDialog(
             player,
             PaperDialogScreen(
                 title = text("category-settings-title"),
-                body = listOf(PaperDialogBody(text("settings-body", "chat" to if (global) "глобальный" else "локальный"))),
-                buttons = listOf(
-                    if (global) button("chat_local", text("command-chat-local-label")) { execute(player, "l") }.closing()
-                    else button("chat_global", text("command-chat-global-label")) { execute(player, "g") }.closing(),
-                ) + availableCatalog(player).filter { it.category == HelpCenterCategory.SETTINGS && it.id !in setOf("chat-global", "chat-local") }.map { commandButton(player, it) },
+                body = listOf(PaperDialogBody(text(
+                    "settings-body",
+                    "chat" to if (global) "глобальный" else "локальный",
+                    "trails" to stateLabel(snapshot.trailsEnabled),
+                    "boost" to stateLabel(snapshot.trailBoostEnabled),
+                ))),
+                buttons = stateButtons + availableCatalog(player)
+                    .filter { it.category == HelpCenterCategory.SETTINGS && it.id !in stateIds }
+                    .map { commandButton(player, it) },
                 exitButton = rootButton(player),
                 columns = 2,
             ),
         )
     }
+
+    private fun stateLabel(value: Boolean?): String = plainText(
+        when (value) {
+            true -> "state-on"
+            false -> "state-off"
+            null -> "state-unknown"
+        },
+    )
 
     private fun openRecovery(player: Player) {
         markNavigation(player)
@@ -418,12 +480,12 @@ internal class HelpCenterController(
             PaperDialogScreen(
                 title = text("recovery-title"),
                 body = listOf(PaperDialogBody(text("recovery-body"), width = 500)),
-                buttons = listOf(
-                    button("stuck", text("stuck-label"), commandTooltip("stuck")) { execute(player, "stuck") }.closing(),
-                    button("homes", text("my-homes-label")) { openTravel(player) },
-                    button("lands", text("my-lands-label")) { open(player, HelpCenterPage.PRIVAT) },
-                    button("rules", text("rules-label"), commandTooltip("rules")) { execute(player, "rules") }.closing(),
-                ),
+                buttons = HelpCenterProblem.entries.map { problem ->
+                    button(
+                        "problem_${problem.name.lowercase()}",
+                        text("problem-${problem.name.lowercase().replace('_', '-')}-label"),
+                    ) { hub.openDiagnostics(player, problem) }
+                } + button("stuck", text("stuck-label"), commandTooltip("stuck")) { execute(player, "stuck") }.closing(),
                 exitButton = backButton("back", player, ::openCommands),
                 columns = 2,
             ),
@@ -431,8 +493,26 @@ internal class HelpCenterController(
     }
 
     private fun openSearch(player: Player, rawQuery: String) {
-        markNavigation(player)
+        val token = markNavigation(player)
         val query = rawQuery.trim()
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("search-title"),
+                body = listOf(PaperDialogBody(text("search-loading"), width = 500)),
+                buttons = emptyList(),
+                exitButton = backButton("back", player, ::openCommands),
+            ),
+        )
+        gateway.loadHomes(player, settings.loadTimeoutSeconds).handle { homes, _ -> homes?.homes.orEmpty() }
+            .whenCompleteSync(tasks) { homes, _ ->
+                if (!active || !player.isOnline || navigation[player.uniqueId] != token) return@whenCompleteSync
+                val resolved = HelpCenterSmartQuery.resolve(query, homes.orEmpty(), gateway.onlinePlayers())
+                if (resolved == null) showSearchResults(player, query) else openResolvedQuery(player, resolved)
+            }
+    }
+
+    private fun showSearchResults(player: Player, query: String) {
         val results = HelpCenterPlanner.search(availableSearchCatalog(player), query, settings.maxSearchResults)
         val body = mutableListOf(
             PaperDialogBody(
@@ -458,6 +538,30 @@ internal class HelpCenterController(
         )
     }
 
+    private fun openResolvedQuery(player: Player, resolved: HelpCenterResolvedQuery) {
+        when (resolved) {
+            is HelpCenterResolvedQuery.Home -> when (resolved.action) {
+                HelpCenterHomeAction.TELEPORT -> openHome(player, resolved.home)
+                HelpCenterHomeAction.RELOCATE -> openRelocateHome(player, resolved.home)
+                HelpCenterHomeAction.DELETE -> openDeleteHome(player, resolved.home)
+            }
+            is HelpCenterResolvedQuery.Player -> when (resolved.action) {
+                HelpCenterPlayerAction.TELEPORT_TO -> execute(player, HelpCenterCommands.teleportRequest(resolved.player.name))
+                HelpCenterPlayerAction.TELEPORT_HERE -> execute(player, HelpCenterCommands.teleportHere(resolved.player.name))
+                HelpCenterPlayerAction.MESSAGE -> openPlayerMessage(player, resolved.player)
+                HelpCenterPlayerAction.PAY -> {
+                    val amount = requireNotNull(resolved.value)
+                    openPaymentConfirmation(player, resolved.player, amount, HelpCenterCommands.pay(resolved.player.name, amount))
+                }
+                HelpCenterPlayerAction.DUEL -> execute(player, HelpCenterCommands.duel(resolved.player.name))
+                HelpCenterPlayerAction.INVITE -> inviteToLand(player, resolved.player)
+            }
+            is HelpCenterResolvedQuery.Page -> resolved.catalogId?.let { id ->
+                catalogById[id]?.let { hub.openCatalogAction(player, it) }
+            } ?: open(player, resolved.page)
+        }
+    }
+
     private fun openCategory(player: Player, category: HelpCenterCategory, returnToRoot: Boolean = false) {
         markNavigation(player)
         val entries = availableCatalog(player).filter { it.category == category }
@@ -466,7 +570,15 @@ internal class HelpCenterController(
             PaperDialogScreen(
                 title = text("category-${category.configId}-title"),
                 body = listOf(PaperDialogBody(text("category-body"))),
-                buttons = entries.map { commandButton(player, it) },
+                buttons = buildList {
+                    if (category == HelpCenterCategory.ACTIVITIES) {
+                        add(button("activity_goals", text("goals-short-label"), text("goals-tooltip")) { hub.openGoals(player) })
+                    }
+                    if (category == HelpCenterCategory.TECHNOLOGY) {
+                        add(button("held_item", text("context-item-label"), text("item-tooltip")) { hub.openItem(player) })
+                    }
+                    addAll(entries.map { commandButton(player, it) })
+                },
                 exitButton = backButton("back", player, if (returnToRoot) ::openRoot else ::openCommands),
                 columns = 2,
             ),
@@ -642,13 +754,13 @@ internal class HelpCenterController(
     private fun travelButtons(player: Player): List<PaperDialogButton> = listOf(
         button("warps", text("warps-label"), commandTooltip("warps")) { executeCatalog(player, "warps") }.closing(),
         button("public_homes", text("public-homes-label"), text("public-homes-tooltip")) { executeInventory(player, "phome") }.closing(),
-        button("spawn", text("spawn-label"), commandTooltip("spawn")) { execute(player, "spawn") }.closing(),
-        button("rtp", text("rtp-label"), commandTooltip("rtp")) { execute(player, "rtp") }.closing(),
-        button("back_command", text("back-command-label"), commandTooltip("back")) { execute(player, "back") }.closing(),
-        button("stuck", text("stuck-label"), commandTooltip("stuck")) { execute(player, "stuck") }.closing(),
-        button("vanilla", text("vanilla-label"), commandTooltip("vanilla")) { execute(player, "pw vanilla") }.closing(),
-        button("mining", text("mining-label"), commandTooltip("mining")) { execute(player, "mining") }.closing(),
-        button("biomes", text("biomes-label"), commandTooltip("biomes")) { execute(player, "pw survival") }.closing(),
+        button("spawn", text("spawn-label"), commandTooltip("spawn")) { executeCatalog(player, "spawn") }.closing(),
+        button("rtp", text("rtp-label"), commandTooltip("rtp")) { executeCatalog(player, "rtp") }.closing(),
+        button("back_command", text("back-command-label"), commandTooltip("back")) { executeCatalog(player, "back") }.closing(),
+        button("stuck", text("stuck-label"), commandTooltip("stuck")) { executeCatalog(player, "stuck") }.closing(),
+        button("vanilla", text("vanilla-label"), commandTooltip("vanilla")) { executeCatalog(player, "vanilla") }.closing(),
+        button("mining", text("mining-label"), commandTooltip("mining")) { executeCatalog(player, "mining") }.closing(),
+        button("biomes", text("biomes-label"), commandTooltip("biomes")) { executeCatalog(player, "biomes") }.closing(),
     )
 
     private fun categoryButton(player: Player, category: HelpCenterCategory): PaperDialogButton =
@@ -667,7 +779,8 @@ internal class HelpCenterController(
 
     private fun commandButton(player: Player, command: HelpCenterCommand): PaperDialogButton {
         val label = when (command.id) {
-            "vote", "chat-global", "chat-local" -> text("command-${command.id}-label")
+            "vote", "chat-global", "chat-local", "lands-borders", "trails-on", "trails-off",
+            "trails-boost-on", "trails-boost-off", "particles", "tpa-ignore" -> text("command-${command.id}-label")
             else -> text("command-label", "label" to command.label)
         }
         val result = button(
@@ -675,7 +788,7 @@ internal class HelpCenterController(
             label,
             text("command-tooltip", "description" to command.description, "command" to command.command),
         ) {
-            if (command.id == "privat") open(player, HelpCenterPage.PRIVAT) else executeCommand(player, command)
+            if (command.id == "privat") open(player, HelpCenterPage.PRIVAT) else executeCatalog(player, command.id)
         }
         return if (command.id == "privat") result else result.closing()
     }
@@ -689,33 +802,30 @@ internal class HelpCenterController(
             } ?: text("search-result-tooltip", "description" to entry.description),
         ) {
             when (val action = entry.action) {
-                is HelpCenterSearchAction.Execute -> {
-                    val command = catalogById[entry.id]
-                    if (command?.opensInventory == true) executeInventory(player, action.command)
-                    else execute(player, action.command)
-                }
+                is HelpCenterSearchAction.Execute -> catalogById[entry.id]?.let { hub.openCatalogAction(player, it) }
                 is HelpCenterSearchAction.OpenPage -> open(player, action.page)
                 HelpCenterSearchAction.CreateHome -> openCreateHome(player)
             }
         }
-        return if (entry.action is HelpCenterSearchAction.Execute) result.closing() else result
+        return result
     }
 
-    private fun execute(player: Player, command: String) {
+    private fun execute(player: Player, command: String): Boolean {
         markNavigation(player)
-        if (!gateway.execute(player, command)) player.sendMessage(text("action-failed"))
+        return gateway.execute(player, command).also { executed ->
+            if (!executed) player.sendMessage(text("action-failed"))
+        }
     }
 
-    private fun executeCommand(player: Player, command: HelpCenterCommand) {
+    private fun executeCommand(player: Player, command: HelpCenterCommand): Boolean =
         if (command.opensInventory) executeInventory(player, command.command)
         else execute(player, command.command)
-    }
 
     private fun executeCatalog(player: Player, id: String) {
-        executeCommand(player, catalogById.getValue(id))
+        if (executeCommand(player, catalogById.getValue(id))) hub.recordRecent(player, id)
     }
 
-    private fun executeInventory(player: Player, command: String) {
+    private fun executeInventory(player: Player, command: String): Boolean {
         markNavigation(player)
         inventoryReturn.arm(player) { HelpCenterModule.open(player) }
         val executed = try {
@@ -728,6 +838,7 @@ internal class HelpCenterController(
             inventoryReturn.cancel(player)
             player.sendMessage(text("action-failed"))
         }
+        return executed
     }
 
     private fun commandTooltip(id: String): Component {

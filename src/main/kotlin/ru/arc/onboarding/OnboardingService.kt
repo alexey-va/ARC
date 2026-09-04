@@ -51,6 +51,9 @@ object OnboardingService {
 
     fun isEnabled(): Boolean = runtime != null
 
+    /** Read-only hint for the main player hub; it does not consume or reschedule the hint. */
+    fun nextPendingHintId(playerId: UUID): String? = runtime?.store?.nextHint(playerId)?.id
+
     fun reset(playerId: UUID): OnboardingResetResult {
         val current = runtime ?: return OnboardingResetResult.DISABLED
         return if (current.store.reset(playerId)) {

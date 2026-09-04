@@ -6,6 +6,7 @@ import ru.arc.core.PluginModule
 import ru.arc.landsui.LandsUiModule
 import ru.arc.util.Logging.error
 import ru.arc.util.Logging.info
+import ru.arc.util.Common
 
 object HelpCenterModule : PluginModule {
     override val name = "HelpCenter"
@@ -38,14 +39,16 @@ object HelpCenterModule : PluginModule {
             info("Help center module disabled by configuration")
             return
         }
+        val preferenceStore = ARC.redisManager?.let { RedisHelpCenterPreferenceStore(it, Common.gson) }
+            ?: UnavailableHelpCenterPreferenceStore()
         controller = HelpCenterController(
-            settings,
-            BukkitHelpCenterGateway(),
-            LandsUiModule::open,
-            HelpCenterInventoryReturnRuntime(ARC.instance),
-        ) { player, target ->
-            LandsUiModule.openInvite(player, target.id, target.name)
-        }
+            settings = settings,
+            gateway = BukkitHelpCenterGateway(),
+            openLands = LandsUiModule::open,
+            inventoryReturn = HelpCenterInventoryReturnRuntime(ARC.instance),
+            inviteToLand = { player, target -> LandsUiModule.openInvite(player, target.id, target.name) },
+            preferences = preferenceStore,
+        )
         info("Help center module initialized")
     }
 }
