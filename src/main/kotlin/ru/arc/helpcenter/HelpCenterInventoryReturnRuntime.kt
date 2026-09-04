@@ -18,7 +18,7 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Restores the help-center root after a command-owned inventory flow ends.
+ * Restores the originating help-center screen after a command-owned inventory flow ends.
  *
  * A request is inert until the command actually opens an inventory. Once an
  * inventory is observed, replacements remain part of the same flow and only

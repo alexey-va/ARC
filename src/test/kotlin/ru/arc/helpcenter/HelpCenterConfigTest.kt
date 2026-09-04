@@ -36,16 +36,9 @@ class HelpCenterConfigTest : StringSpec({
             profileBodies.joinToString().contains("<balance>") shouldBe true
             val renderedProfile = renderedProfileLines(profileBodies)
             renderedProfile shouldBe listOf(
-                "ArchitectureMax",
-                "◆ Сервер  survival",
-                "◆ Онлайн  27",
-                "◆ Ранг  Следопыт",
-                "◆ Баланс  8 000 000",
-                "◆ Дома  3/8",
-                "◆ Приваты  2",
-                "◆ Мир  classic_survival",
-                "◆ Координаты  -1842, 71, 3260",
-                "◆ Чат  локальный",
+                "ArchitectureMax", "Сервер: survival · Онлайн: 27", "Ранг: Следопыт",
+                "Баланс: 8 000 000", "Дома: 3/8 · Приваты: 2", "Мир: classic_survival",
+                "Координаты: -1842, 71, 3260", "Чат: локальный",
             )
             renderedProfile.forEach { line ->
                 line shouldNot contain(Regex(" {3,}"))
@@ -130,7 +123,7 @@ class HelpCenterConfigTest : StringSpec({
                 settings.text("players-label").substringBefore('>'),
                 settings.text("privat-label").substringBefore('>'),
                 settings.text("category-trade-label").substringBefore('>'),
-            ).size shouldBe 4
+            ).size shouldBe 2
             settings.text("back-command-label").contains("прежнее место", ignoreCase = true) shouldBe true
             listOf(
                 "favorites-short-label",

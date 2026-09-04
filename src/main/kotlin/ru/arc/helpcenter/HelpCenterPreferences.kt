@@ -17,7 +17,12 @@ data class HelpCenterPreferences(
 ) {
     fun toggleFavorite(id: String): HelpCenterPreferences {
         validateId(id)
-        val updated = if (id in favorites) favorites - id else (favorites + id).takeLast(MAX_FAVORITES)
+        // A full list is unchanged: adding a fifth action must never silently evict a pin.
+        val updated = when {
+            id in favorites -> favorites - id
+            favorites.size < MAX_FAVORITES -> favorites + id
+            else -> favorites
+        }
         return copy(favorites = updated).validated()
     }
 

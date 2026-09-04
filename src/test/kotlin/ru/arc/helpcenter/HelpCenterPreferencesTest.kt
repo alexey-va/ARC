@@ -18,7 +18,7 @@ class HelpCenterPreferencesTest {
         var value = HelpCenterPreferences.empty()
         listOf("jobs", "skills", "auction", "rtp", "events").forEach { value = value.toggleFavorite(it) }
 
-        assertEquals(listOf("skills", "auction", "rtp", "events"), value.favorites)
+        assertEquals(listOf("jobs", "skills", "auction", "rtp"), value.favorites)
         value = value.toggleFavorite("auction")
         assertFalse("auction" in value.favorites)
     }

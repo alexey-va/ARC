@@ -177,8 +177,14 @@ sources:
       - players-body
       - players-search-label
       - players-search-tooltip
+      - players-local-label
+      - refresh-label
+      - refresh-tooltip
+      - page-next-label
+      - page-previous-label
       - player-label
       - player-tooltip
+      - players-empty
       - guide-label
       - guide-tooltip
       - commands-label
@@ -187,6 +193,8 @@ sources:
       - travel-tooltip
       - privat-label
       - privat-tooltip
+      - root-label
+      - back-label
       - main-menu-label
       - main-menu-tooltip
       - my-title
@@ -200,10 +208,6 @@ sources:
       - my-rank-tooltip
       - my-jobs-label
       - my-jobs-tooltip
-      - my-quests-label
-      - my-quests-tooltip
-      - my-skills-label
-      - my-skills-tooltip
       - guide-title
       - guide-body
       - kit-label
@@ -248,6 +252,11 @@ sources:
       - travel-empty
       - travel-limit
       - travel-error
+      - favorites-picker-title
+      - favorites-picker-body
+      - favorites-full
+      - diagnostic-cannot-claim-help
+      - goal-together-body
       - home-label
       - home-tooltip
       - create-home-label
@@ -287,6 +296,7 @@ sources:
       - goals-short-label
       - goals-tooltip
       - goals-title
+      - goal-title
       - goals-body
       - goal-earn-label
       - goal-build-label
@@ -328,6 +338,8 @@ sources:
       - recovery-tooltip
       - settings-body
 placeholders:
+  goal: Играть вместе
+  scope: вся сеть
   server: Выживание
   marker: CSpy
   sender: Alexey23
@@ -523,16 +535,16 @@ surfaces:
       body:
         - {id: intro, text-key: root-body, width: 500}
       buttons:
-        - {id: now, text-key: now-label, tooltip-key: now-tooltip, width: 190}
-        - {id: search, text-key: commands-label, tooltip-key: commands-tooltip, width: 190}
-        - {id: travel, text-key: travel-label, tooltip-key: travel-tooltip, width: 190}
-        - {id: privat, text-key: privat-label, tooltip-key: privat-tooltip, width: 190}
-        - {id: activities, text-key: category-activities-label, tooltip-key: category-activities-tooltip, width: 190}
-        - {id: progress, text-key: category-progress-label, tooltip-key: category-progress-tooltip, width: 190}
-        - {id: trade, text-key: category-trade-label, tooltip-key: category-trade-tooltip, width: 190}
-        - {id: players, text-key: players-label, tooltip-key: players-tooltip, width: 190}
-        - {id: technology, text-key: category-technology-label, tooltip-key: category-technology-tooltip, width: 190}
-        - {id: settings, text-key: category-settings-label, tooltip-key: category-settings-tooltip, width: 190}
+        - {id: now, text-key: now-label, tooltip-key: now-tooltip, width: 150}
+        - {id: search, text-key: commands-label, tooltip-key: commands-tooltip, width: 150}
+        - {id: travel, text-key: travel-label, tooltip-key: travel-tooltip, width: 150}
+        - {id: privat, text-key: privat-label, tooltip-key: privat-tooltip, width: 150}
+        - {id: activities, text-key: category-activities-label, tooltip-key: category-activities-tooltip, width: 150}
+        - {id: progress, text-key: category-progress-label, tooltip-key: category-progress-tooltip, width: 150}
+        - {id: trade, text-key: category-trade-label, tooltip-key: category-trade-tooltip, width: 150}
+        - {id: players, text-key: players-label, tooltip-key: players-tooltip, width: 150}
+        - {id: technology, text-key: category-technology-label, tooltip-key: category-technology-tooltip, width: 150}
+        - {id: settings, text-key: category-settings-label, tooltip-key: category-settings-tooltip, width: 150}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -545,12 +557,9 @@ surfaces:
       body:
         - {id: loading, text-key: my-loading, width: 500}
       buttons:
-        - {id: homes, text-key: my-homes-label, tooltip-key: my-homes-tooltip, width: 190}
-        - {id: lands, text-key: my-lands-label, tooltip-key: my-lands-tooltip, width: 190}
-        - {id: rank, text-key: my-rank-label, tooltip-key: my-rank-tooltip, width: 190}
-        - {id: jobs, text-key: my-jobs-label, tooltip-key: my-jobs-tooltip, width: 190}
-        - {id: quests, text-key: my-quests-label, tooltip-key: my-quests-tooltip, width: 190}
-        - {id: skills, text-key: my-skills-label, tooltip-key: my-skills-tooltip, width: 190}
+        - {id: homes, text-key: my-homes-label, tooltip-key: my-homes-tooltip, width: 150}
+        - {id: lands, text-key: my-lands-label, tooltip-key: my-lands-tooltip, width: 150}
+        - {id: guide, text-key: guide-label, tooltip-key: guide-tooltip, width: 150}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -565,15 +574,15 @@ surfaces:
         - {id: summary, text-key: now-progress, width: 420, placeholders: {rank: Следопыт, balance: '8 000 000', homes: '3', max_homes: '8', lands: '2'}}
         - {id: location, text-key: now-location, width: 420, placeholders: {world: classic_survival, x: '-1842', y: '71', z: '3260', chat: локальный}}
       buttons:
-        - {id: rank, text-key: rec-rank-label, tooltip-key: now-tooltip, width: 190}
-        - {id: bp, text-key: rec-bp-label, tooltip-key: now-tooltip, width: 190}
-        - {id: events, text-key: rec-events-label, tooltip-key: now-tooltip, width: 190}
-        - {id: homes, text-key: my-homes-label, tooltip-key: my-homes-tooltip, width: 190}
-        - {id: lands, text-key: my-lands-label, tooltip-key: my-lands-tooltip, width: 190}
-        - {id: favorites, text-key: favorites-short-label, tooltip-key: favorites-tooltip, width: 190}
-        - {id: requests, text-key: requests-short-label, tooltip-key: requests-tooltip, width: 190}
-        - {id: context, text-key: context-short-label, tooltip-key: context-tooltip, width: 190}
-        - {id: guide, text-key: guide-label, tooltip-key: guide-tooltip, width: 190}
+        - {id: rank, text-key: rec-rank-label, tooltip-key: now-tooltip, width: 150}
+        - {id: bp, text-key: rec-bp-label, tooltip-key: now-tooltip, width: 150}
+        - {id: events, text-key: rec-events-label, tooltip-key: now-tooltip, width: 150}
+        - {id: homes, text-key: my-homes-label, tooltip-key: my-homes-tooltip, width: 150}
+        - {id: lands, text-key: my-lands-label, tooltip-key: my-lands-tooltip, width: 150}
+        - {id: favorites, text-key: favorites-short-label, tooltip-key: favorites-tooltip, width: 150}
+        - {id: requests, text-key: requests-short-label, tooltip-key: requests-tooltip, width: 150}
+        - {id: context, text-key: context-short-label, tooltip-key: context-tooltip, width: 150}
+        - {id: guide, text-key: guide-label, tooltip-key: guide-tooltip, width: 150}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -586,11 +595,11 @@ surfaces:
       body:
         - {id: summary, text-key: favorites-body, width: 500, placeholders: {favorites: '2', recent: '3'}}
       buttons:
-        - {id: favorite-jobs, text-key: favorite-command-label, tooltip-key: favorites-tooltip, width: 190, placeholders: {label: Работы}}
-        - {id: favorite-rtp, text-key: favorite-command-label, tooltip-key: favorites-tooltip, width: 190, placeholders: {label: Случайное место}}
-        - {id: recent-vote, text-key: recent-command-label, tooltip-key: favorites-tooltip, width: 190, placeholders: {label: Голосование}}
-        - {id: recent-skills, text-key: recent-command-label, tooltip-key: favorites-tooltip, width: 190, placeholders: {label: Навыки}}
-        - {id: find, text-key: favorite-find-label, tooltip-key: favorites-tooltip, width: 190}
+        - {id: favorite-jobs, text-key: favorite-command-label, tooltip-key: favorites-tooltip, width: 150, placeholders: {label: Работы}}
+        - {id: favorite-rtp, text-key: favorite-command-label, tooltip-key: favorites-tooltip, width: 150, placeholders: {label: Случайное место}}
+        - {id: recent-vote, text-key: recent-command-label, tooltip-key: favorites-tooltip, width: 150, placeholders: {label: Голосование}}
+        - {id: recent-skills, text-key: recent-command-label, tooltip-key: favorites-tooltip, width: 150, placeholders: {label: Навыки}}
+        - {id: find, text-key: favorite-find-label, tooltip-key: favorites-tooltip, width: 150}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -603,8 +612,8 @@ surfaces:
       body:
         - {id: summary, text-key: action-body, width: 500, placeholders: {action: Работы, description: Профессии и заработок, command: jobsgui}}
       buttons:
-        - {id: run, text-key: action-run-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Профессии и заработок, command: jobsgui}}
-        - {id: favorite, text-key: favorite-add-label, tooltip-key: favorites-tooltip, width: 190}
+        - {id: run, text-key: action-run-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Профессии и заработок, command: jobsgui}}
+        - {id: favorite, text-key: favorite-add-label, tooltip-key: favorites-tooltip, width: 150}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -617,12 +626,12 @@ surfaces:
       body:
         - {id: intro, text-key: goals-body, width: 500}
       buttons:
-        - {id: earn, text-key: goal-earn-label, tooltip-key: goals-tooltip, width: 190}
-        - {id: build, text-key: goal-build-label, tooltip-key: goals-tooltip, width: 190}
-        - {id: explore, text-key: goal-explore-label, tooltip-key: goals-tooltip, width: 190}
-        - {id: fight, text-key: goal-fight-label, tooltip-key: goals-tooltip, width: 190}
-        - {id: develop, text-key: goal-develop-label, tooltip-key: goals-tooltip, width: 190}
-        - {id: together, text-key: goal-together-label, tooltip-key: goals-tooltip, width: 190}
+        - {id: earn, text-key: goal-earn-label, tooltip-key: goals-tooltip, width: 150}
+        - {id: build, text-key: goal-build-label, tooltip-key: goals-tooltip, width: 150}
+        - {id: explore, text-key: goal-explore-label, tooltip-key: goals-tooltip, width: 150}
+        - {id: fight, text-key: goal-fight-label, tooltip-key: goals-tooltip, width: 150}
+        - {id: develop, text-key: goal-develop-label, tooltip-key: goals-tooltip, width: 150}
+        - {id: together, text-key: goal-together-label, tooltip-key: goals-tooltip, width: 150}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -635,10 +644,10 @@ surfaces:
       body:
         - {id: summary, text-key: context-body, width: 500, placeholders: {world: обычный мир, server: survival, coordinates: '-1842, 71, 3260', land: Берёзовая_гавань, item: Кобальтовая кирка}}
       buttons:
-        - {id: item, text-key: context-item-label, tooltip-key: item-tooltip, width: 190}
-        - {id: travel, text-key: travel-label, tooltip-key: travel-tooltip, width: 190}
-        - {id: privat, text-key: privat-label, tooltip-key: privat-tooltip, width: 190}
-        - {id: goals, text-key: goals-short-label, tooltip-key: goals-tooltip, width: 190}
+        - {id: item, text-key: context-item-label, tooltip-key: item-tooltip, width: 150}
+        - {id: travel, text-key: travel-label, tooltip-key: travel-tooltip, width: 150}
+        - {id: privat, text-key: privat-label, tooltip-key: privat-tooltip, width: 150}
+        - {id: goals, text-key: goals-short-label, tooltip-key: goals-tooltip, width: 150}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -651,11 +660,11 @@ surfaces:
       body:
         - {id: summary, text-key: item-body, width: 500, placeholders: {item: Кобальтовая кирка, amount: '1', kind: дополнительный}}
       buttons:
-        - {id: recipe, text-key: item-recipe-label, tooltip-key: item-tooltip, width: 190}
-        - {id: catalog, text-key: command-label, tooltip-key: item-tooltip, width: 190, placeholders: {label: Новые предметы}}
-        - {id: auction, text-key: command-label, tooltip-key: item-tooltip, width: 190, placeholders: {label: Аукцион}}
-        - {id: sell, text-key: command-label, tooltip-key: item-tooltip, width: 190, placeholders: {label: Быстрая продажа}}
-        - {id: enchants, text-key: command-label, tooltip-key: item-tooltip, width: 190, placeholders: {label: Зачарования}}
+        - {id: recipe, text-key: item-recipe-label, tooltip-key: item-tooltip, width: 150}
+        - {id: catalog, text-key: command-label, tooltip-key: item-tooltip, width: 150, placeholders: {label: Новые предметы}}
+        - {id: auction, text-key: command-label, tooltip-key: item-tooltip, width: 150, placeholders: {label: Аукцион}}
+        - {id: sell, text-key: command-label, tooltip-key: item-tooltip, width: 150, placeholders: {label: Быстрая продажа}}
+        - {id: enchants, text-key: command-label, tooltip-key: item-tooltip, width: 150, placeholders: {label: Зачарования}}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -668,16 +677,16 @@ surfaces:
       body:
         - {id: summary, text-key: requests-body, width: 500, placeholders: {hint: есть незавершённый следующий шаг}}
       buttons:
-        - {id: tpa-accept, text-key: request-tpa-accept-label, tooltip-key: requests-tooltip, width: 190}
-        - {id: tpa-deny, text-key: request-tpa-deny-label, tooltip-key: requests-tooltip, width: 190}
-        - {id: duel-accept, text-key: request-duel-accept-label, tooltip-key: requests-tooltip, width: 190}
-        - {id: duel-deny, text-key: request-duel-deny-label, tooltip-key: requests-tooltip, width: 190}
-        - {id: quests, text-key: check-quests-label, tooltip-key: requests-tooltip, width: 190}
-        - {id: battle-pass, text-key: check-battle-pass-label, tooltip-key: requests-tooltip, width: 190}
-        - {id: vote, text-key: check-vote-label, tooltip-key: requests-tooltip, width: 190}
-        - {id: events, text-key: check-events-label, tooltip-key: requests-tooltip, width: 190}
-        - {id: duels, text-key: check-duels-label, tooltip-key: requests-tooltip, width: 190}
-        - {id: privat, text-key: check-privat-label, tooltip-key: requests-tooltip, width: 190}
+        - {id: tpa-accept, text-key: request-tpa-accept-label, tooltip-key: requests-tooltip, width: 150}
+        - {id: tpa-deny, text-key: request-tpa-deny-label, tooltip-key: requests-tooltip, width: 150}
+        - {id: duel-accept, text-key: request-duel-accept-label, tooltip-key: requests-tooltip, width: 150}
+        - {id: duel-deny, text-key: request-duel-deny-label, tooltip-key: requests-tooltip, width: 150}
+        - {id: quests, text-key: check-quests-label, tooltip-key: requests-tooltip, width: 150}
+        - {id: battle-pass, text-key: check-battle-pass-label, tooltip-key: requests-tooltip, width: 150}
+        - {id: vote, text-key: check-vote-label, tooltip-key: requests-tooltip, width: 150}
+        - {id: events, text-key: check-events-label, tooltip-key: requests-tooltip, width: 150}
+        - {id: duels, text-key: check-duels-label, tooltip-key: requests-tooltip, width: 150}
+        - {id: privat, text-key: check-privat-label, tooltip-key: requests-tooltip, width: 150}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -690,8 +699,8 @@ surfaces:
       body:
         - {id: facts, text-key: diagnostic-body, width: 500, placeholders: {facts: "✓ система приватов доступна\n• вы уже на территории привата\n✓ вы владелец текущего привата"}}
       buttons:
-        - {id: privat, text-key: privat-label, tooltip-key: privat-tooltip, width: 190}
-        - {id: context, text-key: context-short-label, tooltip-key: context-tooltip, width: 190}
+        - {id: privat, text-key: privat-label, tooltip-key: privat-tooltip, width: 150}
+        - {id: context, text-key: context-short-label, tooltip-key: context-tooltip, width: 150}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -704,12 +713,12 @@ surfaces:
       body:
         - {id: intro, text-key: recovery-body, width: 500}
       buttons:
-        - {id: teleport, text-key: problem-cannot-teleport-label, tooltip-key: recovery-tooltip, width: 190}
-        - {id: claim, text-key: problem-cannot-claim-label, tooltip-key: recovery-tooltip, width: 190}
-        - {id: player, text-key: problem-cannot-find-player-label, tooltip-key: recovery-tooltip, width: 190}
-        - {id: item, text-key: problem-lost-item-label, tooltip-key: recovery-tooltip, width: 190}
-        - {id: command, text-key: problem-command-failed-label, tooltip-key: recovery-tooltip, width: 190}
-        - {id: stuck, text-key: stuck-label, tooltip-key: recovery-tooltip, width: 190}
+        - {id: teleport, text-key: problem-cannot-teleport-label, tooltip-key: recovery-tooltip, width: 150}
+        - {id: claim, text-key: problem-cannot-claim-label, tooltip-key: recovery-tooltip, width: 150}
+        - {id: player, text-key: problem-cannot-find-player-label, tooltip-key: recovery-tooltip, width: 150}
+        - {id: item, text-key: problem-lost-item-label, tooltip-key: recovery-tooltip, width: 150}
+        - {id: command, text-key: problem-command-failed-label, tooltip-key: recovery-tooltip, width: 150}
+        - {id: stuck, text-key: stuck-label, tooltip-key: recovery-tooltip, width: 150}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -722,12 +731,12 @@ surfaces:
       body:
         - {id: summary, text-key: settings-body, width: 500, placeholders: {chat: локальный, trails: включено, boost: выключено}}
       buttons:
-        - {id: chat, text-key: command-chat-global-label, tooltip-key: category-settings-tooltip, width: 190}
-        - {id: trails, text-key: command-trails-off-label, tooltip-key: category-settings-tooltip, width: 190}
-        - {id: boost, text-key: command-trails-boost-on-label, tooltip-key: category-settings-tooltip, width: 190}
-        - {id: borders, text-key: command-lands-borders-label, tooltip-key: category-settings-tooltip, width: 190}
-        - {id: particles, text-key: command-particles-label, tooltip-key: category-settings-tooltip, width: 190}
-        - {id: tpa, text-key: command-tpa-ignore-label, tooltip-key: category-settings-tooltip, width: 190}
+        - {id: chat, text-key: command-chat-global-label, tooltip-key: category-settings-tooltip, width: 150}
+        - {id: trails, text-key: command-trails-off-label, tooltip-key: category-settings-tooltip, width: 150}
+        - {id: boost, text-key: command-trails-boost-on-label, tooltip-key: category-settings-tooltip, width: 150}
+        - {id: borders, text-key: command-lands-borders-label, tooltip-key: category-settings-tooltip, width: 150}
+        - {id: particles, text-key: command-particles-label, tooltip-key: category-settings-tooltip, width: 150}
+        - {id: tpa, text-key: command-tpa-ignore-label, tooltip-key: category-settings-tooltip, width: 150}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -740,12 +749,12 @@ surfaces:
       body:
         - {id: summary, text-key: settings-body, width: 500, placeholders: {chat: глобальный, trails: выключено, boost: включено}}
       buttons:
-        - {id: chat, text-key: command-chat-local-label, tooltip-key: category-settings-tooltip, width: 190}
-        - {id: trails, text-key: command-trails-on-label, tooltip-key: category-settings-tooltip, width: 190}
-        - {id: boost, text-key: command-trails-boost-off-label, tooltip-key: category-settings-tooltip, width: 190}
-        - {id: borders, text-key: command-lands-borders-label, tooltip-key: category-settings-tooltip, width: 190}
-        - {id: particles, text-key: command-particles-label, tooltip-key: category-settings-tooltip, width: 190}
-        - {id: tpa, text-key: command-tpa-ignore-label, tooltip-key: category-settings-tooltip, width: 190}
+        - {id: chat, text-key: command-chat-local-label, tooltip-key: category-settings-tooltip, width: 150}
+        - {id: trails, text-key: command-trails-on-label, tooltip-key: category-settings-tooltip, width: 150}
+        - {id: boost, text-key: command-trails-boost-off-label, tooltip-key: category-settings-tooltip, width: 150}
+        - {id: borders, text-key: command-lands-borders-label, tooltip-key: category-settings-tooltip, width: 150}
+        - {id: particles, text-key: command-particles-label, tooltip-key: category-settings-tooltip, width: 150}
+        - {id: tpa, text-key: command-tpa-ignore-label, tooltip-key: category-settings-tooltip, width: 150}
       viewport: [854, 480]
       variants: [{id: alternative}]
 
@@ -756,12 +765,70 @@ surfaces:
       external-title-key: players-title
       columns: 2
       body:
-        - {id: intro, text-key: players-body, width: 500, placeholders: {count: '3'}}
+        - {id: intro, text-key: players-body, width: 420, placeholders: {count: '12', total: '27', page: '1', pages: '3', scope: вся сеть}}
       buttons:
-        - {id: search, text-key: players-search-label, tooltip-key: players-search-tooltip, width: 190}
-        - {id: one, text-key: player-label, tooltip-key: player-tooltip, width: 190, placeholders: {player: AnotherPlayer, server: survival}}
-        - {id: two, text-key: player-label, tooltip-key: player-tooltip, width: 190, placeholders: {player: Limonka, server: spawn}}
-        - {id: three, text-key: player-label, tooltip-key: player-tooltip, width: 190, placeholders: {player: Steve, server: mining}}
+        - {id: one, text-key: player-label, tooltip-key: player-tooltip, width: 150, placeholders: {player: AnotherPlayer, server: survival}}
+        - {id: two, text-key: player-label, tooltip-key: player-tooltip, width: 150, placeholders: {player: Limonka, server: spawn}}
+        - {id: three, text-key: player-label, tooltip-key: player-tooltip, width: 150, placeholders: {player: Steve, server: mining}}
+        - {id: four, text-key: player-label, tooltip-key: player-tooltip, width: 150, placeholders: {player: Player04, server: survival}}
+        - {id: five, text-key: player-label, tooltip-key: player-tooltip, width: 150, placeholders: {player: Player05, server: survival}}
+        - {id: six, text-key: player-label, tooltip-key: player-tooltip, width: 150, placeholders: {player: Player06, server: spawn}}
+        - {id: seven, text-key: player-label, tooltip-key: player-tooltip, width: 150, placeholders: {player: Player07, server: survival}}
+        - {id: eight, text-key: player-label, tooltip-key: player-tooltip, width: 150, placeholders: {player: Player08, server: spawn}}
+        - {id: nine, text-key: player-label, tooltip-key: player-tooltip, width: 150, placeholders: {player: Player09, server: survival}}
+        - {id: ten, text-key: player-label, tooltip-key: player-tooltip, width: 150, placeholders: {player: Player10, server: spawn}}
+        - {id: eleven, text-key: player-label, tooltip-key: player-tooltip, width: 150, placeholders: {player: Player11, server: survival}}
+        - {id: twelve, text-key: player-label, tooltip-key: player-tooltip, width: 150, placeholders: {player: Player12, server: spawn}}
+        - {id: search, text-key: players-search-label, tooltip-key: players-search-tooltip, width: 150}
+        - {id: scope, text-key: players-local-label, tooltip-key: players-tooltip, width: 150}
+        - {id: refresh, text-key: refresh-label, tooltip-key: refresh-tooltip, width: 150}
+        - {id: next, text-key: page-next-label, tooltip-key: players-tooltip, width: 150}
+        - {id: root, text-key: root-label, tooltip-key: players-tooltip, width: 150}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-players-page-2
+      source: help-center
+      format: reference-multi-action
+      name-key: players-title
+      external-title-key: players-title
+      columns: 2
+      body:
+        - {id: intro, text-key: players-body, width: 420, placeholders: {count: '12', total: '27', page: '2', pages: '3', scope: вся сеть}}
+      buttons:
+        - {id: one, text-key: player-label, tooltip-key: player-tooltip, width: 150, placeholders: {player: Player13, server: survival}}
+        - {id: two, text-key: player-label, tooltip-key: player-tooltip, width: 150, placeholders: {player: Player14, server: spawn}}
+        - {id: three, text-key: player-label, tooltip-key: player-tooltip, width: 150, placeholders: {player: Player15, server: survival}}
+        - {id: four, text-key: player-label, tooltip-key: player-tooltip, width: 150, placeholders: {player: Player16, server: spawn}}
+        - {id: five, text-key: player-label, tooltip-key: player-tooltip, width: 150, placeholders: {player: Player17, server: survival}}
+        - {id: six, text-key: player-label, tooltip-key: player-tooltip, width: 150, placeholders: {player: Player18, server: spawn}}
+        - {id: seven, text-key: player-label, tooltip-key: player-tooltip, width: 150, placeholders: {player: Player19, server: survival}}
+        - {id: eight, text-key: player-label, tooltip-key: player-tooltip, width: 150, placeholders: {player: Player20, server: spawn}}
+        - {id: nine, text-key: player-label, tooltip-key: player-tooltip, width: 150, placeholders: {player: Player21, server: survival}}
+        - {id: ten, text-key: player-label, tooltip-key: player-tooltip, width: 150, placeholders: {player: Player22, server: spawn}}
+        - {id: eleven, text-key: player-label, tooltip-key: player-tooltip, width: 150, placeholders: {player: Player23, server: survival}}
+        - {id: twelve, text-key: player-label, tooltip-key: player-tooltip, width: 150, placeholders: {player: Player24, server: spawn}}
+        - {id: search, text-key: players-search-label, tooltip-key: players-search-tooltip, width: 150}
+        - {id: scope, text-key: players-local-label, tooltip-key: players-tooltip, width: 150}
+        - {id: refresh, text-key: refresh-label, tooltip-key: players-tooltip, width: 150}
+        - {id: previous, text-key: page-previous-label, tooltip-key: players-tooltip, width: 150}
+        - {id: next, text-key: page-next-label, tooltip-key: players-tooltip, width: 150}
+        - {id: root, text-key: root-label, tooltip-key: players-tooltip, width: 150}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-players-empty
+      source: help-center
+      format: reference-multi-action
+      name-key: players-title
+      external-title-key: players-title
+      columns: 2
+      body:
+        - {id: intro, text-key: players-body, width: 420, placeholders: {count: '0', total: '0', page: '1', pages: '1', scope: вся сеть}}
+        - {id: empty, text-key: players-empty, width: 420}
+      buttons:
+        - {id: search, text-key: players-search-label, tooltip-key: players-search-tooltip, width: 150}
+        - {id: refresh, text-key: refresh-label, tooltip-key: refresh-tooltip, width: 150}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -774,10 +841,10 @@ surfaces:
       body:
         - {id: error, text-key: my-error, width: 500}
       buttons:
-        - {id: homes, text-key: my-homes-label, tooltip-key: my-homes-tooltip, width: 190}
-        - {id: lands, text-key: my-lands-label, tooltip-key: my-lands-tooltip, width: 190}
-        - {id: rank, text-key: my-rank-label, tooltip-key: my-rank-tooltip, width: 190}
-        - {id: jobs, text-key: my-jobs-label, tooltip-key: my-jobs-tooltip, width: 190}
+        - {id: homes, text-key: my-homes-label, tooltip-key: my-homes-tooltip, width: 150}
+        - {id: lands, text-key: my-lands-label, tooltip-key: my-lands-tooltip, width: 150}
+        - {id: rank, text-key: my-rank-label, tooltip-key: my-rank-tooltip, width: 150}
+        - {id: jobs, text-key: my-jobs-label, tooltip-key: my-jobs-tooltip, width: 150}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -790,14 +857,14 @@ surfaces:
       body:
         - {id: steps, text-key: guide-body, width: 500}
       buttons:
-        - {id: kit, text-key: kit-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Получить стартовые предметы, command: 'kit start'}}
-        - {id: vanilla, text-key: vanilla-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Перейти в обычный мир выживания, command: 'pw vanilla'}}
-        - {id: biomes, text-key: biomes-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Перейти в мир выживания с новыми биомами, command: 'pw survival'}}
-        - {id: jobs, text-key: jobs-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Профессии и заработок, command: jobsgui}}
-        - {id: mining, text-key: mining-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Перейти в обновляемый ресурсный мир, command: mining}}
-        - {id: homes, text-key: travel-label, tooltip-key: travel-tooltip, width: 190}
-        - {id: privat, text-key: privat-label, tooltip-key: privat-tooltip, width: 190}
-        - {id: rules, text-key: rules-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Правила игрового сервера, command: rules}}
+        - {id: kit, text-key: kit-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Получить стартовые предметы, command: 'kit start'}}
+        - {id: vanilla, text-key: vanilla-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Перейти в обычный мир выживания, command: 'pw vanilla'}}
+        - {id: biomes, text-key: biomes-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Перейти в мир выживания с новыми биомами, command: 'pw survival'}}
+        - {id: jobs, text-key: jobs-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Профессии и заработок, command: jobsgui}}
+        - {id: mining, text-key: mining-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Перейти в обновляемый ресурсный мир, command: mining}}
+        - {id: homes, text-key: travel-label, tooltip-key: travel-tooltip, width: 150}
+        - {id: privat, text-key: privat-label, tooltip-key: privat-tooltip, width: 150}
+        - {id: rules, text-key: rules-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Правила игрового сервера, command: rules}}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -810,13 +877,13 @@ surfaces:
       body:
         - {id: intro, text-key: commands-body, width: 500}
       buttons:
-        - {id: search, text-key: search-label, tooltip-key: search-tooltip, width: 190}
-        - {id: start, text-key: category-start-label, tooltip-key: category-body, width: 190}
-        - {id: travel, text-key: category-travel-label, tooltip-key: category-body, width: 190}
-        - {id: protection, text-key: category-protection-label, tooltip-key: category-body, width: 190}
-        - {id: trade, text-key: category-trade-label, tooltip-key: category-body, width: 190}
-        - {id: progress, text-key: category-progress-label, tooltip-key: category-body, width: 190}
-        - {id: social, text-key: category-social-label, tooltip-key: category-body, width: 190}
+        - {id: search, text-key: search-label, tooltip-key: search-tooltip, width: 150}
+        - {id: start, text-key: category-start-label, tooltip-key: category-body, width: 150}
+        - {id: travel, text-key: category-travel-label, tooltip-key: category-body, width: 150}
+        - {id: protection, text-key: category-protection-label, tooltip-key: category-body, width: 150}
+        - {id: trade, text-key: category-trade-label, tooltip-key: category-body, width: 150}
+        - {id: progress, text-key: category-progress-label, tooltip-key: category-body, width: 150}
+        - {id: social, text-key: category-social-label, tooltip-key: category-body, width: 150}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -829,9 +896,9 @@ surfaces:
       body:
         - {id: intro, text-key: category-body, width: 500}
       buttons:
-        - {id: vote, text-key: command-vote-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Открыть ссылки для голосования за сервер, command: vote}}
-        - {id: global, text-key: command-chat-global-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Переключить режим на глобальный чат, command: g}}
-        - {id: local, text-key: command-chat-local-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Переключить режим на локальный чат рядом, command: l}}
+        - {id: vote, text-key: command-vote-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Открыть ссылки для голосования за сервер, command: vote}}
+        - {id: global, text-key: command-chat-global-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Переключить режим на глобальный чат, command: g}}
+        - {id: local, text-key: command-chat-local-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Переключить режим на локальный чат рядом, command: l}}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -858,7 +925,7 @@ surfaces:
       body:
         - {id: summary, text-key: search-body, width: 500, placeholders: {query: как удалить моё посиление, count: '1'}}
       buttons:
-        - {id: delete-land, text-key: command-label, tooltip-key: search-result-tooltip, width: 190, placeholders: {label: Удалить поселение, description: Открыть приват и выбрать поселение для удаления}}
+        - {id: delete-land, text-key: command-label, tooltip-key: search-result-tooltip, width: 150, placeholders: {label: Удалить поселение, description: Открыть приват и выбрать поселение для удаления}}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -910,10 +977,10 @@ surfaces:
         - {id: summary, text-key: travel-body, width: 500, placeholders: {homes: '0', max_homes: '5'}}
         - {id: empty, text-key: travel-empty, width: 500}
       buttons:
-        - {id: create, text-key: create-home-label, tooltip-key: create-home-tooltip, width: 190}
-        - {id: rtp, text-key: rtp-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Телепорт в случайную безопасную точку, command: rtp}}
-        - {id: spawn, text-key: spawn-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Вернуться на спавн, command: spawn}}
-        - {id: vanilla, text-key: vanilla-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Перейти в обычный мир выживания, command: 'pw vanilla'}}
+        - {id: create, text-key: create-home-label, tooltip-key: create-home-tooltip, width: 150}
+        - {id: rtp, text-key: rtp-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Телепорт в случайную безопасную точку, command: rtp}}
+        - {id: spawn, text-key: spawn-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Вернуться на спавн, command: spawn}}
+        - {id: vanilla, text-key: vanilla-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Перейти в обычный мир выживания, command: 'pw vanilla'}}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -927,8 +994,8 @@ surfaces:
         - {id: summary, text-key: travel-body, width: 500, placeholders: {homes: '8', max_homes: '8'}}
         - {id: limit, text-key: travel-limit, width: 500}
       buttons:
-        - {id: warps, text-key: warps-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Публичные точки игроков, command: warps}}
-        - {id: rtp, text-key: rtp-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Телепорт в случайную безопасную точку, command: rtp}}
+        - {id: warps, text-key: warps-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Публичные точки игроков, command: warps}}
+        - {id: rtp, text-key: rtp-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Телепорт в случайную безопасную точку, command: rtp}}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -941,10 +1008,10 @@ surfaces:
       body:
         - {id: error, text-key: travel-error, width: 500}
       buttons:
-        - {id: spawn, text-key: spawn-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Вернуться на спавн, command: spawn}}
-        - {id: rtp, text-key: rtp-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Телепорт в случайную безопасную точку, command: rtp}}
-        - {id: stuck, text-key: stuck-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Аварийный возврат со сложного места, command: stuck}}
-        - {id: warps, text-key: warps-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Публичные точки игроков, command: warps}}
+        - {id: spawn, text-key: spawn-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Вернуться на спавн, command: spawn}}
+        - {id: rtp, text-key: rtp-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Телепорт в случайную безопасную точку, command: rtp}}
+        - {id: stuck, text-key: stuck-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Аварийный возврат со сложного места, command: stuck}}
+        - {id: warps, text-key: warps-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Публичные точки игроков, command: warps}}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -957,9 +1024,9 @@ surfaces:
       body:
         - {id: details, text-key: home-body, width: 500}
       buttons:
-        - {id: teleport, text-key: home-teleport-label, tooltip-key: home-teleport-tooltip, width: 190}
-        - {id: relocate, text-key: home-relocate-label, tooltip-key: home-relocate-tooltip, width: 190}
-        - {id: delete, text-key: home-delete-label, tooltip-key: home-delete-tooltip, width: 190}
+        - {id: teleport, text-key: home-teleport-label, tooltip-key: home-teleport-tooltip, width: 150}
+        - {id: relocate, text-key: home-relocate-label, tooltip-key: home-relocate-tooltip, width: 150}
+        - {id: delete, text-key: home-delete-label, tooltip-key: home-delete-tooltip, width: 150}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -986,6 +1053,67 @@ surfaces:
         - {id: warning, text-key: home-delete-body, width: 500}
       buttons:
         - {id: confirm, text-key: home-delete-confirm, tooltip-key: home-delete-body, width: 220}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-favorites-picker
+      source: help-center
+      format: reference-multi-action
+      name-key: favorites-picker-title
+      external-title-key: favorites-picker-title
+      columns: 2
+      body:
+        - {id: intro, text-key: favorites-picker-body, width: 420}
+      buttons:
+        - {id: activities, text-key: category-activities-label, tooltip-key: category-activities-tooltip, width: 150}
+        - {id: trade, text-key: category-trade-label, tooltip-key: category-trade-tooltip, width: 150}
+        - {id: progress, text-key: category-progress-label, tooltip-key: category-progress-tooltip, width: 150}
+        - {id: technology, text-key: category-technology-label, tooltip-key: category-technology-tooltip, width: 150}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-favorites-full
+      source: help-center
+      format: reference-multi-action
+      name-key: action-title
+      external-title-key: action-title
+      columns: 2
+      body:
+        - {id: summary, text-key: action-body, width: 500, placeholders: {action: Работа, description: Профессии и заработок, command: jobsgui}}
+        - {id: full, text-key: favorites-full, width: 420}
+      buttons:
+        - {id: run, text-key: action-run-label, tooltip-key: favorites-tooltip, width: 150}
+        - {id: back, text-key: back-label, tooltip-key: favorites-tooltip, width: 150}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-goal-detail
+      source: help-center
+      format: reference-multi-action
+      name-key: goal-title
+      name-placeholders: {goal: Играть вместе}
+      external-title-key: goal-title
+      columns: 2
+      body:
+        - {id: detail, text-key: goal-together-body, width: 420}
+      buttons:
+        - {id: players, text-key: players-label, tooltip-key: players-tooltip, width: 150}
+        - {id: action, text-key: command-label, tooltip-key: goals-tooltip, width: 150, placeholders: {label: Дуэли}}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-diagnostic-detail
+      source: help-center
+      format: reference-multi-action
+      name-key: problem-cannot-claim-label
+      external-title-key: problem-cannot-claim-label
+      columns: 2
+      body:
+        - {id: facts, text-key: diagnostic-body, width: 420, placeholders: {facts: "✓ система приватов доступна\n• вы уже на территории привата\n✓ вы владелец текущего привата"}}
+        - {id: help, text-key: diagnostic-cannot-claim-help, width: 420}
+      buttons:
+        - {id: privat, text-key: privat-label, tooltip-key: privat-tooltip, width: 150}
+        - {id: context, text-key: context-short-label, tooltip-key: context-tooltip, width: 150}
       viewport: [854, 480]
       variants: [{id: default}]
 

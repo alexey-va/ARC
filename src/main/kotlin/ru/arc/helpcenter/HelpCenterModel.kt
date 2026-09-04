@@ -87,6 +87,13 @@ data class HelpCenterPlayer(
     val server: String? = null,
 )
 
+data class HelpCenterPlayerPage(
+    val items: List<HelpCenterPlayer>,
+    val total: Int,
+    val page: Int,
+    val pages: Int,
+)
+
 enum class HelpCenterChatMode { LOCAL, GLOBAL }
 
 data class HelpCenterSettingSnapshot(
@@ -183,15 +190,29 @@ object HelpCenterPlanner {
         limit: Int,
     ): List<HelpCenterPlayer> {
         require(limit in 1..32) { "Help center player limit must be in 1..32" }
+        return playerPage(viewerId, onlinePlayers, query, 0, pageSize = limit).items
+    }
+
+    fun playerPage(
+        viewerId: UUID,
+        onlinePlayers: Collection<HelpCenterPlayer>,
+        query: String,
+        requestedPage: Int,
+        server: String? = null,
+        pageSize: Int = 12,
+    ): HelpCenterPlayerPage {
+        require(pageSize in 1..32) { "Help center player page size must be in 1..32" }
         val needle = query.trim()
-        return onlinePlayers
-            .asSequence()
+        val matches = onlinePlayers.asSequence()
             .filter { it.id != viewerId }
+            .filter { server == null || it.server == server }
             .filter { needle.isBlank() || it.name.contains(needle, ignoreCase = true) }
             .distinctBy { it.id }
             .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
-            .take(limit)
             .toList()
+        val pages = maxOf(1, (matches.size + pageSize - 1) / pageSize)
+        val page = requestedPage.coerceIn(0, pages - 1)
+        return HelpCenterPlayerPage(matches.drop(page * pageSize).take(pageSize), matches.size, page, pages)
     }
 
     fun search(entries: List<HelpCenterSearchEntry>, query: String, limit: Int): List<HelpCenterSearchEntry> {
