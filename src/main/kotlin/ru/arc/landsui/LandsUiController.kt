@@ -69,6 +69,29 @@ class LandsUiController(
         )
     }
 
+    fun openInvite(player: Player, target: LandsUiPlayer) {
+        val lands = LandsUiPlanner.inviteableLands(target.id, gateway.lands(player))
+        if (lands.isEmpty()) {
+            player.sendMessage(text("invite-none", "player" to target.name))
+            openRoot(player)
+            return
+        }
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("invite-picker-title"),
+                body = listOf(PaperDialogBody(text("invite-picker-body", "player" to target.name), width = 500)),
+                buttons = lands.mapIndexed { index, land ->
+                    button("invite_land_$index", text("land-label", "land" to land.name)) {
+                        executeForLand(player, land.id) { LandsUiCommands.addMember(target.name) }
+                    }.closing()
+                },
+                exitButton = back("back") { openRoot(player) },
+                columns = 2,
+            ),
+        )
+    }
+
     private fun selectAndOpenDetails(player: Player, landId: String) {
         if (!gateway.select(player, landId)) {
             player.sendMessage(text("land-gone"))

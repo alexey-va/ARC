@@ -25,25 +25,27 @@ class HelpCenterConfigTest : StringSpec({
             settings.enabled shouldBe true
             settings.maxHomes shouldBe 12
             settings.maxSearchResults shouldBe 8
-            settings.text("root-title").contains("Помощь") shouldBe true
-            settings.text("my-title").contains("Про меня") shouldBe true
+            settings.text("root-title").contains("Главное меню") shouldBe true
+            settings.text("now-title").contains("Сейчас") shouldBe true
             val profileBodies = listOf(
-                settings.text("my-identity"),
-                settings.text("my-summary"),
-                settings.text("my-location"),
+                settings.text("now-identity"),
+                settings.text("now-progress"),
+                settings.text("now-location"),
             )
             profileBodies shouldHaveSize 3
             profileBodies.joinToString().contains("<balance>") shouldBe true
             val renderedProfile = renderedProfileLines(profileBodies)
             renderedProfile shouldBe listOf(
                 "ArchitectureMax",
-                "Сервер: survival",
-                "Ранг: Следопыт",
-                "Баланс: 8 000 000",
-                "Дома: 3/8",
-                "Поселения: 2",
-                "Мир: classic_survival",
-                "Координаты: -1842, 71, 3260",
+                "◆ Сервер  survival",
+                "◆ Онлайн  27",
+                "◆ Ранг  Следопыт",
+                "◆ Баланс  8 000 000",
+                "◆ Дома  3/8",
+                "◆ Поселения  2",
+                "◆ Мир  classic_survival",
+                "◆ Координаты  -1842, 71, 3260",
+                "◆ Чат  локальный",
             )
             renderedProfile.forEach { line ->
                 line shouldNot contain(Regex(" {3,}"))
@@ -59,8 +61,7 @@ class HelpCenterConfigTest : StringSpec({
                 "rules-label",
                 "category-progress-label",
             ).map(settings::text).joinToString() shouldNot contain("#b68cff")
-            MiniMessage.miniMessage().deserialize(settings.text("my-summary")).containsBold() shouldBe false
-            MiniMessage.miniMessage().deserialize(settings.text("my-location")).containsBold() shouldBe false
+            profileBodies.forEach { source -> MiniMessage.miniMessage().deserialize(source).containsBold() shouldBe false }
             listOf(
                 "my-label",
                 "guide-label",
@@ -74,6 +75,14 @@ class HelpCenterConfigTest : StringSpec({
                 "my-jobs-label",
                 "my-quests-label",
                 "my-skills-label",
+                "now-title",
+                "now-label",
+                "players-label",
+                "players-search-label",
+                "player-label",
+                "category-activities-label",
+                "category-technology-label",
+                "category-settings-label",
             ).forEach { key ->
                 MiniMessage.miniMessage().deserialize(settings.text(key)).containsBold() shouldBe false
             }
@@ -114,12 +123,12 @@ class HelpCenterConfigTest : StringSpec({
             ).forEach { key ->
                 MiniMessage.miniMessage().deserialize(settings.text(key)).containsBold() shouldBe false
             }
-            listOf("home-label", "warps-label", "spawn-label", "rtp-label", "back-command-label", "vanilla-label", "mining-label", "biomes-label")
-                .forEach { key ->
-                    withClue("$key: ${settings.text(key)}") {
-                        settings.text(key).contains("#4dd8f0") shouldBe true
-                    }
-                }
+            setOf(
+                settings.text("now-label").substringBefore('>'),
+                settings.text("players-label").substringBefore('>'),
+                settings.text("privat-label").substringBefore('>'),
+                settings.text("category-trade-label").substringBefore('>'),
+            ).size shouldBe 4
             settings.text("back-command-label").contains("прежнее место", ignoreCase = true) shouldBe true
         } finally {
             ConfigManager.clear()
@@ -159,6 +168,8 @@ private fun renderedProfileLines(source: List<String>): List<String> {
             "x" to "-1842",
             "y" to "71",
             "z" to "3260",
+            "online" to "27",
+            "chat" to "локальный",
         ).map { (key, value) -> Placeholder.unparsed(key, value) },
     )
     val plain = PlainTextComponentSerializer.plainText()

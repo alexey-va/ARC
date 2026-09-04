@@ -155,8 +155,29 @@ sources:
     include:
       - root-title
       - root-body
-      - my-label
-      - my-tooltip
+      - now-label
+      - now-tooltip
+      - players-label
+      - players-tooltip
+      - now-title
+      - now-identity
+      - now-progress
+      - now-location
+      - rec-rank-label
+      - rec-bp-label
+      - rec-events-label
+      - category-activities-label
+      - category-activities-tooltip
+      - category-technology-label
+      - category-technology-tooltip
+      - category-settings-label
+      - category-settings-tooltip
+      - players-title
+      - players-body
+      - players-search-label
+      - players-search-tooltip
+      - player-label
+      - player-tooltip
       - guide-label
       - guide-tooltip
       - commands-label
@@ -169,9 +190,6 @@ sources:
       - main-menu-tooltip
       - my-title
       - my-loading
-      - my-identity
-      - my-summary
-      - my-location
       - my-error
       - my-homes-label
       - my-homes-tooltip
@@ -210,7 +228,6 @@ sources:
       - category-social-title
       - category-trade-tooltip
       - category-progress-tooltip
-      - category-social-tooltip
       - category-body
       - command-label
       - command-vote-label
@@ -320,6 +337,8 @@ placeholders:
   max_members: '8'
   homes: '3'
   max_homes: '8'
+  online: '27'
+  chat: локальный
   home: Северная_база
   world: classic_survival
   x: '-1842'
@@ -429,15 +448,16 @@ surfaces:
       body:
         - {id: intro, text-key: root-body, width: 500}
       buttons:
-        - {id: my, text-key: my-label, tooltip-key: my-tooltip, width: 190}
-        - {id: guide, text-key: guide-label, tooltip-key: guide-tooltip, width: 190}
-        - {id: commands, text-key: commands-label, tooltip-key: commands-tooltip, width: 190}
+        - {id: now, text-key: now-label, tooltip-key: now-tooltip, width: 190}
+        - {id: search, text-key: commands-label, tooltip-key: commands-tooltip, width: 190}
         - {id: travel, text-key: travel-label, tooltip-key: travel-tooltip, width: 190}
         - {id: privat, text-key: privat-label, tooltip-key: privat-tooltip, width: 190}
-        - {id: trade, text-key: category-trade-label, tooltip-key: category-trade-tooltip, width: 190}
+        - {id: activities, text-key: category-activities-label, tooltip-key: category-activities-tooltip, width: 190}
         - {id: progress, text-key: category-progress-label, tooltip-key: category-progress-tooltip, width: 190}
-        - {id: social, text-key: category-social-label, tooltip-key: category-social-tooltip, width: 190}
-        - {id: main-menu, text-key: main-menu-label, tooltip-key: main-menu-tooltip, width: 190}
+        - {id: trade, text-key: category-trade-label, tooltip-key: category-trade-tooltip, width: 190}
+        - {id: players, text-key: players-label, tooltip-key: players-tooltip, width: 190}
+        - {id: technology, text-key: category-technology-label, tooltip-key: category-technology-tooltip, width: 190}
+        - {id: settings, text-key: category-settings-label, tooltip-key: category-settings-tooltip, width: 190}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -459,23 +479,39 @@ surfaces:
       viewport: [854, 480]
       variants: [{id: default}]
 
-    - id: help-center-my-populated
+    - id: help-center-now-populated
       source: help-center
       format: reference-multi-action
-      name-key: my-title
-      external-title-key: my-title
+      name-key: now-title
+      external-title-key: now-title
       columns: 2
       body:
-        - {id: identity, text-key: my-identity, width: 420, placeholders: {player: ArchitectureMax, server: survival, rank: Следопыт}}
-        - {id: summary, text-key: my-summary, width: 420, placeholders: {balance: '8 000 000', homes: '3', max_homes: '8', lands: '2'}}
-        - {id: location, text-key: my-location, width: 420, placeholders: {world: classic_survival, x: '-1842', y: '71', z: '3260'}}
+        - {id: identity, text-key: now-identity, width: 420, placeholders: {player: ArchitectureMax, server: survival, online: '27'}}
+        - {id: summary, text-key: now-progress, width: 420, placeholders: {rank: Следопыт, balance: '8 000 000', homes: '3', max_homes: '8', lands: '2'}}
+        - {id: location, text-key: now-location, width: 420, placeholders: {world: classic_survival, x: '-1842', y: '71', z: '3260', chat: локальный}}
       buttons:
+        - {id: rank, text-key: rec-rank-label, tooltip-key: now-tooltip, width: 190}
+        - {id: bp, text-key: rec-bp-label, tooltip-key: now-tooltip, width: 190}
+        - {id: events, text-key: rec-events-label, tooltip-key: now-tooltip, width: 190}
         - {id: homes, text-key: my-homes-label, tooltip-key: my-homes-tooltip, width: 190}
         - {id: lands, text-key: my-lands-label, tooltip-key: my-lands-tooltip, width: 190}
-        - {id: rank, text-key: my-rank-label, tooltip-key: my-rank-tooltip, width: 190}
-        - {id: jobs, text-key: my-jobs-label, tooltip-key: my-jobs-tooltip, width: 190}
-        - {id: quests, text-key: my-quests-label, tooltip-key: my-quests-tooltip, width: 190}
-        - {id: skills, text-key: my-skills-label, tooltip-key: my-skills-tooltip, width: 190}
+        - {id: guide, text-key: guide-label, tooltip-key: guide-tooltip, width: 190}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-center-players
+      source: help-center
+      format: reference-multi-action
+      name-key: players-title
+      external-title-key: players-title
+      columns: 2
+      body:
+        - {id: intro, text-key: players-body, width: 500, placeholders: {count: '3'}}
+      buttons:
+        - {id: search, text-key: players-search-label, tooltip-key: players-search-tooltip, width: 190}
+        - {id: one, text-key: player-label, tooltip-key: player-tooltip, width: 190, placeholders: {player: AnotherPlayer, server: survival}}
+        - {id: two, text-key: player-label, tooltip-key: player-tooltip, width: 190, placeholders: {player: Limonka, server: spawn}}
+        - {id: three, text-key: player-label, tooltip-key: player-tooltip, width: 190, placeholders: {player: Steve, server: mining}}
       viewport: [854, 480]
       variants: [{id: default}]
 

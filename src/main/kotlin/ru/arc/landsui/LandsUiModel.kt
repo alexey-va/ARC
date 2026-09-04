@@ -30,6 +30,12 @@ object LandsUiPlanner {
         .distinctBy { it.id }
         .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
         .toList()
+
+    fun inviteableLands(targetId: UUID, lands: Collection<LandsUiLand>): List<LandsUiLand> = lands
+        .asSequence()
+        .filter { targetId !in it.memberIds }
+        .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+        .toList()
 }
 
 object LandsUiCommands {

@@ -87,6 +87,9 @@ commands:
     description: Open and administer the mount collection
     usage: /mount [menu|help|admin]
     permission: arc.mounts.use
+  menu:
+    description: Open the main player hub
+    usage: /menu
 permissions:
   arc.admin:
     description: Administer ARC

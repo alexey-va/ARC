@@ -36,6 +36,7 @@ product-interest:
   qa-player-names:
     - "CodexQA_728"
     - "GrocerMC"
+    - "foll"
   meaningful-thresholds:
     block-break: 64
     block-place: 32

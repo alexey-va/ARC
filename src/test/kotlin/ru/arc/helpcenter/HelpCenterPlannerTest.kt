@@ -3,6 +3,7 @@ package ru.arc.helpcenter
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import java.util.UUID
 
 class HelpCenterPlannerTest : StringSpec({
     val entries = listOf(
@@ -101,6 +102,8 @@ class HelpCenterPlannerTest : StringSpec({
         HelpCenterPlanner.search(intents, "переставить колокол", 5).first().id shouldBe "land-main-block"
         HelpCenterPlanner.search(intents, "сделать хом", 5).first().id shouldBe "home-create"
         HelpCenterPlanner.search(intents, "где мои деньги", 5).first().id shouldBe "my"
+        HelpCenterPlanner.search(intents, "хочу написать другу", 5).first().id shouldBe "player-find"
+        HelpCenterPlanner.search(intents, "я застрял", 5).first().id shouldBe "recovery"
     }
 
     "returns a stable bounded catalog for an empty query" {
@@ -130,9 +133,88 @@ class HelpCenterPlannerTest : StringSpec({
 
     "promotes the task hubs that belong on the universal root" {
         HelpCenterCategory.rootHubs shouldContainExactly listOf(
+            HelpCenterCategory.ACTIVITIES,
             HelpCenterCategory.TRADE,
             HelpCenterCategory.PROGRESS,
-            HelpCenterCategory.SOCIAL,
+            HelpCenterCategory.TECHNOLOGY,
+            HelpCenterCategory.SETTINGS,
         )
+    }
+
+    "orders a bounded personal next-action list from concrete profile gaps" {
+        val profile = HelpCenterProfile(
+            playerName = "NewPlayer",
+            server = "survival",
+            world = "classic_survival",
+            x = 10,
+            y = 70,
+            z = -20,
+            balance = "500",
+            rank = "Поселенец",
+            homes = HelpCenterHomes(emptyList(), 0, 3),
+            lands = 0,
+        )
+
+        HelpCenterPlanner.recommendations(
+            profile,
+            setOf(
+                HelpCenterFeature.LANDS,
+                HelpCenterFeature.RANKS,
+                HelpCenterFeature.BATTLE_PASS,
+                HelpCenterFeature.EVENTS,
+            ),
+            limit = 4,
+        ).map { it.id } shouldContainExactly listOf(
+            HelpCenterRecommendationId.CREATE_HOME,
+            HelpCenterRecommendationId.CREATE_LAND,
+            HelpCenterRecommendationId.RANK_GOAL,
+            HelpCenterRecommendationId.BATTLE_PASS,
+        )
+    }
+
+    "does not invent onboarding gaps when profile data is unavailable" {
+        val profile = HelpCenterProfile(
+            playerName = "ExistingPlayer",
+            server = "classic",
+            world = "world",
+            x = 0,
+            y = 64,
+            z = 0,
+            balance = null,
+            rank = null,
+            homes = null,
+            lands = null,
+        )
+
+        HelpCenterPlanner.recommendations(profile, setOf(HelpCenterFeature.EVENTS), 4)
+            .map { it.id } shouldContainExactly listOf(HelpCenterRecommendationId.EVENTS)
+    }
+
+    "filters and bounds network players without returning the viewer" {
+        val viewer = UUID.fromString("00000000-0000-0000-0000-000000000001")
+        val players = listOf(
+            HelpCenterPlayer(viewer, "Viewer"),
+            HelpCenterPlayer(UUID.fromString("00000000-0000-0000-0000-000000000002"), "Zebra", "spawn"),
+            HelpCenterPlayer(UUID.fromString("00000000-0000-0000-0000-000000000003"), "alice", "survival"),
+            HelpCenterPlayer(UUID.fromString("00000000-0000-0000-0000-000000000004"), "Alina", "mining"),
+        )
+
+        HelpCenterPlanner.players(viewer, players, "ali", 1).map { it.name } shouldContainExactly listOf("alice")
+        HelpCenterPlanner.players(viewer, players, "", 5).map { it.name } shouldContainExactly listOf("alice", "Alina", "Zebra")
+    }
+
+    "builds typed player commands and rejects command injection" {
+        HelpCenterCommands.teleportRequest("Player_2") shouldBe "tpa Player_2"
+        HelpCenterCommands.teleportHere("Player_2") shouldBe "tpahere Player_2"
+        HelpCenterCommands.duel("Player_2") shouldBe "duel Player_2"
+        HelpCenterCommands.message("Player_2", "  привет, идём в шахту?  ") shouldBe
+            "msg Player_2 привет, идём в шахту?"
+        HelpCenterCommands.pay("Player_2", "1500.50") shouldBe "pay Player_2 1500.5"
+
+        runCatching { HelpCenterCommands.teleportRequest("Bad Player") }.isFailure shouldBe true
+        runCatching { HelpCenterCommands.message("Player_2", "первая строка\n/op Player_2") }.isFailure shouldBe true
+        runCatching { HelpCenterCommands.message("Player_2", " ") }.isFailure shouldBe true
+        runCatching { HelpCenterCommands.pay("Player_2", "-1") }.isFailure shouldBe true
+        runCatching { HelpCenterCommands.pay("Player_2", "1.999") }.isFailure shouldBe true
     }
 })

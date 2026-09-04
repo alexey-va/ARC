@@ -9,6 +9,7 @@ import ru.arc.audit.autosell.AutoSellAuditModule
 import ru.arc.audit.bank.BankAuditModule
 import ru.arc.audit.stock.StockAuditModule
 import ru.arc.commands.XCommand
+import ru.arc.commands.MainMenuCommand
 import ru.arc.commands.arc.ArcCommand
 import ru.arc.commands.arc.LegacySubCommandExecutor
 import ru.arc.commands.arc.subcommands.BuySubCommand
@@ -255,6 +256,7 @@ open class ARC : JavaPlugin() {
         registerCommand("x", XCommand, XCommand)
         registerCommand("g", ChatModeAliasCommand, null)
         registerCommand("l", ChatModeAliasCommand, null)
+        registerCommand("menu", MainMenuCommand, null)
         registerLegacyCommands()
     }
 

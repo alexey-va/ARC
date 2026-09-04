@@ -83,7 +83,7 @@ data class ProductInterestConfig(
     val combatThreshold: Int = 5,
     val socialThreshold: Int = 3,
     val maxDetailValuesPerPlayerDay: Int = 128,
-    val qaPlayerNames: Set<String> = setOf("codexqa_728", "grocermc"),
+    val qaPlayerNames: Set<String> = setOf("codexqa_728", "grocermc", "foll"),
     val zoneId: ZoneId = ZoneId.of("Europe/Moscow"),
 ) {
     fun threshold(action: ProductAction): Pair<Int, ProductOutcome>? =
@@ -114,7 +114,7 @@ data class ProductInterestConfig(
                 maxDetailValuesPerPlayerDay = config.integer("product-interest.max-detail-values-per-player-day", 128).coerceIn(16, 512),
                 qaPlayerNames =
                     config
-                        .stringList("product-interest.qa-player-names", listOf("CodexQA_728", "GrocerMC"))
+                        .stringList("product-interest.qa-player-names", listOf("CodexQA_728", "GrocerMC", "foll"))
                         .map { it.trim().lowercase(Locale.ROOT) }
                         .filter { it.matches(Regex("[a-z0-9_]{3,16}")) }
                         .toSet(),

@@ -7,8 +7,12 @@ limits:
 
 # All player-visible copy is configurable. ARC merges new defaults on reload.
 text:
-  root-title: '<#ffc247><bold>Помощь и команды'
-  root-body: '<#e5f1f5>Всё нужное для игры — в одном месте.<newline><#9aaab2>Выберите раздел или <#4f8cff>опишите задачу обычной фразой<#9aaab2>.'
+  root-title: '<#ffca55>Главное меню'
+  root-body: '<#f5fbff>Куда идём?<newline><#9db0ba>Десять понятных разделов — без списка из сотни команд.'
+  now-label: '<#ffca55>Сейчас'
+  now-tooltip: '<#dcecf2>Ваше состояние и полезные следующие шаги.'
+  players-label: '<#46d9ee>Игроки'
+  players-tooltip: '<#dcecf2>Телепорт, сообщение, перевод, дуэль или приглашение.'
   my-label: '<#4f8cff>Про меня'
   my-tooltip: '<#e5f1f5>Ваш профиль, дома, поселения и прогресс.'
   guide-label: '<#ffc247>С чего начать'
@@ -24,10 +28,19 @@ text:
   back-label: '<#b6c4ca>Назад'
   root-label: '<#b6c4ca>К разделам'
   not-available: '—'
+  now-title: '<#ffca55>Сейчас'
+  now-identity: '<#ffca55><player><newline><#46d9ee>◆ <#9db0ba>Сервер  <#f5fbff><server><newline><#46d9ee>◆ <#9db0ba>Онлайн  <#f5fbff><online>'
+  now-progress: '<#7fe38b>◆ <#9db0ba>Ранг  <#f5fbff><rank><newline><#ffad52>◆ <#9db0ba>Баланс  <#f5fbff><balance><newline><#46d9ee>◆ <#9db0ba>Дома  <#f5fbff><homes>/<max_homes><newline><#7fe38b>◆ <#9db0ba>Поселения  <#f5fbff><lands>'
+  now-location: '<#46d9ee>◆ <#9db0ba>Мир  <#f5fbff><world><newline><#46d9ee>◆ <#9db0ba>Координаты  <#f5fbff><x>, <y>, <z><newline><#7fe38b>◆ <#9db0ba>Чат  <#f5fbff><chat>'
+  rec-home-label: '<#ffca55>Поставить первый дом'
+  rec-land-label: '<#7fe38b>Защитить территорию'
+  rec-rank-label: '<#7fe38b>Следующая цель ранга'
+  rec-bp-label: '<#ffad52>Боевой пропуск'
+  rec-events-label: '<#ffca55>Текущие события'
 
-  my-title: '<#ffc247><bold>Про меня'
+  my-title: '<#ffca55>Сейчас'
   my-loading: '<#e5f1f5>Собираю ваш профиль…'
-  my-identity: '<#ffc247><bold><player></bold><newline><#9aaab2>Сервер: <#4dd8f0><server><newline><#9aaab2>Ранг: <#4f8cff><rank>'
+  my-identity: '<#ffca55><player><newline><#9aaab2>Сервер: <#4dd8f0><server><newline><#9aaab2>Ранг: <#7fe38b><rank>'
   my-summary: '<#9aaab2>Баланс: <#ff9f43><balance><newline><#9aaab2>Дома: <#4dd8f0><homes>/<max_homes><newline><#9aaab2>Поселения: <#5ee39c><lands>'
   my-location: '<#9aaab2>Мир: <#4dd8f0><world><newline><#9aaab2>Координаты: <#e5f1f5><x>, <y>, <z>'
   my-error: '<#e5f1f5>Часть профиля сейчас недоступна. Быстрые разделы всё равно работают.'
@@ -44,8 +57,8 @@ text:
   my-skills-label: '<#4f8cff>Мои навыки'
   my-skills-tooltip: '<#e5f1f5>Открыть навыки и их развитие.'
 
-  guide-title: '<#ffc247><bold>С чего начать'
-  guide-body: '<#ffc247><bold>1 · Стартовый набор</bold><newline><#fff4df>Получите первые инструменты и припасы.<newline><newline><#ffc247><bold>2 · Выберите мир</bold><newline><#fff4df>Обычный мир, мир добычи или мир новых биомов.<newline><newline><#ffc247><bold>3 · Начните зарабатывать</bold><newline><#fff4df>Выберите работу и получайте деньги за привычные действия.<newline><newline><#ffc247><bold>4 · Дом и поселение</bold><newline><#fff4df>Сохраните точку дома и защитите территорию поселением.'
+  guide-title: '<#ffca55>С чего начать'
+  guide-body: '<#ffca55>1 · Стартовый набор<newline><#f5fbff>Получите первые инструменты и припасы.<newline><newline><#46d9ee>2 · Выберите мир<newline><#f5fbff>Обычный мир, мир добычи или мир новых биомов.<newline><newline><#ffad52>3 · Начните зарабатывать<newline><#f5fbff>Выберите работу и получайте деньги за привычные действия.<newline><newline><#7fe38b>4 · Дом и поселение<newline><#f5fbff>Сохраните точку дома и защитите территорию поселением.'
   kit-label: '<#ffc247>Получить набор'
   vanilla-label: '<#4dd8f0>Обычный мир'
   mining-label: '<#4dd8f0>Мир добычи'
@@ -53,12 +66,12 @@ text:
   jobs-label: '<#ffc247>Выбрать работу'
   rules-label: '<#4f8cff>Правила'
 
-  commands-title: '<#ffc247><bold>Команды и поиск'
+  commands-title: '<#ffca55>Поиск'
   commands-body: '<#fff4df>Опишите, что хотите сделать, обычной фразой.<newline><#b6c4ca>Поиск понимает формы слов, близкие значения и небольшие опечатки.'
   search-input: '<#fff4df>Что вы хотите сделать?'
   search-label: '<#ffc247>Найти'
   search-tooltip: '<#fff4df>Например: удалить поселение, перенести дом, добавить друга.'
-  search-title: '<#ffc247><bold>Результаты поиска'
+  search-title: '<#ffca55>Результаты поиска'
   search-body: '<#b6c4ca>Запрос  <#fff4df><query><newline><#b6c4ca>Найдено  <#fff4df><count>'
   search-empty: '<#fff4df>Не понял запрос. Опишите действие и объект: «перенести дом» или «добавить игрока».'
   search-result-tooltip: '<#fff4df><description><newline><#b6c4ca>Открыть нужный раздел'
@@ -68,15 +81,59 @@ text:
   category-trade-label: '<#ff9f43>Торговля'
   category-progress-label: '<#a7e75f>Развитие'
   category-social-label: '<#38d9c3>Общение и сервер'
+  category-activities-label: '<#ffad52>Активности'
+  category-technology-label: '<#46d9ee>Технологии'
+  category-settings-label: '<#7fe38b>Настройки'
+  category-activities-tooltip: '<#dcecf2>События, дуэли, подземелья и фермы.'
+  category-technology-tooltip: '<#dcecf2>Предметы, зачарования, механизмы и транспорт.'
+  category-settings-tooltip: '<#dcecf2>Чат, эффекты и личные переключатели.'
   category-trade-tooltip: '<#e5f1f5>Магазины, быстрая продажа и аукцион.'
   category-progress-tooltip: '<#e5f1f5>Ранг, работы, задания и навыки.'
   category-social-tooltip: '<#e5f1f5>Голосование и выбор режима чата.'
-  category-start-title: '<#ffc247><bold>Начало игры'
-  category-travel-title: '<#ffc247><bold>Команды перемещения'
-  category-protection-title: '<#ffc247><bold>Защита'
-  category-trade-title: '<#ffc247><bold>Торговля'
-  category-progress-title: '<#ffc247><bold>Развитие'
-  category-social-title: '<#ffc247><bold>Общение и сервер'
+  category-start-title: '<#ffca55>Начало игры'
+  category-travel-title: '<#46d9ee>Перемещения'
+  category-protection-title: '<#7fe38b>Защита'
+  category-trade-title: '<#ffad52>Торговля'
+  category-progress-title: '<#7fe38b>Развитие'
+  category-social-title: '<#46d9ee>Общение и сервер'
+  category-activities-title: '<#ffad52>Активности'
+  category-technology-title: '<#46d9ee>Технологии'
+  category-settings-title: '<#7fe38b>Настройки'
+  settings-body: '<#f5fbff>Текущий чат: <#46d9ee><chat><newline><#9db0ba>Ниже — только доступные вам переключатели.'
+  players-title: '<#46d9ee>Игроки'
+  players-body: '<#f5fbff>Найдите игрока на любом сервере сети или выберите его из списка.<newline><#9db0ba>Показано: <count>'
+  players-empty: '<#9db0ba>Подходящих игроков сейчас не найдено.'
+  players-input: '<#f5fbff>Ник игрока'
+  players-search-label: '<#ffca55>Найти игрока'
+  players-search-tooltip: '<#9db0ba>Применить фильтр'
+  player-label: '<#46d9ee><player>'
+  player-tooltip: '<#9db0ba>Сервер: <#46d9ee><server>'
+  player-server-unknown: 'неизвестен'
+  player-title: '<#46d9ee><player>'
+  player-body: '<#f5fbff><player><newline><#9db0ba>Сейчас на сервере <#46d9ee><server><#9db0ba>.<newline><newline><#f5fbff>Выберите действие.'
+  player-tpa-label: '<#46d9ee>Телепортироваться к нему'
+  player-tpahere-label: '<#46d9ee>Позвать к себе'
+  player-message-label: '<#7fe38b>Написать сообщение'
+  player-pay-label: '<#ffad52>Перевести деньги'
+  player-duel-label: '<#ff6b61>Вызвать на дуэль'
+  player-invite-label: '<#7fe38b>Пригласить в поселение'
+  message-title: '<#7fe38b>Сообщение · <player>'
+  message-body: '<#f5fbff>Напишите короткое личное сообщение для <#46d9ee><player><#f5fbff>.'
+  message-input: '<#f5fbff>Текст сообщения'
+  message-send-label: '<#7fe38b>Отправить'
+  invalid-message: '<#ff6b61>Сообщение должно занимать от 1 до 128 символов и быть в одну строку.'
+  pay-title: '<#ffad52>Перевод · <player>'
+  pay-body: '<#f5fbff>Укажите сумму. Перед переводом будет подтверждение.'
+  pay-input: '<#f5fbff>Сумма'
+  pay-continue-label: '<#ffad52>Проверить перевод'
+  pay-confirm-title: '<#ffad52>Подтверждение перевода'
+  pay-confirm-body: '<#f5fbff>Перевести <#ffad52><amount> <#f5fbff>игроку <#46d9ee><player><#f5fbff>?'
+  pay-confirm-label: '<#ff6b61>Подтвердить перевод'
+  invalid-amount: '<#ff6b61>Введите положительную сумму, не больше двух знаков после запятой.'
+  recovery-label: '<#ff6b61>Что случилось?'
+  recovery-tooltip: '<#dcecf2>Быстрые выходы, если вы застряли или потерялись.'
+  recovery-title: '<#ff6b61>Что случилось?'
+  recovery-body: '<#f5fbff>Выберите самое похожее действие.<newline><#9db0ba>Если не помогло — откройте поиск и опишите проблему своими словами.'
   category-body: '<#fff4df>Нажмите действие — команда выполнится от вашего имени.'
   command-label: '<#e5f1f5><label>'
   command-vote-label: '<#ffc247>Голосование'
@@ -84,7 +141,7 @@ text:
   command-chat-local-label: '<#4dd8f0>Локальный чат'
   command-tooltip: '<#fff4df><description><newline><#b6c4ca>/<command>'
 
-  travel-title: '<#ffc247><bold>Перемещения'
+  travel-title: '<#46d9ee>Перемещения'
   travel-loading: '<#fff4df>Загружаю ваши дома…'
   travel-body: '<#b6c4ca>Дома  <#fff4df><homes>/<max_homes><newline><#fff4df>Выберите дом или другое направление.'
   travel-empty: '<#fff4df>У вас пока нет домов. Создайте первый в текущей точке.'
@@ -94,11 +151,11 @@ text:
   home-tooltip: '<#fff4df><server> · <world><newline><#b6c4ca><x>, <y>, <z>'
   create-home-label: '<#ffc247>Новый дом'
   create-home-tooltip: '<#fff4df>Сохранить текущую точку.'
-  home-create-title: '<#ffc247><bold>Новый дом'
+  home-create-title: '<#ffca55>Новый дом'
   home-create-body: '<#fff4df>Введите короткое имя без пробелов.<newline><#b6c4ca>Дом будет создан в вашей текущей точке.'
   home-name-input: '<#fff4df>Название дома'
-  home-create-submit: '<#ffc247><bold>Создать'
-  home-title: '<#ffc247><bold>Дом · <home>'
+  home-create-submit: '<#ffca55>Создать'
+  home-title: '<#46d9ee>Дом · <home>'
   home-body: '<#b6c4ca>Сервер       <#fff4df><server><newline><#b6c4ca>Мир         <#fff4df><world><newline><#b6c4ca>Координаты  <#fff4df><x>, <y>, <z>'
   home-teleport-label: '<#ffc247>Телепортироваться'
   home-teleport-tooltip: '<#fff4df>Переместиться в сохранённую точку.'
@@ -106,10 +163,10 @@ text:
   home-relocate-tooltip: '<#fff4df>Заменить точку вашим текущим положением. Потребуется подтверждение.'
   home-delete-label: '<#d96b63><bold>Удалить дом'
   home-delete-tooltip: '<#fff4df>Удалить сохранённую точку. Потребуется подтверждение.'
-  home-relocate-title: '<#ffc247><bold>Перенести · <home>'
+  home-relocate-title: '<#ffca55>Перенести · <home>'
   home-relocate-body: '<#fff4df>Заменить сохранённую точку дома <#ffc247><home> <#fff4df>вашим текущим положением?'
-  home-relocate-confirm: '<#ffc247><bold>Перенести точку'
-  home-delete-title: '<#ffc247><bold>Удаление · <home>'
+  home-relocate-confirm: '<#ffca55>Перенести точку'
+  home-delete-title: '<#ff6b61>Удаление · <home>'
   home-delete-body: '<#d96b63><bold>Это необратимое действие.<newline><#fff4df>Дом <#ffc247><home> <#fff4df>будет удалён.'
   home-delete-confirm: '<#d96b63><bold>Удалить навсегда'
   warps-label: '<#4dd8f0>Варпы игроков'
@@ -136,14 +193,36 @@ commands:
   mining: { label: 'Мир добычи', description: 'Перейти в обновляемый ресурсный мир', keywords: 'шахта ресурсы' }
   biomes: { label: 'Мир новых биомов', description: 'Перейти в мир выживания с новыми биомами', keywords: 'новые биомы необычный мир база' }
   privat: { label: 'Поселения', description: 'Создание и защита территории', keywords: 'земля поселение lands приват защита' }
+  events: { label: 'События', description: 'Активные серверные события', keywords: 'ивенты события награды' }
+  duels: { label: 'Дуэли', description: 'Сразиться с другим игроком', keywords: 'пвп бой поединок' }
+  battle-pass: { label: 'Боевой пропуск', description: 'Задания и награды сезона', keywords: 'бп сезон пропуск награды' }
+  giveaways: { label: 'Розыгрыши', description: 'Активные розыгрыши сервера', keywords: 'giveaway конкурс приз' }
+  dungeons: { label: 'Подземелья', description: 'Меню подземелий и боссов', keywords: 'данж боссы элитные мобы' }
+  dungeon-portals: { label: 'Порталы подземелий', description: 'Телепорт к порталам приключений', keywords: 'данж портал гильдия' }
+  farms: { label: 'Фермы', description: 'Управление игровыми фермами', keywords: 'ферма урожай животные' }
   shops: { label: 'Магазины', description: 'Магазины игроков и сервера', keywords: 'рынок купить продать' }
   sell: { label: 'Быстрая продажа', description: 'Продать подходящие предметы', keywords: 'деньги рынок' }
   auction: { label: 'Аукцион', description: 'Торговля предметами между игроками', keywords: 'ah рынок купить продать' }
+  bank: { label: 'Банк', description: 'Открыть личный банковский счёт', keywords: 'деньги счет вклад' }
+  investments: { label: 'Инвестиции', description: 'Портфель и рынок акций', keywords: 'акции биржа портфель' }
   rank: { label: 'Ранги', description: 'Текущий ранг и следующие цели', keywords: 'уровень развитие' }
   rankup: { label: 'Повысить ранг', description: 'Проверить требования повышения', keywords: 'уровень развитие' }
   jobs: { label: 'Работы', description: 'Профессии и заработок', keywords: 'деньги профессия' }
   quests: { label: 'Задания', description: 'Активные задания и награды', keywords: 'квест развитие' }
   skills: { label: 'Навыки', description: 'Навыки и их развитие', keywords: 'auraskills способности развитие' }
+  slimefun: { label: 'Книга технологий', description: 'Открыть справочник Slimefun', keywords: 'slimefun сф механизмы рецепты' }
+  items: { label: 'Новые предметы', description: 'Каталог дополнительных предметов', keywords: 'itemsadder предметы рецепты' }
+  enchants: { label: 'Зачарования', description: 'Список особых зачарований', keywords: 'энчанты чары магия' }
+  enchanter: { label: 'Зачарователь', description: 'Магазин особых зачарований', keywords: 'купить чары энчанты' }
+  builder: { label: 'Инструменты строителя', description: 'Получить книгу инструментов', keywords: 'стройка билдер блоки' }
+  mounts: { label: 'Транспорт', description: 'Коллекция ездовых существ', keywords: 'маунты транспорт питомцы' }
+  lands-borders: { label: 'Границы поселения', description: 'Показать границы участка', keywords: 'чанки границы приват' }
+  trails-on: { label: 'Включить след', description: 'Показывать выбранный визуальный след', keywords: 'trail частицы эффект' }
+  trails-off: { label: 'Выключить след', description: 'Скрыть визуальный след', keywords: 'trail частицы эффект' }
+  trails-boost-on: { label: 'След при ускорении', description: 'Включить эффект быстрого движения', keywords: 'trail boost ускорение' }
+  trails-boost-off: { label: 'Убрать след ускорения', description: 'Выключить эффект быстрого движения', keywords: 'trail boost ускорение' }
+  particles: { label: 'Частицы', description: 'Включить или выключить личные частицы', keywords: 'эффекты партиклы' }
+  tpa-ignore: { label: 'Запросы телепорта', description: 'Включить или выключить входящие запросы', keywords: 'tpa запросы игнор' }
   vote: { label: 'Голосование', description: 'Открыть ссылки для голосования за сервер', keywords: 'vote votes голос голосование рейтинг награда мониторинг' }
   chat-global: { label: 'Глобальный чат', description: 'Переключить режим на глобальный чат', keywords: 'чат глобальный общий g всем писать' }
   chat-local: { label: 'Локальный чат', description: 'Переключить режим на локальный чат рядом', keywords: 'чат локальный рядом l местный писать' }
@@ -152,6 +231,8 @@ commands:
 # commands directly; the destination dialog owns selection and confirmation.
 intents:
   my: { label: 'Про меня', description: 'Открыть личный профиль, дома, поселения и прогресс', keywords: 'мой профиль баланс деньги координаты где я мои данные' }
+  player-find: { label: 'Найти игрока', description: 'Открыть действия с игроками онлайн на всей сети', keywords: 'игрок друг написать другу личка лс msg телепорт сообщение перевод дуэль пригласить' }
+  recovery: { label: 'Что случилось?', description: 'Быстрые действия, если вы застряли или потерялись', keywords: 'застрял потерялся умер не работает проблема помощь' }
   home-create: { label: 'Создать дом', description: 'Сохранить текущую точку как новый дом', keywords: 'поставить дом создать хом sethome сохранить точку' }
   home-move: { label: 'Перенести дом', description: 'Выбрать дом и заменить его сохранённую точку', keywords: 'передвинуть переместить перенести точку дома edithome' }
   home-delete: { label: 'Удалить дом', description: 'Выбрать сохранённый дом для удаления', keywords: 'удалить стереть снести дом хом delhome' }

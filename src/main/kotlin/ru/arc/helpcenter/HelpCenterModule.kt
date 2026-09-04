@@ -38,7 +38,13 @@ object HelpCenterModule : PluginModule {
             info("Help center module disabled by configuration")
             return
         }
-        controller = HelpCenterController(settings, BukkitHelpCenterGateway(), LandsUiModule::open)
+        controller = HelpCenterController(
+            settings,
+            BukkitHelpCenterGateway(),
+            LandsUiModule::open,
+        ) { player, target ->
+            LandsUiModule.openInvite(player, target.id, target.name)
+        }
         info("Help center module initialized")
     }
 }

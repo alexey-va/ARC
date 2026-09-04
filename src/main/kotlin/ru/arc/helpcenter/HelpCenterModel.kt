@@ -1,15 +1,24 @@
 package ru.arc.helpcenter
 
 import java.text.Normalizer
+import java.math.BigDecimal
 import java.util.Locale
+import java.util.UUID
+import ru.arc.network.NetworkPlayerName
 
 enum class HelpCenterPage(vararg val aliases: String) {
     ROOT("root", "главная"),
+    NOW("now", "сейчас"),
     MY("my", "мое", "моё", "про меня"),
     GUIDE("guide", "гайд", "start", "начало"),
     COMMANDS("commands", "команды"),
     TRAVEL("travel", "перемещения", "homes", "дома"),
     PRIVAT("privat", "приват", "lands", "земли"),
+    ACTIVITIES("activities", "активности", "играть"),
+    PLAYERS("players", "игроки", "друзья"),
+    TECHNOLOGY("technology", "технологии", "предметы"),
+    SETTINGS("settings", "настройки"),
+    RECOVERY("recovery", "проблема", "что случилось"),
     ;
 
     companion object {
@@ -24,14 +33,56 @@ enum class HelpCenterCategory(val configId: String) {
     START("start"),
     TRAVEL("travel"),
     PROTECTION("protection"),
+    ACTIVITIES("activities"),
     TRADE("trade"),
     PROGRESS("progress"),
-    SOCIAL("social");
+    SOCIAL("social"),
+    TECHNOLOGY("technology"),
+    SETTINGS("settings");
 
     companion object {
-        val rootHubs: List<HelpCenterCategory> = listOf(TRADE, PROGRESS, SOCIAL)
+        val rootHubs: List<HelpCenterCategory> = listOf(ACTIVITIES, TRADE, PROGRESS, TECHNOLOGY, SETTINGS)
     }
 }
+
+enum class HelpCenterFeature(val pluginName: String?) {
+    RANKS("ArcRanks"),
+    EVENTS("ArcEvents"),
+    DUELS("ArcDuels"),
+    BATTLE_PASS("BattlePass"),
+    GIVEAWAYS("ArcGiveaways"),
+    DUNGEONS("EliteMobs"),
+    FARMS("ArcFarms"),
+    SLIMEFUN("Slimefun"),
+    ITEMS("ItemsAdder"),
+    ENCHANTMENTS("AdvancedEnchantments"),
+    BUILDER("ArcBuilder"),
+    MOUNTS(null),
+    TRAILS("Trails"),
+    LANDS("Lands"),
+    VOTES("ArcVotes"),
+    BANK("Bank"),
+    PLAYER_PARTICLES("PlayerParticles"),
+    HUSK_HOMES("HuskHomes"),
+}
+
+enum class HelpCenterRecommendationId {
+    CREATE_HOME,
+    CREATE_LAND,
+    RANK_GOAL,
+    BATTLE_PASS,
+    EVENTS,
+}
+
+data class HelpCenterRecommendation(val id: HelpCenterRecommendationId)
+
+data class HelpCenterPlayer(
+    val id: UUID,
+    val name: String,
+    val server: String? = null,
+)
+
+enum class HelpCenterChatMode { LOCAL, GLOBAL }
 
 data class HelpCenterCommand(
     val id: String,
@@ -40,6 +91,8 @@ data class HelpCenterCommand(
     val label: String,
     val description: String,
     val keywords: String,
+    val requiredFeature: HelpCenterFeature? = null,
+    val permission: String? = null,
 )
 
 sealed interface HelpCenterSearchAction {
@@ -85,9 +138,50 @@ data class HelpCenterProfile(
     val rank: String?,
     val homes: HelpCenterHomes?,
     val lands: Int?,
+    val chatMode: HelpCenterChatMode = HelpCenterChatMode.LOCAL,
+    val onlinePlayers: Int = 0,
 )
 
 object HelpCenterPlanner {
+    fun recommendations(
+        profile: HelpCenterProfile,
+        features: Set<HelpCenterFeature>,
+        limit: Int,
+    ): List<HelpCenterRecommendation> {
+        require(limit in 1..8) { "Help center recommendation limit must be in 1..8" }
+        return buildList {
+            if (profile.homes?.usedSlots == 0) add(HelpCenterRecommendation(HelpCenterRecommendationId.CREATE_HOME))
+            if (profile.lands == 0 && HelpCenterFeature.LANDS in features) {
+                add(HelpCenterRecommendation(HelpCenterRecommendationId.CREATE_LAND))
+            }
+            if (profile.rank != null && HelpCenterFeature.RANKS in features) {
+                add(HelpCenterRecommendation(HelpCenterRecommendationId.RANK_GOAL))
+            }
+            if (HelpCenterFeature.BATTLE_PASS in features) {
+                add(HelpCenterRecommendation(HelpCenterRecommendationId.BATTLE_PASS))
+            }
+            if (HelpCenterFeature.EVENTS in features) add(HelpCenterRecommendation(HelpCenterRecommendationId.EVENTS))
+        }.take(limit)
+    }
+
+    fun players(
+        viewerId: UUID,
+        onlinePlayers: Collection<HelpCenterPlayer>,
+        query: String,
+        limit: Int,
+    ): List<HelpCenterPlayer> {
+        require(limit in 1..32) { "Help center player limit must be in 1..32" }
+        val needle = query.trim()
+        return onlinePlayers
+            .asSequence()
+            .filter { it.id != viewerId }
+            .filter { needle.isBlank() || it.name.contains(needle, ignoreCase = true) }
+            .distinctBy { it.id }
+            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+            .take(limit)
+            .toList()
+    }
+
     fun search(entries: List<HelpCenterSearchEntry>, query: String, limit: Int): List<HelpCenterSearchEntry> {
         require(limit in 1..32) { "Help center search limit must be in 1..32" }
         val needle = normalize(query).removePrefix("/")
@@ -296,6 +390,27 @@ object HelpCenterCommands {
 
     fun relocateHome(name: String): String = "edithome ${safeHome(name)} relocate"
 
+    fun teleportRequest(playerName: String): String = "tpa ${safePlayer(playerName)}"
+
+    fun teleportHere(playerName: String): String = "tpahere ${safePlayer(playerName)}"
+
+    fun duel(playerName: String): String = "duel ${safePlayer(playerName)}"
+
+    fun message(playerName: String, rawMessage: String): String {
+        require(rawMessage.none(Character::isISOControl)) { "Private message contains control characters" }
+        val message = rawMessage.trim().replace(WHITESPACE, " ")
+        require(message.isNotEmpty() && message.length <= 128) { "Private message must contain 1..128 characters" }
+        return "msg ${safePlayer(playerName)} $message"
+    }
+
+    fun pay(playerName: String, rawAmount: String): String {
+        val normalized = rawAmount.trim().replace(',', '.')
+        require(AMOUNT.matches(normalized)) { "Payment amount must be a positive decimal with at most two digits" }
+        val amount = BigDecimal(normalized).stripTrailingZeros()
+        require(amount > BigDecimal.ZERO && amount <= MAX_PAYMENT) { "Payment amount is outside the allowed range" }
+        return "pay ${safePlayer(playerName)} ${amount.toPlainString()}"
+    }
+
     fun execute(command: String): String {
         require(executable.matches(command)) { "Unsafe help center command" }
         return command
@@ -305,4 +420,10 @@ object HelpCenterCommands {
         require(homeName.matches(name)) { "Unsafe home name" }
         return name
     }
+
+    private fun safePlayer(name: String): String = NetworkPlayerName.of(name).value
+
+    private val WHITESPACE = Regex("\\s+")
+    private val AMOUNT = Regex("[0-9]{1,12}(?:\\.[0-9]{1,2})?")
+    private val MAX_PAYMENT = BigDecimal("999999999999.99")
 }

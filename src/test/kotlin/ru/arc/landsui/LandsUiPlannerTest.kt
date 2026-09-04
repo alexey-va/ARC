@@ -37,6 +37,16 @@ class LandsUiPlannerTest : StringSpec({
         LandsUiPlanner.createdLand(before, listOf(old)) shouldBe null
     }
 
+    "offers only settlements that do not already contain the invited player" {
+        val owner = UUID.randomUUID()
+        val target = UUID.randomUUID()
+        val existing = LandsUiLand("01KONE", "Берег", owner, 3, 64, setOf(owner, target), 8, 0.0, false)
+        val available = LandsUiLand("01KTWO", "Аванпост", owner, 1, 64, setOf(owner), 8, 0.0, true)
+
+        LandsUiPlanner.inviteableLands(target, listOf(existing, available)).map { it.name } shouldContainExactly
+            listOf("Аванпост")
+    }
+
     "builds safe Lands 8 selected-settlement commands" {
         LandsUiCommands.addMember("Alex_23") shouldBe "lands land member add Alex_23"
         LandsUiCommands.create("Новый_дом") shouldBe "lands create Новый_дом"

@@ -4,6 +4,7 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.entity.Player
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.whenCompleteSync
@@ -23,8 +24,10 @@ class HelpCenterController(
     private val settings: HelpCenterSettings,
     private val gateway: HelpCenterGateway,
     private val openLands: (Player) -> Unit,
+    private val inviteToLand: (Player, HelpCenterPlayer) -> Unit,
 ) {
     private val miniMessage = MiniMessage.miniMessage()
+    private val plainText = PlainTextComponentSerializer.plainText()
     private val tasks = LifecycleTaskScope()
     private val serial = AtomicLong()
     private val navigation = ConcurrentHashMap<UUID, Long>()
@@ -39,6 +42,8 @@ class HelpCenterController(
             configured.label,
             configured.description,
             configured.keywords,
+            definition.requiredFeature,
+            definition.permission,
         )
     }
     private val catalogById = catalog.associateBy { it.id }
@@ -82,7 +87,7 @@ class HelpCenterController(
     fun open(player: Player, page: HelpCenterPage = HelpCenterPage.ROOT) {
         when (page) {
             HelpCenterPage.ROOT -> openRoot(player)
-            HelpCenterPage.MY -> openMy(player)
+            HelpCenterPage.NOW, HelpCenterPage.MY -> openNow(player)
             HelpCenterPage.GUIDE -> openGuide(player)
             HelpCenterPage.COMMANDS -> openCommands(player)
             HelpCenterPage.TRAVEL -> openTravel(player)
@@ -90,6 +95,11 @@ class HelpCenterController(
                 markNavigation(player)
                 openLands(player)
             }
+            HelpCenterPage.ACTIVITIES -> openCategory(player, HelpCenterCategory.ACTIVITIES, returnToRoot = true)
+            HelpCenterPage.PLAYERS -> openPlayers(player)
+            HelpCenterPage.TECHNOLOGY -> openCategory(player, HelpCenterCategory.TECHNOLOGY, returnToRoot = true)
+            HelpCenterPage.SETTINGS -> openSettings(player)
+            HelpCenterPage.RECOVERY -> openRecovery(player)
         }
     }
 
@@ -101,40 +111,45 @@ class HelpCenterController(
                 title = text("root-title"),
                 body = listOf(PaperDialogBody(text("root-body"), width = 500)),
                 buttons = listOf(
-                    button("my", text("my-label"), text("my-tooltip")) { openMy(player) },
-                    button("guide", text("guide-label"), text("guide-tooltip")) { openGuide(player) },
-                    button("commands", text("commands-label"), text("commands-tooltip")) { openCommands(player) },
+                    button("now", text("now-label"), text("now-tooltip")) { openNow(player) },
+                    button("search", text("commands-label"), text("commands-tooltip")) { openCommands(player) },
                     button("travel", text("travel-label"), text("travel-tooltip")) { openTravel(player) },
                     button("privat", text("privat-label"), text("privat-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
-                ) + HelpCenterCategory.rootHubs.map { category ->
-                    rootCategoryButton(player, category)
-                } + listOf(
-                    button("main_menu", text("main-menu-label"), text("main-menu-tooltip")) { execute(player, "menu") }.closing(),
+                    rootCategoryButton(player, HelpCenterCategory.ACTIVITIES),
+                    rootCategoryButton(player, HelpCenterCategory.PROGRESS),
+                    rootCategoryButton(player, HelpCenterCategory.TRADE),
+                    button("players", text("players-label"), text("players-tooltip")) { openPlayers(player) },
+                    rootCategoryButton(player, HelpCenterCategory.TECHNOLOGY),
+                    button("settings", text("category-settings-label"), text("category-settings-tooltip")) { openSettings(player) },
                 ),
                 columns = 2,
             ),
         )
     }
 
-    private fun openMy(player: Player) {
+    private fun openNow(player: Player) {
         val token = markNavigation(player)
         ArcMenus.openDialog(
             player,
             PaperDialogScreen(
-                title = text("my-title"),
+                title = text("now-title"),
                 body = listOf(PaperDialogBody(text("my-loading"), width = 500)),
-                buttons = myButtons(player),
+                buttons = listOf(
+                    button("now_homes", text("my-homes-label")) { openTravel(player) },
+                    button("now_lands", text("my-lands-label")) { open(player, HelpCenterPage.PRIVAT) },
+                    button("now_guide", text("guide-label")) { openGuide(player) },
+                ),
                 exitButton = rootButton(player),
                 columns = 2,
             ),
         )
         gateway.loadProfile(player, settings.loadTimeoutSeconds).whenCompleteSync(tasks) { profile, failure ->
             if (!active || !player.isOnline || navigation[player.uniqueId] != token) return@whenCompleteSync
-            if (failure == null && profile != null) showMy(player, profile) else showMyFailure(player)
+            if (failure == null && profile != null) showNow(player, profile) else showMyFailure(player)
         }
     }
 
-    private fun showMy(player: Player, profile: HelpCenterProfile) {
+    private fun showNow(player: Player, profile: HelpCenterProfile) {
         val unavailable = settings.text("not-available")
         val placeholders = arrayOf(
             "player" to profile.playerName,
@@ -148,26 +163,43 @@ class HelpCenterController(
             "x" to profile.x.toString(),
             "y" to profile.y.toString(),
             "z" to profile.z.toString(),
+            "chat" to if (profile.chatMode == HelpCenterChatMode.GLOBAL) "глобальный" else "локальный",
+            "online" to profile.onlinePlayers.toString(),
         )
         ArcMenus.openDialog(
             player,
             PaperDialogScreen(
-                title = text("my-title"),
-                body = listOf("my-identity", "my-summary", "my-location").map { key ->
+                title = text("now-title"),
+                body = listOf("now-identity", "now-progress", "now-location").map { key ->
                     PaperDialogBody(text(key, *placeholders), width = 420)
                 },
-                buttons = myButtons(player),
+                buttons = recommendationButtons(player, profile) + listOf(
+                    button("now_homes", text("my-homes-label"), text("my-homes-tooltip")) { openTravel(player) },
+                    button("now_lands", text("my-lands-label"), text("my-lands-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
+                    button("now_guide", text("guide-label"), text("guide-tooltip")) { openGuide(player) },
+                ),
                 exitButton = rootButton(player),
                 columns = 2,
             ),
         )
     }
 
+    private fun recommendationButtons(player: Player, profile: HelpCenterProfile): List<PaperDialogButton> =
+        HelpCenterPlanner.recommendations(profile, gateway.features(), 4).map { recommendation ->
+            when (recommendation.id) {
+                HelpCenterRecommendationId.CREATE_HOME -> button("rec_home", text("rec-home-label")) { openCreateHome(player) }
+                HelpCenterRecommendationId.CREATE_LAND -> button("rec_land", text("rec-land-label")) { open(player, HelpCenterPage.PRIVAT) }
+                HelpCenterRecommendationId.RANK_GOAL -> button("rec_rank", text("rec-rank-label")) { execute(player, "rank why") }.closing()
+                HelpCenterRecommendationId.BATTLE_PASS -> button("rec_bp", text("rec-bp-label")) { execute(player, "bp") }.closing()
+                HelpCenterRecommendationId.EVENTS -> button("rec_events", text("rec-events-label")) { execute(player, "events") }.closing()
+            }
+        }
+
     private fun showMyFailure(player: Player) {
         ArcMenus.openDialog(
             player,
             PaperDialogScreen(
-                title = text("my-title"),
+                title = text("now-title"),
                 body = listOf(PaperDialogBody(text("my-error"), width = 500)),
                 buttons = myButtons(player),
                 exitButton = rootButton(player),
@@ -223,11 +255,173 @@ class HelpCenterController(
                     categoryButton(player, HelpCenterCategory.START),
                     categoryButton(player, HelpCenterCategory.TRAVEL),
                     categoryButton(player, HelpCenterCategory.PROTECTION),
+                    categoryButton(player, HelpCenterCategory.ACTIVITIES),
                     categoryButton(player, HelpCenterCategory.TRADE),
                     categoryButton(player, HelpCenterCategory.PROGRESS),
-                    categoryButton(player, HelpCenterCategory.SOCIAL),
+                    categoryButton(player, HelpCenterCategory.TECHNOLOGY),
+                    categoryButton(player, HelpCenterCategory.SETTINGS),
+                    button("recovery", text("recovery-label"), text("recovery-tooltip")) { openRecovery(player) },
                 ),
                 exitButton = rootButton(player),
+                columns = 2,
+            ),
+        )
+    }
+
+    private fun openPlayers(player: Player, rawQuery: String = "") {
+        markNavigation(player)
+        val query = rawQuery.trim()
+        val players = HelpCenterPlanner.players(player.uniqueId, gateway.onlinePlayers(), query, 12)
+        val body = mutableListOf(
+            PaperDialogBody(text("players-body", "count" to players.size.toString()), width = 500),
+        )
+        if (players.isEmpty()) body += PaperDialogBody(text("players-empty"))
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("players-title"),
+                body = body,
+                inputs = listOf(PaperDialogTextInput(PLAYER_SEARCH_INPUT, text("players-input"), initial = query, maxLength = 16)),
+                buttons = listOf(
+                    contextButton("find_player", text("players-search-label"), text("players-search-tooltip")) { context ->
+                        openPlayers(player, context.text(PLAYER_SEARCH_INPUT).orEmpty())
+                    },
+                ) + players.mapIndexed { index, target ->
+                    button(
+                        "player_$index",
+                        text("player-label", "player" to target.name),
+                        text("player-tooltip", "server" to (target.server ?: plainText("player-server-unknown"))),
+                    ) {
+                        openPlayer(player, target)
+                    }
+                },
+                exitButton = rootButton(player),
+                columns = 2,
+            ),
+        )
+    }
+
+    private fun openPlayer(player: Player, target: HelpCenterPlayer) {
+        markNavigation(player)
+        val buttons = mutableListOf(
+            button("tpa", text("player-tpa-label")) { execute(player, HelpCenterCommands.teleportRequest(target.name)) }.closing(),
+            button("tpahere", text("player-tpahere-label")) { execute(player, HelpCenterCommands.teleportHere(target.name)) }.closing(),
+            button("message", text("player-message-label")) { openPlayerMessage(player, target) },
+            button("pay", text("player-pay-label")) { openPlayerPayment(player, target) },
+        )
+        if (HelpCenterFeature.DUELS in gateway.features()) {
+            buttons += button("duel", text("player-duel-label")) { execute(player, HelpCenterCommands.duel(target.name)) }.closing()
+        }
+        if (HelpCenterFeature.LANDS in gateway.features()) {
+            buttons += button("invite", text("player-invite-label")) { inviteToLand(player, target) }
+        }
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("player-title", "player" to target.name),
+                body = listOf(
+                    PaperDialogBody(
+                        text(
+                            "player-body",
+                            "player" to target.name,
+                            "server" to (target.server ?: plainText("player-server-unknown")),
+                        ),
+                        width = 500,
+                    ),
+                ),
+                buttons = buttons,
+                exitButton = backButton("back", player, ::openPlayers),
+                columns = 2,
+            ),
+        )
+    }
+
+    private fun openPlayerMessage(player: Player, target: HelpCenterPlayer) {
+        markNavigation(player)
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("message-title", "player" to target.name),
+                body = listOf(PaperDialogBody(text("message-body", "player" to target.name))),
+                inputs = listOf(PaperDialogTextInput(MESSAGE_INPUT, text("message-input"), maxLength = 128)),
+                buttons = listOf(contextButton("send", text("message-send-label")) { context ->
+                    val command = runCatching { HelpCenterCommands.message(target.name, context.text(MESSAGE_INPUT).orEmpty()) }.getOrNull()
+                    if (command == null) {
+                        player.sendMessage(text("invalid-message"))
+                        openPlayerMessage(player, target)
+                    } else execute(player, command)
+                }.closing()),
+                exitButton = backButton("back", player, action = { openPlayer(it, target) }),
+            ),
+        )
+    }
+
+    private fun openPlayerPayment(player: Player, target: HelpCenterPlayer) {
+        markNavigation(player)
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("pay-title", "player" to target.name),
+                body = listOf(PaperDialogBody(text("pay-body", "player" to target.name))),
+                inputs = listOf(PaperDialogTextInput(AMOUNT_INPUT, text("pay-input"), maxLength = 16)),
+                buttons = listOf(contextButton("continue", text("pay-continue-label")) { context ->
+                    val rawAmount = context.text(AMOUNT_INPUT).orEmpty()
+                    val command = runCatching { HelpCenterCommands.pay(target.name, rawAmount) }.getOrNull()
+                    if (command == null) {
+                        player.sendMessage(text("invalid-amount"))
+                        openPlayerPayment(player, target)
+                    } else openPaymentConfirmation(player, target, rawAmount.replace(',', '.').trim(), command)
+                }),
+                exitButton = backButton("back", player, action = { openPlayer(it, target) }),
+            ),
+        )
+    }
+
+    private fun openPaymentConfirmation(player: Player, target: HelpCenterPlayer, amount: String, command: String) {
+        markNavigation(player)
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("pay-confirm-title"),
+                body = listOf(PaperDialogBody(text("pay-confirm-body", "player" to target.name, "amount" to amount))),
+                buttons = listOf(button("confirm", text("pay-confirm-label")) { execute(player, command) }.closing()),
+                exitButton = backButton("back", player, action = { openPlayerPayment(it, target) }),
+            ),
+        )
+    }
+
+    private fun openSettings(player: Player) {
+        markNavigation(player)
+        val global = ru.arc.chat.ChatModeService.getMode(player.uniqueId).name == "GLOBAL"
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("category-settings-title"),
+                body = listOf(PaperDialogBody(text("settings-body", "chat" to if (global) "глобальный" else "локальный"))),
+                buttons = listOf(
+                    if (global) button("chat_local", text("command-chat-local-label")) { execute(player, "l") }.closing()
+                    else button("chat_global", text("command-chat-global-label")) { execute(player, "g") }.closing(),
+                ) + availableCatalog(player).filter { it.category == HelpCenterCategory.SETTINGS && it.id !in setOf("chat-global", "chat-local") }.map { commandButton(player, it) },
+                exitButton = rootButton(player),
+                columns = 2,
+            ),
+        )
+    }
+
+    private fun openRecovery(player: Player) {
+        markNavigation(player)
+        ArcMenus.openDialog(
+            player,
+            PaperDialogScreen(
+                title = text("recovery-title"),
+                body = listOf(PaperDialogBody(text("recovery-body"), width = 500)),
+                buttons = listOf(
+                    button("stuck", text("stuck-label"), commandTooltip("stuck")) { execute(player, "stuck") }.closing(),
+                    button("homes", text("my-homes-label")) { openTravel(player) },
+                    button("lands", text("my-lands-label")) { open(player, HelpCenterPage.PRIVAT) },
+                    button("rules", text("rules-label"), commandTooltip("rules")) { execute(player, "rules") }.closing(),
+                ),
+                exitButton = backButton("back", player, ::openCommands),
                 columns = 2,
             ),
         )
@@ -236,7 +430,7 @@ class HelpCenterController(
     private fun openSearch(player: Player, rawQuery: String) {
         markNavigation(player)
         val query = rawQuery.trim()
-        val results = HelpCenterPlanner.search(searchCatalog, query, settings.maxSearchResults)
+        val results = HelpCenterPlanner.search(availableSearchCatalog(player), query, settings.maxSearchResults)
         val body = mutableListOf(
             PaperDialogBody(
                 text(
@@ -254,7 +448,7 @@ class HelpCenterController(
                 body = body,
                 buttons = results.map { searchResultButton(player, it) }.ifEmpty {
                     listOf(button("search_again", text("commands-label"), text("commands-tooltip")) { openCommands(player) })
-                },
+                } + listOf(button("recovery", text("recovery-label"), text("recovery-tooltip")) { openRecovery(player) }),
                 exitButton = backButton("back", player, ::openCommands),
                 columns = 2,
             ),
@@ -263,7 +457,7 @@ class HelpCenterController(
 
     private fun openCategory(player: Player, category: HelpCenterCategory, returnToRoot: Boolean = false) {
         markNavigation(player)
-        val entries = catalog.filter { it.category == category }
+        val entries = availableCatalog(player).filter { it.category == category }
         ArcMenus.openDialog(
             player,
             PaperDialogScreen(
@@ -510,6 +704,19 @@ class HelpCenterController(
         return text("command-tooltip", "description" to command.description, "command" to command.command)
     }
 
+    private fun availableCatalog(player: Player): List<HelpCenterCommand> {
+        val features = gateway.features()
+        return catalog.filter { command ->
+            (command.requiredFeature == null || command.requiredFeature in features) &&
+                (command.permission == null || player.hasPermission(command.permission))
+        }
+    }
+
+    private fun availableSearchCatalog(player: Player): List<HelpCenterSearchEntry> {
+        val availableIds = availableCatalog(player).mapTo(hashSetOf()) { it.id }
+        return searchCatalog.filter { entry -> entry.command == null || entry.id in availableIds }
+    }
+
     private fun rootButton(player: Player): PaperDialogButton = backButton("root", player, ::openRoot, "root-label")
 
     private fun backButton(
@@ -540,15 +747,26 @@ class HelpCenterController(
         TagResolver.resolver(placeholders.map { (name, value) -> Placeholder.unparsed(name, value) }),
     )
 
+    private fun plainText(key: String): String = plainText.serialize(text(key))
+
     private fun markNavigation(player: Player): Long = serial.incrementAndGet().also { navigation[player.uniqueId] = it }
 
-    private data class CommandDefinition(val id: String, val category: HelpCenterCategory, val command: String)
+    private data class CommandDefinition(
+        val id: String,
+        val category: HelpCenterCategory,
+        val command: String,
+        val requiredFeature: HelpCenterFeature? = null,
+        val permission: String? = null,
+    )
 
     private data class IntentDefinition(val id: String, val action: HelpCenterSearchAction)
 
     companion object {
         private val SEARCH_INPUT = PaperDialogInputId.of("search")
         private val HOME_INPUT = PaperDialogInputId.of("home_name")
+        private val PLAYER_SEARCH_INPUT = PaperDialogInputId.of("player_search")
+        private val MESSAGE_INPUT = PaperDialogInputId.of("message")
+        private val AMOUNT_INPUT = PaperDialogInputId.of("amount")
 
         private val DEFINITIONS = listOf(
             CommandDefinition("menu", HelpCenterCategory.START, "menu"),
@@ -564,21 +782,45 @@ class HelpCenterController(
             CommandDefinition("mining", HelpCenterCategory.TRAVEL, "mining"),
             CommandDefinition("biomes", HelpCenterCategory.TRAVEL, "pw survival"),
             CommandDefinition("privat", HelpCenterCategory.PROTECTION, "privat"),
+            CommandDefinition("events", HelpCenterCategory.ACTIVITIES, "events", HelpCenterFeature.EVENTS),
+            CommandDefinition("duels", HelpCenterCategory.ACTIVITIES, "duel", HelpCenterFeature.DUELS),
+            CommandDefinition("battle-pass", HelpCenterCategory.ACTIVITIES, "bp", HelpCenterFeature.BATTLE_PASS),
+            CommandDefinition("giveaways", HelpCenterCategory.ACTIVITIES, "giveaway", HelpCenterFeature.GIVEAWAYS),
+            CommandDefinition("dungeons", HelpCenterCategory.ACTIVITIES, "em", HelpCenterFeature.DUNGEONS),
+            CommandDefinition("dungeon-portals", HelpCenterCategory.ACTIVITIES, "pw aguild", HelpCenterFeature.DUNGEONS),
+            CommandDefinition("farms", HelpCenterCategory.ACTIVITIES, "arcfarms", HelpCenterFeature.FARMS),
+            CommandDefinition("vote", HelpCenterCategory.ACTIVITIES, "vote", HelpCenterFeature.VOTES),
             CommandDefinition("shops", HelpCenterCategory.TRADE, "shops"),
             CommandDefinition("sell", HelpCenterCategory.TRADE, "sell"),
             CommandDefinition("auction", HelpCenterCategory.TRADE, "ah"),
+            CommandDefinition("bank", HelpCenterCategory.TRADE, "bank open", HelpCenterFeature.BANK, "bank.open.command"),
+            CommandDefinition("investments", HelpCenterCategory.TRADE, "arc-invest"),
             CommandDefinition("rank", HelpCenterCategory.PROGRESS, "rank"),
             CommandDefinition("rankup", HelpCenterCategory.PROGRESS, "rankup"),
             CommandDefinition("jobs", HelpCenterCategory.PROGRESS, "jobsgui"),
             CommandDefinition("quests", HelpCenterCategory.PROGRESS, "quests"),
             CommandDefinition("skills", HelpCenterCategory.PROGRESS, "skills"),
-            CommandDefinition("vote", HelpCenterCategory.SOCIAL, "vote"),
-            CommandDefinition("chat-global", HelpCenterCategory.SOCIAL, "g"),
-            CommandDefinition("chat-local", HelpCenterCategory.SOCIAL, "l"),
+            CommandDefinition("slimefun", HelpCenterCategory.TECHNOLOGY, "sf open_guide", HelpCenterFeature.SLIMEFUN),
+            CommandDefinition("items", HelpCenterCategory.TECHNOLOGY, "ia", HelpCenterFeature.ITEMS, "ia.user.ia"),
+            CommandDefinition("enchants", HelpCenterCategory.TECHNOLOGY, "enchants", HelpCenterFeature.ENCHANTMENTS),
+            CommandDefinition("enchanter", HelpCenterCategory.TECHNOLOGY, "enchanter", HelpCenterFeature.ENCHANTMENTS),
+            CommandDefinition("builder", HelpCenterCategory.TECHNOLOGY, "builder book", HelpCenterFeature.BUILDER),
+            CommandDefinition("mounts", HelpCenterCategory.TECHNOLOGY, "mount", HelpCenterFeature.MOUNTS, "arc.mounts.use"),
+            CommandDefinition("chat-global", HelpCenterCategory.SETTINGS, "g"),
+            CommandDefinition("chat-local", HelpCenterCategory.SETTINGS, "l"),
+            CommandDefinition("lands-borders", HelpCenterCategory.SETTINGS, "lands view here", HelpCenterFeature.LANDS),
+            CommandDefinition("trails-on", HelpCenterCategory.SETTINGS, "trails on", HelpCenterFeature.TRAILS),
+            CommandDefinition("trails-off", HelpCenterCategory.SETTINGS, "trails off", HelpCenterFeature.TRAILS),
+            CommandDefinition("trails-boost-on", HelpCenterCategory.SETTINGS, "trails boost on", HelpCenterFeature.TRAILS),
+            CommandDefinition("trails-boost-off", HelpCenterCategory.SETTINGS, "trails boost off", HelpCenterFeature.TRAILS),
+            CommandDefinition("particles", HelpCenterCategory.SETTINGS, "pp toggle", HelpCenterFeature.PLAYER_PARTICLES),
+            CommandDefinition("tpa-ignore", HelpCenterCategory.SETTINGS, "huskhomes:tpignore", HelpCenterFeature.HUSK_HOMES),
         )
 
         private val INTENT_DEFINITIONS = listOf(
             IntentDefinition("my", HelpCenterSearchAction.OpenPage(HelpCenterPage.MY)),
+            IntentDefinition("player-find", HelpCenterSearchAction.OpenPage(HelpCenterPage.PLAYERS)),
+            IntentDefinition("recovery", HelpCenterSearchAction.OpenPage(HelpCenterPage.RECOVERY)),
             IntentDefinition("home-create", HelpCenterSearchAction.CreateHome),
             IntentDefinition("home-move", HelpCenterSearchAction.OpenPage(HelpCenterPage.TRAVEL)),
             IntentDefinition("home-delete", HelpCenterSearchAction.OpenPage(HelpCenterPage.TRAVEL)),

@@ -47,6 +47,13 @@ class LandsUiConfigTest : StringSpec({
                 "guide-expand-label",
                 "guide-members-label",
                 "guide-commands-label",
+                "root-title",
+                "details-title",
+                "create-title",
+                "created-title",
+                "members-title",
+                "territory-title",
+                "mainblock-title",
             ).forEach { key ->
                 MiniMessage.miniMessage().deserialize(settings.text(key)).containsBold() shouldBe false
             }
