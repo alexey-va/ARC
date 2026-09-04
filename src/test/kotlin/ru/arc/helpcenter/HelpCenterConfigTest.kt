@@ -5,6 +5,7 @@ import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldNot
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.contain
+import io.kotest.assertions.withClue
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.MiniMessage
@@ -83,8 +84,43 @@ class HelpCenterConfigTest : StringSpec({
             settings.command("skills").label.contains("Навыки") shouldBe true
             settings.command("vanilla").label.contains("Обычный мир") shouldBe true
             settings.command("biomes").label.contains("новых биомов") shouldBe true
+            settings.command("vote").description.contains("голос", ignoreCase = true) shouldBe true
+            settings.command("chat-global").description.contains("глобаль", ignoreCase = true) shouldBe true
+            settings.command("chat-local").description.contains("локаль", ignoreCase = true) shouldBe true
+            runCatching { settings.command("notes") }.isFailure shouldBe true
+            runCatching { settings.command("donate") }.isFailure shouldBe true
             runCatching { settings.command("build") }.isFailure shouldBe true
             settings.intent("land-delete").keywords.contains("удал") shouldBe true
+
+            listOf(
+                "kit-label",
+                "search-label",
+                "home-label",
+                "create-home-label",
+                "home-teleport-label",
+                "home-relocate-label",
+                "warps-label",
+                "spawn-label",
+                "rtp-label",
+                "back-command-label",
+                "stuck-label",
+                "vanilla-label",
+                "mining-label",
+                "biomes-label",
+                "public-homes-label",
+                "command-vote-label",
+                "command-chat-global-label",
+                "command-chat-local-label",
+            ).forEach { key ->
+                MiniMessage.miniMessage().deserialize(settings.text(key)).containsBold() shouldBe false
+            }
+            listOf("home-label", "warps-label", "spawn-label", "rtp-label", "back-command-label", "vanilla-label", "mining-label", "biomes-label")
+                .forEach { key ->
+                    withClue("$key: ${settings.text(key)}") {
+                        settings.text(key).contains("#4dd8f0") shouldBe true
+                    }
+                }
+            settings.text("back-command-label").contains("прежнее место", ignoreCase = true) shouldBe true
         } finally {
             ConfigManager.clear()
             root.toFile().deleteRecursively()

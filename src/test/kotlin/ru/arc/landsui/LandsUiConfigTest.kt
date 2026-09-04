@@ -2,6 +2,10 @@ package ru.arc.landsui
 
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.assertions.withClue
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.TextDecoration
+import net.kyori.adventure.text.minimessage.MiniMessage
 import ru.arc.config.ConfigManager
 import java.nio.file.Files
 
@@ -18,6 +22,40 @@ class LandsUiConfigTest : StringSpec({
             settings.text("guide-commands-body").contains("/lands land delete") shouldBe true
             settings.text("guide-body").contains("текущее поселение", ignoreCase = true) shouldBe true
             settings.text("created-body").contains("первый чанк") shouldBe true
+            listOf(
+                "land-label",
+                "land-selected-label",
+                "create-label",
+                "guide-label",
+                "help-label",
+                "open-lands-label",
+                "members-label",
+                "territory-label",
+                "rename-label",
+                "created-claim-label",
+                "created-details-label",
+                "add-member-label",
+                "member-label",
+                "candidate-label",
+                "claim-label",
+                "unclaim-label",
+                "setspawn-label",
+                "spawn-label",
+                "areas-label",
+                "mainblock-label",
+                "guide-create-label",
+                "guide-expand-label",
+                "guide-members-label",
+                "guide-commands-label",
+            ).forEach { key ->
+                MiniMessage.miniMessage().deserialize(settings.text(key)).containsBold() shouldBe false
+            }
+            withClue(settings.text("land-label")) {
+                settings.text("land-label").contains("#4dd8f0") shouldBe true
+            }
+            withClue(settings.text("land-selected-label")) {
+                settings.text("land-selected-label").contains("#5ee39c") shouldBe true
+            }
         } finally {
             ConfigManager.clear()
             root.toFile().deleteRecursively()
@@ -38,3 +76,6 @@ class LandsUiConfigTest : StringSpec({
         }
     }
 })
+
+private fun Component.containsBold(): Boolean =
+    decoration(TextDecoration.BOLD) == TextDecoration.State.TRUE || children().any(Component::containsBold)

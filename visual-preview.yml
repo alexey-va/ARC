@@ -109,6 +109,42 @@ sources:
       - create-tooltip
       - guide-label
       - guide-tooltip
+      - details-title
+      - details-body
+      - open-lands-label
+      - open-lands-tooltip
+      - members-label
+      - members-tooltip
+      - territory-label
+      - territory-tooltip
+      - rename-label
+      - rename-tooltip
+      - delete-label
+      - delete-tooltip
+      - territory-title
+      - territory-body
+      - claim-label
+      - claim-tooltip
+      - unclaim-label
+      - unclaim-tooltip
+      - setspawn-label
+      - setspawn-tooltip
+      - spawn-label
+      - spawn-tooltip
+      - areas-label
+      - areas-tooltip
+      - mainblock-label
+      - mainblock-tooltip
+      - guide-title
+      - guide-body
+      - guide-create-label
+      - guide-create-tooltip
+      - guide-expand-label
+      - guide-expand-tooltip
+      - guide-members-label
+      - guide-members-tooltip
+      - guide-commands-label
+      - guide-commands-tooltip
       - mainblock-title
       - mainblock-body
       - open-lands-label
@@ -171,11 +207,15 @@ sources:
       - category-trade-label
       - category-progress-label
       - category-social-label
+      - category-social-title
       - category-trade-tooltip
       - category-progress-tooltip
       - category-social-tooltip
       - category-body
       - command-label
+      - command-vote-label
+      - command-chat-global-label
+      - command-chat-local-label
       - command-tooltip
       - travel-title
       - travel-loading
@@ -272,6 +312,7 @@ placeholders:
   variant: тёмно-коричневый
   count: '2'
   land: Берёзовая_гавань
+  role: владелец
   chunks: '18'
   max_chunks: '32'
   selected: Берёзовая_гавань
@@ -325,6 +366,57 @@ surfaces:
         - {id: instructions, text-key: mainblock-body, width: 500}
       buttons:
         - {id: settings, text-key: open-lands-label, tooltip-key: open-lands-tooltip, width: 220}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: lands-details
+      source: lands-ui
+      format: reference-multi-action
+      name-key: details-title
+      external-title-key: details-title
+      columns: 2
+      body:
+        - {id: summary, text-key: details-body, width: 500, placeholders: {land: Берёзовая_гавань, role: владелец, chunks: 18, max_chunks: 30, members: 4, max_members: 8, balance: '8 000 000'}}
+      buttons:
+        - {id: settings, text-key: open-lands-label, tooltip-key: open-lands-tooltip, width: 190}
+        - {id: members, text-key: members-label, tooltip-key: members-tooltip, width: 190}
+        - {id: territory, text-key: territory-label, tooltip-key: territory-tooltip, width: 190}
+        - {id: rename, text-key: rename-label, tooltip-key: rename-tooltip, width: 190}
+        - {id: delete, text-key: delete-label, tooltip-key: delete-tooltip, width: 190}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: lands-territory
+      source: lands-ui
+      format: reference-multi-action
+      name-key: territory-title
+      external-title-key: territory-title
+      columns: 2
+      body:
+        - {id: summary, text-key: territory-body, width: 500, placeholders: {land: Берёзовая_гавань}}
+      buttons:
+        - {id: claim, text-key: claim-label, tooltip-key: claim-tooltip, width: 190}
+        - {id: unclaim, text-key: unclaim-label, tooltip-key: unclaim-tooltip, width: 190}
+        - {id: setspawn, text-key: setspawn-label, tooltip-key: setspawn-tooltip, width: 190}
+        - {id: spawn, text-key: spawn-label, tooltip-key: spawn-tooltip, width: 190}
+        - {id: areas, text-key: areas-label, tooltip-key: areas-tooltip, width: 190}
+        - {id: mainblock, text-key: mainblock-label, tooltip-key: mainblock-tooltip, width: 190}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: lands-guide
+      source: lands-ui
+      format: reference-multi-action
+      name-key: guide-title
+      external-title-key: guide-title
+      columns: 2
+      body:
+        - {id: intro, text-key: guide-body, width: 500}
+      buttons:
+        - {id: create, text-key: guide-create-label, tooltip-key: guide-create-tooltip, width: 190}
+        - {id: expand, text-key: guide-expand-label, tooltip-key: guide-expand-tooltip, width: 190}
+        - {id: members, text-key: guide-members-label, tooltip-key: guide-members-tooltip, width: 190}
+        - {id: commands, text-key: guide-commands-label, tooltip-key: guide-commands-tooltip, width: 190}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -442,6 +534,21 @@ surfaces:
       viewport: [854, 480]
       variants: [{id: default}]
 
+    - id: help-center-social
+      source: help-center
+      format: reference-multi-action
+      name-key: category-social-title
+      external-title-key: category-social-title
+      columns: 2
+      body:
+        - {id: intro, text-key: category-body, width: 500}
+      buttons:
+        - {id: vote, text-key: command-vote-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Открыть ссылки для голосования за сервер, command: vote}}
+        - {id: global, text-key: command-chat-global-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Переключить режим на глобальный чат, command: g}}
+        - {id: local, text-key: command-chat-local-label, tooltip-key: command-tooltip, width: 190, placeholders: {description: Переключить режим на локальный чат рядом, command: l}}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
     - id: help-center-search-empty
       source: help-center
       format: reference-multi-action
@@ -503,6 +610,7 @@ surfaces:
         - {id: stuck, text-key: stuck-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Аварийный возврат со сложного места, command: stuck}}
         - {id: vanilla, text-key: vanilla-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Перейти в обычный мир выживания, command: 'pw vanilla'}}
         - {id: mining, text-key: mining-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Перейти в обновляемый ресурсный мир, command: mining}}
+        - {id: biomes, text-key: biomes-label, tooltip-key: command-tooltip, width: 150, placeholders: {description: Перейти в мир выживания с новыми биомами, command: 'pw survival'}}
       viewport: [854, 480]
       variants: [{id: default}]
 

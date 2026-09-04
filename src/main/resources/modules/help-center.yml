@@ -46,17 +46,17 @@ text:
 
   guide-title: '<#ffc247><bold>С чего начать'
   guide-body: '<#ffc247><bold>1 · Стартовый набор</bold><newline><#fff4df>Получите первые инструменты и припасы.<newline><newline><#ffc247><bold>2 · Выберите мир</bold><newline><#fff4df>Обычный мир, мир добычи или мир новых биомов.<newline><newline><#ffc247><bold>3 · Начните зарабатывать</bold><newline><#fff4df>Выберите работу и получайте деньги за привычные действия.<newline><newline><#ffc247><bold>4 · Дом и поселение</bold><newline><#fff4df>Сохраните точку дома и защитите территорию поселением.'
-  kit-label: '<#ffc247><bold>Получить набор'
+  kit-label: '<#ffc247>Получить набор'
   vanilla-label: '<#4dd8f0>Обычный мир'
   mining-label: '<#4dd8f0>Мир добычи'
-  biomes-label: '<#5ee39c>Мир новых биомов'
+  biomes-label: '<#4dd8f0>Мир новых биомов'
   jobs-label: '<#ffc247>Выбрать работу'
   rules-label: '<#4f8cff>Правила'
 
   commands-title: '<#ffc247><bold>Команды и поиск'
   commands-body: '<#fff4df>Опишите, что хотите сделать, обычной фразой.<newline><#b6c4ca>Поиск понимает формы слов, близкие значения и небольшие опечатки.'
   search-input: '<#fff4df>Что вы хотите сделать?'
-  search-label: '<#ffc247><bold>Найти'
+  search-label: '<#ffc247>Найти'
   search-tooltip: '<#fff4df>Например: удалить поселение, перенести дом, добавить друга.'
   search-title: '<#ffc247><bold>Результаты поиска'
   search-body: '<#b6c4ca>Запрос  <#fff4df><query><newline><#b6c4ca>Найдено  <#fff4df><count>'
@@ -70,7 +70,7 @@ text:
   category-social-label: '<#38d9c3>Общение и сервер'
   category-trade-tooltip: '<#e5f1f5>Магазины, быстрая продажа и аукцион.'
   category-progress-tooltip: '<#e5f1f5>Ранг, работы, задания и навыки.'
-  category-social-tooltip: '<#e5f1f5>Заметки и поддержка сервера.'
+  category-social-tooltip: '<#e5f1f5>Голосование и выбор режима чата.'
   category-start-title: '<#ffc247><bold>Начало игры'
   category-travel-title: '<#ffc247><bold>Команды перемещения'
   category-protection-title: '<#ffc247><bold>Защита'
@@ -79,6 +79,9 @@ text:
   category-social-title: '<#ffc247><bold>Общение и сервер'
   category-body: '<#fff4df>Нажмите действие — команда выполнится от вашего имени.'
   command-label: '<#e5f1f5><label>'
+  command-vote-label: '<#ffc247>Голосование'
+  command-chat-global-label: '<#4dd8f0>Глобальный чат'
+  command-chat-local-label: '<#4dd8f0>Локальный чат'
   command-tooltip: '<#fff4df><description><newline><#b6c4ca>/<command>'
 
   travel-title: '<#ffc247><bold>Перемещения'
@@ -89,7 +92,7 @@ text:
   travel-error: '<#fff4df>Дома сейчас не загрузились, но остальные перемещения доступны.'
   home-label: '<#4dd8f0><home>'
   home-tooltip: '<#fff4df><server> · <world><newline><#b6c4ca><x>, <y>, <z>'
-  create-home-label: '<#ffc247><bold>Новый дом'
+  create-home-label: '<#ffc247>Новый дом'
   create-home-tooltip: '<#fff4df>Сохранить текущую точку.'
   home-create-title: '<#ffc247><bold>Новый дом'
   home-create-body: '<#fff4df>Введите короткое имя без пробелов.<newline><#b6c4ca>Дом будет создан в вашей текущей точке.'
@@ -97,7 +100,7 @@ text:
   home-create-submit: '<#ffc247><bold>Создать'
   home-title: '<#ffc247><bold>Дом · <home>'
   home-body: '<#b6c4ca>Сервер       <#fff4df><server><newline><#b6c4ca>Мир         <#fff4df><world><newline><#b6c4ca>Координаты  <#fff4df><x>, <y>, <z>'
-  home-teleport-label: '<#ffc247><bold>Телепортироваться'
+  home-teleport-label: '<#ffc247>Телепортироваться'
   home-teleport-tooltip: '<#fff4df>Переместиться в сохранённую точку.'
   home-relocate-label: '<#4dd8f0>Перенести сюда'
   home-relocate-tooltip: '<#fff4df>Заменить точку вашим текущим положением. Потребуется подтверждение.'
@@ -112,7 +115,7 @@ text:
   warps-label: '<#4dd8f0>Варпы игроков'
   spawn-label: '<#4dd8f0>Спавн'
   rtp-label: '<#4dd8f0>Случайное место'
-  back-command-label: '<#b6c4ca>Вернуться назад'
+  back-command-label: '<#4dd8f0>На прежнее место'
   stuck-label: '<#ffc247>Выбраться на спавн'
   public-homes-label: '<#4dd8f0>Публичные дома'
   public-homes-tooltip: '<#fff4df>Посмотреть открытые дома игроков.'
@@ -141,8 +144,9 @@ commands:
   jobs: { label: 'Работы', description: 'Профессии и заработок', keywords: 'деньги профессия' }
   quests: { label: 'Задания', description: 'Активные задания и награды', keywords: 'квест развитие' }
   skills: { label: 'Навыки', description: 'Навыки и их развитие', keywords: 'auraskills способности развитие' }
-  notes: { label: 'Заметки', description: 'Ваши серверные заметки', keywords: 'список записи' }
-  donate: { label: 'Поддержка и VIP', description: 'Возможности поддержки сервера', keywords: 'донат привилегии' }
+  vote: { label: 'Голосование', description: 'Открыть ссылки для голосования за сервер', keywords: 'vote votes голос голосование рейтинг награда мониторинг' }
+  chat-global: { label: 'Глобальный чат', description: 'Переключить режим на глобальный чат', keywords: 'чат глобальный общий g всем писать' }
+  chat-local: { label: 'Локальный чат', description: 'Переключить режим на локальный чат рядом', keywords: 'чат локальный рядом l местный писать' }
 
 # Search intents are safe navigation targets. They never execute destructive
 # commands directly; the destination dialog owns selection and confirmation.

@@ -469,9 +469,13 @@ class HelpCenterController(
         }
 
     private fun commandButton(player: Player, command: HelpCenterCommand): PaperDialogButton {
+        val label = when (command.id) {
+            "vote", "chat-global", "chat-local" -> text("command-${command.id}-label")
+            else -> text("command-label", "label" to command.label)
+        }
         val result = button(
             "command_${command.id}",
-            text("command-label", "label" to command.label),
+            label,
             text("command-tooltip", "description" to command.description, "command" to command.command),
         ) {
             if (command.id == "privat") open(player, HelpCenterPage.PRIVAT) else execute(player, command.command)
@@ -568,8 +572,9 @@ class HelpCenterController(
             CommandDefinition("jobs", HelpCenterCategory.PROGRESS, "jobsgui"),
             CommandDefinition("quests", HelpCenterCategory.PROGRESS, "quests"),
             CommandDefinition("skills", HelpCenterCategory.PROGRESS, "skills"),
-            CommandDefinition("notes", HelpCenterCategory.SOCIAL, "notes"),
-            CommandDefinition("donate", HelpCenterCategory.SOCIAL, "donate"),
+            CommandDefinition("vote", HelpCenterCategory.SOCIAL, "vote"),
+            CommandDefinition("chat-global", HelpCenterCategory.SOCIAL, "g"),
+            CommandDefinition("chat-local", HelpCenterCategory.SOCIAL, "l"),
         )
 
         private val INTENT_DEFINITIONS = listOf(

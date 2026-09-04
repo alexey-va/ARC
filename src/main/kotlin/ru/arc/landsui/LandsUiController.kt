@@ -85,12 +85,12 @@ class LandsUiController(
                 button("lands_menu", text("open-lands-label"), text("open-lands-tooltip")) {
                     executeForLand(player, land.id, LandsUiCommands::menu)
                 }.closing(),
-                button("members", text("members-label")) { openMembers(player, land.id) },
-                button("territory", text("territory-label")) { openTerritory(player, land.id) },
+                button("members", text("members-label"), text("members-tooltip")) { openMembers(player, land.id) },
+                button("territory", text("territory-label"), text("territory-tooltip")) { openTerritory(player, land.id) },
             )
             if (land.ownerId == player.uniqueId) {
-                buttons += button("rename", text("rename-label")) { openRename(player, land.id) }
-                buttons += button("delete", text("delete-label")) { openDanger(player, land.id) }
+                buttons += button("rename", text("rename-label"), text("rename-tooltip")) { openRename(player, land.id) }
+                buttons += button("delete", text("delete-label"), text("delete-tooltip")) { openDanger(player, land.id) }
             }
             ArcMenus.openDialog(
                 player,
@@ -270,12 +270,14 @@ class LandsUiController(
                     title = text("territory-title", "land" to land.name),
                     body = listOf(PaperDialogBody(text("territory-body", "land" to land.name))),
                     buttons = listOf(
-                        commandButton("claim", "claim-label", player, landId, "claim"),
-                        commandButton("unclaim", "unclaim-label", player, landId, "unclaim"),
-                        commandButton("setspawn", "setspawn-label", player, landId, "spawn", "set"),
-                        commandButton("spawn", "spawn-label", player, landId, "spawn"),
-                        commandButton("areas", "areas-label", player, landId, "area", "menu"),
-                        button("mainblock", text("mainblock-label")) { openMainblockGuide(player, landId) },
+                        commandButton("claim", "claim-label", "claim-tooltip", player, landId, "claim"),
+                        commandButton("unclaim", "unclaim-label", "unclaim-tooltip", player, landId, "unclaim"),
+                        commandButton("setspawn", "setspawn-label", "setspawn-tooltip", player, landId, "spawn", "set"),
+                        commandButton("spawn", "spawn-label", "spawn-tooltip", player, landId, "spawn"),
+                        commandButton("areas", "areas-label", "areas-tooltip", player, landId, "area", "menu"),
+                        button("mainblock", text("mainblock-label"), text("mainblock-tooltip")) {
+                            openMainblockGuide(player, landId)
+                        },
                     ),
                     exitButton = back("back") { openDetails(player, landId) },
                     columns = 2,
@@ -309,10 +311,10 @@ class LandsUiController(
                 title = text("guide-title"),
                 body = listOf(PaperDialogBody(text("guide-body"), width = 500)),
                 buttons = listOf(
-                    button("guide_create", text("guide-create-label")) { openCreationGuide(player) },
-                    button("guide_expand", text("guide-expand-label")) { openExpansionGuide(player) },
-                    button("guide_members", text("guide-members-label")) { openMembersGuide(player) },
-                    button("guide_commands", text("guide-commands-label")) { openCommandsGuide(player) },
+                    button("guide_create", text("guide-create-label"), text("guide-create-tooltip")) { openCreationGuide(player) },
+                    button("guide_expand", text("guide-expand-label"), text("guide-expand-tooltip")) { openExpansionGuide(player) },
+                    button("guide_members", text("guide-members-label"), text("guide-members-tooltip")) { openMembersGuide(player) },
+                    button("guide_commands", text("guide-commands-label"), text("guide-commands-tooltip")) { openCommandsGuide(player) },
                 ),
                 exitButton = back("back") { openRoot(player) },
                 columns = 2,
@@ -404,7 +406,7 @@ class LandsUiController(
                         ),
                     ),
                     buttons = listOf(
-                        commandButton("claim", "created-claim-label", player, land.id, "claim"),
+                        commandButton("claim", "created-claim-label", "claim-tooltip", player, land.id, "claim"),
                         button("details", text("created-details-label")) { openDetails(player, land.id) },
                     ),
                     exitButton = back("back") { openRoot(player) },
@@ -436,10 +438,11 @@ class LandsUiController(
     private fun commandButton(
         id: String,
         label: String,
+        tooltip: String,
         player: Player,
         landId: String,
         vararg arguments: String,
-    ): PaperDialogButton = button(id, text(label)) {
+    ): PaperDialogButton = button(id, text(label), text(tooltip)) {
         executeForLand(player, landId) { LandsUiCommands.land(*arguments) }
     }.closing()
 
