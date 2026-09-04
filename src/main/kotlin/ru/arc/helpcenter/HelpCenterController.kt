@@ -20,10 +20,11 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
-class HelpCenterController(
+internal class HelpCenterController(
     private val settings: HelpCenterSettings,
     private val gateway: HelpCenterGateway,
     private val openLands: (Player) -> Unit,
+    private val inventoryReturn: HelpCenterInventoryReturnRuntime,
     private val inviteToLand: (Player, HelpCenterPlayer) -> Unit,
 ) {
     private val miniMessage = MiniMessage.miniMessage()
@@ -44,6 +45,7 @@ class HelpCenterController(
             configured.keywords,
             definition.requiredFeature,
             definition.permission,
+            definition.opensInventory,
         )
     }
     private val catalogById = catalog.associateBy { it.id }
@@ -82,6 +84,7 @@ class HelpCenterController(
         active = false
         navigation.clear()
         tasks.close()
+        inventoryReturn.close()
     }
 
     fun open(player: Player, page: HelpCenterPage = HelpCenterPage.ROOT) {
@@ -190,8 +193,8 @@ class HelpCenterController(
                 HelpCenterRecommendationId.CREATE_HOME -> button("rec_home", text("rec-home-label")) { openCreateHome(player) }
                 HelpCenterRecommendationId.CREATE_LAND -> button("rec_land", text("rec-land-label")) { open(player, HelpCenterPage.PRIVAT) }
                 HelpCenterRecommendationId.RANK_GOAL -> button("rec_rank", text("rec-rank-label")) { execute(player, "rank why") }.closing()
-                HelpCenterRecommendationId.BATTLE_PASS -> button("rec_bp", text("rec-bp-label")) { execute(player, "bp") }.closing()
-                HelpCenterRecommendationId.EVENTS -> button("rec_events", text("rec-events-label")) { execute(player, "events") }.closing()
+                HelpCenterRecommendationId.BATTLE_PASS -> button("rec_bp", text("rec-bp-label")) { executeCatalog(player, "battle-pass") }.closing()
+                HelpCenterRecommendationId.EVENTS -> button("rec_events", text("rec-events-label")) { executeCatalog(player, "events") }.closing()
             }
         }
 
@@ -211,10 +214,10 @@ class HelpCenterController(
     private fun myButtons(player: Player): List<PaperDialogButton> = listOf(
         button("my_homes", text("my-homes-label"), text("my-homes-tooltip")) { openTravel(player) },
         button("my_lands", text("my-lands-label"), text("my-lands-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
-        button("my_rank", text("my-rank-label"), text("my-rank-tooltip")) { execute(player, "rank") }.closing(),
-        button("my_jobs", text("my-jobs-label"), text("my-jobs-tooltip")) { execute(player, "jobsgui") }.closing(),
-        button("my_quests", text("my-quests-label"), text("my-quests-tooltip")) { execute(player, "quests") }.closing(),
-        button("my_skills", text("my-skills-label"), text("my-skills-tooltip")) { execute(player, "skills") }.closing(),
+        button("my_rank", text("my-rank-label"), text("my-rank-tooltip")) { executeCatalog(player, "rank") }.closing(),
+        button("my_jobs", text("my-jobs-label"), text("my-jobs-tooltip")) { executeCatalog(player, "jobs") }.closing(),
+        button("my_quests", text("my-quests-label"), text("my-quests-tooltip")) { executeCatalog(player, "quests") }.closing(),
+        button("my_skills", text("my-skills-label"), text("my-skills-tooltip")) { executeCatalog(player, "skills") }.closing(),
     )
 
     private fun openGuide(player: Player) {
@@ -229,7 +232,7 @@ class HelpCenterController(
                     button("vanilla", text("vanilla-label"), commandTooltip("vanilla")) { execute(player, "pw vanilla") }.closing(),
                     button("mining", text("mining-label"), commandTooltip("mining")) { execute(player, "mining") }.closing(),
                     button("biomes", text("biomes-label"), commandTooltip("biomes")) { execute(player, "pw survival") }.closing(),
-                    button("jobs", text("jobs-label"), commandTooltip("jobs")) { execute(player, "jobsgui") }.closing(),
+                    button("jobs", text("jobs-label"), commandTooltip("jobs")) { executeCatalog(player, "jobs") }.closing(),
                     button("home", text("travel-label"), text("travel-tooltip")) { openTravel(player) },
                     button("privat", text("privat-label"), text("privat-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
                     button("rules", text("rules-label"), commandTooltip("rules")) { execute(player, "rules") }.closing(),
@@ -637,8 +640,8 @@ class HelpCenterController(
     }
 
     private fun travelButtons(player: Player): List<PaperDialogButton> = listOf(
-        button("warps", text("warps-label"), commandTooltip("warps")) { execute(player, "warps") }.closing(),
-        button("public_homes", text("public-homes-label"), text("public-homes-tooltip")) { execute(player, "phome") }.closing(),
+        button("warps", text("warps-label"), commandTooltip("warps")) { executeCatalog(player, "warps") }.closing(),
+        button("public_homes", text("public-homes-label"), text("public-homes-tooltip")) { executeInventory(player, "phome") }.closing(),
         button("spawn", text("spawn-label"), commandTooltip("spawn")) { execute(player, "spawn") }.closing(),
         button("rtp", text("rtp-label"), commandTooltip("rtp")) { execute(player, "rtp") }.closing(),
         button("back_command", text("back-command-label"), commandTooltip("back")) { execute(player, "back") }.closing(),
@@ -672,7 +675,7 @@ class HelpCenterController(
             label,
             text("command-tooltip", "description" to command.description, "command" to command.command),
         ) {
-            if (command.id == "privat") open(player, HelpCenterPage.PRIVAT) else execute(player, command.command)
+            if (command.id == "privat") open(player, HelpCenterPage.PRIVAT) else executeCommand(player, command)
         }
         return if (command.id == "privat") result else result.closing()
     }
@@ -686,7 +689,11 @@ class HelpCenterController(
             } ?: text("search-result-tooltip", "description" to entry.description),
         ) {
             when (val action = entry.action) {
-                is HelpCenterSearchAction.Execute -> execute(player, action.command)
+                is HelpCenterSearchAction.Execute -> {
+                    val command = catalogById[entry.id]
+                    if (command?.opensInventory == true) executeInventory(player, action.command)
+                    else execute(player, action.command)
+                }
                 is HelpCenterSearchAction.OpenPage -> open(player, action.page)
                 HelpCenterSearchAction.CreateHome -> openCreateHome(player)
             }
@@ -697,6 +704,30 @@ class HelpCenterController(
     private fun execute(player: Player, command: String) {
         markNavigation(player)
         if (!gateway.execute(player, command)) player.sendMessage(text("action-failed"))
+    }
+
+    private fun executeCommand(player: Player, command: HelpCenterCommand) {
+        if (command.opensInventory) executeInventory(player, command.command)
+        else execute(player, command.command)
+    }
+
+    private fun executeCatalog(player: Player, id: String) {
+        executeCommand(player, catalogById.getValue(id))
+    }
+
+    private fun executeInventory(player: Player, command: String) {
+        markNavigation(player)
+        inventoryReturn.arm(player) { HelpCenterModule.open(player) }
+        val executed = try {
+            gateway.execute(player, command)
+        } catch (failure: Throwable) {
+            inventoryReturn.cancel(player)
+            throw failure
+        }
+        if (!executed) {
+            inventoryReturn.cancel(player)
+            player.sendMessage(text("action-failed"))
+        }
     }
 
     private fun commandTooltip(id: String): Component {
@@ -757,6 +788,7 @@ class HelpCenterController(
         val command: String,
         val requiredFeature: HelpCenterFeature? = null,
         val permission: String? = null,
+        val opensInventory: Boolean = false,
     )
 
     private data class IntentDefinition(val id: String, val action: HelpCenterSearchAction)
@@ -773,7 +805,7 @@ class HelpCenterController(
             CommandDefinition("kit", HelpCenterCategory.START, "kit start"),
             CommandDefinition("rules", HelpCenterCategory.START, "rules"),
             CommandDefinition("tutorial", HelpCenterCategory.START, "tutorial"),
-            CommandDefinition("warps", HelpCenterCategory.TRAVEL, "warps"),
+            CommandDefinition("warps", HelpCenterCategory.TRAVEL, "warps", opensInventory = true),
             CommandDefinition("spawn", HelpCenterCategory.TRAVEL, "spawn"),
             CommandDefinition("rtp", HelpCenterCategory.TRAVEL, "rtp"),
             CommandDefinition("back", HelpCenterCategory.TRAVEL, "back"),
@@ -782,30 +814,99 @@ class HelpCenterController(
             CommandDefinition("mining", HelpCenterCategory.TRAVEL, "mining"),
             CommandDefinition("biomes", HelpCenterCategory.TRAVEL, "pw survival"),
             CommandDefinition("privat", HelpCenterCategory.PROTECTION, "privat"),
-            CommandDefinition("events", HelpCenterCategory.ACTIVITIES, "events", HelpCenterFeature.EVENTS),
-            CommandDefinition("duels", HelpCenterCategory.ACTIVITIES, "duel", HelpCenterFeature.DUELS),
-            CommandDefinition("battle-pass", HelpCenterCategory.ACTIVITIES, "bp", HelpCenterFeature.BATTLE_PASS),
+            CommandDefinition(
+                "events",
+                HelpCenterCategory.ACTIVITIES,
+                "events",
+                HelpCenterFeature.EVENTS,
+                opensInventory = true,
+            ),
+            CommandDefinition(
+                "duels",
+                HelpCenterCategory.ACTIVITIES,
+                "duel",
+                HelpCenterFeature.DUELS,
+                opensInventory = true,
+            ),
+            CommandDefinition(
+                "battle-pass",
+                HelpCenterCategory.ACTIVITIES,
+                "bp",
+                HelpCenterFeature.BATTLE_PASS,
+                opensInventory = true,
+            ),
             CommandDefinition("giveaways", HelpCenterCategory.ACTIVITIES, "giveaway", HelpCenterFeature.GIVEAWAYS),
-            CommandDefinition("dungeons", HelpCenterCategory.ACTIVITIES, "em", HelpCenterFeature.DUNGEONS),
+            CommandDefinition(
+                "dungeons",
+                HelpCenterCategory.ACTIVITIES,
+                "em",
+                HelpCenterFeature.DUNGEONS,
+                opensInventory = true,
+            ),
             CommandDefinition("dungeon-portals", HelpCenterCategory.ACTIVITIES, "pw aguild", HelpCenterFeature.DUNGEONS),
-            CommandDefinition("farms", HelpCenterCategory.ACTIVITIES, "arcfarms", HelpCenterFeature.FARMS),
+            CommandDefinition(
+                "farms",
+                HelpCenterCategory.ACTIVITIES,
+                "arcfarms",
+                HelpCenterFeature.FARMS,
+                opensInventory = true,
+            ),
             CommandDefinition("vote", HelpCenterCategory.ACTIVITIES, "vote", HelpCenterFeature.VOTES),
-            CommandDefinition("shops", HelpCenterCategory.TRADE, "shops"),
+            CommandDefinition("shops", HelpCenterCategory.TRADE, "shops", opensInventory = true),
             CommandDefinition("sell", HelpCenterCategory.TRADE, "sell"),
-            CommandDefinition("auction", HelpCenterCategory.TRADE, "ah"),
-            CommandDefinition("bank", HelpCenterCategory.TRADE, "bank open", HelpCenterFeature.BANK, "bank.open.command"),
-            CommandDefinition("investments", HelpCenterCategory.TRADE, "arc-invest"),
+            CommandDefinition("auction", HelpCenterCategory.TRADE, "ah", opensInventory = true),
+            CommandDefinition(
+                "bank",
+                HelpCenterCategory.TRADE,
+                "bank open",
+                HelpCenterFeature.BANK,
+                "bank.open.command",
+                opensInventory = true,
+            ),
+            CommandDefinition("investments", HelpCenterCategory.TRADE, "arc-invest", opensInventory = true),
             CommandDefinition("rank", HelpCenterCategory.PROGRESS, "rank"),
             CommandDefinition("rankup", HelpCenterCategory.PROGRESS, "rankup"),
-            CommandDefinition("jobs", HelpCenterCategory.PROGRESS, "jobsgui"),
-            CommandDefinition("quests", HelpCenterCategory.PROGRESS, "quests"),
-            CommandDefinition("skills", HelpCenterCategory.PROGRESS, "skills"),
-            CommandDefinition("slimefun", HelpCenterCategory.TECHNOLOGY, "sf open_guide", HelpCenterFeature.SLIMEFUN),
-            CommandDefinition("items", HelpCenterCategory.TECHNOLOGY, "ia", HelpCenterFeature.ITEMS, "ia.user.ia"),
-            CommandDefinition("enchants", HelpCenterCategory.TECHNOLOGY, "enchants", HelpCenterFeature.ENCHANTMENTS),
-            CommandDefinition("enchanter", HelpCenterCategory.TECHNOLOGY, "enchanter", HelpCenterFeature.ENCHANTMENTS),
+            CommandDefinition("jobs", HelpCenterCategory.PROGRESS, "jobsgui", opensInventory = true),
+            CommandDefinition("quests", HelpCenterCategory.PROGRESS, "quests", opensInventory = true),
+            CommandDefinition("skills", HelpCenterCategory.PROGRESS, "skills", opensInventory = true),
+            CommandDefinition(
+                "slimefun",
+                HelpCenterCategory.TECHNOLOGY,
+                "sf open_guide",
+                HelpCenterFeature.SLIMEFUN,
+                opensInventory = true,
+            ),
+            CommandDefinition(
+                "items",
+                HelpCenterCategory.TECHNOLOGY,
+                "ia",
+                HelpCenterFeature.ITEMS,
+                "ia.user.ia",
+                opensInventory = true,
+            ),
+            CommandDefinition(
+                "enchants",
+                HelpCenterCategory.TECHNOLOGY,
+                "enchants",
+                HelpCenterFeature.ENCHANTMENTS,
+                opensInventory = true,
+            ),
+            CommandDefinition(
+                "enchanter",
+                HelpCenterCategory.TECHNOLOGY,
+                "enchanter",
+                HelpCenterFeature.ENCHANTMENTS,
+                opensInventory = true,
+            ),
             CommandDefinition("builder", HelpCenterCategory.TECHNOLOGY, "builder book", HelpCenterFeature.BUILDER),
-            CommandDefinition("mounts", HelpCenterCategory.TECHNOLOGY, "mount", HelpCenterFeature.MOUNTS, "arc.mounts.use"),
+            CommandDefinition(
+                "mounts",
+                HelpCenterCategory.TECHNOLOGY,
+                "mount",
+                HelpCenterFeature.MOUNTS,
+                "arc.mounts.use",
+                opensInventory = true,
+            ),
             CommandDefinition("chat-global", HelpCenterCategory.SETTINGS, "g"),
             CommandDefinition("chat-local", HelpCenterCategory.SETTINGS, "l"),
             CommandDefinition("lands-borders", HelpCenterCategory.SETTINGS, "lands view here", HelpCenterFeature.LANDS),

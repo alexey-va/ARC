@@ -42,6 +42,7 @@ object HelpCenterModule : PluginModule {
             settings,
             BukkitHelpCenterGateway(),
             LandsUiModule::open,
+            HelpCenterInventoryReturnRuntime(ARC.instance),
         ) { player, target ->
             LandsUiModule.openInvite(player, target.id, target.name)
         }

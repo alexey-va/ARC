@@ -93,6 +93,7 @@ data class HelpCenterCommand(
     val keywords: String,
     val requiredFeature: HelpCenterFeature? = null,
     val permission: String? = null,
+    val opensInventory: Boolean = false,
 )
 
 sealed interface HelpCenterSearchAction {
