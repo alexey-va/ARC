@@ -26,7 +26,7 @@ class HelpCenterConfigTest : StringSpec({
             settings.maxHomes shouldBe 12
             settings.maxSearchResults shouldBe 8
             settings.text("root-title").contains("Главное меню") shouldBe true
-            settings.text("now-title").contains("Сейчас") shouldBe true
+            settings.text("now-title").contains("Про меня") shouldBe true
             val profileBodies = listOf(
                 settings.text("now-identity"),
                 settings.text("now-progress"),
@@ -87,9 +87,11 @@ class HelpCenterConfigTest : StringSpec({
                 MiniMessage.miniMessage().deserialize(settings.text(key)).containsBold() shouldBe false
             }
             settings.text("travel-body").contains("<homes>") shouldBe true
+            settings.text("travel-title").contains("Телепортация") shouldBe true
             settings.text("guide-body").contains("Мир строительства") shouldBe false
-            settings.command("privat").label.contains("Поселения") shouldBe true
+            settings.command("privat").label.contains("Приват") shouldBe true
             settings.command("privat").keywords.contains("посел") shouldBe true
+            settings.command("dungeons").label.contains("Данжи") shouldBe true
             settings.command("skills").label.contains("Навыки") shouldBe true
             settings.command("vanilla").label.contains("Обычный мир") shouldBe true
             settings.command("biomes").label.contains("новых биомов") shouldBe true

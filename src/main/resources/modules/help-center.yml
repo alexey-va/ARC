@@ -9,7 +9,7 @@ limits:
 text:
   root-title: '<#ffca55>Главное меню'
   root-body: '<#f5fbff>Куда идём?<newline><#9db0ba>Десять понятных разделов — без списка из сотни команд.'
-  now-label: '<#ffca55>Сейчас'
+  now-label: '<#ffca55>Про меня'
   now-tooltip: '<#dcecf2>Ваше состояние и полезные следующие шаги.'
   players-label: '<#46d9ee>Игроки'
   players-tooltip: '<#dcecf2>Телепорт, сообщение, перевод, дуэль или приглашение.'
@@ -19,16 +19,16 @@ text:
   guide-tooltip: '<#e5f1f5>Первые шаги без лишних команд.'
   commands-label: '<#4f8cff>Команды и поиск'
   commands-tooltip: '<#e5f1f5>Найти действие обычной фразой.'
-  travel-label: '<#4dd8f0>Перемещения'
+  travel-label: '<#4dd8f0>Телепортация'
   travel-tooltip: '<#e5f1f5>Дома, миры, варпы и возврат.'
-  privat-label: '<#5ee39c>Поселения'
+  privat-label: '<#5ee39c>Приват'
   privat-tooltip: '<#e5f1f5>Создание, территория, участники и подробный гайд.'
   main-menu-label: '<#b6c4ca>Главное меню'
   main-menu-tooltip: '<#e5f1f5>Открыть остальные игровые разделы сервера.'
   back-label: '<#b6c4ca>Назад'
   root-label: '<#b6c4ca>К разделам'
   not-available: '—'
-  now-title: '<#ffca55>Сейчас'
+  now-title: '<#ffca55>Про меня'
   now-identity: '<#ffca55><player><newline><#46d9ee>◆ <#9db0ba>Сервер  <#f5fbff><server><newline><#46d9ee>◆ <#9db0ba>Онлайн  <#f5fbff><online>'
   now-progress: '<#7fe38b>◆ <#9db0ba>Ранг  <#f5fbff><rank><newline><#ffad52>◆ <#9db0ba>Баланс  <#f5fbff><balance><newline><#46d9ee>◆ <#9db0ba>Дома  <#f5fbff><homes>/<max_homes><newline><#7fe38b>◆ <#9db0ba>Поселения  <#f5fbff><lands>'
   now-location: '<#46d9ee>◆ <#9db0ba>Мир  <#f5fbff><world><newline><#46d9ee>◆ <#9db0ba>Координаты  <#f5fbff><x>, <y>, <z><newline><#7fe38b>◆ <#9db0ba>Чат  <#f5fbff><chat>'
@@ -38,7 +38,7 @@ text:
   rec-bp-label: '<#ffad52>Боевой пропуск'
   rec-events-label: '<#ffca55>Текущие события'
 
-  my-title: '<#ffca55>Сейчас'
+  my-title: '<#ffca55>Про меня'
   my-loading: '<#e5f1f5>Собираю ваш профиль…'
   my-identity: '<#ffca55><player><newline><#9aaab2>Сервер: <#4dd8f0><server><newline><#9aaab2>Ранг: <#7fe38b><rank>'
   my-summary: '<#9aaab2>Баланс: <#ff9f43><balance><newline><#9aaab2>Дома: <#4dd8f0><homes>/<max_homes><newline><#9aaab2>Поселения: <#5ee39c><lands>'
@@ -76,7 +76,7 @@ text:
   search-empty: '<#fff4df>Не понял запрос. Опишите действие и объект: «перенести дом» или «добавить игрока».'
   search-result-tooltip: '<#fff4df><description><newline><#b6c4ca>Открыть нужный раздел'
   category-start-label: '<#ffc247>Начало игры'
-  category-travel-label: '<#4dd8f0>Перемещения'
+  category-travel-label: '<#4dd8f0>Телепортация'
   category-protection-label: '<#5ee39c>Защита'
   category-trade-label: '<#ff9f43>Торговля'
   category-progress-label: '<#a7e75f>Развитие'
@@ -84,14 +84,14 @@ text:
   category-activities-label: '<#ffad52>Активности'
   category-technology-label: '<#46d9ee>Технологии'
   category-settings-label: '<#7fe38b>Настройки'
-  category-activities-tooltip: '<#dcecf2>События, дуэли, подземелья и фермы.'
+  category-activities-tooltip: '<#dcecf2>События, дуэли, данжи и фермы.'
   category-technology-tooltip: '<#dcecf2>Предметы, зачарования, механизмы и транспорт.'
   category-settings-tooltip: '<#dcecf2>Чат, эффекты и личные переключатели.'
   category-trade-tooltip: '<#e5f1f5>Магазины, быстрая продажа и аукцион.'
   category-progress-tooltip: '<#e5f1f5>Ранг, работы, задания и навыки.'
   category-social-tooltip: '<#e5f1f5>Голосование и выбор режима чата.'
   category-start-title: '<#ffca55>Начало игры'
-  category-travel-title: '<#46d9ee>Перемещения'
+  category-travel-title: '<#46d9ee>Телепортация'
   category-protection-title: '<#7fe38b>Защита'
   category-trade-title: '<#ffad52>Торговля'
   category-progress-title: '<#7fe38b>Развитие'
@@ -141,12 +141,12 @@ text:
   command-chat-local-label: '<#4dd8f0>Локальный чат'
   command-tooltip: '<#fff4df><description><newline><#b6c4ca>/<command>'
 
-  travel-title: '<#46d9ee>Перемещения'
+  travel-title: '<#46d9ee>Телепортация'
   travel-loading: '<#fff4df>Загружаю ваши дома…'
   travel-body: '<#b6c4ca>Дома  <#fff4df><homes>/<max_homes><newline><#fff4df>Выберите дом или другое направление.'
   travel-empty: '<#fff4df>У вас пока нет домов. Создайте первый в текущей точке.'
   travel-limit: '<#b6c4ca>Свободных слотов нет. Удалите или перенесите существующий дом.'
-  travel-error: '<#fff4df>Дома сейчас не загрузились, но остальные перемещения доступны.'
+  travel-error: '<#fff4df>Дома сейчас не загрузились, но остальные способы телепортации доступны.'
   home-label: '<#4dd8f0><home>'
   home-tooltip: '<#fff4df><server> · <world><newline><#b6c4ca><x>, <y>, <z>'
   create-home-label: '<#ffc247>Новый дом'
@@ -192,13 +192,13 @@ commands:
   vanilla: { label: 'Обычный мир', description: 'Перейти в обычный мир выживания', keywords: 'ванильный стандартный мир ресурсы база' }
   mining: { label: 'Мир добычи', description: 'Перейти в обновляемый ресурсный мир', keywords: 'шахта ресурсы' }
   biomes: { label: 'Мир новых биомов', description: 'Перейти в мир выживания с новыми биомами', keywords: 'новые биомы необычный мир база' }
-  privat: { label: 'Поселения', description: 'Создание и защита территории', keywords: 'земля поселение lands приват защита' }
+  privat: { label: 'Приват', description: 'Создание и защита территории', keywords: 'земля поселение lands приват защита' }
   events: { label: 'События', description: 'Активные серверные события', keywords: 'ивенты события награды' }
   duels: { label: 'Дуэли', description: 'Сразиться с другим игроком', keywords: 'пвп бой поединок' }
   battle-pass: { label: 'Боевой пропуск', description: 'Задания и награды сезона', keywords: 'бп сезон пропуск награды' }
   giveaways: { label: 'Розыгрыши', description: 'Активные розыгрыши сервера', keywords: 'giveaway конкурс приз' }
-  dungeons: { label: 'Подземелья', description: 'Меню подземелий и боссов', keywords: 'данж боссы элитные мобы' }
-  dungeon-portals: { label: 'Порталы подземелий', description: 'Телепорт к порталам приключений', keywords: 'данж портал гильдия' }
+  dungeons: { label: 'Данжи', description: 'Меню данжей и боссов', keywords: 'данж подземелье боссы элитные мобы' }
+  dungeon-portals: { label: 'Порталы данжей', description: 'Телепорт к порталам приключений', keywords: 'данж подземелье портал гильдия' }
   farms: { label: 'Фермы', description: 'Управление игровыми фермами', keywords: 'ферма урожай животные' }
   shops: { label: 'Магазины', description: 'Магазины игроков и сервера', keywords: 'рынок купить продать' }
   sell: { label: 'Быстрая продажа', description: 'Продать подходящие предметы', keywords: 'деньги рынок' }

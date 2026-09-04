@@ -124,6 +124,8 @@ class HelpCenterPlannerTest : StringSpec({
     "resolves public help pages without exposing internal command help" {
         HelpCenterPage.from("travel") shouldBe HelpCenterPage.TRAVEL
         HelpCenterPage.from("перемещения") shouldBe HelpCenterPage.TRAVEL
+        HelpCenterPage.from("телепортация") shouldBe HelpCenterPage.TRAVEL
+        HelpCenterPage.from("телепорт") shouldBe HelpCenterPage.TRAVEL
         HelpCenterPage.from("моё") shouldBe HelpCenterPage.MY
         HelpCenterPage.from("мое") shouldBe HelpCenterPage.MY
         HelpCenterPage.from("про меня") shouldBe HelpCenterPage.MY

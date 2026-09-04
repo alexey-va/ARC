@@ -12,7 +12,7 @@ enum class HelpCenterPage(vararg val aliases: String) {
     MY("my", "мое", "моё", "про меня"),
     GUIDE("guide", "гайд", "start", "начало"),
     COMMANDS("commands", "команды"),
-    TRAVEL("travel", "перемещения", "homes", "дома"),
+    TRAVEL("travel", "перемещения", "телепортация", "телепорт", "homes", "дома"),
     PRIVAT("privat", "приват", "lands", "земли"),
     ACTIVITIES("activities", "активности", "играть"),
     PLAYERS("players", "игроки", "друзья"),
