@@ -1,7 +1,5 @@
 # Global Help Hub Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Build a compact dynamic ARC `/help` hub covering current tasks, activities, players, technology, settings and situational recovery.
 
 **Architecture:** Keep Paper dialog assembly in focused controller methods while moving command availability, recommendation priority, player filtering and typed command construction into pure Kotlin models. Extend the existing gateway only for current-node state and delegate settlement mutation to Lands UI so land selection remains explicit.

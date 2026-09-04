@@ -1,7 +1,5 @@
 # Mount Quick Summon Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Let a player select one favorite owned mount in `/mount` and summon it either with sneak + swap-hands or by right-clicking a reusable whistle.
 
 **Architecture:** Store the favorite as one exclusive direct LuckPerms permission under `arc.mounts.favorite.*`. Route menu summons, sneak + swap-hands, and whistle use through one `MountSummonService`, while a Paper listener owns input events and the whistle's persistent item marker.

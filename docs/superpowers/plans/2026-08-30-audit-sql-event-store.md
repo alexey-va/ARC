@@ -1,7 +1,5 @@
 # ARC SQL Audit Event Store Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Replace ARC's full-history Redis audit snapshots with an idempotent append-only MySQL event store and safely cut production over through dual-write verification.
 
 **Architecture:** `AuditService` emits immutable `AuditEvent` values into an `AuditEventStore`. Redis, SQL, and dual implementations share page, scan, retention, and diagnostics contracts; SQL scans feed a bounded summary accumulator. Production first reads Redis while dual-writing/importing, then switches to SQL without deleting rollback data.
