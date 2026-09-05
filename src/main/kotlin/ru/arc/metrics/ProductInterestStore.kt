@@ -41,6 +41,7 @@ class ProductInterestStore private constructor(
     private var uiDroppedEvents: Long = 0
     private var capacityEvictions: Long = 0
     private var resultObservationStartedAt: Long = lastSavedAt
+    private var engagementObservationStartedAt: Long = lastSavedAt
     private data class PlayerRecord(
         val id: String,
         var firstSeenAt: Long,
@@ -55,6 +56,8 @@ class ProductInterestStore private constructor(
 
     private data class DailyRecord(
         val date: String,
+        val engagementFirst: MutableMap<String, Long> = linkedMapOf(),
+        val engagementLast: MutableMap<String, Long> = linkedMapOf(),
         val ui: MutableMap<String, ProductUiRow> = linkedMapOf(),
         var sessions: Long = 0,
         var sessionSeconds: Long = 0,
@@ -108,6 +111,7 @@ class ProductInterestStore private constructor(
         val capacityEvictions: Long = 0,
         val uiDroppedEvents: Long = 0,
         val resultObservationStartedAt: Long? = null,
+        val engagementObservationStartedAt: Long? = null,
     )
 
     private data class PersistedPlayer(
@@ -124,6 +128,8 @@ class ProductInterestStore private constructor(
 
     private data class PersistedDay(
         val date: String? = null,
+        val engagementFirst: Map<String, Long>? = null,
+        val engagementLast: Map<String, Long>? = null,
         val ui: List<ProductUiRow>? = null,
         val sessions: Long = 0,
         val sessionSeconds: Long = 0,
@@ -296,9 +302,12 @@ class ProductInterestStore private constructor(
             }
         }
         if (connection != null) record.days.values.forEach { it.recentTrail.clear() }
-        val mutated = changed || trailChanged || networkExitChanged
+        val engagementChanged = ProductEngagementObservations.key(signal)?.let {
+            day.observeEngagement(it, signal.occurredAt)
+        } ?: false
+        val mutated = changed || trailChanged || networkExitChanged || engagementChanged
         if (mutated) markDirty()
-        return ProductStoreApplyResult(changed, before)
+        return ProductStoreApplyResult(changed || engagementChanged, before)
     }
 
     /** Actual UI observations, independent from inferred command interest. */
@@ -315,6 +324,7 @@ class ProductInterestStore private constructor(
             markDirty()
             return false
         }
+        ProductEngagementObservations.keys(signal).forEach { day.observeEngagement(it, signal.occurredAt) }
         val row = day.ui.getOrPut(key) { ProductUiRow(signal.surface, signal.revision, signal.button, signal.feature) }
         row.add(signal.kind.name.lowercase())
         row.durationMillis += signal.durationMillis
@@ -554,6 +564,7 @@ class ProductInterestStore private constructor(
                 points += point("arc_product_activation_latency_seconds", "First-outcome latency among reached players only", row[key] as? Double ?: Double.NaN, scope, "within" to within, "quantile" to quantile)
             }
         }
+        points += engagement(now, config.retentionDays).metrics(scope)
         val allDays = players.values.flatMap { it.days.keys }.mapNotNull(::parseDate)
         points += point("arc_product_telemetry_state_players", "Pseudonymous players retained in product telemetry state", players.size, scope)
         points += point("arc_product_telemetry_state_days", "Player-day aggregates retained in product telemetry state", players.values.sumOf { it.days.size }, scope)
@@ -655,6 +666,8 @@ class ProductInterestStore private constructor(
             "cohortDefinition" to "Observed first visit to primary Paper entry node; not account registration",
             "ui" to uiReport(now, safeDays, safeLimit),
             "activation" to activationReport(now, safeDays),
+            "engagement" to (engagement(now, safeDays).report(safeLimit) + mapOf(
+                "complete" to (capacityEvictions == 0L && uiDroppedEvents == 0L && recoveredInvalidPath == null))),
             "retention" to retentionReport(end, safeDays),
             "privacy" to linkedMapOf(
                 "identity" to "SHA-256 pseudonyms retained internally; identities are not returned",
@@ -676,6 +689,25 @@ class ProductInterestStore private constructor(
                 .take(safeLimit).map(ReportExit::asMap),
         )
     }
+
+    private fun DailyRecord.observeEngagement(key: String, at: Long): Boolean {
+        // Normally implied by the UI row bound; also enforce after restoring bounded partial state.
+        if (key.startsWith("menu|") && key !in engagementFirst && engagementFirst.keys.count { it.startsWith("menu|") } >= 128) {
+            uiDroppedEvents++
+            markDirty()
+            return false
+        }
+        val firstChanged = engagementFirst.putIfEarlier(key, at)
+        val previous = engagementLast[key]
+        engagementLast[key] = maxOf(previous ?: at, at)
+        return firstChanged || previous != engagementLast[key]
+    }
+
+    private fun engagement(now: Long, days: Int) = ProductEngagementAnalysis(
+        players.values.map { player -> ProductEngagementPlayer(player.firstJoinAt, player.days.values.map { day ->
+            ProductEngagementDay(LocalDate.parse(day.date), day.sessions > 0, day.engagementFirst, day.engagementLast)
+        }) }, now, config.zoneId, engagementObservationStartedAt, days,
+    )
 
     private data class ReportDetail(
         val source: String,
@@ -1038,6 +1070,7 @@ class ProductInterestStore private constructor(
             capacityEvictions = capacityEvictions,
             uiDroppedEvents = uiDroppedEvents,
             resultObservationStartedAt = resultObservationStartedAt,
+            engagementObservationStartedAt = engagementObservationStartedAt,
             players =
                 players.values.sortedBy { it.id }.map { player ->
                     PersistedPlayer(
@@ -1057,6 +1090,8 @@ class ProductInterestStore private constructor(
     private fun persist(day: DailyRecord): PersistedDay =
         PersistedDay(
             date = day.date,
+            engagementFirst = day.engagementFirst.toSortedMap(),
+            engagementLast = day.engagementLast.toSortedMap(),
             ui = day.ui.values.map(ProductUiRow::copyForSave),
             sessions = day.sessions,
             sessionSeconds = day.sessionSeconds,
@@ -1185,7 +1220,9 @@ class ProductInterestStore private constructor(
                     it.uiDroppedEvents = model.uiDroppedEvents.coerceAtLeast(0)
                     it.resultObservationStartedAt = model.resultObservationStartedAt?.takeIf { at -> at in 0..now } ?: now
                     // Save the new observation boundary even before the first new player arrives.
-                    if (model.resultObservationStartedAt == null) it.markDirty()
+                    it.engagementObservationStartedAt = model.engagementObservationStartedAt?.takeIf { at -> at in 0..now } ?: now
+                    if (model.resultObservationStartedAt != it.resultObservationStartedAt ||
+                        model.engagementObservationStartedAt != it.engagementObservationStartedAt) it.markDirty()
                     it.prune(now)
                 }
             }.getOrElse {
@@ -1284,6 +1321,8 @@ class ProductInterestStore private constructor(
                     .toMutableList()
             return DailyRecord(
                 date = date,
+                engagementFirst = restoreEngagement(day.engagementFirst, date, zoneId),
+                engagementLast = restoreEngagement(day.engagementLast, date, zoneId),
                 ui = day.ui.orEmpty().filter { runCatching { it.valid() }.getOrDefault(false) }.take(128).associateBy { it.key }.toMutableMap(),
                 sessions = day.sessions,
                 sessionSeconds = day.sessionSeconds,
@@ -1310,6 +1349,12 @@ class ProductInterestStore private constructor(
                 recentTrail = recentTrail,
             )
         }
+
+        private fun restoreEngagement(values: Map<String, Long>?, date: String, zone: java.time.ZoneId): MutableMap<String, Long> =
+            values.orEmpty().filter { (key, at) -> ProductEngagementObservations.validKey(key) && at > 0 &&
+                Instant.ofEpochMilli(at).atZone(zone).toLocalDate().toString() == date
+            }.entries.take(128 + ProductEngagementObservations.mechanics.size * ProductEngagementObservations.stages.size)
+                .associate { it.key to it.value }.toMutableMap()
 
         private fun detailId(
             source: String,
