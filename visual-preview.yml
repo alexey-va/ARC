@@ -2,7 +2,7 @@ schema: 1
 plugin: ARC
 minecraft-version: 26.1.2
 minecraft-client-sha1: 4e618f09a0c649dde3fdf829df443ce0b8831e65
-gallery-accent: '#92bed8'
+gallery-accent: '#c8a477'
 
 resource-pack:
   url: https://storage.yandexcloud.net/ruscraftinresources/RusCraftingResource.zip
@@ -44,6 +44,10 @@ custom-items:
     model: assets/arc/models/gui/mount_category_swimming.json
 
 glyphs:
+  - character: ''
+    path: '@pack/assets/arc/textures/icons/mechanics/crafting_gear.png'
+    height: 9
+    ascent: 8
   - character: '💰'
     path: '@pack/assets/arc/textures/glyphs/coin.png'
     height: 9

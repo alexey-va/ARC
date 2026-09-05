@@ -131,12 +131,17 @@ class HelpCenterConfigTest : StringSpec({
                 "commands-label" to 0xb9bfd0,
                 "category-settings-label" to 0xb7a9cf,
             ).forEach { (key, color) ->
-                withClue(key) { MiniMessage.miniMessage().deserialize(settings.text(key)).color()?.value() shouldBe color }
+                withClue(key) {
+                    val component = MiniMessage.miniMessage().deserialize(settings.text(key))
+                    val label = if (key == "category-settings-label") component.children().last() else component
+                    label.color()?.value() shouldBe color
+                }
             }
             MiniMessage.miniMessage().deserialize(settings.text("root-title")).color()?.value() shouldBe 0xf4bd6a
             MiniMessage.miniMessage().deserialize(settings.text("pay-confirm-label")).color()?.value() shouldBe 0x2bba43
             MiniMessage.miniMessage().deserialize(settings.text("home-delete-confirm")).color()?.value() shouldBe 0xff6b61
             MiniMessage.miniMessage().deserialize(settings.text("back-label")).color()?.value() shouldBe 0x969696
+            MiniMessage.miniMessage().deserialize(settings.text("setting-chat-current")).color()?.value() shouldBe 0xc8a477
             settings.text("back-command-label").contains("прежнее место", ignoreCase = true) shouldBe true
             listOf(
                 "favorites-short-label",
