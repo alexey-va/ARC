@@ -27,6 +27,11 @@ class HelpCenterConfigTest : StringSpec({
             settings.maxSearchResults shouldBe 8
             settings.text("root-title").contains("Главное меню") shouldBe true
             settings.text("now-title").contains("Мой профиль") shouldBe true
+            val aliases = settings::text
+            resolveHelpCenterWorldLabel(HelpCenterWorldKind.VANILLA, "world", aliases) shouldBe "Ванильный мир"
+            resolveHelpCenterWorldLabel(HelpCenterWorldKind.OTHER, "world_nether", aliases) shouldBe "Нижний мир"
+            resolveHelpCenterWorldLabel(HelpCenterWorldKind.OTHER, "ag", aliases) shouldBe "Гильдия приключений"
+            resolveHelpCenterWorldLabel(HelpCenterWorldKind.OTHER, "unknown_internal_name", aliases) shouldBe "Другой мир"
             val profileBodies = listOf(
                 settings.text("now-identity"),
                 settings.text("now-progress"),
@@ -36,8 +41,9 @@ class HelpCenterConfigTest : StringSpec({
             profileBodies.joinToString().contains("<balance>") shouldBe true
             val renderedProfile = renderedProfileLines(profileBodies)
             renderedProfile shouldBe listOf(
-                "ArchitectureMax", "Сервер: survival · Онлайн: 27", "Ранг: Следопыт",
-                "Баланс: 8 000 000", "Дома: 3/8 · Приваты: 2", "Мир: classic_survival",
+                "ArchitectureMax", "Ранг: Следопыт", "Баланс: 8 000 000 💰", "Жетоны: 125 ",
+                "Дома: 3/8 · Приваты: 2 (47 чанков)",
+                "Мир: Ванильный мир",
                 "Координаты: -1842, 71, 3260", "Чат: локальный",
             )
             renderedProfile.forEach { line ->
@@ -188,10 +194,12 @@ private fun renderedProfileLines(source: List<String>): List<String> {
             "server" to "survival",
             "rank" to "Следопыт",
             "balance" to "8 000 000",
+            "tokens" to "125",
             "homes" to "3",
             "max_homes" to "8",
             "lands" to "2",
-            "world" to "classic_survival",
+            "claimed_chunks" to "47",
+            "world" to "Ванильный мир",
             "x" to "-1842",
             "y" to "71",
             "z" to "3260",

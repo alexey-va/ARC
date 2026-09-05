@@ -160,6 +160,9 @@ data class HelpCenterProfile(
     val lands: Int?,
     val chatMode: HelpCenterChatMode = HelpCenterChatMode.LOCAL,
     val onlinePlayers: Int = 0,
+    val tokens: String? = null,
+    val claimedChunks: Int? = null,
+    val worldKind: HelpCenterWorldKind = HelpCenterWorldKind.OTHER,
 )
 
 object HelpCenterPlanner {

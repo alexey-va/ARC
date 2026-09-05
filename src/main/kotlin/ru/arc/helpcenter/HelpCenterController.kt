@@ -198,18 +198,18 @@ internal class HelpCenterController(
         val unavailable = settings.text("not-available")
         val placeholders = arrayOf(
             "player" to profile.playerName,
-            "server" to profile.server,
             "rank" to (profile.rank ?: unavailable),
             "balance" to (profile.balance ?: unavailable),
+            "tokens" to (profile.tokens ?: unavailable),
             "homes" to (profile.homes?.usedSlots?.toString() ?: unavailable),
             "max_homes" to (profile.homes?.maxSlots?.toString() ?: unavailable),
             "lands" to (profile.lands?.toString() ?: unavailable),
-            "world" to profile.world,
+            "claimed_chunks" to (profile.claimedChunks?.toString() ?: unavailable),
+            "world" to worldLabel(profile.worldKind, profile.world),
             "x" to profile.x.toString(),
             "y" to profile.y.toString(),
             "z" to profile.z.toString(),
             "chat" to if (profile.chatMode == HelpCenterChatMode.GLOBAL) "глобальный" else "локальный",
-            "online" to profile.onlinePlayers.toString(),
         )
         showDialog(
             player,
@@ -232,6 +232,9 @@ internal class HelpCenterController(
             ),
         )
     }
+
+    private fun worldLabel(kind: HelpCenterWorldKind, raw: String): String =
+        resolveHelpCenterWorldLabel(kind, raw, settings::text)
 
     private fun recommendationButtons(player: Player, profile: HelpCenterProfile): List<PaperDialogButton> =
         HelpCenterPlanner.recommendations(profile, gateway.features(), 4).map { recommendation ->
@@ -1058,5 +1061,29 @@ internal class HelpCenterController(
             IntentDefinition("land-main-block", HelpCenterSearchAction.OpenPage(HelpCenterPage.PRIVAT)),
             IntentDefinition("land-claim", HelpCenterSearchAction.OpenPage(HelpCenterPage.PRIVAT)),
         )
+    }
+}
+
+internal fun resolveHelpCenterWorldLabel(
+    kind: HelpCenterWorldKind,
+    raw: String,
+    alias: (String) -> String,
+): String {
+    val world = raw.lowercase(java.util.Locale.ROOT)
+    return when {
+        world in setOf("spawn", "rc_origin_spawn") -> alias("world-alias-spawn")
+        world == "lobby" -> alias("world-alias-lobby")
+        world == "em_adventurers_guild" || world == "ag" -> alias("world-alias-adventure-guild")
+        world == "nether" || world.endsWith("_nether") -> alias("world-alias-nether")
+        world == "end" || world.endsWith("_the_end") -> alias("world-alias-end")
+        world.startsWith("em_") -> alias("world-alias-dungeon")
+        world.startsWith("parkour") -> alias("world-alias-parkour")
+        world == "survival" -> alias("world-alias-biomes")
+        else -> alias(when (kind) {
+            HelpCenterWorldKind.VANILLA -> "world-alias-vanilla"
+            HelpCenterWorldKind.NEW_BIOMES -> "world-alias-biomes"
+            HelpCenterWorldKind.MINING -> "world-alias-mining"
+            HelpCenterWorldKind.OTHER -> "world-alias-other"
+        })
     }
 }

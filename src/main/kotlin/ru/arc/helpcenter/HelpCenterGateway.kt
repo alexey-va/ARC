@@ -11,6 +11,7 @@ import org.bukkit.entity.Player
 import ru.arc.ARC
 import ru.arc.chat.ChatModeService
 import ru.arc.core.modules.EconomyModule
+import ru.arc.hooks.HookRegistry
 import ru.arc.lands.currentLands
 import ru.arc.util.TextUtil
 import ru.arc.util.displayNamePlain
@@ -68,6 +69,11 @@ class BukkitHelpCenterGateway : HelpCenterGateway {
 
     override fun loadProfile(player: Player, timeoutSeconds: Long): CompletableFuture<HelpCenterProfile> {
         val location = player.location
+        val landsSnapshot = runCatching {
+            if (!Bukkit.getPluginManager().isPluginEnabled("Lands")) return@runCatching null
+            LandsIntegration.of(ARC.instance).getLandPlayer(player.uniqueId)?.currentLands().orEmpty()
+                .filter { it.exists() }.toList()
+        }.getOrNull()
         val base = HelpCenterProfile(
             playerName = player.name,
             server = ARC.serverName?.takeIf(String::isNotBlank) ?: "—",
@@ -76,29 +82,34 @@ class BukkitHelpCenterGateway : HelpCenterGateway {
             y = floor(location.y).toInt(),
             z = floor(location.z).toInt(),
             balance = runCatching {
-                EconomyModule.getEconomy()?.getBalance(player)?.takeIf(Double::isFinite)?.let(TextUtil::formatAmount)
+                currencyBalance(player, "vault")
             }.getOrNull(),
             rank = runCatching {
-                if (!Bukkit.getPluginManager().isPluginEnabled("CMI")) return@runCatching null
-                CMI.getInstance().playerManager.getUser(player.uniqueId)?.rank?.name
+                if (!Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")) return@runCatching null
+                me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(player, "%arcranks_rank_name%")
+                    .trim()
+                    .replace(Regex("(?i)[&§][0-9A-FK-OR]"), "")
+                    .takeUnless { it.isBlank() || it.startsWith("%") || it in setOf("…", "?", "unknown") }
             }.getOrNull(),
             homes = null,
-            lands = runCatching {
-                if (!Bukkit.getPluginManager().isPluginEnabled("Lands")) return@runCatching null
-                LandsIntegration.of(ARC.instance)
-                    .getLandPlayer(player.uniqueId)
-                    ?.currentLands()
-                    .orEmpty()
-                    .count { it.exists() }
-            }.getOrNull(),
+            lands = landsSnapshot?.size,
             chatMode = if (ChatModeService.getMode(player.uniqueId).name == "GLOBAL") {
                 HelpCenterChatMode.GLOBAL
             } else {
                 HelpCenterChatMode.LOCAL
             },
             onlinePlayers = onlinePlayers().size,
+            tokens = runCatching { currencyBalance(player, "tokens") }.getOrNull(),
+            claimedChunks = landsSnapshot?.sumOf { it.chunksAmount },
+            worldKind = worldKind(location.world.name),
         )
         return loadHomes(player, timeoutSeconds).handle { homes, _ -> base.copy(homes = homes) }
+    }
+
+    private fun currencyBalance(player: Player, currencyName: String): String? {
+        val amount = HookRegistry.redisEcoHook?.getCachedBalance(player.uniqueId, currencyName)
+            ?: if (currencyName == "vault") EconomyModule.getEconomy()?.getBalance(player)?.takeIf(Double::isFinite) else null
+        return amount?.takeIf(Double::isFinite)?.let(TextUtil::formatAmount)
     }
 
     override fun pendingRequests(player: Player): HelpCenterPendingRequests {
