@@ -80,37 +80,31 @@ menus:
     personal-loot-1:
       schema-version: 1
       rows: 1
-      background: { template: background }
       regions:
         loot: { slots: ['0-8'] }
     personal-loot-2:
       schema-version: 1
       rows: 2
-      background: { template: background }
       regions:
         loot: { slots: ['0-17'] }
     personal-loot-3:
       schema-version: 1
       rows: 3
-      background: { template: background }
       regions:
         loot: { slots: ['0-26'] }
     personal-loot-4:
       schema-version: 1
       rows: 4
-      background: { template: background }
       regions:
         loot: { slots: ['0-35'] }
     personal-loot-5:
       schema-version: 1
       rows: 5
-      background: { template: background }
       regions:
         loot: { slots: ['0-44'] }
     personal-loot-6:
       schema-version: 1
       rows: 6
-      background: { template: background }
       regions:
         loot: { slots: ['0-53'] }
     parkour-root:
@@ -429,6 +423,21 @@ menus:
         store-items: { slots: ['0-44'] }
 
   templates:
+    personal-loot-cobblestone:
+      material: COBBLESTONE
+      name: '<italic:false><gray>Булыжник'
+      lore:
+        - '<italic:false><dark_gray>Декорация сундука'
+    personal-loot-dirt:
+      material: DIRT
+      name: '<italic:false><gray>Земля'
+      lore:
+        - '<italic:false><dark_gray>Декорация сундука'
+    personal-loot-stick:
+      material: STICK
+      name: '<italic:false><gray>Палочки'
+      lore:
+        - '<italic:false><dark_gray>Декорация сундука'
     personal-loot-cobweb:
       material: COBWEB
       name: '<italic:false><gray>Паутина'

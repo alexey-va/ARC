@@ -34,6 +34,22 @@ class StoreDataTest :
         }
 
         "StoreData" - {
+            "cloud edits reject stale and forbidden replacements without partial mutation" {
+                val store = StoreData(UUID.randomUUID(), size = 2)
+                val empty = store.getSlots()
+                val deposited = listOf(ItemStack(Material.DIAMOND, 4), null)
+                store.compareAndSetSlots(empty, deposited) shouldBe true
+                deposited[0]?.amount = 2
+                store.getSlots()[0]?.amount shouldBe 4
+                val before = store.getSlots()
+                store.compareAndSetSlots(before, listOf(null, ItemStack(Material.SHULKER_BOX))) shouldBe false
+                store.getSlots() shouldBe before
+                store.compareAndSetSlots(empty, listOf(null, null)) shouldBe false
+                store.getSlots() shouldBe before
+                store.compareAndSetSlots(before, listOf(null, null)) shouldBe true
+                store.getSlots() shouldBe empty
+            }
+
             "initialization" - {
                 "should create empty store with default size" {
                     val store = StoreData(UUID.randomUUID())

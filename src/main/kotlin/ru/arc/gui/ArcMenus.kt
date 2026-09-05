@@ -23,6 +23,9 @@ import ru.arc.paper.menu.PaperMenuRuntime
 import ru.arc.paper.menu.PaperMenuSession
 import ru.arc.paper.menu.PaperMenuTransferDecision
 import ru.arc.paper.menu.PaperMenuTransferHandler
+import ru.arc.paper.menu.PaperCloudStorage
+import ru.arc.paper.menu.PaperCloudStorageContent
+import ru.arc.paper.menu.PaperCloudStorageSession
 import java.nio.file.Path
 
 /**
@@ -56,6 +59,14 @@ object ArcMenus {
 
     fun current(): PaperMenuConfiguration =
         requireNotNull(runtime) { "ARC menu runtime is not initialized" }.current()
+
+    fun openStorage(
+        player: Player,
+        menu: MenuId,
+        region: MenuRegionId,
+        storage: PaperCloudStorage,
+        content: PaperCloudStorageContent,
+    ): PaperCloudStorageSession = requireNotNull(runtime).openStorage(player, menu, region, storage, content)
 
     fun openDialog(player: Player, screen: PaperDialogScreen) {
         requireNotNull(dialogRuntime) { "ARC dialog runtime is not initialized" }

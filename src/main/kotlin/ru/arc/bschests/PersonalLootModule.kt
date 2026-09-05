@@ -85,8 +85,21 @@ class CustomLootData(
 
     fun snapshotItems(): List<ItemStack?> =
         synchronized(this) {
-            items.map { it?.clone() }
+            items.map { it?.takeUnless { item -> item.type.isAir }?.clone() }
         }
+
+    /** Cloud loot may only remove items from their exact persisted slots. */
+    fun compareAndSetItems(expected: List<ItemStack?>, replacement: List<ItemStack?>): Boolean = synchronized(this) {
+        if (expected.size != items.size || replacement.size != items.size || snapshotItems() != expected) return@synchronized false
+        if (replacement.indices.any { slot ->
+                val next = replacement[slot]
+                val previous = expected[slot]
+                next != null && (previous == null || !next.isSimilar(previous) || next.amount !in 1..previous.amount)
+            }) return@synchronized false
+        items.clear()
+        items.addAll(replacement.map { it?.clone() })
+        true
+    }
 
     /**
      * Remove an item from the loot.

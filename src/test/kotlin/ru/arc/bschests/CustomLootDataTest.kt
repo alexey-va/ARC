@@ -13,6 +13,19 @@ import java.util.UUID
 class CustomLootDataTest :
     KotestTestBase({
         describe("CustomLootData") {
+            it("cloud edits remove from exact slots and reject stale or added loot atomically") {
+                val loot = lootWithAmounts(4, 4)
+                val before = loot.snapshotItems()
+                loot.compareAndSetItems(before, listOf(ItemStack(Material.DIAMOND, 5), null)).shouldBeFalse()
+                loot.snapshotItems() shouldBe before
+                val after = listOf(ItemStack(Material.DIAMOND, 2), null)
+                loot.compareAndSetItems(before, after).shouldBeTrue()
+                after[0]?.amount = 1
+                loot.snapshotItems()[0]?.amount shouldBe 2
+                loot.compareAndSetItems(before, listOf(null, null)).shouldBeFalse()
+                loot.snapshotItems()[0]?.amount shouldBe 2
+            }
+
             it("copies persisted state on merge") {
                 val playerId = UUID.randomUUID()
                 val chestId = UUID.randomUUID()

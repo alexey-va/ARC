@@ -1,81 +1,52 @@
 package ru.arc.bschests
 
-import org.bukkit.Material
-import org.bukkit.NamespacedKey
 import org.bukkit.entity.Player
-import org.bukkit.event.inventory.ClickType
-import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.inventory.ItemStack
 import ru.arc.ARC
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import ru.arc.gui.ArcMenuSchema
 import ru.arc.gui.ArcMenus
-import ru.arc.misc.VanillaPlayerStorageTransfer
+import ru.arc.paper.menu.PaperCloudStorage
+import ru.arc.paper.menu.PaperCloudStorageContent
+import ru.arc.paper.menu.PaperCloudStorageFailure
 import kotlin.random.Random
 
-/** Configured personal-loot screen with guarded, domain-backed item transfers. */
+/** Read-only cloud chest; backing rewards stay separate from decorative debris. */
 object LootGuiFactory {
-    private val config: Config by lazy {
-        ConfigManager.ofModule(ARC.instance.dataFolder.toPath(), "personalloot.yml")
-    }
+    private val config: Config
+        get() = ConfigManager.ofModule(ARC.instance.dataFolder.toPath(), "personalloot.yml")
 
-    fun open(
-        player: Player,
-        lootData: CustomLootData,
-    ) {
-        val itemSnapshot = lootData.snapshotItems()
-        val rows = calculateRows(itemSnapshot.size)
-        val menu = checkNotNull(ArcMenuSchema.PERSONAL_LOOT[rows])
-        val empty = checkNotNull(ArcMenus.background(menu))
-        val cobweb = ArcMenus.item("personal-loot-cobweb")
-        val entries = scatteredSlots(itemSnapshot.size, lootData.playerUuid.hashCode() xor lootData.chestUuid.hashCode()).map { index ->
-            val expected = itemSnapshot.getOrNull(index)
-            if (expected == null || expected.type.isAir) {
-                ArcMenus.entry(if (index in itemSnapshot.size until itemSnapshot.size + 2) cobweb else empty, enabled = false)
-            } else {
-                ArcMenus.entryWithContext(expected.clone(), acceptedClicks = setOf(ClickType.LEFT, ClickType.SHIFT_LEFT)) { click ->
-                    takeLoot(click.event, lootData, expected, index)
+    fun open(player: Player, lootData: CustomLootData) {
+        val count = lootData.snapshotItems().size
+        val menu = checkNotNull(ArcMenuSchema.PERSONAL_LOOT[calculateRows(count)])
+        val seed = lootData.playerUuid.hashCode() xor lootData.chestUuid.hashCode()
+        val order = scatteredSlots(count, seed)
+        val debris = listOf("cobweb", "cobblestone", "dirt", "stick").shuffled(Random(seed))
+        ArcMenus.openStorage(
+            player, menu, ArcMenuSchema.PERSONAL_LOOT_ITEMS,
+            object : PaperCloudStorage {
+                override fun snapshot(): List<ItemStack?> = lootData.snapshotItems()
+                override fun compareAndSet(expected: List<ItemStack?>, replacement: List<ItemStack?>): Boolean {
+                    if (!lootData.compareAndSetItems(expected, replacement)) return false
+                    PersonalLootModule.save(lootData)
+                    return true
                 }
-            }
-        }
-
-        ArcMenus.open(
-            player = player,
-            menu = menu,
-            title = config.component("gui.title", "<dark_gray>Лут данжа"),
-            regions = mapOf(ArcMenuSchema.PERSONAL_LOOT_ITEMS to entries),
+            },
+            PaperCloudStorageContent(
+                title = config.component("gui.title", "<dark_gray>Лут данжа"),
+                allowDeposits = false,
+                slotOrder = order,
+                decorations = debris.take((order.size - count).coerceAtLeast(0)).mapIndexed { offset, name ->
+                    count + offset to ArcMenus.item("personal-loot-$name")
+                }.toMap(),
+                onFailure = { viewer, reason ->
+                    if (reason == PaperCloudStorageFailure.FULL) {
+                        viewer.sendMessage(config.component("messages.inventory-full", "<red>В инвентаре нет места. Заберите предмет на курсор обычным кликом."))
+                    }
+                },
+            ),
         )
-    }
-
-    internal fun takeLoot(
-        event: InventoryClickEvent,
-        lootData: CustomLootData,
-        expected: ItemStack,
-        index: Int,
-    ): Boolean {
-        event.isCancelled = true
-        val currentItem = event.currentItem?.clone() ?: return false
-        // InventoryFramework adds its own UUID to the displayed stack only.
-        currentItem.editMeta { meta ->
-            meta.persistentDataContainer.remove(NamespacedKey(ARC.instance, "if-uuid"))
-        }
-        if (currentItem != expected) {
-            return false
-        }
-        if (event.click !in setOf(ClickType.LEFT, ClickType.SHIFT_LEFT)) return false
-        val player = event.whoClicked as? Player ?: return false
-        val transfer = VanillaPlayerStorageTransfer.planFull(player.inventory.storageContents, currentItem)
-            ?: run {
-                player.sendMessage(config.component("messages.inventory-full", "<red>Освободите место в инвентаре для всей стопки."))
-                return false
-            }
-        if (!lootData.removeItem(expected, index)) return false
-        PersonalLootModule.save(lootData)
-        // Commit both inventories while the native move stays cancelled.
-        transfer.updates.forEach { update -> player.inventory.setItem(update.slot, update.item) }
-        event.currentItem = null
-        return true
     }
 
     internal fun scatteredSlots(itemCount: Int, seed: Int): List<Int> {
@@ -83,6 +54,5 @@ object LootGuiFactory {
         return (0 until calculateRows(itemCount) * 9).shuffled(Random(seed))
     }
 
-    internal fun calculateRows(itemCount: Int): Int =
-        maxOf(3, minOf(6, (itemCount + 8) / 9))
+    internal fun calculateRows(itemCount: Int): Int = maxOf(3, minOf(6, (itemCount + 8) / 9))
 }

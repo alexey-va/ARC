@@ -9,7 +9,6 @@ import ru.arc.commands.arc.tabComplete
 import ru.arc.core.sync
 import ru.arc.misc.StoreGuiFactory
 import ru.arc.store.StoreManager
-import ru.arc.util.GuiUtils
 import ru.arc.util.Logging
 import ru.arc.xserver.playerlist.PlayerManager
 
@@ -104,7 +103,7 @@ object StoreSubCommand : SubCommand {
         // Открываем GUI
         StoreManager.getStoreAsync(uuid)
             .thenAccept { store ->
-                GuiUtils.constructAndShowAsync({ StoreGuiFactory.create(player, store) }, player, 0)
+                sync { if (player.isOnline) StoreGuiFactory.open(player, store) }
             }
             .exceptionally { e ->
                 Logging.error("[Store] Failed to load store for {}: {}", uuid, e.cause ?: e)

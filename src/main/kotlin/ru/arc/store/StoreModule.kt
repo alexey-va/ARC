@@ -65,6 +65,20 @@ class StoreData(
             }
         }
 
+    /** Atomically applies one cloud-chest edit without bypassing item restrictions. */
+    fun compareAndSetSlots(expected: List<ItemStack?>, replacement: List<ItemStack?>): Boolean = withLock {
+        if (expected.size != size || replacement.size != size || getSlots() != expected) return@withLock false
+        for (slot in replacement.indices) {
+            val next = replacement[slot] ?: continue
+            val previous = expected[slot]
+            val addsItems = previous == null || !next.isSimilar(previous) || next.amount > previous.amount
+            if (addsItems && (!isAllowed(next) || next.amount > next.maxStackSize)) return@withLock false
+            if (next.amount <= 0 || next.type.isAir) return@withLock false
+        }
+        itemList = ItemList().apply { addAll(replacement.map { it?.clone() }) }
+        true
+    }
+
     /**
      * Get a detached snapshot of one explicit store slot.
      */
