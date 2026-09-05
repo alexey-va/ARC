@@ -119,14 +119,6 @@ class ProductInterestTelemetry(
                 .tags("outcome", outcome.label, "activity", outcome.activity.label, "path", outcome.path.label)
                 .register(registry)
         }
-    private val abandonmentCounters =
-        listOf("before_menu", "before_path", "before_outcome").associateWith { stage ->
-            Counter
-                .builder("arc_product_abandonments")
-                .description("New-player sessions ending before a funnel stage")
-                .tag("stage", stage)
-                .register(registry)
-        }
     private val transportCounters =
         listOf("local", "publish_attempt", "publish_unavailable", "receive", "duplicate", "invalid").associateWith { result ->
             Counter
@@ -298,7 +290,10 @@ class ProductInterestTelemetry(
             return
         }
         recordLocal(signal(player, now, ProductEventKind.SESSION_START))
-        if (firstJoin) recordLocal(signal(player, now, ProductEventKind.FIRST_JOIN))
+        // A first visit to another backend is not a new network player.
+        if (firstJoin && (primaryAggregator || !config.networkEnabled)) {
+            recordLocal(signal(player, now, ProductEventKind.FIRST_JOIN))
+        }
         detail(player, now, ProductDetailType.WORLD, normalizedWorld(sample.worldName))
     }
 
@@ -703,7 +698,8 @@ class ProductInterestTelemetry(
         report["scope"] = if (primaryAggregator) "network" else "local-standby"
         report["primary"] = primaryAggregator
         report["networkReady"] = networkReady
-        report["complete"] = primaryAggregator && (!config.networkEnabled || networkReady)
+        report["complete"] = report["complete"] == true && primaryAggregator && (!config.networkEnabled || networkReady)
+        report["transportGuarantee"] = "Best-effort Redis pub/sub; current connectivity does not prove historical delivery"
         if (!primaryAggregator) report["warning"] = "Rolling network detail is exposed by the primary ARC node"
         return report
     }
@@ -760,7 +756,6 @@ class ProductInterestTelemetry(
             sessionActiveDuration.getValue(session.cohort).record(session.activeSeconds.coerceAtMost(durationSeconds), TimeUnit.SECONDS)
             sessionSystems.getValue(session.cohort).record(session.systems.size.toDouble())
             sessionActions.getValue(session.cohort).record(session.actionCount.toDouble())
-            if (session.cohort == ProductCohort.NEW) recordAbandonment(session.player)
         }
         val exitStage = exitStage(session.player)
         recordLocal(
@@ -792,18 +787,13 @@ class ProductInterestTelemetry(
         )
     }
 
-    private fun recordAbandonment(player: String) {
-        val stage = exitStage(player)
-        if (stage != ProductExitStage.ENGAGED) abandonmentCounters.getValue(stage.label).increment()
-    }
-
     private fun exitStage(player: String): ProductExitStage {
         val journey = store.journey(player) ?: return ProductExitStage.ENGAGED
         return when {
-            journey.firstMenuAt == null -> ProductExitStage.BEFORE_MENU
-            journey.firstPathAt.isEmpty() -> ProductExitStage.BEFORE_PATH
-            journey.firstOutcomeAt.isEmpty() -> ProductExitStage.BEFORE_OUTCOME
-            else -> ProductExitStage.ENGAGED
+            journey.firstOutcomeAt.isNotEmpty() -> ProductExitStage.ENGAGED
+            journey.firstPathAt.isNotEmpty() -> ProductExitStage.BEFORE_OUTCOME
+            journey.firstMenuAt != null -> ProductExitStage.BEFORE_PATH
+            else -> ProductExitStage.BEFORE_MENU
         }
     }
 
@@ -843,13 +833,23 @@ class ProductInterestTelemetry(
         signal: ProductSignal,
         before: ProductJourneySnapshot?,
     ) {
+        // Daily-set changes are not new lifetime milestones.
+        if (before?.firstJoinAt == null) return
+        when (signal.kind) {
+            ProductEventKind.MENU_OPEN -> if (before.firstMenuAt != null) return
+            ProductEventKind.PATH_INTEREST,
+            ProductEventKind.PATH_CHOICE,
+            -> if (signal.path in before.firstPathAt) return
+            ProductEventKind.MEANINGFUL_OUTCOME -> if (signal.path in before.firstOutcomeAt) return
+            else -> return
+        }
         val start =
             when (signal.kind) {
-                ProductEventKind.MENU_OPEN -> before?.firstJoinAt to LatencyMeterKey("join_to_menu", ProductPath.NONE)
+                ProductEventKind.MENU_OPEN -> before.firstJoinAt to LatencyMeterKey("join_to_menu", ProductPath.NONE)
                 ProductEventKind.PATH_INTEREST,
                 ProductEventKind.PATH_CHOICE,
-                -> before?.firstMenuAt to LatencyMeterKey("menu_to_path", signal.path)
-                ProductEventKind.MEANINGFUL_OUTCOME -> before?.firstPathAt?.get(signal.path) to LatencyMeterKey("path_to_outcome", signal.path)
+                -> before.firstMenuAt to LatencyMeterKey("menu_to_path", signal.path)
+                ProductEventKind.MEANINGFUL_OUTCOME -> before.firstPathAt[signal.path] to LatencyMeterKey("path_to_outcome", signal.path)
                 else -> return
             }
         val startedAt = start.first ?: return

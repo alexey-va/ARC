@@ -56,14 +56,14 @@ object OpsEconomyAuditHandlers {
                     "stockLiabilityShare" to if (bankKnownSupply + stockLiability > 0.0) stockLiability / (bankKnownSupply + stockLiability) else 0.0,
                     "scope" to "wallet + Bank + redeemable ARC stock account equity; other plugin-held currencies may still be absent",
                 )
-        }
+            }
         val hook = HookRegistry.redisEcoHook
         @Suppress("UNCHECKED_CAST")
         val bankTopBalances =
             (bankAudit["topKnownAccounts"] as? List<Map<String, Any?>>)
                 ?.takeIf { bankAudit["status"] == "ready" && bankAudit["complete"] == true }
         val topBalances =
-            if (!bankTopBalances.isNullOrEmpty()) {
+            if (bankTopBalances != null) {
                 Result.success(bankTopBalances)
             } else runCatching {
                 hook
@@ -91,9 +91,9 @@ object OpsEconomyAuditHandlers {
                     .orEmpty()
             }
         result["topBalances"] = topBalances.getOrDefault(emptyList())
-        result["topBalancesAvailable"] = hook != null && topBalances.isSuccess
+        result["topBalancesAvailable"] = bankTopBalances != null || (hook != null && topBalances.isSuccess)
         result["topBalancesCoverage"] =
-            if (!bankTopBalances.isNullOrEmpty()) {
+            if (bankTopBalances != null) {
                 "single-leader network snapshot across the RedisEconomy account cache"
             } else {
                 "fallback: vault-ranked accounts enriched with Bank; bank-only accounts outside the Vault top may be absent"

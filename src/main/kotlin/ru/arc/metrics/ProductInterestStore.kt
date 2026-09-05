@@ -101,6 +101,7 @@ class ProductInterestStore private constructor(
         val version: Int = 0,
         val savedAt: Long = 0,
         val players: List<PersistedPlayer>? = null,
+        val capacityEvictions: Long = 0,
     )
 
     private data class PersistedPlayer(
@@ -187,6 +188,19 @@ class ProductInterestStore private constructor(
         if (signal.occurredAt > record.lastSeenAt) markDirty()
         record.lastSeenAt = maxOf(record.lastSeenAt, signal.occurredAt)
         val day = record.day(dayKey(signal.occurredAt))
+        val connection = signal.detail
+            ?.takeIf { signal.kind == ProductEventKind.DETAIL && it.type == ProductDetailType.CONNECTION }
+            ?.key?.let { key -> TERMINAL_CONNECTIONS.firstOrNull { it.label == key } }
+        // Velocity alone confirms a network disconnect. Paper quits also include transfers.
+        val networkExitChanged = connection?.let {
+            val trail = record.days.values.flatMap { it.recentTrail }.sortedBy { it.occurredAt }.takeLast(MAX_TRAIL_STEPS)
+            fun last(kind: String) = trail.lastOrNull { it.step.startsWith("$kind=") }?.step?.substringAfter('=')
+            day.recordExit(signal.source, ProductExitContext(
+                server = last("server"), world = last("world"), command = last("command"),
+                npcId = last("npc"), connection = it, stage = record.exitStage(),
+                trail = trail.map { it.step },
+            ), config.maxDetailValuesPerPlayerDay)
+        } ?: false
         val trailChanged = day.recordTrail(signal)
         var changed = false
         when (signal.kind) {
@@ -256,13 +270,11 @@ class ProductInterestStore private constructor(
                         changed = day.recordExit(signal.source, it, config.maxDetailValuesPerPlayerDay) || changed
                     }
                 }
-                if (day.recentTrail.isNotEmpty()) {
-                    day.recentTrail.clear()
-                    changed = true
-                }
+                // Preserve the journey across Paper transfers until Velocity disconnects.
             }
         }
-        val mutated = changed || trailChanged
+        if (connection != null) record.days.values.forEach { it.recentTrail.clear() }
+        val mutated = changed || trailChanged || networkExitChanged
         if (mutated) markDirty()
         return ProductStoreApplyResult(changed, before)
     }
@@ -339,6 +351,7 @@ class ProductInterestStore private constructor(
         prune(now)
         val today = localDate(now)
         val points = mutableListOf<MetricPoint>()
+        points += point("arc_product_measurement_version", "Product measurement semantics version", 2, scope)
         WINDOWS.forEach { days ->
             val window = "${days}d"
             val start = today.minusDays(days.toLong() - 1)
@@ -413,8 +426,22 @@ class ProductInterestStore private constructor(
                 "window" to window,
             )
             addFunnel(points, records.map { it.first }, start, today, window, scope)
+            ProductExitStage.entries.forEach { stage ->
+                points += point("arc_product_network_exits", "Velocity-confirmed active disconnects by observed journey stage",
+                    records.sumOf { (_, daily) -> daily.sumOf { day -> day.exits.values.filter {
+                        it.connection == ProductConnection.DISCONNECT_ACTIVE.label && it.stage == stage.label
+                    }.sumOf { it.count } } }, scope, "window" to window, "stage" to stage.label)
+            }
         }
         addRetention(points, today, scope)
+        activationReport(now).forEach { row ->
+            val within = when (row["withinSeconds"]) { 600L -> "10m"; 3_600L -> "1h"; else -> "24h" }
+            points += point("arc_product_activation_eligible_players", "New players with the full first-outcome observation budget", row["eligiblePlayers"] as Int, scope, "within" to within)
+            points += point("arc_product_activation_reached_players", "New players reaching a confirmed outcome within budget", row["reachedPlayers"] as Int, scope, "within" to within)
+            listOf("0.5" to "medianSecondsAmongReached", "0.9" to "p90SecondsAmongReached").forEach { (quantile, key) ->
+                points += point("arc_product_activation_latency_seconds", "First-outcome latency among reached players only", row[key] as? Double ?: Double.NaN, scope, "within" to within, "quantile" to quantile)
+            }
+        }
         val allDays = players.values.flatMap { it.days.keys }.mapNotNull(::parseDate)
         points += point("arc_product_telemetry_state_players", "Pseudonymous players retained in product telemetry state", players.size, scope)
         points += point("arc_product_telemetry_state_days", "Player-day aggregates retained in product telemetry state", players.values.sumOf { it.days.size }, scope)
@@ -501,9 +528,20 @@ class ProductInterestStore private constructor(
 
         return linkedMapOf(
             "version" to VERSION,
+            "measurementVersion" to 2,
             "generatedAt" to now,
             "window" to linkedMapOf("days" to safeDays, "from" to start.toString(), "through" to end.toString()),
-            "complete" to true,
+            "complete" to (capacityEvictions == 0L && recoveredInvalidPath == null),
+            "quality" to linkedMapOf(
+                "capacityEvictionsSinceStartup" to capacityEvictions,
+                "recoveredInvalidState" to (recoveredInvalidPath != null),
+                "historyGuarantee" to "Bounded observed data; missing history cannot be reconstructed",
+                "sessionUnit" to "Paper backend visits, including server transfers",
+                "exitInterpretation" to "Observed context, not a proven reason for leaving",
+            ),
+            "cohortDefinition" to "Observed first visit to primary Paper entry node; not account registration",
+            "activation" to activationReport(now, safeDays),
+            "retention" to retentionReport(end, safeDays),
             "privacy" to linkedMapOf(
                 "identity" to "SHA-256 pseudonyms retained internally; identities are not returned",
                 "commands" to "command roots only; arguments are discarded before persistence",
@@ -515,10 +553,13 @@ class ProductInterestStore private constructor(
             "detailEvents" to selected.sumOf { (_, playerDays) -> playerDays.sumOf { day -> day.details.values.sumOf { bucket -> bucket.values.sumOf { it.count } } } },
             "dimensions" to dimensions,
             "exitContexts" to
-                exits.values
+                exits.values.filter { it.connection == null }
                     .sortedWith(compareByDescending<ReportExit> { it.sessions }.thenByDescending { it.players.size }.thenBy { it.source })
                     .take(safeLimit)
                     .map(ReportExit::asMap),
+            "networkExitContexts" to exits.values.filter { it.connection != null }
+                .sortedWith(compareByDescending<ReportExit> { it.sessions }.thenBy { it.source })
+                .take(safeLimit).map(ReportExit::asMap),
         )
     }
 
@@ -624,26 +665,52 @@ class ProductInterestStore private constructor(
         today: LocalDate,
         scope: String,
     ) {
-        val oldestRetainedCohort = today.minusDays(config.retentionDays.toLong() - 1)
-        listOf(1, 7).forEach { horizon ->
-            val eligible =
-                players.values.filter { player ->
-                    player.firstJoinAt?.let(::localDate)?.let { first ->
-                        !first.isBefore(oldestRetainedCohort) && !first.plusDays(horizon.toLong()).isAfter(today)
-                    } == true
-                }
-            val retained =
-                eligible.count { player ->
-                    val first = localDate(checkNotNull(player.firstJoinAt))
-                    if (horizon == 1) {
-                        player.days.containsKey(first.plusDays(1).toString())
-                    } else {
-                        player.days.keys.mapNotNull(::parseDate).any { day -> day.isAfter(first) && !day.isAfter(first.plusDays(7)) }
-                    }
-                }
-            points += point("arc_product_retention_eligible_players", "Mature first-join cohort size for retention", eligible.size, scope, "horizon" to "d$horizon")
-            points += point("arc_product_retained_players", "First-join players returning within the retention horizon", retained, scope, "horizon" to "d$horizon")
+        retentionReport(today).forEach { row ->
+            points += point("arc_product_retention_eligible_players", "First-join cohort with fully closed retention days", row.getValue("eligiblePlayers") as Int, scope, "horizon" to row.getValue("horizon").toString())
+            points += point("arc_product_retained_players", "Players starting a return visit in the specified retention period", row.getValue("returnedPlayers") as Int, scope, "horizon" to row.getValue("horizon").toString())
         }
+    }
+
+    private fun retentionReport(today: LocalDate, cohortDays: Int = config.retentionDays): List<Map<String, Any>> = listOf("d1", "d7", "w1").map { horizon ->
+        val days = if (horizon == "d1") 1L else 7L
+        val oldest = today.minusDays(cohortDays.toLong() - 1)
+        val eligible = players.values.filter { player -> player.firstJoinAt?.let(::localDate)?.let {
+            !it.isBefore(oldest) && it.plusDays(days).isBefore(today)
+        } == true }
+        val returned = eligible.count { player ->
+            val first = localDate(checkNotNull(player.firstJoinAt))
+            player.days.values.any { day ->
+                val date = LocalDate.parse(day.date)
+                day.sessions > 0 && if (horizon == "w1") date.isAfter(first) && !date.isAfter(first.plusDays(7))
+                else date == first.plusDays(days)
+            }
+        }
+        linkedMapOf("horizon" to horizon, "eligiblePlayers" to eligible.size, "returnedPlayers" to returned)
+    }
+
+    /** Fixed observation budgets avoid penalizing newcomers whose observation window is still open. */
+    private fun activationReport(now: Long, cohortDays: Int = config.retentionDays): List<Map<String, Any?>> = listOf(600L, 3_600L, 86_400L).map { budget ->
+        val oldest = localDate(now).minusDays(cohortDays.toLong() - 1)
+        val eligible = players.values.filter { player -> player.firstJoinAt?.let {
+            !localDate(it).isBefore(oldest) && it <= now - budget * 1_000
+        } == true }
+        val latencies = eligible.mapNotNull { player ->
+            val joined = checkNotNull(player.firstJoinAt)
+            player.firstOutcomeAt.values.filter { it >= joined }.minOrNull()?.let { (it - joined) / 1_000.0 }
+                ?.takeIf { it <= budget }
+        }.sorted()
+        fun percentile(fraction: Double): Double? = if (latencies.isEmpty()) null else
+            latencies[(kotlin.math.ceil(latencies.size * fraction).toInt() - 1).coerceAtLeast(0)]
+        linkedMapOf("withinSeconds" to budget, "eligiblePlayers" to eligible.size,
+            "reachedPlayers" to latencies.size, "withoutOutcomePlayers" to eligible.size - latencies.size,
+            "medianSecondsAmongReached" to percentile(0.5), "p90SecondsAmongReached" to percentile(0.9))
+    }
+
+    private fun PlayerRecord.exitStage(): ProductExitStage = when {
+        firstOutcomeAt.isNotEmpty() -> ProductExitStage.ENGAGED
+        firstPathAt.isNotEmpty() -> ProductExitStage.BEFORE_OUTCOME
+        firstMenuAt != null -> ProductExitStage.BEFORE_PATH
+        else -> ProductExitStage.BEFORE_MENU
     }
 
     private fun player(
@@ -769,7 +836,7 @@ class ProductInterestStore private constructor(
         maxValues: Int,
     ): Boolean {
         val aggregateTrail =
-            recentTrail
+            recentTrail.takeIf { exit.connection == null }.orEmpty()
                 .map(TrailRecord::step)
                 .takeIf { it.isNotEmpty() }
                 ?: exit.trail.takeLast(MAX_TRAIL_STEPS)
@@ -830,7 +897,7 @@ class ProductInterestStore private constructor(
             val keptIds = newest.mapTo(hashSetOf(), PersistedPlayer::id)
             retained.filter { it.id !in keptIds }.forEach { player -> player.id?.let { evicted[it] = player.lastSeenAt } }
             retained = newest.sortedBy(PersistedPlayer::id)
-            state = state.copy(players = retained)
+            state = state.copy(players = retained, capacityEvictions = initial.capacityEvictions + evicted.size)
             json = gson.toJson(state)
         }
         require(json.toByteArray(Charsets.UTF_8).size <= MAX_FILE_BYTES) {
@@ -854,6 +921,7 @@ class ProductInterestStore private constructor(
         StoreFile(
             version = VERSION,
             savedAt = now,
+            capacityEvictions = capacityEvictions,
             players =
                 players.values.sortedBy { it.id }.map { player ->
                     PersistedPlayer(
@@ -991,7 +1059,10 @@ class ProductInterestStore private constructor(
                         .forEach { day -> record.days[day.date] = day }
                     records[id] = record
                 }
-                ProductInterestStore(path, config, gson, records, model.savedAt.coerceAtMost(now)).also { it.prune(now) }
+                ProductInterestStore(path, config, gson, records, model.savedAt.coerceAtMost(now)).also {
+                    it.capacityEvictions = model.capacityEvictions.coerceAtLeast(0)
+                    it.prune(now)
+                }
             }.getOrElse {
                 val invalid = path.resolveSibling("${path.fileName}.invalid-$now")
                 Files.move(path, invalid, StandardCopyOption.REPLACE_EXISTING)

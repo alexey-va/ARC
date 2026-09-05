@@ -105,12 +105,45 @@ class ProductInterestTelemetryTest :
             telemetry.command(player, "/mm", now)
             now += 1_000
             telemetry.command(player, "/mm", now)
+            // A new calendar day changes the daily aggregate, but is not a first transition.
+            now += 24 * 60 * 60 * 1_000L
+            telemetry.command(player, "/mm", now)
 
             registry
                 .get("arc_product_funnel_latency")
                 .tags("transition", "join_to_menu", "path", "none")
                 .timer()
                 .count() shouldBe 1
+        }
+
+        "successful play does not require opening a menu to count as engaged" {
+            val now = Instant.parse("2026-08-16T12:00:00Z").toEpochMilli()
+            val registry = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
+            val telemetry = ProductInterestTelemetry(
+                registry, ProductInterestConfig(networkEnabled = false), "survival",
+                Files.createTempDirectory("product-direct-play-").resolve("state.json"), true,
+                clockMillis = { now },
+            )
+            val player = "direct-player"
+            telemetry.join(player, true, sample(player, "vanilla"), now = now)
+            telemetry.outcome(player, ProductOutcome.BUILDING_THRESHOLD, now = now + 1_000)
+            telemetry.leave(player, now + 2_000)
+            @Suppress("UNCHECKED_CAST")
+            val exits = telemetry.report(1, 20, false, now + 3_000)["exitContexts"] as List<Map<String, Any?>>
+            exits.single()["stage"] shouldBe "engaged"
+        }
+
+        "first visit to a secondary backend does not create a network newcomer" {
+            val now = Instant.parse("2026-08-16T12:00:00Z").toEpochMilli()
+            val telemetry = ProductInterestTelemetry(
+                PrometheusMeterRegistry(PrometheusConfig.DEFAULT), ProductInterestConfig(networkEnabled = true),
+                "survival", Files.createTempDirectory("product-backend-cohort-").resolve("state.json"), false,
+                clockMillis = { now },
+            )
+            telemetry.join("veteran", true, sample("veteran", "vanilla"), now = now)
+            @Suppress("UNCHECKED_CAST")
+            val activation = telemetry.report(1, 20, true, now + 3_600_000)["activation"] as List<Map<String, Any?>>
+            activation.first()["eligiblePlayers"] shouldBe 0
         }
 
         "accepts validated network detail once and rejects origin spoofing" {

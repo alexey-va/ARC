@@ -7,6 +7,10 @@ import kotlin.math.ceil
 private const val ACTIVITY_BUCKET_MILLIS = 5 * 60 * 1000L
 private const val ACTIVITY_BUCKET_MINUTES = 5
 
+private fun economyAccountKey(playerName: String, context: EconomyLedgerContext?): String =
+    context?.accountId?.trim()?.takeIf { it.isNotEmpty() }?.let { "account:$it" }
+        ?: "name:${playerName.trim().lowercase(Locale.ROOT)}"
+
 internal class MutableAuditStats(
     private val trackBalanceProfile: Boolean = false,
 ) {
@@ -437,6 +441,8 @@ internal fun buildAuditSummary(
     val sources = linkedMapOf<String, MutableAuditStats>()
     val actions = linkedMapOf<EconomyActionKey, MutableAuditStats>()
     val players = linkedMapOf<String, MutableAuditStats>()
+    val playerNames = linkedMapOf<String, String>()
+    val playerNameTimes = linkedMapOf<String, Long>()
     val unknownOrigins = linkedMapOf<String, MutableAuditStats>()
     var minted = 0.0
     var burned = 0.0
@@ -536,7 +542,11 @@ internal fun buildAuditSummary(
                 contextApplicable.merge("jobsBreakdown", 1L, Long::plus)
             }
             val action = transaction.normalizedAction.label
-            val accountKey = context?.accountId?.takeIf(String::isNotBlank) ?: auditData.name.lowercase()
+            val accountKey = economyAccountKey(auditData.name, context)
+            if (transaction.timestamp2 >= (playerNameTimes[accountKey] ?: Long.MIN_VALUE)) {
+                playerNameTimes[accountKey] = transaction.timestamp2
+                playerNames[accountKey] = auditData.name
+            }
             adminShopSales.add(accountKey, transaction)
             jobsRewards.add(accountKey, transaction)
             sources.computeIfAbsent(source) { MutableAuditStats(trackBalanceProfile = true) }
@@ -548,7 +558,7 @@ internal fun buildAuditSummary(
             }
             actions.computeIfAbsent(EconomyActionKey(source, action)) { MutableAuditStats(trackBalanceProfile = true) }
                 .add(accountKey, transaction, since)
-            players.computeIfAbsent(auditData.name) { MutableAuditStats() }.add(accountKey, transaction, since)
+            players.computeIfAbsent(accountKey) { MutableAuditStats() }.add(accountKey, transaction, since)
             if (transaction.normalizedSource == EconomySource.UNKNOWN) {
                 unknownOrigins.computeIfAbsent(transaction.origin.orEmpty().ifBlank { "unresolved" }) { MutableAuditStats() }
                     .add(accountKey, transaction, since)
@@ -722,7 +732,10 @@ internal fun buildAuditSummary(
         "contextCoverage" to contextCoverage,
         "adminShopSales" to adminShopSales.toMap(limit, shopMaterials),
         "jobsRewards" to jobsRewards.toMap(limit),
-        "topPlayers" to ranked(players, "player"),
+        "topPlayers" to
+            players.entries.sortedByDescending { it.value.volume() }.take(limit).map { (key, stats) ->
+                stats.toMap("player", playerNames[key] ?: key)
+            },
         "unknownOrigins" to ranked(unknownOrigins, "origin"),
         "policyViolations" to policyViolations,
         "recentAnomalies" to
@@ -925,6 +938,8 @@ internal class StreamingAuditSummary(
     private val sources = linkedMapOf<String, MutableAuditStats>()
     private val actions = linkedMapOf<EconomyActionKey, MutableAuditStats>()
     private val players = linkedMapOf<String, MutableAuditStats>()
+    private val playerNames = linkedMapOf<String, String>()
+    private val playerNameTimes = linkedMapOf<String, Long>()
     private val unknownOrigins = linkedMapOf<String, MutableAuditStats>()
     private val attemptsByStatus = linkedMapOf<String, Long>()
     private val attemptsByAction = linkedMapOf<String, Long>()
@@ -1014,7 +1029,11 @@ internal class StreamingAuditSummary(
             contextApplicable.merge("jobsBreakdown", 1L, Long::plus)
         }
         val action = transaction.normalizedAction.label
-        val accountKey = context?.accountId?.takeIf(String::isNotBlank) ?: player.lowercase()
+        val accountKey = economyAccountKey(player, context)
+        if (transaction.timestamp2 >= (playerNameTimes[accountKey] ?: Long.MIN_VALUE)) {
+            playerNameTimes[accountKey] = transaction.timestamp2
+            playerNames[accountKey] = player
+        }
         adminShopSales.add(accountKey, transaction)
         jobsRewards.add(accountKey, transaction)
         sources.computeIfAbsent(source) { MutableAuditStats(trackBalanceProfile = true) }
@@ -1024,7 +1043,7 @@ internal class StreamingAuditSummary(
         }
         actions.computeIfAbsent(EconomyActionKey(source, action)) { MutableAuditStats(trackBalanceProfile = true) }
             .add(accountKey, transaction, since)
-        players.computeIfAbsent(player) { MutableAuditStats() }.add(accountKey, transaction, since)
+        players.computeIfAbsent(accountKey) { MutableAuditStats() }.add(accountKey, transaction, since)
         if (transaction.normalizedSource == EconomySource.UNKNOWN) {
             unknownOrigins.computeIfAbsent(transaction.origin.orEmpty().ifBlank { "unresolved" }) { MutableAuditStats() }
                 .add(accountKey, transaction, since)
@@ -1184,7 +1203,10 @@ internal class StreamingAuditSummary(
             "contextCoverage" to contextCoverage,
             "adminShopSales" to adminShopSales.toMap(limit, shopMaterials),
             "jobsRewards" to jobsRewards.toMap(limit),
-            "topPlayers" to ranked(players, "player"),
+            "topPlayers" to
+                players.entries.sortedByDescending { it.value.volume() }.take(limit).map { (key, stats) ->
+                    stats.toMap("player", playerNames[key] ?: key)
+                },
             "unknownOrigins" to ranked(unknownOrigins, "origin"),
             "policyViolations" to policyViolations,
             "recentAnomalies" to

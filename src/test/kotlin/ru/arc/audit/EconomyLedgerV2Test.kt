@@ -528,6 +528,27 @@ class EconomyLedgerV2Test : FreeSpec({
             sale["topPlayerQuantityShare"] shouldBe 1.0
         }
 
+        "keeps top player identity stable across renames and same-name accounts" {
+            val oldName = AuditData.create("OldName", "survival:old-name")
+            val renamed = AuditData.create("NewName", "survival:new-name")
+            val sameNameOne = AuditData.create("Twin", "survival:twin-one")
+            val sameNameTwo = AuditData.create("Twin", "survival:twin-two")
+            val metadata = AuditMetadata(EconomySource.JOBS, EconomyFlow.MINT, server = "survival")
+            oldName.operation(100.0, Type.JOB, "reward", metadata, EconomyLedgerContext(accountId = "uuid-renamed"), at = 1_000)
+            renamed.operation(50.0, Type.JOB, "reward", metadata, EconomyLedgerContext(accountId = "uuid-renamed"), at = 2_000)
+            sameNameOne.operation(40.0, Type.JOB, "reward", metadata, EconomyLedgerContext(accountId = "uuid-one"), at = 3_000)
+            sameNameTwo.operation(30.0, Type.JOB, "reward", metadata, EconomyLedgerContext(accountId = "uuid-two"), at = 4_000)
+
+            val summary = buildAuditSummary(listOf(renamed, oldName, sameNameOne, sameNameTwo), 5_000, 0, 20, null, emptyList())
+            val topPlayers = summary["topPlayers"] as List<*>
+            val jobs = (summary["sources"] as List<*>).single { (it as Map<*, *>)["source"] == "jobs" } as Map<*, *>
+            val distribution = jobs["mintDistribution"] as Map<*, *>
+
+            topPlayers.map { (it as Map<*, *>)["player"] } shouldBe listOf("NewName", "Twin", "Twin")
+            distribution["players"] shouldBe 3
+            distribution["topPlayerShare"] shouldBe 150.0 / 220.0
+        }
+
         "computes exact player concentration across requested source groups" {
             val first = AuditData.create("First", "survival:first")
             val second = AuditData.create("Second", "survival:second")
