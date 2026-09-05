@@ -930,6 +930,7 @@ class MountGuiController(
             "$path-$currency",
             "$fallbackColor$fallbackLabel: <#ffacd5><$placeholder> ${currencyLabel(configProvider(), currency)}",
             placeholder to TextUtil.formatAmount(amountMinor.minorToDouble()),
+            "currency" to currencyLabel(configProvider(), currency),
         )
 
     private fun formatSpeed(value: Double): String = "%.2f".format(java.util.Locale.ROOT, value).trimEnd('0').trimEnd('.')

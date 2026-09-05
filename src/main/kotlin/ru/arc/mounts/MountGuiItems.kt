@@ -78,6 +78,11 @@ internal class MountGuiItems(
                                 )
                         }
                     addAll(copyLines(path, fallback, *commonValues))
+                    if (!profile.unlocked) {
+                        mount.price(1)?.let { basePrice ->
+                            add(priceLine("Цена первого уровня", basePrice.toExactMinor(), mount.currency))
+                        }
+                    }
                     addAll(mountFeatureLore(mount))
                     when {
                         profile.unlocked -> {
@@ -214,13 +219,10 @@ internal class MountGuiItems(
                         }
                     } else {
                         add("")
-                        add(
-                            copy(
-                                "detail.locked-acquisition",
-                                "<#8c8c8c>Получение: <#e6fff3><acquisition>",
-                                *commonValues,
-                            ),
-                        )
+                        add(copy("detail.locked-acquisition", "<#8c8c8c>Получение: <#e6fff3><acquisition>", *commonValues))
+                        mount.price(1)?.let { basePrice ->
+                            add(priceLine("Цена первого уровня", basePrice.toExactMinor(), mount.currency))
+                        }
                     }
                 }
             }
@@ -346,11 +348,18 @@ internal class MountGuiItems(
             )
         val content =
             if (!profile.unlocked) {
-                copyLines(
-                    "detail.upgrade-locked-lore",
-                    listOf("<#8c8c8c>Уровень: <#e6fff3><level>/<max-level>"),
-                    *values,
-                )
+                buildList {
+                    addAll(
+                        copyLines(
+                            "detail.upgrade-locked-lore",
+                            listOf("<#8c8c8c>Уровень: <#e6fff3><level>/<max-level>"),
+                            *values,
+                        ),
+                    )
+                    mount.price(1)?.let { basePrice ->
+                        add(priceLine("Цена первого уровня", basePrice.toExactMinor(), mount.currency))
+                    }
+                }
             } else {
                 copyLines(
                     "detail.upgrade-lore",
@@ -368,10 +377,14 @@ internal class MountGuiItems(
                     }
                 }
             }
-        val lore = if (profile.unlocked || mount.price(1) != null) actionLore(content, "открыть") else content
+        val purchasable = mount.price(1) != null
+        val lore = if (profile.unlocked || purchasable) actionLore(content, if (profile.unlocked) "открыть" else "купить") else content
         return item(
             Material.COMPARATOR,
-            copy("detail.upgrade-name", "<#92bed8>Развитие и тюнинг"),
+            copy(
+                if (profile.unlocked || !purchasable) "detail.upgrade-name" else "detail.upgrade-buy-name",
+                if (profile.unlocked || !purchasable) "<#92bed8>Развитие и тюнинг" else "<#ff9f0f>Купить первый уровень",
+            ),
             lore,
             glint = profile.level >= mount.maxLevel,
         )
