@@ -95,6 +95,18 @@ class HelpCenterScreensTest {
     private fun body() = screen.body.joinToString("\n") { plain(it.text) }
 
     @Test
+    fun `jobs opens ArcEcoJobs dialog without arming inventory return`() {
+        open(HelpCenterPage.GUIDE)
+        click("jobs")
+        assertEquals(listOf("arcjobs dialog"), executed)
+        val previous = screen
+        player.openInventory(Bukkit.createInventory(null, 9))
+        player.closeInventory()
+        paper.performTicks(3)
+        assertSame(previous, screen)
+    }
+
+    @Test
     fun `root keeps utilities in the last row and activities have one dungeon entry`() {
         open(HelpCenterPage.ROOT)
         assertEquals(listOf("now", "players", "travel", "privat", "root_activities", "root_progress",

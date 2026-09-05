@@ -1081,7 +1081,7 @@ internal class HelpCenterController(
             CommandDefinition("investments", HelpCenterCategory.TRADE, "arc-invest", opensInventory = true),
             CommandDefinition("rank", HelpCenterCategory.PROGRESS, "rank dialog"),
             CommandDefinition("rankup", HelpCenterCategory.PROGRESS, "rankup"),
-            CommandDefinition("jobs", HelpCenterCategory.PROGRESS, "jobsgui", opensInventory = true),
+            CommandDefinition("jobs", HelpCenterCategory.PROGRESS, "arcjobs dialog"),
             CommandDefinition("quests", HelpCenterCategory.PROGRESS, "quests", opensInventory = true),
             CommandDefinition("skills", HelpCenterCategory.PROGRESS, "skills", opensInventory = true),
             CommandDefinition(
