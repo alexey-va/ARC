@@ -22,6 +22,8 @@ data class HelpCenterLegacySettingEntry(
     val tooltipKey: String,
 )
 
+data class HelpCenterFlightSnapshot(val charge: Double, val maximum: Int, val enabled: Boolean)
+
 /** Typed bridge for the old personal settings. Menu presentation stays in the controller. */
 class HelpCenterLegacySettings(
     private val backend: Backend = BukkitBackend(),
@@ -30,6 +32,7 @@ class HelpCenterLegacySettings(
         fun hasPermission(player: Player, node: String): Boolean
         fun meta(player: Player, key: String): String?
         fun cmiOption(player: Player, option: CmiOption): Boolean?
+        fun flightSnapshot(player: Player): HelpCenterFlightSnapshot? = null
         fun flightState(player: Player): String?
         fun tpaEnabled(player: Player): Boolean?
         fun setPermission(player: Player, node: String, enabled: Boolean): CompletableFuture<Boolean>
@@ -46,6 +49,7 @@ class HelpCenterLegacySettings(
         FLIGHT_EXP("cmi autorecharge exp on -s"), FLIGHT_MONEY("cmi autorecharge money on -s"),
         FLIGHT_OFF_EXP("cmi autorecharge exp off -s"), FLIGHT_OFF_MONEY("cmi autorecharge money off -s"),
         FLIGHT_RECHARGE("cmi flightcharge recharge"), FLIGHT_TOGGLE("flyc"),
+        FLIGHT_ENABLE("flyc true"), FLIGHT_DISABLE("flyc false"),
         SHIFT_ENABLE("cmi options shiftsignedit enable"), SHIFT_DISABLE("cmi options shiftsignedit disable"),
         TOTEM_ENABLE("cmi options totembossbar enable"), TOTEM_DISABLE("cmi options totembossbar disable"),
         TPA_TOGGLE("huskhomes:tpignore"),
@@ -72,6 +76,8 @@ class HelpCenterLegacySettings(
         entry("admin", "legacy-settings-admin", if (backend.hasPermission(player, ADMIN)) "available" else "locked", "legacy-settings-admin-tooltip"),
     )
 
+    fun flightSnapshot(player: Player): HelpCenterFlightSnapshot? = backend.flightSnapshot(player)
+
     fun execute(player: Player, id: String): CompletableFuture<Boolean> = when (id) {
         "admin" -> if (backend.hasPermission(player, ADMIN)) backend.consoleCommand(player, ConsoleCommand.OPEN_ADMIN_SETTINGS) else falseFuture()
         "scoreboard-off" -> backend.setExclusiveMode(player, "tab.scoreboard", null)
@@ -88,6 +94,8 @@ class HelpCenterLegacySettings(
         "flight-off" -> commands(player, PlayerCommand.FLIGHT_OFF_EXP, PlayerCommand.FLIGHT_OFF_MONEY)
         "flight-recharge" -> backend.command(player, PlayerCommand.FLIGHT_RECHARGE)
         "flight-toggle" -> backend.command(player, PlayerCommand.FLIGHT_TOGGLE)
+        "flight-enable" -> backend.command(player, PlayerCommand.FLIGHT_ENABLE)
+        "flight-disable" -> backend.command(player, PlayerCommand.FLIGHT_DISABLE)
         "shift-sign-edit" -> toggleCmi(player, CmiOption.SHIFT_SIGN_EDIT, SHIFT_EDIT, PlayerCommand.SHIFT_ENABLE, PlayerCommand.SHIFT_DISABLE)
         "resource-pack" -> togglePermission(player, RESOURCE_PACK)
         "totem" -> toggleCmi(player, CmiOption.TOTEM_BOSSBAR, TOTEM, PlayerCommand.TOTEM_ENABLE, PlayerCommand.TOTEM_DISABLE)
@@ -100,6 +108,9 @@ class HelpCenterLegacySettings(
     private fun modeAction(player: Player, id: String): CompletableFuture<Boolean> {
         MenuShortcutAction.entries.firstOrNull { "shortcut-${it.id}" == id }?.let {
             return backend.setMeta(player, MenuShortcutAction.META_KEY, it.id)
+        }
+        id.removePrefix("portal-style-").takeIf { id.startsWith("portal-style-") && it in PORTAL_STYLES }?.let {
+            return backend.setMeta(player, PORTAL_STYLE_META, it)
         }
         val match = Regex("^(scoreboard|tablist)-(\\d{1,2})$").matchEntire(id) ?: return falseFuture()
         val mode = match.groupValues[2].toIntOrNull()?.takeIf { it in 1..20 } ?: return falseFuture()
@@ -148,6 +159,10 @@ class HelpCenterLegacySettings(
         override fun cmiOption(player: Player, option: CmiOption): Boolean? = runCatching {
             val user = CMI.getInstance().playerManager.getUser(player.uniqueId) ?: return null
             user.getOptionState(if (option == CmiOption.SHIFT_SIGN_EDIT) PlayerOption.shiftSignEdit else PlayerOption.totemBossBar)
+        }.getOrNull()
+        override fun flightSnapshot(player: Player): HelpCenterFlightSnapshot? = runCatching {
+            val charge = CMI.getInstance().playerManager.getUser(player.uniqueId)?.flightCharge ?: return null
+            HelpCenterFlightSnapshot(charge.charge, charge.max, charge.isEnabled)
         }.getOrNull()
         override fun flightState(player: Player): String? = runCatching {
             val charge = CMI.getInstance().playerManager.getUser(player.uniqueId)?.flightCharge ?: return null
@@ -223,7 +238,7 @@ class HelpCenterLegacySettings(
         private const val STAIRS_SIT = "cmi.command.sit.stairs"
         private const val ADMIN = "tab.group.admin"
         private const val PORTAL_STYLE_META = "arc-portal-style"
-        private val PORTAL_STYLES = listOf("legacy", "origin", "astral", "chaos", "solar", "void")
+        internal val PORTAL_STYLES = listOf("legacy", "origin", "astral", "chaos", "solar", "void")
         private fun modeNode(prefix: String, mode: Int) = if (mode == 1) prefix else "$prefix$mode"
         fun modeLabelKey(prefix: String, mode: Int): String? = when (prefix) {
             "tab.scoreboard", "tab.tablist" -> "legacy-settings-${if (prefix == "tab.scoreboard") "scoreboard" else "tablist"}-mode-$mode"

@@ -26,7 +26,7 @@ class HelpCenterConfigTest : StringSpec({
             settings.maxHomes shouldBe 12
             settings.maxSearchResults shouldBe 8
             settings.text("root-title").contains("Главное меню") shouldBe true
-            settings.text("now-title").contains("Про меня") shouldBe true
+            settings.text("now-title").contains("Мой профиль") shouldBe true
             val profileBodies = listOf(
                 settings.text("now-identity"),
                 settings.text("now-progress"),
@@ -120,28 +120,28 @@ class HelpCenterConfigTest : StringSpec({
             }
             // Section colors encode topic; utility actions remain together at the end.
             mapOf(
-                "now-label" to 0x62dbef,
-                "players-label" to 0xf58cba,
-                "travel-label" to 0x63b3ff,
-                "privat-label" to 0x9cdb67,
-                "category-activities-label" to 0xff9866,
-                "category-progress-label" to 0xc49aff,
-                "category-trade-label" to 0xf4d35e,
-                "category-technology-label" to 0x4fd6bb,
-                "commands-label" to 0xb9bfd0,
-                "category-settings-label" to 0xb7a9cf,
+                "now-label" to 0x86dcf1,
+                "players-label" to 0xf3a2c9,
+                "travel-label" to 0x91c4ff,
+                "privat-label" to 0xa3de92,
+                "category-activities-label" to 0xffb277,
+                "category-progress-label" to 0xc4abff,
+                "category-trade-label" to 0xf4d87a,
+                "category-technology-label" to 0x85dfc4,
+                "commands-label" to 0xaaa49a,
+                "category-settings-label" to 0xaaa49a,
             ).forEach { (key, color) ->
                 withClue(key) {
                     val component = MiniMessage.miniMessage().deserialize(settings.text(key))
-                    val label = if (key == "category-settings-label") component.children().last() else component
+                    val label = component
                     label.color()?.value() shouldBe color
                 }
             }
-            MiniMessage.miniMessage().deserialize(settings.text("root-title")).color()?.value() shouldBe 0xf4bd6a
+            MiniMessage.miniMessage().deserialize(settings.text("root-title")).color()?.value() shouldBe 0x835326
             MiniMessage.miniMessage().deserialize(settings.text("pay-confirm-label")).color()?.value() shouldBe 0x2bba43
             MiniMessage.miniMessage().deserialize(settings.text("home-delete-confirm")).color()?.value() shouldBe 0xff6b61
-            MiniMessage.miniMessage().deserialize(settings.text("back-label")).color()?.value() shouldBe 0x969696
-            MiniMessage.miniMessage().deserialize(settings.text("setting-chat-current")).color()?.value() shouldBe 0xc8a477
+            MiniMessage.miniMessage().deserialize(settings.text("back-label")).color()?.value() shouldBe 0xaaa49a
+            MiniMessage.miniMessage().deserialize(settings.text("setting-chat-current")).color()?.value() shouldBe 0xd7b486
             settings.text("back-command-label").contains("прежнее место", ignoreCase = true) shouldBe true
             listOf(
                 "favorites-short-label",

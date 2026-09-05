@@ -57,4 +57,19 @@ class MenuInputSettingsTest : TestBase() {
         MenuEscapeBehavior.apply(close, false) shouldBe close
         MenuEscapeBehavior.apply(original, true) shouldBe original
     }
+    @Test
+    fun `async dialogs invalidate their visit on native escape while keeping normal back navigation`() {
+        var closed = 0
+        val back = PaperDialogButton(PaperDialogActionId.of("back"), Component.text("Back"), width = 150, onClick = mockk())
+        val action = back.copy(id = PaperDialogActionId.of("action"), width = 230)
+        val exit = PaperDialogButton(PaperDialogActionId.of("close_menu"), Component.text("Close"), closeDialogBeforeAction = true, onClick = { closed++ })
+        val original = PaperDialogScreen(Component.text("Settings"), buttons = listOf(action), exitButton = back)
+        val close = MenuEscapeBehavior.apply(original, false, exit)
+        close.buttons.last().width shouldBe 230
+        close.exitButton shouldBe exit
+        close.exitButton!!.onClick.handle(mockk())
+        closed shouldBe 1
+        MenuEscapeBehavior.apply(original, true, exit) shouldBe original
+    }
+
 }

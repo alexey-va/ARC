@@ -68,9 +68,9 @@ object ArcMenus {
         content: PaperCloudStorageContent,
     ): PaperCloudStorageSession = requireNotNull(runtime).openStorage(player, menu, region, storage, content)
 
-    fun openDialog(player: Player, screen: PaperDialogScreen) {
+    fun openDialog(player: Player, screen: PaperDialogScreen, closeButton: ru.arc.paper.menu.PaperDialogButton? = null) {
         requireNotNull(dialogRuntime) { "ARC dialog runtime is not initialized" }
-            .open(player, MenuEscapeBehavior.apply(screen, MenuEscapeBehavior.goesBack(player)))
+            .open(player, MenuEscapeBehavior.apply(screen, MenuEscapeBehavior.goesBack(player), closeButton))
     }
 
     fun item(

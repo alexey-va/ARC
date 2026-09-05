@@ -25,7 +25,12 @@ internal class HelpCenterController(
     private val inviteToLand: (Player, HelpCenterPlayer) -> Unit,
     private val preferences: HelpCenterPreferenceStore,
     private val navigation: HelpCenterNavigation = HelpCenterNavigation(ru.arc.ARC.instance, inventoryReturn::cancel),
-    private val showDialog: (Player, PaperDialogScreen) -> Unit = ArcMenus::openDialog,
+    private val showDialog: (Player, PaperDialogScreen) -> Unit = { player, screen ->
+        ArcMenus.openDialog(player, screen, PaperDialogButton(
+            PaperDialogActionId.of("close_menu"), MiniMessage.miniMessage().deserialize(settings.text("menu-close-label")),
+            width = 200, closeDialogBeforeAction = true, onClick = { navigation.visit(player) },
+        ))
+    },
     private val legacySettings: HelpCenterLegacySettings = HelpCenterLegacySettings(),
 ) {
     private val miniMessage = MiniMessage.miniMessage()
@@ -93,10 +98,16 @@ internal class HelpCenterController(
         )
     }
 
+    private val personalSettings by lazy {
+        HelpCenterSettingsController(settings, gateway, legacySettings, navigation, showDialog,
+            ::executeCatalog, ::executeInventory, ::openRoot)
+    }
+
     fun close() {
         active = false
         navigation.close()
         tasks.close()
+        personalSettings.close()
         hub.close()
         inventoryReturn.close()
     }
@@ -132,7 +143,7 @@ internal class HelpCenterController(
             PaperDialogScreen(
                 id = "help.root",
                 title = text("root-title"),
-                body = listOf(PaperDialogBody(text("root-body"), width = 500)),
+                body = listOf(PaperDialogBody(text("root-body"), width = 468)),
                 buttons = listOf(
                     button("now", text("now-label"), text("now-tooltip")) { openNow(player) },
                     button("players", text("players-label"), text("players-tooltip")) { openPlayers(player) },
@@ -144,7 +155,7 @@ internal class HelpCenterController(
                     rootCategoryButton(player, HelpCenterCategory.TECHNOLOGY),
                     button("search", text("commands-label"), text("commands-tooltip")) { openCommands(player) },
                     button("settings", text("category-settings-label"), text("category-settings-tooltip")) { openSettings(player) },
-                ),
+                ).map { it.copy(width = 230) },
                 columns = 2,
             ),
         )
@@ -441,128 +452,7 @@ internal class HelpCenterController(
         )
     }
 
-    private fun openSettings(player: Player) {
-        markNavigation(player) { openSettings(player) }
-        val snapshot = gateway.settings(player)
-        val global = snapshot.chatMode == HelpCenterChatMode.GLOBAL
-        val stateIds = setOf("chat-global", "chat-local", "trails-on", "trails-off")
-        val stateButtons = buildList {
-            add(
-                if (global) settingButton(player, catalogById.getValue("chat-local"), text("setting-chat-current", "state" to plainText("chat-global-state")))
-                else settingButton(player, catalogById.getValue("chat-global"), text("setting-chat-current", "state" to plainText("chat-local-state"))),
-            )
-            if (HelpCenterFeature.TRAILS in gateway.features()) {
-                when (snapshot.trailsEnabled) {
-                    true -> add(settingButton(player, catalogById.getValue("trails-off"), text("setting-trails-current", "state" to stateLabel(snapshot.trailsEnabled))))
-                    false -> add(settingButton(player, catalogById.getValue("trails-on"), text("setting-trails-current", "state" to stateLabel(snapshot.trailsEnabled))))
-                    null -> {
-                        add(settingButton(player, catalogById.getValue("trails-on")))
-                        add(settingButton(player, catalogById.getValue("trails-off")))
-                    }
-                }
-
-            }
-        }
-        showDialog(
-            player,
-            PaperDialogScreen(
-                id = "help.category.settings",
-                title = text("category-settings-title"),
-                body = listOf(PaperDialogBody(text(
-                    "settings-body",
-                    "chat" to if (global) "глобальный" else "локальный",
-                    "trails" to stateLabel(snapshot.trailsEnabled),
-                ))),
-                buttons = stateButtons + availableCatalog(player)
-                    .filter { it.category == HelpCenterCategory.SETTINGS && it.id !in stateIds && it.id !in setOf("lands-borders", "tpa-ignore") }
-                    .map { command ->
-                        val label = if (command.id == "particles") text("setting-particles-current", "state" to stateLabel(snapshot.particlesEnabled))
-                            else text("command-${command.id}-label")
-                        settingButton(player, command, label)
-                    } + legacySettings.entries(player)
-                    .filter { it.id != "admin" || player.hasPermission("tab.group.admin") }
-                    .map { entry ->
-                        button("legacy_${entry.id}", text(entry.labelKey, "state" to legacyState(entry.state, entry.id)), text(entry.tooltipKey)) {
-                            when (entry.id) {
-                                "shortcut" -> openLegacyOptions(player, entry.id, ru.arc.gui.MenuShortcutAction.entries.map { "shortcut-${it.id}" })
-                                "escape" -> openLegacyOptions(player, entry.id, listOf("escape-close", "escape-back"))
-                                "scoreboard", "tablist" -> openLegacyOptions(player, entry.id, (1..20).map { "${entry.id}-$it" } + "${entry.id}-off")
-                                "lands" -> openLegacyOptions(player, entry.id, listOf("lands-show", "lands-hide"))
-                                "flight" -> openLegacyOptions(player, entry.id, listOf("flight-exp", "flight-money", "flight-off", "flight-recharge", "flight-toggle"))
-                                "admin" -> legacySettings.execute(player, entry.id)
-                                else -> applyLegacySetting(player, entry.id) { openSettings(player) }
-                            }
-                        }.copy(width = 230)
-                    },
-                exitButton = rootButton(player),
-                columns = 2,
-            ),
-        )
-    }
-
-    private fun legacyState(state: String?, group: String? = null): String = when {
-        group in setOf("shortcut", "escape") -> plainText("$group-state-$state")
-        state?.toIntOrNull() != null && group in setOf("scoreboard", "tablist") -> plainText("legacy-settings-$group-mode-$state")
-        state?.toIntOrNull() != null -> plainText("legacy-state-style") + " " + state
-        else -> plainText("legacy-state-${state ?: "unknown"}")
-    }
-
-    private fun openLegacyOptions(player: Player, group: String, actions: List<String>) {
-        markNavigation(player) { openLegacyOptions(player, group, actions) }
-        val selected = legacySettings.entries(player).firstOrNull { it.id == group }?.state
-        val bodyKey = "legacy-settings-$group-tooltip"
-        val detailedActions = group in setOf("shortcut", "escape", "flight")
-        showDialog(player, PaperDialogScreen(
-            id = "help.settings.$group",
-            title = text("legacy-settings-$group", "state" to legacyState(legacySettings.entries(player).firstOrNull { it.id == group }?.state, group)),
-            body = if (group == "flight") listOf("flight-body-how", "flight-body-recharge", "flight-body-start")
-                .map { PaperDialogBody(text(it)) } else listOf(PaperDialogBody(text(bodyKey))),
-            buttons = actions.map { id ->
-                val mode = id.substringAfterLast('-').toIntOrNull()
-                val name = if (mode != null) text("legacy-settings-$group-mode-$mode") else text("legacy-action-$id")
-                val label = if (detailedActions && id == "$group-$selected") text("setting-selected").append(name) else name
-                button("legacy_$id", label, text(if (detailedActions) "legacy-action-$id-tooltip" else bodyKey)) {
-                    if (id == "flight-recharge") executeInventory(player, HelpCenterLegacySettings.PlayerCommand.FLIGHT_RECHARGE.value)
-                    else applyLegacySetting(player, id) { openLegacyOptions(player, group, actions) }
-                }.copy(width = if (detailedActions) 230 else 190)
-            },
-            exitButton = button("back", text("back-label")) { openSettings(player) },
-            columns = 2,
-        ))
-    }
-
-    private fun applyLegacySetting(player: Player, id: String, refresh: () -> Unit) {
-        val token = markNavigation(player)
-        legacySettings.execute(player, id).whenCompleteSync(tasks) { accepted, failure ->
-            if (!active || !player.isOnline || !navigation.isCurrent(player, token)) return@whenCompleteSync
-            if (failure != null || accepted != true) player.sendMessage(text("action-failed"))
-            refresh()
-        }
-    }
-
-    private fun settingButton(player: Player, command: HelpCenterCommand, label: Component = text("command-${command.id}-label")): PaperDialogButton =
-        button("setting_${command.id}", label, commandTooltip(command.id)) {
-            if (command.id == "chat-global" || command.id == "chat-local") {
-                val mode = if (command.id == "chat-global") HelpCenterChatMode.GLOBAL else HelpCenterChatMode.LOCAL
-                val token = markNavigation(player)
-                gateway.selectChatMode(player, mode).whenCompleteSync(tasks) { _, failure ->
-                    if (!active || !player.isOnline || !navigation.isCurrent(player, token)) return@whenCompleteSync
-                    if (failure != null) player.sendMessage(text("action-failed"))
-                    openSettings(player)
-                }
-            } else {
-                executeCatalog(player, command.id)
-                openSettings(player)
-            }
-        }.copy(width = 230)
-
-    private fun stateLabel(value: Boolean?): String = plainText(
-        when (value) {
-            true -> "state-on"
-            false -> "state-off"
-            null -> "state-unknown"
-        },
-    )
+    private fun openSettings(player: Player) = personalSettings.open(player)
 
     private fun openRecovery(player: Player) {
         markNavigation(player) { openRecovery(player) }

@@ -2,6 +2,7 @@ package ru.arc.helpcenter
 
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.spyk
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import org.bukkit.Bukkit
@@ -27,6 +28,7 @@ class HelpCenterScreensTest {
     private lateinit var gateway: HelpCenterGateway
     private lateinit var screen: PaperDialogScreen
     private var screenCount = 0
+    private lateinit var legacy: HelpCenterLegacySettings
     private lateinit var preferences: HelpCenterPreferenceStore
     private val directory = Files.createTempDirectory("help-screens")
     private var chatMode = HelpCenterChatMode.LOCAL
@@ -70,9 +72,11 @@ class HelpCenterScreensTest {
         }
         ConfigManager.clear()
         val inventoryReturn = HelpCenterInventoryReturnRuntime(plugin, returnOnClose = { true })
+        legacy = spyk(HelpCenterLegacySettings())
+        every { legacy.flightSnapshot(any()) } returns HelpCenterFlightSnapshot(50_000.0, 100_000, false)
         controller = HelpCenterController(
             HelpCenterConfig.load(directory).snapshot(), gateway, {}, inventoryReturn,
-            { _, _ -> }, preferences, HelpCenterNavigation(plugin, inventoryReturn::cancel), { _, value -> screen = value; screenCount++ },
+            { _, _ -> }, preferences, HelpCenterNavigation(plugin, inventoryReturn::cancel), { _, value -> screen = value; screenCount++ }, legacy,
         )
     }
 
@@ -140,18 +144,15 @@ class HelpCenterScreensTest {
     }
 
     @Test
-    fun `settings update on the same screen without an extra menu command`() {
+    fun `settings update inside the selected section without an extra menu command`() {
         open(HelpCenterPage.SETTINGS)
-        assertEquals("Чат: локальный", plain(screen.buttons.first().label))
-        assertTrue(screen.buttons.any { plain(it.label) == "Тропинки: выключено" })
-        assertTrue(screen.buttons.any { plain(it.label) == "Частицы: включено" })
-        assertFalse(screen.buttons.any { it.id.value.contains("boost") })
+        click("settings_social")
+        assertEquals("Канал чата: локальный", plain(screen.buttons.first().label))
         click("setting_chat_global")
-        assertTrue(body().contains("глобальный"))
-        assertEquals("Чат: глобальный", plain(screen.buttons.first().label))
-        assertTrue(screen.buttons.any { it.id.value == "setting_chat_local" })
+        assertEquals("help.settings.section.social", screen.id)
+        assertEquals("Канал чата: глобальный", plain(screen.buttons.first().label))
         click("setting_chat_local")
-        assertTrue(body().contains("локальный"))
+        assertEquals("Канал чата: локальный", plain(screen.buttons.first().label))
         assertEquals(emptyList<String>(), executed)
     }
 
@@ -160,12 +161,13 @@ class HelpCenterScreensTest {
         val pending = CompletableFuture<Unit>()
         every { gateway.selectChatMode(player, HelpCenterChatMode.GLOBAL) } returns pending
         open(HelpCenterPage.SETTINGS)
+        click("settings_social")
         click("setting_chat_global")
-        assertEquals("Чат: локальный", plain(screen.buttons.first().label))
+        assertEquals("Канал чата: локальный", plain(screen.buttons.first().label))
         chatMode = HelpCenterChatMode.GLOBAL
         pending.complete(Unit)
         paper.performTicks(2)
-        assertEquals("Чат: глобальный", plain(screen.buttons.first().label))
+        assertEquals("Канал чата: глобальный", plain(screen.buttons.first().label))
         val later = CompletableFuture<Unit>()
         every { gateway.selectChatMode(player, HelpCenterChatMode.LOCAL) } returns later
         click("setting_chat_local")
@@ -176,40 +178,105 @@ class HelpCenterScreensTest {
     }
 
     @Test
-    fun `settings include all legacy groups and mode selectors return to settings`() {
+    fun `settings retain every legacy control in four groups and options return to their group`() {
+        val expected = mapOf(
+            "controls" to listOf("legacy_shortcut", "legacy_escape", "legacy_shift_sign_edit", "legacy_stairs_sit"),
+            "interface" to listOf("legacy_scoreboard", "legacy_tablist", "setting_particles", "legacy_totem", "legacy_resource_pack"),
+            "social" to listOf("setting_chat_global", "legacy_notifications", "legacy_tpa"),
+            "world" to listOf("setting_trails_on", "legacy_flight", "legacy_lands", "legacy_portal_style", "legacy_portal_by_other", "legacy_portal_for_other"),
+        )
+        expected.forEach { (group, ids) ->
+            open(HelpCenterPage.SETTINGS)
+            assertEquals(4, screen.buttons.size)
+            click("settings_$group")
+            assertEquals(ids, screen.buttons.map { it.id.value })
+            assertTrue(screen.buttons.all { it.width == 230 && !it.closeDialogBeforeAction })
+        }
         open(HelpCenterPage.SETTINGS)
-        val ids = screen.buttons.map { it.id.value }
-        listOf("scoreboard", "tablist", "lands", "portal_by_other", "portal_for_other", "shortcut", "escape",
-            "notifications", "flight", "shift_sign_edit", "resource_pack", "totem", "stairs_sit", "tpa", "portal_style")
-            .forEach { assertTrue("legacy_$it" in ids, it) }
-        assertFalse(ids.any { it.contains("boost") })
+        click("settings_interface")
         click("legacy_tablist")
         assertEquals(21, screen.buttons.size)
-        assertTrue(screen.buttons.all { !it.closeDialogBeforeAction })
+        assertTrue(plain(screen.buttons.last().label).startsWith("✔"))
+        click("back")
+        assertEquals("help.settings.section.interface", screen.id)
         click("back")
         assertEquals("help.category.settings", screen.id)
     }
 
     @Test
-    fun `flight settings explain charge in sections and give each action its own tooltip`() {
+    fun `unavailable trails preserve world layout without exposing a mutation`() {
+        every { gateway.features() } returns HelpCenterFeature.entries.toSet() - HelpCenterFeature.TRAILS
         open(HelpCenterPage.SETTINGS)
+        click("settings_world")
+        assertEquals("setting_trails_unavailable", screen.buttons.first().id.value)
+        assertTrue(plain(screen.buttons.first().label).contains("недоступно"))
+        assertEquals(6, screen.buttons.size)
+        click("setting_trails_unavailable")
+        assertTrue(executed.isEmpty())
+    }
+
+    @Test
+    fun `flight shows real charge and isolates recharge selection from flight actions`() {
+        open(HelpCenterPage.SETTINGS)
+        click("settings_world")
         val trails = screen.buttons.single { it.id.value == "setting_trails_on" }
         assertTrue(plain(requireNotNull(trails.tooltip)).contains("протаптывают землю"))
         click("legacy_flight")
-        assertEquals("help.settings.flight", screen.id)
         assertEquals(3, screen.body.size)
-        assertTrue(body().contains("Как работает полёт"))
-        assertTrue(body().contains("Как взлететь"))
-        assertTrue(body().contains("списывается автоматически"))
-        assertEquals(5, screen.buttons.map { plain(requireNotNull(it.tooltip)) }.distinct().size)
-        assertTrue(screen.buttons.all { !it.closeDialogBeforeAction })
+        assertTrue(body().contains("50%"))
+        assertTrue(body().contains("■■■■■■■■□□□□□□□□"))
+        assertEquals("Включить полёт", plain(screen.buttons.first().label))
+        assertEquals(listOf("legacy_flight_toggle", "legacy_flight_recharge", "flight_auto"), screen.buttons.map { it.id.value })
+        click("flight_auto")
+        assertEquals("help.settings.flight.recharge", screen.id)
+        assertEquals(3, screen.buttons.size)
+        assertTrue(body().contains("автоматически"))
+        assertEquals(3, screen.buttons.map { plain(requireNotNull(it.tooltip)) }.distinct().size)
         click("back")
-        assertEquals("help.category.settings", screen.id)
+        assertEquals("help.settings.flight", screen.id)
+        click("back")
+        assertEquals("help.settings.section.world", screen.id)
+    }
+
+    @Test
+    fun `missing flight data never fabricates a charge or enables an unknown mode`() {
+        every { legacy.flightSnapshot(any()) } returns null
+        open(HelpCenterPage.SETTINGS)
+        click("settings_world")
+        click("legacy_flight")
+        assertTrue(body().contains("недоступны"))
+        assertFalse(body().contains("%"))
+        assertEquals("Полёт: неизвестно", plain(screen.buttons.first().label))
+        click("legacy_flight_toggle")
+        assertTrue(executed.isEmpty())
+    }
+
+    @Test
+    fun `invalid charge disables toggle and explicit flight actions cannot invert another flight source`() {
+        every { legacy.flightSnapshot(any()) } returns HelpCenterFlightSnapshot(Double.NaN, 0, false)
+        open(HelpCenterPage.SETTINGS)
+        click("settings_world")
+        click("legacy_flight")
+        assertTrue(body().contains("недоступны"))
+        val unchanged = screenCount
+        click("legacy_flight_toggle")
+        assertEquals(unchanged, screenCount)
+        io.mockk.verify(exactly = 0) { legacy.execute(player, any()) }
+        every { legacy.flightSnapshot(any()) } returns HelpCenterFlightSnapshot(1_000.0, 1_000, false)
+        every { legacy.execute(player, "flight-enable") } returns CompletableFuture.completedFuture(true)
+        open(HelpCenterPage.SETTINGS)
+        click("settings_world")
+        click("legacy_flight")
+        assertTrue(body().contains("100%"))
+        click("legacy_flight_toggle")
+        io.mockk.verify(exactly = 1) { legacy.execute(player, "flight-enable") }
+        io.mockk.verify(exactly = 0) { legacy.execute(player, "flight-toggle") }
     }
 
     @Test
     fun `manual flight recharge opens inventory without immediately covering it with a dialog`() {
         open(HelpCenterPage.SETTINGS)
+        click("settings_world")
         click("legacy_flight")
         val before = screenCount
         click("legacy_flight_recharge")

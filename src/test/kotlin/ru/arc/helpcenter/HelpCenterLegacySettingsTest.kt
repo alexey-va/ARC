@@ -52,6 +52,19 @@ class HelpCenterLegacySettingsTest {
     }
 
     @Test
+    fun `portal style selection rejects unknown styles and flight uses explicit booleans`() {
+        val player = mockk<Player>()
+        val backend = FakeBackend()
+        val settings = HelpCenterLegacySettings(backend)
+        assertTrue(settings.execute(player, "portal-style-solar").join())
+        assertEquals("solar", backend.metadata["arc-portal-style"])
+        assertEquals(false, settings.execute(player, "portal-style-solar extra").join())
+        assertTrue(settings.execute(player, "flight-enable").join())
+        assertTrue(settings.execute(player, "flight-disable").join())
+        assertEquals(listOf("flyc true", "flyc false"), backend.commands.map { it.value })
+    }
+
+    @Test
     fun `unknown ids cannot execute arbitrary commands`() {
         val player = mockk<Player>()
         val backend = FakeBackend()
