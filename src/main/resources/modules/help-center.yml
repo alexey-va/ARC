@@ -10,7 +10,7 @@ text:
   menu-close-label: "<#aaa49a>Закрыть меню"
   dungeons-title: "<#86dcf1>Данжи"
   dungeons-body: "<#e8dfd2>В данжах вас ждут элитные противники, боссы, задания и особое снаряжение.<newline><newline><#9bd48d>Порталы <#e8dfd2>— перейти в Гильдию искателей приключений.<newline><#f4bd6a>Гайд <#e8dfd2>— разобраться в подготовке и прохождении.<newline><#86dcf1>Меню /em <#e8dfd2>— открыть журнал EliteMobs."
-  dungeons-portals-label: "<#9bd48d>➜ Порталы"
+  dungeons-portals-label: "<#9bd48d>› Порталы"
   dungeons-portals-tooltip: "<#9bd48d>Куда попадёте<newline><#e8dfd2>В Гильдию искателей приключений: к порталам и специалистам по снаряжению.<newline><newline><#f4bd6a>Что сделать там<newline><#e8dfd2>Выберите данж по уровню, прочитайте условия и подготовьтесь к бою.<newline><#c9c3ba>Нажатие закроет меню и выполнит /pw aguild."
   dungeons-guide-label: "<#f4bd6a>◇ Гайд"
   dungeons-guide-tooltip: "<#e6fff3>Подробно о входе, группах, навыках, наградах и командах.<newline><#c9c3ba>Сначала выберите подходящий раздел для новичка."
