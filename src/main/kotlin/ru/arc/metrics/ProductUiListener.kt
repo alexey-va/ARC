@@ -45,13 +45,18 @@ internal class ProductUiListener(private val plugin: Plugin, private val product
 
     private fun attach(producer: Plugin) {
         if (!CORE_PRODUCER.matches(producer.name) || !producer.isEnabled) return
+        val owns = runCatching {
+            val artifact = File(producer.javaClass.protectionDomain.codeSource.location.toURI())
+            JarFile(artifact).use {
+                (it.getJarEntry("ru/arc/paper/menu/PaperMenuService.class") != null) to
+                    (it.getJarEntry("ru/arc/paper/menu/PaperMenuObservationEvent.class") != null)
+            }
+        }.getOrDefault(false to false)
+        if (!owns.first) return // A core-only plugin has no menu producer to instrument.
         val type = runCatching {
             Class.forName("ru.arc.paper.menu.PaperMenuObservationEvent", false, producer.javaClass.classLoader).asSubclass(Event::class.java)
         }.getOrNull()
-        coverage[producer.name.lowercase(Locale.ROOT)] = type != null && runCatching {
-            val artifact = File(producer.javaClass.protectionDomain.codeSource.location.toURI())
-            JarFile(artifact).use { it.getJarEntry("ru/arc/paper/menu/PaperMenuObservationEvent.class") != null }
-        }.getOrDefault(false)
+        coverage[producer.name.lowercase(Locale.ROOT)] = type != null && owns.second
         if (type == null || !classes.add(type)) return
         val payload = type.getMethod("getPayload")
         plugin.server.pluginManager.registerEvent(type, this, EventPriority.MONITOR,
