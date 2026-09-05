@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+OPS_ROOT="${RUSCRAFTING_OPS_ROOT:-$PROJECT_ROOT/../../mcserver}"
+OUTPUT="$PROJECT_ROOT/build/reports/join-message-visual-preview"
+CLIENT_JAR=""
+RESOURCE_PACK="${RUSCRAFTING_RESOURCE_PACK:-}"
+
+while (($#)); do
+  case "$1" in
+    --help) echo "usage: $0 [--ops-root PATH] [--output PATH] [--client-jar PATH] [--resource-pack PATH]"; exit 0 ;;
+    --ops-root) OPS_ROOT="$2"; shift 2 ;;
+    --output) OUTPUT="$2"; shift 2 ;;
+    --client-jar) CLIENT_JAR="$2"; shift 2 ;;
+    --resource-pack) RESOURCE_PACK="$2"; shift 2 ;;
+    *) echo "unknown argument: $1" >&2; exit 2 ;;
+  esac
+done
+
+COMMAND=(python3 -B \
+  "$OPS_ROOT/.agents/skills/design-ruscrafting-surfaces/scripts/render_plugin_surface_dump.py" \
+  --manifest "$PROJECT_ROOT/visual-preview-join-messages.yml" \
+  --project-root "$PROJECT_ROOT" \
+  --output "$OUTPUT" \
+  --gui-scale 3)
+[[ -n "$CLIENT_JAR" ]] && COMMAND+=(--client-jar "$CLIENT_JAR")
+[[ -n "$RESOURCE_PACK" ]] && COMMAND+=(--resource-pack "$RESOURCE_PACK")
+exec "${COMMAND[@]}"

@@ -369,6 +369,7 @@ open class ARC : JavaPlugin() {
                 "modules/text.yml",
                 "stocks/stock.yml",
                 "modules/misc.yml",
+                "modules/join-message-dialog.yml",
                 "config/commands.yml",
                 "guis/defaults.yml",
                 "guis/menus.yml",

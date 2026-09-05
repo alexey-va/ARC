@@ -1,0 +1,121 @@
+schema: 1
+plugin: ARC — native join message dialog
+minecraft-version: 26.1.2
+minecraft-client-sha1: 4e618f09a0c649dde3fdf829df443ce0b8831e65
+gallery-accent: '#92bed8'
+
+resource-pack:
+  url: https://storage.yandexcloud.net/ruscraftinresources/RusCraftingResource.zip
+  sha256-url: https://storage.yandexcloud.net/ruscraftinresources/RusCraftingResource.zip.sha256
+
+sources:
+  dialog:
+    path: src/main/resources/modules/join-message-dialog.yml
+    root: text
+    include: ['*']
+
+placeholders:
+  page: '1'
+  pages: '10'
+  selected: '2'
+  count: '2'
+  limit: '120'
+  message: 'Архитектор23 выполз из своей пещеры'
+
+surfaces:
+  dialogs:
+    - id: join-messages-page
+      source: dialog
+      format: reference-multi-action
+      name-key: join-title
+      external-title-key: join-title
+      columns: 1
+      body:
+        - {id: help, text-key: catalog-help, width: 600}
+        - {id: page, text-key: page, width: 600}
+      buttons:
+        - id: selected-1
+          text-key: selected
+          tooltip-key: turn-off
+          width: 600
+          placeholders: {message: 'Архитектор23 выполз из своей пещеры'}
+        - id: available-2
+          text-key: unselected
+          tooltip-key: turn-on
+          width: 600
+          placeholders: {message: 'Архитектор23 вернулся, потому что реальная жизнь — это для слабаков'}
+        - id: available-3
+          text-key: unselected
+          tooltip-key: turn-on
+          width: 600
+          placeholders: {message: 'Архитектор23 появился, и теперь будет всех ебать'}
+        - id: available-4
+          text-key: unselected
+          tooltip-key: turn-on
+          width: 600
+          placeholders: {message: 'Архитектор23 пришел, чтобы в очередной раз накосячить'}
+        - id: available-5
+          text-key: unselected
+          tooltip-key: turn-on
+          width: 600
+          placeholders: {message: 'Архитектор23 как обычно — зашел с голой жопой'}
+        - id: locked-6
+          text-key: locked
+          tooltip-key: unavailable
+          width: 600
+          placeholders: {message: 'Архитектор23 прибыл и готов на всё, лишь бы не работать'}
+        - id: next
+          text-key: next
+          tooltip-key: next
+          width: 600
+        - id: custom
+          text-key: custom-list
+          tooltip-key: custom-list
+          width: 600
+        - id: switch
+          text-key: switch-leave
+          tooltip-key: switch-leave
+          width: 600
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: leave-messages-page
+      source: dialog
+      format: reference-multi-action
+      name-key: leave-title
+      external-title-key: leave-title
+      columns: 1
+      body:
+        - {id: help, text-key: catalog-help, width: 600}
+        - {id: page, text-key: page, width: 600}
+      buttons:
+        - {id: selected-1, text-key: selected, tooltip-key: turn-off, width: 600, placeholders: {message: 'Архитектор23 съебался в туман'}}
+        - {id: available-2, text-key: unselected, tooltip-key: turn-on, width: 600, placeholders: {message: 'Архитектор23 испарился, потому что реальная жизнь зовёт... или нет'}}
+        - {id: available-3, text-key: unselected, tooltip-key: turn-on, width: 600, placeholders: {message: 'Архитектор23 свалил, оставив после себя одни проблемы'}}
+        - {id: available-4, text-key: unselected, tooltip-key: turn-on, width: 600, placeholders: {message: 'Архитектор23 ушёл, потому что тут хрен делать'}}
+        - {id: available-5, text-key: unselected, tooltip-key: turn-on, width: 600, placeholders: {message: 'Архитектор23 исчез, как последний шанс на победу'}}
+        - {id: locked-6, text-key: locked, tooltip-key: unavailable, width: 600, placeholders: {message: 'Архитектор23 свалил, потому что всё это задолбало'}}
+        - {id: next, text-key: next, tooltip-key: next, width: 600}
+        - {id: custom, text-key: custom-list, tooltip-key: custom-list, width: 600}
+        - {id: switch, text-key: switch-join, tooltip-key: switch-join, width: 600}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: custom-messages
+      source: dialog
+      format: reference-multi-action
+      name-key: custom-join-title
+      external-title-key: custom-join-title
+      columns: 1
+      body:
+        - {id: help, text-key: custom-help, width: 600, placeholders: {count: '0', limit: '10'}}
+        - {id: empty, text-key: custom-empty, width: 600}
+      buttons:
+        - {id: create, text-key: create, tooltip-key: create, width: 600}
+        - {id: back, text-key: back-catalog, tooltip-key: back-catalog, width: 600}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+  fragments:
+    - source: dialog
+      include: ['*']

@@ -139,8 +139,11 @@ permissions:
     description: Bypass ARC join invulnerability
     default: op
   arc.join.message.gui:
-    description: Administer join and quit messages
+    description: Select personal join and quit messages
     default: op
+  arc.join.message.custom:
+    description: Create personal join and quit messages (also requires arc.join.message.gui)
+    default: false
   arc.leaf.decay.bypass:
     description: Bypass ARC leaf decay handling
     default: op
