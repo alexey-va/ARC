@@ -87,7 +87,7 @@ surfaces:
       columns: 1
       body:
         - {id: help, text-key: catalog-help, width: 600}
-        - {id: page, text-key: page, width: 600}
+        - {id: page, text-key: page, width: 600, placeholders: {page: '2'}}
       buttons:
         - {id: selected-1, text-key: selected, tooltip-key: turn-off, width: 600, placeholders: {message: 'Архитектор23 съебался в туман'}}
         - {id: available-2, text-key: unselected, tooltip-key: turn-on, width: 600, placeholders: {message: 'Архитектор23 испарился, потому что реальная жизнь зовёт... или нет'}}
@@ -96,6 +96,7 @@ surfaces:
         - {id: available-5, text-key: unselected, tooltip-key: turn-on, width: 600, placeholders: {message: 'Архитектор23 исчез, как последний шанс на победу'}}
         - {id: locked-6, text-key: locked, tooltip-key: unavailable, width: 600, placeholders: {message: 'Архитектор23 свалил, потому что всё это задолбало'}}
         - {id: next, text-key: next, tooltip-key: next, width: 600}
+        - {id: previous, text-key: previous, tooltip-key: previous, width: 600}
         - {id: custom, text-key: custom-list, tooltip-key: custom-list, width: 600}
         - {id: switch, text-key: switch-join, tooltip-key: switch-join, width: 600}
       viewport: [854, 480]

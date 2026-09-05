@@ -85,8 +85,8 @@ internal class JoinMessageDialogs(private val config: Config) {
                 selectCatalogMessage(context.player, entry, isJoin, !current, page)
             }
         }.toMutableList()
-        if (page > 0) buttons += button("previous", text("previous"), isJoin) { show(it.player, isJoin, page - 1) }
         if (page + 1 < pages) buttons += button("next", text("next"), isJoin) { show(it.player, isJoin, page + 1) }
+        if (page > 0) buttons += button("previous", text("previous"), isJoin) { show(it.player, isJoin, page - 1) }
         if (player.hasPermission(CUSTOM_PERMISSION)) {
             buttons += button("custom", text("custom-list"), isJoin, custom = true) { showCustom(it.player, isJoin, page) }
         }
