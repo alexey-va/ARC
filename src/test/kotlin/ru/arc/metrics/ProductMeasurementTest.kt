@@ -87,6 +87,10 @@ class ProductMeasurementTest : StringSpec({
         store.apply(event("new", joined + 88, ProductEventKind.MEANINGFUL_OUTCOME, ProductOutcome.ADVANCEMENT))
         store.apply(event("new", joined + 100, ProductEventKind.MEANINGFUL_OUTCOME, ProductOutcome.DUNGEON_VISIT))
         rows(store.report(joined + 600_000, 1, 20), "activation").first()["reachedPlayers"] shouldBe 0
+        val points = store.snapshot(joined + 600_000, "network")
+        points.any { it.name == "arc_product_activated_players" } shouldBe false
+        points.filter { it.name == "arc_product_outcome_unique_players" }.all { it.value == 0.0 } shouldBe true
+        points.filter { it.name == "arc_product_path_players" && it.tags["signal"] == "outcome" }.all { it.value == 0.0 } shouldBe true
         store.apply(event("new", joined + 300_000, ProductEventKind.MEANINGFUL_OUTCOME, ProductOutcome.BUILDING_THRESHOLD))
         val activation = rows(store.report(joined + 600_000, 1, 20), "activation").first()
         activation["reachedPlayers"] shouldBe 1

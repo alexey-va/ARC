@@ -184,6 +184,9 @@ class ProductInterestStore private constructor(
 
     @Synchronized
     fun apply(signal: ProductSignal): ProductStoreApplyResult {
+        if (signal.kind == ProductEventKind.MEANINGFUL_OUTCOME && signal.outcome?.isGameplayResult() != true) {
+            return ProductStoreApplyResult(false, players[signal.player]?.journey())
+        }
         prune(signal.occurredAt)
         val record = player(signal.player, signal.occurredAt)
         val before = record.journey()
@@ -362,12 +365,10 @@ class ProductInterestStore private constructor(
             val records = players.values.mapNotNull { player -> player.window(start, today)?.let { player to it } }
             val newPlayers = records.count { (player) -> player.firstJoinAt?.let(::localDate)?.let { !it.isBefore(start) && !it.isAfter(today) } == true }
             val returning = records.count { (_, daily) -> daily.size >= 2 }
-            val activated = records.count { (_, daily) -> daily.size >= 2 && daily.flatMap { it.outcomes }.toSet().size >= 2 }
             val multisystem = records.count { (_, daily) -> daily.flatMap { it.systems }.toSet().size >= 2 }
             points += point("arc_product_unique_players", "Unique pseudonymous players in the rolling window", records.size, scope, "window" to window)
             points += point("arc_product_new_players", "First-join players in the rolling window", newPlayers, scope, "window" to window)
             points += point("arc_product_returning_players", "Players active on at least two calendar days", returning, scope, "window" to window)
-            points += point("arc_product_activated_players", "Players with two days and two distinct meaningful outcomes", activated, scope, "window" to window)
             points += point("arc_product_multisystem_players", "Players using at least two bounded product systems", multisystem, scope, "window" to window)
             ProductFeature.entries.forEach { feature ->
                 points += point(
@@ -389,7 +390,7 @@ class ProductInterestStore private constructor(
                     "activity" to activity.label,
                 )
             }
-            ProductOutcome.entries.forEach { outcome ->
+            ProductOutcome.entries.filter(ProductOutcome::isGameplayResult).forEach { outcome ->
                 points += point(
                     "arc_product_outcome_unique_players",
                     "Unique players reaching a bounded meaningful outcome",
@@ -1176,7 +1177,7 @@ class ProductInterestStore private constructor(
                 features = day.features.orEmpty().filter { value -> ProductFeature.entries.any { it.label == value } }.toMutableSet(),
                 pathInterests = day.pathInterests.orEmpty().filter { value -> ProductPath.entries.any { it.label == value } }.toMutableSet(),
                 pathChoices = day.pathChoices.orEmpty().filter { value -> ProductPath.entries.any { it.label == value } }.toMutableSet(),
-                outcomes = day.outcomes.orEmpty().filter { value -> ProductOutcome.entries.any { it.label == value } }.toMutableSet(),
+                outcomes = day.outcomes.orEmpty().filter { value -> ProductOutcome.entries.any { it.label == value && it.isGameplayResult() } }.toMutableSet(),
                 systems =
                     day.systems.orEmpty()
                         .filter { value -> ProductFeature.entries.any { it.countsAsSystem && it.label == value } }
