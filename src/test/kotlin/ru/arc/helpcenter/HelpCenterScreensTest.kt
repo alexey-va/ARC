@@ -68,7 +68,7 @@ class HelpCenterScreensTest {
             true
         }
         ConfigManager.clear()
-        val inventoryReturn = HelpCenterInventoryReturnRuntime(plugin)
+        val inventoryReturn = HelpCenterInventoryReturnRuntime(plugin, returnOnClose = { true })
         controller = HelpCenterController(
             HelpCenterConfig.load(directory).snapshot(), gateway, {}, inventoryReturn,
             { _, _ -> }, preferences, HelpCenterNavigation(plugin, inventoryReturn::cancel), { _, value -> screen = value },
@@ -166,7 +166,7 @@ class HelpCenterScreensTest {
     fun `settings include all legacy groups and mode selectors return to settings`() {
         open(HelpCenterPage.SETTINGS)
         val ids = screen.buttons.map { it.id.value }
-        listOf("scoreboard", "tablist", "lands", "portal_by_other", "portal_for_other", "jobs",
+        listOf("scoreboard", "tablist", "lands", "portal_by_other", "portal_for_other", "shortcut", "escape",
             "notifications", "flight", "shift_sign_edit", "resource_pack", "totem", "stairs_sit", "tpa", "portal_style")
             .forEach { assertTrue("legacy_$it" in ids, it) }
         assertFalse(ids.any { it.contains("boost") })

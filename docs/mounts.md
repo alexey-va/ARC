@@ -71,7 +71,7 @@ Saving a new favorite removes every older direct node with the `arc.mounts.favor
 
 The favorite has two server-side quick summon paths:
 
-- sneak + the client's **swap item with offhand** action (`Shift + F` with default controls); the swap is intercepted only when the player already has a favorite, otherwise vanilla hand swapping remains unchanged;
+- sneak + the client's **swap item with offhand** action (`Shift + F` with default controls), when the player assigns **Favorite mount** in main-menu settings. The default assignment is the main menu. `MenuShortcutController` owns the sole key listener; the mount controller only performs the selected summon. Missing favorites produce the existing guidance to select one in `/mount`;
 - right-click with the reusable **Свисток маунта**, issued from the favorite mount's detail screen. The whistle stores only an ARC item marker and always summons the currently selected favorite.
 
 Both paths use the same summon service as the collection and detail menu. World, water, vehicle, cooldown, tuning, skin, glow, and ability checks therefore remain identical. `quick-summon.sneak-swap-hands` and `quick-summon.whistle` independently disable the two entry points; both default to `true` when omitted by an older runtime mirror.

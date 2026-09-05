@@ -12,7 +12,6 @@ import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
 import org.bukkit.event.block.Action
 import org.bukkit.event.player.PlayerInteractEvent
-import org.bukkit.event.player.PlayerSwapHandItemsEvent
 import org.bukkit.inventory.ItemFlag
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
@@ -46,15 +45,11 @@ class MountQuickSummonController(
         HandlerList.unregisterAll(this)
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    fun onSwapHands(event: PlayerSwapHandItemsEvent) {
-        val player = event.player
-        if (!active || !configProvider().quickSummonSneakSwapHands) return
-        if (!player.isSneaking || !player.hasPermission(USE_PERMISSION)) return
-        if (summons.favoriteMountId(player.uniqueId) == null) return
-
-        event.isCancelled = true
+    fun summonFavorite(player: Player): Boolean {
+        if (!active || !configProvider().quickSummonSneakSwapHands) return false
+        if (!player.hasPermission(USE_PERMISSION)) return false
         summons.sendFeedback(player, summons.summonFavorite(player))
+        return true
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)

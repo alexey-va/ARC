@@ -28,6 +28,7 @@ internal class HelpCenterInventoryReturnRuntime(
     private val plugin: Plugin,
     private val scheduler: TaskScheduler = BukkitTaskScheduler(plugin),
     private val openGraceTicks: Long = DEFAULT_OPEN_GRACE_TICKS,
+    private val returnOnClose: (Player) -> Boolean = ru.arc.gui.MenuEscapeBehavior::goesBack,
 ) : Listener, AutoCloseable {
     private val store = HelpCenterInventoryReturnStore()
     private val tasks = LifecycleTaskScope(scheduler)
@@ -72,7 +73,7 @@ internal class HelpCenterInventoryReturnRuntime(
         // close handler. Waiting one tick lets the replacement open event win.
         tasks.runLater(1L) {
             val action = store.consumeClose(player.uniqueId, nonce, inventory) ?: return@runLater
-            if (player.isOnline) action()
+            if (player.isOnline && returnOnClose(player)) action()
         }
     }
 

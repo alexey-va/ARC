@@ -484,6 +484,8 @@ internal class HelpCenterController(
                     .map { entry ->
                         button("legacy_${entry.id}", text(entry.labelKey, "state" to legacyState(entry.state, entry.id)), text(entry.tooltipKey)) {
                             when (entry.id) {
+                                "shortcut" -> openLegacyOptions(player, entry.id, ru.arc.gui.MenuShortcutAction.entries.map { "shortcut-${it.id}" })
+                                "escape" -> openLegacyOptions(player, entry.id, listOf("escape-close", "escape-back"))
                                 "scoreboard", "tablist" -> openLegacyOptions(player, entry.id, (1..20).map { "${entry.id}-$it" } + "${entry.id}-off")
                                 "lands" -> openLegacyOptions(player, entry.id, listOf("lands-show", "lands-hide"))
                                 "flight" -> openLegacyOptions(player, entry.id, listOf("flight-exp", "flight-money", "flight-off", "flight-recharge", "flight-toggle"))
@@ -499,6 +501,7 @@ internal class HelpCenterController(
     }
 
     private fun legacyState(state: String?, group: String? = null): String = when {
+        group in setOf("shortcut", "escape") -> plainText("$group-state-$state")
         state?.toIntOrNull() != null && group in setOf("scoreboard", "tablist") -> plainText("legacy-settings-$group-mode-$state")
         state?.toIntOrNull() != null -> plainText("legacy-state-style") + " " + state
         else -> plainText("legacy-state-${state ?: "unknown"}")
@@ -506,16 +509,19 @@ internal class HelpCenterController(
 
     private fun openLegacyOptions(player: Player, group: String, actions: List<String>) {
         markNavigation(player) { openLegacyOptions(player, group, actions) }
+        val selected = legacySettings.entries(player).firstOrNull { it.id == group }?.state
+        val bodyKey = if (group in setOf("shortcut", "escape")) "legacy-settings-$group-tooltip" else "legacy-options-body"
         showDialog(player, PaperDialogScreen(
             id = "help.settings.$group",
             title = text("legacy-settings-$group", "state" to legacyState(legacySettings.entries(player).firstOrNull { it.id == group }?.state, group)),
-            body = listOf(PaperDialogBody(text("legacy-options-body"))),
+            body = listOf(PaperDialogBody(text(bodyKey))),
             buttons = actions.map { id ->
                 val mode = id.substringAfterLast('-').toIntOrNull()
-                val label = if (mode != null) text("legacy-settings-$group-mode-$mode") else text("legacy-action-$id")
-                button("legacy_$id", label, text("legacy-options-body")) {
+                val name = if (mode != null) text("legacy-settings-$group-mode-$mode") else text("legacy-action-$id")
+                val label = if (group in setOf("shortcut", "escape") && id == "$group-$selected") text("setting-selected").append(name) else name
+                button("legacy_$id", label, text(if (group in setOf("shortcut", "escape")) "legacy-action-$id-tooltip" else bodyKey)) {
                     applyLegacySetting(player, id) { openLegacyOptions(player, group, actions) }
-                }.copy(width = 190)
+                }.copy(width = if (group in setOf("shortcut", "escape")) 230 else 190)
             },
             exitButton = button("back", text("back-label")) { openSettings(player) },
             columns = 2,

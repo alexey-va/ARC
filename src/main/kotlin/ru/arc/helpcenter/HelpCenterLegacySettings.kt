@@ -11,6 +11,8 @@ import org.bukkit.entity.Player
 import ru.arc.ARC
 import ru.arc.config.ConfigManager
 import ru.arc.hooks.HookRegistry
+import ru.arc.gui.MenuShortcutAction
+import ru.arc.gui.MenuEscapeBehavior
 import java.util.concurrent.CompletableFuture
 
 data class HelpCenterLegacySettingEntry(
@@ -29,7 +31,6 @@ class HelpCenterLegacySettings(
         fun meta(player: Player, key: String): String?
         fun cmiOption(player: Player, option: CmiOption): Boolean?
         fun flightState(player: Player): String?
-        fun jobsBossbar(player: Player): Boolean?
         fun tpaEnabled(player: Player): Boolean?
         fun setPermission(player: Player, node: String, enabled: Boolean): CompletableFuture<Boolean>
         fun setExclusiveMode(player: Player, prefix: String, mode: Int?): CompletableFuture<Boolean>
@@ -42,7 +43,6 @@ class HelpCenterLegacySettings(
 
     enum class PlayerCommand(val value: String) {
         LANDS_SHOW("lands view here"), LANDS_HIDE("lands view disable"),
-        JOBS_BOSSBAR("jobs toggle bossbar"),
         FLIGHT_EXP("cmi autorecharge exp on -s"), FLIGHT_MONEY("cmi autorecharge money on -s"),
         FLIGHT_OFF_EXP("cmi autorecharge exp off -s"), FLIGHT_OFF_MONEY("cmi autorecharge money off -s"),
         FLIGHT_RECHARGE("cmi flightcharge recharge"), FLIGHT_TOGGLE("flyc"),
@@ -54,12 +54,13 @@ class HelpCenterLegacySettings(
     enum class ConsoleCommand { OPEN_ADMIN_SETTINGS }
 
     fun entries(player: Player): List<HelpCenterLegacySettingEntry> = listOf(
+        entry("shortcut", "legacy-settings-shortcut", MenuShortcutAction.from(backend.meta(player, MenuShortcutAction.META_KEY)).id, "legacy-settings-shortcut-tooltip"),
+        entry("escape", "legacy-settings-escape", if (backend.meta(player, MenuEscapeBehavior.META_KEY) == "back") "back" else "close", "legacy-settings-escape-tooltip"),
         entry("scoreboard", "legacy-settings-scoreboard", modeState(player, "tab.scoreboard"), "legacy-settings-scoreboard-tooltip"),
         entry("tablist", "legacy-settings-tablist", modeState(player, "tab.tablist"), "legacy-settings-tablist-tooltip"),
         entry("lands", "legacy-settings-lands", null, "legacy-settings-lands-tooltip"),
         entry("portal-by-other", "legacy-settings-portal-by-other", onOff(player, PORTAL_BY_OTHER), "legacy-settings-portal-tooltip"),
         entry("portal-for-other", "legacy-settings-portal-for-other", onOff(player, PORTAL_FOR_OTHER), "legacy-settings-portal-tooltip"),
-        entry("jobs", "legacy-settings-jobs", backend.jobsBossbar(player)?.let { if (it) "on" else "off" }, "legacy-settings-jobs-tooltip"),
         entry("notifications", "legacy-settings-notifications", onOff(player, CHAT_NOTIFY), "legacy-settings-notifications-tooltip"),
         entry("flight", "legacy-settings-flight", backend.flightState(player), "legacy-settings-flight-tooltip"),
         entry("shift-sign-edit", "legacy-settings-shift-edit", cmiOnOff(player, CmiOption.SHIFT_SIGN_EDIT), "legacy-settings-shift-tooltip"),
@@ -79,7 +80,8 @@ class HelpCenterLegacySettings(
         "lands-hide" -> backend.command(player, PlayerCommand.LANDS_HIDE)
         "portal-by-other" -> togglePermission(player, PORTAL_BY_OTHER)
         "portal-for-other" -> togglePermission(player, PORTAL_FOR_OTHER)
-        "jobs" -> backend.command(player, PlayerCommand.JOBS_BOSSBAR)
+        "escape-close" -> backend.setMeta(player, MenuEscapeBehavior.META_KEY, "close")
+        "escape-back" -> backend.setMeta(player, MenuEscapeBehavior.META_KEY, "back")
         "notifications" -> togglePermission(player, CHAT_NOTIFY)
         "flight-exp" -> commands(player, PlayerCommand.FLIGHT_EXP, PlayerCommand.FLIGHT_OFF_MONEY)
         "flight-money" -> commands(player, PlayerCommand.FLIGHT_MONEY, PlayerCommand.FLIGHT_OFF_EXP)
@@ -96,6 +98,9 @@ class HelpCenterLegacySettings(
     }
 
     private fun modeAction(player: Player, id: String): CompletableFuture<Boolean> {
+        MenuShortcutAction.entries.firstOrNull { "shortcut-${it.id}" == id }?.let {
+            return backend.setMeta(player, MenuShortcutAction.META_KEY, it.id)
+        }
         val match = Regex("^(scoreboard|tablist)-(\\d{1,2})$").matchEntire(id) ?: return falseFuture()
         val mode = match.groupValues[2].toIntOrNull()?.takeIf { it in 1..20 } ?: return falseFuture()
         return backend.setExclusiveMode(player, match.groupValues[1].let { if (it == "scoreboard") "tab.scoreboard" else "tab.tablist" }, mode)
@@ -152,17 +157,6 @@ class HelpCenterLegacySettings(
                 charge.isMoneyAutoRecharge -> "money"
                 else -> "unknown"
             }
-        }.getOrNull()
-        override fun jobsBossbar(player: Player): Boolean? = runCatching {
-            val type = Class.forName("com.gamingmesh.jobs.container.MessageToggleType")
-            val state = Class.forName("com.gamingmesh.jobs.stuff.ToggleBarHandling")
-                .getMethod("getState", java.util.UUID::class.java, type)
-                .invoke(null, player.uniqueId, type.enumConstants.first { it.toString() == "BossBar" })
-            state?.toString()?.equals("Off", ignoreCase = true)?.not()
-        }.recoverCatching {
-            val map = Class.forName("com.gamingmesh.jobs.stuff.ToggleBarHandling")
-                .getMethod("getBossBarToggle").invoke(null) as? Map<*, *> ?: return null
-            map[player.uniqueId] as? Boolean
         }.getOrNull()
         override fun tpaEnabled(player: Player): Boolean? = runCatching {
             val plugin = org.bukkit.Bukkit.getPluginManager().getPlugin("HuskHomes") as? HuskHomes ?: return null
@@ -222,7 +216,6 @@ class HelpCenterLegacySettings(
     companion object {
         private const val PORTAL_BY_OTHER = "arc.portal.teleport.by.other"
         private const val PORTAL_FOR_OTHER = "arc.portal.teleport.other"
-        private const val JOBS = "arc.settings.jobs"
         private const val CHAT_NOTIFY = "arc.chat.notify"
         private const val SHIFT_EDIT = "arc.settings.shiftedit"
         private const val RESOURCE_PACK = "arc.apply-rp"

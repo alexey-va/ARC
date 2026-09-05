@@ -344,6 +344,36 @@ sources:
       - setting-trails-current
       - chat-global-state
       - chat-local-state
+      - legacy-settings-shortcut
+      - legacy-settings-shortcut-tooltip
+      - legacy-settings-escape
+      - legacy-settings-escape-tooltip
+      - setting-selected
+      - shortcut-unavailable
+      - escape-state-close
+      - escape-state-back
+      - legacy-action-escape-close
+      - legacy-action-escape-close-tooltip
+      - legacy-action-escape-back
+      - legacy-action-escape-back-tooltip
+      - shortcut-state-main
+      - legacy-action-shortcut-main
+      - legacy-action-shortcut-main-tooltip
+      - shortcut-state-mount
+      - legacy-action-shortcut-mount
+      - legacy-action-shortcut-mount-tooltip
+      - shortcut-state-travel
+      - legacy-action-shortcut-travel
+      - legacy-action-shortcut-travel-tooltip
+      - shortcut-state-favorites
+      - legacy-action-shortcut-favorites
+      - legacy-action-shortcut-favorites-tooltip
+      - shortcut-state-settings
+      - legacy-action-shortcut-settings
+      - legacy-action-shortcut-settings-tooltip
+      - shortcut-state-disabled
+      - legacy-action-shortcut-disabled
+      - legacy-action-shortcut-disabled-tooltip
       - legacy-settings-scoreboard
       - legacy-settings-scoreboard-tooltip
       - legacy-settings-tablist
@@ -353,8 +383,6 @@ sources:
       - legacy-settings-portal-by-other
       - legacy-settings-portal-for-other
       - legacy-settings-portal-tooltip
-      - legacy-settings-jobs
-      - legacy-settings-jobs-tooltip
       - legacy-settings-notifications
       - legacy-settings-notifications-tooltip
       - legacy-settings-flight
@@ -438,6 +466,7 @@ sources:
       - legacy-settings-tablist-mode-20
       - settings-body
 placeholders:
+  number: '1'
   goal: Играть вместе
   problem: Не получается заприватить
   scope: вся сеть
@@ -855,6 +884,18 @@ surfaces:
         placeholders: {state: включено, description: Включить или выключить личные частицы, command: pp toggle}
         width: 230
         tooltip-key: command-tooltip
+      - id: shortcut
+        text-key: legacy-settings-shortcut
+        width: 230
+        placeholders:
+          state: главное меню
+        tooltip-key: legacy-settings-shortcut-tooltip
+      - id: escape
+        text-key: legacy-settings-escape
+        width: 230
+        placeholders:
+          state: закрыть всё
+        tooltip-key: legacy-settings-escape-tooltip
       - id: scoreboard
         text-key: legacy-settings-scoreboard
         width: 230
@@ -885,12 +926,6 @@ surfaces:
         placeholders:
           state: ○ выкл
         tooltip-key: legacy-settings-portal-tooltip
-      - id: jobs
-        text-key: legacy-settings-jobs
-        width: 230
-        placeholders:
-          state: ✔ вкл
-        tooltip-key: legacy-settings-jobs-tooltip
       - id: notifications
         text-key: legacy-settings-notifications
         width: 230
@@ -939,6 +974,10 @@ surfaces:
         placeholders:
           state: Астральный
         tooltip-key: legacy-settings-portal-style-tooltip
+      - id: navigate-back
+        text-key: back-label
+        tooltip-key: back-label
+        width: 150
       viewport:
       - 854
       - 480
@@ -976,6 +1015,18 @@ surfaces:
         placeholders: {state: включено, description: Включить или выключить личные частицы, command: pp toggle}
         width: 230
         tooltip-key: command-tooltip
+      - id: shortcut
+        text-key: legacy-settings-shortcut
+        width: 230
+        placeholders:
+          state: главное меню
+        tooltip-key: legacy-settings-shortcut-tooltip
+      - id: escape
+        text-key: legacy-settings-escape
+        width: 230
+        placeholders:
+          state: закрыть всё
+        tooltip-key: legacy-settings-escape-tooltip
       - id: scoreboard
         text-key: legacy-settings-scoreboard
         width: 230
@@ -1006,12 +1057,6 @@ surfaces:
         placeholders:
           state: ○ выкл
         tooltip-key: legacy-settings-portal-tooltip
-      - id: jobs
-        text-key: legacy-settings-jobs
-        width: 230
-        placeholders:
-          state: ✔ вкл
-        tooltip-key: legacy-settings-jobs-tooltip
       - id: notifications
         text-key: legacy-settings-notifications
         width: 230
@@ -1166,6 +1211,78 @@ surfaces:
       - 480
       variants:
       - id: default
+
+    - id: help-settings-shortcut
+      source: help-center
+      format: reference-multi-action
+      name-key: legacy-settings-shortcut
+      external-title-key: legacy-settings-shortcut
+      columns: 2
+      placeholders:
+        state: главное меню
+      body:
+      - id: intro
+        text-key: legacy-settings-shortcut-tooltip
+        width: 400
+      buttons:
+      - id: main
+        text-key: legacy-action-shortcut-main
+        tooltip-key: legacy-action-shortcut-main-tooltip
+        width: 230
+      - id: mount
+        text-key: legacy-action-shortcut-mount
+        tooltip-key: legacy-action-shortcut-mount-tooltip
+        width: 230
+      - id: travel
+        text-key: legacy-action-shortcut-travel
+        tooltip-key: legacy-action-shortcut-travel-tooltip
+        width: 230
+      - id: favorites
+        text-key: legacy-action-shortcut-favorites
+        tooltip-key: legacy-action-shortcut-favorites-tooltip
+        width: 230
+      - id: settings
+        text-key: legacy-action-shortcut-settings
+        tooltip-key: legacy-action-shortcut-settings-tooltip
+        width: 230
+      - id: disabled
+        text-key: legacy-action-shortcut-disabled
+        tooltip-key: legacy-action-shortcut-disabled-tooltip
+        width: 230
+      - id: navigate-back
+        text-key: back-label
+        tooltip-key: back-label
+        width: 150
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: help-settings-escape
+      source: help-center
+      format: reference-multi-action
+      name-key: legacy-settings-escape
+      external-title-key: legacy-settings-escape
+      columns: 2
+      placeholders:
+        state: закрыть всё
+      body:
+      - id: intro
+        text-key: legacy-settings-escape-tooltip
+        width: 400
+      buttons:
+      - id: close
+        text-key: legacy-action-escape-close
+        tooltip-key: legacy-action-escape-close-tooltip
+        width: 230
+      - id: back
+        text-key: legacy-action-escape-back
+        tooltip-key: legacy-action-escape-back-tooltip
+        width: 230
+      - id: navigate-back
+        text-key: back-label
+        tooltip-key: back-label
+        width: 150
+      viewport: [854, 480]
+      variants: [{id: default}]
 
     - id: help-settings-tablist
       source: help-center
@@ -1736,7 +1853,7 @@ surfaces:
 
   fragments:
     - source: help-center
-      include: ["legacy-*", "chat-*-state"]
+      include: ["legacy-*", "chat-*-state", "shortcut-state-*", "escape-state-*", "setting-selected", "shortcut-unavailable", "command-*-label"]
     - source: mounts-ui
       include: ['copy.*']
     - source: mounts-catalog

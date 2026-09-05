@@ -37,6 +37,7 @@ object ArcMenus {
     private lateinit var dataRoot: Path
     private var runtime: PaperMenuRuntime? = null
     private var dialogRuntime: PaperDialogRuntime? = null
+    private var shortcuts: MenuShortcutController? = null
 
     fun initialize(plugin: Plugin, root: Path) {
         check(runtime == null) { "ARC menu runtime is already initialized" }
@@ -45,6 +46,7 @@ object ArcMenus {
         disk.mergeMissingFromBundled(ArcMenuConfiguration.RESOURCE)
         runtime = PaperMenuRuntime(plugin, BukkitTaskScheduler(plugin), ArcMenuConfiguration.load(root))
         dialogRuntime = PaperDialogRuntime(plugin)
+        shortcuts = MenuShortcutController(plugin)
     }
 
     fun reload() {
@@ -56,7 +58,8 @@ object ArcMenus {
         requireNotNull(runtime) { "ARC menu runtime is not initialized" }.current()
 
     fun openDialog(player: Player, screen: PaperDialogScreen) {
-        requireNotNull(dialogRuntime) { "ARC dialog runtime is not initialized" }.open(player, screen)
+        requireNotNull(dialogRuntime) { "ARC dialog runtime is not initialized" }
+            .open(player, MenuEscapeBehavior.apply(screen, MenuEscapeBehavior.goesBack(player)))
     }
 
     fun item(
@@ -126,6 +129,8 @@ object ArcMenus {
     )
 
     fun close() {
+        shortcuts?.close()
+        shortcuts = null
         dialogRuntime?.close()
         dialogRuntime = null
         runtime?.close()
@@ -133,6 +138,8 @@ object ArcMenus {
     }
 
     internal fun resetForTests() {
+        shortcuts?.close()
+        shortcuts = null
         dialogRuntime = null
         runtime = null
     }

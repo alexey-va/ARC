@@ -14,7 +14,7 @@ class HelpCenterInventoryReturnRuntimeTest : FreeSpec({
     "returns one tick after the observed inventory closes" {
         val plugin = paper.createSimplePlugin("HelpCenterReturn")
         val player = paper.addPlayer("Viewer")
-        val runtime = HelpCenterInventoryReturnRuntime(plugin)
+        val runtime = HelpCenterInventoryReturnRuntime(plugin, returnOnClose = { true })
         var returns = 0
 
         runtime.arm(player) { returns++ }
@@ -24,6 +24,24 @@ class HelpCenterInventoryReturnRuntimeTest : FreeSpec({
         returns shouldBe 0
         paper.performTicks(1)
         returns shouldBe 1
+        runtime.close()
+    }
+
+    "close all consumes the return without reopening any menu" {
+        val plugin = paper.createSimplePlugin("HelpCenterCloseAll")
+        val player = paper.addPlayer("Viewer")
+        var back = false
+        val runtime = HelpCenterInventoryReturnRuntime(plugin, returnOnClose = { back })
+        var returns = 0
+        runtime.arm(player) { returns++ }
+        player.openInventory(Bukkit.createInventory(null, 9))
+        player.closeInventory()
+        paper.performTicks(1)
+        back = true
+        player.openInventory(Bukkit.createInventory(null, 9))
+        player.closeInventory()
+        paper.performTicks(1)
+        returns shouldBe 0
         runtime.close()
     }
 
@@ -46,7 +64,7 @@ class HelpCenterInventoryReturnRuntimeTest : FreeSpec({
     "keeps replacement inventories inside the same external flow" {
         val plugin = paper.createSimplePlugin("HelpCenterChain")
         val player = paper.addPlayer("Viewer")
-        val runtime = HelpCenterInventoryReturnRuntime(plugin)
+        val runtime = HelpCenterInventoryReturnRuntime(plugin, returnOnClose = { true })
         var returns = 0
 
         runtime.arm(player) { returns++ }

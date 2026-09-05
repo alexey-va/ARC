@@ -11,6 +11,25 @@ import java.util.concurrent.CompletableFuture
 
 class HelpCenterLegacySettingsTest {
     @Test
+    fun `input settings default safely and roundtrip through persistent metadata`() {
+        val player = mockk<Player>()
+        val backend = FakeBackend()
+        val settings = HelpCenterLegacySettings(backend)
+        assertEquals("main", settings.entries(player).first { it.id == "shortcut" }.state)
+        assertEquals("close", settings.entries(player).first { it.id == "escape" }.state)
+        assertTrue(settings.execute(player, "shortcut-mount").join())
+        assertTrue(settings.execute(player, "escape-back").join())
+        val reopened = HelpCenterLegacySettings(backend)
+        assertEquals("mount", reopened.entries(player).first { it.id == "shortcut" }.state)
+        assertEquals("back", reopened.entries(player).first { it.id == "escape" }.state)
+        assertEquals(false, reopened.execute(player, "shortcut-op").join())
+        assertTrue(reopened.execute(player, "shortcut-disabled").join())
+        assertTrue(reopened.execute(player, "escape-close").join())
+        assertEquals("disabled", reopened.entries(player).first { it.id == "shortcut" }.state)
+        assertEquals("close", reopened.entries(player).first { it.id == "escape" }.state)
+    }
+
+    @Test
     fun `entries expose canonical states and execute only typed actions`() {
         val player = mockk<Player>()
         val backend = FakeBackend()
@@ -42,18 +61,18 @@ class HelpCenterLegacySettingsTest {
     }
 
     private class FakeBackend : HelpCenterLegacySettings.Backend {
+        val metadata = mutableMapOf<String, String>()
         val permissions = mutableMapOf<String, Boolean>()
         val commands = mutableListOf<HelpCenterLegacySettings.PlayerCommand>()
         val consoleCommands = mutableListOf<HelpCenterLegacySettings.ConsoleCommand>()
         override fun hasPermission(player: Player, node: String) = permissions[node] == true
-        override fun meta(player: Player, key: String) = null
+        override fun meta(player: Player, key: String) = metadata[key]
         override fun cmiOption(player: Player, option: HelpCenterLegacySettings.CmiOption) = null
         override fun flightState(player: Player) = null
-        override fun jobsBossbar(player: Player) = null
         override fun tpaEnabled(player: Player) = null
         override fun setPermission(player: Player, node: String, enabled: Boolean) = CompletableFuture.completedFuture(permissions.put(node, enabled) == null || true)
         override fun setExclusiveMode(player: Player, prefix: String, mode: Int?) = CompletableFuture.completedFuture(true)
-        override fun setMeta(player: Player, key: String, value: String) = CompletableFuture.completedFuture(true)
+        override fun setMeta(player: Player, key: String, value: String) = CompletableFuture.completedFuture(true).also { metadata[key] = value }
         override fun command(player: Player, command: HelpCenterLegacySettings.PlayerCommand) = CompletableFuture.completedFuture(commands.add(command).let { true })
         override fun consoleCommand(player: Player, command: HelpCenterLegacySettings.ConsoleCommand) = CompletableFuture.completedFuture(consoleCommands.add(command).let { true })
     }

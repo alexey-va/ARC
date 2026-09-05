@@ -46,6 +46,8 @@ object MountModule : PluginModule {
         catalog = null
     }
 
+    fun summonFavorite(player: org.bukkit.entity.Player): Boolean = quickSummons?.summonFavorite(player) ?: false
+
     private fun start(loadedConfig: MountModuleConfig) {
         config = loadedConfig
         if (!loadedConfig.enabled) {

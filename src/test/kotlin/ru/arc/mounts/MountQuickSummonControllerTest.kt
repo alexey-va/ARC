@@ -8,7 +8,6 @@ import org.bukkit.Material
 import org.bukkit.block.BlockFace
 import org.bukkit.event.block.Action
 import org.bukkit.event.player.PlayerInteractEvent
-import org.bukkit.event.player.PlayerSwapHandItemsEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
 import org.junit.jupiter.api.Test
@@ -17,40 +16,36 @@ import java.time.Duration
 
 class MountQuickSummonControllerTest : TestBase() {
     @Test
-    fun `sneak swap-hands summons the selected favorite and cancels the vanilla swap`() {
+    fun `shortcut summons the selected favorite`() {
         val fixture = fixture(favoriteSelected = true)
         val player = server.addPlayer("HotkeyRider")
         player.addAttachment(plugin, "arc.mounts.use", true)
         player.setSneaking(true)
-        val event = PlayerSwapHandItemsEvent(player, ItemStack(Material.STONE), ItemStack(Material.TORCH))
 
         fixture.controller.start()
         try {
-            fixture.controller.onSwapHands(event)
+            fixture.controller.summonFavorite(player) shouldBe true
         } finally {
             fixture.controller.shutdown()
         }
 
-        event.isCancelled shouldBe true
         verify(exactly = 1) { fixture.sessions.spawn(any(), any(), any(), any()) }
     }
 
     @Test
-    fun `sneak swap-hands remains vanilla when no favorite is selected`() {
+    fun `shortcut does not spawn a mount when no favorite is selected`() {
         val fixture = fixture(favoriteSelected = false)
         val player = server.addPlayer("VanillaSwapper")
         player.addAttachment(plugin, "arc.mounts.use", true)
         player.setSneaking(true)
-        val event = PlayerSwapHandItemsEvent(player, ItemStack(Material.STONE), ItemStack(Material.TORCH))
 
         fixture.controller.start()
         try {
-            fixture.controller.onSwapHands(event)
+            fixture.controller.summonFavorite(player) shouldBe true
         } finally {
             fixture.controller.shutdown()
         }
 
-        event.isCancelled shouldBe false
         verify(exactly = 0) { fixture.sessions.spawn(any(), any(), any(), any()) }
     }
 
