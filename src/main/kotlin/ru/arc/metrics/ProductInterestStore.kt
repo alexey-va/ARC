@@ -17,7 +17,7 @@ data class ProductJourneySnapshot(
     val firstJoinAt: Long?,
     val firstMenuAt: Long?,
     val firstPathAt: Map<ProductPath, Long>,
-    val firstOutcomeAt: Map<ProductPath, Long>,
+    val firstGameplayOutcomeAt: Map<ProductPath, Long> = emptyMap(),
 )
 
 data class ProductStoreApplyResult(
@@ -39,6 +39,7 @@ class ProductInterestStore private constructor(
     val recoveredInvalidPath: Path? = null,
 ) {
     private var capacityEvictions: Long = 0
+    private var resultObservationStartedAt: Long = lastSavedAt
     private data class PlayerRecord(
         val id: String,
         var firstSeenAt: Long,
@@ -46,7 +47,7 @@ class ProductInterestStore private constructor(
         var firstJoinAt: Long? = null,
         var firstMenuAt: Long? = null,
         val firstPathAt: MutableMap<String, Long> = linkedMapOf(),
-        val firstOutcomeAt: MutableMap<String, Long> = linkedMapOf(),
+        val firstGameplayOutcomeAt: MutableMap<String, Long> = linkedMapOf(),
         val days: MutableMap<String, DailyRecord> = linkedMapOf(),
     )
 
@@ -102,6 +103,7 @@ class ProductInterestStore private constructor(
         val savedAt: Long = 0,
         val players: List<PersistedPlayer>? = null,
         val capacityEvictions: Long = 0,
+        val resultObservationStartedAt: Long? = null,
     )
 
     private data class PersistedPlayer(
@@ -111,7 +113,7 @@ class ProductInterestStore private constructor(
         val firstJoinAt: Long? = null,
         val firstMenuAt: Long? = null,
         val firstPathAt: Map<String, Long>? = null,
-        val firstOutcomeAt: Map<String, Long>? = null,
+        val firstGameplayOutcomeAt: Map<String, Long>? = null,
         val days: List<PersistedDay>? = null,
     )
 
@@ -251,7 +253,9 @@ class ProductInterestStore private constructor(
                     changed = day.outcomes.add(outcome.label) || changed
                     changed = day.activities.add(outcome.activity.label) || changed
                     changed = day.pathInterests.add(outcome.path.label) || changed
-                    changed = record.firstOutcomeAt.putIfEarlier(outcome.path.label, signal.occurredAt) || changed
+                    if (outcome.isGameplayResult()) {
+                        changed = record.firstGameplayOutcomeAt.putIfEarlier(outcome.path.label, signal.occurredAt) || changed
+                    }
                     signal.feature?.takeIf(ProductFeature::countsAsSystem)?.let { changed = day.systems.add(it.label) || changed }
                 }
             }
@@ -351,7 +355,7 @@ class ProductInterestStore private constructor(
         prune(now)
         val today = localDate(now)
         val points = mutableListOf<MetricPoint>()
-        points += point("arc_product_measurement_version", "Product measurement semantics version", 2, scope)
+        points += point("arc_product_measurement_version", "Product measurement semantics version", 3, scope)
         WINDOWS.forEach { days ->
             val window = "${days}d"
             val start = today.minusDays(days.toLong() - 1)
@@ -528,7 +532,8 @@ class ProductInterestStore private constructor(
 
         return linkedMapOf(
             "version" to VERSION,
-            "measurementVersion" to 2,
+            "measurementVersion" to 3,
+            "resultObservationStartedAt" to resultObservationStartedAt,
             "generatedAt" to now,
             "window" to linkedMapOf("days" to safeDays, "from" to start.toString(), "through" to end.toString()),
             "complete" to (capacityEvictions == 0L && recoveredInvalidPath == null),
@@ -648,7 +653,7 @@ class ProductInterestStore private constructor(
         points += funnelPoint(cohort.count { it.firstMenuAt != null }, "menu_open", "none")
         points += funnelPoint(cohort.count { it.firstPathAt.isNotEmpty() }, "path_interest", "any")
         points += funnelPoint(cohort.count { player -> player.days.values.any { it.pathChoices.isNotEmpty() } }, "path_choice", "any")
-        points += funnelPoint(cohort.count { it.firstOutcomeAt.isNotEmpty() }, "outcome", "any")
+        points += funnelPoint(cohort.count { it.firstGameplayOutcomeAt.isNotEmpty() }, "outcome", "any")
         ProductPath.entries.filterNot { it == ProductPath.NONE }.forEach { path ->
             points += funnelPoint(cohort.count { path.label in it.firstPathAt }, "path_interest", path.label)
             points += funnelPoint(
@@ -656,7 +661,7 @@ class ProductInterestStore private constructor(
                 "path_choice",
                 path.label,
             )
-            points += funnelPoint(cohort.count { path.label in it.firstOutcomeAt }, "outcome", path.label)
+            points += funnelPoint(cohort.count { path.label in it.firstGameplayOutcomeAt }, "outcome", path.label)
         }
     }
 
@@ -692,11 +697,11 @@ class ProductInterestStore private constructor(
     private fun activationReport(now: Long, cohortDays: Int = config.retentionDays): List<Map<String, Any?>> = listOf(600L, 3_600L, 86_400L).map { budget ->
         val oldest = localDate(now).minusDays(cohortDays.toLong() - 1)
         val eligible = players.values.filter { player -> player.firstJoinAt?.let {
-            !localDate(it).isBefore(oldest) && it <= now - budget * 1_000
+            it >= resultObservationStartedAt && !localDate(it).isBefore(oldest) && it <= now - budget * 1_000
         } == true }
         val latencies = eligible.mapNotNull { player ->
             val joined = checkNotNull(player.firstJoinAt)
-            player.firstOutcomeAt.values.filter { it >= joined }.minOrNull()?.let { (it - joined) / 1_000.0 }
+            player.firstGameplayOutcomeAt.values.filter { it >= joined }.minOrNull()?.let { (it - joined) / 1_000.0 }
                 ?.takeIf { it <= budget }
         }.sorted()
         fun percentile(fraction: Double): Double? = if (latencies.isEmpty()) null else
@@ -707,7 +712,7 @@ class ProductInterestStore private constructor(
     }
 
     private fun PlayerRecord.exitStage(): ProductExitStage = when {
-        firstOutcomeAt.isNotEmpty() -> ProductExitStage.ENGAGED
+        firstGameplayOutcomeAt.isNotEmpty() -> ProductExitStage.ENGAGED
         firstPathAt.isNotEmpty() -> ProductExitStage.BEFORE_OUTCOME
         firstMenuAt != null -> ProductExitStage.BEFORE_PATH
         else -> ProductExitStage.BEFORE_MENU
@@ -736,7 +741,7 @@ class ProductInterestStore private constructor(
             firstJoinAt,
             firstMenuAt,
             firstPathAt.mapNotNull { (key, value) -> ProductPath.entries.firstOrNull { it.label == key }?.let { it to value } }.toMap(),
-            firstOutcomeAt.mapNotNull { (key, value) -> ProductPath.entries.firstOrNull { it.label == key }?.let { it to value } }.toMap(),
+            firstGameplayOutcomeAt.mapNotNull { (key, value) -> ProductPath.entries.firstOrNull { it.label == key }?.let { it to value } }.toMap(),
         )
 
     private fun PlayerRecord.window(
@@ -922,6 +927,7 @@ class ProductInterestStore private constructor(
             version = VERSION,
             savedAt = now,
             capacityEvictions = capacityEvictions,
+            resultObservationStartedAt = resultObservationStartedAt,
             players =
                 players.values.sortedBy { it.id }.map { player ->
                     PersistedPlayer(
@@ -931,7 +937,7 @@ class ProductInterestStore private constructor(
                         firstJoinAt = player.firstJoinAt,
                         firstMenuAt = player.firstMenuAt,
                         firstPathAt = player.firstPathAt.toSortedMap(),
-                        firstOutcomeAt = player.firstOutcomeAt.toSortedMap(),
+                        firstGameplayOutcomeAt = player.firstGameplayOutcomeAt.toSortedMap(),
                         days = player.days.values.sortedBy { it.date }.map(::persist),
                     )
                 },
@@ -1038,13 +1044,12 @@ class ProductInterestStore private constructor(
                             firstSeenAt = persisted.firstSeenAt,
                             lastSeenAt = persisted.lastSeenAt,
                             firstJoinAt = persisted.firstJoinAt?.takeIf(validTime),
+                            firstGameplayOutcomeAt = persisted.firstGameplayOutcomeAt.orEmpty()
+                                .filter { (key, value) -> ProductPath.entries.any { it.label == key } && validTime(value) }
+                                .toMutableMap(),
                             firstMenuAt = persisted.firstMenuAt?.takeIf(validTime),
                             firstPathAt =
                                 persisted.firstPathAt.orEmpty()
-                                    .filter { (key, value) -> ProductPath.entries.any { it.label == key } && validTime(value) }
-                                    .toMutableMap(),
-                            firstOutcomeAt =
-                                persisted.firstOutcomeAt.orEmpty()
                                     .filter { (key, value) -> ProductPath.entries.any { it.label == key } && validTime(value) }
                                     .toMutableMap(),
                         )
@@ -1061,6 +1066,9 @@ class ProductInterestStore private constructor(
                 }
                 ProductInterestStore(path, config, gson, records, model.savedAt.coerceAtMost(now)).also {
                     it.capacityEvictions = model.capacityEvictions.coerceAtLeast(0)
+                    it.resultObservationStartedAt = model.resultObservationStartedAt?.takeIf { at -> at in 0..now } ?: now
+                    // Save the new observation boundary even before the first new player arrives.
+                    if (model.resultObservationStartedAt == null) it.markDirty()
                     it.prune(now)
                 }
             }.getOrElse {

@@ -470,6 +470,7 @@ class ProductInterestTelemetry(
         entry: ProductEntryPoint = ProductEntryPoint.API,
         now: Long = clockMillis(),
     ) {
+        if (!outcome.isGameplayResult()) return
         val player = ProductPseudonym.of(playerId)
         val session = sessions[player]
         session?.addTrail("outcome", outcome.label)
@@ -790,7 +791,7 @@ class ProductInterestTelemetry(
     private fun exitStage(player: String): ProductExitStage {
         val journey = store.journey(player) ?: return ProductExitStage.ENGAGED
         return when {
-            journey.firstOutcomeAt.isNotEmpty() -> ProductExitStage.ENGAGED
+            journey.firstGameplayOutcomeAt.isNotEmpty() -> ProductExitStage.ENGAGED
             journey.firstPathAt.isNotEmpty() -> ProductExitStage.BEFORE_OUTCOME
             journey.firstMenuAt != null -> ProductExitStage.BEFORE_PATH
             else -> ProductExitStage.BEFORE_MENU
@@ -840,7 +841,7 @@ class ProductInterestTelemetry(
             ProductEventKind.PATH_INTEREST,
             ProductEventKind.PATH_CHOICE,
             -> if (signal.path in before.firstPathAt) return
-            ProductEventKind.MEANINGFUL_OUTCOME -> if (signal.path in before.firstOutcomeAt) return
+            ProductEventKind.MEANINGFUL_OUTCOME -> if (signal.path in before.firstGameplayOutcomeAt) return
             else -> return
         }
         val start =

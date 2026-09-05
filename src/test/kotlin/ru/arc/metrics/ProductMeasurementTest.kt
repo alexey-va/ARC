@@ -80,4 +80,37 @@ class ProductMeasurementTest : StringSpec({
         store.apply(event("two", joined + 1, ProductEventKind.FIRST_JOIN))
         store.report(joined + 2, 1, 20)["complete"] shouldBe false
     }
+
+    "automatic advancement and arrival do not count as a first gameplay result" {
+        val store = store()
+        store.apply(event("new", joined, ProductEventKind.FIRST_JOIN))
+        store.apply(event("new", joined + 88, ProductEventKind.MEANINGFUL_OUTCOME, ProductOutcome.ADVANCEMENT))
+        store.apply(event("new", joined + 100, ProductEventKind.MEANINGFUL_OUTCOME, ProductOutcome.DUNGEON_VISIT))
+        rows(store.report(joined + 600_000, 1, 20), "activation").first()["reachedPlayers"] shouldBe 0
+        store.apply(event("new", joined + 300_000, ProductEventKind.MEANINGFUL_OUTCOME, ProductOutcome.BUILDING_THRESHOLD))
+        val activation = rows(store.report(joined + 600_000, 1, 20), "activation").first()
+        activation["reachedPlayers"] shouldBe 1
+        activation["medianSecondsAmongReached"] shouldBe 300.0
+    }
+
+    "contaminated observations cannot enter the new result cohort" {
+        val path = Files.createTempDirectory("product-legacy-outcome-").resolve("state.json")
+        val id = ProductPseudonym.of("legacy")
+        Files.writeString(path, """{"version":1,"savedAt":$joined,"players":[
+          {"id":"$id","firstSeenAt":$joined,"lastSeenAt":${joined + 88},"firstJoinAt":$joined,
+           "firstOutcomeAt":{"explorer":${joined + 88}},"days":[{"date":"2026-08-16","sessions":1,"outcomes":["advancement"]}]}]}""")
+        val config = ProductInterestConfig(networkEnabled = false, zoneId = ZoneId.of("UTC"))
+        val upgradedAt = joined + 3_600_000
+        val store = ProductInterestStore.open(path, config, upgradedAt)
+        store.journey(id)?.firstGameplayOutcomeAt shouldBe emptyMap()
+        rows(store.report(upgradedAt + 600_000, 1, 20), "activation").first()["eligiblePlayers"] shouldBe 0
+        store.apply(event("fresh", upgradedAt, ProductEventKind.FIRST_JOIN))
+        store.apply(event("fresh", upgradedAt + 120_000, ProductEventKind.MEANINGFUL_OUTCOME, ProductOutcome.HOME_CREATED))
+        store.flush(upgradedAt + 600_000, force = true)
+        val restored = ProductInterestStore.open(path, config, upgradedAt + 900_000)
+        val report = restored.report(upgradedAt + 900_000, 1, 20)
+        report["resultObservationStartedAt"] shouldBe upgradedAt
+        rows(report, "activation").first()["reachedPlayers"] shouldBe 1
+        rows(report, "activation").first()["medianSecondsAmongReached"] shouldBe 120.0
+    }
 })

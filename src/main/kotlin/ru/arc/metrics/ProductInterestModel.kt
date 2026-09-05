@@ -29,6 +29,10 @@ typealias ProductDetail = ru.arc.product.ProductDetail
 typealias ProductExitContext = ru.arc.product.ProductExitContext
 typealias ProductSignal = ru.arc.product.ProductSignal
 
+/** Automatic unlocks and arrival/start signals are not evidence of a completed player result. */
+internal fun ProductOutcome.isGameplayResult(): Boolean =
+    this !in setOf(ProductOutcome.ADVANCEMENT, ProductOutcome.DUNGEON_VISIT, ProductOutcome.AUTOBUILD_STARTED)
+
 object ProductCommandClassifier {
     fun classify(message: String): ProductCommandInterest? = ru.arc.product.ProductCommandClassifier.classify(message)
 
