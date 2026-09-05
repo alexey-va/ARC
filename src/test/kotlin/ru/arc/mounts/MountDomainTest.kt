@@ -89,6 +89,18 @@ class MountDomainTest : StringSpec({
         hasDirectPositivePermission(listOf(permissionNode(disabled)), disabled) shouldBe true
     }
 
+    "revoke-all allowlist excludes wildcard and unrelated permissions" {
+        val mount = testMount()
+
+        isMountOwnedPermission(mount, mount.levelPermission(1)) shouldBe true
+        isMountOwnedPermission(mount, favoriteMountPermission(mount.id)) shouldBe true
+        isMountOwnedPermission(mount, "*") shouldBe false
+        isMountOwnedPermission(mount, "arc.mounts.other.1") shouldBe false
+        isMountOwnedPermission(mount, "arc.admin") shouldBe false
+        isMountOwnedPermission(mount, "75") shouldBe false
+        isMountOwnedPermission(mount, "120") shouldBe false
+    }
+
     "direct tuning state accepts only positive exact numeric suffixes and resolves duplicates conservatively" {
         val prefix = testMount().speedTuningPermissionPrefix
 

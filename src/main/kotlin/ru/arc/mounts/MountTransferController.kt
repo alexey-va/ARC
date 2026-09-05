@@ -222,7 +222,6 @@ class MountTransferController(
     private fun access(player: Player): Boolean {
         if (!player.hasPermission("arc.mounts.use")) return false
         if (!config.enabled) { send(player, "spawn-only", "<#ff9f0f>Упаковка и активация свидетельств доступны на спавне."); return false }
-        if (player.isOp) { send(player, "operator", "<#ff9f0f>Для торговли используйте обычный игровой аккаунт без OP."); return false }
         return true
     }
 

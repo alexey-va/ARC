@@ -8,13 +8,17 @@ import java.util.concurrent.CompletableFuture
 
 class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership {
     override fun profile(subject: MountPermissionSubject, mount: MountDefinition): MountProfile {
+        val permissionData = luckPerms.userManager.getUser(subject.uniqueId)
+            ?.cachedData
+            ?.permissionData
+        val owns = { permission: String -> permissionData?.checkPermission(permission)?.asBoolean() == true }
         val level =
             (1..mount.maxLevel)
-                .filter { subject.hasPermission(mount.levelPermission(it)) }
+                .filter { owns(mount.levelPermission(it)) }
                 .maxOrNull() ?: 0
-        val glowOwned = subject.hasPermission(mount.glowPermission)
+        val glowOwned = owns(mount.glowPermission)
         val glowDisabled = hasDirectPositivePermission(subject.uniqueId, mount.glowDisabledPermission)
-        val ownedSkinIds = mount.skins.filter { subject.hasPermission(mount.skinPermission(it.id)) }.mapTo(linkedSetOf()) { it.id }
+        val ownedSkinIds = mount.skins.filter { owns(mount.skinPermission(it.id)) }.mapTo(linkedSetOf()) { it.id }
         val activeSkinId =
             mount.skins
                 .firstOrNull { hasDirectPositivePermission(subject.uniqueId, mount.activeSkinPermission(it.id)) }
@@ -23,11 +27,11 @@ class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership
                 ?: MountDefinition.DEFAULT_SKIN_ID
         val ownedAbilityIds =
             mount.abilities.upgrades
-                .filter { subject.hasPermission(mount.abilityPermission(it.id)) }
+                .filter { owns(mount.abilityPermission(it.id)) }
                 .mapTo(linkedSetOf(), MountAbilityUpgradeDefinition::id)
         val ownedSizeIds =
             mount.sizeOptions
-                .filter { it.grantOnly && subject.hasPermission(mount.sizeOwnershipPermission(it.id)) }
+                .filter { it.grantOnly && owns(mount.sizeOwnershipPermission(it.id)) }
                 .mapTo(linkedSetOf(), MountSizeOptionDefinition::id)
         val directNodes = luckPerms.userManager.getUser(subject.uniqueId)?.nodes.orEmpty()
         val selectedSpeedPercentage = directPositiveNumericSuffix(directNodes, mount.speedTuningPermissionPrefix)
@@ -92,6 +96,16 @@ class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership
             removePermission(user.data()::remove, user.nodes, mount.levelPermission(level))
         }
     }
+
+    override fun revokeAll(playerId: UUID, mounts: Collection<MountDefinition>): CompletableFuture<Int> =
+        java.util.concurrent.atomic.AtomicInteger().let { removed ->
+            luckPerms.userManager.modifyUser(playerId) { user ->
+                val owned = user.nodes.filterIsInstance<PermissionNode>()
+                    .filter { it.value && mounts.any { mount -> isMountOwnedPermission(mount, it.permission) } }
+                owned.forEach(user.data()::remove)
+                removed.set(owned.size)
+            }.thenApply { removed.get() }
+        }
 
     override fun grantGlow(playerId: UUID, mount: MountDefinition): CompletableFuture<Void> =
         luckPerms.userManager.modifyUser(playerId) { user ->
@@ -269,6 +283,23 @@ class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership
         hasDirectPositivePermission(luckPerms.userManager.getUser(playerId)?.nodes.orEmpty(), permission)
 
     private fun permission(name: String): PermissionNode = PermissionNode.builder(name).value(true).build()
+
+}
+
+internal fun isMountOwnedPermission(mount: MountDefinition, permission: String): Boolean {
+    val fixed =
+        (1..mount.maxLevel).map(mount::levelPermission) +
+            listOf(mount.glowPermission, mount.glowDisabledPermission) +
+            mount.skins.flatMap { listOf(mount.skinPermission(it.id), mount.activeSkinPermission(it.id)) } +
+            mount.abilities.upgrades.map { mount.abilityPermission(it.id) } +
+            mount.sizeOptions.flatMap { listOf(mount.sizeOwnershipPermission(it.id), mount.sizeTuningPermission(it.id)) } +
+            listOf(mount.riderViewTuningPermission(true), mount.riderViewTuningPermission(false))
+    if (permission in fixed) return true
+    if (permission == favoriteMountPermission(mount.id)) return true
+    return (permission.startsWith(mount.speedTuningPermissionPrefix) &&
+        permission.removePrefix(mount.speedTuningPermissionPrefix).toIntOrNull()?.let { it in 25..100 } == true) ||
+        (permission.startsWith(mount.stepHeightTuningPermissionPrefix) &&
+            permission.removePrefix(mount.stepHeightTuningPermissionPrefix).toIntOrNull()?.let { it in 60..400 } == true)
 }
 
 internal fun hasDirectPositivePermission(nodes: Collection<Node>, permission: String): Boolean =

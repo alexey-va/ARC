@@ -340,7 +340,7 @@ class MountModuleConfigTest : StringSpec({
         }
     }
 
-    "bundled GUI copy owns the dark titles and thirteen-row collection guide" {
+    "bundled GUI copy owns the dark titles" {
         val config = bundledConfig("gui-copy")
 
         config.listTitle shouldBe "<color:#20252b><bold>Коллекция маунтов</bold>"
@@ -348,9 +348,6 @@ class MountModuleConfigTest : StringSpec({
         config.progressionTitle shouldBe "<color:#20252b><bold>Развитие маунта</bold>"
         config.skinsTitle shouldBe "<color:#20252b><bold>Облики маунта</bold>"
         config.confirmTitle shouldBe "<color:#20252b><bold>Покупка маунта</bold>"
-        config.guiText("list.guide-name", "") shouldBe "<color:#92bed8>Путеводитель по коллекции"
-        // Display name plus twelve lore rows is the intentionally retained thirteen-row tooltip.
-        config.guiLines("list.guide-lore", emptyList()) shouldHaveSize 12
         config.guiText("common.action-footer", "").contains("▶") shouldBe true
         config.guiText("list.mount-acquirable-name", "") shouldBe "<color:#92bed8><mount>"
         config.guiText("detail.whistle-disabled-name", "") shouldBe "<color:#969696>Свисток недоступен"

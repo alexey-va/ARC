@@ -66,6 +66,7 @@ class MountCommand(
         when (args.firstOrNull()?.lowercase(Locale.ROOT)) {
             "summon" -> summon(sender, label, args.drop(1))
             "grant-all" -> grantAll(sender, label, args.drop(1))
+            "revoke-all" -> revokeAll(sender, label, args.drop(1))
             "grant" -> mutateOwnership(sender, label, args.drop(1), granting = true)
             "revoke" -> mutateOwnership(sender, label, args.drop(1), granting = false)
             else -> sendAdminHelp(sender, label)
@@ -103,6 +104,40 @@ class MountCommand(
                     sender.sendMessage(TextUtil.mm(text, true))
                 },
             )
+        }
+    }
+
+    private fun revokeAll(sender: CommandSender, label: String, args: List<String>) {
+        val playerName = when (args.size) {
+            0 -> (sender as? Player)?.name
+            1 -> args[0]
+            else -> null
+        }
+        if (playerName == null || !PLAYER_NAME.matches(playerName)) {
+            sender.sendMessage(TextUtil.mm("<red>Использование: /$label admin revoke-all [игрок]", true))
+            return
+        }
+        resolvePlayer(sender, playerName).thenCompose { playerId ->
+            if (playerId == null) failedFuture(PlayerNotFoundException(playerName))
+            else ownership.revokeAll(playerId, catalog().all).thenApply { playerId to it }
+        }.whenComplete { removed, failure ->
+            scheduler.runSync(Runnable {
+                when {
+                    failure == null -> {
+                        sessions.remove(removed.first, MountRemovalReason.INVALID)
+                        sender.sendMessage(
+                        TextUtil.mm(
+                            "<green>Маунты и улучшения отозваны у игрока <white>$playerName<green>. Удалено прав: <white>${removed.second}<green>. <gray>Права из групп сохраняются.",
+                            true,
+                        ),
+                        )
+                    }
+                    unwrap(failure) is PlayerNotFoundException -> sender.sendMessage(
+                        TextUtil.mm("<red>Игрок <white>$playerName <red>не найден.", true),
+                    )
+                    else -> sender.sendMessage(TextUtil.mm("<red>Не удалось отозвать права маунтов.", true))
+                }
+            })
         }
     }
 
@@ -310,6 +345,7 @@ class MountCommand(
     private fun sendAdminHelp(sender: CommandSender, label: String) {
         sender.sendMessage(TextUtil.mm("<yellow>/$label admin summon <маунт> [уровень] [облик]", true))
         sender.sendMessage(TextUtil.mm("<yellow>/$label admin grant-all <игрок> <gray>— выдать всех маунтов максимального уровня", true))
+        sender.sendMessage(TextUtil.mm("<yellow>/$label admin revoke-all [игрок] <gray>— отозвать прямые права маунтов", true))
         sender.sendMessage(TextUtil.mm("<yellow>/$label admin grant <level|skin|glow|ability|size> <игрок> <маунт> [значение]", true))
         sender.sendMessage(TextUtil.mm("<yellow>/$label admin revoke <level|skin|glow|ability|size> <игрок> <маунт> [значение]", true))
     }
@@ -335,10 +371,11 @@ class MountCommand(
         }
         if (args.size == 2 && args[0].lowercase(Locale.ROOT) in listOf("view", "pack")) return catalog().all.map { it.id }.matching(args[1])
         if (!args[0].equals("admin", ignoreCase = true) || !sender.hasPermission(ADMIN_PERMISSION)) return emptyList()
-        if (args.size == 2) return listOf("summon", "grant-all", "grant", "revoke").matching(args[1])
+        if (args.size == 2) return listOf("summon", "grant-all", "revoke-all", "grant", "revoke").matching(args[1])
         return when (args[1].lowercase(Locale.ROOT)) {
             "summon" -> completeSummon(args)
             "grant-all" -> if (args.size == 3) sender.server.onlinePlayers.map(Player::getName).matching(args[2]) else emptyList()
+            "revoke-all" -> if (args.size == 3) sender.server.onlinePlayers.map(Player::getName).matching(args[2]) else emptyList()
             "grant", "revoke" -> completeMutation(sender, args)
             else -> emptyList()
         }

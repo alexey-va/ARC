@@ -649,6 +649,9 @@ interface MountOwnership {
 
     fun revokeLevel(playerId: UUID, mount: MountDefinition, level: Int): CompletableFuture<Void>
 
+    fun revokeAll(playerId: UUID, mounts: Collection<MountDefinition>): CompletableFuture<Int> =
+        CompletableFuture.completedFuture(0)
+
     fun grantGlow(playerId: UUID, mount: MountDefinition): CompletableFuture<Void>
 
     fun revokeGlow(playerId: UUID, mount: MountDefinition): CompletableFuture<Void>

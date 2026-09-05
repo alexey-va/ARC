@@ -244,61 +244,6 @@ class MountGuiController(
             ),
         )
         inventory.setItem(
-            LIST_INFO_SLOT,
-            styledItem(
-                MountGuiItemRole.INFO,
-                Material.BOOK,
-                if (visible.isEmpty()) {
-                    when (purpose) {
-                        MountListPurpose.SHOP -> "<#92bed8>Магазин маунтов пуст"
-                        MountListPurpose.UPGRADES -> "<#92bed8>Нет доступных улучшений"
-                        MountListPurpose.TRADE -> "<#92bed8>Нет маунтов для передачи"
-                        MountListPurpose.COLLECTION -> config.guiText("list.guide-name", "<#92bed8>Путеводитель по коллекции")
-                    }
-                } else config.guiText("list.guide-name", "<#92bed8>Путеводитель по коллекции"),
-                if (visible.isEmpty()) {
-                    listOf(
-                        when (purpose) {
-                            MountListPurpose.SHOP -> "<#8c8c8c>Покупаемые маунты появятся здесь."
-                            MountListPurpose.UPGRADES -> "<#8c8c8c>Сначала получите маунта через магазин."
-                            MountListPurpose.TRADE -> "<#8c8c8c>Получите маунта, чтобы передать его игроку."
-                            MountListPurpose.COLLECTION -> "<#8c8c8c>Каталог маунтов пока пуст."
-                        },
-                    )
-                } else when (purpose) {
-                    MountListPurpose.SHOP -> listOf(
-                        "<#8c8c8c>ЛКМ по доступному маунту — открыть покупку",
-                        "<#8c8c8c>ПКМ по полученному — открыть карточку",
-                    )
-                    MountListPurpose.UPGRADES -> listOf(
-                        "<#8c8c8c>ЛКМ — открыть улучшения",
-                        "<#8c8c8c>ПКМ — открыть карточку и облики",
-                    )
-                    MountListPurpose.TRADE -> listOf(
-                        "<#8c8c8c>ЛКМ — открыть подтверждение упаковки",
-                        "<#8c8c8c>ПКМ — открыть карточку",
-                    )
-                    MountListPurpose.COLLECTION -> config.guiLines(
-                        "list.guide-lore",
-                        listOf(
-                        "<#8c8c8c>ЛКМ — призвать полученного маунта",
-                        "<#8c8c8c>ПКМ — открыть развитие и облики",
-                        "",
-                        "<#8c8c8c>Shift + F — призвать любимого маунта",
-                        "<#8c8c8c>Свисток — получить в карточке маунта",
-                        "",
-                        "<#92bed8>Полёт",
-                        "<#8c8c8c>Space — вверх",
-                        "<#8c8c8c>Shift — вниз",
-                        "<#8c8c8c>Взгляд вниз скрывает маунта из кадра",
-                        "",
-                        "<#8c8c8c>Двойной Shift — спешиться",
-                        ),
-                    )
-                },
-            ),
-        )
-        inventory.setItem(
             LIST_BACK_SLOT,
             styledItem(
                 MountGuiItemRole.BACK,
@@ -1009,7 +954,6 @@ class MountGuiController(
         private val LIST_PREVIOUS_SLOT get() = slot(ArcMenuSchema.MOUNT_LIST, "previous")
         private val LIST_BACK_SLOT get() = slot(ArcMenuSchema.MOUNT_LIST, "back")
         private val LIST_FILTER_SLOT get() = slot(ArcMenuSchema.MOUNT_LIST, "filter")
-        private val LIST_INFO_SLOT get() = slot(ArcMenuSchema.MOUNT_LIST, "info")
         private val LIST_NEXT_SLOT get() = slot(ArcMenuSchema.MOUNT_LIST, "next")
 
         private val DETAIL_SIZE get() = rows(ArcMenuSchema.MOUNT_DETAIL)

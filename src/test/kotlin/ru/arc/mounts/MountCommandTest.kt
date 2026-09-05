@@ -145,7 +145,7 @@ class MountCommandTest : StringSpec({
         fixture.command.onTabComplete(fixture.player, fixture.bukkitCommand, "mount", arrayOf(""))
             .shouldContainExactly("admin", "help", "menu", "owned", "pack", "shop", "trade", "upgrades", "view")
         fixture.command.onTabComplete(fixture.player, fixture.bukkitCommand, "mount", arrayOf("admin", ""))
-            .shouldContainExactly("grant", "grant-all", "revoke", "summon")
+            .shouldContainExactly("grant", "grant-all", "revoke", "revoke-all", "summon")
         fixture.command.onTabComplete(fixture.player, fixture.bukkitCommand, "mount", arrayOf("admin", "grant", ""))
             .shouldContainExactly("ability", "glow", "level", "size", "skin")
         fixture.command.onTabComplete(
@@ -209,6 +209,22 @@ class MountCommandTest : StringSpec({
         verify(exactly = 1) { fixture.ownership.grantLevel(fixture.playerId, mount, mount.maxLevel) }
         verify(exactly = 1) { fixture.ownership.grantLevel(fixture.playerId, secondMount, secondMount.maxLevel) }
         verify(exactly = 1) { fixture.console.sendMessage(any<Component>()) }
+    }
+
+    "admin revoke-all without a target revokes the executing player's mounts" {
+        val fixture = commandFixture(catalog, admin = true)
+        every { fixture.ownership.revokeAll(fixture.playerId, catalog.all) } returns CompletableFuture.completedFuture(4)
+
+        fixture.command.onCommand(
+            fixture.player,
+            fixture.bukkitCommand,
+            "mount",
+            arrayOf("admin", "revoke-all"),
+        ) shouldBe true
+        fixture.scheduler.executeImmediate()
+
+        verify(exactly = 1) { fixture.ownership.revokeAll(fixture.playerId, catalog.all) }
+        verify(exactly = 1) { fixture.sessions.remove(fixture.playerId, MountRemovalReason.INVALID) }
     }
 
     "admin mutations reject trailing arguments instead of applying a partial parse" {
@@ -278,6 +294,7 @@ private fun commandFixture(catalog: MountCatalog, admin: Boolean = false): Mount
         every { revokeAbility(any(), any(), any()) } returns CompletableFuture.completedFuture(null)
         every { grantSize(any(), any(), any()) } returns CompletableFuture.completedFuture(null)
         every { revokeSize(any(), any(), any()) } returns CompletableFuture.completedFuture(null)
+        every { revokeAll(any(), any()) } returns CompletableFuture.completedFuture(0)
     }
     val config = mockk<MountModuleConfig> {
         every { adminSessionDuration } returns java.time.Duration.ofSeconds(10)

@@ -158,8 +158,7 @@ class MountGuiControllerTest : TestBase() {
             lore.none { "●" in it } shouldBe true
             lore.count(String::isEmpty).shouldBeGreaterThanOrEqual(2)
             lore.filter(String::isNotEmpty).first() shouldBe "✔ Получен"
-            val guide = checkNotNull(player.openInventory.topInventory.getItem(4))
-            (1 + checkNotNull(guide.itemMeta.lore()).size) shouldBe 13
+            player.openInventory.topInventory.getItem(4)?.type shouldBe Material.GRAY_STAINED_GLASS_PANE
             plainName(player.openInventory.topInventory.getItem(53)) shouldBe " "
         } finally {
             controller.shutdown()
