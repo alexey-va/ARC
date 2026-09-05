@@ -47,6 +47,10 @@ softdepend:
   - packetevents
   - CoreProtect
 commands:
+  dungeon:
+    description: Dungeon shortcuts
+    usage: /dungeon [start|quit|help]
+    aliases: [данж]
   arc:
     description: Main command
     usage: Main command

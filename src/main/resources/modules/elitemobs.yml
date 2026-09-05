@@ -41,3 +41,31 @@ chests:
   sound: ambient.basalt_deltas.additions
   sound-period-ticks: 100
   quest-locked-message: '<white></white> <#c42323>Сундук доступен только по заданию.'
+
+dungeon-qol:
+  enabled: true
+  resume-enabled: true
+  resume-hours: 72
+  titles-enabled: true
+  messages:
+    help: "<gold>Данжи:</gold> <click:run_command:'/dungeon start'><green>[Начать]</green></click> <click:run_command:'/dungeon quit'><white>[Выйти]</white></click>"
+    unavailable: '<red>Данжи сейчас недоступны.</red>'
+    player-only: '<red>Эта команда доступна только игроку.</red>'
+    entry: "<gold>Данж</gold> <gray>·</gray> <click:run_command:'/dungeon start'><green>[Начать]</green></click> <gray>или</gray> <click:run_command:'/dungeon quit'><white>[Выйти]</white></click>"
+    complete: "<gold>Данж</gold> <gray>·</gray> <white>Заберите добычу.</white> <click:run_command:'/dungeon quit'><green>[Выйти из данжа]</green></click>"
+  titles:
+    entry:
+      title: '<gold>Готовы к данжу?'
+      subtitle: '<white>/данж начать <gray>— начать прохождение'
+    resumed:
+      title: '<green>Продолжаем'
+      subtitle: '<white>Вы вернулись к месту выхода'
+    open-entry:
+      title: '<gold>Вы в данже'
+      subtitle: '<white>Место выхода запоминается'
+    started:
+      title: '<gold>Данж начался'
+      subtitle: '<white>/данж выйти <gray>— покинуть данж'
+    complete:
+      title: '<green>Данж пройден'
+      subtitle: '<white>Заберите добычу <gray>·</gray> <white>/данж выйти'

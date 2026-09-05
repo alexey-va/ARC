@@ -257,6 +257,10 @@ open class ARC : JavaPlugin() {
         registerCommand("g", ChatModeAliasCommand, null)
         registerCommand("l", ChatModeAliasCommand, null)
         registerCommand("menu", MainMenuCommand, null)
+        val dungeonCommand = ru.arc.hooks.elitemobs.EMDungeonCommand(
+            ru.arc.config.ConfigManager.of(dataPath, "modules/elitemobs.yml"),
+        )
+        registerCommand("dungeon", dungeonCommand, dungeonCommand)
         registerLegacyCommands()
     }
 
@@ -311,6 +315,8 @@ open class ARC : JavaPlugin() {
                 debug("Saved bundled resource: {}", resource)
             }
         }
+
+        ConfigManager.of(dataPath, "modules/elitemobs.yml").mergeMissingFromBundled("modules/elitemobs.yml")
 
         val commandsConfig = ConfigManager.of(dataFolder.toPath().resolve("config"), "commands.yml")
         if (commandsConfig.mergeMissingFromBundled("config/commands.yml")) {

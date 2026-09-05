@@ -10,6 +10,7 @@ import ru.arc.hooks.betterstructures.BSListener
 import ru.arc.hooks.citizens.CitizensHook
 import ru.arc.hooks.elitemobs.EMHook
 import ru.arc.hooks.elitemobs.EMListener
+import ru.arc.hooks.elitemobs.EMDungeonQol
 import ru.arc.hooks.economyshop.EconomyShopGuiPurchaseService
 import ru.arc.hooks.economyshop.EconomyShopGuiAuditListener
 import ru.arc.hooks.economyshop.ShopPurchaseService
@@ -54,6 +55,7 @@ class HookRegistry(
     var respawnListener: RespawnListener? = null
     var bsListener: BSListener? = null
     var emListener: EMListener? = null
+    private var dungeonQol: EMDungeonQol? = null
     var seasonTrophyProtectionListener: SeasonTrophyProtectionListener? = null
 
     private val registeredHooks = HashSet<String>()
@@ -160,6 +162,8 @@ class HookRegistry(
 
         val failures = mutableListOf<Throwable>()
         cleanup(failures) { emHook?.close() }
+        cleanup(failures) { dungeonQol?.close() }
+        dungeonQol = null
         cleanup(failures) { auctionHook?.close() }
         cleanup(failures) { citizensHook?.close() }
         cleanup(failures) { papiHook?.clearPlaceholderCache() }
@@ -294,6 +298,7 @@ class HookRegistry(
                 val listener = emListener ?: registerListener(EMListener())
                 emHook = hook
                 emListener = listener
+                if (dungeonQol == null) dungeonQol = registerListener(EMDungeonQol())
             } catch (failure: Throwable) {
                 if (existingHook == null) hook.close()
                 throw failure
