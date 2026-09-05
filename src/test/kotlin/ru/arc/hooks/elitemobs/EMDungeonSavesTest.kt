@@ -1,0 +1,279 @@
+package ru.arc.hooks.elitemobs
+
+import io.kotest.core.spec.style.FreeSpec
+import io.kotest.matchers.shouldBe
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
+import net.kyori.adventure.bossbar.BossBar
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.title.Title
+import org.bukkit.GameMode
+import org.bukkit.Location
+import org.bukkit.entity.Player
+import org.bukkit.event.entity.EntityDamageByEntityEvent
+import org.bukkit.event.player.PlayerMoveEvent
+import org.bukkit.event.player.PlayerTeleportEvent
+import ru.arc.config.Config
+import ru.arc.core.Tasks
+import ru.arc.core.TestTaskScheduler
+import ru.arc.paper.audience.PaperAudienceEffects
+import ru.arc.paper.playerstate.PaperPlayerDataPersistence
+import ru.arc.paper.testing.MockBukkitTestRuntime
+
+class EMDungeonSavesTest : FreeSpec({
+    lateinit var paper: MockBukkitTestRuntime
+    beforeEach { paper = MockBukkitTestRuntime.open() }
+    afterEach { paper.close() }
+
+    "manual save persists, overwrites position, enforces cooldown and full limit" {
+        withScheduler { _ ->
+            val player = paper.addPlayer("saver")
+            val world = paper.addSimpleWorld("save-world")
+            var now = 1_000L
+            var persisted = 0
+            val qol = qol(world, player, clock = { now }, persistence = { persisted++ })
+            val expected = qol.view(player)!!
+            qol.save(player, "alpha", expected).success shouldBe true
+            qol.save(player, "alpha", expected).success shouldBe false
+            now += 5_000L
+            player.teleport(Location(world, 9.0, 70.0, 9.0))
+            qol.save(player, "alpha", qol.view(player)!!).success shouldBe true
+            qol.view(player)!!.points.single { it.name == "alpha" }.location.x shouldBe 9.0
+            persisted shouldBe 2
+            now += 5_000L
+            repeat(4) { index ->
+                now += 5_000L
+                qol.save(player, "p$index", qol.view(player)!!).success shouldBe true
+            }
+            now += 5_000L
+            qol.save(player, "overflow", qol.view(player)!!).success shouldBe false
+            qol.close()
+        }
+    }
+
+    "save rejects stale run, membership, spectator, and unsafe state" {
+        withScheduler {
+            val player = paper.addPlayer("guards")
+            val world = paper.addSimpleWorld("guard-world")
+            val other = paper.addPlayer("other")
+            var run = "run"
+            val qol = qol(world, player, members = setOf(other.uniqueId), safe = { false }, runProvider = { run })
+            val expected = DungeonSaveView(world.uid, "run", emptyList(), null, null)
+            qol.save(player, "x", expected).success shouldBe false
+            run = "changed"
+            qol.save(player, "x", expected).success shouldBe false
+            val memberQol = qol(world, player, members = setOf(other.uniqueId), runProvider = { run })
+            memberQol.view(player) shouldBe null
+            val unsafeQol = qol(world, player, safe = { false }, runProvider = { run })
+            unsafeQol.save(player, "x", unsafeQol.view(player)!!).success shouldBe false
+            player.gameMode = GameMode.SPECTATOR
+            val spectatorQol = qol(world, player, runProvider = { run })
+            spectatorQol.view(player) shouldBe null
+            qol.close()
+            memberQol.close()
+            unsafeQol.close()
+            spectatorQol.close()
+        }
+    }
+
+    "autosave creates first point and respects 120 seconds and eight blocks" {
+        withScheduler {
+            val player = paper.addPlayer("auto")
+            val world = paper.addSimpleWorld("auto-world")
+            var now = 100_000L
+            val audience = RecordingSavesAudience()
+            val qol = qol(world, player, clock = { now }, audience = audience)
+            qol.autoSave(player)
+            qol.view(player)!!.points.count { it.kind == DungeonSaveKind.AUTO } shouldBe 1
+            now += 60_000L
+            qol.autoSave(player)
+            qol.view(player)!!.points.size shouldBe 1
+            player.teleport(Location(world, 20.0, 70.0, 0.0))
+            now += 60_001L
+            qol.autoSave(player)
+            qol.view(player)!!.points.count { it.kind == DungeonSaveKind.AUTO } shouldBe 2
+            qol.close()
+        }
+    }
+
+    "travel cancels on movement and an old timer cannot consume a new request" {
+        withScheduler { scheduler ->
+            val player = paper.addPlayer("traveler")
+            val world = paper.addSimpleWorld("travel-world")
+            val destination = Location(world, 4.0, 70.0, 4.0)
+            val moved = mutableListOf<Location>()
+            val qol = qol(world, player, entryProvider = { destination }, move = { _, location, _ -> moved += location; true })
+            val expected = qol.view(player)!!
+            qol.travel(player, expected, "entry")
+            val from = player.location.clone()
+            player.teleport(Location(world, 1.0, 70.0, 0.0))
+            qol.cancelOnMovement(PlayerMoveEvent(player, from, player.location.clone()))
+            scheduler.advanceMs(1_000L)
+            qol.travel(player, expected, "entry")
+            scheduler.advanceMs(2_000L)
+            moved shouldBe emptyList()
+            scheduler.advanceMs(1_000L)
+            moved.size shouldBe 1
+            qol.close()
+        }
+    }
+
+    "travel refuses unsafe points and reports move failure" {
+        withScheduler { scheduler ->
+            val player = paper.addPlayer("travel-guards")
+            val world = paper.addSimpleWorld("travel-guard-world")
+            val audience = RecordingSavesAudience()
+            val qol = qol(world, player, entry = Location(world, 3.0, 70.0, 3.0), safe = { false }, audience = audience)
+            val expected = qol.view(player)!!
+            qol.travel(player, expected, "entry")
+            scheduler.advanceMs(3_000L)
+            audience.messages.size shouldBe 2
+            qol.close()
+        }
+    }
+
+    "stale run or removed point cannot travel, and close cancels success" {
+        withScheduler { scheduler ->
+            val player = paper.addPlayer("stale-travel")
+            val world = paper.addSimpleWorld("stale-travel-world")
+            var run = "run"
+            val destination = Location(world, 4.0, 70.0, 4.0)
+            val moved = mutableListOf<Location>()
+            val qol = qol(world, player, entry = destination, runProvider = { run }, move = { _, location, _ -> moved += location; true })
+            val expected = qol.view(player)!!
+            qol.travel(player, expected, "entry")
+            run = "new-run"
+            scheduler.advanceMs(3_000L)
+            moved shouldBe emptyList()
+            run = "run"
+            val fresh = qol.view(player)!!
+            qol.save(player, "spot", fresh).success shouldBe true
+            val pointExpected = qol.view(player)!!
+            val point = pointExpected.points.single()
+            qol.travel(player, pointExpected, point.id)
+            qol.remove(player, point, pointExpected).success shouldBe true
+            scheduler.advanceMs(3_000L)
+            moved shouldBe emptyList()
+            qol.travel(player, qol.view(player)!!, "entry")
+            qol.close()
+            scheduler.advanceMs(3_000L)
+            moved shouldBe emptyList()
+        }
+    }
+
+    "native move failure reports blocked feedback after a valid countdown" {
+        withScheduler { scheduler ->
+            val player = paper.addPlayer("move-fail")
+            val world = paper.addSimpleWorld("move-fail-world")
+            val audience = RecordingSavesAudience()
+            val destination = Location(world, 4.0, 70.0, 4.0)
+            val qol = qol(world, player, entry = destination, audience = audience, move = { _, _, _ -> false })
+            qol.travel(player, qol.view(player)!!, "entry")
+            scheduler.advanceMs(3_000L)
+            audience.messages.last().toString().contains("отменено") shouldBe true
+            qol.close()
+        }
+    }
+
+    "quit and close clear pending travel tokens before a later request" {
+        withScheduler { scheduler ->
+            val player = paper.addPlayer("pending")
+            val world = paper.addSimpleWorld("pending-world")
+            val destination = Location(world, 4.0, 70.0, 4.0)
+            val moved = mutableListOf<Location>()
+            val qol = qol(world, player, entry = destination, move = { _, location, _ -> moved += location; true })
+            val expected = qol.view(player)!!
+            qol.travel(player, expected, "entry")
+            qol.quit(player)
+            scheduler.advanceMs(1_000L)
+            qol.travel(player, qol.view(player)!!, "entry")
+            scheduler.advanceMs(2_000L)
+            moved.size shouldBe 0
+            scheduler.advanceMs(1_000L)
+            moved.single().x shouldBe 4.0
+            qol.close()
+        }
+    }
+
+    "combat blocks save and travel, then expires" {
+        withScheduler {
+            val player = paper.addPlayer("combat")
+            val world = paper.addSimpleWorld("combat-world")
+            var now = 100L
+            val qol = qol(world, player, clock = { now })
+            qol.combat(mockk<EntityDamageByEntityEvent> { every { entity } returns player; every { damager } returns player })
+            qol.save(player, "fight", qol.view(player)!!).success shouldBe false
+            now += 15_001L
+            qol.save(player, "fight", qol.view(player)!!).success shouldBe true
+            qol.close()
+        }
+    }
+
+    "cancelled instanced command and plugin teleports are hinted with a throttle" {
+        withScheduler {
+            val player = paper.addPlayer("hint")
+            val world = paper.addSimpleWorld("hint-world")
+            val audience = RecordingSavesAudience()
+            var now = 1_000L
+            val qol = qol(world, player, audience = audience, clock = { now }, instanced = true)
+            val first = teleport(player, Location(world, 0.0, 70.0, 0.0), Location(world, 1.0, 70.0, 1.0), PlayerTeleportEvent.TeleportCause.COMMAND).apply { isCancelled = true }
+            qol.explainCancelledTeleport(first)
+            val second = teleport(player, first.from, first.to, PlayerTeleportEvent.TeleportCause.PLUGIN).apply { isCancelled = true }
+            qol.explainCancelledTeleport(second)
+            audience.messages.size shouldBe 1
+            now += 3_001L
+            qol.explainCancelledTeleport(second)
+            audience.messages.size shouldBe 2
+            qol.close()
+        }
+    }
+})
+
+private fun withScheduler(block: (TestTaskScheduler) -> Unit) {
+    val scheduler = TestTaskScheduler()
+    Tasks.withScheduler(scheduler) { block(scheduler) }
+}
+
+private fun qol(
+    world: org.bukkit.World,
+    player: Player,
+    members: Set<java.util.UUID>? = null,
+    safe: (Location) -> Boolean = { true },
+    audience: PaperAudienceEffects = RecordingSavesAudience(),
+    clock: () -> Long = { 100_000L },
+    move: (Player, Location, Boolean) -> Boolean = { _, _, _ -> true },
+    instanced: Boolean = false,
+    entry: Location? = null,
+    entryProvider: () -> Location? = { entry },
+    runProvider: () -> String = { "run" },
+    persistence: () -> Unit = {},
+) = EMDungeonQol(
+    config(),
+    { candidate -> if (candidate == world) DungeonVisit(runProvider(), entry = entryProvider(), members = members, instanced = instanced) else null },
+    safe,
+    audience,
+    clock,
+    move = move,
+    persistence = PaperPlayerDataPersistence { persistence(); true },
+).also { player.teleport(Location(world, 0.0, 70.0, 0.0)) }
+
+private fun config(): Config = mockk<Config>(relaxed = true).also {
+    every { it.bool("dungeon-qol.enabled", true) } returns true
+    every { it.bool("dungeon-qol.resume-enabled", true) } returns true
+    every { it.bool("dungeon-qol.saves.autosave-enabled", true) } returns true
+    every { it.integer("dungeon-qol.resume-hours", 72) } returns 72
+    every { it.integer("dungeon-qol.saves.autosave-seconds", 120) } returns 120
+    every { it.component(any(), any<String>(), any()) } answers { net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(secondArg<String>()) }
+}
+
+private fun teleport(player: Player, from: Location, to: Location, cause: PlayerTeleportEvent.TeleportCause) = PlayerTeleportEvent(player, from, to, cause)
+
+private class RecordingSavesAudience : PaperAudienceEffects {
+    val messages = mutableListOf<Component>()
+    override fun sendMessage(player: Player, message: Component) { messages += message }
+    override fun sendActionBar(player: Player, message: Component) { messages += message }
+    override fun showTitle(player: Player, title: Title) = Unit
+    override fun showBossBar(player: Player, bossBar: BossBar) = Unit
+    override fun hideBossBar(player: Player, bossBar: BossBar) = Unit
+}

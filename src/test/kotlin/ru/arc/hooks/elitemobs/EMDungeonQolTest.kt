@@ -41,6 +41,26 @@ class EMDungeonQolTest : FreeSpec({
         }
     }
 
+    "native quit departure still records after membership was removed" {
+        withScheduler {
+            val player = paper.addPlayer("native-quit")
+            val dungeon = paper.addSimpleWorld("native-quit-world")
+            val hub = paper.addSimpleWorld("quit-hub")
+            var members = emptySet<java.util.UUID>()
+            val qol = EMDungeonQol(config(), { world -> if (world == dungeon) DungeonVisit("run", members = members) else null }, { true }, clock = { 100L })
+            val point = Location(dungeon, 10.0, 70.0, 10.0)
+            qol.rememberDeparture(teleport(player, point, Location(hub, 0.0, 70.0, 0.0)))
+            val denied = teleport(player, Location(hub, 0.0, 70.0, 0.0), Location(dungeon, 0.0, 70.0, 0.0))
+            qol.resumeOnEntry(denied)
+            denied.to.x shouldBe 0.0
+            members = setOf(player.uniqueId)
+            val admitted = teleport(player, denied.from, denied.to)
+            qol.resumeOnEntry(admitted)
+            admitted.to shouldBe point
+            qol.close()
+        }
+    }
+
     "does not resume same-world, unsafe, dead, or cancelled teleports" {
         withScheduler {
             val dungeon = paper.addSimpleWorld("dungeon")
@@ -98,14 +118,14 @@ class EMDungeonQolTest : FreeSpec({
             audience.titles.size shouldBe 1
             audience.messages.size shouldBe 1
             audience.messages.single().second.toString().contains("run_command") shouldBe true
-            audience.messages.single().second.toString().contains("/dungeon start") shouldBe true
+            audience.messages.single().second.toString().contains("/начать") shouldBe true
 
             qol.started(mockk<DungeonStartEvent> { every { dungeonInstance } returns instance })
             audience.titles.size shouldBe 2
             qol.completed(mockk<DungeonCompleteEvent> { every { dungeonInstance } returns instance })
             scheduler.tick(60)
             audience.titles.size shouldBe 3
-            audience.messages.size shouldBe 2
+            audience.messages.size shouldBe 3
             qol.close()
         }
     }

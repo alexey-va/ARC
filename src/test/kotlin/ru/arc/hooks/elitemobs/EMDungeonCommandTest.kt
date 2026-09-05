@@ -13,31 +13,44 @@ import ru.arc.config.Config
 
 class EMDungeonCommandTest : FreeSpec({
     val config = mockk<Config>(relaxed = true)
-    val command = mockk<Command>()
+    val command = mockk<Command> { every { name } returns "dungeon" }
 
     "routes only supported player actions to native EliteMobs" {
         val player = mockk<Player>(relaxed = true)
-        val executor = EMDungeonCommand(config) { true }
+        val calls = mutableListOf<Pair<String, List<String>>>()
+        val executor = EMDungeonCommand(config, { _, action, args -> calls += action to args }, { true })
 
-        executor.onCommand(player, command, "dungeon", arrayOf("начать")) shouldBe true
+        executor.onCommand(player, command, "dungeon", arrayOf("начать", "now")) shouldBe true
         executor.onCommand(player, command, "dungeon", arrayOf("выйти")) shouldBe true
 
-        verify { player.performCommand("elitemobs:elitemobs start") }
-        verify { player.performCommand("elitemobs:elitemobs quit") }
+        calls shouldBe listOf("начать" to listOf("now"), "выйти" to emptyList())
     }
 
-    "fails closed when EliteMobs is unavailable" {
+    "canonical command shortcuts dispatch canonical actions" {
+        val player = mockk<Player>(relaxed = true)
+        val calls = mutableListOf<Pair<String, List<String>>>()
+        val executor = EMDungeonCommand(config, { _, action, args -> calls += action to args }, { true })
+
+        every { command.name } returnsMany listOf("dungeonstart", "dungeonsave", "dungeonsaves")
+        executor.onCommand(player, command, "dungeonstart", arrayOf("ignored")) shouldBe true
+        executor.onCommand(player, command, "dungeonsave", arrayOf("name")) shouldBe true
+        executor.onCommand(player, command, "dungeonsaves", emptyArray()) shouldBe true
+
+        calls shouldBe listOf("start" to listOf("ignored"), "save" to listOf("name"), "saves" to emptyList())
+    }
+
+    "fails closed for unavailable, nonplayers, and supports Russian tab completion" {
         val player = mockk<Player>(relaxed = true)
         every { config.component(any(), any<String>(), any()) } returns Component.text("unavailable")
-        val executor = EMDungeonCommand(config) { false }
-
+        val executor = EMDungeonCommand(config, { _, _, _ -> error("must not dispatch") }, { false })
         executor.onCommand(player, command, "dungeon", arrayOf("start")) shouldBe true
-
-        verify(exactly = 0) { player.performCommand(any()) }
         verify { player.sendMessage(Component.text("unavailable")) }
-    }
 
-    "suggests bounded actions" {
-        EMDungeonCommand(config) { true }.onTabComplete(mockk(), command, "dungeon", arrayOf("q")) shouldContainExactly listOf("quit")
+        val sender = mockk<org.bukkit.command.CommandSender>(relaxed = true)
+        executor.onCommand(sender, command, "dungeon", emptyArray()) shouldBe true
+        verify { sender.sendMessage(Component.text("unavailable")) }
+
+        every { command.name } returns "dungeon"
+        EMDungeonCommand(config, { _, _, _ -> }, { true }).onTabComplete(player, command, "dungeon", arrayOf("с")) shouldContainExactly listOf("сохраниться", "сохранения")
     }
 })

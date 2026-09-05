@@ -49,8 +49,20 @@ softdepend:
 commands:
   dungeon:
     description: Dungeon shortcuts
-    usage: /dungeon [start|quit|help]
+    usage: /dungeon [start|quit|entry|save|saves|help]
     aliases: [данж]
+  dungeonstart:
+    description: Start the current dungeon
+    usage: /начать
+    aliases: [начать]
+  dungeonsave:
+    description: Save a place in the current dungeon
+    usage: /сохраниться [название]
+    aliases: [сохраниться]
+  dungeonsaves:
+    description: Open saved dungeon places
+    usage: /сохранения
+    aliases: [сохранения]
   arc:
     description: Main command
     usage: Main command

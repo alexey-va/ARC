@@ -55,7 +55,8 @@ class HookRegistry(
     var respawnListener: RespawnListener? = null
     var bsListener: BSListener? = null
     var emListener: EMListener? = null
-    private var dungeonQol: EMDungeonQol? = null
+    internal var dungeonQol: EMDungeonQol? = null
+        private set
     var seasonTrophyProtectionListener: SeasonTrophyProtectionListener? = null
 
     private val registeredHooks = HashSet<String>()
@@ -298,7 +299,12 @@ class HookRegistry(
                 val listener = emListener ?: registerListener(EMListener())
                 emHook = hook
                 emListener = listener
-                if (dungeonQol == null) dungeonQol = registerListener(EMDungeonQol())
+                if (dungeonQol == null) {
+                    val qol = EMDungeonQol()
+                    registerListener(qol.teleporter)
+                    dungeonQol = registerListener(qol)
+                    qol.startAutosaves()
+                }
             } catch (failure: Throwable) {
                 if (existingHook == null) hook.close()
                 throw failure

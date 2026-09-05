@@ -48,24 +48,84 @@ dungeon-qol:
   resume-hours: 72
   titles-enabled: true
   messages:
-    help: "<gold>Данжи:</gold> <click:run_command:'/dungeon start'><green>[Начать]</green></click> <click:run_command:'/dungeon quit'><white>[Выйти]</white></click>"
-    unavailable: '<red>Данжи сейчас недоступны.</red>'
-    player-only: '<red>Эта команда доступна только игроку.</red>'
-    entry: "<gold>Данж</gold> <gray>·</gray> <click:run_command:'/dungeon start'><green>[Начать]</green></click> <gray>или</gray> <click:run_command:'/dungeon quit'><white>[Выйти]</white></click>"
-    complete: "<gold>Данж</gold> <gray>·</gray> <white>Заберите добычу.</white> <click:run_command:'/dungeon quit'><green>[Выйти из данжа]</green></click>"
+    help: <gold>Данжи:</gold> <white>/начать</white> · <white>/сохраниться [название]</white> · <white>/сохранения</white> · <white>/данж вход</white> · <white>/данж выйти</white>
+    unavailable: <red>Данжи сейчас недоступны.</red>
+    player-only: <red>Эта команда доступна только игроку.</red>
+    entry: <gold>Данж</gold> <gray>·</gray> <click:run_command:'/начать'><green>[Начать]</green></click> <gray>или</gray> <click:run_command:'/dungeon quit'><white>[Выйти]</white></click>
+    complete: <gold>Данж</gold> <gray>·</gray> <white>Заберите добычу.</white> <click:run_command:'/dungeon quit'><green>[Выйти из данжа]</green></click>
+    saves-hint: <click:run_command:'/сохранения'><gold>[/сохранения]</gold></click> <gray>— ваши места и начало данжа. <white>/сохраниться [название]</white> — запомнить место. <white>/данж
+      выйти</white> — выйти.
+    already-started: <gray>Этот данж уже идёт или не требует запуска. <white>/сохранения</white> — ваши места.
+    outside: '<gray>Сохранения доступны во время прохождения данжа. В его лобби: <white>/начать</white>. Для выхода: <white>/данж выйти</white>.'
+    teleport-blocked: <gold>Вы внутри данжа.</gold> <gray>Для выхода:</gray> <click:run_command:'/dungeon quit'><green>[/данж выйти]</green></click><gray>. Вернуться ко входу или сохранённому
+      месту:</gray> <click:run_command:'/сохранения'><white>[/сохранения]</white></click>
   titles:
     entry:
-      title: '<gold>Готовы к данжу?'
-      subtitle: '<white>/данж начать <gray>— начать прохождение'
+      title: <gold>Готовы к данжу?
+      subtitle: <white>/начать <gray>— начать прохождение
     resumed:
-      title: '<green>Продолжаем'
-      subtitle: '<white>Вы вернулись к месту выхода'
+      title: <green>Продолжаем
+      subtitle: <white>Вы вернулись к месту выхода
     open-entry:
-      title: '<gold>Вы в данже'
-      subtitle: '<white>Место выхода запоминается'
+      title: <gold>Вы в данже
+      subtitle: <white>Место выхода запоминается
     started:
-      title: '<gold>Данж начался'
-      subtitle: '<white>/данж выйти <gray>— покинуть данж'
+      title: <gold>Данж начался
+      subtitle: <white>/сохранения <gray>— ваши места
     complete:
-      title: '<green>Данж пройден'
-      subtitle: '<white>Заберите добычу <gray>·</gray> <white>/данж выйти'
+      title: <green>Данж пройден
+      subtitle: <white>Заберите добычу <gray>·</gray> <white>/данж выйти
+  saves:
+    messages:
+      changed: <red>Данж или сохранение изменились. Откройте /сохранения заново.
+      combat: '<red>Во время боя сохраняться и перемещаться нельзя. Подождите 15 секунд без боя. <gray>Для выхода: /данж выйти.'
+      cooldown: <gray>Подождите 5 секунд между сохранениями.
+      unsafe: <red>Встаньте на безопасную твёрдую поверхность, вдали от огня, воды и обрыва.
+      invalid-name: <red>Название должно содержать от 1 до 32 символов.
+      full: <red>Уже есть 5 ручных мест. Удалите ненужное в /сохранения или сохранитесь с тем же названием, чтобы заменить его.
+      saved: <green>Место «<name>» сохранено. <white>/сохранения</white> — открыть список.
+      write-failed: <red>Не удалось записать сохранение на диск. Повторите попытку позже.
+      removed: <gray>Сохранение удалено.
+      pending: <gray>Перемещение уже готовится.
+      countdown: <gray>Перемещение через 3 секунды. Не двигайтесь; бой отменит переход.
+      cancelled: '<gray>Перемещение отменено: вы сдвинулись или вступили в бой.'
+      unavailable-point: <red>Эта точка больше не подходит для безопасного перехода. Выберите другую или /данж выйти.
+      arrived: <green>Вы на месте.
+      blocked: <red>Перемещение отменено защитой. Для выхода используйте /данж выйти.
+      auto-saved: <gray>Место сохранено автоматически · /сохранения
+    dialog:
+      close-label: Закрыть
+      body: Ваши места в этом данже. Сохраняется только позиция. Добыча и монстры не откатываются.
+      limits: До 5 ручных и 3 автосохранений. Смерть и завершение данжа очищают точки.
+      title: Сохранения данжа
+      save-body: Введите имя точки. Такое же имя заменит вашу ручную точку.
+      save-title: Сохранить точку
+      name: Имя точки
+      remove-title: Удалить точку?
+      remove-body: Точка «<name>» будет удалена.
+      auto-label: Авто · <time>
+      manual-label: <name>
+      point-tooltip: <kind> · <time> · <coords>
+      back-label: ‹ Назад
+      save-label: Сохранить здесь
+      save-tooltip: Сохранить текущую позицию
+      quit-label: Выйти из данжа
+      quit-tooltip: Покинуть данж обычным способом
+      close-tooltip: Закрыть меню
+      confirm-save-label: Сохранить
+      confirm-save-tooltip: Сохранить точку
+      travel-label: Перейти
+      travel-tooltip: Телепортироваться к точке
+      remove-label: Удалить
+      remove-tooltip: Удалить эту точку
+      confirm-remove-label: Удалить
+      confirm-remove-tooltip: Удалить точку
+      entry-label: К началу данжа
+      entry-tooltip: Вернуться к началу данжа · <coords>
+      exit-label: Место прошлого выхода
+      exit-tooltip: Вернуться к месту последнего выхода из данжа · <coords>
+      manual: Ручная
+      auto: Авто
+    autosave-enabled: true
+    autosave-seconds: 120
+  open-exit-command: spawn

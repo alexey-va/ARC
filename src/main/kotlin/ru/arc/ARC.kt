@@ -260,7 +260,9 @@ open class ARC : JavaPlugin() {
         val dungeonCommand = ru.arc.hooks.elitemobs.EMDungeonCommand(
             ru.arc.config.ConfigManager.of(dataPath, "modules/elitemobs.yml"),
         )
-        registerCommand("dungeon", dungeonCommand, dungeonCommand)
+        for (name in listOf("dungeon", "dungeonstart", "dungeonsave", "dungeonsaves")) {
+            registerCommand(name, dungeonCommand, dungeonCommand)
+        }
         registerLegacyCommands()
     }
 
