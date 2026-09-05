@@ -68,7 +68,7 @@ class HelpCenterScreensTest {
             executed += command
             if (command == "g") chatMode = HelpCenterChatMode.GLOBAL
             if (command == "l") chatMode = HelpCenterChatMode.LOCAL
-            if (command in setOf("sf open_guide", "cmi flightcharge recharge")) player.openInventory(Bukkit.createInventory(null, 9))
+            if (command in setOf("sf open_guide", "cmi flightcharge recharge", "elitemobs:em")) player.openInventory(Bukkit.createInventory(null, 9))
             true
         }
         ConfigManager.clear()
@@ -153,6 +153,58 @@ class HelpCenterScreensTest {
         open(HelpCenterPage.GUIDE)
         click("jobs")
         assertEquals(listOf("arcjobs dialog"), executed)
+        val previous = screen
+        player.openInventory(Bukkit.createInventory(null, 9))
+        player.closeInventory()
+        paper.performTicks(3)
+        assertSame(previous, screen)
+    }
+
+    @Test
+    fun `dungeons entry opens a hub and guide chapters before any EliteMobs command`() {
+        open(HelpCenterPage.ACTIVITIES)
+        click("command_dungeons")
+        assertEquals("help.dungeons", screen.id)
+        assertEquals(listOf("dungeons_portals", "dungeons_guide", "dungeons_menu"), screen.buttons.map { it.id.value })
+        assertTrue(executed.isEmpty())
+        click("dungeons_guide")
+        assertEquals("help.dungeons.guide", screen.id)
+        for (topic in HelpCenterDungeonsController.TOPICS) {
+            click("dungeons_guide_$topic")
+            assertEquals("help.dungeons.guide.$topic", screen.id)
+            assertEquals(3, screen.body.size)
+            assertTrue(screen.body.all { plain(it.text).isNotBlank() })
+            click("back")
+            assertEquals("help.dungeons.guide", screen.id)
+        }
+        click("back")
+        assertEquals("help.dungeons", screen.id)
+        click("back")
+        assertEquals("help.category.activities", screen.id)
+        assertTrue(executed.isEmpty())
+    }
+
+    @Test
+    fun `EliteMobs inventory returns to the exact guide chapter`() {
+        open(HelpCenterPage.ACTIVITIES)
+        click("command_dungeons")
+        click("dungeons_guide")
+        click("dungeons_guide_start")
+        assertFalse(screen.buttons.single { it.id.value == "dungeons_menu" }.closeDialogBeforeAction)
+        click("dungeons_menu")
+        assertEquals("elitemobs:em", executed.last())
+        player.closeInventory()
+        paper.performTicks(3)
+        assertEquals("help.dungeons.guide.start", screen.id)
+    }
+
+    @Test
+    fun `dungeon portals close the menu and use the existing guild warp`() {
+        open(HelpCenterPage.ACTIVITIES)
+        click("command_dungeons")
+        assertTrue(screen.buttons.single { it.id.value == "dungeons_portals" }.closeDialogBeforeAction)
+        click("dungeons_portals")
+        assertEquals(listOf("pw aguild"), executed)
         val previous = screen
         player.openInventory(Bukkit.createInventory(null, 9))
         player.closeInventory()

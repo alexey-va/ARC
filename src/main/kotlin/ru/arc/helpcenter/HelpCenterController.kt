@@ -98,6 +98,10 @@ internal class HelpCenterController(
         )
     }
 
+    private val dungeons by lazy {
+        HelpCenterDungeonsController(settings, navigation, showDialog, ::executeInventory, ::execute)
+    }
+
     private val personalSettings by lazy {
         HelpCenterSettingsController(settings, gateway, legacySettings, navigation, showDialog,
             ::executeCatalog, ::executeInventory, ::openRoot)
@@ -818,7 +822,11 @@ internal class HelpCenterController(
             player.sendMessage(text("action-unavailable"))
             return
         }
-        if (executeCommand(player, command)) hub.recordRecent(player, id)
+        if (id == "dungeons") {
+            val returnTo = navigation.returnTarget(player) ?: { open(player, HelpCenterPage.ACTIVITIES) }
+            dungeons.open(player, returnTo)
+            hub.recordRecent(player, id)
+        } else if (executeCommand(player, command)) hub.recordRecent(player, id)
     }
 
     private fun executeInventory(player: Player, command: String): Boolean {
