@@ -460,3 +460,6 @@ object HelpCenterCommands {
     private val AMOUNT = Regex("[0-9]{1,12}(?:\\.[0-9]{1,2})?")
     private val MAX_PAYMENT = BigDecimal("999999999999.99")
 }
+
+/** Current incoming requests, never plugin availability or outgoing invitations. */
+data class HelpCenterPendingRequests(val teleport: Boolean = false, val duel: Boolean = false)

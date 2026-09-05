@@ -3,6 +3,8 @@ package ru.arc.helpcenter
 import com.Zrips.CMI.CMI
 import dev.lone.itemsadder.api.CustomStack
 import me.angeschossen.lands.api.LandsIntegration
+import net.william278.huskhomes.BukkitHuskHomes
+import net.william278.huskhomes.teleport.TeleportRequest
 import net.william278.huskhomes.api.HuskHomesAPI
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
@@ -21,6 +23,8 @@ interface HelpCenterGateway {
     fun loadHomes(player: Player, timeoutSeconds: Long): CompletableFuture<HelpCenterHomes>
 
     fun loadProfile(player: Player, timeoutSeconds: Long): CompletableFuture<HelpCenterProfile>
+
+    fun pendingRequests(player: Player): HelpCenterPendingRequests
 
     fun features(): Set<HelpCenterFeature>
 
@@ -95,6 +99,20 @@ class BukkitHelpCenterGateway : HelpCenterGateway {
             onlinePlayers = onlinePlayers().size,
         )
         return loadHomes(player, timeoutSeconds).handle { homes, _ -> base.copy(homes = homes) }
+    }
+
+    override fun pendingRequests(player: Player): HelpCenterPendingRequests {
+        val plugins = Bukkit.getPluginManager()
+        val teleport = if (plugins.isPluginEnabled("HuskHomes")) {
+            val user = HuskHomesAPI.getInstance().adaptUser(player)
+            val request = (plugins.getPlugin("HuskHomes") as BukkitHuskHomes).manager.requests().getLastTeleportRequest(user).orElse(null)
+            request != null && request.status == TeleportRequest.Status.PENDING && !request.hasExpired()
+        } else false
+        val duels = plugins.getPlugin("ArcDuels")?.takeIf { it.isEnabled }
+        // Optional public bridge uses JDK types, without inspecting the other plugin's private state.
+        val duel = duels?.javaClass?.getMethod("hasIncomingChallenge", java.util.UUID::class.java)
+            ?.invoke(duels, player.uniqueId) == true
+        return HelpCenterPendingRequests(teleport, duel)
     }
 
     override fun selectChatMode(player: Player, mode: HelpCenterChatMode): CompletableFuture<Unit> =

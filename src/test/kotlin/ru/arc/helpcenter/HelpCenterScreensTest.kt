@@ -46,6 +46,7 @@ class HelpCenterScreensTest {
         every { preferences.recordRecent(any(), any()) } returns CompletableFuture.completedFuture(HelpCenterPreferences())
         every { preferences.close() } returns Unit
         every { gateway.features() } returns HelpCenterFeature.entries.toSet()
+        every { gateway.pendingRequests(player) } returns HelpCenterPendingRequests()
         every { gateway.onlinePlayers() } returns (1..27).map {
             HelpCenterPlayer(UUID(0, it.toLong()), "Player%02d".format(it), if (it % 2 == 0) "spawn" else "survival")
         }
@@ -98,6 +99,54 @@ class HelpCenterScreensTest {
     }
     private fun plain(component: Component) = PlainTextComponentSerializer.plainText().serialize(component)
     private fun body() = screen.body.joinToString("\n") { plain(it.text) }
+
+    @Test
+    fun `request response buttons exist only for current incoming requests`() {
+        for (pending in listOf(
+            HelpCenterPendingRequests(), HelpCenterPendingRequests(teleport = true),
+            HelpCenterPendingRequests(duel = true), HelpCenterPendingRequests(teleport = true, duel = true),
+        )) {
+            every { gateway.pendingRequests(player) } returns pending
+            open(HelpCenterPage.REQUESTS)
+            val ids = screen.buttons.map { it.id.value }
+            assertEquals(pending.teleport, "tpa_accept" in ids)
+            assertEquals(pending.teleport, "tpa_deny" in ids)
+            assertEquals(pending.duel, "duel_accept" in ids)
+            assertEquals(pending.duel, "duel_deny" in ids)
+        }
+    }
+
+    @Test
+    fun `expired request is removed on click without dispatching an accept command`() {
+        for (id in listOf("tpa_accept", "duel_accept")) {
+            every { gateway.pendingRequests(player) } returns HelpCenterPendingRequests(true, true)
+            open(HelpCenterPage.REQUESTS)
+            assertFalse(screen.buttons.single { it.id.value == id }.closeDialogBeforeAction)
+            every { gateway.pendingRequests(player) } returns HelpCenterPendingRequests()
+            click(id)
+            assertTrue(executed.isEmpty())
+            assertFalse(screen.buttons.any { it.id.value == id })
+        }
+    }
+
+    @Test
+    fun `active request dispatches its response after revalidation`() {
+        every { gateway.pendingRequests(player) } returns HelpCenterPendingRequests(true, true)
+        open(HelpCenterPage.REQUESTS)
+        click("tpa_accept")
+        assertEquals(listOf("huskhomes:tpaccept"), executed)
+        open(HelpCenterPage.REQUESTS)
+        click("duel_deny")
+        assertEquals(listOf("huskhomes:tpaccept", "duel deny"), executed)
+    }
+
+    @Test
+    fun `request load failure hides responses and explains the unavailable state`() {
+        every { gateway.pendingRequests(player) } throws IllegalStateException("offline")
+        open(HelpCenterPage.REQUESTS)
+        assertFalse(screen.buttons.any { it.id.value in setOf("tpa_accept", "duel_accept") })
+        assertTrue(body().contains("Не удалось проверить"))
+    }
 
     @Test
     fun `jobs opens ArcEcoJobs dialog without arming inventory return`() {

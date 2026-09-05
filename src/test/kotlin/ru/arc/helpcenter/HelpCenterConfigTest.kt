@@ -137,7 +137,7 @@ class HelpCenterConfigTest : StringSpec({
                     label.color()?.value() shouldBe color
                 }
             }
-            MiniMessage.miniMessage().deserialize(settings.text("root-title")).color()?.value() shouldBe 0x835326
+            MiniMessage.miniMessage().deserialize(settings.text("root-title")).color()?.value() shouldBe 0x86dcf1
             MiniMessage.miniMessage().deserialize(settings.text("pay-confirm-label")).color()?.value() shouldBe 0x2bba43
             MiniMessage.miniMessage().deserialize(settings.text("home-delete-confirm")).color()?.value() shouldBe 0xff6b61
             MiniMessage.miniMessage().deserialize(settings.text("back-label")).color()?.value() shouldBe 0xaaa49a

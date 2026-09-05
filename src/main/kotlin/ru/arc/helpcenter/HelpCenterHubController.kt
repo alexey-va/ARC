@@ -189,16 +189,22 @@ internal class HelpCenterHubController(
 
     fun openRequests(player: Player) {
         navigation.visit(player) { openRequests(player) }
+        runCatching { gateway.pendingRequests(player) }
+            .onSuccess { showRequests(player, it) }
+            .onFailure { showRequests(player, HelpCenterPendingRequests(), "requests-unavailable") }
+    }
+
+    private fun showRequests(player: Player, pending: HelpCenterPendingRequests, notice: String? = null) {
         val entries = availableCatalog(player).associateBy { it.id }
         val ids = listOf("quests", "battle-pass", "vote", "events", "duels", "privat")
         val responseButtons = buildList {
-            if (HelpCenterFeature.HUSK_HOMES in gateway.features()) {
-                add(button("tpa_accept", text("request-tpa-accept-label")) { executeRaw(player, "huskhomes:tpaccept") }.closing())
-                add(button("tpa_deny", text("request-tpa-deny-label")) { executeRaw(player, "huskhomes:tpdeny") }.closing())
+            if (pending.teleport) {
+                add(button("tpa_accept", text("request-tpa-accept-label")) { respondToRequest(player, "huskhomes:tpaccept") { it.teleport } })
+                add(button("tpa_deny", text("request-tpa-deny-label")) { respondToRequest(player, "huskhomes:tpdeny") { it.teleport } })
             }
-            if (HelpCenterFeature.DUELS in gateway.features()) {
-                add(button("duel_accept", text("request-duel-accept-label")) { executeRaw(player, "duel accept") }.closing())
-                add(button("duel_deny", text("request-duel-deny-label")) { executeRaw(player, "duel deny") }.closing())
+            if (pending.duel) {
+                add(button("duel_accept", text("request-duel-accept-label")) { respondToRequest(player, "duel accept") { it.duel } })
+                add(button("duel_deny", text("request-duel-deny-label")) { respondToRequest(player, "duel deny") { it.duel } })
             }
         }
         showDialog(
@@ -215,7 +221,7 @@ internal class HelpCenterHubController(
                         ),
                         width = 500,
                     ),
-                ),
+                ) + listOfNotNull(notice?.let { PaperDialogBody(text(it), width = 500) }),
                 buttons = responseButtons + ids.mapNotNull { id -> entries[id]?.let { command ->
                     button("request_$id", requestLabel(id, command.label)) {
                         if (id == "privat") openPage(player, HelpCenterPage.PRIVAT) else executeCatalog(player, id)
@@ -225,6 +231,17 @@ internal class HelpCenterHubController(
                 columns = 2,
             ),
         )
+    }
+
+    private fun respondToRequest(player: Player, command: String, isPending: (HelpCenterPendingRequests) -> Boolean) {
+        val pending = runCatching { gateway.pendingRequests(player) }.getOrNull()
+        if (pending == null) showRequests(player, HelpCenterPendingRequests(), "requests-unavailable")
+        else if (isPending(pending)) {
+            navigation.visit(player)
+            // ARC still compiles against pre-dialog Paper; the installed native runtime provides this public method.
+            player.javaClass.getMethod("closeDialog").invoke(player)
+            executeRaw(player, command)
+        } else showRequests(player, pending)
     }
 
     fun openDiagnostics(player: Player, problem: HelpCenterProblem) {

@@ -8,7 +8,7 @@ limits:
 # All player-visible copy is configurable. ARC merges new defaults on reload.
 text:
   menu-close-label: "<#aaa49a>Закрыть меню"
-  settings-flight-back-label: "<#aaa49a>‹ Полёт и подзарядка"
+  settings-flight-back-label: "<#aaa49a>‹ Назад"
   settings-flight-auto-off-help: "<#e8dfd2>Отключение сохранит накопленный заряд.<newline><#aaa49a>Режим полёта включается на предыдущем экране."
   settings-flight-auto-current: "<#aaa49a>Настройки / Полёт / Автопополнение<newline><#e8dfd2>Выбран способ: <state>"
   settings-flight-auto-label: "<#d7b486>Автопополнение: <state><#d7b486> ›"
@@ -19,27 +19,27 @@ text:
   settings-flight-enable-label: "<italic:false><#9bd48d>Включить полёт"
   settings-flight-how: "<italic:false><#e8dfd2>Заряд расходуется при движении в воздухе и зависании.<newline>Для взлёта включите полёт и дважды нажмите прыжок.<newline><#aaa49a>Нужны доступ к полёту и оставшийся заряд."
   settings-flight-breadcrumb: "<italic:false><#aaa49a>Настройки / Мир и перемещение / Полёт"
-  settings-flight-title: "<italic:false><#835326>Полёт и подзарядка"
+  settings-flight-title: "<italic:false><#f4bd6a>Полёт и подзарядка"
   settings-portal-style-option-tooltip: "<#e8dfd2>Оформление: <state><newline><newline><#d7b486>Нажмите, чтобы выбрать этот вид портала."
   settings-options-flight-body: "<#e8dfd2>Выберите ресурс для автоматической покупки заряда."
-  settings-options-flight-title: "<#835326>Автопополнение заряда"
+  settings-options-flight-title: "<#f4bd6a>Автопополнение заряда"
   settings-options-portal-style-body: "<#e8dfd2>Выберите оформление создаваемого портала.<newline>Галочка отмечает текущий стиль."
-  settings-options-portal-style-title: "<#835326>Вид портала"
+  settings-options-portal-style-title: "<#86dcf1>Вид портала"
   settings-options-lands-body: "<#e8dfd2>Покажите границы территории рядом с собой<newline>или отключите их подсветку."
-  settings-options-lands-title: "<#835326>Границы земель"
+  settings-options-lands-title: "<#9bd48d>Границы земель"
   settings-options-tablist-body: "<#e8dfd2>Выберите оформление списка игроков по клавише Tab.<newline>«Выключить» уберёт дополнительное оформление."
-  settings-options-tablist-title: "<#835326>Список игроков"
+  settings-options-tablist-title: "<#86dcf1>Список игроков"
   settings-options-scoreboard-body: "<#e8dfd2>Выберите набор информации справа на экране.<newline>«Выключить» полностью скроет панель."
-  settings-options-scoreboard-title: "<#835326>Информационная панель"
+  settings-options-scoreboard-title: "<#86dcf1>Информационная панель"
   settings-options-escape-body: "<#e8dfd2>Закрыть — выйти из всех меню.<newline>Назад — вернуться к предыдущему экрану."
-  settings-options-escape-title: "<#835326>Поведение Escape"
+  settings-options-escape-title: "<#f3a2c9>Поведение Escape"
   settings-options-shortcut-body: "<#e8dfd2>Выберите действие для сочетания Shift + F.<newline>Обычная клавиша F продолжит менять предметы в руках."
-  settings-options-shortcut-title: "<#835326>Горячая клавиша Shift + F"
+  settings-options-shortcut-title: "<#f3a2c9>Горячая клавиша Shift + F"
   settings-options-body: "<#aaa49a>Сейчас: <#e8dfd2><state>"
   settings-selected-option: "<#9bd48d>✔ <label>"
   settings-trails-unavailable-tooltip: "<#e8dfd2>Состояние тропинок на этом сервере недоступно.<newline><#aaa49a>Кнопка не меняет настройки.<newline>Попробуйте открыть раздел позже или на другом сервере."
   settings-unavailable-state: "<#aaa49a>недоступно"
-  settings-back-label: "<#aaa49a>‹ В настройки"
+  settings-back-label: "<#aaa49a>‹ Назад"
   settings-hub-body: "<#e8dfd2>Настройте игру под себя.<newline><#aaa49a>Shift + F: <#e8dfd2><shortcut><#aaa49a>    Escape: <#e8dfd2><escape>"
   settings-world-tooltip: "<italic:false><#e8dfd2>Тропинки, границы земель и полёт.<newline>Доступ к порталам и их оформление."
   settings-world-label: "<italic:false><#d7b486>Мир и перемещение ›"
@@ -49,45 +49,45 @@ text:
   settings-interface-label: "<italic:false><#d7b486>Интерфейс ›"
   settings-controls-tooltip: "<italic:false><#e8dfd2>Горячая клавиша и поведение Escape.<newline>Редактирование табличек и посадка на ступеньки."
   settings-controls-label: "<italic:false><#d7b486>Управление ›"
-  settings-world-back-label: "<#aaa49a>‹ Мир и перемещение"
+  settings-world-back-label: "<#aaa49a>‹ Назад"
   settings-world-body: "<italic:false><#aaa49a>Настройки / Мир и перемещение<newline><italic:false><#e8dfd2>Тропинки, полёт и взаимодействие с территориями."
-  settings-world-title: "<italic:false><#835326>Мир и перемещение"
-  settings-social-back-label: "<#aaa49a>‹ Общение"
+  settings-world-title: "<italic:false><#9bd48d>Мир и перемещение"
+  settings-social-back-label: "<#aaa49a>‹ Назад"
   settings-social-body: "<italic:false><#aaa49a>Настройки / Общение<newline><italic:false><#e8dfd2>Кто вас слышит и какие сообщения вы получаете."
-  settings-social-title: "<italic:false><#835326>Общение"
-  settings-interface-back-label: "<#aaa49a>‹ Интерфейс"
+  settings-social-title: "<italic:false><#f3a2c9>Общение"
+  settings-interface-back-label: "<#aaa49a>‹ Назад"
   settings-interface-body: "<italic:false><#aaa49a>Настройки / Интерфейс<newline><italic:false><#e8dfd2>Информация на экране и визуальные эффекты."
-  settings-interface-title: "<italic:false><#835326>Интерфейс"
-  settings-controls-back-label: "<#aaa49a>‹ Управление"
+  settings-interface-title: "<italic:false><#86dcf1>Интерфейс"
+  settings-controls-back-label: "<#aaa49a>‹ Назад"
   settings-controls-body: "<italic:false><#aaa49a>Настройки / Управление<newline><italic:false><#e8dfd2>Выберите привычные клавиши и действия."
-  settings-controls-title: "<italic:false><#835326>Управление"
-  legacy-action-flight-recharge-tooltip: '<#e6fff3>Меню ручного пополнения запаса полёта.<newline><#969696>В нём можно выбрать опыт или игровые деньги<newline>и посмотреть стоимость доступного количества.<newline>Покупка заряда выполняется в этом меню.<newline><newline><#d7b486>Нажмите, чтобы открыть пополнение.'
-  legacy-action-flight-toggle-tooltip: '<#e6fff3>Включить или выключить режим полёта за заряд.<newline><#969696>Для взлёта дважды нажмите прыжок.<newline>Нужны доступ к полёту и оставшийся заряд.<newline>Эта кнопка не выбирает способ подзарядки.<newline><newline><#d7b486>Нажмите, чтобы переключить режим полёта.'
-  legacy-action-flight-off-tooltip: '<#e6fff3>Отключить автоматическую покупку заряда.<newline><#969696>Опыт и деньги перестанут тратиться<newline>на автопополнение. Накопленный заряд сохранится,<newline>и его можно будет использовать для полёта.<newline><newline><#d7b486>Нажмите, чтобы выключить автоподзарядку.'
-  legacy-action-flight-money-tooltip: '<#e6fff3>Автоматически пополнять заряд за игровые деньги.<newline><#969696>Когда запас снизится, деньги будут списываться<newline>с вашего баланса без отдельного нажатия.<newline>Автопополнение за опыт будет выключено.<newline><newline><#d7b486>Нажмите, чтобы выбрать оплату деньгами.'
-  legacy-action-flight-exp-tooltip: '<#e6fff3>Автоматически пополнять заряд за очки опыта.<newline><#969696>Когда запас снизится, опыт будет списываться<newline>без отдельного нажатия. Это очки, а не уровни.<newline>Автопополнение за деньги будет выключено.<newline><newline><#d7b486>Нажмите, чтобы выбрать оплату опытом.'
+  settings-controls-title: "<italic:false><#f3a2c9>Управление"
+  legacy-action-flight-recharge-tooltip: '<#e6fff3>Меню ручного пополнения запаса полёта.<newline><#c9c3ba>В нём можно выбрать опыт или игровые деньги<newline>и посмотреть стоимость доступного количества.<newline>Покупка заряда выполняется в этом меню.<newline><newline><#d7b486>Нажмите, чтобы открыть пополнение.'
+  legacy-action-flight-toggle-tooltip: '<#e6fff3>Включить или выключить режим полёта за заряд.<newline><#c9c3ba>Для взлёта дважды нажмите прыжок.<newline>Нужны доступ к полёту и оставшийся заряд.<newline>Эта кнопка не выбирает способ подзарядки.<newline><newline><#d7b486>Нажмите, чтобы переключить режим полёта.'
+  legacy-action-flight-off-tooltip: '<#e6fff3>Отключить автоматическую покупку заряда.<newline><#c9c3ba>Опыт и деньги перестанут тратиться<newline>на автопополнение. Накопленный заряд сохранится,<newline>и его можно будет использовать для полёта.<newline><newline><#d7b486>Нажмите, чтобы выключить автоподзарядку.'
+  legacy-action-flight-money-tooltip: '<#e6fff3>Автоматически пополнять заряд за игровые деньги.<newline><#c9c3ba>Когда запас снизится, деньги будут списываться<newline>с вашего баланса без отдельного нажатия.<newline>Автопополнение за опыт будет выключено.<newline><newline><#d7b486>Нажмите, чтобы выбрать оплату деньгами.'
+  legacy-action-flight-exp-tooltip: '<#e6fff3>Автоматически пополнять заряд за очки опыта.<newline><#c9c3ba>Когда запас снизится, опыт будет списываться<newline>без отдельного нажатия. Это очки, а не уровни.<newline>Автопополнение за деньги будет выключено.<newline><newline><#d7b486>Нажмите, чтобы выбрать оплату опытом.'
   flight-body-start: '<#f4bd6a>Как взлететь<newline><#e6fff3>Включите режим кнопкой «Переключить полёт», затем дважды нажмите прыжок. Нужны доступ к полёту и запас заряда. Настройка подзарядки сама по себе их не выдаёт.'
   flight-body-recharge: '<#f4bd6a>Автоподзарядка<newline><#e6fff3>При низком запасе заряд пополняется за выбранный ресурс: очки опыта или игровые деньги. Ресурс списывается автоматически. Режим «выкл» отключает только автопополнение.'
   flight-body-how: '<#f4bd6a>Как работает полёт<newline><#e6fff3>Это полёт с запасом заряда: он расходуется, пока вы летите или зависаете в воздухе. Остаток показывает полоса вверху экрана.'
-  setting-trails-off-tooltip: '<#e6fff3>Ваши шаги участвуют в создании тропинок.<newline><#969696>Повторные проходы меняют подходящую землю<newline>и постепенно прокладывают маршрут.<newline>Выключение не убирает уже созданные тропы.<newline><newline><#d7b486>Нажмите, чтобы больше не протаптывать землю.'
-  setting-trails-on-tooltip: '<#e6fff3>Повторные проходы постепенно протаптывают землю.<newline><#969696>Подходящие блоки меняются по стадиям,<newline>и на часто используемом маршруте появляется тропа.<newline><newline><#d7b486>Нажмите, чтобы ваши шаги создавали тропинки.'
-  setting-particles-tooltip: '<#e6fff3>Видимость эффектов PlayerParticles.<newline><#969696>Отключите их, если частицы отвлекают,<newline>или включите, чтобы снова видеть эффекты.<newline>Настройка меняет их отображение для вас.<newline><newline><#d7b486>Нажмите, чтобы показать или скрыть частицы.'
-  setting-chat-local-tooltip: '<#e6fff3>Локальный чат для общения поблизости.<newline><#969696>Ваши сообщения увидят игроки рядом.<newline>Подходит для разговора в одном месте.<newline><newline><#d7b486>Нажмите, чтобы писать в локальный чат.'
-  setting-chat-global-tooltip: '<#e6fff3>Глобальный чат для общего общения.<newline><#969696>Сообщения отправляются в общий канал,<newline>даже если собеседник далеко от вас.<newline><newline><#d7b486>Нажмите, чтобы писать в глобальный чат.'
-  legacy-settings-portal-for-other-tooltip: '<#e6fff3>Доступ других игроков к вашим порталам.<newline><#969696>Включено — разрешаете гостям использовать<newline>ваши порталы. Выключено — закрываете доступ.<newline>У гостя также должны быть включены чужие порталы.<newline><newline><#d7b486>Нажмите, чтобы переключить разрешение.'
-  legacy-settings-portal-by-other-tooltip: '<#e6fff3>Использование порталов других игроков.<newline><#969696>Включено — вы разрешаете перемещать себя<newline>через чужие порталы, если владелец их открыл.<newline>Выключено — такие переходы запрещены.<newline><newline><#d7b486>Нажмите, чтобы переключить разрешение.'
+  setting-trails-off-tooltip: '<#e6fff3>Ваши шаги участвуют в создании тропинок.<newline><#c9c3ba>Повторные проходы меняют подходящую землю<newline>и постепенно прокладывают маршрут.<newline>Выключение не убирает уже созданные тропы.<newline><newline><#d7b486>Нажмите, чтобы больше не протаптывать землю.'
+  setting-trails-on-tooltip: '<#e6fff3>Повторные проходы постепенно протаптывают землю.<newline><#c9c3ba>Подходящие блоки меняются по стадиям,<newline>и на часто используемом маршруте появляется тропа.<newline><newline><#d7b486>Нажмите, чтобы ваши шаги создавали тропинки.'
+  setting-particles-tooltip: '<#e6fff3>Видимость эффектов PlayerParticles.<newline><#c9c3ba>Отключите их, если частицы отвлекают,<newline>или включите, чтобы снова видеть эффекты.<newline>Настройка меняет их отображение для вас.<newline><newline><#d7b486>Нажмите, чтобы показать или скрыть частицы.'
+  setting-chat-local-tooltip: '<#e6fff3>Локальный чат для общения поблизости.<newline><#c9c3ba>Ваши сообщения увидят игроки рядом.<newline>Подходит для разговора в одном месте.<newline><newline><#d7b486>Нажмите, чтобы писать в локальный чат.'
+  setting-chat-global-tooltip: '<#e6fff3>Глобальный чат для общего общения.<newline><#c9c3ba>Сообщения отправляются в общий канал,<newline>даже если собеседник далеко от вас.<newline><newline><#d7b486>Нажмите, чтобы писать в глобальный чат.'
+  legacy-settings-portal-for-other-tooltip: '<#e6fff3>Доступ других игроков к вашим порталам.<newline><#c9c3ba>Включено — разрешаете гостям использовать<newline>ваши порталы. Выключено — закрываете доступ.<newline>У гостя также должны быть включены чужие порталы.<newline><newline><#d7b486>Нажмите, чтобы переключить разрешение.'
+  legacy-settings-portal-by-other-tooltip: '<#e6fff3>Использование порталов других игроков.<newline><#c9c3ba>Включено — вы разрешаете перемещать себя<newline>через чужие порталы, если владелец их открыл.<newline>Выключено — такие переходы запрещены.<newline><newline><#d7b486>Нажмите, чтобы переключить разрешение.'
   legacy-settings-shortcut: "<#d7b486>Shift + F: <state><#d7b486> ›"
-  legacy-settings-shortcut-tooltip: '<#e6fff3>Выберите действие для Shift + F.<newline><#969696>Если вы сменили клавиши управления: приседание + смена рук.<newline>Выбор сохраняется между серверами. Обычная F не меняется.'
+  legacy-settings-shortcut-tooltip: '<#e6fff3>Выберите действие для Shift + F.<newline><#c9c3ba>Если вы сменили клавиши управления: приседание + смена рук.<newline>Выбор сохраняется между серверами. Обычная F не меняется.'
   legacy-settings-escape: "<#d7b486>Escape: <state><#d7b486> ›"
-  legacy-settings-escape-tooltip: '<#e6fff3>Закрыть все меню или вернуться на предыдущий экран.<newline><#969696>По умолчанию — закрыть всё. Кнопка «Назад» доступна в обоих режимах.'
+  legacy-settings-escape-tooltip: '<#e6fff3>Закрыть все меню или вернуться на предыдущий экран.<newline><#c9c3ba>По умолчанию — закрыть всё. Кнопка «Назад» доступна в обоих режимах.'
   setting-selected: '<#9cdb67>✔ '
   shortcut-unavailable: '<#ff6b61>Назначенное действие сейчас недоступно. Выберите другое в настройках меню.'
   escape-state-close: 'закрыть всё'
   escape-state-back: 'назад'
   legacy-action-escape-close: '<#d7b486>Закрыть все меню'
-  legacy-action-escape-close-tooltip: '<#e6fff3>Escape сразу возвращает в игру.<newline><#969696>Режим по умолчанию.'
+  legacy-action-escape-close-tooltip: '<#e6fff3>Escape сразу возвращает в игру.<newline><#c9c3ba>Режим по умолчанию.'
   legacy-action-escape-back: '<#d7b486>Вернуться назад'
-  legacy-action-escape-back-tooltip: '<#e6fff3>Escape выполняет действие кнопки «Назад».<newline><#969696>В главном меню — закрывает меню.'
+  legacy-action-escape-back-tooltip: '<#e6fff3>Escape выполняет действие кнопки «Назад».<newline><#c9c3ba>В главном меню — закрывает меню.'
   shortcut-state-main: 'главное меню'
   legacy-action-shortcut-main: '<#d7b486>Главное меню'
   legacy-action-shortcut-main-tooltip: '<#e6fff3>Открыть главное меню сервера. Назначение по умолчанию.'
@@ -107,7 +107,7 @@ text:
   legacy-action-shortcut-disabled: '<#d7b486>Не использовать'
   legacy-action-shortcut-disabled-tooltip: '<#e6fff3>Shift + F выполняет обычную смену предметов между руками.'
   diagnostic-title: '<#f4bd6a><problem>'
-  category-empty: '<#969696>В этом разделе пока нет доступных действий.<newline>Попробуйте поиск или другой раздел.'
+  category-empty: '<#c9c3ba>В этом разделе пока нет доступных действий.<newline>Попробуйте поиск или другой раздел.'
   players-all-servers: 'вся сеть'
   players-network-label: '<#d7b486>Вся сеть'
   players-local-label: '<#d7b486>Только мой сервер'
@@ -119,19 +119,19 @@ text:
   action-unavailable: '<#ff6b61>Действие сейчас недоступно. Откройте раздел заново.'
   favorites-full: '<#e6fff3>Все четыре места заняты.<newline><#e6fff3>Уберите ненужное действие в избранном, чтобы закрепить новое.'
   favorites-picker-title: '<#f4bd6a>Добавить в избранное'
-  favorites-picker-body: '<#e6fff3>Выберите раздел, затем нужное действие.<newline><#969696>В его карточке нажмите «Добавить в избранное».'
-  goal-earn-body: '<#e6fff3>Работы платят за игровые действия, а магазины выкупают ресурсы.<newline><#969696>Редкие вещи можно предложить другим игрокам на аукционе.'
-  goal-build-body: '<#e6fff3>Сначала защитите место для базы, затем выбирайте материалы и инструменты.<newline><#969696>В технологиях есть механизмы, а в каталоге — дополнительные предметы.'
-  goal-explore-body: '<#e6fff3>Выберите мир или готовую точку для путешествия.<newline><#969696>Перед дальней дорогой сохраните дом в разделе «Телепортация».'
-  goal-fight-body: '<#e6fff3>Дуэли — для боя с игроком, данжи — для приключений с противниками.<newline><#969696>Условия участия и награды показаны внутри выбранной активности.'
-  goal-develop-body: '<#e6fff3>Откройте ранг, чтобы увидеть условия следующего повышения.<newline><#969696>Работы, задания и навыки дают отдельные цели для развития.'
-  goal-together-body: '<#e6fff3>Найдите друга в сети: можно написать, позвать к себе или пригласить в приват.<newline><#969696>События и дуэли помогут выбрать совместное занятие.'
-  diagnostic-cannot-teleport-help: '<#e6fff3>Не двигайтесь во время отсчёта телепортации.<newline>Проверьте сохранённые дома или отправьте другу новый запрос.<newline><#969696>Если команда отказала, причина будет в последнем сообщении чата.'
-  diagnostic-cannot-claim-help: '<#e6fff3>Выберите своё поселение в разделе «Приват».<newline>Проверьте лимит чанков, доступный баланс и права на расширение.<newline><#969696>Чужую территорию занять нельзя. Подробный отказ покажет Lands.'
-  diagnostic-cannot-find-player-help: '<#e6fff3>Откройте «Игроки», выберите всю сеть и сбросьте поиск.<newline>Попробуйте часть ника, затем обновите список.<newline><#969696>В списке показаны только игроки онлайн.'
-  diagnostic-lost-item-help: '<#e6fff3>Возьмите предмет в основную руку и откройте его карточку.<newline>Для дополнительных предметов доступен рецепт, если его предоставляет каталог.<newline><#969696>Переход в магазин или на аукцион сам по себе ничего не продаёт.'
-  diagnostic-command-failed-help: '<#e6fff3>Найдите действие через поиск — там есть описание и точная команда.<newline>Проверьте последнее сообщение чата: в нём может быть причина отказа.<newline><#969696>Недоступный на этом сервере раздел может отсутствовать в каталоге.'
-  root-title: "<italic:false><#835326>Главное меню"
+  favorites-picker-body: '<#e6fff3>Выберите раздел, затем нужное действие.<newline><#c9c3ba>В его карточке нажмите «Добавить в избранное».'
+  goal-earn-body: '<#e6fff3>Работы платят за игровые действия, а магазины выкупают ресурсы.<newline><#c9c3ba>Редкие вещи можно предложить другим игрокам на аукционе.'
+  goal-build-body: '<#e6fff3>Сначала защитите место для базы, затем выбирайте материалы и инструменты.<newline><#c9c3ba>В технологиях есть механизмы, а в каталоге — дополнительные предметы.'
+  goal-explore-body: '<#e6fff3>Выберите мир или готовую точку для путешествия.<newline><#c9c3ba>Перед дальней дорогой сохраните дом в разделе «Телепортация».'
+  goal-fight-body: '<#e6fff3>Дуэли — для боя с игроком, данжи — для приключений с противниками.<newline><#c9c3ba>Условия участия и награды показаны внутри выбранной активности.'
+  goal-develop-body: '<#e6fff3>Откройте ранг, чтобы увидеть условия следующего повышения.<newline><#c9c3ba>Работы, задания и навыки дают отдельные цели для развития.'
+  goal-together-body: '<#e6fff3>Найдите друга в сети: можно написать, позвать к себе или пригласить в приват.<newline><#c9c3ba>События и дуэли помогут выбрать совместное занятие.'
+  diagnostic-cannot-teleport-help: '<#e6fff3>Не двигайтесь во время отсчёта телепортации.<newline>Проверьте сохранённые дома или отправьте другу новый запрос.<newline><#c9c3ba>Если команда отказала, причина будет в последнем сообщении чата.'
+  diagnostic-cannot-claim-help: '<#e6fff3>Выберите своё поселение в разделе «Приват».<newline>Проверьте лимит чанков, доступный баланс и права на расширение.<newline><#c9c3ba>Чужую территорию занять нельзя. Подробный отказ покажет Lands.'
+  diagnostic-cannot-find-player-help: '<#e6fff3>Откройте «Игроки», выберите всю сеть и сбросьте поиск.<newline>Попробуйте часть ника, затем обновите список.<newline><#c9c3ba>В списке показаны только игроки онлайн.'
+  diagnostic-lost-item-help: '<#e6fff3>Возьмите предмет в основную руку и откройте его карточку.<newline>Для дополнительных предметов доступен рецепт, если его предоставляет каталог.<newline><#c9c3ba>Переход в магазин или на аукцион сам по себе ничего не продаёт.'
+  diagnostic-command-failed-help: '<#e6fff3>Найдите действие через поиск — там есть описание и точная команда.<newline>Проверьте последнее сообщение чата: в нём может быть причина отказа.<newline><#c9c3ba>Недоступный на этом сервере раздел может отсутствовать в каталоге.'
+  root-title: "<italic:false><#86dcf1>Главное меню"
   root-body: "<italic:false><#e8dfd2>Всё для игры — в одном месте.<newline><#aaa49a>Выберите раздел; наведите на кнопку для подробностей."
   now-label: "<italic:false><#86dcf1>Мой профиль ›"
   now-tooltip: '<#e6fff3>Ваше состояние и полезные следующие шаги.'
@@ -147,15 +147,15 @@ text:
   travel-tooltip: '<#e6fff3>Дома, миры, варпы и возврат.'
   privat-label: "<italic:false><#a3de92>Приват ›"
   privat-tooltip: '<#e6fff3>Создание, территория, участники и подробный гайд.'
-  main-menu-label: '<#969696>Главное меню'
+  main-menu-label: '<#c9c3ba>Главное меню'
   main-menu-tooltip: '<#e6fff3>Открыть остальные игровые разделы сервера.'
   back-label: "<#aaa49a>‹ Назад"
-  root-label: "<#aaa49a>‹ Главное меню"
+  root-label: "<#aaa49a>‹ Назад"
   not-available: '—'
-  now-title: "<#835326>Мой профиль"
-  now-identity: '<#e6fff3><player><newline><#969696>Сервер: <#e6fff3><server> <#969696>· Онлайн: <#e6fff3><online>'
-  now-progress: '<#969696>Ранг: <#e6fff3><rank><newline><#969696>Баланс: <#e6fff3><balance><newline><#969696>Дома: <#e6fff3><homes>/<max_homes> <#969696>· Приваты: <#e6fff3><lands>'
-  now-location: '<#969696>Мир: <#e6fff3><world><newline><#969696>Координаты: <#e6fff3><x>, <y>, <z><newline><#969696>Чат: <#e6fff3><chat>'
+  now-title: "<#86dcf1>Мой профиль"
+  now-identity: '<#e6fff3><player><newline><#c9c3ba>Сервер: <#e6fff3><server> <#c9c3ba>· Онлайн: <#e6fff3><online>'
+  now-progress: '<#c9c3ba>Ранг: <#86dcf1><rank><newline><#c9c3ba>Баланс: <#f4bd6a><balance><newline><#c9c3ba>Дома: <#9bd48d><homes>/<max_homes> <#c9c3ba>· Приваты: <#9bd48d><lands>'
+  now-location: '<#c9c3ba>Мир: <#e6fff3><world><newline><#c9c3ba>Координаты: <#e6fff3><x>, <y>, <z><newline><#c9c3ba>Чат: <#e6fff3><chat>'
   rec-home-label: '<#d7b486>Поставить первый дом'
   rec-land-label: '<#d7b486>Защитить территорию'
   rec-rank-label: '<#d7b486>Следующая цель ранга'
@@ -166,19 +166,19 @@ text:
   favorites-title: '<#f4bd6a>Избранное и недавнее'
   personalization-loading: '<#e6fff3>Загружаю ваши действия…'
   personalization-unavailable: '<#e6fff3>Избранное сейчас недоступно, но остальные разделы работают.'
-  favorites-body: '<#e6fff3>Избранное: <#e6fff3><favorites>/4<newline><#969696>★ — закреплено · ↻ — недавно использовано<newline>Выберите действие, чтобы открыть его или убрать из избранного.'
+  favorites-body: '<#e6fff3>Избранное: <#e6fff3><favorites>/4<newline><#c9c3ba>★ — закреплено · ↻ — недавно использовано<newline>Выберите действие, чтобы открыть его или убрать из избранного.'
   favorite-command-label: '<#d7b486>★ <label>'
   recent-command-label: '<#d7b486>↻ <label>'
   favorite-find-label: '<#d7b486>Выбрать из каталога'
   action-title: '<#f4bd6a><action>'
-  action-body: '<#e6fff3><description><newline><#969696>Команда: /<command>'
+  action-body: '<#e6fff3><description><newline><#c9c3ba>Команда: /<command>'
   action-run-label: '<#2bba43>Выполнить'
   favorite-add-label: '<#2bba43>Добавить в избранное'
-  favorite-remove-label: '<#969696>Убрать из избранного'
+  favorite-remove-label: '<#c9c3ba>Убрать из избранного'
   goals-short-label: '<#d7b486>Чем заняться'
   goals-tooltip: '<#e6fff3>Подобрать игровые действия под вашу цель.'
   goals-title: '<#f4bd6a>Чем заняться'
-  goals-body: '<#e6fff3>Выберите, чего хочется сейчас.<newline><#969696>Покажу несколько подходящих возможностей без лишнего списка.'
+  goals-body: '<#e6fff3>Выберите, чего хочется сейчас.<newline><#c9c3ba>Покажу несколько подходящих возможностей без лишнего списка.'
   goal-earn-label: '<#d7b486>Заработать'
   goal-build-label: '<#d7b486>Строить'
   goal-explore-label: '<#d7b486>Исследовать'
@@ -190,12 +190,12 @@ text:
   context-short-label: '<#d7b486>Что рядом со мной'
   context-tooltip: '<#e6fff3>Мир, приват, предмет в руке и полезные действия.'
   context-title: '<#f4bd6a>Что рядом со мной'
-  context-body: '<#e6fff3>◆ <#969696>Мир  <#e6fff3><world><newline><#e6fff3>◆ <#969696>Сервер  <#e6fff3><server><newline><#e6fff3>◆ <#969696>Координаты  <#e6fff3><coordinates><newline><#e6fff3>◆ <#969696>Приват  <#e6fff3><land><newline><#e6fff3>◆ <#969696>В руке  <#e6fff3><item>'
+  context-body: '<#e6fff3>◆ <#c9c3ba>Мир  <#e6fff3><world><newline><#e6fff3>◆ <#c9c3ba>Сервер  <#e6fff3><server><newline><#e6fff3>◆ <#c9c3ba>Координаты  <#e6fff3><coordinates><newline><#e6fff3>◆ <#c9c3ba>Приват  <#e6fff3><land><newline><#e6fff3>◆ <#c9c3ba>В руке  <#e6fff3><item>'
   context-item-label: '<#d7b486>Предмет в руке'
   item-tooltip: '<#e6fff3>Рецепт, каталог, торговля и улучшения предмета.'
   item-title: '<#f4bd6a>Предмет в руке'
   item-empty: '<#e6fff3>Возьмите предмет в основную руку и откройте этот экран снова.'
-  item-body: '<#e6fff3><item><newline><#969696>Количество: <#e6fff3><amount><newline><#969696>Тип: <#e6fff3><kind>'
+  item-body: '<#e6fff3><item><newline><#c9c3ba>Количество: <#e6fff3><amount><newline><#c9c3ba>Тип: <#e6fff3><kind>'
   item-recipe-label: '<#d7b486>Показать рецепт'
   item-kind-vanilla: 'обычный'
   item-kind-custom: 'дополнительный'
@@ -209,7 +209,8 @@ text:
   requests-short-label: '<#d7b486>Дела и запросы'
   requests-tooltip: '<#e6fff3>Обучение, задания, награды и игровые приглашения.'
   requests-title: '<#f4bd6a>Дела и запросы'
-  requests-body: '<#e6fff3>Обучение: <hint><newline><#969696>Ответы ниже относятся к последнему входящему запросу.<newline>Награды и приглашения проверяются в своих разделах.'
+  requests-body: '<#e6fff3>Обучение: <hint><newline><#c9c3ba>Доступные входящие запросы показаны здесь.<newline>Награды и приглашения проверяются в своих разделах.'
+  requests-unavailable: '<#c9c3ba>Не удалось проверить входящие запросы.<newline>Откройте этот раздел ещё раз.'
   check-command-label: '<#d7b486>Проверить: <label>'
   check-quests-label: '<#d7b486>Проверить задания'
   check-battle-pass-label: '<#d7b486>Проверить боевой пропуск'
@@ -227,7 +228,7 @@ text:
   problem-cannot-find-player-label: '<#d7b486>Не вижу игрока'
   problem-lost-item-label: '<#d7b486>Не понимаю предмет'
   problem-command-failed-label: '<#d7b486>Команда не работает'
-  diagnostic-body: '<#e6fff3>Что удалось проверить:<newline><#969696><facts><newline><newline><#e6fff3>Выберите ближайший безопасный путь.'
+  diagnostic-body: '<#e6fff3>Что удалось проверить:<newline><#c9c3ba><facts><newline><newline><#e6fff3>Выберите ближайший безопасный путь.'
   fact-homes-ready-yes: 'список домов доступен'
   fact-homes-ready-no: 'список домов ещё не проверен'
   fact-husk-ready-yes: 'система телепортации доступна'
@@ -249,9 +250,9 @@ text:
 
   my-title: '<#f4bd6a>Про меня'
   my-loading: '<#e6fff3>Собираю ваш профиль…'
-  my-identity: '<#e6fff3><player><newline><#969696>Сервер: <#e6fff3><server><newline><#969696>Ранг: <#e6fff3><rank>'
-  my-summary: '<#969696>Баланс: <#e6fff3><balance><newline><#969696>Дома: <#e6fff3><homes>/<max_homes><newline><#969696>Поселения: <#e6fff3><lands>'
-  my-location: '<#969696>Мир: <#d7b486><world><newline><#969696>Координаты: <#e6fff3><x>, <y>, <z>'
+  my-identity: '<#e6fff3><player><newline><#c9c3ba>Сервер: <#e6fff3><server><newline><#c9c3ba>Ранг: <#86dcf1><rank>'
+  my-summary: '<#c9c3ba>Баланс: <#f4bd6a><balance><newline><#c9c3ba>Дома: <#9bd48d><homes>/<max_homes><newline><#c9c3ba>Поселения: <#9bd48d><lands>'
+  my-location: '<#c9c3ba>Мир: <#d7b486><world><newline><#c9c3ba>Координаты: <#e6fff3><x>, <y>, <z>'
   my-error: '<#e6fff3>Часть профиля сейчас недоступна. Быстрые разделы всё равно работают.'
   my-homes-label: '<#d7b486>Мои дома'
   my-homes-tooltip: '<#e6fff3>Сохранённые точки и перемещения.'
@@ -276,14 +277,14 @@ text:
   rules-label: '<#d7b486>Правила'
 
   commands-title: '<#f4bd6a>Поиск'
-  commands-body: '<#e6fff3>Опишите, что хотите сделать, обычной фразой.<newline><#969696>Поиск понимает формы слов, близкие значения и небольшие опечатки.'
+  commands-body: '<#e6fff3>Опишите, что хотите сделать, обычной фразой.<newline><#c9c3ba>Поиск понимает формы слов, близкие значения и небольшие опечатки.'
   search-input: '<#e6fff3>Что вы хотите сделать?'
   search-label: '<#d7b486>Найти'
   search-tooltip: '<#e6fff3>Например: удалить поселение, перенести дом, добавить друга.'
   search-title: '<#f4bd6a>Результаты поиска'
-  search-body: '<#969696>Запрос  <#e6fff3><query><newline><#969696>Найдено  <#e6fff3><count>'
+  search-body: '<#c9c3ba>Запрос  <#e6fff3><query><newline><#c9c3ba>Найдено  <#e6fff3><count>'
   search-empty: '<#e6fff3>Не понял запрос. Опишите действие и объект: «перенести дом» или «добавить игрока».'
-  search-result-tooltip: '<#e6fff3><description><newline><#969696>Открыть нужный раздел'
+  search-result-tooltip: '<#e6fff3><description><newline><#c9c3ba>Открыть нужный раздел'
   category-start-label: '<#d7b486>Начало игры'
   category-travel-label: '<#d7b486>Телепортация'
   category-protection-label: '<#d7b486>Защита'
@@ -295,7 +296,7 @@ text:
   category-settings-label: "<#aaa49a>Настройки ›"
   category-activities-tooltip: '<#e6fff3>События, дуэли, данжи и фермы.'
   category-technology-tooltip: '<#e6fff3>Предметы, зачарования, механизмы и транспорт.'
-  category-settings-tooltip: '<#e6fff3>Личные настройки игры и интерфейса.<newline><#969696>Чат, тропинки, полёт, порталы и управление.<newline>В названии кнопки — текущий режим,<newline>в подсказке — его назначение.'
+  category-settings-tooltip: '<#e6fff3>Личные настройки игры и интерфейса.<newline><#c9c3ba>Чат, тропинки, полёт, порталы и управление.<newline>В названии кнопки — текущий режим,<newline>в подсказке — его назначение.'
   category-trade-tooltip: '<#e6fff3>Магазины, быстрая продажа и аукцион.'
   category-progress-tooltip: '<#e6fff3>Ранг, работы, задания и навыки.'
   category-social-tooltip: '<#e6fff3>Голосование и выбор режима чата.'
@@ -307,39 +308,39 @@ text:
   category-social-title: '<#f4bd6a>Общение и сервер'
   category-activities-title: '<#f4bd6a>Активности'
   category-technology-title: '<#f4bd6a>Технологии'
-  category-settings-title: "<italic:false><#835326>Настройки"
+  category-settings-title: "<italic:false><#f4bd6a>Настройки"
   setting-chat-current: "<#d7b486>Канал чата: <state>"
   setting-particles-current: "<#d7b486>Частицы: <state>"
   setting-trails-current: "<#d7b486>Тропинки: <state>"
   chat-global-state: 'глобальный'
   chat-local-state: 'локальный'
   legacy-settings-scoreboard: "<#d7b486>Панель: <state><#d7b486> ›"
-  legacy-settings-scoreboard-tooltip: '<#e6fff3>Панель с информацией справа на экране.<newline><#969696>Выберите подходящий набор данных:<newline>баланс, координаты, профессии или прогресс.<newline><newline><#d7b486>Нажмите, чтобы выбрать один из 20 видов<newline>или полностью скрыть панель.'
+  legacy-settings-scoreboard-tooltip: '<#e6fff3>Панель с информацией справа на экране.<newline><#c9c3ba>Выберите подходящий набор данных:<newline>баланс, координаты, профессии или прогресс.<newline><newline><#d7b486>Нажмите, чтобы выбрать один из 20 видов<newline>или полностью скрыть панель.'
   legacy-settings-tablist: "<#d7b486>Tab: <state><#d7b486> ›"
-  legacy-settings-tablist-tooltip: '<#e6fff3>Оформление списка игроков по клавише Tab.<newline><#969696>Виды отличаются набором дополнительных<newline>данных: профиль, баланс, место и прогресс.<newline><newline><#d7b486>Нажмите, чтобы выбрать один из 20 видов<newline>или выключить дополнительное оформление.'
+  legacy-settings-tablist-tooltip: '<#e6fff3>Оформление списка игроков по клавише Tab.<newline><#c9c3ba>Виды отличаются набором дополнительных<newline>данных: профиль, баланс, место и прогресс.<newline><newline><#d7b486>Нажмите, чтобы выбрать один из 20 видов<newline>или выключить дополнительное оформление.'
   legacy-settings-lands: "<#d7b486>Границы земель ›"
-  legacy-settings-lands-tooltip: '<#e6fff3>Подсветка границ территории Lands.<newline><#969696>Помогает понять, где заканчивается участок<newline>и какие блоки входят в поселение.<newline><newline><#d7b486>Нажмите, чтобы показать границы рядом<newline>или убрать их отображение.'
+  legacy-settings-lands-tooltip: '<#e6fff3>Подсветка границ территории Lands.<newline><#c9c3ba>Помогает понять, где заканчивается участок<newline>и какие блоки входят в поселение.<newline><newline><#d7b486>Нажмите, чтобы показать границы рядом<newline>или убрать их отображение.'
   legacy-settings-portal-by-other: "<#d7b486>Чужие порталы: <state>"
   legacy-settings-portal-for-other: "<#d7b486>Мои порталы для гостей: <state>"
-  legacy-settings-portal-tooltip: '<#969696>Разрешить телепортацию через порталы игроков.'
+  legacy-settings-portal-tooltip: '<#c9c3ba>Разрешить телепортацию через порталы игроков.'
   legacy-settings-notifications: "<#d7b486>Уведомления: <state>"
-  legacy-settings-notifications-tooltip: '<#e6fff3>Системные объявления RusCrafting в чате.<newline><#969696>Отключите их, если хотите меньше<newline>информационных сообщений от сервера.<newline>Это отдельная настройка от режима чата.<newline><newline><#d7b486>Нажмите, чтобы включить или выключить.'
+  legacy-settings-notifications-tooltip: '<#e6fff3>Системные объявления RusCrafting в чате.<newline><#c9c3ba>Отключите их, если хотите меньше<newline>информационных сообщений от сервера.<newline>Это отдельная настройка от режима чата.<newline><newline><#d7b486>Нажмите, чтобы включить или выключить.'
   legacy-settings-flight: "<#d7b486>Полёт и подзарядка ›"
-  legacy-settings-flight-tooltip: '<#e6fff3>Полёт с расходуемым запасом заряда.<newline><#969696>Заряд тратится при перемещении и зависании.<newline>Его можно пополнять за опыт или игровые деньги.<newline><newline><#d7b486>Нажмите, чтобы узнать правила расхода,<newline>выбрать автопополнение и управлять полётом.'
+  legacy-settings-flight-tooltip: '<#e6fff3>Полёт с расходуемым запасом заряда.<newline><#c9c3ba>Заряд тратится при перемещении и зависании.<newline>Его можно пополнять за опыт или игровые деньги.<newline><newline><#d7b486>Нажмите, чтобы узнать правила расхода,<newline>выбрать автопополнение и управлять полётом.'
   legacy-settings-shift-edit: "<#d7b486>Правка табличек: <state>"
-  legacy-settings-shift-tooltip: '<#e6fff3>Редактирование текста уже поставленных табличек.<newline><#969696>Нажмите ПКМ по доступной для правки табличке;<newline>при необходимости удерживайте Shift.<newline>Защита территории продолжает действовать.<newline><newline><#d7b486>Нажмите, чтобы переключить редактирование.'
+  legacy-settings-shift-tooltip: '<#e6fff3>Редактирование текста уже поставленных табличек.<newline><#c9c3ba>Нажмите ПКМ по доступной для правки табличке;<newline>при необходимости удерживайте Shift.<newline>Защита территории продолжает действовать.<newline><newline><#d7b486>Нажмите, чтобы переключить редактирование.'
   legacy-settings-resource-pack: "<#d7b486>Ресурспак: <state>"
-  legacy-settings-resource-pack-tooltip: '<#e6fff3>Автоматическая загрузка ресурспака при входе.<newline><#969696>Он добавляет серверные модели, предметы<newline>и значки, которые используются в меню.<newline>Выбор будет учитываться при следующем входе.<newline><newline><#d7b486>Нажмите, чтобы включить или выключить.'
+  legacy-settings-resource-pack-tooltip: '<#e6fff3>Автоматическая загрузка ресурспака при входе.<newline><#c9c3ba>Он добавляет серверные модели, предметы<newline>и значки, которые используются в меню.<newline>Выбор будет учитываться при следующем входе.<newline><newline><#d7b486>Нажмите, чтобы включить или выключить.'
   legacy-settings-totem: "<#d7b486>Полоса автототема: <state>"
-  legacy-settings-totem-tooltip: '<#e6fff3>Полоса состояния автототема вверху экрана.<newline><#969696>Показывает его перезарядку, когда работает<newline>механика автоматического использования тотема.<newline>Настройка управляет отображением полосы.<newline><newline><#d7b486>Нажмите, чтобы показать или скрыть её.'
+  legacy-settings-totem-tooltip: '<#e6fff3>Полоса состояния автототема вверху экрана.<newline><#c9c3ba>Показывает его перезарядку, когда работает<newline>механика автоматического использования тотема.<newline>Настройка управляет отображением полосы.<newline><newline><#d7b486>Нажмите, чтобы показать или скрыть её.'
   legacy-settings-stairs-sit: "<#d7b486>Сидеть на ступеньках: <state>"
-  legacy-settings-stairs-tooltip: '<#e6fff3>Посадка на ступеньки по правой кнопке мыши.<newline><#969696>Включите, чтобы использовать их как сиденье.<newline>Отключите, если случайно садитесь при стройке.<newline><newline><#d7b486>Нажмите, чтобы включить или выключить.'
+  legacy-settings-stairs-tooltip: '<#e6fff3>Посадка на ступеньки по правой кнопке мыши.<newline><#c9c3ba>Включите, чтобы использовать их как сиденье.<newline>Отключите, если случайно садитесь при стройке.<newline><newline><#d7b486>Нажмите, чтобы включить или выключить.'
   legacy-settings-tpa: "<#d7b486>Запросы телепортации: <state>"
-  legacy-settings-tpa-tooltip: '<#e6fff3>Входящие запросы на телепортацию от игроков.<newline><#969696>Включено — вы можете получать запросы /tpa.<newline>Выключено — запросы будут игнорироваться.<newline>Разрешение запроса не означает его принятие.<newline><newline><#d7b486>Нажмите, чтобы переключить приём запросов.'
+  legacy-settings-tpa-tooltip: '<#e6fff3>Входящие запросы на телепортацию от игроков.<newline><#c9c3ba>Включено — вы можете получать запросы /tpa.<newline>Выключено — запросы будут игнорироваться.<newline>Разрешение запроса не означает его принятие.<newline><newline><#d7b486>Нажмите, чтобы переключить приём запросов.'
   legacy-settings-portal-style: "<#d7b486>Вид портала: <state><#d7b486> ›"
   legacy-settings-portal-style-tooltip: "<#e8dfd2>Внешний вид создаваемого вами портала.<newline><#aaa49a>Можно выбрать обычное, астральное, солнечное<newline>и другие оформления. Текущий вид указан на кнопке.<newline><newline><#d7b486>Нажмите, чтобы открыть выбор оформления."
   legacy-settings-admin: '<#d7b486>Админские настройки: <#e6fff3><state>'
-  legacy-settings-admin-tooltip: '<#e6fff3>Личные служебные режимы администратора.<newline><#969696>Откроется отдельное меню со Spy, CSpy<newline>и другими доступными настройками.<newline><newline><#d7b486>Нажмите, чтобы открыть меню.'
+  legacy-settings-admin-tooltip: '<#e6fff3>Личные служебные режимы администратора.<newline><#c9c3ba>Откроется отдельное меню со Spy, CSpy<newline>и другими доступными настройками.<newline><newline><#d7b486>Нажмите, чтобы открыть меню.'
   legacy-state-on: "<#9bd48d>✔ вкл."
   legacy-state-off: "<#aaa49a>○ выкл."
   legacy-state-exp: 'за опыт'
@@ -354,12 +355,12 @@ text:
   legacy-state-chaos: 'Хаос'
   legacy-state-solar: 'Солнечный'
   legacy-state-void: 'Пустота'
-  legacy-options-body: '<#969696>Выберите параметр. Текущий режим указан в заголовке.'
+  legacy-options-body: '<#c9c3ba>Выберите параметр. Текущий режим указан в заголовке.'
   legacy-mode-label: '<#d7b486>Вид <number>'
-  legacy-action-scoreboard-off: '<#969696>Выключить панель'
-  legacy-action-tablist-off: '<#969696>Выключить список'
+  legacy-action-scoreboard-off: '<#c9c3ba>Выключить панель'
+  legacy-action-tablist-off: '<#c9c3ba>Выключить список'
   legacy-action-lands-show: '<#d7b486>Показать границы'
-  legacy-action-lands-hide: '<#969696>Скрыть границы'
+  legacy-action-lands-hide: '<#c9c3ba>Скрыть границы'
   legacy-action-flight-exp: "<#d7b486>За очки опыта"
   legacy-action-flight-money: "<#d7b486>За игровые деньги"
   legacy-action-flight-off: "<#aaa49a>Отключить"
@@ -405,21 +406,21 @@ text:
   legacy-settings-tablist-mode-18: '<#d7b486>Связь'
   legacy-settings-tablist-mode-19: '<#d7b486>Лайт'
   legacy-settings-tablist-mode-20: '<#d7b486>Админ'
-  settings-body: '<#969696>Чат: <#e6fff3><chat><newline><#969696>Тропинки: <#e6fff3><trails><newline><newline><#969696>Текущий режим — в названии кнопки.<newline>Наведите на неё, чтобы узнать подробности.'
+  settings-body: '<#c9c3ba>Чат: <#e6fff3><chat><newline><#c9c3ba>Тропинки: <#e6fff3><trails><newline><newline><#c9c3ba>Текущий режим — в названии кнопки.<newline>Наведите на неё, чтобы узнать подробности.'
   state-on: 'включено'
   state-off: 'выключено'
   state-unknown: 'выберите состояние'
   players-title: '<#f4bd6a>Игроки'
-  players-body: '<#e6fff3>Игроки: <#e6fff3><total><newline><#969696>Где ищем: <#e6fff3><scope><newline><#969696>Страница <page>/<pages> · на экране <count>'
-  players-empty: '<#969696>Игроков по этому фильтру нет.<newline>Измените ник или переключитесь на всю сеть.'
+  players-body: '<#e6fff3>Игроки: <#e6fff3><total><newline><#c9c3ba>Где ищем: <#e6fff3><scope><newline><#c9c3ba>Страница <page>/<pages> · на экране <count>'
+  players-empty: '<#c9c3ba>Игроков по этому фильтру нет.<newline>Измените ник или переключитесь на всю сеть.'
   players-input: '<#e6fff3>Ник игрока'
   players-search-label: '<#d7b486>Найти игрока'
-  players-search-tooltip: '<#969696>Применить фильтр'
+  players-search-tooltip: '<#c9c3ba>Применить фильтр'
   player-label: '<#d7b486><player>'
-  player-tooltip: '<#969696>Сервер: <#d7b486><server>'
+  player-tooltip: '<#c9c3ba>Сервер: <#d7b486><server>'
   player-server-unknown: 'неизвестен'
   player-title: '<#f4bd6a><player>'
-  player-body: '<#e6fff3><player><newline><#969696>Сейчас на сервере <#e6fff3><server><#969696>.<newline><newline><#e6fff3>Выберите действие.'
+  player-body: '<#e6fff3><player><newline><#c9c3ba>Сейчас на сервере <#e6fff3><server><#c9c3ba>.<newline><newline><#e6fff3>Выберите действие.'
   player-tpa-label: '<#d7b486>Телепортироваться к нему'
   player-tpahere-label: '<#d7b486>Позвать к себе'
   player-message-label: '<#d7b486>Написать сообщение'
@@ -442,8 +443,8 @@ text:
   recovery-label: '<#d7b486>Что случилось?'
   recovery-tooltip: '<#e6fff3>Быстрые выходы, если вы застряли или потерялись.'
   recovery-title: '<#f4bd6a>Что случилось?'
-  recovery-body: '<#e6fff3>Выберите самое похожее действие.<newline><#969696>Если не помогло — откройте поиск и опишите проблему своими словами.'
-  category-body: '<#e6fff3>Выберите действие. Подробности — при наведении.<newline><#969696>После закрытия игрового инвентаря вы вернётесь сюда.'
+  recovery-body: '<#e6fff3>Выберите самое похожее действие.<newline><#c9c3ba>Если не помогло — откройте поиск и опишите проблему своими словами.'
+  category-body: '<#e6fff3>Выберите действие. Подробности — при наведении.<newline><#c9c3ba>После закрытия игрового инвентаря вы вернётесь сюда.'
   command-label: '<#d7b486><label>'
   command-vote-label: '<#d7b486>Голосование'
   command-chat-global-label: '<#d7b486>Глобальный чат'
@@ -453,24 +454,24 @@ text:
   command-trails-off-label: '<#d7b486>Не протаптывать тропинки'
   command-particles-label: '<#d7b486>Частицы'
   command-tpa-ignore-label: '<#d7b486>Запросы телепорта'
-  command-tooltip: '<#e6fff3><description><newline><#969696>/<command>'
+  command-tooltip: '<#e6fff3><description><newline><#c9c3ba>/<command>'
 
   travel-title: '<#f4bd6a>Телепортация'
   travel-loading: '<#e6fff3>Загружаю ваши дома…'
-  travel-body: '<#969696>Дома  <#e6fff3><homes>/<max_homes><newline><#e6fff3>Выберите дом или другое направление.'
+  travel-body: '<#c9c3ba>Дома  <#e6fff3><homes>/<max_homes><newline><#e6fff3>Выберите дом или другое направление.'
   travel-empty: '<#e6fff3>У вас пока нет домов. Создайте первый в текущей точке.'
-  travel-limit: '<#969696>Свободных слотов нет. Удалите или перенесите существующий дом.'
+  travel-limit: '<#c9c3ba>Свободных слотов нет. Удалите или перенесите существующий дом.'
   travel-error: '<#e6fff3>Дома сейчас не загрузились, но остальные способы телепортации доступны.'
   home-label: '<#d7b486><home>'
-  home-tooltip: '<#e6fff3><server> · <world><newline><#969696><x>, <y>, <z>'
+  home-tooltip: '<#e6fff3><server> · <world><newline><#c9c3ba><x>, <y>, <z>'
   create-home-label: '<#d7b486>Новый дом'
   create-home-tooltip: '<#e6fff3>Сохранить текущую точку.'
   home-create-title: '<#f4bd6a>Новый дом'
-  home-create-body: '<#e6fff3>Введите короткое имя без пробелов.<newline><#969696>Дом будет создан в вашей текущей точке.'
+  home-create-body: '<#e6fff3>Введите короткое имя без пробелов.<newline><#c9c3ba>Дом будет создан в вашей текущей точке.'
   home-name-input: '<#e6fff3>Название дома'
   home-create-submit: '<#2bba43>Создать'
   home-title: '<#f4bd6a>Дом · <home>'
-  home-body: '<#969696>Сервер       <#e6fff3><server><newline><#969696>Мир         <#e6fff3><world><newline><#969696>Координаты  <#e6fff3><x>, <y>, <z>'
+  home-body: '<#c9c3ba>Сервер       <#e6fff3><server><newline><#c9c3ba>Мир         <#e6fff3><world><newline><#c9c3ba>Координаты  <#e6fff3><x>, <y>, <z>'
   home-teleport-label: '<#d7b486>Телепортироваться'
   home-teleport-tooltip: '<#e6fff3>Переместиться в сохранённую точку.'
   home-relocate-label: '<#d7b486>Перенести сюда'
