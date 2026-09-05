@@ -8,7 +8,7 @@ McFine **Paper/Purpur** plugin — treasure hunts, stock market, board, and cros
 
 - **Java 25** (Temurin)
 - **Gradle 9.2.1**
-- Published `arc-core 2.1.3` artifacts from the public RusCrafting repository
+- Published `arc-core 2.5.0` artifacts from the public RusCrafting repository
 
 ## Build
 
@@ -82,3 +82,22 @@ ordinary `cache` form continues to preserve the expansion result exactly.
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Product UI telemetry
+
+`MetricsModule` owns `ProductUiListener` and the persisted `ProductInterestStore`.
+The listener consumes `PaperMenuObservationEvent` from the shared renderer in
+ARC and sibling Arc plugins discovered at runtime. Dialog screens declare stable `id` values.
+`ProductZMenuAdapter` observes the native public `ruscrafting_test` catalog;
+its physical presses remain attempts because zMenu's callback precedes requirements.
+New configured menus are observed automatically; legacy standalone GUIs are outside this hook.
+
+`ProductUiTracker` deduplicates rendered impressions per visit and distinguishes
+user closes from replacements/disconnects. Reports expose counts, unique players,
+versions, temporal destination/result associations, truncation and producer coverage.
+Menu IDs and semantic button IDs are used instead of player names, item text or inputs.
+The bounded Redis codec and the existing atomic product store own transport validation,
+retention and saves; no second persistence lifecycle is introduced.
+
+Check with `./gradlew test --tests 'ru.arc.metrics.Product*'` and `./gradlew test shadowJar`.
+Dashboard definitions and interpretation are in the ops [product-interest runbook](../ruscrafting-ops/docs/runbooks/product-interest.md).

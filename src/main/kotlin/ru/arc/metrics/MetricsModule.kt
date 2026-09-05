@@ -50,6 +50,7 @@ object MetricsModule : PluginModule {
     private var redisMetrics: RedisMetricsBinder? = null
     private var dungeonInterest: DungeonInterestMetrics? = null
     private var productInterest: ProductInterestTelemetry? = null
+    private var productUi: ProductUiListener? = null
     private var activeDungeonConfig: DungeonInterestConfig? = null
     private var platformHeavyEnabled = false
     private var metricsEvents: EventScope? = null
@@ -103,7 +104,7 @@ object MetricsModule : PluginModule {
         days: Int,
         limit: Int,
     ): Map<String, Any?> =
-        productInterest?.report(days, limit, ARC.redisManager?.isConnected() == true)
+        productInterest?.report(days, limit, ARC.redisManager?.isConnected() == true)?.plus("uiCoverage" to productUi?.coverage())
             ?: linkedMapOf("complete" to false, "status" to "disabled", "message" to "Product-interest telemetry is not active")
 
     /** Let feature modules publish cached snapshots without owning scrape-time work. */
@@ -162,6 +163,7 @@ object MetricsModule : PluginModule {
                     ).also {
                         it.start()
                         productInterest = it
+                        productUi = ProductUiListener(ARC.instance, it).also(ProductUiListener::start)
                     }
                 } else {
                     null
@@ -334,7 +336,7 @@ object MetricsModule : PluginModule {
         if (platformHeavyEnabled) metrics.recordSnapshot("paper-heavy", "platform-heavy", paper::heavySnapshot)
         productInterest?.let { product ->
             metrics.recordSnapshot("product-interest", "product") {
-                product.snapshot(ARC.redisManager?.isConnected() == true)
+                product.snapshot(ARC.redisManager?.isConnected() == true) + productUi?.snapshot().orEmpty()
             }
         }
     }
@@ -352,6 +354,8 @@ object MetricsModule : PluginModule {
         metricsEvents = null
         dungeonInterest?.shutdown()
         dungeonInterest = null
+        productUi?.close()
+        productUi = null
         productInterest?.shutdown()
         productInterest = null
         activeDungeonConfig = null

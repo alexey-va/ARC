@@ -207,6 +207,7 @@ class ProductInterestTelemetry(
             "onboarding_hint",
             "session_end",
             "session_censored",
+            *ProductUiKind.entries.map { "ui_${it.name.lowercase()}" }.toTypedArray(),
         )
             .associateWith { event ->
                 Counter
@@ -249,11 +250,13 @@ class ProductInterestTelemetry(
             }
         }.toMap()
 
+    private val uiRedisListener = ChannelListener { _, message, origin -> receiveUi(message, origin) }
     private val redisListener = ChannelListener { _, message, origin -> receive(message, origin) }
 
     fun start() {
         if (config.networkEnabled && redis != null) {
             redis.registerChannelUnique(CHANNEL, redisListener)
+            redis.registerChannelUnique(ProductUiCodec.CHANNEL, uiRedisListener)
         }
     }
 
@@ -388,7 +391,7 @@ class ProductInterestTelemetry(
                 activity = feature.activity,
             ),
         )
-        if (interest.event != ProductEventKind.FEATURE_INTEREST) {
+        if (interest.event != ProductEventKind.FEATURE_INTEREST && interest.event != ProductEventKind.MENU_OPEN) {
             recordLocal(signal(player, now, interest.event, feature = feature, activity = feature.activity))
         }
     }
@@ -624,6 +627,36 @@ class ProductInterestTelemetry(
         detail(player, now, ProductDetailType.NPC, id, display)
     }
 
+    /** Actual UI lifecycle observations from the shared renderer or a verified native adapter. */
+    @Synchronized
+    fun ui(playerId: String, kind: ProductUiKind, view: ProductUiView, button: String = "_menu",
+        durationMillis: Long = 0, now: Long = clockMillis()) {
+        val player = ProductPseudonym.of(playerId)
+        val session = sessions[player] ?: return // Never treat unattached/offline or startup viewers as new organic sessions.
+        if (session.qa) { qa("ui_${kind.name.lowercase()}"); return }
+        session.lastActiveAt = now
+        val feature = view.buttons[button]?.feature ?: productUiFeature(view.surface, button)
+        val event = ProductUiSignal(ProductPseudonym.eventId(), serverName, player, now, kind,
+            view.surface, view.revision, button, feature?.label, durationMillis)
+        if (!ProductUiCodec.valid(event)) return
+        if (kind == ProductUiKind.OPEN) recordLocal(signal(player, now, ProductEventKind.MENU_OPEN))
+        seenEvents[event.eventId] = Unit
+        if (!store.applyUi(event) || !config.networkEnabled) return
+        val publisher = redis
+        if (publisher == null) { transportCounters.getValue("publish_unavailable").increment(); return }
+        transportCounters.getValue("publish_attempt").increment()
+        publisher.publish(ProductUiCodec.CHANNEL, gson.toJson(event))
+    }
+
+    @Synchronized
+    private fun receiveUi(payload: String, origin: String) {
+        val event = ProductUiCodec.decode(payload, origin, clockMillis(), config.retentionDays, gson)
+        if (event == null) { transportCounters.getValue("invalid").increment(); return }
+        if (seenEvents.put(event.eventId, Unit) != null) { transportCounters.getValue("duplicate").increment(); return }
+        transportCounters.getValue("receive").increment()
+        store.applyUi(event)
+    }
+
     /** Sample movement and active/idle time without a hot PlayerMoveEvent listener. */
     @Synchronized
     fun sample(
@@ -712,6 +745,7 @@ class ProductInterestTelemetry(
         store.flush(now, force = true)
         if (config.networkEnabled && redis != null) {
             redis.unregisterChannel(CHANNEL, redisListener)
+            redis.unregisterChannel(ProductUiCodec.CHANNEL, uiRedisListener)
         }
     }
 

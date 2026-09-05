@@ -129,6 +129,7 @@ internal class HelpCenterController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.root",
                 title = text("root-title"),
                 body = listOf(PaperDialogBody(text("root-body"), width = 500)),
                 buttons = listOf(
@@ -153,6 +154,7 @@ internal class HelpCenterController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.now",
                 title = text("now-title"),
                 body = listOf(PaperDialogBody(text("my-loading"), width = 500)),
                 buttons = listOf(
@@ -190,6 +192,7 @@ internal class HelpCenterController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.now",
                 title = text("now-title"),
                 body = listOf("now-identity", "now-progress", "now-location").map { key ->
                     PaperDialogBody(text(key, *placeholders), width = 420)
@@ -223,6 +226,7 @@ internal class HelpCenterController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.now.failure",
                 title = text("now-title"),
                 body = listOf(PaperDialogBody(text("my-error"), width = 500)),
                 buttons = myButtons(player),
@@ -249,6 +253,7 @@ internal class HelpCenterController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.guide",
                 title = text("guide-title"),
                 body = listOf(PaperDialogBody(text("guide-body"), width = 500)),
                 buttons = listOf(
@@ -272,6 +277,7 @@ internal class HelpCenterController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.commands",
                 title = text("commands-title"),
                 body = listOf(PaperDialogBody(text("commands-body"), width = 500)),
                 inputs = listOf(PaperDialogTextInput(SEARCH_INPUT, text("search-input"), maxLength = 48)),
@@ -311,6 +317,7 @@ internal class HelpCenterController(
         if (result.items.isEmpty()) body += PaperDialogBody(text("players-empty"))
         val returnToList = { openPlayers(player, query, result.page, localOnly) }
         showDialog(player, PaperDialogScreen(
+            id = "help.players",
             title = text("players-title"), body = body,
             inputs = listOf(PaperDialogTextInput(PLAYER_SEARCH_INPUT, text("players-input"), initial = query, maxLength = 16)),
             buttons = result.items.mapIndexed { index, target ->
@@ -357,6 +364,7 @@ internal class HelpCenterController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.player",
                 title = text("player-title", "player" to target.name),
                 body = listOf(
                     PaperDialogBody(
@@ -380,6 +388,7 @@ internal class HelpCenterController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.message",
                 title = text("message-title", "player" to target.name),
                 body = listOf(PaperDialogBody(text("message-body", "player" to target.name))),
                 inputs = listOf(PaperDialogTextInput(MESSAGE_INPUT, text("message-input"), maxLength = 128)),
@@ -400,6 +409,7 @@ internal class HelpCenterController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.pay",
                 title = text("pay-title", "player" to target.name),
                 body = listOf(PaperDialogBody(text("pay-body", "player" to target.name))),
                 inputs = listOf(PaperDialogTextInput(AMOUNT_INPUT, text("pay-input"), maxLength = 16)),
@@ -421,6 +431,7 @@ internal class HelpCenterController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.pay.confirm",
                 title = text("pay-confirm-title"),
                 body = listOf(PaperDialogBody(text("pay-confirm-body", "player" to target.name, "amount" to amount))),
                 buttons = listOf(button("confirm", text("pay-confirm-label")) { execute(player, command) }.closing()),
@@ -461,6 +472,7 @@ internal class HelpCenterController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.category.settings",
                 title = text("category-settings-title"),
                 body = listOf(PaperDialogBody(text(
                     "settings-body",
@@ -496,6 +508,7 @@ internal class HelpCenterController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.recovery",
                 title = text("recovery-title"),
                 body = listOf(PaperDialogBody(text("recovery-body"), width = 500)),
                 buttons = HelpCenterProblem.entries.map { problem ->
@@ -516,6 +529,7 @@ internal class HelpCenterController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.search",
                 title = text("search-title"),
                 body = listOf(PaperDialogBody(text("search-loading"), width = 500)),
                 buttons = listOf(backButton("back", player, ::openCommands)),
@@ -544,6 +558,7 @@ internal class HelpCenterController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.search",
                 title = text("search-title"),
                 body = body,
                 buttons = results.map { searchResultButton(player, it) }.ifEmpty {
@@ -585,6 +600,7 @@ internal class HelpCenterController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.category.${category.configId}",
                 title = text("category-${category.configId}-title"),
                 body = listOf(PaperDialogBody(text(if (entries.isEmpty()) "category-empty" else "category-body"))),
                 buttons = buildList {
@@ -607,6 +623,7 @@ internal class HelpCenterController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.travel",
                 title = text("travel-title"),
                 body = listOf(PaperDialogBody(text("travel-loading"))),
                 buttons = listOf(button("root", text("root-label"), text("main-menu-tooltip")) { openRoot(player) }),
@@ -655,6 +672,7 @@ internal class HelpCenterController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.travel",
                 title = text("travel-title"),
                 body = body,
                 buttons = homeButtons + createButton + travelButtons(player),
@@ -668,6 +686,7 @@ internal class HelpCenterController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.travel.failure",
                 title = text("travel-title"),
                 body = listOf(PaperDialogBody(text("travel-error"))),
                 buttons = travelButtons(player),
@@ -682,6 +701,7 @@ internal class HelpCenterController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.home.create",
                 title = text("home-create-title"),
                 body = listOf(PaperDialogBody(text("home-create-body"))),
                 inputs = listOf(PaperDialogTextInput(HOME_INPUT, text("home-name-input"), maxLength = 32)),
@@ -708,6 +728,7 @@ internal class HelpCenterController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.home",
                 title = text("home-title", "home" to home.name),
                 body = listOf(
                     PaperDialogBody(
@@ -739,6 +760,7 @@ internal class HelpCenterController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.home.relocate",
                 title = text("home-relocate-title", "home" to home.name),
                 body = listOf(PaperDialogBody(text("home-relocate-body", "home" to home.name))),
                 buttons = listOf(
@@ -756,6 +778,7 @@ internal class HelpCenterController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.home.delete",
                 title = text("home-delete-title", "home" to home.name),
                 body = listOf(PaperDialogBody(text("home-delete-body", "home" to home.name))),
                 buttons = listOf(

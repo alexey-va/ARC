@@ -38,6 +38,7 @@ class ProductInterestStore private constructor(
     private var lastSavedAt: Long,
     val recoveredInvalidPath: Path? = null,
 ) {
+    private var uiDroppedEvents: Long = 0
     private var capacityEvictions: Long = 0
     private var resultObservationStartedAt: Long = lastSavedAt
     private data class PlayerRecord(
@@ -48,11 +49,13 @@ class ProductInterestStore private constructor(
         var firstMenuAt: Long? = null,
         val firstPathAt: MutableMap<String, Long> = linkedMapOf(),
         val firstGameplayOutcomeAt: MutableMap<String, Long> = linkedMapOf(),
+        var uiAttribution: ProductUiAttribution? = null,
         val days: MutableMap<String, DailyRecord> = linkedMapOf(),
     )
 
     private data class DailyRecord(
         val date: String,
+        val ui: MutableMap<String, ProductUiRow> = linkedMapOf(),
         var sessions: Long = 0,
         var sessionSeconds: Long = 0,
         var activeSeconds: Long = 0,
@@ -103,6 +106,7 @@ class ProductInterestStore private constructor(
         val savedAt: Long = 0,
         val players: List<PersistedPlayer>? = null,
         val capacityEvictions: Long = 0,
+        val uiDroppedEvents: Long = 0,
         val resultObservationStartedAt: Long? = null,
     )
 
@@ -115,10 +119,12 @@ class ProductInterestStore private constructor(
         val firstPathAt: Map<String, Long>? = null,
         val firstGameplayOutcomeAt: Map<String, Long>? = null,
         val days: List<PersistedDay>? = null,
+        val uiAttribution: ProductUiAttribution? = null,
     )
 
     private data class PersistedDay(
         val date: String? = null,
+        val ui: List<ProductUiRow>? = null,
         val sessions: Long = 0,
         val sessionSeconds: Long = 0,
         val activeSeconds: Long = 0,
@@ -280,10 +286,99 @@ class ProductInterestStore private constructor(
                 // Preserve the journey across Paper transfers until Velocity disconnects.
             }
         }
+        if (signal.kind == ProductEventKind.MEANINGFUL_OUTCOME) {
+            val feature = signal.feature ?: signal.outcome?.uiFeature()
+            record.uiAttribution?.takeIf { !it.result && it.feature != null && it.feature == feature?.label &&
+                signal.occurredAt - it.occurredAt in 0..600_000 }?.let { click ->
+                record.uiRow(click)?.add("result")
+                click.result = true
+                changed = true
+            }
+        }
         if (connection != null) record.days.values.forEach { it.recentTrail.clear() }
         val mutated = changed || trailChanged || networkExitChanged
         if (mutated) markDirty()
         return ProductStoreApplyResult(changed, before)
+    }
+
+    /** Actual UI observations, independent from inferred command interest. */
+    @Synchronized
+    fun applyUi(signal: ProductUiSignal): Boolean {
+        if (!ProductUiCodec.valid(signal)) return false
+        prune(signal.occurredAt)
+        val record = player(signal.player, signal.occurredAt)
+        record.lastSeenAt = maxOf(record.lastSeenAt, signal.occurredAt)
+        val day = record.day(dayKey(signal.occurredAt))
+        val key = "${signal.surface}|${signal.revision}|${signal.button}"
+        if (key !in day.ui && day.ui.size >= 128) {
+            uiDroppedEvents++
+            markDirty()
+            return false
+        }
+        val row = day.ui.getOrPut(key) { ProductUiRow(signal.surface, signal.revision, signal.button, signal.feature) }
+        row.add(signal.kind.name.lowercase())
+        row.durationMillis += signal.durationMillis
+        if (signal.feature != null) row.feature = signal.feature
+        if (signal.kind == ProductUiKind.OPEN) {
+            record.firstMenuAt = minOf(record.firstMenuAt ?: signal.occurredAt, signal.occurredAt)
+            day.menuOpened = true
+            record.uiAttribution?.takeIf { !it.destination && it.surface != signal.surface &&
+                signal.occurredAt - it.occurredAt in 0..30_000 }?.let { click ->
+                record.uiRow(click)?.add("destination")
+                click.destination = true
+            }
+        }
+        if (signal.kind == ProductUiKind.CLICK) record.uiAttribution = ProductUiAttribution(
+            signal.surface, signal.revision, signal.button, signal.feature, signal.occurredAt)
+        markDirty()
+        return true
+    }
+
+    private fun PlayerRecord.uiRow(click: ProductUiAttribution): ProductUiRow? =
+        days[dayKey(click.occurredAt)]?.ui?.get("${click.surface}|${click.revision}|${click.button}")
+
+    private data class UiAggregate(val surface: String, val revision: String, val button: String,
+        var feature: String? = null, val events: MutableMap<String, Long> = linkedMapOf(),
+        val players: MutableMap<String, MutableSet<String>> = linkedMapOf(), var durationMillis: Long = 0)
+
+    private fun uiAggregates(now: Long, days: Int): List<UiAggregate> {
+        val end = localDate(now)
+        val start = end.minusDays(days.toLong() - 1)
+        val rows = linkedMapOf<String, UiAggregate>()
+        players.values.forEach { player ->
+            player.window(start, end).orEmpty().forEach { day ->
+                day.ui.values.forEach { item ->
+                    val row = rows.getOrPut(item.key) { UiAggregate(item.surface, item.revision, item.button) }
+                    row.feature = item.feature ?: row.feature
+                    row.durationMillis += item.durationMillis
+                    item.counts.forEach { (event, count) ->
+                        row.events[event] = (row.events[event] ?: 0) + count
+                        if (count > 0) row.players.getOrPut(event) { linkedSetOf() }.add(player.id)
+                    }
+                }
+            }
+        }
+        return rows.values.sortedWith(compareByDescending<UiAggregate> { (it.events["click"] ?: 0) + (it.events["attempt"] ?: 0) }
+            .thenByDescending { it.events["open"] ?: it.events["impression"] ?: 0 }.thenBy { it.surface }.thenBy { it.button })
+    }
+
+    private fun uiReport(now: Long, days: Int, limit: Int): Map<String, Any?> {
+        val rows = uiAggregates(now, days)
+        return linkedMapOf(
+            "definition" to "Actual menu views and rendered button impressions; core accepted/blocked actions and native physical attempts. No-choice means user close without a button press",
+            "attribution" to "Last accepted click: another surface within 30 seconds; matching instrumented gameplay result within 10 minutes. Temporal association, not causality",
+            "complete" to (uiDroppedEvents == 0L && rows.size <= limit), "droppedEvents" to uiDroppedEvents,
+            "observedRows" to rows.size, "returnedRows" to rows.size.coerceAtMost(limit),
+            "rows" to rows.take(limit).map { row -> linkedMapOf(
+                "surface" to row.surface, "revision" to row.revision, "button" to row.button,
+                "feature" to row.feature, "resultAttributionSupported" to (ProductOutcome.entries.any { it.uiFeature()?.label == row.feature && row.feature != null } && !row.surface.startsWith("zmenu:")),
+                "acceptedClicksSupported" to !row.surface.startsWith("zmenu:"),
+                "events" to row.events, "uniquePlayers" to row.players.mapValues { it.value.size },
+                "uniqueAttemptRate" to (row.players["impression"]?.size?.takeIf { it > 0 }?.let { (row.players["attempt"]?.size ?: 0).toDouble() / it }),
+                "meanVisitSeconds" to (row.events["close"]?.takeIf { it > 0 }?.let { row.durationMillis / 1000.0 / it }),
+                "uniqueClickRate" to (row.players["impression"]?.size?.takeIf { it > 0 }?.let { (row.players["click"]?.size ?: 0).toDouble() / it }),
+            ) },
+        )
     }
 
     /** Record local high-volume actions without publishing every action to Redis. */
@@ -359,8 +454,20 @@ class ProductInterestStore private constructor(
         val today = localDate(now)
         val points = mutableListOf<MetricPoint>()
         points += point("arc_product_measurement_version", "Product measurement semantics version", 3, scope)
+        points += point("arc_product_ui_dropped_events", "UI events discarded by the per-player bounded store", uiDroppedEvents, scope)
         WINDOWS.forEach { days ->
             val window = "${days}d"
+            val uiRows = uiAggregates(now, days)
+            uiRows.take(200).forEach { row ->
+                ProductUiRow.EVENTS.forEach { event ->
+                    val labels = arrayOf("window" to window, "surface" to row.surface, "revision" to row.revision,
+                        "button" to row.button, "event" to event)
+                    points += point("arc_product_ui_events", "Observed UI events in the rolling window", row.events[event] ?: 0, scope, *labels)
+                    points += point("arc_product_ui_players", "Unique UI participants in the rolling window", row.players[event]?.size ?: 0, scope, *labels)
+                }
+            }
+            points += point("arc_product_ui_metric_rows", "UI rows exposed in Prometheus (bounded at 200)", uiRows.size.coerceAtMost(200), scope, "window" to window)
+            points += point("arc_product_ui_observed_rows", "All observed UI rows before Prometheus truncation", uiRows.size, scope, "window" to window)
             val start = today.minusDays(days.toLong() - 1)
             val records = players.values.mapNotNull { player -> player.window(start, today)?.let { player to it } }
             val newPlayers = records.count { (player) -> player.firstJoinAt?.let(::localDate)?.let { !it.isBefore(start) && !it.isAfter(today) } == true }
@@ -546,6 +653,7 @@ class ProductInterestStore private constructor(
                 "exitInterpretation" to "Observed context, not a proven reason for leaving",
             ),
             "cohortDefinition" to "Observed first visit to primary Paper entry node; not account registration",
+            "ui" to uiReport(now, safeDays, safeLimit),
             "activation" to activationReport(now, safeDays),
             "retention" to retentionReport(end, safeDays),
             "privacy" to linkedMapOf(
@@ -928,6 +1036,7 @@ class ProductInterestStore private constructor(
             version = VERSION,
             savedAt = now,
             capacityEvictions = capacityEvictions,
+            uiDroppedEvents = uiDroppedEvents,
             resultObservationStartedAt = resultObservationStartedAt,
             players =
                 players.values.sortedBy { it.id }.map { player ->
@@ -940,6 +1049,7 @@ class ProductInterestStore private constructor(
                         firstPathAt = player.firstPathAt.toSortedMap(),
                         firstGameplayOutcomeAt = player.firstGameplayOutcomeAt.toSortedMap(),
                         days = player.days.values.sortedBy { it.date }.map(::persist),
+                        uiAttribution = player.uiAttribution?.copy(),
                     )
                 },
         )
@@ -947,6 +1057,7 @@ class ProductInterestStore private constructor(
     private fun persist(day: DailyRecord): PersistedDay =
         PersistedDay(
             date = day.date,
+            ui = day.ui.values.map(ProductUiRow::copyForSave),
             sessions = day.sessions,
             sessionSeconds = day.sessionSeconds,
             activeSeconds = day.activeSeconds,
@@ -1045,6 +1156,10 @@ class ProductInterestStore private constructor(
                             firstSeenAt = persisted.firstSeenAt,
                             lastSeenAt = persisted.lastSeenAt,
                             firstJoinAt = persisted.firstJoinAt?.takeIf(validTime),
+                            uiAttribution = persisted.uiAttribution?.takeIf { click ->
+                                ProductUiCodec.ID.matches(click.surface) && ProductUiCodec.REVISION.matches(click.revision) &&
+                                    ProductUiCodec.ID.matches(click.button) && now - click.occurredAt in 0..600_000
+                            },
                             firstGameplayOutcomeAt = persisted.firstGameplayOutcomeAt.orEmpty()
                                 .filter { (key, value) -> ProductPath.entries.any { it.label == key } && validTime(value) }
                                 .toMutableMap(),
@@ -1067,6 +1182,7 @@ class ProductInterestStore private constructor(
                 }
                 ProductInterestStore(path, config, gson, records, model.savedAt.coerceAtMost(now)).also {
                     it.capacityEvictions = model.capacityEvictions.coerceAtLeast(0)
+                    it.uiDroppedEvents = model.uiDroppedEvents.coerceAtLeast(0)
                     it.resultObservationStartedAt = model.resultObservationStartedAt?.takeIf { at -> at in 0..now } ?: now
                     // Save the new observation boundary even before the first new player arrives.
                     if (model.resultObservationStartedAt == null) it.markDirty()
@@ -1168,6 +1284,7 @@ class ProductInterestStore private constructor(
                     .toMutableList()
             return DailyRecord(
                 date = date,
+                ui = day.ui.orEmpty().filter { runCatching { it.valid() }.getOrDefault(false) }.take(128).associateBy { it.key }.toMutableMap(),
                 sessions = day.sessions,
                 sessionSeconds = day.sessionSeconds,
                 activeSeconds = day.activeSeconds,

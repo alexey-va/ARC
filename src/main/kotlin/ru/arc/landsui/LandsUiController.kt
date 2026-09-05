@@ -60,6 +60,7 @@ class LandsUiController(
         ArcMenus.openDialog(
             player,
             PaperDialogScreen(
+                id = "lands.home",
                 title = text("root-title"),
                 body = body,
                 buttons = buttons,
@@ -79,6 +80,7 @@ class LandsUiController(
         ArcMenus.openDialog(
             player,
             PaperDialogScreen(
+                id = "lands.invite-picker",
                 title = text("invite-picker-title"),
                 body = listOf(PaperDialogBody(text("invite-picker-body", "player" to target.name), width = 500)),
                 buttons = lands.mapIndexed { index, land ->
@@ -118,6 +120,7 @@ class LandsUiController(
             ArcMenus.openDialog(
                 player,
                 PaperDialogScreen(
+                    id = "lands.details",
                     title = text("details-title", "land" to land.name),
                     body = listOf(
                         PaperDialogBody(
@@ -144,6 +147,7 @@ class LandsUiController(
         ArcMenus.openDialog(
             player,
             PaperDialogScreen(
+                id = "lands.create",
                 title = text("create-title"),
                 body = listOf(PaperDialogBody(text("create-body"))),
                 inputs = listOf(PaperDialogTextInput(NAME_INPUT, text("name-input"), maxLength = 24)),
@@ -176,6 +180,7 @@ class LandsUiController(
             ArcMenus.openDialog(
                 player,
                 PaperDialogScreen(
+                    id = "lands.rename",
                     title = text("rename-title", "land" to land.name),
                     body = listOf(PaperDialogBody(text("rename-body"))),
                     inputs = listOf(PaperDialogTextInput(NAME_INPUT, text("name-input"), initial = land.name, maxLength = 24)),
@@ -216,6 +221,7 @@ class LandsUiController(
             ArcMenus.openDialog(
                 player,
                 PaperDialogScreen(
+                    id = "lands.members",
                     title = text("members-title", "land" to land.name),
                     body = listOf(
                         PaperDialogBody(
@@ -246,6 +252,7 @@ class LandsUiController(
             ArcMenus.openDialog(
                 player,
                 PaperDialogScreen(
+                    id = "lands.add",
                     title = text("add-title", "land" to land.name),
                     body = listOf(PaperDialogBody(text("add-body", "limit" to settings.maxListedPlayers.toString()))),
                     inputs = listOf(PaperDialogTextInput(PLAYER_INPUT, text("player-input"), maxLength = 16)),
@@ -272,6 +279,7 @@ class LandsUiController(
             ArcMenus.openDialog(
                 player,
                 PaperDialogScreen(
+                    id = "lands.remove",
                     title = text("remove-title"),
                     body = listOf(PaperDialogBody(text("remove-body", "player" to memberName, "land" to land.name))),
                     buttons = listOf(
@@ -290,6 +298,7 @@ class LandsUiController(
             ArcMenus.openDialog(
                 player,
                 PaperDialogScreen(
+                    id = "lands.territory",
                     title = text("territory-title", "land" to land.name),
                     body = listOf(PaperDialogBody(text("territory-body", "land" to land.name))),
                     buttons = listOf(
@@ -314,6 +323,7 @@ class LandsUiController(
             ArcMenus.openDialog(
                 player,
                 PaperDialogScreen(
+                    id = "lands.mainblock",
                     title = text("mainblock-title", "land" to land.name),
                     body = listOf(PaperDialogBody(text("mainblock-body"), width = 500)),
                     buttons = listOf(
@@ -331,6 +341,7 @@ class LandsUiController(
         ArcMenus.openDialog(
             player,
             PaperDialogScreen(
+                id = "lands.guide",
                 title = text("guide-title"),
                 body = listOf(PaperDialogBody(text("guide-body"), width = 500)),
                 buttons = listOf(
@@ -349,6 +360,7 @@ class LandsUiController(
         ArcMenus.openDialog(
             player,
             PaperDialogScreen(
+                id = "lands.guide-create",
                 title = text("guide-create-title"),
                 body = listOf(PaperDialogBody(text("guide-create-body"), width = 500)),
                 buttons = listOf(button("create", text("create-label")) { openCreate(player) }),
@@ -361,6 +373,7 @@ class LandsUiController(
         ArcMenus.openDialog(
             player,
             PaperDialogScreen(
+                id = "lands.guide-expand",
                 title = text("guide-expand-title"),
                 body = listOf(PaperDialogBody(text("guide-expand-body"), width = 500)),
                 buttons = listOf(button("lands", text("my-lands-label")) { openRoot(player) }),
@@ -373,6 +386,7 @@ class LandsUiController(
         ArcMenus.openDialog(
             player,
             PaperDialogScreen(
+                id = "lands.guide-members",
                 title = text("guide-members-title"),
                 body = listOf(PaperDialogBody(text("guide-members-body"), width = 500)),
                 buttons = listOf(button("lands", text("my-lands-label")) { openRoot(player) }),
@@ -385,6 +399,7 @@ class LandsUiController(
         ArcMenus.openDialog(
             player,
             PaperDialogScreen(
+                id = "lands.guide-commands",
                 title = text("guide-commands-title"),
                 body = listOf(PaperDialogBody(text("guide-commands-body"), width = 500)),
                 buttons = listOf(button("lands", text("my-lands-label")) { openRoot(player) }),
@@ -416,6 +431,7 @@ class LandsUiController(
             ArcMenus.openDialog(
                 player,
                 PaperDialogScreen(
+                    id = "lands.created",
                     title = text("created-title"),
                     body = listOf(
                         PaperDialogBody(
@@ -445,6 +461,7 @@ class LandsUiController(
             ArcMenus.openDialog(
                 player,
                 PaperDialogScreen(
+                    id = "lands.danger",
                     title = text("danger-title", "land" to land.name),
                     body = listOf(PaperDialogBody(text("danger-body", "land" to land.name))),
                     buttons = listOf(

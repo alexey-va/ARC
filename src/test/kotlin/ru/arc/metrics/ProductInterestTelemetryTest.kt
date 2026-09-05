@@ -80,10 +80,12 @@ class ProductInterestTelemetryTest :
             telemetry.join(qa, false, sample(qa, "vanilla"), qa = true, now = now)
             telemetry.command(qa, "/rtp private target", now)
             telemetry.npcClick(qa, 17, "Проводник", now)
+            telemetry.ui(qa, ProductUiKind.OPEN, ProductUiView("arc:help.root", "0123456789ab", emptyMap()), now = now)
             telemetry.leave(qa, now + 1_000)
 
             telemetry.report(1, 20, networkReady = false, now = now + 1_000)["players"] shouldBe 0
             registry.get("arc_product_qa_events").tag("event", "command").counter().count() shouldBeExactly 1.0
+            registry.get("arc_product_qa_events").tag("event", "ui_open").counter().count() shouldBeExactly 1.0
             registry.get("arc_product_detail_events").tag("dimension", "command").counter().count() shouldBeExactly 0.0
         }
 
@@ -101,13 +103,16 @@ class ProductInterestTelemetryTest :
                 )
             val player = "00000000-0000-0000-0000-000000000077"
             telemetry.join(player, true, sample(player, "world"), now = now)
-            now += 1_000
             telemetry.command(player, "/mm", now)
+            registry.get("arc_product_funnel_latency").tags("transition", "join_to_menu", "path", "none")
+                .timer().count() shouldBe 0
             now += 1_000
-            telemetry.command(player, "/mm", now)
+            telemetry.ui(player, ProductUiKind.OPEN, ProductUiView("arc:help.root", "0123456789ab", emptyMap()), now = now)
+            now += 1_000
+            telemetry.ui(player, ProductUiKind.OPEN, ProductUiView("arc:help.root", "0123456789ab", emptyMap()), now = now)
             // A new calendar day changes the daily aggregate, but is not a first transition.
             now += 24 * 60 * 60 * 1_000L
-            telemetry.command(player, "/mm", now)
+            telemetry.ui(player, ProductUiKind.OPEN, ProductUiView("arc:help.root", "0123456789ab", emptyMap()), now = now)
 
             registry
                 .get("arc_product_funnel_latency")

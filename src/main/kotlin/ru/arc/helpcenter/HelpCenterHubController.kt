@@ -35,6 +35,7 @@ internal class HelpCenterHubController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.favorites",
                 title = text("favorites-title"),
                 body = listOf(PaperDialogBody(text("personalization-loading"))),
                 buttons = listOf(backTo(player, HelpCenterPage.MY)),
@@ -56,6 +57,7 @@ internal class HelpCenterHubController(
             showDialog(
                 player,
                 PaperDialogScreen(
+                    id = "help.favorite.action",
                     title = text("action-title", "action" to command.label),
                     body = listOf(
                         PaperDialogBody(
@@ -90,6 +92,7 @@ internal class HelpCenterHubController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.goals",
                 title = text("goals-title"),
                 body = listOf(PaperDialogBody(text("goals-body"), width = 500)),
                 buttons = HelpCenterGoal.entries.map { goal ->
@@ -134,6 +137,7 @@ internal class HelpCenterHubController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.item",
                 title = text("item-title"),
                 body = body,
                 buttons = buttons,
@@ -156,6 +160,7 @@ internal class HelpCenterHubController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.context",
                 title = text("context-title"),
                 body = listOf(
                     PaperDialogBody(
@@ -199,6 +204,7 @@ internal class HelpCenterHubController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.requests",
                 title = text("requests-title"),
                 body = listOf(
                     PaperDialogBody(
@@ -240,6 +246,7 @@ internal class HelpCenterHubController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.diagnostic",
                 title = text("diagnostic-title", "problem" to label),
                 body = listOf(
                     PaperDialogBody(text("diagnostic-body", "facts" to factsText), width = 420),
@@ -261,6 +268,7 @@ internal class HelpCenterHubController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.goal",
                 title = text("goal-title", "goal" to plain("goal-${goal.name.lowercase()}-label")),
                 body = listOf(PaperDialogBody(text("goal-${goal.name.lowercase()}-body"))) +
                     if (commands.isEmpty() && goal != HelpCenterGoal.TOGETHER) listOf(PaperDialogBody(text("category-empty"))) else emptyList(),
@@ -299,6 +307,7 @@ internal class HelpCenterHubController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.favorites",
                 title = text("favorites-title"),
                 body = body,
                 buttons = buttons,
@@ -326,6 +335,7 @@ internal class HelpCenterHubController(
             }
         }
         showDialog(player, PaperDialogScreen(
+            id = "help.favorites.picker",
             title = text("favorites-picker-title"),
             body = listOf(PaperDialogBody(text("favorites-picker-body"), width = 420)),
             buttons = buttons.ifEmpty { listOf(backTo(player, HelpCenterPage.COMMANDS)) },
@@ -340,6 +350,7 @@ internal class HelpCenterHubController(
         showDialog(
             player,
             PaperDialogScreen(
+                id = "help.favorites.unavailable",
                 title = text("favorites-title"),
                 body = listOf(PaperDialogBody(text("personalization-unavailable"), width = 500)),
                 buttons = listOf(button("find_action", text("commands-label")) { openPage(player, HelpCenterPage.COMMANDS) }),

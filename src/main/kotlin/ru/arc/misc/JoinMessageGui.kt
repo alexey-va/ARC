@@ -92,6 +92,7 @@ internal class JoinMessageDialogs(private val config: Config) {
         }
         buttons += button("switch", text(if (isJoin) "switch-leave" else "switch-join"), isJoin) { show(it.player, !isJoin) }
         ArcMenus.openDialog(player, PaperDialogScreen(
+            id = "messages.catalog.${if (isJoin) "join" else "leave"}",
             title = text(if (isJoin) "join-title" else "leave-title"),
             body = listOf(
                 PaperDialogBody(text("catalog-help"), width),
@@ -147,6 +148,7 @@ internal class JoinMessageDialogs(private val config: Config) {
                 // Back is also a normal action, so an empty or full custom list always has an action.
                 buttons += button("back", text("back-catalog"), isJoin) { show(it.player, isJoin, catalogPage) }
                 ArcMenus.openDialog(player, PaperDialogScreen(
+                    id = "messages.custom.${if (isJoin) "join" else "leave"}",
                     title = text(if (isJoin) "custom-join-title" else "custom-leave-title"),
                     body = listOf(PaperDialogBody(text("custom-help", "count" to custom.size, "limit" to CustomJoinMessage.MAX_SAVED), width)) +
                         if (custom.isEmpty()) listOf(PaperDialogBody(text("custom-empty"), width)) else emptyList(),
@@ -158,6 +160,7 @@ internal class JoinMessageDialogs(private val config: Config) {
 
     private fun openCustomMessage(player: Player, isJoin: Boolean, catalogPage: Int, message: String, selected: Boolean) {
         ArcMenus.openDialog(player, PaperDialogScreen(
+            id = "messages.custom.detail.${if (isJoin) "join" else "leave"}",
             title = text("custom-detail-title"),
             body = listOf(PaperDialogBody(Component.text("${player.name} $message"), width)),
             buttons = listOf(
@@ -178,6 +181,7 @@ internal class JoinMessageDialogs(private val config: Config) {
 
     private fun openEditor(player: Player, isJoin: Boolean, catalogPage: Int, initial: String = "", invalid: Boolean = false) {
         ArcMenus.openDialog(player, PaperDialogScreen(
+            id = "messages.editor.${if (isJoin) "join" else "leave"}",
             title = text("editor-title"),
             body = listOf(PaperDialogBody(text("editor-help", "limit" to CustomJoinMessage.MAX_LENGTH), width)) +
                 if (invalid) listOf(PaperDialogBody(text("invalid"), width)) else emptyList(),
@@ -194,6 +198,7 @@ internal class JoinMessageDialogs(private val config: Config) {
 
     private fun openPreview(player: Player, isJoin: Boolean, catalogPage: Int, message: String) {
         ArcMenus.openDialog(player, PaperDialogScreen(
+            id = "messages.preview.${if (isJoin) "join" else "leave"}",
             title = text("preview-title"),
             body = listOf(
                 PaperDialogBody(Component.text("${player.name} $message"), width),
