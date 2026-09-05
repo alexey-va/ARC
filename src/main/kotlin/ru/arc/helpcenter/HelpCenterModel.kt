@@ -99,7 +99,7 @@ enum class HelpCenterChatMode { LOCAL, GLOBAL }
 data class HelpCenterSettingSnapshot(
     val chatMode: HelpCenterChatMode,
     val trailsEnabled: Boolean? = null,
-    val trailBoostEnabled: Boolean? = null,
+    val particlesEnabled: Boolean? = null,
 )
 
 data class HelpCenterCommand(

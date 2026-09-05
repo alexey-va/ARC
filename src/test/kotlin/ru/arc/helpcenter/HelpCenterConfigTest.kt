@@ -118,15 +118,20 @@ class HelpCenterConfigTest : StringSpec({
             ).forEach { key ->
                 MiniMessage.miniMessage().deserialize(settings.text(key)).containsBold() shouldBe false
             }
-            // Equal navigation roles must keep the same color across both columns.
-            listOf(
-                "now-label", "commands-label", "travel-label", "privat-label",
-                "category-activities-label", "category-progress-label", "category-trade-label",
-                "players-label", "category-technology-label", "category-settings-label",
-                "goal-earn-label", "goal-build-label", "goal-explore-label", "goal-fight-label",
-                "goal-develop-label", "goal-together-label",
-            ).forEach { key ->
-                withClue(key) { MiniMessage.miniMessage().deserialize(settings.text(key)).color()?.value() shouldBe 0x92bed8 }
+            // Section colors encode topic; utility actions remain together at the end.
+            mapOf(
+                "now-label" to 0x62dbef,
+                "players-label" to 0xf58cba,
+                "travel-label" to 0x63b3ff,
+                "privat-label" to 0x9cdb67,
+                "category-activities-label" to 0xff9866,
+                "category-progress-label" to 0xc49aff,
+                "category-trade-label" to 0xf4d35e,
+                "category-technology-label" to 0x4fd6bb,
+                "commands-label" to 0xb9bfd0,
+                "category-settings-label" to 0xb7a9cf,
+            ).forEach { (key, color) ->
+                withClue(key) { MiniMessage.miniMessage().deserialize(settings.text(key)).color()?.value() shouldBe color }
             }
             MiniMessage.miniMessage().deserialize(settings.text("root-title")).color()?.value() shouldBe 0xf4bd6a
             MiniMessage.miniMessage().deserialize(settings.text("pay-confirm-label")).color()?.value() shouldBe 0x2bba43

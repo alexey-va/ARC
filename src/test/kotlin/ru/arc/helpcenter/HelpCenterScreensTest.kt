@@ -50,6 +50,10 @@ class HelpCenterScreensTest {
             "survival", "vanilla", HelpCenterWorldKind.VANILLA, 1, 65, 2, null, null, false,
             HelpCenterFeature.entries.toSet(),
         )
+        every { gateway.selectChatMode(player, any()) } answers {
+            chatMode = secondArg()
+            CompletableFuture.completedFuture(Unit)
+        }
         every { gateway.settings(player) } answers { HelpCenterSettingSnapshot(chatMode, false, true) }
         every { gateway.loadHomes(player, any()) } returns CompletableFuture.completedFuture(HelpCenterHomes(emptyList(), 0, 3))
         every { gateway.loadProfile(player, any()) } returns CompletableFuture.completedFuture(
@@ -91,6 +95,16 @@ class HelpCenterScreensTest {
     private fun body() = screen.body.joinToString("\n") { plain(it.text) }
 
     @Test
+    fun `root keeps utilities in the last row and activities have one dungeon entry`() {
+        open(HelpCenterPage.ROOT)
+        assertEquals(listOf("now", "players", "travel", "privat", "root_activities", "root_progress",
+            "root_trade", "root_technology", "search", "settings"), screen.buttons.map { it.id.value })
+        click("root_activities")
+        assertEquals(1, screen.buttons.count { it.id.value == "command_dungeons" })
+        assertFalse(screen.buttons.any { it.id.value.contains("dungeon_portals") })
+    }
+
+    @Test
     fun `network directory pages all players and preserves filter on back`() {
         open(HelpCenterPage.PLAYERS)
         assertTrue(body().contains("27"))
@@ -115,17 +129,58 @@ class HelpCenterScreensTest {
     @Test
     fun `settings update on the same screen without an extra menu command`() {
         open(HelpCenterPage.SETTINGS)
+        assertEquals("Чат: локальный", plain(screen.buttons.first().label))
+        assertTrue(screen.buttons.any { plain(it.label) == "След: выключено" })
+        assertTrue(screen.buttons.any { plain(it.label) == "Частицы: включено" })
+        assertFalse(screen.buttons.any { it.id.value.contains("boost") })
         click("setting_chat_global")
         assertTrue(body().contains("глобальный"))
+        assertEquals("Чат: глобальный", plain(screen.buttons.first().label))
         assertTrue(screen.buttons.any { it.id.value == "setting_chat_local" })
         click("setting_chat_local")
         assertTrue(body().contains("локальный"))
-        assertEquals(listOf("g", "l"), executed)
+        assertEquals(emptyList<String>(), executed)
+    }
+
+    @Test
+    fun `chat refresh waits for asynchronous selection and does not steal later navigation`() {
+        val pending = CompletableFuture<Unit>()
+        every { gateway.selectChatMode(player, HelpCenterChatMode.GLOBAL) } returns pending
+        open(HelpCenterPage.SETTINGS)
+        click("setting_chat_global")
+        assertEquals("Чат: локальный", plain(screen.buttons.first().label))
+        chatMode = HelpCenterChatMode.GLOBAL
+        pending.complete(Unit)
+        paper.performTicks(2)
+        assertEquals("Чат: глобальный", plain(screen.buttons.first().label))
+        val later = CompletableFuture<Unit>()
+        every { gateway.selectChatMode(player, HelpCenterChatMode.LOCAL) } returns later
+        click("setting_chat_local")
+        open(HelpCenterPage.ROOT)
+        later.complete(Unit)
+        paper.performTicks(2)
+        assertEquals("help.root", screen.id)
+    }
+
+    @Test
+    fun `settings include all legacy groups and mode selectors return to settings`() {
+        open(HelpCenterPage.SETTINGS)
+        val ids = screen.buttons.map { it.id.value }
+        listOf("scoreboard", "tablist", "lands", "portal_by_other", "portal_for_other", "jobs",
+            "notifications", "flight", "shift_sign_edit", "resource_pack", "totem", "stairs_sit", "tpa", "portal_style")
+            .forEach { assertTrue("legacy_$it" in ids, it) }
+        assertFalse(ids.any { it.contains("boost") })
+        click("legacy_tablist")
+        assertEquals(21, screen.buttons.size)
+        assertTrue(screen.buttons.all { !it.closeDialogBeforeAction })
+        click("back")
+        assertEquals("help.category.settings", screen.id)
     }
 
     @Test
     fun `external inventory returns to the originating technology section once`() {
         open(HelpCenterPage.TECHNOLOGY)
+        assertFalse(screen.buttons.single { it.id.value == "command_slimefun" }.closeDialogBeforeAction)
         click("command_slimefun")
         player.closeInventory()
         paper.performTicks(2)

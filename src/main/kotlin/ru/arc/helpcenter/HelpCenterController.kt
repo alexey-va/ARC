@@ -26,6 +26,7 @@ internal class HelpCenterController(
     private val preferences: HelpCenterPreferenceStore,
     private val navigation: HelpCenterNavigation = HelpCenterNavigation(ru.arc.ARC.instance, inventoryReturn::cancel),
     private val showDialog: (Player, PaperDialogScreen) -> Unit = ArcMenus::openDialog,
+    private val legacySettings: HelpCenterLegacySettings = HelpCenterLegacySettings(),
 ) {
     private val miniMessage = MiniMessage.miniMessage()
     private val plainText = PlainTextComponentSerializer.plainText()
@@ -134,14 +135,14 @@ internal class HelpCenterController(
                 body = listOf(PaperDialogBody(text("root-body"), width = 500)),
                 buttons = listOf(
                     button("now", text("now-label"), text("now-tooltip")) { openNow(player) },
-                    button("search", text("commands-label"), text("commands-tooltip")) { openCommands(player) },
+                    button("players", text("players-label"), text("players-tooltip")) { openPlayers(player) },
                     button("travel", text("travel-label"), text("travel-tooltip")) { openTravel(player) },
                     button("privat", text("privat-label"), text("privat-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
                     rootCategoryButton(player, HelpCenterCategory.ACTIVITIES),
                     rootCategoryButton(player, HelpCenterCategory.PROGRESS),
                     rootCategoryButton(player, HelpCenterCategory.TRADE),
-                    button("players", text("players-label"), text("players-tooltip")) { openPlayers(player) },
                     rootCategoryButton(player, HelpCenterCategory.TECHNOLOGY),
+                    button("search", text("commands-label"), text("commands-tooltip")) { openCommands(player) },
                     button("settings", text("category-settings-label"), text("category-settings-tooltip")) { openSettings(player) },
                 ),
                 columns = 2,
@@ -216,9 +217,9 @@ internal class HelpCenterController(
             when (recommendation.id) {
                 HelpCenterRecommendationId.CREATE_HOME -> button("rec_home", text("rec-home-label")) { openCreateHome(player) }
                 HelpCenterRecommendationId.CREATE_LAND -> button("rec_land", text("rec-land-label")) { open(player, HelpCenterPage.PRIVAT) }
-                HelpCenterRecommendationId.RANK_GOAL -> button("rec_rank", text("rec-rank-label")) { executeCatalog(player, "rank") }.closing()
-                HelpCenterRecommendationId.BATTLE_PASS -> button("rec_bp", text("rec-bp-label")) { executeCatalog(player, "battle-pass") }.closing()
-                HelpCenterRecommendationId.EVENTS -> button("rec_events", text("rec-events-label")) { executeCatalog(player, "events") }.closing()
+                HelpCenterRecommendationId.RANK_GOAL -> button("rec_rank", text("rec-rank-label")) { executeCatalog(player, "rank") }
+                HelpCenterRecommendationId.BATTLE_PASS -> button("rec_bp", text("rec-bp-label")) { executeCatalog(player, "battle-pass") }
+                HelpCenterRecommendationId.EVENTS -> button("rec_events", text("rec-events-label")) { executeCatalog(player, "events") }
             }
         }
 
@@ -242,10 +243,10 @@ internal class HelpCenterController(
         button("my_favorites", text("favorites-short-label"), text("favorites-tooltip")) { hub.openFavorites(player) },
         button("my_requests", text("requests-short-label"), text("requests-tooltip")) { hub.openRequests(player) },
         button("my_context", text("context-short-label"), text("context-tooltip")) { hub.openContext(player) },
-        button("my_rank", text("my-rank-label"), text("my-rank-tooltip")) { executeCatalog(player, "rank") }.closing(),
-        button("my_jobs", text("my-jobs-label"), text("my-jobs-tooltip")) { executeCatalog(player, "jobs") }.closing(),
-        button("my_quests", text("my-quests-label"), text("my-quests-tooltip")) { executeCatalog(player, "quests") }.closing(),
-        button("my_skills", text("my-skills-label"), text("my-skills-tooltip")) { executeCatalog(player, "skills") }.closing(),
+        button("my_rank", text("my-rank-label"), text("my-rank-tooltip")) { executeCatalog(player, "rank") },
+        button("my_jobs", text("my-jobs-label"), text("my-jobs-tooltip")) { executeCatalog(player, "jobs") },
+        button("my_quests", text("my-quests-label"), text("my-quests-tooltip")) { executeCatalog(player, "quests") },
+        button("my_skills", text("my-skills-label"), text("my-skills-tooltip")) { executeCatalog(player, "skills") },
     )
 
     private fun openGuide(player: Player) {
@@ -261,7 +262,7 @@ internal class HelpCenterController(
                     button("vanilla", text("vanilla-label"), commandTooltip("vanilla")) { executeCatalog(player, "vanilla") }.closing(),
                     button("mining", text("mining-label"), commandTooltip("mining")) { executeCatalog(player, "mining") }.closing(),
                     button("biomes", text("biomes-label"), commandTooltip("biomes")) { executeCatalog(player, "biomes") }.closing(),
-                    button("jobs", text("jobs-label"), commandTooltip("jobs")) { executeCatalog(player, "jobs") }.closing(),
+                    button("jobs", text("jobs-label"), commandTooltip("jobs")) { executeCatalog(player, "jobs") },
                     button("home", text("travel-label"), text("travel-tooltip")) { openTravel(player) },
                     button("privat", text("privat-label"), text("privat-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
                     button("rules", text("rules-label"), commandTooltip("rules")) { executeCatalog(player, "rules") }.closing(),
@@ -444,29 +445,22 @@ internal class HelpCenterController(
         markNavigation(player) { openSettings(player) }
         val snapshot = gateway.settings(player)
         val global = snapshot.chatMode == HelpCenterChatMode.GLOBAL
-        val stateIds = setOf("chat-global", "chat-local", "trails-on", "trails-off", "trails-boost-on", "trails-boost-off")
+        val stateIds = setOf("chat-global", "chat-local", "trails-on", "trails-off")
         val stateButtons = buildList {
             add(
-                if (global) settingButton(player, catalogById.getValue("chat-local"))
-                else settingButton(player, catalogById.getValue("chat-global")),
+                if (global) settingButton(player, catalogById.getValue("chat-local"), text("setting-chat-current", "state" to plainText("chat-global-state")))
+                else settingButton(player, catalogById.getValue("chat-global"), text("setting-chat-current", "state" to plainText("chat-local-state"))),
             )
             if (HelpCenterFeature.TRAILS in gateway.features()) {
                 when (snapshot.trailsEnabled) {
-                    true -> add(settingButton(player, catalogById.getValue("trails-off")))
-                    false -> add(settingButton(player, catalogById.getValue("trails-on")))
+                    true -> add(settingButton(player, catalogById.getValue("trails-off"), text("setting-trails-current", "state" to stateLabel(snapshot.trailsEnabled))))
+                    false -> add(settingButton(player, catalogById.getValue("trails-on"), text("setting-trails-current", "state" to stateLabel(snapshot.trailsEnabled))))
                     null -> {
                         add(settingButton(player, catalogById.getValue("trails-on")))
                         add(settingButton(player, catalogById.getValue("trails-off")))
                     }
                 }
-                when (snapshot.trailBoostEnabled) {
-                    true -> add(settingButton(player, catalogById.getValue("trails-boost-off")))
-                    false -> add(settingButton(player, catalogById.getValue("trails-boost-on")))
-                    null -> {
-                        add(settingButton(player, catalogById.getValue("trails-boost-on")))
-                        add(settingButton(player, catalogById.getValue("trails-boost-off")))
-                    }
-                }
+
             }
         }
         showDialog(
@@ -478,22 +472,80 @@ internal class HelpCenterController(
                     "settings-body",
                     "chat" to if (global) "глобальный" else "локальный",
                     "trails" to stateLabel(snapshot.trailsEnabled),
-                    "boost" to stateLabel(snapshot.trailBoostEnabled),
                 ))),
                 buttons = stateButtons + availableCatalog(player)
-                    .filter { it.category == HelpCenterCategory.SETTINGS && it.id !in stateIds }
-                    .map { settingButton(player, it) },
+                    .filter { it.category == HelpCenterCategory.SETTINGS && it.id !in stateIds && it.id !in setOf("lands-borders", "tpa-ignore") }
+                    .map { command ->
+                        val label = if (command.id == "particles") text("setting-particles-current", "state" to stateLabel(snapshot.particlesEnabled))
+                            else text("command-${command.id}-label")
+                        settingButton(player, command, label)
+                    } + legacySettings.entries(player)
+                    .filter { it.id != "admin" || player.hasPermission("tab.group.admin") }
+                    .map { entry ->
+                        button("legacy_${entry.id}", text(entry.labelKey, "state" to legacyState(entry.state, entry.id)), text(entry.tooltipKey)) {
+                            when (entry.id) {
+                                "scoreboard", "tablist" -> openLegacyOptions(player, entry.id, (1..20).map { "${entry.id}-$it" } + "${entry.id}-off")
+                                "lands" -> openLegacyOptions(player, entry.id, listOf("lands-show", "lands-hide"))
+                                "flight" -> openLegacyOptions(player, entry.id, listOf("flight-exp", "flight-money", "flight-off", "flight-recharge", "flight-toggle"))
+                                "admin" -> legacySettings.execute(player, entry.id)
+                                else -> applyLegacySetting(player, entry.id) { openSettings(player) }
+                            }
+                        }.copy(width = 230)
+                    },
                 exitButton = rootButton(player),
                 columns = 2,
             ),
         )
     }
 
-    private fun settingButton(player: Player, command: HelpCenterCommand): PaperDialogButton =
-        button("setting_${command.id}", text("command-${command.id}-label"), commandTooltip(command.id)) {
-            executeCatalog(player, command.id)
-            openSettings(player)
+    private fun legacyState(state: String?, group: String? = null): String = when {
+        state?.toIntOrNull() != null && group in setOf("scoreboard", "tablist") -> plainText("legacy-settings-$group-mode-$state")
+        state?.toIntOrNull() != null -> plainText("legacy-state-style") + " " + state
+        else -> plainText("legacy-state-${state ?: "unknown"}")
+    }
+
+    private fun openLegacyOptions(player: Player, group: String, actions: List<String>) {
+        markNavigation(player) { openLegacyOptions(player, group, actions) }
+        showDialog(player, PaperDialogScreen(
+            id = "help.settings.$group",
+            title = text("legacy-settings-$group", "state" to legacyState(legacySettings.entries(player).firstOrNull { it.id == group }?.state, group)),
+            body = listOf(PaperDialogBody(text("legacy-options-body"))),
+            buttons = actions.map { id ->
+                val mode = id.substringAfterLast('-').toIntOrNull()
+                val label = if (mode != null) text("legacy-settings-$group-mode-$mode") else text("legacy-action-$id")
+                button("legacy_$id", label, text("legacy-options-body")) {
+                    applyLegacySetting(player, id) { openLegacyOptions(player, group, actions) }
+                }.copy(width = 190)
+            },
+            exitButton = button("back", text("back-label")) { openSettings(player) },
+            columns = 2,
+        ))
+    }
+
+    private fun applyLegacySetting(player: Player, id: String, refresh: () -> Unit) {
+        val token = markNavigation(player)
+        legacySettings.execute(player, id).whenCompleteSync(tasks) { accepted, failure ->
+            if (!active || !player.isOnline || !navigation.isCurrent(player, token)) return@whenCompleteSync
+            if (failure != null || accepted != true) player.sendMessage(text("action-failed"))
+            refresh()
         }
+    }
+
+    private fun settingButton(player: Player, command: HelpCenterCommand, label: Component = text("command-${command.id}-label")): PaperDialogButton =
+        button("setting_${command.id}", label, commandTooltip(command.id)) {
+            if (command.id == "chat-global" || command.id == "chat-local") {
+                val mode = if (command.id == "chat-global") HelpCenterChatMode.GLOBAL else HelpCenterChatMode.LOCAL
+                val token = markNavigation(player)
+                gateway.selectChatMode(player, mode).whenCompleteSync(tasks) { _, failure ->
+                    if (!active || !player.isOnline || !navigation.isCurrent(player, token)) return@whenCompleteSync
+                    if (failure != null) player.sendMessage(text("action-failed"))
+                    openSettings(player)
+                }
+            } else {
+                executeCatalog(player, command.id)
+                openSettings(player)
+            }
+        }.copy(width = 230)
 
     private fun stateLabel(value: Boolean?): String = plainText(
         when (value) {
@@ -792,7 +844,7 @@ internal class HelpCenterController(
     }
 
     private fun travelButtons(player: Player): List<PaperDialogButton> = listOf(
-        button("warps", text("warps-label"), commandTooltip("warps")) { executeCatalog(player, "warps") }.closing(),
+        button("warps", text("warps-label"), commandTooltip("warps")) { executeCatalog(player, "warps") },
         button("public_homes", text("public-homes-label"), text("public-homes-tooltip")) { executeInventory(player, "phome") }.closing(),
         button("spawn", text("spawn-label"), commandTooltip("spawn")) { executeCatalog(player, "spawn") }.closing(),
         button("rtp", text("rtp-label"), commandTooltip("rtp")) { executeCatalog(player, "rtp") }.closing(),
@@ -820,7 +872,7 @@ internal class HelpCenterController(
     private fun commandButton(player: Player, command: HelpCenterCommand): PaperDialogButton {
         val label = when (command.id) {
             "vote", "chat-global", "chat-local", "lands-borders", "trails-on", "trails-off",
-            "trails-boost-on", "trails-boost-off", "particles", "tpa-ignore" -> text("command-${command.id}-label")
+            "particles", "tpa-ignore" -> text("command-${command.id}-label")
             else -> text("command-label", "label" to command.label)
         }
         val result = button(
@@ -830,7 +882,7 @@ internal class HelpCenterController(
         ) {
             if (command.id == "privat") open(player, HelpCenterPage.PRIVAT) else executeCatalog(player, command.id)
         }
-        return if (command.id == "privat") result else result.closing()
+        return if (command.id == "privat" || command.opensInventory) result else result.closing()
     }
 
     private fun searchResultButton(player: Player, entry: HelpCenterSearchEntry): PaperDialogButton {
@@ -883,6 +935,7 @@ internal class HelpCenterController(
         if (!executed) {
             inventoryReturn.cancel(player)
             player.sendMessage(text("action-failed"))
+            returnTo()
         }
         return executed
     }
@@ -992,7 +1045,7 @@ internal class HelpCenterController(
                 HelpCenterFeature.BATTLE_PASS,
                 opensInventory = true,
             ),
-            CommandDefinition("giveaways", HelpCenterCategory.ACTIVITIES, "giveaway", HelpCenterFeature.GIVEAWAYS),
+            CommandDefinition("giveaways", HelpCenterCategory.ACTIVITIES, "giveaway", HelpCenterFeature.GIVEAWAYS, opensInventory = true),
             CommandDefinition(
                 "dungeons",
                 HelpCenterCategory.ACTIVITIES,
@@ -1000,7 +1053,6 @@ internal class HelpCenterController(
                 HelpCenterFeature.DUNGEONS,
                 opensInventory = true,
             ),
-            CommandDefinition("dungeon-portals", HelpCenterCategory.ACTIVITIES, "pw aguild", HelpCenterFeature.DUNGEONS),
             CommandDefinition(
                 "farms",
                 HelpCenterCategory.ACTIVITIES,
@@ -1069,8 +1121,6 @@ internal class HelpCenterController(
             CommandDefinition("lands-borders", HelpCenterCategory.SETTINGS, "lands view here", HelpCenterFeature.LANDS),
             CommandDefinition("trails-on", HelpCenterCategory.SETTINGS, "trails on", HelpCenterFeature.TRAILS),
             CommandDefinition("trails-off", HelpCenterCategory.SETTINGS, "trails off", HelpCenterFeature.TRAILS),
-            CommandDefinition("trails-boost-on", HelpCenterCategory.SETTINGS, "trails boost on", HelpCenterFeature.TRAILS),
-            CommandDefinition("trails-boost-off", HelpCenterCategory.SETTINGS, "trails boost off", HelpCenterFeature.TRAILS),
             CommandDefinition("particles", HelpCenterCategory.SETTINGS, "pp toggle", HelpCenterFeature.PLAYER_PARTICLES),
             CommandDefinition("tpa-ignore", HelpCenterCategory.SETTINGS, "huskhomes:tpignore", HelpCenterFeature.HUSK_HOMES),
         )

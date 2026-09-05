@@ -32,7 +32,7 @@ object HelpCenterHubPlanner {
     fun goalActions(goal: HelpCenterGoal): List<String> = when (goal) {
         HelpCenterGoal.EARN -> listOf("jobs", "sell", "shops", "auction", "bank")
         HelpCenterGoal.BUILD -> listOf("builder", "items", "slimefun", "enchants", "privat")
-        HelpCenterGoal.EXPLORE -> listOf("rtp", "biomes", "mining", "warps", "dungeon-portals")
+        HelpCenterGoal.EXPLORE -> listOf("rtp", "biomes", "mining", "warps", "dungeons")
         HelpCenterGoal.FIGHT -> listOf("events", "duels", "dungeons", "battle-pass")
         HelpCenterGoal.DEVELOP -> listOf("rank", "rankup", "quests", "skills", "jobs")
         HelpCenterGoal.TOGETHER -> listOf("players", "duels", "privat", "events", "vote")

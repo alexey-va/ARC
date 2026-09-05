@@ -30,6 +30,8 @@ interface HelpCenterGateway {
 
     fun settings(player: Player): HelpCenterSettingSnapshot
 
+    fun selectChatMode(player: Player, mode: HelpCenterChatMode): CompletableFuture<Unit>
+
     fun execute(player: Player, command: String): Boolean
 }
 
@@ -94,6 +96,9 @@ class BukkitHelpCenterGateway : HelpCenterGateway {
         )
         return loadHomes(player, timeoutSeconds).handle { homes, _ -> base.copy(homes = homes) }
     }
+
+    override fun selectChatMode(player: Player, mode: HelpCenterChatMode): CompletableFuture<Unit> =
+        ChatModeService.selectMode(player.uniqueId, ru.arc.chat.ChatMode.valueOf(mode.name)).thenApply { Unit }
 
     override fun execute(player: Player, command: String): Boolean = Bukkit.dispatchCommand(player, command)
 
@@ -167,7 +172,10 @@ class BukkitHelpCenterGateway : HelpCenterGateway {
                 HelpCenterChatMode.LOCAL
             },
             trailsEnabled = trailsState("trailsEnabled"),
-            trailBoostEnabled = trailsState("boostEnabled"),
+            particlesEnabled = runCatching {
+                me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(player, "%playerparticles_can_see_particles%")
+                    .trim().toBooleanStrictOrNull()
+            }.getOrNull(),
         )
     }
 
