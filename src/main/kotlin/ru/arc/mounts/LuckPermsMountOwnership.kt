@@ -1,6 +1,7 @@
 package ru.arc.mounts
 
 import net.luckperms.api.LuckPerms
+import net.luckperms.api.query.QueryMode
 import net.luckperms.api.node.Node
 import net.luckperms.api.node.types.PermissionNode
 import java.util.UUID
@@ -8,9 +9,15 @@ import java.util.concurrent.CompletableFuture
 
 class LuckPermsMountOwnership(private val luckPerms: LuckPerms) : MountOwnership {
     override fun profile(subject: MountPermissionSubject, mount: MountDefinition): MountProfile {
-        val permissionData = luckPerms.userManager.getUser(subject.uniqueId)
-            ?.cachedData
-            ?.permissionData
+        val user = luckPerms.userManager.getUser(subject.uniqueId)
+        val permissionData = user?.let {
+            val contextManager = luckPerms.contextManager
+            val queryOptions = contextManager
+                .queryOptionsBuilder(QueryMode.CONTEXTUAL)
+                .context(contextManager.getContext(it).orElse(contextManager.staticContext))
+                .build()
+            it.cachedData.getPermissionData(queryOptions)
+        }
         val owns = { permission: String -> permissionData?.checkPermission(permission)?.asBoolean() == true }
         val level =
             (1..mount.maxLevel)
