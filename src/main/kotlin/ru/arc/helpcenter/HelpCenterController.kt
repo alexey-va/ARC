@@ -510,18 +510,21 @@ internal class HelpCenterController(
     private fun openLegacyOptions(player: Player, group: String, actions: List<String>) {
         markNavigation(player) { openLegacyOptions(player, group, actions) }
         val selected = legacySettings.entries(player).firstOrNull { it.id == group }?.state
-        val bodyKey = if (group in setOf("shortcut", "escape")) "legacy-settings-$group-tooltip" else "legacy-options-body"
+        val bodyKey = "legacy-settings-$group-tooltip"
+        val detailedActions = group in setOf("shortcut", "escape", "flight")
         showDialog(player, PaperDialogScreen(
             id = "help.settings.$group",
             title = text("legacy-settings-$group", "state" to legacyState(legacySettings.entries(player).firstOrNull { it.id == group }?.state, group)),
-            body = listOf(PaperDialogBody(text(bodyKey))),
+            body = if (group == "flight") listOf("flight-body-how", "flight-body-recharge", "flight-body-start")
+                .map { PaperDialogBody(text(it)) } else listOf(PaperDialogBody(text(bodyKey))),
             buttons = actions.map { id ->
                 val mode = id.substringAfterLast('-').toIntOrNull()
                 val name = if (mode != null) text("legacy-settings-$group-mode-$mode") else text("legacy-action-$id")
-                val label = if (group in setOf("shortcut", "escape") && id == "$group-$selected") text("setting-selected").append(name) else name
-                button("legacy_$id", label, text(if (group in setOf("shortcut", "escape")) "legacy-action-$id-tooltip" else bodyKey)) {
-                    applyLegacySetting(player, id) { openLegacyOptions(player, group, actions) }
-                }.copy(width = if (group in setOf("shortcut", "escape")) 230 else 190)
+                val label = if (detailedActions && id == "$group-$selected") text("setting-selected").append(name) else name
+                button("legacy_$id", label, text(if (detailedActions) "legacy-action-$id-tooltip" else bodyKey)) {
+                    if (id == "flight-recharge") executeInventory(player, HelpCenterLegacySettings.PlayerCommand.FLIGHT_RECHARGE.value)
+                    else applyLegacySetting(player, id) { openLegacyOptions(player, group, actions) }
+                }.copy(width = if (detailedActions) 230 else 190)
             },
             exitButton = button("back", text("back-label")) { openSettings(player) },
             columns = 2,
@@ -947,6 +950,7 @@ internal class HelpCenterController(
     }
 
     private fun commandTooltip(id: String): Component {
+        if (id in setOf("chat-global", "chat-local", "trails-on", "trails-off", "particles")) return text("setting-$id-tooltip")
         val command = catalogById.getValue(id)
         return text("command-tooltip", "description" to command.description, "command" to command.command)
     }
