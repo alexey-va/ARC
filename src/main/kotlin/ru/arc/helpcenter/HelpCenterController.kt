@@ -121,6 +121,7 @@ internal class HelpCenterController(
             HelpCenterPage.ROOT -> openRoot(player)
             HelpCenterPage.NOW, HelpCenterPage.MY -> openNow(player)
             HelpCenterPage.GUIDE -> openGuide(player)
+            HelpCenterPage.DUNGEONS_GUIDE -> openDungeonsGuide(player)
             HelpCenterPage.COMMANDS -> openCommands(player)
             HelpCenterPage.TRAVEL -> openTravel(player)
             HelpCenterPage.PRIVAT -> {
@@ -163,6 +164,11 @@ internal class HelpCenterController(
                 columns = 2,
             ),
         )
+    }
+
+    private fun openDungeonsGuide(player: Player) {
+        val returnTo = navigation.returnTarget(player) ?: { open(player, HelpCenterPage.ACTIVITIES) }
+        dungeons.openGuide(player, returnTo)
     }
 
     private fun openNow(player: Player) {

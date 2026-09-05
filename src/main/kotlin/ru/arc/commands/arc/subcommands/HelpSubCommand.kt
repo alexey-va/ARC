@@ -187,7 +187,7 @@ object HelpSubCommand : SubCommand {
     override fun tabComplete(sender: CommandSender, args: Array<String>): List<String>? {
         return when (args.size) {
             1 -> (
-                listOf("guide", "commands", "travel", "privat") +
+                listOf("guide", "dungeons-guide", "commands", "travel", "privat") +
                     getAvailableCommands(sender).map { it.name }
                 ).distinct().tabComplete(args[0])
             else -> null

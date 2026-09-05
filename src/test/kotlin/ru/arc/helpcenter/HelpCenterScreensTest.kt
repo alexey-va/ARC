@@ -185,6 +185,17 @@ class HelpCenterScreensTest {
     }
 
     @Test
+    fun `direct dungeon guide preserves current dungeon hub`() {
+        open(HelpCenterPage.ACTIVITIES)
+        click("command_dungeons")
+        open(HelpCenterPage.DUNGEONS_GUIDE)
+        assertEquals("help.dungeons.guide", screen.id)
+        assertTrue(screen.buttons.any { it.id.value == "dungeons_guide_start" })
+        click("back")
+        assertEquals("help.dungeons", screen.id)
+    }
+
+    @Test
     fun `EliteMobs inventory returns to the exact guide chapter`() {
         open(HelpCenterPage.ACTIVITIES)
         click("command_dungeons")

@@ -11,6 +11,7 @@ enum class HelpCenterPage(vararg val aliases: String) {
     NOW("now", "сейчас"),
     MY("my", "мое", "моё", "про меня"),
     GUIDE("guide", "гайд", "start", "начало"),
+    DUNGEONS_GUIDE("dungeons-guide", "dungeon-guide", "данжи-гайд"),
     COMMANDS("commands", "команды"),
     TRAVEL("travel", "перемещения", "телепортация", "телепорт", "homes", "дома"),
     PRIVAT("privat", "приват", "lands", "земли"),

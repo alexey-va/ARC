@@ -33,7 +33,7 @@ internal class HelpCenterDungeonsController(
         ))
     }
 
-    private fun openGuide(player: Player, returnTo: () -> Unit) {
+    internal fun openGuide(player: Player, returnTo: () -> Unit) {
         navigation.visit(player) { openGuide(player, returnTo) }
         show(player, PaperDialogScreen(
             id = "help.dungeons.guide", title = text("dungeons-guide-title"),
