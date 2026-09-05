@@ -33,7 +33,10 @@ class JoinMessageDialogTest : FreeSpec({
         every { context.player } returns player
         every { context.text(any()) } returns input
         val current = checkNotNull(screen)
-        (current.buttons + listOfNotNull(current.exitButton)).single { it.id.value == id }.onClick.handle(context)
+        val button = (current.buttons + listOfNotNull(current.exitButton)).single { it.id.value == id }
+        // Closing between screens returns mouse control to the game and recenters the cursor.
+        button.closeDialogBeforeAction shouldBe false
+        button.onClick.handle(context)
     }
 
     beforeEach {
@@ -102,6 +105,9 @@ class JoinMessageDialogTest : FreeSpec({
         data.selectedMessages(true) shouldBe emptySet()
         click("next")
         plain(screen!!.body[1].text) shouldContain "2/3"
+        click("previous")
+        plain(screen!!.body[1].text) shouldContain "1/3"
+        click("next")
         click("phrase_0")
         plain(screen!!.body[1].text) shouldContain "2/3"
         click("next")

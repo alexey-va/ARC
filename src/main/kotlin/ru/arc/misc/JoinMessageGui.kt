@@ -215,7 +215,7 @@ internal class JoinMessageDialogs(private val config: Config) {
         custom: Boolean = false,
         tooltip: Component = Component.empty(),
         action: (PaperDialogClickContext) -> Unit,
-    ) = PaperDialogButton(PaperDialogActionId.of(id), label, tooltip, width = width, closeDialogBeforeAction = true) { context ->
+    ) = PaperDialogButton(PaperDialogActionId.of(id), label, tooltip, width = width) { context ->
         if (allowed(context.player, isJoin, custom)) action(context)
     }
 
