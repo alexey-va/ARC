@@ -471,7 +471,7 @@ internal class MountGuiItems(
                             }
                         }
                         add("")
-                        add(priceLine("Цена", checkNotNull(level.price).toExactMinor()))
+                        add(priceLine("Цена", checkNotNull(level.price).toExactMinor(), mount.currency))
                         if (purchasable) {
                             add("")
                             add(actionFooter("открыть покупку"))
@@ -762,7 +762,7 @@ internal class MountGuiItems(
                     Material.GLOW_INK_SAC,
                     copy("detail.glow-buy-name", "<#92bed8>Купить свечение"),
                     buildList {
-                        add(priceLine("Цена", mount.glowPrice.toExactMinor()))
+                        add(priceLine("Цена", mount.glowPrice.toExactMinor(), mount.currency))
                         if (configProvider().purchasesEnabled) {
                             add("")
                             add(actionFooter("открыть покупку"))
@@ -842,7 +842,7 @@ internal class MountGuiItems(
                     !profile.unlocked -> add(copy("progression.mount-required", "<#c42323>Сначала получите маунта"))
                     owned -> add(copy("detail.ability-owned", "<#2bba43>Куплено навсегда"))
                     else -> {
-                        add(priceLine("Цена", ability.price.toExactMinor()))
+                        add(priceLine("Цена", ability.price.toExactMinor(), ability.currency))
                         if (configProvider().purchasesEnabled) {
                             add("")
                             add(actionFooter("открыть покупку"))
@@ -895,7 +895,7 @@ internal class MountGuiItems(
                         add(actionFooter("выбрать"))
                     }
                     skin.price != null -> {
-                        add(priceLine("Цена", skin.price.toExactMinor()))
+                        add(priceLine("Цена", skin.price.toExactMinor(), mount.currency))
                         if (configProvider().purchasesEnabled) {
                             add("")
                             add(actionFooter("открыть покупку"))
@@ -1052,16 +1052,10 @@ internal class MountGuiItems(
         accent: String = "<#92bed8>",
     ): List<String> = content.dropLastWhile(String::isEmpty) + "" + actionFooter(action, accent)
 
-    private fun priceLine(label: String, amountMinor: Long, labelColor: String = "<#8c8c8c>"): String {
+    private fun priceLine(label: String, amountMinor: Long, currency: String): String {
         val amount = TextUtil.formatAmount(amountMinor.minorToDouble())
-        if (label == "Цена" && labelColor == "<#8c8c8c>") {
-            return copy(
-                "common.price",
-                "<#8c8c8c>Цена: <#ffacd5><price> <white><bold:false>💰</bold></white>",
-                "price" to amount,
-            )
-        }
-        return "$labelColor$label: <#ffacd5>$amount <white><bold:false>💰</bold></white>"
+        return configProvider().guiText("common.price-$currency", "<#8c8c8c>Цена: <#ffacd5><price> <currency>")
+            .replace("<price>", amount).replace("<currency>", currencyLabel(configProvider(), currency))
     }
 
     private fun localizedVariant(value: String): String {
@@ -1189,3 +1183,6 @@ internal class MountGuiItems(
             )
     }
 }
+
+internal fun currencyLabel(config: MountModuleConfig, currency: String): String =
+    config.guiText("currencies.$currency", if (currency == "tokens") "<#ffacd5>жетонов" else "<white>монет")

@@ -27,6 +27,10 @@ data class MountProviderTransactionEvidence(
 interface MountWallet {
     val available: Boolean
 
+    /** Returns a wallet for an explicitly named RedisEconomy currency. */
+    fun walletForCurrency(currency: String): MountWallet? =
+        if (currency == "vault") this else null
+
     fun balanceMinor(playerId: UUID): Long?
 
     fun withdraw(
@@ -55,11 +59,15 @@ interface MountWallet {
 /** Exact RedisEconomy 4.5.12 mount sink adapter. Provider mutation calls are never retried. */
 class RedisEconomyMountWallet(
     private val apiProvider: () -> RedisEconomyAPI? = RedisEconomyAPI::getAPI,
+    private val currencyName: String = "vault",
 ) : MountWallet {
-    override val available: Boolean get() = apiProvider()?.defaultCurrency != null
+    override val available: Boolean get() = apiProvider()?.getCurrencyByName(currencyName) != null
+
+    override fun walletForCurrency(currency: String): MountWallet? =
+        if (currency == currencyName) this else RedisEconomyMountWallet(apiProvider, currency)
 
     override fun balanceMinor(playerId: UUID): Long? =
-        runCatching { apiProvider()?.defaultCurrency?.getBalance(playerId)?.toProviderMinorOrNull() }.getOrNull()
+        runCatching { apiProvider()?.getCurrencyByName(currencyName)?.getBalance(playerId)?.toProviderMinorOrNull() }.getOrNull()
 
     override fun withdraw(
         playerId: UUID,
@@ -85,7 +93,8 @@ class RedisEconomyMountWallet(
         require(REASON_PATTERN.matches(reason)) { "Invalid mount provider history reason" }
         val api = apiProvider()
             ?: return CompletableFuture.completedFuture(MountProviderTransactionEvidence(null, false))
-        val currency = api.defaultCurrency
+        val currency = api.getCurrencyByName(currencyName)
+            ?: return CompletableFuture.completedFuture(MountProviderTransactionEvidence(null, false))
         if (!currency.shouldSaveTransactions()) {
             return CompletableFuture.completedFuture(MountProviderTransactionEvidence(null, false))
         }
@@ -114,7 +123,7 @@ class RedisEconomyMountWallet(
     ): MountMoneyEvidence {
         require(amountMinor > 0L) { "Mount money mutation must be positive" }
         require(REASON_PATTERN.matches(reason)) { "Invalid mount money mutation reason" }
-        val currency = apiProvider()?.defaultCurrency
+        val currency = apiProvider()?.getCurrencyByName(currencyName)
             ?: return MountMoneyEvidence(false, false, null, "provider_unavailable")
         val before = currency.getBalance(playerId).toProviderMinorOrNull()
             ?: return MountMoneyEvidence(false, false, null, "provider_balance_unavailable")

@@ -80,6 +80,7 @@ class MountGuiController(
     private val purchases: MountPurchaseCoordinator,
     private val summons: MountSummonService,
     private val quickSummons: MountQuickSummonController,
+    private val transfers: () -> MountTransferController? = { null },
 ) : Listener {
     @Volatile private var active = false
     private val items = MountGuiItems(configProvider, quickSummons)
@@ -98,6 +99,11 @@ class MountGuiController(
     }
 
     fun openList(player: Player) = openListPage(player, 0, MountFilter.ALL, false)
+
+    fun openOwned(player: Player) {
+        transfers()?.recoverDelivery(player)
+        openListPage(player, 0, MountFilter.ALL, true)
+    }
 
     private fun openListPage(
         player: Player,
@@ -255,6 +261,7 @@ class MountGuiController(
         val inventory = Bukkit.createInventory(holder, DETAIL_SIZE, component(config.detailTitle.replace("<mount>", escape(mount.displayName))))
         holder.backingInventory = inventory
         fill(inventory)
+        transfers()?.let { inventory.setItem(it.detailSlot, it.button(profile.unlocked)) }
         val favorite = summons.favoriteMountId(player.uniqueId) == mount.id
         inventory.setItem(DETAIL_ICON_SLOT, items.mountIcon(mount, profile, detailed = true, favorite = favorite))
         inventory.setItem(DETAIL_FAVORITE_SLOT, items.favoriteItem(profile, favorite))
@@ -386,22 +393,23 @@ class MountGuiController(
         holder.backingInventory = inventory
         fill(inventory, Material.BLACK_STAINED_GLASS_PANE)
         val (name, price, description) = confirmationDetails(mount, action)
-        val balance = wallet.balanceMinor(player.uniqueId)
+        val currency = if (action is ConfirmAction.Ability) mount.ability(action.abilityId)?.currency ?: mount.currency else mount.currency
+        val balance = wallet.walletForCurrency(currency)?.balanceMinor(player.uniqueId)
         val priceMinor = price.toExactMinor()
         holder.confirmEnabled = balance != null && balance >= priceMinor
         val economyLore =
             buildList {
                 addAll(description)
                 add("")
-                add(moneyLine("common.price", "price", priceMinor, "Цена"))
+                add(moneyLine("common.price", "price", priceMinor, "Цена", currency = currency))
                 if (balance == null) {
                     add(config.guiText("confirm.economy-unavailable-line", "<#c42323>Баланс сейчас недоступен"))
                 } else {
-                    add(moneyLine("common.balance", "balance", balance, "Баланс"))
+                    add(moneyLine("common.balance", "balance", balance, "Баланс", currency = currency))
                     if (balance >= priceMinor) {
-                        add(moneyLine("common.remaining", "remaining", balance - priceMinor, "Останется"))
+                        add(moneyLine("common.remaining", "remaining", balance - priceMinor, "Останется", currency = currency))
                     } else {
-                        add(moneyLine("common.missing", "missing", priceMinor - balance, "Не хватает", "<#c42323>"))
+                        add(moneyLine("common.missing", "missing", priceMinor - balance, "Не хватает", "<#c42323>", currency = currency))
                     }
                 }
             }
@@ -425,7 +433,7 @@ class MountGuiController(
                         MountGuiItemRole.CONFIRM,
                         Material.ORANGE_CONCRETE,
                         config.guiText("confirm.accept-name", "<#ff9f0f>Подтвердить покупку"),
-                        actionLore(listOf(moneyLine("common.debit", "price", priceMinor, "Будет списано")), "купить", "<#ff9f0f>"),
+                        actionLore(listOf(moneyLine("common.debit", "price", priceMinor, "Будет списано", currency = currency)), "купить", "<#ff9f0f>"),
                     )
             },
         )
@@ -489,6 +497,10 @@ class MountGuiController(
     }
 
     private fun handleDetailClick(player: Player, holder: MountMenuHolder, slot: Int) {
+        val transfer = transfers()
+        if (transfer != null && slot == transfer.detailSlot) {
+            holder.mountId?.let { transfer.confirm(player, it) }; return
+        }
         val mount = holder.mountId?.let(catalogProvider()::get) ?: return openList(player)
         val profile = ownership.profile(subject(player), mount)
         holder.abilitiesBySlot[slot]?.let { abilityId ->
@@ -912,10 +924,11 @@ class MountGuiController(
         amountMinor: Long,
         fallbackLabel: String,
         fallbackColor: String = "<#8c8c8c>",
+        currency: String = "vault",
     ): String =
         copy(
-            path,
-            "$fallbackColor$fallbackLabel: <#ffacd5><$placeholder> <white><bold:false>💰</bold></white>",
+            "$path-$currency",
+            "$fallbackColor$fallbackLabel: <#ffacd5><$placeholder> ${currencyLabel(configProvider(), currency)}",
             placeholder to TextUtil.formatAmount(amountMinor.minorToDouble()),
         )
 

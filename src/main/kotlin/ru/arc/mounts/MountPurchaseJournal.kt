@@ -41,6 +41,7 @@ data class MountPurchaseJournalRecord(
     val target: String,
     val permission: String,
     val priceMinor: Long,
+    val currency: String = "vault",
     val status: MountPurchaseJournalStatus = MountPurchaseJournalStatus.PREPARED,
     val createdAt: Long,
     val updatedAt: Long,
@@ -63,6 +64,7 @@ data class MountPurchaseJournalRecord(
             "Invalid mount purchase permission"
         }
         require(priceMinor > 0L) { "Mount purchase price must be positive" }
+        require(CURRENCY_PATTERN.matches(currency)) { "Invalid mount purchase currency" }
         require(createdAt > 0L && updatedAt >= createdAt) { "Invalid mount purchase timestamps" }
         require(evidence == null || EVIDENCE_PATTERN.matches(evidence)) { "Invalid mount purchase evidence" }
         if (status == MountPurchaseJournalStatus.FUNDS_WITHDRAWN ||
@@ -87,6 +89,7 @@ data class MountPurchaseJournalRecord(
         private val TARGET_PATTERN = Regex("[a-z0-9_-]{1,48}")
         private val PERMISSION_PATTERN = Regex("[a-z0-9._-]{4,160}")
         private val EVIDENCE_PATTERN = Regex("[a-z0-9_:-]{1,160}")
+        private val CURRENCY_PATTERN = Regex("[A-Za-z0-9_-]{1,16}")
     }
 }
 
@@ -136,6 +139,7 @@ class FileMountPurchaseJournal(
                     current.target == valid.target &&
                     current.permission == valid.permission &&
                     current.priceMinor == valid.priceMinor &&
+                    current.currency == valid.currency &&
                     current.createdAt == valid.createdAt
             ) {
                 "Mount purchase journal identity changed"
@@ -183,9 +187,13 @@ class FileMountPurchaseJournal(
             "Unsupported mount purchase journal schema ${snapshot.schemaVersion}"
         }
         require(snapshot.records.size <= MAX_RECORDS) { "Mount purchase journal exceeds hard record limit" }
-        snapshot.records.map(MountPurchaseJournalRecord::validated).forEach { record ->
+        snapshot.records
+            // Gson bypasses Kotlin constructor defaults when a historical field is absent.
+            .map { it.copy(currency = it.currency ?: "vault") }
+            .map(MountPurchaseJournalRecord::validated)
+            .forEach { record ->
             require(recordsById.put(record.transactionId, record) == null) { "Duplicate mount purchase transaction id" }
-        }
+            }
     }
 
     private fun compact(records: Collection<MountPurchaseJournalRecord>): List<MountPurchaseJournalRecord> {

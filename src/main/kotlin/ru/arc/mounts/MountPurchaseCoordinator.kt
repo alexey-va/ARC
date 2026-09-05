@@ -30,6 +30,7 @@ class MountPurchaseCoordinator(
     private val runSync: (() -> Unit) -> Unit,
     private val clock: () -> Long = System::currentTimeMillis,
     private val onStateChanged: () -> Unit = {},
+    private val externalBusy: (UUID) -> Boolean = { false },
 ) {
     private val activePurchases = ConcurrentHashMap.newKeySet<UUID>()
 
@@ -51,6 +52,7 @@ class MountPurchaseCoordinator(
             level.toString(),
             mount.levelPermission(level),
             price,
+            mount.currency,
             callback,
         ) { ownership.grantLevel(subject.uniqueId, mount, level) }
     }
@@ -71,6 +73,7 @@ class MountPurchaseCoordinator(
             "glow",
             mount.glowPermission,
             price,
+            mount.currency,
             callback,
         ) { ownership.grantGlow(subject.uniqueId, mount) }
     }
@@ -92,6 +95,7 @@ class MountPurchaseCoordinator(
             skin.id,
             mount.skinPermission(skin.id),
             price,
+            mount.currency,
             callback,
         ) { ownership.grantSkin(subject.uniqueId, mount, skin) }
     }
@@ -113,6 +117,7 @@ class MountPurchaseCoordinator(
             ability.id,
             mount.abilityPermission(ability.id),
             ability.price,
+            ability.currency,
             callback,
         ) { ownership.grantAbility(subject.uniqueId, mount, ability) }
     }
@@ -239,6 +244,8 @@ class MountPurchaseCoordinator(
         activePurchases.clear()
     }
 
+    fun isBusy(playerId: UUID): Boolean = playerId in activePurchases || journal.hasOpenPurchase(playerId)
+
     private fun purchase(
         playerId: UUID,
         mount: MountDefinition,
@@ -246,11 +253,14 @@ class MountPurchaseCoordinator(
         target: String,
         permission: String,
         price: Double,
+        currency: String,
         callback: (MountPurchaseResult) -> Unit,
         applyPermission: () -> CompletableFuture<Void>,
     ) {
         if (!purchasesEnabled()) return callback(MountPurchaseResult.PurchasesDisabled)
-        if (!wallet.available) return callback(MountPurchaseResult.EconomyUnavailable)
+        if (externalBusy(playerId)) return callback(MountPurchaseResult.Busy)
+        val purchaseWallet = wallet.walletForCurrency(currency)
+        if (purchaseWallet == null || !purchaseWallet.available) return callback(MountPurchaseResult.EconomyUnavailable)
         if (journal.hasOpenPurchase(playerId)) return callback(MountPurchaseResult.ManualReview)
         if (!activePurchases.add(playerId)) return callback(MountPurchaseResult.Busy)
 
@@ -264,11 +274,12 @@ class MountPurchaseCoordinator(
                 target = target,
                 permission = permission,
                 priceMinor = price.toExactMinor(),
+                currency = currency,
                 createdAt = now,
                 updatedAt = now,
             )
         if (!persist(record)) return finish(playerId, callback, MountPurchaseResult.JournalUnavailable)
-        val balanceBefore = wallet.balanceMinor(playerId)
+        val balanceBefore = purchaseWallet.balanceMinor(playerId)
         if (balanceBefore == null) {
             val cancelled = persist(record.advance(MountPurchaseJournalStatus.CANCELLED, "balance_unavailable"))
             return finish(
@@ -289,7 +300,7 @@ class MountPurchaseCoordinator(
             )
         if (!persist(started)) return finish(playerId, callback, MountPurchaseResult.JournalUnavailable)
 
-        val evidence = wallet.withdraw(playerId, record.priceMinor, "arc-mount:${record.transactionId}", balanceBefore)
+        val evidence = purchaseWallet.withdraw(playerId, record.priceMinor, "arc-mount:${record.transactionId}", balanceBefore)
         val expectedAfter = balanceBefore - record.priceMinor
         if (evidence.balanceAfterMinor != expectedAfter) {
             val exactUnchanged = evidence.balanceAfterMinor == balanceBefore && evidence.providerAccepted == false
@@ -353,7 +364,12 @@ class MountPurchaseCoordinator(
         record: MountPurchaseJournalRecord,
         callback: (MountPurchaseResult) -> Unit,
     ) {
-        val before = wallet.balanceMinor(playerId)
+        val purchaseWallet = wallet.walletForCurrency(record.currency)
+        if (purchaseWallet == null || !purchaseWallet.available) {
+            persist(record.advance(MountPurchaseJournalStatus.MANUAL_REVIEW, "refund_wallet_unavailable"))
+            return finish(playerId, callback, MountPurchaseResult.PersistenceFailedRefundFailed)
+        }
+        val before = purchaseWallet.balanceMinor(playerId)
         if (before == null) {
             persist(record.advance(MountPurchaseJournalStatus.MANUAL_REVIEW, "refund_balance_unavailable"))
             return finish(playerId, callback, MountPurchaseResult.PersistenceFailedRefundFailed)
@@ -366,7 +382,7 @@ class MountPurchaseCoordinator(
                 evidence = "permission_not_applied",
             )
         if (!persist(started)) return finish(playerId, callback, MountPurchaseResult.PersistenceFailedRefundFailed)
-        val evidence = wallet.deposit(playerId, record.priceMinor, "arc-mount-refund:${record.transactionId}", before)
+        val evidence = purchaseWallet.deposit(playerId, record.priceMinor, "arc-mount-refund:${record.transactionId}", before)
         val expectedAfter = before + record.priceMinor
         if (evidence.balanceAfterMinor == expectedAfter) {
             val refunded =
@@ -462,7 +478,12 @@ class MountPurchaseCoordinator(
         onManualReview: (MountPurchaseJournalRecord) -> Unit,
     ) {
         val playerId = UUID.fromString(record.playerId)
-        wallet.findTransaction(
+        val purchaseWallet = wallet.walletForCurrency(record.currency)
+        if (purchaseWallet == null || !purchaseWallet.available) {
+            markManualReview(record, "withdrawal_wallet_unavailable")?.let(onManualReview)
+            return
+        }
+        purchaseWallet.findTransaction(
             playerId = playerId,
             amountMinor = -record.priceMinor,
             reason = "arc-mount:${record.transactionId}",
@@ -493,7 +514,12 @@ class MountPurchaseCoordinator(
         onManualReview: (MountPurchaseJournalRecord) -> Unit,
     ) {
         val playerId = UUID.fromString(record.playerId)
-        wallet.findTransaction(
+        val purchaseWallet = wallet.walletForCurrency(record.currency)
+        if (purchaseWallet == null || !purchaseWallet.available) {
+            markManualReview(record, "refund_wallet_unavailable")?.let(onManualReview)
+            return
+        }
+        purchaseWallet.findTransaction(
             playerId = playerId,
             amountMinor = record.priceMinor,
             reason = "arc-mount-refund:${record.transactionId}",
@@ -533,7 +559,7 @@ class MountPurchaseCoordinator(
         callback: (MountPurchaseResult) -> Unit,
         mutation: () -> CompletableFuture<Void>,
     ) {
-        if (!activePurchases.add(playerId)) return callback(MountPurchaseResult.Busy)
+        if (externalBusy(playerId) || !activePurchases.add(playerId)) return callback(MountPurchaseResult.Busy)
         val future = runCatching(mutation).getOrElse {
             activePurchases.remove(playerId)
             callback(MountPurchaseResult.PersistenceFailed)

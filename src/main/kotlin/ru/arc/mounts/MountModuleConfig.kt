@@ -130,6 +130,7 @@ open class MountModuleConfig(private val config: Config) {
                     sizeOptions = sizeOptionList(root, id, levels, appearance, skins),
                     behaviors = behaviorList(root, id),
                     motion = motion("$root.motion"),
+                    currency = config.string("$root.currency", "vault").trim(),
                 )
             }
         return MountCatalog(definitions)
@@ -241,7 +242,7 @@ open class MountModuleConfig(private val config: Config) {
                     (config.stringOrNull("$path.item")
                         ?: presetPath?.let { config.string("$it.item", "LEATHER_HORSE_ARMOR") }
                         ?: "LEATHER_HORSE_ARMOR").trim().uppercase(Locale.ROOT),
-                price = config.doubleOrNull("$path.price"),
+                price = config.doubleOrNull("$path.price-${config.string("$root.currency", "vault")}") ?: config.doubleOrNull("$path.price"),
                 appearance = appearance("$path.appearance", presetAppearance),
                 trail = trail("$path.trail") ?: presetPath?.let { trail("$it.trail") },
             )
@@ -457,6 +458,8 @@ open class MountModuleConfig(private val config: Config) {
                         ?: throw IllegalArgumentException("Mount ability '$id' price is required"),
                     effect = effect,
                     speedMultiplier = config.double("$path.speed-multiplier", 1.0),
+                    // Keep historical configs on the original vault currency; token pricing is explicit in catalogs.
+                    currency = config.string("$path.currency", "vault").trim(),
                 )
         }
 

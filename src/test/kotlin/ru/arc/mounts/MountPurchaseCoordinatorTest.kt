@@ -69,6 +69,38 @@ class MountPurchaseCoordinatorTest : StringSpec({
         fixture.journal.records().single().status shouldBe MountPurchaseJournalStatus.COMPLETED
     }
 
+    "ability currency routes independently from the mount currency" {
+        val tokenWallet = MutableWallet()
+        val ability = checkNotNull(testMount().ability("night-vision")).copy(currency = "tokens")
+        val mount = testMount().copy(currency = "vault", abilities = MountAbilities(upgrades = listOf(ability)))
+        val fixture = PurchaseFixture(mount).also {
+            it.ownership.level = 1
+            it.wallet.currencyWallets["tokens"] = tokenWallet
+        }
+        var result: MountPurchaseResult? = null
+
+        fixture.coordinator.purchaseAbility(fixture.subject(), mount, ability) { result = it }
+
+        result shouldBe MountPurchaseResult.Success
+        fixture.wallet.withdrawals shouldBe 0
+        tokenWallet.withdrawals shouldBe 1
+        fixture.journal.records().single().currency shouldBe "tokens"
+    }
+
+    "recovery uses recorded currency and price after catalog repricing" {
+        val tokenWallet = MutableWallet()
+        val fixture = PurchaseFixture().also { it.wallet.currencyWallets["tokens"] = tokenWallet }
+        val record = fixture.preparedRecord().copy(currency = "tokens", priceMinor = 5_000_000L)
+        fixture.journal.persist(record) shouldBe true
+        fixture.journal.persist(record.copy(status = MountPurchaseJournalStatus.WITHDRAWAL_STARTED, updatedAt = 2L, balanceBeforeMinor = 10_000_000L)) shouldBe true
+        fixture.journal.persist(record.copy(status = MountPurchaseJournalStatus.FUNDS_WITHDRAWN, updatedAt = 3L, balanceBeforeMinor = 10_000_000L, balanceAfterMinor = 5_000_000L, evidence = "exact_balance_delta")) shouldBe true
+
+        fixture.coordinator.recover(MountCatalog(listOf(fixture.mount.copy(levels = listOf(MountLevelDefinition(0.4, 99_000_000.0))))), {})
+
+        fixture.journal.records().single().status shouldBe MountPurchaseJournalStatus.COMPLETED
+        tokenWallet.withdrawals shouldBe 0
+    }
+
     "speed tuning is free and persists independently from the unlocked level" {
         val fixture = PurchaseFixture().also { it.ownership.level = 2 }
         val tuning = MountTuningDefinition(listOf(50, 65, 80, 90, 100), listOf(110, 150, 200, 300, 400), listOf(110, 200, 400))
@@ -592,7 +624,11 @@ private class MutableWallet : MountWallet {
     var historyAmountMinor: Long? = null
     val historyReasons = mutableListOf<String>()
     val historyNotBeforeMillis = mutableListOf<Long>()
+    val currencyWallets = mutableMapOf<String, MountWallet>()
     override val available = true
+
+    override fun walletForCurrency(currency: String): MountWallet? =
+        currencyWallets[currency] ?: super.walletForCurrency(currency)
 
     override fun balanceMinor(playerId: UUID): Long? = balanceMinor.takeIf { balanceAvailable }
 

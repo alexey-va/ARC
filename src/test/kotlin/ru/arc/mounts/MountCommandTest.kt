@@ -88,7 +88,7 @@ class MountCommandTest : StringSpec({
 
         verify(exactly = 0) { fixture.sessions.spawn(any(), any(), any(), any()) }
         fixture.command.onTabComplete(fixture.player, fixture.bukkitCommand, "mount", arrayOf(""))
-            .shouldContainExactly("help", "menu")
+            .shouldContainExactly("help", "menu", "owned", "pack", "shop", "trade", "upgrades", "view")
     }
 
     "admin can grant and revoke levels, skins, glow and abilities" {
@@ -131,7 +131,7 @@ class MountCommandTest : StringSpec({
         val fixture = commandFixture(MountCatalog(listOf(specialMount)), admin = true)
 
         fixture.command.onTabComplete(fixture.player, fixture.bukkitCommand, "mount", arrayOf(""))
-            .shouldContainExactly("admin", "help", "menu")
+            .shouldContainExactly("admin", "help", "menu", "owned", "pack", "shop", "trade", "upgrades", "view")
         fixture.command.onTabComplete(fixture.player, fixture.bukkitCommand, "mount", arrayOf("admin", ""))
             .shouldContainExactly("grant", "grant-all", "revoke", "summon")
         fixture.command.onTabComplete(fixture.player, fixture.bukkitCommand, "mount", arrayOf("admin", "grant", ""))
@@ -242,6 +242,7 @@ private fun commandFixture(catalog: MountCatalog, admin: Boolean = false): Mount
         every { uniqueId } returns playerId
         every { name } returns "Rider"
         every { hasPermission("arc.mounts.admin") } returns admin
+        every { hasPermission("arc.mounts.use") } returns true
         every { this@mockk.server } returns server
     }
     val console = mockk<CommandSender>(relaxed = true) {

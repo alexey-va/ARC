@@ -63,7 +63,7 @@ class MountGuiControllerTest : TestBase() {
                 configProvider = { config },
                 catalogProvider = { MountCatalog(listOf(mount)) },
                 ownership = ownership,
-                wallet = mockk { every { balanceMinor(any()) } returns 1_000_000L },
+                wallet = mockk { every { walletForCurrency("vault") } answers { self as MountWallet }; every { balanceMinor(any()) } returns 1_000_000L },
                 purchases = mockk(relaxed = true),
                 sessions = mockk(relaxed = true),
             )
@@ -142,7 +142,7 @@ class MountGuiControllerTest : TestBase() {
                 configProvider = { config },
                 catalogProvider = { MountCatalog(listOf(locked, owned)) },
                 ownership = ownership,
-                wallet = mockk { every { balanceMinor(any()) } returns 1_000_000L },
+                wallet = mockk { every { walletForCurrency("vault") } answers { self as MountWallet }; every { balanceMinor(any()) } returns 1_000_000L },
                 purchases = mockk(relaxed = true),
                 sessions = mockk(relaxed = true),
             )
@@ -322,7 +322,7 @@ class MountGuiControllerTest : TestBase() {
                 configProvider = { config },
                 catalogProvider = { MountCatalog(listOf(walking, flying, swimming)) },
                 ownership = ownership,
-                wallet = mockk { every { balanceMinor(any()) } returns 1_000_000L },
+                wallet = mockk { every { walletForCurrency("vault") } answers { self as MountWallet }; every { balanceMinor(any()) } returns 1_000_000L },
                 purchases = mockk(relaxed = true),
                 sessions = mockk(relaxed = true),
             )
@@ -408,7 +408,7 @@ class MountGuiControllerTest : TestBase() {
                 configProvider = { config },
                 catalogProvider = { MountCatalog(listOf(mount)) },
                 ownership = ownership,
-                wallet = mockk { every { balanceMinor(any()) } returns 1_000_000L },
+                wallet = mockk { every { walletForCurrency("vault") } answers { self as MountWallet }; every { balanceMinor(any()) } returns 1_000_000L },
                 purchases = purchases,
                 sessions = mockk(relaxed = true),
             )
@@ -565,7 +565,7 @@ class MountGuiControllerTest : TestBase() {
                 configProvider = { config },
                 catalogProvider = { MountCatalog(listOf(mount)) },
                 ownership = ownership,
-                wallet = mockk { every { balanceMinor(any()) } returns 500_000L },
+                wallet = mockk { every { walletForCurrency("vault") } answers { self as MountWallet }; every { balanceMinor(any()) } returns 500_000L },
                 purchases = purchases,
                 sessions = mockk(relaxed = true),
             )
@@ -606,7 +606,7 @@ class MountGuiControllerTest : TestBase() {
                 configProvider = { config },
                 catalogProvider = { MountCatalog(listOf(mount)) },
                 ownership = ownership,
-                wallet = mockk { every { balanceMinor(any()) } returns 1_000_000L },
+                wallet = mockk { every { walletForCurrency("vault") } answers { self as MountWallet }; every { balanceMinor(any()) } returns 1_000_000L },
                 purchases = purchases,
                 sessions = mockk(relaxed = true),
             )

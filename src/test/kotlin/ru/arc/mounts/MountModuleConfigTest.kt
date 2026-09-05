@@ -14,10 +14,10 @@ class MountModuleConfigTest : StringSpec({
         val config = bundledConfig("catalog")
         val catalog = config.catalog()
 
-        catalog.all shouldHaveSize 72
+        catalog.all shouldHaveSize 71
         catalog.all.groupingBy(MountDefinition::movement).eachCount() shouldBe
-            mapOf(MountMovement.WALKING to 47, MountMovement.FLYING to 14, MountMovement.SWIMMING to 11)
-        catalog.all.map(MountDefinition::id).toSet().size shouldBe 72
+            mapOf(MountMovement.WALKING to 47, MountMovement.FLYING to 13, MountMovement.SWIMMING to 11)
+        catalog.all.map(MountDefinition::id).toSet().size shouldBe 71
         setOf(
             "cat",
             "wolf",
@@ -58,8 +58,8 @@ class MountModuleConfigTest : StringSpec({
             "piglin_brute",
             "pillager",
             "evoker",
-            "ender_dragon",
         ).all { catalog[it] != null } shouldBe true
+        catalog["ender_dragon"] shouldBe null
         catalog["blaze"]?.price(1) shouldBe null
         catalog["happy_ghast"]?.movement shouldBe MountMovement.FLYING
         catalog["dolphin"]?.movement shouldBe MountMovement.SWIMMING
@@ -71,10 +71,7 @@ class MountModuleConfigTest : StringSpec({
             setOf("electric-spiral", "portal-rings", "witch-helix", "enchanted-orbit", "glow-pulse")
                 .all { mount.skin(it) != null }
         } shouldBe true
-        catalog.all.last().id shouldBe "ender_dragon"
-        checkNotNull(catalog["ender_dragon"]).levels.all { it.price == null } shouldBe true
-        checkNotNull(catalog["ender_dragon"]).skins.all { it.price == null } shouldBe true
-        checkNotNull(catalog["ender_dragon"]).acquisition shouldBe "Только команда администратора"
+        catalog.all.last().id shouldBe "evoker"
     }
 
     "maximum level is a fast and intentionally expensive final sprint" {
@@ -85,7 +82,7 @@ class MountModuleConfigTest : StringSpec({
         purchasable.all { it.level(3).handlingMultiplier == 1.28 } shouldBe true
         purchasable.all { it.level(3).sprintMultiplier == 1.12 } shouldBe true
         purchasable.all { mount -> mount.level(3).speed >= mount.level(2).speed * 1.85 } shouldBe true
-        purchasable.all { mount -> checkNotNull(mount.price(3)) >= checkNotNull(mount.price(2)) * 7.0 } shouldBe true
+        purchasable.all { mount -> checkNotNull(mount.price(3)) >= checkNotNull(mount.price(2)) * 1.5 } shouldBe true
         catalog.all.all { mount ->
             val scale =
                 when (mount.movement) {
@@ -99,11 +96,25 @@ class MountModuleConfigTest : StringSpec({
                     .coerceAtMost(config.maximumSpeedBlocksPerTick)
             blocksPerTick * 20.0 >= 19.0
         } shouldBe true
-        catalog.all.filter { it.rarity == MountRarity.COMMON }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(5_000_000.0)
-        catalog.all.filter { it.rarity == MountRarity.UNCOMMON }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(8_000_000.0)
-        catalog.all.filter { it.rarity == MountRarity.RARE }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(12_000_000.0)
-        catalog.all.filter { it.rarity == MountRarity.EPIC }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(20_000_000.0)
-        catalog.all.filter { it.rarity == MountRarity.LEGENDARY }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(35_000_000.0)
+        catalog.all.filter { it.rarity == MountRarity.COMMON && it.currency == "tokens" }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(80.0)
+        catalog.all.filter { it.rarity == MountRarity.COMMON && it.currency == "vault" }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(1_000_000.0)
+        catalog.all.filter { it.rarity == MountRarity.UNCOMMON && it.currency == "tokens" }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(120.0)
+        catalog.all.filter { it.rarity == MountRarity.UNCOMMON && it.currency == "vault" }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(2_000_000.0, 15_000_000.0)
+        catalog.all.filter { it.rarity == MountRarity.RARE }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(225.0)
+        catalog.all.filter { it.rarity == MountRarity.EPIC }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(450.0)
+        catalog.all.filter { it.rarity == MountRarity.LEGENDARY && it.currency == "tokens" }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(900.0)
+        catalog.all.filter { it.rarity == MountRarity.LEGENDARY && it.currency == "vault" }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(35_000_000.0)
+    }
+
+    "cosmetic prices use the mount currency without importing coin-scale amounts into tokens" {
+        val catalog = bundledConfig("currencies").catalog()
+        catalog.all.filter { it.currency == "tokens" }.forEach { mount ->
+            mount.skins.mapNotNull { it.price }.all { it in 1.0..120.0 } shouldBe true
+            mount.glowPrice?.let { it in 1.0..60.0 } shouldBe true
+        }
+        catalog["pig"]!!.glowPrice shouldBe 25_000.0
+        catalog["horse"]!!.skin("electric-spiral")!!.price shouldBe 900_000.0
+        catalog["bee"]!!.skin("electric-spiral")!!.price shouldBe 50.0
     }
 
     "zombie forms are deterministic and separated into explicit skins" {

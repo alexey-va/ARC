@@ -11,6 +11,8 @@ import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
 
+private val MOUNT_CURRENCY_PATTERN = Regex("[A-Za-z0-9_-]{1,16}")
+
 internal const val MIN_MOUNT_APPEARANCE_SCALE = 0.0625
 internal const val MAX_MOUNT_APPEARANCE_SCALE = 16.0
 private const val MIN_MOUNT_SIZE_MULTIPLIER = 0.1
@@ -352,6 +354,7 @@ data class MountAbilityUpgradeDefinition(
     val price: Double,
     val effect: MountAbilityEffect,
     val speedMultiplier: Double = 1.0,
+    val currency: String = "vault",
 ) {
     init {
         require(MountDefinition.validId(id)) { "Invalid mount ability id: $id" }
@@ -361,6 +364,7 @@ data class MountAbilityUpgradeDefinition(
         }
         require(iconMaterial.isNotBlank()) { "Mount ability '$id' icon material is blank" }
         require(price.isFinite() && price > 0.0) { "Mount ability '$id' price must be positive and finite" }
+        require(MOUNT_CURRENCY_PATTERN.matches(currency)) { "Mount ability '$id' currency is invalid" }
         require(speedMultiplier.isFinite() && speedMultiplier in 1.0..1.5) {
             "Mount ability '$id' speed multiplier must be between 1.0 and 1.5"
         }
@@ -412,6 +416,7 @@ data class MountDefinition(
     val sizeOptions: List<MountSizeOptionDefinition> = emptyList(),
     val behaviors: List<MountBehaviorDefinition> = emptyList(),
     val motion: MountMotionOverride = MountMotionOverride(),
+    val currency: String = "vault",
 ) {
     init {
         require(validId(id)) { "Invalid mount id: $id" }
@@ -421,6 +426,7 @@ data class MountDefinition(
         require(displayName.length <= 64) { "Mount '$id' display name is too long" }
         require(description.size <= 6 && description.all { it.length <= 120 }) { "Mount '$id' description is invalid" }
         require(acquisition.isNotBlank() && acquisition.length <= 120) { "Mount '$id' acquisition text is invalid" }
+        require(MOUNT_CURRENCY_PATTERN.matches(currency)) { "Mount '$id' currency is invalid" }
         require(levels.isNotEmpty()) { "Mount '$id' must have at least one level" }
         require(levels.size <= MAX_LEVELS) { "Mount '$id' has more than $MAX_LEVELS levels" }
         require(glowPrice == null || glowPrice.isFinite() && glowPrice > 0.0) {

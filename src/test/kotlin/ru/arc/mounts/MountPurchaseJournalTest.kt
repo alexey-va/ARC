@@ -75,6 +75,16 @@ class MountPurchaseJournalTest : StringSpec({
             journal.persist(review.copy(status = MountPurchaseJournalStatus.CANCELLED, updatedAt = 5L))
         }
     }
+
+    "old journal records without currency load as vault" {
+        val path = Files.createTempDirectory("arc-mount-journal-legacy-").resolve("journal.json")
+        Files.writeString(
+            path,
+            """{"schemaVersion":1,"records":[{"transactionId":"00000000-0000-0000-0000-000000000001","playerId":"00000000-0000-0000-0000-000000000002","mountId":"bee","kind":"LEVEL","target":"1","permission":"arc.mounts.bee.1","priceMinor":5000000,"status":"PREPARED","createdAt":1,"updatedAt":1}]}""",
+        )
+
+        FileMountPurchaseJournal(path).records().single().currency shouldBe "vault"
+    }
 })
 
 private fun journalRecord() =

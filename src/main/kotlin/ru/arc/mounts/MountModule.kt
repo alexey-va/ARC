@@ -29,6 +29,9 @@ object MountModule : PluginModule {
     private var sessions: MountSessionController? = null
     private var quickSummons: MountQuickSummonController? = null
     private var gui: MountGuiController? = null
+    private var transfers: MountTransferController? = null
+
+    internal fun currentBackgroundStyle(): MountGuiItemStyle? = config?.guiStyle(MountGuiItemRole.BACKGROUND)
 
     override fun init() {
         bindUnavailableCommands()
@@ -92,6 +95,7 @@ object MountModule : PluginModule {
                 wallet = wallet,
                 journal = journal,
                 purchasesEnabled = { requiredConfig().purchasesEnabled },
+                externalBusy = { transfers?.isBusy(it) == true },
                 runSync = { task -> Tasks.scheduler.runSync(Runnable(task)) },
                 onStateChanged = ::publishMetrics,
             )
@@ -101,6 +105,7 @@ object MountModule : PluginModule {
                 catalogProvider = ::requiredCatalog,
                 ownership = loadedOwnership,
                 sessions = controller,
+                isBusy = { transfers?.isBusy(it) == true },
             )
         val quickSummonController =
             MountQuickSummonController(
@@ -121,7 +126,27 @@ object MountModule : PluginModule {
                 purchases = coordinator,
                 summons = summonService,
                 quickSummons = quickSummonController,
+                transfers = { transfers },
             )
+
+        val transferConfig = MountTransferConfig.load(ARC.instance.dataPath)
+        if (transferConfig.enabled && loadedConfig.purchasesEnabled) {
+            try {
+                val ledger = ru.arc.sql.onetime.MySqlOneTimeUseLedger.open(
+                    transferConfig.sql(), "ARC-mount-transfers", "arc_mount_transfers",
+                    listOf(ru.arc.sql.onetime.MySqlOneTimeUseLedger.createTableMigration(1)),
+                    ru.arc.sql.onetime.MySqlOneTimeUsePartition("arc.mount-transfer"),
+                )
+                try {
+                    transfers = MountTransferController(
+                        ARC.instance, transferConfig, loadedCatalog, ledger, LuckPermsMountTransfers(luckPerms),
+                        controller, coordinator::isBusy, guiController::openDetail,
+                    )
+                } catch (failure: Throwable) { ledger.close(); throw failure }
+            } catch (failure: Exception) {
+                warn("Mount transfers unavailable: {}", failure.javaClass.simpleName)
+            }
+        }
 
         catalog = loadedCatalog
         ownership = loadedOwnership
@@ -133,6 +158,7 @@ object MountModule : PluginModule {
             controller.start()
             quickSummonController.start()
             guiController.start()
+            transfers?.start()
             bindCommands(guiController, loadedOwnership, controller)
         } catch (failure: Throwable) {
             shutdownRuntime()
@@ -144,6 +170,8 @@ object MountModule : PluginModule {
 
     private fun shutdownRuntime() {
         bindUnavailableCommands()
+        transfers?.close()
+        transfers = null
         gui?.shutdown()
         gui = null
         quickSummons?.shutdown()
@@ -171,6 +199,13 @@ object MountModule : PluginModule {
                 sessions = controller,
                 scheduler = Tasks.scheduler,
                 openMenu = guiController::openList,
+                openOwned = guiController::openOwned,
+                openDetail = guiController::openDetail,
+                packMount = { player, id ->
+                    transfers?.confirm(player, id) ?: player.sendMessage(ru.arc.util.TextUtil.mm(
+                        MountTransferConfig.load(ARC.instance.dataPath).text("spawn-only", "<#ff9f0f>Упаковка и активация свидетельств доступны на спавне.")
+                    ))
+                },
             )
         ARC.instance.getCommand("mount")?.apply {
             setExecutor(mountCommand)

@@ -17,10 +17,24 @@ class MountCommand(
     private val sessions: MountSessionController,
     private val scheduler: TaskScheduler,
     private val openMenu: (Player) -> Unit,
+    private val openOwned: (Player) -> Unit = openMenu,
+    private val openDetail: (Player, String) -> Unit = { player, _ -> openMenu(player) },
+    private val packMount: (Player, String) -> Unit = { player, _ -> openMenu(player) },
 ) : TabExecutor {
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
+        if (sender is Player && !sender.hasPermission("arc.mounts.use")) {
+            sender.sendMessage(TextUtil.noPermissions()); return true
+        }
         when (args.firstOrNull()?.lowercase(Locale.ROOT)) {
             null, "menu" -> openPlayerMenu(sender)
+            "shop" -> openPlayerMenu(sender)
+            "owned", "upgrades", "trade" -> if (sender is Player) openOwned(sender) else openPlayerMenu(sender)
+            "view", "pack" -> {
+                if (sender !is Player) openPlayerMenu(sender)
+                else if (args.size == 2 && catalog()[args[1]] != null) {
+                    if (args[0].equals("pack", true)) packMount(sender, args[1]) else openDetail(sender, args[1])
+                } else openOwned(sender)
+            }
             "help" -> sendHelp(sender, label)
             "admin" -> {
                 if (!sender.hasPermission(ADMIN_PERMISSION)) {
@@ -284,6 +298,7 @@ class MountCommand(
     private fun sendHelp(sender: CommandSender, label: String) {
         sender.sendMessage(TextUtil.mm("<gold>/$label <gray>— открыть коллекцию маунтов", true))
         sender.sendMessage(TextUtil.mm("<gold>/$label menu <gray>— открыть коллекцию", true))
+        sender.sendMessage(TextUtil.mm(config().message("player-command-help", "<#92bed8>/mount shop <#e6fff3>— покупки; <#92bed8>/mount upgrades <#e6fff3>— развитие; <#92bed8>/mount trade <#e6fff3>— передача и перепродажа.")))
         if (sender.hasPermission(ADMIN_PERMISSION)) sendAdminHelp(sender, label)
     }
 
@@ -309,9 +324,11 @@ class MountCommand(
             return buildList {
                 add("help")
                 add("menu")
+                addAll(listOf("shop", "owned", "upgrades", "trade", "view", "pack"))
                 if (sender.hasPermission(ADMIN_PERMISSION)) add("admin")
             }.matching(args[0])
         }
+        if (args.size == 2 && args[0].lowercase(Locale.ROOT) in listOf("view", "pack")) return catalog().all.map { it.id }.matching(args[1])
         if (!args[0].equals("admin", ignoreCase = true) || !sender.hasPermission(ADMIN_PERMISSION)) return emptyList()
         if (args.size == 2) return listOf("summon", "grant-all", "grant", "revoke").matching(args[1])
         return when (args[1].lowercase(Locale.ROOT)) {

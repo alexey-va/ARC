@@ -16,6 +16,7 @@ enum class MountSummonOutcome {
     WATER_REQUIRED,
     COOLDOWN,
     SPAWN_FAILED,
+    TRANSFER_PENDING,
 }
 
 enum class MountFavoriteSelectionOutcome {
@@ -29,10 +30,12 @@ class MountSummonService(
     private val catalogProvider: () -> MountCatalog,
     private val ownership: MountOwnership,
     private val sessions: MountSessionController,
+    private val isBusy: (UUID) -> Boolean = { false },
 ) {
     fun favoriteMountId(playerId: UUID): String? = ownership.favoriteMountId(playerId)
 
     fun selectFavorite(player: Player, mount: MountDefinition): CompletableFuture<MountFavoriteSelectionOutcome> {
+        if (isBusy(player.uniqueId)) return CompletableFuture.completedFuture(MountFavoriteSelectionOutcome.PERSISTENCE_FAILED)
         if (!ownership.profile(subject(player), mount).unlocked) {
             return CompletableFuture.completedFuture(MountFavoriteSelectionOutcome.NOT_UNLOCKED)
         }
@@ -48,6 +51,7 @@ class MountSummonService(
     }
 
     fun summon(player: Player, mount: MountDefinition): MountSummonOutcome {
+        if (isBusy(player.uniqueId)) return MountSummonOutcome.TRANSFER_PENDING
         val profile = ownership.profile(subject(player), mount)
         if (!profile.unlocked) return MountSummonOutcome.FAVORITE_UNAVAILABLE
         val config = configProvider()
@@ -75,6 +79,7 @@ class MountSummonService(
         val (path, fallback) =
             when (outcome) {
                 MountSummonOutcome.SUCCESS -> return
+                MountSummonOutcome.TRANSFER_PENDING -> "transfer-pending" to "<yellow>Дождитесь завершения передачи маунта."
                 MountSummonOutcome.FAVORITE_NOT_SELECTED ->
                     "favorite-not-selected" to "<yellow>Сначала выберите любимого маунта в /mount."
                 MountSummonOutcome.FAVORITE_UNAVAILABLE ->
