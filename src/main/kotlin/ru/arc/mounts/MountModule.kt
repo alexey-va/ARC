@@ -200,6 +200,9 @@ object MountModule : PluginModule {
                 scheduler = Tasks.scheduler,
                 openMenu = guiController::openList,
                 openOwned = guiController::openOwned,
+                openShop = guiController::openShop,
+                openUpgrades = guiController::openUpgrades,
+                openTrade = guiController::openTrade,
                 openDetail = guiController::openDetail,
                 packMount = { player, id ->
                     transfers?.confirm(player, id) ?: player.sendMessage(ru.arc.util.TextUtil.mm(

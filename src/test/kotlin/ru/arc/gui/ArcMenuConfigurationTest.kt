@@ -4,10 +4,12 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import net.kyori.adventure.text.Component
 import ru.arc.config.Config
 import ru.arc.menu.MenuElementId
 import ru.arc.menu.MenuId
 import ru.arc.paper.menu.PaperMenuConfigurationParser
+import ru.arc.paper.menu.PaperMenuItemFactory
 import ru.arc.paper.testing.MockBukkitTestRuntime
 import java.nio.file.Files
 import java.nio.file.Path
@@ -37,6 +39,23 @@ class ArcMenuConfigurationTest : StringSpec({
                 slot("back").index shouldBe (rows - 1) * 9
                 region(ArcMenuSchema.STORE_ITEMS).size shouldBe (rows - 1) * 9
             }
+        }
+    }
+
+    "investigation menu backgrounds render the canonical filler model" {
+        val configuration = ArcMenuConfiguration.loadResource(javaClass.classLoader)
+        val factory = PaperMenuItemFactory()
+
+        listOf(
+            ArcMenuSchema.INVESTIGATION_HUB,
+            ArcMenuSchema.INVESTIGATION_CASE,
+            ArcMenuSchema.INVESTIGATION_VERDICT,
+            ArcMenuSchema.INVESTIGATION_TESTIMONY,
+        ).forEach { menu ->
+            val templateId = requireNotNull(configuration.catalog.require(menu).backgroundTemplate)
+            val item = factory.create(configuration.template(templateId), Component.empty(), emptyList())
+
+            item.itemMeta.customModelData shouldBe 11000
         }
     }
 

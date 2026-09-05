@@ -18,7 +18,8 @@ class OriginSpawnConfigTest :
                 val plan = OriginChunkPlanner.plan(config.chunkRegion)
 
                 config.enabled shouldBe false
-                config.cycleTicks shouldBe 300L
+                config.cycleTicks shouldBe 40L
+                config.pageTicks shouldBe 300L
                 config.pedestals shouldContainExactly
                     listOf(
                         AuctionPedestalSpec(-58.5, 72.08, -4.5, 0f),

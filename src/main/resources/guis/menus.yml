@@ -445,6 +445,7 @@ menus:
         - '<italic:false><dark_gray>Декорация сундука'
     background:
       material: GRAY_STAINED_GLASS_PANE
+      custom-model-data: 11000
       hide-tooltip: true
     store-back:
       material: BLUE_STAINED_GLASS_PANE
@@ -453,6 +454,7 @@ menus:
       lore: []
     investigation-start:
       material: WRITABLE_BOOK
+      custom-model-data: 12001
       name: '<green><bold>Взять дело за <fee> <white>💰</white>'
       lore:
         - '<white>Фома выдаст вам предмет <gold>«Дело»<white>.'
@@ -480,6 +482,7 @@ menus:
         - { repeat: warnings, text: '<line>' }
     investigation-dossier:
       material: WRITABLE_BOOK
+      custom-model-data: 12001
       name: '<gold><bold><title>'
       lore:
         - { repeat: dossier, text: '<line>' }
@@ -551,6 +554,7 @@ menus:
       lore: *verdict-lore
     investigation-back:
       material: BLUE_STAINED_GLASS_PANE
+      custom-model-data: 11013
       name: '<aqua>Вернуться к материалам'
       lore:
         - '<action>'

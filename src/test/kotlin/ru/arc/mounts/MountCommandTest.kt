@@ -28,6 +28,18 @@ class MountCommandTest : StringSpec({
         verify(exactly = 0) { fixture.sessions.spawn(any(), any(), any(), any()) }
     }
 
+    "service subcommands route to distinct menus" {
+        val fixture = commandFixture(catalog)
+        fixture.command.onCommand(fixture.player, fixture.bukkitCommand, "mount", arrayOf("shop"))
+        fixture.command.onCommand(fixture.player, fixture.bukkitCommand, "mount", arrayOf("upgrades"))
+        fixture.command.onCommand(fixture.player, fixture.bukkitCommand, "mount", arrayOf("trade"))
+
+        verify(exactly = 1) { fixture.openShop(fixture.player) }
+        verify(exactly = 1) { fixture.openUpgrades(fixture.player) }
+        verify(exactly = 1) { fixture.openTrade(fixture.player) }
+        verify(exactly = 0) { fixture.openMenu(fixture.player) }
+    }
+
     "admin summon uses a configured level instead of arbitrary raw speed" {
         val fixture = commandFixture(catalog, admin = true)
         every {
@@ -231,6 +243,9 @@ private data class MountCommandFixture(
     val sessions: MountSessionController,
     val ownership: MountOwnership,
     val openMenu: (Player) -> Unit,
+    val openShop: (Player) -> Unit,
+    val openUpgrades: (Player) -> Unit,
+    val openTrade: (Player) -> Unit,
     val scheduler: TestTaskScheduler,
     val playerId: UUID,
 )
@@ -271,6 +286,9 @@ private fun commandFixture(catalog: MountCatalog, admin: Boolean = false): Mount
     }
     val sessions = mockk<MountSessionController>(relaxed = true)
     val openMenu = mockk<(Player) -> Unit>(relaxed = true)
+    val openShop = mockk<(Player) -> Unit>(relaxed = true)
+    val openUpgrades = mockk<(Player) -> Unit>(relaxed = true)
+    val openTrade = mockk<(Player) -> Unit>(relaxed = true)
     val scheduler = TestTaskScheduler()
     val command =
         MountCommand(
@@ -280,6 +298,9 @@ private fun commandFixture(catalog: MountCatalog, admin: Boolean = false): Mount
             sessions = sessions,
             scheduler = scheduler,
             openMenu = openMenu,
+            openShop = openShop,
+            openUpgrades = openUpgrades,
+            openTrade = openTrade,
         )
-    return MountCommandFixture(command, player, console, mockk(relaxed = true), sessions, ownership, openMenu, scheduler, playerId)
+    return MountCommandFixture(command, player, console, mockk(relaxed = true), sessions, ownership, openMenu, openShop, openUpgrades, openTrade, scheduler, playerId)
 }

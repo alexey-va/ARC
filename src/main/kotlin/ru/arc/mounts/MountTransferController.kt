@@ -26,7 +26,7 @@ import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
 import java.util.UUID
 
-private class MountPackingMenu(val mountId: String) : InventoryHolder {
+private class MountPackingMenu(val mountId: String, val back: (() -> Unit)? = null) : InventoryHolder {
     lateinit var contents: Inventory
     var accepted = false
     override fun getInventory() = contents
@@ -71,10 +71,10 @@ class MountTransferController(
         )) else lines("locked-lore", listOf("<#969696>Сначала получите маунта.")),
     )
 
-    fun confirm(player: Player, mountId: String) {
+    fun confirm(player: Player, mountId: String, back: (() -> Unit)? = null) {
         if (!access(player)) return
         val mount = catalog[mountId] ?: return
-        val holder = MountPackingMenu(mountId)
+        val holder = MountPackingMenu(mountId, back)
         val inventory = Bukkit.createInventory(holder, 27, TextUtil.mm(text("confirm-title", "<#20252b>Упаковка маунта")))
         holder.contents = inventory
         val background = MountModule.currentBackgroundStyle()
@@ -101,7 +101,10 @@ class MountTransferController(
         event.isCancelled = true
         val player = event.whoClicked as? Player ?: return
         if (event.click != ClickType.LEFT || holder.accepted) return
-        if (event.rawSlot == 11) { openDetail(player, holder.mountId); return }
+        if (event.rawSlot == 11) {
+            holder.back?.invoke() ?: openDetail(player, holder.mountId)
+            return
+        }
         if (event.rawSlot != 15 || !access(player)) return
         if (player.inventory.firstEmpty() < 0) { send(player, "full", "<#ff9f0f>Освободите один слот для свидетельства."); return }
         val mount = catalog[holder.mountId] ?: return

@@ -95,7 +95,8 @@ internal class AuctionShowcaseManager {
                 cleanupTaggedEntities(world, next)
                 next.pedestals.forEach { spec -> pedestals += spawnPedestal(world, spec) }
                 refresh(advance = false)
-                tasks.runTimer(token, next.cycleTicks, next.cycleTicks) { refresh(advance = true) }
+                tasks.runTimer(token, next.cycleTicks, next.cycleTicks) { refresh(advance = false) }
+                tasks.runTimer(token, next.pageTicks, next.pageTicks) { refresh(advance = true) }
                 tasks.runTimer(token, next.rotationTicks, next.rotationTicks) { rotate(next.rotationTicks) }
                 info("Origin auction showcase ready: world={}, pedestals={}", next.worldName, pedestals.size)
             }
@@ -153,38 +154,40 @@ internal class AuctionShowcaseManager {
             cyclePage = if (cyclePage == Int.MAX_VALUE) 0 else cyclePage + 1
         }
         val selected = AuctionShowcasePlanner.select(listings, pedestals.size, cyclePage)
-        pedestals.zip(selected).forEachIndexed { index, (pedestal, listing) ->
-            render(pedestal, listing, emptyLabel = index == 0 && listings.isEmpty())
+        pedestals.zip(selected).forEach { (pedestal, listing) ->
+            render(pedestal, listing)
         }
     }
 
     private fun render(
         pedestal: Pedestal,
         listing: AuctionShowcaseListing?,
-        emptyLabel: Boolean,
     ) {
         val current = config ?: return
         pedestal.listingId = listing?.id
         pedestal.interaction.isResponsive = listing != null
         pedestal.item.setItemStack(listing?.item?.clone() ?: ItemStack(Material.AIR))
         pedestal.text.text(
-            when {
-                listing != null -> current.listingText(listing.itemName, listing.sellerName, listing.price)
-                emptyLabel -> current.emptyText()
-                else -> Component.empty()
-            },
+            listing?.let { current.listingText(it.itemName, it.sellerName, it.price) } ?: Component.empty(),
         )
     }
 
     private fun rotate(periodTicks: Long) {
-        rotation = (rotation + (2.0 * PI * periodTicks / 240.0).toFloat()) % (2f * PI.toFloat())
+        // Keep the angle unwrapped so Display interpolation never crosses 2π -> 0.
+        rotation += (2.0 * PI * periodTicks / 240.0).toFloat()
         pedestals.forEach { pedestal ->
             if (pedestal.listingId == null || !pedestal.item.isValid) return@forEach
+            val pulse = kotlin.math.sin(rotation.toDouble()).toFloat()
+            pedestal.item.interpolationDelay = 0
             pedestal.item.transformation =
                 Transformation(
-                    Vector3f(),
+                    Vector3f(0f, ITEM_BOB * pulse, 0f),
                     AxisAngle4f(rotation, 0f, 1f, 0f),
-                    Vector3f(ITEM_SCALE, ITEM_SCALE, ITEM_SCALE),
+                    Vector3f(
+                        ITEM_SCALE * (1f + ITEM_SCALE_PULSE * pulse),
+                        ITEM_SCALE * (1f + ITEM_SCALE_PULSE * pulse),
+                        ITEM_SCALE * (1f + ITEM_SCALE_PULSE * pulse),
+                    ),
                     AxisAngle4f(),
                 )
         }
@@ -207,7 +210,7 @@ internal class AuctionShowcaseManager {
         configureDisplay(item)
         item.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.GROUND
         item.interpolationDelay = 0
-        item.interpolationDuration = (config?.rotationTicks ?: 2L).toInt()
+        item.interpolationDuration = maxOf((config?.rotationTicks ?: 2L).toInt(), 2)
         item.transformation =
             Transformation(Vector3f(), AxisAngle4f(), Vector3f(ITEM_SCALE, ITEM_SCALE, ITEM_SCALE), AxisAngle4f())
 
@@ -276,5 +279,7 @@ internal class AuctionShowcaseManager {
     private companion object {
         const val ENTITY_TAG = "arc_origin_auction_showcase"
         const val ITEM_SCALE = 3.75f
+        const val ITEM_SCALE_PULSE = 0.035f
+        const val ITEM_BOB = 0.045f
     }
 }

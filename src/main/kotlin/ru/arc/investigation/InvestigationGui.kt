@@ -65,7 +65,10 @@ object InvestigationGui {
                         ArcMenuSchema.INVESTIGATION_CASE,
                         "next-step",
                         render(
-                            values = mapOf("time" to timeLine(record), "clues" to record.clueCount().toString()),
+                            values = mapOf(
+                                "time" to timeLine(record),
+                                "clues" to record.clueCount().toString(),
+                            ),
                             repeats = mapOf(
                                 "directions" to nextDirections(record),
                                 "warnings" to if (ready) {
@@ -96,9 +99,12 @@ object InvestigationGui {
                             repeats = mapOf(
                                 "timeline" to wrapInvestigationLore(record.case.timeline(record.cluesMask)),
                                 "links" to if (checks.isEmpty()) {
-                                    listOf("<dark_gray>Опросите ещё свидетелей, чтобы открыть сверки.")
+                                    listOf(
+                                        "<dark_gray>Сопоставлено связей: 0/5",
+                                        "<dark_gray>Опросите ещё свидетелей, чтобы открыть сверки.",
+                                    )
                                 } else {
-                                    wrapInvestigationLore(checks)
+                                    listOf("<light_purple>Сопоставлено связей: <white>${checks.size}/5") + wrapInvestigationLore(checks)
                                 },
                             ),
                         ),
@@ -136,7 +142,7 @@ object InvestigationGui {
     }
 
     /**
-     * Focused response shown only after a physical click on a witness NPC.
+     * Focused response after a witness visit or reopening a collected statement.
      * The case-file GUI deliberately keeps every collected statement inline.
      */
     fun openTestimony(
@@ -149,7 +155,9 @@ object InvestigationGui {
             "statement",
             render(
                 values = mapOf("name" to witness.displayName),
-                repeats = mapOf("testimony" to focusedTestimonyLore(record, witness)),
+                repeats = mapOf(
+                    "testimony" to testimonyStatus(record) + focusedTestimonyLore(record, witness),
+                ),
             ),
         )
         item.type = org.bukkit.Material.matchMaterial(witness.itemMaterial) ?: item.type
@@ -212,13 +220,15 @@ object InvestigationGui {
             render(
                 values = mapOf("name" to witness.displayName, "location" to witness.locationHint),
                 flags = if (collected) setOf("collected") else emptySet(),
-                repeats = mapOf("body" to if (collected) witnessLore(record, witness) else emptyList()),
+                repeats = mapOf("body" to if (collected) witnessLore(record, witness) + listOf("", "<aqua>Нажмите — перечитать показание.") else emptyList()),
             ),
         )
         item.type = org.bukkit.Material.matchMaterial(witness.itemMaterial) ?: item.type
         return ArcMenus.entry(item) {
             if (!collected) {
                 it.sendActionBar(TextUtil.mm("<yellow>Найдите свидетеля лично: <white>${witness.locationHint}<yellow>."))
+            } else {
+                openTestimony(it, record, witness)
             }
         }
     }
@@ -236,23 +246,42 @@ object InvestigationGui {
     )
 
     private fun nextDirections(record: InvestigationJournalRecord): List<String> {
+        val clueCount = record.clueCount()
         val nextWitness = record.case.witnesses().firstOrNull { !record.hasClue(it) }
-        return when {
-            record.clueCount() >= InvestigationService.MIN_CLUES -> listOf(
-                "<green>Вернитесь к Фоме: он готов принять вердикт.",
-                if (nextWitness == null) {
-                    "<gray>Вы собрали полную картину: пять показаний."
-                } else {
-                    "<gray>Для полной картины ещё можно опросить ${nextWitness.displayName}."
-                },
-            )
-            nextWitness != null -> listOf(
-                "<white>Найдите: <gold>${nextWitness.displayName}<white>.",
-                "<gray>Место: <white>${nextWitness.locationHint}<gray>.",
-                "<gray>Поговорите с NPC, чтобы записать показание.",
-            )
-            else -> emptyList()
+        val directions = mutableListOf<String>()
+        when {
+            clueCount >= 5 -> {
+                directions += "<green>Полная картина собрана: 5/5 показаний."
+                directions += "<gray>Фома видит все пять этапов и готов принять вердикт."
+            }
+            clueCount >= InvestigationService.MIN_CLUES -> {
+                directions += "<green>Вердикт доступен. Собрано показаний: $clueCount/5."
+                directions += "<gray>Можно вынести вердикт или собрать ещё показания для полной картины."
+                nextWitness?.let { directions += "<gray>Следующий свидетель: <white>${it.displayName}<gray>." }
+            }
+            nextWitness != null -> {
+                directions += "<white>Найдите: <gold>${nextWitness.displayName}<white>."
+                directions += "<gray>Место: <white>${nextWitness.locationHint}<gray>."
+                directions += "<gray>Вердикт откроется после трёх показаний; сопоставления появятся по мере сбора."
+            }
         }
+        return directions
+    }
+
+    private fun testimonyStatus(record: InvestigationJournalRecord): List<String> {
+        val clues = record.clueCount()
+        val links = record.case.crossChecks(record.cluesMask).size
+        return listOf(
+            "<gray>Собрано показаний: <white>$clues/5",
+            if (clues >= InvestigationService.MIN_CLUES) {
+                "<green>Порог вердикта 3/5 достигнут; можно сопоставить показания у Фомы."
+            } else {
+                "<yellow>До вердикта: ещё ${InvestigationService.MIN_CLUES - clues} показания."
+            },
+            "<light_purple>Доступно сопоставлений: <white>$links/5",
+            if (clues >= 5) "<aqua>Полная картина собрана: Фома готов принять итог." else "<gray>Пятое показание завершит картину дела.",
+            "",
+        )
     }
 
     private fun cooldownLine(

@@ -18,6 +18,9 @@ class MountCommand(
     private val scheduler: TaskScheduler,
     private val openMenu: (Player) -> Unit,
     private val openOwned: (Player) -> Unit = openMenu,
+    private val openShop: (Player) -> Unit = openMenu,
+    private val openUpgrades: (Player) -> Unit = openOwned,
+    private val openTrade: (Player) -> Unit = openOwned,
     private val openDetail: (Player, String) -> Unit = { player, _ -> openMenu(player) },
     private val packMount: (Player, String) -> Unit = { player, _ -> openMenu(player) },
 ) : TabExecutor {
@@ -27,8 +30,10 @@ class MountCommand(
         }
         when (args.firstOrNull()?.lowercase(Locale.ROOT)) {
             null, "menu" -> openPlayerMenu(sender)
-            "shop" -> openPlayerMenu(sender)
-            "owned", "upgrades", "trade" -> if (sender is Player) openOwned(sender) else openPlayerMenu(sender)
+            "shop" -> if (sender is Player) openShop(sender) else openPlayerMenu(sender)
+            "owned" -> if (sender is Player) openOwned(sender) else openPlayerMenu(sender)
+            "upgrades" -> if (sender is Player) openUpgrades(sender) else openPlayerMenu(sender)
+            "trade" -> if (sender is Player) openTrade(sender) else openPlayerMenu(sender)
             "view", "pack" -> {
                 if (sender !is Player) openPlayerMenu(sender)
                 else if (args.size == 2 && catalog()[args[1]] != null) {
