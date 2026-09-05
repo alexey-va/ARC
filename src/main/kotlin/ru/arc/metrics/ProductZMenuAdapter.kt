@@ -73,20 +73,16 @@ internal class ProductZMenuAdapter(private val plugin: Plugin, private val obser
         if (name.startsWith("admin_") || !ProductUiCodec.ID.matches(name)) return
         val inventory = call(engine, "getSpigotInventory") as? Inventory ?: return
         if (player.openInventory.topInventory !== inventory) return
-        val rendered = (call(engine, "getItems") as? Map<*, *>)?.keys?.filterIsInstance<Int>()?.toSet() ?: return
-        val declared = call(engine, "getButtons") as? Collection<*> ?: return
-        val page = (call(engine, "getPage") as? Int) ?: return
+        val rendered = call(engine, "getItems") as? Map<*, *> ?: return
+        val buttonType = Class.forName("fr.maxlego08.menu.api.button.Button", false, engine.javaClass.classLoader)
         val slots = linkedMapOf<Int, String>()
-        for (button in declared.filterNotNull()) {
-            if (call(button, "isClickable") != true || call(button, "isPlayerInventory") == true) continue
+        for ((position, item) in rendered) {
+            val slot = position as? Int ?: continue
+            if (slot !in 0 until inventory.size || item == null) continue
+            val button = renderedZMenuButton(item, buttonType) ?: continue
             val id = (call(button, "getName") as? String)?.lowercase(Locale.ROOT)
                 ?.takeIf(ProductUiCodec.ID::matches) ?: continue
-            val positions = (call(button, "getSlots") as? Collection<*>)?.filterIsInstance<Int>() ?: continue
-            val permanent = call(button, "isPermanent") == true
-            for (position in positions) {
-                val slot = if (permanent) position else position - (page - 1) * inventory.size
-                if (slot in rendered && slot in 0 until inventory.size) slots[slot] = id
-            }
+            slots[slot] = id
         }
         val revision = revisions.getOrPut(menu) {
             if (!file.isFile || file.length() > 524_288) return
@@ -132,4 +128,16 @@ internal class ProductZMenuAdapter(private val plugin: Plugin, private val obser
     private fun call(target: Any, name: String): Any? =
         target.javaClass.methods.firstOrNull { it.name == name && it.parameterCount == 0 }?.invoke(target)
 
+}
+
+/** Exact zMenu 1.1.1.8 bridge: displayFinalButton installs a consumer capturing the
+ * actual Button AFTER view requirements/else selection. Filler has no consumer.
+ * Declared slots are insufficient: filler occupies hidden buttons' slots too.
+ * Fail visibly on an unsupported handler instead of attributing it to another button.
+ */
+internal fun renderedZMenuButton(item: Any, buttonType: Class<*>): Any? {
+    val click = item.javaClass.getDeclaredField("onClick").apply { isAccessible = true }.get(item) ?: return null
+    val candidates = click.javaClass.declaredFields.filter { buttonType.isAssignableFrom(it.type) }
+    check(candidates.size == 1) { "Unsupported zMenu button renderer" }
+    return candidates.single().apply { isAccessible = true }.get(click)
 }

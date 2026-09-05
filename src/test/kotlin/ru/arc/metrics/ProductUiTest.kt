@@ -18,6 +18,12 @@ class ProductUiTest : StringSpec({
     fun rows(store: ProductInterestStore, at: Long = now) =
         (store.report(at, 7, 100)["ui"] as Map<String, Any?>)["rows"] as List<Map<String, Any?>>
 
+    "native rendered buttons exclude filler and use the visible else button at an overlapping slot" {
+        val visible = RenderedButton("locked_help")
+        renderedZMenuButton(RenderedItem(null), RenderedButton::class.java) shouldBe null
+        renderedZMenuButton(RenderedItem(RenderedClick(visible)), RenderedButton::class.java) shouldBe visible
+    }
+
     "UI codec rejects source spoofing malformed identifiers and free text" {
         val valid = event("one", ProductUiKind.CLICK, "rtp")
         val gson = Gson()
@@ -118,3 +124,7 @@ class ProductUiTest : StringSpec({
         ui["complete"] shouldBe false
     }
 })
+
+private class RenderedButton(val name: String)
+private class RenderedClick(private val button: RenderedButton)
+private class RenderedItem(private val onClick: Any?)
