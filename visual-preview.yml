@@ -157,6 +157,21 @@ sources:
     path: src/main/resources/modules/help-center.yml
     root: text
     include:
+      - flight-body-how
+      - flight-body-recharge
+      - flight-body-start
+      - legacy-action-flight-exp-tooltip
+      - legacy-action-flight-money-tooltip
+      - legacy-action-flight-off-tooltip
+      - legacy-action-flight-recharge-tooltip
+      - legacy-action-flight-toggle-tooltip
+      - legacy-settings-portal-by-other-tooltip
+      - legacy-settings-portal-for-other-tooltip
+      - setting-chat-global-tooltip
+      - setting-chat-local-tooltip
+      - setting-particles-tooltip
+      - setting-trails-off-tooltip
+      - setting-trails-on-tooltip
       - root-title
       - root-body
       - now-label
@@ -862,20 +877,20 @@ surfaces:
       body:
       - id: summary
         text-key: settings-body
-        width: 500
+        width: 400
         placeholders:
           chat: локальный
           trails: включено
       buttons:
       - id: chat
         text-key: setting-chat-current
-        tooltip-key: category-settings-tooltip
+        tooltip-key: setting-chat-global-tooltip
         width: 230
         placeholders:
           state: локальный
       - id: trails
         text-key: setting-trails-current
-        tooltip-key: category-settings-tooltip
+        tooltip-key: setting-trails-off-tooltip
         width: 230
         placeholders:
           state: включено
@@ -883,7 +898,7 @@ surfaces:
         text-key: setting-particles-current
         placeholders: {state: включено, description: Включить или выключить личные частицы, command: pp toggle}
         width: 230
-        tooltip-key: command-tooltip
+        tooltip-key: setting-particles-tooltip
       - id: shortcut
         text-key: legacy-settings-shortcut
         width: 230
@@ -919,13 +934,13 @@ surfaces:
         width: 230
         placeholders:
           state: ✔ вкл
-        tooltip-key: legacy-settings-portal-tooltip
+        tooltip-key: legacy-settings-portal-by-other-tooltip
       - id: portal-for-other
         text-key: legacy-settings-portal-for-other
         width: 230
         placeholders:
           state: ○ выкл
-        tooltip-key: legacy-settings-portal-tooltip
+        tooltip-key: legacy-settings-portal-for-other-tooltip
       - id: notifications
         text-key: legacy-settings-notifications
         width: 230
@@ -993,20 +1008,20 @@ surfaces:
       body:
       - id: summary
         text-key: settings-body
-        width: 500
+        width: 400
         placeholders:
           chat: глобальный
           trails: выключено
       buttons:
       - id: chat
         text-key: setting-chat-current
-        tooltip-key: category-settings-tooltip
+        tooltip-key: setting-chat-local-tooltip
         width: 230
         placeholders:
           state: глобальный
       - id: trails
         text-key: setting-trails-current
-        tooltip-key: category-settings-tooltip
+        tooltip-key: setting-trails-on-tooltip
         width: 230
         placeholders:
           state: выключено
@@ -1014,7 +1029,7 @@ surfaces:
         text-key: setting-particles-current
         placeholders: {state: включено, description: Включить или выключить личные частицы, command: pp toggle}
         width: 230
-        tooltip-key: command-tooltip
+        tooltip-key: setting-particles-tooltip
       - id: shortcut
         text-key: legacy-settings-shortcut
         width: 230
@@ -1050,13 +1065,13 @@ surfaces:
         width: 230
         placeholders:
           state: ✔ вкл
-        tooltip-key: legacy-settings-portal-tooltip
+        tooltip-key: legacy-settings-portal-by-other-tooltip
       - id: portal-for-other
         text-key: legacy-settings-portal-for-other
         width: 230
         placeholders:
           state: ○ выкл
-        tooltip-key: legacy-settings-portal-tooltip
+        tooltip-key: legacy-settings-portal-for-other-tooltip
       - id: notifications
         text-key: legacy-settings-notifications
         width: 230
@@ -1119,93 +1134,93 @@ surfaces:
       columns: 2
       body:
       - id: intro
-        text-key: legacy-options-body
+        text-key: legacy-settings-scoreboard-tooltip
         width: 400
       buttons:
       - id: scoreboard-1
         text-key: legacy-settings-scoreboard-mode-1
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-scoreboard-tooltip
       - id: scoreboard-2
         text-key: legacy-settings-scoreboard-mode-2
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-scoreboard-tooltip
       - id: scoreboard-3
         text-key: legacy-settings-scoreboard-mode-3
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-scoreboard-tooltip
       - id: scoreboard-4
         text-key: legacy-settings-scoreboard-mode-4
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-scoreboard-tooltip
       - id: scoreboard-5
         text-key: legacy-settings-scoreboard-mode-5
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-scoreboard-tooltip
       - id: scoreboard-6
         text-key: legacy-settings-scoreboard-mode-6
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-scoreboard-tooltip
       - id: scoreboard-7
         text-key: legacy-settings-scoreboard-mode-7
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-scoreboard-tooltip
       - id: scoreboard-8
         text-key: legacy-settings-scoreboard-mode-8
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-scoreboard-tooltip
       - id: scoreboard-9
         text-key: legacy-settings-scoreboard-mode-9
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-scoreboard-tooltip
       - id: scoreboard-10
         text-key: legacy-settings-scoreboard-mode-10
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-scoreboard-tooltip
       - id: scoreboard-11
         text-key: legacy-settings-scoreboard-mode-11
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-scoreboard-tooltip
       - id: scoreboard-12
         text-key: legacy-settings-scoreboard-mode-12
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-scoreboard-tooltip
       - id: scoreboard-13
         text-key: legacy-settings-scoreboard-mode-13
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-scoreboard-tooltip
       - id: scoreboard-14
         text-key: legacy-settings-scoreboard-mode-14
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-scoreboard-tooltip
       - id: scoreboard-15
         text-key: legacy-settings-scoreboard-mode-15
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-scoreboard-tooltip
       - id: scoreboard-16
         text-key: legacy-settings-scoreboard-mode-16
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-scoreboard-tooltip
       - id: scoreboard-17
         text-key: legacy-settings-scoreboard-mode-17
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-scoreboard-tooltip
       - id: scoreboard-18
         text-key: legacy-settings-scoreboard-mode-18
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-scoreboard-tooltip
       - id: scoreboard-19
         text-key: legacy-settings-scoreboard-mode-19
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-scoreboard-tooltip
       - id: scoreboard-20
         text-key: legacy-settings-scoreboard-mode-20
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-scoreboard-tooltip
       - id: scoreboard-off
         text-key: legacy-action-scoreboard-off
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-scoreboard-tooltip
       viewport:
       - 854
       - 480
@@ -1292,93 +1307,93 @@ surfaces:
       columns: 2
       body:
       - id: intro
-        text-key: legacy-options-body
+        text-key: legacy-settings-tablist-tooltip
         width: 400
       buttons:
       - id: tablist-1
         text-key: legacy-settings-tablist-mode-1
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-tablist-tooltip
       - id: tablist-2
         text-key: legacy-settings-tablist-mode-2
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-tablist-tooltip
       - id: tablist-3
         text-key: legacy-settings-tablist-mode-3
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-tablist-tooltip
       - id: tablist-4
         text-key: legacy-settings-tablist-mode-4
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-tablist-tooltip
       - id: tablist-5
         text-key: legacy-settings-tablist-mode-5
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-tablist-tooltip
       - id: tablist-6
         text-key: legacy-settings-tablist-mode-6
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-tablist-tooltip
       - id: tablist-7
         text-key: legacy-settings-tablist-mode-7
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-tablist-tooltip
       - id: tablist-8
         text-key: legacy-settings-tablist-mode-8
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-tablist-tooltip
       - id: tablist-9
         text-key: legacy-settings-tablist-mode-9
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-tablist-tooltip
       - id: tablist-10
         text-key: legacy-settings-tablist-mode-10
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-tablist-tooltip
       - id: tablist-11
         text-key: legacy-settings-tablist-mode-11
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-tablist-tooltip
       - id: tablist-12
         text-key: legacy-settings-tablist-mode-12
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-tablist-tooltip
       - id: tablist-13
         text-key: legacy-settings-tablist-mode-13
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-tablist-tooltip
       - id: tablist-14
         text-key: legacy-settings-tablist-mode-14
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-tablist-tooltip
       - id: tablist-15
         text-key: legacy-settings-tablist-mode-15
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-tablist-tooltip
       - id: tablist-16
         text-key: legacy-settings-tablist-mode-16
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-tablist-tooltip
       - id: tablist-17
         text-key: legacy-settings-tablist-mode-17
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-tablist-tooltip
       - id: tablist-18
         text-key: legacy-settings-tablist-mode-18
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-tablist-tooltip
       - id: tablist-19
         text-key: legacy-settings-tablist-mode-19
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-tablist-tooltip
       - id: tablist-20
         text-key: legacy-settings-tablist-mode-20
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-tablist-tooltip
       - id: tablist-off
         text-key: legacy-action-tablist-off
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-tablist-tooltip
       viewport:
       - 854
       - 480
@@ -1393,17 +1408,17 @@ surfaces:
       columns: 2
       body:
       - id: intro
-        text-key: legacy-options-body
+        text-key: legacy-settings-lands-tooltip
         width: 400
       buttons:
       - id: lands-show
         text-key: legacy-action-lands-show
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-lands-tooltip
       - id: lands-hide
         text-key: legacy-action-lands-hide
         width: 190
-        tooltip-key: legacy-options-body
+        tooltip-key: legacy-settings-lands-tooltip
       viewport:
       - 854
       - 480
@@ -1417,30 +1432,40 @@ surfaces:
       external-title-key: legacy-settings-flight
       columns: 2
       body:
-      - id: intro
-        text-key: legacy-options-body
+      - id: how
+        text-key: flight-body-how
+        width: 400
+      - id: recharge
+        text-key: flight-body-recharge
+        width: 400
+      - id: start
+        text-key: flight-body-start
         width: 400
       buttons:
       - id: flight-exp
         text-key: legacy-action-flight-exp
-        width: 190
-        tooltip-key: legacy-options-body
+        width: 230
+        tooltip-key: legacy-action-flight-exp-tooltip
       - id: flight-money
         text-key: legacy-action-flight-money
-        width: 190
-        tooltip-key: legacy-options-body
+        width: 230
+        tooltip-key: legacy-action-flight-money-tooltip
       - id: flight-off
         text-key: legacy-action-flight-off
-        width: 190
-        tooltip-key: legacy-options-body
+        width: 230
+        tooltip-key: legacy-action-flight-off-tooltip
       - id: flight-recharge
         text-key: legacy-action-flight-recharge
-        width: 190
-        tooltip-key: legacy-options-body
+        width: 230
+        tooltip-key: legacy-action-flight-recharge-tooltip
       - id: flight-toggle
         text-key: legacy-action-flight-toggle
-        width: 190
-        tooltip-key: legacy-options-body
+        width: 230
+        tooltip-key: legacy-action-flight-toggle-tooltip
+      - id: back
+        text-key: back-label
+        width: 150
+        tooltip-key: back-label
       viewport:
       - 854
       - 480

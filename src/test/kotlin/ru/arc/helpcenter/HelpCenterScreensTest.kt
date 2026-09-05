@@ -26,6 +26,7 @@ class HelpCenterScreensTest {
     private lateinit var controller: HelpCenterController
     private lateinit var gateway: HelpCenterGateway
     private lateinit var screen: PaperDialogScreen
+    private var screenCount = 0
     private lateinit var preferences: HelpCenterPreferenceStore
     private val directory = Files.createTempDirectory("help-screens")
     private var chatMode = HelpCenterChatMode.LOCAL
@@ -64,14 +65,14 @@ class HelpCenterScreensTest {
             executed += command
             if (command == "g") chatMode = HelpCenterChatMode.GLOBAL
             if (command == "l") chatMode = HelpCenterChatMode.LOCAL
-            if (command == "sf open_guide") player.openInventory(Bukkit.createInventory(null, 9))
+            if (command in setOf("sf open_guide", "cmi flightcharge recharge")) player.openInventory(Bukkit.createInventory(null, 9))
             true
         }
         ConfigManager.clear()
         val inventoryReturn = HelpCenterInventoryReturnRuntime(plugin, returnOnClose = { true })
         controller = HelpCenterController(
             HelpCenterConfig.load(directory).snapshot(), gateway, {}, inventoryReturn,
-            { _, _ -> }, preferences, HelpCenterNavigation(plugin, inventoryReturn::cancel), { _, value -> screen = value },
+            { _, _ -> }, preferences, HelpCenterNavigation(plugin, inventoryReturn::cancel), { _, value -> screen = value; screenCount++ },
         )
     }
 
@@ -142,7 +143,7 @@ class HelpCenterScreensTest {
     fun `settings update on the same screen without an extra menu command`() {
         open(HelpCenterPage.SETTINGS)
         assertEquals("Чат: локальный", plain(screen.buttons.first().label))
-        assertTrue(screen.buttons.any { plain(it.label) == "След: выключено" })
+        assertTrue(screen.buttons.any { plain(it.label) == "Тропинки: выключено" })
         assertTrue(screen.buttons.any { plain(it.label) == "Частицы: включено" })
         assertFalse(screen.buttons.any { it.id.value.contains("boost") })
         click("setting_chat_global")
@@ -187,6 +188,38 @@ class HelpCenterScreensTest {
         assertTrue(screen.buttons.all { !it.closeDialogBeforeAction })
         click("back")
         assertEquals("help.category.settings", screen.id)
+    }
+
+    @Test
+    fun `flight settings explain charge in sections and give each action its own tooltip`() {
+        open(HelpCenterPage.SETTINGS)
+        val trails = screen.buttons.single { it.id.value == "setting_trails_on" }
+        assertTrue(plain(requireNotNull(trails.tooltip)).contains("протаптывают землю"))
+        click("legacy_flight")
+        assertEquals("help.settings.flight", screen.id)
+        assertEquals(3, screen.body.size)
+        assertTrue(body().contains("Как работает полёт"))
+        assertTrue(body().contains("Как взлететь"))
+        assertTrue(body().contains("списывается автоматически"))
+        assertEquals(5, screen.buttons.map { plain(requireNotNull(it.tooltip)) }.distinct().size)
+        assertTrue(screen.buttons.all { !it.closeDialogBeforeAction })
+        click("back")
+        assertEquals("help.category.settings", screen.id)
+    }
+
+    @Test
+    fun `manual flight recharge opens inventory without immediately covering it with a dialog`() {
+        open(HelpCenterPage.SETTINGS)
+        click("legacy_flight")
+        val before = screenCount
+        click("legacy_flight_recharge")
+        assertEquals(listOf("cmi flightcharge recharge"), executed)
+        assertEquals(9, player.openInventory.topInventory.size)
+        assertEquals(before, screenCount)
+        player.closeInventory()
+        paper.performTicks(2)
+        assertEquals("help.settings.flight", screen.id)
+        assertEquals(before + 1, screenCount)
     }
 
     @Test
