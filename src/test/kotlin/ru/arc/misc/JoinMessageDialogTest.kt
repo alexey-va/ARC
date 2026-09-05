@@ -118,6 +118,53 @@ class JoinMessageDialogTest : FreeSpec({
         data.selectedMessages(false) shouldBe setOf("%player_name% ушёл")
     }
 
+    "personal and preset phrases share pagination and personal toggles keep their page" {
+        permissions += JoinMessageDialogs.CUSTOM_PERMISSION
+        (1..10).forEach { data.addCustomMessage("своя фраза $it", true) }
+        dialogs.show(player)
+        plain(screen!!.body[1].text) shouldContain "1/4"
+        plain(screen!!.buttons.first().label) shouldBe "★ [Вкл] Viewer своя фраза 1"
+        plain(screen!!.buttons.first().tooltip) shouldContain "Своя фраза"
+        val phrases = mutableListOf<String>()
+        repeat(4) { page ->
+            phrases += screen!!.buttons.filter { it.id.value.startsWith("own_") || it.id.value.startsWith("phrase_") }
+                .map { plain(it.label) }
+            if (page < 3) click("next")
+        }
+        phrases.size shouldBe 23
+        phrases.distinct().size shouldBe 23
+        phrases.take(10).all { it.startsWith("★") } shouldBe true
+        dialogs.show(player, startPage = 1)
+        screen!!.buttons.count { it.id.value.startsWith("own_") } shouldBe 4
+        screen!!.buttons.count { it.id.value.startsWith("phrase_") } shouldBe 2
+        click("own_0")
+        plain(screen!!.body[1].text) shouldContain "2/4"
+        plain(screen!!.buttons.first().label) shouldBe "★ Viewer своя фраза 7"
+        (CustomJoinMessage.selectionKey("своя фраза 7") in data.selectedMessages(true)) shouldBe false
+        click("own_0")
+        (CustomJoinMessage.selectionKey("своя фраза 7") in data.selectedMessages(true)) shouldBe true
+        data.customMessages(true).size shouldBe 10
+        click("switch")
+        screen!!.buttons.none { it.id.value.startsWith("own_") } shouldBe true
+    }
+
+    "personal-only catalog stays visible and revoked custom permission blocks toggles" {
+        permissions += JoinMessageDialogs.CUSTOM_PERMISSION
+        data.addCustomMessage("принёс чай", true)
+        every { JoinMessageCatalogManager.currentAsync() } returns CompletableFuture.completedFuture(JoinMessageCatalog())
+        dialogs.show(player)
+        screen!!.body.size shouldBe 2
+        screen!!.buttons.first().id.value shouldBe "own_0"
+        permissions -= JoinMessageDialogs.CUSTOM_PERMISSION
+        click("own_0")
+        verify(exactly = 0) { JoinMessagesManager.selectCustomMessageAsync(any(), any(), any(), any()) }
+        data.selectedMessages(true) shouldBe setOf("%player_name% принёс чай")
+        data.updateMessage("%player_name% принёс чай", true, false)
+        dialogs.show(player)
+        plain(screen!!.buttons.first().label) shouldBe "★ [Недоступно] Viewer принёс чай"
+        screen!!.buttons.none { it.id.value == "custom" } shouldBe true
+    }
+
     "permissions are rechecked on every callback including grants revoked after opening" {
         dialogs.show(player)
         click("phrase_1")

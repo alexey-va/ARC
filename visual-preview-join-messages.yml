@@ -35,13 +35,13 @@ surfaces:
         - {id: page, text-key: page, width: 600}
       buttons:
         - id: selected-1
-          text-key: selected
-          tooltip-key: turn-off
+          text-key: custom-selected
+          tooltip-key: custom-description
           width: 600
-          placeholders: {message: 'Архитектор23 выполз из своей пещеры'}
+          placeholders: {message: 'Архитектор23 принёс с собой уют'}
         - id: available-2
-          text-key: unselected
-          tooltip-key: turn-on
+          text-key: custom-unselected
+          tooltip-key: custom-description
           width: 600
           placeholders: {message: 'Архитектор23 вернулся, потому что реальная жизнь — это для слабаков'}
         - id: available-3

@@ -71,10 +71,25 @@ internal class JoinMessageDialogs(private val config: Config) {
         requestedPage: Int,
     ) {
         val entries = catalog.filter { config.bool("show-unavailable", true) || it.permission == null || player.hasPermission(it.permission!!) }
-        val pages = maxOf(1, (entries.size + pageSize - 1) / pageSize)
+        val total = custom.size + entries.size
+        val pages = maxOf(1, (total + pageSize - 1) / pageSize)
         val page = requestedPage.coerceIn(0, pages - 1)
-        val selectedCount = (entries.map { it.message } + custom.map(CustomJoinMessage::selectionKey)).count { it in selected }
-        val buttons = entries.drop(page * pageSize).take(pageSize).mapIndexed { index, entry ->
+        val selectedCount = (entries.map { it.message } + custom.map(CustomJoinMessage::selectionKey)).toSet().count { it in selected }
+        val buttons = custom.drop(page * pageSize).take(pageSize).mapIndexed { index, message ->
+            val current = CustomJoinMessage.selectionKey(message) in selected
+            val available = player.hasPermission(CUSTOM_PERMISSION)
+            val preview = Component.text("${player.name} $message")
+            val label = text(if (current) "custom-selected" else if (available) "custom-unselected" else "custom-locked", "message" to preview)
+            button("own_$index", label, isJoin, custom = true, tooltip = preview.append(Component.newline())
+                .append(text("custom-description")).append(Component.newline())
+                .append(text(if (!available) "unavailable" else if (current) "turn-off" else "turn-on"))) { context ->
+                finish(context.player, JoinMessagesManager.selectCustomMessageAsync(context.player.name, message, isJoin, !current)) {
+                    show(context.player, isJoin, page)
+                }
+            }
+        }.toMutableList()
+        val catalogOffset = (page * pageSize - custom.size).coerceAtLeast(0)
+        buttons += entries.drop(catalogOffset).take(pageSize - buttons.size).mapIndexed { index, entry ->
             val available = entry.permission == null || player.hasPermission(entry.permission!!)
             val current = entry.message in selected
             val preview = preview(entry.message, player.name)
@@ -84,7 +99,7 @@ internal class JoinMessageDialogs(private val config: Config) {
             ))) { context ->
                 selectCatalogMessage(context.player, entry, isJoin, !current, page)
             }
-        }.toMutableList()
+        }
         if (page + 1 < pages) buttons += button("next", text("next"), isJoin) { show(it.player, isJoin, page + 1) }
         if (page > 0) buttons += button("previous", text("previous"), isJoin) { show(it.player, isJoin, page - 1) }
         if (player.hasPermission(CUSTOM_PERMISSION)) {
@@ -97,7 +112,7 @@ internal class JoinMessageDialogs(private val config: Config) {
             body = listOf(
                 PaperDialogBody(text("catalog-help"), width),
                 PaperDialogBody(text("page", "page" to (page + 1), "pages" to pages, "selected" to selectedCount), width),
-            ) + if (entries.isEmpty()) listOf(PaperDialogBody(text("empty"), width)) else emptyList(),
+            ) + if (total == 0) listOf(PaperDialogBody(text("empty"), width)) else emptyList(),
             buttons = buttons,
             columns = 1,
         ))

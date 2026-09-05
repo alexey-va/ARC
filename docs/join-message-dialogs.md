@@ -13,6 +13,10 @@ still published by ProxyARC through `arc.join_message_catalog`.
   button at some client GUI scales; their tooltips preserve the complete text.
 - Multiple selections remain supported. ProxyARC randomly picks one enabled
   phrase for each join or quit. With no selection it uses the network default.
+- Saved personal phrases appear first in the same paginated catalog with a `★`
+  marker and a tooltip identifying them. Clicking toggles them in place;
+  editing and deleting remain in `Мои фразы`. Personal toggles recheck the
+  custom permission, and saved phrases remain visible if that permission is lost.
 - Next/previous retain the message kind. The switch control opens the other kind.
 - `Мои фразы` opens a separate personal library. Enter a suffix, inspect the
   preview, then save and enable it. The player name is always prepended. Open a
