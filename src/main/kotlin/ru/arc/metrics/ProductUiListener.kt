@@ -40,7 +40,9 @@ internal class ProductUiListener(private val plugin: Plugin, private val product
     fun start() {
         plugin.server.pluginManager.registerEvents(this, plugin)
         plugin.server.pluginManager.plugins.forEach(::attach)
-        coverage["zmenu"] = runCatching { zMenu.register() }.getOrDefault(false)
+        if (plugin.server.pluginManager.getPlugin("zMenu") != null) {
+            coverage["zmenu"] = runCatching { zMenu.register() }.getOrDefault(false)
+        }
     }
 
     private fun attach(producer: Plugin) {
