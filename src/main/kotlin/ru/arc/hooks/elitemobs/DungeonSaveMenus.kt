@@ -84,14 +84,14 @@ internal class DungeonSaveMenus(
             if (panel == null) unavailable(player) else {
                 show(player, PaperDialogScreen(id = "dungeon.saves.unavailable", title = text("saves.dialog.title", "<#f4bd6a>Сохранения"),
                     body = listOf(PaperDialogBody(availability(dungeon.saveBlockReason(player, null)), 468)),
-                    buttons = listOf(guide(player) { open(player) }), exitButton = back { panel(player) }))
+                    buttons = listOf(autosaveSettingsButton(player), guide(player) { open(player) }), exitButton = back { panel(player) }))
             }
             return
         }
         val blocked = dungeon.saveBlockReason(player, view)
         val body = mutableListOf(
             PaperDialogBody(text("saves.dialog.body", "<#e8dfd2>Ваши места в этом данже. Сохраняется только позиция: добыча и монстры не откатываются."), 468),
-            PaperDialogBody(dungeon.autosaveDescription(), 468),
+            PaperDialogBody(dungeon.autosaveDescription(player), 468),
             PaperDialogBody(saveCounts(view), 468),
             PaperDialogBody(availability(blocked), 468),
         )
@@ -103,6 +103,7 @@ internal class DungeonSaveMenus(
                 action("save", "saves.dialog.save-label", "<#9bd48d>Сохранить здесь", "saves.dialog.save-tooltip", "Запомнить текущую позицию") {
                     if (blocked == null) saveForm(player, view) else open(player)
                 }.let { if (blocked == null) it else it.copy(label = text("saves.dialog.save-disabled", "<#aaa49a>Сохранение недоступно"), tooltip = blocked) },
+                autosaveSettingsButton(player),
             ) + listOfNotNull(view.exit?.let { locationButton(player, "exit", "saves.dialog.exit-label", "<#d7b486>Место прошлого выхода", "saves.dialog.exit-tooltip", it, view) }) +
                 view.points.mapIndexed { index, point -> pointButton("point_$index", pointLabel(point), pointTooltip(point)) { detail(player, point, view) } },
             exitButton = back { panel(player) }, columns = 2,
@@ -122,6 +123,36 @@ internal class DungeonSaveMenus(
     ))
 
     private fun mainMenu(player: Player) = action("main", "panel.main-label", "<#aaa49a>Главное меню ›", "panel.main-tooltip", "Открыть главное меню сервера") { dungeon.action(player, "main") }
+
+    private fun autosaveSettingsButton(player: Player) = action("autosaves", "saves.settings.label", "<#d7b486>Автосохранение ›", "saves.settings.tooltip", "Выбрать интервал или отключить автоматические точки") { autosaveSettings(player) }
+
+    private fun autosaveSettings(player: Player, feedback: Component? = null) {
+        val seconds = dungeon.autosaveSeconds(player)
+        val body = mutableListOf(
+            PaperDialogBody(text("saves.settings.body", "<#e8dfd2>Выберите интервал между автоматическими точками.<newline><#aaa49a>Личная настройка сохраняется после выхода и действует во всех данжах этого сервера. Ручные точки и возврат к месту выхода не меняются."), 468),
+            PaperDialogBody(text("saves.settings.current", "<#aaa49a>Сейчас: <value>", "value" to autosaveIntervalLabel(seconds)), 468),
+            PaperDialogBody(dungeon.autosaveDescription(player), 468),
+        )
+        if (!dungeon.canConfigureAutosaves()) body += PaperDialogBody(text("saves.settings.unavailable", "<#aaa49a>Настройка автосохранения сейчас недоступна."), 468)
+        feedback?.let { body += PaperDialogBody(it, 468) }
+        show(player, PaperDialogScreen(
+            id = "dungeon.autosaves", title = text("saves.settings.title", "<#f4bd6a>Автосохранение"), body = body,
+            buttons = if (dungeon.canConfigureAutosaves()) DUNGEON_AUTOSAVE_INTERVALS.map { interval ->
+                PaperDialogButton(PaperDialogActionId.of("auto_$interval"),
+                    text(if (seconds == interval) "saves.settings.selected" else "saves.settings.option",
+                        if (seconds == interval) "<#9bd48d>✔ <value>" else "<#d7b486><value>", "value" to autosaveIntervalLabel(interval)),
+                    tooltip = text("saves.settings.option-tooltip", "Применить только к вашим автоматическим точкам"), width = 230,
+                    onClick = { val result = dungeon.setAutosaveSeconds(player, interval); autosaveSettings(player, result.message.takeUnless { result.success }) })
+            } else listOf(guide(player) { autosaveSettings(player) }),
+            exitButton = back { open(player) }, columns = 2,
+        ))
+    }
+
+    private fun autosaveIntervalLabel(seconds: Int): Component = when {
+        seconds == 0 -> text("saves.settings.off", "Выключено")
+        seconds % 60 == 0 -> text("saves.settings.minutes", "<value> мин", "value" to Component.text(seconds / 60))
+        else -> text("saves.settings.seconds", "<value> с", "value" to Component.text(seconds))
+    }
 
     private fun partyButton(player: Player) = action("party", "panel.party-label", "<#d7b486>Группа ›", "panel.party-tooltip", "Как собрать пати и управлять группой EliteMobs") { party(player) }
 

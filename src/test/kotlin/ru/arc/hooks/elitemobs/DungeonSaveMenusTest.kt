@@ -94,6 +94,28 @@ class DungeonSaveMenusTest : FreeSpec({
         verify { dungeon.panelAction(player, any(), "quit") }
     }
 
+    "autosave settings apply one choice without closing and return to saves" {
+        val player = paper.addPlayer("interval")
+        val dungeon = mockk<EMDungeonQol>(relaxed = true)
+        val world = paper.addSimpleWorld("interval-world")
+        every { dungeon.view(player) } returns DungeonSaveView(world.uid, "run", emptyList(), null, null)
+        every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
+        every { dungeon.canConfigureAutosaves() } returns true
+        every { dungeon.autosaveSeconds(player) } returns 120
+        every { dungeon.setAutosaveSeconds(player, 60) } returns DungeonSaveEdit(true, Component.empty())
+        val screens = mutableListOf<PaperDialogScreen>()
+        DungeonSaveMenus(dungeon) { _, screen -> screens += screen }.open(player)
+        screens.last().buttons.single { it.id.value == "autosaves" }.onClick.handle(mockk())
+        screens.last().id shouldBe "dungeon.autosaves"
+        screens.last().buttons.map { it.id.value } shouldBe listOf("auto_60", "auto_120", "auto_300", "auto_0")
+        screens.last().buttons.all { !it.closeDialogBeforeAction } shouldBe true
+        screens.last().buttons.single { it.id.value == "auto_60" }.onClick.handle(mockk())
+        verify(exactly = 1) { dungeon.setAutosaveSeconds(player, 60) }
+        screens.last().id shouldBe "dungeon.autosaves"
+        screens.last().exitButton!!.onClick.handle(mockk())
+        screens.last().id shouldBe "dungeon.saves"
+    }
+
     "start exists only while the instance is waiting and menus have no refresh action" {
         val player = paper.addPlayer("viewer")
         val dungeon = mockk<EMDungeonQol>(relaxed = true)

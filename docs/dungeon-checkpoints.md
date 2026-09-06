@@ -29,6 +29,10 @@ missing bundled defaults without replacing operator values.
   player's manual point, ignoring case. Names are literal text, at most 32 chars.
 - `/сохранения`: native dialog with manual/automatic points, creation, deletion
   confirmation, entry/last-exit travel, and a separate native dungeon exit.
+  Its Autosave submenu selects 1, 2 or 5 minutes, or Off. The preference is
+  persisted in the player's `arc:dungeon_autosave_seconds` integer PDC and
+  applies to all dungeons on that node; it does not alter manual points or
+  departure-resume behavior. Failed persistence restores the prior preference.
 - `/данж вход`: return through the normal ARC portal to safe ground near the
   authored start of this exact dungeon clone, outside native return portals.
 - `/данж выйти`: native EliteMobs quit for instances; `open-exit-command` (default
@@ -54,8 +58,10 @@ lobby/finished match.
 Autosaves are polled every 20 seconds. The first point is written at the first
 suitable check while walking on a safe solid surface, without fire, water or
 flight, and after 15 seconds outside combat. Subsequent points require at least
-`autosave-seconds` (default 120, configurable 30–600) and eight blocks from the
-latest autosave. Three AUTO points roll independently of manual names; manual
+the player's selected interval (otherwise `autosave-seconds`, default 120,
+configurable 30–600) and eight blocks from the latest autosave. Off prevents
+new AUTO points without deleting old ones; the server's `autosave-enabled`
+gate always takes precedence. Three AUTO points roll independently of manual names; manual
 saves have a five-second rate limit.
 Manual saves/removals and autosaves use the core native player-data persistence
 port. A persistence failure reports failure rather than claiming disk durability.

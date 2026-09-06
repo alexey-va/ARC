@@ -7,6 +7,8 @@ import org.bukkit.Bukkit
 import org.bukkit.GameMode
 import org.bukkit.Location
 import org.bukkit.Material
+import org.bukkit.NamespacedKey
+import org.bukkit.persistence.PersistentDataType
 import org.bukkit.World
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
@@ -69,6 +71,7 @@ internal class EMDungeonQol(
     private val menus by lazy { DungeonSaveMenus(this) }
     private var closed = false
     private var autosavesStarted = false
+    private val autosaveIntervalKey = NamespacedKey("arc", "dungeon_autosave_seconds")
 
     private val enabled get() = config.bool("dungeon-qol.enabled", true)
     private val ttl get() = config.integer("dungeon-qol.resume-hours", 72).coerceIn(1, 720) * 3_600_000L
@@ -174,10 +177,31 @@ internal class EMDungeonQol(
         return text("context.$key.body", "<description>", "description" to description)
     }
 
-    internal fun autosaveDescription(): Component {
-        if (!config.bool("dungeon-qol.saves.autosave-enabled", true)) return text("saves.dialog.autosaves-disabled", "<#aaa49a>Автосохранения отключены. Ручные точки доступны через «Сохранить здесь».")
+    internal fun canConfigureAutosaves(): Boolean = config.bool("dungeon-qol.saves.autosave-enabled", true)
+
+    internal fun autosaveSeconds(player: Player): Int {
+        if (!canConfigureAutosaves()) return 0
+        return player.persistentDataContainer.get(autosaveIntervalKey, PersistentDataType.INTEGER)
+            ?.takeIf { it in DUNGEON_AUTOSAVE_INTERVALS }
+            ?: config.integer("dungeon-qol.saves.autosave-seconds", 120).coerceIn(30, 600)
+    }
+
+    internal fun setAutosaveSeconds(player: Player, seconds: Int): DungeonSaveEdit {
+        if (seconds !in DUNGEON_AUTOSAVE_INTERVALS || !canConfigureAutosaves())
+            return DungeonSaveEdit(false, text("saves.settings.unavailable", "<#aaa49a>Настройка автосохранения сейчас недоступна."))
+        val data = player.persistentDataContainer
+        val previous = data.get(autosaveIntervalKey, PersistentDataType.INTEGER)
+        if (previous == seconds) return DungeonSaveEdit(true, Component.empty())
+        data.set(autosaveIntervalKey, PersistentDataType.INTEGER, seconds)
+        if (persist(player)) return DungeonSaveEdit(true, Component.empty())
+        if (previous == null) data.remove(autosaveIntervalKey) else data.set(autosaveIntervalKey, PersistentDataType.INTEGER, previous)
+        return DungeonSaveEdit(false, text("saves.messages.write-failed", "<red>Не удалось сохранить настройку. Повторите попытку позже."))
+    }
+
+    internal fun autosaveDescription(player: Player): Component {
+        if (autosaveSeconds(player) == 0) return text("saves.dialog.autosaves-disabled", "<#aaa49a>Автосохранения отключены. Ручные точки доступны через «Сохранить здесь».")
         return text("saves.dialog.autosaves", "<#e8dfd2>Автосохранение запоминает вашу позицию, а не добычу или состояние монстров.<newline><#aaa49a>Проверка каждые 20 секунд: первая безопасная точка, затем не чаще раза в <seconds> секунд и после перемещения хотя бы на 8 блоков. Нужно стоять на безопасной поверхности, без полёта и транспорта, не гореть и 15 секунд не участвовать в бою.<newline>Хранятся 3 последние автоточки и до 5 ручных. Смерть их не удаляет. Точки действуют <hours> ч.; в новом инстансе места прошлого прохождения недоступны.",
-            "seconds" to Component.text(config.integer("dungeon-qol.saves.autosave-seconds", 120).coerceIn(30, 600)),
+            "seconds" to Component.text(autosaveSeconds(player)),
             "hours" to Component.text(ttl / 3_600_000))
     }
 
@@ -367,12 +391,13 @@ internal class EMDungeonQol(
     }
 
     internal fun autoSave(player: Player) {
-        if (!config.bool("dungeon-qol.saves.autosave-enabled", true) || inCombat(player) || pending.containsKey(player.uniqueId)) return
+        val seconds = autosaveSeconds(player)
+        if (seconds == 0 || inCombat(player) || pending.containsKey(player.uniqueId)) return
         val visit = current(player)?.takeIf { it.canResume } ?: return
         val now = clock()
         val latest = checkpoints.list(player.persistentDataContainer, player.world.uid, visit.run, now, ttl)
             .filter { it.kind == DungeonSaveKind.AUTO }.maxByOrNull { it.savedAt }
-        val interval = config.integer("dungeon-qol.saves.autosave-seconds", 120).coerceIn(30, 600) * 1_000L
+        val interval = seconds * 1_000L
         if (latest != null && (now - latest.savedAt < interval || latest.location.distanceSquared(player.location) < 64)) return
         if (!stable(player)) return
         val snapshot = checkpoints.snapshotSaves(player.persistentDataContainer)
@@ -402,6 +427,8 @@ internal class EMDungeonQol(
 internal data class DungeonPanelView(val worldId: UUID, val visit: DungeonVisit, val saves: DungeonSaveView?)
 internal data class DungeonSaveView(val worldId: UUID, val run: String, val points: List<DungeonSavePoint>, val entry: Location?, val exit: Location?)
 internal data class DungeonSaveEdit(val success: Boolean, val message: Component)
+
+internal val DUNGEON_AUTOSAVE_INTERVALS = listOf(60, 120, 300, 0)
 
 internal fun safeDungeonCheckpoint(location: Location): Boolean {
     return !isNativeWormholeTrigger(location) && safeDungeonTerrain(location)

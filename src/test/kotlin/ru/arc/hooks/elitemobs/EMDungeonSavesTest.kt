@@ -199,6 +199,65 @@ class EMDungeonSavesTest : FreeSpec({
         }
     }
 
+    "personal autosave interval survives service recreation and off preserves existing points" {
+        withScheduler {
+            val player = paper.addPlayer("auto-settings")
+            val world = paper.addSimpleWorld("auto-settings-world")
+            var now = 100_000L
+            val service = qol(world, player, clock = { now })
+            service.autosaveSeconds(player) shouldBe 120
+            service.setAutosaveSeconds(player, 60).success shouldBe true
+            service.autoSave(player)
+            player.teleport(Location(world, 20.0, 70.0, 0.0))
+            now += 59_999L
+            service.autoSave(player)
+            service.view(player)!!.points.size shouldBe 1
+            now++
+            service.autoSave(player)
+            service.view(player)!!.points.size shouldBe 2
+            service.setAutosaveSeconds(player, 0).success shouldBe true
+            val before = service.view(player)!!.points
+            player.teleport(Location(world, 40.0, 70.0, 0.0))
+            now += 600_000L
+            service.autoSave(player)
+            service.view(player)!!.points shouldBe before
+            service.save(player, "manual", service.view(player)!!).success shouldBe true
+            service.close()
+            val recreated = qol(world, player, clock = { now })
+            recreated.autosaveSeconds(player) shouldBe 0
+            recreated.setAutosaveSeconds(player, 300).success shouldBe true
+            recreated.autosaveSeconds(player) shouldBe 300
+            recreated.setAutosaveSeconds(player, -1).success shouldBe false
+            recreated.setAutosaveSeconds(player, 1).success shouldBe false
+            recreated.autosaveSeconds(player) shouldBe 300
+            recreated.close()
+        }
+    }
+
+    "failed autosave preference write restores previous value and server disable wins" {
+        withScheduler {
+            val player = paper.addPlayer("auto-settings-failure")
+            val world = paper.addSimpleWorld("auto-settings-failure-world")
+            var fail = true
+            val service = qol(world, player, persistence = { if (fail) error("disk") })
+            service.setAutosaveSeconds(player, 60).success shouldBe false
+            service.autosaveSeconds(player) shouldBe 120
+            fail = false
+            service.setAutosaveSeconds(player, 300).success shouldBe true
+            fail = true
+            service.setAutosaveSeconds(player, 0).success shouldBe false
+            service.autosaveSeconds(player) shouldBe 300
+            val disabled = EMDungeonQol(config().also {
+                every { it.bool("dungeon-qol.saves.autosave-enabled", true) } returns false
+            })
+            disabled.autosaveSeconds(player) shouldBe 0
+            disabled.setAutosaveSeconds(player, 60).success shouldBe false
+            service.autosaveSeconds(player) shouldBe 300
+            disabled.close()
+            service.close()
+        }
+    }
+
     "portal requires entry, permits walking and consumes its action only once" {
         withScheduler { scheduler ->
             val player = paper.addPlayer("traveler")
