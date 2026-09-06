@@ -342,7 +342,13 @@ class MountGuiControllerTest : TestBase() {
 
             controller.onClick(clickEvent(player.openInventory, 10))
             player.openInventory.topInventory.size shouldBe 54
-            plainName(player.openInventory.topInventory.getItem(21)) shouldBe "Скорость: 100%"
+            plainName(player.openInventory.topInventory.getItem(49)) shouldBe "Настроить маунта"
+            checkNotNull(player.openInventory.topInventory.getItem(49)?.itemMeta?.lore())
+                .map(PlainTextComponentSerializer.plainText()::serialize)
+                .none { "открыть настройки" in it } shouldBe true
+            player.openInventory.topInventory.contents.filterNotNull().map(::plainName).none {
+                it.startsWith("Скорость:") || it.startsWith("Подъём:") || it.startsWith("Размер:") || it.startsWith("Корпус:")
+            } shouldBe true
 
             controller.openList(player)
             controller.onClick(clickEvent(player.openInventory, 11))
@@ -492,6 +498,12 @@ class MountGuiControllerTest : TestBase() {
             plainName(player.openInventory.topInventory.getItem(11)) shouldBe "Уровень 2 · открыт"
             plainName(player.openInventory.topInventory.getItem(12)) shouldBe "Уровень 3 · доступен"
             player.openInventory.topInventory.getItem(12)?.type shouldBe Material.EMERALD
+            plainName(player.openInventory.topInventory.getItem(49)) shouldBe "Настроить маунта"
+            player.openInventory.topInventory.contents.filterNotNull().map(::plainName).none {
+                it.startsWith("Скорость:") || it.startsWith("Подъём:") || it.startsWith("Размер:") || it.startsWith("Корпус:")
+            } shouldBe true
+
+            controller.onClick(clickEvent(player.openInventory, 49))
             plainName(player.openInventory.topInventory.getItem(21)) shouldBe "Скорость: 65%"
             player.openInventory.topInventory.getItem(21)?.itemMeta?.enchantmentGlintOverride shouldBe true
             checkNotNull(player.openInventory.topInventory.getItem(21)?.itemMeta?.lore())
@@ -528,6 +540,14 @@ class MountGuiControllerTest : TestBase() {
             controller.onClick(clickEvent(player.openInventory, 23))
 
             verify(exactly = 1) { purchases.setSpeedTuning(any(), mount, tuning, 90, any()) }
+
+            player.closeInventory(InventoryCloseEvent.Reason.PLAYER)
+            server.scheduler.performOneTick()
+            plainName(player.openInventory.topInventory.getItem(10)) shouldBe "Уровень 1 · открыт"
+            server.scheduler.performOneTick()
+            player.closeInventory(InventoryCloseEvent.Reason.PLAYER)
+            server.scheduler.performOneTick()
+            plainName(player.openInventory.topInventory.getItem(31)) shouldBe "Способности маунта"
         } finally {
             controller.shutdown()
         }

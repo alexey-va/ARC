@@ -4,10 +4,38 @@ import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.doubles.shouldBeExactly
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
+import io.mockk.every
+import io.mockk.mockk
+import com.magmaguy.elitemobs.config.contentpackages.ContentPackagesConfigFields
+import com.magmaguy.elitemobs.instanced.dungeons.DungeonInstance
+import com.magmaguy.elitemobs.instanced.dungeons.DynamicDungeonInstance
 import org.bukkit.Location
 import ru.arc.paper.testing.MockBukkitTestRuntime
 
 class NativeDungeonVisitsTest : FreeSpec({
+    "native difficulty ids resolve by configured id and dynamic level excludes the gear sync offset" {
+        val fields = mockk<ContentPackagesConfigFields>()
+        every { fields.difficulties } returns listOf(mapOf("id" to 7, "name" to "hard"), mapOf("id" to 0, "name" to "normal"))
+        val dynamic = mockk<DynamicDungeonInstance>()
+        every { dynamic.contentPackagesConfigFields } returns fields
+        every { dynamic.difficultyID } returns "0"
+        every { dynamic.selectedLevel } returns 5
+        every { dynamic.levelSync } returns 10
+        every { dynamic.players } returns hashSetOf()
+        nativeDungeonStats(dynamic) shouldBe DungeonVisitStats(0, "normal", 5)
+
+        val fixed = mockk<DungeonInstance>()
+        every { fixed.contentPackagesConfigFields } returns fields
+        every { fixed.difficultyID } returns "7"
+        every { fields.contentLevel } returns 50
+        every { fixed.levelSync } returns 55
+        every { fixed.players } returns hashSetOf()
+        nativeDungeonStats(fixed) shouldBe DungeonVisitStats(0, "hard", 50)
+        every { fixed.difficultyID } returns "99"
+        every { fields.contentLevel } returns 0
+        nativeDungeonStats(fixed) shouldBe DungeonVisitStats(0, null, null)
+    }
+
     "keeps metadata optional for existing visit consumers" {
         DungeonVisit("run").name shouldBe null
         DungeonVisit("run").stats shouldBe null
