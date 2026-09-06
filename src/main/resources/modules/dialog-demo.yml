@@ -1,0 +1,321 @@
+title:
+  root: <gradient:#ffd166:#ff8f70><bold>Paper Dialog API · витрина</bold></gradient>
+  alignment: <#FFCA80><bold>Выравнивание и ширина
+  text: <#FFCA80><bold>Компоненты текста
+  hover: <#FFCA80><bold>Hover, click и insertion
+  items: <#7FE2B5><bold>Предметное тело
+  inputs: <#7FE2B5><bold>Все типы ввода
+  input-options: <#7FE2B5><bold>Варианты полей
+  actions: <#C4A5FF><bold>Действия кнопок
+  template: <#C4A5FF><bold>Command template
+  receipt: <gradient:#79c2ff:#b79cff><bold>Полученный ответ</bold></gradient>
+  custom: <#C4A5FF><bold>Custom click
+  notice: <#FFB19A><bold>Notice
+  confirmation: <#FFB19A><bold>Confirmation
+  list: <#FFB19A><bold>Dialog list
+  links: <#92CCFF><bold>Server links
+  layout: <#92CCFF><bold>Сетка и размеры
+  scroll: <#92CCFF><bold>Большой экран
+  lifecycle: <#D7B486><bold>Жизненный цикл
+  limits: <#D7B486><bold>Границы API
+  callbacks: <#C4A5FF><bold>Callback · один ответ
+intro: |
+  <#e6fff3><bold>Одна точка для всей витрины</bold></#e6fff3>
+  <#c6d5e1>Здесь собраны нативные Paper Dialog на 1.21.11: тело, вводы, кнопки, registry и возвращение ответа.</#c6d5e1>
+  <#ffd166>Откройте раздел ниже и нажмите каждую кнопку.</#ffd166>
+  <#8c9aaa>Все действия ограничены этой демонстрацией: инвентарь, экономика и права не меняются.</#8c9aaa>
+nav:
+  alignment: <#FFCA80>Сетка и выравнивание ›
+  alignment-tip: <gray>Поля ширины, центрированный plain-текст и предмет слева.</gray>
+  text: <#FFCA80>Компоненты и стили ›
+  text-tip: <gray>Цвет, декорации, font, translatable и keybind.</gray>
+  hover: <#FFCA80>Hover и click ›
+  hover-tip: <gray>Подсказки предмета, сущности, текста и вставка.</gray>
+  items: <#7FE2B5>Предметы ›
+  items-tip: <gray>Стек, урон, tooltip, декорации и размеры тела.</gray>
+  inputs: <#7FE2B5>Четыре типа ввода ›
+  inputs-tip: <gray>Текст, многострочность, флажок, варианты и слайдер.</gray>
+  input-options: <#7FE2B5>Настройки вводов ›
+  input-options-tip: <gray>Скрытые подписи, авто-высота и отрицательный диапазон.</gray>
+  actions: <#C4A5FF>Действия ›
+  actions-tip: <gray>Все основные click-события и DialogAction.</gray>
+  template: <#C4A5FF>Command template ›
+  template-tip: <gray>Подстановка значений полей в командную строку.</gray>
+  custom: <#C4A5FF>Custom click ›
+  custom-tip: <gray>Идентификатор, payload и DialogResponseView.</gray>
+  notice: <#FFB19A>Notice ›
+  notice-tip: <gray>Один основной action и возврат назад.</gray>
+  confirmation: <#FFB19A>Confirmation ›
+  confirmation-tip: <gray>Пара yes/no с отдельными результатами.</gray>
+  list: <#FFB19A>Dialog list ›
+  list-tip: <gray>RegistrySet с двумя вложенными диалогами.</gray>
+  links: <#92CCFF>Server links ›
+  links-tip: <gray>Список ссылок сервера из Bukkit ServerLinks.</gray>
+  layout: <#92CCFF>Колонки и ширина ›
+  layout-tip: <gray>Одна, две или три колонки и размеры кнопок.</gray>
+  scroll: <#92CCFF>Длинный экран ›
+  scroll-tip: <gray>Много body-элементов и кнопок для проверки прокрутки.</gray>
+  lifecycle: <#D7B486>Lifecycle ›
+  lifecycle-tip: <gray>NONE, CLOSE, WAIT_FOR_RESPONSE, Escape и pause.</gray>
+  limits: <#D7B486>Границы и ограничения ›
+  limits-tip: <gray>Что native Dialog умеет и где заканчивается vanilla UI.</gray>
+  callbacks: <#C4A5FF>Callback ›
+  callbacks-tip: Один ответ, срок 60 секунд и проверка игрока. Введите текст и нажмите кнопку.
+back: <#D7B486>‹ Назад
+back-tip: <gray>Вернуться к предыдущему разделу.</gray>
+close: <color:#ff9b85>Закрыть витрину</color>
+close-tip: <gray>Закрыть демо и вернуться к прошлому экрану.</gray>
+submit: <color:#9ff0bd><bold>Показать ответ</bold></color>
+submit-tip: <gray>Отправить введённые значения в обработчик демо.</gray>
+alignment:
+  intro: |-
+    <#FFCA80><bold>Один текст · два выравнивания</bold>
+
+    <white>Верхний образец — обычный plain_message.
+    Нижний — описание рядом с книгой, с ровным левым краем.
+  sample: |-
+    <#FFCA80><bold>Горожанин</bold>
+
+    <white>Дома: 1 → 2
+    Чанки: 64 → 96
+
+    Откройте новые возможности поселения.
+    Стройте вместе с друзьями.
+items:
+  intro: |
+    <#e6fff3><bold>Предметный body</bold></#e6fff3>
+    <#c6d5e1>Каждый образец меняет только параметры отображения ItemStack.</#c6d5e1>
+    <#ffd166>Наведите курсор на предметы и проверьте tooltip.</#ffd166>
+  name: <gradient:#ffd166:#ff8f70><bold>Кристалл витрины</bold></gradient>
+  lore: <#c6d5e1>Учебный ItemStack · демонстрационный предмет</#c6d5e1>
+  stack: <#e6fff3>Стек из 32 предметов показывает count-декорацию и tooltip.</#e6fff3>
+  damage: <#e6fff3>Повреждённая кирка показывает полоску урона.</#e6fff3>
+  hidden: <#e6fff3>Здесь выключены showDecorations и showTooltip.</#e6fff3>
+  size: <#ffd166>48×48 — это размер области тела, не масштаб иконки.</#ffd166>
+text:
+  styles: |-
+    <#e6fff3><bold>Жирный</bold> · <italic>курсив</italic> · <underlined>подчёркнутый</underlined>
+    <strikethrough>Зачёркнутый</strikethrough> · <obfuscated>Скрытый</obfuscated>
+    <#c6d5e1>Это реальные декорации Adventure Component, а не только подписи к ним.</#c6d5e1>
+  colors: |-
+    <#FFB19A>RGB #FFB19A</#FFB19A> · <gradient:#FFCA80:#C4A5FF>Градиент по буквам</gradient>
+    <shadow:#000000:0.9><white>Тень текста</white></shadow>
+  sections: |-
+    <#ffd166>Секция A</#ffd166>
+    <#e6fff3>Ниже отдельный дочерний компонент после пустого промежутка.</#e6fff3>
+
+    <#79c2ff>Секция B</#79c2ff>
+    <#c6d5e1>Пустая строка сохраняется внутри plainMessage.</#c6d5e1>
+  font: |-
+    <white><font:minecraft:default>Обычный шрифт: Абв 123</font>
+    <font:minecraft:uniform>Равномерный шрифт: Абв 123</font>
+
+    Глиф жетона из ресурспака: <white></white>
+hover:
+  intro: |
+    <#e6fff3><bold>Интерактивные Component-события</bold></#e6fff3>
+    <#c6d5e1>Наведите курсор на четыре строки. Клиент сам решает, как отрисовать hover и click.</#c6d5e1>
+    <#8c9aaa>Open URL и file здесь не запускаются автоматически; они лишь передают click event.</#8c9aaa>
+  text: '<#79c2ff>Наведи: текстовая подсказка</#79c2ff>'
+  detail: <#e6fff3>Это HoverEvent.showText(Component).</#e6fff3>
+  item: '<#ffd166>Наведи: предметная подсказка</#ffd166>'
+  entity: '<#9ff0bd>Наведи: сущность игрока</#9ff0bd>'
+  copy: '<#79c2ff>Нажми: копирование в буфер обмена</#79c2ff>'
+  insert: '<#c6d5e1>Shift-клик: insertion = RusCrafting</#c6d5e1>'
+inputs:
+  intro: |
+    <#e6fff3><bold>Полный набор DialogInput</bold></#e6fff3>
+    <#c6d5e1>Введите имя, многострочную заметку, переключите флажок, выберите вариант и подвигайте слайдер.</#c6d5e1>
+    <#ffd166>Нажмите «Показать ответ», чтобы увидеть ключи и значения.</#ffd166>
+  name: Имя игрока
+  notes: Многострочная заметка
+  enabled: Включить демонстрационный флаг
+  choice: Сценарий игрока
+  amount: Количество
+  build: Строительство
+  explore: Исследование
+  trade: Торговля
+  result: |
+    <#e6fff3><bold>Ответ DialogResponseView</bold></#e6fff3>
+    <#c6d5e1>Значения прочитаны по ключам и безопасно ограничены для вывода.</#c6d5e1>
+    <#ffd166>%lines%</#ffd166>
+input-options:
+  intro: |
+    <#e6fff3><bold>Те же поля, другие параметры</bold></#e6fff3>
+    <#c6d5e1>Скрытая подпись, multiline без фиксированной высоты, false по умолчанию, скрытая подпись radio и диапазон −1…1.</#c6d5e1>
+    <#8c9aaa>Скрытая подпись экономит место, но оставляет поле доступным.</#8c9aaa>
+  autoheight: Авто-высота заметки
+  flag: Флаг выключен по умолчанию
+  continuous: Непрерывный диапазон
+actions:
+  intro: |
+    <#e6fff3><bold>Нативные click-возможности</bold></#e6fff3>
+    <#c6d5e1>Проверьте копирование, suggest, команду, URL, открытие другого диалога, custom payload, пустое действие и change_page.</#c6d5e1>
+    <#ffd166>Suggest command обычно только подставляет команду в чат; не ожидайте автоматического открытия чата.</#ffd166>
+    <#8c9aaa>Change page относится к страницам книги, не к страницам Dialog.</#8c9aaa>
+  copy: Скопировать команду
+  copy-tip: <gray>ClickEvent.copyToClipboard — без выполнения команды.</gray>
+  suggest: Предложить команду
+  suggest-tip: <gray>Подставить команду; чат сам по себе не обязан открыться.</gray>
+  run: Выполнить команду
+  run-tip: <gray>Запустить /arc dialogdemo notice.</gray>
+  url: Открыть документацию
+  url-tip: <gray>Передать open_url клиенту Minecraft.</gray>
+  inline: Открыть notice внутри
+  inline-tip: <gray>ClickEvent.showDialog открывает другой Dialog.</gray>
+  custom: Custom payload
+  custom-tip: <gray>Custom click с идентификатором и NBT payload.</gray>
+  none: Пустое действие
+  none-tip: <gray>Без DialogAction; native dialog закрывается после клика.</gray>
+  page: Страница книги №2
+  page-tip: <gray>change_page имеет смысл в открытой книге.</gray>
+template:
+  intro: |
+    <#e6fff3><bold>Command template</bold></#e6fff3>
+    <#c6d5e1>Действие подставляет значения полей по ключам $(amount) и $(enabled) в команду.</#c6d5e1>
+    <#ffd166>Измените слайдер или флажок и нажмите кнопку.</#ffd166>
+receipt:
+  intro: |
+    <#e6fff3><bold>Команда получила значения</bold></#e6fff3>
+    <#c6d5e1>Этот экран показывает безопасную строку результата, без выполнения пользовательского текста.</#c6d5e1>
+custom:
+  ack: "<#9BE49D>✓ Custom click получен"
+  intro: |
+    <#e6fff3><bold>Custom click</bold></#e6fff3>
+    <#c6d5e1>Идентификатор события и небольшой BinaryTag payload приходят на сервер вместе с ответом полей.</#c6d5e1>
+    <#ffd166>Введите сообщение и нажмите «Отправить».</#ffd166>
+  echo: Отправить payload
+  echo-tip: <gray>Отправить custom click с source=demo и sample=7.</gray>
+  message: Сообщение
+  result: |
+    <#e6fff3><bold>Custom click обработан</bold></#e6fff3>
+    <#c6d5e1>Идентификатор и разрешённые значения ответа были прочитаны сервером.</#c6d5e1>
+    <#ffd166>%lines%</#ffd166>
+notice:
+  intro: |-
+    <#e6fff3><bold>Notice</bold></#e6fff3>
+    <#c6d5e1>Минимальный тип: заголовок, тело и одна кнопка действия.</#c6d5e1>
+    <#ffd166>Ниже также есть сценарий с native default action и кликабельной ссылкой в body.</#ffd166>
+  default: |-
+    <white>Это Notice со стандартной кнопкой клиента.
+    Нажмите её или Escape: диалог закроется.
+  default-link: <#FFCA80><underlined>Открыть Notice со стандартной кнопкой ›
+confirmation:
+  intro: |
+    <#e6fff3><bold>Confirmation</bold></#e6fff3>
+    <#c6d5e1>Две ActionButton образуют явный yes/no сценарий.</#c6d5e1>
+    <#ffd166>Нажмите оба варианта по очереди и сравните результат.</#ffd166>
+  accepted: |-
+    <#9ff0bd><bold>Подтверждение принято.</bold></#9ff0bd>
+    <#c6d5e1>Вы выбрали yes; теперь нажмите «Назад».</#c6d5e1>
+  cancelled: |-
+    <#ff9b85><bold>Действие отменено.</bold></#ff9b85>
+    <#c6d5e1>Вы выбрали no; демонстрация ничего не изменила.</#c6d5e1>
+yes-tip: <gray>Отправить результат yes.</gray>
+no-tip: <gray>Отправить результат no.</gray>
+list:
+  intro: |
+    <#e6fff3><bold>Dialog list и RegistrySet</bold></#e6fff3>
+    <#c6d5e1>Список построен на RegistrySet.valueSet для registry DIALOG и содержит два вложенных Dialog.</#c6d5e1>
+    <#ffd166>Выберите элемент списка, затем вернитесь назад.</#ffd166>
+  first-title: Первый вложенный диалог
+  first-external: Первый пример
+  first-body: <#e6fff3>Вложенный notice из DialogList.</#e6fff3>
+  second-title: Второй вложенный диалог
+  second-external: Второй пример
+  second-body: <#e6fff3>Каждый элемент списка — отдельный Dialog с собственным title и body.</#e6fff3>
+  builtin-quick: <#FFB19A><underlined>Встроенный Quick Actions ›
+  builtin-options: <#FFB19A><underlined>Встроенный Custom Options ›
+  builtin-links: <#92CCFF><underlined>Встроенный Server Links ›
+links:
+  intro: |
+    <#e6fff3><bold>Server links</bold></#e6fff3>
+    <#c6d5e1>Тип показывает ссылки из Bukkit.getServer().getServerLinks(). Сам DialogType не хранит список URL.</#c6d5e1>
+    <#ffd166>Если сервер не настроил ссылки, список может оказаться пустым.</#ffd166>
+    <#8c9aaa>Это ограничение API, а не ошибка навигации.</#8c9aaa>
+layout:
+  intro: |
+    <#e6fff3><bold>Размеры и колонки</bold></#e6fff3>
+    <#c6d5e1>Переключите число колонок и сравните узкое, обычное и широкое тело.</#c6d5e1>
+    <#ffd166>Ширина кнопки задаётся числом; визуальная ширина зависит от окна клиента.</#ffd166>
+  narrow: '<#79c2ff>Узкая область: 180 px</#79c2ff>'
+  wide: '<#9ff0bd>Широкая область: 420 px</#9ff0bd>'
+  one: 1 колонка
+  one-tip: <gray>Одна колонка кнопок.</gray>
+  two: 2 колонки
+  two-tip: <gray>Две колонки кнопок.</gray>
+  three: 3 колонки
+  three-tip: <gray>Три колонки кнопок.</gray>
+  small: Кнопка 90
+  small-tip: <gray>Минимальный демонстрационный размер.</gray>
+  medium: Кнопка 150
+  medium-tip: <gray>Средняя ширина кнопки.</gray>
+  large: Кнопка 205
+  large-tip: <gray>Широкая кнопка по умолчанию.</gray>
+scroll:
+  paragraph: '<#c6d5e1>Проверочный абзац: длинное тело сохраняет порядок, переносы и читаемость при прокрутке.</#c6d5e1>'
+  button: <#79c2ff>Открыть notice</#79c2ff>
+lifecycle:
+  intro: |
+    <#e6fff3><bold>Lifecycle flags</bold></#e6fff3>
+    <#c6d5e1>Здесь можно проверить afterAction, запрет Escape и флаг pause.</#c6d5e1>
+    <#ffcf70>Pause применяется только в single-player. В multiplayer он не ставит игру на паузу.</#ffcf70>
+    <#8c9aaa>Кнопка и нижний footer специально возвращают в раздел lifecycle.</#8c9aaa>
+  none: 'afterAction: NONE'
+  none-tip: После нажатия кнопки оставить диалог открытым.
+  close: 'afterAction: CLOSE'
+  close-tip: <gray>Вернуться к предыдущему экрану.</gray>
+  wait: WAIT_FOR_RESPONSE
+  wait-tip: Экран ожидания без ответа; через 5 секунд можно вручную вернуться.
+  esc: Escape выключен
+  esc-tip: <gray>Проверить footer-навигацию вместо Escape.</gray>
+  pause: Pause (single-player)
+  pause-tip: <gray>Проверить флаг pause; на сервере он не ставит multiplayer на паузу.</gray>
+  try: Проверить действие
+  try-tip: Выполнить пустое тестовое действие и проверить выбранный after_action.
+  after-none: |-
+    <#9BE49D><bold>NONE — остаться на экране</bold>
+
+    <white>Нажмите «Проверить действие»: меню останется открытым.
+    Обработчик демо намеренно ничего не меняет.
+  after-close: |-
+    <#FFCA80><bold>CLOSE — закрыть диалог</bold>
+
+    <white>Нажатие «Проверить действие» вернёт вас в игру.
+    Повторный вход: /arc dialogdemo lifecycle
+  after-wait: |-
+    <#FFCA80><bold>WAIT_FOR_RESPONSE — экран ожидания</bold>
+
+    <white>Нажмите «Проверить действие». В этом примере сервер
+    намеренно не отвечает. Через 5 секунд на экране ожидания
+    станет доступна кнопка возврата. Нажмите её сами.
+  escape-off: |-
+    <#FFCA80><bold>Escape отключён</bold>
+
+    <white>Проверьте Escape: этот экран останется открытым.
+    Для выхода нажмите нижнюю кнопку «‹ Назад».
+  pause-body: |-
+    <#FFCA80><bold>Пауза в одиночной игре</bold>
+
+    <white>Здесь установлен pause=true. На мультиплеерном
+    сервере время продолжает идти. Кнопка закроет экран.
+limits:
+  body: |
+    <#e6fff3><bold>Что здесь нельзя сделать через native Dialog API</bold></#e6fff3>
+    <#c6d5e1>• произвольные контейнеры, картинки и свободную сеточную вёрстку;
+    • выдать показанный ItemStack в инвентарь — он только отображается;
+    • задать список server links через DialogType — он приходит из ServerLinks;
+    • использовать DialogList без RegistrySet, связанного с registry DIALOG;
+    • поставить multiplayer-сессию на паузу флагом pause.</#c6d5e1>
+    <#ffd166>Рендеринг Component, font и click/hover зависит от возможностей клиента.</#ffd166>
+    <#8c9aaa>U+E516 оставлен только как пример pack glyph в тексте: это glyph-плейсхолдер, не монета.</#8c9aaa>
+callback:
+  intro: |-
+    <#e6fff3><bold>Локальный callback</bold></#e6fff3>
+    <#c6d5e1>Callback получает DialogResponseView и Audience, но в этом демо не меняет игровой мир.</#c6d5e1>
+    <#ffd166>Одна попытка действует 60 секунд и привязана к игроку, который открыл диалог.</#ffd166>
+  try: Выполнить callback
+  try-tip: <gray>Использовать callback один раз.</gray>
+  success: <#9BE49D>✓ Callback выполнен
+'yes': <#9BE49D>✓ Подтвердить
+'no': <#FFB19A>✕ Отменить

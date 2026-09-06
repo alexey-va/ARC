@@ -4,6 +4,7 @@ import org.bukkit.command.Command
 import org.bukkit.command.CommandExecutor
 import org.bukkit.command.CommandSender
 import org.bukkit.command.TabCompleter
+import ru.arc.commands.arc.subcommands.DialogDemoSubCommand
 import ru.arc.commands.arc.subcommands.AuditSubCommand
 import ru.arc.commands.arc.subcommands.BaltopSubCommand
 import ru.arc.commands.arc.subcommands.BoardSubCommand
@@ -58,6 +59,7 @@ class ArcCommand :
         // Register all subcommands
         register(
             HelpSubCommand, // Help first for discoverability
+            DialogDemoSubCommand,
             BuySubCommand,
             ReloadSubCommand,
             BoardSubCommand,

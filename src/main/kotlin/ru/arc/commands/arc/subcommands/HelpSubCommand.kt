@@ -157,6 +157,7 @@ object HelpSubCommand : SubCommand {
     private fun getAvailableCommands(sender: CommandSender): List<SubCommand> {
         return listOf(
             HelpSubCommand,
+            DialogDemoSubCommand,
             ReloadSubCommand,
             BoardSubCommand,
             BaltopSubCommand,

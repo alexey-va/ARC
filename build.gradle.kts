@@ -54,6 +54,8 @@ repositories {
 }
 
 dependencies {
+    // Keep the server API ahead of HuskHomes' bundled older Adventure classes.
+    compileOnly("net.kyori:adventure-api:4.26.1")
     // Kotlin coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.10.2")

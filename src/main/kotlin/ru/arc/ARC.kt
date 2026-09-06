@@ -61,6 +61,7 @@ import ru.arc.investigation.InvestigationModule
 import ru.arc.hooks.HookRegistry
 import ru.arc.gui.GuiDefaults
 import ru.arc.gui.ArcMenus
+import ru.arc.dialogdemo.DialogDemoModule
 import ru.arc.helpcenter.HelpCenterModule
 import ru.arc.itemcatalog.ItemsCatalogModule
 import ru.arc.landsui.LandsUiModule
@@ -239,6 +240,7 @@ open class ARC : JavaPlugin() {
             ItemsCatalogModule,
             LandsUiModule,
             HelpCenterModule,
+            DialogDemoModule,
             CommandHideModule,
             OnboardingModule,
             // Sync systems (priority 100)
