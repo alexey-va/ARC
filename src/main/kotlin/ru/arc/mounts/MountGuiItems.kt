@@ -516,7 +516,6 @@ internal class MountGuiItems(
             else -> "<#969696>Уровень <level> · закрыт"
         }
         val lore = buildList {
-            add(copy(statePath, stateFallback, "level" to levelNumber.toString()))
             add(copy("progression.level-speed", "<#8c8c8c>Скорость: <#e6fff3><speed>", "speed" to formatSpeed(level.speed)))
             add(copy("progression.level-handling", "<#8c8c8c>Управляемость: <#e6fff3>×<handling>", "handling" to formatMultiplier(level.handlingMultiplier)))
             if (level.sprintMultiplier > 1.0) {
@@ -555,6 +554,28 @@ internal class MountGuiItems(
             glint = available,
         )
     }
+
+    fun tuningButtonItem(profile: MountProfile): ItemStack =
+        item(
+            Material.COMPARATOR,
+            copy("progression.tuning-name", "<#92bed8>Настроить маунта"),
+            if (profile.unlocked) {
+                copyLines(
+                    "progression.tuning-lore",
+                    listOf(
+                        "<#8c8c8c>Скорость, подъём, размер и обзор всадника.",
+                        "",
+                        "<#92bed8>ЛКМ — открыть настройки",
+                    ),
+                )
+            } else {
+                copyLines(
+                    "progression.tuning-locked-lore",
+                    listOf("<#c42323>Сначала получите маунта."),
+                )
+            },
+            glint = profile.unlocked,
+        )
 
     fun abilitiesSummaryItem(mount: MountDefinition, profile: MountProfile): ItemStack {
         val upgrades = mount.abilities.upgrades
@@ -625,6 +646,23 @@ internal class MountGuiItems(
                         (index != 5 || mount.sizeOptions.isNotEmpty())
                 }
             },
+        )
+
+    fun progressionLevelsInfoItem(mount: MountDefinition, profile: MountProfile): ItemStack =
+        item(
+            Material.EXPERIENCE_BOTTLE,
+            copy("progression.levels-info-name", "<#92bed8>Уровни маунта"),
+            copyLines(
+                "progression.levels-info-lore",
+                listOf(
+                    "<#8c8c8c>Текущий уровень: <#e6fff3><level>/<max-level>",
+                    "",
+                    "<#8c8c8c>Выберите карточку доступного уровня,",
+                    "<#8c8c8c>чтобы посмотреть цену и открыть покупку.",
+                ),
+                "level" to profile.level.toString(),
+                "max-level" to mount.maxLevel.toString(),
+            ),
         )
 
     fun speedTuningItem(
