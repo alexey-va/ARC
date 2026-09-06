@@ -5,6 +5,8 @@ import com.magmaguy.elitemobs.items.customitems.CustomItem
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
+import org.bukkit.inventory.meta.PotionMeta
+import org.bukkit.potion.PotionType
 import ru.arc.util.Logging
 
 internal data class SupplyOffer(val id: String, val material: Material, val amount: Int, val price: Double, val customItem: String? = null)
@@ -88,7 +90,9 @@ internal class DungeonSupplyShop(
 }
 
 private fun nativeSupplyItem(player: Player, offer: SupplyOffer): ItemStack? {
-    if (offer.customItem == null) return ItemStack(offer.material, offer.amount)
+    if (offer.customItem == null) return ItemStack(offer.material, offer.amount).also { item ->
+        if (offer.id == "healing") item.editMeta(PotionMeta::class.java) { it.basePotionType = PotionType.HEALING }
+    }
     return CustomItem.getCustomItem(offer.customItem)?.generateDefaultsItemStack(player, false, null)?.clone()?.also { it.amount = offer.amount }
 }
 
@@ -96,5 +100,6 @@ internal val DEFAULT_SUPPLY_OFFERS = listOf(
     SupplyOffer("beef", Material.COOKED_BEEF, 8, 20.0),
     SupplyOffer("bread", Material.BREAD, 16, 20.0),
     SupplyOffer("arrows", Material.ARROW, 32, 20.0),
+    SupplyOffer("healing", Material.POTION, 1, 20.0),
     SupplyOffer("merchant", Material.PAPER, 1, 100.0, "summon_merchant_scroll.yml"),
 )

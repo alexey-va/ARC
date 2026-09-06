@@ -166,12 +166,13 @@ internal class DungeonSaveMenus(
     }
 
     private fun supplyName(offer: SupplyOffer): Component = text("shop.stock.${offer.id}.name", when (offer.id) {
-        "beef" -> "Стейки"; "bread" -> "Хлеб"; "arrows" -> "Стрелы"; "merchant" -> "Свиток торговца"; else -> offer.id
+        "beef" -> "Стейки"; "bread" -> "Хлеб"; "arrows" -> "Стрелы"; "healing" -> "Зелье лечения"; "merchant" -> "Свиток торговца"; else -> offer.id
     })
     private fun supplyDescription(offer: SupplyOffer): Component = text("shop.stock.${offer.id}.description", when (offer.id) {
         "beef" -> "<#e8dfd2>Обычные стейки для восстановления сытости."
         "bread" -> "<#e8dfd2>Обычный хлеб для восстановления сытости."
         "arrows" -> "<#e8dfd2>Обычные стрелы для лука и арбалета."
+        "healing" -> "<#e8dfd2>Восстанавливает 2 сердца после питья.<newline><#aaa49a>Зажмите ПКМ, чтобы выпить. После использования останется пустая бутылочка."
         "merchant" -> "<#e8dfd2>Настоящий свиток EliteMobs. ПКМ вызывает странствующего торговца и расходует свиток.<newline><#aaa49a>Между вызовами — 60 секунд."
         else -> ""
     })
