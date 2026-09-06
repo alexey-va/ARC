@@ -223,6 +223,12 @@ dungeon-qol:
         price: 20
         enabled: true
         description: <#e8dfd2>Обычные стрелы для лука и арбалета.
+      healing:
+        name: Зелье лечения
+        amount: 1
+        price: 20
+        enabled: true
+        description: <#e8dfd2>Восстанавливает 2 сердца после питья.<newline><#aaa49a>Зажмите ПКМ, чтобы выпить. После использования останется пустая бутылочка.
       merchant:
         name: Свиток торговца
         amount: 1
