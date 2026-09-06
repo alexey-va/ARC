@@ -48,30 +48,31 @@ dungeon-qol:
   resume-hours: 72
   titles-enabled: true
   messages:
-    help: <gold>Данжи:</gold> <white>/начать</white> · <white>/сохраниться [название]</white> · <white>/сохранения</white> · <white>/данж вход</white> · <white>/данж выйти</white>
+    help: <gold>/данж</gold> <gray>— панель похода.</gray> <white>/начать</white> · <white>/сохраниться [название]</white> · <white>/сохранения</white> · <white>/данж вход</white> ·
+      <white>/данж выйти</white>
     unavailable: <red>Данжи сейчас недоступны.</red>
     player-only: <red>Эта команда доступна только игроку.</red>
-    entry: <gold>Данж</gold> <gray>·</gray> <click:run_command:'/начать'><green>[Начать]</green></click> <gray>или</gray> <click:run_command:'/dungeon quit'><white>[Выйти]</white></click>
+    entry: '<gold>Данж</gold> <gray>·</gray> <click:run_command:''/данж''><green>[/данж — меню похода]</green></click> <gray>Старт, группа и выход. Быстрый запуск: <white>/начать</white>.'
     complete: <gold>Данж</gold> <gray>·</gray> <white>Заберите добычу.</white> <click:run_command:'/dungeon quit'><green>[Выйти из данжа]</green></click>
     saves-hint: <click:run_command:'/сохранения'><gold>[/сохранения]</gold></click> <gray>— ваши места и начало данжа. <white>/сохраниться [название]</white> — запомнить место. <white>/данж
       выйти</white> — выйти.
     already-started: <gray>Этот данж уже идёт или не требует запуска. <white>/сохранения</white> — ваши места.
-    outside: '<gray>Сохранения доступны во время прохождения данжа. В его лобби: <white>/начать</white>. Для выхода: <white>/данж выйти</white>.'
-    teleport-blocked: <gold>Вы внутри данжа.</gold> <gray>Для выхода:</gray> <click:run_command:'/dungeon quit'><green>[/данж выйти]</green></click><gray>. Вернуться ко входу или сохранённому
-      месту:</gray> <click:run_command:'/сохранения'><white>[/сохранения]</white></click>
+    outside: <gray>Эта команда работает в данже. После входа откройте <white>/данж</white> — меню похода.
+    teleport-blocked: <gold>Вы внутри данжа.</gold> <gray>Для выхода:</gray> <click:run_command:'/dungeon quit'><green>[/данж выйти]</green></click><gray>. Начало данжа и сохранения:</gray>
+      <click:run_command:'/данж'><white>[/данж — меню]</white></click>
   titles:
     entry:
       title: <gold>Готовы к данжу?
-      subtitle: <white>/начать <gray>— начать прохождение
+      subtitle: <white>/данж <gray>— меню похода · /начать — старт
     resumed:
       title: <green>Продолжаем
       subtitle: <white>Вы вернулись к месту выхода
     open-entry:
       title: <gold>Вы в данже
-      subtitle: <white>Место выхода запоминается
+      subtitle: <white>/данж <gray>— меню похода и сохранения
     started:
       title: <gold>Данж начался
-      subtitle: <white>/сохранения <gray>— ваши места
+      subtitle: <white>/данж <gray>— меню данжа
     complete:
       title: <green>Данж пройден
       subtitle: <white>Заберите добычу <gray>·</gray> <white>/данж выйти
@@ -93,39 +94,138 @@ dungeon-qol:
       arrived: <green>Вы на месте.
       blocked: <red>Перемещение отменено защитой. Для выхода используйте /данж выйти.
       auto-saved: <gray>Место сохранено автоматически · /сохранения
+      vehicle: <#aaa49a>Чтобы сохраниться, выйдите из транспорта или слезьте с ездового животного.
+      flying: <#aaa49a>Чтобы сохраниться, приземлитесь и выключите полёт.
     dialog:
-      close-label: Закрыть
-      body: Ваши места в этом данже. Сохраняется только позиция. Добыча и монстры не откатываются.
+      close-label: <#aaa49a>Закрыть
+      body: '<#e8dfd2>Ваши места в этом данже. Сохраняется только позиция: добыча и монстры не откатываются.'
       limits: До 5 ручных и 3 автосохранений. Смерть и завершение данжа очищают точки.
-      title: Сохранения данжа
-      save-body: Введите имя точки. Такое же имя заменит вашу ручную точку.
-      save-title: Сохранить точку
-      name: Имя точки
-      remove-title: Удалить точку?
-      remove-body: Точка «<name>» будет удалена.
-      auto-label: Авто · <time>
-      manual-label: <name>
-      point-tooltip: <kind> · <time> · <coords>
-      back-label: ‹ Назад
-      save-label: Сохранить здесь
-      save-tooltip: Сохранить текущую позицию
+      title: <#f4bd6a>Сохранения
+      save-body: <#e8dfd2>Введите имя точки. Такое же имя заменит вашу ручную точку.
+      save-title: <#f4bd6a>Сохранить точку
+      name: <#aaa49a>Имя точки
+      remove-title: <#f4bd6a>Удалить точку?
+      remove-body: <#e8dfd2>Точка «<name>» будет удалена.
+      auto-label: <#d7b486>Авто · <time>
+      manual-label: <#d7b486><name>
+      point-tooltip: '<#e8dfd2><kind> · <time><newline><#aaa49a>Координаты: <coords>'
+      back-label: <#aaa49a>‹ Назад
+      save-label: <#9bd48d>Сохранить здесь
+      save-tooltip: Запомнить текущую позицию
       quit-label: Выйти из данжа
       quit-tooltip: Покинуть данж обычным способом
-      close-tooltip: Закрыть меню
-      confirm-save-label: Сохранить
-      confirm-save-tooltip: Сохранить точку
-      travel-label: Перейти
+      close-tooltip: Вернуться в игру
+      confirm-save-label: <#9bd48d>Сохранить
+      confirm-save-tooltip: <#f4bd6a>Сохранить точку
+      travel-label: <#9bd48d>Перейти
       travel-tooltip: Телепортироваться к точке
-      remove-label: Удалить
+      remove-label: <#d7b486>Удалить
       remove-tooltip: Удалить эту точку
-      confirm-remove-label: Удалить
+      confirm-remove-label: <#d7b486>Удалить
       confirm-remove-tooltip: Удалить точку
       entry-label: К началу данжа
       entry-tooltip: Вернуться к началу данжа · <coords>
-      exit-label: Место прошлого выхода
-      exit-tooltip: Вернуться к месту последнего выхода из данжа · <coords>
+      exit-label: <#d7b486>Место прошлого выхода
+      exit-tooltip: '<#e8dfd2>Вернуться к месту последнего выхода из данжа<newline><#aaa49a>Координаты: <coords>'
       manual: Ручная
       auto: Авто
+      empty: <#aaa49a>Ручных точек пока нет. Сохраните удобное место для возвращения.
+      save-disabled: <#aaa49a>Сохранение недоступно
+      counts: '<#aaa49a>Ручные: <#e8dfd2><manual>/5 <#aaa49a>· Авто: <#e8dfd2><auto>/3<newline><#aaa49a>Смерть и завершение данжа очищают точки.'
+      unavailable: <#d7b486>Сохраниться здесь нельзя<newline><reason>
+      ready: <#9bd48d>✔ Здесь можно сохраниться
+      replace-only: <#d7b486>Все 5 мест заняты. Укажите имя существующей точки, чтобы заменить её, или сначала удалите ненужную.
+      point-title: <#f4bd6a>Сохранение
     autosave-enabled: true
     autosave-seconds: 120
   open-exit-command: spawn
+  panel:
+    waiting: <#d7b486>Сбор группы · готовьтесь к старту
+    open: <#9bd48d>Открытый данж · можно исследовать
+    ongoing: <#9bd48d>Прохождение идёт
+    finished: <#aaa49a>Прохождение остановлено · можно выйти
+    intro: '<#f4bd6a><name><newline><#e8dfd2>Ваш поход: действия, места и возвращение.'
+    level: '<#aaa49a>Уровень: <#e8dfd2><value>'
+    difficulty: '<#aaa49a>Сложность: <#e8dfd2><value>'
+    party: '<#aaa49a>Участников: <#e8dfd2><value>'
+    title: <#f4bd6a>Панель данжа
+    started-label: <#aaa49a>Запуск не требуется
+    start-disabled: <#aaa49a>Начать · недоступно
+    entry-unavailable: <#aaa49a>Безопасный переход ко входу сейчас недоступен. Для выхода используйте кнопку выше.
+    entry-disabled: <#aaa49a>К началу · недоступно
+    outside: <#e8dfd2>Вы сейчас не участвуете в данже.<newline><#aaa49a>Войдите в данж и откройте /данж — здесь появятся действия и ваши места.
+    start-label: <#9bd48d>Начать поход
+    start-tooltip: Запустить прохождение для собранной группы
+    quit-label: <#d7b486>Выйти из данжа
+    quit-tooltip: Покинуть данж штатным способом
+    saves-label: <#d7b486>Сохранения ›
+    saves-tooltip: Ваши ручные точки, автосохранения и место прошлого выхода
+    entry-label: <#d7b486>К началу данжа
+    entry-tooltip: Вернуться к безопасной стартовой точке; переход займёт 3 секунды
+    journal-label: <#d7b486>Журнал EliteMobs
+    journal-tooltip: Снаряжение, навыки и задания
+    refresh-label: <#aaa49a>Обновить
+    refresh-tooltip: Проверить доступность сохранения
+    save-inactive: <#aaa49a>Сохранения доступны только во время прохождения.
+    difficulties:
+      normal: Обычная
+      hard: Сложная
+      mythic: Мифическая
+    crystals: '<#aaa49a>Ваши кристаллы: <#c7a0e8><value>'
+    quit-open-tooltip: Вызвать выход ко спавну. Если появился портал, войдите в него.
+    shop-label: <#d7b486>Припасы ›
+    shop-tooltip: Еда, стрелы и полезные предметы за кристаллы
+  scoreboard:
+    heading: <#f4bd6a>Поход в данж
+    waiting: <#f4bd6a>Сбор группы · /начать
+    ongoing: <#9bd48d>Исследование
+    finished: <#aaa49a>Поход окончен · /данж выйти
+    level: '<#f4bd6a>| <#e8dfd2>Уровень: <#f4bd6a><value>'
+    difficulty: '<#f4bd6a>| <#e8dfd2>Сложность: <#f4bd6a><value>'
+    party: '<#f4bd6a>| <#e8dfd2>Участников: <#9bd48d><value>'
+    crystals: '<#f4bd6a>| <#e8dfd2>Кристаллы: <#c7a0e8><value>'
+    menu: <#f4bd6a>/данж <#e8dfd2>— меню данжа
+    title: <#b22222><bold>Rus<white>Crafting
+    instanced: <#aaa49a>Отдельное прохождение
+    open: <#aaa49a>Открытый данж
+  shop:
+    body: <#e8dfd2>Пополните запасы для похода. Оплата кристаллами EliteMobs; перед покупкой будет подтверждение.
+    title: <#f4bd6a>Припасы
+    offer-label: <#d7b486><name> ×<amount> <#aaa49a>· <price> кр.
+    item-unavailable: <#aaa49a>Этот предмет сейчас недоступен. Кристаллы не списываются.
+    confirm-body: '<#e8dfd2><name> ×<amount><newline><#aaa49a>Стоимость: <#c7a0e8><price> кристаллов'
+    confirm-title: <#f4bd6a>Купить припасы?
+    bought: <#9bd48d>✔ Припасы куплены и добавлены в инвентарь.
+    changed: <#d7b486>Товар изменился. Вернитесь в магазин и выберите его заново.
+    outside: <#d7b486>Данж изменился. Откройте /данж заново; покупка не выполнена.
+    no-space: <#d7b486>Освободите место в инвентаре. Кристаллы не списаны.
+    no-money: <#d7b486>Не хватает кристаллов. Покупка не выполнена.
+    payment-failed: <#d7b486>Не удалось завершить оплату. Покупка не выполнена.
+    balance: '<#aaa49a>Ваши кристаллы: <#c7a0e8><value>'
+    buy-label: <#9bd48d>Купить
+    buy-tooltip: Купить ровно показанный набор за указанную цену
+    stock:
+      beef:
+        name: Стейки
+        amount: 8
+        price: 20
+        enabled: true
+        description: <#e8dfd2>Обычные стейки для восстановления сытости.
+      bread:
+        name: Хлеб
+        amount: 16
+        price: 20
+        enabled: true
+        description: <#e8dfd2>Обычный хлеб для восстановления сытости.
+      arrows:
+        name: Стрелы
+        amount: 32
+        price: 20
+        enabled: true
+        description: <#e8dfd2>Обычные стрелы для лука и арбалета.
+      merchant:
+        name: Свиток торговца
+        amount: 1
+        price: 100
+        enabled: true
+        description: <#e8dfd2>Настоящий свиток EliteMobs. ПКМ вызывает странствующего торговца и расходует свиток.<newline><#aaa49a>Между вызовами — 60 секунд.

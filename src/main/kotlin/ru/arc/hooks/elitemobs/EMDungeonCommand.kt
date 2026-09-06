@@ -33,14 +33,14 @@ class EMDungeonCommand(
             "dungeonsaves" -> "saves"
             else -> null
         }
-        val action = shortcut ?: args.firstOrNull()?.lowercase() ?: "help"
+        val action = shortcut ?: args.firstOrNull()?.lowercase() ?: "menu"
         dispatch(player, action, if (shortcut != null) args.toList() else args.drop(1))
         return true
     }
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<String>): List<String> =
         if (command.name == "dungeon" && args.size == 1) {
-            listOf("начать", "выйти", "вход", "сохраниться", "сохранения", "помощь", "start", "quit", "entry", "save", "saves", "help")
+            listOf("меню", "menu", "начать", "выйти", "вход", "сохраниться", "сохранения", "помощь", "start", "quit", "entry", "save", "saves", "help")
                 .filter { it.startsWith(args[0], ignoreCase = true) }
         } else emptyList()
 }

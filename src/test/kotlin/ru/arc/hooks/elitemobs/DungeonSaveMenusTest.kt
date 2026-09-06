@@ -18,30 +18,34 @@ class DungeonSaveMenusTest : FreeSpec({
     beforeEach { paper = MockBukkitTestRuntime.open() }
     afterEach { paper.close() }
 
-    "returning after the dungeon ended replaces the stale dialog with an explanation" {
+    "opening saves outside a resumable run returns to the panel explanation" {
         val player = mockk<org.bukkit.entity.Player>(relaxed = true)
         val dungeon = mockk<EMDungeonQol>(relaxed = true)
         every { dungeon.view(player) } returns null
+        every { dungeon.panelView(player) } returns null
         every { dungeon.text(any(), any(), *anyVararg()) } returns Component.text("changed")
         val shown = mutableListOf<PaperDialogScreen>()
         DungeonSaveMenus(dungeon) { _, screen -> shown += screen }.open(player)
-        shown.single().id shouldBe "dungeon.saves.unavailable"
-        shown.single().buttons.single().closeDialogBeforeAction shouldBe true
+        shown.single().id shouldBe "dungeon.panel.unavailable"
+        shown.single().exitButton!!.id.value shouldBe "close"
+        shown.single().exitButton!!.closeDialogBeforeAction shouldBe true
         shown.single().body.single().text shouldBe Component.text("changed").decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
     }
 
-    "root close does not quit and explicit quit does" {
+    "root close is separate from the quit action" {
         val player = paper.addPlayer("viewer")
         val dungeon = mockk<EMDungeonQol>(relaxed = true)
         val world = paper.addSimpleWorld("dungeon")
-        every { dungeon.view(player) } returns DungeonSaveView(world.uid, "run", emptyList(), null, null)
+        val saves = DungeonSaveView(world.uid, "run", emptyList(), null, null)
+        every { dungeon.view(player) } returns saves
+        every { dungeon.panelView(player) } returns DungeonPanelView(world.uid, DungeonVisit("run"), saves)
         every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
         var screen: PaperDialogScreen? = null
-        DungeonSaveMenus(dungeon) { _, shown -> screen = shown }.open(player)
+        DungeonSaveMenus(dungeon) { _, shown -> screen = shown }.panel(player)
         screen!!.exitButton!!.onClick.handle(mockk())
         verify(exactly = 0) { dungeon.quit(any()) }
         screen!!.buttons.single { it.id.value == "quit" }.onClick.handle(mockk())
-        verify(exactly = 1) { dungeon.quit(player) }
+        verify { dungeon.panelAction(player, any(), "quit") }
     }
 
     "save captures expected view and shows error in the form" {
@@ -50,16 +54,37 @@ class DungeonSaveMenusTest : FreeSpec({
         val world = paper.addSimpleWorld("dungeon")
         val expected = DungeonSaveView(world.uid, "run", emptyList(), null, null)
         every { dungeon.view(player) } returns expected
+        every { dungeon.saveBlockReason(player, expected) } returns null
         every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
         every { dungeon.save(player, "base", expected) } returns DungeonSaveEdit(false, Component.text("error"))
         val shown = mutableListOf<PaperDialogScreen>()
         DungeonSaveMenus(dungeon) { _, screen -> shown += screen }.open(player)
-        shown.last().buttons.single { it.id.value == "save" }.onClick.handle(mockk())
+        shown.last().buttons.single { it.id.value == "save" }.onClick.handle(mockk<PaperDialogClickContext> {
+            every { text(any()) } returns ""
+        })
         shown.last().buttons.single { it.id.value == "save" }.onClick.handle(mockk<PaperDialogClickContext> {
             every { text(any()) } returns "base"
         })
         verify { dungeon.save(player, "base", expected) }
         shown.last().id shouldBe "dungeon.saves.save"
+        shown.last().inputs.single().initial shouldBe "base"
+    }
+
+    "renders a blocked save before opening the form and never writes from its muted button" {
+        val player = paper.addPlayer("blocked")
+        val dungeon = mockk<EMDungeonQol>(relaxed = true)
+        val world = paper.addSimpleWorld("dungeon")
+        val expected = DungeonSaveView(world.uid, "run", emptyList(), null, null)
+        every { dungeon.view(player) } returns expected
+        every { dungeon.saveBlockReason(player, expected) } returns null
+        every { dungeon.saveBlockReason(player, expected) } returns Component.text("В бою")
+        every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
+        val shown = mutableListOf<PaperDialogScreen>()
+        DungeonSaveMenus(dungeon) { _, screen -> shown += screen }.open(player)
+        val save = shown.single().buttons.single { it.id.value == "save" }
+        save.tooltip shouldBe Component.text("В бою")
+        save.onClick.handle(mockk<PaperDialogClickContext> { every { text(any()) } returns "ignored" })
+        verify(exactly = 0) { dungeon.save(any(), any(), any()) }
     }
 
     "point detail, back, and delete confirmation use the captured point view" {

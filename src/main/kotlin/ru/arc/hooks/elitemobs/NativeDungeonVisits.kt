@@ -4,10 +4,12 @@ import com.magmaguy.elitemobs.config.contentpackages.ContentPackagesConfig
 import com.magmaguy.elitemobs.instanced.dungeons.DungeonInstance
 import com.magmaguy.elitemobs.utils.ConfigurationLocation
 import com.magmaguy.elitemobs.wormhole.WormholeEntry
+import com.magmaguy.elitemobs.economy.EconomyHandler
 import org.bukkit.Location
 import org.bukkit.World
 import java.util.UUID
 import java.util.WeakHashMap
+import org.bukkit.entity.Player
 import kotlin.math.floor
 
 internal data class DungeonVisit(
@@ -17,6 +19,14 @@ internal data class DungeonVisit(
     val entry: Location? = null,
     val members: Set<UUID>? = null,
     val instanced: Boolean = false,
+    val name: String? = null,
+    val stats: DungeonVisitStats? = null,
+)
+
+internal data class DungeonVisitStats(
+    val playerCount: Int? = null,
+    val difficulty: String? = null,
+    val level: Int? = null,
 )
 
 internal data class NativeWormholeVolume(val location: Location, val radiusSquared: Double)
@@ -46,11 +56,15 @@ internal class NativeDungeonVisits(
                 waiting = state == "WAITING" && !instance.isCancelled,
                 canResume = state == "ONGOING" && !instance.isCancelled,
                 entry = cachedEntry(entry, world),
-                members = instance.players.map { it.uniqueId }.toSet(), instanced = true)
+                members = instance.players.map { it.uniqueId }.toSet(), instanced = true,
+                name = instance.contentPackagesConfigFields.name,
+                stats = DungeonVisitStats(instance.players.size, instance.difficultyID?.takeIf { it.isNotBlank() }, instance.levelSync))
         }
         val fields = ContentPackagesConfig.getDungeonPackages().values.firstOrNull { it.worldName == world.name } ?: return null
         return if (fields.contentType.name == "OPEN_DUNGEON") {
-            DungeonVisit("open", entry = cachedEntry(fields.teleportLocation, world))
+            DungeonVisit("open", entry = cachedEntry(fields.teleportLocation, world),
+                name = fields.name,
+                stats = DungeonVisitStats(level = fields.contentLevel))
         } else null
     }
 
@@ -100,3 +114,9 @@ internal fun isNativeWormholeTrigger(location: Location, volumes: List<NativeWor
 
 internal fun wormholeTriggerRadiusSquared(sizeMultiplier: Double): Double =
     (1.5 * sizeMultiplier) * (1.5 * sizeMultiplier)
+
+internal fun readDungeonCrystals(player: Player): String? =
+    runCatching {
+        EconomyHandler.checkCurrency(player.uniqueId).takeIf { it.isFinite() && it >= 0 }?.toBigDecimal()
+            ?.setScale(2, java.math.RoundingMode.DOWN)?.stripTrailingZeros()?.toPlainString()
+    }.getOrNull()

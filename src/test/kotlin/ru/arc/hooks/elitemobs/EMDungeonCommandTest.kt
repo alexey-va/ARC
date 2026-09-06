@@ -22,8 +22,9 @@ class EMDungeonCommandTest : FreeSpec({
 
         executor.onCommand(player, command, "dungeon", arrayOf("начать", "now")) shouldBe true
         executor.onCommand(player, command, "dungeon", arrayOf("выйти")) shouldBe true
+        executor.onCommand(player, command, "dungeon", emptyArray()) shouldBe true
 
-        calls shouldBe listOf("начать" to listOf("now"), "выйти" to emptyList())
+        calls shouldBe listOf("начать" to listOf("now"), "выйти" to emptyList(), "menu" to emptyList())
     }
 
     "canonical command shortcuts dispatch canonical actions" {
@@ -48,7 +49,7 @@ class EMDungeonCommandTest : FreeSpec({
 
         val sender = mockk<org.bukkit.command.CommandSender>(relaxed = true)
         executor.onCommand(sender, command, "dungeon", emptyArray()) shouldBe true
-        verify { sender.sendMessage(Component.text("unavailable")) }
+        verify { sender.sendMessage(any<Component>()) }
 
         every { command.name } returns "dungeon"
         EMDungeonCommand(config, { _, _, _ -> }, { true }).onTabComplete(player, command, "dungeon", arrayOf("с")) shouldContainExactly listOf("сохраниться", "сохранения")

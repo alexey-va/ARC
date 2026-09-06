@@ -48,6 +48,10 @@ class PAPIHook internal constructor(
             params.startsWith("guildrank") -> formatGuildRankAndPrestige(player)
             params.startsWith("particles") -> formatParticleVisibility(player)
             params.startsWith("worldname") -> getWorldName(player)
+            params.startsWith("dungeon_", ignoreCase = true) -> {
+                val key = params.substringAfter('_').lowercase()
+                ARC.hookRegistry?.dungeonQol?.scoreboard?.value(player.uniqueId, key) ?: if (key == "active") "false" else ""
+            }
             params.startsWith("mount_", ignoreCase = true) -> mountPlaceholder(player, params)
             else -> null
         }
@@ -60,6 +64,9 @@ class PAPIHook internal constructor(
         "%arc_guildrank%",
         "%arc_particles%",
         "%arc_worldname%",
+        "%arc_dungeon_active%",
+        "%arc_dungeon_title%",
+        "%arc_dungeon_line_<1-11>%",
         "%arc_mount_active%",
         "%arc_mount_id%",
         "%arc_mount_name%",

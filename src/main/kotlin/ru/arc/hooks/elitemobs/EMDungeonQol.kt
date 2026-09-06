@@ -48,12 +48,19 @@ internal class EMDungeonQol(
     private val persistence: PaperPlayerDataPersistence = NativePaperPlayerDataPersistence,
 
 ) : Listener, AutoCloseable {
+    internal val scoreboard = DungeonScoreboard(this)
     private val checkpoints = DungeonCheckpointStore()
     private val tasks = LifecycleTaskScope()
     private val combatUntil = mutableMapOf<UUID, Long>()
     private val lastHint = mutableMapOf<UUID, Long>()
     private val lastSave = mutableMapOf<UUID, Long>()
     private val pending = mutableMapOf<UUID, UUID>()
+    internal val supplies by lazy { DungeonSupplyShop(
+        offers = { DEFAULT_SUPPLY_OFFERS.filter { config.bool("dungeon-qol.shop.stock.${it.id}.enabled", true) }.map {
+            it.copy(amount = config.integer("dungeon-qol.shop.stock.${it.id}.amount", it.amount),
+                price = config.double("dungeon-qol.shop.stock.${it.id}.price", it.price))
+        } }, current = ::panelView,
+    ) }
     private val menus by lazy { DungeonSaveMenus(this) }
     private var closed = false
     private var autosavesStarted = false
@@ -80,6 +87,7 @@ internal class EMDungeonQol(
 
     @EventHandler(priority = EventPriority.MONITOR)
     fun rememberLogout(event: PlayerQuitEvent) {
+        scoreboard.remove(event.player.uniqueId)
         if (enabled) remember(event.player, event.player.location)
         combatUntil.remove(event.player.uniqueId)
         lastHint.remove(event.player.uniqueId)
@@ -95,6 +103,7 @@ internal class EMDungeonQol(
 
     @EventHandler(priority = EventPriority.MONITOR)
     fun entered(event: PlayerChangedWorldEvent) {
+        scoreboard.remove(event.player.uniqueId)
         if (!enabled) return
         val player = event.player
         val world = player.world
@@ -122,13 +131,13 @@ internal class EMDungeonQol(
     fun started(event: DungeonStartEvent) {
         if (!enabled) return
         event.dungeonInstance.players.forEach {
-            show(it, "started", "<gold>Данж начался", "<white>/сохранения <gray>— ваши места")
+            show(it, "started", "<gold>Данж начался", "<white>/данж <gray>— меню данжа")
             savesHint(it)
         }
     }
 
     private fun savesHint(player: Player) = audience.sendMessage(player, text("messages.saves-hint",
-        "<click:run_command:'/сохранения'><gold>[/сохранения]</gold></click> <gray>— ваши места и начало данжа. <white>/сохраниться [название]</white> — запомнить место. <white>/данж выйти</white> — выйти."))
+        "<click:run_command:'/данж'><gold>[/данж]</gold></click> <gray>— меню данжа: прохождение, выход и сохранения. <white>/сохраниться [название]</white> — запомнить место. <white>/данж выйти</white> — выйти."))
 
     @EventHandler(priority = EventPriority.MONITOR)
     fun completed(event: DungeonCompleteEvent) {
@@ -172,6 +181,19 @@ internal class EMDungeonQol(
         if (!enabled || closed || !player.isOnline || player.isDead || player.gameMode == GameMode.SPECTATOR) null
         else resolve(player.world)?.takeIf { member(player, it) }
 
+    internal fun panelView(player: Player): DungeonPanelView? = current(player)?.let {
+        DungeonPanelView(player.world.uid, it, view(player))
+    }
+
+    /** Dialog callbacks must still belong to the exact world and native run shown. */
+    internal fun panelAction(player: Player, expected: DungeonPanelView, action: String) {
+        if (player.world.uid != expected.worldId || current(player)?.run != expected.visit.run) {
+            audience.sendMessage(player, changed().message)
+            return
+        }
+        action(player, action)
+    }
+
     internal fun view(player: Player): DungeonSaveView? {
         val visit = current(player) ?: return null
         if (!visit.canResume) return null
@@ -182,6 +204,7 @@ internal class EMDungeonQol(
 
     internal fun action(player: Player, action: String, args: List<String> = emptyList()) {
         when (action) {
+            "menu", "меню" -> menus.panel(player)
             "start", "начать" -> {
                 val visit = current(player)
                 when {
@@ -190,6 +213,7 @@ internal class EMDungeonQol(
                     else -> player.performCommand("elitemobs:elitemobs start")
                 }
             }
+            "journal" -> if (current(player) != null) player.performCommand("elitemobs:em") else audience.sendMessage(player, outside())
             "quit", "leave", "выйти" -> quit(player)
             "save", "сохраниться" -> {
                 val expected = view(player)
@@ -200,7 +224,7 @@ internal class EMDungeonQol(
                 val expected = view(player)
                 if (expected == null) audience.sendMessage(player, outside()) else travel(player, expected, "entry")
             }
-            "saves", "сохранения" -> if (view(player) == null) audience.sendMessage(player, outside()) else menus.open(player)
+            "saves", "сохранения" -> menus.open(player)
             else -> audience.sendMessage(player, text("messages.help", "<gold>Данжи:</gold> <white>/начать</white> · <white>/сохраниться [название]</white> · <white>/сохранения</white> · <white>/данж вход</white> · <white>/данж выйти</white>"))
         }
     }
@@ -220,12 +244,23 @@ internal class EMDungeonQol(
     private fun inCombat(player: Player): Boolean = clock() < (combatUntil[player.uniqueId] ?: 0L)
     private fun combatMessage() = text("saves.messages.combat", "<red>Во время боя сохраняться и перемещаться нельзя. Подождите 15 секунд без боя. <gray>Для выхода: /данж выйти.")
 
+    /** Shared, non-mutating preflight for the panel, form, and authoritative save action. */
+    internal fun saveBlockReason(player: Player, expected: DungeonSaveView?): Component? {
+        if (expected == null) return text("panel.save-inactive", "<#aaa49a>Сохранения доступны только во время прохождения.")
+        if (!matches(player, expected)) return changed().message
+        if (inCombat(player)) return combatMessage()
+        if (pending.containsKey(player.uniqueId)) return text("saves.messages.pending", "<gray>Перемещение уже готовится.")
+        if (lastSave[player.uniqueId]?.let { clock() - it < 5_000 } == true)
+            return text("saves.messages.cooldown", "<gray>Подождите 5 секунд между сохранениями.")
+        if (player.isInsideVehicle) return text("saves.messages.vehicle", "<#aaa49a>Чтобы сохраниться, выйдите из транспорта или слезьте с ездового животного.")
+        if (player.isFlying || player.isGliding) return text("saves.messages.flying", "<#aaa49a>Чтобы сохраниться, приземлитесь и выключите полёт.")
+        if (!stable(player)) return text("saves.messages.unsafe", "<red>Встаньте на безопасную твёрдую поверхность, вдали от огня, воды и обрыва.")
+        return null
+    }
+
     internal fun save(player: Player, name: String, expected: DungeonSaveView): DungeonSaveEdit {
-        if (!matches(player, expected)) return changed()
-        if (inCombat(player)) return DungeonSaveEdit(false, combatMessage())
+        saveBlockReason(player, expected)?.let { return DungeonSaveEdit(false, it) }
         val now = clock()
-        if (lastSave[player.uniqueId]?.let { now - it < 5_000 } == true) return DungeonSaveEdit(false, text("saves.messages.cooldown", "<gray>Подождите 5 секунд между сохранениями."))
-        if (!stable(player)) return DungeonSaveEdit(false, text("saves.messages.unsafe", "<red>Встаньте на безопасную твёрдую поверхность, вдали от огня, воды и обрыва."))
         val points = checkpoints.list(player.persistentDataContainer, expected.worldId, expected.run, now, ttl)
         val label = name.trim().ifEmpty {
             (1..5).map { "Место $it" }.firstOrNull { candidate -> points.none { it.kind == DungeonSaveKind.MANUAL && it.name.equals(candidate, true) } } ?: ""
@@ -285,7 +320,7 @@ internal class EMDungeonQol(
         val now = clock()
         if (lastHint[event.player.uniqueId]?.let { now - it < 3_000 } == true) return
         lastHint[event.player.uniqueId] = now
-        audience.sendMessage(event.player, text("messages.teleport-blocked", "<gold>Вы внутри данжа.</gold> <gray>Для выхода:</gray> <click:run_command:'/dungeon quit'><green>[/данж выйти]</green></click><gray>. Вернуться ко входу или сохранённому месту:</gray> <click:run_command:'/сохранения'><white>[/сохранения]</white></click>"))
+        audience.sendMessage(event.player, text("messages.teleport-blocked", "<gold>Вы внутри данжа.</gold> <gray>Для выхода:</gray> <click:run_command:'/dungeon quit'><green>[/данж выйти]</green></click><gray>. Начало данжа и сохранения:</gray> <click:run_command:'/данж'><white>[/данж — меню]</white></click>"))
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -306,6 +341,7 @@ internal class EMDungeonQol(
     internal fun startAutosaves() {
         if (autosavesStarted) return
         autosavesStarted = true
+        tasks.runTimer(20, 20) { scoreboard.refresh(Bukkit.getOnlinePlayers()) }
         tasks.runTimer(400, 400) { Bukkit.getOnlinePlayers().forEach(::autoSave) }
     }
 
@@ -331,6 +367,7 @@ internal class EMDungeonQol(
 
     override fun close() {
         closed = true
+        scoreboard.clear()
         pending.clear()
         combatUntil.clear()
         lastSave.clear()
@@ -339,6 +376,7 @@ internal class EMDungeonQol(
     }
 }
 
+internal data class DungeonPanelView(val worldId: UUID, val visit: DungeonVisit, val saves: DungeonSaveView?)
 internal data class DungeonSaveView(val worldId: UUID, val run: String, val points: List<DungeonSavePoint>, val entry: Location?, val exit: Location?)
 internal data class DungeonSaveEdit(val success: Boolean, val message: Component)
 

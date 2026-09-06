@@ -8,6 +8,13 @@ import org.bukkit.Location
 import ru.arc.paper.testing.MockBukkitTestRuntime
 
 class NativeDungeonVisitsTest : FreeSpec({
+    "keeps metadata optional for existing visit consumers" {
+        DungeonVisit("run").name shouldBe null
+        DungeonVisit("run").stats shouldBe null
+        DungeonVisitStats(playerCount = 2, difficulty = "hard", level = 15) shouldBe
+            DungeonVisitStats(2, "hard", 15)
+    }
+
     "matches EliteMobs native wormhole trigger and relocates open entry" {
         val paper = MockBukkitTestRuntime.open()
         try {
