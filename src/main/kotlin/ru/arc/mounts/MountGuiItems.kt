@@ -501,6 +501,88 @@ internal class MountGuiItems(
         }
     }
 
+    fun levelCardItem(mount: MountDefinition, profile: MountProfile, levelNumber: Int): ItemStack {
+        val level = mount.level(levelNumber)
+        val owned = profile.level >= levelNumber
+        val available = !owned && profile.level + 1 == levelNumber && mount.price(levelNumber) != null
+        val statePath = when {
+            owned -> "progression.level-card-owned-name"
+            available -> "progression.level-card-available-name"
+            else -> "progression.level-card-locked-name"
+        }
+        val stateFallback = when {
+            owned -> "<#2bba43>Уровень <level> · открыт"
+            available -> "<#92bed8>Уровень <level> · доступен"
+            else -> "<#969696>Уровень <level> · закрыт"
+        }
+        val lore = buildList {
+            add(copy(statePath, stateFallback, "level" to levelNumber.toString()))
+            add(copy("progression.level-speed", "<#8c8c8c>Скорость: <#e6fff3><speed>", "speed" to formatSpeed(level.speed)))
+            add(copy("progression.level-handling", "<#8c8c8c>Управляемость: <#e6fff3>×<handling>", "handling" to formatMultiplier(level.handlingMultiplier)))
+            if (level.sprintMultiplier > 1.0) {
+                add(copy("progression.level-sprint", "<#8c8c8c>Форсаж: <#e6fff3>×<sprint>", "sprint" to formatMultiplier(level.sprintMultiplier)))
+            }
+            if (mount.movement == MountMovement.WALKING) {
+                add(
+                    copy(
+                        "progression.level-step",
+                        "<#8c8c8c>Подъём: <#e6fff3><step> блока",
+                        "step" to formatHeight(configProvider().tuning.maximumStepHeightHundredths(levelNumber) / 100.0),
+                    ),
+                )
+            }
+            when {
+                owned -> add(copy("progression.level-card-owned", "<#2bba43>Уже открыто"))
+                available -> {
+                    add(priceLine("Цена", checkNotNull(level.price).toExactMinor(), mount.currency))
+                    add(
+                        if (configProvider().purchasesEnabled) actionFooter("купить")
+                        else configProvider().guiText("common.purchases-at-spawn", "<#ff9f0f>Покупка доступна на спавне."),
+                    )
+                }
+                level.price == null -> add(copy("progression.level-card-special", "<#ff9f0f><acquisition>", "acquisition" to escape(mount.acquisition)))
+                else -> add(copy("progression.level-card-locked", "<#969696>Сначала откройте предыдущий уровень"))
+            }
+        }
+        return item(
+            when {
+                owned -> Material.LIME_DYE
+                available -> Material.EMERALD
+                else -> Material.GRAY_DYE
+            },
+            copy(statePath, stateFallback, "level" to levelNumber.toString()),
+            lore,
+            glint = available,
+        )
+    }
+
+    fun abilitiesSummaryItem(mount: MountDefinition, profile: MountProfile): ItemStack {
+        val upgrades = mount.abilities.upgrades
+        return item(
+            Material.ENCHANTED_BOOK,
+            copy("detail.abilities-summary-name", "<#92bed8>Способности маунта"),
+            if (upgrades.isEmpty()) {
+                copyLines("detail.abilities-summary-empty", listOf("<#8c8c8c>У этого маунта нет покупных способностей."))
+            } else {
+                buildList {
+                    add(copy("detail.abilities-summary-title", "<#8c8c8c>Все способности в одном списке:"))
+                    upgrades.forEach { ability ->
+                        add(
+                            copy(
+                                "detail.abilities-summary-line",
+                                "<state> <#e6fff3><ability>",
+                                "state" to if (profile.ownsAbility(ability.id)) "<#2bba43>✔" else "<#969696>•",
+                                "ability" to escape(ability.displayName),
+                            ),
+                        )
+                    }
+                    add("")
+                    add(copy("detail.abilities-summary-footer", "<#8c8c8c>Покупки способностей доступны из этой карточки."))
+                }
+            },
+        )
+    }
+
     fun progressionInfoItem(
         mount: MountDefinition,
         profile: MountProfile,

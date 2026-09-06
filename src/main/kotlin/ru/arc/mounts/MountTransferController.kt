@@ -11,6 +11,7 @@ import org.bukkit.event.block.Action
 import org.bukkit.event.inventory.ClickType
 import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.event.inventory.InventoryDragEvent
+import org.bukkit.event.inventory.InventoryCloseEvent
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.inventory.EquipmentSlot
@@ -41,6 +42,7 @@ class MountTransferController(
     private val sessions: MountSessionController,
     otherBusy: (UUID) -> Boolean,
     private val openDetail: (Player, String) -> Unit,
+    private val profile: ((UUID, MountDefinition) -> MountProfile)? = null,
 ) : Listener, AutoCloseable {
     private val scope = LifecycleTaskScope(Tasks.scheduler)
     private val key = NamespacedKey(plugin, "mount_certificate")
@@ -81,12 +83,29 @@ class MountTransferController(
         val filler = item(background?.material ?: Material.GRAY_STAINED_GLASS_PANE, " ", emptyList())
         filler.editMeta { meta -> background?.customModelData?.let { meta.setCustomModelData(it) } }
         repeat(inventory.size) { inventory.setItem(it, filler) }
-        inventory.setItem(13, item(Material.NAME_TAG, mount.displayName, lines("confirm-lore", listOf(
-            "<#e6fff3>Маунт, уровни, способности и облики",
-            "<#e6fff3>перейдут в одно свидетельство.", "",
+        val profileSnapshot = profile?.invoke(player.uniqueId, mount)
+        val levelLine = if (profileSnapshot != null) {
+            text("confirm-level", "<#e6fff3>Текущий уровень: <level>")
+                .replace("<level>", profileSnapshot.level.toString())
+        } else {
+            text("confirm-level", "<#e6fff3>Текущий уровень и улучшения сверяются перед списанием прав.")
+        }
+        val details = listOf(
+            text("confirm-mount", "<#e6fff3>Маунт: <mount> <rarity>")
+                .replace("<mount>", mount.displayName)
+                .replace("<rarity>", "${mount.rarity.color}${mount.rarity.displayName}"),
+            levelLine,
+        ) + mount.abilities.upgrades.map { upgrade ->
+            val owned = profileSnapshot?.ownsAbility(upgrade.id)
+            text("confirm-ability", "<#e6fff3><state> <ability>")
+                .replace("<state>", if (owned == true) "<green>✔" else "<gray>○")
+                .replace("<ability>", upgrade.displayName)
+        }
+        inventory.setItem(13, item(Material.NAME_TAG, mount.displayName, details + lines("confirm-lore", listOf(
+            "<#e6fff3>В свидетельство попадут только подтверждённые права.", "",
             "<#ff9f0f>Маунт исчезнет из вашей коллекции.",
-            "<#e6fff3>Свидетельство можно подарить или",
-            "<#e6fff3>выставить на аукцион через /ah.",
+            "<#e6fff3>После упаковки вы получите именно этот маунт",
+            "<#e6fff3>с его текущим уровнем и улучшениями.",
             "<#969696>Активация доступна на спавне.",
         ))))
         inventory.setItem(11, item(Material.RED_CONCRETE, text("cancel-name", "<#c42323>Назад"),
@@ -116,6 +135,17 @@ class MountTransferController(
 
     @EventHandler fun onDrag(event: InventoryDragEvent) {
         if (event.view.topInventory.holder is MountPackingMenu) event.isCancelled = true
+    }
+
+    @EventHandler fun onClose(event: InventoryCloseEvent) {
+        val holder = event.inventory.holder as? MountPackingMenu ?: return
+        if (event.reason != InventoryCloseEvent.Reason.PLAYER || holder.accepted || holder.back == null) return
+        val player = event.player as? Player ?: return
+        Tasks.scheduler.runLater(1) {
+            if (!player.isOnline) return@runLater
+            val openType = player.openInventory.topInventory?.type
+            if (openType == null || openType == org.bukkit.event.inventory.InventoryType.CRAFTING) holder.back.invoke()
+        }
     }
 
     @EventHandler fun onUse(event: PlayerInteractEvent) {
@@ -184,6 +214,7 @@ class MountTransferController(
         val mount = catalog[record.mountId] ?: return
         val level = record.permissions.mapNotNull { it.removePrefix("arc.mounts.${mount.id}.").toIntOrNull() }.max()
         val extras = buildList {
+            add(text("certificate-rarity", "<#e6fff3>Редкость: <rarity>").replace("<rarity>", "${mount.rarity.color}${mount.rarity.displayName}"))
             if (mount.glowPermission in record.permissions) add(text("certificate-glow", "<#e6fff3>Свечение: открыто"))
             mount.abilities.upgrades.filter { mount.abilityPermission(it.id) in record.permissions }.forEach {
                 add(text("certificate-ability", "<#e6fff3>Способность: <name>").replace("<name>", it.displayName))
@@ -206,7 +237,16 @@ class MountTransferController(
         player.inventory.setItem(slot, certificate)
         player.saveData()
         store.save(record.copy(stage = MountTransferStage.AVAILABLE))
-        send(player, "packed", "<#2bba43>Маунт упакован. Свидетельство можно подарить или выставить на /ah.")
+        player.sendMessage(
+            TextUtil.mm(
+                text(
+                    "packed",
+                    "<#2bba43>Упакован маунт <white><mount><green> (<rarity>), уровень <white><level><green>. Свидетельство содержит текущие улучшения.",
+                ).replace("<mount>", mount.displayName)
+                    .replace("<rarity>", "${mount.rarity.color}${mount.rarity.displayName}")
+                    .replace("<level>", level.toString()),
+            ),
+        )
     }
 
     private fun removeCertificate(player: Player, id: UUID) {

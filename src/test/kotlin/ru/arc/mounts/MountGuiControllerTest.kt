@@ -11,6 +11,7 @@ import org.bukkit.Material
 import org.bukkit.event.inventory.ClickType
 import org.bukkit.event.inventory.InventoryAction
 import org.bukkit.event.inventory.InventoryClickEvent
+import org.bukkit.event.inventory.InventoryCloseEvent
 import org.bukkit.event.inventory.InventoryType
 import org.junit.jupiter.api.Test
 import ru.arc.TestBase
@@ -19,6 +20,71 @@ import java.time.Duration
 import java.util.concurrent.CompletableFuture
 
 class MountGuiControllerTest : TestBase() {
+    @Test
+    fun `escape from nested screen restores actual list parent`() {
+        val mounts = (0 until 30).map { index -> testMount().copy(id = "escape-$index", displayName = "Маунт $index") }
+        val ownership = mockk<MountOwnership> {
+            every { profile(any(), any()) } returns MountProfile(1, false, false)
+            every { favoriteMountId(any()) } returns null
+        }
+        val controller = mountGuiController(
+            configProvider = { interactionConfig(MountTuningDefinition(listOf(50, 100), listOf(110, 200, 400), listOf(110, 200, 400))) },
+            catalogProvider = { MountCatalog(mounts) },
+            ownership = ownership,
+            wallet = mockk(relaxed = true),
+            purchases = mockk(relaxed = true),
+            sessions = mockk(relaxed = true),
+        )
+        val player = server.addPlayer("EscapeRider")
+        controller.start()
+        try {
+            controller.openList(player)
+            controller.onClick(clickEvent(player.openInventory, 50))
+            controller.onClick(clickEvent(player.openInventory, 10, ClickType.RIGHT))
+            controller.onClick(clickEvent(player.openInventory, 20))
+            server.scheduler.performOneTick()
+            player.closeInventory(InventoryCloseEvent.Reason.PLAYER)
+            server.scheduler.performOneTick()
+            plainName(player.openInventory.topInventory.getItem(31)) shouldBe "Способности маунта"
+            server.scheduler.performOneTick()
+            player.closeInventory(InventoryCloseEvent.Reason.PLAYER)
+            server.scheduler.performOneTick()
+            plainName(player.openInventory.topInventory.getItem(10)) shouldBe "Маунт 28"
+        } finally {
+            controller.shutdown()
+        }
+    }
+
+    @Test
+    fun `locked mount cannot open transfer packing from detail`() {
+        val mount = testMount()
+        val ownership = mockk<MountOwnership> {
+            every { profile(any(), mount) } returns MountProfile(0, false, false)
+            every { favoriteMountId(any()) } returns null
+        }
+        val transfer = mockk<MountTransferController>(relaxed = true) {
+            every { detailSlot } returns 38
+        }
+        val controller = mountGuiController(
+            configProvider = { interactionConfig(MountTuningDefinition(listOf(50, 100), listOf(110, 200, 400), listOf(110, 200, 400))) },
+            catalogProvider = { MountCatalog(listOf(mount)) },
+            ownership = ownership,
+            wallet = mockk(relaxed = true),
+            purchases = mockk(relaxed = true),
+            sessions = mockk(relaxed = true),
+            transfers = { transfer },
+        )
+        val player = server.addPlayer("LockedTransferRider")
+        controller.start()
+        try {
+            controller.openDetail(player, mount.id)
+            controller.onClick(clickEvent(player.openInventory, 38))
+            verify(exactly = 0) { transfer.confirm(any(), any()) }
+        } finally {
+            controller.shutdown()
+        }
+    }
+
     @Test
     fun `detail ability controls stay centered for every supported count`() {
         centeredDetailAbilitySlots(0) shouldBe emptyList()
@@ -416,8 +482,16 @@ class MountGuiControllerTest : TestBase() {
         controller.start()
         try {
             controller.openDetail(player, mount.id)
+            plainName(player.openInventory.topInventory.getItem(31)) shouldBe "Способности маунта"
+            controller.onClick(clickEvent(player.openInventory, 31))
+            plainName(player.openInventory.topInventory.getItem(31)) shouldBe "Ночное зрение"
+            controller.onClick(clickEvent(player.openInventory, 36))
             controller.onClick(clickEvent(player.openInventory, 20))
 
+            plainName(player.openInventory.topInventory.getItem(10)) shouldBe "Уровень 1 · открыт"
+            plainName(player.openInventory.topInventory.getItem(11)) shouldBe "Уровень 2 · открыт"
+            plainName(player.openInventory.topInventory.getItem(12)) shouldBe "Уровень 3 · доступен"
+            player.openInventory.topInventory.getItem(12)?.type shouldBe Material.EMERALD
             plainName(player.openInventory.topInventory.getItem(21)) shouldBe "Скорость: 65%"
             player.openInventory.topInventory.getItem(21)?.itemMeta?.enchantmentGlintOverride shouldBe true
             checkNotNull(player.openInventory.topInventory.getItem(21)?.itemMeta?.lore())
@@ -782,6 +856,7 @@ class MountGuiControllerTest : TestBase() {
         wallet: MountWallet,
         purchases: MountPurchaseCoordinator,
         sessions: MountSessionController,
+        transfers: () -> MountTransferController? = { null },
     ): MountGuiController {
         val summons = MountSummonService(configProvider, catalogProvider, ownership, sessions)
         return MountGuiController(
@@ -793,6 +868,7 @@ class MountGuiControllerTest : TestBase() {
             purchases = purchases,
             summons = summons,
             quickSummons = MountQuickSummonController(plugin, configProvider, summons),
+            transfers = transfers,
         )
     }
 

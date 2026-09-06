@@ -10,6 +10,7 @@ import org.bukkit.event.Listener
 import org.bukkit.event.inventory.ClickType
 import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.event.inventory.InventoryDragEvent
+import org.bukkit.event.inventory.InventoryCloseEvent
 import org.bukkit.inventory.Inventory
 import org.bukkit.inventory.InventoryHolder
 import org.bukkit.inventory.ItemFlag
@@ -22,7 +23,7 @@ import ru.arc.util.Logging.error
 import ru.arc.util.TextUtil
 import kotlin.math.ceil
 
-private enum class MountScreen { LIST, DETAIL, PROGRESSION, SKINS, CONFIRM }
+private enum class MountScreen { LIST, DETAIL, ABILITIES, PROGRESSION, SKINS, CONFIRM }
 
 internal enum class MountListPurpose { COLLECTION, SHOP, UPGRADES, TRADE }
 
@@ -64,11 +65,14 @@ private class MountMenuHolder(
     val mountsBySlot: Map<Int, String> = emptyMap(),
     val skinsBySlot: Map<Int, String> = emptyMap(),
     val abilitiesBySlot: Map<Int, String> = emptyMap(),
+    val levelCardsBySlot: Map<Int, Int> = emptyMap(),
     val speedPercentagesBySlot: Map<Int, Int> = emptyMap(),
     val stepHeightsBySlot: Map<Int, Int> = emptyMap(),
     val sizeOptionsBySlot: Map<Int, String> = emptyMap(),
     val confirmAction: ConfirmAction? = null,
     var confirmEnabled: Boolean = false,
+    val directOpen: Boolean = true,
+    val parent: MountMenuHolder? = null,
 ) : InventoryHolder {
     lateinit var backingInventory: Inventory
     override fun getInventory(): Inventory = backingInventory
@@ -86,6 +90,7 @@ class MountGuiController(
     private val transfers: () -> MountTransferController? = { null },
 ) : Listener {
     @Volatile private var active = false
+    private val suppressClose = mutableSetOf<java.util.UUID>()
     private val items = MountGuiItems(configProvider, quickSummons)
 
     fun start() {
@@ -157,6 +162,8 @@ class MountGuiController(
                 ownedOnly = ownedOnly,
                 purpose = purpose,
                 mountsBySlot = slots,
+                directOpen = false,
+                parent = null,
             )
         val title = when (purpose) {
             MountListPurpose.COLLECTION -> config.listTitle
@@ -252,18 +259,30 @@ class MountGuiController(
                 actionLore(listOf(config.guiText("list.back-description", "<#8c8c8c>Вернуться в главное меню.")), "вернуться"),
             ),
         )
-        player.openInventory(inventory)
+        show(player, inventory)
         click(player)
     }
 
-    fun openDetail(player: Player, mountId: String) {
+    fun openDetail(player: Player, mountId: String) = openDetailFromSource(player, mountId, null, forceDirect = true)
+
+    private fun openDetailFromCurrent(player: Player, mountId: String) =
+        openDetailFromSource(player, mountId, previousHolder(player))
+
+    private fun openDetailFromSource(player: Player, mountId: String, source: MountMenuHolder?, forceDirect: Boolean = false) {
         val config = configProvider()
         val mount = catalogProvider()[mountId] ?: return openList(player)
         val profile = ownership.profile(subject(player), mount)
-        val abilitySlots = centeredSlots(DETAIL_ABILITY_SLOTS, mount.abilities.upgrades.size)
-            .zip(mount.abilities.upgrades.map(MountAbilityUpgradeDefinition::id))
-            .toMap()
-        val holder = MountMenuHolder(MountScreen.DETAIL, mount.id, purpose = currentPurpose(player), abilitiesBySlot = abilitySlots)
+        val previous = source ?: player.openInventory.topInventory?.holder as? MountMenuHolder
+        val holder = MountMenuHolder(
+            MountScreen.DETAIL,
+            mount.id,
+            page = previous?.page ?: 0,
+            filter = previous?.filter ?: MountFilter.ALL,
+            ownedOnly = previous?.ownedOnly ?: false,
+            purpose = previous?.purpose ?: MountListPurpose.COLLECTION,
+            directOpen = forceDirect || (previous?.directOpen ?: true),
+            parent = if (forceDirect) null else detailParent(previous),
+        )
         val inventory = Bukkit.createInventory(holder, DETAIL_SIZE, component(config.detailTitle.replace("<mount>", escape(mount.displayName))))
         holder.backingInventory = inventory
         fill(inventory)
@@ -276,9 +295,10 @@ class MountGuiController(
         inventory.setItem(DETAIL_GLOW_SLOT, items.glowItem(mount, profile))
         inventory.setItem(DETAIL_SKINS_SLOT, items.skinsItem(mount, profile))
         inventory.setItem(DETAIL_WHISTLE_SLOT, items.whistleMenuItem(player, summons.favoriteMountId(player.uniqueId)))
-        abilitySlots.forEach { (slot, abilityId) ->
-            mount.ability(abilityId)?.let { inventory.setItem(slot, items.abilityItem(profile, it)) }
-        }
+        inventory.setItem(
+            DETAIL_ABILITY_SLOTS[DETAIL_ABILITY_SLOTS.size / 2],
+            items.abilitiesSummaryItem(mount, profile),
+        )
         inventory.setItem(
             DETAIL_BACK_SLOT,
             styledItem(
@@ -288,11 +308,49 @@ class MountGuiController(
                 actionLore(listOf(config.guiText("detail.back-description", "<#8c8c8c>Вернуться к коллекции.")), "вернуться"),
             ),
         )
-        player.openInventory(inventory)
+        show(player, inventory)
         click(player)
     }
 
-    private fun openProgression(player: Player, mount: MountDefinition) {
+    private fun openAbilities(player: Player, mount: MountDefinition, source: MountMenuHolder? = null) {
+        val config = configProvider()
+        val abilitySlots = centeredSlots(DETAIL_ABILITY_SLOTS, mount.abilities.upgrades.size)
+            .zip(mount.abilities.upgrades.map(MountAbilityUpgradeDefinition::id))
+            .toMap()
+        val previous = source ?: player.openInventory.topInventory?.holder as? MountMenuHolder
+        val holder = MountMenuHolder(
+            MountScreen.ABILITIES,
+            mount.id,
+            page = previous?.page ?: 0,
+            filter = previous?.filter ?: MountFilter.ALL,
+            ownedOnly = previous?.ownedOnly ?: false,
+            purpose = previous?.purpose ?: MountListPurpose.COLLECTION,
+            abilitiesBySlot = abilitySlots,
+            directOpen = previous?.directOpen ?: true,
+            parent = navigationParent(previous, MountScreen.ABILITIES),
+        )
+        val title = config.guiText("detail.abilities-title", "<#20252b><bold>Способности: <mount></bold>")
+            .replace("<mount>", escape(mount.displayName))
+        val inventory = Bukkit.createInventory(holder, DETAIL_SIZE, component(title))
+        holder.backingInventory = inventory
+        fill(inventory)
+        abilitySlots.forEach { (slot, abilityId) ->
+            mount.ability(abilityId)?.let { inventory.setItem(slot, items.abilityItem(ownership.profile(subject(player), mount), it)) }
+        }
+        inventory.setItem(
+            DETAIL_BACK_SLOT,
+            styledItem(
+                MountGuiItemRole.BACK,
+                Material.BLUE_STAINED_GLASS_PANE,
+                config.guiText("common.back-name", "<#92bed8>Назад"),
+                actionLore(listOf("<#8c8c8c>Вернуться к карточке маунта."), "вернуться"),
+            ),
+        )
+        show(player, inventory)
+        click(player)
+    }
+
+    private fun openProgression(player: Player, mount: MountDefinition, source: MountMenuHolder? = null) {
         val config = configProvider()
         val tuning = config.tuning
         val profile = ownership.profile(subject(player), mount)
@@ -307,14 +365,21 @@ class MountGuiController(
             mount.sizeOptions.takeIf { it.size > 1 }
                 ?.let { tuningSizeSlots(it.size).zip(it.map(MountSizeOptionDefinition::id)).toMap() }
                 .orEmpty()
+        val previous = source ?: player.openInventory.topInventory?.holder as? MountMenuHolder
         val holder =
             MountMenuHolder(
                 MountScreen.PROGRESSION,
                 mount.id,
-                purpose = currentPurpose(player),
+                purpose = previous?.purpose ?: currentPurpose(player),
+                page = previous?.page ?: 0,
+                filter = previous?.filter ?: MountFilter.ALL,
+                ownedOnly = previous?.ownedOnly ?: false,
+                levelCardsBySlot = LEVEL_CARD_SLOTS.take(mount.maxLevel).mapIndexed { index, slot -> slot to index + 1 }.toMap(),
                 speedPercentagesBySlot = speedSlots,
                 stepHeightsBySlot = stepSlots,
                 sizeOptionsBySlot = sizeSlots,
+                directOpen = previous?.directOpen ?: true,
+                parent = navigationParent(previous, MountScreen.PROGRESSION),
             )
         val inventory =
             Bukkit.createInventory(
@@ -326,6 +391,9 @@ class MountGuiController(
         fill(inventory)
         inventory.setItem(TUNING_INFO_SLOT, items.progressionInfoItem(mount, profile, tuning))
         inventory.setItem(TUNING_LEVEL_SLOT, items.levelUpgradeItem(mount, profile))
+        holder.levelCardsBySlot.forEach { (slot, level) ->
+            inventory.setItem(slot, items.levelCardItem(mount, profile, level))
+        }
         speedSlots.forEach { (slot, percentage) ->
             inventory.setItem(slot, items.speedTuningItem(mount, profile, tuning, percentage))
         }
@@ -361,16 +429,27 @@ class MountGuiController(
                 actionLore(listOf(config.guiText("progression.back-description", "<#8c8c8c>Вернуться к маунту.")), "вернуться"),
             ),
         )
-        player.openInventory(inventory)
+        show(player, inventory)
         click(player)
     }
 
-    private fun openSkins(player: Player, mount: MountDefinition) {
+    private fun openSkins(player: Player, mount: MountDefinition, source: MountMenuHolder? = null) {
         val config = configProvider()
         val profile = ownership.profile(subject(player), mount)
         val allSkinIds = listOf(MountDefinition.DEFAULT_SKIN_ID) + mount.skins.map(MountSkinDefinition::id)
         val slots = SKIN_CONTENT_SLOTS.zip(allSkinIds).toMap()
-        val holder = MountMenuHolder(MountScreen.SKINS, mount.id, purpose = currentPurpose(player), skinsBySlot = slots)
+        val previous = source ?: player.openInventory.topInventory?.holder as? MountMenuHolder
+        val holder = MountMenuHolder(
+            MountScreen.SKINS,
+            mount.id,
+            page = previous?.page ?: 0,
+            filter = previous?.filter ?: MountFilter.ALL,
+            ownedOnly = previous?.ownedOnly ?: false,
+            purpose = previous?.purpose ?: MountListPurpose.COLLECTION,
+            skinsBySlot = slots,
+            directOpen = previous?.directOpen ?: true,
+            parent = navigationParent(previous, MountScreen.SKINS),
+        )
         val inventory =
             Bukkit.createInventory(
                 holder,
@@ -389,13 +468,24 @@ class MountGuiController(
                 actionLore(listOf(config.guiText("skins.back-description", "<#8c8c8c>Вернуться к маунту.")), "вернуться"),
             ),
         )
-        player.openInventory(inventory)
+        show(player, inventory)
         click(player)
     }
 
     private fun openConfirm(player: Player, mount: MountDefinition, action: ConfirmAction) {
         val config = configProvider()
-        val holder = MountMenuHolder(MountScreen.CONFIRM, mount.id, purpose = currentPurpose(player), confirmAction = action)
+        val previous = player.openInventory.topInventory?.holder as? MountMenuHolder
+        val holder = MountMenuHolder(
+            MountScreen.CONFIRM,
+            mount.id,
+            page = previous?.page ?: 0,
+            filter = previous?.filter ?: MountFilter.ALL,
+            ownedOnly = previous?.ownedOnly ?: false,
+            purpose = previous?.purpose ?: MountListPurpose.COLLECTION,
+            confirmAction = action,
+            directOpen = previous?.directOpen ?: true,
+            parent = previous,
+        )
         val inventory = Bukkit.createInventory(holder, CONFIRM_SIZE, component(config.confirmTitle))
         holder.backingInventory = inventory
         fill(inventory, Material.BLACK_STAINED_GLASS_PANE)
@@ -444,8 +534,52 @@ class MountGuiController(
                     )
             },
         )
-        player.openInventory(inventory)
+        show(player, inventory)
         click(player)
+    }
+
+    private fun previousHolder(player: Player): MountMenuHolder? = player.openInventory.topInventory?.holder as? MountMenuHolder
+
+    private fun detailParent(previous: MountMenuHolder?): MountMenuHolder? = when (previous?.screen) {
+        null -> null
+        MountScreen.LIST -> previous
+        MountScreen.DETAIL -> previous.parent
+        else -> previous.parent?.let { parent -> if (parent.screen == MountScreen.DETAIL) parent.parent else parent }
+    }
+
+    private fun navigationParent(previous: MountMenuHolder?, target: MountScreen): MountMenuHolder? = when {
+        previous == null -> null
+        previous.screen == MountScreen.CONFIRM -> previous.parent?.parent
+        previous.screen == target -> previous.parent
+        else -> previous
+    }
+
+    private fun show(player: Player, inventory: Inventory) {
+        suppressClose += player.uniqueId
+        player.openInventory(inventory)
+        Tasks.scheduler.runLater(1) { suppressClose -= player.uniqueId }
+    }
+
+    @EventHandler
+    fun onClose(event: InventoryCloseEvent) {
+        if (!active) return
+        val holder = event.inventory.holder as? MountMenuHolder ?: return
+        if (suppressClose.remove(event.player.uniqueId) || event.reason != InventoryCloseEvent.Reason.PLAYER) return
+        val player = event.player as? Player ?: return
+        val parent = holder.parent ?: return
+        Tasks.scheduler.runLater(1) {
+            if (!active || !player.isOnline) return@runLater
+            val openType = player.openInventory.topInventory?.type
+            if (openType != null && openType != org.bukkit.event.inventory.InventoryType.CRAFTING) return@runLater
+            when (parent.screen) {
+                MountScreen.LIST -> openListPage(player, parent.page, parent.filter, parent.ownedOnly, parent.purpose)
+                MountScreen.DETAIL -> parent.mountId?.let { openDetailFromSource(player, it, parent) }
+                MountScreen.ABILITIES -> parent.mountId?.let { catalogProvider()[it]?.let { mount -> openAbilities(player, mount, parent) } }
+                MountScreen.PROGRESSION -> parent.mountId?.let { catalogProvider()[it]?.let { mount -> openProgression(player, mount, parent) } }
+                MountScreen.SKINS -> parent.mountId?.let { catalogProvider()[it]?.let { mount -> openSkins(player, mount, parent) } }
+                MountScreen.CONFIRM -> Unit
+            }
+        }
     }
 
     @EventHandler
@@ -462,6 +596,7 @@ class MountGuiController(
         when (holder.screen) {
             MountScreen.LIST -> handleListClick(player, holder, event)
             MountScreen.DETAIL -> handleDetailClick(player, holder, event.rawSlot)
+            MountScreen.ABILITIES -> handleAbilitiesClick(player, holder, event.rawSlot)
             MountScreen.PROGRESSION -> handleProgressionClick(player, holder, event.rawSlot)
             MountScreen.SKINS -> handleSkinClick(player, holder, event.rawSlot)
             MountScreen.CONFIRM -> handleConfirmClick(player, holder, event.rawSlot)
@@ -498,10 +633,10 @@ class MountGuiController(
                 val profile = ownership.profile(subject(player), mount)
                 when {
                     holder.purpose == MountListPurpose.UPGRADES && profile.unlocked && event.click == ClickType.LEFT -> openProgression(player, mount)
-                    holder.purpose == MountListPurpose.TRADE && profile.unlocked && event.click == ClickType.LEFT -> transfers()?.confirm(player, mount.id) { openTrade(player) }
-                    holder.purpose == MountListPurpose.SHOP && profile.unlocked && event.click == ClickType.LEFT -> openDetail(player, mount.id)
+                    holder.purpose == MountListPurpose.TRADE && profile.unlocked && event.click == ClickType.LEFT -> transfers()?.confirm(player, mount.id) { openListPage(player, holder.page, holder.filter, holder.ownedOnly, holder.purpose) }
+                    holder.purpose == MountListPurpose.SHOP && profile.unlocked && event.click == ClickType.LEFT -> openDetailFromCurrent(player, mount.id)
                     profile.unlocked && event.click == ClickType.LEFT -> summon(player, mount)
-                    profile.unlocked && event.click == ClickType.RIGHT -> openDetail(player, mount.id)
+                    profile.unlocked && event.click == ClickType.RIGHT -> openDetailFromCurrent(player, mount.id)
                     !profile.unlocked && mount.price(1) != null && event.click == ClickType.LEFT -> openProgression(player, mount)
                 }
             }
@@ -511,21 +646,22 @@ class MountGuiController(
     private fun handleDetailClick(player: Player, holder: MountMenuHolder, slot: Int) {
         val transfer = transfers()
         if (transfer != null && slot == transfer.detailSlot) {
-            holder.mountId?.let { transfer.confirm(player, it) }; return
-        }
-        val mount = holder.mountId?.let(catalogProvider()::get) ?: return openList(player)
-        val profile = ownership.profile(subject(player), mount)
-        holder.abilitiesBySlot[slot]?.let { abilityId ->
-            val ability = mount.ability(abilityId) ?: return
-            when {
-                !profile.unlocked || profile.ownsAbility(abilityId) -> Unit
-                !configProvider().purchasesEnabled -> Unit
-                else -> openConfirm(player, mount, ConfirmAction.Ability(abilityId))
+            val mount = holder.mountId?.let(catalogProvider()::get)
+            if (mount != null && ownership.profile(subject(player), mount).unlocked) {
+                transfer.confirm(player, mount.id) { openDetailFromSource(player, mount.id, holder) }
             }
             return
         }
+        val mount = holder.mountId?.let(catalogProvider()::get) ?: return openList(player)
+        val profile = ownership.profile(subject(player), mount)
+        if (slot == DETAIL_ABILITY_SLOTS[DETAIL_ABILITY_SLOTS.size / 2]) {
+            if (profile.unlocked && mount.abilities.upgrades.isNotEmpty()) openAbilities(player, mount)
+            return
+        }
         when (slot) {
-            DETAIL_BACK_SLOT -> returnToList(player, holder.purpose)
+            DETAIL_BACK_SLOT -> if (holder.directOpen) player.closeInventory() else {
+                openListPage(player, holder.page, holder.filter, holder.ownedOnly, holder.purpose)
+            }
             DETAIL_FAVORITE_SLOT -> if (profile.unlocked && summons.favoriteMountId(player.uniqueId) != mount.id) selectFavorite(player, mount)
             DETAIL_SUMMON_SLOT -> if (profile.unlocked) summon(player, mount)
             DETAIL_SKINS_SLOT -> if (profile.unlocked) openSkins(player, mount)
@@ -534,7 +670,7 @@ class MountGuiController(
                 val hasWhistle = player.inventory.contents.any(quickSummons::isWhistle)
                 if (hasFavorite && !hasWhistle && configProvider().quickSummonWhistle && player.inventory.firstEmpty() >= 0) {
                     quickSummons.giveWhistle(player)
-                    openDetail(player, mount.id)
+                    openDetailFromCurrent(player, mount.id)
                 }
             }
             DETAIL_UPGRADE_SLOT -> {
@@ -554,12 +690,33 @@ class MountGuiController(
         }
     }
 
+    private fun handleAbilitiesClick(player: Player, holder: MountMenuHolder, slot: Int) {
+        val mount = holder.mountId?.let(catalogProvider()::get) ?: return openList(player)
+        if (slot == DETAIL_BACK_SLOT) {
+            openDetailFromCurrent(player, mount.id)
+            return
+        }
+        val abilityId = holder.abilitiesBySlot[slot] ?: return
+        val profile = ownership.profile(subject(player), mount)
+        when {
+            !profile.unlocked || profile.ownsAbility(abilityId) -> Unit
+            !configProvider().purchasesEnabled -> Unit
+            else -> openConfirm(player, mount, ConfirmAction.Ability(abilityId))
+        }
+    }
+
     private fun handleProgressionClick(player: Player, holder: MountMenuHolder, slot: Int) {
         val mount = holder.mountId?.let(catalogProvider()::get) ?: return openList(player)
         val profile = ownership.profile(subject(player), mount)
         val tuning = configProvider().tuning
+        holder.levelCardsBySlot[slot]?.let { level ->
+            if (level == profile.level + 1 && mount.price(level) != null && configProvider().purchasesEnabled) {
+                openConfirm(player, mount, ConfirmAction.Level(level))
+            }
+            return
+        }
         when (slot) {
-            TUNING_BACK_SLOT -> openDetail(player, mount.id)
+            TUNING_BACK_SLOT -> openDetailFromCurrent(player, mount.id)
             TUNING_LEVEL_SLOT -> {
                 val target = profile.level + 1
                 when {
@@ -610,7 +767,7 @@ class MountGuiController(
 
     private fun handleSkinClick(player: Player, holder: MountMenuHolder, slot: Int) {
         val mount = holder.mountId?.let(catalogProvider()::get) ?: return openList(player)
-        val skinId = holder.skinsBySlot[slot] ?: if (slot == SKINS_BACK_SLOT) return openDetail(player, mount.id) else return
+        val skinId = holder.skinsBySlot[slot] ?: if (slot == SKINS_BACK_SLOT) return openDetailFromCurrent(player, mount.id) else return
         val profile = ownership.profile(subject(player), mount)
         if (profile.ownsSkin(skinId)) {
             if (profile.activeSkinId == skinId) return
@@ -626,12 +783,13 @@ class MountGuiController(
 
     private fun handleConfirmClick(player: Player, holder: MountMenuHolder, slot: Int) {
         val mount = holder.mountId?.let(catalogProvider()::get) ?: return openList(player)
-        val action = holder.confirmAction ?: return openDetail(player, mount.id)
+        val action = holder.confirmAction ?: return openDetailFromCurrent(player, mount.id)
         when (slot) {
             CONFIRM_CANCEL_SLOT -> when (action) {
                 is ConfirmAction.Skin -> openSkins(player, mount)
                 is ConfirmAction.Level -> openProgression(player, mount)
-                else -> openDetail(player, mount.id)
+                is ConfirmAction.Ability -> openAbilities(player, mount)
+                else -> openDetailFromCurrent(player, mount.id)
             }
             CONFIRM_ACCEPT_SLOT -> {
                 if (!holder.confirmEnabled) return
@@ -654,6 +812,7 @@ class MountGuiController(
                             when (action) {
                                 is ConfirmAction.Skin -> MountScreen.SKINS
                                 is ConfirmAction.Level -> MountScreen.PROGRESSION
+                                is ConfirmAction.Ability -> MountScreen.ABILITIES
                                 else -> MountScreen.DETAIL
                             },
                     )
@@ -700,7 +859,7 @@ class MountGuiController(
                                 )
                             player.sendMessage(component(configured.replace("<mount>", escape(mount.displayName))))
                             click(player)
-                            openDetail(player, mount.id)
+                            openDetailFromCurrent(player, mount.id)
                         }
                     }
                 },
@@ -763,9 +922,10 @@ class MountGuiController(
 
     private fun reopen(player: Player, mount: MountDefinition, screen: MountScreen) {
         when (screen) {
+            MountScreen.ABILITIES -> openAbilities(player, mount)
             MountScreen.PROGRESSION -> openProgression(player, mount)
             MountScreen.SKINS -> openSkins(player, mount)
-            else -> openDetail(player, mount.id)
+            else -> openDetailFromCurrent(player, mount.id)
         }
     }
 
@@ -966,6 +1126,7 @@ class MountGuiController(
         private val DETAIL_BACK_SLOT get() = slot(ArcMenuSchema.MOUNT_DETAIL, "back")
         private val DETAIL_WHISTLE_SLOT get() = slot(ArcMenuSchema.MOUNT_DETAIL, "whistle")
         private val DETAIL_ABILITY_SLOTS get() = region(ArcMenuSchema.MOUNT_DETAIL, ArcMenuSchema.MOUNT_ABILITIES)
+        private val LEVEL_CARD_SLOTS = listOf(10, 11, 12, 14, 15)
 
         private val TUNING_SIZE get() = rows(ArcMenuSchema.MOUNT_PROGRESSION)
         private val TUNING_INFO_SLOT get() = slot(ArcMenuSchema.MOUNT_PROGRESSION, "info")

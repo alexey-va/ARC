@@ -146,6 +146,13 @@ gui:
       back-description: "<#8c8c8c>Вернуться в главное меню."
     detail:
       back-description: "<#8c8c8c>Вернуться к коллекции."
+      abilities-title: "<#20252b><bold>Способности: <mount></bold>"
+      abilities-summary-name: "<#92bed8>Способности маунта"
+      abilities-summary-title: "<#8c8c8c>Все способности в одном списке:"
+      abilities-summary-line: "<state> <#e6fff3><ability>"
+      abilities-summary-footer: "<#8c8c8c>Открой карточку, чтобы выбрать способность."
+      abilities-summary-empty:
+        - "<#8c8c8c>У этого маунта нет покупных способностей."
       mount-locked-state: "<#c42323>✘ Не получен"
       locked-acquisition: "<#8c8c8c>Получение: <#e6fff3><acquisition>"
       description-line: "<#e6fff3><mount-description>"
@@ -270,6 +277,13 @@ gui:
       level-sprint: "<#8c8c8c>Форсаж: <#e6fff3>×<sprint>"
       level-step-initial: "<#8c8c8c>Макс. подъём: <#e6fff3><step> блока"
       level-step-upgrade: "<#8c8c8c>Макс. подъём: <#e6fff3><step-before> <#8c8c8c>→ <#2bba43><step-after> блока"
+      level-step: "<#8c8c8c>Подъём: <#e6fff3><step> блока"
+      level-card-owned-name: "<#2bba43>Уровень <level> · открыт"
+      level-card-available-name: "<#92bed8>Уровень <level> · доступен"
+      level-card-locked-name: "<#969696>Уровень <level> · закрыт"
+      level-card-owned: "<#2bba43>Уже открыто"
+      level-card-locked: "<#969696>Сначала откройте предыдущий уровень"
+      level-card-special: "<#ff9f0f><acquisition>"
       speed-name: "<#92bed8>Скорость: <percentage>%"
       speed-selected-name: "<#2bba43>Скорость: <percentage>%"
       speed-lore:

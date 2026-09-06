@@ -144,6 +144,7 @@ object MountModule : PluginModule {
                     transfers = MountTransferController(
                         ARC.instance, transferConfig, loadedCatalog, ledger, LuckPermsMountTransfers(luckPerms),
                         controller, coordinator::isBusy, guiController::openDetail,
+                        { playerId, mount -> loadedOwnership.profile(MountPermissionSubject(playerId, "", { false }), mount) },
                     )
                 } catch (failure: Throwable) { ledger.close(); throw failure }
             } catch (failure: Exception) {
