@@ -135,10 +135,7 @@ inputs:
   build: Строительство
   explore: Исследование
   trade: Торговля
-  result: |
-    <#e6fff3><bold>Ответ DialogResponseView</bold></#e6fff3>
-    <#c6d5e1>Значения прочитаны по ключам и безопасно ограничены для вывода.</#c6d5e1>
-    <#ffd166>%lines%</#ffd166>
+  result: <#9BE49D><bold>Ответ DialogResponseView</bold>
 input-options:
   intro: |
     <#e6fff3><bold>Те же поля, другие параметры</bold></#e6fff3>
@@ -187,10 +184,7 @@ custom:
   echo: Отправить payload
   echo-tip: <gray>Отправить custom click с source=demo и sample=7.</gray>
   message: Сообщение
-  result: |
-    <#e6fff3><bold>Custom click обработан</bold></#e6fff3>
-    <#c6d5e1>Идентификатор и разрешённые значения ответа были прочитаны сервером.</#c6d5e1>
-    <#ffd166>%lines%</#ffd166>
+  result: <#9BE49D><bold>Custom click обработан</bold>
 notice:
   intro: |-
     <#e6fff3><bold>Notice</bold></#e6fff3>

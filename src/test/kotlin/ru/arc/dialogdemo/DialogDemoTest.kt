@@ -34,7 +34,10 @@ class DialogDemoTest : FreeSpec({
             config.string("alignment.sample", "MISSING") shouldNotContain "MISSING"
             config.string("back", "MISSING") shouldNotContain "MISSING"
             listOf("custom.ack", "custom.result", "inputs.result", "callback.success").forEach {
-                config.string(it, "MISSING") shouldNotContain "MISSING"
+                val resultTitle = config.string(it, "MISSING")
+                resultTitle shouldNotContain "MISSING"
+                resultTitle shouldNotContain "%lines%"
+                resultTitle shouldNotContain "\n"
             }
         } finally { directory.toFile().deleteRecursively() }
     }

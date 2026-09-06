@@ -41,8 +41,8 @@ Verified against the official Minecraft 1.21.11 client and Paper's exact-version
 API. The repository compiles against its existing Paper 26.1.2 dependency; the
 showcase uses only the 1.21.11 dialog API surface. An explicit compile-only
 Adventure dependency gives the server API precedence over the older Adventure
-classes bundled inside the HuskHomes compile JAR. It adds no bundled runtime
-Adventure copy.
+classes bundled inside the HuskHomes compile JAR. This explicit compile-only declaration does not add a runtime dependency;
+existing transitive JAR contents are unchanged.
 
 - `PlainMessageHandler` calls `setCentered(true)`; `ItemHandler` leaves the
   description widget left-aligned. Changing width does not change alignment.
