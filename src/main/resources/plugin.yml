@@ -48,8 +48,8 @@ softdepend:
   - CoreProtect
 commands:
   dungeon:
-    description: Dungeon shortcuts
-    usage: /dungeon [start|quit|entry|save|saves|help]
+    description: Dungeon control panel and saved places
+    usage: /dungeon [menu|start|quit|entry|save|saves|help]
     aliases: [данж]
   dungeonstart:
     description: Start the current dungeon

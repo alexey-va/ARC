@@ -13,7 +13,7 @@ literal components, never evaluated as commands or MiniMessage.
 | --- | --- |
 | Dialog types | `notice` (custom and default action), `confirmation`, `multi_action`, `dialog_list`, `server_links` |
 | Body types | `plain_message`; `item` with and without description |
-| Alignment | Identical paragraphs in centered plain message and left-aligned item description |
+| Alignment | Plain message and item description comparison; both are centered by the 1.21.11 client |
 | Item options | Stack count, damage bar, tooltip on/off, decorations on/off, 16px and 48px allocated slots |
 | Text input | Initial value, max length, width, hidden label, multiline explicit height and automatic height |
 | Boolean input | Both initial states; custom `on`/`off` template values |
@@ -44,8 +44,13 @@ Adventure dependency gives the server API precedence over the older Adventure
 classes bundled inside the HuskHomes compile JAR. This explicit compile-only declaration does not add a runtime dependency;
 existing transitive JAR contents are unchanged.
 
-- `PlainMessageHandler` calls `setCentered(true)`; `ItemHandler` leaves the
-  description widget left-aligned. Changing width does not change alignment.
+- Both handlers create `FocusableTextWidget`, whose constructor calls
+  `setCentered(true)`. The earlier claim that item descriptions are left-aligned
+  was incorrect: the superclass default is overridden by this constructor.
+  Existing demo text describing a left edge is therefore not proof of alignment.
+  Changing width does not change alignment. Measured per-line padding with
+  resource-pack space glyphs can emulate left/right edges; it must be checked
+  against the font metrics, internal padding and wrapping in a real client.
 - Item slot size reserves space; it does not scale the item model. Item bodies
   are display elements, not inventory slots or item-transfer actions.
 - Ordinary specimen pages use Back in the action grid and a Close footer, so
@@ -82,4 +87,4 @@ Sources:
 - https://jd.papermc.io/paper/1.21.11/io/papermc/paper/registry/data/dialog/type/DialogType.html
 - https://jd.papermc.io/paper/1.21.11/io/papermc/paper/registry/data/dialog/input/DialogInput.html
 - https://jd.papermc.io/paper/1.21.11/io/papermc/paper/registry/data/dialog/body/ItemDialogBody.Builder.html
-- Minecraft 1.21.11 official client mappings: `DialogBodyHandlers.PlainMessageHandler`, `DialogBodyHandlers.ItemHandler`, `MultiLineTextWidget`.
+- Minecraft 1.21.11 official client mappings: `DialogBodyHandlers.PlainMessageHandler`, `DialogBodyHandlers.ItemHandler`, `FocusableTextWidget`, `MultiLineTextWidget`.

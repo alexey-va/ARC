@@ -26,6 +26,56 @@ class EMDungeonSavesTest : FreeSpec({
     beforeEach { paper = MockBukkitTestRuntime.open() }
     afterEach { paper.close() }
 
+    "read-only preflight agrees with save for unsafe flight combat cooldown and pending travel" {
+        withScheduler {
+            val player = paper.addPlayer("preflight")
+            val world = paper.addSimpleWorld("preflight-world")
+            var now = 100_000L
+            var safe = false
+            val service = qol(world, player, safe = { safe }, clock = { now })
+            val expected = service.view(player)!!
+            fun denied() {
+                val reason = service.saveBlockReason(player, expected)
+                (reason != null) shouldBe true
+                service.save(player, "test", expected).message shouldBe reason
+            }
+            denied()
+            safe = true
+            service.saveBlockReason(player, expected) shouldBe null
+            player.allowFlight = true
+            player.isFlying = true
+            denied()
+            player.isFlying = false
+            service.combat(mockk<EntityDamageByEntityEvent> { every { entity } returns player; every { damager } returns player })
+            denied()
+            now += 15_001
+            service.save(player, "test", expected).success shouldBe true
+            denied()
+            now += 5_001
+            service.saveBlockReason(player, expected) shouldBe null
+            service.travel(player, expected, "entry")
+            denied()
+            service.close()
+        }
+    }
+
+    "a root action cannot act on a replacement run" {
+        withScheduler {
+            val player = paper.addPlayer("old-panel")
+            val world = paper.addSimpleWorld("panel-world")
+            var run = "before"
+            val audience = RecordingSavesAudience()
+            val service = qol(world, player, audience = audience, runProvider = { run })
+            val expected = service.panelView(player)!!
+            run = "after"
+            service.panelAction(player, expected, "quit")
+            audience.messages.size shouldBe 1
+            net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(audience.messages.single()).contains("изменились") shouldBe true
+            player.world shouldBe world
+            service.close()
+        }
+    }
+
     "manual save persists, overwrites position, enforces cooldown and full limit" {
         withScheduler { _ ->
             val player = paper.addPlayer("saver")
