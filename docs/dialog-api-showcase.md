@@ -99,6 +99,8 @@ layout explicitly. A different client font option requires a different snapshot.
 `DialogTextLayoutTest` measures every output line of the Russian demo, including
 bold and the ItemsAdder coin: 392px total, equal selected edges and preserved text.
 This is a layout-model test, not a screenshot from a vanilla client.
+The same alignment page also demonstrates standalone `PixelSpacing.padding`
+with gaps of 0, 8, 16 and 32px between a common left marker and the sample word.
 
 Local unit/package checks cover resource routes and bounded literal echo.
 Native acceptance must open every page and exercise form submission, nested

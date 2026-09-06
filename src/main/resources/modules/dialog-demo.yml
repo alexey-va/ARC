@@ -79,6 +79,12 @@ alignment:
   left: <#7FE2B5><bold>По левому краю</bold>
   center: <#FFCA80><bold>По центру</bold>
   right: <#C4A5FF><bold>По правому краю</bold>
+  padding-intro: |-
+    <#FFCA80><bold>Отступ в пикселях</bold>
+    <#C6D5E1>Черта отмечает общее начало строки. Между ней и словом — отступ 0, 8, 16 или 32 пикселя.
+    <#C6D5E1>Используются готовые невидимые символы ItemsAdder из серверного ресурспака.
+  padding-marker: <#FFCA80>|</#FFCA80>
+  padding-sample: <#E6FFF3>Пример <#FFCA80>· %pixels% px
   sample: |-
     <#FFE2AE><bold>Горожанин</bold>
     <#E6FFF3>Дома: <#7FE2B5>1 → 2

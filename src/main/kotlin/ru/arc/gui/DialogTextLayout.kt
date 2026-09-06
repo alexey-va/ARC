@@ -13,6 +13,7 @@ import ru.arc.text.TextLayoutResult
 
 /** Server-pack font snapshot adapter; the reusable layout algorithm lives in arc-core. */
 object DialogTextLayout {
+    val spacing = PixelSpacing(Key.key("minecraft:default"), 0xF0F01)
     private val engine by lazy {
         val fonts = requireNotNull(javaClass.getResourceAsStream("/fonts/dialog-font-metrics.json"))
             .bufferedReader().use { JsonParser.parseReader(it).asJsonObject.getAsJsonObject("fonts") }
@@ -27,7 +28,7 @@ object DialogTextLayout {
         }
         ComponentTextLayout(GlyphWidths { font, point, bold ->
             tables[font.asString()]?.get(if (bold) 1 else 0)?.get(point)
-        }, PixelSpacing(Key.key("minecraft:default"), 0xF0F01))
+        }, spacing)
     }
 
     /** Width includes Minecraft 1.21.11's 4px padding on each side. */

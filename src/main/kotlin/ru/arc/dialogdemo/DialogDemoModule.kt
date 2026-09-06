@@ -98,7 +98,9 @@ object DialogDemoModule : PluginModule, Listener {
                 body(if (player.hasResourcePack()) "alignment.intro" else "alignment.pack-required"),
                 body("alignment.left"), DialogTextLayout.body(player, text("alignment.sample"), TextAlignment.LEFT),
                 body("alignment.center"), DialogTextLayout.body(player, text("alignment.sample"), TextAlignment.CENTER),
-                body("alignment.right"), DialogTextLayout.body(player, text("alignment.sample"), TextAlignment.RIGHT)))
+                body("alignment.right"), DialogTextLayout.body(player, text("alignment.sample"), TextAlignment.RIGHT),
+                body("alignment.padding-intro"),
+                DialogTextLayout.body(player, paddingSample(player.hasResourcePack()), TextAlignment.LEFT)))
             "text" -> multi("title.text", listOf(body("text.styles"), body("text.colors"), body("text.sections"),
                 DialogBody.plainMessage(Component.translatable("block.minecraft.diamond_block"), 420),
                 DialogBody.plainMessage(Component.keybind("key.swapOffhand"), 420), body("text.font")))
@@ -198,6 +200,19 @@ object DialogDemoModule : PluginModule, Listener {
             else -> multi("title.limits", listOf(body("limits.body")))
         }
         player.showDialog(screen)
+    }
+
+    private fun paddingSample(withPack: Boolean): Component {
+        val result = Component.text()
+        listOf(0, 8, 16, 32).forEachIndexed { index, pixels ->
+            if (index > 0) result.append(Component.newline())
+            result.append(text("alignment.padding-marker"))
+            if (withPack) result.append(DialogTextLayout.spacing.padding(pixels))
+            result.append(text("alignment.padding-sample").replaceText {
+                it.matchLiteral("%pixels%").replacement(pixels.toString())
+            })
+        }
+        return result.build()
     }
 
     private fun options() = listOf(OptionEntry.create("build", text("inputs.build"), true),
