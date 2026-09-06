@@ -26,7 +26,7 @@ class AeLootTest :
 
             val command = AeLoot.buildCommand("Steve", treasure)
 
-            command shouldStartWith "ae giveitem Steve magic 1 "
+            command shouldStartWith "advancedenchantments:advancedenchantments giveitem Steve magic 1 "
             listOf("SIMPLE", "UNIQUE", "ELITE", "ULTIMATE", "LEGENDARY", "FABLED")
                 .any { command.endsWith(" $it") || command.contains(" $it") } shouldBe true
         }
@@ -38,7 +38,7 @@ class AeLootTest :
                     args = listOf(AeArg.RandomTier),
                 )
 
-            AeLoot.buildCommand("Alex", treasure) shouldStartWith "ae giverandombook Alex "
+            AeLoot.buildCommand("Alex", treasure) shouldStartWith "advancedenchantments:advancedenchantments giverandombook Alex "
         }
 
         it("should parse ae args from yaml map") {
@@ -141,7 +141,7 @@ class TreasureServiceNativeLootTest :
             service.give(treasure, player)
 
             verify {
-                Bukkit.dispatchCommand(console, "ae giveitem Steve mystery 1")
+                Bukkit.dispatchCommand(console, "advancedenchantments:advancedenchantments giveitem Steve mystery 1")
             }
         }
 
