@@ -33,6 +33,8 @@ import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import ru.arc.core.PluginModule
 import ru.arc.util.TextUtil
+import ru.arc.gui.DialogTextLayout
+import ru.arc.text.TextAlignment
 
 /**
  * Stateless native API specimens, deliberately outside the production menu model:
@@ -92,8 +94,11 @@ object DialogDemoModule : PluginModule, Listener {
         val screen = when (page) {
             "root" -> dialog("title.root", listOf(body("intro")),
                 DialogType.multiAction(pages.drop(1).map(::nav), button("close", custom("close"), 200), 2))
-            "alignment" -> multi("title.alignment", listOf(body("alignment.intro"),
-                body("alignment.sample", 400), item(Material.WRITABLE_BOOK, "alignment.sample")))
+            "alignment" -> multi("title.alignment", listOf(
+                body(if (player.hasResourcePack()) "alignment.intro" else "alignment.pack-required"),
+                body("alignment.left"), DialogTextLayout.body(player, text("alignment.sample"), TextAlignment.LEFT),
+                body("alignment.center"), DialogTextLayout.body(player, text("alignment.sample"), TextAlignment.CENTER),
+                body("alignment.right"), DialogTextLayout.body(player, text("alignment.sample"), TextAlignment.RIGHT)))
             "text" -> multi("title.text", listOf(body("text.styles"), body("text.colors"), body("text.sections"),
                 DialogBody.plainMessage(Component.translatable("block.minecraft.diamond_block"), 420),
                 DialogBody.plainMessage(Component.keybind("key.swapOffhand"), 420), body("text.font")))

@@ -1,5 +1,12 @@
 # Конфигурируемые GUI в ARC
 
+Для нативного Dialog body с измеренным выравниванием используйте
+`DialogTextLayout.body(player, text, TextAlignment.LEFT, width = 400)`.
+Общий алгоритм принадлежит `arc-core/ru.arc.text.ComponentTextLayout`;
+метрики ресурспака, ограничения и проверка описаны в
+[витрине Dialog API](../../../../../../docs/dialog-api-showcase.md#shared-alignment-adapter).
+Не копируйте подсчёт пробелов в отдельные игровые меню.
+
 Все игровые экраны ARC подключаются к общему каталогу
 `src/main/resources/guis/menus.yml`. Он работает поверх
 `arc-core-menu` и `arc-core-paper-menu` (Inventory Framework остаётся внутренней

@@ -47,10 +47,12 @@ existing transitive JAR contents are unchanged.
 - Both handlers create `FocusableTextWidget`, whose constructor calls
   `setCentered(true)`. The earlier claim that item descriptions are left-aligned
   was incorrect: the superclass default is overridden by this constructor.
-  Existing demo text describing a left edge is therefore not proof of alignment.
-  Changing width does not change alignment. Measured per-line padding with
-  resource-pack space glyphs can emulate left/right edges; it must be checked
-  against the font metrics, internal padding and wrapping in a real client.
+  Changing width does not change alignment. The alignment page now compares
+  three measured layouts through `ru.arc.gui.DialogTextLayout`, backed by
+  `ru.arc.text.ComponentTextLayout` in arc-core. It subtracts the widget's 8px
+  padding, wraps styled text and pads each line with `arc:dialog_alignment`
+  space glyphs. Resource-pack installation and native visual checks remain
+  separate gates; packet inspection alone cannot prove pixel alignment.
 - Item slot size reserves space; it does not scale the item model. Item bodies
   are display elements, not inventory slots or item-transfer actions.
 - Ordinary specimen pages use Back in the action grid and a Close footer, so
@@ -76,6 +78,27 @@ the caller. They do not authorize a gameplay operation or retain a session.
 Paper's callback example is deliberately short-lived and one-use.
 
 ## Verification
+
+### Shared alignment adapter
+
+Use `DialogTextLayout.body(player, component, TextAlignment.LEFT, width = 400)`
+for a native body, or `layout(component, alignment, width)` for its typed result.
+The player adapter checks that a pack was accepted and falls back to the original
+centered text if it is absent or metrics are unsupported. This API does not know
+which additional client-side packs override fonts; acceptance alone cannot prove
+the current font fingerprint. Deploy the spacer font before enabling its consumer.
+
+`fonts/dialog-font-metrics.json` is generated from the exact Minecraft 1.21.11
+client plus the published server pack using ops'
+`scripts/tools/build_dialog_font_metrics.py`. It includes source SHA-1, per-asset
+SHA-256, provider diagnostics and metrics for the ordinary `uniform=false` client
+option. Regenerate when font JSONs or referenced bitmaps change. Unknown font
+providers fail the generator; unmeasured glyphs and non-text components fail the
+layout explicitly. A different client font option requires a different snapshot.
+
+`DialogTextLayoutTest` measures every output line of the Russian demo, including
+bold and the ItemsAdder coin: 392px total, equal selected edges and preserved text.
+This is a layout-model test, not a screenshot from a vanilla client.
 
 Local unit/package checks cover resource routes and bounded literal echo.
 Native acceptance must open every page and exercise form submission, nested
