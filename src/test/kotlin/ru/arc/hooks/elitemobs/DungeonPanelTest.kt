@@ -30,7 +30,7 @@ class DungeonPanelTest : FreeSpec({
         )
         for (visit in visits) {
             every { dungeon.panelView(player) } returns DungeonPanelView(world.uid, visit, null)
-            DungeonSaveMenus(dungeon) { _, screen -> shown += screen }.panel(player)
+            DungeonSaveMenus(dungeon) { _, screen, _ -> shown += screen }.panel(player)
             shown.last().id shouldBe "dungeon.panel"
             shown.last().buttons.map { it.id.value } shouldContain "saves"
             shown.last().buttons.map { it.id.value } shouldContain "quit"
@@ -47,7 +47,7 @@ class DungeonPanelTest : FreeSpec({
         every { dungeon.view(player) } returns view
         every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
         val shown = mutableListOf<PaperDialogScreen>()
-        DungeonSaveMenus(dungeon) { _, screen -> shown += screen }.panel(player)
+        DungeonSaveMenus(dungeon) { _, screen, _ -> shown += screen }.panel(player)
         shown.last().buttons.single { it.id.value == "saves" }.onClick.handle(mockk())
         shown.last().id shouldBe "dungeon.saves"
         shown.last().exitButton!!.onClick.handle(mockk())
@@ -63,7 +63,7 @@ class DungeonPanelTest : FreeSpec({
         every { dungeon.view(player) } returns view
         every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
         val shown = mutableListOf<PaperDialogScreen>()
-        DungeonSaveMenus(dungeon) { _, screen -> shown += screen }.panel(player)
+        DungeonSaveMenus(dungeon) { _, screen, _ -> shown += screen }.panel(player)
         shown.last().exitButton!!.id.value shouldBe "close"
         shown.last().buttons.single { it.id.value == "saves" }.onClick.handle(mockk())
         shown.last().exitButton!!.id.value shouldBe "back"
@@ -79,7 +79,7 @@ class DungeonPanelTest : FreeSpec({
         var action: String? = null
         every { dungeon.panelAction(player, expected, any()) } answers { action = thirdArg() }
         val shown = mutableListOf<PaperDialogScreen>()
-        DungeonSaveMenus(dungeon) { _, screen -> shown += screen }.panel(player)
+        DungeonSaveMenus(dungeon) { _, screen, _ -> shown += screen }.panel(player)
         shown.single().buttons.single { it.id.value == "start" }.onClick.handle(mockk<PaperDialogClickContext>(relaxed = true))
         verify { dungeon.panelAction(player, expected, "start") }
         action shouldBe "start"

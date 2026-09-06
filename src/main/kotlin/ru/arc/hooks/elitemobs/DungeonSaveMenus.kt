@@ -20,11 +20,11 @@ import java.time.format.DateTimeFormatter
 
 internal class DungeonSaveMenus(
     private val dungeon: EMDungeonQol,
-    private val show: (Player, PaperDialogScreen) -> Unit = { player, screen ->
+    private val show: (Player, PaperDialogScreen, (() -> Unit)?) -> Unit = { player, screen, reopen ->
         val close = PaperDialogButton(PaperDialogActionId.of("close"), dungeon.text("saves.dialog.close-label", "<#aaa49a>Закрыть"), width = 200, closeDialogBeforeAction = true) { }
         // A root Close is already the footer, so never move a second Close into the grid.
         val prepared = if (screen.exitButton?.id?.value == "close" && !MenuEscapeBehavior.goesBack(player)) screen.copy(exitButton = null) else screen
-        ArcMenus.openDialog(player, prepared, close)
+        ArcMenus.openDialog(player, prepared, close, reopen = reopen)
     },
 ) {
     private val nameInput = PaperDialogInputId.of("name")
@@ -75,7 +75,7 @@ internal class DungeonSaveMenus(
                 mainMenu(player),
             ),
             exitButton = close(), columns = 2,
-        ))
+        )) { panel(player) }
     }
 
     internal fun open(player: Player, feedback: Component? = null) {
@@ -84,7 +84,7 @@ internal class DungeonSaveMenus(
             if (panel == null) unavailable(player) else {
                 show(player, PaperDialogScreen(id = "dungeon.saves.unavailable", title = text("saves.dialog.title", "<#f4bd6a>Сохранения"),
                     body = listOf(PaperDialogBody(availability(dungeon.saveBlockReason(player, null)), 468)),
-                    buttons = listOf(autosaveSettingsButton(player), guide(player) { open(player) }), exitButton = back { panel(player) }))
+                    buttons = listOf(autosaveSettingsButton(player), guide(player) { open(player) }), exitButton = back { panel(player) })) { open(player) }
             }
             return
         }
@@ -107,7 +107,7 @@ internal class DungeonSaveMenus(
             ) + listOfNotNull(view.exit?.let { locationButton(player, "exit", "saves.dialog.exit-label", "<#d7b486>Место прошлого выхода", "saves.dialog.exit-tooltip", it, view) }) +
                 view.points.mapIndexed { index, point -> pointButton("point_$index", pointLabel(point), pointTooltip(point)) { detail(player, point, view) } },
             exitButton = back { panel(player) }, columns = 2,
-        ))
+        )) { open(player) }
     }
 
     private fun unavailable(player: Player): Unit = show(player, PaperDialogScreen(
@@ -120,7 +120,7 @@ internal class DungeonSaveMenus(
             partyButton(player),
             mainMenu(player),
         ), exitButton = close(), columns = 2,
-    ))
+    )) { unavailable(player) }
 
     private fun mainMenu(player: Player) = action("main", "panel.main-label", "<#aaa49a>Главное меню ›", "panel.main-tooltip", "Открыть главное меню сервера") { dungeon.action(player, "main") }
 
@@ -145,7 +145,7 @@ internal class DungeonSaveMenus(
                     onClick = { val result = dungeon.setAutosaveSeconds(player, interval); autosaveSettings(player, result.message.takeUnless { result.success }) })
             } else listOf(guide(player) { autosaveSettings(player) }),
             exitButton = back { open(player) }, columns = 2,
-        ))
+        )) { autosaveSettings(player) }
     }
 
     private fun autosaveIntervalLabel(seconds: Int): Component = when {
@@ -168,7 +168,7 @@ internal class DungeonSaveMenus(
                 if (available) action("manage_party", "party.manage-label", "<#9bd48d>Управление группой", "party.manage-tooltip", "Открыть меню группы EliteMobs", close = true) { dungeon.action(player, "party") } else null,
                 guide(player) { party(player) },
             ), exitButton = back { panel(player) }, columns = 2,
-        ))
+        )) { party(player) }
     }
 
     private fun saveCounts(view: DungeonSaveView): Component = text("saves.dialog.counts", "<#aaa49a>Ручные: <#e8dfd2><manual>/5 <#aaa49a>· Авто: <#e8dfd2><auto>/3",
@@ -195,7 +195,7 @@ internal class DungeonSaveMenus(
             ),
             buttons = listOf(guide(player) { about(player) }),
             exitButton = back { panel(player) },
-        ))
+        )) { about(player) }
     }
 
     private fun shop(player: Player, feedback: Component? = null) {
@@ -215,7 +215,7 @@ internal class DungeonSaveMenus(
                     else confirmPurchase(player, quote, view)
                 }
             }.ifEmpty { listOf(guide(player) { shop(player) }) }, exitButton = back { panel(player) }, columns = 2,
-        ))
+        )) { shop(player) }
     }
 
     private fun confirmPurchase(player: Player, quote: SupplyQuote, expected: DungeonPanelView, feedback: Component? = null) {
@@ -232,7 +232,7 @@ internal class DungeonSaveMenus(
                 val message = supplyResult(result)
                 if (result.success) shop(player, message) else confirmPurchase(player, quote, expected, message)
             }), exitButton = back { shop(player) },
-        ))
+        )) { confirmPurchase(player, quote, expected) }
     }
 
     private fun supplyResult(result: SupplyResult): Component = when (result) {
@@ -282,7 +282,7 @@ internal class DungeonSaveMenus(
             ),
             exitButton = back { open(player) },
             columns = 1,
-        ))
+        ), null)
     }
 
     private fun detail(player: Player, point: DungeonSavePoint, expected: DungeonSaveView) {
@@ -296,7 +296,7 @@ internal class DungeonSaveMenus(
             ),
             exitButton = back { open(player) },
             columns = 2,
-        ))
+        )) { reopenPoint(player, point.id, false) }
     }
 
     private fun confirmRemove(player: Player, point: DungeonSavePoint, expected: DungeonSaveView) {
@@ -312,7 +312,14 @@ internal class DungeonSaveMenus(
             ),
             exitButton = back { detail(player, point, expected) },
             columns = 1,
-        ))
+        )) { reopenPoint(player, point.id, true) }
+    }
+
+    private fun reopenPoint(player: Player, id: String, removing: Boolean) {
+        val view = dungeon.view(player) ?: run { open(player); return }
+        val point = view.points.firstOrNull { it.id == id }
+        if (point == null) open(player)
+        else if (removing) confirmRemove(player, point, view) else detail(player, point, view)
     }
 
     private fun locationButton(player: Player, id: String, labelKey: String, labelFallback: String, tooltipKey: String, location: Location, expected: DungeonSaveView) =

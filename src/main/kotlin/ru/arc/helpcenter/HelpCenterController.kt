@@ -29,7 +29,7 @@ internal class HelpCenterController(
         ArcMenus.openDialog(player, screen, PaperDialogButton(
             PaperDialogActionId.of("close_menu"), MiniMessage.miniMessage().deserialize(settings.text("menu-close-label")),
             width = 200, closeDialogBeforeAction = true, onClick = { navigation.visit(player) },
-        ))
+        ), reopen = navigation.returnTarget(player), onDismiss = { navigation.visit(player) })
     },
     private val legacySettings: HelpCenterLegacySettings = HelpCenterLegacySettings(),
 ) {
@@ -117,6 +117,7 @@ internal class HelpCenterController(
     }
 
     fun open(player: Player, page: HelpCenterPage = HelpCenterPage.ROOT) {
+        ArcMenus.beginDialogFlow(player)
         when (page) {
             HelpCenterPage.ROOT -> openRoot(player)
             HelpCenterPage.NOW, HelpCenterPage.MY -> openNow(player)
@@ -172,6 +173,7 @@ internal class HelpCenterController(
     }
 
     internal fun openDungeonsGuide(player: Player, returnTo: () -> Unit) {
+        ArcMenus.beginDialogFlow(player)
         dungeons.openGuide(player, returnTo)
     }
 

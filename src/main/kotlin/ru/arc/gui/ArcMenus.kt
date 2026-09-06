@@ -68,9 +68,15 @@ object ArcMenus {
         content: PaperCloudStorageContent,
     ): PaperCloudStorageSession = requireNotNull(runtime).openStorage(player, menu, region, storage, content)
 
-    fun openDialog(player: Player, screen: PaperDialogScreen, closeButton: ru.arc.paper.menu.PaperDialogButton? = null) {
+    fun beginDialogFlow(player: Player) { dialogRuntime?.beginFlow(player) }
+
+    fun openDialog(player: Player, screen: PaperDialogScreen, closeButton: ru.arc.paper.menu.PaperDialogButton? = null, reopen: (() -> Unit)? = null, onDismiss: () -> Unit = {}) {
+        val close = closeButton ?: ru.arc.paper.menu.PaperDialogButton(
+            ru.arc.paper.menu.PaperDialogActionId.of("close_menu"), Component.translatable("gui.back"),
+            width = 200, closeDialogBeforeAction = true, onClick = {},
+        )
         requireNotNull(dialogRuntime) { "ARC dialog runtime is not initialized" }
-            .open(player, MenuEscapeBehavior.apply(screen, MenuEscapeBehavior.goesBack(player), closeButton))
+            .open(player, MenuEscapeBehavior.apply(screen, MenuEscapeBehavior.goesBack(player), close), reopen, onDismiss, !MenuEscapeBehavior.goesBack(player))
     }
 
     fun item(

@@ -17,14 +17,17 @@ import ru.arc.gui.ArcMenus
 import ru.arc.paper.menu.PaperDialogClickContext
 import ru.arc.paper.menu.PaperDialogScreen
 import java.nio.file.Files
+import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
 class JoinMessageDialogTest : FreeSpec({
     val directory = Files.createTempDirectory("join-message-dialog")
     val config = Config(directory, "modules/join-message-dialog.yml")
-    val dialogs = JoinMessageDialogs(config)
+    val runOnMain: (() -> Unit) -> Unit = { it() }
+    val dialogs = JoinMessageDialogs(config, runOnMain)
     val player = mockk<Player>(relaxed = true)
     var screen: PaperDialogScreen? = null
+    var dismiss: (() -> Unit)? = null
     var data = JoinMessagesData("Viewer")
     val permissions = mutableSetOf<String>()
     fun plain(component: Component) = PlainTextComponentSerializer.plainText().serialize(component)
@@ -41,6 +44,7 @@ class JoinMessageDialogTest : FreeSpec({
 
     beforeEach {
         screen = null
+        dismiss = null
         data = JoinMessagesData("Viewer")
         permissions.clear()
         permissions += "arc.join.message.gui"
@@ -49,9 +53,13 @@ class JoinMessageDialogTest : FreeSpec({
         every { JoinMessageSubCommand.permission } returns "arc.join.message.gui"
         every { QuitMessageSubCommand.permission } returns "arc.join.message.gui"
         every { player.name } returns "Viewer"
+        every { player.uniqueId } returns UUID.fromString("00000000-0000-0000-0000-000000000001")
         every { player.isOnline } returns true
         every { player.hasPermission(any<String>()) } answers { firstArg<String>() in permissions }
-        every { ArcMenus.openDialog(player, any()) } answers { screen = secondArg() }
+        every { ArcMenus.openDialog(player, any(), any(), any(), any()) } answers {
+            screen = secondArg()
+            dismiss = arg(4)
+        }
         every { JoinMessagesManager.getOrCreateAsync("Viewer") } answers { CompletableFuture.completedFuture(data) }
         every { JoinMessagesManager.updateMessageAsync("Viewer", any(), any(), any()) } answers {
             data.updateMessage(secondArg(), thirdArg(), arg(3))
@@ -96,6 +104,21 @@ class JoinMessageDialogTest : FreeSpec({
     }
     afterSpec { directory.toFile().deleteRecursively() }
 
+    "pending catalog keeps loading screen and ignores completion after dismiss" {
+        val catalog = CompletableFuture<JoinMessageCatalog>()
+        val preferences = CompletableFuture<JoinMessagesData>()
+        every { JoinMessageCatalogManager.currentAsync() } returns catalog
+        every { JoinMessagesManager.getOrCreateAsync("Viewer") } returns preferences
+
+        dialogs.show(player)
+
+        screen!!.id shouldBe "messages.catalog.join"
+        dismiss!!.invoke()
+        catalog.complete(JoinMessageCatalog(revision = "late"))
+        preferences.complete(data)
+        screen!!.body.single().text shouldBe Component.text("…")
+    }
+
     "upgrading bundled dialog text preserves operator overrides and adds editor defaults" {
         val legacyDirectory = Files.createTempDirectory(directory, "legacy")
         val legacyFile = legacyDirectory.resolve("modules/join-message-dialog.yml")
@@ -105,7 +128,7 @@ class JoinMessageDialogTest : FreeSpec({
         }
         val old = Config(legacyDirectory, "modules/join-message-dialog.yml")
         old.setString("text.join-title", "Наш заголовок")
-        val upgraded = JoinMessageDialogs(old)
+        val upgraded = JoinMessageDialogs(old, runOnMain)
         old.string("text.join-title") shouldBe "Наш заголовок"
         old.string("text.custom-list") shouldContain "›"
         old.string("text.editor-help") shouldContain "%player_name%"

@@ -8,7 +8,8 @@ import ru.arc.paper.menu.PaperDialogButton
 /** Native Escape runs the footer action; ordinary navigation buttons do not. */
 object MenuEscapeBehavior {
     const val META_KEY = "arc-menu-escape"
-    fun goesBack(player: Player): Boolean = HookRegistry.luckPermsHook?.getCachedMeta(player.uniqueId, META_KEY) == "back"
+    fun goesBack(player: Player): Boolean = goesBack(HookRegistry.luckPermsHook?.getCachedMeta(player.uniqueId, META_KEY))
+    internal fun goesBack(meta: String?): Boolean = meta != "close"
 
     fun apply(screen: PaperDialogScreen, back: Boolean, closeButton: PaperDialogButton? = null): PaperDialogScreen {
         if (back) return screen

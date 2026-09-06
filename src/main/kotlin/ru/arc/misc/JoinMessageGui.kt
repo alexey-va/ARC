@@ -5,6 +5,7 @@ import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import ru.arc.ARC
 import ru.arc.commands.arc.subcommands.JoinMessageSubCommand
@@ -33,7 +34,12 @@ object JoinMessageGuiFactory {
     fun show(player: Player, isJoin: Boolean = true, startPage: Int = 0) = dialogs.show(player, isJoin, startPage)
 }
 
-internal class JoinMessageDialogs(private val config: Config) {
+internal class JoinMessageDialogs(
+    private val config: Config,
+    private val runOnMain: (() -> Unit) -> Unit = { block ->
+        if (Bukkit.isPrimaryThread()) block() else sync { block() }
+    },
+) {
     init {
         config.mergeMissingFromBundled("modules/join-message-dialog.yml")
         val loader = org.snakeyaml.engine.v2.api.Load(org.snakeyaml.engine.v2.api.LoadSettings.builder().build())
@@ -53,18 +59,27 @@ internal class JoinMessageDialogs(private val config: Config) {
     }
 
     private val inputId = PaperDialogInputId.of("message")
+    private val generations = mutableMapOf<java.util.UUID, Long>()
+    private var nextGeneration = 0L
     private val width get() = config.int("button-width", 600).coerceIn(300, 1024)
     private val pageSize get() = config.int("page-size", 6).coerceIn(1, 10)
 
     fun show(player: Player, isJoin: Boolean = true, startPage: Int = 0) {
-        sync {
-            if (!allowed(player, isJoin)) return@sync
+        runOnMain {
+            val generation = advance(player)
+            if (!allowed(player, isJoin)) return@runOnMain
+            showLoading(
+                player,
+                "messages.catalog.${if (isJoin) "join" else "leave"}",
+                text(if (isJoin) "join-title" else "leave-title"),
+                reopen = { show(player, isJoin, startPage) },
+            )
             JoinMessageCatalogManager.currentAsync()
                 .thenCombine(JoinMessagesManager.getOrCreateAsync(player.name)) { catalog, data ->
                     Triple(catalog.entries(isJoin).map { it.copy() }, data.selectedMessages(isJoin), data.customMessages(isJoin))
                 }.whenComplete { result, failure ->
                     sync {
-                        if (!player.isOnline) return@sync
+                        if (!current(player, generation)) return@sync
                         if (failure != null || result == null) {
                             reportFailure(player, failure ?: IllegalStateException("Missing message catalog"))
                         } else if (allowed(player, isJoin)) {
@@ -88,6 +103,7 @@ internal class JoinMessageDialogs(private val config: Config) {
         custom: Set<String>,
         requestedPage: Int,
     ) {
+        advance(player)
         val entries = catalog.filter { config.bool("show-unavailable", true) || it.permission == null || player.hasPermission(it.permission!!) }
         val total = custom.size + entries.size
         val pages = maxOf(1, (total + pageSize - 1) / pageSize)
@@ -133,13 +149,14 @@ internal class JoinMessageDialogs(private val config: Config) {
             ) + if (total == 0) listOf(PaperDialogBody(text("empty"), width)) else emptyList(),
             buttons = buttons,
             columns = 1,
-        ))
+        ), reopen = { show(player, isJoin, page) }, onDismiss = { invalidate(player) })
     }
 
     private fun selectCatalogMessage(player: Player, entry: JoinMessageCatalogEntry, isJoin: Boolean, selected: Boolean, page: Int) {
+        val generation = advance(player)
         JoinMessageCatalogManager.currentAsync().whenComplete { catalog, failure ->
             sync {
-                if (!allowed(player, isJoin)) return@sync
+                if (!current(player, generation, isJoin)) return@sync
                 if (failure != null || catalog == null) {
                     reportFailure(player, failure ?: IllegalStateException("Missing message catalog"))
                     return@sync
@@ -156,10 +173,17 @@ internal class JoinMessageDialogs(private val config: Config) {
     }
 
     private fun showCustom(player: Player, isJoin: Boolean, catalogPage: Int) {
+        val generation = advance(player)
         if (!allowed(player, isJoin, custom = true)) return
+        showLoading(
+            player,
+            "messages.custom.${if (isJoin) "join" else "leave"}",
+            text(if (isJoin) "custom-join-title" else "custom-leave-title"),
+            reopen = { showCustom(player, isJoin, catalogPage) },
+        )
         JoinMessagesManager.getOrCreateAsync(player.name).whenComplete { data, failure ->
             sync {
-                if (!player.isOnline) return@sync
+                if (!current(player, generation, isJoin, custom = true)) return@sync
                 if (failure != null || data == null) {
                     reportFailure(player, failure ?: IllegalStateException("Missing message preferences"))
                     return@sync
@@ -185,12 +209,13 @@ internal class JoinMessageDialogs(private val config: Config) {
                         if (custom.isEmpty()) listOf(PaperDialogBody(text("custom-empty"), width)) else emptyList(),
                     buttons = buttons,
                     exitButton = button("back", text("back-catalog"), isJoin) { show(it.player, isJoin, catalogPage) },
-                ))
+                ), reopen = { showCustom(player, isJoin, catalogPage) }, onDismiss = { invalidate(player) })
             }
         }
     }
 
     private fun openCustomMessage(player: Player, isJoin: Boolean, catalogPage: Int, message: String, selected: Boolean) {
+        advance(player)
         ArcMenus.openDialog(player, PaperDialogScreen(
             id = "messages.custom.detail.${if (isJoin) "join" else "leave"}",
             title = text("custom-detail-title"),
@@ -211,7 +236,25 @@ internal class JoinMessageDialogs(private val config: Config) {
                 },
             ),
             exitButton = button("back", text("back-custom"), isJoin) { showCustom(it.player, isJoin, catalogPage) },
-        ))
+        ), reopen = { reopenCustomMessage(player, isJoin, catalogPage, message) }, onDismiss = { invalidate(player) })
+    }
+
+    private fun reopenCustomMessage(player: Player, isJoin: Boolean, catalogPage: Int, message: String) {
+        val generation = advance(player)
+        showLoading(
+            player,
+            "messages.custom.detail.${if (isJoin) "join" else "leave"}",
+            text("custom-detail-title"),
+            reopen = { reopenCustomMessage(player, isJoin, catalogPage, message) },
+        )
+        JoinMessagesManager.getOrCreateAsync(player.name).whenComplete { data, failure ->
+            sync {
+                if (!current(player, generation, isJoin, custom = true)) return@sync
+                val current = data?.customMessages(isJoin)?.firstOrNull { it == message }
+                if (failure != null || current == null) showCustom(player, isJoin, catalogPage)
+                else openCustomMessage(player, isJoin, catalogPage, current, CustomJoinMessage.selectionKey(current) in data.selectedMessages(isJoin))
+            }
+        }
     }
 
     private fun openEditor(
@@ -223,6 +266,7 @@ internal class JoinMessageDialogs(private val config: Config) {
         original: String? = null,
         conflict: Boolean = false,
     ) {
+        advance(player)
         ArcMenus.openDialog(player, PaperDialogScreen(
             id = "messages.editor.${if (isJoin) "join" else "leave"}",
             title = text(if (original == null) "editor-title" else "edit-title"),
@@ -239,19 +283,29 @@ internal class JoinMessageDialogs(private val config: Config) {
             }),
             exitButton = button("back", text("back-custom"), isJoin) {
                 if (original == null) showCustom(it.player, isJoin, catalogPage)
-                else JoinMessagesManager.getOrCreateAsync(it.player.name).whenComplete { data, failure ->
-                    sync {
-                        if (!allowed(player, isJoin, custom = true)) return@sync
-                        if (failure != null) reportFailure(player, failure)
-                        else if (original !in data.customMessages(isJoin)) showCustom(player, isJoin, catalogPage)
-                        else openCustomMessage(player, isJoin, catalogPage, original, CustomJoinMessage.selectionKey(original) in data.selectedMessages(isJoin))
+                else {
+                    val generation = advance(it.player)
+                    showLoading(
+                        it.player,
+                        "messages.custom.detail.${if (isJoin) "join" else "leave"}",
+                        text("custom-detail-title"),
+                        reopen = { reopenCustomMessage(it.player, isJoin, catalogPage, original) },
+                    )
+                    JoinMessagesManager.getOrCreateAsync(it.player.name).whenComplete { data, failure ->
+                        sync {
+                            if (!current(player, generation, isJoin, custom = true)) return@sync
+                            if (failure != null) reportFailure(player, failure)
+                            else if (original !in data.customMessages(isJoin)) showCustom(player, isJoin, catalogPage)
+                            else openCustomMessage(player, isJoin, catalogPage, original, CustomJoinMessage.selectionKey(original) in data.selectedMessages(isJoin))
+                        }
                     }
                 }
             },
-        ))
+        ), onDismiss = { invalidate(player) })
     }
 
     private fun openFormatting(player: Player, isJoin: Boolean, catalogPage: Int, draft: String, original: String?) {
+        advance(player)
         ArcMenus.openDialog(player, PaperDialogScreen(
             id = "messages.formatting",
             title = text("formatting-title"),
@@ -261,10 +315,11 @@ internal class JoinMessageDialogs(private val config: Config) {
             buttons = listOf(button("back", text("back-custom"), isJoin, custom = true) {
                 openEditor(it.player, isJoin, catalogPage, draft, original = original)
             }),
-        ))
+        ), onDismiss = { invalidate(player) })
     }
 
     private fun openPreview(player: Player, isJoin: Boolean, catalogPage: Int, message: String, original: String?) {
+        advance(player)
         ArcMenus.openDialog(player, PaperDialogScreen(
             id = "messages.preview.${if (isJoin) "join" else "leave"}",
             title = text("preview-title"),
@@ -282,7 +337,7 @@ internal class JoinMessageDialogs(private val config: Config) {
                 }
             }),
             exitButton = button("edit", text("edit"), isJoin, custom = true) { openEditor(it.player, isJoin, catalogPage, message, original = original) },
-        ))
+        ), onDismiss = { invalidate(player) })
     }
 
     private fun button(
@@ -307,9 +362,10 @@ internal class JoinMessageDialogs(private val config: Config) {
     }
 
     private fun finish(player: Player, operation: CompletableFuture<Unit>, rejected: (() -> Unit)? = null, next: () -> Unit) {
+        val generation = advance(player)
         operation.whenComplete { _, failure ->
             sync {
-                if (!player.isOnline) return@sync
+                if (!current(player, generation)) return@sync
                 if (failure != null) {
                     val cause = (failure as? java.util.concurrent.CompletionException)?.cause ?: failure
                     if (cause is IllegalArgumentException && rejected != null) rejected() else reportFailure(player, failure)
@@ -317,6 +373,37 @@ internal class JoinMessageDialogs(private val config: Config) {
             }
         }
     }
+
+    private fun showLoading(
+        player: Player,
+        id: String,
+        title: Component,
+        reopen: () -> Unit,
+    ) {
+        ArcMenus.openDialog(player, PaperDialogScreen(
+            id = id,
+            title = title,
+            body = listOf(PaperDialogBody(Component.text("…"), width)),
+            buttons = listOf(PaperDialogButton(
+                PaperDialogActionId.of("loading_cancel"),
+                Component.translatable("gui.cancel"),
+                width = width,
+                closeDialogBeforeAction = true,
+            ) { invalidate(player) }),
+        ), reopen = reopen, onDismiss = { invalidate(player) })
+    }
+
+    private fun advance(player: Player): Long {
+        val next = ++nextGeneration
+        generations[player.uniqueId] = next
+        return next
+    }
+
+    private fun invalidate(player: Player) { generations.remove(player.uniqueId) }
+
+    private fun current(player: Player, generation: Long, isJoin: Boolean? = null, custom: Boolean = false): Boolean =
+        generations[player.uniqueId] == generation && player.isOnline &&
+            (isJoin == null || allowed(player, isJoin, custom))
 
     private fun reportFailure(player: Player, failure: Throwable) {
         error("Failed to update/load join-message preferences for {}", player.name, failure)

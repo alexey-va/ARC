@@ -56,6 +56,7 @@ class LandsUiController(
         } + listOf(
             button("create", text("create-label"), text("create-tooltip")) { openCreate(player) },
             button("guide", text("guide-label"), text("guide-tooltip")) { openGuide(player) },
+            button("help", text("help-label"), text("help-tooltip")) { openHelp(player) },
         )
         ArcMenus.openDialog(
             player,
@@ -64,7 +65,6 @@ class LandsUiController(
                 title = text("root-title"),
                 body = body,
                 buttons = buttons,
-                exitButton = button("help", text("help-label"), text("help-tooltip")) { openHelp(player) },
                 columns = 2,
             ),
         )

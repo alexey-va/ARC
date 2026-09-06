@@ -48,6 +48,14 @@ class MenuInputSettingsTest : TestBase() {
     }
 
     @Test
+    fun `escape follows actual history by default and preserves explicit close preference`() {
+        MenuEscapeBehavior.goesBack(null) shouldBe true
+        MenuEscapeBehavior.goesBack("back") shouldBe true
+        MenuEscapeBehavior.goesBack("unknown") shouldBe true
+        MenuEscapeBehavior.goesBack("close") shouldBe false
+    }
+
+    @Test
     fun `default shortcut opens root once without summoning or swapping`() {
         val player = server.addPlayer()
         player.isSneaking = true

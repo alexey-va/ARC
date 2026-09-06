@@ -91,7 +91,7 @@ text:
   settings-options-tablist-title: "<#86dcf1>Список игроков"
   settings-options-scoreboard-body: "<#e8dfd2>Выберите набор информации справа на экране.<newline>«Выключить» полностью скроет панель."
   settings-options-scoreboard-title: "<#86dcf1>Информационная панель"
-  settings-options-escape-body: "<#e8dfd2>Закрыть — выйти из всех меню.<newline>Назад — вернуться к предыдущему экрану."
+  settings-options-escape-body: "<#e8dfd2>Назад — предыдущий открытый экран; если его не было, выход.<newline>Закрыть — сразу выйти из всех меню."
   settings-options-escape-title: "<#f3a2c9>Поведение Escape"
   settings-options-shortcut-body: "<#e8dfd2>Выберите действие для сочетания Shift + F.<newline>Обычная клавиша F продолжит менять предметы в руках."
   settings-options-shortcut-title: "<#f3a2c9>Горячая клавиша Shift + F"
@@ -139,15 +139,15 @@ text:
   legacy-settings-shortcut: "<#d7b486>Shift + F: <state><#d7b486> ›"
   legacy-settings-shortcut-tooltip: '<#e6fff3>Выберите действие для Shift + F.<newline><#c9c3ba>Если вы сменили клавиши управления: приседание + смена рук.<newline>Выбор сохраняется между серверами. Обычная F не меняется.'
   legacy-settings-escape: "<#d7b486>Escape: <state><#d7b486> ›"
-  legacy-settings-escape-tooltip: '<#e6fff3>Закрыть все меню или вернуться на предыдущий экран.<newline><#c9c3ba>По умолчанию — закрыть всё. Кнопка «Назад» доступна в обоих режимах.'
+  legacy-settings-escape-tooltip: '<#e6fff3>Закрыть все меню или вернуться на предыдущий экран.<newline><#c9c3ba>По умолчанию — предыдущий открытый экран. Если его не было, меню закрывается.'
   setting-selected: '<#9cdb67>✔ '
   shortcut-unavailable: '<#ff6b61>Назначенное действие сейчас недоступно. Выберите другое в настройках меню.'
   escape-state-close: 'закрыть всё'
   escape-state-back: 'назад'
   legacy-action-escape-close: '<#d7b486>Закрыть все меню'
-  legacy-action-escape-close-tooltip: '<#e6fff3>Escape сразу возвращает в игру.<newline><#c9c3ba>Режим по умолчанию.'
+  legacy-action-escape-close-tooltip: '<#e6fff3>Escape сразу возвращает в игру.<newline><#c9c3ba>Выберите этот режим, чтобы пропускать историю меню.'
   legacy-action-escape-back: '<#d7b486>Вернуться назад'
-  legacy-action-escape-back-tooltip: '<#e6fff3>Escape выполняет действие кнопки «Назад».<newline><#c9c3ba>В главном меню — закрывает меню.'
+  legacy-action-escape-back-tooltip: '<#e6fff3>Escape возвращает на предыдущий открытый экран.<newline><#c9c3ba>После прямой команды — закрывает меню. Это режим по умолчанию.'
   shortcut-state-main: 'главное меню'
   legacy-action-shortcut-main: '<#d7b486>Главное меню'
   legacy-action-shortcut-main-tooltip: '<#e6fff3>Открыть главное меню сервера. Назначение по умолчанию.'

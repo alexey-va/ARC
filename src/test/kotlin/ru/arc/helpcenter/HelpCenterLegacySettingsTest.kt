@@ -16,7 +16,7 @@ class HelpCenterLegacySettingsTest {
         val backend = FakeBackend()
         val settings = HelpCenterLegacySettings(backend)
         assertEquals("main", settings.entries(player).first { it.id == "shortcut" }.state)
-        assertEquals("close", settings.entries(player).first { it.id == "escape" }.state)
+        assertEquals("back", settings.entries(player).first { it.id == "escape" }.state)
         assertTrue(settings.execute(player, "shortcut-mount").join())
         assertTrue(settings.execute(player, "escape-back").join())
         val reopened = HelpCenterLegacySettings(backend)

@@ -59,7 +59,7 @@ class HelpCenterLegacySettings(
 
     fun entries(player: Player): List<HelpCenterLegacySettingEntry> = listOf(
         entry("shortcut", "legacy-settings-shortcut", MenuShortcutAction.from(backend.meta(player, MenuShortcutAction.META_KEY)).id, "legacy-settings-shortcut-tooltip"),
-        entry("escape", "legacy-settings-escape", if (backend.meta(player, MenuEscapeBehavior.META_KEY) == "back") "back" else "close", "legacy-settings-escape-tooltip"),
+        entry("escape", "legacy-settings-escape", if (MenuEscapeBehavior.goesBack(backend.meta(player, MenuEscapeBehavior.META_KEY))) "back" else "close", "legacy-settings-escape-tooltip"),
         entry("scoreboard", "legacy-settings-scoreboard", modeState(player, "tab.scoreboard"), "legacy-settings-scoreboard-tooltip"),
         entry("tablist", "legacy-settings-tablist", modeState(player, "tab.tablist"), "legacy-settings-tablist-tooltip"),
         entry("lands", "legacy-settings-lands", null, "legacy-settings-lands-tooltip"),
