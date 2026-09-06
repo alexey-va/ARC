@@ -50,8 +50,8 @@ existing transitive JAR contents are unchanged.
   Changing width does not change alignment. The alignment page now compares
   three measured layouts through `ru.arc.gui.DialogTextLayout`, backed by
   `ru.arc.text.ComponentTextLayout` in arc-core. It subtracts the widget's 8px
-  padding, wraps styled text and pads each line with `arc:dialog_alignment`
-  space glyphs. Resource-pack installation and native visual checks remain
+  padding, wraps styled text and pads each line with the existing ItemsAdder
+  U+F0F01..U+F0F0A space glyphs in `minecraft:default`. Resource-pack installation and native visual checks remain
   separate gates; packet inspection alone cannot prove pixel alignment.
 - Item slot size reserves space; it does not scale the item model. Item bodies
   are display elements, not inventory slots or item-transfer actions.
@@ -86,7 +86,7 @@ for a native body, or `layout(component, alignment, width)` for its typed result
 The player adapter checks that a pack was accepted and falls back to the original
 centered text if it is absent or metrics are unsupported. This API does not know
 which additional client-side packs override fonts; acceptance alone cannot prove
-the current font fingerprint. Deploy the spacer font before enabling its consumer.
+the current font fingerprint. No additional spacer font is installed: `PixelSpacing` selects existing ItemsAdder glyphs.
 
 `fonts/dialog-font-metrics.json` is generated from the exact Minecraft 1.21.11
 client plus the published server pack using ops'

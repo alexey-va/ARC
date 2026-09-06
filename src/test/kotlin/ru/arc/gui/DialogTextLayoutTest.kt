@@ -30,7 +30,7 @@ class DialogTextLayoutTest : FreeSpec({
                     if (point == '\n'.code) lines += Line()
                     else {
                         val line = lines.last()
-                        if (font == "arc:dialog_alignment") line.width += 1 shl (point - 0xE000)
+                        if (point in 0xF0F01..0xF0F0A) line.width += 1 shl (point - 0xF0F01)
                         else {
                             val weight = if (style.decoration(TextDecoration.BOLD) == TextDecoration.State.TRUE) "bold" else "normal"
                             val advance = fonts.getAsJsonObject(font).getAsJsonObject(weight)

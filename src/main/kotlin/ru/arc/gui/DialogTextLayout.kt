@@ -7,6 +7,7 @@ import net.kyori.adventure.text.Component
 import org.bukkit.entity.Player
 import ru.arc.text.ComponentTextLayout
 import ru.arc.text.GlyphWidths
+import ru.arc.text.PixelSpacing
 import ru.arc.text.TextAlignment
 import ru.arc.text.TextLayoutResult
 
@@ -26,7 +27,7 @@ object DialogTextLayout {
         }
         ComponentTextLayout(GlyphWidths { font, point, bold ->
             tables[font.asString()]?.get(if (bold) 1 else 0)?.get(point)
-        }, Key.key("arc:dialog_alignment"))
+        }, PixelSpacing(Key.key("minecraft:default"), 0xF0F01))
     }
 
     /** Width includes Minecraft 1.21.11's 4px padding on each side. */
