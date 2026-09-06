@@ -22,8 +22,9 @@ import ru.arc.paper.playerstate.PaperPlayerDataPersistence
 import ru.arc.util.Logging
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerQuitEvent
-import org.bukkit.event.player.PlayerMoveEvent
 import org.bukkit.event.player.PlayerTeleportEvent
+import ru.arc.Portal
+import ru.arc.PortalData
 import ru.arc.ARC
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
@@ -46,6 +47,9 @@ internal class EMDungeonQol(
     internal val teleporter: EMCheckpointTeleporter = EMCheckpointTeleporter(),
     private val move: (Player, Location, Boolean) -> Boolean = teleporter::teleport,
     private val persistence: PaperPlayerDataPersistence = NativePaperPlayerDataPersistence,
+    private val openPortal: (Player, () -> Unit) -> Unit = { player, action ->
+        Portal(player.uniqueId, PortalData(ownerAction = { action() }))
+    },
 
 ) : Listener, AutoCloseable {
     internal val scoreboard = DungeonScoreboard(this)
@@ -76,7 +80,7 @@ internal class EMDungeonQol(
         if (!visit.canResume || !member(event.player, visit)) return
         val destination = checkpoints.destination(event.player.persistentDataContainer, event.to.world, visit.run, clock(), ttl) ?: return
         if (safe(destination)) event.to = destination
-        else checkpoints.forget(event.player.persistentDataContainer, destination.world.uid)
+        else checkpoints.forgetDestination(event.player.persistentDataContainer, destination.world.uid)
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -96,8 +100,7 @@ internal class EMDungeonQol(
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
-    fun clearOnDeath(event: PlayerDeathEvent) {
-        checkpoints.forget(event.entity.persistentDataContainer, event.entity.world.uid)
+    fun cancelTravelOnDeath(event: PlayerDeathEvent) {
         pending.remove(event.entity.uniqueId)
     }
 
@@ -112,18 +115,9 @@ internal class EMDungeonQol(
         tasks.runLater(30L) {
             if (!enabled || !player.isOnline || player.world.uid != world.uid) return@runLater
             val visit = resolve(world) ?: return@runLater
-            val resumed = config.bool("dungeon-qol.resume-enabled", true) && visit.canResume && checkpoints.destination(player.persistentDataContainer, world, visit.run, clock(), ttl)
-                ?.let { it.distanceSquared(player.location) < 16 } == true
-            when {
-                resumed -> show(player, "resumed", "<green>Продолжаем", "<white>Вы вернулись к месту выхода")
-                visit.waiting -> {
-                    show(player, "entry", "<gold>Готовы к данжу?", "<white>/начать <gray>— начать прохождение")
-                    audience.sendMessage(player, config.component("dungeon-qol.messages.entry",
-                        "<gold>Данж</gold> <gray>·</gray> <click:run_command:'/начать'><green>[Начать]</green></click> <gray>или</gray> <click:run_command:'/dungeon quit'><white>[Выйти]</white></click>"))
-                }
-                else -> show(player, "open-entry", "<gold>Вы в данже", "<white>Место выхода запоминается")
-            }
-            if (visit.canResume && !visit.waiting && member(player, visit)) savesHint(player)
+            if (!member(player, visit)) return@runLater
+            if (visit.waiting) show(player, "entry", "<gold>Готовы к данжу?", "<white>/начать <gray>— начать прохождение")
+            else show(player, "open-entry", "<gold>Вы в данже", "<white>/данж <gray>— меню данжа")
         }
     }
 
@@ -132,12 +126,8 @@ internal class EMDungeonQol(
         if (!enabled) return
         event.dungeonInstance.players.forEach {
             show(it, "started", "<gold>Данж начался", "<white>/данж <gray>— меню данжа")
-            savesHint(it)
         }
     }
-
-    private fun savesHint(player: Player) = audience.sendMessage(player, text("messages.saves-hint",
-        "<click:run_command:'/данж'><gold>[/данж]</gold></click> <gray>— меню данжа: прохождение, выход и сохранения. <white>/сохраниться [название]</white> — запомнить место. <white>/данж выйти</white> — выйти."))
 
     @EventHandler(priority = EventPriority.MONITOR)
     fun completed(event: DungeonCompleteEvent) {
@@ -174,6 +164,22 @@ internal class EMDungeonQol(
         config.component("dungeon-qol.$key", fallback) { values.forEach { (name, value) -> tag(name, value) } }
             .decoration(TextDecoration.ITALIC, false)
 
+    internal fun context(player: Player): Component {
+        val visit = current(player) ?: return outside()
+        val lore = visit.lore.filter { it.isNotBlank() }.take(8).joinToString("\n")
+        val description = if (lore.isBlank()) text("context.fallback", "<#e8dfd2>Продвигайтесь осторожно, проверяйте боковые проходы и пополняйте припасы перед сильными противниками.")
+            else net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacyAmpersand().deserialize(lore.replace('§', '&'))
+        val key = visit.contentId?.takeIf { it.matches(Regex("[a-zA-Z0-9_-]+")) } ?: "unknown"
+        return text("context.$key.body", "<description>", "description" to description)
+    }
+
+    internal fun autosaveDescription(): Component {
+        if (!config.bool("dungeon-qol.saves.autosave-enabled", true)) return text("saves.dialog.autosaves-disabled", "<#aaa49a>Автосохранения отключены. Ручные точки доступны через «Сохранить здесь».")
+        return text("saves.dialog.autosaves", "<#e8dfd2>Автосохранение запоминает вашу позицию, а не добычу или состояние монстров.<newline><#aaa49a>Проверка каждые 20 секунд: первая безопасная точка, затем не чаще раза в <seconds> секунд и после перемещения хотя бы на 8 блоков. Нужно стоять на безопасной поверхности, без полёта и транспорта, не гореть и 15 секунд не участвовать в бою.<newline>Хранятся 3 последние автоточки и до 5 ручных. Смерть их не удаляет. Точки действуют <hours> ч.; в новом инстансе места прошлого прохождения недоступны.",
+            "seconds" to Component.text(config.integer("dungeon-qol.saves.autosave-seconds", 120).coerceIn(30, 600)),
+            "hours" to Component.text(ttl / 3_600_000))
+    }
+
     private fun member(player: Player, visit: DungeonVisit): Boolean =
         visit.members?.contains(player.uniqueId) != false
 
@@ -205,6 +211,10 @@ internal class EMDungeonQol(
     internal fun action(player: Player, action: String, args: List<String> = emptyList()) {
         when (action) {
             "menu", "меню" -> menus.panel(player)
+            "tp", "тп", "порталы", "list", "список" -> {
+                if (current(player)?.instanced == true) audience.sendMessage(player, text("messages.leave-first", "<#d7b486>Сначала выйдите из текущего данжа: /данж выйти."))
+                else player.performCommand(if (action in setOf("list", "список")) "elitemobs:em" else "pw aguild")
+            }
             "start", "начать" -> {
                 val visit = current(player)
                 when {
@@ -249,7 +259,7 @@ internal class EMDungeonQol(
         if (expected == null) return text("panel.save-inactive", "<#aaa49a>Сохранения доступны только во время прохождения.")
         if (!matches(player, expected)) return changed().message
         if (inCombat(player)) return combatMessage()
-        if (pending.containsKey(player.uniqueId)) return text("saves.messages.pending", "<gray>Перемещение уже готовится.")
+        if (pending.containsKey(player.uniqueId)) return text("saves.messages.pending", "<gray>Сначала войдите в открытый портал или дождитесь его закрытия.")
         if (lastSave[player.uniqueId]?.let { clock() - it < 5_000 } == true)
             return text("saves.messages.cooldown", "<gray>Подождите 5 секунд между сохранениями.")
         if (player.isInsideVehicle) return text("saves.messages.vehicle", "<#aaa49a>Чтобы сохраниться, выйдите из транспорта или слезьте с ездового животного.")
@@ -266,35 +276,44 @@ internal class EMDungeonQol(
             (1..5).map { "Место $it" }.firstOrNull { candidate -> points.none { it.kind == DungeonSaveKind.MANUAL && it.name.equals(candidate, true) } } ?: ""
         }
         if (label.isNotEmpty() && (label.length > 32 || label.any(Char::isISOControl))) return DungeonSaveEdit(false, text("saves.messages.invalid-name", "<red>Название должно содержать от 1 до 32 символов."))
+        val snapshot = checkpoints.snapshotSaves(player.persistentDataContainer)
         val saved = checkpoints.save(player.persistentDataContainer, player.location, expected.run, label, DungeonSaveKind.MANUAL, now, ttl)
             ?: return DungeonSaveEdit(false, text("saves.messages.full", "<red>Уже есть 5 ручных мест. Удалите ненужное в /сохранения или сохранитесь с тем же названием, чтобы заменить его."))
+        if (!persist(player)) {
+            checkpoints.restoreSaves(player.persistentDataContainer, snapshot)
+            return DungeonSaveEdit(false, text("saves.messages.write-failed", "<red>Не удалось записать сохранение на диск. Повторите попытку позже."))
+        }
         lastSave[player.uniqueId] = now
-        return if (persist(player)) DungeonSaveEdit(true, text("saves.messages.saved", "<green>Место «<name>» сохранено. <white>/сохранения</white> — открыть список.", "name" to Component.text(saved.name)))
-        else DungeonSaveEdit(false, text("saves.messages.write-failed", "<red>Не удалось записать сохранение на диск. Повторите попытку позже."))
+        return DungeonSaveEdit(true, text("saves.messages.saved", "<green>Место «<name>» сохранено. <white>/сохранения</white> — открыть список.", "name" to Component.text(saved.name)))
     }
 
     internal fun remove(player: Player, point: DungeonSavePoint, expected: DungeonSaveView): DungeonSaveEdit {
         if (!matches(player, expected)) return changed()
         val actual = checkpoints.list(player.persistentDataContainer, expected.worldId, expected.run, clock(), ttl).firstOrNull { it.id == point.id }
+        val snapshot = checkpoints.snapshotSaves(player.persistentDataContainer)
         if (actual != point || !checkpoints.remove(player.persistentDataContainer, expected.worldId, expected.run, point.id)) return changed()
-        return if (persist(player)) DungeonSaveEdit(true, text("saves.messages.removed", "<gray>Сохранение удалено."))
-        else DungeonSaveEdit(false, text("saves.messages.write-failed", "<red>Не удалось записать сохранение на диск. Повторите попытку позже."))
+        if (!persist(player)) {
+            checkpoints.restoreSaves(player.persistentDataContainer, snapshot)
+            return DungeonSaveEdit(false, text("saves.messages.write-failed", "<red>Не удалось записать сохранение на диск. Повторите попытку позже."))
+        }
+        return DungeonSaveEdit(true, text("saves.messages.removed", "<gray>Сохранение удалено."))
     }
 
     internal fun travel(player: Player, expected: DungeonSaveView, id: String) {
         if (!matches(player, expected)) { audience.sendMessage(player, changed().message); return }
         if (inCombat(player)) { audience.sendMessage(player, combatMessage()); return }
         val token = UUID.randomUUID()
-        if (pending.putIfAbsent(player.uniqueId, token) != null) { audience.sendMessage(player, text("saves.messages.pending", "<gray>Перемещение уже готовится.")); return }
-        val from = player.location.clone()
-        audience.sendMessage(player, text("saves.messages.countdown", "<gray>Перемещение через 3 секунды. Не двигайтесь; бой отменит переход."))
-        tasks.runLater(60) {
-            if (!pending.remove(player.uniqueId, token)) return@runLater
-            if (!matches(player, expected)) { if (player.isOnline) audience.sendMessage(player, changed().message); return@runLater }
-            if (inCombat(player) || player.location.distanceSquared(from) > 0.09 || player.isInsideVehicle) {
-                audience.sendMessage(player, text("saves.messages.cancelled", "<gray>Перемещение отменено: вы сдвинулись или вступили в бой.")); return@runLater
+        if (pending.putIfAbsent(player.uniqueId, token) != null) { audience.sendMessage(player, text("saves.messages.pending", "<gray>Сначала войдите в открытый портал или дождитесь его закрытия.")); return }
+        // Expire only this request; an old portal must not consume a later one.
+        tasks.runLater(420) { pending.remove(player.uniqueId, token) }
+        runCatching { openPortal(player) portal@{
+            if (!pending.remove(player.uniqueId, token)) return@portal
+            if (!matches(player, expected)) { if (player.isOnline) audience.sendMessage(player, changed().message); return@portal }
+            if (inCombat(player)) { audience.sendMessage(player, combatMessage()); return@portal }
+            if (player.isInsideVehicle || player.isFlying || player.isGliding) {
+                audience.sendMessage(player, text("saves.messages.travel-ground", "<gray>Войдите в портал пешком, без транспорта и полёта.")); return@portal
             }
-            val visit = current(player) ?: return@runLater
+            val visit = current(player) ?: return@portal
             val destination = when (id) {
                 "entry" -> visit.entry?.takeIf { it == expected.entry }
                 "exit" -> checkpoints.destination(player.persistentDataContainer, player.world, expected.run, clock(), ttl)?.takeIf { it == expected.exit }
@@ -302,19 +321,22 @@ internal class EMDungeonQol(
                     .firstOrNull { it.id == id && it == expected.points.firstOrNull { point -> point.id == id } }?.location
             }
             if (destination == null || destination.world.uid != player.world.uid || !safe(destination)) {
-                audience.sendMessage(player, text("saves.messages.unavailable-point", "<red>Эта точка больше не подходит для безопасного перехода. Выберите другую или /данж выйти.")); return@runLater
+                audience.sendMessage(player, text("saves.messages.unavailable-point", "<red>Эта точка больше не подходит для безопасного перехода. Выберите другую или /данж выйти.")); return@portal
             }
             val moved = runCatching { move(player, destination.clone(), visit.instanced) }.getOrElse {
                 Logging.error("Dungeon checkpoint teleport failed", it); false
             }
-            audience.sendMessage(player, if (moved) text("saves.messages.arrived", "<green>Вы на месте.")
-                else text("saves.messages.blocked", "<red>Перемещение отменено защитой. Для выхода используйте /данж выйти."))
+            if (!moved) audience.sendMessage(player, text("saves.messages.blocked", "<red>Перемещение отменено защитой. Для выхода используйте /данж выйти."))
+        } }.onFailure {
+            pending.remove(player.uniqueId, token)
+            Logging.error("Unable to open dungeon checkpoint portal", it)
+            audience.sendMessage(player, text("saves.messages.blocked", "<red>Перемещение отменено защитой. Для выхода используйте /данж выйти."))
         }
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = false)
     fun explainCancelledTeleport(event: PlayerTeleportEvent) {
-        if (!enabled || !event.isCancelled || pending.containsKey(event.player.uniqueId) || teleporter.owns(event)) return
+        if (!enabled || !event.isCancelled || teleporter.owns(event)) return
         val visit = resolve(event.from.world) ?: return
         if (!visit.instanced || event.cause !in setOf(PlayerTeleportEvent.TeleportCause.COMMAND, PlayerTeleportEvent.TeleportCause.PLUGIN)) return
         val now = clock()
@@ -328,13 +350,6 @@ internal class EMDungeonQol(
         val attacker = (event.damager as? Player) ?: (event.damager as? Projectile)?.shooter as? Player
         listOfNotNull(event.entity as? Player, attacker).forEach { player ->
             if (resolve(player.world) != null) combatUntil[player.uniqueId] = clock() + 15_000
-        }
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    fun cancelOnMovement(event: PlayerMoveEvent) {
-        if (event.hasChangedPosition() && pending.remove(event.player.uniqueId) != null) {
-            audience.sendMessage(event.player, text("saves.messages.cancelled", "<gray>Перемещение отменено: вы сдвинулись или вступили в бой."))
         }
     }
 
@@ -354,8 +369,10 @@ internal class EMDungeonQol(
         val interval = config.integer("dungeon-qol.saves.autosave-seconds", 120).coerceIn(30, 600) * 1_000L
         if (latest != null && (now - latest.savedAt < interval || latest.location.distanceSquared(player.location) < 64)) return
         if (!stable(player)) return
+        val snapshot = checkpoints.snapshotSaves(player.persistentDataContainer)
         checkpoints.save(player.persistentDataContainer, player.location, visit.run, "Автосохранение", DungeonSaveKind.AUTO, now, ttl) ?: return
         if (persist(player)) audience.sendActionBar(player, text("saves.messages.auto-saved", "<gray>Место сохранено автоматически · /сохранения"))
+        else checkpoints.restoreSaves(player.persistentDataContainer, snapshot)
     }
 
     private fun stable(player: Player): Boolean = !player.isInsideVehicle && !player.isGliding && !player.isFlying &&

@@ -49,7 +49,7 @@ softdepend:
 commands:
   dungeon:
     description: Dungeon control panel and saved places
-    usage: /dungeon [menu|start|quit|entry|save|saves|help]
+    usage: /dungeon [menu|tp|list|start|quit|entry|save|saves|help]
     aliases: [данж]
   dungeonstart:
     description: Start the current dungeon

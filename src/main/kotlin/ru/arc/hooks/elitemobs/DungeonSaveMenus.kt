@@ -6,6 +6,7 @@ import org.bukkit.Location
 import org.bukkit.entity.Player
 import ru.arc.gui.ArcMenus
 import ru.arc.gui.MenuEscapeBehavior
+import ru.arc.helpcenter.HelpCenterModule
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
 import ru.arc.paper.menu.PaperDialogButton
@@ -35,37 +36,41 @@ internal class DungeonSaveMenus(
         val blocked = dungeon.saveBlockReason(player, view.saves)
         val state = when {
             visit.waiting -> text("panel.waiting", "<#d7b486>Сбор группы · готовьтесь к старту")
-            !visit.instanced -> text("panel.open", "<#9bd48d>Открытый данж · можно исследовать")
             visit.canResume -> text("panel.ongoing", "<#9bd48d>Прохождение идёт")
             else -> text("panel.finished", "<#aaa49a>Прохождение остановлено · можно выйти")
         }
         val body = mutableListOf(
-            PaperDialogBody(text("panel.intro", "<#f4bd6a><name><newline><#e8dfd2>Ваш поход: действия, места и возвращение.", "name" to dungeonDisplayName(visit)), 468),
-            PaperDialogBody(state, 468),
+            PaperDialogBody(text("panel.intro", "<#f4bd6a><name>", "name" to dungeonDisplayName(visit)), 468),
         )
+        if (visit.instanced) body += PaperDialogBody(state, 468)
         val stats = buildList {
             visit.stats?.level?.takeIf { it > 0 }?.let { add(text("panel.level", "<#aaa49a>Уровень: <#e8dfd2><value>", "value" to Component.text(it))) }
             visit.stats?.difficulty?.let { add(text("panel.difficulty", "<#aaa49a>Сложность: <#e8dfd2><value>", "value" to dungeonDifficulty(dungeon, it))) }
             visit.stats?.playerCount?.let { add(text("panel.party", "<#aaa49a>Участников: <#e8dfd2><value>", "value" to Component.text(it))) }
         }
         if (stats.isNotEmpty()) body += PaperDialogBody(stats.reduce { a, b -> a.append(Component.text(" · ")).append(b) }, 468)
-        readDungeonCrystals(player)?.let { body += PaperDialogBody(text("panel.crystals", "<#aaa49a>Ваши кристаллы: <#c7a0e8><value>", "value" to Component.text(it)), 468) }
+        readDungeonCrystals(player)?.let { body += PaperDialogBody(text("panel.crystals", "<#aaa49a>Ваши кристаллы: <#c7a0e8>💎 <value>", "value" to Component.text(it)), 468) }
         body += PaperDialogBody(availability(blocked), 468)
         if (view.saves != null) body += PaperDialogBody(saveCounts(view.saves), 468)
         feedback?.let { body += PaperDialogBody(plain(it), 468) }
         show(player, PaperDialogScreen(
             id = "dungeon.panel", title = text("panel.title", "<#f4bd6a>Панель данжа"), body = body,
-            buttons = listOf(
-                action("start", "panel.start-label", "<#9bd48d>Начать поход", "panel.start-tooltip", "Запустить прохождение для собранной группы", close = visit.waiting) {
-                    if (visit.waiting) dungeon.panelAction(player, view, "start") else panel(player)
-                }.let { if (visit.waiting) it else it.copy(label = if (visit.canResume) text("panel.started-label", "<#aaa49a>Запуск не требуется") else text("panel.start-disabled", "<#aaa49a>Начать · недоступно"), tooltip = state) },
+            buttons = listOfNotNull(
+                if (visit.waiting) action("start", "panel.start-label", "<#9bd48d>Начать поход", "panel.start-tooltip", "Запустить прохождение для собранной группы", close = true) {
+                    dungeon.panelAction(player, view, "start")
+                } else null,
                 action("quit", "panel.quit-label", "<#d7b486>Выйти из данжа", "panel.quit-tooltip", "Покинуть данж штатным способом", close = true) { dungeon.panelAction(player, view, "quit") }.let { if (visit.instanced) it else it.copy(tooltip = text("panel.quit-open-tooltip", "Вызвать выход ко спавну. Если появился портал, войдите в него.")) },
                 action("saves", "panel.saves-label", "<#d7b486>Сохранения ›", "panel.saves-tooltip", "Ваши ручные точки, автосохранения и место прошлого выхода") { open(player) },
-                action("entry", "panel.entry-label", "<#d7b486>К началу данжа", "panel.entry-tooltip", "Вернуться к безопасной стартовой точке; переход займёт 3 секунды", close = view.saves?.entry != null) {
+                action("entry", "panel.entry-label", "<#d7b486>К началу данжа", "panel.entry-tooltip", "Обычный портал к началу данжа", close = view.saves?.entry != null) {
                     if (view.saves?.entry != null) dungeon.travel(player, view.saves, "entry") else panel(player, text("panel.entry-unavailable", "<#aaa49a>Безопасный переход ко входу сейчас недоступен. Для выхода используйте кнопку выше."))
                 }.let { if (view.saves?.entry != null) it else it.copy(label = text("panel.entry-disabled", "<#aaa49a>К началу · недоступно")) },
                 action("shop", "panel.shop-label", "<#d7b486>Припасы ›", "panel.shop-tooltip", "Еда, стрелы и полезные предметы за кристаллы") { shop(player) },
-                refresh { panel(player) },
+                action("guide", "panel.guide-label", "<#86dcf1>Гайд ›", "panel.guide-tooltip", "Читальная справка о данжах") {
+                    if (!HelpCenterModule.openDungeonsGuide(player) { panel(player) }) {
+                        panel(player, text("panel.guide-unavailable", "<#d7b486>Гайд сейчас недоступен. Закройте панель и попробуйте позже."))
+                    }
+                },
+                action("about", "panel.about-label", "<#86dcf1>О данже ›", "panel.about-tooltip", "Описание и подсказка этого данжа") { about(player) },
             ),
             exitButton = close(), columns = 2,
         ))
@@ -77,13 +82,14 @@ internal class DungeonSaveMenus(
             if (panel == null) unavailable(player) else {
                 show(player, PaperDialogScreen(id = "dungeon.saves.unavailable", title = text("saves.dialog.title", "<#f4bd6a>Сохранения"),
                     body = listOf(PaperDialogBody(availability(dungeon.saveBlockReason(player, null)), 468)),
-                    buttons = listOf(refresh { open(player) }), exitButton = back { panel(player) }))
+                    buttons = listOf(guide(player) { open(player) }), exitButton = back { panel(player) }))
             }
             return
         }
         val blocked = dungeon.saveBlockReason(player, view)
         val body = mutableListOf(
             PaperDialogBody(text("saves.dialog.body", "<#e8dfd2>Ваши места в этом данже. Сохраняется только позиция: добыча и монстры не откатываются."), 468),
+            PaperDialogBody(dungeon.autosaveDescription(), 468),
             PaperDialogBody(saveCounts(view), 468),
             PaperDialogBody(availability(blocked), 468),
         )
@@ -95,28 +101,48 @@ internal class DungeonSaveMenus(
                 action("save", "saves.dialog.save-label", "<#9bd48d>Сохранить здесь", "saves.dialog.save-tooltip", "Запомнить текущую позицию") {
                     if (blocked == null) saveForm(player, view) else open(player)
                 }.let { if (blocked == null) it else it.copy(label = text("saves.dialog.save-disabled", "<#aaa49a>Сохранение недоступно"), tooltip = blocked) },
-                refresh { open(player) },
             ) + listOfNotNull(view.exit?.let { locationButton(player, "exit", "saves.dialog.exit-label", "<#d7b486>Место прошлого выхода", "saves.dialog.exit-tooltip", it, view) }) +
                 view.points.mapIndexed { index, point -> pointButton("point_$index", pointLabel(point), pointTooltip(point)) { detail(player, point, view) } },
             exitButton = back { panel(player) }, columns = 2,
         ))
     }
 
-    private fun unavailable(player: Player) = show(player, PaperDialogScreen(
+    private fun unavailable(player: Player): Unit = show(player, PaperDialogScreen(
         id = "dungeon.panel.unavailable", title = text("panel.title", "<#f4bd6a>Панель данжа"),
-        body = listOf(PaperDialogBody(text("panel.outside", "<#e8dfd2>Вы сейчас не участвуете в данже.<newline><#aaa49a>Войдите в данж и откройте /данж — здесь появятся действия и ваши места."), 468)),
-        buttons = listOf(refresh { panel(player) }), exitButton = close(),
+        body = listOf(PaperDialogBody(text("panel.outside", "<#e8dfd2>Подготовка к походу<newline><#aaa49a>Почитайте гайд или выберите данж. После входа здесь появится панель прохождения.<newline><#d7b486>/данж тп <#aaa49a>— к порталам · <#d7b486>/данж список <#aaa49a>— выбор данжа"), 468)),
+        buttons = listOf(
+            guide(player) { unavailable(player) },
+            action("portals", "panel.portals-label", "<#d7b486>К порталам", "panel.portals-tooltip", "Перейти к порталам данжей в гильдии", close = true) { dungeon.action(player, "tp") },
+            action("list", "panel.list-label", "<#d7b486>Выбрать данж", "panel.list-tooltip", "Открыть список данжей EliteMobs", close = true) { dungeon.action(player, "list") },
+        ), exitButton = close(), columns = 2,
     ))
 
-    private fun saveCounts(view: DungeonSaveView): Component = text("saves.dialog.counts", "<#aaa49a>Ручные: <#e8dfd2><manual>/5 <#aaa49a>· Авто: <#e8dfd2><auto>/3<newline><#aaa49a>Смерть и завершение данжа очищают точки.",
+    private fun saveCounts(view: DungeonSaveView): Component = text("saves.dialog.counts", "<#aaa49a>Ручные: <#e8dfd2><manual>/5 <#aaa49a>· Авто: <#e8dfd2><auto>/3",
         "manual" to Component.text(view.points.count { it.kind == DungeonSaveKind.MANUAL }), "auto" to Component.text(view.points.count { it.kind == DungeonSaveKind.AUTO }))
 
     private fun availability(reason: Component?): Component = reason?.let {
         text("saves.dialog.unavailable", "<#d7b486>Сохраниться здесь нельзя<newline><reason>", "reason" to it)
     } ?: text("saves.dialog.ready", "<#9bd48d>✔ Здесь можно сохраниться")
 
-    private fun refresh(action: () -> Unit) = action("refresh", "panel.refresh-label", "<#aaa49a>Обновить", "panel.refresh-tooltip", "Проверить текущее состояние и доступность действий") { action() }
+    private fun guide(player: Player, returnTo: () -> Unit) = action("guide", "panel.guide-label", "<#86dcf1>Гайд ›", "panel.guide-tooltip", "Правила и советы по прохождению данжей") {
+        if (!HelpCenterModule.openDungeonsGuide(player, returnTo)) player.sendMessage(text("panel.guide-unavailable", "<#d7b486>Гайд сейчас недоступен. Попробуйте позже."))
+    }
+
     private fun close() = action("close", "saves.dialog.close-label", "<#aaa49a>Закрыть", "saves.dialog.close-tooltip", "Вернуться в игру", close = true) { }.copy(width = 200)
+
+    private fun about(player: Player) {
+        val visit = dungeon.panelView(player)?.visit ?: run { unavailable(player); return }
+        show(player, PaperDialogScreen(
+            id = "dungeon.about",
+            title = text("panel.about-title", "<#f4bd6a>О данже"),
+            body = listOf(
+                PaperDialogBody(dungeonDisplayName(visit), 468),
+                PaperDialogBody(dungeon.context(player), 468),
+            ),
+            buttons = listOf(guide(player) { about(player) }),
+            exitButton = back { panel(player) },
+        ))
+    }
 
     private fun shop(player: Player, feedback: Component? = null) {
         val view = dungeon.panelView(player) ?: run { unavailable(player); return }
@@ -128,20 +154,20 @@ internal class DungeonSaveMenus(
         show(player, PaperDialogScreen(id = "dungeon.shop", title = text("shop.title", "<#f4bd6a>Припасы"), body = body,
             buttons = dungeon.supplies.list().map { offer ->
                 val quote = dungeon.supplies.quote(player, offer)
-                pointButton("supply_${offer.id}", text("shop.offer-label", "<#d7b486><name> ×<amount> <#aaa49a>· <price> кр.",
+                pointButton("supply_${offer.id}", text("shop.offer-label", "<#d7b486><name> ×<amount> <#aaa49a>· 💎 <price>",
                     "name" to supplyName(offer), "amount" to Component.text(offer.amount), "price" to price(offer.price)),
                     if (quote == null) text("shop.item-unavailable", "<#aaa49a>Этот предмет сейчас недоступен. Кристаллы не списываются.") else supplyDescription(offer)) {
                     if (quote == null) shop(player, text("shop.item-unavailable", "<#aaa49a>Этот предмет сейчас недоступен. Кристаллы не списываются."))
                     else confirmPurchase(player, quote, view)
                 }
-            } + refresh { shop(player) }, exitButton = back { panel(player) }, columns = 2,
+            }.ifEmpty { listOf(guide(player) { shop(player) }) }, exitButton = back { panel(player) }, columns = 2,
         ))
     }
 
     private fun confirmPurchase(player: Player, quote: SupplyQuote, expected: DungeonPanelView, feedback: Component? = null) {
         val offer = quote.offer
         val body = mutableListOf(
-            PaperDialogBody(text("shop.confirm-body", "<#e8dfd2><name> ×<amount><newline><#aaa49a>Стоимость: <#c7a0e8><price> кристаллов", "name" to supplyName(offer),
+            PaperDialogBody(text("shop.confirm-body", "<#e8dfd2><name> ×<amount><newline><#aaa49a>Стоимость: <#c7a0e8>💎 <price>", "name" to supplyName(offer),
                 "amount" to Component.text(offer.amount), "price" to price(offer.price)), 468),
             PaperDialogBody(supplyDescription(offer), 468), PaperDialogBody(balance(player), 468),
         )
@@ -176,7 +202,7 @@ internal class DungeonSaveMenus(
         "merchant" -> "<#e8dfd2>Настоящий свиток EliteMobs. ПКМ вызывает странствующего торговца и расходует свиток.<newline><#aaa49a>Между вызовами — 60 секунд."
         else -> ""
     })
-    private fun balance(player: Player): Component = text("shop.balance", "<#aaa49a>Ваши кристаллы: <#c7a0e8><value>",
+    private fun balance(player: Player): Component = text("shop.balance", "<#aaa49a>Ваши кристаллы: <#c7a0e8>💎 <value>",
         "value" to Component.text(readDungeonCrystals(player) ?: "—"))
     private fun price(value: Double): Component = Component.text(value.toBigDecimal().stripTrailingZeros().toPlainString())
 
@@ -199,7 +225,6 @@ internal class DungeonSaveMenus(
                         if (result.success) open(player, result.message) else saveForm(player, expected, result.message, entered)
                     }
                 }.let { if (blocked == null) it else it.copy(label = text("saves.dialog.save-disabled", "<#aaa49a>Сохранение недоступно"), tooltip = blocked) },
-                action("refresh", "panel.refresh-label", "<#aaa49a>Обновить", "panel.refresh-tooltip", "Проверить доступность сохранения") { saveForm(player, expected, name = it.text(nameInput).orEmpty()) },
             ),
             exitButton = back { open(player) },
             columns = 1,

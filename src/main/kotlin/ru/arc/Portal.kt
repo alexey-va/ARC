@@ -227,7 +227,7 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
         val cb = centerBlock ?: return null
         val owner = player ?: return null
         for (p in nearby) {
-            if (!inPortal(p, cb.location)) continue
+            if (!portalData.accepts(owner.uniqueId, p) || !inPortal(p, cb.location)) continue
             when (
                 evaluatePortalAccess(
                     isOwner = p == owner,
@@ -252,6 +252,11 @@ class Portal(uuid: UUID, private val portalData: PortalData) {
     }
 
     private fun executeAction(player: Player) {
+        if (portalData.ownerAction != null) {
+            val owner = this.player ?: return
+            sync { portalData.executeOwnerAction(owner.uniqueId, player) }
+            return
+        }
         when (portalData.actionType) {
             COMMAND -> {
                 sync {

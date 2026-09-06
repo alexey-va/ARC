@@ -6,6 +6,12 @@ missing bundled defaults without replacing operator values.
 
 ## Player controls
 
+- `/данж` (also `/dungeon`): opens the dungeon control surface from any
+  location. Outside a dungeon it offers the dungeon guide, the portal hub and
+  the native EliteMobs list. `/данж тп` routes to `pw aguild`, and
+  `/данж список` opens `elitemobs:em`; inside an instance, these transitions
+  first ask the player to use `/данж выйти`. If EliteMobs is unavailable on a
+  node, the menu opens the general guide.
 - `/начать` (also `/данж начать`): start the current dungeon lobby through native
   EliteMobs. Outside a dungeon or after the start, it explains the current state.
 - `/сохраниться [название]`: save the current safe standing position. Empty names
@@ -13,12 +19,13 @@ missing bundled defaults without replacing operator values.
   player's manual point, ignoring case. Names are literal text, at most 32 chars.
 - `/сохранения`: native dialog with manual/automatic points, creation, deletion
   confirmation, entry/last-exit travel, and a separate native dungeon exit.
-- `/данж вход`: return to safe ground near the authored start of this exact dungeon clone, outside native return portals.
+- `/данж вход`: return through the normal ARC portal to safe ground near the
+  authored start of this exact dungeon clone, outside native return portals.
 - `/данж выйти`: native EliteMobs quit for instances; `open-exit-command` (default
   `spawn`) for open dungeons, because native quit has no open-world return path.
 
 Only positions are saved. Inventory, rewards, mobs, objectives and match state
-are never restored. Cancelling an ordinary command/plugin teleport in an instance
+are never restored. A blocked ordinary command/plugin teleport in an instance
 shows a throttled, clickable explanation of exit and checkpoint commands.
 
 ## Scope and safety
@@ -29,23 +36,25 @@ remains compatible. Points expire after `resume-hours` (default 72).
 Dynamic runs use an in-memory token keyed by the native instance object and the
 actual world UUID; a new instance or ARC lifecycle cannot reuse an old run.
 Open dungeons use their persistent world UUID and `open` token.
-Death and dungeon completion clear positions in that world. Players cannot use
-another participant's points, spectate through this feature, enter a different
-world, revive themselves, or teleport from a lobby/finished match.
+Death preserves positions in that world; a new instance makes its old points
+unavailable. Players cannot use another participant's points, spectate through
+this feature, enter a different world, revive themselves, or teleport from a
+lobby/finished match.
 
-Autosaves are checked every 20 seconds, only when a player stands safely, is not
-flying/gliding/riding/falling/burning, and has been out of combat for 15 seconds.
-The first safe check can save; subsequent points require at least 120 seconds
-(configurable 30–600) and eight blocks from the latest autosave. Three AUTO points
-roll independently of manual names; manual saves have a five-second rate limit.
+Autosaves are polled every 20 seconds. The first point is written at the first
+suitable check while walking on a safe solid surface, without fire, water or
+flight, and after 15 seconds outside combat. Subsequent points require at least
+`autosave-seconds` (default 120, configurable 30–600) and eight blocks from the
+latest autosave. Three AUTO points roll independently of manual names; manual
+saves have a five-second rate limit.
 Manual saves/removals and autosaves use the core native player-data persistence
 port. A persistence failure reports failure rather than claiming disk durability.
 
-Travel waits three seconds. Movement, combat, logout, quit, death, closure, changed
-membership/run, replaced/deleted points, and an unsafe destination invalidate the
-request. Each timer owns a unique token, so an old timer cannot complete a newer
-request. The standing body and supporting floor are checked against liquids,
-hazards, walls, height and border; only existing chunks may load, never new terrain.
+Saved-point and entry returns use the normal ARC portal flow; there is no countdown
+or movement-cancel travel timer. The same-world run, membership, point freshness
+and safe-destination checks still apply. The standing body and supporting floor
+are checked against liquids, hazards, walls, height and border; only existing
+chunks may load, never new terrain.
 The conservative passability check may reject cramped/partial-block positions;
 players can choose another point or leave through the native exit.
 

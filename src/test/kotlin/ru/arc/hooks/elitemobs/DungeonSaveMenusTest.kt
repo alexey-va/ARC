@@ -27,9 +27,27 @@ class DungeonSaveMenusTest : FreeSpec({
         val shown = mutableListOf<PaperDialogScreen>()
         DungeonSaveMenus(dungeon) { _, screen -> shown += screen }.open(player)
         shown.single().id shouldBe "dungeon.panel.unavailable"
+        shown.single().buttons.map { it.id.value } shouldBe listOf("guide", "portals", "list")
         shown.single().exitButton!!.id.value shouldBe "close"
         shown.single().exitButton!!.closeDialogBeforeAction shouldBe true
         shown.single().body.single().text shouldBe Component.text("changed").decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
+    }
+
+    "about page opens safely and returns to the current dungeon panel" {
+        val player = paper.addPlayer("about")
+        val dungeon = mockk<EMDungeonQol>(relaxed = true)
+        val world = paper.addSimpleWorld("about-world")
+        every { dungeon.panelView(player) } returns DungeonPanelView(world.uid, DungeonVisit("run", name = "Пещера"), null)
+        every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
+        every { dungeon.context(player) } returns Component.text("Подсказка")
+        val screens = mutableListOf<PaperDialogScreen>()
+        val menus = DungeonSaveMenus(dungeon) { _, screen -> screens += screen }
+        menus.panel(player)
+        screens.last().buttons.single { it.id.value == "about" }.onClick.handle(mockk())
+        screens.last().id shouldBe "dungeon.about"
+        screens.last().body.last().text shouldBe Component.text("Подсказка")
+        screens.last().exitButton!!.onClick.handle(mockk())
+        screens.last().id shouldBe "dungeon.panel"
     }
 
     "root close is separate from the quit action" {
@@ -46,6 +64,26 @@ class DungeonSaveMenusTest : FreeSpec({
         verify(exactly = 0) { dungeon.quit(any()) }
         screen!!.buttons.single { it.id.value == "quit" }.onClick.handle(mockk())
         verify { dungeon.panelAction(player, any(), "quit") }
+    }
+
+    "start exists only while the instance is waiting and menus have no refresh action" {
+        val player = paper.addPlayer("viewer")
+        val dungeon = mockk<EMDungeonQol>(relaxed = true)
+        val world = paper.addSimpleWorld("dungeon")
+        val saves = DungeonSaveView(world.uid, "run", emptyList(), null, null)
+        every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
+        every { dungeon.panelView(player) } returns DungeonPanelView(world.uid, DungeonVisit("run", waiting = false, canResume = true, instanced = true), saves)
+        var screen: PaperDialogScreen? = null
+        DungeonSaveMenus(dungeon) { _, shown -> screen = shown }.panel(player)
+        screen!!.buttons.none { it.id.value == "start" } shouldBe true
+        screen!!.buttons.none { it.id.value == "refresh" } shouldBe true
+
+        every { dungeon.panelView(player) } returns DungeonPanelView(world.uid, DungeonVisit("run", waiting = true, canResume = false, instanced = true), saves)
+        DungeonSaveMenus(dungeon) { _, shown -> screen = shown }.panel(player)
+        screen!!.buttons.any { it.id.value == "start" } shouldBe true
+        screen!!.buttons.none { it.id.value == "refresh" } shouldBe true
+        screen!!.buttons.single { it.id.value == "start" }.onClick.handle(mockk())
+        verify { dungeon.panelAction(player, any(), "start") }
     }
 
     "save captures expected view and shows error in the form" {

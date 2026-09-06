@@ -83,7 +83,7 @@ class EMDungeonQolTest : FreeSpec({
             safeQol.rememberDeparture(teleport(dead, checkpoint, Location(hub, 1.0, 70.0, 1.0)))
             dead.teleport(checkpoint)
             dead.health = 0.0
-            safeQol.clearOnDeath(mockk<PlayerDeathEvent> { every { entity } returns dead })
+            safeQol.cancelTravelOnDeath(mockk<PlayerDeathEvent> { every { entity } returns dead })
             val deadEntry = teleport(dead, Location(hub, 1.0, 70.0, 1.0), Location(dungeon, 2.0, 70.0, 2.0))
             safeQol.resumeOnEntry(deadEntry)
             deadEntry.to shouldBe Location(dungeon, 2.0, 70.0, 2.0)
@@ -116,21 +116,19 @@ class EMDungeonQolTest : FreeSpec({
             qol.entered(PlayerChangedWorldEvent(player, hub))
             scheduler.tick(30)
             audience.titles.size shouldBe 1
-            audience.messages.size shouldBe 1
-            audience.messages.single().second.toString().contains("run_command") shouldBe true
-            audience.messages.single().second.toString().contains("/начать") shouldBe true
+            audience.messages.size shouldBe 0
 
             qol.started(mockk<DungeonStartEvent> { every { dungeonInstance } returns instance })
             audience.titles.size shouldBe 2
             qol.completed(mockk<DungeonCompleteEvent> { every { dungeonInstance } returns instance })
             scheduler.tick(60)
             audience.titles.size shouldBe 3
-            audience.messages.size shouldBe 3
+            audience.messages.size shouldBe 1
             qol.close()
         }
     }
 
-    "clears a checkpoint on death and completion" {
+    "death preserves resume manual and auto points while completion clears the old run" {
         withScheduler {
             val player = paper.addPlayer("clear")
             val dungeon = paper.addSimpleWorld("dungeon")
@@ -140,10 +138,14 @@ class EMDungeonQolTest : FreeSpec({
 
             qol.rememberDeparture(teleport(player, checkpoint, Location(hub, 1.0, 70.0, 1.0)))
             player.teleport(checkpoint)
-            qol.clearOnDeath(mockk<PlayerDeathEvent> { every { entity } returns player })
+            val store = DungeonCheckpointStore()
+            store.save(player.persistentDataContainer, checkpoint, "run", "Ручная", DungeonSaveKind.MANUAL, 100L, 100_000L)
+            store.save(player.persistentDataContainer, checkpoint, "run", "Авто", DungeonSaveKind.AUTO, 100L, 100_000L)
+            qol.cancelTravelOnDeath(mockk<PlayerDeathEvent> { every { entity } returns player })
+            qol.view(player)!!.points.map { it.kind }.toSet() shouldBe setOf(DungeonSaveKind.MANUAL, DungeonSaveKind.AUTO)
             val afterDeath = teleport(player, Location(hub, 1.0, 70.0, 1.0), Location(dungeon, 2.0, 70.0, 2.0))
             qol.resumeOnEntry(afterDeath)
-            afterDeath.to shouldBe Location(dungeon, 2.0, 70.0, 2.0)
+            afterDeath.to shouldBe checkpoint
 
             qol.rememberDeparture(teleport(player, checkpoint, Location(hub, 1.0, 70.0, 1.0)))
             val instance = mockk<DungeonInstance>()

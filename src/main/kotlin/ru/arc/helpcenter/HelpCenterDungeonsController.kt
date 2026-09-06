@@ -26,7 +26,7 @@ internal class HelpCenterDungeonsController(
             body = listOf(PaperDialogBody(text("dungeons-body"), 468)),
             buttons = listOf(
                 portals(player),
-                button("dungeons_guide", "dungeons-guide-label", "dungeons-guide-tooltip") { openGuide(player, returnTo) },
+                button("dungeons_guide", "dungeons-guide-label", "dungeons-guide-tooltip") { openGuide(player) { open(player, returnTo) } },
                 eliteMenu(player),
             ),
             exitButton = back(returnTo), columns = 2,
@@ -43,7 +43,7 @@ internal class HelpCenterDungeonsController(
                     openTopic(player, topic, returnTo)
                 }
             },
-            exitButton = back { open(player, returnTo) }, columns = 2,
+            exitButton = back(returnTo), columns = 2,
         ))
     }
 

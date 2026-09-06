@@ -40,6 +40,16 @@ class EMDungeonCommandTest : FreeSpec({
         calls shouldBe listOf("start" to listOf("ignored"), "save" to listOf("name"), "saves" to emptyList())
     }
 
+    "global menu and portal command remain available without a local EliteMobs runtime" {
+        val player = mockk<Player>(relaxed = true)
+        val calls = mutableListOf<String>()
+        every { command.name } returns "dungeon"
+        val executor = EMDungeonCommand(config, { _, _, _ -> error("native dispatch forbidden") }, { false }, { _, action -> calls += action; true })
+        executor.onCommand(player, command, "данж", emptyArray())
+        executor.onCommand(player, command, "данж", arrayOf("тп"))
+        calls shouldBe listOf("menu", "тп")
+    }
+
     "fails closed for unavailable, nonplayers, and supports Russian tab completion" {
         val player = mockk<Player>(relaxed = true)
         every { config.component(any(), any<String>(), any()) } returns Component.text("unavailable")
@@ -52,6 +62,6 @@ class EMDungeonCommandTest : FreeSpec({
         verify { sender.sendMessage(any<Component>()) }
 
         every { command.name } returns "dungeon"
-        EMDungeonCommand(config, { _, _, _ -> }, { true }).onTabComplete(player, command, "dungeon", arrayOf("с")) shouldContainExactly listOf("сохраниться", "сохранения")
+        EMDungeonCommand(config, { _, _, _ -> }, { true }).onTabComplete(player, command, "dungeon", arrayOf("с")) shouldContainExactly listOf("сохраниться", "сохранения", "список")
     }
 })

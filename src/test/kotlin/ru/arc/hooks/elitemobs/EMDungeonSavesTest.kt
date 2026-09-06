@@ -12,7 +12,7 @@ import org.bukkit.GameMode
 import org.bukkit.Location
 import org.bukkit.entity.Player
 import org.bukkit.event.entity.EntityDamageByEntityEvent
-import org.bukkit.event.player.PlayerMoveEvent
+import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.player.PlayerTeleportEvent
 import ru.arc.config.Config
 import ru.arc.core.Tasks
@@ -102,6 +102,58 @@ class EMDungeonSavesTest : FreeSpec({
         }
     }
 
+    "failed manual save rolls back the point and does not consume cooldown" {
+        withScheduler {
+            val player = paper.addPlayer("failed-save")
+            val world = paper.addSimpleWorld("failed-save-world")
+            var fail = true
+            val qol = qol(world, player, persistence = { if (fail) error("disk") })
+            val expected = qol.view(player)!!
+
+            qol.save(player, "phantom", expected).success shouldBe false
+            qol.view(player)!!.points shouldBe emptyList()
+            fail = false
+            qol.save(player, "real", qol.view(player)!!).success shouldBe true
+            qol.close()
+        }
+    }
+
+    "failed remove restores the point" {
+        withScheduler {
+            val player = paper.addPlayer("failed-remove")
+            val world = paper.addSimpleWorld("failed-remove-world")
+            var fail = false
+            val qol = qol(world, player, persistence = { if (fail) error("disk") })
+            val expected = qol.view(player)!!
+            qol.save(player, "keep", expected).success shouldBe true
+            val point = qol.view(player)!!.points.single()
+            fail = true
+
+            qol.remove(player, point, qol.view(player)!!).success shouldBe false
+            qol.view(player)!!.points.single().name shouldBe "keep"
+            qol.close()
+        }
+    }
+
+    "failed autosave preserves previous slots" {
+        withScheduler {
+            val player = paper.addPlayer("failed-auto")
+            val world = paper.addSimpleWorld("failed-auto-world")
+            var now = 100_000L
+            var fail = false
+            val qol = qol(world, player, clock = { now }, persistence = { if (fail) error("disk") })
+            qol.autoSave(player)
+            val before = qol.view(player)!!.points
+            player.teleport(Location(world, 20.0, 70.0, 0.0))
+            now += 120_001L
+            fail = true
+
+            qol.autoSave(player)
+            qol.view(player)!!.points shouldBe before
+            qol.close()
+        }
+    }
+
     "save rejects stale run, membership, spectator, and unsafe state" {
         withScheduler {
             val player = paper.addPlayer("guards")
@@ -147,102 +199,121 @@ class EMDungeonSavesTest : FreeSpec({
         }
     }
 
-    "travel cancels on movement and an old timer cannot consume a new request" {
+    "portal requires entry, permits walking and consumes its action only once" {
         withScheduler { scheduler ->
             val player = paper.addPlayer("traveler")
             val world = paper.addSimpleWorld("travel-world")
             val destination = Location(world, 4.0, 70.0, 4.0)
             val moved = mutableListOf<Location>()
-            val qol = qol(world, player, entryProvider = { destination }, move = { _, location, _ -> moved += location; true })
-            val expected = qol.view(player)!!
-            qol.travel(player, expected, "entry")
-            val from = player.location.clone()
-            player.teleport(Location(world, 1.0, 70.0, 0.0))
-            qol.cancelOnMovement(PlayerMoveEvent(player, from, player.location.clone()))
-            scheduler.advanceMs(1_000L)
-            qol.travel(player, expected, "entry")
-            scheduler.advanceMs(2_000L)
+            val portals = mutableListOf<() -> Unit>()
+            val audience = RecordingSavesAudience()
+            val service = qol(world, player, entry = destination, portals = portals, audience = audience,
+                move = { _, location, _ -> moved += location; true })
+            service.travel(player, service.view(player)!!, "entry")
+            scheduler.advanceMs(3_000)
             moved shouldBe emptyList()
-            scheduler.advanceMs(1_000L)
+            audience.messages shouldBe emptyList()
+            player.teleport(Location(world, 1.0, 70.0, 0.0))
+            portals.single().invoke()
+            moved shouldBe listOf(destination)
+            portals.single().invoke()
             moved.size shouldBe 1
-            qol.close()
+            service.close()
         }
     }
 
-    "travel refuses unsafe points and reports move failure" {
-        withScheduler { scheduler ->
+    "portal rechecks terrain and native move rejection on entry" {
+        withScheduler {
             val player = paper.addPlayer("travel-guards")
             val world = paper.addSimpleWorld("travel-guard-world")
+            var safe = true
             val audience = RecordingSavesAudience()
-            val qol = qol(world, player, entry = Location(world, 3.0, 70.0, 3.0), safe = { false }, audience = audience)
-            val expected = qol.view(player)!!
-            qol.travel(player, expected, "entry")
-            scheduler.advanceMs(3_000L)
-            audience.messages.size shouldBe 2
-            qol.close()
+            val portals = mutableListOf<() -> Unit>()
+            var moves = 0
+            val service = qol(world, player, entry = Location(world, 3.0, 70.0, 3.0), safe = { safe }, audience = audience,
+                portals = portals, move = { _, _, _ -> moves++; false })
+            service.travel(player, service.view(player)!!, "entry")
+            safe = false
+            portals.last().invoke()
+            moves shouldBe 0
+            audience.messages.size shouldBe 1
+            safe = true
+            service.travel(player, service.view(player)!!, "entry")
+            portals.last().invoke()
+            moves shouldBe 1
+            audience.messages.last().toString().contains("отменено") shouldBe true
+            service.close()
         }
     }
 
-    "stale run or removed point cannot travel, and close cancels success" {
-        withScheduler { scheduler ->
+    "portal rejects a replacement run, removed point and closed service" {
+        withScheduler {
             val player = paper.addPlayer("stale-travel")
             val world = paper.addSimpleWorld("stale-travel-world")
             var run = "run"
-            val destination = Location(world, 4.0, 70.0, 4.0)
             val moved = mutableListOf<Location>()
-            val qol = qol(world, player, entry = destination, runProvider = { run }, move = { _, location, _ -> moved += location; true })
-            val expected = qol.view(player)!!
-            qol.travel(player, expected, "entry")
+            val portals = mutableListOf<() -> Unit>()
+            val service = qol(world, player, entry = Location(world, 4.0, 70.0, 4.0), runProvider = { run }, portals = portals,
+                move = { _, location, _ -> moved += location; true })
+            service.travel(player, service.view(player)!!, "entry")
             run = "new-run"
-            scheduler.advanceMs(3_000L)
-            moved shouldBe emptyList()
+            portals.last().invoke()
             run = "run"
-            val fresh = qol.view(player)!!
-            qol.save(player, "spot", fresh).success shouldBe true
-            val pointExpected = qol.view(player)!!
-            val point = pointExpected.points.single()
-            qol.travel(player, pointExpected, point.id)
-            qol.remove(player, point, pointExpected).success shouldBe true
-            scheduler.advanceMs(3_000L)
-            moved shouldBe emptyList()
-            qol.travel(player, qol.view(player)!!, "entry")
-            qol.close()
-            scheduler.advanceMs(3_000L)
+            service.save(player, "spot", service.view(player)!!).success shouldBe true
+            val expected = service.view(player)!!
+            val point = expected.points.single()
+            service.travel(player, expected, point.id)
+            service.remove(player, point, expected).success shouldBe true
+            portals.last().invoke()
+            service.travel(player, service.view(player)!!, "entry")
+            service.close()
+            portals.last().invoke()
             moved shouldBe emptyList()
         }
     }
 
-    "native move failure reports blocked feedback after a valid countdown" {
-        withScheduler { scheduler ->
-            val player = paper.addPlayer("move-fail")
-            val world = paper.addSimpleWorld("move-fail-world")
-            val audience = RecordingSavesAudience()
-            val destination = Location(world, 4.0, 70.0, 4.0)
-            val qol = qol(world, player, entry = destination, audience = audience, move = { _, _, _ -> false })
-            qol.travel(player, qol.view(player)!!, "entry")
-            scheduler.advanceMs(3_000L)
-            audience.messages.last().toString().contains("отменено") shouldBe true
-            qol.close()
-        }
-    }
-
-    "quit and close clear pending travel tokens before a later request" {
+    "death, expiry and quit invalidate old portals without consuming later requests" {
         withScheduler { scheduler ->
             val player = paper.addPlayer("pending")
             val world = paper.addSimpleWorld("pending-world")
-            val destination = Location(world, 4.0, 70.0, 4.0)
             val moved = mutableListOf<Location>()
-            val qol = qol(world, player, entry = destination, move = { _, location, _ -> moved += location; true })
-            val expected = qol.view(player)!!
-            qol.travel(player, expected, "entry")
-            qol.quit(player)
-            scheduler.advanceMs(1_000L)
-            qol.travel(player, qol.view(player)!!, "entry")
-            scheduler.advanceMs(2_000L)
-            moved.size shouldBe 0
-            scheduler.advanceMs(1_000L)
-            moved.single().x shouldBe 4.0
-            qol.close()
+            val portals = mutableListOf<() -> Unit>()
+            val service = qol(world, player, entry = Location(world, 4.0, 70.0, 4.0), portals = portals,
+                move = { _, location, _ -> moved += location; true })
+            val expected = service.view(player)!!
+            service.travel(player, expected, "entry")
+            service.cancelTravelOnDeath(mockk<PlayerDeathEvent> { every { entity } returns player })
+            service.travel(player, expected, "entry")
+            portals.first().invoke()
+            moved shouldBe emptyList()
+            scheduler.advanceMs(21_000)
+            portals.last().invoke()
+            moved shouldBe emptyList()
+            service.travel(player, expected, "entry")
+            val beforeQuit = portals.last()
+            service.quit(player)
+            service.travel(player, expected, "entry")
+            beforeQuit()
+            moved shouldBe emptyList()
+            portals.last().invoke()
+            moved.size shouldBe 1
+            service.close()
+        }
+    }
+
+    "entering combat after opening the portal prevents travel" {
+        withScheduler {
+            val player = paper.addPlayer("portal-combat")
+            val world = paper.addSimpleWorld("portal-combat-world")
+            val portals = mutableListOf<() -> Unit>()
+            var moves = 0
+            val service = qol(world, player, entry = Location(world, 4.0, 70.0, 4.0), portals = portals,
+                move = { _, _, _ -> moves++; true })
+            service.travel(player, service.view(player)!!, "entry")
+            service.combat(mockk<EntityDamageByEntityEvent> { every { entity } returns player; every { damager } returns player })
+            portals.single().invoke()
+            moves shouldBe 0
+            service.close()
         }
     }
 
@@ -298,6 +369,7 @@ private fun qol(
     entryProvider: () -> Location? = { entry },
     runProvider: () -> String = { "run" },
     persistence: () -> Unit = {},
+    portals: MutableList<() -> Unit> = mutableListOf(),
 ) = EMDungeonQol(
     config(),
     { candidate -> if (candidate == world) DungeonVisit(runProvider(), entry = entryProvider(), members = members, instanced = instanced) else null },
@@ -305,7 +377,8 @@ private fun qol(
     audience,
     clock,
     move = move,
-    persistence = PaperPlayerDataPersistence { persistence(); true },
+    persistence = PaperPlayerDataPersistence { persistence() },
+    openPortal = { _, action -> portals += action },
 ).also { player.teleport(Location(world, 0.0, 70.0, 0.0)) }
 
 private fun config(): Config = mockk<Config>(relaxed = true).also {

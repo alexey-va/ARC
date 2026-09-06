@@ -22,6 +22,8 @@ internal data class DungeonVisit(
     val instanced: Boolean = false,
     val name: String? = null,
     val stats: DungeonVisitStats? = null,
+    val contentId: String? = null,
+    val lore: List<String> = emptyList(),
 )
 
 internal data class DungeonVisitStats(
@@ -59,12 +61,14 @@ internal class NativeDungeonVisits(
                 entry = cachedEntry(entry, world),
                 members = instance.players.map { it.uniqueId }.toSet(), instanced = true,
                 name = instance.contentPackagesConfigFields.name,
+                contentId = instance.contentPackagesConfigFields.filename.removeSuffix(".yml"),
+                lore = instance.contentPackagesConfigFields.customInfo.orEmpty(),
                 stats = nativeDungeonStats(instance))
         }
         val fields = ContentPackagesConfig.getDungeonPackages().values.firstOrNull { it.worldName == world.name } ?: return null
         return if (fields.contentType.name == "OPEN_DUNGEON") {
             DungeonVisit("open", entry = cachedEntry(fields.teleportLocation, world),
-                name = fields.name,
+                name = fields.name, contentId = fields.filename.removeSuffix(".yml"), lore = fields.customInfo.orEmpty(),
                 stats = DungeonVisitStats(level = fields.contentLevel))
         } else null
     }

@@ -196,6 +196,14 @@ class HelpCenterScreensTest {
     }
 
     @Test
+    fun `dungeon guide back uses the caller supplied return action`() {
+        var returned = false
+        controller.openDungeonsGuide(player) { returned = true }
+        click("back")
+        assertTrue(returned)
+    }
+
+    @Test
     fun `EliteMobs inventory returns to the exact guide chapter`() {
         open(HelpCenterPage.ACTIVITIES)
         click("command_dungeons")

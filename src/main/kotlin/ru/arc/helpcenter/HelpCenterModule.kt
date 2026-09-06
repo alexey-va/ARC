@@ -32,6 +32,13 @@ object HelpCenterModule : PluginModule {
             .isSuccess
     }
 
+    fun openDungeonsGuide(player: Player, returnTo: () -> Unit): Boolean {
+        val current = controller ?: return false
+        return runCatching { current.openDungeonsGuide(player, returnTo) }
+            .onFailure { failure -> error("Could not open dungeon guide for {}", player.name, failure) }
+            .isSuccess
+    }
+
     private fun start(settings: HelpCenterSettings) {
         controller?.close()
         controller = null

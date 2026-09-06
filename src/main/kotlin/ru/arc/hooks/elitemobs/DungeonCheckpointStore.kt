@@ -72,6 +72,18 @@ internal class DungeonCheckpointStore {
         return true
     }
 
+    /** Snapshot only the durable save-point root so callers can roll back a failed native write. */
+    @Suppress("DEPRECATION")
+    internal fun snapshotSaves(data: PersistentDataContainer): Array<PersistentDataContainer>? =
+        data.get(savesRoot, PersistentDataType.TAG_CONTAINER_ARRAY)?.copyOf()
+
+    /** Restore a previous save-point root without touching the separate resume destination root. */
+    @Suppress("DEPRECATION")
+    internal fun restoreSaves(data: PersistentDataContainer, snapshot: Array<PersistentDataContainer>?) {
+        if (snapshot == null) data.remove(savesRoot)
+        else data.set(savesRoot, PersistentDataType.TAG_CONTAINER_ARRAY, snapshot)
+    }
+
     fun remember(data: PersistentDataContainer, location: Location, run: String, now: Long, ttl: Long) {
         val entries = read(data).filter { valid(it, now, ttl) && it.world != location.world.uid.toString() }
         write(data, (entries + Point(location.world.uid.toString(), run,
@@ -83,8 +95,12 @@ internal class DungeonCheckpointStore {
         read(data).firstOrNull { it.world == world.uid.toString() && it.run == run && valid(it, now, ttl) }
             ?.let { Location(world, it.position[0], it.position[1], it.position[2], it.position[3].toFloat(), it.position[4].toFloat()) }
 
-    fun forget(data: PersistentDataContainer, world: UUID) {
+    fun forgetDestination(data: PersistentDataContainer, world: UUID) {
         write(data, read(data).filter { it.world != world.toString() })
+    }
+
+    fun forget(data: PersistentDataContainer, world: UUID) {
+        forgetDestination(data, world)
         writeSaves(data, readSaves(data).filter { it.world != world.toString() })
     }
 
