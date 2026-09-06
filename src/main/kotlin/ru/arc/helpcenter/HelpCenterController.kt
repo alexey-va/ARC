@@ -950,9 +950,8 @@ internal class HelpCenterController(
             CommandDefinition(
                 "events",
                 HelpCenterCategory.ACTIVITIES,
-                "events",
+                "arcevents",
                 HelpCenterFeature.EVENTS,
-                opensInventory = true,
             ),
             CommandDefinition(
                 "duels",
@@ -968,7 +967,7 @@ internal class HelpCenterController(
                 HelpCenterFeature.BATTLE_PASS,
                 opensInventory = true,
             ),
-            CommandDefinition("giveaways", HelpCenterCategory.ACTIVITIES, "giveaway", HelpCenterFeature.GIVEAWAYS, opensInventory = true),
+            CommandDefinition("giveaways", HelpCenterCategory.ACTIVITIES, "giveaway", HelpCenterFeature.GIVEAWAYS),
             CommandDefinition(
                 "dungeons",
                 HelpCenterCategory.ACTIVITIES,
@@ -981,7 +980,6 @@ internal class HelpCenterController(
                 HelpCenterCategory.ACTIVITIES,
                 "arcfarms",
                 HelpCenterFeature.FARMS,
-                opensInventory = true,
             ),
             CommandDefinition("vote", HelpCenterCategory.ACTIVITIES, "vote", HelpCenterFeature.VOTES),
             CommandDefinition("shops", HelpCenterCategory.TRADE, "shops", opensInventory = true),
