@@ -4,6 +4,8 @@ import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import ru.arc.KotestTestBase
+import ru.arc.mounts.ActiveMountSnapshot
+import java.util.UUID
 
 class PAPIHookTest :
     KotestTestBase({
@@ -16,9 +18,28 @@ class PAPIHookTest :
                     "%arc_guildrank%",
                     "%arc_particles%",
                     "%arc_worldname%",
+                    "%arc_mount_active%",
+                    "%arc_mount_id%",
+                    "%arc_mount_name%",
+                    "%arc_mount_rarity%",
+                    "%arc_mount_entity_uuid%",
                     "%arc_cache_<1-300 seconds>_<placeholder_without_percent_signs>%",
                     "%arc_cache_plain_<1-300 seconds>_<placeholder_without_percent_signs>%",
                 )
+            }
+
+            it("exposes only the immutable confirmed mount snapshot fields") {
+                val entityId = UUID.randomUUID()
+                val snapshot = ActiveMountSnapshot("pig", "Поросёнок", "Редкий", entityId)
+
+                mountPlaceholderValue(snapshot, "mount_active") shouldBe "true"
+                mountPlaceholderValue(snapshot, "mount_id") shouldBe "pig"
+                mountPlaceholderValue(snapshot, "mount_name") shouldBe "Поросёнок"
+                mountPlaceholderValue(snapshot, "mount_rarity") shouldBe "Редкий"
+                mountPlaceholderValue(snapshot, "mount_entity_uuid") shouldBe entityId.toString()
+                mountPlaceholderValue(null, "mount_active") shouldBe "false"
+                mountPlaceholderValue(null, "mount_id") shouldBe ""
+                mountPlaceholderValue(snapshot, "mount_unknown").shouldBeNull()
             }
 
             it("resolves arc_players without an OfflinePlayer") {

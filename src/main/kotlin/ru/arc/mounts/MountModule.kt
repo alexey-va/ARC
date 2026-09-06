@@ -51,6 +51,9 @@ object MountModule : PluginModule {
 
     fun summonFavorite(player: org.bukkit.entity.Player): Boolean = quickSummons?.summonFavorite(player) ?: false
 
+    internal fun activeMountSnapshot(player: org.bukkit.entity.Player): ActiveMountSnapshot? =
+        sessions?.activeMountSnapshot(player)
+
     private fun start(loadedConfig: MountModuleConfig) {
         config = loadedConfig
         if (!loadedConfig.enabled) {

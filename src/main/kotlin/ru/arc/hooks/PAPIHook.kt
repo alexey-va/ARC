@@ -2,11 +2,14 @@ package ru.arc.hooks
 
 import me.clip.placeholderapi.PlaceholderAPI
 import me.clip.placeholderapi.expansion.PlaceholderExpansion
+import org.bukkit.Bukkit
 import org.bukkit.OfflinePlayer
 import org.bukkit.entity.Player
 import ru.arc.ARC
 import ru.arc.config.ConfigManager
 import ru.arc.jobs.JobsModule
+import ru.arc.mounts.ActiveMountSnapshot
+import ru.arc.mounts.MountModule
 import ru.arc.xserver.playerlist.PlayerManager
 
 class PAPIHook internal constructor(
@@ -45,6 +48,7 @@ class PAPIHook internal constructor(
             params.startsWith("guildrank") -> formatGuildRankAndPrestige(player)
             params.startsWith("particles") -> formatParticleVisibility(player)
             params.startsWith("worldname") -> getWorldName(player)
+            params.startsWith("mount_", ignoreCase = true) -> mountPlaceholder(player, params)
             else -> null
         }
     }
@@ -56,6 +60,11 @@ class PAPIHook internal constructor(
         "%arc_guildrank%",
         "%arc_particles%",
         "%arc_worldname%",
+        "%arc_mount_active%",
+        "%arc_mount_id%",
+        "%arc_mount_name%",
+        "%arc_mount_rarity%",
+        "%arc_mount_entity_uuid%",
         "%arc_cache_<1-300 seconds>_<placeholder_without_percent_signs>%",
         "%arc_cache_plain_<1-300 seconds>_<placeholder_without_percent_signs>%",
     )
@@ -115,5 +124,24 @@ class PAPIHook internal constructor(
         }
         config.injectDeepKey("world-names.$playerWorld", playerWorld)
         return "&7Обычный мир"
+    }
+
+    private fun mountPlaceholder(offlinePlayer: OfflinePlayer, params: String): String {
+        // PlaceholderAPI may be called by integrations from arbitrary threads. Bukkit entity
+        // state is only read on the primary thread; fail closed for off-thread requests.
+        if (!Bukkit.isPrimaryThread()) return ""
+        val player = offlinePlayer as? Player ?: return ""
+        return mountPlaceholderValue(MountModule.activeMountSnapshot(player), params) ?: ""
+    }
+}
+
+internal fun mountPlaceholderValue(snapshot: ActiveMountSnapshot?, params: String): String? {
+    return when (params.lowercase()) {
+        "mount_active" -> (snapshot != null).toString()
+        "mount_id" -> snapshot?.mountId ?: ""
+        "mount_name" -> snapshot?.mountName ?: ""
+        "mount_rarity" -> snapshot?.rarity ?: ""
+        "mount_entity_uuid" -> snapshot?.entityId?.toString() ?: ""
+        else -> null
     }
 }

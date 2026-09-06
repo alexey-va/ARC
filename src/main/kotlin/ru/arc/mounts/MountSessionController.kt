@@ -73,6 +73,14 @@ enum class MountRemovalReason {
     INVALID,
 }
 
+/** Immutable, read-only view of a mount that is currently confirmed in use. */
+internal data class ActiveMountSnapshot(
+    val mountId: String,
+    val mountName: String,
+    val rarity: String,
+    val entityId: UUID,
+)
+
 private data class MountSession(
     val playerId: UUID,
     val entityId: UUID,
@@ -140,6 +148,24 @@ class MountSessionController(
     fun isRiding(playerId: UUID): Boolean = sessionsByPlayer.containsKey(playerId)
 
     fun activeSessionCount(): Int = sessionsByPlayer.size
+
+    /**
+     * Returns a snapshot only while the controller still owns the session and the rider is
+     * actually mounted on that exact entity. Callers must not retain Bukkit objects from this
+     * method; the returned value is immutable and contains no mutation capability.
+     */
+    internal fun activeMountSnapshot(player: Player): ActiveMountSnapshot? {
+        val session = sessionsByPlayer[player.uniqueId] ?: return null
+        if (session.playerId != player.uniqueId) return null
+        val entity = plugin.server.getEntity(session.entityId) as? LivingEntity ?: return null
+        if (!entity.isValid || !entity.passengers.contains(player)) return null
+        return ActiveMountSnapshot(
+            mountId = session.definition.id,
+            mountName = session.definition.displayName,
+            rarity = session.definition.rarity.displayName,
+            entityId = entity.uniqueId,
+        )
+    }
 
     fun reconcileSettings(
         playerId: UUID,
