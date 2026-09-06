@@ -115,6 +115,21 @@ class ProductUiTest : StringSpec({
         (rows(store, now + 605_001).first { it["button"] == "rtp" }["events"] as Map<*, *>)["result"] shouldBe 1L
     }
 
+    "snapshot and report sort rows with and without view counters after persistence" {
+        val path = Files.createTempDirectory("ui-mixed-counts-").resolve("state.json")
+        val store = ProductInterestStore.open(path, config, now)
+        store.applyUi(event("one", ProductUiKind.CLOSE, surface = "arc:a.closed")) shouldBe true
+        store.applyUi(event("two", ProductUiKind.OPEN, surface = "arc:z.opened")) shouldBe true
+
+        fun verifyCounts(candidate: ProductInterestStore) {
+            rows(candidate).map { it["surface"] } shouldBe listOf("arc:z.opened", "arc:a.closed")
+            candidate.snapshot(now, "network").isNotEmpty() shouldBe true
+        }
+        verifyCounts(store)
+        store.flush(now, force = true) shouldBe true
+        verifyCounts(ProductInterestStore.open(path, config, now))
+    }
+
     "UI capacity loss is visible and does not grow storage without bounds" {
         val store = ProductInterestStore.open(Files.createTempDirectory("ui-bounds-").resolve("state.json"), config, now)
         repeat(130) { store.applyUi(event("one", ProductUiKind.IMPRESSION, "button$it")) }

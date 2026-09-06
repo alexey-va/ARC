@@ -48,12 +48,13 @@ object AeLoot {
         playerName: String,
         treasure: Treasure.Ae,
     ): String {
+        // ArcEvents also registers /ae; always address the owning plugin explicitly.
         val resolvedArgs = treasure.args.map { resolveArg(it) }
         return when (treasure.kind) {
             AeKind.ITEM -> {
                 val name = treasure.itemName ?: error("AE item name required")
                 buildString {
-                    append("ae giveitem ")
+                    append("advancedenchantments:advancedenchantments giveitem ")
                     append(playerName)
                     append(' ')
                     append(name)
@@ -68,7 +69,7 @@ object AeLoot {
 
             AeKind.RANDOM_BOOK -> {
                 buildString {
-                    append("ae giverandombook ")
+                    append("advancedenchantments:advancedenchantments giverandombook ")
                     append(playerName)
                     resolvedArgs.forEach { arg ->
                         append(' ')

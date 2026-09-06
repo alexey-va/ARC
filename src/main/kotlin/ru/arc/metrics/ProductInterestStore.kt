@@ -369,7 +369,7 @@ class ProductInterestStore private constructor(
             }
         }
         return rows.values.sortedWith(compareByDescending<UiAggregate> { (it.events["click"] ?: 0) + (it.events["attempt"] ?: 0) }
-            .thenByDescending { it.events["open"] ?: it.events["impression"] ?: 0 }.thenBy { it.surface }.thenBy { it.button })
+            .thenByDescending { it.events["open"] ?: it.events["impression"] ?: 0L }.thenBy { it.surface }.thenBy { it.button })
     }
 
     private fun uiReport(now: Long, days: Int, limit: Int): Map<String, Any?> {
