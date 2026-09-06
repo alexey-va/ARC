@@ -1,5 +1,8 @@
 package ru.arc.commands
 
+import io.mockk.every
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -18,6 +21,8 @@ import ru.arc.TestBase
 import ru.arc.commands.arc.ArcCommand
 import ru.arc.commands.arc.subcommands.RespawnOnRtpSubCommand
 import ru.arc.helpcenter.HelpCenterModule
+import ru.arc.gui.ArcMenus
+import ru.arc.paper.menu.PaperDialogScreen
 import ru.arc.rtp.RtpCompletionRequest
 import org.bukkit.command.Command as BukkitCommand
 
@@ -520,6 +525,20 @@ class ArcCommandTest : TestBase() {
     @Nested
     @DisplayName("/arc joinmessage & quitmessage")
     inner class JoinQuitMessageTests {
+        private fun assertMessageDialog(command: String, expectedId: String) {
+            // MockBukkit has no native inlined-dialog registry provider. Capture
+            // the actual screen model at that boundary; keep command routing real.
+            var shown: PaperDialogScreen? = null
+            mockkObject(ArcMenus)
+            try {
+                every { ArcMenus.openDialog(player, any(), any(), any(), any()) } answers { shown = secondArg() }
+                assertTrue(arcCommand.onCommand(player, mockCommand, "arc", arrayOf(command)))
+                assertEquals(expectedId, shown?.id, "The command must immediately open its loading visit")
+            } finally {
+                unmockkObject(ArcMenus)
+            }
+        }
+
         @Test
         @DisplayName("joinmessage without permission - sends no permission message")
         fun testJoinMessageNoPermission() {
@@ -550,10 +569,7 @@ class ArcCommandTest : TestBase() {
             player.addAttachment(plugin, "arc.join.message.gui", true)
             assertTrue(player.hasPermission("arc.join.message.gui"))
 
-            val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("joinmessage"))
-
-            assertTrue(result)
-            // GUI opens asynchronously
+            assertMessageDialog("joinmessage", "messages.catalog.join")
         }
 
         @Test
@@ -562,10 +578,7 @@ class ArcCommandTest : TestBase() {
             player.addAttachment(plugin, "arc.join.message.gui", true)
             assertTrue(player.hasPermission("arc.join.message.gui"))
 
-            val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("quitmessage"))
-
-            assertTrue(result)
-            // GUI opens asynchronously
+            assertMessageDialog("quitmessage", "messages.catalog.leave")
         }
     }
 
