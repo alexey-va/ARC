@@ -34,6 +34,12 @@ internal data class DungeonVisitStats(
 
 internal data class NativeWormholeVolume(val location: Location, val radiusSquared: Double)
 
+// Parties are present on 10.8.1, but absent on the supported 10.7.3 runtime.
+internal fun nativeDungeonPartiesAvailable(): Boolean = runCatching {
+    Class.forName("com.magmaguy.elitemobs.config.PartyConfig", false, EconomyHandler::class.java.classLoader)
+        .getMethod("isEnabled").invoke(null) == true
+}.getOrDefault(false)
+
 private val ENTRY_OFFSETS = buildList {
     for (x in -8..8) for (z in -8..8) for (y in -4..4) add(Triple(x, y, z))
 }.sortedWith(compareBy({ it.first * it.first * 0.25 + it.second * it.second + it.third * it.third * 0.25 }, { it.first }, { it.second }, { it.third }))

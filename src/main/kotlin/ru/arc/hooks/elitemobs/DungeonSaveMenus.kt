@@ -65,12 +65,14 @@ internal class DungeonSaveMenus(
                     if (view.saves?.entry != null) dungeon.travel(player, view.saves, "entry") else panel(player, text("panel.entry-unavailable", "<#aaa49a>Безопасный переход ко входу сейчас недоступен. Для выхода используйте кнопку выше."))
                 }.let { if (view.saves?.entry != null) it else it.copy(label = text("panel.entry-disabled", "<#aaa49a>К началу · недоступно")) },
                 action("shop", "panel.shop-label", "<#d7b486>Припасы ›", "panel.shop-tooltip", "Еда, стрелы и полезные предметы за кристаллы") { shop(player) },
+                partyButton(player),
                 action("guide", "panel.guide-label", "<#86dcf1>Гайд ›", "panel.guide-tooltip", "Читальная справка о данжах") {
                     if (!HelpCenterModule.openDungeonsGuide(player) { panel(player) }) {
                         panel(player, text("panel.guide-unavailable", "<#d7b486>Гайд сейчас недоступен. Закройте панель и попробуйте позже."))
                     }
                 },
                 action("about", "panel.about-label", "<#86dcf1>О данже ›", "panel.about-tooltip", "Описание и подсказка этого данжа") { about(player) },
+                mainMenu(player),
             ),
             exitButton = close(), columns = 2,
         ))
@@ -114,8 +116,29 @@ internal class DungeonSaveMenus(
             guide(player) { unavailable(player) },
             action("portals", "panel.portals-label", "<#d7b486>К порталам", "panel.portals-tooltip", "Перейти к порталам данжей в гильдии", close = true) { dungeon.action(player, "tp") },
             action("list", "panel.list-label", "<#d7b486>Выбрать данж", "panel.list-tooltip", "Открыть список данжей EliteMobs", close = true) { dungeon.action(player, "list") },
+            partyButton(player),
+            mainMenu(player),
         ), exitButton = close(), columns = 2,
     ))
+
+    private fun mainMenu(player: Player) = action("main", "panel.main-label", "<#aaa49a>Главное меню ›", "panel.main-tooltip", "Открыть главное меню сервера") { dungeon.action(player, "main") }
+
+    private fun partyButton(player: Player) = action("party", "panel.party-label", "<#d7b486>Группа ›", "panel.party-tooltip", "Как собрать пати и управлять группой EliteMobs") { party(player) }
+
+    private fun party(player: Player) {
+        val available = dungeon.partiesAvailable()
+        show(player, PaperDialogScreen(
+            id = "dungeon.party", title = text("party.title", "<#f4bd6a>Группа"),
+            body = listOf(
+                PaperDialogBody(text("party.body", "<#e8dfd2>Соберите пати перед входом в данж.<newline><#aaa49a>В управлении группой можно создать пати, пригласить игроков и посмотреть участников. Приглашённый игрок должен принять приглашение."), 468),
+                PaperDialogBody(text("party.tips", "<#e8dfd2>Группа помогает проходить данжи вместе: рядом засчитывается общий прогресс заданий, а за групповую добычу можно голосовать.<newline><#aaa49a>Перед входом договоритесь о данже и сложности. Сохранения позиций остаются личными."), 468),
+            ) + if (available) emptyList() else listOf(PaperDialogBody(text("party.unavailable", "<#aaa49a>Группы EliteMobs на этом сервере пока недоступны."), 468)),
+            buttons = listOfNotNull(
+                if (available) action("manage_party", "party.manage-label", "<#9bd48d>Управление группой", "party.manage-tooltip", "Открыть меню группы EliteMobs", close = true) { dungeon.action(player, "party") } else null,
+                guide(player) { party(player) },
+            ), exitButton = back { panel(player) }, columns = 2,
+        ))
+    }
 
     private fun saveCounts(view: DungeonSaveView): Component = text("saves.dialog.counts", "<#aaa49a>Ручные: <#e8dfd2><manual>/5 <#aaa49a>· Авто: <#e8dfd2><auto>/3",
         "manual" to Component.text(view.points.count { it.kind == DungeonSaveKind.MANUAL }), "auto" to Component.text(view.points.count { it.kind == DungeonSaveKind.AUTO }))

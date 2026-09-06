@@ -28,6 +28,7 @@ import ru.arc.PortalData
 import ru.arc.ARC
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
+import ru.arc.helpcenter.HelpCenterModule
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.paper.audience.NativePaperAudienceEffects
 import ru.arc.paper.audience.PaperAudienceEffects
@@ -191,6 +192,8 @@ internal class EMDungeonQol(
         DungeonPanelView(player.world.uid, it, view(player))
     }
 
+    internal fun partiesAvailable(): Boolean = nativeDungeonPartiesAvailable()
+
     /** Dialog callbacks must still belong to the exact world and native run shown. */
     internal fun panelAction(player: Player, expected: DungeonPanelView, action: String) {
         if (player.world.uid != expected.worldId || current(player)?.run != expected.visit.run) {
@@ -211,6 +214,9 @@ internal class EMDungeonQol(
     internal fun action(player: Player, action: String, args: List<String> = emptyList()) {
         when (action) {
             "menu", "меню" -> menus.panel(player)
+            "main" -> if (!HelpCenterModule.open(player)) audience.sendMessage(player, text("panel.main-unavailable", "<#d7b486>Главное меню сейчас недоступно. Попробуйте позже."))
+            "party" -> if (partiesAvailable()) player.performCommand("elitemobs:em party menu")
+                else audience.sendMessage(player, text("party.unavailable", "<#aaa49a>Группы EliteMobs на этом сервере пока недоступны."))
             "tp", "тп", "порталы", "list", "список" -> {
                 if (current(player)?.instanced == true) audience.sendMessage(player, text("messages.leave-first", "<#d7b486>Сначала выйдите из текущего данжа: /данж выйти."))
                 else player.performCommand(if (action in setOf("list", "список")) "elitemobs:em" else "pw aguild")

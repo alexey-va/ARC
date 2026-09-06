@@ -37,6 +37,8 @@ class MenuShortcutController(
     private val selection: (Player) -> MenuShortcutAction = MenuShortcutAction::selected,
     private val openMenu: (Player, HelpCenterPage) -> Boolean = HelpCenterModule::open,
     private val summonMount: (Player) -> Boolean = MountModule::summonFavorite,
+    private val inDungeon: (Player) -> Boolean = { ARC.hookRegistry?.dungeonQol?.panelView(it) != null },
+    private val openDungeonMenu: (Player) -> Unit = { ARC.hookRegistry?.dungeonQol?.action(it, "menu") },
 ) : Listener, AutoCloseable {
     init {
         plugin.server.pluginManager.registerEvents(this, plugin)
@@ -45,6 +47,11 @@ class MenuShortcutController(
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun onSwapHands(event: PlayerSwapHandItemsEvent) {
         if (event.isCancelled || !event.player.isSneaking) return
+        if (inDungeon(event.player)) {
+            event.isCancelled = true
+            openDungeonMenu(event.player)
+            return
+        }
         val action = selection(event.player)
         if (action == MenuShortcutAction.DISABLED) return
         // Cancel before opening a screen: the selected action must never also swap items.

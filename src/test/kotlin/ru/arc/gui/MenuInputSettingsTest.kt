@@ -15,6 +15,39 @@ import ru.arc.paper.menu.PaperDialogScreen
 
 class MenuInputSettingsTest : TestBase() {
     @Test
+    fun `dungeon shortcut overrides personal binding only while sneaking in a dungeon`() {
+        val player = server.addPlayer()
+        var inside = true
+        var selection = MenuShortcutAction.MOUNT
+        var dungeonOpens = 0
+        var summons = 0
+        val pages = mutableListOf<HelpCenterPage>()
+        MenuShortcutController(plugin, { selection }, { _, page -> pages.add(page); true },
+            { summons++; true }, { inside }, { dungeonOpens++ }).use { shortcuts ->
+            fun swap(cancelled: Boolean = false) = PlayerSwapHandItemsEvent(player, ItemStack(Material.STONE), ItemStack(Material.TORCH))
+                .also { it.isCancelled = cancelled; shortcuts.onSwapHands(it) }
+            player.isSneaking = true
+            swap().isCancelled shouldBe true
+            selection = MenuShortcutAction.DISABLED
+            swap().isCancelled shouldBe true
+            dungeonOpens shouldBe 2
+            summons shouldBe 0
+            pages shouldBe emptyList()
+            player.isSneaking = false
+            swap().isCancelled shouldBe false
+            player.isSneaking = true
+            swap(cancelled = true)
+            dungeonOpens shouldBe 2
+            inside = false
+            swap().isCancelled shouldBe false
+            selection = MenuShortcutAction.MOUNT
+            swap().isCancelled shouldBe true
+            summons shouldBe 1
+            dungeonOpens shouldBe 2
+        }
+    }
+
+    @Test
     fun `default shortcut opens root once without summoning or swapping`() {
         val player = server.addPlayer()
         player.isSneaking = true

@@ -6,6 +6,16 @@ missing bundled defaults without replacing operator values.
 
 ## Player controls
 
+- Shift + F opens the dungeon panel while the player is in an active dungeon
+  or its lobby. It takes precedence over the personal shortcut only there;
+  ordinary F and an already-cancelled swap event remain untouched. Outside a
+  dungeon the saved shortcut behavior applies again.
+- The panel has a direct Main menu action and a Group section with party
+  guidance and native `/elitemobs:em party menu` management. The latter is
+  offered only when the installed EliteMobs party feature exists and is enabled
+  (10.8.1 supports it; the supported 10.7.3 runtime does not). Panel, Group,
+  guide and Main menu navigation do not explicitly close the dialog first;
+  the shared ArcCore runtime owns dialog replacement and Escape semantics.
 - `/данж` (also `/dungeon`): opens the dungeon control surface from any
   location. Outside a dungeon it offers the dungeon guide, the portal hub and
   the native EliteMobs list. `/данж тп` routes to `pw aguild`, and
