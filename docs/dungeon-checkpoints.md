@@ -13,7 +13,7 @@ missing bundled defaults without replacing operator values.
   player's manual point, ignoring case. Names are literal text, at most 32 chars.
 - `/сохранения`: native dialog with manual/automatic points, creation, deletion
   confirmation, entry/last-exit travel, and a separate native dungeon exit.
-- `/данж вход`: return to the authored start of this exact dungeon clone.
+- `/данж вход`: return to safe ground near the authored start of this exact dungeon clone, outside native return portals.
 - `/данж выйти`: native EliteMobs quit for instances; `open-exit-command` (default
   `spawn`) for open dungeons, because native quit has no open-world return path.
 
@@ -61,16 +61,21 @@ The pinned compilation/test API is `elitemobs-api:10.1.1`. The normalized
 three: LOW, ignoreCancelled, a public one-event `teleportBypass`, then instance
 membership/world cancellation. Native start uses that same flag.
 
-`EMCheckpointTeleporter` registers after EliteMobs. On the primary thread it
+EliteMobs can register its listeners after ARC during deferred initialization.
+On the primary thread `EMCheckpointTeleporter`
 requires the current ongoing DungeonInstance membership, scopes authorization to
 one UUID and exact same-world PLUGIN destination, arms the flag at LOWEST only for
-that event, lets native LOW consume it, and clears it at LOW and in `finally`.
+that event, lets native LOW consume it, and clears it at NORMAL and in `finally`.
+This ordering is independent of which plugin registers its listeners first.
 Nested/foreign events and destination rewrites are denied. Other cancellations
 are never undone; an already-set native flag makes this adapter decline the call.
 The existing season-instance membership guard remains in force.
 
 The authored start is resolved with native `ConfigurationLocation.serialize` and
 rebound to the clone world, matching `DynamicDungeonInstance.generate`.
+Authored positions may float above the floor or overlap the return wormhole.
+Entry resolution selects nearby safe standing ground outside native wormhole
+trigger volumes; saved points inside those volumes are also rejected.
 If this native contract changes, re-verify the handler and start-location path
 before updating EliteMobs. Do not replace the scope with a generic uncancel or a
 flag left armed across ticks.

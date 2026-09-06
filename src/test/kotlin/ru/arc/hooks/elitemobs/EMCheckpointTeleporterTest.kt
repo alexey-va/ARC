@@ -13,6 +13,7 @@ import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
+import org.bukkit.event.HandlerList
 import org.bukkit.event.player.PlayerTeleportEvent
 import org.bukkit.plugin.Plugin
 import ru.arc.paper.testing.MockBukkitTestRuntime
@@ -24,6 +25,7 @@ class EMCheckpointTeleporterTest : FreeSpec({
     lateinit var world: org.bukkit.World
     lateinit var match: DungeonInstance
     lateinit var teleporter: EMCheckpointTeleporter
+    lateinit var nativeGuard: MatchInstance.MatchInstanceEvents
 
     beforeEach {
         paper = MockBukkitTestRuntime.open()
@@ -37,7 +39,8 @@ class EMCheckpointTeleporterTest : FreeSpec({
         every { match.players } returns linkedSetOf(player)
         mockkStatic(MatchInstance::class)
         every { MatchInstance.getPlayerInstance(player) } returns match
-        paper.server.pluginManager.registerEvents(MatchInstance.MatchInstanceEvents(), plugin)
+        nativeGuard = MatchInstance.MatchInstanceEvents()
+        paper.server.pluginManager.registerEvents(nativeGuard, plugin)
     }
 
     fun installTeleporter() {
@@ -73,6 +76,37 @@ class EMCheckpointTeleporterTest : FreeSpec({
         armedAtLowest shouldBe true
         clearedAfterNative shouldBe true
         MatchInstance.MatchInstanceEvents.teleportBypass shouldBe false
+    }
+
+    listOf(false, true).forEach { nativeRegisteredLast ->
+        "real native membership is respected with nativeRegisteredLast=$nativeRegisteredLast" {
+            // Native guards read fields and the static instance set directly, not mocked getters.
+            fun setField(name: String, value: Any) = MatchInstance::class.java.getDeclaredField(name).apply {
+                isAccessible = true
+            }.set(match, value)
+            setField("world", world)
+            setField("players", hashSetOf(player))
+            setField("spectators", hashSetOf<Player>())
+            @Suppress("UNCHECKED_CAST")
+            val instances = MatchInstance::class.java.getDeclaredField("instances").apply {
+                isAccessible = true
+            }.get(null) as MutableSet<MatchInstance>
+            instances.add(match)
+            try {
+                if (nativeRegisteredLast) HandlerList.unregisterAll(nativeGuard)
+                installTeleporter()
+                if (nativeRegisteredLast) paper.server.pluginManager.registerEvents(nativeGuard, plugin)
+                val destination = world.location(12.0, 70.0, 12.0)
+                val ordinary = PlayerTeleportEvent(player, player.location, destination, PlayerTeleportEvent.TeleportCause.COMMAND)
+                paper.callEvent(ordinary)
+                ordinary.isCancelled shouldBe true
+                teleporter.teleport(player, destination, instance = true) shouldBe true
+                MatchInstance.MatchInstanceEvents.teleportBypass shouldBe false
+                val subsequent = PlayerTeleportEvent(player, player.location, world.location(15.0, 70.0, 15.0), PlayerTeleportEvent.TeleportCause.PLUGIN)
+                paper.callEvent(subsequent)
+                subsequent.isCancelled shouldBe true
+            } finally { instances.remove(match) }
+        }
     }
 
     "pre-cancelled event stays cancelled and never arms native bypass" {
