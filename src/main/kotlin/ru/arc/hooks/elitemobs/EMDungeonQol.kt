@@ -343,6 +343,10 @@ internal data class DungeonSaveView(val worldId: UUID, val run: String, val poin
 internal data class DungeonSaveEdit(val success: Boolean, val message: Component)
 
 internal fun safeDungeonCheckpoint(location: Location): Boolean {
+    return !isNativeWormholeTrigger(location) && safeDungeonTerrain(location)
+}
+
+internal fun safeDungeonTerrain(location: Location): Boolean {
     val world = location.world
     if (!location.x.isFinite() || !location.y.isFinite() || !location.z.isFinite() || !location.yaw.isFinite() || !location.pitch.isFinite()) return false
     if (location.y < world.minHeight + 1 || location.y >= world.maxHeight - 2 || !world.worldBorder.isInside(location)) return false

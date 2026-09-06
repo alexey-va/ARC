@@ -16,7 +16,8 @@ import ru.arc.paper.teleport.TeleportMatchTolerance
  * EliteMobs 10.1.1 / 10.7.3 / 10.8.1 only exposes a global, one-event teleportBypass, consumed at
  * LOW. Arm it at LOWEST for one exact synchronous event, reject nested events,
  * and always clear it in finally. Other plugins' cancellations are never undone.
- * Must be registered after EliteMobs and used only on the primary thread.
+ * Cleanup runs at NORMAL, after native LOW regardless of deferred native registration.
+ * Used only on the primary thread.
  */
 internal class EMCheckpointTeleporter : Listener {
     private val allowed = ScopedTeleportAuthorizer(TeleportMatchTolerance(0.0, 0f))
@@ -54,7 +55,7 @@ internal class EMCheckpointTeleporter : Listener {
         if (instanced && !event.isCancelled) MatchInstance.MatchInstanceEvents.teleportBypass = true
     }
 
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = false)
+    @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = false)
     fun afterNativeGuard(event: PlayerTeleportEvent) {
         if (active && instanced && event === owned) MatchInstance.MatchInstanceEvents.teleportBypass = false
     }
