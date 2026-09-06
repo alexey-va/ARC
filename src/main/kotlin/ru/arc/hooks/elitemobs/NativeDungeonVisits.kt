@@ -2,6 +2,7 @@ package ru.arc.hooks.elitemobs
 
 import com.magmaguy.elitemobs.config.contentpackages.ContentPackagesConfig
 import com.magmaguy.elitemobs.instanced.dungeons.DungeonInstance
+import com.magmaguy.elitemobs.instanced.dungeons.DynamicDungeonInstance
 import com.magmaguy.elitemobs.utils.ConfigurationLocation
 import com.magmaguy.elitemobs.wormhole.WormholeEntry
 import com.magmaguy.elitemobs.economy.EconomyHandler
@@ -58,7 +59,7 @@ internal class NativeDungeonVisits(
                 entry = cachedEntry(entry, world),
                 members = instance.players.map { it.uniqueId }.toSet(), instanced = true,
                 name = instance.contentPackagesConfigFields.name,
-                stats = DungeonVisitStats(instance.players.size, instance.difficultyID?.takeIf { it.isNotBlank() }, instance.levelSync))
+                stats = nativeDungeonStats(instance))
         }
         val fields = ContentPackagesConfig.getDungeonPackages().values.firstOrNull { it.worldName == world.name } ?: return null
         return if (fields.contentType.name == "OPEN_DUNGEON") {
@@ -78,6 +79,17 @@ internal class NativeDungeonVisits(
         return resolved?.clone()
     }
 
+}
+
+internal fun nativeDungeonStats(instance: DungeonInstance): DungeonVisitStats {
+    val fields = instance.contentPackagesConfigFields
+    val id = instance.difficultyID?.takeIf { it.isNotBlank() }
+    val difficulty = fields.difficulties.orEmpty().firstOrNull { it["id"]?.toString() == id }
+        ?.get("name")?.toString()?.takeIf { it.isNotBlank() }
+        ?: id?.takeUnless { it.toIntOrNull() != null }
+    // levelSync caps equipment and can include a difficulty offset; it is not the dungeon level.
+    val level = if (instance is DynamicDungeonInstance) instance.selectedLevel else fields.contentLevel
+    return DungeonVisitStats(instance.players.size, difficulty, level.takeIf { it > 0 })
 }
 
 internal fun normalizeDungeonEntry(
