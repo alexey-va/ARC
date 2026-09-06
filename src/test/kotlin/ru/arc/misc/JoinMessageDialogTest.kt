@@ -65,6 +65,10 @@ class JoinMessageDialogTest : FreeSpec({
             data.addCustomMessage(secondArg(), thirdArg())
             CompletableFuture.completedFuture(Unit)
         }
+        every { JoinMessagesManager.editCustomMessageAsync("Viewer", any(), any(), any()) } answers {
+            runCatching { data.editCustomMessage(secondArg(), thirdArg(), arg(3)); Unit }
+                .fold({ CompletableFuture.completedFuture(it) }, { CompletableFuture.failedFuture(it) })
+        }
         every { JoinMessagesManager.selectCustomMessageAsync("Viewer", any(), any(), any()) } answers {
             data.updateMessage(CustomJoinMessage.selectionKey(secondArg()), thirdArg(), arg(3))
             CompletableFuture.completedFuture(Unit)
@@ -92,15 +96,36 @@ class JoinMessageDialogTest : FreeSpec({
     }
     afterSpec { directory.toFile().deleteRecursively() }
 
+    "upgrading bundled dialog text preserves operator overrides and adds editor defaults" {
+        val legacyDirectory = Files.createTempDirectory(directory, "legacy")
+        val legacyFile = legacyDirectory.resolve("modules/join-message-dialog.yml")
+        Files.createDirectories(legacyFile.parent)
+        javaClass.getResourceAsStream("/modules/join-message-dialog-legacy.yml")!!.use {
+            Files.copy(it, legacyFile)
+        }
+        val old = Config(legacyDirectory, "modules/join-message-dialog.yml")
+        old.setString("text.join-title", "Наш заголовок")
+        val upgraded = JoinMessageDialogs(old)
+        old.string("text.join-title") shouldBe "Наш заголовок"
+        old.string("text.custom-list") shouldContain "›"
+        old.string("text.editor-help") shouldContain "%player_name%"
+        upgraded.show(player)
+        permissions += JoinMessageDialogs.CUSTOM_PERMISSION
+        upgraded.show(player)
+        click("custom")
+        click("create")
+        screen!!.inputs.single().initial shouldContain "%player_name%"
+    }
+
     "wide single-column pages toggle selections and keep page while switching join and leave" {
         dialogs.show(player)
         screen!!.columns shouldBe 1
         screen!!.buttons.filter { it.id.value.startsWith("phrase_") }.size shouldBe 6
         screen!!.buttons.all { it.width == 600 } shouldBe true
         screen!!.buttons.none { it.id.value == "custom" } shouldBe true
-        plain(screen!!.buttons.first().label) shouldBe "Viewer принёс уют 1"
+        plain(screen!!.buttons.first().label) shouldBe "○ Viewer принёс уют 1"
         click("phrase_0")
-        plain(screen!!.buttons.first().label) shouldContain "[Вкл]"
+        plain(screen!!.buttons.first().label) shouldContain "✔ Вкл."
         click("phrase_0")
         data.selectedMessages(true) shouldBe emptySet()
         click("next")
@@ -123,7 +148,7 @@ class JoinMessageDialogTest : FreeSpec({
         (1..10).forEach { data.addCustomMessage("своя фраза $it", true) }
         dialogs.show(player)
         plain(screen!!.body[1].text) shouldContain "1/4"
-        plain(screen!!.buttons.first().label) shouldBe "★ [Вкл] Viewer своя фраза 1"
+        plain(screen!!.buttons.first().label) shouldBe "★ ✔ Вкл. · Viewer своя фраза 1"
         plain(screen!!.buttons.first().tooltip) shouldContain "Своя фраза"
         val phrases = mutableListOf<String>()
         repeat(4) { page ->
@@ -139,7 +164,7 @@ class JoinMessageDialogTest : FreeSpec({
         screen!!.buttons.count { it.id.value.startsWith("phrase_") } shouldBe 2
         click("own_0")
         plain(screen!!.body[1].text) shouldContain "2/4"
-        plain(screen!!.buttons.first().label) shouldBe "★ Viewer своя фраза 7"
+        plain(screen!!.buttons.first().label) shouldBe "★ ○ Viewer своя фраза 7"
         (CustomJoinMessage.selectionKey("своя фраза 7") in data.selectedMessages(true)) shouldBe false
         click("own_0")
         (CustomJoinMessage.selectionKey("своя фраза 7") in data.selectedMessages(true)) shouldBe true
@@ -202,22 +227,74 @@ class JoinMessageDialogTest : FreeSpec({
         dialogs.show(player)
         click("custom")
         click("create")
-        screen!!.inputs.single().maxLength shouldBe 120
+        screen!!.inputs.single().maxLength shouldBe 512
         click("preview", "<red>инъекция")
         screen!!.body.size shouldBe 2
-        click("preview", "принёс чай")
+        click("preview", "%player_name% принёс чай")
         plain(screen!!.body.first().text) shouldBe "Viewer принёс чай"
         data.customMessages(true) shouldBe emptySet()
         click("save")
-        data.customMessages(true) shouldBe setOf("принёс чай")
+        data.customMessages(true) shouldBe setOf("%player_name% принёс чай")
         click("custom_0")
         click("toggle")
         data.selectedMessages(true) shouldBe emptySet()
-        data.customMessages(true) shouldBe setOf("принёс чай")
+        data.customMessages(true) shouldBe setOf("%player_name% принёс чай")
         click("custom_0")
         click("delete")
         data.customMessages(true) shouldBe emptySet()
         data.selectedMessages(true) shouldBe emptySet()
+    }
+
+    "edit replaces enabled and disabled templates and formatting help retains the draft for both kinds" {
+        permissions += JoinMessageDialogs.CUSTOM_PERMISSION
+        for (isJoin in listOf(true, false)) {
+            data.addCustomMessage("старая фраза", isJoin)
+            dialogs.show(player, isJoin)
+            click("custom")
+            click("custom_0")
+            click("edit")
+            screen!!.inputs.single().initial shouldBe "%player_name% старая фраза"
+            val template = "<gold>✦ <aqua>%player_name% <gray>снова с нами"
+            click("formatting", template)
+            plain(screen!!.body[1].text) shouldContain "<gradient:#92bed8:#ffacd5>"
+            click("back")
+            screen!!.inputs.single().initial shouldBe template
+            click("preview", template)
+            plain(screen!!.body.first().text) shouldBe "✦ Viewer снова с нами"
+            click("edit")
+            screen!!.inputs.single().initial shouldBe template
+            click("preview", template)
+            click("save")
+            data.customMessages(isJoin) shouldBe setOf(template)
+            data.selectedMessages(isJoin) shouldBe setOf(CustomJoinMessage.selectionKey(template))
+            click("custom_0")
+            click("toggle")
+            click("custom_0")
+            click("edit")
+            click("preview", "<red>%player_name% отдыхает")
+            click("save")
+            data.selectedMessages(isJoin) shouldBe emptySet()
+            data.customMessages(isJoin) shouldBe setOf("<red>%player_name% отдыхает")
+        }
+    }
+
+    "edit rejects a deleted source inline and revoked permission prevents replacement" {
+        permissions += JoinMessageDialogs.CUSTOM_PERMISSION
+        data.addCustomMessage("принёс чай", true)
+        dialogs.show(player)
+        click("custom")
+        click("custom_0")
+        click("edit")
+        click("preview", "<aqua>%player_name% вернулся")
+        permissions -= JoinMessageDialogs.CUSTOM_PERMISSION
+        click("save")
+        verify(exactly = 0) { JoinMessagesManager.editCustomMessageAsync(any(), any(), any(), any()) }
+        permissions += JoinMessageDialogs.CUSTOM_PERMISSION
+        data.deleteCustomMessage("принёс чай", true)
+        click("save")
+        screen!!.id shouldBe "messages.editor.join"
+        plain(screen!!.body.last().text) shouldContain "исходная фраза удалена"
+        data.customMessages(true) shouldBe emptySet()
     }
 
     "revoking custom permission at preview prevents saving" {
@@ -225,7 +302,7 @@ class JoinMessageDialogTest : FreeSpec({
         dialogs.show(player)
         click("custom")
         click("create")
-        click("preview", "принёс чай")
+        click("preview", "%player_name% принёс чай")
         permissions -= JoinMessageDialogs.CUSTOM_PERMISSION
         click("save")
         verify(exactly = 0) { JoinMessagesManager.addCustomMessageAsync(any(), any(), any()) }

@@ -2,7 +2,7 @@ schema: 1
 plugin: ARC — native join message dialog
 minecraft-version: 26.1.2
 minecraft-client-sha1: 4e618f09a0c649dde3fdf829df443ce0b8831e65
-gallery-accent: '#92bed8'
+gallery-accent: '#d7b486'
 
 resource-pack:
   url: https://storage.yandexcloud.net/ruscraftinresources/RusCraftingResource.zip
@@ -15,6 +15,8 @@ sources:
     include: ['*']
 
 placeholders:
+  # Keep the literal placeholder readable without recursively expanding the preview token.
+  player_name: '%<#aaa49a>player_name%'
   page: '1'
   pages: '10'
   selected: '2'
@@ -114,6 +116,38 @@ surfaces:
       buttons:
         - {id: create, text-key: create, tooltip-key: create, width: 600}
         - {id: back, text-key: back-catalog, tooltip-key: back-catalog, width: 600}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: custom-message-detail
+      source: dialog
+      format: reference-multi-action
+      name-key: custom-detail-title
+      external-title-key: custom-detail-title
+      columns: 1
+      body:
+        - {id: message, text-key: manage-selected, width: 600, placeholders: {message: '✦ Архитектор23 снова с нами'}}
+      buttons:
+        - {id: toggle, text-key: turn-off, tooltip-key: turn-off, width: 600}
+        - {id: edit, text-key: edit-message, tooltip-key: edit-message, width: 600}
+        - {id: delete, text-key: delete, tooltip-key: delete, width: 600}
+        - {id: back, text-key: back-custom, tooltip-key: back-custom, width: 600}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: template-formatting
+      source: dialog
+      format: reference-multi-action
+      name-key: formatting-title
+      external-title-key: formatting-title
+      columns: 1
+      body:
+        - {id: help, text-key: formatting-help, width: 600}
+        - {id: colors, text-key: formatting-colors, width: 600}
+        - {id: styles, text-key: formatting-styles, width: 600}
+        - {id: example, text-key: formatting-example, width: 600}
+      buttons:
+        - {id: back, text-key: back-custom, tooltip-key: back-custom, width: 600}
       viewport: [854, 480]
       variants: [{id: default}]
 

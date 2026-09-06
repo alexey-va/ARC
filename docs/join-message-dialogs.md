@@ -7,7 +7,7 @@ still published by ProxyARC through `arc.join_message_catalog`.
 ## Player flow
 
 - The catalog uses one column, six phrases per page, and 600 GUI-unit buttons.
-  Click a phrase to enable/disable it. `[Вкл]` and green text identify enabled
+  Click a phrase to enable/disable it. `✔ Вкл.` and green text identify enabled
   phrases; `[Недоступно]` identifies unavailable choices. The full phrase is also
   present in its tooltip. Extremely long operator-authored phrases can exceed a
   button at some client GUI scales; their tooltips preserve the complete text.
@@ -18,9 +18,18 @@ still published by ProxyARC through `arc.join_message_catalog`.
   editing and deleting remain in `Мои фразы`. Personal toggles recheck the
   custom permission, and saved phrases remain visible if that permission is lost.
 - Next/previous retain the message kind. The switch control opens the other kind.
-- `Мои фразы` opens a separate personal library. Enter a suffix, inspect the
-  preview, then save and enable it. The player name is always prepended. Open a
-  saved phrase to disable, enable or delete it.
+- `Мои фразы` opens a separate personal library. Enter a full MiniMessage
+  template, inspect the styled preview, then save and enable it. Use exactly one `%player_name%`
+  wherever the name belongs. The template owns the prefix as well as nickname
+  and body formatting; no network dot is added to new templates.
+- Open a saved phrase to edit, disable, enable or delete it. Editing preloads the
+  current template, replaces the same slot and preserves its enabled state.
+  A full ten-phrase library remains editable. Duplicate targets and a deleted
+  source are rejected without deleting either phrase. Formatting help preserves
+  the unsaved draft, and preview Back returns to that draft.
+- Dialog actions follow the main menu palette (`#d7b486`, `#9bd48d`, `#aaa49a`),
+  use `›` for child screens and `‹ Назад` for returns. Existing operator text is
+  preserved; values equal to the previous bundled defaults migrate automatically.
 
 ## Permissions and configuration
 
@@ -44,15 +53,27 @@ commands. Width is bounded to 300–1024 and page size to 1–10.
 The existing Redis record/channel remain `arc.join_messages` /
 `arc.join_messages_update`. `joinMessages` and `leaveMessages` still contain
 selected template strings. New `customJoinMessages` and `customLeaveMessages`
-contain saved plain suffixes; missing or null new fields mean an empty library.
-A custom selection key is `%player_name% ` followed by its suffix.
+contain saved legacy suffixes or full MiniMessage templates; missing or null
+fields mean an empty library.
+A legacy custom selection key is `%player_name% ` followed by its suffix.
+A full template contains `%player_name%` and its selection key is `<reset>`
+followed by the template. That leading reset also tells ProxyARC to omit the
+family prefix. The shared selection strings remain the existing wire format.
 
-Each library has at most ten phrases, each at most 120 UTF-16 code units after
-trimming. ARC validates before saving and ProxyARC validates before selection.
-Control/FORMAT characters, markup, color codes and placeholder syntax are
-rejected. Disabled phrases remain saved; deleting removes both the suffix and
-its selection key. Catalog cleanup preserves personal selections. A successful
-save callback follows the Redis flush and update publication.
+Each library has at most ten phrases. Legacy suffixes keep their 120 UTF-16
+limit. New templates permit 512 UTF-16 code units and 160 rendered characters
+(measured using a representative 15-character nickname). Colors (named and HEX),
+gradients, rainbow, decorations, resets and fonts are supported. Interactive,
+newline, translation and unknown tags, extra placeholders and control/FORMAT
+characters are rejected by both ARC and ProxyARC. Discord/Telegram receive plain
+text. Font appearance depends on the receiving client's resource pack.
+
+Disabled phrases remain saved; editing transfers the active selection key and
+deleting removes both template and selection. Catalog cleanup preserves personal
+selections. A successful callback follows the Redis flush and update publication.
+
+MiniMessage syntax follows the [Adventure format reference](https://docs.advntr.dev/minimessage/format).
+Example: `<gold>✦ <aqua>%player_name% <gray>снова с нами`.
 
 Deploy the matching ProxyARC change together with ARC before enabling custom
 editing. An old ProxyARC ignores custom selections because they are absent from
@@ -73,5 +94,7 @@ enabled valid custom phrases and preserving first-join behavior.
 
 The preview uses source text with representative player/catalog values. It
 checks the static catalog layout and custom library; the canonical renderer does
-not model native text input widgets. Unit tests cover form actions, but actual
-client rendering and a live join/quit are separate runtime checks.
+not model native text input widgets. The management screen and formatting help
+are included. The static renderer interprets literal HEX examples as colors;
+unit tests verify the actual help components retain the complete tag examples.
+Actual client rendering and a live join/quit are separate runtime checks.

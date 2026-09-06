@@ -78,6 +78,21 @@ data class JoinMessagesData(
     }
 
     @Synchronized
+    fun editCustomMessage(original: String, raw: String, isJoin: Boolean): Boolean {
+        val message = CustomJoinMessage.normalize(raw)
+        val messages = customMessages(isJoin)
+        require(original in messages) { "Custom message no longer exists" }
+        if (message == original) return false
+        require(message !in messages) { "Custom message already exists" }
+        val replacement = messages.map { if (it == original) message else it }.toSet()
+        val selected = CustomJoinMessage.selectionKey(original) in selectedMessages(isJoin)
+        if (isJoin) customJoinMessages = replacement else customLeaveMessages = replacement
+        updateMessage(CustomJoinMessage.selectionKey(original), isJoin, false)
+        updateMessage(CustomJoinMessage.selectionKey(message), isJoin, selected)
+        return true
+    }
+
+    @Synchronized
     fun deleteCustomMessage(message: String, isJoin: Boolean): Boolean {
         val messages = customMessages(isJoin)
         if (message !in messages) return false
@@ -207,6 +222,9 @@ object JoinMessagesManager {
 
     fun addCustomMessageAsync(player: String, raw: String, isJoin: Boolean): CompletableFuture<Unit> =
         changeAsync(player) { it.addCustomMessage(raw, isJoin) }
+
+    fun editCustomMessageAsync(player: String, original: String, raw: String, isJoin: Boolean): CompletableFuture<Unit> =
+        changeAsync(player) { it.editCustomMessage(original, raw, isJoin) }
 
     fun deleteCustomMessageAsync(player: String, message: String, isJoin: Boolean): CompletableFuture<Unit> =
         changeAsync(player) { it.deleteCustomMessage(message, isJoin) }

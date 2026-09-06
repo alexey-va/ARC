@@ -48,12 +48,43 @@ class CustomJoinMessageTest : FreeSpec({
     }
 
     "validation blocks markup control characters and overlong input on the server" {
-        listOf("", " ", "а".repeat(121), "<red>текст", "&aтекст", "§aтекст", "%player_name%", "#ff0000",
+        listOf("", " ", "а".repeat(121), "<red>текст", "&aтекст", "§aтекст", "#ff0000",
             "текст\\", "\nтекст", "текст\n", "две\rстроки", "текст\u200B", "текст\u202E", "текст\u0000").forEach {
             shouldThrow<IllegalArgumentException> { CustomJoinMessage.normalize(it) }
         }
         CustomJoinMessage.normalize("а".repeat(120)).length shouldBe 120
         CustomJoinMessage.normalize("  принёс чай!  ") shouldBe "принёс чай!"
+    }
+
+    "editing a full library preserves order selection kind and rejects duplicates or stale source" {
+        val data = JoinMessagesData("Viewer")
+        repeat(10) { data.addCustomMessage("фраза $it", true) }
+        val template = "<gold>✦ <aqua>%player_name% <gray>на месте"
+        data.editCustomMessage("фраза 3", template, true) shouldBe true
+        data.customMessages(true).toList()[3] shouldBe template
+        data.customMessages(true).size shouldBe 10
+        (CustomJoinMessage.selectionKey("фраза 3") in data.selectedMessages(true)) shouldBe false
+        (CustomJoinMessage.selectionKey(template) in data.selectedMessages(true)) shouldBe true
+        data.customMessages(false) shouldBe emptySet()
+        data.editCustomMessage(template, template, true) shouldBe false
+        shouldThrow<IllegalArgumentException> { data.editCustomMessage(template, "фраза 4", true) }
+        shouldThrow<IllegalArgumentException> { data.editCustomMessage("нет", template, true) }
+        data.customMessages(true).size shouldBe 10
+    }
+
+    "full templates allow formatting but reject interactive tags extra placeholders and oversized output" {
+        val template = "<gold>✦ <gradient:#92bed8:#ffacd5>%player_name%</gradient> <bold>здесь</bold>"
+        CustomJoinMessage.normalize(template) shouldBe template
+        CustomJoinMessage.selectionKey(template) shouldBe "<reset>$template"
+        CustomJoinMessage.normalize("<font:minecraft:default><rainbow>%player_name%</rainbow>")
+        val italic = CustomJoinMessage.render("<italic>%player_name%", "Viewer")
+        italic.children().single().decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC) shouldBe
+            net.kyori.adventure.text.format.TextDecoration.State.TRUE
+        listOf("<click:run_command:'/op me'>%player_name%", "<hover:show_text:'hi'>%player_name%", "<newline>%player_name%",
+            "%player_name% %player_name%", "%player_name% %other%", "<wat>%player_name%", "<red %player_name%",
+            "<color:nope>%player_name%", "%player_name%" + "x".repeat(160)).forEach {
+            shouldThrow<IllegalArgumentException> { CustomJoinMessage.normalize(it) }
+        }
     }
 
     "merge retains disabled saved phrases and prevents expiry while any are saved" {

@@ -34,6 +34,24 @@ object JoinMessageGuiFactory {
 }
 
 internal class JoinMessageDialogs(private val config: Config) {
+    init {
+        config.mergeMissingFromBundled("modules/join-message-dialog.yml")
+        val loader = org.snakeyaml.engine.v2.api.Load(org.snakeyaml.engine.v2.api.LoadSettings.builder().build())
+        fun bundledText(resource: String): Map<*, *> = checkNotNull(javaClass.getResourceAsStream("/modules/$resource")).use {
+            (loader.loadFromInputStream(it) as Map<*, *>)["text"] as Map<*, *>
+        }
+        val defaults = bundledText("join-message-dialog.yml")
+        var changed = false
+        bundledText("join-message-dialog-legacy.yml").forEach { (key, old) ->
+            val replacement = defaults[key] as? String
+            if (replacement != null && replacement != old && config.string("text.$key").replace("<color:#", "<#") == old) {
+                config.setString("text.$key", replacement)
+                changed = true
+            }
+        }
+        if (changed) config.saveStrict()
+    }
+
     private val inputId = PaperDialogInputId.of("message")
     private val width get() = config.int("button-width", 600).coerceIn(300, 1024)
     private val pageSize get() = config.int("page-size", 6).coerceIn(1, 10)
@@ -78,7 +96,7 @@ internal class JoinMessageDialogs(private val config: Config) {
         val buttons = custom.drop(page * pageSize).take(pageSize).mapIndexed { index, message ->
             val current = CustomJoinMessage.selectionKey(message) in selected
             val available = player.hasPermission(CUSTOM_PERMISSION)
-            val preview = Component.text("${player.name} $message")
+            val preview = CustomJoinMessage.render(message, player.name)
             val label = text(if (current) "custom-selected" else if (available) "custom-unselected" else "custom-locked", "message" to preview)
             button("own_$index", label, isJoin, custom = true, tooltip = preview.append(Component.newline())
                 .append(text("custom-description")).append(Component.newline())
@@ -151,8 +169,8 @@ internal class JoinMessageDialogs(private val config: Config) {
                 val selected = data.selectedMessages(isJoin)
                 val buttons = custom.mapIndexed { index, message ->
                     val current = CustomJoinMessage.selectionKey(message) in selected
-                    val preview = Component.text("${player.name} $message")
-                    button("custom_$index", text(if (current) "selected" else "unselected", "message" to preview), isJoin,
+                    val preview = CustomJoinMessage.render(message, player.name)
+                    button("custom_$index", text(if (current) "manage-selected" else "manage-unselected", "message" to preview), isJoin,
                         custom = true, tooltip = preview.append(Component.newline()).append(text("manage"))) {
                         openCustomMessage(it.player, isJoin, catalogPage, message, current)
                     }
@@ -160,14 +178,13 @@ internal class JoinMessageDialogs(private val config: Config) {
                 if (custom.size < CustomJoinMessage.MAX_SAVED) {
                     buttons += button("create", text("create"), isJoin, custom = true) { openEditor(it.player, isJoin, catalogPage) }
                 }
-                // Back is also a normal action, so an empty or full custom list always has an action.
-                buttons += button("back", text("back-catalog"), isJoin) { show(it.player, isJoin, catalogPage) }
                 ArcMenus.openDialog(player, PaperDialogScreen(
                     id = "messages.custom.${if (isJoin) "join" else "leave"}",
                     title = text(if (isJoin) "custom-join-title" else "custom-leave-title"),
                     body = listOf(PaperDialogBody(text("custom-help", "count" to custom.size, "limit" to CustomJoinMessage.MAX_SAVED), width)) +
                         if (custom.isEmpty()) listOf(PaperDialogBody(text("custom-empty"), width)) else emptyList(),
                     buttons = buttons,
+                    exitButton = button("back", text("back-catalog"), isJoin) { show(it.player, isJoin, catalogPage) },
                 ))
             }
         }
@@ -177,12 +194,15 @@ internal class JoinMessageDialogs(private val config: Config) {
         ArcMenus.openDialog(player, PaperDialogScreen(
             id = "messages.custom.detail.${if (isJoin) "join" else "leave"}",
             title = text("custom-detail-title"),
-            body = listOf(PaperDialogBody(Component.text("${player.name} $message"), width)),
+            body = listOf(PaperDialogBody(CustomJoinMessage.render(message, player.name), width)),
             buttons = listOf(
                 button("toggle", text(if (selected) "turn-off" else "turn-on"), isJoin, custom = true) {
                     finish(it.player, JoinMessagesManager.selectCustomMessageAsync(it.player.name, message, isJoin, !selected)) {
                         showCustom(player, isJoin, catalogPage)
                     }
+                },
+                button("edit", text("edit-message"), isJoin, custom = true) {
+                    openEditor(it.player, isJoin, catalogPage, CustomJoinMessage.editable(message), original = message)
                 },
                 button("delete", text("delete"), isJoin, custom = true) {
                     finish(it.player, JoinMessagesManager.deleteCustomMessageAsync(it.player.name, message, isJoin)) {
@@ -194,37 +214,74 @@ internal class JoinMessageDialogs(private val config: Config) {
         ))
     }
 
-    private fun openEditor(player: Player, isJoin: Boolean, catalogPage: Int, initial: String = "", invalid: Boolean = false) {
+    private fun openEditor(
+        player: Player,
+        isJoin: Boolean,
+        catalogPage: Int,
+        initial: String = config.string(if (isJoin) "default-join-template" else "default-leave-template"),
+        invalid: Boolean = false,
+        original: String? = null,
+        conflict: Boolean = false,
+    ) {
         ArcMenus.openDialog(player, PaperDialogScreen(
             id = "messages.editor.${if (isJoin) "join" else "leave"}",
-            title = text("editor-title"),
+            title = text(if (original == null) "editor-title" else "edit-title"),
             body = listOf(PaperDialogBody(text("editor-help", "limit" to CustomJoinMessage.MAX_LENGTH), width)) +
-                if (invalid) listOf(PaperDialogBody(text("invalid"), width)) else emptyList(),
+                if (invalid || conflict) listOf(PaperDialogBody(text(if (conflict) "edit-conflict" else "invalid"), width)) else emptyList(),
             inputs = listOf(PaperDialogTextInput(inputId, text("input"), initial, width, CustomJoinMessage.MAX_LENGTH)),
             buttons = listOf(button("preview", text("preview"), isJoin, custom = true) { context ->
                 val raw = context.text(inputId).orEmpty()
-                val message = runCatching { CustomJoinMessage.normalize(raw) }.getOrNull()
-                if (message == null) openEditor(context.player, isJoin, catalogPage, raw.take(CustomJoinMessage.MAX_LENGTH), invalid = true)
-                else openPreview(context.player, isJoin, catalogPage, message)
+                val message = runCatching { require(CustomJoinMessage.PLAYER in raw); CustomJoinMessage.normalize(raw) }.getOrNull()
+                if (message == null) openEditor(context.player, isJoin, catalogPage, raw.take(CustomJoinMessage.MAX_LENGTH), invalid = true, original = original)
+                else openPreview(context.player, isJoin, catalogPage, message, original)
+            }, button("formatting", text("formatting"), isJoin, custom = true) {
+                openFormatting(it.player, isJoin, catalogPage, it.text(inputId).orEmpty().take(CustomJoinMessage.MAX_LENGTH), original)
             }),
-            exitButton = button("back", text("back-custom"), isJoin) { showCustom(it.player, isJoin, catalogPage) },
+            exitButton = button("back", text("back-custom"), isJoin) {
+                if (original == null) showCustom(it.player, isJoin, catalogPage)
+                else JoinMessagesManager.getOrCreateAsync(it.player.name).whenComplete { data, failure ->
+                    sync {
+                        if (!allowed(player, isJoin, custom = true)) return@sync
+                        if (failure != null) reportFailure(player, failure)
+                        else if (original !in data.customMessages(isJoin)) showCustom(player, isJoin, catalogPage)
+                        else openCustomMessage(player, isJoin, catalogPage, original, CustomJoinMessage.selectionKey(original) in data.selectedMessages(isJoin))
+                    }
+                }
+            },
         ))
     }
 
-    private fun openPreview(player: Player, isJoin: Boolean, catalogPage: Int, message: String) {
+    private fun openFormatting(player: Player, isJoin: Boolean, catalogPage: Int, draft: String, original: String?) {
+        ArcMenus.openDialog(player, PaperDialogScreen(
+            id = "messages.formatting",
+            title = text("formatting-title"),
+            body = listOf("formatting-help", "formatting-colors", "formatting-styles", "formatting-example").map {
+                PaperDialogBody(text(it), width)
+            },
+            buttons = listOf(button("back", text("back-custom"), isJoin, custom = true) {
+                openEditor(it.player, isJoin, catalogPage, draft, original = original)
+            }),
+        ))
+    }
+
+    private fun openPreview(player: Player, isJoin: Boolean, catalogPage: Int, message: String, original: String?) {
         ArcMenus.openDialog(player, PaperDialogScreen(
             id = "messages.preview.${if (isJoin) "join" else "leave"}",
             title = text("preview-title"),
             body = listOf(
-                PaperDialogBody(Component.text("${player.name} $message"), width),
-                PaperDialogBody(text("preview-help"), width),
+                PaperDialogBody(CustomJoinMessage.render(message, player.name), width),
+                PaperDialogBody(text(if (original == null) "preview-help" else "edit-preview-help"), width),
             ),
-            buttons = listOf(button("save", text("save"), isJoin, custom = true) {
-                finish(it.player, JoinMessagesManager.addCustomMessageAsync(it.player.name, message, isJoin)) {
+            buttons = listOf(button("save", text(if (original == null) "save" else "save-changes"), isJoin, custom = true) {
+                val operation = if (original == null) JoinMessagesManager.addCustomMessageAsync(it.player.name, message, isJoin)
+                    else JoinMessagesManager.editCustomMessageAsync(it.player.name, original, message, isJoin)
+                finish(it.player, operation, rejected = {
+                    openEditor(player, isJoin, catalogPage, message, original = original, conflict = true)
+                }) {
                     showCustom(player, isJoin, catalogPage)
                 }
             }),
-            exitButton = button("edit", text("edit"), isJoin, custom = true) { openEditor(it.player, isJoin, catalogPage, message) },
+            exitButton = button("edit", text("edit"), isJoin, custom = true) { openEditor(it.player, isJoin, catalogPage, message, original = original) },
         ))
     }
 
@@ -249,12 +306,13 @@ internal class JoinMessageDialogs(private val config: Config) {
         return true
     }
 
-    private fun finish(player: Player, operation: CompletableFuture<Unit>, next: () -> Unit) {
+    private fun finish(player: Player, operation: CompletableFuture<Unit>, rejected: (() -> Unit)? = null, next: () -> Unit) {
         operation.whenComplete { _, failure ->
             sync {
                 if (!player.isOnline) return@sync
                 if (failure != null) {
-                    reportFailure(player, failure)
+                    val cause = (failure as? java.util.concurrent.CompletionException)?.cause ?: failure
+                    if (cause is IllegalArgumentException && rejected != null) rejected() else reportFailure(player, failure)
                 } else next()
             }
         }
