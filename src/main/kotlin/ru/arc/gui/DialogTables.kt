@@ -88,8 +88,8 @@ object DialogTables {
         fun widths(left: Int) = (TILE * (left + 1) - TEXT_START) to
             (TILE * (repeats - left + 1) - frame.innerAdvance - padding)
 
-        data class Measured(val left: Int, val rows: List<Pair<List<Component>, List<Component>>>) {
-            val height get() = rows.sumOf { (a, b) -> maxOf(a.size, b.size) }
+        data class Measured(val left: Int, val cells: List<Pair<List<Component>, List<Component>>>) {
+            val height = cells.sumOf { (a, b) -> maxOf(a.size, b.size) }
         }
         fun measure(left: Int): Measured? {
             val (leftWidth, rightWidth) = widths(left)
@@ -125,7 +125,7 @@ object DialogTables {
             glyph(frame.base + 6), gap(10 - frame.rightAdvance),
         )))
         val output = mutableListOf(border(0, 1, 2, 3))
-        chosen.rows.forEachIndexed { index, (a, b) ->
+        chosen.cells.forEachIndexed { index, (a, b) ->
             repeat(maxOf(a.size, b.size)) { row ->
                 output += content(a.getOrElse(row) { gap(leftWidth) }, b.getOrElse(row) { gap(rightWidth) })
             }
