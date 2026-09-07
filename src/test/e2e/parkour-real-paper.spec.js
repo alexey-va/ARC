@@ -11,36 +11,50 @@ test('real Parkour run emits ARC HUD for join, checkpoint, death and finish', as
 
   const titles = [];
   const onTitle = packet => titles.push(titleText(packet));
+  const walkToCheckpoint = async z => {
+    try {
+      await player.bot.lookAt(player.bot.entity.position.clone().set(0.5, 66.5, z), true);
+      player.bot.setControlState('forward', true);
+      await waitUntil(() => Math.abs(player.bot.entity.position.z - z) < 0.25, {
+        signal, timeout: 10000, message: `Player must physically reach checkpoint at z=${z}`,
+      });
+    } finally {
+      player.bot.clearControlStates();
+    }
+  };
   player.bot._client.on('set_title_text', onTitle);
   try {
     server.execute('minecraft:fill -20 64 -20 20 64 20 minecraft:stone');
-    await player.teleport(0, 65, 0);
+    await player.teleport(0.5, 65, 0.5);
     player.chat('/pa create course arc-e2e');
     await expect(player).toHaveReceivedMessage(/created|создан/i);
 
-    await player.teleport(0, 65, 0);
+    // Parkour creates checkpoint 0 with the course. The first plate must be ahead
+    // of that origin, otherwise starting on an extra checkpoint skips its trigger.
+    await player.teleport(0.5, 65, 3.5);
+    const firstCheckpointSince = player.getMessageBufferIndex();
     player.chat('/pa create checkpoint arc-e2e');
-    await expect(player).toHaveReceivedMessage(/checkpoint|контрольн/i);
-    await player.teleport(0, 65, 3);
+    await expect(player).toHaveReceivedMessage(/Checkpoint 1/i, { since: firstCheckpointSince });
+    await player.teleport(0.5, 65, 6.5);
+    const lastCheckpointSince = player.getMessageBufferIndex();
     player.chat('/pa create checkpoint arc-e2e');
-    await expect(player).toHaveReceivedMessage(/checkpoint|контрольн/i);
-    await player.teleport(0, 65, 6);
-    player.chat('/pa create checkpoint arc-e2e');
-    await expect(player).toHaveReceivedMessage(/checkpoint|контрольн/i);
+    await expect(player).toHaveReceivedMessage(/Checkpoint 2/i, { since: lastCheckpointSince });
 
     player.chat('/pa setcourse arc-e2e ready');
     await expect(player).toHaveReceivedMessage(/ready|готов/i);
-    await player.teleport(0, 65, 0);
     player.chat('/pa join arc-e2e');
     await waitUntil(() => titles.some(text => text.includes('ТРАССА НАЧАЛАСЬ')), { signal, timeout: 10000 });
 
-    server.execute(`pac setcheckpoint ${player.username} 1`);
+    await walkToCheckpoint(3.5);
     await waitUntil(() => titles.some(text => text.includes('ТОЧКА')), { signal, timeout: 10000 });
 
     server.execute(`minecraft:kill ${player.username}`);
     await waitUntil(() => titles.some(text => text.includes('Срыв')), { signal, timeout: 10000 });
 
-    server.execute(`pac setcheckpoint ${player.username} 2`);
+    await waitUntil(() => Math.abs(player.bot.entity.position.z - 3.5) < 1, {
+      signal, timeout: 10000, message: 'Parkour must return the dead player to the acquired checkpoint',
+    });
+    await walkToCheckpoint(6.5);
     await waitUntil(() => titles.some(text => text.includes('ТРАССА ПРОЙДЕНА')), { signal, timeout: 10000 });
     assert.ok(titles.some(text => text.includes('ТРАССА НАЧАЛАСЬ')));
     assert.ok(titles.some(text => text.includes('ТОЧКА')));
