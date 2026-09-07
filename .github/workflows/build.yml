@@ -92,3 +92,4 @@ jobs:
             build/plugwright-e2e.log
             build/plugwright/logs/
             build/plugwright/crash-reports/
+            build/libs/ARC-*.jar

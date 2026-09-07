@@ -11,7 +11,9 @@ import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import net.kyori.adventure.text.Component
 import net.milkbowl.vault.economy.EconomyResponse
+import ru.arc.paper.playerstate.PaperPlayerDataPersistence
 import org.bukkit.Material
+import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.mockbukkit.mockbukkit.MockBukkit
 import org.mockbukkit.mockbukkit.ServerMock
@@ -34,7 +36,12 @@ class PaperContractSubmissionGatewaysTest : StringSpec({
             player.teleport(server.getWorld("rc_origin_spawn")!!.spawnLocation)
             player.inventory.setItem(0, ItemStack(Material.STONE, 5))
             player.inventory.setItem(1, ItemStack(Material.STONE, 10))
-            val gateway = PaperContractInventoryGateway()
+            // MockBukkit 4.116.3 saveData throws UnimplementedOperationException.
+            // Record native inventory snapshots through the existing shared platform port.
+            val savedAmounts = mutableListOf<Int>()
+            val gateway = PaperContractInventoryGateway(PaperPlayerDataPersistence {
+                savedAmounts += it.inventory.storageContents.filterNotNull().sumOf(ItemStack::getAmount)
+            })
 
             player.isOnline shouldBe true
             player.inventory.getItem(0)!!.type.key.toString() shouldBe "minecraft:stone"
@@ -49,6 +56,61 @@ class PaperContractSubmissionGatewaysTest : StringSpec({
             prepared.restoreExact() shouldBe ContractInventoryMutation.Confirmed
             player.inventory.getItem(0)?.amount shouldBe 5
             player.inventory.getItem(1)?.amount shouldBe 10
+            savedAmounts shouldContainExactly listOf(7, 15)
+        }
+    }
+
+    "persists removed and refunded inventory before acknowledging either mutation" {
+        runTest {
+            val nativePlayer = server.addPlayer("DurableMiner")
+            nativePlayer.inventory.setItem(0, ItemStack(Material.STONE, 4))
+            val player = mockk<Player>()
+            every { player.uniqueId } returns nativePlayer.uniqueId
+            every { player.isOnline } returns true
+            every { player.world } returns server.getWorld("rc_origin_spawn")!!
+            every { player.inventory } returns nativePlayer.inventory
+            val savedAmounts = mutableListOf<Int>()
+            every { player.saveData() } answers {
+                savedAmounts += player.inventory.getItem(0)?.amount ?: 0
+            }
+            val prepared = PaperContractInventoryGateway { player }
+                .prepare(player.uniqueId.toString(), "minecraft:stone", 2)!!
+
+            prepared.removeExact() shouldBe ContractInventoryMutation.Confirmed
+            savedAmounts shouldContainExactly listOf(2)
+            prepared.restoreExact() shouldBe ContractInventoryMutation.Confirmed
+            savedAmounts shouldContainExactly listOf(2, 4)
+        }
+    }
+
+    "a native save failure never acknowledges removed or refunded items" {
+        runTest {
+            for (failedSave in 1..2) {
+                val player = server.addPlayer("SaveFailure$failedSave")
+                player.teleport(server.getWorld("rc_origin_spawn")!!.spawnLocation)
+                player.inventory.setItem(0, ItemStack(Material.STONE, 4))
+                var saves = 0
+                val persistedAmounts = mutableListOf<Int>()
+                val gateway = PaperContractInventoryGateway(PaperPlayerDataPersistence {
+                    saves++
+                    if (saves == failedSave) error("synthetic native save failure")
+                    persistedAmounts += it.inventory.getItem(0)?.amount ?: 0
+                })
+                val prepared = gateway.prepare(player.uniqueId.toString(), "minecraft:stone", 2)!!
+                if (failedSave == 1) {
+                    prepared.removeExact() shouldBe ContractInventoryMutation.Ambiguous
+                    persistedAmounts shouldBe emptyList()
+                    player.inventory.getItem(0)?.amount shouldBe 2
+                } else {
+                    prepared.removeExact() shouldBe ContractInventoryMutation.Confirmed
+                    prepared.restoreExact() shouldBe ContractInventoryMutation.Ambiguous
+                    persistedAmounts shouldContainExactly listOf(2)
+                    player.inventory.getItem(0)?.amount shouldBe 4
+                    // RAM already contains the refund: do not blindly restore it again.
+                    prepared.restoreExact() shouldBe ContractInventoryMutation.NotPerformed("refund_slot_changed")
+                }
+                saves shouldBe failedSave
+            }
         }
     }
 

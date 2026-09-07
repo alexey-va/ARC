@@ -7,6 +7,8 @@ import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import ru.arc.core.Tasks
+import ru.arc.paper.playerstate.NativePaperPlayerDataPersistence
+import ru.arc.paper.playerstate.PaperPlayerDataPersistence
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.util.UUID
@@ -20,6 +22,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  * implemented for that item family.
  */
 class PaperContractInventoryGateway(
+    private val persistence: PaperPlayerDataPersistence = NativePaperPlayerDataPersistence,
     private val playerLookup: (UUID) -> Player? = Bukkit::getPlayer,
 ) : ContractInventoryGateway {
     override suspend fun prepare(
@@ -52,7 +55,7 @@ class PaperContractInventoryGateway(
                 remaining -= take
             }
             if (remaining != 0 || slots.isEmpty()) return@onBukkitMain null
-            PaperPreparedContractInventory(uuid, playerLookup, slots)
+            PaperPreparedContractInventory(uuid, playerLookup, slots, persistence)
         }
 
 }
@@ -91,6 +94,7 @@ private class PaperPreparedContractInventory(
     private val playerId: UUID,
     private val playerLookup: (UUID) -> Player?,
     private val slots: List<PaperContractSlotPlan>,
+    private val persistence: PaperPlayerDataPersistence,
 ) : PreparedContractInventory {
     override val payloads: List<EscrowedItemPayload> = slots.map { it.payload }
     private var removed = false
@@ -122,6 +126,9 @@ private class PaperPreparedContractInventory(
                 if (slots.any { plan -> !inventory.getItem(plan.slot).isExpectedAfterRemoval(plan) }) {
                     return@onBukkitMain ContractInventoryMutation.Ambiguous
                 }
+                // Persist native inventory before the durable journal can advance to payment.
+                // A failed save has an unknown outcome and must not trigger a blind refund.
+                persistence.persist(player)
                 removed = true
                 ContractInventoryMutation.Confirmed
             } catch (_: Throwable) {
@@ -150,6 +157,8 @@ private class PaperPreparedContractInventory(
                 if (slots.any { plan -> !inventory.getItem(plan.slot).sameBytes(plan.beforeBytes) }) {
                     return@onBukkitMain ContractInventoryMutation.Ambiguous
                 }
+                // REFUNDED must not outlive the restored inventory after a process crash.
+                persistence.persist(player)
                 removed = false
                 ContractInventoryMutation.Confirmed
             } catch (_: Throwable) {
