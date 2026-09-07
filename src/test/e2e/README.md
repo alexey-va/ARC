@@ -26,11 +26,12 @@ policy during Paper's async pass removed commands before the fresh permission
 check could restore them. Filtering must use the synchronous pass, as allowed
 by the [Paper event contract](https://jd.papermc.io/paper/26.1.2/com/destroystokyo/paper/event/brigadier/AsyncPlayerSendCommandsEvent.html).
 
-Run the GitHub Actions `build` workflow manually with `heavy_tests=true` to run
-MySQL and both Paper profiles alongside unit tests. Ordinary pushes run only the
-unit/package job; E2E-only paths do not trigger it. The workflow uploads runner
-output and Paper logs on success or failure. Do not run the container-backed
-contract fixture on the owner’s local workstation.
+The GitHub Actions `build` workflow runs MySQL and both Paper profiles alongside
+unit tests on matching pushes/PRs and on manual dispatch. E2E-only paths are
+excluded from automatic triggers, so dispatch `build` manually after changing
+only those tests. The workflow uploads runner output and Paper logs on success
+or failure. Do not run the container-backed contract fixture on the owner’s
+local workstation.
 
 ## Entity cleanup acceptance
 
