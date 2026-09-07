@@ -14,7 +14,10 @@ object MenuEscapeBehavior {
     fun apply(screen: PaperDialogScreen, back: Boolean, closeButton: PaperDialogButton? = null): PaperDialogScreen {
         if (back) return screen
         val exit = screen.exitButton
-        val regularExit = exit?.let { if (closeButton == null) it else it.copy(width = screen.buttons.first().width) }
+        val regularExit = exit?.let {
+            if (closeButton == null) it
+            else it.copy(width = screen.buttons.firstOrNull()?.width ?: it.width)
+        }
         return screen.copy(buttons = screen.buttons + listOfNotNull(regularExit), exitButton = closeButton)
     }
 }
