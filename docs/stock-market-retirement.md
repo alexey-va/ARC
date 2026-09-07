@@ -39,3 +39,10 @@ local execution was blocked before readiness by macOS native-library loading
 (JLine, then JNA hardware reporting), so it is not claimed as passing. The full
 JVM attempt also stalled in an unrelated ItemsAdder resource-pack shell test.
 A task-local temporary directory was required for the focused MockBukkit tests.
+
+GitHub Actions [run 34134795730](https://github.com/alexey-va/ARC/actions/runs/34134795730)
+passed on source `0081907`: the complete JVM/package job, MySQL integration,
+and both Paper profiles. The new market-retirement command-tree scenario passed
+on real Paper 26.1.2, resolving the platform-verification gap left by the local
+macOS native-loader failure. Final local integration verification passed 356
+focused tests with no failures, errors or skips.
