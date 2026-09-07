@@ -198,7 +198,7 @@ private class PaperPreparedSeasonTrophyInventory(
     override val payloads: List<EscrowedItemPayload> = slots.map { it.payload }
     private var removed = false
 
-    override suspend fun removeExact(): ContractInventoryMutation =
+    override suspend fun removeExact(canRemove: () -> Boolean): ContractInventoryMutation =
         onBukkitMain {
             if (removed) return@onBukkitMain ContractInventoryMutation.Ambiguous
             val player = playerLookup(playerId)?.takeIf { it.isOnline }
@@ -207,6 +207,8 @@ private class PaperPreparedSeasonTrophyInventory(
             if (slots.any { plan -> !sameBytes(inventory.getItem(plan.slot), plan.beforeBytes) }) {
                 return@onBukkitMain ContractInventoryMutation.NotPerformed("slot_changed")
             }
+            if (!canRemove()) return@onBukkitMain ContractInventoryMutation.NotPerformed("submission_expired")
+
             try {
                 slots.forEach { plan ->
                     val current = requireNotNull(inventory.getItem(plan.slot))

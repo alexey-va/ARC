@@ -155,7 +155,8 @@ private class FakeTrophyInventory(
         return object : PreparedContractInventory {
             override val payloads = listOf(EscrowedItemPayload.capture(itemKey, 1, byteArrayOf(1, 2, 3)))
 
-            override suspend fun removeExact(): ContractInventoryMutation {
+            override suspend fun removeExact(canRemove: () -> Boolean): ContractInventoryMutation {
+                if (!canRemove()) return ContractInventoryMutation.NotPerformed("submission_expired")
                 removeCalls += 1
                 return mutation
             }

@@ -51,6 +51,36 @@ class ContractSubmissionCoordinatorTest : StringSpec({
         }
     }
 
+    "quote expiry during journal persistence cannot remove items or pay" {
+        runTest {
+            for ((windowEnd, delayedNow) in listOf(100_000L to 31_501L, 20_000L to 20_000L)) {
+                val order = definition.copy(windowEndsAt = windowEnd)
+                val events = mutableListOf<String>()
+                val storage = FakePersistence(order, events)
+                var now = 1_500L
+                val persistence = object : ContractSubmissionPersistence by storage {
+                    override suspend fun persistJournal(record: ContractSubmissionJournalRecord) {
+                        storage.persistJournal(record)
+                        if (record.status == ContractSubmissionJournalStatus.ITEM_REMOVAL_STARTED) now = delayedNow
+                    }
+                }
+                val prepared = FakePreparedInventory(order.itemKey, 8, events)
+                val payment = FakePayment(0L, ContractPaymentEvidence(true, 2_000L), events)
+                val quote = ContractSubmissionQuote(order.id, order.windowStartsAt, "player-1", 8, 2_000L, 0L, now)
+                val outcome = ContractSubmissionCoordinator(persistence, FakeInventory(prepared), payment) { now }
+                    .submit(order, "delayed", "player-1", 8, quote = quote)
+
+                outcome shouldBe ContractSubmissionOutcome.Rejected(SubmissionRejection.STALE_STATE)
+                payment.depositCalls shouldBe 0
+                ("inventory:remove" in events) shouldBe false
+                prepared.restoreCalls shouldBe 0
+                storage.state.acceptedQuantity shouldBe 0L
+                storage.journals.getValue("delayed").status shouldBe ContractSubmissionJournalStatus.CANCELLED
+                storage.journals.getValue("delayed").quotaReservation() shouldBe null
+            }
+        }
+    }
+
     "network envelope rejects payout before creating escrow" {
         runTest {
             val events = mutableListOf<String>()
@@ -333,7 +363,8 @@ private class FakePreparedInventory(
         )
     var restoreCalls = 0
 
-    override suspend fun removeExact(): ContractInventoryMutation {
+    override suspend fun removeExact(canRemove: () -> Boolean): ContractInventoryMutation {
+        if (!canRemove()) return ContractInventoryMutation.NotPerformed("submission_expired")
         events += "inventory:remove"
         return removeResult
     }

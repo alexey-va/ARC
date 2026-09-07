@@ -132,6 +132,27 @@ class PaperContractSubmissionGatewaysTest : StringSpec({
         }
     }
 
+    "a deadline that expires after preparation is checked on the inventory thread before removal" {
+        runTest {
+            val player = server.addPlayer("LateMiner")
+            player.teleport(server.getWorld("rc_origin_spawn")!!.spawnLocation)
+            player.inventory.setItem(0, ItemStack(Material.STONE, 8))
+            var saves = 0
+            val prepared = PaperContractInventoryGateway(PaperPlayerDataPersistence { saves++ })
+                .prepare(player.uniqueId.toString(), "minecraft:stone", 8)!!
+            var now = 1_500L
+            val canRemove = {
+                org.bukkit.Bukkit.isPrimaryThread() shouldBe true
+                now <= 31_500L
+            }
+            now = 31_501L
+
+            prepared.removeExact(canRemove) shouldBe ContractInventoryMutation.NotPerformed("submission_expired")
+            player.inventory.getItem(0)?.amount shouldBe 8
+            saves shouldBe 0
+        }
+    }
+
     "leaving Origin after preparation cannot remove resources" {
         runTest {
             val player = server.addPlayer("TravellingMiner")

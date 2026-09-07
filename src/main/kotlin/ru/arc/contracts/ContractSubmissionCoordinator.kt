@@ -18,7 +18,8 @@ interface ContractSubmissionPersistence {
 interface PreparedContractInventory {
     val payloads: List<EscrowedItemPayload>
 
-    suspend fun removeExact(): ContractInventoryMutation
+    /** Evaluate the final precondition on the inventory thread immediately before changing any slot. */
+    suspend fun removeExact(canRemove: () -> Boolean = { true }): ContractInventoryMutation
 
     suspend fun restoreExact(): ContractInventoryMutation
 }
@@ -200,19 +201,26 @@ class ContractSubmissionCoordinator(
 
         val removalStarted = ContractSubmissionJournalEngine.beginItemRemoval(prepared, clock())
         if (!persistJournal(removalStarted)) return ContractSubmissionOutcome.Unavailable(submissionId)
-        when (safeInventoryMutation { preparedInventory.removeExact() }) {
+        when (val removal = safeInventoryMutation {
+            preparedInventory.removeExact {
+                val now = clock()
+                quote?.matches(definition, plan, now) ?: definition.isOpenAt(now)
+            }
+        }) {
             ContractInventoryMutation.Confirmed -> Unit
             is ContractInventoryMutation.NotPerformed -> {
                 val cancelled =
                     ContractSubmissionJournalEngine.confirmNoItemsRemoved(
                         removalStarted,
-                        "inventory_changed_before_remove",
+                        if (removal.code == "submission_expired") "quote_expired_before_remove" else "inventory_changed_before_remove",
                         clock(),
                     )
-                return if (persistJournal(cancelled)) {
-                    ContractSubmissionOutcome.Cancelled(submissionId, cancelled.cancellationCode!!)
-                } else {
+                return if (!persistJournal(cancelled)) {
                     ContractSubmissionOutcome.Unavailable(submissionId)
+                } else if (removal.code == "submission_expired") {
+                    ContractSubmissionOutcome.Rejected(SubmissionRejection.STALE_STATE)
+                } else {
+                    ContractSubmissionOutcome.Cancelled(submissionId, cancelled.cancellationCode!!)
                 }
             }
             ContractInventoryMutation.Ambiguous -> {
