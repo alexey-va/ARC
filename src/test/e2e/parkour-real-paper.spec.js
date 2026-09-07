@@ -23,6 +23,12 @@ test('real Parkour run emits ARC HUD for join, checkpoint, death and finish', as
   };
   const walkToCheckpoint = async z => {
     try {
+      // Creating a checkpoint while standing there presses its plate before
+      // joining. Native pressure-plate polling must release it before this run.
+      await waitUntil(() => player.bot.blockAt(player.bot.entity.position.clone().set(0.5, 65, z))
+        ?.getProperties().powered === false, {
+        signal, timeout: 10000, message: `Checkpoint plate at z=${z} must be released before entering it`,
+      });
       logPosition(`Before walking to ${z}`);
       await player.bot.lookAt(player.bot.entity.position.clone().set(0.5, 66.5, z), true);
       player.bot.setControlState('forward', true);
@@ -52,10 +58,14 @@ test('real Parkour run emits ARC HUD for join, checkpoint, death and finish', as
     player.chat('/pa create checkpoint arc-e2e');
     await expect(player).toHaveReceivedMessage(/Checkpoint 2/i, { since: lastCheckpointSince });
 
+    const readySince = player.getMessageBufferIndex();
     player.chat('/pa setcourse arc-e2e ready');
-    await expect(player).toHaveReceivedMessage(/ready|готов/i);
+    await expect(player).toHaveReceivedMessage(/Ready Status.*true/i, { since: readySince });
     player.chat('/pa join arc-e2e');
     await waitUntil(() => titles.some(text => text.includes('ТРАССА НАЧАЛАСЬ')), { signal, timeout: 10000 });
+    await waitUntil(() => player.bot.entity.onGround && Math.abs(player.bot.entity.position.z - 0.5) < 0.25, {
+      signal, timeout: 10000, message: 'Native course join must return the player to the start',
+    });
 
     await walkToCheckpoint(3.5);
     await waitUntil(() => titles.some(text => text.includes('ТОЧКА')), { signal, timeout: 10000 });
