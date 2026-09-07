@@ -1,5 +1,42 @@
+import org.gradle.api.provider.Property
+import org.gradle.api.services.BuildService
+import org.gradle.api.services.BuildServiceParameters
 import org.gradle.internal.os.OperatingSystem
+import ru.arc.testing.containers.RedisTestService
 import java.util.Properties
+import java.net.Socket
+import java.security.MessageDigest
+
+buildscript {
+    repositories {
+        maven("https://repo.rus-crafting.ru/grocermc/")
+        mavenCentral()
+    }
+    dependencies {
+        classpath("ru.ruscrafting.arc:arc-core-integration-testing:2.7.4")
+    }
+}
+
+abstract class E2eRedisService : BuildService<E2eRedisService.Parameters>, AutoCloseable {
+    interface Parameters : BuildServiceParameters {
+        val image: Property<String>
+    }
+
+    private var redis: RedisTestService? = null
+
+    private fun service(): RedisTestService = synchronized(this) {
+        redis ?: RedisTestService.Companion.start(parameters.image.get()).also { redis = it }
+    }
+
+    val endpoint get() = service().endpoint
+
+    override fun close() {
+        synchronized(this) {
+            redis?.close()
+            redis = null
+        }
+    }
+}
 
 plugins {
     id("io.github.drownek.plugwright") version "2.0.4"
@@ -403,5 +440,127 @@ plugwright {
     writeFiles {
         file("server.properties", projectDir.resolve("src/test/e2e/fixtures/server.properties"))
         file("plugins/ARC/modules/redis.yml", projectDir.resolve("src/test/e2e/fixtures/config.yml"))
+    }
+}
+
+// E2E owns a disposable Redis only for the lifetime of Paper. The service uses
+// Testcontainers' mapped port, so the test never binds a shared host port.
+val e2eRedis = gradle.sharedServices.registerIfAbsent("plugwrightRedis", E2eRedisService::class) {
+    parameters.image.set("redis:7.4-alpine")
+}
+val e2eRedisEconomy = configurations.detachedConfiguration(
+    dependencies.create("ru.ruscrafting.thirdparty:rediseconomy:4.5.12"),
+).apply {
+    isTransitive = false
+}
+
+tasks.named("plugwrightTest") {
+    usesService(e2eRedis)
+    doFirst {
+        val endpoint = e2eRedis.get().endpoint
+        Socket(endpoint.host, endpoint.port).use { }
+
+        val generatedDir = layout.buildDirectory.dir("plugwright-e2e-generated").get().asFile
+        generatedDir.mkdirs()
+        val redisConfig = generatedDir.resolve("redis.yml").apply {
+            writeText(
+                """
+                enabled: true
+                host: ${endpoint.host}
+                port: ${endpoint.port}
+                username: default
+                password: ""
+                server-name: e2e
+                main-server: true
+                """.trimIndent() + "\n",
+            )
+        }
+        val economyConfig = generatedDir.resolve("rediseconomy.yml").apply {
+            writeText(
+                """
+                lang: en-US
+                debug: false
+                migrationEnabled: false
+                redis:
+                  host: ${endpoint.host}
+                  port: ${endpoint.port}
+                  user: default
+                  password: ""
+                  database: 0
+                  timeout: 300
+                  clientName: RedisEconomyE2E
+                  ssl: false
+                  poolSize: 2
+                  tryAgainCount: 3
+                clusterId: e2e
+                defaultCurrencyName: vault
+                payCooldown: 0
+                minPayAmount: 0.01
+                currencies:
+                  - currencyName: vault
+                    currencySingle: ' coin'
+                    currencyPlural: ' coins'
+                    decimalFormat: '#.##'
+                    languageTag: en-US
+                    startingBalance: 0.0
+                    maxBalance: 1000000.0
+                    payTax: 0.0
+                    saveTransactions: true
+                    transactionsTTL: 604800
+                    bankEnabled: true
+                    taxOnlyPay: false
+                    executorThreads: 1
+                """.trimIndent() + "\n",
+            )
+        }
+        val contractsConfig = generatedDir.resolve("contracts.yml").apply {
+            writeText(
+                """
+                enabled: true
+                mode: enforce
+                leader-server: e2e
+                server-weekly-budget: '100000.00'
+                orders:
+                  e2e_stone:
+                    enabled: true
+                    kind: resource
+                    group: spawn
+                    display-name: E2E stone order
+                    item: minecraft:stone
+                    funding: server_envelope
+                    window-starts-at: '2026-01-01T00:00:00Z'
+                    window-ends-at: '2099-01-01T00:00:00Z'
+                    payout-per-unit: '100.00'
+                    budget: '100000.00'
+                    target-quantity: 1000
+                    per-player-quantity-cap: 64
+                    min-submission-quantity: 1
+                    max-submission-quantity: 16
+                    dynamic-pricing: true
+                """.trimIndent() + "\n",
+            )
+        }
+        val jar = e2eRedisEconomy.resolve().single { it.name == "rediseconomy-4.5.12.jar" }
+        check(MessageDigest.getInstance("SHA-256").digest(jar.readBytes())
+            .joinToString("") { "%02x".format(it) } ==
+            "7ccd1c5fbc43ab1a3345f4c9705b71aa39fbbbd457647c1808629bc86884e51f") {
+            "Unexpected RedisEconomy 4.5.12 artifact: ${jar.absolutePath}"
+        }
+
+        val extension = project.extensions.getByName("plugwright") as me.drownek.plugwright.PlugwrightExtension
+        val files = extension.runDirFiles.get().toMutableList()
+        files += me.drownek.plugwright.PlugwrightExtension.RunDirFile(
+            "plugins/ARC/modules/redis.yml", null, redisConfig,
+        )
+        files += me.drownek.plugwright.PlugwrightExtension.RunDirFile(
+            "plugins/RedisEconomy/config.yml", null, economyConfig,
+        )
+        files += me.drownek.plugwright.PlugwrightExtension.RunDirFile(
+            "plugins/RedisEconomy.jar", null, jar,
+        )
+        files += me.drownek.plugwright.PlugwrightExtension.RunDirFile(
+            "plugins/ARC/modules/contracts.yml", null, contractsConfig,
+        )
+        extension.runDirFiles.set(files)
     }
 }
