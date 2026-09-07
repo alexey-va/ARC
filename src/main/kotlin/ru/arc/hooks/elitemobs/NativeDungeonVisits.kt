@@ -24,6 +24,7 @@ internal data class DungeonVisit(
     val stats: DungeonVisitStats? = null,
     val contentId: String? = null,
     val lore: List<String> = emptyList(),
+    val permission: String? = null,
 )
 
 internal data class DungeonVisitStats(
@@ -75,7 +76,7 @@ internal class NativeDungeonVisits(
         return if (fields.contentType.name == "OPEN_DUNGEON") {
             DungeonVisit("open", entry = cachedEntry(fields.teleportLocation, world),
                 name = fields.name, contentId = fields.filename.removeSuffix(".yml"), lore = fields.customInfo.orEmpty(),
-                stats = DungeonVisitStats(level = fields.contentLevel))
+                stats = DungeonVisitStats(level = fields.contentLevel), permission = fields.permission)
         } else null
     }
 

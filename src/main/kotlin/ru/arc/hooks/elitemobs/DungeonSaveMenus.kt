@@ -20,6 +20,7 @@ import java.time.format.DateTimeFormatter
 
 internal class DungeonSaveMenus(
     private val dungeon: EMDungeonQol,
+    private val crystals: (Player) -> String? = ::readDungeonCrystals,
     private val show: (Player, PaperDialogScreen, (() -> Unit)?) -> Unit = { player, screen, reopen ->
         val close = PaperDialogButton(PaperDialogActionId.of("close"), dungeon.text("saves.dialog.close-label", "<#aaa49a>Закрыть"), width = 200, closeDialogBeforeAction = true) { }
         // A root Close is already the footer, so never move a second Close into the grid.
@@ -49,7 +50,7 @@ internal class DungeonSaveMenus(
             visit.stats?.playerCount?.let { add(text("panel.party", "<#aaa49a>Участников: <#e8dfd2><value>", "value" to Component.text(it))) }
         }
         if (stats.isNotEmpty()) body += PaperDialogBody(stats.reduce { a, b -> a.append(Component.text(" · ")).append(b) }, 468)
-        readDungeonCrystals(player)?.let { body += PaperDialogBody(text("panel.crystals", "<#aaa49a>Ваши кристаллы: <#c7a0e8>💎 <value>", "value" to Component.text(it)), 468) }
+        body += crystalBalance(player)
         body += PaperDialogBody(availability(blocked), 468)
         if (view.saves != null) body += PaperDialogBody(saveCounts(view.saves), 468)
         feedback?.let { body += PaperDialogBody(plain(it), 468) }
@@ -65,6 +66,7 @@ internal class DungeonSaveMenus(
                     if (view.saves?.entry != null) dungeon.travel(player, view.saves, "entry") else panel(player, text("panel.entry-unavailable", "<#aaa49a>Безопасный переход ко входу сейчас недоступен. Для выхода используйте кнопку выше."))
                 }.let { if (view.saves?.entry != null) it else it.copy(label = text("panel.entry-disabled", "<#aaa49a>К началу · недоступно")) },
                 action("shop", "panel.shop-label", "<#d7b486>Припасы ›", "panel.shop-tooltip", "Еда, стрелы и полезные предметы за кристаллы") { shop(player) },
+                shops(player),
                 partyButton(player),
                 action("guide", "panel.guide-label", "<#86dcf1>Гайд ›", "panel.guide-tooltip", "Читальная справка о данжах") {
                     if (!HelpCenterModule.openDungeonsGuide(player) { panel(player) }) {
@@ -110,17 +112,31 @@ internal class DungeonSaveMenus(
         )) { open(player) }
     }
 
-    private fun unavailable(player: Player): Unit = show(player, PaperDialogScreen(
+    private fun unavailable(player: Player) {
+        val destination = dungeon.lastReturn(player)
+        show(player, PaperDialogScreen(
         id = "dungeon.panel.unavailable", title = text("panel.title", "<#f4bd6a>Панель данжа"),
-        body = listOf(PaperDialogBody(text("panel.outside", "<#e8dfd2>Подготовка к походу<newline><#aaa49a>Почитайте гайд или выберите данж. После входа здесь появится панель прохождения.<newline><#d7b486>/данж тп <#aaa49a>— к порталам · <#d7b486>/данж список <#aaa49a>— выбор данжа"), 468)),
+        body = listOf(PaperDialogBody(text("panel.outside", "<#e8dfd2>Подготовка к походу<newline><#aaa49a>Почитайте гайд или выберите данж. После входа здесь появится панель прохождения.<newline><#d7b486>/данж тп <#aaa49a>— к порталам · <#d7b486>/данж список <#aaa49a>— выбор данжа"), 468), crystalBalance(player)),
         buttons = listOf(
+            action("return", "panel.return-label", "<#9bd48d>Вернуться в данж", "panel.return-tooltip", "Вернуться в последний обычный данж на место выхода", close = destination != null) {
+                if (destination != null) dungeon.returnToLast(player, destination)
+            }.let { if (destination != null) it else it.copy(label = text("panel.return-disabled", "<#aaa49a>Вернуться · недоступно"),
+                tooltip = text("panel.return-unavailable", "<#aaa49a>Нет доступного места выхода из обычного данжа. Сначала посетите данж и выйдите из него.")) },
+            shops(player),
             guide(player) { unavailable(player) },
             action("portals", "panel.portals-label", "<#d7b486>К порталам", "panel.portals-tooltip", "Перейти к порталам данжей в гильдии", close = true) { dungeon.action(player, "tp") },
             action("list", "panel.list-label", "<#d7b486>Выбрать данж", "panel.list-tooltip", "Открыть список данжей EliteMobs", close = true) { dungeon.action(player, "list") },
             partyButton(player),
             mainMenu(player),
         ), exitButton = close(), columns = 2,
-    )) { unavailable(player) }
+        )) { unavailable(player) }
+    }
+
+    private fun crystalBalance(player: Player) = PaperDialogBody(crystals(player)?.let {
+        text("panel.crystals", "<#aaa49a>Ваши кристаллы: <#c7a0e8>💎 <value>", "value" to Component.text(it))
+    } ?: text("panel.crystals-unavailable", "<#aaa49a>Кристаллы: баланс сейчас недоступен"), 468)
+
+    private fun shops(player: Player) = action("shops", "panel.shops-label", "<#d7b486>К магазинам", "panel.shops-tooltip", "Перейти к торговцам данжей", close = true) { dungeon.action(player, "shops") }
 
     private fun mainMenu(player: Player) = action("main", "panel.main-label", "<#aaa49a>Главное меню ›", "panel.main-tooltip", "Открыть главное меню сервера") { dungeon.action(player, "main") }
 

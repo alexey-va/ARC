@@ -47,7 +47,7 @@ class EMDungeonCommand(
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<String>): List<String> =
         if (command.name == "dungeon" && args.size == 1) {
-            listOf("меню", "menu", "начать", "выйти", "вход", "сохраниться", "сохранения", "тп", "список", "помощь", "start", "quit", "entry", "save", "saves", "tp", "list", "help")
+            listOf("меню", "menu", "начать", "выйти", "вход", "вернуться", "магазины", "сохраниться", "сохранения", "тп", "список", "помощь", "start", "quit", "entry", "return", "shops", "save", "saves", "tp", "list", "help")
                 .filter { it.startsWith(args[0], ignoreCase = true) }
         } else emptyList()
 }

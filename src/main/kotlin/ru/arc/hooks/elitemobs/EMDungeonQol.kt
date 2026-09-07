@@ -53,7 +53,9 @@ internal class EMDungeonQol(
     private val openPortal: (Player, () -> Unit) -> Unit = { player, action ->
         Portal(player.uniqueId, PortalData(ownerAction = { action() }))
     },
-
+    private val returnMove: (Player, Location) -> Unit = { player, destination ->
+        com.magmaguy.elitemobs.api.PlayerTeleportEvent.teleportPlayer(player, destination)
+    },
 ) : Listener, AutoCloseable {
     internal val scoreboard = DungeonScoreboard(this)
     private val checkpoints = DungeonCheckpointStore()
@@ -153,7 +155,8 @@ internal class EMDungeonQol(
         val visit = resolve(location.world) ?: return
         // Native quit removes membership before emitting its departure teleport.
         // Recording that position grants no admission: resume/travel recheck membership.
-        if (!visit.canResume || inCombat(player) || !safe(location)) return
+        // A successful open-world exit must replace the old point even just after combat.
+        if (!visit.canResume || (visit.instanced && inCombat(player)) || !safe(location)) return
         checkpoints.remember(player.persistentDataContainer, location, visit.run, clock(), ttl)
     }
 
@@ -235,12 +238,58 @@ internal class EMDungeonQol(
             visit.entry?.clone(), checkpoints.destination(player.persistentDataContainer, player.world, visit.run, clock(), ttl))
     }
 
+    internal fun lastReturn(player: Player): DungeonDeparture? {
+        if (!enabled || closed || !config.bool("dungeon-qol.resume-enabled", true) || !player.isOnline ||
+            player.isDead || player.gameMode == GameMode.SPECTATOR || resolve(player.world) != null) return null
+        val point = checkpoints.latestDeparture(player.persistentDataContainer, clock(), ttl) ?: return null
+        val visit = resolve(point.location.world) ?: return null
+        if (visit.instanced || !visit.canResume || visit.run != point.run ||
+            visit.permission?.takeIf { it.isNotBlank() }?.let { !player.hasPermission(it) } == true) return null
+        return point
+    }
+
+    internal fun returnToLast(player: Player, expected: DungeonDeparture? = lastReturn(player)) {
+        val unavailable = text("panel.return-unavailable", "<#aaa49a>Нет доступного места выхода из обычного данжа. Сначала посетите данж и выйдите из него.")
+        if (expected == null || lastReturn(player) != expected) { audience.sendMessage(player, unavailable); return }
+        if (inCombat(player)) { audience.sendMessage(player, combatMessage()); return }
+        val origin = player.world.uid
+        val token = UUID.randomUUID()
+        if (pending.putIfAbsent(player.uniqueId, token) != null) {
+            audience.sendMessage(player, text("saves.messages.pending", "<gray>Сначала войдите в открытый портал или дождитесь его закрытия.")); return
+        }
+        tasks.runLater(420) { pending.remove(player.uniqueId, token) }
+        runCatching { openPortal(player) portal@{
+            if (!pending.remove(player.uniqueId, token)) return@portal
+            if (player.world.uid != origin || lastReturn(player) != expected) {
+                if (player.isOnline) audience.sendMessage(player, unavailable)
+                return@portal
+            }
+            if (inCombat(player)) { audience.sendMessage(player, combatMessage()); return@portal }
+            if (player.isInsideVehicle || player.isFlying || player.isGliding) {
+                audience.sendMessage(player, text("saves.messages.travel-ground", "<gray>Войдите в портал пешком, без транспорта и полёта.")); return@portal
+            }
+            if (!safe(expected.location)) {
+                audience.sendMessage(player, text("saves.messages.unavailable-point", "<red>Эта точка больше не подходит для безопасного перехода. Выберите другую или /данж выйти.")); return@portal
+            }
+            returnMove(player, expected.location.clone())
+        } }.onFailure {
+            pending.remove(player.uniqueId, token)
+            Logging.error("Unable to return to last dungeon", it)
+            audience.sendMessage(player, text("saves.messages.blocked", "<red>Перемещение отменено защитой. Для выхода используйте /данж выйти."))
+        }
+    }
+
     internal fun action(player: Player, action: String, args: List<String> = emptyList()) {
         when (action) {
             "menu", "меню" -> menus.panel(player)
+            "return", "вернуться" -> returnToLast(player)
             "main" -> if (!HelpCenterModule.open(player)) audience.sendMessage(player, text("panel.main-unavailable", "<#d7b486>Главное меню сейчас недоступно. Попробуйте позже."))
             "party" -> if (partiesAvailable()) player.performCommand("elitemobs:em party menu")
                 else audience.sendMessage(player, text("party.unavailable", "<#aaa49a>Группы EliteMobs на этом сервере пока недоступны."))
+            "shops", "магазины" -> {
+                if (resolve(player.world)?.instanced == true) audience.sendMessage(player, text("messages.leave-first", "<#d7b486>Сначала выйдите из текущего данжа: /данж выйти."))
+                else player.performCommand(config.string("dungeon-qol.shops-command", "pw aguild"))
+            }
             "tp", "тп", "порталы", "list", "список" -> {
                 if (current(player)?.instanced == true) audience.sendMessage(player, text("messages.leave-first", "<#d7b486>Сначала выйдите из текущего данжа: /данж выйти."))
                 else player.performCommand(if (action in setOf("list", "список")) "elitemobs:em" else "pw aguild")

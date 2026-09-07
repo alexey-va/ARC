@@ -27,10 +27,83 @@ class DungeonSaveMenusTest : FreeSpec({
         val shown = mutableListOf<PaperDialogScreen>()
         DungeonSaveMenus(dungeon) { _, screen, _ -> shown += screen }.open(player)
         shown.single().id shouldBe "dungeon.panel.unavailable"
-        shown.single().buttons.map { it.id.value } shouldBe listOf("guide", "portals", "list", "party", "main")
+        shown.single().buttons.map { it.id.value } shouldBe listOf("return", "shops", "guide", "portals", "list", "party", "main")
         shown.single().exitButton!!.id.value shouldBe "close"
         shown.single().exitButton!!.closeDialogBeforeAction shouldBe true
-        shown.single().body.single().text shouldBe Component.text("changed").decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
+        shown.single().body.map { it.text } shouldBe listOf(
+            Component.text("changed").decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false),
+            Component.text("changed").decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false),
+        )
+    }
+
+    "outside menu renders zero, nonzero, and unavailable dungeon crystal balances" {
+        val balances = listOf("0", "27", null)
+        val observed = mutableListOf<String?>()
+
+        balances.forEach { balance ->
+            val player = paper.addPlayer("balance-${observed.size}")
+            val dungeon = mockk<EMDungeonQol>(relaxed = true)
+            every { dungeon.view(player) } returns null
+            every { dungeon.panelView(player) } returns null
+            every { dungeon.lastReturn(player) } returns null
+            every { dungeon.text(any(), any(), *anyVararg()) } answers {
+                Component.text(firstArg<String>())
+            }
+            val shown = mutableListOf<PaperDialogScreen>()
+            DungeonSaveMenus(dungeon, crystals = {
+                observed += balance
+                balance
+            }) { _, screen, _ -> shown += screen }.open(player)
+
+            observed.last() shouldBe balance
+            shown.single().body.map { it.text } shouldBe listOf(
+                Component.text("panel.outside").decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false),
+                Component.text(if (balance == null) "panel.crystals-unavailable" else "panel.crystals")
+                    .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false),
+            )
+        }
+    }
+
+    "outside menu disables return without a departure and routes shops to the dungeon action" {
+        val player = paper.addPlayer("outside-actions")
+        val dungeon = mockk<EMDungeonQol>(relaxed = true)
+        every { dungeon.view(player) } returns null
+        every { dungeon.panelView(player) } returns null
+        every { dungeon.lastReturn(player) } returns null
+        every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
+        val shown = mutableListOf<PaperDialogScreen>()
+        DungeonSaveMenus(dungeon, crystals = { "0" }) { _, screen, _ -> shown += screen }.open(player)
+
+        val screen = shown.single()
+        screen.buttons.single { it.id.value == "return" }.also {
+            it.closeDialogBeforeAction shouldBe false
+            it.onClick.handle(mockk())
+        }
+        verify(exactly = 0) { dungeon.returnToLast(any(), any()) }
+        screen.buttons.single { it.id.value == "shops" }.also {
+            it.closeDialogBeforeAction shouldBe true
+            it.onClick.handle(mockk())
+        }
+        verify { dungeon.action(player, "shops") }
+    }
+
+    "outside menu enables return and passes the captured departure to the callback" {
+        val player = paper.addPlayer("outside-return")
+        val world = paper.addSimpleWorld("outside-return-world")
+        val departure = DungeonDeparture(Location(world, 4.5, 71.0, -2.5, 180f, 12f), "run", 42L)
+        val dungeon = mockk<EMDungeonQol>(relaxed = true)
+        every { dungeon.view(player) } returns null
+        every { dungeon.panelView(player) } returns null
+        every { dungeon.lastReturn(player) } returns departure
+        every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(secondArg<String>()) }
+        val shown = mutableListOf<PaperDialogScreen>()
+        DungeonSaveMenus(dungeon, crystals = { "7" }) { _, screen, _ -> shown += screen }.open(player)
+
+        shown.single().buttons.single { it.id.value == "return" }.also {
+            it.closeDialogBeforeAction shouldBe true
+            it.onClick.handle(mockk())
+        }
+        verify { dungeon.returnToLast(player, departure) }
     }
 
     "about page opens safely and returns to the current dungeon panel" {

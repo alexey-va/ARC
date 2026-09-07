@@ -9,6 +9,8 @@ import java.util.UUID
 
 internal enum class DungeonSaveKind { MANUAL, AUTO }
 
+internal data class DungeonDeparture(val location: Location, val run: String, val savedAt: Long)
+
 internal data class DungeonSavePoint(
     val id: String,
     val name: String,
@@ -94,6 +96,13 @@ internal class DungeonCheckpointStore {
     fun destination(data: PersistentDataContainer, world: World, run: String, now: Long, ttl: Long): Location? =
         read(data).firstOrNull { it.world == world.uid.toString() && it.run == run && valid(it, now, ttl) }
             ?.let { Location(world, it.position[0], it.position[1], it.position[2], it.position[3].toFloat(), it.position[4].toFloat()) }
+
+    fun latestDeparture(data: PersistentDataContainer, now: Long, ttl: Long): DungeonDeparture? {
+        val point = read(data).filter { valid(it, now, ttl) }.maxByOrNull { it.savedAt } ?: return null
+        val world = org.bukkit.Bukkit.getWorld(UUID.fromString(point.world)) ?: return null
+        return DungeonDeparture(Location(world, point.position[0], point.position[1], point.position[2],
+            point.position[3].toFloat(), point.position[4].toFloat()), point.run, point.savedAt)
+    }
 
     fun forgetDestination(data: PersistentDataContainer, world: UUID) {
         write(data, read(data).filter { it.world != world.toString() })

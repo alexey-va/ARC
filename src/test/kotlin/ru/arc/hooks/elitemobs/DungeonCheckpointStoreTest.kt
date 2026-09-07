@@ -49,6 +49,55 @@ class DungeonCheckpointStoreTest : FreeSpec({
         store.destination(data, largeWorld, "large", 100L, 1_000L) shouldBe null
     }
 
+    "latest departure selects the newest valid world and preserves position and rotation" {
+        val player = paper.addPlayer("latest-departure")
+        val oldWorld = paper.addSimpleWorld("latest-old")
+        val newWorld = paper.addSimpleWorld("latest-new")
+        val store = DungeonCheckpointStore()
+        store.remember(player.persistentDataContainer, Location(oldWorld, 1.0, 2.0, 3.0, 15f, 25f), "old-run", 100L, 1_000L)
+        store.remember(player.persistentDataContainer, Location(newWorld, 11.5, 72.0, -3.5, 205.5f, -17.25f), "new-run", 200L, 1_000L)
+
+        val departure = store.latestDeparture(player.persistentDataContainer, 250L, 1_000L)!!
+        departure.location.world shouldBe newWorld
+        departure.location.x shouldBe 11.5
+        departure.location.y shouldBe 72.0
+        departure.location.z shouldBe -3.5
+        departure.location.yaw shouldBe 205.5f
+        departure.location.pitch shouldBe -17.25f
+        departure.run shouldBe "new-run"
+        departure.savedAt shouldBe 200L
+    }
+
+    "latest departure rejects expired points and does not fall back from an unloaded newest world" {
+        val player = paper.addPlayer("latest-expiry")
+        val oldWorld = paper.addSimpleWorld("expiry-old")
+        val newestWorld = paper.addSimpleWorld("expiry-new")
+        val store = DungeonCheckpointStore()
+        store.remember(player.persistentDataContainer, Location(oldWorld, 1.0, 2.0, 3.0), "old-run", 100L, 1_000L)
+        store.latestDeparture(player.persistentDataContainer, 1_101L, 1_000L) shouldBe null
+
+        store.remember(player.persistentDataContainer, Location(newestWorld, 4.0, 5.0, 6.0), "new-run", 200L, 1_000L)
+        @Suppress("DEPRECATION")
+        val root = NamespacedKey("arc", "dungeon_checkpoints")
+        @Suppress("DEPRECATION")
+        val entries = player.persistentDataContainer.get(root, PersistentDataType.TAG_CONTAINER_ARRAY)!!.toMutableList()
+        entries.first().set(NamespacedKey("arc", "world"), PersistentDataType.STRING, UUID.randomUUID().toString())
+        @Suppress("DEPRECATION")
+        player.persistentDataContainer.set(root, PersistentDataType.TAG_CONTAINER_ARRAY, entries.toTypedArray())
+        store.latestDeparture(player.persistentDataContainer, 250L, 1_000L) shouldBe null
+    }
+
+    "latest departure remains isolated to the player's checkpoint container" {
+        val first = paper.addPlayer("isolated-first")
+        val second = paper.addPlayer("isolated-second")
+        val world = paper.addSimpleWorld("isolated-world")
+        val store = DungeonCheckpointStore()
+        store.remember(first.persistentDataContainer, Location(world, 8.0, 9.0, 10.0), "run", 100L, 1_000L)
+
+        store.latestDeparture(second.persistentDataContainer, 200L, 1_000L) shouldBe null
+        store.latestDeparture(first.persistentDataContainer, 200L, 1_000L)!!.location.x shouldBe 8.0
+    }
+
     "keeps only the newest sixteen world checkpoints" {
         val player = paper.addPlayer("bounded")
         val store = DungeonCheckpointStore()
