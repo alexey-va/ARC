@@ -1,9 +1,13 @@
 # Optional external product telemetry
 
 ARC owns collection, network transport, retention, reports and session timing.
-Paper consumers declare `softdepend: [ARC]` (alongside existing dependencies)
+Most Paper consumers declare `softdepend: [ARC]` (alongside existing dependencies)
 and call the public static bridges through reflection. They remain independently
-usable when ARC is absent. A telemetry failure must never retry a payout, roll
+usable when ARC is absent. ArcEvents is the load-order exception: its arena
+generators require it before My_Worlds, while ARC loads after My_Worlds. It
+resolves the enabled ARC plugin's own classloader at event completion and has
+no ARC ordering edge. This preserves optional telemetry without a Paper cycle.
+A telemetry failure must never retry a payout, roll
 back gameplay, or prevent a reward from being delivered.
 
 ## Product API
@@ -68,5 +72,9 @@ remain separate units.
 Do not shade ARC itself. If a consumer relocates its bundled `ru.arc` core,
 Shadow also rewrites fully qualified string constants. Build the optional
 external API name at runtime (as Trails does) and verify the packaged JAR,
-not just unshaded unit tests. Plugin classloader visibility requires the soft
-dependency even when no compile-time API dependency is added.
+not just unshaded unit tests. Default plugin classloader visibility requires the soft
+dependency even when no compile-time API dependency is added. A plugin with a
+conflicting early world-generator requirement must resolve ARC through ARC's
+explicit classloader instead. Check loadbefore edges and provider aliases as
+well as softdepend: the 2026-09-07 ArcEvents → My_Worlds → ARC cycle was only
+visible with the full server plugin graph, not the isolated ARC Paper fixture.
