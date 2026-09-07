@@ -42,7 +42,7 @@ internal class DungeonSaveMenus(
             else -> text("panel.finished", "<#aaa49a>Прохождение остановлено · можно выйти")
         }
         val body = mutableListOf(
-            PaperDialogBody(text("panel.intro", "<#f4bd6a><name>", "name" to dungeonDisplayName(visit)), 468),
+            PaperDialogBody(text("panel.intro", "<#ffb277><name>", "name" to dungeonDisplayName(visit)), 468),
         )
         if (visit.instanced) body += PaperDialogBody(state, 468)
         val stats = buildList {
@@ -303,7 +303,7 @@ internal class DungeonSaveMenus(
             body = body,
             inputs = listOf(PaperDialogTextInput(nameInput, text("saves.dialog.name", "<#aaa49a>Имя точки"), initial = name.take(32), maxLength = 32, width = 300)),
             buttons = listOf(
-                action("save", "saves.dialog.confirm-save-label", "<#9bd48d>Сохранить", "saves.dialog.confirm-save-tooltip", "<#f4bd6a>Сохранить точку") { context ->
+                action("save", "saves.dialog.confirm-save-label", "<#9bd48d>Сохранить", "saves.dialog.confirm-save-tooltip", "<#e8dfd2>Сохранить точку") { context ->
                     val entered = context.text(nameInput)?.trim().orEmpty()
                     if (blocked != null) saveForm(player, expected, name = entered) else {
                         val result = dungeon.save(player, entered, expected)

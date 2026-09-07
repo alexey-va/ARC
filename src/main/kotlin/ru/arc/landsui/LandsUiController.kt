@@ -69,6 +69,7 @@ class LandsUiController(
                 exitButton = if (MenuEscapeBehavior.goesBack(player)) back("back") {} else null,
                 columns = 2,
             ),
+            reopen = { openRoot(player) },
         )
     }
 
@@ -93,6 +94,7 @@ class LandsUiController(
                 exitButton = back("back") { openRoot(player) },
                 columns = 2,
             ),
+            reopen = { openInvite(player, target) },
         )
     }
 
@@ -140,6 +142,7 @@ class LandsUiController(
                     exitButton = back("back") { openRoot(player) },
                     columns = 2,
                 ),
+                reopen = { openDetails(player, landId) },
             )
         }
     }
@@ -237,6 +240,7 @@ class LandsUiController(
                     exitButton = back("back") { openDetails(player, landId) },
                     columns = 2,
                 ),
+                reopen = { openMembers(player, landId) },
             )
         }
     }
@@ -315,6 +319,7 @@ class LandsUiController(
                     exitButton = back("back") { openDetails(player, landId) },
                     columns = 2,
                 ),
+                reopen = { openTerritory(player, landId) },
             )
         }
     }
@@ -452,6 +457,7 @@ class LandsUiController(
                     exitButton = back("back") { openRoot(player) },
                     columns = 2,
                 ),
+                reopen = { openCreated(player, landId) },
             )
         }
     }
@@ -534,9 +540,9 @@ class LandsUiController(
 
     private fun back(id: String, action: () -> Unit): PaperDialogButton = button(id, text("back-label"), action = action).copy(width = 200)
 
-    private fun show(player: Player, screen: PaperDialogScreen) {
+    private fun show(player: Player, screen: PaperDialogScreen, reopen: (() -> Unit)? = null) {
         val close = button("close", text("close-label")) {}.copy(width = 200, closeDialogBeforeAction = true)
-        ArcMenus.openDialog(player, screen, closeButton = close)
+        ArcMenus.openDialog(player, screen, closeButton = close, reopen = reopen)
     }
 
     private fun text(key: String, vararg values: Pair<String, String>): Component {

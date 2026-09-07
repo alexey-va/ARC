@@ -141,7 +141,7 @@ dungeon-qol:
       quit-tooltip: Покинуть данж обычным способом
       close-tooltip: Вернуться в игру
       confirm-save-label: <#9bd48d>Сохранить
-      confirm-save-tooltip: <#f4bd6a>Сохранить точку
+      confirm-save-tooltip: <#e8dfd2>Сохранить точку
       travel-label: '<#92bed8>Перейти ›'
       travel-tooltip: Вернуться к точке через обычный портал
       remove-label: '<#ff6b61>Удалить ›'
@@ -181,7 +181,7 @@ dungeon-qol:
     waiting: <#d7b486>Сбор группы · готовьтесь к старту
     ongoing: <#9bd48d>Прохождение идёт
     finished: <#aaa49a>Прохождение остановлено · можно выйти
-    intro: <#f4bd6a><name>
+    intro: <#ffb277><name>
     level: '<#aaa49a>Уровень: <#e8dfd2><value>'
     difficulty: '<#aaa49a>Сложность: <#e8dfd2><value>'
     party: '<#aaa49a>Участников: <#e8dfd2><value>'
