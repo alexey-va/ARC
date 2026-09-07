@@ -29,16 +29,21 @@ policy during Paper's async pass removed commands before the fresh permission
 check could restore them. Filtering must use the synchronous pass, as allowed
 by the [Paper event contract](https://jd.papermc.io/paper/26.1.2/com/destroystokyo/paper/event/brigadier/AsyncPlayerSendCommandsEvent.html).
 
-The GitHub Actions `build` workflow runs MySQL and both Paper profiles alongside
-unit tests on matching pushes/PRs and on manual dispatch. E2E-only paths are
-excluded from automatic triggers, so dispatch `build` manually after changing
-only those tests. The workflow uploads runner output and Paper logs on success
-or failure. Do not run the container-backed contract fixture on the owner’s
-local workstation.
+The GitHub Actions `build` workflow runs MySQL and three Paper profiles alongside
+unit tests on matching pushes/PRs and on manual dispatch, including E2E-only
+changes. The normal profile includes contracts and Parkour; an isolated Parkour
+profile and the 1.21.11 cleanup profile provide separate evidence. Each profile
+uploads distinctly named runner output and Paper logs on success or failure.
+Do not run the container-backed contract fixture on the owner’s local workstation.
 
 For the isolated Parkour acceptance run, use
 `TEST_TIMEOUT=60000 python3 /tmp/arc-plugwright-run.py ./gradlew --no-daemon plugwrightTest -PparkourE2e=true`.
 This profile keeps Redis disabled and runs only `parkour-real-paper.spec.js`.
+Course creation already records checkpoint 0. The test adds only two points
+ahead, waits for each plate to release after creation, and physically walks onto
+it. No administrative checkpoint advancement is used. The native plate state,
+player position and ARC HUD packets are observed; generated course JSON is
+retained with the CI artifacts.
 
 ## Entity cleanup acceptance
 
