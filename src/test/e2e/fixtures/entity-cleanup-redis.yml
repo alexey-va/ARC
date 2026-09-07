@@ -1,0 +1,2 @@
+# Entity cleanup has no Redis dependency; isolated acceptance starts without it.
+enabled: false

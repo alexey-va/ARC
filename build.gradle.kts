@@ -426,10 +426,11 @@ tasks {
 }
 
 val contractE2eFiles = layout.buildDirectory.dir("plugwright-e2e-generated")
+val cleanupE2e = providers.gradleProperty("cleanupE2e").map(String::toBoolean).orElse(false).get()
 
 // Isolated real-Paper tests run separately from the fast JVM suite.
 plugwright {
-    minecraftVersion.set("26.1.2")
+    minecraftVersion.set(providers.gradleProperty("e2eMinecraftVersion").orElse("26.1.2"))
     downloadPlugins {
         url("https://github.com/MilkBowl/Vault/releases/download/1.7.3/Vault.jar")
     }
@@ -442,10 +443,15 @@ plugwright {
     writeFiles {
         file("server.properties", projectDir.resolve("src/test/e2e/fixtures/server.properties"))
         file("permissions.yml", projectDir.resolve("src/test/e2e/fixtures/permissions.yml"))
-        file("plugins/ARC/modules/redis.yml", contractE2eFiles.get().file("redis.yml").asFile)
-        file("plugins/ARC/modules/contracts.yml", contractE2eFiles.get().file("contracts.yml").asFile)
-        file("plugins/RedisEconomy/config.yml", contractE2eFiles.get().file("rediseconomy.yml").asFile)
-        file("plugins/RedisEconomy.jar", contractE2eFiles.get().file("RedisEconomy.jar").asFile)
+        file("plugins/ARC/modules/entity-cleanup.yml", projectDir.resolve("src/test/e2e/fixtures/entity-cleanup.yml"))
+        if (cleanupE2e) {
+            file("plugins/ARC/modules/redis.yml", projectDir.resolve("src/test/e2e/fixtures/entity-cleanup-redis.yml"))
+        } else {
+            file("plugins/ARC/modules/redis.yml", contractE2eFiles.get().file("redis.yml").asFile)
+            file("plugins/ARC/modules/contracts.yml", contractE2eFiles.get().file("contracts.yml").asFile)
+            file("plugins/RedisEconomy/config.yml", contractE2eFiles.get().file("rediseconomy.yml").asFile)
+            file("plugins/RedisEconomy.jar", contractE2eFiles.get().file("RedisEconomy.jar").asFile)
+        }
     }
 }
 
@@ -557,7 +563,11 @@ val prepareContractE2e = tasks.register("prepareContractE2e") {
     }
 }
 
-tasks.named("plugwrightTest") {
-    dependsOn(prepareContractE2e)
-    usesService(e2eRedis)
+tasks.named<me.drownek.plugwright.PlugwrightTestTask>("plugwrightTest") {
+    if (cleanupE2e) {
+        testFiles.set("entity-cleanup")
+    } else {
+        dependsOn(prepareContractE2e)
+        usesService(e2eRedis)
+    }
 }

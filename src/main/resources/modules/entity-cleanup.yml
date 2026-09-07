@@ -1,0 +1,43 @@
+# ARC: событийные правила очистки. /arc reload применяет новые настройки.
+# Выключено в общем дистрибутиве; включать на нужных серверах отдельно.
+# Нет обхода мира, задач на каждый предмет, удаления по общему таймеру или I/O в событиях дропа.
+enabled: false
+
+rules:
+  mob-equipment:
+    enabled: true
+    # Время жизни неподобранной обычной экипировки. 20 тиков = 1 с при 20 TPS.
+    # 1800 = 90 секунд; при низком TPS дольше. Выгруженные чанки не тикают.
+    # Допустимо 20..72000. Уже более короткий native despawn не продлевается.
+    # Возраст выставляется один раз. Ранее выпавшие предметы reload не пересчитывает.
+    lifetime-ticks: 1800
+    # Точные имена миров, регистр важен. Пустой include = все, exclude приоритетнее.
+    worlds:
+      include: []
+      exclude: []
+    # Только Mob; игроки никогда не подходят. Пустой список = никого.
+    entity-types: [ZOMBIE, HUSK, DROWNED, ZOMBIE_VILLAGER, SKELETON, STRAY, BOGGED, WITHER_SKELETON, PIGLIN, ZOMBIFIED_PIGLIN, PILLAGER, VINDICATOR]
+    # CUSTOM/COMMAND/SPAWNER_EGG намеренно исключены. Нужные источники можно добавить явно.
+    spawn-reasons: [NATURAL, SPAWNER, RAID, PATROL, REINFORCEMENTS]
+    # Только прочная экипировка, по точным Bukkit Material. Алмазы/незерит не включены.
+    materials: [BOW, CROSSBOW, STONE_SWORD, IRON_SWORD, GOLDEN_SWORD, IRON_AXE, LEATHER_HELMET, LEATHER_CHESTPLATE, LEATHER_LEGGINGS, LEATHER_BOOTS, CHAINMAIL_HELMET, CHAINMAIL_CHESTPLATE, CHAINMAIL_LEGGINGS, CHAINMAIL_BOOTS, IRON_HELMET, IRON_CHESTPLATE, IRON_LEGGINGS, IRON_BOOTS, GOLDEN_HELMET, GOLDEN_CHESTPLATE, GOLDEN_LEGGINGS, GOLDEN_BOOTS]
+    # Необязательно: отдельный TTL для материала из materials, например BOW: 1200.
+    lifetime-overrides: {}
+    protect:
+      # true = сохранять даже обычные ванильные зачарования. false допускает только
+      # vanilla enchants; прочие отличия от обычного предмета всё равно защищены.
+      enchanted: true
+      named-mobs: true
+      foreign-mob-pdc: true
+      mob-metadata: [NPC, Elitemob, Elitemobs_NPC]
+      mob-scoreboard-tags: []
+
+# Обязательная защита независимо от настроек:
+# - неизвестные/старые мобы, появившиеся до текущего запуска модуля, пропускаются;
+# - после поднятия любого предмета, взаимодействия игрока или надевания брони
+#   раздатчиком моб навсегда теряет доказательство происхождения в этом запуске;
+# - имена, lore, PDC, модели, атрибуты и прочие нестандартные компоненты вещи защищены;
+# - предметы из инвентарей/смерти игроков не маркируются;
+# - после подбора и повторного выбрасывания действует обычное время сервера.
+# Поддерживается Paper/Purpur. Native despawn берётся из настроек сервера при reload.
+# Обычный /arc reload сохраняет доказательство мобов; отключение/рестарт сбрасывает его.

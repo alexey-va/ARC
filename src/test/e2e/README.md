@@ -26,3 +26,18 @@ by the [Paper event contract](https://jd.papermc.io/paper/26.1.2/com/destroystok
 
 GitHub Actions runs the suite independently of unit/MySQL tests and uploads the
 runner output and Paper logs on success or failure.
+
+## Entity cleanup acceptance
+
+CI also runs `entity-cleanup.spec.js` on Paper 1.21.11 using
+`./gradlew plugwrightTest -PcleanupE2e=true -Pe2eMinecraftVersion=1.21.11` and stages
+`fixtures/entity-cleanup.yml`. The fixture enables only the configured mob
+equipment rule with a 40-tick remaining lifetime for vanilla zombie/skeleton drops in
+the disposable `rc_origin_spawn` world.
+The scenario asserts native item age through server-side scoreboard predicates,
+then covers ordinary mob gear, player drops, custom components, pickup-history
+trust loss, two same-tick deaths and `/arc reload`. This focused profile disables
+Redis and filters to cleanup scenarios; the normal suite retains real Redis
+and contract acceptance. Run integration servers in CI, as required by the
+operations runtime-delivery policy. Restart provenance invalidation is also
+covered by the JVM event tests.

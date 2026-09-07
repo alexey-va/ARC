@@ -1,0 +1,30 @@
+enabled: true
+rules:
+  mob-equipment:
+    enabled: true
+    lifetime-ticks: 40
+    worlds:
+      include:
+        - rc_origin_spawn
+      exclude: []
+    entity-types:
+      - ZOMBIE
+      - SKELETON
+    spawn-reasons:
+      - COMMAND
+      - NATURAL
+      - SPAWNER
+    materials:
+      - BOW
+      - IRON_SWORD
+      - IRON_AXE
+    protect:
+      enchanted: true
+      named-mobs: true
+      foreign-mob-pdc: true
+      mob-metadata:
+        - NPC
+        - Elitemob
+        - Elitemobs_NPC
+      mob-scoreboard-tags: []
+    lifetime-overrides: {}

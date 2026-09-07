@@ -23,6 +23,7 @@ import ru.arc.commands.arc.subcommands.TreasuresSubCommand
 import ru.arc.commands.chat.ChatModeAliasCommand
 import ru.arc.commandhide.CommandHideModule
 import ru.arc.citizens.NpcChunkTicketModule
+import ru.arc.cleanup.EntityCleanupModule
 import ru.arc.config.ConfigManager
 import ru.arc.config.LocationPoolConfig
 import ru.arc.core.ModuleRegistry
@@ -232,6 +233,7 @@ open class ARC : JavaPlugin() {
             LeafDecayModule,
             PersonalLootModule,
             MobSpawnModule,
+            EntityCleanupModule,
             JoinMessagesModule,
             ChatModeModule,
             CrossServerSpyModule,
