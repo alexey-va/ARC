@@ -810,32 +810,50 @@ class ProductInterestTelemetry(
         }
     }
 
-    @Synchronized
     fun snapshot(
         networkReady: Boolean,
         now: Long = clockMillis(),
     ): List<MetricPoint> {
+        // Keep the telemetry monitor out of the aggregation path. The store has
+        // its own lock for mutable rolling state; holding this outer lock while
+        // building all windows made the main-thread movement sampler wait for
+        // the complete (and comparatively expensive) report.
+        val state = synchronized(this) {
+            SnapshotState(
+                store = store,
+                onlineSessions = sessions.size,
+                activeSessions = sessions.values.count { now - it.lastActiveAt <= config.activeWindowSeconds * 1_000L },
+                reset = localReset,
+            )
+        }
         val local =
             listOf(
                 MetricPoint("arc_product_telemetry_enabled", "Product-interest telemetry enabled state", 1.0),
                 MetricPoint("arc_product_telemetry_primary", "Whether this node owns network rolling gauges", if (primaryAggregator) 1.0 else 0.0),
                 MetricPoint("arc_product_telemetry_network_ready", "Whether Redis transport is currently connected", if (networkReady) 1.0 else 0.0),
-                MetricPoint("arc_product_online_sessions", "Product sessions currently observed on this node", sessions.size.toDouble()),
+                MetricPoint("arc_product_online_sessions", "Product sessions currently observed on this node", state.onlineSessions.toDouble()),
                 MetricPoint(
                     "arc_product_active_sessions",
                     "Product sessions active inside the configured activity window",
-                    sessions.values.count { now - it.lastActiveAt <= config.activeWindowSeconds * 1_000L }.toDouble(),
+                    state.activeSessions.toDouble(),
                 ),
                 MetricPoint(
                     "arc_product_telemetry_recovered_invalid_state",
                     "Whether invalid persisted state was moved aside at startup",
-                    if (store.recoveredInvalidPath != null) 1.0 else 0.0,
+                    if (state.store.recoveredInvalidPath != null) 1.0 else 0.0,
                 ),
-                MetricPoint("arc_product_measurement_reset_generation", "Applied measurement reset generation", (localReset?.generation ?: 0L).toDouble()),
-                MetricPoint("arc_product_measurement_boundary_timestamp", "Applied measurement boundary Unix milliseconds", (localReset?.boundaryAt ?: 0L).toDouble()),
+                MetricPoint("arc_product_measurement_reset_generation", "Applied measurement reset generation", (state.reset?.generation ?: 0L).toDouble()),
+                MetricPoint("arc_product_measurement_boundary_timestamp", "Applied measurement boundary Unix milliseconds", (state.reset?.boundaryAt ?: 0L).toDouble()),
             )
-        return if (primaryAggregator) local + store.snapshot(now, "network") else local
+        return if (primaryAggregator) local + state.store.snapshot(now, "network") else local
     }
+
+    private data class SnapshotState(
+        val store: ProductInterestStore,
+        val onlineSessions: Int,
+        val activeSessions: Int,
+        val reset: MeasurementResetState?,
+    )
 
     @Synchronized
     fun report(
@@ -872,8 +890,13 @@ class ProductInterestTelemetry(
         }
     }
 
-    @Synchronized
-    fun flush(now: Long = clockMillis()): Boolean = store.flush(now)
+    fun flush(now: Long = clockMillis()): Boolean {
+        // ProductInterestStore serializes state capture and file replacement.
+        // Do not hold the telemetry monitor across filesystem I/O: the
+        // persistence task is asynchronous and otherwise stalls Bukkit events.
+        val currentStore = synchronized(this) { store }
+        return currentStore.flush(now)
+    }
 
     @Synchronized
     private fun receive(

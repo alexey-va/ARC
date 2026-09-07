@@ -43,6 +43,8 @@ class ProductInterestStore private constructor(
     private var capacityEvictions: Long = 0
     private var resultObservationStartedAt: Long = lastSavedAt
     private var engagementObservationStartedAt: Long = lastSavedAt
+    /** Day keys repeat across every rolling-window calculation; keep parsing bounded. */
+    private val parsedDates = HashMap<String, LocalDate?>(64)
     private data class PlayerRecord(
         val id: String,
         var firstSeenAt: Long,
@@ -515,12 +517,54 @@ class ProductInterestStore private constructor(
     @Synchronized
     fun measurementStartedAt(): Long = resultObservationStartedAt
 
-    @Synchronized
     fun snapshot(
         now: Long,
         scope: String,
-    ): List<MetricPoint> {
+    ): List<MetricPoint> = snapshotState(now).snapshotMetrics(now, scope)
+
+    // Only copy mutable state under the event-writer lock. Rolling-window
+    // aggregation runs on this detached view without blocking player events.
+    @Synchronized
+    private fun snapshotState(now: Long): ProductInterestStore {
         prune(now)
+        val copiedPlayers = players.mapValuesTo(linkedMapOf()) { (_, player) ->
+            player.copy(
+                firstPathAt = player.firstPathAt.toMutableMap(),
+                firstGameplayOutcomeAt = player.firstGameplayOutcomeAt.toMutableMap(),
+                uiAttribution = player.uiAttribution?.copy(),
+                days = player.days.mapValuesTo(linkedMapOf()) { (_, day) ->
+                    day.copy(
+                        engagementFirst = day.engagementFirst.toMutableMap(),
+                        engagementLast = day.engagementLast.toMutableMap(),
+                        ui = day.ui.mapValuesTo(linkedMapOf()) { (_, row) -> row.copyForSave() },
+                        activities = day.activities.toMutableSet(),
+                        features = day.features.toMutableSet(),
+                        pathInterests = day.pathInterests.toMutableSet(),
+                        pathChoices = day.pathChoices.toMutableSet(),
+                        outcomes = day.outcomes.toMutableSet(),
+                        systems = day.systems.toMutableSet(),
+                        actionCounts = day.actionCounts.toMutableMap(),
+                        details = day.details.mapValuesTo(linkedMapOf()) { (_, values) ->
+                            values.mapValuesTo(linkedMapOf()) { (_, detail) -> detail.copy() }
+                        },
+                        exits = day.exits.mapValuesTo(linkedMapOf()) { (_, exit) -> exit.copy(trail = exit.trail.toList()) },
+                        recentTrail = day.recentTrail.toMutableList(),
+                        externalEvents = day.externalEvents.toMutableMap(),
+                        jobWork = day.jobWork.mapValuesTo(linkedMapOf()) { (_, totals) -> totals.copy() },
+                    )
+                },
+            )
+        }
+        return ProductInterestStore(path, config, gson, copiedPlayers, lastSavedAt, measurementBoundaryAt, recoveredInvalidPath).also {
+            it.uiDroppedEvents = uiDroppedEvents
+            it.capacityEvictions = capacityEvictions
+            it.resultObservationStartedAt = resultObservationStartedAt
+            it.engagementObservationStartedAt = engagementObservationStartedAt
+            it.parsedDates.putAll(parsedDates)
+        }
+    }
+
+    private fun snapshotMetrics(now: Long, scope: String): List<MetricPoint> {
         val today = localDate(now)
         val points = mutableListOf<MetricPoint>()
         points += point("arc_product_measurement_version", "Product measurement semantics version", 3, scope)
@@ -1244,7 +1288,14 @@ class ProductInterestStore private constructor(
 
     private fun dayKey(timestamp: Long): String = localDate(timestamp).toString()
 
-    private fun parseDate(value: String): LocalDate? = runCatching { LocalDate.parse(value) }.getOrNull()
+    private fun parseDate(value: String): LocalDate? {
+        parsedDates[value]?.let { return it }
+        if (parsedDates.containsKey(value)) return null
+        val parsed = runCatching { LocalDate.parse(value) }.getOrNull()
+        if (parsedDates.size >= MAX_PARSED_DATES) parsedDates.clear()
+        parsedDates[value] = parsed
+        return parsed
+    }
 
     private fun outcomePath(label: String): ProductPath? = ProductOutcome.entries.firstOrNull { it.label == label }?.path
 
@@ -1274,6 +1325,7 @@ class ProductInterestStore private constructor(
         private val SOURCE = Regex("[a-z0-9_.-]{1,32}")
         private const val OTHER_DETAIL = "__other__"
         private const val OVERFLOW_SOURCE = "overflow"
+        private const val MAX_PARSED_DATES = 128
         private val WINDOWS = listOf(1, 7, 28)
 
         fun open(

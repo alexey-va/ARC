@@ -75,6 +75,7 @@ object MetricsModule : PluginModule {
     private var metricsEvents: EventScope? = null
     private var fastTask: ScheduledTask? = null
     private var heavyTask: ScheduledTask? = null
+    private var productSnapshotTask: ScheduledTask? = null
     private var persistenceTask: ScheduledTask? = null
     private var measurementTask: ScheduledTask? = null
 
@@ -372,7 +373,7 @@ object MetricsModule : PluginModule {
                 }
             }
             sampleFast()
-            if (platformHeavyEnabled || product != null) sampleHeavy()
+            if (platformHeavyEnabled) sampleHeavy()
             fastTask =
                 repeating(
                     cfg.sampleIntervalSeconds.seconds,
@@ -380,13 +381,28 @@ object MetricsModule : PluginModule {
                 ) {
                     sampleFast()
                 }
-            if (platformHeavyEnabled || product != null) {
+            if (platformHeavyEnabled) {
                 heavyTask =
                     repeating(
                         cfg.heavySampleIntervalSeconds.seconds,
                         delay = cfg.heavySampleIntervalSeconds.seconds,
                     ) {
                         sampleHeavy()
+                    }
+            }
+            if (product != null) {
+                val ui = productUi
+                val redis = ARC.redisManager
+                // Capture this lifecycle's instances so an in-flight callback
+                // cannot publish stale data into a newly reloaded runtime.
+                productSnapshotTask =
+                    repeatingAsync(
+                        cfg.heavySampleIntervalSeconds.seconds,
+                        delay = 0.seconds,
+                    ) {
+                        metrics.recordSnapshot("product-interest", "product") {
+                            product.snapshot(redis?.isConnected() == true) + ui?.snapshot().orEmpty()
+                        }
                     }
             }
             if (product != null) {
@@ -439,6 +455,7 @@ object MetricsModule : PluginModule {
                 )
         }
         dungeonInterest?.sample()
+        productUi?.refreshSnapshot()
         productInterest?.let { product ->
             val dungeonConfig = activeDungeonConfig ?: DungeonInterestConfig(enabled = false)
             product.sample(Bukkit.getOnlinePlayers().map { it.sample(dungeonConfig) })
@@ -449,11 +466,6 @@ object MetricsModule : PluginModule {
         val metrics = runtime ?: return
         val paper = collector ?: return
         if (platformHeavyEnabled) metrics.recordSnapshot("paper-heavy", "platform-heavy", paper::heavySnapshot)
-        productInterest?.let { product ->
-            metrics.recordSnapshot("product-interest", "product") {
-                product.snapshot(ARC.redisManager?.isConnected() == true) + productUi?.snapshot().orEmpty()
-            }
-        }
     }
 
     override fun reload() = init()
@@ -461,10 +473,12 @@ object MetricsModule : PluginModule {
     override fun shutdown() {
         fastTask?.cancel()
         heavyTask?.cancel()
+        productSnapshotTask?.cancel()
         persistenceTask?.cancel()
         measurementTask?.cancel()
         fastTask = null
         heavyTask = null
+        productSnapshotTask = null
         persistenceTask = null
         measurementTask = null
         metricsEvents?.unregisterAll()

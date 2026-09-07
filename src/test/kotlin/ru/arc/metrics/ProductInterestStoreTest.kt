@@ -9,9 +9,40 @@ import ru.arc.product.ProductOnboardingHint
 import java.nio.file.Files
 import java.time.Instant
 import java.time.ZoneId
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 class ProductInterestStoreTest :
     StringSpec({
+        "rolling snapshots preserve events written concurrently" {
+            val now = Instant.parse("2026-08-16T12:00:00Z").toEpochMilli()
+            val path = Files.createTempDirectory("product-concurrent-snapshot-").resolve("period.json")
+            val store = ProductInterestStore.open(path, ProductInterestConfig(networkEnabled = false), now)
+            val player = ProductPseudonym.of("snapshot-writer")
+            val start = CountDownLatch(1)
+            val executor = Executors.newFixedThreadPool(2)
+            try {
+                val reader = executor.submit {
+                    start.await()
+                    repeat(12) { store.snapshot(now + 1_000, "network") }
+                }
+                val writer = executor.submit {
+                    start.await()
+                    repeat(200) { store.apply(signal(player, now + it, ProductEventKind.SESSION_START)) }
+                }
+                start.countDown()
+                writer.get(10, TimeUnit.SECONDS)
+                reader.get(10, TimeUnit.SECONDS)
+                store.report(now + 1_000, 1, 10)["sessions"] shouldBe 200L
+                store.flush(now + 1_000, force = true)
+                val restored = ProductInterestStore.open(path, ProductInterestConfig(networkEnabled = false), now + 1_000)
+                restored.snapshot(now + 1_000, "network") shouldBe store.snapshot(now + 1_000, "network")
+            } finally {
+                executor.shutdownNow()
+            }
+        }
+
         "network boundary is not lowered when the local clock is behind after reopening" {
             val now = Instant.parse("2026-08-16T12:00:00Z").toEpochMilli()
             val path = Files.createTempDirectory("product-clock-boundary-").resolve("period.json")
