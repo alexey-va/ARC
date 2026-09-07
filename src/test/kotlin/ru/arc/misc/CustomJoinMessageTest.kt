@@ -6,6 +6,21 @@ import io.kotest.matchers.shouldBe
 import ru.arc.util.Common
 
 class CustomJoinMessageTest : FreeSpec({
+    "legacy prefix becomes editable and full templates never acquire another prefix" {
+        CustomJoinMessage.editable("вернулся", "<green>● ") shouldBe "<green>● %player_name% вернулся"
+        val full = "<gold>◆ <white>%player_name% вернулся"
+        CustomJoinMessage.editable(full, "<green>● ") shouldBe full
+        CustomJoinMessage.editable("%player_name% вернулся", "<green>● ") shouldBe "%player_name% вернулся"
+        val old = Common.gson.fromJson("""{"catalogId":"catalog","revision":"old"}""", JoinMessageCatalog::class.java)
+        old.prefix(true) shouldBe "<dark_green>● "
+        old.prefix(false) shouldBe "<dark_red>● "
+        val catalog = JoinMessageCatalog(joinPrefix = "", leavePrefix = "<red>◆ ")
+        val restored = Common.gson.fromJson(Common.gson.toJson(catalog), JoinMessageCatalog::class.java)
+        restored.prefix(true) shouldBe ""
+        old.merge(restored)
+        old.prefix(false) shouldBe "<red>◆ "
+    }
+
     "old Redis records retain selections and acquire an empty personal library" {
         val data = Common.gson.fromJson(
             """{"player":"Viewer","joinMessages":["old"],"leaveMessages":[],"timestamp":1}""",

@@ -45,8 +45,9 @@ internal object CustomJoinMessage {
 
     fun selectionKey(message: String): String = if (PLAYER in message) FULL_PREFIX + message else "$PLAYER $message"
 
-    fun editable(message: String): String = if (PLAYER in message) message else "$PLAYER $message"
+    fun editable(message: String, legacyPrefix: String = ""): String =
+        if (PLAYER in message) message else "$legacyPrefix$PLAYER $message"
 
-    fun render(message: String, playerName: String): Component = Component.empty().decoration(TextDecoration.ITALIC, false)
-        .append(miniMessage.deserialize(editable(message).replace(PLAYER, playerName)))
+    fun render(message: String, playerName: String, legacyPrefix: String = ""): Component = Component.empty().decoration(TextDecoration.ITALIC, false)
+        .append(miniMessage.deserialize(editable(message, legacyPrefix).replace(PLAYER, playerName)))
 }

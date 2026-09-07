@@ -48,7 +48,7 @@ internal class JoinMessageDialogs(
         }
         val defaults = bundledText("join-message-dialog.yml")
         var changed = false
-        bundledText("join-message-dialog-legacy.yml").forEach { (key, old) ->
+        listOf("join-message-dialog-legacy.yml", "join-message-dialog-v2.yml").flatMap { bundledText(it).entries }.forEach { (key, old) ->
             val replacement = defaults[key] as? String
             if (replacement != null && replacement != old && config.string("text.$key").replace("<color:#", "<#") == old) {
                 config.setString("text.$key", replacement)
@@ -76,16 +76,16 @@ internal class JoinMessageDialogs(
             )
             JoinMessageCatalogManager.currentAsync()
                 .thenCombine(JoinMessagesManager.getOrCreateAsync(player.name)) { catalog, data ->
-                    Triple(catalog.entries(isJoin).map { it.copy() }, data.selectedMessages(isJoin), data.customMessages(isJoin))
+                    Triple(catalog.entries(isJoin).map { it.copy() } to catalog.prefix(isJoin), data.selectedMessages(isJoin), data.customMessages(isJoin))
                 }.whenComplete { result, failure ->
                     sync {
                         if (!current(player, generation)) return@sync
                         if (failure != null || result == null) {
                             reportFailure(player, failure ?: IllegalStateException("Missing message catalog"))
                         } else if (allowed(player, isJoin)) {
-                            val known = result.first.map { it.message }.toSet() + result.third.map(CustomJoinMessage::selectionKey)
+                            val known = result.first.first.map { it.message }.toSet() + result.third.map(CustomJoinMessage::selectionKey)
                             val removed = result.second - known
-                            if (removed.isEmpty()) openCatalog(player, isJoin, result.first, result.second, result.third, startPage)
+                            if (removed.isEmpty()) openCatalog(player, isJoin, result.first.first, result.second, result.third, startPage, result.first.second)
                             else finish(player, JoinMessagesManager.removeMessagesAsync(player.name, removed, isJoin)) {
                                 show(player, isJoin, startPage)
                             }
@@ -102,6 +102,7 @@ internal class JoinMessageDialogs(
         selected: Set<String>,
         custom: Set<String>,
         requestedPage: Int,
+        legacyPrefix: String,
     ) {
         advance(player)
         val entries = catalog.filter { config.bool("show-unavailable", true) || it.permission == null || player.hasPermission(it.permission!!) }
@@ -112,8 +113,8 @@ internal class JoinMessageDialogs(
         val buttons = custom.drop(page * pageSize).take(pageSize).mapIndexed { index, message ->
             val current = CustomJoinMessage.selectionKey(message) in selected
             val available = player.hasPermission(CUSTOM_PERMISSION)
-            val preview = CustomJoinMessage.render(message, player.name)
-            val label = text(if (current) "custom-selected" else if (available) "custom-unselected" else "custom-locked", "message" to preview)
+            val preview = CustomJoinMessage.render(message, player.name, legacyPrefix)
+            val label = text(if (current) "custom-selected" else if (available) "custom-unselected" else "custom-locked", "message" to plainLabel(preview))
             button("own_$index", label, isJoin, custom = true, tooltip = preview.append(Component.newline())
                 .append(text("custom-description")).append(Component.newline())
                 .append(text(if (!available) "unavailable" else if (current) "turn-off" else "turn-on"))) { context ->
@@ -127,19 +128,19 @@ internal class JoinMessageDialogs(
             val available = entry.permission == null || player.hasPermission(entry.permission!!)
             val current = entry.message in selected
             val preview = preview(entry.message, player.name)
-            val label = text(if (current) "selected" else if (!available) "locked" else "unselected", "message" to preview)
+            val label = text(if (current) "selected" else if (!available) "locked" else "unselected", "message" to plainLabel(preview))
             button("phrase_$index", label, isJoin, tooltip = preview.append(Component.newline()).append(text(
                 if (current) "turn-off" else if (!available) "unavailable" else "turn-on",
             ))) { context ->
                 selectCatalogMessage(context.player, entry, isJoin, !current, page)
             }
         }
-        if (page + 1 < pages) buttons += button("next", text("next"), isJoin) { show(it.player, isJoin, page + 1) }
-        if (page > 0) buttons += button("previous", text("previous"), isJoin) { show(it.player, isJoin, page - 1) }
         if (player.hasPermission(CUSTOM_PERMISSION)) {
             buttons += button("custom", text("custom-list"), isJoin, custom = true) { showCustom(it.player, isJoin, page) }
         }
         buttons += button("switch", text(if (isJoin) "switch-leave" else "switch-join"), isJoin) { show(it.player, !isJoin) }
+        buttons += button("previous", text("previous"), isJoin) { show(it.player, isJoin, (page + pages - 1) % pages) }
+        buttons += button("next", text("next"), isJoin) { show(it.player, isJoin, (page + 1) % pages) }
         ArcMenus.openDialog(player, PaperDialogScreen(
             id = "messages.catalog.${if (isJoin) "join" else "leave"}",
             title = text(if (isJoin) "join-title" else "leave-title"),
@@ -181,22 +182,25 @@ internal class JoinMessageDialogs(
             text(if (isJoin) "custom-join-title" else "custom-leave-title"),
             reopen = { showCustom(player, isJoin, catalogPage) },
         )
-        JoinMessagesManager.getOrCreateAsync(player.name).whenComplete { data, failure ->
+        JoinMessagesManager.getOrCreateAsync(player.name)
+            .thenCombine(JoinMessageCatalogManager.currentAsync()) { data, catalog -> data to catalog.prefix(isJoin) }
+            .whenComplete { result, failure ->
             sync {
                 if (!current(player, generation, isJoin, custom = true)) return@sync
-                if (failure != null || data == null) {
+                if (failure != null || result == null) {
                     reportFailure(player, failure ?: IllegalStateException("Missing message preferences"))
                     return@sync
                 }
                 if (!allowed(player, isJoin, custom = true)) return@sync
+                val (data, legacyPrefix) = result
                 val custom = data.customMessages(isJoin)
                 val selected = data.selectedMessages(isJoin)
                 val buttons = custom.mapIndexed { index, message ->
                     val current = CustomJoinMessage.selectionKey(message) in selected
-                    val preview = CustomJoinMessage.render(message, player.name)
-                    button("custom_$index", text(if (current) "manage-selected" else "manage-unselected", "message" to preview), isJoin,
+                    val preview = CustomJoinMessage.render(message, player.name, legacyPrefix)
+                    button("custom_$index", text(if (current) "manage-selected" else "manage-unselected", "message" to plainLabel(preview)), isJoin,
                         custom = true, tooltip = preview.append(Component.newline()).append(text("manage"))) {
-                        openCustomMessage(it.player, isJoin, catalogPage, message, current)
+                        openCustomMessage(it.player, isJoin, catalogPage, message, current, legacyPrefix)
                     }
                 }.toMutableList()
                 if (custom.size < CustomJoinMessage.MAX_SAVED) {
@@ -214,12 +218,12 @@ internal class JoinMessageDialogs(
         }
     }
 
-    private fun openCustomMessage(player: Player, isJoin: Boolean, catalogPage: Int, message: String, selected: Boolean) {
+    private fun openCustomMessage(player: Player, isJoin: Boolean, catalogPage: Int, message: String, selected: Boolean, legacyPrefix: String) {
         advance(player)
         ArcMenus.openDialog(player, PaperDialogScreen(
             id = "messages.custom.detail.${if (isJoin) "join" else "leave"}",
             title = text("custom-detail-title"),
-            body = listOf(PaperDialogBody(CustomJoinMessage.render(message, player.name), width)),
+            body = listOf(PaperDialogBody(CustomJoinMessage.render(message, player.name, legacyPrefix), width)),
             buttons = listOf(
                 button("toggle", text(if (selected) "turn-off" else "turn-on"), isJoin, custom = true) {
                     finish(it.player, JoinMessagesManager.selectCustomMessageAsync(it.player.name, message, isJoin, !selected)) {
@@ -227,7 +231,7 @@ internal class JoinMessageDialogs(
                     }
                 },
                 button("edit", text("edit-message"), isJoin, custom = true) {
-                    openEditor(it.player, isJoin, catalogPage, CustomJoinMessage.editable(message), original = message)
+                    openEditor(it.player, isJoin, catalogPage, CustomJoinMessage.editable(message, legacyPrefix), original = message)
                 },
                 button("delete", text("delete"), isJoin, custom = true) {
                     finish(it.player, JoinMessagesManager.deleteCustomMessageAsync(it.player.name, message, isJoin)) {
@@ -247,12 +251,15 @@ internal class JoinMessageDialogs(
             text("custom-detail-title"),
             reopen = { reopenCustomMessage(player, isJoin, catalogPage, message) },
         )
-        JoinMessagesManager.getOrCreateAsync(player.name).whenComplete { data, failure ->
+        JoinMessagesManager.getOrCreateAsync(player.name)
+            .thenCombine(JoinMessageCatalogManager.currentAsync()) { data, catalog -> data to catalog.prefix(isJoin) }
+            .whenComplete { result, failure ->
             sync {
                 if (!current(player, generation, isJoin, custom = true)) return@sync
+                val data = result?.first
                 val current = data?.customMessages(isJoin)?.firstOrNull { it == message }
                 if (failure != null || current == null) showCustom(player, isJoin, catalogPage)
-                else openCustomMessage(player, isJoin, catalogPage, current, CustomJoinMessage.selectionKey(current) in data.selectedMessages(isJoin))
+                else openCustomMessage(player, isJoin, catalogPage, current, CustomJoinMessage.selectionKey(current) in data.selectedMessages(isJoin), result.second)
             }
         }
     }
@@ -283,23 +290,7 @@ internal class JoinMessageDialogs(
             }),
             exitButton = button("back", text("back-custom"), isJoin) {
                 if (original == null) showCustom(it.player, isJoin, catalogPage)
-                else {
-                    val generation = advance(it.player)
-                    showLoading(
-                        it.player,
-                        "messages.custom.detail.${if (isJoin) "join" else "leave"}",
-                        text("custom-detail-title"),
-                        reopen = { reopenCustomMessage(it.player, isJoin, catalogPage, original) },
-                    )
-                    JoinMessagesManager.getOrCreateAsync(it.player.name).whenComplete { data, failure ->
-                        sync {
-                            if (!current(player, generation, isJoin, custom = true)) return@sync
-                            if (failure != null) reportFailure(player, failure)
-                            else if (original !in data.customMessages(isJoin)) showCustom(player, isJoin, catalogPage)
-                            else openCustomMessage(player, isJoin, catalogPage, original, CustomJoinMessage.selectionKey(original) in data.selectedMessages(isJoin))
-                        }
-                    }
-                }
+                else reopenCustomMessage(it.player, isJoin, catalogPage, original)
             },
         ), onDismiss = { invalidate(player) })
     }
@@ -414,6 +405,9 @@ internal class JoinMessageDialogs(
         config.string("text.$key", key),
         TagResolver.resolver(values.map { (name, value) -> Placeholder.component(name, value as? Component ?: Component.text(value.toString())) }),
     ).decoration(TextDecoration.ITALIC, false)
+
+    private fun plainLabel(component: Component): Component =
+        Component.text(PlainTextComponentSerializer.plainText().serialize(component))
 
     private fun preview(template: String, playerName: String): Component = Component.text(
         PlainTextComponentSerializer.plainText().serialize(TextUtil.mm(template.replace("%player_name%", playerName), true)),

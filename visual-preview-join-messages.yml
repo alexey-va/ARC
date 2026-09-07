@@ -21,7 +21,7 @@ placeholders:
   pages: '10'
   selected: '2'
   count: '2'
-  limit: '120'
+  limit: '512'
   message: 'Архитектор23 выполз из своей пещеры'
 
 surfaces:
@@ -66,18 +66,10 @@ surfaces:
           tooltip-key: unavailable
           width: 600
           placeholders: {message: 'Архитектор23 прибыл и готов на всё, лишь бы не работать'}
-        - id: next
-          text-key: next
-          tooltip-key: next
-          width: 600
-        - id: custom
-          text-key: custom-list
-          tooltip-key: custom-list
-          width: 600
-        - id: switch
-          text-key: switch-leave
-          tooltip-key: switch-leave
-          width: 600
+        - {id: custom, text-key: custom-list, tooltip-key: custom-list, width: 600}
+        - {id: switch, text-key: switch-leave, tooltip-key: switch-leave, width: 600}
+        - {id: previous, text-key: previous, tooltip-key: previous, width: 600}
+        - {id: next, text-key: next, tooltip-key: next, width: 600}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -97,10 +89,10 @@ surfaces:
         - {id: available-4, text-key: unselected, tooltip-key: turn-on, width: 600, placeholders: {message: 'Архитектор23 ушёл, потому что тут хрен делать'}}
         - {id: available-5, text-key: unselected, tooltip-key: turn-on, width: 600, placeholders: {message: 'Архитектор23 исчез, как последний шанс на победу'}}
         - {id: locked-6, text-key: locked, tooltip-key: unavailable, width: 600, placeholders: {message: 'Архитектор23 свалил, потому что всё это задолбало'}}
-        - {id: next, text-key: next, tooltip-key: next, width: 600}
-        - {id: previous, text-key: previous, tooltip-key: previous, width: 600}
         - {id: custom, text-key: custom-list, tooltip-key: custom-list, width: 600}
         - {id: switch, text-key: switch-join, tooltip-key: switch-join, width: 600}
+        - {id: previous, text-key: previous, tooltip-key: previous, width: 600}
+        - {id: next, text-key: next, tooltip-key: next, width: 600}
       viewport: [854, 480]
       variants: [{id: default}]
 

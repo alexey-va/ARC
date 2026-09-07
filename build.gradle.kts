@@ -552,6 +552,9 @@ val prepareContractE2e = tasks.register("prepareContractE2e") {
                 """.trimIndent() + "\n",
             )
         }
+        generatedDir.resolve("redis-test.json").writeText(
+            "{\"host\":\"${endpoint.host}\",\"port\":${endpoint.port}}\n",
+        )
         val jar = e2eRedisEconomy.resolve().single { it.name == "rediseconomy-4.5.12.jar" }
         check(MessageDigest.getInstance("SHA-256").digest(jar.readBytes())
             .joinToString("") { "%02x".format(it) } ==

@@ -90,7 +90,7 @@ class JoinMessageDialogTest : FreeSpec({
                 permission = if (it == 2) "rank.vip" else null)
         }
         every { JoinMessageCatalogManager.currentAsync() } returns CompletableFuture.completedFuture(
-            JoinMessageCatalog(revision = "test", join = entries, leave = listOf(JoinMessageCatalogEntry(id = "leave-1", message = "%player_name% ушёл"))),
+            JoinMessageCatalog(revision = "test", joinPrefix = "<green>● ", leavePrefix = "<red>◆ ", join = entries, leave = listOf(JoinMessageCatalogEntry(id = "leave-1", message = "%player_name% ушёл"))),
         )
         val scheduler = mockk<TaskScheduler>()
         every { scheduler.runSync(any()) } answers { firstArg<Runnable>().run(); mockk<ScheduledTask>(relaxed = true) }
@@ -130,7 +130,7 @@ class JoinMessageDialogTest : FreeSpec({
         old.setString("text.join-title", "Наш заголовок")
         val upgraded = JoinMessageDialogs(old, runOnMain)
         old.string("text.join-title") shouldBe "Наш заголовок"
-        old.string("text.custom-list") shouldContain "›"
+        old.string("text.custom-list") shouldBe "<#92bed8>Мои фразы ›"
         old.string("text.editor-help") shouldContain "%player_name%"
         upgraded.show(player)
         permissions += JoinMessageDialogs.CUSTOM_PERMISSION
@@ -138,6 +138,50 @@ class JoinMessageDialogTest : FreeSpec({
         click("custom")
         click("create")
         screen!!.inputs.single().initial shouldContain "%player_name%"
+    }
+
+    "full-template defaults migrate utilities without replacing operator labels" {
+        val dir = Files.createTempDirectory(directory, "v2")
+        val file = dir.resolve("modules/join-message-dialog.yml")
+        Files.createDirectories(file.parent)
+        javaClass.getResourceAsStream("/modules/join-message-dialog-v2.yml")!!.use { Files.copy(it, file) }
+        val old = Config(dir, "modules/join-message-dialog.yml")
+        old.setString("text.create", "Моя кнопка")
+        JoinMessageDialogs(old, runOnMain)
+        old.string("text.create") shouldBe "Моя кнопка"
+        old.string("text.custom-list") shouldBe "<#92bed8>Мои фразы ›"
+        old.string("text.editor-help") shouldContain "точку"
+    }
+
+    "content state colors stay separate from utilities even for colored custom templates" {
+        permissions += JoinMessageDialogs.CUSTOM_PERMISSION
+        data.addCustomMessage("<#aaa49a>● %player_name% дома", true)
+        dialogs.show(player)
+        val buttons = screen!!.buttons.associateBy { it.id.value }
+        fun colors(c: Component): List<String> = listOfNotNull(c.color()?.asHexString()?.lowercase()) + c.children().flatMap(::colors)
+        colors(buttons.getValue("own_0").label).toSet() shouldBe setOf("#9bd48d")
+        colors(buttons.getValue("phrase_0").label).toSet() shouldBe setOf("#aaa49a")
+        listOf("custom", "switch", "next").forEach {
+            colors(buttons.getValue(it).label).toSet() shouldBe setOf("#92bed8")
+        }
+        plain(buttons.getValue("own_0").tooltip) shouldContain "● Viewer дома"
+    }
+
+    "pagination is always last and wraps both ways including a single page" {
+        permissions += JoinMessageDialogs.CUSTOM_PERMISSION
+        dialogs.show(player)
+        screen!!.buttons.takeLast(4).map { it.id.value } shouldBe listOf("custom", "switch", "previous", "next")
+        click("previous")
+        plain(screen!!.body[1].text) shouldContain "3/3"
+        click("next")
+        plain(screen!!.body[1].text) shouldContain "1/3"
+        click("switch")
+        repeat(2) {
+            click("next")
+            plain(screen!!.body[1].text) shouldContain "1/1"
+            click("previous")
+            plain(screen!!.body[1].text) shouldContain "1/1"
+        }
     }
 
     "wide single-column pages toggle selections and keep page while switching join and leave" {
@@ -148,7 +192,7 @@ class JoinMessageDialogTest : FreeSpec({
         screen!!.buttons.none { it.id.value == "custom" } shouldBe true
         plain(screen!!.buttons.first().label) shouldBe "○ Viewer принёс уют 1"
         click("phrase_0")
-        plain(screen!!.buttons.first().label) shouldContain "✔ Вкл."
+        plain(screen!!.buttons.first().label) shouldContain "✔ Viewer"
         click("phrase_0")
         data.selectedMessages(true) shouldBe emptySet()
         click("next")
@@ -171,7 +215,7 @@ class JoinMessageDialogTest : FreeSpec({
         (1..10).forEach { data.addCustomMessage("своя фраза $it", true) }
         dialogs.show(player)
         plain(screen!!.body[1].text) shouldContain "1/4"
-        plain(screen!!.buttons.first().label) shouldBe "★ ✔ Вкл. · Viewer своя фраза 1"
+        plain(screen!!.buttons.first().label) shouldBe "★ ✔ ● Viewer своя фраза 1"
         plain(screen!!.buttons.first().tooltip) shouldContain "Своя фраза"
         val phrases = mutableListOf<String>()
         repeat(4) { page ->
@@ -187,7 +231,7 @@ class JoinMessageDialogTest : FreeSpec({
         screen!!.buttons.count { it.id.value.startsWith("phrase_") } shouldBe 2
         click("own_0")
         plain(screen!!.body[1].text) shouldContain "2/4"
-        plain(screen!!.buttons.first().label) shouldBe "★ ○ Viewer своя фраза 7"
+        plain(screen!!.buttons.first().label) shouldBe "★ ○ ● Viewer своя фраза 7"
         (CustomJoinMessage.selectionKey("своя фраза 7") in data.selectedMessages(true)) shouldBe false
         click("own_0")
         (CustomJoinMessage.selectionKey("своя фраза 7") in data.selectedMessages(true)) shouldBe true
@@ -209,7 +253,7 @@ class JoinMessageDialogTest : FreeSpec({
         data.selectedMessages(true) shouldBe setOf("%player_name% принёс чай")
         data.updateMessage("%player_name% принёс чай", true, false)
         dialogs.show(player)
-        plain(screen!!.buttons.first().label) shouldBe "★ [Недоступно] Viewer принёс чай"
+        plain(screen!!.buttons.first().label) shouldBe "★ [Недоступно] ● Viewer принёс чай"
         screen!!.buttons.none { it.id.value == "custom" } shouldBe true
     }
 
@@ -276,7 +320,7 @@ class JoinMessageDialogTest : FreeSpec({
             click("custom")
             click("custom_0")
             click("edit")
-            screen!!.inputs.single().initial shouldBe "%player_name% старая фраза"
+            screen!!.inputs.single().initial shouldBe (if (isJoin) "<green>● " else "<red>◆ ") + "%player_name% старая фраза"
             val template = "<gold>✦ <aqua>%player_name% <gray>снова с нами"
             click("formatting", template)
             plain(screen!!.body[1].text) shouldContain "<gradient:#92bed8:#ffacd5>"

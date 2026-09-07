@@ -2,3 +2,7 @@ arc.e2e.board:
   default: true
   children:
     arc.board: true
+arc.e2e.join-message:
+  default: op
+  children:
+    arc.join.message.custom: true

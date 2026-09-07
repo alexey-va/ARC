@@ -31,6 +31,8 @@ class JoinMessageCatalog(
     @JvmField var updatedAt: Long = 0,
     @JvmField var join: List<JoinMessageCatalogEntry> = emptyList(),
     @JvmField var leave: List<JoinMessageCatalogEntry> = emptyList(),
+    @JvmField var joinPrefix: String? = null,
+    @JvmField var leavePrefix: String? = null,
 ) : Entity,
     Mergeable<JoinMessageCatalog> {
     override fun id(): String = catalogId
@@ -40,11 +42,17 @@ class JoinMessageCatalog(
         schemaVersion = other.schemaVersion
         revision = other.revision
         updatedAt = other.updatedAt
+        joinPrefix = other.joinPrefix
+        leavePrefix = other.leavePrefix
         join = other.join.map(JoinMessageCatalogEntry::copy)
         leave = other.leave.map(JoinMessageCatalogEntry::copy)
     }
 
     fun entries(isJoin: Boolean): List<JoinMessageCatalogEntry> = if (isJoin) join else leave
+
+    // Older publishers omit these fields; preserve their network defaults while upgrading.
+    fun prefix(isJoin: Boolean): String =
+        if (isJoin) joinPrefix ?: "<dark_green>● " else leavePrefix ?: "<dark_red>● "
 
     fun validate() {
         require(catalogId == CATALOG_ID) { "Unexpected join message catalog id: $catalogId" }

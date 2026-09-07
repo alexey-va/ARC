@@ -7,7 +7,7 @@ still published by ProxyARC through `arc.join_message_catalog`.
 ## Player flow
 
 - The catalog uses one column, six phrases per page, and 600 GUI-unit buttons.
-  Click a phrase to enable/disable it. `✔ Вкл.` and green text identify enabled
+  Click a phrase to enable/disable it. `✔` and green text identify enabled
   phrases; `[Недоступно]` identifies unavailable choices. The full phrase is also
   present in its tooltip. Extremely long operator-authored phrases can exceed a
   button at some client GUI scales; their tooltips preserve the complete text.
@@ -17,17 +17,26 @@ still published by ProxyARC through `arc.join_message_catalog`.
   marker and a tooltip identifying them. Clicking toggles them in place;
   editing and deleting remain in `Мои фразы`. Personal toggles recheck the
   custom permission, and saved phrases remain visible if that permission is lost.
-- Next/previous retain the message kind. The switch control opens the other kind.
+- Next/previous are always present at the bottom and wrap between the first
+  and last page. On a single page both keep that page. Personal settings and
+  the kind switch precede pagination. The switch control opens the other kind.
 - `Мои фразы` opens a separate personal library. Enter a full MiniMessage
   template, inspect the styled preview, then save and enable it. Use exactly one `%player_name%`
   wherever the name belongs. The template owns the prefix as well as nickname
   and body formatting; no network dot is added to new templates.
 - Open a saved phrase to edit, disable, enable or delete it. Editing preloads the
-  current template, replaces the same slot and preserves its enabled state.
+  current template, including the published network prefix for old suffix-only
+  phrases, replaces the same slot and preserves its enabled state. The dot and
+  its color can be replaced or removed entirely.
   A full ten-phrase library remains editable. Duplicate targets and a deleted
   source are rejected without deleting either phrase. Formatting help preserves
   the unsaved draft, and preview Back returns to that draft.
-- Dialog actions follow the main menu palette (`#d7b486`, `#9bd48d`, `#aaa49a`),
+- Phrase buttons use neutral `#aaa49a` for disabled and green `#9bd48d` for enabled
+  states. Only `○` / `✔` and color change on toggle; no state words or extra
+  separators are inserted. Tooltips explain the available action. Utilities (personal library, settings, pagination
+  and navigation) use blue `#92bed8`; deletion uses red. Personal template
+  colors appear in tooltips and previews, while button labels retain state colors.
+  Dialog actions
   use `›` for child screens and `‹ Назад` for returns. Existing operator text is
   preserved; values equal to the previous bundled defaults migrate automatically.
 
@@ -59,6 +68,10 @@ A legacy custom selection key is `%player_name% ` followed by its suffix.
 A full template contains `%player_name%` and its selection key is `<reset>`
 followed by the template. That leading reset also tells ProxyARC to omit the
 family prefix. The shared selection strings remain the existing wire format.
+The catalog also publishes nullable `joinPrefix` / `leavePrefix` fields so ARC
+can expose the actual legacy prefix in the editor and preview. Missing fields
+from older publishers use the previous green/red dot defaults; an explicitly
+empty prefix remains empty. Prefix-only changes update the catalog revision.
 
 Each library has at most ten phrases. Legacy suffixes keep their 120 UTF-16
 limit. New templates permit 512 UTF-16 code units and 160 rendered characters
