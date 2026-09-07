@@ -129,6 +129,11 @@ private class MutableCurrencyStats {
     var records = 0L
     val players = linkedSetOf<String>()
     val sourceStats = linkedMapOf<String, MutableAuditStats>()
+    private val actionStats = linkedMapOf<EconomyActionKey, MutableAuditStats>()
+    private val unknownOrigins = linkedMapOf<String, MutableAuditStats>()
+    private var unclassifiedAmount = 0.0
+    private var unclassifiedOperations = 0L
+    private var absoluteAmount = 0.0
 
     fun add(player: String, transaction: Transaction, since: Long) {
         val amount = transaction.amount
@@ -145,6 +150,16 @@ private class MutableCurrencyStats {
         players += player
         sourceStats.computeIfAbsent(transaction.normalizedSource.label) { MutableAuditStats(trackBalanceProfile = true) }
             .add(player, transaction, since)
+        actionStats.computeIfAbsent(EconomyActionKey(transaction.normalizedSource.label, transaction.normalizedAction.label)) {
+            MutableAuditStats()
+        }.add(player, transaction, since)
+        absoluteAmount += transaction.absoluteAmount
+        if (transaction.normalizedSource in setOf(EconomySource.UNKNOWN, EconomySource.LEGACY)) {
+            unclassifiedAmount += transaction.absoluteAmount
+            unclassifiedOperations += transaction.occurrenceCount
+            unknownOrigins.computeIfAbsent(transaction.origin.orEmpty().ifBlank { "unresolved" }) { MutableAuditStats() }
+                .add(player, transaction, since)
+        }
     }
 
     fun toMap(): Map<String, Any?> = linkedMapOf(
@@ -161,6 +176,16 @@ private class MutableCurrencyStats {
         "records" to records,
         "players" to players.size,
         "sources" to sourceStats.toSortedMap().map { (source, stats) -> stats.toMap("source", source) },
+        "actions" to actionStats.entries.sortedWith(compareBy({ it.key.source }, { it.key.action })).map { (key, stats) ->
+            stats.toMap("action", key.action) + ("source" to key.source)
+        },
+        "unknownOrigins" to unknownOrigins.toSortedMap().map { (origin, stats) -> stats.toMap("origin", origin) },
+        "sourceCoverage" to linkedMapOf(
+            "unclassifiedOperations" to unclassifiedOperations,
+            "unclassifiedAbsoluteAmount" to unclassifiedAmount,
+            "classifiedOperationRatio" to if (operations > 0) 1.0 - unclassifiedOperations.toDouble() / operations else null,
+            "classifiedAmountRatio" to if (absoluteAmount > 0.0) 1.0 - unclassifiedAmount / absoluteAmount else null,
+        ),
     )
 }
 

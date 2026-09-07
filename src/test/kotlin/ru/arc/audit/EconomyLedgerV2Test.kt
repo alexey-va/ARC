@@ -223,6 +223,21 @@ class EconomyLedgerV2Test : FreeSpec({
             EconomyPendingContextTracker.consume(playerId, 50.0, 1_101)?.correlationId shouldBe "unscoped"
         }
 
+        "does not let an unknown provider event consume a known external marker" {
+            val playerId = UUID.randomUUID()
+            EconomyPendingContextTracker.register(
+                playerId,
+                50.0,
+                EconomyLedgerContext(correlationId = "voting-marker"),
+                1_000,
+                EconomySource.VOTING,
+                "tokens",
+            )
+
+            consumePendingEconomyContext(playerId, 50.0, 1_100, EconomySource.UNKNOWN)?.correlationId shouldBe null
+            consumePendingEconomyContext(playerId, 50.0, 1_101, EconomySource.VOTING)?.correlationId shouldBe "voting-marker"
+        }
+
         "removes a failed pre-transaction without disturbing an equal Jobs payout" {
             val playerId = UUID.randomUUID()
             EconomyPendingContextTracker.register(

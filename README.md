@@ -101,3 +101,14 @@ retention and saves; no second persistence lifecycle is introduced.
 
 Check with `./gradlew test --tests 'ru.arc.metrics.Product*'` and `./gradlew test shadowJar`.
 Dashboard definitions and interpretation are in the ops [product-interest runbook](../ruscrafting-ops/docs/runbooks/product-interest.md).
+
+## External economy attribution
+
+ARC is the sole owner of economy audit persistence. Optional Paper plugins may
+call `ru.arc.audit.ExternalEconomyAuditBridge.markExternalReward` immediately
+before a known Vault or RedisEconomy reward, using only the bounded source/action
+pairs `voting/vote_reward`, `ranks/contract_reward`, and `farms/farm_reward`, the actual currency name,
+and their durable reward identity. Keep the returned marker until the provider
+event arrives; call `cancel` only when the provider rejects or throws. ARC
+matches player, amount, source, and currency. Unknown provider events never
+consume a marker, and historical records remain unchanged.

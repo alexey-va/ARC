@@ -12,6 +12,7 @@ enum class EconomySource(val label: String, val type: Type) {
     BATTLE_PASS("battle_pass", Type.OTHER),
     REFERRAL("referral", Type.OTHER),
     VOTING("voting", Type.OTHER),
+    RANKS("ranks", Type.OTHER),
     PLAYER_TRANSFER("player_transfer", Type.PAY),
     QUICKSHOP("quickshop", Type.CHEST_SHOP),
     AUCTION("auction", Type.AUCTION),
@@ -22,6 +23,7 @@ enum class EconomySource(val label: String, val type: Type) {
     QUESTS("quests", Type.QUEST),
     GAMBLING("gambling", Type.GAMBLING),
     PUBLIC_PROJECTS("public_projects", Type.ARC),
+    RESOURCE_CONTRACTS("resource_contracts", Type.ARC),
     FARMS("farms", Type.ARC),
     DUNGEON_ENTRY("dungeon_entry", Type.ARC),
     MOUNTS("mounts", Type.ARC),
@@ -72,6 +74,9 @@ enum class EconomyAction(val label: String) {
     JOB_REWARD("job_reward"),
     QUEST_REWARD("quest_reward"),
     TREASURE_REWARD("treasure_reward"),
+    VOTE_REWARD("vote_reward"),
+    FARM_REWARD("farm_reward"),
+    CONTRACT_REWARD("contract_reward"),
     ELITEMOBS_REWARD("elitemobs_reward"),
     LAND_CHARGE("land_charge"),
     LAND_CREDIT("land_credit"),
@@ -158,6 +163,11 @@ object EconomyActionClassifier {
             EconomySource.JOBS -> if (amount > 0.0) EconomyAction.JOB_REWARD else EconomyAction.SOURCE_DEBIT
             EconomySource.QUESTS -> if (amount > 0.0) EconomyAction.QUEST_REWARD else EconomyAction.SOURCE_DEBIT
             EconomySource.TREASURE -> if (amount > 0.0) EconomyAction.TREASURE_REWARD else EconomyAction.SOURCE_DEBIT
+            EconomySource.VOTING -> if (amount > 0.0) EconomyAction.VOTE_REWARD else EconomyAction.SOURCE_DEBIT
+            EconomySource.RANKS -> if (amount > 0.0) EconomyAction.CONTRACT_REWARD else EconomyAction.SOURCE_DEBIT
+            EconomySource.FARMS -> if (amount > 0.0) EconomyAction.FARM_REWARD else EconomyAction.SOURCE_DEBIT
+            EconomySource.RESOURCE_CONTRACTS ->
+                if (amount > 0.0) EconomyAction.CONTRACT_REWARD else EconomyAction.SOURCE_DEBIT
             EconomySource.ELITEMOBS -> if (amount > 0.0) EconomyAction.ELITEMOBS_REWARD else EconomyAction.SOURCE_DEBIT
             EconomySource.LANDS -> if (amount > 0.0) EconomyAction.LAND_CREDIT else EconomyAction.LAND_CHARGE
             EconomySource.ADVANCED_ENCHANTMENTS ->
@@ -237,6 +247,7 @@ object EconomyAttributionResolver {
         return when {
             reason.equals("Payment", ignoreCase = true) -> EconomySource.PLAYER_TRANSFER
             haystack.contains("arc-season:public_projects:") -> EconomySource.PUBLIC_PROJECTS
+            haystack.contains("arc-contract:") -> EconomySource.RESOURCE_CONTRACTS
             haystack.contains("arc-season:dungeon_entry:") -> EconomySource.DUNGEON_ENTRY
             haystack.contains("arc-mount:") || haystack.contains("arc-mount-refund:") -> EconomySource.MOUNTS
             haystack.contains("reset balance") || haystack.contains("set balance") -> EconomySource.BALANCE_SET
@@ -252,6 +263,10 @@ object EconomyAttributionResolver {
             haystack.contains("excellentcrates") -> EconomySource.CRATES
             haystack.contains("battlepass") -> EconomySource.BATTLE_PASS
             haystack.contains("referral") -> EconomySource.REFERRAL
+            reason.equals("ArcVotes vote reward", ignoreCase = true) || haystack.contains("arcvotes") ||
+                haystack.contains("ru.ruscrafting.votes") -> EconomySource.VOTING
+            reason.equals("ArcRanks personal contract reward", ignoreCase = true) || haystack.contains("arcranks") ||
+                haystack.contains("ru.ruscrafting.ranks") -> EconomySource.RANKS
             haystack.contains("votifier") || haystack.contains("votingplugin") -> EconomySource.VOTING
             haystack.contains("quickshop") -> EconomySource.QUICKSHOP
             haystack.contains("zauction") -> EconomySource.AUCTION

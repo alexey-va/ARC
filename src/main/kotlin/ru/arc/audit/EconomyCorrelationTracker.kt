@@ -12,6 +12,7 @@ object EconomyPendingContextTracker {
         val expectedAmounts: List<Double>,
         val context: EconomyLedgerContext,
         val source: EconomySource?,
+        val currency: String?,
         val expiresAt: Long,
     )
 
@@ -23,9 +24,10 @@ object EconomyPendingContextTracker {
         context: EconomyLedgerContext,
         now: Long,
         source: EconomySource? = null,
+        currency: String? = null,
     ): String? {
         val amount = expectedAmount?.takeIf(Double::isFinite) ?: return null
-        return register(playerId, listOf(amount), context, now, source)
+        return register(playerId, listOf(amount), context, now, source, currency)
     }
 
     fun register(
@@ -34,27 +36,46 @@ object EconomyPendingContextTracker {
         context: EconomyLedgerContext,
         now: Long,
         source: EconomySource? = null,
+        currency: String? = null,
     ): String? {
         val amounts = expectedAmounts.asSequence().filter(Double::isFinite).distinct().toList()
         if (amounts.isEmpty()) return null
         val token = UUID.randomUUID().toString()
         val queue = pending.computeIfAbsent(playerId) { ConcurrentLinkedDeque() }
         queue.removeIf { it.expiresAt < now }
-        queue.addLast(Pending(token, amounts, context, source, now + TTL_MILLIS))
+        queue.addLast(Pending(token, amounts, context, source, normalizeCurrency(currency), now + TTL_MILLIS))
         while (queue.size > MAX_PENDING_PER_PLAYER) queue.pollFirst()
         return token
     }
 
-    fun consume(playerId: UUID, amount: Double, now: Long, source: EconomySource? = null): EconomyLedgerContext? {
+    data class Consumed(val source: EconomySource?, val context: EconomyLedgerContext)
+
+    fun consume(
+        playerId: UUID,
+        amount: Double,
+        now: Long,
+        source: EconomySource? = null,
+        currency: String? = null,
+    ): EconomyLedgerContext? = consumeMatch(playerId, amount, now, source, currency)?.context
+
+    fun consumeMatch(
+        playerId: UUID,
+        amount: Double,
+        now: Long,
+        source: EconomySource? = null,
+        currency: String? = null,
+    ): Consumed? {
         val queue = pending[playerId] ?: return null
         queue.removeIf { it.expiresAt < now }
+        val normalizedCurrency = normalizeCurrency(currency)
         val match = queue.firstOrNull { candidate ->
             (source == null || candidate.source == source) &&
+                (candidate.currency == null || normalizedCurrency == null || candidate.currency == normalizedCurrency) &&
                 candidate.expectedAmounts.any { approximatelyEqualMoney(it, amount) }
         }
         if (match != null) queue.remove(match)
         if (queue.isEmpty()) pending.remove(playerId, queue)
-        return match?.context?.asTransaction()
+        return match?.let { Consumed(it.source, it.context.asTransaction()) }
     }
 
     fun cancel(playerId: UUID, token: String) {
@@ -81,6 +102,9 @@ object EconomyPendingContextTracker {
 
     private const val TTL_MILLIS = 10_000L
     private const val MAX_PENDING_PER_PLAYER = 32
+
+    private fun normalizeCurrency(value: String?): String? =
+        value?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
 }
 
 /** Pairs the debit and credit sides of one player transfer without player labels in metrics. */

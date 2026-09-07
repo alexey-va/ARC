@@ -202,6 +202,23 @@ class EconomyAuditTest : FreeSpec({
             }
         }
 
+        "classifies explicit ArcVotes and ArcRanks reasons and legacy origins" {
+            EconomyAttributionResolver.resolve("ArcVotes vote reward", 3.0, "tokens", "survival")
+                .metadata.source shouldBe EconomySource.VOTING
+            EconomyAttributionResolver.resolve("ArcRanks personal contract reward", 2_000.0, "vault", "survival")
+                .metadata.source shouldBe EconomySource.RANKS
+            EconomyAttributionResolver.resolve(
+                "Deposit\nCall:ru.ruscrafting.ranks.contract.ContractRewardProvider",
+                2_000.0,
+                "vault",
+                "survival",
+            ).metadata.source shouldBe EconomySource.RANKS
+            EconomyAttributionResolver.resolve("arc-contract:abc", 50.0, "vault", "survival").metadata shouldBe
+                AuditMetadata(EconomySource.RESOURCE_CONTRACTS, EconomyFlow.MINT, "vault", "survival")
+            EconomyAttributionResolver.resolve("arc-contract:abc", -50.0, "vault", "survival")
+                .metadata.flow shouldBe EconomyFlow.BURN
+        }
+
         "keeps unresolved callers bounded as unknown" {
             val attribution =
                 EconomyAttributionResolver.resolve("Reward\nCall:example.newplugin.RewardService", 10.0, "vault", "spawn")

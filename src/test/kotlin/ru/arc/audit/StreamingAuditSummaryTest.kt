@@ -118,6 +118,9 @@ class StreamingAuditSummaryTest : FreeSpec({
         val mounts = (tokens["sources"] as List<*>).single { (it as Map<*, *>)["source"] == "mounts" } as Map<*, *>
         mounts["expense"] shouldBe 25.0
         mounts["records"] shouldBe 1L
+        val tokenActions = tokens["actions"] as List<*>
+        (tokenActions.single() as Map<*, *>)["expense"] shouldBe 25.0
+        (tokens["sourceCoverage"] as Map<*, *>)["unclassifiedAbsoluteAmount"] shouldBe 0.0
         (summary["totals"] as Map<*, *>)["legacyMixedCurrencyAggregation"] shouldBe true
     }
 })
