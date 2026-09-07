@@ -82,12 +82,14 @@ object DialogDemoModule : PluginModule, Listener {
     private fun gallery(family: String, page: Int): Dialog {
         val tables = family == "tables"
         val perPage = if (tables) 3 else 6
-        val pageCount = if (tables) 4 else 3
+        val itemCount = if (tables) DialogDesignGallery.TABLE_COUNT else DialogDesignGallery.DIVIDER_COUNT
+        val pageCount = (itemCount + perPage - 1) / perPage
         val bodies = mutableListOf(body("gallery.$family.intro"))
         bodies += DialogBody.plainMessage(text("gallery.page").replaceText {
             it.matchLiteral("%page%").replacement("${page + 1} / $pageCount")
         }, 400)
-        ((page * perPage + 1)..((page + 1) * perPage)).forEach { number ->
+        val last = minOf((page + 1) * perPage, itemCount)
+        ((page * perPage + 1)..last).forEach { number ->
             bodies += body("gallery.$family.$number.title")
             bodies += DialogBody.plainMessage(if (tables) DialogDesignGallery.table(number, ::text)
                 else DialogDesignGallery.divider(number, ::text), 400)
@@ -99,7 +101,7 @@ object DialogDemoModule : PluginModule, Listener {
             ActionButton.builder(label).width(96).tooltip(text("gallery.$family.page-${index + 1}"))
                 .action(command(if (index == 0) family else "$family-${index + 1}")).build()
         }
-        return dialog("title.$family", bodies, DialogType.multiAction(buttons, back(), pageCount))
+        return dialog("title.$family", bodies, DialogType.multiAction(buttons, back(), minOf(pageCount, 3)))
     }
     private fun item(material: Material, description: String, decorations: Boolean = true, tooltip: Boolean = true,
         width: Int = 16, height: Int = 16, amount: Int = 1): DialogBody {
@@ -115,7 +117,7 @@ object DialogDemoModule : PluginModule, Listener {
 
     fun open(player: Player, page: String = "root", value: String = "") {
         val screen = when (page) {
-            "tables", "tables-2", "tables-3", "tables-4" -> gallery("tables", page.substringAfter('-', "1").toInt() - 1)
+            "tables", "tables-2", "tables-3", "tables-4", "tables-5", "tables-6" -> gallery("tables", page.substringAfter('-', "1").toInt() - 1)
             "dividers", "dividers-2", "dividers-3" -> gallery("dividers", page.substringAfter('-', "1").toInt() - 1)
             "root" -> dialog("title.root", listOf(body("intro")),
                 DialogType.multiAction(pages.drop(1).map(::nav), button("close", custom("close"), 200), 2))

@@ -43,6 +43,18 @@ class DialogDesignGalleryTest : FreeSpec({
                             val width = if (point in 0xF0F01..0xF0F0A) {
                                 bold shouldBe false
                                 1 shl (point - 0xF0F01)
+                            } else if (point == 0xF0F11) {
+                                bold shouldBe false
+                                -1
+                            } else if (point in 0xE540..0xE59E && (point and 0xF) <= 14) {
+                                bold shouldBe false
+                                val style = (point - 0xE540) / 0x10
+                                when (point and 0xF) {
+                                    4 -> listOf(2, 2, 2, 4, 4, 9)[style]
+                                    5 -> listOf(6, 6, 6, 6, 6, 8)[style]
+                                    6 -> listOf(10, 10, 10, 8, 8, 8)[style]
+                                    else -> 10
+                                }
                             } else requireNotNull(fonts.getAsJsonObject(font)
                                 .getAsJsonObject(if (bold) "bold" else "normal").get("U+%04X".format(point))) {
                                 "Unmeasured U+%04X".format(point)
@@ -76,7 +88,7 @@ class DialogDesignGalleryTest : FreeSpec({
                     put("page-idle", mm.serialize(text("gallery.page-button").color(net.kyori.adventure.text.format.TextColor.color(0x92BED8))))
                     put("back", mm.serialize(text("back")))
                     put("back-tip", mm.serialize(text("back-tip")))
-                    for (page in 1..if (family == "tables") 4 else 3) {
+                    for (page in 1..if (family == "tables") 6 else 3) {
                         put("page-$page", mm.serialize(text("gallery.$family.page-$page")))
                     }
                 })
