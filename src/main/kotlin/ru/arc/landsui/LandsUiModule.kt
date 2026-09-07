@@ -4,7 +4,6 @@ import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import ru.arc.ARC
 import ru.arc.core.PluginModule
-import ru.arc.helpcenter.HelpCenterModule
 import ru.arc.util.Logging.info
 import ru.arc.util.Logging.warn
 import ru.arc.util.TextUtil
@@ -59,9 +58,7 @@ object LandsUiModule : PluginModule {
             warn("Lands UI module disabled because Lands is unavailable")
             return
         }
-        controller = LandsUiController(loaded, BukkitLandsUiGateway()) { player ->
-            HelpCenterModule.open(player)
-        }
+        controller = LandsUiController(loaded, BukkitLandsUiGateway())
         info("Lands UI module initialized")
     }
 }

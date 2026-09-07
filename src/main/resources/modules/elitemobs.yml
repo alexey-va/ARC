@@ -91,13 +91,13 @@ dungeon-qol:
       subtitle: <white>Заберите добычу <gray>·</gray> <white>/данж выйти
   saves:
     settings:
-      label: <#d7b486>Автосохранение ›
+      label: '<#c4a7e7>Автосохранение ›'
       tooltip: Выбрать интервал или отключить автоматические точки
-      title: <#f4bd6a>Автосохранение
+      title: '<#c4a7e7>Автосохранение'
       body: <#e8dfd2>Выберите интервал между автоматическими точками.<newline><#aaa49a>Личная настройка сохраняется после выхода и действует во всех данжах этого сервера. Ручные точки и возврат к месту выхода не меняются.
       current: '<#aaa49a>Сейчас: <value>'
-      selected: <#9bd48d>✔ <value>
-      option: <#d7b486><value>
+      selected: '<#9bd48d>✔ <value>'
+      option: '<white>○ <value>'
       option-tooltip: Применить только к вашим автоматическим точкам
       'off': Выключено
       minutes: <value> мин
@@ -125,58 +125,58 @@ dungeon-qol:
       limits: До 5 ручных и 3 автосохранений.
       autosaves: '<#e8dfd2>Проверка — каждые 20 секунд. Первая точка сохраняется при первой подходящей проверке: пешком, на безопасной твёрдой поверхности, без огня, воды и полёта; следующие — не чаще чем раз в <seconds> секунд и не ближе 8 блоков к предыдущей.<newline><#aaa49a>Точка сохраняется после 15 секунд вне боя, хранится до <hours> часов и заменяется по кругу в 3 автослотах. Смерть её не удаляет. В новом экземпляре старые точки недоступны.'
       autosaves-disabled: <#aaa49a>Автосохранения отключены.
-      title: <#f4bd6a>Сохранения
+      title: '<#c4a7e7>Сохранения'
       save-body: <#e8dfd2>Введите имя точки. Такое же имя заменит вашу ручную точку.
-      save-title: <#f4bd6a>Сохранить точку
+      save-title: '<#c4a7e7>Сохранить точку'
       name: <#aaa49a>Имя точки
-      remove-title: <#f4bd6a>Удалить точку?
+      remove-title: '<#ff6b61>Удалить точку?'
       remove-body: <#e8dfd2>Точка «<name>» будет удалена.
-      auto-label: <#d7b486>Авто · <time>
-      manual-label: <#d7b486><name>
+      auto-label: '<#c4a7e7>Авто · <time> ›'
+      manual-label: '<#c4a7e7><name> ›'
       point-tooltip: '<#e8dfd2><kind> · <time><newline><#aaa49a>Координаты: <coords>'
       back-label: <#aaa49a>‹ Назад
-      save-label: <#9bd48d>Сохранить здесь
+      save-label: '<#c4a7e7>Сохранить здесь ›'
       save-tooltip: Запомнить текущую позицию
       quit-label: Выйти из данжа
       quit-tooltip: Покинуть данж обычным способом
       close-tooltip: Вернуться в игру
       confirm-save-label: <#9bd48d>Сохранить
       confirm-save-tooltip: <#f4bd6a>Сохранить точку
-      travel-label: <#9bd48d>Перейти
+      travel-label: '<#92bed8>Перейти ›'
       travel-tooltip: Вернуться к точке через обычный портал
-      remove-label: <#d7b486>Удалить
+      remove-label: '<#ff6b61>Удалить ›'
       remove-tooltip: Удалить эту точку
-      confirm-remove-label: <#d7b486>Удалить
+      confirm-remove-label: '<#ff6b61>Удалить'
       confirm-remove-tooltip: Удалить точку
       entry-label: К началу данжа
       entry-tooltip: Вернуться к началу данжа · <coords>
-      exit-label: <#d7b486>Место прошлого выхода
+      exit-label: '<#92bed8>Место прошлого выхода ›'
       exit-tooltip: '<#e8dfd2>Вернуться к месту последнего выхода из данжа<newline><#aaa49a>Координаты: <coords>'
       manual: Ручная
       auto: Авто
       empty: <#aaa49a>Ручных точек пока нет. Сохраните удобное место для возвращения.
-      save-disabled: <#aaa49a>Сохранение недоступно
+      save-disabled: '<#aaa49a>[Недоступно] Сохранить здесь'
       counts: '<#aaa49a>Ручные: <#e8dfd2><manual>/5 <#aaa49a>· Авто: <#e8dfd2><auto>/3'
       unavailable: <#d7b486>Сохраниться здесь нельзя<newline><reason>
       ready: <#9bd48d>✔ Здесь можно сохраниться
       replace-only: <#d7b486>Все 5 мест заняты. Укажите имя существующей точки, чтобы заменить её, или сначала удалите ненужную.
-      point-title: <#f4bd6a>Сохранение
+      point-title: '<#c4a7e7>Сохранение'
     autosave-enabled: true
     autosave-seconds: 120
   open-exit-command: spawn
   shops-command: pw aguild
   panel:
-    return-label: <#9bd48d>Вернуться в данж
+    return-label: '<#92bed8>Вернуться в данж ›'
     return-tooltip: Вернуться в последний обычный данж на место выхода
-    return-disabled: <#aaa49a>Вернуться · недоступно
+    return-disabled: '<#aaa49a>[Недоступно] Вернуться в данж'
     return-unavailable: <#aaa49a>Нет доступного места выхода из обычного данжа. Сначала посетите данж и выйдите из него.
-    shops-label: <#d7b486>К магазинам
+    shops-label: '<#92bed8>К магазинам ›'
     shops-tooltip: Перейти к торговцам данжей в Гильдии
     crystals-unavailable: '<#aaa49a>Кристаллы: баланс сейчас недоступен'
     main-label: <#aaa49a>Главное меню ›
     main-tooltip: Открыть главное меню сервера
     main-unavailable: <#d7b486>Главное меню сейчас недоступно. Попробуйте позже.
-    party-label: <#d7b486>Группа ›
+    party-label: '<#e5ba73>Группа ›'
     party-tooltip: Как собрать пати и управлять группой EliteMobs
     waiting: <#d7b486>Сбор группы · готовьтесь к старту
     ongoing: <#9bd48d>Прохождение идёт
@@ -185,17 +185,17 @@ dungeon-qol:
     level: '<#aaa49a>Уровень: <#e8dfd2><value>'
     difficulty: '<#aaa49a>Сложность: <#e8dfd2><value>'
     party: '<#aaa49a>Участников: <#e8dfd2><value>'
-    title: <#f4bd6a>Панель данжа
+    title: '<#ffb277>Панель данжа'
     entry-unavailable: <#aaa49a>Безопасный переход ко входу сейчас недоступен. Для выхода используйте кнопку выше.
-    entry-disabled: <#aaa49a>К началу · недоступно
+    entry-disabled: '<#aaa49a>[Недоступно] К началу данжа'
     outside: <#e8dfd2>Подготовка к походу<newline><#aaa49a>Почитайте гайд или выберите данж. После входа здесь появится панель прохождения.<newline><#d7b486>/данж тп <#aaa49a>— к порталам · <#d7b486>/данж список <#aaa49a>— выбор данжа
     start-label: <#9bd48d>Начать поход
     start-tooltip: Запустить прохождение для собранной группы
     quit-label: <#d7b486>Выйти из данжа
     quit-tooltip: Покинуть данж штатным способом
-    saves-label: <#d7b486>Сохранения ›
+    saves-label: '<#c4a7e7>Сохранения ›'
     saves-tooltip: Ваши ручные точки, автосохранения и место прошлого выхода
-    entry-label: <#d7b486>К началу данжа
+    entry-label: '<#92bed8>К началу данжа ›'
     entry-tooltip: Вернуться к безопасной стартовой точке через обычный портал
     journal-label: <#d7b486>Журнал EliteMobs
     journal-tooltip: Снаряжение, навыки и задания
@@ -206,14 +206,17 @@ dungeon-qol:
       mythic: Мифическая
     crystals: '<#aaa49a>Ваши кристаллы: <#c7a0e8>💎 <value>'
     quit-open-tooltip: Вызвать выход ко спавну. Если появился портал, войдите в него.
-    shop-label: <#d7b486>Припасы ›
+    shop-label: '<#f4d87a>Припасы ›'
     shop-tooltip: Еда, стрелы и полезные предметы за кристаллы
+    portals-label: '<#92bed8>К порталам ›'
+    list-label: '<#ffb277>Выбрать данж ›'
+    about-title: '<#86dcf1>О данже'
   party:
-    title: <#f4bd6a>Группа
+    title: '<#e5ba73>Группа'
     body: <#e8dfd2>Соберите пати перед входом в данж.<newline><#aaa49a>В управлении группой можно создать пати, пригласить игроков и посмотреть участников. Приглашённый игрок должен принять приглашение.
     tips: '<#e8dfd2>Группа помогает проходить данжи вместе: рядом засчитывается общий прогресс заданий, а за групповую добычу можно голосовать.<newline><#aaa49a>Перед входом договоритесь о данже и сложности. Сохранения позиций остаются личными.'
     unavailable: <#aaa49a>Группы EliteMobs на этом сервере пока недоступны.
-    manage-label: <#9bd48d>Управление группой
+    manage-label: '<#c4a7e7>Управление группой ›'
     manage-tooltip: Открыть меню группы EliteMobs
   scoreboard:
     heading: <#f4bd6a>Поход в данж
@@ -230,11 +233,11 @@ dungeon-qol:
     open: <#aaa49a>Открытый данж
   shop:
     body: <#e8dfd2>Пополните запасы для похода. Оплата кристаллами EliteMobs; перед покупкой будет подтверждение.
-    title: <#f4bd6a>Припасы
-    offer-label: <#d7b486><name> ×<amount> <#aaa49a>· 💎 <price>
+    title: '<#f4d87a>Припасы'
+    offer-label: '<#f4d87a><name> ×<amount> <#aaa49a>· 💎 <price> <#f4d87a>›'
     item-unavailable: <#aaa49a>Этот предмет сейчас недоступен. Кристаллы не списываются.
     confirm-body: '<#e8dfd2><name> ×<amount><newline><#aaa49a>Стоимость: <#c7a0e8>💎 <price>'
-    confirm-title: <#f4bd6a>Купить припасы?
+    confirm-title: '<#f4d87a>Купить припасы?'
     bought: <#9bd48d>✔ Припасы куплены и добавлены в инвентарь.
     changed: <#d7b486>Товар изменился. Вернитесь в магазин и выберите его заново.
     outside: <#d7b486>Данж изменился. Откройте /данж заново; покупка не выполнена.

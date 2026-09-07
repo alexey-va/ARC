@@ -27,7 +27,7 @@ class DungeonSaveMenusTest : FreeSpec({
         val shown = mutableListOf<PaperDialogScreen>()
         DungeonSaveMenus(dungeon) { _, screen, _ -> shown += screen }.open(player)
         shown.single().id shouldBe "dungeon.panel.unavailable"
-        shown.single().buttons.map { it.id.value } shouldBe listOf("return", "shops", "guide", "portals", "list", "party", "main")
+        shown.single().buttons.map { it.id.value } shouldBe listOf("return", "shops", "guide", "portals", "list", "party")
         shown.single().exitButton!!.id.value shouldBe "close"
         shown.single().exitButton!!.closeDialogBeforeAction shouldBe true
         shown.single().body.map { it.text } shouldBe listOf(
@@ -123,7 +123,7 @@ class DungeonSaveMenusTest : FreeSpec({
         screens.last().id shouldBe "dungeon.panel"
     }
 
-    "party section routes to native management when supported and main navigation stays open" {
+    "party section routes to native management without a redundant main-menu link" {
         val player = paper.addPlayer("party")
         val dungeon = mockk<EMDungeonQol>(relaxed = true)
         val world = paper.addSimpleWorld("party-world")
@@ -133,11 +133,7 @@ class DungeonSaveMenusTest : FreeSpec({
         val screens = mutableListOf<PaperDialogScreen>()
         val menus = DungeonSaveMenus(dungeon) { _, screen, _ -> screens += screen }
         menus.panel(player)
-        screens.last().buttons.single { it.id.value == "main" }.also {
-            it.closeDialogBeforeAction shouldBe false
-            it.onClick.handle(mockk())
-        }
-        verify { dungeon.action(player, "main") }
+        screens.last().buttons.any { it.id.value == "main" } shouldBe false
         screens.last().buttons.single { it.id.value == "party" }.onClick.handle(mockk())
         screens.last().id shouldBe "dungeon.party"
         screens.last().buttons.single { it.id.value == "manage_party" }.onClick.handle(mockk())

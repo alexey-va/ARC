@@ -27,7 +27,6 @@ class LandsUiConfigTest : StringSpec({
                 "land-selected-label",
                 "create-label",
                 "guide-label",
-                "help-label",
                 "open-lands-label",
                 "members-label",
                 "territory-label",
@@ -58,10 +57,10 @@ class LandsUiConfigTest : StringSpec({
                 MiniMessage.miniMessage().deserialize(settings.text(key)).containsBold() shouldBe false
             }
             withClue(settings.text("land-label")) {
-                settings.text("land-label").contains("#4dd8f0") shouldBe true
+                settings.text("land-label").contains("<white>○") shouldBe true
             }
             withClue(settings.text("land-selected-label")) {
-                settings.text("land-selected-label").contains("#5ee39c") shouldBe true
+                settings.text("land-selected-label").contains("#9bd48d>✔") shouldBe true
             }
         } finally {
             ConfigManager.clear()
