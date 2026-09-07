@@ -98,10 +98,14 @@ test('player and custom drops keep native age', async ({ player, server, signal 
 test('pickup history and same-tick deaths preserve custom/native exclusions', async ({ player, server, signal }) => {
   await prepare(server, player);
   await command(server, player,
-    'minecraft:summon zombie 0.5 65 9 {Tags:["arc_cleanup_picker"],PersistenceRequired:1b,CanPickUpLoot:1b}');
+    'minecraft:summon zombie 0.5 65 9 {Tags:["arc_cleanup_picker"],PersistenceRequired:1b,CanPickUpLoot:1b,attributes:[{id:"minecraft:movement_speed",base:0.0}]}');
   await player.giveItem('iron_sword', 1);
   await waitUntil(() => player.bot.inventory.items().some((entry) => entry.name === 'iron_sword'), { signal });
   await toss(player, await ironSword(player));
+  // Retain a real player-drop/pickup event while removing pathfinding and throw direction from the fixture.
+  await player.teleport(8.5, 65, 10.5);
+  await command(server, player, 'minecraft:execute at @e[type=zombie,tag=arc_cleanup_picker,limit=1] run minecraft:tp @e[type=item,nbt={Item:{id:"minecraft:iron_sword"}},limit=1] ~ ~ ~');
+  await command(server, player, 'minecraft:data merge entity @e[type=item,nbt={Item:{id:"minecraft:iron_sword"}},limit=1] {PickupDelay:0s,Motion:[0.0d,0.0d,0.0d]}');
   await waitForPredicate(server, player, 'if entity @e[type=zombie,tag=arc_cleanup_picker,nbt={equipment:{mainhand:{id:"minecraft:iron_sword"}}}]', 'pickup-confirmed', '0.5 65 0.5', signal);
   await command(server, player, 'minecraft:kill @e[type=zombie,tag=arc_cleanup_picker,limit=1]');
   await assertAgeRange(server, player, itemSelector('nbt={Item:{id:"minecraft:iron_sword"}}'), '0..100', 'pickup', '0.5 65 10.5');
@@ -113,5 +117,5 @@ test('pickup history and same-tick deaths preserve custom/native exclusions', as
     'minecraft:summon zombie 6 65 0 {Tags:["arc_cleanup_batch"],PersistenceRequired:1b,CanPickUpLoot:0b,NoAI:1b,equipment:{mainhand:{id:"minecraft:iron_sword",components:{"minecraft:custom_name":{text:"ARC batch custom"}},count:1}},drop_chances:{mainhand:2.0f}}');
   await command(server, player, 'minecraft:execute as @e[type=zombie,tag=arc_cleanup_batch] run minecraft:kill @s');
   await assertAgeRange(server, player, '@e[type=item,nbt={Item:{id:"minecraft:iron_sword"}},distance=..4,limit=1,sort=nearest]', '5960..5999', 'batch');
-  await assertAgeRange(server, player, '@e[type=item,distance=5..8,limit=1,sort=nearest]', '0..100', 'batch-custom');
+  await assertAgeRange(server, player, '@e[type=item,nbt={Item:{id:"minecraft:iron_sword"}},distance=5..8,limit=1,sort=nearest]', '0..100', 'batch-custom');
 });
