@@ -1,11 +1,10 @@
 package ru.arc.dialogdemo
 
-import net.kyori.adventure.key.Key
 import net.kyori.adventure.text.Component
-import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
 import ru.arc.gui.DialogTextLayout
+import ru.arc.gui.DialogTables
 import ru.arc.text.TextAlignment
 import ru.arc.text.TextLayoutResult
 
@@ -57,73 +56,18 @@ object DialogDesignGallery {
         })
     }
 
-    private object TooltipTable {
-        private data class Frame(val base: Int, val leftAdvance: Int, val innerAdvance: Int,
-            val rightAdvance: Int, val rightJointAdvance: Int = 10)
-
-        private val font = Key.key("minecraft:default")
-        private val undecorated = TextDecoration.values().associateWith { TextDecoration.State.FALSE }
-        private val frames = listOf(
-            Frame(0xE540, 2, 6, 10),
-            Frame(0xE550, 2, 6, 10),
-            Frame(0xE560, 2, 6, 10),
-            Frame(0xE570, 4, 6, 8),
-            Frame(0xE580, 4, 6, 8, 8),
-            Frame(0xE590, 6, 7, 8, 8)
-        )
-        private const val NEGATIVE_ONE = 0xF0F11
-        private const val TOP_LEFT = 0
-        private const val TOP = 1
-        private const val TOP_JOINT = 2
-        private const val TOP_RIGHT = 3
-        private const val LEFT = 4
-        private const val INNER = 5
-        private const val RIGHT = 6
-        private const val LEFT_JOINT = 7
-        private const val MIDDLE = 8
-        private const val CROSS = 9
-        private const val RIGHT_JOINT = 10
-        private const val BOTTOM_LEFT = 11
-        private const val BOTTOM = 12
-        private const val BOTTOM_JOINT = 13
-        private const val BOTTOM_RIGHT = 14
-
-        private fun glyph(point: Int) = Component.text(String(Character.toChars(point)))
-            .font(font).color(NamedTextColor.WHITE).decorations(undecorated)
-        private fun glued(frame: Frame, offsets: List<Int>): Component = join(offsets.flatMapIndexed { index, offset ->
-            val part = glyph(frame.base + offset)
-            if (index == 0) listOf(part) else listOf(glyph(NEGATIVE_ONE), part)
-        })
-        private fun centeredBorder(content: Component) = join(listOf(gap(11), content, gap(11)))
-
-        fun render(index: Int, text: (String) -> Component): Component {
-            val frame = frames[index]
-            val top = glued(frame, listOf(TOP_LEFT) + List(28) { TOP } + TOP_JOINT + List(10) { TOP } + TOP_RIGHT)
-            val separator = glued(frame, listOf(LEFT_JOINT) + List(28) { MIDDLE } + CROSS + List(10) { MIDDLE } + RIGHT_JOINT)
-                .append(gap(10 - frame.rightJointAdvance))
-            val bottom = glued(frame, listOf(BOTTOM_LEFT) + List(28) { BOTTOM } + BOTTOM_JOINT + List(10) { BOTTOM } + BOTTOM_RIGHT)
-            val columnPadding = 10 - frame.leftAdvance
-            fun contentRow(left: Component, right: Component) = join(listOf(
-                gap(11), glyph(frame.base + LEFT), gap(columnPadding), cell(left, 251),
-                glyph(frame.base + INNER), gap(columnPadding),
-                cell(right, 99 - frame.innerAdvance - columnPadding), glyph(frame.base + RIGHT),
-                gap(10 - frame.rightAdvance), gap(11)
-            ))
-            val header = contentRow(
-                text("gallery.tooltip.label").color(gold).decorate(TextDecoration.BOLD),
-                text("gallery.tooltip.value").color(gold).decorate(TextDecoration.BOLD)
-            )
-            val rows = (1..5).map { index -> contentRow(
-                text("gallery.details.row-$index.label").color(muted),
-                text("gallery.details.row-$index.value").color(ink)
-            ) }
-            return lines(listOf(centeredBorder(top), header, centeredBorder(separator)) + rows + centeredBorder(bottom))
-        }
-    }
-
     fun table(number: Int, text: (String) -> Component): Component {
         require(number in 1..TABLE_COUNT)
-        if (number >= 13) return TooltipTable.render(number - 13, text)
+        if (number >= 13) return DialogTables.render(
+            rows = (1..5).map { index ->
+                text("gallery.details.row-$index.label").color(muted) to
+                    text("gallery.details.row-$index.value").color(ink)
+            },
+            headers = text("gallery.tooltip.label").color(gold) to text("gallery.tooltip.value").color(gold),
+            frame = DialogTables.Frame.entries[number - 13],
+            width = WIDTH + 8,
+            columns = DialogTables.Columns.LABEL_WIDE,
+        ).component
         val widths = listOf(180, 81, 81)
         val accent = when (number) { 3, 6, 9 -> blue; 4, 7 -> mint; 8 -> violet; else -> gold }
         val header = listOf("project", "steps", "status").map { text("gallery.data.$it").color(accent).decorate(TextDecoration.BOLD) }

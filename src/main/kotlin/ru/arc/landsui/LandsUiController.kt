@@ -7,6 +7,7 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.bukkit.entity.Player
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.gui.ArcMenus
+import ru.arc.gui.DialogTables
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
 import ru.arc.paper.menu.PaperDialogButton
@@ -122,19 +123,18 @@ class LandsUiController(
                 PaperDialogScreen(
                     id = "lands.details",
                     title = text("details-title", "land" to land.name),
-                    body = listOf(
-                        PaperDialogBody(
-                            text(
-                                "details-body",
-                                "role" to role,
-                                "chunks" to land.chunks.toString(),
-                                "max_chunks" to land.maxChunks.toString(),
-                                "members" to land.memberIds.size.toString(),
-                                "max_members" to land.maxMembers.toString(),
-                                "balance" to amountFormat.format(land.balance),
-                            ),
+                    body = listOf(DialogTables.body(
+                        rows = listOf(
+                            text("table-role-label") to Component.text(role),
+                            text("table-territory-label") to text("table-territory-value",
+                                "used" to land.chunks.toString(), "maximum" to land.maxChunks.toString()),
+                            text("table-members-label") to text("table-slots-value",
+                                "used" to land.memberIds.size.toString(), "maximum" to land.maxMembers.toString()),
+                            text("table-balance-label") to text("table-coins-value", "value" to amountFormat.format(land.balance)),
                         ),
-                    ),
+                        headers = text("table-label-heading") to text("table-value-heading"),
+                        frame = DialogTables.Frame.LEGENDARY,
+                    )),
                     buttons = buttons,
                     exitButton = back("back") { openRoot(player) },
                     columns = 2,

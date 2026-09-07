@@ -9,6 +9,7 @@ import org.bukkit.entity.Player
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.whenCompleteSync
 import ru.arc.gui.ArcMenus
+import ru.arc.gui.DialogTables
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
 import ru.arc.paper.menu.PaperDialogButton
@@ -202,29 +203,29 @@ internal class HelpCenterController(
 
     private fun showNow(player: Player, profile: HelpCenterProfile) {
         val unavailable = settings.text("not-available")
-        val placeholders = arrayOf(
-            "player" to profile.playerName,
-            "rank" to (profile.rank ?: unavailable),
-            "balance" to (profile.balance ?: unavailable),
-            "tokens" to (profile.tokens ?: unavailable),
-            "homes" to (profile.homes?.usedSlots?.toString() ?: unavailable),
-            "max_homes" to (profile.homes?.maxSlots?.toString() ?: unavailable),
-            "lands" to (profile.lands?.toString() ?: unavailable),
-            "claimed_chunks" to (profile.claimedChunks?.toString() ?: unavailable),
-            "world" to worldLabel(profile.worldKind, profile.world),
-            "x" to profile.x.toString(),
-            "y" to profile.y.toString(),
-            "z" to profile.z.toString(),
-            "chat" to if (profile.chatMode == HelpCenterChatMode.GLOBAL) "глобальный" else "локальный",
+        val rows = listOf(
+            text("table-player-label") to Component.text(profile.playerName),
+            text("table-rank-label") to text("table-rank-value", "value" to (profile.rank ?: unavailable)),
+            text("table-balance-label") to text("table-coins-value", "value" to (profile.balance ?: unavailable)),
+            text("table-tokens-label") to text("table-tokens-value", "value" to (profile.tokens ?: unavailable)),
+            text("table-homes-label") to text("table-slots-value",
+                "used" to (profile.homes?.usedSlots?.toString() ?: unavailable),
+                "maximum" to (profile.homes?.maxSlots?.toString() ?: unavailable)),
+            text("table-lands-label") to text("table-lands-value",
+                "count" to (profile.lands?.toString() ?: unavailable),
+                "chunks" to (profile.claimedChunks?.toString() ?: unavailable)),
+            text("table-world-label") to Component.text(worldLabel(profile.worldKind, profile.world)),
+            text("table-coordinates-label") to Component.text("${profile.x}, ${profile.y}, ${profile.z}"),
+            text("table-chat-label") to text(if (profile.chatMode == HelpCenterChatMode.GLOBAL) "table-chat-global" else "table-chat-local"),
         )
         showDialog(
             player,
             PaperDialogScreen(
                 id = "help.now",
                 title = text("now-title"),
-                body = listOf("now-identity", "now-progress", "now-location").map { key ->
-                    PaperDialogBody(text(key, *placeholders), width = 420)
-                },
+                body = listOf(DialogTables.body(rows,
+                    headers = text("table-label-heading") to text("table-value-heading"),
+                    frame = DialogTables.Frame.EPIC, width = 420)),
                 buttons = recommendationButtons(player, profile) + listOf(
                     button("now_homes", text("my-homes-label"), text("my-homes-tooltip")) { openTravel(player) },
                     button("now_lands", text("my-lands-label"), text("my-lands-tooltip")) { open(player, HelpCenterPage.PRIVAT) },
@@ -700,18 +701,15 @@ internal class HelpCenterController(
             PaperDialogScreen(
                 id = "help.home",
                 title = text("home-title", "home" to home.name),
-                body = listOf(
-                    PaperDialogBody(
-                        text(
-                            "home-body",
-                            "server" to home.server,
-                            "world" to home.world,
-                            "x" to home.x.toString(),
-                            "y" to home.y.toString(),
-                            "z" to home.z.toString(),
-                        ),
+                body = listOf(DialogTables.body(
+                    rows = listOf(
+                        text("table-server-label") to Component.text(home.server),
+                        text("table-world-label") to Component.text(home.world),
+                        text("table-coordinates-label") to Component.text("${home.x}, ${home.y}, ${home.z}"),
                     ),
-                ),
+                    headers = text("table-label-heading") to text("table-value-heading"),
+                    frame = DialogTables.Frame.EPIC,
+                )),
                 buttons = listOf(
                     button("teleport", text("home-teleport-label"), text("home-teleport-tooltip")) {
                         execute(player, HelpCenterCommands.home(home.name))

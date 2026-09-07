@@ -43,6 +43,21 @@ chests:
   quest-locked-message: '<white></white> <#c42323>Сундук доступен только по заданию.'
 
 dungeon-qol:
+  table:
+    label-heading: 'Параметр'
+    value-heading: 'Значение'
+    level: 'Уровень'
+    difficulty: 'Сложность'
+    party: 'Участники'
+    crystals: 'Ваши кристаллы'
+    crystals-value: '<white>💎</white> <#c7a0e8><value>'
+    manual-count: 'Ручные точки'
+    auto-count: 'Автоточки'
+    manual-value: '<value> / 5'
+    auto-value: '<value> / 3'
+    kind: 'Тип'
+    saved-at: 'Сохранено'
+    coordinates: 'Координаты'
   enabled: true
   resume-enabled: true
   resume-hours: 72

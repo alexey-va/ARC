@@ -6,6 +6,15 @@ limits:
   max-listed-players: 12
 
 text:
+  table-label-heading: 'Параметр'
+  table-value-heading: 'Значение'
+  table-role-label: 'Роль'
+  table-territory-label: 'Территория'
+  table-members-label: 'Участники'
+  table-balance-label: 'Баланс'
+  table-territory-value: '<used> / <maximum> чанков'
+  table-slots-value: '<used> / <maximum>'
+  table-coins-value: '<value> <white>💰</white>'
   root-title: '<#7fe38b>Приват'
   root-body: '<#f5fbff>Выберите поселение — оно станет текущим для действий.<newline><#7fe38b>● <#9db0ba>Текущее  <#f5fbff><selected><newline><#46d9ee>◆ <#9db0ba>Всего  <#f5fbff><count>'
   root-empty: '<#9aaab2>Поселений пока нет. Создайте первое в чанке, где стоите.'

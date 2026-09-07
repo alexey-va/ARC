@@ -5,6 +5,7 @@ import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.Location
 import org.bukkit.entity.Player
 import ru.arc.gui.ArcMenus
+import ru.arc.gui.DialogTables
 import ru.arc.gui.MenuEscapeBehavior
 import ru.arc.helpcenter.HelpCenterModule
 import ru.arc.paper.menu.PaperDialogActionId
@@ -44,14 +45,15 @@ internal class DungeonSaveMenus(
         )
         if (visit.instanced) body += PaperDialogBody(state, 468)
         val stats = buildList {
-            visit.stats?.level?.takeIf { it > 0 }?.let { add(text("panel.level", "<#aaa49a>Уровень: <#e8dfd2><value>", "value" to Component.text(it))) }
-            visit.stats?.difficulty?.let { add(text("panel.difficulty", "<#aaa49a>Сложность: <#e8dfd2><value>", "value" to dungeonDifficulty(dungeon, it))) }
-            visit.stats?.playerCount?.let { add(text("panel.party", "<#aaa49a>Участников: <#e8dfd2><value>", "value" to Component.text(it))) }
+            visit.stats?.level?.takeIf { it > 0 }?.let { add(tableLabel("level", "Уровень") to Component.text(it)) }
+            visit.stats?.difficulty?.let { add(tableLabel("difficulty", "Сложность") to dungeonDifficulty(dungeon, it)) }
+            visit.stats?.playerCount?.let { add(tableLabel("party", "Участники") to Component.text(it)) }
+            readDungeonCrystals(player)?.let { add(tableLabel("crystals", "Ваши кристаллы") to
+                text("table.crystals-value", "<white>💎</white> <#c7a0e8><value>", "value" to Component.text(it))) }
+            view.saves?.let { addAll(saveRows(it)) }
         }
-        if (stats.isNotEmpty()) body += PaperDialogBody(stats.reduce { a, b -> a.append(Component.text(" · ")).append(b) }, 468)
-        readDungeonCrystals(player)?.let { body += PaperDialogBody(text("panel.crystals", "<#aaa49a>Ваши кристаллы: <#c7a0e8>💎 <value>", "value" to Component.text(it)), 468) }
+        if (stats.isNotEmpty()) body += table(stats, DialogTables.Frame.ARTIFACT)
         body += PaperDialogBody(availability(blocked), 468)
-        if (view.saves != null) body += PaperDialogBody(saveCounts(view.saves), 468)
         feedback?.let { body += PaperDialogBody(plain(it), 468) }
         show(player, PaperDialogScreen(
             id = "dungeon.panel", title = text("panel.title", "<#f4bd6a>Панель данжа"), body = body,
@@ -92,7 +94,7 @@ internal class DungeonSaveMenus(
         val body = mutableListOf(
             PaperDialogBody(text("saves.dialog.body", "<#e8dfd2>Ваши места в этом данже. Сохраняется только позиция: добыча и монстры не откатываются."), 468),
             PaperDialogBody(dungeon.autosaveDescription(player), 468),
-            PaperDialogBody(saveCounts(view), 468),
+            table(saveRows(view), DialogTables.Frame.ARTIFACT),
             PaperDialogBody(availability(blocked), 468),
         )
         if (view.points.none { it.kind == DungeonSaveKind.MANUAL }) body += PaperDialogBody(text("saves.dialog.empty", "<#aaa49a>Ручных точек пока нет. Сохраните удобное место для возвращения."), 468)
@@ -171,8 +173,19 @@ internal class DungeonSaveMenus(
         )) { party(player) }
     }
 
-    private fun saveCounts(view: DungeonSaveView): Component = text("saves.dialog.counts", "<#aaa49a>Ручные: <#e8dfd2><manual>/5 <#aaa49a>· Авто: <#e8dfd2><auto>/3",
-        "manual" to Component.text(view.points.count { it.kind == DungeonSaveKind.MANUAL }), "auto" to Component.text(view.points.count { it.kind == DungeonSaveKind.AUTO }))
+    private fun tableLabel(key: String, fallback: String) = text("table.$key", fallback)
+
+    private fun table(rows: List<Pair<Component, Component>>, frame: DialogTables.Frame) = DialogTables.body(
+        rows, headers = tableLabel("label-heading", "Параметр") to tableLabel("value-heading", "Значение"),
+        frame = frame, width = 468,
+    )
+
+    private fun saveRows(view: DungeonSaveView) = listOf(
+        tableLabel("manual-count", "Ручные точки") to text("table.manual-value", "<value> / 5",
+            "value" to Component.text(view.points.count { it.kind == DungeonSaveKind.MANUAL })),
+        tableLabel("auto-count", "Автоточки") to text("table.auto-value", "<value> / 3",
+            "value" to Component.text(view.points.count { it.kind == DungeonSaveKind.AUTO })),
+    )
 
     private fun availability(reason: Component?): Component = reason?.let {
         text("saves.dialog.unavailable", "<#d7b486>Сохраниться здесь нельзя<newline><reason>", "reason" to it)
@@ -289,7 +302,13 @@ internal class DungeonSaveMenus(
         show(player, PaperDialogScreen(
             id = "dungeon.saves.point",
             title = text("saves.dialog.point-title", "<#f4bd6a>Сохранение"),
-            body = listOf(PaperDialogBody(plain(Component.text(point.name)), 468), PaperDialogBody(pointTooltip(point), 468)),
+            body = listOf(PaperDialogBody(plain(Component.text(point.name)), 468), table(listOf(
+                tableLabel("kind", "Тип") to text(
+                    if (point.kind == DungeonSaveKind.MANUAL) "saves.dialog.manual" else "saves.dialog.auto",
+                    if (point.kind == DungeonSaveKind.MANUAL) "ручная" else "авто"),
+                tableLabel("saved-at", "Сохранено") to Component.text(timeFormat.format(Instant.ofEpochMilli(point.savedAt))),
+                tableLabel("coordinates", "Координаты") to locationText(point.location),
+            ), DialogTables.Frame.LEGENDARY)),
             buttons = listOf(
                 action("travel", "saves.dialog.travel-label", "<#9bd48d>Перейти", "saves.dialog.travel-tooltip", "Телепортироваться к точке", close = true) { dungeon.travel(player, expected, point.id) },
                 action("remove", "saves.dialog.remove-label", "<#d7b486>Удалить", "saves.dialog.remove-tooltip", "Удалить эту точку") { confirmRemove(player, point, expected) },

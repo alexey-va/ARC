@@ -7,6 +7,25 @@ limits:
 
 # All player-visible copy is configurable. ARC merges new defaults on reload.
 text:
+  table-label-heading: 'Параметр'
+  table-value-heading: 'Значение'
+  table-player-label: 'Игрок'
+  table-rank-label: 'Ранг'
+  table-balance-label: 'Баланс'
+  table-tokens-label: 'Жетоны'
+  table-homes-label: 'Дома'
+  table-lands-label: 'Приваты'
+  table-world-label: 'Мир'
+  table-coordinates-label: 'Координаты'
+  table-chat-label: 'Чат'
+  table-server-label: 'Сервер'
+  table-chat-global: 'глобальный'
+  table-chat-local: 'локальный'
+  table-rank-value: '<#c4abff><value>'
+  table-coins-value: '<#f4bd6a><value> <white>💰</white>'
+  table-tokens-value: '<#f4bd6a><value> <white></white>'
+  table-slots-value: '<used> / <maximum>'
+  table-lands-value: '<count> (<chunks> чанков)'
   menu-close-label: "<#aaa49a>Закрыть меню"
   dungeons-title: "<#86dcf1>Данжи"
   dungeons-body: "<#e8dfd2>В данжах вас ждут элитные противники, боссы, задания и особое снаряжение.<newline><newline><#9bd48d>Порталы <#e8dfd2>— перейти в Гильдию искателей приключений.<newline><#f4bd6a>Гайд <#e8dfd2>— разобраться в подготовке и прохождении.<newline><#86dcf1>Меню /em <#e8dfd2>— открыть журнал EliteMobs."

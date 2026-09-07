@@ -38,6 +38,15 @@ class LandsUiConfig(private val config: Config) {
         }
 
         private val DEFAULT_TEXT = linkedMapOf(
+            "table-label-heading" to "Параметр",
+            "table-value-heading" to "Значение",
+            "table-role-label" to "Роль",
+            "table-territory-label" to "Территория",
+            "table-members-label" to "Участники",
+            "table-balance-label" to "Баланс",
+            "table-territory-value" to "<used> / <maximum> чанков",
+            "table-slots-value" to "<used> / <maximum>",
+            "table-coins-value" to "<value> <white>💰</white>",
             "root-title" to "<#7fe38b>Приват",
             "root-body" to "<#f5fbff>Выберите поселение — оно станет текущим для действий.<newline><#7fe38b>● <#9db0ba>Текущее  <#f5fbff><selected><newline><#46d9ee>◆ <#9db0ba>Всего  <#f5fbff><count>",
             "root-empty" to "<#9aaab2>Поселений пока нет. Создайте первое в чанке, где стоите.",
