@@ -73,6 +73,9 @@ data class ResourceContractPlayerView(
     val playerPayoutMinorPerUnit: Long,
     val capBasisPoints: Int,
     val payoutBasisPoints: Int,
+    val pricingDefinition: ResourceContractDefinition? = null,
+    val pricingSupply: Long = 0L,
+    val pricingAt: Long = 0L,
 )
 
 sealed interface SeasonDungeonLaunchPreparationOutcome {
@@ -497,12 +500,46 @@ object ContractsManager {
         dungeonObserver.snapshot(now)
 
     @JvmStatic
+    fun quote(player: Player, contractId: String, requestedQuantity: Int): ContractSubmissionQuote? {
+        check(Bukkit.isPrimaryThread()) { "Contract quotes must be created on the main thread" }
+        if (!submissionsEnabled() || !ContractOriginGate.canSubmit(player)) return null
+        val now = System.currentTimeMillis()
+        val definition = definitionAt(contractId, now) ?: return null
+        if (!seasonResourceStageOpen(definition)) return null
+        val state = repo?.getNow(ResourceContractRecord.stateId(definition.id, definition.windowStartsAt))?.state
+            ?: ResourceContractState.empty(definition)
+        val plan = ResourceContractEngine.plan(
+            definition, state.validatedAgainst(definition), "quote-${UUID.randomUUID()}", player.uniqueId.toString(),
+            requestedQuantity, now, activeReservations(definition, state), ContractRankPolicyResolver.resolve(player),
+        ) as? ContractSubmissionPlan.Accepted ?: return null
+        if (plan.payoutMinor > remainingWeeklyBudget(now)) return null
+        return ContractSubmissionQuote(
+            definition.id, definition.windowStartsAt, plan.playerId, plan.acceptedQuantity.toInt(),
+            plan.payoutMinor, plan.expectedRevision, now,
+        )
+    }
+
+    private fun definitionAt(contractId: String, now: Long): ResourceContractDefinition? =
+        configRef.get()?.resourceOrdersAt(now)?.firstOrNull { it.id == contractId }?.let(::frozenDefinition)
+
+    private fun frozenDefinition(definition: ResourceContractDefinition): ResourceContractDefinition =
+        repo?.getNow(ResourceContractRecord.stateId(definition.id, definition.windowStartsAt))?.definitionSnapshot
+            ?: definition
+
+    /** Counts overlapping windows including retired catalog entries, never only visible orders. */
+    private fun remainingWeeklyBudget(now: Long): Long = ContractRotation.remainingBudget(
+        configRef.get()?.serverWeeklyBudgetMinor ?: 0L, repo?.allNow().orEmpty(), journalRepo?.allNow().orEmpty(), now,
+    )
+
+    @JvmStatic
     fun submit(
         player: Player,
-        contractId: String,
-        requestedQuantity: Int,
+        quote: ContractSubmissionQuote,
     ): CompletableFuture<ContractSubmissionOutcome> {
         val playerId = player.uniqueId
+        if (!ContractOriginGate.canSubmit(player) || quote.playerId != playerId.toString()) {
+            return CompletableFuture.completedFuture(ContractSubmissionOutcome.Rejected(SubmissionRejection.INVALID_REQUEST))
+        }
         val policy = ContractRankPolicyResolver.resolve(player)
         val submissionId = "arc-${UUID.randomUUID()}"
         val result = CompletableFuture<ContractSubmissionOutcome>()
@@ -518,7 +555,7 @@ object ContractsManager {
                 complete(ContractSubmissionOutcome.Rejected(SubmissionRejection.SUBMISSION_IN_PROGRESS))
             }
         }
-        val definition = configRef.get()?.resourceOrders()?.firstOrNull { it.id == contractId }
+        val definition = definitionAt(quote.contractId, System.currentTimeMillis())
             ?: return result.apply {
                 submissionsInFlight.remove(playerId)
                 complete(ContractSubmissionOutcome.Rejected(SubmissionRejection.INVALID_REQUEST))
@@ -533,12 +570,20 @@ object ContractsManager {
                             } else if (!seasonResourceStageOpen(definition)) {
                                 ContractSubmissionOutcome.Rejected(SubmissionRejection.PROJECT_STAGE_LOCKED)
                             } else {
+                                val currentRepo = requireNotNull(repo)
+                                val stateId = ResourceContractRecord.stateId(definition.id, definition.windowStartsAt)
+                                if (currentRepo.getNow(stateId) == null) {
+                                    currentRepo.markDirty(ResourceContractRecord.empty(definition))
+                                    currentRepo.saveDirty().getOrThrow()
+                                }
                                 coordinator.submit(
                                     definition,
                                     submissionId,
                                     playerId.toString(),
-                                    requestedQuantity,
+                                    quote.quantity,
                                     policy,
+                                    quote = quote,
+                                    availableNetworkBudgetMinor = remainingWeeklyBudget(System.currentTimeMillis()),
                                 )
                             }
                         val projected =
@@ -838,9 +883,14 @@ object ContractsManager {
                     playerReservedQuantity = reserved,
                     playerRemainingQuantity =
                         (effectiveCap - accepted - reserved).coerceAtLeast(0L),
-                    playerPayoutMinorPerUnit = policy.payoutMinorPerUnit(runtime.definition.payoutMinorPerUnit),
+                    playerPayoutMinorPerUnit = ContractMarketPricing.unitPayoutMinor(
+                        runtime.definition, runtime.view.acceptedQuantity + runtime.view.reservedQuantity, now, policy,
+                    ),
                     capBasisPoints = policy.playerCapBasisPoints,
                     payoutBasisPoints = policy.payoutBasisPoints,
+                    pricingDefinition = runtime.definition,
+                    pricingSupply = runtime.view.acceptedQuantity + runtime.view.reservedQuantity,
+                    pricingAt = now,
                 )
             }.toList()
 
@@ -854,7 +904,7 @@ object ContractsManager {
     private fun currentRuntimeViews(now: Long): List<RuntimeResourceContractView> {
         val config = configRef.get() ?: return emptyList()
         val currentRepo = repo
-        return config.resourceOrders().map { definition ->
+        return config.resourceOrdersAt(now).map(::frozenDefinition).map { definition ->
             val record =
                 currentRepo?.getNow(ResourceContractRecord.stateId(definition.id, definition.windowStartsAt))
                     ?: ResourceContractRecord.empty(definition)
@@ -877,7 +927,9 @@ object ContractsManager {
                     status = effectiveStatus.label,
                     windowStartsAt = definition.windowStartsAt,
                     windowEndsAt = definition.windowEndsAt,
-                    payoutMinorPerUnit = definition.payoutMinorPerUnit,
+                    payoutMinorPerUnit = ContractMarketPricing.unitPayoutMinor(
+                        definition, state.acceptedQuantity + reservedQuantity, now, ContractRankPolicy.IDENTITY,
+                    ),
                     budgetMinor = definition.budgetMinor,
                     spentMinor = state.spentMinor,
                     reservedMinor = reservedMinor,
@@ -911,6 +963,9 @@ object ContractsManager {
             "seasonTrophyEnabled" to seasonTrophyEnabled(),
             "seasonDungeonRewardsEnabled" to seasonDungeonRewardsEnabled(),
             "serverWeeklyBudgetMinor" to (config?.serverWeeklyBudgetMinor ?: 0L),
+            "remainingWeeklyBudgetMinor" to remainingWeeklyBudget(System.currentTimeMillis()),
+            "salesWorld" to "rc_origin_spawn",
+            "salesEntry" to "gui",
             "seasonCatalog" to config?.observeSeasonCatalog(SEASON_MUTATION_RUNTIME_READY)?.summary(),
             "seasonState" to
                 currentSeasonState?.let { state ->
@@ -1126,7 +1181,7 @@ object ContractsManager {
                     }.validatedAgainst(definition).state
                     val recovery = ContractSubmissionRecoveryEngine.recoverPaid(definition, state, resolved, now)
                     if (recovery.commit.changed) {
-                        currentContract.markDirty(ResourceContractRecord(stateId, recovery.commit.state))
+                        currentContract.markDirty(ResourceContractRecord(stateId, recovery.commit.state, definitionSnapshot = definition))
                         currentContract.saveDirty().getOrThrow()
                     }
                     resolved = recovery.journal
@@ -1416,11 +1471,11 @@ object ContractsManager {
         config: ContractsConfig,
         repository: CachedRepository<ResourceContractRecord>,
     ) {
-        val definitions = config.resourceOrders()
+        val definitions = config.resourceOrdersAt(System.currentTimeMillis())
         definitions.forEach { definition ->
             val stateId = ResourceContractRecord.stateId(definition.id, definition.windowStartsAt)
             val existing = repository.getNow(stateId)
-            existing?.validatedAgainst(definition)
+            existing?.validatedAgainst(existing.definitionSnapshot ?: definition)
         }
         definitions.forEach { definition ->
             val stateId = ResourceContractRecord.stateId(definition.id, definition.windowStartsAt)
@@ -1456,8 +1511,8 @@ object ContractsManager {
         }
 
         records.filter { it.status == ContractSubmissionJournalStatus.PAID }.forEach { paid ->
-            val definition =
-                config.resourceOrders().firstOrNull {
+            val definition = paid.definitionSnapshot ?:
+                config.resourceOrdersAt(paid.contractWindowStartsAt).firstOrNull {
                     it.id == paid.contractId && it.windowStartsAt == paid.contractWindowStartsAt
                 } ?: return@forEach
             val stateId = ResourceContractRecord.stateId(definition.id, definition.windowStartsAt)
@@ -1470,7 +1525,7 @@ object ContractsManager {
                     now,
                 )
             if (recovery.commit.changed) {
-                contractRepository.markDirty(ResourceContractRecord(stateId, recovery.commit.state))
+                contractRepository.markDirty(ResourceContractRecord(stateId, recovery.commit.state, definitionSnapshot = definition))
                 runBlocking { contractRepository.saveDirty().getOrThrow() }
             }
             journalRepository.markDirty(recovery.journal)
@@ -1500,7 +1555,7 @@ object ContractsManager {
 
     private fun reconciliationDefinition(record: ContractSubmissionJournalRecord): ResourceContractDefinition =
         requireNotNull(
-            configRef.get()?.resourceOrders()?.firstOrNull {
+            record.definitionSnapshot ?: configRef.get()?.resourceOrdersAt(record.contractWindowStartsAt)?.firstOrNull {
                 it.id == record.contractId && it.windowStartsAt == record.contractWindowStartsAt
             },
         ) { "Configured contract policy for submission ${record.submissionId} is unavailable" }
@@ -1694,6 +1749,7 @@ object ContractsManager {
                 ResourceContractRecord(
                     ResourceContractRecord.stateId(definition.id, definition.windowStartsAt),
                     state,
+                    definitionSnapshot = definition,
                 ),
             )
             contractRepository.saveDirty().getOrThrow()

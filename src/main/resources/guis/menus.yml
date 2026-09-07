@@ -567,6 +567,7 @@ menus:
       material: PAPER
       name: '<heading>'
       lore:
+        - ''
         - '<description-one>'
         - '<description-two>'
         - ''
@@ -579,10 +580,11 @@ menus:
       material: PAPER
       name: '<gold><bold><contract-name>'
       lore:
+        - ''
         - '<gray>Осталось по заказу: <white><remaining><gray>/<white><target>'
         - '<gray>У вас в инвентаре: <white><available>'
         - '<gray>Ваш лимит: <white><player-remaining>'
-        - '<gray>Награда: <gold><payout> <white>💰</white> <gray>за единицу'
+        - '<gray>Следующий предмет: <gold><payout> <white>💰</white>'
         - '<gray>Ранг: <gold>+<cap-bonus>% <gray>к лимиту • <gold>+<payout-bonus>% <gray>к выплате'
         - '<gray>До: <white><ends-at>'
         - ''
@@ -591,6 +593,7 @@ menus:
       material: PAPER
       name: '<gold><bold><contract-name>'
       lore:
+        - ''
         - '<gray>У вас: <white><available>'
         - '<gray>Осталось по заказу: <white><remaining>'
         - '<gray>Ваш лимит: <white><player-remaining>'
@@ -601,6 +604,7 @@ menus:
       material: PAPER
       name: '<heading>'
       lore:
+        - ''
         - '<gray>Собрано: <white><accepted><gray>/<white><target>'
         - '<gray>Участников: <white><contributors>'
         - ''
@@ -609,12 +613,18 @@ menus:
       material: GOLD_NUGGET
       name: '<gold><bold>Выплата:</bold> <payout> <white>💰</white>'
       lore:
-        - '<gray>Ставка: <gold><per-unit> <white>💰</white> <gray>за единицу.'
+        - ''
+        - '<gray>Следующий предмет: <gold><per-unit> <white>💰</white>'
         - '<gray>Надбавка ранга: <gold>+<payout-bonus>%'
+        - ''
+        - '<gray>Выплата рассчитана за всю партию.'
+        - '<gray>Котировка действует <white>30 секунд<gray>.'
+        - '<gray>Новые поставки могут изменить цену.'
     contracts-detail-quantity:
       material: PAPER
       name: '<white><bold>Сдать: <selected>'
       lore:
+        - ''
         - '<gray>Минимальная партия: <white><minimum>'
         - '<gray>Доступно сейчас: <white><maximum>'
         - ''
@@ -630,12 +640,13 @@ menus:
       material: GREEN_STAINED_GLASS_PANE
       name: '<green><bold>Подтвердить'
       lore:
+        - ''
         - { text: '<gray>Будет принято: <white><selected>', when: can-submit }
         - { text: '<gray>Выплата: <gold><payout> <white>💰</white>', when: can-submit }
         - { text: '', when: can-submit }
-        - { text: '<green>ЛКМ: подтвердить сдачу.', when: can-submit }
+        - { text: '<green>[▶] ЛКМ — сдать ресурсы', when: can-submit }
         - { text: '<red>Сдача недоступна', unless: can-submit }
-        - { text: '<gray>Не хватает минимальной партии.', unless: can-submit }
+        - { text: '<unavailable-reason>', unless: can-submit }
     scheduled-refresh:
       material: CLOCK
       name: '<yellow>Обновить'
@@ -964,15 +975,16 @@ menus:
       lore: []
     board-contract:
       material: WRITABLE_BOOK
-      name: '<gold>Заказ сервера: <white><name>'
+      name: '<gold><name>'
       lore:
-        - '<dark_gray>Системное объявление · <status>'
+        - ''
+        - '<gray>Городская закупка · <status>'
         - ''
         - '<gray>Ресурс: <white><item>'
         - '<gray>Сдано: <white><accepted>/<target> <dark_gray>(<progress>%)'
         - '<gray>В обработке: <white><reserved>'
         - '<gray>Осталось: <white><remaining>'
-        - '<gray>Награда: <green><payout>/шт.'
+        - '<gray>Следующий предмет: <gold><payout> <white>💰</white>'
         - '<gray>Остаток бюджета: <green><budget>'
         - '<gray>До: <white><ends>'
         - ''

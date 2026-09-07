@@ -121,7 +121,6 @@ balance сверяется в точных minor units. Неоднозначны
 /arc contracts
 /arc contracts status
 /arc contracts open forge_orders
-/arc contracts submit forge_raw_iron 64
 ```
 
 ## /arc investigation

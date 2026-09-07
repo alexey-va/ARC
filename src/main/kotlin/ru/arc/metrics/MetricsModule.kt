@@ -35,8 +35,14 @@ import ru.arc.metrics.core.MetricsConfig
 import ru.arc.metrics.core.MetricsIdentity
 import ru.arc.metrics.core.RedisMetricsBinder
 import ru.arc.metrics.paper.PaperMetricsCollector
+import ru.arc.redis.network.RedisReplayPolicy
+import ru.arc.redis.network.ValidatedRedisTopic
 import ru.arc.product.ProductOnboardingHint
+import ru.arc.product.ProductAction
+import ru.arc.product.ProductFeature
+import ru.arc.product.ProductOutcome
 import ru.arc.util.Logging.info
+import ru.arc.util.Common
 import ru.arc.util.Logging.warn
 import kotlin.time.Duration.Companion.seconds
 
@@ -50,6 +56,7 @@ object MetricsModule : PluginModule {
     private var redisMetrics: RedisMetricsBinder? = null
     private var dungeonInterest: DungeonInterestMetrics? = null
     private var productInterest: ProductInterestTelemetry? = null
+    private var externalProductTopic: ValidatedRedisTopic<ExternalProductEnvelope>? = null
     private var productUi: ProductUiListener? = null
     private var activeDungeonConfig: DungeonInterestConfig? = null
     private var platformHeavyEnabled = false
@@ -98,6 +105,49 @@ object MetricsModule : PluginModule {
         hint: ProductOnboardingHint,
     ) {
         productInterest?.onboardingHint(player.uniqueId.toString(), hint)
+    }
+
+    /** Called by the bounded optional external product bridge. */
+    internal fun recordExternalProduct(
+        playerId: String,
+        feature: ProductFeature?,
+        outcome: ProductOutcome?,
+        action: ProductAction?,
+    ): Boolean {
+        val product = productInterest ?: return false
+        return runCatching {
+            when {
+                action != null -> product.action(playerId, action)
+                outcome != null -> product.outcome(playerId, outcome, feature, ProductEntryPoint.GAMEPLAY)
+                feature != null -> product.featureInterest(playerId, feature, ProductEntryPoint.GAMEPLAY)
+                else -> error("empty external product signal")
+            }
+            true
+        }.onFailure { warn("External product telemetry rejected: {}", it.message ?: it::class.simpleName) }
+            .getOrDefault(false)
+    }
+
+    internal fun recordExternalEvent(
+        playerId: java.util.UUID,
+        source: ExternalProductSource,
+        event: ExternalProductEvent,
+        operationId: String,
+    ): Boolean {
+        val product = productInterest ?: return false
+        val occurredAt = System.currentTimeMillis()
+        val envelope = ExternalProductEnvelope(
+            origin = ARC.serverName ?: "unknown",
+            player = ExternalProductEnvelopeCodec.player(playerId),
+            source = source.label,
+            event = event.label,
+            operationId = operationId,
+            occurredAt = occurredAt,
+        )
+        val local = product.externalEvent(envelope.player, source, event, occurredAt)
+        if (!local) return false
+        val topic = externalProductTopic
+        if (topic == null || ARC.redisManager == null) return local
+        return runCatching { topic.publish(envelope); local }.getOrDefault(local)
     }
 
     fun productInterestReport(
@@ -160,10 +210,27 @@ object MetricsModule : PluginModule {
                         statePath = ARC.instance.dataPath.resolve("data/product-interest-v1.json"),
                         primaryAggregator = redisConfig.mainServer,
                         redis = ARC.redisManager,
-                    ).also {
-                        it.start()
-                        productInterest = it
-                        productUi = ProductUiListener(ARC.instance, it).also(ProductUiListener::start)
+                    ).also { productInstance ->
+                        productInstance.start()
+                        productInterest = productInstance
+                        productUi = ProductUiListener(ARC.instance, productInstance).also(ProductUiListener::start)
+                        ARC.redisManager?.takeIf { productConfig.networkEnabled }?.let { redis ->
+                            externalProductTopic = ValidatedRedisTopic.open(
+                                redis = redis,
+                                channel = ExternalProductEnvelopeCodec.CHANNEL,
+                                codec = ExternalProductEnvelopeCodec.codec(Common.gson),
+                                originAllowed = { it.isNotBlank() },
+                                embeddedOrigin = ExternalProductEnvelope::origin,
+                                replay = RedisReplayPolicy({ "${it.player}:${it.source}:${it.event}:${it.operationId}" }, 86_400_000L, 4_096),
+                                onMessage = { envelope, origin ->
+                                    if (origin != (ARC.serverName ?: "unknown")) {
+                                        val source = ExternalProductSource.entries.firstOrNull { it.label == envelope.source }
+                                        val event = ExternalProductEvent.entries.firstOrNull { it.label == envelope.event }
+                                        if (source != null && event != null) productInstance.externalEvent(envelope.player, source, event, envelope.occurredAt)
+                                    }
+                                },
+                            )
+                        }
                     }
                 } else {
                     null
@@ -356,6 +423,9 @@ object MetricsModule : PluginModule {
         dungeonInterest = null
         productUi?.close()
         productUi = null
+        externalProductTopic?.close()
+        externalProductTopic = null
+        ExternalProductTelemetryBridge.clearReplayState()
         productInterest?.shutdown()
         productInterest = null
         activeDungeonConfig = null

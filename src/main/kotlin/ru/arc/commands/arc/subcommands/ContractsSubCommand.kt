@@ -7,9 +7,7 @@ import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.tabComplete
 import ru.arc.contracts.ContractsManager
 import ru.arc.contracts.ContractsMode
-import ru.arc.contracts.ContractSubmissionOutcome
 import ru.arc.contracts.NpcContractsGui
-import ru.arc.contracts.SubmissionRejection
 import ru.arc.contracts.PaperSeasonTrophyItems
 import ru.arc.contracts.SeasonDungeonLaunchPreparationOutcome
 import ru.arc.contracts.SeasonMoneyActionOutcome
@@ -34,7 +32,7 @@ object ContractsSubCommand : SubCommand {
     override val defaultPermission: String? = null
     override val defaultDescription = "Открыть доску ресурсных контрактов"
     override val defaultUsage =
-        "/arc contracts [status|open <группа>|submit <id> <количество>|donate <этап> <сумма>|pass <данж>|launch <данж>|trophy <количество>]"
+        "/arc contracts [status|open <группа>|donate <этап> <сумма>|pass <данж>|launch <данж>|trophy <количество>]"
     override val defaultPlayerOnly = false
 
     override fun isAvailable(): Boolean = ContractsManager.mode() != ContractsMode.DISABLED
@@ -44,7 +42,6 @@ object ContractsSubCommand : SubCommand {
         when (action) {
             "status", "list" -> showBoard(sender)
             "open", "menu", "меню" -> openBoard(sender, args)
-            "submit", "сдать" -> submit(sender, args)
             "donate", "вклад" -> donateCash(sender, args)
             "pass", "пропуск" -> buyPass(sender, args)
             "launch", "экспедиция" -> launchDungeon(sender, args)
@@ -56,11 +53,10 @@ object ContractsSubCommand : SubCommand {
 
     override fun tabComplete(sender: CommandSender, args: Array<String>): List<String>? =
         when (args.size) {
-            1 -> listOf("status", "open", "submit", "donate", "pass", "launch", "trophy").tabComplete(args[0])
+            1 -> listOf("status", "open", "donate", "pass", "launch", "trophy").tabComplete(args[0])
             2 ->
                 when (args[0].lowercase()) {
                     "open" -> ContractsManager.currentViews().map { it.group }.distinct().tabComplete(args[1])
-                    "submit" -> ContractsManager.currentViews().map { it.id }.tabComplete(args[1])
                     "donate" -> ContractsManager.seasonProjectStageIds().tabComplete(args[1])
                     "pass", "launch" -> ContractsManager.seasonDungeonContractIds().tabComplete(args[1])
                     else -> null
@@ -110,42 +106,6 @@ object ContractsSubCommand : SubCommand {
         }
         if (!ContractsManager.submissionsEnabled()) {
             sender.sendMessage(CommandConfig.get("contracts.observe-only", "<yellow>Сдача предметов пока выключена: режим калибровки."))
-        }
-    }
-
-    private fun submit(sender: CommandSender, args: Array<String>) {
-        if (!ContractsManager.submissionsEnabled()) {
-            sender.sendMessage(
-                CommandConfig.get(
-                    "contracts.observe-only",
-                    "<yellow>Контракты пока калибруются. <gray>Сдача предметов и выплаты выключены.",
-                ),
-            )
-            return
-        }
-        val player = sender as? Player
-        if (player == null) {
-            sender.sendMessage(TextUtil.mm("<red>Сдать ресурсы может только игрок."))
-            return
-        }
-        val contractId = args.getOrNull(1)?.lowercase()
-        val quantity = args.getOrNull(2)?.toIntOrNull()
-        if (contractId == null || quantity == null || quantity <= 0) {
-            sendUsage(sender)
-            return
-        }
-        player.sendMessage(TextUtil.mm("<gray>Проверяю ресурсы и резерв контракта…"))
-        ContractsManager.submit(player, contractId, quantity).whenComplete { outcome, failure ->
-            Tasks.scheduler.runSync(
-                Runnable {
-                    if (!player.isOnline) return@Runnable
-                    if (failure != null || outcome == null) {
-                        player.sendMessage(TextUtil.mm("<red>Заявка остановлена. Не повторяй её до проверки администратора."))
-                        return@Runnable
-                    }
-                    player.sendMessage(renderOutcome(outcome))
-                },
-            )
         }
     }
 
@@ -311,43 +271,6 @@ object ContractsSubCommand : SubCommand {
             BigDecimal(raw.replace(',', '.')).setScale(2, RoundingMode.UNNECESSARY)
                 .movePointRight(2).longValueExact().takeIf { it > 0L }
         }.getOrNull()
-
-    private fun renderOutcome(outcome: ContractSubmissionOutcome) =
-        TextUtil.mm(
-            when (outcome) {
-                is ContractSubmissionOutcome.Committed ->
-                    "<green>Контракт принят: <white>${outcome.receipt.quantity} шт. <gray>· выплата <green>${formatContractMoney(outcome.receipt.payoutMinor)} <white>💰</white>"
-                is ContractSubmissionOutcome.Duplicate ->
-                    "<yellow>Эта заявка уже учтена. <gray>Повторной выплаты не было."
-                is ContractSubmissionOutcome.Rejected ->
-                    "<yellow>Заявка не принята: <gray>${rejection(outcome.reason)}"
-                is ContractSubmissionOutcome.Cancelled ->
-                    "<yellow>Инвентарь изменился до сдачи. <gray>Предметы и деньги не менялись."
-                is ContractSubmissionOutcome.Refunded ->
-                    "<yellow>Выплата не прошла. <gray>Точные сданные предметы возвращены."
-                is ContractSubmissionOutcome.ManualReview ->
-                    "<red>Заявка ${outcome.submissionId} остановлена для проверки. <gray>Не повторяй её вручную."
-                is ContractSubmissionOutcome.Unavailable ->
-                    "<red>Контрактный сервис сейчас недоступен. <gray>Предметы и деньги не менялись."
-            },
-        )
-
-    private fun rejection(reason: SubmissionRejection): String =
-        when (reason) {
-            SubmissionRejection.INVALID_REQUEST -> "неверные параметры"
-            SubmissionRejection.CONTRACT_NOT_OPEN -> "заказ сейчас закрыт"
-            SubmissionRejection.WINDOW_MISMATCH -> "окно заказа изменилось"
-            SubmissionRejection.STALE_STATE -> "состояние заказа изменилось, открой доску заново"
-            SubmissionRejection.QUANTITY_EXHAUSTED -> "нужное количество уже собрано"
-            SubmissionRejection.BUDGET_EXHAUSTED -> "бюджет заказа исчерпан"
-            SubmissionRejection.PLAYER_CAP_REACHED -> "твой лимит по заказу исчерпан"
-            SubmissionRejection.CONTRIBUTOR_LIMIT_REACHED -> "лимит участников заказа исчерпан"
-            SubmissionRejection.BELOW_MINIMUM -> "количество меньше минимальной партии"
-            SubmissionRejection.PROJECT_STAGE_LOCKED -> "этот этап общего проекта ещё не открыт"
-            SubmissionRejection.INVENTORY_UNAVAILABLE -> "нет нужного количества обычных предметов без модификаций"
-            SubmissionRejection.JOURNAL_CAPACITY_REACHED -> "журнал заявок заполнен; нужна проверка администратора"
-            SubmissionRejection.SUBMISSION_IN_PROGRESS -> "предыдущая сдача ещё обрабатывается"
-        }
 
     private fun formatTime(timestamp: Long): String = TIME_FORMAT.format(Instant.ofEpochMilli(timestamp))
 

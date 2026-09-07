@@ -4,6 +4,10 @@ mode: observe
 leader-server: spawn
 server-weekly-budget: "250000.00"
 
-# Resource orders are added with explicit ISO-8601 windows and exact decimal prices.
+# Resource orders use exact decimal base prices. Sales require a GUI quote on
+# rc_origin_spawn. Optional weekly-recurring renews a Monday 00:00 UTC seven-day
+# window; dynamic-pricing prices each item from bounded weekly demand/supply.
+# Both options default false for existing fixed-window orders. Active window
+# policy is frozen in durable state; edits take effect on the next window.
 # Disabled/empty catalogs mint nothing and keep the public runtime read-only.
 orders: {}

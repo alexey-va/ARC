@@ -31,7 +31,7 @@ test('an Origin quote consumes one real item once and a second click cannot dupl
   const list = await player.gui({ title: /Книга заказов/i });
   await list.locator(item => item.getDisplayName().includes('E2E stone order')).click();
   const detail = await player.gui({ title: /Сдать ресурсы/i });
-  const firstQuote = detail.locator(item => item.getDisplayName().includes('Выплата:')).displayName();
+  const firstQuote = await detail.locator(item => item.getDisplayName().includes('Выплата:')).displayName();
   const confirm = detail.locator(item => item.getDisplayName().includes('Подтвердить'));
   await confirm.click();
   await confirm.click({ timeout: 1000 }).catch(() => undefined);
@@ -47,7 +47,7 @@ test('an Origin quote consumes one real item once and a second click cannot dupl
   await player.gui({ title: /Книга заказов/i }).then(gui =>
     gui.locator(item => item.getDisplayName().includes('E2E stone order')).click());
   const repriced = await player.gui({ title: /Сдать ресурсы/i });
-  const nextQuote = repriced.locator(item => item.getDisplayName().includes('Выплата:')).displayName();
+  const nextQuote = await repriced.locator(item => item.getDisplayName().includes('Выплата:')).displayName();
   const quoteValue = text => Number.parseFloat(text.replace(',', '.').replace(/[^0-9.]/g, ''));
   assert.ok(quoteValue(nextQuote) < quoteValue(firstQuote), 'dynamic price did not decrease after accepted supply');
 });

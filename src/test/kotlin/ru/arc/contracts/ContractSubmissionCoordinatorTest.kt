@@ -22,6 +22,52 @@ class ContractSubmissionCoordinatorTest : StringSpec({
             maxSubmissionQuantity = 32,
         )
 
+    "rejects stale or changed GUI quotes before touching inventory or payment" {
+        runTest {
+            val longWindow = definition.copy(windowEndsAt = 100_000L)
+            val initial = ContractSubmissionQuote(longWindow.id, longWindow.windowStartsAt, "player-1", 8, 2_000L, 0L, 1_500L)
+            val cases = listOf(
+                initial to 31_501L,
+                initial.copy(payoutMinor = 2_001L) to 2_000L,
+                initial.copy(playerId = "another-player") to 2_000L,
+                initial.copy(expectedRevision = 1L) to 2_000L,
+                initial.copy(quantity = 7) to 2_000L,
+            )
+            for ((quote, now) in cases) {
+                val events = mutableListOf<String>()
+                val persistence = FakePersistence(longWindow, events)
+                val inventory = object : ContractInventoryGateway {
+                    override suspend fun prepare(playerId: String, itemKey: String, quantity: Int): PreparedContractInventory? =
+                        error("Invalid quote must not inspect or mutate inventory")
+                }
+                val payment = FakePayment(0L, ContractPaymentEvidence(true, 2_000L), events)
+                ContractSubmissionCoordinator(persistence, inventory, payment) { now }
+                    .submit(longWindow, "stale", "player-1", 8, quote = quote) shouldBe
+                    ContractSubmissionOutcome.Rejected(SubmissionRejection.STALE_STATE)
+                events shouldBe emptyList()
+                persistence.journals shouldBe emptyMap()
+                payment.depositCalls shouldBe 0
+            }
+        }
+    }
+
+    "network envelope rejects payout before creating escrow" {
+        runTest {
+            val events = mutableListOf<String>()
+            val persistence = FakePersistence(definition, events)
+            val payment = FakePayment(0L, ContractPaymentEvidence(true, 2_000L), events)
+            val inventory = object : ContractInventoryGateway {
+                override suspend fun prepare(playerId: String, itemKey: String, quantity: Int): PreparedContractInventory? =
+                    error("Exhausted network budget must not touch inventory")
+            }
+            ContractSubmissionCoordinator(persistence, inventory, payment, tickingClock())
+                .submit(definition, "no-budget", "player-1", 8, availableNetworkBudgetMinor = 1_999L) shouldBe
+                ContractSubmissionOutcome.Rejected(SubmissionRejection.BUDGET_EXHAUSTED)
+            events shouldBe emptyList()
+            persistence.journals shouldBe emptyMap()
+        }
+    }
+
     "persists every intent before removing items and paying exactly once" {
         runTest {
             val events = mutableListOf<String>()

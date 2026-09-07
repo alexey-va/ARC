@@ -21,6 +21,7 @@ class PaperContractSubmissionGatewaysTest : StringSpec({
 
     beforeSpec {
         server = MockBukkit.mock()
+        server.addSimpleWorld("rc_origin_spawn")
     }
 
     afterSpec {
@@ -30,6 +31,7 @@ class PaperContractSubmissionGatewaysTest : StringSpec({
     "removes and restores the exact prevalidated vanilla slots" {
         runTest {
             val player = server.addPlayer("ContractMiner")
+            player.teleport(server.getWorld("rc_origin_spawn")!!.spawnLocation)
             player.inventory.setItem(0, ItemStack(Material.STONE, 5))
             player.inventory.setItem(1, ItemStack(Material.STONE, 10))
             val gateway = PaperContractInventoryGateway()
@@ -53,6 +55,7 @@ class PaperContractSubmissionGatewaysTest : StringSpec({
     "proves no mutation when a slot changes before removal" {
         runTest {
             val player = server.addPlayer("ChangingMiner")
+            player.teleport(server.getWorld("rc_origin_spawn")!!.spawnLocation)
             player.inventory.setItem(0, ItemStack(Material.STONE, 8))
             player.isOnline shouldBe true
             player.inventory.getItem(0)!!.type.key.toString() shouldBe "minecraft:stone"
@@ -67,9 +70,23 @@ class PaperContractSubmissionGatewaysTest : StringSpec({
         }
     }
 
+    "leaving Origin after preparation cannot remove resources" {
+        runTest {
+            val player = server.addPlayer("TravellingMiner")
+            player.teleport(server.getWorld("rc_origin_spawn")!!.spawnLocation)
+            player.inventory.setItem(0, ItemStack(Material.STONE, 8))
+            val prepared = PaperContractInventoryGateway().prepare(player.uniqueId.toString(), "minecraft:stone", 8)!!
+            player.teleport(server.addSimpleWorld("survival").spawnLocation)
+            prepared.removeExact() shouldBe ContractInventoryMutation.NotPerformed("outside_origin")
+            player.inventory.getItem(0)?.amount shouldBe 8
+            PaperContractInventoryGateway().prepare(player.uniqueId.toString(), "minecraft:stone", 8) shouldBe null
+        }
+    }
+
     "rejects custom namespaces and metadata-bearing vanilla variants" {
         runTest {
             val player = server.addPlayer("NamedMiner")
+            player.teleport(server.getWorld("rc_origin_spawn")!!.spawnLocation)
             val namedStone = ItemStack(Material.STONE, 8)
             namedStone.itemMeta = namedStone.itemMeta.also { it.displayName(Component.text("Особый камень")) }
             player.inventory.setItem(0, namedStone)
@@ -82,6 +99,7 @@ class PaperContractSubmissionGatewaysTest : StringSpec({
 
     "counts only plain matching stacks for a contract menu" {
         val player = server.addPlayer("CountingMiner")
+            player.teleport(server.getWorld("rc_origin_spawn")!!.spawnLocation)
         player.inventory.setItem(0, ItemStack(Material.RAW_IRON, 32))
         player.inventory.setItem(1, ItemStack(Material.RAW_IRON, 7))
         val named = ItemStack(Material.RAW_IRON, 64)

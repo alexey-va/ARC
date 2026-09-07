@@ -542,6 +542,15 @@ class ProductInterestTelemetry(
     }
 
     @Synchronized
+    fun externalEvent(player: String, source: ExternalProductSource, event: ExternalProductEvent, occurredAt: Long): Boolean {
+        if (sessions[player]?.qa == true) {
+            qa("outcome")
+            return false
+        }
+        return store.applyExternal(player, source, event, occurredAt)
+    }
+
+    @Synchronized
     fun worldChange(
         playerId: String,
         from: ProductWorldType,

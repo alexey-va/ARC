@@ -53,16 +53,17 @@ internal sealed interface ContractBoardCard {
                     true,
                 )
 
-        val action: Component
-            get() =
-                TextUtil.mm(
-                    if (canPrepareSubmission) {
-                        "<yellow>ЛКМ <gray>— подготовить команду сдачи"
-                    } else {
-                        "<dark_gray>Сдача предметов сейчас отключена"
-                    },
-                    true,
-                )
+        fun action(originAllowed: Boolean): Component =
+            TextUtil.mm(
+                if (!originAllowed) {
+                    "<yellow>Откройте заказ у конторщика на спавне"
+                } else if (canPrepareSubmission) {
+                    "<yellow>ЛКМ <gray>— открыть книгу заказов"
+                } else {
+                    "<dark_gray>Сдача предметов сейчас отключена"
+                },
+                true,
+            )
 
         val endsAt: String
             get() = TIME_FORMAT.format(Instant.ofEpochMilli(view.windowEndsAt))
@@ -150,7 +151,7 @@ internal object ContractBoardTelemetry {
     }
 
     fun recordInteraction(contractId: String, outcome: String) {
-        require(outcome == "submit_prompt" || outcome == "unavailable") { "Unsupported board interaction outcome" }
+        require(outcome == "open_gui" || outcome == "unavailable") { "Unsupported board interaction outcome" }
         interactions.computeIfAbsent(InteractionKey(contractId, outcome)) { AtomicLong() }.incrementAndGet()
         publish()
     }

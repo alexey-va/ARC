@@ -15,30 +15,41 @@ object ContractQuantitySelector {
         view: ResourceContractPlayerView,
         availableItems: Int,
         requested: Int? = null,
+        marketQuote: ContractMarketQuoteData? = null,
     ): ContractQuantitySelection {
         val contract = view.contract
-        val budgetUnits =
-            (contract.budgetMinor - contract.spentMinor - contract.reservedMinor)
-                .coerceAtLeast(0L) / view.playerPayoutMinorPerUnit
+        val effectiveQuote = marketQuote ?: view.pricingDefinition?.let {
+            ContractMarketQuoteData(it, view.pricingSupply, view.pricingAt)
+        }
+        val budgetRemaining = (contract.budgetMinor - contract.spentMinor - contract.reservedMinor).coerceAtLeast(0L)
         val maximum =
             minOf(
                 availableItems.coerceAtLeast(0).toLong(),
                 view.maxSubmissionQuantity.toLong(),
                 view.playerRemainingQuantity,
                 contract.remainingQuantity,
-                budgetUnits,
             ).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        val affordableMaximum = effectiveQuote?.let { quote ->
+            ContractMarketPricing.affordableQuantity(
+                quote.definition, quote.supplyBefore, maximum.toLong(), budgetRemaining, quote.now,
+                ContractRankPolicy(view.capBasisPoints, view.payoutBasisPoints),
+            ).toInt()
+        } ?: (budgetRemaining / view.playerPayoutMinorPerUnit).coerceAtMost(maximum.toLong()).toInt()
+        val effectiveMaximum = if (maximum < view.minSubmissionQuantity) maximum else affordableMaximum
         val selected =
-            if (maximum < view.minSubmissionQuantity) {
+            if (effectiveMaximum < view.minSubmissionQuantity) {
                 0
             } else {
-                (requested ?: maximum).coerceIn(view.minSubmissionQuantity, maximum)
+                (requested ?: effectiveMaximum).coerceIn(view.minSubmissionQuantity, effectiveMaximum)
             }
         return ContractQuantitySelection(
             minimum = view.minSubmissionQuantity,
-            maximum = maximum,
+            maximum = effectiveMaximum,
             selected = selected,
-            payoutMinor = Math.multiplyExact(selected.toLong(), view.playerPayoutMinorPerUnit),
+            payoutMinor = effectiveQuote?.let { quote ->
+                ContractMarketPricing.payoutMinor(quote.definition, quote.supplyBefore, selected.toLong(), quote.now,
+                    ContractRankPolicy(view.capBasisPoints, view.payoutBasisPoints))
+            } ?: Math.multiplyExact(selected.toLong(), view.playerPayoutMinorPerUnit),
         )
     }
 

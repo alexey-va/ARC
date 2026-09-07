@@ -103,14 +103,14 @@ object NpcContractsGui {
                 "cap-bonus" to ((view.capBasisPoints / 100) - 100).toString(),
                 "payout-bonus" to ((view.payoutBasisPoints / 100) - 100).toString(),
                 "ends-at" to formatTime(view.contract.windowEndsAt),
-                "action" to action(view, selectable),
+                "action" to action(view, selectable, ContractOriginGate.canSubmit(player)),
             ),
         ).withType(PaperContractItems.material(view.contract.itemKey) ?: Material.PAPER)
         return ArcMenus.entry(item) {
             if (selectable.canSubmit && view.contract.status == ContractStatus.OPEN.label) {
                 openDetail(it, group, view.contract.id)
             } else {
-                it.sendActionBar(unavailableReason(group, view, selectable, available))
+                it.sendActionBar(unavailableReason(group, view, selectable, available, ContractOriginGate.canSubmit(it)))
             }
         }
     }
@@ -129,7 +129,10 @@ object NpcContractsGui {
         val available = PaperContractItems.countPlain(player, view.contract.itemKey)
         val selection = ContractQuantitySelector.select(view, available, requestedQuantity)
         val material = PaperContractItems.material(view.contract.itemKey) ?: Material.PAPER
-        val canSubmit = selection.canSubmit
+        val quote = ContractsManager.quote(player, contractId, selection.selected)
+        val originAllowed = ContractOriginGate.canSubmit(player)
+        val quoteAvailable = quote != null
+        val canSubmit = selection.canSubmit && originAllowed && quoteAvailable
         ArcMenus.open(
             player,
             ArcMenuSchema.CONTRACTS_DETAIL,
@@ -164,7 +167,7 @@ object NpcContractsGui {
                         ArcMenuSchema.CONTRACTS_DETAIL,
                         "payout",
                         render(
-                            "payout" to formatContractMoney(selection.payoutMinor),
+                            "payout" to (quote?.payoutMinor?.let(::formatContractMoney) ?: "—"),
                             "per-unit" to formatContractMoney(view.playerPayoutMinorPerUnit),
                             "payout-bonus" to ((view.payoutBasisPoints / 100) - 100).toString(),
                         ),
@@ -195,7 +198,9 @@ object NpcContractsGui {
                             ),
                         )
                     } else {
-                        context.player.sendActionBar(unavailableReason(group, view, selection, available))
+                        context.player.sendActionBar(
+                            unavailableReason(group, view, selection, available, ContractOriginGate.canSubmit(context.player)),
+                        )
                     }
                 },
                 "back" to ArcMenus.entry(ArcMenus.item(ArcMenuSchema.CONTRACTS_DETAIL, "back")) {
@@ -208,13 +213,18 @@ object NpcContractsGui {
                         PaperMenuItemRenderContext(
                             values = mapOf(
                                 "selected" to Component.text(selection.selected),
-                                "payout" to Component.text(formatContractMoney(selection.payoutMinor)),
+                                "payout" to Component.text(quote?.payoutMinor?.let(::formatContractMoney) ?: "—"),
+                                "unavailable-reason" to unavailableReason(group, view, selection, available, originAllowed),
                             ),
-                            flags = if (canSubmit) setOf("can-submit") else emptySet(),
+                            flags = buildSet {
+                                if (canSubmit) add("can-submit")
+                                if (originAllowed) add("origin-allowed")
+                                if (quoteAvailable) add("quote-available")
+                            },
                         ),
                     ),
                     enabled = canSubmit,
-                ) { submit(it, group, contractId, selection.selected) },
+                ) { submit(it, group, quote) },
             ),
         )
     }
@@ -226,12 +236,19 @@ object NpcContractsGui {
     private fun submit(
         player: Player,
         group: String,
-        contractId: String,
-        quantity: Int,
+        quote: ContractSubmissionQuote?,
     ) {
+        if (!ContractOriginGate.canSubmit(player)) {
+            player.sendActionBar(message(group, "messages.origin-required", "<yellow>Сдать заказ можно только у конторщика на спавне."))
+            return
+        }
+        if (quote == null) {
+            player.sendActionBar(message(group, "messages.unavailable", "<yellow>Этот заказ больше недоступен. Обновите книгу заказов."))
+            return
+        }
         player.closeInventory()
         player.sendActionBar(message(group, "messages.processing", "<gray>Проверяем ресурсы и запись в книге…"))
-        ContractsManager.submit(player, contractId, quantity).whenComplete { outcome, failure ->
+        ContractsManager.submit(player, quote).whenComplete { outcome, failure ->
             Tasks.scheduler.runSync(
                 Runnable {
                     if (!player.isOnline) return@Runnable
@@ -257,8 +274,10 @@ object NpcContractsGui {
         view: ResourceContractPlayerView,
         selection: ContractQuantitySelection,
         available: Int,
+        originAllowed: Boolean,
     ): Component =
         when {
+            !originAllowed -> message(group, "messages.origin-required", "<yellow>Сдать заказ можно только у конторщика на спавне.")
             view.contract.status != ContractStatus.OPEN.label ->
                 message(group, "messages.closed", "<yellow>Этот заказ сейчас закрыт.")
             view.playerRemainingQuantity < view.minSubmissionQuantity ->
@@ -273,8 +292,10 @@ object NpcContractsGui {
     private fun action(
         view: ResourceContractPlayerView,
         selection: ContractQuantitySelection,
+        originAllowed: Boolean,
     ): String =
         when {
+            !originAllowed -> "<yellow>Откройте этот заказ у конторщика на спавне"
             view.contract.status != ContractStatus.OPEN.label -> "<yellow>Заказ сейчас закрыт"
             view.playerRemainingQuantity < view.minSubmissionQuantity -> "<yellow>Ваш лимит исчерпан"
             view.contract.remainingQuantity < view.minSubmissionQuantity -> "<green>Заказ выполнен"

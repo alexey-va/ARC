@@ -10,6 +10,8 @@ defaults:
     title: "<dark_gray>Сдать ресурсы"
     info-heading: "<gold><bold>Общий заказ"
   messages:
+    origin-required: "<yellow>Сдать заказ можно только у конторщика на спавне."
+    unavailable: "<yellow>Этот заказ больше недоступен. Обновите книгу заказов."
     rejections: { }
 
 boards:

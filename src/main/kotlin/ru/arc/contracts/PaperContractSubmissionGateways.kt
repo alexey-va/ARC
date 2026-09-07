@@ -30,6 +30,7 @@ class PaperContractInventoryGateway(
         onBukkitMain {
             val uuid = runCatching { UUID.fromString(playerId) }.getOrNull() ?: return@onBukkitMain null
             val player = playerLookup(uuid)?.takeIf { it.isOnline } ?: return@onBukkitMain null
+            if (!ContractOriginGate.canSubmit(player)) return@onBukkitMain null
             val material = PaperContractItems.material(itemKey) ?: return@onBukkitMain null
             require(quantity in 1..EscrowedItemPayload.MAX_ITEM_QUANTITY) { "Invalid contract inventory quantity" }
 
@@ -99,6 +100,9 @@ private class PaperPreparedContractInventory(
             if (removed) return@onBukkitMain ContractInventoryMutation.Ambiguous
             val player = playerLookup(playerId)?.takeIf { it.isOnline }
                 ?: return@onBukkitMain ContractInventoryMutation.NotPerformed("player_offline")
+            if (!ContractOriginGate.canSubmit(player)) {
+                return@onBukkitMain ContractInventoryMutation.NotPerformed("outside_origin")
+            }
             val inventory = player.inventory
             if (slots.any { plan -> !inventory.getItem(plan.slot).sameBytes(plan.beforeBytes) }) {
                 return@onBukkitMain ContractInventoryMutation.NotPerformed("slot_changed")

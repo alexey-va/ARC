@@ -45,6 +45,8 @@ data class ResourceContractDefinition(
     val maxSubmissionQuantity: Int = 2_304,
     val kind: ContractKind = ContractKind.RESOURCE,
     val group: String = DEFAULT_GROUP,
+    val dynamicPricing: Boolean = false,
+    val weeklyRecurring: Boolean = false,
 ) {
     init {
         require(ID_PATTERN.matches(id)) { "Invalid contract id: $id" }
@@ -158,7 +160,7 @@ data class ResourceContractState(
         require(spentMinor <= definition.budgetMinor) { "Contract state exceeds budget" }
         require(
             acceptedQuantity == 0L && spentMinor == 0L ||
-                ContractRankPolicy.payoutAllowed(definition.payoutMinorPerUnit, acceptedQuantity, spentMinor),
+                ContractMarketPricing.payoutAllowed(definition, acceptedQuantity, spentMinor),
         ) {
             "Contract state quantity and spend disagree"
         }
@@ -176,7 +178,7 @@ data class ResourceContractState(
             ) {
                 "Invalid contract receipt"
             }
-            require(ContractRankPolicy.payoutAllowed(definition.payoutMinorPerUnit, receipt.quantity, receipt.payoutMinor)) {
+            require(ContractMarketPricing.payoutAllowed(definition, receipt.quantity, receipt.payoutMinor)) {
                 "Contract receipt quantity and payout disagree"
             }
             require(perPlayerQuantity[receipt.playerId].orZero() >= receipt.quantity) {
@@ -228,6 +230,7 @@ data class ResourceContractState(
 data class ResourceContractRecord(
     val stateId: String,
     val state: ResourceContractState,
+    val definitionSnapshot: ResourceContractDefinition? = null,
 ) : ru.arc.repository.Entity {
     override fun id(): String = stateId
 
@@ -235,6 +238,7 @@ data class ResourceContractRecord(
         require(stateId == ResourceContractRecord.stateId(definition.id, definition.windowStartsAt)) {
             "Contract record id does not match policy"
         }
+        definitionSnapshot?.let { require(it == definition) { "Contract record definition snapshot does not match policy" } }
         state.validatedAgainst(definition)
         return this
     }
@@ -246,6 +250,7 @@ data class ResourceContractRecord(
             ResourceContractRecord(
                 stateId = stateId(definition.id, definition.windowStartsAt),
                 state = ResourceContractState.empty(definition),
+                definitionSnapshot = definition,
             )
     }
 }
@@ -277,6 +282,7 @@ sealed interface ContractSubmissionPlan {
         val plannedAt: Long,
         val playerCapBasisPoints: Int = ContractRankPolicy.BASE_BASIS_POINTS,
         val payoutBasisPoints: Int = ContractRankPolicy.BASE_BASIS_POINTS,
+        val priceSupplyBefore: Long = 0L,
     ) : ContractSubmissionPlan
 
     data class Duplicate(
@@ -345,11 +351,6 @@ object ResourceContractEngine {
             return ContractSubmissionPlan.Rejected(SubmissionRejection.QUANTITY_EXHAUSTED)
         }
         val budgetRemaining = (definition.budgetMinor - accountedPayout).coerceAtLeast(0L)
-        val payoutMinorPerUnit = policy.payoutMinorPerUnit(definition.payoutMinorPerUnit)
-        val budgetUnits = budgetRemaining / payoutMinorPerUnit
-        if (budgetUnits == 0L) {
-            return ContractSubmissionPlan.Rejected(SubmissionRejection.BUDGET_EXHAUSTED)
-        }
         val playerReserved =
             activeReservations.asSequence()
                 .filter { it.playerId == playerId }
@@ -361,25 +362,22 @@ object ResourceContractEngine {
             return ContractSubmissionPlan.Rejected(SubmissionRejection.PLAYER_CAP_REACHED)
         }
 
-        val accepted =
-            minOf(
-                requestedQuantity.toLong(),
-                definition.maxSubmissionQuantity.toLong(),
-                quantityRemaining,
-                budgetUnits,
-                playerRemaining,
-            )
+        val upper = minOf(requestedQuantity.toLong(), definition.maxSubmissionQuantity.toLong(), quantityRemaining, playerRemaining)
+        val priceSupplyBefore = accountedQuantity
+        val accepted = ContractMarketPricing.affordableQuantity(
+            definition, priceSupplyBefore, upper, budgetRemaining, now, policy,
+        )
         if (accepted < definition.minSubmissionQuantity) {
             return ContractSubmissionPlan.Rejected(
                 when {
                     playerRemaining < definition.minSubmissionQuantity -> SubmissionRejection.PLAYER_CAP_REACHED
-                    budgetUnits < definition.minSubmissionQuantity -> SubmissionRejection.BUDGET_EXHAUSTED
+                    ContractMarketPricing.payoutMinor(definition, priceSupplyBefore, definition.minSubmissionQuantity.toLong(), now, policy) > budgetRemaining -> SubmissionRejection.BUDGET_EXHAUSTED
                     quantityRemaining < definition.minSubmissionQuantity -> SubmissionRejection.QUANTITY_EXHAUSTED
                     else -> SubmissionRejection.BELOW_MINIMUM
                 },
             )
         }
-        val payout = Math.multiplyExact(accepted, payoutMinorPerUnit)
+        val payout = ContractMarketPricing.payoutMinor(definition, priceSupplyBefore, accepted, now, policy)
         check(payout <= budgetRemaining) { "Planned payout exceeds remaining budget" }
 
         return ContractSubmissionPlan.Accepted(
@@ -392,6 +390,7 @@ object ResourceContractEngine {
             plannedAt = now,
             playerCapBasisPoints = policy.playerCapBasisPoints,
             payoutBasisPoints = policy.payoutBasisPoints,
+            priceSupplyBefore = priceSupplyBefore,
         )
     }
 
@@ -414,9 +413,9 @@ object ResourceContractEngine {
         require(plan.acceptedQuantity > 0L && plan.payoutMinor > 0L) { "Cannot commit an empty submission" }
         val policy = ContractRankPolicy(plan.playerCapBasisPoints, plan.payoutBasisPoints)
         require(
-            Math.multiplyExact(plan.acceptedQuantity, policy.payoutMinorPerUnit(definition.payoutMinorPerUnit)) ==
+            ContractMarketPricing.payoutMinor(definition, plan.priceSupplyBefore, plan.acceptedQuantity, plan.plannedAt, policy) ==
                 plan.payoutMinor,
-        ) { "Submission payout does not match rank policy" }
+        ) { "Submission payout does not match locked market quote" }
         require(
             Math.addExact(state.perPlayerQuantity[plan.playerId].orZero(), plan.acceptedQuantity) <=
                 policy.playerCap(definition.perPlayerQuantityCap),
@@ -453,7 +452,7 @@ object ResourceContractEngine {
             return ContractCommitResult(state, it, changed = false)
         }
         require(state.contractId == definition.id) { SubmissionRejection.WINDOW_MISMATCH.label }
-        require(ContractRankPolicy.payoutAllowed(definition.payoutMinorPerUnit, reservation.quantity, reservation.payoutMinor)) {
+        require(ContractMarketPricing.payoutAllowed(definition, reservation.quantity, reservation.payoutMinor)) {
             "Reservation payout does not match contract policy"
         }
         return commitAccepted(
@@ -486,7 +485,7 @@ object ResourceContractEngine {
         require(playerQuantity <= ContractRankPolicy.MAXIMUM.playerCap(definition.perPlayerQuantityCap)) {
             "Submission exceeds player cap"
         }
-        require(ContractRankPolicy.payoutAllowed(definition.payoutMinorPerUnit, quantity, payoutMinor)) {
+        require(ContractMarketPricing.payoutAllowed(definition, quantity, payoutMinor)) {
             "Submission payout does not match released policy bounds"
         }
 
@@ -504,8 +503,8 @@ object ResourceContractEngine {
             receipts.remove(receipts.entries.first().key)
         }
         val nextStatus =
-            if (nextQuantity == definition.targetQuantity ||
-                definition.budgetMinor - nextSpent < definition.payoutMinorPerUnit
+            if (definition.targetQuantity - nextQuantity < definition.minSubmissionQuantity ||
+                definition.budgetMinor - nextSpent < ContractMarketPricing.minimumSubmissionPayout(definition)
             ) {
                 ContractStatus.COMPLETED
             } else {
@@ -545,7 +544,7 @@ object ResourceContractEngine {
             "Contract reservation set contains duplicate ids"
         }
         active.forEach { reservation ->
-            require(ContractRankPolicy.payoutAllowed(definition.payoutMinorPerUnit, reservation.quantity, reservation.payoutMinor)) {
+            require(ContractMarketPricing.payoutAllowed(definition, reservation.quantity, reservation.payoutMinor)) {
                 "Contract reservation payout does not match policy"
             }
         }

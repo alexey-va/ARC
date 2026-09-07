@@ -123,6 +123,8 @@ class ContractSubmissionCoordinator(
         playerId: String,
         requestedQuantity: Int,
         policy: ContractRankPolicy = ContractRankPolicy.IDENTITY,
+        quote: ContractSubmissionQuote? = null,
+        availableNetworkBudgetMinor: Long = Long.MAX_VALUE,
     ): ContractSubmissionOutcome {
         val records =
             try {
@@ -163,7 +165,7 @@ class ContractSubmissionCoordinator(
                     submissionId = submissionId,
                     playerId = playerId,
                     requestedQuantity = requestedQuantity,
-                    now = clock(),
+                    now = quote?.quotedAt ?: clock(),
                     reservations = reservations,
                     policy = policy,
                 )
@@ -174,6 +176,12 @@ class ContractSubmissionCoordinator(
             is ContractSubmissionPlan.Duplicate -> return ContractSubmissionOutcome.Duplicate(plan.receipt)
             is ContractSubmissionPlan.Rejected -> return ContractSubmissionOutcome.Rejected(plan.reason)
             is ContractSubmissionPlan.Accepted -> Unit
+        }
+        if (quote != null && !quote.matches(definition, plan, clock())) {
+            return ContractSubmissionOutcome.Rejected(SubmissionRejection.STALE_STATE)
+        }
+        if (plan.payoutMinor > availableNetworkBudgetMinor) {
+            return ContractSubmissionOutcome.Rejected(SubmissionRejection.BUDGET_EXHAUSTED)
         }
 
         val preparedInventory =

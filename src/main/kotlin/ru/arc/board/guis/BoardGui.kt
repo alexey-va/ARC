@@ -1,7 +1,6 @@
 package ru.arc.board.guis
 
 import net.kyori.adventure.text.Component
-import net.kyori.adventure.text.event.ClickEvent
 import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
@@ -13,6 +12,8 @@ import ru.arc.board.BoardManager
 import ru.arc.board.ContractBoardCard
 import ru.arc.board.ContractBoardCards
 import ru.arc.board.ContractBoardTelemetry
+import ru.arc.contracts.ContractOriginGate
+import ru.arc.contracts.NpcContractsGui
 import ru.arc.board.money
 import ru.arc.config.BoardConfig
 import ru.arc.config.Config
@@ -87,16 +88,12 @@ object BoardGuiFactory {
                 "payout" to Component.text(money(view.payoutMinorPerUnit)),
                 "budget" to Component.text(money(card.remainingBudgetMinor)),
                 "ends" to Component.text(card.endsAt),
-                "action" to card.action,
+                "action" to card.action(ContractOriginGate.canSubmit(player)),
             ))).withType(card.material)
             ArcMenus.entry(item) { clicker ->
                 if (card.canPrepareSubmission) {
-                    ContractBoardTelemetry.recordInteraction(view.id, "submit_prompt")
-                    clicker.closeInventory()
-                    clicker.sendMessage(
-                        TextUtil.mm(config.string("contracts.submit-prompt", "<yellow>Нажми сюда, введи количество и отправь команду сдачи."), true)
-                            .clickEvent(ClickEvent.suggestCommand("/arc contracts submit ${view.id} ")),
-                    )
+                    ContractBoardTelemetry.recordInteraction(view.id, "open_gui")
+                    NpcContractsGui.openList(clicker, view.group)
                 } else {
                     ContractBoardTelemetry.recordInteraction(view.id, "unavailable")
                     clicker.sendActionBar(TextUtil.mm(config.string("contracts.unavailable", "<yellow>Сдача предметов пока отключена"), true))

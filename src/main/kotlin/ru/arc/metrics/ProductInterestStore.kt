@@ -74,6 +74,7 @@ class ProductInterestStore private constructor(
         val details: MutableMap<String, MutableMap<String, DetailRecord>> = linkedMapOf(),
         val exits: MutableMap<String, ExitRecord> = linkedMapOf(),
         val recentTrail: MutableList<TrailRecord> = mutableListOf(),
+        val externalEvents: MutableMap<String, Long> = linkedMapOf(),
     )
 
     private data class TrailRecord(
@@ -146,6 +147,7 @@ class ProductInterestStore private constructor(
         val details: Map<String, List<PersistedDetail>>? = null,
         val exits: List<PersistedExit>? = null,
         val recentTrail: List<PersistedTrail>? = null,
+        val externalEvents: Map<String, Long>? = null,
     )
 
     private data class PersistedTrail(
@@ -310,6 +312,21 @@ class ProductInterestStore private constructor(
         return ProductStoreApplyResult(changed || engagementChanged, before)
     }
 
+    @Synchronized
+    fun applyExternal(playerId: String, source: ExternalProductSource, event: ExternalProductEvent, occurredAt: Long): Boolean {
+        require(playerId.matches(Regex("[a-f0-9]{64}"))) { "External product player must be pseudonymous" }
+        require(event.source == source) { "External event does not belong to source" }
+        prune(occurredAt)
+        val record = player(playerId, occurredAt)
+        record.lastSeenAt = maxOf(record.lastSeenAt, occurredAt)
+        val day = record.day(dayKey(occurredAt))
+        val key = "${source.label}:${event.label}"
+        if (key !in day.externalEvents && day.externalEvents.size >= 64) return false
+        day.externalEvents[key] = ((day.externalEvents[key] ?: 0L) + 1L).coerceAtMost(1_000_000L)
+        markDirty()
+        return true
+    }
+
     /** Actual UI observations, independent from inferred command interest. */
     @Synchronized
     fun applyUi(signal: ProductUiSignal): Boolean {
@@ -467,6 +484,16 @@ class ProductInterestStore private constructor(
         points += point("arc_product_ui_dropped_events", "UI events discarded by the per-player bounded store", uiDroppedEvents, scope)
         WINDOWS.forEach { days ->
             val window = "${days}d"
+            ExternalProductEvent.entries.forEach { event ->
+                val key = "${event.source.label}:${event.label}"
+                val counts = players.values.map { player ->
+                    player.window(today.minusDays(days.toLong() - 1), today).orEmpty()
+                        .sumOf { it.externalEvents[key] ?: 0L }
+                }
+                val labels = arrayOf("window" to window, "source" to event.source.label, "event" to event.label)
+                points += point("arc_product_external_events", "Observed external plugin outcomes in the rolling window", counts.sum(), scope, *labels)
+                points += point("arc_product_external_players", "Players with an external plugin outcome in the rolling window", counts.count { it > 0L }, scope, *labels)
+            }
             val uiRows = uiAggregates(now, days)
             uiRows.take(200).forEach { row ->
                 ProductUiRow.EVENTS.forEach { event ->
@@ -605,6 +632,10 @@ class ProductInterestStore private constructor(
             }
 
         val dimensions = linkedMapOf<String, Any?>()
+        val externalEvents = linkedMapOf<String, Long>()
+        selected.flatMap { (_, days) -> days.flatMap { it.externalEvents.entries } }.forEach { entry ->
+            externalEvents[entry.key] = (externalEvents[entry.key] ?: 0L) + entry.value
+        }
         ProductDetailType.entries.forEach { type ->
             val aggregate = linkedMapOf<String, ReportDetail>()
             selected.forEach { (playerId, playerDays) ->
@@ -678,6 +709,7 @@ class ProductInterestStore private constructor(
             "players" to selected.size,
             "sessions" to selected.sumOf { (_, playerDays) -> playerDays.sumOf { it.sessions } },
             "detailEvents" to selected.sumOf { (_, playerDays) -> playerDays.sumOf { day -> day.details.values.sumOf { bucket -> bucket.values.sumOf { it.count } } } },
+            "externalEvents" to externalEvents,
             "dimensions" to dimensions,
             "exitContexts" to
                 exits.values.filter { it.connection == null }
@@ -1130,6 +1162,7 @@ class ProductInterestStore private constructor(
                     )
                 },
             recentTrail = day.recentTrail.map { PersistedTrail(it.occurredAt, it.step) },
+            externalEvents = day.externalEvents.toSortedMap(),
         )
 
     private fun localDate(timestamp: Long): LocalDate = Instant.ofEpochMilli(timestamp).atZone(config.zoneId).toLocalDate()
@@ -1262,6 +1295,12 @@ class ProductInterestStore private constructor(
                 }
                 if (bucket.isNotEmpty()) details[typeLabel] = bucket
             }
+            val externalEvents = day.externalEvents.orEmpty().entries.take(64).mapNotNull { (key, count) ->
+                if (count <= 0 || key.count { it == ':' } != 1) return@mapNotNull null
+                val (source, event) = key.split(':', limit = 2)
+                if (ExternalProductSource.entries.none { it.label == source } || ExternalProductEvent.entries.none { it.label == event && it.source.label == source }) return@mapNotNull null
+                key to count.coerceAtMost(1_000_000)
+            }.toMap().toMutableMap()
             val exits = linkedMapOf<String, ExitRecord>()
             day.exits.orEmpty().take(maxStoredRows).forEach { persisted ->
                 val source = persisted.source?.takeIf(SOURCE::matches) ?: return@forEach
@@ -1347,6 +1386,7 @@ class ProductInterestStore private constructor(
                 details = details,
                 exits = exits,
                 recentTrail = recentTrail,
+                externalEvents = externalEvents,
             )
         }
 

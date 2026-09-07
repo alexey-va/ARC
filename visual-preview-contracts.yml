@@ -1,0 +1,126 @@
+schema: 1
+minecraft-version: 26.1.2
+minecraft-client-sha1: 4e618f09a0c649dde3fdf829df443ce0b8831e65
+gallery-accent: '#c8a477'
+resource-pack:
+  url: https://storage.yandexcloud.net/ruscraftinresources/RusCraftingResource.zip
+  sha256-url: https://storage.yandexcloud.net/ruscraftinresources/RusCraftingResource.zip.sha256
+custom-items:
+  arc:background:
+    material: GRAY_STAINED_GLASS_PANE
+    model: assets/arc/models/gui/background.json
+  arc:left_gray:
+    material: BLUE_STAINED_GLASS_PANE
+    model: assets/arc/models/gui/left_gray.json
+  arc:left_blue_gray:
+    material: BLUE_STAINED_GLASS_PANE
+    model: assets/arc/models/gui/left_blue_gray.json
+  arc:right_blue_gray:
+    material: BLUE_STAINED_GLASS_PANE
+    model: assets/arc/models/gui/right_blue_gray.json
+  arc:comment_gray:
+    material: BLUE_STAINED_GLASS_PANE
+    model: assets/arc/models/gui/comment_gray.json
+  arc:confirm_gray:
+    material: GREEN_STAINED_GLASS_PANE
+    model: assets/arc/models/gui/confirm_gray.json
+  arc:cancel:
+    material: RED_STAINED_GLASS_PANE
+    model: assets/arc/models/gui/cancel.json
+  arc:mount_category_all:
+    material: COMPASS
+    model: assets/arc/models/gui/mount_category_all.json
+  arc:mount_category_flying:
+    material: FEATHER
+    model: assets/arc/models/gui/mount_category_flying.json
+  arc:mount_category_walking:
+    material: SADDLE
+    model: assets/arc/models/gui/mount_category_walking.json
+  arc:mount_category_swimming:
+    material: HEART_OF_THE_SEA
+    model: assets/arc/models/gui/mount_category_swimming.json
+glyphs:
+- character: 
+  path: '@pack/assets/arc/textures/icons/mechanics/crafting_gear.png'
+  height: 9
+  ascent: 8
+- character: 💰
+  path: '@pack/assets/arc/textures/glyphs/coin.png'
+  height: 9
+  ascent: 8
+plugin: ARC — закупки Origin
+limitations:
+- Статическое превью актуальных описаний; события Paper проверяются отдельным E2E.
+sources:
+  catalog:
+    path: src/main/resources/guis/menus.yml
+    root: menus.templates
+    include:
+    - contracts-order.name
+    - contracts-order.lore
+    - contracts-detail-payout.name
+    - contracts-detail-payout.lore
+    - contracts-detail-confirm.name
+    - contracts-detail-confirm.lore.*.text
+    - contracts-detail-confirm.lore.0
+  titles:
+    path: src/main/resources/guis/contracts.yml
+    root: defaults
+    include:
+    - detail.title
+placeholders:
+  contract-name: Уголь для кузницы
+  remaining: 3 728
+  target: 4 800
+  available: '64'
+  player-remaining: 1 088
+  payout: '432.17'
+  cap-bonus: '25'
+  payout-bonus: '10'
+  ends-at: 14.09 03:00 МСК
+  action: <green>[▶] ЛКМ — выбрать количество
+  per-unit: '6.98'
+  selected: '64'
+  unavailable-reason: <yellow>Сдать заказ можно только на спавне.
+surfaces:
+  inventories:
+  - id: contract-details
+    title: titles:detail.title
+    rows: 3
+    filler: GRAY_STAINED_GLASS_PANE
+    background-item: arc:background
+    items:
+    - slot: 2
+      material: COAL
+      name: catalog:contracts-order.name
+      lore: catalog:contracts-order.lore
+      placeholders:
+        payout: '6.98'
+    - slot: 6
+      material: GOLD_NUGGET
+      name: catalog:contracts-detail-payout.name
+      lore: catalog:contracts-detail-payout.lore
+    - slot: 26
+      material: GREEN_STAINED_GLASS_PANE
+      itemsadder: arc:confirm_gray
+      name: catalog:contracts-detail-confirm.name
+      lore:
+      - catalog:contracts-detail-confirm.lore.0
+      - catalog:contracts-detail-confirm.lore.1.text
+      - catalog:contracts-detail-confirm.lore.2.text
+      - catalog:contracts-detail-confirm.lore.3.text
+      - catalog:contracts-detail-confirm.lore.4.text
+  - id: contract-outside-origin
+    title: titles:detail.title
+    rows: 3
+    filler: GRAY_STAINED_GLASS_PANE
+    background-item: arc:background
+    items:
+    - slot: 26
+      material: GREEN_STAINED_GLASS_PANE
+      itemsadder: arc:confirm_gray
+      name: catalog:contracts-detail-confirm.name
+      lore:
+      - catalog:contracts-detail-confirm.lore.0
+      - catalog:contracts-detail-confirm.lore.5.text
+      - catalog:contracts-detail-confirm.lore.6.text

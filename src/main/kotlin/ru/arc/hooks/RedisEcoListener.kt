@@ -28,13 +28,35 @@ internal fun consumePendingEconomyContext(
     amount: Double,
     now: Long,
     source: EconomySource,
-): EconomyLedgerContext? =
-    EconomyPendingContextTracker.consume(playerId, amount, now, source)
-        ?: if (source == EconomySource.SHOP) {
-            EconomyPendingContextTracker.consume(playerId, amount, now, EconomySource.AUTOSELL)
-        } else {
-            null
-        }
+    currency: String?,
+): EconomyPendingContextTracker.Consumed? =
+    consumePendingEconomyMatch(playerId, amount, now, source, currency)
+
+internal fun consumePendingEconomyContext(
+    playerId: UUID,
+    amount: Double,
+    now: Long,
+    source: EconomySource,
+): EconomyLedgerContext? = consumePendingEconomyMatch(playerId, amount, now, source, null)?.context
+
+private fun consumePendingEconomyMatch(
+    playerId: UUID,
+    amount: Double,
+    now: Long,
+    source: EconomySource,
+    currency: String?,
+): EconomyPendingContextTracker.Consumed? =
+    EconomyPendingContextTracker.consumeMatch(
+        playerId,
+        amount,
+        now,
+        source,
+        currency,
+    ) ?: if (source == EconomySource.SHOP) {
+        EconomyPendingContextTracker.consumeMatch(playerId, amount, now, EconomySource.AUTOSELL, currency)
+    } else {
+        null
+    }
 
 class RedisEcoListener : Listener {
     @EventHandler
@@ -83,13 +105,32 @@ class RedisEcoListener : Listener {
         if (amount == 0.0) return
 
         val adminCommand = AdminEconomyCommandTracker.consumeDelta(playerName, amount, currency = transaction.currencyName)
-        val resolved =
+        val initialResolved =
             EconomyAttributionResolver.resolve(
                 rawReason = transaction.reason,
                 amount = amount,
                 currency = transaction.currencyName,
                 server = ARC.serverName,
             )
+        val pending =
+            consumePendingEconomyContext(
+                accountId.uuid,
+                amount,
+                System.currentTimeMillis(),
+                initialResolved.metadata.source,
+                transaction.currencyName,
+            )
+        val resolved = pending?.source?.let { pendingSource ->
+            initialResolved.copy(
+                metadata = initialResolved.metadata.copy(
+                    source = pendingSource,
+                    flow = if (amount > 0.0) EconomyFlow.MINT else EconomyFlow.BURN,
+                    origin = "external-bridge:${pendingSource.label}",
+                ),
+                type = pendingSource.type,
+                reason = pending.context.action ?: initialResolved.reason,
+            )
+        } ?: initialResolved
         val attribution =
             adminCommand?.let {
                 resolved.copy(
@@ -129,6 +170,7 @@ class RedisEcoListener : Listener {
                 revertedWith = transaction.revertedWith,
                 action = adminCommand?.action,
                 forcedCorrelationId = adminCommand?.correlationId,
+                pendingContext = pending?.context,
             )
         val contextualSource = EconomyShopAuditMapper.sourceForContext(context.action, attribution.metadata.source)
         val contextualAttribution =
@@ -168,18 +210,14 @@ class RedisEcoListener : Listener {
         revertedWith: String?,
         action: String? = null,
         forcedCorrelationId: String? = null,
+        pendingContext: EconomyLedgerContext? = null,
     ): EconomyLedgerContext {
         val capturedAt = System.currentTimeMillis()
         val onlinePlayer = Bukkit.getPlayer(playerId)
         val session = AuditManager.session(playerId, onlinePlayer?.world?.name)
         val observedAfter = HookRegistry.redisEcoHook?.getCachedBalance(playerId, currency)
         val balance = amount?.let { delta -> observedAfter?.let { EconomyBalanceObservation.inferredFromAfter(delta, it) } }
-        val pending =
-            if (amount != null && source in setOf(EconomySource.JOBS, EconomySource.SHOP, EconomySource.AUTOSELL)) {
-                consumePendingEconomyContext(playerId, amount, capturedAt, source)
-            } else {
-                null
-            }
+        val pending = pendingContext
         val counterparty = actorParty(actor)
         val correlationId =
             pending?.correlationId

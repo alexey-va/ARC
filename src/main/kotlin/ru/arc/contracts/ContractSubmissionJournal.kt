@@ -149,6 +149,10 @@ data class ContractSubmissionJournalRecord(
     val reviewEvidence: String? = null,
     val reconciliation: ContractSubmissionReconciliation? = null,
     val revision: Long = 0L,
+    val definitionSnapshot: ResourceContractDefinition? = null,
+    val quoteSupplyBefore: Long? = null,
+    val quotePlannedAt: Long? = null,
+    val quotePayoutBasisPoints: Int? = null,
 ) : Entity {
     init {
         validated()
@@ -197,6 +201,23 @@ data class ContractSubmissionJournalRecord(
         validateTimestampOrder()
         validateStatusShape()
         validateReconciliationShape()
+        definitionSnapshot?.let { definition ->
+            require(definition.id == contractId && definition.windowStartsAt == contractWindowStartsAt && definition.itemKey == itemKey) {
+                "Journal contract snapshot does not match submission"
+            }
+            require(ContractMarketPricing.payoutAllowed(definition, acceptedQuantity, payoutMinor)) {
+                "Journal payout exceeds its immutable contract policy"
+            }
+            if (definition.dynamicPricing || quoteSupplyBefore != null || quotePlannedAt != null || quotePayoutBasisPoints != null) {
+                val supply = requireNotNull(quoteSupplyBefore) { "Missing quoted supply" }
+                val at = requireNotNull(quotePlannedAt) { "Missing quote timestamp" }
+                val policy = ContractRankPolicy(payoutBasisPoints = requireNotNull(quotePayoutBasisPoints))
+                require(definition.isOpenAt(at) && at <= createdAt) { "Quote is outside its contract window" }
+                require(ContractMarketPricing.payoutMinor(definition, supply, acceptedQuantity, at, policy) == payoutMinor) {
+                    "Journal payout does not equal its immutable marginal quote"
+                }
+            }
+        }
         return this
     }
 
@@ -504,10 +525,9 @@ object ContractSubmissionJournalEngine {
                     .playerCap(definition.perPlayerQuantityCap),
         ) { "Journal plan quantity exceeds contract policy" }
         require(
-            Math.multiplyExact(
-                plan.acceptedQuantity,
-                ContractRankPolicy(plan.playerCapBasisPoints, plan.payoutBasisPoints)
-                    .payoutMinorPerUnit(definition.payoutMinorPerUnit),
+            ContractMarketPricing.payoutMinor(
+                definition, plan.priceSupplyBefore, plan.acceptedQuantity, plan.plannedAt,
+                ContractRankPolicy(plan.playerCapBasisPoints, plan.payoutBasisPoints),
             ) == plan.payoutMinor,
         ) {
             "Journal plan payout does not match contract policy"
@@ -527,6 +547,10 @@ object ContractSubmissionJournalEngine {
             payoutReason = ContractSubmissionJournalRecord.payoutReason(plan.submissionId),
             itemPayloads = itemPayloads,
             createdAt = now,
+            definitionSnapshot = definition,
+            quoteSupplyBefore = plan.priceSupplyBefore,
+            quotePlannedAt = plan.plannedAt,
+            quotePayoutBasisPoints = plan.payoutBasisPoints,
         )
     }
 

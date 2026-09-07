@@ -7,6 +7,7 @@ import io.kotest.matchers.shouldBe
 import org.bukkit.Material
 import ru.arc.contracts.ContractsMode
 import ru.arc.contracts.ResourceContractView
+import ru.arc.util.TextUtil
 
 class ContractBoardIntegrationTest : StringSpec({
     "projects active contracts before player announcements and excludes expired windows" {
@@ -58,6 +59,11 @@ class ContractBoardIntegrationTest : StringSpec({
         exhausted.canPrepareSubmission shouldBe false
     }
 
+    "shows the origin desk action outside the origin world" {
+        val card = ContractBoardCard.Order(view(), submissionsEnabled = true)
+        card.action(originAllowed = false) shouldBe TextUtil.mm("<yellow>Откройте заказ у конторщика на спавне", true)
+    }
+
     "uses the requested vanilla material and fails closed for custom namespaces" {
         materialFor("minecraft:cobblestone") shouldBe Material.COBBLESTONE
         materialFor("slimefun:basic_circuit_board") shouldBe Material.PAPER
@@ -67,13 +73,13 @@ class ContractBoardIntegrationTest : StringSpec({
     "exports passive bounded interaction metrics without player or item labels" {
         val cards = listOf(ContractBoardCard.Order(view(), submissionsEnabled = false))
         ContractBoardTelemetry.recordOpen(cards)
-        ContractBoardTelemetry.recordInteraction("road_stone", "unavailable")
+        ContractBoardTelemetry.recordInteraction("road_stone", "open_gui")
 
         val points = ContractBoardTelemetry.points()
         points.first { it.name == "arc_contract_board_opens_total" }.value.toLong() shouldBeGreaterThanOrEqual 1L
         points.first { it.name == "arc_contract_board_visible_cards" }.value shouldBe 1.0
         points.first { it.name == "arc_contract_board_interactions_total" }.tags shouldBe
-            mapOf("contract" to "road_stone", "outcome" to "unavailable")
+            mapOf("contract" to "road_stone", "outcome" to "open_gui")
         points.flatMap { it.tags.keys }.none { it.contains("player") || it.contains("item") } shouldBe true
     }
 })

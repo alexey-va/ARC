@@ -199,6 +199,8 @@ open class ContractsConfig(
                     perPlayerQuantityCap = config.long("$root.per-player-quantity-cap", 0L),
                     minSubmissionQuantity = config.integer("$root.min-submission-quantity", 1),
                     maxSubmissionQuantity = config.integer("$root.max-submission-quantity", 2_304),
+                    dynamicPricing = config.bool("$root.dynamic-pricing", false),
+                    weeklyRecurring = config.bool("$root.weekly-recurring", false),
                     kind = kind,
                     group =
                         normalizedId(
@@ -206,6 +208,7 @@ open class ContractsConfig(
                             "$root.group",
                         ),
                 ).also { definition ->
+                    if (definition.weeklyRecurring) ContractRotation.at(definition, definition.windowStartsAt)
                     require(definition.perPlayerQuantityCap <= definition.targetQuantity) {
                         "Contract '$id' per-player cap exceeds target quantity"
                     }
@@ -220,6 +223,8 @@ open class ContractsConfig(
         }
         return definitions
     }
+
+    fun resourceOrdersAt(now: Long): List<ResourceContractDefinition> = resourceOrders().map { ContractRotation.at(it, now) }
 
     open fun observeSeasonCatalog(allowSeasonMutations: Boolean = false): ObserveSeasonCatalog? {
         if (!config.exists("season-catalog")) return null

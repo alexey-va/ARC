@@ -264,8 +264,8 @@ object ArcMenuSchema {
         "contracts-detail-quantity" to PaperMenuTextContract(values = setOf("selected", "minimum", "maximum")),
         "contracts-detail-back" to PaperMenuTextContract(),
         "contracts-detail-confirm" to PaperMenuTextContract(
-            values = setOf("selected", "payout"),
-            flags = setOf("can-submit"),
+            values = setOf("selected", "payout", "unavailable-reason"),
+            flags = setOf("can-submit", "origin-allowed", "quote-available"),
         ),
         "scheduled-refresh" to PaperMenuTextContract(),
         "scheduled-entry-enabled" to scheduledEntryContract(),
