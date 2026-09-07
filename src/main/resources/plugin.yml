@@ -115,6 +115,9 @@ permissions:
   arc.audit:
     description: Inspect ARC audit data
     default: op
+  arc.audit.reset:
+    description: Reset the network measurement period without clearing financial journals
+    default: op
   arc.balance.top:
     description: View the balance leaderboard
     default: false

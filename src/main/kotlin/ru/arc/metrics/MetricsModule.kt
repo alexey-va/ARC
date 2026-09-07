@@ -51,6 +51,17 @@ object MetricsModule : PluginModule {
     override val name = "Metrics"
     override val priority = 34
 
+    fun resetMeasurementPeriod(expectedGeneration: Long): java.util.concurrent.CompletableFuture<MeasurementResetState> =
+        productInterest?.requestMeasurementReset(expectedGeneration)
+            ?: java.util.concurrent.CompletableFuture.failedFuture(IllegalStateException("Product telemetry is unavailable"))
+
+    fun measurementResetStatus(): Map<String, Any?> =
+        productInterest?.measurementResetStatus() ?: emptyMap()
+
+    fun readMeasurementReset(): java.util.concurrent.CompletableFuture<MeasurementResetState?> =
+        productInterest?.readMeasurementReset()
+            ?: java.util.concurrent.CompletableFuture.failedFuture(IllegalStateException("Product telemetry is unavailable"))
+
     private var runtime: ArcMetricsRuntime? = null
     private var collector: PaperMetricsCollector? = null
     private var redisMetrics: RedisMetricsBinder? = null
@@ -64,6 +75,7 @@ object MetricsModule : PluginModule {
     private var fastTask: ScheduledTask? = null
     private var heavyTask: ScheduledTask? = null
     private var persistenceTask: ScheduledTask? = null
+    private var measurementTask: ScheduledTask? = null
 
     fun registry(): MeterRegistry? = runtime?.registry
 
@@ -347,6 +359,11 @@ object MetricsModule : PluginModule {
                     }
             }
             if (product != null) {
+                // Polling only selects a new archival period after an admin confirms the reset.
+                product.pollMeasurementReset().exceptionally { null }
+                measurementTask = repeatingAsync(5.seconds, delay = 5.seconds) {
+                    product.pollMeasurementReset().exceptionally { null }
+                }
                 persistenceTask =
                     repeatingAsync(
                         productConfig.persistIntervalSeconds.seconds,
@@ -414,9 +431,11 @@ object MetricsModule : PluginModule {
         fastTask?.cancel()
         heavyTask?.cancel()
         persistenceTask?.cancel()
+        measurementTask?.cancel()
         fastTask = null
         heavyTask = null
         persistenceTask = null
+        measurementTask = null
         metricsEvents?.unregisterAll()
         metricsEvents = null
         dungeonInterest?.shutdown()

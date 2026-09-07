@@ -33,9 +33,11 @@ class SqlAuditEventStoreIntegrationTest : FreeSpec({
     fun open(
         retentionDays: Int = 30,
         jobsRawDays: Int = 7,
+        boundary: Long = 0L,
     ): SqlAuditEventStore =
         SqlAuditEventStore.open(
             config = connection,
+            measurementBoundary = { java.util.concurrent.CompletableFuture.completedFuture(boundary) },
             runtimeName = "ARC-audit-integration",
             writerSettings =
                 AuditWriterSettings(
@@ -146,6 +148,25 @@ class SqlAuditEventStoreIntegrationTest : FreeSpec({
             compacted.amount shouldBe 4.0
             compacted.occurrenceCount shouldBe 2
             compacted.eventId?.length shouldBe 64
+        }
+    }
+
+    "measurement reset day stays raw while neighboring days compact and duplicate replay remains suppressed" {
+        val boundary = Instant.parse("2026-08-20T12:00:00Z").toEpochMilli()
+        open(boundary = boundary).use { store ->
+            store.clearAll().join()
+            store.append(event("reset-before", 3.0, boundary - 60_000))
+            store.append(event("reset-after", 7.0, boundary + 60_000))
+            store.append(event("reset-neighbor", 2.0, boundary - 86_400_000))
+            store.flushNow().join()
+            store.maintainNow(Instant.parse("2026-08-30T12:00:00Z")).join().compactedDays shouldBe 1
+            val active = mutableListOf<AuditEvent>()
+            store.scan(AuditScanRequest(boundary, boundary + 120_000, null)) { active += it }.join()
+            active.map { it.transaction.amount } shouldContainExactly listOf(7.0)
+            val replay = store.append(event("reset-after", 7.0, boundary + 60_000))
+            store.flushNow().join()
+            replay.join().inserted shouldBe false
+            store.count().join() shouldBe 3L
         }
     }
 

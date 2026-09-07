@@ -13,6 +13,7 @@ import ru.arc.util.Common
 import java.nio.file.Path
 import java.util.ArrayDeque
 import java.util.LinkedHashMap
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import kotlin.math.sqrt
 
@@ -36,7 +37,7 @@ class ProductInterestTelemetry(
     private val registry: MeterRegistry,
     private val config: ProductInterestConfig,
     rawServerName: String,
-    statePath: Path,
+    private val statePath: Path,
     private val primaryAggregator: Boolean,
     private val redis: RedisOperations? = null,
     private val gson: Gson = Common.gson,
@@ -46,7 +47,7 @@ class ProductInterestTelemetry(
         val player: String,
         val cohort: ProductCohort,
         val qa: Boolean,
-        val startedAt: Long,
+        var startedAt: Long,
         var lastSampleAt: Long,
         var lastActiveAt: Long,
         var activeSeconds: Long = 0,
@@ -74,7 +75,14 @@ class ProductInterestTelemetry(
     private data class TeleportMeterKey(val cause: ProductTeleportType, val from: ProductWorldType, val to: ProductWorldType)
 
     private val serverName = normalizeServer(rawServerName)
-    private val store = ProductInterestStore.open(statePath, config, clockMillis(), gson)
+    private var store = ProductInterestStore.open(statePath, config, clockMillis(), gson)
+    private val resetControl = redis?.let { MeasurementResetControl(it, gson, clockMillis) }
+    @Volatile private var localReset: MeasurementResetState? = null
+    @Volatile private var localResetAppliedAt: Long? = null
+    @Volatile private var resetControlReady = !config.networkEnabled
+    private var resetPollInFlight: CompletableFuture<Unit>? = null
+    @Volatile private var closed = false
+
     private val sessions = linkedMapOf<String, Session>()
     private val seenEvents =
         object : LinkedHashMap<String, Unit>(MAX_SEEN_EVENTS + 1, 0.75f, true) {
@@ -254,11 +262,86 @@ class ProductInterestTelemetry(
     private val redisListener = ChannelListener { _, message, origin -> receive(message, origin) }
 
     fun start() {
+        pollMeasurementReset().exceptionally { null }
         if (config.networkEnabled && redis != null) {
             redis.registerChannelUnique(CHANNEL, redisListener)
             redis.registerChannelUnique(ProductUiCodec.CHANNEL, uiRedisListener)
         }
     }
+
+    fun requestMeasurementReset(expectedGeneration: Long): CompletableFuture<MeasurementResetState> {
+        if (!primaryAggregator) return CompletableFuture.failedFuture(IllegalStateException("Reset must be requested on the primary node"))
+        val control = resetControl ?: return CompletableFuture.failedFuture(IllegalStateException("Redis is unavailable"))
+        return control.request(expectedGeneration = expectedGeneration).thenApply { state ->
+            applyReset(state)
+            resetControlReady = true
+            state
+        }
+    }
+
+    fun readMeasurementReset(): CompletableFuture<MeasurementResetState?> =
+        resetControl?.read() ?: CompletableFuture.failedFuture(IllegalStateException("Redis is unavailable"))
+
+    @Synchronized
+    fun pollMeasurementReset(): CompletableFuture<Unit> {
+        if (closed) return CompletableFuture.completedFuture(Unit)
+        resetPollInFlight?.let { return it }
+        val control = resetControl ?: return CompletableFuture.completedFuture(Unit)
+        val pending = CompletableFuture<Unit>()
+        resetPollInFlight = pending
+        control.read().thenApply { state ->
+            check(state != null || localReset == null) { "Measurement control record disappeared" }
+            if (state != null) applyReset(state)
+            resetControlReady = true
+            Unit
+        }.whenComplete { _, failure ->
+            if (failure != null) resetControlReady = false
+            synchronized(this) { resetPollInFlight = null }
+            if (failure == null) pending.complete(Unit) else pending.completeExceptionally(failure)
+        }
+        return pending
+    }
+
+    @Synchronized
+    private fun applyReset(state: MeasurementResetState) {
+        if (closed || (localReset?.generation ?: 0L) >= state.generation) return
+        val now = clockMillis()
+        // Materially non-destructive rollover: finish writing the old file and open a new
+        // generation-specific file. No existing period, audit row or financial journal is deleted.
+        store.flush(now, force = true)
+        val periodPath = statePath.resolveSibling("product-interest-period-${state.boundaryAt}.json")
+        val next = ProductInterestStore.open(periodPath, config, now, gson)
+        next.resetPeriod(state.boundaryAt, now)
+        next.flush(now, force = true)
+        store = next
+        sessions.values.forEach { session ->
+            session.startedAt = maxOf(session.startedAt, now)
+            session.lastSampleAt = now
+            session.lastActiveAt = 0
+            session.activeSeconds = 0
+            session.actionCount = 0
+            session.systems.clear()
+            session.trail.clear()
+            session.lastCommand = null
+            session.lastNpcId = null
+            session.lastNpcName = null
+            session.lastFeature = null
+            session.lastActivity = null
+            session.lastTeleportCause = null
+        }
+        localReset = state
+        localResetAppliedAt = now
+    }
+
+    fun measurementResetStatus(): Map<String, Any?> = linkedMapOf(
+        "generation" to (localReset?.generation ?: 0L),
+        "boundaryAt" to localReset?.boundaryAt,
+        "controlReady" to resetControlReady,
+        "localAppliedAt" to localResetAppliedAt,
+        "initialPropagationGapMillis" to localReset?.let { (store.measurementStartedAt() - it.boundaryAt).coerceAtLeast(0) },
+        "coverage" to if (!resetControlReady) "control_unavailable" else "best_effort_from_local_application",
+        "archive" to "Previous product period files and economy audit rows are retained; reset does not change Prometheus counter history",
+    )
 
     @Synchronized
     fun join(
@@ -726,6 +809,8 @@ class ProductInterestTelemetry(
                     "Whether invalid persisted state was moved aside at startup",
                     if (store.recoveredInvalidPath != null) 1.0 else 0.0,
                 ),
+                MetricPoint("arc_product_measurement_reset_generation", "Applied measurement reset generation", (localReset?.generation ?: 0L).toDouble()),
+                MetricPoint("arc_product_measurement_boundary_timestamp", "Applied measurement boundary Unix milliseconds", (localReset?.boundaryAt ?: 0L).toDouble()),
             )
         return if (primaryAggregator) local + store.snapshot(now, "network") else local
     }
@@ -741,7 +826,8 @@ class ProductInterestTelemetry(
         report["scope"] = if (primaryAggregator) "network" else "local-standby"
         report["primary"] = primaryAggregator
         report["networkReady"] = networkReady
-        report["complete"] = report["complete"] == true && primaryAggregator && (!config.networkEnabled || networkReady)
+        report["measurementReset"] = measurementResetStatus()
+        report["complete"] = report["complete"] == true && primaryAggregator && resetControlReady && (!config.networkEnabled || networkReady)
         report["transportGuarantee"] = "Best-effort Redis pub/sub; current connectivity does not prove historical delivery"
         if (!primaryAggregator) report["warning"] = "Rolling network detail is exposed by the primary ARC node"
         return report
@@ -749,6 +835,7 @@ class ProductInterestTelemetry(
 
     @Synchronized
     fun shutdown(now: Long = clockMillis()) {
+        closed = true
         sessions.values.toList().forEach { finish(it, now, organic = false) }
         sessions.clear()
         store.flush(now, force = true)
@@ -758,6 +845,7 @@ class ProductInterestTelemetry(
         }
     }
 
+    @Synchronized
     fun flush(now: Long = clockMillis()): Boolean = store.flush(now)
 
     @Synchronized

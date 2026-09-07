@@ -12,6 +12,19 @@ import java.time.ZoneId
 
 class ProductInterestStoreTest :
     StringSpec({
+        "network boundary is not lowered when the local clock is behind after reopening" {
+            val now = Instant.parse("2026-08-16T12:00:00Z").toEpochMilli()
+            val path = Files.createTempDirectory("product-clock-boundary-").resolve("period.json")
+            val config = ProductInterestConfig(networkEnabled = false)
+            val store = ProductInterestStore.open(path, config, now)
+            store.resetPeriod(now + 1000, now)
+            store.flush(now, force = true)
+            val restored = ProductInterestStore.open(path, config, now + 100)
+            restored.resetPeriod(now + 1000, now + 100) shouldBe false
+            restored.apply(signal(ProductPseudonym.of("clock-player"), now + 500, ProductEventKind.SESSION_START)).changed shouldBe false
+            restored.report(now + 100, 1, 10)["measurementBoundaryAt"] shouldBe now + 1000
+        }
+
         "aggregates detailed journeys and exit context without returning identities" {
             val now = Instant.parse("2026-08-16T12:00:00Z").toEpochMilli()
             val path = Files.createTempDirectory("product-interest-store-").resolve("data/product-interest-v1.json")
@@ -193,6 +206,21 @@ class ProductInterestStoreTest :
             @Suppress("UNCHECKED_CAST")
             val commands = ((store.report(now, 1, 100)["dimensions"] as Map<String, List<Map<String, Any?>>>).getValue("command"))
             commands.size shouldBe 16
+        }
+
+        "resets rolling state, persists the boundary, and rejects late signals" {
+            val now = Instant.parse("2026-08-16T12:00:00Z").toEpochMilli()
+            val path = Files.createTempDirectory("product-interest-reset-").resolve("state.json")
+            val store = ProductInterestStore.open(path, ProductInterestConfig(networkEnabled = false, zoneId = ZoneId.of("UTC")), now)
+            val player = ProductPseudonym.of("reset-player")
+            store.resetPeriod(now + 10_000) shouldBe true
+            store.apply(signal(player, now + 5, ProductEventKind.DETAIL, detail = ProductDetail(ProductDetailType.COMMAND, "old"))).changed shouldBe false
+            store.applyExternal(player, ExternalProductSource.FARMS, ExternalProductEvent.FARM_REWARD_CLAIMED, now + 5) shouldBe false
+            store.flush(now + 10_001, force = true) shouldBe true
+            val restored = ProductInterestStore.open(path, ProductInterestConfig(networkEnabled = false, zoneId = ZoneId.of("UTC")), now + 10_002)
+            restored.report(now + 10_002, 1, 20)["measurementBoundaryAt"] shouldBe now + 10_000
+            restored.report(now + 10_002, 1, 20)["players"] shouldBe 0
+            restored.apply(signal(player, now + 10_001, ProductEventKind.MENU_OPEN)).changed shouldBe true
         }
     })
 

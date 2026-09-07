@@ -15,6 +15,44 @@ import java.time.ZoneId
 
 class ProductInterestTelemetryTest :
     StringSpec({
+        "confirmed rollover archives the old period and standby and restart select the same new boundary" {
+            var now = Instant.parse("2026-08-16T12:00:00Z").toEpochMilli()
+            val redis = InMemoryRedis()
+            val path = Files.createTempDirectory("product-reset-network-").resolve("product-interest-v1.json")
+            val standbyPath = Files.createTempDirectory("product-reset-standby-").resolve("product-interest-v1.json")
+            val config = ProductInterestConfig(networkEnabled = true, zoneId = ZoneId.of("UTC"))
+            fun telemetry(file: java.nio.file.Path, primary: Boolean) = ProductInterestTelemetry(
+                PrometheusMeterRegistry(PrometheusConfig.DEFAULT), config, if (primary) "spawn" else "survival",
+                file, primary, redis, clockMillis = { now })
+            val leader = telemetry(path, true)
+            val follower = telemetry(standbyPath, false)
+            leader.start(); follower.start()
+            leader.pollMeasurementReset().join()
+            follower.pollMeasurementReset().join()
+            val id = "00000000-0000-0000-0000-000000000042"
+            leader.join(id, true, sample(id, "vanilla"), now = now)
+            leader.command(id, "/before_reset", now)
+            now += 10_000
+            val period = leader.requestMeasurementReset(0).join()
+            follower.pollMeasurementReset().join()
+            follower.measurementResetStatus()["generation"] shouldBe period.generation
+            leader.report(1, 10, true)["players"] shouldBe 0
+            Files.readString(path).contains("before_reset") shouldBe true
+            leader.command(id, "/after_reset", now + 1)
+            leader.report(1, 10, true).toString().contains("before_reset") shouldBe false
+            now += 1_000
+            leader.shutdown(now)
+            follower.shutdown(now)
+            val reopened = telemetry(path, true)
+            reopened.start()
+            reopened.pollMeasurementReset().join()
+            reopened.report(1, 10, true).toString().contains("after_reset") shouldBe true
+            reopened.report(1, 10, true).toString().contains("before_reset") shouldBe false
+            reopened.measurementResetStatus()["boundaryAt"] shouldBe period.boundaryAt
+            Files.readString(path).contains("before_reset") shouldBe true
+            reopened.shutdown(now)
+        }
+
         "records detailed journey and safe aggregate metrics" {
             var now = Instant.parse("2026-08-16T12:00:00Z").toEpochMilli()
             val registry = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)

@@ -19,6 +19,8 @@ enum class ExternalProductEvent(val label: String, val source: ExternalProductSo
     JOB_BOOST_ACTIVATED("job_boost_activated", ExternalProductSource.JOBS), DUEL_COMPLETED("duel_completed", ExternalProductSource.DUELS),
     EVENT_COMPLETED("event_completed", ExternalProductSource.EVENTS), GIVEAWAY_ITEM_GRANTED("giveaway_item_granted", ExternalProductSource.GIVEAWAYS),
     TRAIL_ENABLED("trail_enabled", ExternalProductSource.TRAILS),
+    WORK_BLOCKED_AFK("work_blocked_afk", ExternalProductSource.JOBS),
+    WORK_BLOCKED_FARM("work_blocked_farm", ExternalProductSource.JOBS),
 }
 
 data class ExternalProductEnvelope(

@@ -198,6 +198,7 @@ class SqlAuditEventStore private constructor(
     private val maintenanceSettings: AuditMaintenanceSettings,
     private val scheduler: ScheduledExecutorService,
     private val telemetry: AuditStorageTelemetry?,
+    private val measurementBoundary: () -> CompletableFuture<Long>,
 ) : AuditEventStore {
     private val closed = AtomicBoolean(false)
     private val maintenanceRunning = AtomicBoolean(false)
@@ -263,7 +264,7 @@ class SqlAuditEventStore private constructor(
             return CompletableFuture.completedFuture(AuditMaintenanceReport(0, 0, 0, 0))
         }
         val boundaries = maintenanceSettings.policy.boundaries(now)
-        val future =
+        val future = measurementBoundary().thenCompose { boundary ->
             runtime.executor.transaction { connection ->
                 var compactedRows = 0
                 var compactedSourceRows = 0
@@ -274,7 +275,9 @@ class SqlAuditEventStore private constructor(
                         2,
                         boundaries.jobsCompactBeforeDay.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
                     )
-                    statement.setInt(3, maintenanceSettings.maxCompactionDaysPerRun)
+                    statement.setLong(3, MILLIS_PER_DAY)
+                    statement.setLong(4, if (boundary > 0) boundary / MILLIS_PER_DAY else -1L)
+                    statement.setInt(5, maintenanceSettings.maxCompactionDaysPerRun)
                     statement.executeQuery().use { result ->
                         while (result.next()) dayBuckets += result.getLong("day_bucket")
                     }
@@ -315,6 +318,7 @@ class SqlAuditEventStore private constructor(
                     }
                 AuditMaintenanceReport(dayBuckets.size, compactedRows, compactedSourceRows, expiredRows)
             }
+        }
         future.whenComplete { report, failure ->
             maintenanceRunning.set(false)
             if (failure == null) telemetry?.maintenance(report)
@@ -548,7 +552,8 @@ class SqlAuditEventStore private constructor(
         private const val FIND_COMPACTION_DAYS =
             "SELECT DISTINCT FLOOR(`occurred_at` / ?) AS `day_bucket` FROM `$EVENTS_TABLE` " +
                 "WHERE `source` = 'jobs' AND `compacted` = FALSE AND `occurred_at` < ? " +
-                "ORDER BY `day_bucket` ASC LIMIT ?"
+                // ponytail: retain at most one extra raw day instead of adding an epoch SQL migration.
+                "AND FLOOR(`occurred_at` / ?) <> ? ORDER BY `day_bucket` ASC LIMIT ?"
         private const val COUNT_RAW_JOBS_DAY =
             "SELECT COUNT(*) FROM `$EVENTS_TABLE` WHERE `source` = 'jobs' AND `compacted` = FALSE " +
                 "AND `occurred_at` >= ? AND `occurred_at` < ?"
@@ -577,6 +582,7 @@ class SqlAuditEventStore private constructor(
             maintenanceSettings: AuditMaintenanceSettings =
                 AuditMaintenanceSettings(true, AuditRetentionPolicy(30, 7), 24, 7, 10_000),
             telemetry: AuditStorageTelemetry? = null,
+            measurementBoundary: () -> CompletableFuture<Long> = { CompletableFuture.completedFuture(0L) },
         ): SqlAuditEventStore {
             val runtime = SqlRuntime.create(config, runtimeName)
             return runCatching {
@@ -593,7 +599,7 @@ class SqlAuditEventStore private constructor(
                     Executors.newSingleThreadScheduledExecutor { runnable ->
                         Thread(runnable, "$runtimeName-maintenance").apply { isDaemon = true }
                     }
-                SqlAuditEventStore(runtime, writerSettings, maintenanceSettings, scheduler, telemetry)
+                SqlAuditEventStore(runtime, writerSettings, maintenanceSettings, scheduler, telemetry, measurementBoundary)
             }.getOrElse { failure ->
                 runtime.close()
                 throw failure

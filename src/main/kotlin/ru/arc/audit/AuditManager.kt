@@ -64,6 +64,7 @@ object AuditManager {
                 SqlAuditEventStore.open(
                     config = requireNotNull(config.mysql) { "Audit MySQL config is required" },
                     telemetry = AuditStorageTelemetry(MetricsModule::registry, config.storageMode),
+                    measurementBoundary = { readMeasurementPeriod().thenApply { it?.boundaryAt ?: 0L } },
                     writerSettings =
                         AuditWriterSettings(
                             batchSize = config.writeBatchSize,
@@ -285,7 +286,7 @@ object AuditManager {
         shopMaterials: Set<String> = emptySet(),
         concentrationGroups: Map<String, Set<String>> = emptyMap(),
     ): Map<String, Any?> =
-        service.economySummary(hours, limit, serverFilter, shopMaterials, concentrationGroups)
+        economySummaryAsync(hours, limit, serverFilter, shopMaterials, concentrationGroups).join()
 
     @JvmStatic
     fun economySummaryAsync(
@@ -295,7 +296,7 @@ object AuditManager {
         shopMaterials: Set<String> = emptySet(),
         concentrationGroups: Map<String, Set<String>> = emptyMap(),
     ): CompletableFuture<Map<String, Any?>> =
-        service.economySummaryAsync(hours, limit, serverFilter, shopMaterials, concentrationGroups)
+        economySummarySinceAsync(System.currentTimeMillis() - hours.coerceIn(1, 744) * 3_600_000L, limit, serverFilter, shopMaterials, concentrationGroups)
 
     @JvmStatic
     fun economySummarySince(
@@ -305,7 +306,7 @@ object AuditManager {
         shopMaterials: Set<String> = emptySet(),
         concentrationGroups: Map<String, Set<String>> = emptyMap(),
     ): Map<String, Any?> =
-        service.economySummarySince(sinceEpochMs, limit, serverFilter, shopMaterials, concentrationGroups)
+        economySummarySinceAsync(sinceEpochMs, limit, serverFilter, shopMaterials, concentrationGroups).join()
 
     @JvmStatic
     fun economySummarySinceAsync(
@@ -315,7 +316,21 @@ object AuditManager {
         shopMaterials: Set<String> = emptySet(),
         concentrationGroups: Map<String, Set<String>> = emptyMap(),
     ): CompletableFuture<Map<String, Any?>> =
-        service.economySummarySinceAsync(sinceEpochMs, limit, serverFilter, shopMaterials, concentrationGroups)
+        readMeasurementPeriod().thenCompose { period ->
+            service.economySummarySinceAsync(maxOf(sinceEpochMs, period?.boundaryAt ?: 0L), limit, serverFilter, shopMaterials, concentrationGroups)
+                .thenApply { summary ->
+                    summary + ("measurementPeriod" to mapOf(
+                        "generation" to (period?.generation ?: 0L),
+                        "boundaryAt" to period?.boundaryAt,
+                        "requestedSinceEpochMs" to sinceEpochMs,
+                        "historicalAuditRetained" to true,
+                    ))
+                }
+        }
+
+    private fun readMeasurementPeriod(): CompletableFuture<ru.arc.metrics.MeasurementResetState?> =
+        ARC.redisManager?.let { ru.arc.metrics.MeasurementResetControl(it).read() }
+            ?: CompletableFuture.completedFuture(null)
 
     @JvmStatic
     fun sendAudit(audience: Audience, playerName: String, page: Int, filter: AuditFilter) {

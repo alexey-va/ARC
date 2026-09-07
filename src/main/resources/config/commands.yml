@@ -74,6 +74,7 @@ commands:
     name: audit
     aliases: [ ]
     permission: arc.audit
+    usage: /arc audit <player> [page] [filter] | <player> clear | clearall | reset-period [status|confirm <generation>]
   repo:
     name: repo
     aliases: [ ]
@@ -213,6 +214,11 @@ messages:
     observe-only: '<yellow>Контракты пока калибруются. <gray>Сдача предметов и выплаты выключены.'
   common:
     usage: '<red>Использование: <gray>%usage%'
+  audit:
+    reset-period-success: '<green>Период измерений сброшен с границы <white>%boundary%<green>. Журналы выплат и контрактов сохранены.'
+    reset-period-failed: '<red>Запрос не завершён. Проверьте /arc audit reset-period status и журнал сервера.'
+    reset-period-confirm: '<gray>Отчёты начнут новый период; прежние данные сохранятся. Подтвердить: <white>/arc audit reset-period confirm %generation%'
+    reset-period-status: '<gray>Граница измерений: <white>%boundary%<gray>, поколение: <white>%generation%'
   chat:
     local: '<gray>Режим чата: <white>локальный<gray>. Переключить: <white>/g'
     global: '<gray>Режим чата: <white>глобальный<gray>. Переключить: <white>/l'

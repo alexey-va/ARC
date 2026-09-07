@@ -36,6 +36,7 @@ class ProductInterestStore private constructor(
     private val gson: Gson,
     private val players: MutableMap<String, PlayerRecord>,
     private var lastSavedAt: Long,
+    private var measurementBoundaryAt: Long = 0L,
     val recoveredInvalidPath: Path? = null,
 ) {
     private var uiDroppedEvents: Long = 0
@@ -113,6 +114,7 @@ class ProductInterestStore private constructor(
         val uiDroppedEvents: Long = 0,
         val resultObservationStartedAt: Long? = null,
         val engagementObservationStartedAt: Long? = null,
+        val measurementBoundaryAt: Long? = null,
     )
 
     private data class PersistedPlayer(
@@ -198,6 +200,7 @@ class ProductInterestStore private constructor(
 
     @Synchronized
     fun apply(signal: ProductSignal): ProductStoreApplyResult {
+        if (signal.occurredAt < measurementBoundaryAt) return ProductStoreApplyResult(false, players[signal.player]?.journey())
         if (signal.kind == ProductEventKind.MEANINGFUL_OUTCOME && signal.outcome?.isGameplayResult() != true) {
             return ProductStoreApplyResult(false, players[signal.player]?.journey())
         }
@@ -282,11 +285,14 @@ class ProductInterestStore private constructor(
             ProductEventKind.SESSION_END,
             ProductEventKind.SESSION_CENSORED,
             -> {
-                day.sessionSeconds += signal.sessionSeconds.coerceAtLeast(0)
-                day.activeSeconds += signal.activeSeconds.coerceIn(0, signal.sessionSeconds)
+                // A remote node may finish a pre-reset session before it observes the new period.
+                // Never attribute pre-boundary time or its un-timestamped context to this period.
+                val duration = signal.sessionSeconds.coerceIn(0, (signal.occurredAt - measurementBoundaryAt).coerceAtLeast(0) / 1000)
+                day.sessionSeconds += duration
+                day.activeSeconds += if (signal.sessionSeconds <= duration) signal.activeSeconds.coerceIn(0, duration) else 0L
                 changed = signal.sessionSeconds > 0
-                signal.systems.forEach { changed = day.systems.add(it) || changed }
-                if (signal.kind == ProductEventKind.SESSION_END) {
+                if (signal.sessionSeconds <= duration) signal.systems.forEach { changed = day.systems.add(it) || changed }
+                if (signal.kind == ProductEventKind.SESSION_END && signal.sessionSeconds <= duration) {
                     signal.exit?.let {
                         changed = day.recordExit(signal.source, it, config.maxDetailValuesPerPlayerDay) || changed
                     }
@@ -316,6 +322,7 @@ class ProductInterestStore private constructor(
     fun applyExternal(playerId: String, source: ExternalProductSource, event: ExternalProductEvent, occurredAt: Long): Boolean {
         require(playerId.matches(Regex("[a-f0-9]{64}"))) { "External product player must be pseudonymous" }
         require(event.source == source) { "External event does not belong to source" }
+        if (occurredAt < measurementBoundaryAt) return false
         prune(occurredAt)
         val record = player(playerId, occurredAt)
         record.lastSeenAt = maxOf(record.lastSeenAt, occurredAt)
@@ -331,6 +338,7 @@ class ProductInterestStore private constructor(
     @Synchronized
     fun applyUi(signal: ProductUiSignal): Boolean {
         if (!ProductUiCodec.valid(signal)) return false
+        if (signal.occurredAt < measurementBoundaryAt) return false
         prune(signal.occurredAt)
         val record = player(signal.player, signal.occurredAt)
         record.lastSeenAt = maxOf(record.lastSeenAt, signal.occurredAt)
@@ -344,7 +352,7 @@ class ProductInterestStore private constructor(
         ProductEngagementObservations.keys(signal).forEach { day.observeEngagement(it, signal.occurredAt) }
         val row = day.ui.getOrPut(key) { ProductUiRow(signal.surface, signal.revision, signal.button, signal.feature) }
         row.add(signal.kind.name.lowercase())
-        row.durationMillis += signal.durationMillis
+        row.durationMillis += signal.durationMillis.coerceAtMost((signal.occurredAt - measurementBoundaryAt).coerceAtLeast(0))
         if (signal.feature != null) row.feature = signal.feature
         if (signal.kind == ProductUiKind.OPEN) {
             record.firstMenuAt = minOf(record.firstMenuAt ?: signal.occurredAt, signal.occurredAt)
@@ -415,6 +423,7 @@ class ProductInterestStore private constructor(
         action: ProductAction,
         occurredAt: Long,
     ): Boolean {
+        if (occurredAt < measurementBoundaryAt) return false
         prune(occurredAt)
         val record = player(player, occurredAt)
         record.lastSeenAt = maxOf(record.lastSeenAt, occurredAt)
@@ -471,6 +480,23 @@ class ProductInterestStore private constructor(
             flushLock.unlock()
         }
     }
+
+    /** Initializes an empty period file. Historical stores must never be cleared by a reset. */
+    @Synchronized
+    fun resetPeriod(boundaryAt: Long, observedAt: Long = boundaryAt): Boolean {
+        if (boundaryAt == measurementBoundaryAt) return false
+        require(boundaryAt > 0 && measurementBoundaryAt == 0L && players.isEmpty()) {
+            "Measurement periods must use a new empty file; existing records cannot be cleared"
+        }
+        measurementBoundaryAt = boundaryAt
+        resultObservationStartedAt = observedAt
+        engagementObservationStartedAt = observedAt
+        markDirty()
+        return true
+    }
+
+    @Synchronized
+    fun measurementStartedAt(): Long = resultObservationStartedAt
 
     @Synchronized
     fun snapshot(
@@ -683,6 +709,7 @@ class ProductInterestStore private constructor(
         return linkedMapOf(
             "version" to VERSION,
             "measurementVersion" to 3,
+            "measurementBoundaryAt" to measurementBoundaryAt,
             "resultObservationStartedAt" to resultObservationStartedAt,
             "generatedAt" to now,
             "window" to linkedMapOf("days" to safeDays, "from" to start.toString(), "through" to end.toString()),
@@ -1103,6 +1130,7 @@ class ProductInterestStore private constructor(
             uiDroppedEvents = uiDroppedEvents,
             resultObservationStartedAt = resultObservationStartedAt,
             engagementObservationStartedAt = engagementObservationStartedAt,
+            measurementBoundaryAt = measurementBoundaryAt,
             players =
                 players.values.sortedBy { it.id }.map { player ->
                     PersistedPlayer(
@@ -1248,12 +1276,13 @@ class ProductInterestStore private constructor(
                         .forEach { day -> record.days[day.date] = day }
                     records[id] = record
                 }
-                ProductInterestStore(path, config, gson, records, model.savedAt.coerceAtMost(now)).also {
+                ProductInterestStore(path, config, gson, records, model.savedAt.coerceAtMost(now), model.measurementBoundaryAt?.coerceAtLeast(0L) ?: 0L).also {
                     it.capacityEvictions = model.capacityEvictions.coerceAtLeast(0)
                     it.uiDroppedEvents = model.uiDroppedEvents.coerceAtLeast(0)
                     it.resultObservationStartedAt = model.resultObservationStartedAt?.takeIf { at -> at in 0..now } ?: now
                     // Save the new observation boundary even before the first new player arrives.
                     it.engagementObservationStartedAt = model.engagementObservationStartedAt?.takeIf { at -> at in 0..now } ?: now
+                    it.measurementBoundaryAt = model.measurementBoundaryAt?.coerceAtLeast(0L) ?: 0L
                     if (model.resultObservationStartedAt != it.resultObservationStartedAt ||
                         model.engagementObservationStartedAt != it.engagementObservationStartedAt) it.markDirty()
                     it.prune(now)
@@ -1261,7 +1290,7 @@ class ProductInterestStore private constructor(
             }.getOrElse {
                 val invalid = path.resolveSibling("${path.fileName}.invalid-$now")
                 Files.move(path, invalid, StandardCopyOption.REPLACE_EXISTING)
-                ProductInterestStore(path, config, gson, linkedMapOf(), now, invalid)
+                ProductInterestStore(path, config, gson, linkedMapOf(), now, recoveredInvalidPath = invalid)
             }
         }
 

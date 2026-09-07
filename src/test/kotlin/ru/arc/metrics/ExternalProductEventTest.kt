@@ -27,6 +27,11 @@ class ExternalProductEventTest : StringSpec({
         }
     }
 
+    "accepts the bounded jobs anti-farm transition events" {
+        ExternalProductEvent.WORK_BLOCKED_AFK.source shouldBe ExternalProductSource.JOBS
+        ExternalProductEvent.WORK_BLOCKED_FARM.source shouldBe ExternalProductSource.JOBS
+    }
+
     "external event survives store persistence and old files default empty" {
         val path = Files.createTempDirectory("arc-product").resolve("state.json")
         val config = ProductInterestConfig(networkEnabled = false, persistIntervalSeconds = 10)
