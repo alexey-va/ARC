@@ -43,14 +43,14 @@ test('real Parkour run emits ARC HUD for join, checkpoint, death and finish', as
     console.log('parkour join probe', JSON.stringify(player.bot.entity.position), titles);
     await waitUntil(() => titles.some(text => text.includes('ТРАССА НАЧАЛАСЬ')), { signal, timeout: 10000 });
 
-    await walkForward(player, 3000);
+    await walkForward(player, 4000);
     await waitUntil(() => titles.some(text => text.includes('ТОЧКА')), { signal, timeout: 10000 });
 
     server.execute(`minecraft:kill ${player.username}`);
     await waitUntil(() => titles.some(text => text.includes('Срыв')), { signal, timeout: 10000 });
 
     await new Promise(resolve => setTimeout(resolve, 1000));
-    await walkForward(player, 3000);
+    await walkForward(player, 4000);
     await waitUntil(() => titles.some(text => text.includes('ТРАССА ПРОЙДЕНА')), { signal, timeout: 10000 });
     assert.ok(titles.some(text => text.includes('ТРАССА НАЧАЛАСЬ')));
     assert.ok(titles.some(text => text.includes('ТОЧКА')));
