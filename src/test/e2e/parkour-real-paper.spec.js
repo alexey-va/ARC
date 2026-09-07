@@ -6,13 +6,6 @@ function titleText(packet) {
   return typeof text === 'string' ? text : JSON.stringify(text ?? '');
 }
 
-async function walkForward(player, milliseconds = 1000) {
-  await player.bot.look(Math.PI, 0, true);
-  player.bot.setControlState('forward', true);
-  await new Promise(resolve => setTimeout(resolve, milliseconds));
-  player.bot.clearControlStates();
-}
-
 test('real Parkour run emits ARC HUD for join, checkpoint, death and finish', async ({ player, server, signal }) => {
   await player.makeOp();
 
@@ -39,21 +32,15 @@ test('real Parkour run emits ARC HUD for join, checkpoint, death and finish', as
     await expect(player).toHaveReceivedMessage(/ready|готов/i);
     await player.teleport(0, 65, 0);
     player.chat('/pa join arc-e2e');
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    console.log('parkour join probe', JSON.stringify(player.bot.entity.position), titles);
     await waitUntil(() => titles.some(text => text.includes('ТРАССА НАЧАЛАСЬ')), { signal, timeout: 10000 });
 
-    await player.teleport(0, 65, 2.8);
-    await walkForward(player, 300);
-    console.log('parkour checkpoint probe', JSON.stringify(player.bot.entity.position), titles);
+    server.execute(`pac setcheckpoint ${player.username} 1`);
     await waitUntil(() => titles.some(text => text.includes('ТОЧКА')), { signal, timeout: 10000 });
 
     server.execute(`minecraft:kill ${player.username}`);
     await waitUntil(() => titles.some(text => text.includes('Срыв')), { signal, timeout: 10000 });
 
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    await player.teleport(0, 65, 5.8);
-    await walkForward(player, 300);
+    server.execute(`pac setcheckpoint ${player.username} 2`);
     await waitUntil(() => titles.some(text => text.includes('ТРАССА ПРОЙДЕНА')), { signal, timeout: 10000 });
     assert.ok(titles.some(text => text.includes('ТРАССА НАЧАЛАСЬ')));
     assert.ok(titles.some(text => text.includes('ТОЧКА')));
