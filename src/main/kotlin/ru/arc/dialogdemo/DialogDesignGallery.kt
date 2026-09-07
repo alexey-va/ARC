@@ -58,7 +58,8 @@ object DialogDesignGallery {
     }
 
     private object TooltipTable {
-        private data class Frame(val base: Int, val leftAdvance: Int, val innerAdvance: Int, val rightAdvance: Int)
+        private data class Frame(val base: Int, val leftAdvance: Int, val innerAdvance: Int,
+            val rightAdvance: Int, val rightJointAdvance: Int = 10)
 
         private val font = Key.key("minecraft:default")
         private val undecorated = TextDecoration.values().associateWith { TextDecoration.State.FALSE }
@@ -67,8 +68,8 @@ object DialogDesignGallery {
             Frame(0xE550, 2, 6, 10),
             Frame(0xE560, 2, 6, 10),
             Frame(0xE570, 4, 6, 8),
-            Frame(0xE580, 4, 6, 8),
-            Frame(0xE590, 9, 8, 8)
+            Frame(0xE580, 4, 6, 8, 8),
+            Frame(0xE590, 6, 7, 8, 8)
         )
         private const val NEGATIVE_ONE = 0xF0F11
         private const val TOP_LEFT = 0
@@ -99,10 +100,13 @@ object DialogDesignGallery {
             val frame = frames[index]
             val top = glued(frame, listOf(TOP_LEFT) + List(28) { TOP } + TOP_JOINT + List(10) { TOP } + TOP_RIGHT)
             val separator = glued(frame, listOf(LEFT_JOINT) + List(28) { MIDDLE } + CROSS + List(10) { MIDDLE } + RIGHT_JOINT)
+                .append(gap(10 - frame.rightJointAdvance))
             val bottom = glued(frame, listOf(BOTTOM_LEFT) + List(28) { BOTTOM } + BOTTOM_JOINT + List(10) { BOTTOM } + BOTTOM_RIGHT)
+            val columnPadding = 10 - frame.leftAdvance
             fun contentRow(left: Component, right: Component) = join(listOf(
-                gap(11), glyph(frame.base + LEFT), gap(10 - frame.leftAdvance), cell(left, 251),
-                glyph(frame.base + INNER), cell(right, 99 - frame.innerAdvance), glyph(frame.base + RIGHT),
+                gap(11), glyph(frame.base + LEFT), gap(columnPadding), cell(left, 251),
+                glyph(frame.base + INNER), gap(columnPadding),
+                cell(right, 99 - frame.innerAdvance - columnPadding), glyph(frame.base + RIGHT),
                 gap(10 - frame.rightAdvance), gap(11)
             ))
             val header = contentRow(

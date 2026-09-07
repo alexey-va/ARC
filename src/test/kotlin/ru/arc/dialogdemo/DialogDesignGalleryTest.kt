@@ -50,9 +50,10 @@ class DialogDesignGalleryTest : FreeSpec({
                                 bold shouldBe false
                                 val style = (point - 0xE540) / 0x10
                                 when (point and 0xF) {
-                                    4 -> listOf(2, 2, 2, 4, 4, 9)[style]
-                                    5 -> listOf(6, 6, 6, 6, 6, 8)[style]
+                                    4 -> listOf(2, 2, 2, 4, 4, 6)[style]
+                                    5 -> listOf(6, 6, 6, 6, 6, 7)[style]
                                     6 -> listOf(10, 10, 10, 8, 8, 8)[style]
+                                    10 -> if (style >= 4) 8 else 10
                                     else -> 10
                                 }
                             } else requireNotNull(fonts.getAsJsonObject(font)
