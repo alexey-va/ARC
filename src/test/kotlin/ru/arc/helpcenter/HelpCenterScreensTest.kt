@@ -264,6 +264,25 @@ class HelpCenterScreensTest {
     }
 
     @Test
+    fun `settings expose native join messages and distinct category accents`() {
+        io.mockk.mockkObject(ru.arc.misc.JoinMessageGuiFactory)
+        try {
+            every { ru.arc.misc.JoinMessageGuiFactory.show(player, true, 0) } returns Unit
+            open(HelpCenterPage.SETTINGS)
+            assertEquals(2, screen.columns)
+            assertEquals(5, screen.buttons.map { it.label.color() }.distinct().size)
+            val join = screen.buttons.single { it.id.value == "settings_join_messages" }
+            assertEquals("Сообщения при входе ›", plain(join.label))
+            assertFalse(join.closeDialogBeforeAction)
+            click("settings_join_messages")
+            io.mockk.verify(exactly = 1) { ru.arc.misc.JoinMessageGuiFactory.show(player, true, 0) }
+            assertTrue(executed.isEmpty())
+        } finally {
+            io.mockk.unmockkObject(ru.arc.misc.JoinMessageGuiFactory)
+        }
+    }
+
+    @Test
     fun `settings update inside the selected section without an extra menu command`() {
         open(HelpCenterPage.SETTINGS)
         click("settings_social")
@@ -307,7 +326,7 @@ class HelpCenterScreensTest {
         )
         expected.forEach { (group, ids) ->
             open(HelpCenterPage.SETTINGS)
-            assertEquals(4, screen.buttons.size)
+            assertEquals(5, screen.buttons.size)
             click("settings_$group")
             assertEquals(ids, screen.buttons.map { it.id.value })
             assertTrue(screen.buttons.all { it.width == 230 && !it.closeDialogBeforeAction })

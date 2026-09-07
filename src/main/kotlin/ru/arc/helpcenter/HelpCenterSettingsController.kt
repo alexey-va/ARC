@@ -9,6 +9,7 @@ import org.bukkit.entity.Player
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.whenCompleteSync
 import ru.arc.gui.MenuShortcutAction
+import ru.arc.misc.JoinMessageGuiFactory
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
 import ru.arc.paper.menu.PaperDialogButton
@@ -45,7 +46,12 @@ internal class HelpCenterSettingsController(
             button("settings_${section.key}", text("settings-${section.key}-label"), text("settings-${section.key}-tooltip")) {
                 openSection(player, section)
             }
-        } + if (player.hasPermission("tab.group.admin")) listOf(
+        } + listOf(
+            button("settings_join_messages", text("settings-join-messages-label"), text("settings-join-messages-tooltip")) {
+                navigation.visit(player) { open(player) }
+                JoinMessageGuiFactory.show(player, isJoin = true)
+            },
+        ) + if (player.hasPermission("tab.group.admin")) listOf(
             button("legacy_admin", text("legacy-settings-admin", "state" to state(entries.getValue("admin"))), text("legacy-settings-admin-tooltip")) {
                 legacy.execute(player, "admin")
             },

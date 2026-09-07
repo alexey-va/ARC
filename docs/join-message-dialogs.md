@@ -1,7 +1,9 @@
 # Join and quit message dialogs
 
 `/arc joinmessage` and `/arc quitmessage` open native Paper dialogs. Existing
-command aliases and command permission overrides are retained. The catalog is
+command aliases and command permission overrides are retained. The main menu also
+links directly to the join catalog through «Настройки → Сообщения при входе»;
+this route retains the catalog permission check and native dialog history. The catalog is
 still published by ProxyARC through `arc.join_message_catalog`.
 
 ## Player flow

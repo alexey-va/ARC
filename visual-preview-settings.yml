@@ -1,0 +1,51 @@
+schema: 1
+minecraft-version: 26.1.2
+minecraft-client-sha1: 4e618f09a0c649dde3fdf829df443ce0b8831e65
+plugin: ARC — настройки главного меню
+sources:
+  settings:
+    path: src/main/resources/modules/help-center.yml
+    root: text
+    include: [category-settings-title, settings-hub-body, settings-controls-label, settings-controls-tooltip, settings-interface-label, settings-interface-tooltip, settings-social-label, settings-social-tooltip, settings-world-label, settings-world-tooltip, settings-join-messages-label, settings-join-messages-tooltip, legacy-settings-admin, legacy-settings-admin-tooltip, root-label]
+placeholders:
+  shortcut: главное меню
+  escape: назад
+  state: выключено
+surfaces:
+  dialogs:
+    - id: settings-hub
+      source: settings
+      format: reference-multi-action
+      name-key: category-settings-title
+      external-title-key: category-settings-title
+      columns: 2
+      body:
+        - {id: summary, text-key: settings-hub-body, width: 468}
+      buttons:
+        - {id: controls, text-key: settings-controls-label, tooltip-key: settings-controls-tooltip, width: 230}
+        - {id: interface, text-key: settings-interface-label, tooltip-key: settings-interface-tooltip, width: 230}
+        - {id: social, text-key: settings-social-label, tooltip-key: settings-social-tooltip, width: 230}
+        - {id: world, text-key: settings-world-label, tooltip-key: settings-world-tooltip, width: 230}
+        - {id: join-messages, text-key: settings-join-messages-label, tooltip-key: settings-join-messages-tooltip, width: 230}
+      exit-button: {id: root, text-key: root-label, tooltip-key: root-label, width: 230}
+      viewport: [854, 480]
+      variants: [{id: default}]
+
+    - id: settings-hub-admin
+      source: settings
+      format: reference-multi-action
+      name-key: category-settings-title
+      external-title-key: category-settings-title
+      columns: 2
+      body:
+        - {id: summary, text-key: settings-hub-body, width: 468}
+      buttons:
+        - {id: controls, text-key: settings-controls-label, tooltip-key: settings-controls-tooltip, width: 230}
+        - {id: interface, text-key: settings-interface-label, tooltip-key: settings-interface-tooltip, width: 230}
+        - {id: social, text-key: settings-social-label, tooltip-key: settings-social-tooltip, width: 230}
+        - {id: world, text-key: settings-world-label, tooltip-key: settings-world-tooltip, width: 230}
+        - {id: join-messages, text-key: settings-join-messages-label, tooltip-key: settings-join-messages-tooltip, width: 230}
+        - {id: admin, text-key: legacy-settings-admin, tooltip-key: legacy-settings-admin-tooltip, width: 230}
+      exit-button: {id: root, text-key: root-label, tooltip-key: root-label, width: 230}
+      viewport: [854, 480]
+      variants: [{id: default}]

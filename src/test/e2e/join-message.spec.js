@@ -103,8 +103,12 @@ test('native join editor replaces and removes the full prefix and persists the s
     await ready(destination);
   }
   try {
-    player.chat('/arc joinmessage');
-    await ready('own_0');
+    player.chat('/menu');
+    await ready('settings');
+    await click('settings', 'settings_join_messages');
+    assert.equal(dialog.columns ?? 2, 2);
+    assert.match(plain(button('settings_join_messages').label), /Сообщения при входе/);
+    await click('settings_join_messages', 'own_0');
     // The native codec omits columns when it equals the default (two).
     assert.equal(dialog.columns ?? 2, 2);
     assert.equal(actions().filter(a => /\/(own|phrase)_/.test(a.action?.id ?? '')).length, 12);
