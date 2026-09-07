@@ -31,7 +31,7 @@ surfaces:
       format: reference-multi-action
       name-key: join-title
       external-title-key: join-title
-      columns: 1
+      columns: 2
       body:
         - {id: help, text-key: catalog-help, width: 600}
         - {id: page, text-key: page, width: 600}
@@ -39,37 +39,43 @@ surfaces:
         - id: selected-1
           text-key: custom-selected
           tooltip-key: custom-description
-          width: 600
+          width: 299
           placeholders: {message: 'Архитектор23 принёс с собой уют'}
         - id: available-2
           text-key: custom-unselected
           tooltip-key: custom-description
-          width: 600
+          width: 299
           placeholders: {message: 'Архитектор23 вернулся, потому что реальная жизнь — это для слабаков'}
         - id: available-3
           text-key: unselected
           tooltip-key: turn-on
-          width: 600
+          width: 299
           placeholders: {message: 'Архитектор23 появился, и теперь будет всех ебать'}
         - id: available-4
           text-key: unselected
           tooltip-key: turn-on
-          width: 600
+          width: 299
           placeholders: {message: 'Архитектор23 пришел, чтобы в очередной раз накосячить'}
         - id: available-5
           text-key: unselected
           tooltip-key: turn-on
-          width: 600
+          width: 299
           placeholders: {message: 'Архитектор23 как обычно — зашел с голой жопой'}
         - id: locked-6
           text-key: locked
           tooltip-key: unavailable
-          width: 600
+          width: 299
           placeholders: {message: 'Архитектор23 прибыл и готов на всё, лишь бы не работать'}
-        - {id: custom, text-key: custom-list, tooltip-key: custom-list, width: 600}
-        - {id: switch, text-key: switch-leave, tooltip-key: switch-leave, width: 600}
-        - {id: previous, text-key: previous, tooltip-key: previous, width: 600}
-        - {id: next, text-key: next, tooltip-key: next, width: 600}
+        - {id: available-7, text-key: unselected, tooltip-key: turn-on, width: 299, placeholders: {message: 'Архитектор23 снова тут, как будто бездельничать — это его работа'}}
+        - {id: available-8, text-key: unselected, tooltip-key: turn-on, width: 299, placeholders: {message: 'Архитектор23 вернулся, надеясь, что его тут хоть кто-то ждал'}}
+        - {id: available-9, text-key: unselected, tooltip-key: turn-on, width: 299, placeholders: {message: 'Архитектор23 зашел, чтобы проверить, не упал ли сервер без него'}}
+        - {id: available-10, text-key: unselected, tooltip-key: turn-on, width: 299, placeholders: {message: 'Архитектор23 вернулся и будет снова тупить'}}
+        - {id: available-11, text-key: unselected, tooltip-key: turn-on, width: 299, placeholders: {message: 'Архитектор23 снова здесь, как будто ему больше нечем заняться'}}
+        - {id: available-12, text-key: unselected, tooltip-key: turn-on, width: 299, placeholders: {message: 'Архитектор23 вошел в игру, как бы это не кончилось катастрофой'}}
+        - {id: custom, text-key: custom-list, tooltip-key: custom-list, width: 299}
+        - {id: switch, text-key: switch-leave, tooltip-key: switch-leave, width: 299}
+        - {id: previous, text-key: previous, tooltip-key: previous, width: 299}
+        - {id: next, text-key: next, tooltip-key: next, width: 299}
       viewport: [854, 480]
       variants: [{id: default}]
 
@@ -78,7 +84,7 @@ surfaces:
       format: reference-multi-action
       name-key: leave-title
       external-title-key: leave-title
-      columns: 1
+      columns: 2
       body:
         - {id: help, text-key: catalog-help, width: 600}
         - {id: page, text-key: page, width: 600, placeholders: {page: '2'}}
@@ -89,10 +95,16 @@ surfaces:
         - {id: available-4, text-key: unselected, tooltip-key: turn-on, width: 600, placeholders: {message: 'Архитектор23 ушёл, потому что тут хрен делать'}}
         - {id: available-5, text-key: unselected, tooltip-key: turn-on, width: 600, placeholders: {message: 'Архитектор23 исчез, как последний шанс на победу'}}
         - {id: locked-6, text-key: locked, tooltip-key: unavailable, width: 600, placeholders: {message: 'Архитектор23 свалил, потому что всё это задолбало'}}
-        - {id: custom, text-key: custom-list, tooltip-key: custom-list, width: 600}
-        - {id: switch, text-key: switch-join, tooltip-key: switch-join, width: 600}
-        - {id: previous, text-key: previous, tooltip-key: previous, width: 600}
-        - {id: next, text-key: next, tooltip-key: next, width: 600}
+        - {id: available-7, text-key: unselected, tooltip-key: turn-on, width: 299, placeholders: {message: 'Архитектор23 свалил, оставив все на остальных дебилов'}}
+        - {id: available-8, text-key: unselected, tooltip-key: turn-on, width: 299, placeholders: {message: 'Архитектор23 вышел, потому что не выдержал накала тупости'}}
+        - {id: available-9, text-key: unselected, tooltip-key: turn-on, width: 299, placeholders: {message: 'Архитектор23 слился, как крыса'}}
+        - {id: available-10, text-key: unselected, tooltip-key: turn-on, width: 299, placeholders: {message: 'Архитектор23 ушел, потому что кто-то в реале орет "Убери мусор!"'}}
+        - {id: available-11, text-key: unselected, tooltip-key: turn-on, width: 299, placeholders: {message: 'Архитектор23 исчез, как будто его никогда не было'}}
+        - {id: available-12, text-key: unselected, tooltip-key: turn-on, width: 299, placeholders: {message: 'Архитектор23 свалил, как только понял, что тут ему не светит'}}
+        - {id: custom, text-key: custom-list, tooltip-key: custom-list, width: 299}
+        - {id: switch, text-key: switch-join, tooltip-key: switch-join, width: 299}
+        - {id: previous, text-key: previous, tooltip-key: previous, width: 299}
+        - {id: next, text-key: next, tooltip-key: next, width: 299}
       viewport: [854, 480]
       variants: [{id: default}]
 

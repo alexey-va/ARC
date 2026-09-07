@@ -6,7 +6,8 @@ still published by ProxyARC through `arc.join_message_catalog`.
 
 ## Player flow
 
-- The catalog uses one column, six phrases per page, and 600 GUI-unit buttons.
+- The catalog uses two columns and twelve phrases per page. A 600 GUI-unit grid uses
+  two 299-unit buttons and the native 2-unit gutter.
   Click a phrase to enable/disable it. `✔` and green text identify enabled
   phrases; `[Недоступно]` identifies unavailable choices. The full phrase is also
   present in its tooltip. Extremely long operator-authored phrases can exceed a
@@ -33,8 +34,9 @@ still published by ProxyARC through `arc.join_message_catalog`.
   the unsaved draft, and preview Back returns to that draft.
 - Phrase buttons use neutral `#aaa49a` for disabled and green `#9bd48d` for enabled
   states. Only `○` / `✔` and color change on toggle; no state words or extra
-  separators are inserted. Tooltips explain the available action. Utilities (personal library, settings, pagination
-  and navigation) use blue `#92bed8`; deletion uses red. Personal template
+  separators are inserted. Tooltips explain the available action. Utility colors encode categories: pagination is blue `#92bed8`, the
+  personal library/editor is violet `#c4a7e7`, and switching join/quit is gold
+  `#e5ba73`. Back stays neutral; deletion uses red. Personal template
   colors appear in tooltips and previews, while button labels retain state colors.
   Dialog actions
   use `›` for child screens and `‹ Назад` for returns. Existing operator text is
@@ -55,7 +57,10 @@ an already-enabled phrase can be disabled after its catalog permission is lost.
 `modules/join-message-dialog.yml` owns all visible text, button width, page size,
 and whether unavailable catalog entries remain visible. The old inventory
 presentation in `modules/misc.yml` and `guis/menus.yml` is no longer used by these
-commands. Width is bounded to 300–1024 and page size to 1–10.
+commands. Grid width is bounded to 300–1024 and page size to 2–20.
+Short last pages reserve empty cells so personal settings/kind switching and
+pagination remain two separate complete rows. Clicking an empty cell only
+refreshes the same page; it never changes a selection.
 
 ## Storage and broadcast contract
 

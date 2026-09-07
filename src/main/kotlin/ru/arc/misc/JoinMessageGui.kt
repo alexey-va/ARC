@@ -62,7 +62,7 @@ internal class JoinMessageDialogs(
     private val generations = mutableMapOf<java.util.UUID, Long>()
     private var nextGeneration = 0L
     private val width get() = config.int("button-width", 600).coerceIn(300, 1024)
-    private val pageSize get() = config.int("page-size", 6).coerceIn(1, 10)
+    private val pageSize get() = config.int("page-size", 12).coerceIn(2, 20)
 
     fun show(player: Player, isJoin: Boolean = true, startPage: Int = 0) {
         runOnMain {
@@ -135,8 +135,15 @@ internal class JoinMessageDialogs(
                 selectCatalogMessage(context.player, entry, isJoin, !current, page)
             }
         }
+        // Keep utility and paging pairs on their own rows even on a short last page.
+        if (buttons.size % 2 != 0) buttons += button("empty_phrase", Component.empty(), isJoin) {
+            show(it.player, isJoin, page)
+        }
         if (player.hasPermission(CUSTOM_PERMISSION)) {
             buttons += button("custom", text("custom-list"), isJoin, custom = true) { showCustom(it.player, isJoin, page) }
+        }
+        if (buttons.size % 2 == 0) buttons += button("empty_utility", Component.empty(), isJoin) {
+            show(it.player, isJoin, page)
         }
         buttons += button("switch", text(if (isJoin) "switch-leave" else "switch-join"), isJoin) { show(it.player, !isJoin) }
         buttons += button("previous", text("previous"), isJoin) { show(it.player, isJoin, (page + pages - 1) % pages) }
@@ -148,8 +155,8 @@ internal class JoinMessageDialogs(
                 PaperDialogBody(text("catalog-help"), width),
                 PaperDialogBody(text("page", "page" to (page + 1), "pages" to pages, "selected" to selectedCount), width),
             ) + if (total == 0) listOf(PaperDialogBody(text("empty"), width)) else emptyList(),
-            buttons = buttons,
-            columns = 1,
+            buttons = buttons.map { it.copy(width = (width - 2) / 2) },
+            columns = 2,
         ), reopen = { show(player, isJoin, page) }, onDismiss = { invalidate(player) })
     }
 

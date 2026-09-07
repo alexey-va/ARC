@@ -105,11 +105,14 @@ test('native join editor replaces and removes the full prefix and persists the s
   try {
     player.chat('/arc joinmessage');
     await ready('own_0');
+    assert.equal(dialog.columns, 2);
+    assert.equal(actions().filter(a => /\/(own|phrase)_/.test(a.action?.id ?? '')).length, 12);
+    assert.deepEqual(actions().filter(a => !/arc_history_exit|close/.test(a.action?.id ?? '')).slice(-4).map(a => a.action.id.split('/').pop()), ['custom', 'switch', 'previous', 'next']);
     assert.match(plain(button('own_0').label), /★ ✔ ● .*legacy welcome/);
     await click('previous', 'previous');
-    assert.match(plain(dialog.body[1].contents), /3\/3/);
+    assert.match(plain(dialog.body[1].contents), /2\/2/);
     await click('next', 'own_0');
-    assert.match(plain(dialog.body[1].contents), /1\/3/);
+    assert.match(plain(dialog.body[1].contents), /1\/2/);
     await click('custom', 'custom_0');
     await click('custom_0', 'edit');
     await click('edit', 'preview');

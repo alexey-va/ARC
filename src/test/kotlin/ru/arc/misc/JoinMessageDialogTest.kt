@@ -130,7 +130,7 @@ class JoinMessageDialogTest : FreeSpec({
         old.setString("text.join-title", "Наш заголовок")
         val upgraded = JoinMessageDialogs(old, runOnMain)
         old.string("text.join-title") shouldBe "Наш заголовок"
-        old.string("text.custom-list") shouldBe "<#92bed8>Мои фразы ›"
+        old.string("text.custom-list") shouldBe "<#c4a7e7>Мои фразы ›"
         old.string("text.editor-help") shouldContain "%player_name%"
         upgraded.show(player)
         permissions += JoinMessageDialogs.CUSTOM_PERMISSION
@@ -149,7 +149,7 @@ class JoinMessageDialogTest : FreeSpec({
         old.setString("text.create", "Моя кнопка")
         JoinMessageDialogs(old, runOnMain)
         old.string("text.create") shouldBe "Моя кнопка"
-        old.string("text.custom-list") shouldBe "<#92bed8>Мои фразы ›"
+        old.string("text.custom-list") shouldBe "<#c4a7e7>Мои фразы ›"
         old.string("text.editor-help") shouldContain "точку"
     }
 
@@ -161,8 +161,8 @@ class JoinMessageDialogTest : FreeSpec({
         fun colors(c: Component): List<String> = listOfNotNull(c.color()?.asHexString()?.lowercase()) + c.children().flatMap(::colors)
         colors(buttons.getValue("own_0").label).toSet() shouldBe setOf("#9bd48d")
         colors(buttons.getValue("phrase_0").label).toSet() shouldBe setOf("#aaa49a")
-        listOf("custom", "switch", "next").forEach {
-            colors(buttons.getValue(it).label).toSet() shouldBe setOf("#92bed8")
+        mapOf("custom" to "#c4a7e7", "switch" to "#e5ba73", "next" to "#92bed8", "previous" to "#92bed8").forEach { (id, color) ->
+            colors(buttons.getValue(id).label).toSet() shouldBe setOf(color)
         }
         plain(buttons.getValue("own_0").tooltip) shouldContain "● Viewer дома"
     }
@@ -172,9 +172,9 @@ class JoinMessageDialogTest : FreeSpec({
         dialogs.show(player)
         screen!!.buttons.takeLast(4).map { it.id.value } shouldBe listOf("custom", "switch", "previous", "next")
         click("previous")
-        plain(screen!!.body[1].text) shouldContain "3/3"
+        plain(screen!!.body[1].text) shouldContain "2/2"
         click("next")
-        plain(screen!!.body[1].text) shouldContain "1/3"
+        plain(screen!!.body[1].text) shouldContain "1/2"
         click("switch")
         repeat(2) {
             click("next")
@@ -184,11 +184,24 @@ class JoinMessageDialogTest : FreeSpec({
         }
     }
 
-    "wide single-column pages toggle selections and keep page while switching join and leave" {
+    "short pages preserve complete utility and paging rows" {
+        for (hasCustom in listOf(false, true)) {
+            if (hasCustom) permissions += JoinMessageDialogs.CUSTOM_PERMISSION
+            dialogs.show(player, startPage = 1)
+            val ids = screen!!.buttons.map { it.id.value }
+            (ids.indexOf("previous") % 2) shouldBe 0
+            (ids.indexOf("switch") % 2) shouldBe 1
+            ids.takeLast(2) shouldBe listOf("previous", "next")
+            click("empty_phrase")
+            plain(screen!!.body[1].text) shouldContain "2/2"
+        }
+    }
+
+    "two-column pages toggle selections and keep page while switching join and leave" {
         dialogs.show(player)
-        screen!!.columns shouldBe 1
-        screen!!.buttons.filter { it.id.value.startsWith("phrase_") }.size shouldBe 6
-        screen!!.buttons.all { it.width == 600 } shouldBe true
+        screen!!.columns shouldBe 2
+        screen!!.buttons.filter { it.id.value.startsWith("phrase_") }.size shouldBe 12
+        screen!!.buttons.all { it.width == 299 } shouldBe true
         screen!!.buttons.none { it.id.value == "custom" } shouldBe true
         plain(screen!!.buttons.first().label) shouldBe "○ Viewer принёс уют 1"
         click("phrase_0")
@@ -196,14 +209,14 @@ class JoinMessageDialogTest : FreeSpec({
         click("phrase_0")
         data.selectedMessages(true) shouldBe emptySet()
         click("next")
-        plain(screen!!.body[1].text) shouldContain "2/3"
+        plain(screen!!.body[1].text) shouldContain "2/2"
         click("previous")
-        plain(screen!!.body[1].text) shouldContain "1/3"
+        plain(screen!!.body[1].text) shouldContain "1/2"
         click("next")
         click("phrase_0")
-        plain(screen!!.body[1].text) shouldContain "2/3"
-        click("next")
+        plain(screen!!.body[1].text) shouldContain "2/2"
         screen!!.buttons.count { it.id.value.startsWith("phrase_") } shouldBe 1
+        click("next")
         click("switch")
         plain(screen!!.title) shouldBe "Сообщения при выходе"
         click("phrase_0")
@@ -214,27 +227,27 @@ class JoinMessageDialogTest : FreeSpec({
         permissions += JoinMessageDialogs.CUSTOM_PERMISSION
         (1..10).forEach { data.addCustomMessage("своя фраза $it", true) }
         dialogs.show(player)
-        plain(screen!!.body[1].text) shouldContain "1/4"
+        plain(screen!!.body[1].text) shouldContain "1/2"
         plain(screen!!.buttons.first().label) shouldBe "★ ✔ ● Viewer своя фраза 1"
         plain(screen!!.buttons.first().tooltip) shouldContain "Своя фраза"
         val phrases = mutableListOf<String>()
-        repeat(4) { page ->
+        repeat(2) { page ->
             phrases += screen!!.buttons.filter { it.id.value.startsWith("own_") || it.id.value.startsWith("phrase_") }
                 .map { plain(it.label) }
-            if (page < 3) click("next")
+            if (page < 1) click("next")
         }
         phrases.size shouldBe 23
         phrases.distinct().size shouldBe 23
         phrases.take(10).all { it.startsWith("★") } shouldBe true
-        dialogs.show(player, startPage = 1)
-        screen!!.buttons.count { it.id.value.startsWith("own_") } shouldBe 4
+        dialogs.show(player, startPage = 0)
+        screen!!.buttons.count { it.id.value.startsWith("own_") } shouldBe 10
         screen!!.buttons.count { it.id.value.startsWith("phrase_") } shouldBe 2
         click("own_0")
-        plain(screen!!.body[1].text) shouldContain "2/4"
-        plain(screen!!.buttons.first().label) shouldBe "★ ○ ● Viewer своя фраза 7"
-        (CustomJoinMessage.selectionKey("своя фраза 7") in data.selectedMessages(true)) shouldBe false
+        plain(screen!!.body[1].text) shouldContain "1/2"
+        plain(screen!!.buttons.first().label) shouldBe "★ ○ ● Viewer своя фраза 1"
+        (CustomJoinMessage.selectionKey("своя фраза 1") in data.selectedMessages(true)) shouldBe false
         click("own_0")
-        (CustomJoinMessage.selectionKey("своя фраза 7") in data.selectedMessages(true)) shouldBe true
+        (CustomJoinMessage.selectionKey("своя фраза 1") in data.selectedMessages(true)) shouldBe true
         data.customMessages(true).size shouldBe 10
         click("switch")
         screen!!.buttons.none { it.id.value.startsWith("own_") } shouldBe true
