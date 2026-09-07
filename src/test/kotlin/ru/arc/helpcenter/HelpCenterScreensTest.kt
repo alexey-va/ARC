@@ -410,6 +410,29 @@ class HelpCenterScreensTest {
     }
 
     @Test
+    fun `native plugin commands preserve the shared dialog flow`() {
+        val destinations = listOf(
+            Triple("root_activities", "events", "arcevents"),
+            Triple("root_activities", "farms", "arcfarms"),
+            Triple("root_activities", "giveaways", "giveaway"),
+            Triple("root_progress", "jobs", "arcjobs dialog"),
+            Triple("root_progress", "rank", "rank dialog"),
+        )
+        for ((entry, id, command) in destinations) {
+            open(HelpCenterPage.ROOT)
+            click(entry)
+            assertFalse(
+                screen.buttons.single { it.id.value == "command_$id" }.closeDialogBeforeAction,
+                "$id must keep the parent dialog and cursor during native navigation",
+            )
+            click("command_$id")
+            assertEquals(command, executed.last())
+        }
+        open(HelpCenterPage.ACTIVITIES)
+        assertTrue(screen.buttons.single { it.id.value == "command_vote" }.closeDialogBeforeAction)
+    }
+
+    @Test
     fun `external inventory returns to the originating technology section once`() {
         open(HelpCenterPage.TECHNOLOGY)
         assertFalse(screen.buttons.single { it.id.value == "command_slimefun" }.closeDialogBeforeAction)

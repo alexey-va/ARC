@@ -800,7 +800,9 @@ internal class HelpCenterController(
         ) {
             if (command.id == "privat") open(player, HelpCenterPage.PRIVAT) else executeCatalog(player, command.id)
         }
-        return if (command.id == "privat" || command.opensInventory) result else result.closing()
+        return if (command.id == "privat" || command.id in NATIVE_DIALOG_COMMANDS || command.opensInventory) {
+            result
+        } else result.closing()
     }
 
     private fun searchResultButton(player: Player, entry: HelpCenterSearchEntry): PaperDialogButton {
@@ -927,6 +929,8 @@ internal class HelpCenterController(
     private data class IntentDefinition(val id: String, val action: HelpCenterSearchAction)
 
     companion object {
+        // These commands join Core's shared history while this callback is active.
+        private val NATIVE_DIALOG_COMMANDS = setOf("events", "farms", "giveaways", "jobs", "rank")
         private val SEARCH_INPUT = PaperDialogInputId.of("search")
         private val HOME_INPUT = PaperDialogInputId.of("home_name")
         private val PLAYER_SEARCH_INPUT = PaperDialogInputId.of("player_search")
