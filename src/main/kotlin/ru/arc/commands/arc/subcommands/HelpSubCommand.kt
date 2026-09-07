@@ -175,7 +175,6 @@ object HelpSubCommand : SubCommand {
             TreasuresSubCommand,
             TestSubCommand,
             EliteLootSubCommand,
-            InvestSubCommand,
             StoreSubCommand,
             GiveBoostSubCommand,
             GiveSubCommand,

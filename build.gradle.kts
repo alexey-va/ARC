@@ -47,7 +47,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.5"
+version = "1.4.6"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.4"
@@ -136,7 +136,6 @@ dependencies {
     compileOnly(libs.betterrtp.betterrtp)
     // Private mirror of the exact server-provided LeafRTP JAR; never shaded.
     compileOnly("ru.ruscrafting.thirdparty:leafrtp-lite:3.2.0")
-    compileOnly(libs.org.jsoup.jsoup)
     compileOnly(libs.dev.espi.protectionstones)
     compileOnly(libs.com.alessiodp.parties.parties.api)
     compileOnly(libs.me.clip.placeholderapi)
@@ -161,7 +160,6 @@ dependencies {
     compileOnly(libs.net.citizensnpcs.citizens.main) { exclude(group = "*", module = "*") }
     compileOnly("de.bluecolored:bluemap-api:2.7.7")
     compileOnly(libs.com.viaversion.viaversion.api)
-    compileOnly(libs.org.eclipse.jetty.websocket.websocket.client)
     compileOnly(libs.io.josemmo.yamipa)
     compileOnly(libs.net.luckperms.api)
     compileOnly(libs.fr.black.eyes.lootchest)
@@ -214,10 +212,8 @@ dependencies {
     testImplementation(libs.redis.clients.jedis)
     testImplementation(libs.ru.ruscrafting.thirdparty.rediseconomy)
     testImplementation(libs.io.lettuce.lettuce.core)
-    testImplementation(libs.org.jsoup.jsoup)
     testImplementation(libs.net.luckperms.api)
     testImplementation(libs.me.clip.placeholderapi)
-    testImplementation(libs.org.eclipse.jetty.websocket.websocket.client)
     testImplementation("commons-lang:commons-lang:2.6")
     testImplementation(libs.com.zrips.cmi.api)
     testImplementation(libs.net.william278.huskhomes)

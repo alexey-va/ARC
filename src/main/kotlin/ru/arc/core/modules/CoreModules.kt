@@ -1,11 +1,6 @@
 package ru.arc.core.modules
 
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import net.milkbowl.vault.economy.Economy
 import org.bukkit.plugin.RegisteredServiceProvider
 import ru.arc.ARC
@@ -13,11 +8,9 @@ import ru.arc.TitleInput
 import ru.arc.audit.AuditManager
 import ru.arc.board.BoardManager
 import ru.arc.common.locationpools.LocationPoolManager
-import ru.arc.config.AuctionConfig
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import ru.arc.config.LocationPoolConfig
-import ru.arc.config.StockConfig
 import ru.arc.core.Tasks
 import ru.arc.core.PluginModule
 import ru.arc.core.ScheduledTask
@@ -37,13 +30,6 @@ import ru.arc.redis.RedisManager
 import ru.arc.redis.ServerIdentity
 import ru.arc.redis.RedisConfigBootstrap
 import ru.arc.redis.RedisModuleConfig
-import ru.arc.repository.CachedRepository
-import ru.arc.repository.redisRepo
-import ru.arc.stock.HistoryManager
-import ru.arc.stock.Stock
-import ru.arc.stock.StockMarket
-import ru.arc.stock.StockPlayer
-import ru.arc.stock.StockPlayerManager
 import ru.arc.sync.CMISync
 import ru.arc.sync.duels.DuelStatsBridge
 import ru.arc.sync.duels.DuelsSync
@@ -346,120 +332,6 @@ object XActionModule : PluginModule {
 
     override fun shutdown() {
         XActionManager.shutdown()
-    }
-}
-
-/**
- * Stock market system.
- */
-object StockModule : PluginModule {
-    override val name = "Stock"
-    override val priority = 75
-
-    private var scope: CoroutineScope? = null
-    private var initialized = false
-    private val config by lazy { ConfigManager.of(ARC.instance.dataPath, "stocks/stock.yml") }
-    private var updateTask: ScheduledTask? = null
-    private var dividendTask: ScheduledTask? = null
-
-    @JvmStatic
-    fun isAvailable(): Boolean = initialized
-
-    fun launch(block: suspend CoroutineScope.() -> Unit) {
-        scope?.launch(block = block)
-    }
-
-    override fun init() {
-        if (ARC.redisManager == null) return
-        if (!config.bool("enabled", false)) {
-            ru.arc.util.Logging
-                .info("Stocks are disabled")
-            return
-        }
-
-        scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-        val activeScope = scope ?: return
-        var stockRepository: CachedRepository<Stock>? = null
-        var playerRepository: CachedRepository<StockPlayer>? = null
-
-        try {
-            StockConfig.load(config)
-            AuctionConfig.load()
-
-            stockRepository =
-                redisRepo<Stock>(
-                id = "stocks",
-                storageKey = "arc.stocks",
-                updateChannel = "arc.stocks_update",
-                scope = activeScope,
-            ) {
-                loadAllOnStart(true)
-                // The market catalog is a small complete mirror used by bulk jobs.
-                enableCleanup(false)
-                saveInterval(kotlin.time.Duration.parse("1s"))
-            }
-
-            playerRepository =
-                redisRepo<StockPlayer>(
-                id = "stock_players",
-                storageKey = "arc.stock_players",
-                updateChannel = "arc.stock_players_update",
-                scope = activeScope,
-            ) {
-                loadAllOnStart(true)
-                // Margin calls and dividends must include offline positions too.
-                enableCleanup(false)
-                saveInterval(kotlin.time.Duration.parse("250ms"))
-            }
-
-            StockMarket.stockRepo = stockRepository
-            StockPlayerManager.playerRepo = playerRepository
-
-            HistoryManager.init()
-
-            updateTask =
-                repeating(200.ticks, delay = 20.ticks) {
-                    activeScope.launch { StockMarket.updateStocks() }
-                }
-            dividendTask =
-                repeating(20.ticks, delay = 100.ticks) {
-                    StockMarket.payDividends()
-                }
-
-            initialized = true
-        } catch (e: Exception) {
-            updateTask?.cancel()
-            dividendTask?.cancel()
-            updateTask = null
-            dividendTask = null
-            HistoryManager.cancelTasks()
-            runBlocking {
-                playerRepository?.shutdown()
-                stockRepository?.shutdown()
-            }
-            activeScope.cancel()
-            scope = null
-            StockMarket.closeClient()
-            throw e
-        }
-    }
-
-    override fun shutdown() {
-        if (!initialized) return
-        initialized = false
-
-        updateTask?.let { if (!it.isCancelled) it.cancel() }
-        dividendTask?.let { if (!it.isCancelled) it.cancel() }
-        updateTask = null
-        dividendTask = null
-        HistoryManager.cancelTasks()
-
-        StockMarket.saveHistory()
-        runBlocking { StockMarket.stockRepo.shutdown() }
-        runBlocking { StockPlayerManager.playerRepo.shutdown() }
-        StockMarket.closeClient()
-        scope?.cancel()
-        scope = null
     }
 }
 

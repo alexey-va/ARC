@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "title": "Retire the investment market, September 7 2026",
+  "assumptions": [
+    "User explicitly closes the entire market. No settlement or player-data deletion is performed.",
+    "One network portfolio is the accounting unit for all three scenarios; this is a frozen-price illustration, not player-income forecasting.",
+    "Observed next daily dividend is 27.6693 Vault; low/base/high assume the same existing positions and prices, zero new trades. Price-dependent gains and historical commission volume are unknown.",
+    "After activation all trade, payout and external-price paths are absent. Retained balances and positions are not zero liabilities. No effect on tokens, XP, items, or EconomyShopGUI SELL transition."
+  ],
+  "participants": [
+    1,
+    1,
+    1
+  ],
+  "currencies": {
+    "vault": {
+      "minor_per_unit": 100,
+      "flows": [
+        {
+          "id": "existing_portfolio_dividends",
+          "kind": "liability",
+          "source": "arc_ops_server classic stockAudit, 2026-09-07, timestamp 1788788973682",
+          "basis": "Network nextDividendLiability snapshot; .0002/day effective policy before, no payouts after code activation.",
+          "before": {
+            "enabled": true,
+            "amount_per_event": {
+              "value": "27.6693",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              1,
+              1,
+              1
+            ]
+          },
+          "after": {
+            "enabled": false,
+            "amount_per_event": {
+              "value": "0",
+              "unit": "major"
+            },
+            "events_per_player_day": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "prices": []
+}

@@ -256,7 +256,7 @@ surface is intentionally compact:
   and mint/burn per bucket-derived player-hour. The response explicitly marks
   this as a presence proxy rather than measured session duration; transfers,
   adjustments, and internal movements never contribute to that profile.
-  Internal-stock principal placement, short placement, close
+  Historical internal-stock principal placement, short placement, close
   result, and dividend use the bounded actions `stock_buy`, `stock_short`,
   `stock_close`, and `stock_dividend`; Vault-to-trading transfers remain
   transfers rather than mint. Detailed
@@ -273,12 +273,10 @@ surface is intentionally compact:
   this is explicitly `snapshot_delta_inferred`, not an exact Bank event.
   Survival and parkour must remain standby rather than collecting duplicate
   network snapshots.
-  `stockAudit` is another single-leader aggregate: it measures the trading
-  balance, principal, gross leverage, unrealized P/L, redeemable liability,
-  dividends, and short-position dividend exposure held outside wallet and Bank
-  supply. It never returns player or position identifiers. When both collectors
-  are ready, `moneySupplyCoverage` adds redeemable stock equity to wallet+Bank
-  known supply without pretending that every possible plugin currency is covered.
+  `stockAudit` is now `retired_pending_settlement` with `complete: false`.
+  The investment feature and its collector were removed; retained Redis accounts
+  are not read or mutated. Do not assume their historical liability is zero or
+  report a complete combined money supply from an unavailable stock snapshot.
 
   The same MCP tool exposes `contract_action=list|get|preview|apply` and
   `season_money_action=list|get|preview|apply` for authenticated Economy V2

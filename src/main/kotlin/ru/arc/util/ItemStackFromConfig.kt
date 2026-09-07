@@ -14,7 +14,7 @@ import ru.arc.config.sound
  * then applied back (lazy config fill → editable buttons without hand-writing YAML).
  *
  * ```kotlin
- * val config = StockConfig.config()  // or BoardConfig.config(), jobs Config, gui Config, …
+ * val config = BoardConfig.config()  // or jobs Config, gui Config, …
  * itemStack(Material.STICK) {
  *     display("<gold>Баланс")
  *     lore(listOf("<gray>Баланс: <balance>"))

@@ -5,8 +5,6 @@ api-version: 1.20
 libraries:
   - com.google.code.gson:gson:2.10.1
   - redis.clients:jedis:5.2.0-beta4
-  - org.jsoup:jsoup:1.17.2
-  - org.eclipse.jetty.websocket:websocket-client:9.4.54.v20240208
 softdepend:
   - Parties
   - Lands
@@ -84,9 +82,6 @@ commands:
   treasure-pool:
     description: Treasure reward pools
     usage: /treasure-pool [pool] [action]
-  arc-invest:
-    description: Stock market GUI
-    usage: /arc-invest [gui|buy|sell|portfolio]
   sound-follow:
     description: Play follow sound for player
     usage: /sound-follow <player> <namespace:sound>
@@ -196,12 +191,6 @@ permissions:
   arc.help.ui.use:
     description: Open the ARC player help center
     default: true
-  arc.invest.max.20:
-    description: Hold up to 20 units of one ARC stock
-    default: false
-  arc.invest.max.30:
-    description: Hold up to 30 units of one ARC stock
-    default: false
   arc.investigations.cooldown.bypass:
     description: Bypass the cooldown between paid bureau investigations
     default: op
@@ -234,18 +223,6 @@ permissions:
     default: op
   arc.sound.follow:
     description: Play a follow sound for a player
-    default: op
-  arc.stocks.buy:
-    description: Trade through the ARC stock market
-    default: false
-  arc.stocks.history.prune:
-    description: Prune ARC stock history
-    default: op
-  arc.stocks.images.update:
-    description: Refresh ARC stock images
-    default: op
-  arc.stocks.menu.other:
-    description: Inspect another player's stock menu
     default: op
   arc.store:
     description: Inspect your ARC store history

@@ -47,3 +47,6 @@ Redis and filters to cleanup scenarios; the normal suite retains real Redis
 and contract acceptance. Run integration servers in CI, as required by the
 operations runtime-delivery policy. Restart provenance invalidation is also
 covered by the JVM event tests.
+
+The market retirement scenario verifies that ARC loads while investment command
+roots and the invest subcommand are absent from an operator's command tree.

@@ -43,11 +43,6 @@ object ArcMenuSchema {
     val MOUNT_PROGRESSION = MenuId.of("mount-progression")
     val MOUNT_SKINS = MenuId.of("mount-skins")
     val MOUNT_CONFIRM = MenuId.of("mount-confirm")
-    val STOCK_SYMBOLS = MenuId.of("stock-symbols")
-    val STOCK_POSITIONS = MenuId.of("stock-positions")
-    val STOCK_PROFILE = MenuId.of("stock-profile")
-    val STOCK_POSITION = MenuId.of("stock-position")
-    val STOCK_CREATE = MenuId.of("stock-create")
     val STORE = (2..6).associateWith { MenuId.of("store-$it") }
 
     val WITNESSES = MenuRegionId.of("witnesses")
@@ -74,8 +69,6 @@ object ArcMenuSchema {
     val MOUNT_STEPS = MenuRegionId.of("steps")
     val MOUNT_SIZES = MenuRegionId.of("sizes")
     val MOUNT_SKIN_ENTRIES = MenuRegionId.of("skins")
-    val STOCK_SYMBOL_ENTRIES = MenuRegionId.of("symbols")
-    val STOCK_POSITION_ENTRIES = MenuRegionId.of("positions")
     val STORE_ITEMS = MenuRegionId.of("store-items")
 
     private fun elements(vararg ids: String) = ids.mapTo(linkedSetOf(), MenuElementId::of)
@@ -185,17 +178,6 @@ object ArcMenuSchema {
             requiredRegions = setOf(MOUNT_SKIN_ENTRIES),
         ),
         MOUNT_CONFIRM to MenuContract(requiredElements = elements("cancel", "info", "accept")),
-        STOCK_SYMBOLS to MenuContract(
-            requiredElements = elements("market", "back", "all", "profile"),
-            requiredRegions = setOf(STOCK_SYMBOL_ENTRIES),
-        ),
-        STOCK_POSITIONS to MenuContract(
-            requiredElements = elements("back", "create", "profile"),
-            requiredRegions = setOf(STOCK_POSITION_ENTRIES),
-        ),
-        STOCK_PROFILE to MenuContract(requiredElements = elements("statistics", "balance", "auto", "back")),
-        STOCK_POSITION to MenuContract(requiredElements = elements("info", "close", "back")),
-        STOCK_CREATE to MenuContract(requiredElements = elements("amount", "type", "leverage", "upper", "lower", "create", "back")),
         *STORE.values.map { menu ->
             menu to MenuContract(
                 requiredElements = elements("back"),

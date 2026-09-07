@@ -997,7 +997,6 @@ internal class HelpCenterController(
                 "bank.open.command",
                 opensInventory = true,
             ),
-            CommandDefinition("investments", HelpCenterCategory.TRADE, "arc-invest", opensInventory = true),
             CommandDefinition("rank", HelpCenterCategory.PROGRESS, "rank dialog"),
             CommandDefinition("rankup", HelpCenterCategory.PROGRESS, "rankup"),
             CommandDefinition("jobs", HelpCenterCategory.PROGRESS, "arcjobs dialog"),

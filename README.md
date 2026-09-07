@@ -1,6 +1,6 @@
 # ARC Minecraft Plugin
 
-McFine **Paper/Purpur** plugin — treasure hunts, stock market, board, and cross-server Redis.
+McFine **Paper/Purpur** plugin — treasure hunts, board, and cross-server Redis.
 
 **Architecture for agents:** [`AGENTS.md`](AGENTS.md) → [arc-core/AGENTS.md](../arc-core/AGENTS.md)
 
@@ -38,7 +38,7 @@ cd ~/RusCrafting/ruscrafting-ops && ./scripts/mc arc classic classic_survival
 
 ## Features
 
-Treasure hunts, stock simulation, auction (Redis pub/sub), x-server
+Treasure hunts, auction (Redis pub/sub), x-server
 announcements, and 72 native cross-server mounts with progression, cosmetics,
 typed abilities, player tuning, and command-only comic extremes.
 

@@ -328,56 +328,6 @@ menus:
         cancel: { slot: 11, template: background }
         info: { slot: 13, template: background }
         accept: { slot: 15, template: background }
-    stock-symbols:
-      schema-version: 1
-      rows: 4
-      background: { template: background }
-      elements:
-        market: { slot: 4, template: background }
-        back: { slot: 27, template: background }
-        all: { slot: 31, template: background }
-        profile: { slot: 35, template: background }
-      regions:
-        symbols: { slots: ['9-26'] }
-    stock-positions:
-      schema-version: 1
-      rows: 6
-      background: { template: background }
-      elements:
-        back: { slot: 45, template: background }
-        create: { slot: 49, template: background }
-        profile: { slot: 53, template: background }
-      regions:
-        positions: { slots: ['0-44'] }
-    stock-profile:
-      schema-version: 1
-      rows: 2
-      background: { template: background }
-      elements:
-        statistics: { slot: 1, template: background }
-        balance: { slot: 3, template: background }
-        auto: { slot: 5, template: background }
-        back: { slot: 9, template: background }
-    stock-position:
-      schema-version: 1
-      rows: 2
-      background: { template: background }
-      elements:
-        info: { slot: 1, template: background }
-        close: { slot: 7, template: background }
-        back: { slot: 9, template: background }
-    stock-create:
-      schema-version: 1
-      rows: 2
-      background: { template: background }
-      elements:
-        amount: { slot: 0, template: background }
-        type: { slot: 2, template: background }
-        leverage: { slot: 4, template: background }
-        upper: { slot: 6, template: background }
-        lower: { slot: 7, template: background }
-        back: { slot: 9, template: background }
-        create: { slot: 8, template: background }
     # The store keeps a custom transactional click controller, but its physical
     # topology is owned by this validated catalog. The region order maps to
     # logical StoreData slots and therefore may be rearranged freely.

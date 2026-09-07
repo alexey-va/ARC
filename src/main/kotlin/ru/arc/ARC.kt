@@ -7,7 +7,6 @@ import org.bukkit.event.server.ServerCommandEvent
 import org.bukkit.plugin.java.JavaPlugin
 import ru.arc.audit.autosell.AutoSellAuditModule
 import ru.arc.audit.bank.BankAuditModule
-import ru.arc.audit.stock.StockAuditModule
 import ru.arc.commands.XCommand
 import ru.arc.commands.MainMenuCommand
 import ru.arc.commands.arc.ArcCommand
@@ -16,7 +15,6 @@ import ru.arc.commands.arc.subcommands.BuySubCommand
 import ru.arc.commands.arc.subcommands.EliteLootSubCommand
 import ru.arc.commands.arc.subcommands.GiveBoostSubCommand
 import ru.arc.commands.arc.subcommands.HuntSubCommand
-import ru.arc.commands.arc.subcommands.InvestSubCommand
 import ru.arc.commands.arc.subcommands.SoundFollowSubCommand
 import ru.arc.commands.arc.subcommands.TestSubCommand
 import ru.arc.commands.arc.subcommands.TreasuresSubCommand
@@ -52,7 +50,6 @@ import ru.arc.core.modules.NetworkModule
 import ru.arc.core.modules.ParticleModule
 import ru.arc.core.modules.PersonalLootModule
 import ru.arc.core.modules.RedisModule
-import ru.arc.core.modules.StockModule
 import ru.arc.core.modules.StoreModule
 import ru.arc.core.modules.SyncModule
 import ru.arc.core.modules.TreasureModule
@@ -223,9 +220,7 @@ open class ARC : JavaPlugin() {
             ScheduledCommandsModule,
             XActionModule,
             RestartModule,
-            StockModule,
             StoreModule,
-            StockAuditModule,
             ContractsModule,
             InvestigationModule,
             TreasureModule,
@@ -275,7 +270,6 @@ open class ARC : JavaPlugin() {
             mapOf(
                 "treasure-hunt" to HuntSubCommand,
                 "treasure-pool" to TreasuresSubCommand,
-                "arc-invest" to InvestSubCommand,
                 "sound-follow" to SoundFollowSubCommand,
                 "give-jobs-boost" to GiveBoostSubCommand,
                 "arctest" to TestSubCommand,
@@ -379,7 +373,6 @@ open class ARC : JavaPlugin() {
                 "modules/commands.yml",
                 "modules/elitemobs.yml",
                 "modules/text.yml",
-                "stocks/stock.yml",
                 "modules/misc.yml",
                 "modules/join-message-dialog.yml",
                 "config/commands.yml",

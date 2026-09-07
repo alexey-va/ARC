@@ -657,7 +657,6 @@ class HelpCenterConfig(private val config: Config) {
             "sell" to HelpCenterCommandText("Быстрая продажа", "Продать подходящие предметы", "деньги рынок"),
             "auction" to HelpCenterCommandText("Аукцион", "Торговля предметами между игроками", "ah рынок купить продать"),
             "bank" to HelpCenterCommandText("Банк", "Открыть личный банковский счёт", "деньги счет вклад"),
-            "investments" to HelpCenterCommandText("Инвестиции", "Портфель и рынок акций", "акции биржа портфель"),
             "rank" to HelpCenterCommandText("Ранги", "Текущий ранг и следующие цели", "уровень развитие"),
             "rankup" to HelpCenterCommandText("Повысить ранг", "Проверить требования повышения", "уровень развитие"),
             "jobs" to HelpCenterCommandText("Работы", "Профессии и заработок", "деньги профессия"),

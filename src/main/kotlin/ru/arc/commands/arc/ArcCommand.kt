@@ -20,7 +20,6 @@ import ru.arc.commands.arc.subcommands.GiveBoostSubCommand
 import ru.arc.commands.arc.subcommands.GiveSubCommand
 import ru.arc.commands.arc.subcommands.HelpSubCommand
 import ru.arc.commands.arc.subcommands.HuntSubCommand
-import ru.arc.commands.arc.subcommands.InvestSubCommand
 import ru.arc.commands.arc.subcommands.InvestigationSubCommand
 import ru.arc.commands.arc.subcommands.ItemsCatalogSubCommand
 import ru.arc.commands.arc.subcommands.JobsboostsSubCommand
@@ -88,7 +87,6 @@ class ArcCommand :
             // New subcommands
             TestSubCommand,
             EliteLootSubCommand,
-            InvestSubCommand,
             StoreSubCommand,
             ItemsCatalogSubCommand,
             LandsSubCommand,

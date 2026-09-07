@@ -96,7 +96,6 @@ class CoreModulesTest : TestBase() {
             ScheduledCommandsModule,
             XActionModule,
             RestartModule,
-            StockModule,
             StoreModule,
             TreasureModule,
             EliteLootModule,
@@ -196,17 +195,6 @@ class CoreModulesTest : TestBase() {
         }
     }
 
-    @Nested
-    @DisplayName("StockModule")
-    inner class StockModuleTests {
-
-        @Test
-        @DisplayName("shutdown is safe when module was never initialized")
-        fun testShutdownWithoutInit() {
-            StockModule.shutdown()
-        }
-    }
-
     // ==================== PluginModule Interface Compliance ====================
 
     @Nested
@@ -230,7 +218,6 @@ class CoreModulesTest : TestBase() {
             ScheduledCommandsModule,
             XActionModule,
             RestartModule,
-            StockModule,
             StoreModule,
             TreasureModule,
             EliteLootModule,
@@ -261,7 +248,7 @@ class CoreModulesTest : TestBase() {
     // ==================== Module Count Test ====================
 
     @Test
-    @DisplayName("Total module count is 26")
+    @DisplayName("Total module count is 24")
     fun testTotalModuleCount() {
         val allModules = listOf(
             RedisModule,
@@ -280,7 +267,6 @@ class CoreModulesTest : TestBase() {
             ScheduledCommandsModule,
             XActionModule,
             RestartModule,
-            StockModule,
             StoreModule,
             TreasureModule,
             EliteLootModule,
@@ -291,6 +277,6 @@ class CoreModulesTest : TestBase() {
             SyncModule
         )
 
-        assertEquals(25, allModules.size, "Should have 25 modules")
+        assertEquals(24, allModules.size, "Should have 24 modules")
     }
 }

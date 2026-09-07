@@ -5,8 +5,6 @@ import ru.arc.hooks.lands.LandsMessager
 import ru.arc.hooks.zauction.AuctionMessager
 import ru.arc.redis.ChannelListener
 import ru.arc.redis.RedisOperations
-import ru.arc.stock.HistoryManager
-import ru.arc.stock.HistoryMessager
 import ru.arc.xserver.playerlist.PlayerListMessager
 
 class NetworkRegistry(
@@ -14,7 +12,6 @@ class NetworkRegistry(
 ) : AutoCloseable {
     private val registrations = mutableListOf<Pair<String, ChannelListener>>()
     private var landBridge: LandsMessager? = null
-    private var historyBridge: HistoryMessager? = null
     private var auctionBridge: AuctionMessager? = null
 
     companion object {
@@ -35,11 +32,6 @@ class NetworkRegistry(
             landsMessager = lands
             register(lands.respChannel, lands)
             register(lands.reqChannel, lands)
-
-            val history = HistoryMessager("arc.high_lows_update", redis)
-            historyBridge = history
-            register(history.channel, history)
-            HistoryManager.setMessager(history)
 
             HookRegistry.auctionHook?.let { hook ->
                 val auction =
@@ -71,8 +63,6 @@ class NetworkRegistry(
         if (landsMessager === landBridge) landsMessager = null
         landBridge = null
 
-        historyBridge?.let(HistoryManager::clearMessager)
-        historyBridge = null
 
         auctionBridge?.let { bridge ->
             HookRegistry.auctionHook?.let { hook ->

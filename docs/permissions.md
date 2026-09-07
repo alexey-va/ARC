@@ -30,8 +30,6 @@ also be declared with an explicit default in `src/main/resources/plugin.yml`.
 | `arc.rate-own` | `arc.board.rate.own` |
 | `arc.rtp-respawn` | `arc.rtp.respawn` |
 | `arc.sound-follow` | `arc.sound.follow` |
-| `arc.stocks.prunehistory` | `arc.stocks.history.prune` |
-| `arc.stocks.update-images` | `arc.stocks.images.update` |
 | `arc.treasure-hunt` | `arc.treasure.hunt.admin` |
 | `arc.treasures.admin` | `arc.treasure.pool.admin` |
 

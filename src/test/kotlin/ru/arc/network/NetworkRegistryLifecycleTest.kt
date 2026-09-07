@@ -32,7 +32,7 @@ class NetworkRegistryLifecycleTest {
             assertEquals(1, redis.listenerCount("arc.proxy_player_list"))
             assertEquals(1, redis.listenerCount("arc.lands_req"))
             assertEquals(1, redis.listenerCount("arc.lands_response"))
-            assertEquals(1, redis.listenerCount("arc.high_lows_update"))
+            assertEquals(0, redis.listenerCount("arc.high_lows_update"))
 
             registry.close()
 

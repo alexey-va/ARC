@@ -14,7 +14,6 @@
 - [Охота на сокровища](#arc-hunt)
 - [Пулы наград](#arc-treasures)
 - [Пулы локаций](#arc-locationpool)
-- [Биржа и инвестиции](#arc-invest)
 - [Elite Loot](#arc-eliteloot)
 - [Администрирование](#администрирование)
 - [GUI команды](#gui-команды)
@@ -45,9 +44,6 @@
 
 # Редактировать пул локаций
 /arc locationpool my_pool
-
-# Открыть биржу
-/arc invest
 
 # Посмотреть ресурсные заказы Economy V2
 /arc contracts
@@ -341,29 +337,6 @@ pouches:
 
 # Переключиться на другой пул
 /arc locationpool other_pool  # автоматически остановит текущий и начнёт новый
-```
-
----
-
-## /arc invest
-
-Биржа и инвестиции. Покупка и продажа акций, просмотр портфеля.
-
-| Параметр         | Значение     |
-|------------------|--------------|
-| **Право**        | `arc.invest` |
-| **Только игрок** | Да           |
-
-### Использование
-
-```bash
-/arc invest              # открыть GUI биржи
-/arc invest gui          # то же самое
-/arc invest history      # история торгов
-/arc invest list         # список акций
-/arc invest buy AAPL 10  # купить 10 акций AAPL
-/arc invest sell AAPL 5  # продать 5 акций
-/arc invest portfolio    # портфель
 ```
 
 ---
@@ -772,7 +745,6 @@ commands:
 | `jobsboosts`  | `jb`             |
 | `joinmessage` | `jmsg`           |
 | `quitmessage` | `qmsg`           |
-| `invest`      | `stock`, `биржа` |
 | `help`        | `?`, `h`         |
 
 ---
@@ -788,7 +760,6 @@ commands:
 | `arc.board`            | Настройки скорборда           |
 | `arc.balance.top`           | Таблица лидеров               |
 | `arc.join.message.gui` | Настройка join/quit сообщений |
-| `arc.invest`           | Доступ к бирже                |
 | `arc.store`            | Открытие магазина             |
 
 **LuckPerms команда:**
@@ -797,7 +768,6 @@ commands:
 lp group default permission set arc.board true
 lp group default permission set arc.balance.top true
 lp group default permission set arc.join.message.gui true
-lp group default permission set arc.invest true
 lp group default permission set arc.store true
 ```
 
@@ -880,7 +850,6 @@ lp group admin permission set arc.x true
 | `arc.board`               | `/arc board`                                                          | Игрок     |
 | `arc.balance.top`              | `/arc baltop`                                                         | Игрок     |
 | `arc.join.message.gui`    | `/arc joinmessage`, `/arc quitmessage`                                | Игрок     |
-| `arc.invest`              | `/arc invest`                                                         | Игрок     |
 | `arc.store`               | `/arc store`                                                          | Игрок     |
 | `arc.jobs.boost.use`          | `/arc jobsboosts`                                                     | VIP       |
 | `arc.audit`               | `/arc audit`                                                          | Модератор |

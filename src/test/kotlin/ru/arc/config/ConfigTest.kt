@@ -995,47 +995,13 @@ class ConfigTest {
     }
 
     @Test
-    fun testLoadProductionStockConfigWithEmoji() {
-        val resource = Config::class.java.classLoader.getResourceAsStream("stocks/stock-prod.yml")
-        assertNotNull(resource, "Test fixture stocks/stock-prod.yml must exist")
-        resource.use { Files.copy(it, tempDir.resolve("stock.yml"), java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
-        val stockConfig = ConfigManager.create(tempDir, "stock.yml", "stock.yml")
-        assertTrue(stockConfig.bool("main-server", false), "Production stock config should load with emoji lore lines")
-        val stocks = stockConfig.list<Map<String, Any>>("stocks")
-        assertFalse(stocks.isEmpty(), "Stock list should not be empty")
-    }
-
-    @Test
-    fun testLoadBundledStockConfigWithEmoji() {
-        val resource = Config::class.java.classLoader.getResourceAsStream("stocks/stock.yml")
-        assertNotNull(resource, "Bundled stocks/stock.yml must exist")
-        resource.use { Files.copy(it, tempDir.resolve("stock.yml"), java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
-        val stockConfig = ConfigManager.create(tempDir, "stock.yml", "stock.yml")
-        assertTrue(stockConfig.bool("main-server", false), "Stock config should load with emoji lore lines")
-        val stocks = stockConfig.list<Map<String, Any>>("stocks")
-        assertFalse(stocks.isEmpty(), "Stock list should not be empty")
-        assertEquals("AAPL", stocks[0]["symbol"]?.toString())
-    }
-
-    @Test
-    fun testStockBackButtonLocaleSpec() {
-        val resource = Config::class.java.classLoader.getResourceAsStream("stocks/stock.yml")
-        assertNotNull(resource, "Bundled stocks/stock.yml must exist")
-        resource.use { Files.copy(it, tempDir.resolve("stock.yml"), java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
-        val stockConfig = ConfigManager.create(tempDir, "stock.yml", "stock.yml")
-        for (path in listOf(
-            "locale.symbol-selector.back",
-            "locale.profile-menu.back",
-            "locale.position-selector.back",
-            "locale.position-creator.back",
-            "locale.position-menu.back",
-        )) {
-            val spec =
-                ru.arc.util.ConfigItemSpec
-                    .readFromConfig(stockConfig, path)
-            assertNotNull(spec, "Expected item spec at $path")
-            assertEquals("<gray>Назад", spec!!.display, "display at $path")
-        }
+    fun testLoadLargeConfigWithEmoji() {
+        val entries = (1..3000).joinToString("\n") { "  - 'Строка $it 🌟: текст для проверки Unicode'" }
+        Files.writeString(configFile, "enabled: true\nlore:\n$entries\n")
+        config.load()
+        assertTrue(config.bool("enabled", false))
+        assertEquals(3000, config.list<String>("lore").size)
+        assertEquals("Строка 3000 🌟: текст для проверки Unicode", config.list<String>("lore").last())
     }
 
     // Helper method to write YAML to file

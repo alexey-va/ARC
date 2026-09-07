@@ -632,7 +632,6 @@ class ArcCommandTest : TestBase() {
                     "treasures",
                     "test",
                     "eliteloot",
-                    "invest",
                     "store",
                     "giveboost",
                     "soundfollow",
@@ -1294,46 +1293,6 @@ class ArcCommandTest : TestBase() {
 
             assertNotNull(completions)
             assertTrue(completions!!.isNotEmpty())
-        }
-    }
-
-    // ==================== Invest Subcommand ====================
-
-    @Nested
-    @DisplayName("/arc invest")
-    inner class InvestSubCommandTests {
-        @Test
-        @DisplayName("Without permission - sends no permission message")
-        fun testNoPermission() {
-            assertFalse(player.hasPermission("arc.stocks.buy"))
-
-            val result = arcCommand.onCommand(player, mockCommand, "arc", arrayOf("invest"))
-
-            assertTrue(result)
-            assertTrue(player.hasReceivedMessage(), "Should send no permission message")
-        }
-
-        @Test
-        @DisplayName("Tab completion shows parameter options")
-        fun testTabCompletion() {
-            player.addAttachment(plugin, "arc.stocks.buy", true)
-
-            val completions = arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("invest", ""))
-
-            assertNotNull(completions)
-            assertTrue(completions!!.any { it.startsWith("-t") })
-        }
-
-        @Test
-        @DisplayName("Tab completion for -t shows action types")
-        fun testTabCompletionTypes() {
-            player.addAttachment(plugin, "arc.stocks.buy", true)
-
-            val completions = arcCommand.onTabComplete(player, mockCommand, "arc", arrayOf("invest", "-t"))
-
-            assertNotNull(completions)
-            assertTrue(completions!!.any { it.contains("buy") })
-            assertTrue(completions.any { it.contains("menu") })
         }
     }
 

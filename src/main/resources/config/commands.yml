@@ -153,10 +153,6 @@ commands:
     name: eliteloot
     aliases: [ ]
     permission: arc.elite.loot.admin
-  invest:
-    name: invest
-    aliases: [ ]
-    permission: arc.stocks.buy
   store:
     name: store
     aliases: [ ]
