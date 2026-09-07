@@ -35,13 +35,19 @@ async function balance(player, expectedMinor, signal) {
 }
 
 async function snapshot(player, name, signal) {
-  await player.makeOp();
+  await makeOpFresh(player);
   const since = player.messageBuffer.length;
   player.chat(`/contractcrashfixture snapshot ${name}`);
   await expect(player).toHaveReceivedMessage(`CONTRACT_CRASH_SNAPSHOT:${name}`, { since });
   const result = await properties(name);
   await player.deOp();
   return result;
+}
+
+async function makeOpFresh(player) {
+  const since = player.messageBuffer.length;
+  await player.makeOp();
+  await expect(player).toHaveReceivedMessage(`Made ${player.username} a server operator`, { since });
 }
 
 async function startReplacement(player, generation, signal) {
@@ -75,7 +81,7 @@ async function startReplacement(player, generation, signal) {
       return ready && fixtureReady;
     }, { signal, timeout: 120000, message: `Replacement Paper ${generation} did not become ready` });
     player.setServerWrapper(new ServerWrapper(command => child.stdin.write(`${command}\n`)));
-    await player.rejoin({ clearMessages: false });
+    await player.rejoin();
     return child;
   } catch (error) {
     child.kill('SIGKILL');
@@ -103,7 +109,7 @@ if (enabled) test('contract items, provider payment and journal survive real pro
   let lastSnapshot;
   try {
     for (const [index, [phase, paid, committed, reviewReason]] of phases.entries()) {
-      await player.makeOp();
+      await makeOpFresh(player);
       player.chat('/clear @s');
       await waitUntil(() => countStone(player) === 0, { signal, message: 'Fixture inventory did not clear' });
       await player.giveItem('stone', 4);
