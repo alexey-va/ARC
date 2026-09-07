@@ -1,0 +1,4 @@
+arc.e2e.board:
+  default: true
+  children:
+    arc.board: true

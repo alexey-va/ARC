@@ -441,6 +441,7 @@ plugwright {
     jvmArgs.set(listOf("-Xms512M", "-Xmx2G", "-XX:ActiveProcessorCount=2"))
     writeFiles {
         file("server.properties", projectDir.resolve("src/test/e2e/fixtures/server.properties"))
+        file("permissions.yml", projectDir.resolve("src/test/e2e/fixtures/permissions.yml"))
         file("plugins/ARC/modules/redis.yml", contractE2eFiles.get().file("redis.yml").asFile)
         file("plugins/ARC/modules/contracts.yml", contractE2eFiles.get().file("contracts.yml").asFile)
         file("plugins/RedisEconomy/config.yml", contractE2eFiles.get().file("rediseconomy.yml").asFile)
@@ -540,7 +541,7 @@ val prepareContractE2e = tasks.register("prepareContractE2e") {
                     target-quantity: 1000
                     per-player-quantity-cap: 64
                     min-submission-quantity: 1
-                    max-submission-quantity: 16
+                    max-submission-quantity: 2
                     dynamic-pricing: true
                 """.trimIndent() + "\n",
             )
