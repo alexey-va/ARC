@@ -4,7 +4,6 @@ import com.google.gson.JsonParser
 import io.papermc.paper.registry.data.dialog.body.DialogBody
 import net.kyori.adventure.key.Key
 import net.kyori.adventure.text.Component
-import org.bukkit.entity.Player
 import ru.arc.text.ComponentTextLayout
 import ru.arc.text.GlyphWidths
 import ru.arc.text.PixelSpacing
@@ -37,9 +36,9 @@ object DialogTextLayout {
         return engine.layout(text, width - 8, alignment)
     }
 
-    /** Call on the server thread. Preserve readable native text if the pack/font is unavailable. */
-    fun body(player: Player, text: Component, alignment: TextAlignment, width: Int = 400): DialogBody {
-        val result = if (player.hasResourcePack()) layout(text, alignment, width) else null
+    /** Preserve readable native text when the component cannot be measured. */
+    fun body(text: Component, alignment: TextAlignment, width: Int = 400): DialogBody {
+        val result = layout(text, alignment, width)
         return DialogBody.plainMessage((result as? TextLayoutResult.Aligned)?.component ?: text, width)
     }
 }
