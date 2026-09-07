@@ -37,7 +37,9 @@ data class ContractSubmissionReconciliation(
         require(reviewedRevision >= 0L && reconciledAt >= 0L) { "Invalid reconciliation revision or timestamp" }
         require(
             reviewFromStatus == ContractSubmissionJournalStatus.ITEM_REMOVAL_STARTED ||
+                reviewFromStatus == ContractSubmissionJournalStatus.ITEMS_ESCROWED ||
                 reviewFromStatus == ContractSubmissionJournalStatus.PAYMENT_STARTED ||
+                reviewFromStatus == ContractSubmissionJournalStatus.PAYMENT_FAILED ||
                 reviewFromStatus == ContractSubmissionJournalStatus.REFUND_STARTED,
         ) { "Invalid reconciliation source state" }
         require(originalReviewEvidence.isNotBlank() && originalReviewEvidence.length <= MAX_ORIGINAL_EVIDENCE_LENGTH) {

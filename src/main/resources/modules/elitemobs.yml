@@ -44,6 +44,7 @@ chests:
 
 dungeon-qol:
   table:
+    unavailable-value: 'Сейчас недоступно'
     label-heading: 'Параметр'
     value-heading: 'Значение'
     level: 'Уровень'
@@ -163,7 +164,15 @@ dungeon-qol:
     autosave-enabled: true
     autosave-seconds: 120
   open-exit-command: spawn
+  shops-command: pw aguild
   panel:
+    return-label: <#9bd48d>Вернуться в данж
+    return-tooltip: Вернуться в последний обычный данж на место выхода
+    return-disabled: <#aaa49a>Вернуться · недоступно
+    return-unavailable: <#aaa49a>Нет доступного места выхода из обычного данжа. Сначала посетите данж и выйдите из него.
+    shops-label: <#d7b486>К магазинам
+    shops-tooltip: Перейти к торговцам данжей в Гильдии
+    crystals-unavailable: '<#aaa49a>Кристаллы: баланс сейчас недоступен'
     main-label: <#aaa49a>Главное меню ›
     main-tooltip: Открыть главное меню сервера
     main-unavailable: <#d7b486>Главное меню сейчас недоступно. Попробуйте позже.

@@ -17,8 +17,16 @@ missing bundled defaults without replacing operator values.
   guide and Main menu navigation do not explicitly close the dialog first;
   the shared ArcCore runtime owns dialog replacement and Escape semantics.
 - `/данж` (also `/dungeon`): opens the dungeon control surface from any
-  location. Outside a dungeon it offers the dungeon guide, the portal hub and
-  the native EliteMobs list. `/данж тп` routes to `pw aguild`, and
+  location. Both the active panel and preparation menu show the player's
+  EliteMobs crystal balance and a Shops teleport (`shops-command`, default
+  `pw aguild`). Missing currency data is shown as unavailable, never as zero.
+  Outside a dungeon it also offers a personal Return to dungeon button,
+  the dungeon guide, the portal hub and the native EliteMobs list.
+  Return uses the most recent departure in the existing player PDC, including
+  exact coordinates, yaw and pitch; it is disabled without an available open
+  dungeon destination. `/данж вернуться` invokes the same return, while
+  `/данж магазины` invokes the configured shops route.
+  `/данж тп` routes to `pw aguild`, and
   `/данж список` opens `elitemobs:em`; inside an instance, these transitions
   first ask the player to use `/данж выйти`. If EliteMobs is unavailable on a
   node, the menu opens the general guide.
@@ -52,8 +60,18 @@ actual world UUID; a new instance or ARC lifecycle cannot reuse an old run.
 Open dungeons use their persistent world UUID and `open` token.
 Death preserves positions in that world; a new instance makes its old points
 unavailable. Players cannot use another participant's points, spectate through
-this feature, enter a different world, revive themselves, or teleport from a
-lobby/finished match.
+this feature, revive themselves, or use return to bypass instance admission.
+Cross-world return from the preparation menu admits only an existing open
+dungeon with the same world/run and a current package permission. It uses the
+normal ARC owner portal followed by the native EliteMobs teleport event;
+the callback rechecks the source world, exact departure, player state and safe
+destination. The feature does not teleport other party members.
+
+Every successful safe open-dungeon departure replaces that world's previous
+position, even after recent combat. Re-entry through a wormhole or another
+cross-world teleport restores that exact point in the Bukkit teleport event.
+Unsafe positions still fail the terrain/portal-volume check; points expire
+after `resume-hours`. Cancelled teleports and deaths do not replace an exit.
 
 Autosaves are polled every 20 seconds. The first point is written at the first
 suitable check while walking on a safe solid surface, without fire, water or

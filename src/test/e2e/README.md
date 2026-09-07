@@ -62,3 +62,26 @@ covered by the JVM event tests.
 
 The market retirement scenario verifies that ARC loads while investment command
 roots and the invest subcommand are absent from an operator's command tree.
+
+## Resource-contract process crashes
+
+The dedicated CI profile runs on Paper 1.21.11 with
+`ARC_CONTRACT_CRASH_FIXTURE=1 ./gradlew plugwrightTest -PcontractCrashE2e=true -Pe2eMinecraftVersion=1.21.11`
+and `TEST_TIMEOUT=900000`. Do not run this container/server profile on the local
+workstation. `contractCrashFixtureJar` is a separate test artifact and is never
+included in the production shadow JAR.
+
+The fixture decorates the existing coordinator ports, preserving the real
+Redis repositories, native inventory persistence and RedisEconomy adapter. It
+halts the JVM after native removal, durable escrow, durable payment rejection,
+provider success, durable PAID and durable contract state. The test starts a
+replacement Paper process against the same directory and still-live disposable
+Redis, reconnects the same offline UUID, and checks inventory, provider balance,
+journal status, held quota and spent budget. A final restart must be idempotent.
+
+Plugwright 2.0.4 exposes no restart API. This one-spec profile therefore owns its
+replacement child processes, rebinds the public `ServerWrapper` and always stops
+the final child. It never re-runs `plugwrightClean` between process generations.
+Per-generation logs and synthetic journal snapshots are retained as CI artifacts.
+This proves process-crash boundaries; it does not claim power-loss/fsync safety
+for Minecraft or the external economy provider.

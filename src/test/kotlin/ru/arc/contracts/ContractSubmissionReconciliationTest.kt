@@ -60,6 +60,20 @@ class ContractSubmissionReconciliationTest : StringSpec({
         return ContractSubmissionJournalEngine.recoverInterrupted(payment, 2_000L)
     }
 
+    fun escrowReview(id: String = "review-escrow"): ContractSubmissionJournalRecord {
+        val removal = ContractSubmissionJournalEngine.beginItemRemoval(prepared(id), 1_501L)
+        val escrowed = ContractSubmissionJournalEngine.confirmItemsEscrowed(removal, 1_502L)
+        return ContractSubmissionJournalEngine.recoverInterrupted(escrowed, 2_000L)
+    }
+
+    fun failedPaymentReview(id: String = "review-failed-payment"): ContractSubmissionJournalRecord {
+        val removal = ContractSubmissionJournalEngine.beginItemRemoval(prepared(id), 1_501L)
+        val escrowed = ContractSubmissionJournalEngine.confirmItemsEscrowed(removal, 1_502L)
+        val payment = ContractSubmissionJournalEngine.beginPayment(escrowed, 10_000L, 1_503L)
+        val failed = ContractSubmissionJournalEngine.confirmPaymentFailed(payment, 10_000L, "provider_rejected", 1_504L)
+        return ContractSubmissionJournalEngine.recoverInterrupted(failed, 2_000L)
+    }
+
     fun request(
         record: ContractSubmissionJournalRecord,
         resolution: ContractSubmissionReconciliationResolution,
@@ -185,6 +199,49 @@ class ContractSubmissionReconciliationTest : StringSpec({
                 ),
             )
         }.message shouldBe "Payment reconciliation history reason does not match the journal correlation reason"
+    }
+
+    "reconciles interrupted escrow and failed payment only as inventory refunds" {
+        listOf(escrowReview(), failedPaymentReview()).forEach { review ->
+            review.status shouldBe ContractSubmissionJournalStatus.MANUAL_REVIEW
+            val refundRequest = request(review, ContractSubmissionReconciliationResolution.ITEMS_REFUNDED)
+            val preview = ContractSubmissionReconciliationEngine.preview(review, refundRequest)
+            preview.evidenceKind shouldBe ContractSubmissionReconciliationEvidenceKind.OPERATOR_INVENTORY_INSPECTION
+            preview.commitsContractState shouldBe false
+            shouldThrow<IllegalArgumentException> {
+                ContractSubmissionReconciliationEngine.preview(
+                    review,
+                    request(
+                        review,
+                        ContractSubmissionReconciliationResolution.ITEMS_REFUNDED,
+                        providerBalanceAfterMinor = review.providerBalanceBeforeMinor ?: 1L,
+                    ),
+                )
+            }.message shouldBe "Inventory-only refund resolution does not accept provider evidence"
+
+            val refunded = ContractSubmissionReconciliationEngine.apply(review, refundRequest, preview.reviewDigest, 2_100L)
+            refunded.status shouldBe ContractSubmissionJournalStatus.REFUNDED
+            refunded.reconciliation?.reviewFromStatus shouldBe review.reviewFromStatus
+            ContractSubmissionReconciliationEngine.apply(
+                refunded,
+                refundRequest,
+                preview.reviewDigest,
+                2_200L,
+            ) shouldBe refunded
+
+            shouldThrow<IllegalArgumentException> {
+                ContractSubmissionReconciliationEngine.preview(
+                    review,
+                    request(
+                        review,
+                        ContractSubmissionReconciliationResolution.PAYMENT_CONFIRMED,
+                        providerBalanceAfterMinor = 12_000L,
+                        providerTransactionId = "history-unsupported",
+                        providerTransactionReason = review.payoutReason,
+                    ),
+                )
+            }.message shouldBe "Payment resolution requires a payment review"
+        }
     }
 
     "requires unchanged balance before terminally confirming a manual item refund" {

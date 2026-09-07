@@ -145,13 +145,24 @@ class ContractSubmissionJournalTest : StringSpec({
         paymentReview.reviewFromStatus shouldBe ContractSubmissionJournalStatus.PAYMENT_STARTED
         paymentReview.reviewReason shouldBe ContractSubmissionReviewReason.INTERRUPTED_PAYMENT
 
+        val escrowReview = ContractSubmissionJournalEngine.recoverInterrupted(escrowed, 2_000L)
+        escrowReview.status shouldBe ContractSubmissionJournalStatus.MANUAL_REVIEW
+        escrowReview.reviewFromStatus shouldBe ContractSubmissionJournalStatus.ITEMS_ESCROWED
+        escrowReview.reviewReason shouldBe ContractSubmissionReviewReason.INTERRUPTED_ESCROW
+
+        val failedPayment = ContractSubmissionJournalEngine.confirmPaymentFailed(paymentStarted, 10_000L, "provider_rejected", 1_504L)
+        val failedPaymentReview = ContractSubmissionJournalEngine.recoverInterrupted(failedPayment, 2_000L)
+        failedPaymentReview.status shouldBe ContractSubmissionJournalStatus.MANUAL_REVIEW
+        failedPaymentReview.reviewFromStatus shouldBe ContractSubmissionJournalStatus.PAYMENT_FAILED
+        failedPaymentReview.reviewReason shouldBe ContractSubmissionReviewReason.INTERRUPTED_PAYMENT_FAILED
+
         val refundStarted = ContractSubmissionJournalEngine.beginRefund(escrowed, 1_504L)
         val refundReview = ContractSubmissionJournalEngine.recoverInterrupted(refundStarted, 2_000L)
         refundReview.status shouldBe ContractSubmissionJournalStatus.MANUAL_REVIEW
         refundReview.reviewReason shouldBe ContractSubmissionReviewReason.INTERRUPTED_REFUND
     }
 
-    "leaves restart-safe phases resumable and makes confirmations idempotent" {
+    "leaves prepared and completed phases unchanged and makes confirmations idempotent" {
         val prepared = prepared("safe-recovery")
         ContractSubmissionJournalEngine.recoverInterrupted(prepared, 2_000L) shouldBe prepared
         val escrowed =
@@ -160,8 +171,6 @@ class ContractSubmissionJournalTest : StringSpec({
                 1_502L,
             )
         ContractSubmissionJournalEngine.confirmItemsEscrowed(escrowed, 1_600L) shouldBe escrowed
-        ContractSubmissionJournalEngine.recoverInterrupted(escrowed, 2_000L) shouldBe escrowed
-
         val paid =
             ContractSubmissionJournalEngine.confirmPaid(
                 ContractSubmissionJournalEngine.beginPayment(escrowed, 10_000L, 1_503L),

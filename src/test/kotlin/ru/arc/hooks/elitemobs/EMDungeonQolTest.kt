@@ -26,6 +26,79 @@ class EMDungeonQolTest : FreeSpec({
     beforeEach { paper = MockBukkitTestRuntime.open() }
     afterEach { paper.close() }
 
+    "wormhole plugin entry returns to the latest open dungeon exit even after recent combat" {
+        withScheduler {
+            val player = paper.addPlayer("wormhole-return")
+            val dungeon = paper.addSimpleWorld("open-dungeon")
+            val hub = paper.addSimpleWorld("guild")
+            var now = 100L
+            val qol = EMDungeonQol(config(), { if (it == dungeon) DungeonVisit("open") else null }, { true }, clock = { now })
+            val first = Location(dungeon, 12.5, 70.0, 4.5, 90f, 5f)
+            player.teleport(first)
+            qol.rememberDeparture(teleport(player, first, hub.spawnLocation))
+            qol.combat(mockk<org.bukkit.event.entity.EntityDamageByEntityEvent> {
+                every { damager } returns player
+                every { entity } returns player
+            })
+            now = 200L
+            val latest = Location(dungeon, 28.25, 72.0, -7.75, 125f, -15f)
+            qol.rememberDeparture(teleport(player, latest, hub.spawnLocation))
+            player.teleport(hub.spawnLocation)
+            val entry = PlayerTeleportEvent(player, hub.spawnLocation, dungeon.spawnLocation, PlayerTeleportEvent.TeleportCause.PLUGIN)
+            qol.resumeOnEntry(entry)
+            entry.to shouldBe latest
+            qol.close()
+        }
+    }
+
+    "personal return uses the exact latest open departure and consumes the portal once" {
+        withScheduler {
+            val player = paper.addPlayer("return-button")
+            val dungeon = paper.addSimpleWorld("return-open")
+            val hub = paper.addSimpleWorld("return-hub")
+            player.teleport(hub.spawnLocation)
+            var portal: (() -> Unit)? = null
+            val moved = mutableListOf<Location>()
+            val qol = EMDungeonQol(config(), { if (it == dungeon) DungeonVisit("open") else null }, { true },
+                clock = { 100L }, openPortal = { _, action -> portal = action }, returnMove = { _, location -> moved += location })
+            val exit = Location(dungeon, 14.25, 73.0, -9.5, 110f, -20f)
+            qol.rememberDeparture(teleport(player, exit, hub.spawnLocation))
+            val expected = qol.lastReturn(player)!!
+            qol.returnToLast(player, expected)
+            moved shouldBe emptyList()
+            portal!!()
+            portal!!()
+            moved shouldBe listOf(exit)
+            qol.close()
+        }
+    }
+
+    "return rejects a replaced departure and does not admit players to instances" {
+        withScheduler {
+            val player = paper.addPlayer("stale-return")
+            val dungeon = paper.addSimpleWorld("stale-open")
+            val hub = paper.addSimpleWorld("stale-hub")
+            player.teleport(hub.spawnLocation)
+            var instance = false
+            var now = 100L
+            var portal: (() -> Unit)? = null
+            val moved = mutableListOf<Location>()
+            val qol = EMDungeonQol(config(), { if (it == dungeon) DungeonVisit("run", instanced = instance) else null }, { true },
+                clock = { now }, openPortal = { _, action -> portal = action }, returnMove = { _, location -> moved += location })
+            qol.rememberDeparture(teleport(player, Location(dungeon, 1.0, 70.0, 1.0), hub.spawnLocation))
+            qol.returnToLast(player)
+            now++
+            qol.rememberDeparture(teleport(player, Location(dungeon, 9.0, 70.0, 9.0), hub.spawnLocation))
+            portal!!()
+            moved shouldBe emptyList()
+            instance = true
+            qol.lastReturn(player) shouldBe null
+            qol.returnToLast(player)
+            moved shouldBe emptyList()
+            qol.close()
+        }
+    }
+
     "retargets a cross-world entry to a safe checkpoint for the current run" {
         withScheduler {
             val player = paper.addPlayer("resume")
