@@ -402,7 +402,9 @@ class ItemsCatalogGuiController(
                 meta.displayName(source.displayName())
                 meta.lore(source.lore())
                 meta.isHideTooltip = source.isHideTooltip
-                meta.setEnchantmentGlintOverride(source.enchantmentGlintOverride)
+                meta.setEnchantmentGlintOverride(
+                    if (source.hasEnchantmentGlintOverride()) source.enchantmentGlintOverride else null,
+                )
             }
         }
 
