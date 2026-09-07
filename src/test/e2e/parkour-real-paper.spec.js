@@ -6,7 +6,7 @@ function titleText(packet) {
   return typeof text === 'string' ? text : JSON.stringify(text ?? '');
 }
 
-async function walkForward(player, milliseconds = 700) {
+async function walkForward(player, milliseconds = 1000) {
   await player.bot.look(Math.PI, 0, true);
   player.bot.setControlState('forward', true);
   await new Promise(resolve => setTimeout(resolve, milliseconds));
