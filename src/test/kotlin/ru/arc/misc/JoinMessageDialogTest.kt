@@ -160,7 +160,7 @@ class JoinMessageDialogTest : FreeSpec({
         val buttons = screen!!.buttons.associateBy { it.id.value }
         fun colors(c: Component): List<String> = listOfNotNull(c.color()?.asHexString()?.lowercase()) + c.children().flatMap(::colors)
         colors(buttons.getValue("own_0").label).toSet() shouldBe setOf("#9bd48d")
-        colors(buttons.getValue("phrase_0").label).toSet() shouldBe setOf("#aaa49a")
+        colors(buttons.getValue("phrase_0").label).toSet() shouldBe setOf("#ffffff")
         mapOf("custom" to "#c4a7e7", "switch" to "#e5ba73", "next" to "#92bed8", "previous" to "#92bed8").forEach { (id, color) ->
             colors(buttons.getValue(id).label).toSet() shouldBe setOf(color)
         }

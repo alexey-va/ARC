@@ -32,7 +32,7 @@ still published by ProxyARC through `arc.join_message_catalog`.
   A full ten-phrase library remains editable. Duplicate targets and a deleted
   source are rejected without deleting either phrase. Formatting help preserves
   the unsaved draft, and preview Back returns to that draft.
-- Phrase buttons use neutral `#aaa49a` for disabled and green `#9bd48d` for enabled
+- Phrase buttons use white `#ffffff` for unselected and green `#9bd48d` for enabled
   states. Only `○` / `✔` and color change on toggle; no state words or extra
   separators are inserted. Tooltips explain the available action. Utility colors encode categories: pagination is blue `#92bed8`, the
   personal library/editor is violet `#c4a7e7`, and switching join/quit is gold
