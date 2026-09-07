@@ -1,2 +1,4 @@
+OnJoin:
+  TeleportPlayer: true
 OnCourse:
   TreatLastCheckpointAsFinish: true

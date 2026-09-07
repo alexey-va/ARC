@@ -39,6 +39,8 @@ test('real Parkour run emits ARC HUD for join, checkpoint, death and finish', as
     await expect(player).toHaveReceivedMessage(/ready|готов/i);
     await player.teleport(0, 65, 0);
     player.chat('/pa join arc-e2e');
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    console.log('parkour join probe', JSON.stringify(player.bot.entity.position), titles);
     await waitUntil(() => titles.some(text => text.includes('ТРАССА НАЧАЛАСЬ')), { signal, timeout: 10000 });
 
     await walkForward(player, 3000);
