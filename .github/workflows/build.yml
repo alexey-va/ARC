@@ -87,10 +87,12 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: arc-paper-e2e-${{ matrix.minecraft }}
+          name: arc-paper-e2e-${{ matrix.minecraft }}-cleanup-${{ matrix.cleanup-only }}-parkour-${{ matrix.parkour-only }}
           retention-days: 7
           path: |
             build/plugwright-e2e.log
             build/plugwright/logs/
             build/plugwright/crash-reports/
+            build/plugwright/plugins/Parkour/config.yml
+            build/plugwright/plugins/Parkour/courses/
             build/libs/ARC-*.jar

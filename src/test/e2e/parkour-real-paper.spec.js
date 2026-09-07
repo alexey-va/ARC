@@ -10,9 +10,20 @@ test('real Parkour run emits ARC HUD for join, checkpoint, death and finish', as
   await player.makeOp();
 
   const titles = [];
-  const onTitle = packet => titles.push(titleText(packet));
+  const onTitle = packet => {
+    const text = titleText(packet);
+    titles.push(text);
+    console.log('Parkour title:', text);
+  };
+  const logPosition = label => {
+    const position = player.bot.entity.position;
+    console.log(label, JSON.stringify({ position, onGround: player.bot.entity.onGround,
+      feet: player.bot.blockAt(position)?.name,
+      below: player.bot.blockAt(position.offset(0, -1, 0))?.name }));
+  };
   const walkToCheckpoint = async z => {
     try {
+      logPosition(`Before walking to ${z}`);
       await player.bot.lookAt(player.bot.entity.position.clone().set(0.5, 66.5, z), true);
       player.bot.setControlState('forward', true);
       await waitUntil(() => Math.abs(player.bot.entity.position.z - z) < 0.25, {
@@ -20,6 +31,7 @@ test('real Parkour run emits ARC HUD for join, checkpoint, death and finish', as
       });
     } finally {
       player.bot.clearControlStates();
+      logPosition(`After walking to ${z}`);
     }
   };
   player.bot._client.on('set_title_text', onTitle);
