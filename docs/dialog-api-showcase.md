@@ -81,12 +81,14 @@ Paper's callback example is deliberately short-lived and one-use.
 
 ### Shared alignment adapter
 
-Use `DialogTextLayout.body(player, component, TextAlignment.LEFT, width = 400)`
+Use `DialogTextLayout.body(component, TextAlignment.LEFT, width = 400)`
 for a native body, or `layout(component, alignment, width)` for its typed result.
-The player adapter checks that a pack was accepted and falls back to the original
-centered text if it is absent or metrics are unsupported. This API does not know
-which additional client-side packs override fonts; acceptance alone cannot prove
-the current font fingerprint. No additional spacer font is installed: `PixelSpacing` selects existing ItemsAdder glyphs.
+The adapter always applies measured alignment and falls back to the original
+centered text only if metrics are unsupported. It does not consult Paper's pack
+status, which does not reliably represent packs distributed by the proxy.
+The client still needs the server font assets; client-side font overrides are
+outside this API's knowledge. No additional spacer font is installed:
+`PixelSpacing` selects existing ItemsAdder glyphs.
 
 `fonts/dialog-font-metrics.json` is generated from the exact Minecraft 1.21.11
 client plus the published server pack using ops'

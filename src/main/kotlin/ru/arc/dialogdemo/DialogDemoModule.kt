@@ -95,12 +95,12 @@ object DialogDemoModule : PluginModule, Listener {
             "root" -> dialog("title.root", listOf(body("intro")),
                 DialogType.multiAction(pages.drop(1).map(::nav), button("close", custom("close"), 200), 2))
             "alignment" -> multi("title.alignment", listOf(
-                body(if (player.hasResourcePack()) "alignment.intro" else "alignment.pack-required"),
-                body("alignment.left"), DialogTextLayout.body(player, text("alignment.sample"), TextAlignment.LEFT),
-                body("alignment.center"), DialogTextLayout.body(player, text("alignment.sample"), TextAlignment.CENTER),
-                body("alignment.right"), DialogTextLayout.body(player, text("alignment.sample"), TextAlignment.RIGHT),
+                body("alignment.intro"),
+                body("alignment.left"), DialogTextLayout.body(text("alignment.sample"), TextAlignment.LEFT),
+                body("alignment.center"), DialogTextLayout.body(text("alignment.sample"), TextAlignment.CENTER),
+                body("alignment.right"), DialogTextLayout.body(text("alignment.sample"), TextAlignment.RIGHT),
                 body("alignment.padding-intro"),
-                DialogTextLayout.body(player, paddingSample(player.hasResourcePack()), TextAlignment.LEFT)))
+                DialogTextLayout.body(paddingSample(), TextAlignment.LEFT)))
             "text" -> multi("title.text", listOf(body("text.styles"), body("text.colors"), body("text.sections"),
                 DialogBody.plainMessage(Component.translatable("block.minecraft.diamond_block"), 420),
                 DialogBody.plainMessage(Component.keybind("key.swapOffhand"), 420), body("text.font")))
@@ -202,12 +202,12 @@ object DialogDemoModule : PluginModule, Listener {
         player.showDialog(screen)
     }
 
-    private fun paddingSample(withPack: Boolean): Component {
+    private fun paddingSample(): Component {
         val result = Component.text()
         listOf(0, 8, 16, 32).forEachIndexed { index, pixels ->
             if (index > 0) result.append(Component.newline())
             result.append(text("alignment.padding-marker"))
-            if (withPack) result.append(DialogTextLayout.spacing.padding(pixels))
+            result.append(DialogTextLayout.spacing.padding(pixels))
             result.append(text("alignment.padding-sample").replaceText {
                 it.matchLiteral("%pixels%").replacement(pixels.toString())
             })
