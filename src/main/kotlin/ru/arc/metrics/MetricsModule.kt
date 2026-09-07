@@ -68,6 +68,7 @@ object MetricsModule : PluginModule {
     private var dungeonInterest: DungeonInterestMetrics? = null
     private var productInterest: ProductInterestTelemetry? = null
     private var externalProductTopic: ValidatedRedisTopic<ExternalProductEnvelope>? = null
+    private var jobWorkTopic: ValidatedRedisTopic<JobWorkEnvelope>? = null
     private var productUi: ProductUiListener? = null
     private var activeDungeonConfig: DungeonInterestConfig? = null
     private var platformHeavyEnabled = false
@@ -162,6 +163,23 @@ object MetricsModule : PluginModule {
         return runCatching { topic.publish(envelope); local }.getOrDefault(local)
     }
 
+    internal fun recordJobWork(playerId: java.util.UUID, job: String): Boolean {
+        val player = ExternalProductEnvelopeCodec.player(playerId)
+        val observation = productInterest?.observeJobWork(player, job) ?: return false
+        val envelope = JobWorkEnvelope(
+            origin = ARC.serverName ?: "unknown", player = player,
+            operationId = java.util.UUID.randomUUID().toString(), job = job,
+            startedAt = observation.startedAt, endedAt = observation.endedAt,
+        )
+        // Best-effort product telemetry; financial ownership and payout results stay in the audit ledger.
+        runCatching { jobWorkTopic?.publish(envelope) }
+        return true
+    }
+
+    internal fun breakJobWork(playerId: java.util.UUID) {
+        productInterest?.breakJobWork(ExternalProductEnvelopeCodec.player(playerId))
+    }
+
     fun productInterestReport(
         days: Int,
         limit: Int,
@@ -227,6 +245,19 @@ object MetricsModule : PluginModule {
                         productInterest = productInstance
                         productUi = ProductUiListener(ARC.instance, productInstance).also(ProductUiListener::start)
                         ARC.redisManager?.takeIf { productConfig.networkEnabled }?.let { redis ->
+                            jobWorkTopic = ValidatedRedisTopic.open(
+                                redis = redis,
+                                channel = JobWorkEnvelopeCodec.CHANNEL,
+                                codec = JobWorkEnvelopeCodec.codec(Common.gson),
+                                originAllowed = { it.isNotBlank() },
+                                embeddedOrigin = JobWorkEnvelope::origin,
+                                replay = RedisReplayPolicy({ it.operationId }, 86_400_000L, 4_096),
+                                onMessage = { envelope, origin ->
+                                    if (origin != (ARC.serverName ?: "unknown")) {
+                                        productInstance.receiveJobWork(envelope.player, envelope.observation())
+                                    }
+                                },
+                            )
                             externalProductTopic = ValidatedRedisTopic.open(
                                 redis = redis,
                                 channel = ExternalProductEnvelopeCodec.CHANNEL,
@@ -442,6 +473,8 @@ object MetricsModule : PluginModule {
         dungeonInterest = null
         productUi?.close()
         productUi = null
+        jobWorkTopic?.close()
+        jobWorkTopic = null
         externalProductTopic?.close()
         externalProductTopic = null
         ExternalProductTelemetryBridge.clearReplayState()

@@ -84,6 +84,7 @@ class ProductInterestTelemetry(
     @Volatile private var closed = false
 
     private val sessions = linkedMapOf<String, Session>()
+    private val jobWorkClock = JobWorkClock()
     private val seenEvents =
         object : LinkedHashMap<String, Unit>(MAX_SEEN_EVENTS + 1, 0.75f, true) {
             override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Unit>?): Boolean = size > MAX_SEEN_EVENTS
@@ -314,6 +315,7 @@ class ProductInterestTelemetry(
         next.resetPeriod(state.boundaryAt, now)
         next.flush(now, force = true)
         store = next
+        jobWorkClock.clear()
         sessions.values.forEach { session ->
             session.startedAt = maxOf(session.startedAt, now)
             session.lastSampleAt = now
@@ -352,6 +354,7 @@ class ProductInterestTelemetry(
         now: Long = clockMillis(),
     ) {
         val player = ProductPseudonym.of(playerId)
+        jobWorkClock.breakContinuity(player)
         sessions.remove(player)?.let { finish(it, now, organic = false) }
         val session =
             Session(
@@ -416,6 +419,7 @@ class ProductInterestTelemetry(
         now: Long = clockMillis(),
     ) {
         val player = ProductPseudonym.of(playerId)
+        jobWorkClock.breakContinuity(player)
         sessions.remove(player)?.let { finish(it, now, organic = true) }
     }
 
@@ -624,6 +628,24 @@ class ProductInterestTelemetry(
         }
     }
 
+    /** Caller supplies a native eligible-action signal; timers do not infer work from movement or menus. */
+    @Synchronized
+    internal fun observeJobWork(player: String, job: String, now: Long = clockMillis()): JobWorkObservation? {
+        val session = sessions[player] ?: return null
+        if (session.qa || job !in JobWorkObservation.JOBS || closed) return null
+        val observation = jobWorkClock.action(player, job, now) ?: return null
+        return observation.takeIf { store.applyJobWork(player, it) }
+    }
+
+    @Synchronized
+    internal fun breakJobWork(player: String) = jobWorkClock.breakContinuity(player)
+
+    @Synchronized
+    internal fun receiveJobWork(player: String, observation: JobWorkObservation): Boolean {
+        if (closed || sessions[player]?.qa == true) return false
+        return store.applyJobWork(player, observation)
+    }
+
     @Synchronized
     fun externalEvent(player: String, source: ExternalProductSource, event: ExternalProductEvent, occurredAt: Long): Boolean {
         if (sessions[player]?.qa == true) {
@@ -827,6 +849,11 @@ class ProductInterestTelemetry(
         report["primary"] = primaryAggregator
         report["networkReady"] = networkReady
         report["measurementReset"] = measurementResetStatus()
+        report["jobWorkLocalClock"] = mapOf(
+            "scope" to "this_process_since_start_or_period_reset",
+            "capacityEvictions" to jobWorkClock.capacityEvictions,
+            "clockRegressions" to jobWorkClock.clockRegressions,
+        )
         report["complete"] = report["complete"] == true && primaryAggregator && resetControlReady && (!config.networkEnabled || networkReady)
         report["transportGuarantee"] = "Best-effort Redis pub/sub; current connectivity does not prove historical delivery"
         if (!primaryAggregator) report["warning"] = "Rolling network detail is exposed by the primary ARC node"

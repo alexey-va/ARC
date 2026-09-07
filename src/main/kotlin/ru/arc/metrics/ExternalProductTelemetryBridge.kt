@@ -30,6 +30,19 @@ object ExternalProductTelemetryBridge {
         return runCatching { MetricsModule.recordExternalEvent(playerId, parsedSource, parsedEvent, wireOperationId) }.getOrDefault(false)
     }
 
+    /** Called for accepted EcoJobs XP events; native work counters qualify, placeholders do not. */
+    @JvmStatic
+    fun recordJobWork(playerId: UUID, job: String): Boolean {
+        if (job !in JobWorkObservation.JOBS) return false
+        return runCatching { MetricsModule.recordJobWork(playerId, job) }.getOrDefault(false)
+    }
+
+    /** AFK entry, blocked work or consumer shutdown breaks the observation chain without adding time. */
+    @JvmStatic
+    fun breakJobWork(playerId: UUID) {
+        runCatching { MetricsModule.breakJobWork(playerId) }
+    }
+
     /** Test seam for the exact validated-to-sink boundary. */
     internal fun recordForSink(playerId: UUID, source: String, feature: String? = null, outcome: String? = null, action: String? = null, operationId: String, sink: (String, ProductFeature?, ProductOutcome?, ProductAction?) -> Boolean): Boolean =
         validateAndRecord(playerId, source, feature, outcome, action, operationId, sink)

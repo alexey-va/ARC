@@ -76,6 +76,7 @@ class ProductInterestStore private constructor(
         val exits: MutableMap<String, ExitRecord> = linkedMapOf(),
         val recentTrail: MutableList<TrailRecord> = mutableListOf(),
         val externalEvents: MutableMap<String, Long> = linkedMapOf(),
+        val jobWork: MutableMap<String, JobWorkTotals> = linkedMapOf(),
     )
 
     private data class TrailRecord(
@@ -150,6 +151,7 @@ class ProductInterestStore private constructor(
         val exits: List<PersistedExit>? = null,
         val recentTrail: List<PersistedTrail>? = null,
         val externalEvents: Map<String, Long>? = null,
+        val jobWork: Map<String, JobWorkTotals>? = null,
     )
 
     private data class PersistedTrail(
@@ -330,6 +332,21 @@ class ProductInterestStore private constructor(
         val key = "${source.label}:${event.label}"
         if (key !in day.externalEvents && day.externalEvents.size >= 64) return false
         day.externalEvents[key] = ((day.externalEvents[key] ?: 0L) + 1L).coerceAtMost(1_000_000L)
+        markDirty()
+        return true
+    }
+
+    /** Existing product retention/reset/pseudonym rules also own profession-time observations. */
+    @Synchronized
+    fun applyJobWork(playerId: String, observation: JobWorkObservation): Boolean {
+        require(PSEUDONYM.matches(playerId)) { "Job work player must be pseudonymous" }
+        if (!observation.valid()) return false
+        val parts = observation.days(config.zoneId, measurementBoundaryAt)
+        if (parts.isEmpty()) return false
+        prune(observation.endedAt)
+        val record = player(playerId, observation.endedAt)
+        record.lastSeenAt = maxOf(record.lastSeenAt, observation.endedAt)
+        parts.forEach { part -> record.day(part.date).jobWork.getOrPut(observation.job) { JobWorkTotals() }.add(part) }
         markDirty()
         return true
     }
@@ -737,6 +754,35 @@ class ProductInterestStore private constructor(
             "sessions" to selected.sumOf { (_, playerDays) -> playerDays.sumOf { it.sessions } },
             "detailEvents" to selected.sumOf { (_, playerDays) -> playerDays.sumOf { day -> day.details.values.sumOf { bucket -> bucket.values.sumOf { it.count } } } },
             "externalEvents" to externalEvents,
+            "jobWork" to linkedMapOf(
+                "method" to "accepted_job_xp_intervals_v1",
+                "status" to if (selected.any { (_, days) -> days.any { it.jobWork.isNotEmpty() } }) "observed" else "no_observations",
+                "delivery" to "best_effort_product_telemetry",
+                "coversAllWorkingTime" to false,
+                "maxGapMillis" to JobWorkObservation.MAX_GAP_MILLIS,
+                "minimumSampleMillis" to JobWorkClock.MIN_SAMPLE_MILLIS,
+                "unit" to "milliseconds",
+                "limitations" to listOf(
+                    "Observed XP-event intervals are a proxy, not measured human attention or total work sessions",
+                    "Native counters emit XP events for eligible actions; external API XP grants can also emit them",
+                    "Profession intervals may overlap; never sum them as independent player hours",
+                    "Late intervals can undercount; lateObservations exposes this loss",
+                    "Income rates require payouts matched to the same player, profession and calendar window",
+                ),
+                "professions" to JobWorkObservation.JOBS.sorted().mapNotNull { job ->
+                    val participantRows = selected.mapNotNull { (_, days) ->
+                        days.mapNotNull { it.jobWork[job] }.takeIf { it.isNotEmpty() }
+                    }
+                    if (participantRows.isEmpty()) null else linkedMapOf(
+                        "job" to job,
+                        "players" to participantRows.size,
+                        "firstObservedAt" to participantRows.minOf { rows -> rows.minOf { it.firstObservedAt } },
+                        "observedMillis" to participantRows.sumOf { rows -> rows.sumOf { it.observedMillis } },
+                        "observations" to participantRows.sumOf { rows -> rows.sumOf { it.observations } },
+                        "lateObservations" to participantRows.sumOf { rows -> rows.sumOf { it.lateObservations } },
+                    )
+                },
+            ),
             "dimensions" to dimensions,
             "exitContexts" to
                 exits.values.filter { it.connection == null }
@@ -1191,6 +1237,7 @@ class ProductInterestStore private constructor(
                 },
             recentTrail = day.recentTrail.map { PersistedTrail(it.occurredAt, it.step) },
             externalEvents = day.externalEvents.toSortedMap(),
+            jobWork = day.jobWork.toSortedMap().mapValues { it.value.copy() },
         )
 
     private fun localDate(timestamp: Long): LocalDate = Instant.ofEpochMilli(timestamp).atZone(config.zoneId).toLocalDate()
@@ -1416,6 +1463,13 @@ class ProductInterestStore private constructor(
                 exits = exits,
                 recentTrail = recentTrail,
                 externalEvents = externalEvents,
+                jobWork = day.jobWork.orEmpty().filter { (job, totals) ->
+                    job in JobWorkObservation.JOBS && runCatching {
+                        val start = LocalDate.parse(date).atStartOfDay(zoneId).toInstant().toEpochMilli()
+                        val end = LocalDate.parse(date).plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+                        totals.valid() && totals.firstObservedAt in start..end && totals.lastEndedAt in start..end && totals.observedMillis <= end - start
+                    }.getOrDefault(false)
+                }.mapValues { it.value.copy() }.toMutableMap(),
             )
         }
 

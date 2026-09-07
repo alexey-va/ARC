@@ -31,7 +31,7 @@ arbitrary labels, maps, money amounts, currencies or duration.
 | ArcVotes | Vote reward components completed and grant recorded |
 | ArcRanks | Rank promoted; weekly kit claimed; shared contract signals |
 | ArcBuilder | Durable build completed (shared autobuild outcome) |
-| ArcEcoJobs | Boost purchase delivered; voucher activated |
+| ArcEcoJobs | Boost purchase delivered; voucher activated; AFK/farm block notices |
 | ArcDuels | Completed duel for each participant |
 | ArcEvents | Event completion |
 | ArcGiveaways | Item prize delivery completed |
@@ -54,6 +54,56 @@ acceptance, not confirmed delivery to every node. Compare financial volumes
 with the economy ledger, never derive them by multiplying these counters by
 catalog prices. `activeSeconds` and session boundaries remain owned by ARC's
 existing `ProductInterestTelemetry`; consumers introduce no timers or sessions.
+
+## Profession work observations
+
+`ExternalProductTelemetryBridge.recordJobWork(UUID, job)` observes an accepted
+EcoJobs XP event. `breakJobWork(UUID)` ends continuity without adding duration.
+These are optional, failure-isolated APIs; neither method changes XP or money.
+`JobWorkObservation`/`JobWorkClock` own interval semantics in ARC, while the
+consumer owns native eligibility and AFK detection. There is no second ledger.
+
+The pinned EcoJobs/libreforge 2026.33 counter invokes `JobXPAccumulator.accept`
+only after its filters and conditions; the accumulator checks active membership,
+AFK policy and game mode, then immediately emits `PlayerJobExpGainEvent`.
+Observe non-cancelled positive finite XP at MONITOR, independently of whether
+money paid on that action. Native `givexp` uses `giveExactJobExperience` and
+bypasses this event. External `giveJobExperience` API calls and libreforge's
+`give_job_xp` effect can also emit the event: this is an **accepted XP-event
+interval proxy**, not proof of a physical action or human attention.
+
+ARC accepts at most one observation per second per player/profession. The first
+has zero duration; subsequent intervals connect observations only when their
+gap is at most 30 seconds. Long gaps restart at zero. AFK/blocked work, world
+change, logout, consumer shutdown and period reset break continuity. Sub-second
+activity tails and sparse work are not reconstructed. No time is inferred from
+menus, placeholders, selected jobs, ordinary movement or money amount.
+
+The separate `arc-product-job-work-v1` topic preserves the external-event v1
+contract during rolling upgrades. It uses the shared bounded codec, origin
+checks and bounded replay suppression. Local known QA sessions are excluded
+before publication. Daily `jobWork` rows use the existing product file, privacy,
+retention, eviction, atomic save and reset-period lifecycle. Intervals split at
+calendar midnight using the configured timezone, and clip at the measurement
+boundary. Monotonic interval union avoids double counting; unseen late prefixes
+are conservatively omitted and exposed as `lateObservations`. Network delivery
+and crash recovery retain the existing best-effort telemetry limitations.
+
+The authenticated product report returns `jobWork.professions` with participants,
+`firstObservedAt`, `observedMillis`, sampled `observations`, and
+`lateObservations`. `coversAllWorkingTime=false` is explicit regardless of the
+parent product report completeness flag. `jobWorkLocalClock` separately exposes
+this node’s bounded-cursor evictions and clock regressions since startup/reset.
+`no_observations` does not mean zero potential income.
+Profession intervals can overlap, so their times must not be summed into player
+hours. A measured income rate still requires the same player set, profession,
+currency, calendar/time window and observation coverage in the money ledger;
+this report deliberately does not divide whole-day payouts by partial observed
+time. Do not use it as an automatic pricing input.
+
+Focused verification: `./gradlew test --tests ru.arc.metrics.JobWorkObservationTest`.
+The native producer and actual optional bridge are exercised by ArcEcoJobs'
+paired Paper suite with `-Pe2eArcJar=/absolute/path/to/ARC.jar`.
 
 ## Economy attribution
 
