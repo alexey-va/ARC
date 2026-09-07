@@ -47,7 +47,7 @@ plugins {
 }
 
 group = "ARC"
-version = "1.4.7"
+version = "1.4.8"
 description = "ARC"
 val pluginVersion = version.toString()
 val arcCoreVersion = "2.7.4"
@@ -422,9 +422,22 @@ tasks {
 }
 
 val contractE2eFiles = layout.buildDirectory.dir("plugwright-e2e-generated")
+val contractCrashFixture = sourceSets.create("contractCrashFixture") {
+    compileClasspath += sourceSets.main.get().output
+    runtimeClasspath += sourceSets.main.get().output
+}
+configurations[contractCrashFixture.implementationConfigurationName].extendsFrom(configurations.implementation.get())
+configurations[contractCrashFixture.compileOnlyConfigurationName].extendsFrom(configurations.compileOnly.get())
+kotlin.target.compilations.getByName("contractCrashFixture")
+    .associateWith(kotlin.target.compilations.getByName("main"))
+val contractCrashFixtureJar = tasks.register<Jar>("contractCrashFixtureJar") {
+    archiveBaseName.set("ARCContractCrashFixture")
+    from(contractCrashFixture.output)
+}
 val cleanupE2e = providers.gradleProperty("cleanupE2e").map(String::toBoolean).orElse(false).get()
 val dialogE2e = providers.gradleProperty("dialogE2e").map(String::toBoolean).orElse(false).get()
 val parkourE2e = providers.gradleProperty("parkourE2e").map(String::toBoolean).orElse(false).get()
+val contractCrashE2e = providers.gradleProperty("contractCrashE2e").map(String::toBoolean).orElse(false).get()
 
 // Isolated real-Paper tests run separately from the fast JVM suite.
 plugwright {
@@ -452,6 +465,9 @@ plugwright {
             file("plugins/ARC/modules/contracts.yml", contractE2eFiles.get().file("contracts.yml").asFile)
             file("plugins/RedisEconomy/config.yml", contractE2eFiles.get().file("rediseconomy.yml").asFile)
             file("plugins/RedisEconomy.jar", contractE2eFiles.get().file("RedisEconomy.jar").asFile)
+            if (contractCrashE2e) {
+                file("plugins/ARCContractCrashFixture.jar", contractCrashFixtureJar.get().archiveFile.get().asFile)
+            }
         }
     }
 }
@@ -577,5 +593,14 @@ tasks.named<me.drownek.plugwright.PlugwrightTestTask>("plugwrightTest") {
     } else {
         dependsOn(prepareContractE2e)
         usesService(e2eRedis)
+        if (contractCrashE2e) {
+            dependsOn(contractCrashFixtureJar)
+            testFiles.set("contracts-crash")
+            doFirst {
+                check(System.getenv("ARC_CONTRACT_CRASH_FIXTURE") == "1") {
+                    "The crash profile requires ARC_CONTRACT_CRASH_FIXTURE=1 in its isolated CI process"
+                }
+            }
+        }
     }
 }

@@ -1,7 +1,5 @@
 package ru.arc.contracts
 
-import dev.unnm3d.rediseconomy.api.RedisEconomyAPI
-import net.milkbowl.vault.economy.EconomyResponse
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.entity.Player
@@ -9,8 +7,6 @@ import org.bukkit.inventory.ItemStack
 import ru.arc.core.Tasks
 import ru.arc.paper.playerstate.NativePaperPlayerDataPersistence
 import ru.arc.paper.playerstate.PaperPlayerDataPersistence
-import java.math.BigDecimal
-import java.math.RoundingMode
 import java.util.UUID
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -181,61 +177,6 @@ private class PaperPreparedContractInventory(
 
 private fun ItemStack?.sameBytes(expected: ByteArray): Boolean =
     this != null && runCatching { serializeAsBytes().contentEquals(expected) }.getOrDefault(false)
-
-/** RedisEconomy adapter; the provider call is never retried. */
-class RedisEconomyContractPaymentGateway(
-    private val apiProvider: () -> RedisEconomyAPI? = RedisEconomyAPI::getAPI,
-) : ContractPaymentGateway {
-    override suspend fun balanceMinor(playerId: String): Long? {
-        val uuid = runCatching { UUID.fromString(playerId) }.getOrNull() ?: return null
-        val currency = apiProvider()?.defaultCurrency ?: return null
-        return runCatching { currency.getBalance(uuid).toContractEvidenceMinor() }.getOrNull()
-    }
-
-    override suspend fun deposit(
-        playerId: String,
-        amountMinor: Long,
-        reason: String,
-    ): ContractPaymentEvidence {
-        require(amountMinor > 0L) { "Contract payout must be positive" }
-        val uuid = runCatching { UUID.fromString(playerId) }.getOrNull()
-            ?: return ContractPaymentEvidence(false, null, "invalid_player_id")
-        val currency = apiProvider()?.defaultCurrency
-            ?: return ContractPaymentEvidence(false, null, "provider_unavailable")
-        val amount = BigDecimal.valueOf(amountMinor, 2).toDouble()
-        val response: EconomyResponse =
-            try {
-                currency.depositPlayer(uuid, currency.currencyName, amount, reason)
-            } catch (_: Throwable) {
-                return ContractPaymentEvidence(
-                    providerAccepted = null,
-                    balanceAfterMinor = runCatching { currency.getBalance(uuid).toContractEvidenceMinor() }.getOrNull(),
-                )
-            }
-        val after = runCatching { currency.getBalance(uuid).toContractEvidenceMinor() }.getOrNull()
-        return ContractPaymentEvidence(
-            providerAccepted = response.transactionSuccess(),
-            balanceAfterMinor = after,
-            failureCode = if (response.transactionSuccess()) null else "provider_rejected",
-        )
-    }
-}
-
-/**
- * RedisEconomy stores balances as doubles, and other earners can leave a
- * legitimate sub-cent remainder. Contract payouts are still integer cents, so
- * rounding both balance snapshots preserves their exact payout delta without
- * rejecting the player's pre-existing remainder.
- */
-private fun Double.toContractEvidenceMinor(): Long? {
-    if (!isFinite()) return null
-    return runCatching {
-        BigDecimal.valueOf(this)
-            .movePointRight(2)
-            .setScale(0, RoundingMode.HALF_UP)
-            .longValueExact()
-    }.getOrNull()
-}
 
 internal suspend fun <T> onBukkitMain(block: () -> T): T {
     if (Bukkit.isPrimaryThread()) return block()

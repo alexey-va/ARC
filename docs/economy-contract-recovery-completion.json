@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "title": "Contract interruption and provider persistence confirmation",
+  "assumptions": [
+    "Recovery and provider evidence changes preserve every existing contract price, payout formula, quantity cap and budget.",
+    "Interrupted item escrow and definite payment rejection become visible manual reviews; no automatic payout or refund is introduced.",
+    "A successful payment requires Redis-visible balance confirmation, not only the RedisEconomy local cache. An unconfirmed provider call is never repeated.",
+    "The zero deltas below describe unchanged planned currency flows, not an estimate of historical lost or delayed payments.",
+    "Held items and quota remain obligations until an evidence-backed resolution. They are not income or newly minted currency."
+  ],
+  "participants": [0, 0, 0],
+  "currencies": {
+    "vault": {
+      "minor_per_unit": 100,
+      "disposable_per_player_day": {"before": ["0", "0", "0"], "after": ["0", "0", "0"]},
+      "flows": []
+    },
+    "tokens": {
+      "minor_per_unit": 1,
+      "disposable_per_player_day": {"before": ["0", "0", "0"], "after": ["0", "0", "0"]},
+      "flows": []
+    }
+  },
+  "prices": []
+}

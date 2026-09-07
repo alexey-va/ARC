@@ -20,7 +20,9 @@ enum class ContractSubmissionJournalStatus(val label: String) {
 
 enum class ContractSubmissionReviewReason(val label: String) {
     INTERRUPTED_ITEM_REMOVAL("interrupted_item_removal"),
+    INTERRUPTED_ESCROW("interrupted_escrow"),
     INTERRUPTED_PAYMENT("interrupted_payment"),
+    INTERRUPTED_PAYMENT_FAILED("interrupted_payment_failed"),
     INTERRUPTED_REFUND("interrupted_refund"),
     INVENTORY_EVIDENCE_CONFLICT("inventory_evidence_conflict"),
     REFUND_EVIDENCE_CONFLICT("refund_evidence_conflict"),
@@ -343,6 +345,18 @@ data class ContractSubmissionJournalRecord(
                                 providerTransactionId == null && paidAt == null &&
                                 paymentFailureCode == null && refundStartedAt == null,
                         ) { "Interrupted payment review contains an outcome" }
+                    ContractSubmissionJournalStatus.ITEMS_ESCROWED ->
+                        require(
+                            itemsEscrowedAt != null && paymentStartedAt == null && refundStartedAt == null &&
+                                providerBalanceBeforeMinor == null && providerBalanceAfterMinor == null &&
+                                providerTransactionId == null && paidAt == null && paymentFailureCode == null,
+                        ) { "Interrupted escrow review contains a later phase" }
+                    ContractSubmissionJournalStatus.PAYMENT_FAILED -> {
+                        require(refundStartedAt == null && paidAt == null) {
+                            "Interrupted failed-payment review contains a later phase"
+                        }
+                        validateDefinitePaymentFailure()
+                    }
                     ContractSubmissionJournalStatus.REFUND_STARTED -> {
                         require(refundStartedAt != null && refundedAt == null && paidAt == null) {
                             "Interrupted refund review contains an outcome"
@@ -471,7 +485,9 @@ data class ContractSubmissionJournalRecord(
         private val AMBIGUOUS_STATES =
             setOf(
                 ContractSubmissionJournalStatus.ITEM_REMOVAL_STARTED,
+                ContractSubmissionJournalStatus.ITEMS_ESCROWED,
                 ContractSubmissionJournalStatus.PAYMENT_STARTED,
+                ContractSubmissionJournalStatus.PAYMENT_FAILED,
                 ContractSubmissionJournalStatus.REFUND_STARTED,
             )
 
@@ -487,6 +503,10 @@ data class ContractSubmissionJournalRecord(
                         ContractSubmissionReviewReason.INTERRUPTED_PAYMENT,
                         ContractSubmissionReviewReason.PROVIDER_EVIDENCE_CONFLICT,
                     )
+                ContractSubmissionJournalStatus.ITEMS_ESCROWED ->
+                    setOf(ContractSubmissionReviewReason.INTERRUPTED_ESCROW)
+                ContractSubmissionJournalStatus.PAYMENT_FAILED ->
+                    setOf(ContractSubmissionReviewReason.INTERRUPTED_PAYMENT_FAILED)
                 ContractSubmissionJournalStatus.REFUND_STARTED ->
                     setOf(
                         ContractSubmissionReviewReason.INTERRUPTED_REFUND,
@@ -742,6 +762,20 @@ object ContractSubmissionJournalEngine {
                     "Restart after durable payout intent; reconcile balance/history and never auto-pay",
                     now,
                 )
+            ContractSubmissionJournalStatus.ITEMS_ESCROWED ->
+                manualReview(
+                    record,
+                    ContractSubmissionReviewReason.INTERRUPTED_ESCROW,
+                    "Restart after durable item escrow; verify inventory before any refund",
+                    now,
+                )
+            ContractSubmissionJournalStatus.PAYMENT_FAILED ->
+                manualReview(
+                    record,
+                    ContractSubmissionReviewReason.INTERRUPTED_PAYMENT_FAILED,
+                    "Restart after proven payment rejection; verify inventory before any refund",
+                    now,
+                )
             ContractSubmissionJournalStatus.REFUND_STARTED ->
                 manualReview(
                     record,
@@ -762,7 +796,9 @@ object ContractSubmissionJournalEngine {
         advance(record, record.status, now) {
             require(
                 status == ContractSubmissionJournalStatus.ITEM_REMOVAL_STARTED ||
+                    status == ContractSubmissionJournalStatus.ITEMS_ESCROWED ||
                     status == ContractSubmissionJournalStatus.PAYMENT_STARTED ||
+                    status == ContractSubmissionJournalStatus.PAYMENT_FAILED ||
                     status == ContractSubmissionJournalStatus.REFUND_STARTED,
             ) { "Journal state is not an ambiguous external-mutation boundary" }
             copy(
