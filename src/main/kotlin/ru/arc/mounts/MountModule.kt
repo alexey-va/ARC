@@ -1,6 +1,7 @@
 package ru.arc.mounts
 
 import net.luckperms.api.LuckPerms
+import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.command.Command
 import org.bukkit.command.CommandSender
@@ -101,6 +102,7 @@ object MountModule : PluginModule {
                 externalBusy = { transfers?.isBusy(it) == true },
                 runSync = { task -> Tasks.scheduler.runSync(Runnable(task)) },
                 onStateChanged = ::publishMetrics,
+                purchaseAllowed = { playerId -> Bukkit.getPlayer(playerId)?.let(MountMerchantGate::isAtMerchant) == true },
             )
         val summonService =
             MountSummonService(

@@ -176,6 +176,10 @@ enum class MountTrailPattern {
     DOUBLE_HELIX,
     ORBIT,
     PULSE,
+    WAVE,
+    RIBBON,
+    COMET,
+    HEART,
 }
 
 data class MountTrailDefinition(

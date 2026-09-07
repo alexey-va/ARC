@@ -88,6 +88,7 @@ class MountGuiController(
     private val summons: MountSummonService,
     private val quickSummons: MountQuickSummonController,
     private val transfers: () -> MountTransferController? = { null },
+    private val merchantAllowed: (Player) -> Boolean = MountMerchantGate::isAtMerchant,
 ) : Listener {
     @Volatile private var active = false
     private val suppressClose = mutableSetOf<java.util.UUID>()
@@ -106,9 +107,19 @@ class MountGuiController(
         org.bukkit.event.HandlerList.unregisterAll(this)
     }
 
-    fun openList(player: Player) = openListPage(player, 0, MountFilter.ALL, false, MountListPurpose.COLLECTION)
+    fun openList(player: Player) = openListPage(player, 0, MountFilter.ALL, true, MountListPurpose.COLLECTION)
 
-    fun openShop(player: Player) = openListPage(player, 0, MountFilter.ALL, false, MountListPurpose.SHOP)
+    fun openShop(player: Player) {
+        if (!configProvider().purchasesEnabled) {
+            purchasesDisabled(player)
+            return openOwned(player)
+        }
+        if (!merchantAllowed(player)) {
+            send(player, "merchant-required", "<#ff9f0f>Покупки маунтов доступны у торговца на спавне.")
+            return openOwned(player)
+        }
+        openListPage(player, 0, MountFilter.ALL, false, MountListPurpose.SHOP)
+    }
 
     fun openUpgrades(player: Player) = openListPage(player, 0, MountFilter.ALL, true, MountListPurpose.UPGRADES)
 
@@ -141,11 +152,12 @@ class MountGuiController(
     ) {
         val config = configProvider()
         val catalog = catalogProvider()
+        val effectiveOwnedOnly = ownedOnly || purpose == MountListPurpose.COLLECTION
         val favoriteMountId = summons.favoriteMountId(player.uniqueId)
         val profiles = catalog.all.associateWith { mount -> ownership.profile(subject(player), mount) }
         val matching =
             catalog.all.filter { mount ->
-                filter.matches(mount) && (!ownedOnly || checkNotNull(profiles[mount]).unlocked) &&
+                filter.matches(mount) && (!effectiveOwnedOnly || checkNotNull(profiles[mount]).unlocked) &&
                     (purpose != MountListPurpose.SHOP || mount.price(1) != null)
             }
         val visible = prioritizeUnlockedMounts(matching) { mount -> checkNotNull(profiles[mount]) }
@@ -159,7 +171,7 @@ class MountGuiController(
                 page = page,
                 pageCount = pageCount,
                 filter = filter,
-                ownedOnly = ownedOnly,
+                ownedOnly = effectiveOwnedOnly,
                 purpose = purpose,
                 mountsBySlot = slots,
                 directOpen = false,
@@ -174,6 +186,27 @@ class MountGuiController(
         val inventory = Bukkit.createInventory(holder, LIST_SIZE, component(title))
         holder.backingInventory = inventory
         fill(inventory)
+        if (visible.isEmpty()) {
+            val ownedCount = profiles.values.count(MountProfile::unlocked)
+            val filterEmpty = purpose != MountListPurpose.SHOP && ownedCount > 0
+            val title = when {
+                purpose == MountListPurpose.SHOP -> config.guiText("list.empty-shop-title", "<#ffcf70>Магазин пока пуст")
+                filterEmpty -> config.guiText("list.empty-filter-title", "<#ffcf70>В этой категории пока пусто")
+                else -> config.guiText("list.empty-title", "<#ffcf70>Коллекция пока пуста")
+            }
+            val lore = when {
+                purpose == MountListPurpose.SHOP -> config.guiLines("list.empty-shop-lore", listOf("", "<#b8b8b8>Нет доступных маунтов."))
+                filterEmpty -> config.guiLines("list.empty-filter-lore", listOf("", "<#b8b8b8>Смените категорию внизу меню."))
+                else -> config.guiLines(
+                    "list.empty-lore",
+                    listOf("", "<#b8b8b8>Маунтов можно приобрести у", "<#b8b8b8>Конюшего Остромира на спавне."),
+                )
+            }
+            inventory.setItem(
+                LIST_CONTENT_SLOTS.minBy { kotlin.math.abs(it / 9 - 2) * 9 + kotlin.math.abs(it % 9 - 4) },
+                styledItem(MountGuiItemRole.INFO, Material.PAPER, title, lore),
+            )
+        }
         slots.forEach { (slot, mountId) ->
             val mount = catalog[mountId] ?: return@forEach
             inventory.setItem(slot, items.mountIcon(mount, checkNotNull(profiles[mount]), favorite = mount.id == favoriteMountId, purpose = purpose))
@@ -247,7 +280,7 @@ class MountGuiController(
                                 },
                         ),
                     ),
-                glint = ownedOnly,
+                glint = effectiveOwnedOnly,
             ),
         )
         inventory.setItem(
@@ -272,6 +305,7 @@ class MountGuiController(
         val config = configProvider()
         val mount = catalogProvider()[mountId] ?: return openList(player)
         val profile = ownership.profile(subject(player), mount)
+        if (forceDirect && !profile.unlocked) return openList(player)
         val previous = source ?: player.openInventory.topInventory?.holder as? MountMenuHolder
         val holder = MountMenuHolder(
             MountScreen.DETAIL,
@@ -662,9 +696,6 @@ class MountGuiController(
             }
             LIST_FILTER_SLOT -> when (event.click) {
                 ClickType.LEFT -> openListPage(player, 0, holder.filter.next(), holder.ownedOnly, holder.purpose)
-                ClickType.RIGHT -> if (holder.purpose == MountListPurpose.COLLECTION) {
-                    openListPage(player, 0, holder.filter, !holder.ownedOnly, holder.purpose)
-                }
                 else -> Unit
             }
             else -> {
@@ -676,7 +707,7 @@ class MountGuiController(
                     holder.purpose == MountListPurpose.SHOP && profile.unlocked && event.click == ClickType.LEFT -> openDetailFromCurrent(player, mount.id)
                     profile.unlocked && event.click == ClickType.LEFT -> summon(player, mount)
                     profile.unlocked && event.click == ClickType.RIGHT -> openDetailFromCurrent(player, mount.id)
-                    !profile.unlocked && mount.price(1) != null && event.click == ClickType.LEFT -> openProgression(player, mount)
+                    holder.purpose == MountListPurpose.SHOP && !profile.unlocked && mount.price(1) != null && event.click == ClickType.LEFT -> openProgression(player, mount)
                 }
             }
         }
@@ -939,6 +970,7 @@ class MountGuiController(
             MountPurchaseResult.InvalidLevel -> send(player, "invalid-level", "<red>Сначала купите предыдущий уровень.")
             MountPurchaseResult.NotUnlocked -> send(player, "not-unlocked", "<red>Сначала разблокируйте маунта или облик.")
             MountPurchaseResult.NotForSale -> send(player, "not-for-sale", "<red>Это улучшение нельзя купить.")
+            MountPurchaseResult.MerchantRequired -> send(player, "merchant-required", "<yellow>Покупки доступны только рядом с торговцем маунтами на спавне.")
             MountPurchaseResult.PurchasesDisabled -> purchasesDisabled(player)
             MountPurchaseResult.EconomyUnavailable -> send(player, "economy-unavailable", "<red>Экономика временно недоступна.")
             MountPurchaseResult.InsufficientFunds -> send(player, "not-enough-money", "<red>Недостаточно денег.")

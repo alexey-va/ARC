@@ -338,7 +338,7 @@ class MountCommand(
     private fun sendHelp(sender: CommandSender, label: String) {
         sender.sendMessage(TextUtil.mm("<gold>/$label <gray>— открыть коллекцию маунтов", true))
         sender.sendMessage(TextUtil.mm("<gold>/$label menu <gray>— открыть коллекцию", true))
-        sender.sendMessage(TextUtil.mm(config().message("player-command-help", "<#92bed8>/mount shop <#e6fff3>— покупки; <#92bed8>/mount upgrades <#e6fff3>— развитие; <#92bed8>/mount trade <#e6fff3>— передача и перепродажа.")))
+        sender.sendMessage(TextUtil.mm(config().message("player-command-help", "<#92bed8>/mount shop <#e6fff3>— покупки у торговца на спавне; <#92bed8>/mount upgrades <#e6fff3>— развитие; <#92bed8>/mount trade <#e6fff3>— передача и перепродажа.")))
         if (sender.hasPermission(ADMIN_PERMISSION)) sendAdminHelp(sender, label)
     }
 

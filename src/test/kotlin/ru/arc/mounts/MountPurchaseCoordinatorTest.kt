@@ -45,6 +45,17 @@ class MountPurchaseCoordinatorTest : StringSpec({
         fixture.journal.records() shouldBe emptyList()
     }
 
+    "stale confirmation is denied before journal or debit when merchant context is lost" {
+        val fixture = PurchaseFixture().also { it.purchaseAllowed = false }
+        var result: MountPurchaseResult? = null
+
+        fixture.coordinator.purchaseLevel(fixture.subject(), fixture.mount, 1) { result = it }
+
+        result shouldBe MountPurchaseResult.MerchantRequired
+        fixture.wallet.withdrawals shouldBe 0
+        fixture.journal.records() shouldBe emptyList()
+    }
+
     "glow purchase requires an unlocked mount" {
         val fixture = PurchaseFixture()
         var result: MountPurchaseResult? = null
@@ -416,7 +427,8 @@ private class PurchaseFixture(val mount: MountDefinition = testMount()) {
     val ownership = MutableOwnership()
     val wallet = MutableWallet()
     val journal = FileMountPurchaseJournal(Files.createTempDirectory("arc-mount-purchase-").resolve("journal.json"))
-    val coordinator = MountPurchaseCoordinator(ownership, wallet, journal, { true }, { it() }, clock = { 10L })
+    var purchaseAllowed = true
+    val coordinator = MountPurchaseCoordinator(ownership, wallet, journal, { true }, { it() }, clock = { 10L }, purchaseAllowed = { purchaseAllowed })
 
     fun subject() =
         MountPermissionSubject(playerId, "Rider") { permission ->

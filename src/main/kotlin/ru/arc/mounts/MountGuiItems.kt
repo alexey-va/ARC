@@ -1023,7 +1023,7 @@ internal class MountGuiItems(
                 owned -> copy("skins.skin-owned-name", "<#ffacd5><skin>", "skin" to escape(skin.displayName))
                 else -> copy("skins.skin-buy-name", "<#969696><skin>", "skin" to escape(skin.displayName))
             },
-            appearanceDeltaLore(mount, skin) + buildList {
+            listOf("") + appearanceDeltaLore(mount, skin) + buildList {
                 when {
                     selected -> add(configProvider().guiText("common.selected", "<#2bba43>Выбрано"))
                     owned -> {

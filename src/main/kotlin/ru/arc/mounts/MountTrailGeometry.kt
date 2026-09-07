@@ -82,6 +82,29 @@ internal fun mountTrailPoints(
                 val pulseRadius = radius * (0.45 + 0.55 * ((sin(phase) + 1.0) / 2.0))
                 trailPoint(origin, forward, right, ringAngle, pulseRadius, 0.0)
             }
+            MountTrailPattern.WAVE -> {
+                val angle = phase - index * 0.65
+                offsetPoint(origin, forward, right, sin(angle) * radius, cos(angle) * radius * 0.2, index * 0.16)
+            }
+            MountTrailPattern.RIBBON -> {
+                val pair = index / 2
+                val side = if (index % 2 == 0) 1.0 else -1.0
+                val angle = phase - pair * 0.6
+                offsetPoint(origin, forward, right, side * radius * (0.55 + 0.35 * sin(angle)),
+                    cos(angle) * radius * 0.35, pair * 0.28)
+            }
+            MountTrailPattern.COMET -> {
+                // The fan widens behind the bright head; its bounded trail follows motion.
+                val progress = index.toDouble() / max(trail.count - 1, 1)
+                trailPoint(origin, forward, right, ringAngle, radius * progress * 0.65, progress * 1.1)
+            }
+            MountTrailPattern.HEART -> {
+                val angle = fraction * Math.PI * 2.0
+                val pulse = 0.8 + 0.1 * sin(phase)
+                val horizontal = sin(angle) * sin(angle) * sin(angle)
+                val vertical = (13 * cos(angle) - 5 * cos(2 * angle) - 2 * cos(3 * angle) - cos(4 * angle)) / 17.0
+                offsetPoint(origin, forward, right, horizontal * radius * pulse, vertical * radius * pulse, 0.0)
+            }
             MountTrailPattern.SCATTER -> origin
         }
     }
@@ -107,3 +130,17 @@ private fun trailPoint(
         origin.y + sin(angle) * radius,
         origin.z - forward.z * rearward + right.z * cos(angle) * radius,
     )
+
+
+private fun offsetPoint(
+    origin: MotionVector,
+    forward: MotionVector,
+    right: MotionVector,
+    horizontal: Double,
+    vertical: Double,
+    rearward: Double,
+): MotionVector = MotionVector(
+    origin.x - forward.x * rearward + right.x * horizontal,
+    origin.y + vertical,
+    origin.z - forward.z * rearward + right.z * horizontal,
+)

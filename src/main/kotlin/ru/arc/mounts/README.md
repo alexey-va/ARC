@@ -4,9 +4,10 @@ Native production replacement for `Denizen/scripts/activities/rideable_mobs.dsc`
 
 ## Player behavior
 
-- `/mount` opens a paginated 30-mount collection with walking, flying and
-  swimming filters. Left click summons an owned mount; right click opens its
-  progression, glow and appearance controls.
+- `/mount` opens a paginated collection of owned mounts with walking, flying
+  and swimming filters. Left click summons an owned mount; right click opens
+  its progression, glow and appearance controls. Locked mounts never appear
+  in the main collection, and a direct locked view returns to that collection.
 - Walking mounts use WASD, automatically step over one-block terrain and use
   Space to jump. Horses retain native ridden physics so gravity and terrain
   transitions remain correct; hold and release Space for their charged jump.
@@ -107,6 +108,13 @@ mob-spawn restrictions remain intact.
 
 ## Economy safety
 
+New mount purchases and paid upgrades are available only while the player is
+near a live spawn merchant (Citizens NPC 368 or 369) in `rc_origin_spawn` and
+the node has `purchases-enabled`. The shop command outside that context falls
+back to the owned collection. The coordinator repeats this check immediately
+before creating the purchase journal, so moving away, changing worlds,
+despawning the NPC or losing Citizens fails closed before any debit.
+
 Purchases are enabled only on the spawn node. Prices are converted to exact
 minor currency units and charged directly through the RedisEconomy 4.5.12 API.
 Historical provider doubles may contain a sub-cent binary tail; ARC accepts
@@ -142,3 +150,5 @@ Metrics use no player or transaction labels:
 
 The package is self-contained behind `MountOwnership`, `MountWallet` and
 `MountPurchaseJournal`; `MountModule` is its only ARC lifecycle entry point.
+
+Pricing follows the mandatory ops economy inventory and the dated 2026-09-07 assessment. Flying entry prices have a120-token floor without changing cosmetic rarity; reward-only unlocks stay reward-only. New shared skins provide WAVE, RIBBON, COMET and HEART trails, each at most60particles/second per mount. Cosmetics do not grant income or movement bonuses.

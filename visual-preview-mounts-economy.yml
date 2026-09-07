@@ -1,0 +1,171 @@
+schema: 1
+minecraft-version: 26.1.2
+minecraft-client-sha1: 4e618f09a0c649dde3fdf829df443ce0b8831e65
+gallery-accent: '#c8a477'
+resource-pack:
+  url: https://storage.yandexcloud.net/ruscraftinresources/RusCraftingResource.zip
+  sha256-url: https://storage.yandexcloud.net/ruscraftinresources/RusCraftingResource.zip.sha256
+custom-items:
+  arc:background:
+    material: GRAY_STAINED_GLASS_PANE
+    model: assets/arc/models/gui/background.json
+  arc:left_gray:
+    material: BLUE_STAINED_GLASS_PANE
+    model: assets/arc/models/gui/left_gray.json
+  arc:left_blue_gray:
+    material: BLUE_STAINED_GLASS_PANE
+    model: assets/arc/models/gui/left_blue_gray.json
+  arc:right_blue_gray:
+    material: BLUE_STAINED_GLASS_PANE
+    model: assets/arc/models/gui/right_blue_gray.json
+  arc:comment_gray:
+    material: BLUE_STAINED_GLASS_PANE
+    model: assets/arc/models/gui/comment_gray.json
+  arc:confirm_gray:
+    material: GREEN_STAINED_GLASS_PANE
+    model: assets/arc/models/gui/confirm_gray.json
+  arc:cancel:
+    material: RED_STAINED_GLASS_PANE
+    model: assets/arc/models/gui/cancel.json
+  arc:mount_category_all:
+    material: COMPASS
+    model: assets/arc/models/gui/mount_category_all.json
+  arc:mount_category_flying:
+    material: FEATHER
+    model: assets/arc/models/gui/mount_category_flying.json
+  arc:mount_category_walking:
+    material: SADDLE
+    model: assets/arc/models/gui/mount_category_walking.json
+  arc:mount_category_swimming:
+    material: HEART_OF_THE_SEA
+    model: assets/arc/models/gui/mount_category_swimming.json
+glyphs:
+- character: 
+  path: '@pack/assets/arc/textures/icons/mechanics/crafting_gear.png'
+  height: 9
+  ascent: 8
+- character: 💰
+  path: '@pack/assets/arc/textures/glyphs/coin.png'
+  height: 9
+  ascent: 8
+plugin: ARC — collection and new trails
+limitations:
+- Static source-linked tooltip samples; not a full interactive inventory or runtime
+  particle-motion test. Trail samples use the coin-priced horse and one currency per
+  purchase.
+sources:
+  ui:
+    path: src/main/resources/modules/mounts.yml
+    root: gui
+    include:
+    - list-title
+    - skins-title
+    - copy.common.blank
+    - copy.list.empty-title
+    - copy.list.empty-filter-title
+    - copy.list.empty-shop-title
+    - copy.list.empty-lore
+    - copy.list.empty-filter-lore
+    - copy.list.empty-shop-lore
+    - copy.skins.skin-buy-name
+    - copy.skins.skin-owned-name
+    - copy.skins.skin-selected-name
+    - copy.skins.trail
+    - copy.common.price
+    - copy.common.selected
+    - copy.common.footer-select
+    - copy.common.footer-open-purchase
+surfaces:
+  inventories:
+  - id: empty-collection
+    title: ui:list-title
+    rows: 6
+    filler: GRAY_STAINED_GLASS_PANE
+    background-item: arc:background
+    items:
+    - slot: 22
+      material: PAPER
+      itemsadder: arc:comment_gray
+      name: ui:copy.list.empty-title
+      lore: ui:copy.list.empty-lore
+  - id: empty-category
+    title: ui:list-title
+    rows: 6
+    filler: GRAY_STAINED_GLASS_PANE
+    background-item: arc:background
+    items:
+    - slot: 22
+      material: PAPER
+      itemsadder: arc:comment_gray
+      name: ui:copy.list.empty-filter-title
+      lore: ui:copy.list.empty-filter-lore
+  - id: empty-shop
+    title: ui:list-title
+    rows: 6
+    filler: GRAY_STAINED_GLASS_PANE
+    background-item: arc:background
+    items:
+    - slot: 22
+      material: PAPER
+      itemsadder: arc:comment_gray
+      name: ui:copy.list.empty-shop-title
+      lore: ui:copy.list.empty-shop-lore
+  - id: new-trail-tooltips
+    title: ui:skins-title
+    rows: 6
+    filler: GRAY_STAINED_GLASS_PANE
+    background-item: arc:background
+    items:
+    - slot: 10
+      material: SNOWBALL
+      name: ui:copy.skins.skin-buy-name
+      lore:
+      - ui:copy.common.blank
+      - ui:copy.skins.trail
+      - ui:copy.common.price
+      - ui:copy.common.blank
+      - ui:copy.common.footer-open-purchase
+      placeholders:
+        skin: Ледяная волна
+        trail: Ледяная волна
+        price: 30 000
+    - slot: 11
+      material: CHERRY_SAPLING
+      name: ui:copy.skins.skin-owned-name
+      lore:
+      - ui:copy.common.blank
+      - ui:copy.skins.trail
+      - ui:copy.common.blank
+      - ui:copy.common.footer-select
+      placeholders:
+        skin: Ленты сакуры
+        trail: Ленты сакуры
+        price: 40 000
+    - slot: 12
+      material: FIREWORK_ROCKET
+      name: ui:copy.skins.skin-selected-name
+      lore:
+      - ui:copy.common.blank
+      - ui:copy.skins.trail
+      - ui:copy.common.selected
+      placeholders:
+        skin: Звёздная комета
+        trail: Звёздная комета
+        price: 60 000
+    - slot: 13
+      material: POPPY
+      name: ui:copy.skins.skin-buy-name
+      lore:
+      - ui:copy.common.blank
+      - ui:copy.skins.trail
+      - ui:copy.common.price
+      - ui:copy.common.blank
+      - ui:copy.common.footer-open-purchase
+      placeholders:
+        skin: Сердечный пульс
+        trail: Сердечный пульс
+        price: 45 000
+placeholders:
+  skin: Ледяная волна
+  trail: Ледяная волна
+  price: 30 000

@@ -96,14 +96,14 @@ class MountModuleConfigTest : StringSpec({
                     .coerceAtMost(config.maximumSpeedBlocksPerTick)
             blocksPerTick * 20.0 >= 19.0
         } shouldBe true
-        catalog.all.filter { it.rarity == MountRarity.COMMON && it.currency == "tokens" }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(80.0)
-        catalog.all.filter { it.rarity == MountRarity.COMMON && it.currency == "vault" }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(1_000_000.0)
-        catalog.all.filter { it.rarity == MountRarity.UNCOMMON && it.currency == "tokens" }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(120.0)
-        catalog.all.filter { it.rarity == MountRarity.UNCOMMON && it.currency == "vault" }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(2_000_000.0, 15_000_000.0)
-        catalog.all.filter { it.rarity == MountRarity.RARE }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(225.0)
-        catalog.all.filter { it.rarity == MountRarity.EPIC }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(450.0)
-        catalog.all.filter { it.rarity == MountRarity.LEGENDARY && it.currency == "tokens" }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(900.0)
-        catalog.all.filter { it.rarity == MountRarity.LEGENDARY && it.currency == "vault" }.mapNotNull { it.price(3) }.toSet() shouldBe setOf(35_000_000.0)
+        catalog.all.filter { it.movement == MountMovement.FLYING }.mapNotNull { it.price(1) }
+            .all { it >= 120.0 } shouldBe true
+        catalog["pig"]!!.levels.mapNotNull { it.price }.sum() shouldBe 205_000.0
+        catalog["horse"]!!.levels.mapNotNull { it.price }.sum() shouldBe 420_000.0
+        catalog["camel"]!!.levels.mapNotNull { it.price }.sum() shouldBe 1_050_000.0
+        catalog["iron_golem"]!!.levels.mapNotNull { it.price }.sum() shouldBe 3_500_000.0
+        catalog.all.filter { it.rarity == MountRarity.LEGENDARY && it.currency == "tokens" }
+            .mapNotNull { it.price(3) }.toSet() shouldBe setOf(1200.0)
     }
 
     "cosmetic prices use the mount currency without importing coin-scale amounts into tokens" {
@@ -112,9 +112,29 @@ class MountModuleConfigTest : StringSpec({
             mount.skins.mapNotNull { it.price }.all { it in 1.0..120.0 } shouldBe true
             mount.glowPrice?.let { it in 1.0..60.0 } shouldBe true
         }
-        catalog["pig"]!!.glowPrice shouldBe 25_000.0
-        catalog["horse"]!!.skin("electric-spiral")!!.price shouldBe 900_000.0
+        catalog["pig"]!!.glowPrice shouldBe 5_000.0
+        catalog["horse"]!!.skin("electric-spiral")!!.price shouldBe 25_000.0
         catalog["bee"]!!.skin("electric-spiral")!!.price shouldBe 50.0
+    }
+
+    "new shared trails are data-free particles within the emission budget" {
+        val catalog = bundledConfig("new-trails").catalog()
+        val expected = mapOf(
+            "frost-wave" to MountTrailPattern.WAVE,
+            "cherry-ribbons" to MountTrailPattern.RIBBON,
+            "star-comet" to MountTrailPattern.COMET,
+            "heart-beat" to MountTrailPattern.HEART,
+        )
+        catalog.all.forEach { mount ->
+            expected.forEach { (id, pattern) ->
+                val trail = checkNotNull(mount.skin(id)?.trail)
+                trail.pattern shouldBe pattern
+                org.bukkit.Particle.valueOf(trail.particle).dataType shouldBe Void::class.java
+                (trail.count * 20.0 / trail.intervalTicks <= 60.0) shouldBe true
+            }
+        }
+        catalog["horse"]!!.skin("star-comet")!!.price shouldBe 60_000.0
+        catalog["bee"]!!.skin("star-comet")!!.price shouldBe 80.0
     }
 
     "zombie forms are deterministic and separated into explicit skins" {
@@ -132,6 +152,10 @@ class MountModuleConfigTest : StringSpec({
                 "witch-helix",
                 "enchanted-orbit",
                 "glow-pulse",
+                "frost-wave",
+                "cherry-ribbons",
+                "star-comet",
+                "heart-beat",
             )
         zombie.skin("baby")?.appearance?.baby shouldBe true
         zombie.skin("iron_guard")?.appearance?.equipment?.get(MountEquipmentSlot.CHEST) shouldBe "IRON_CHESTPLATE"

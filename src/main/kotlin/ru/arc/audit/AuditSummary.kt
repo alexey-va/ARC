@@ -117,6 +117,56 @@ internal class MutableAuditStats(
         playerHours(bucketCount).takeIf { it > 0.0 }?.let { amount / it }
 }
 
+private class MutableCurrencyStats {
+    var minted = 0.0
+    var burned = 0.0
+    var transferIn = 0.0
+    var transferOut = 0.0
+    var adjustments = 0.0
+    var internalNet = 0.0
+    var unknownNet = 0.0
+    var operations = 0L
+    var records = 0L
+    val players = linkedSetOf<String>()
+    val sourceStats = linkedMapOf<String, MutableAuditStats>()
+
+    fun add(player: String, transaction: Transaction, since: Long) {
+        val amount = transaction.amount
+        when (transaction.normalizedFlow) {
+            EconomyFlow.MINT -> minted += amount.coerceAtLeast(0.0)
+            EconomyFlow.BURN -> burned += (-amount).coerceAtLeast(0.0)
+            EconomyFlow.TRANSFER -> if (amount > 0.0) transferIn += amount else transferOut += abs(amount)
+            EconomyFlow.ADJUSTMENT -> adjustments += amount
+            EconomyFlow.INTERNAL -> internalNet += amount
+            EconomyFlow.UNKNOWN -> unknownNet += amount
+        }
+        operations += transaction.occurrenceCount
+        records++
+        players += player
+        sourceStats.computeIfAbsent(transaction.normalizedSource.label) { MutableAuditStats(trackBalanceProfile = true) }
+            .add(player, transaction, since)
+    }
+
+    fun toMap(): Map<String, Any?> = linkedMapOf(
+        "minted" to minted,
+        "burned" to burned,
+        "mintBurnNet" to minted - burned,
+        "transferIn" to transferIn,
+        "transferOut" to transferOut,
+        "transferNet" to transferIn - transferOut,
+        "adjustments" to adjustments,
+        "internalNet" to internalNet,
+        "unknownNet" to unknownNet,
+        "operations" to operations,
+        "records" to records,
+        "players" to players.size,
+        "sources" to sourceStats.toSortedMap().map { (source, stats) -> stats.toMap("source", source) },
+    )
+}
+
+private fun currencyBreakdown(stats: Map<String, MutableCurrencyStats>): List<Map<String, Any?>> =
+    stats.toSortedMap().map { (currency, value) -> LinkedHashMap(value.toMap()).apply { put("currency", currency) } }
+
 private data class AdminShopItemKey(
     val source: String,
     val item: String,
@@ -444,6 +494,7 @@ internal fun buildAuditSummary(
     val playerNames = linkedMapOf<String, String>()
     val playerNameTimes = linkedMapOf<String, Long>()
     val unknownOrigins = linkedMapOf<String, MutableAuditStats>()
+    val currencies = linkedMapOf<String, MutableCurrencyStats>()
     var minted = 0.0
     var burned = 0.0
     var transferIn = 0.0
@@ -541,8 +592,10 @@ internal fun buildAuditSummary(
             ) {
                 contextApplicable.merge("jobsBreakdown", 1L, Long::plus)
             }
-            val action = transaction.normalizedAction.label
             val accountKey = economyAccountKey(auditData.name, context)
+            val action = transaction.normalizedAction.label
+            currencies.computeIfAbsent(transaction.normalizedCurrency) { MutableCurrencyStats() }
+                .add(accountKey, transaction, since)
             if (transaction.timestamp2 >= (playerNameTimes[accountKey] ?: Long.MIN_VALUE)) {
                 playerNameTimes[accountKey] = transaction.timestamp2
                 playerNames[accountKey] = auditData.name
@@ -677,7 +730,9 @@ internal fun buildAuditSummary(
                 "knownSupplyNet" to minted - burned,
                 "vaultObservedNet" to observedNet,
                 "supplyCoverage" to "known_mint_burn_only; bank_interest_and_transfer_fees_require_separate_reconciliation",
+                "legacyMixedCurrencyAggregation" to true,
             ),
+        "currencies" to currencyBreakdown(currencies),
         "sourceCoverage" to
             linkedMapOf(
                 "classifiedRecords" to (records - unclassifiedRecords),
@@ -941,6 +996,7 @@ internal class StreamingAuditSummary(
     private val playerNames = linkedMapOf<String, String>()
     private val playerNameTimes = linkedMapOf<String, Long>()
     private val unknownOrigins = linkedMapOf<String, MutableAuditStats>()
+    private val currencies = linkedMapOf<String, MutableCurrencyStats>()
     private val attemptsByStatus = linkedMapOf<String, Long>()
     private val attemptsByAction = linkedMapOf<String, Long>()
     private val attemptsBySource = linkedMapOf<String, Long>()
@@ -1028,8 +1084,10 @@ internal class StreamingAuditSummary(
         ) {
             contextApplicable.merge("jobsBreakdown", 1L, Long::plus)
         }
-        val action = transaction.normalizedAction.label
         val accountKey = economyAccountKey(player, context)
+        val action = transaction.normalizedAction.label
+        currencies.computeIfAbsent(transaction.normalizedCurrency) { MutableCurrencyStats() }
+            .add(accountKey, transaction, since)
         if (transaction.timestamp2 >= (playerNameTimes[accountKey] ?: Long.MIN_VALUE)) {
             playerNameTimes[accountKey] = transaction.timestamp2
             playerNames[accountKey] = player
@@ -1154,7 +1212,9 @@ internal class StreamingAuditSummary(
                     "knownSupplyNet" to minted - burned,
                     "vaultObservedNet" to observedNet,
                     "supplyCoverage" to "known_mint_burn_only; bank_interest_and_transfer_fees_require_separate_reconciliation",
+                    "legacyMixedCurrencyAggregation" to true,
                 ),
+            "currencies" to currencyBreakdown(currencies),
             "sourceCoverage" to
                 linkedMapOf(
                     "classifiedRecords" to (records - unclassifiedRecords),

@@ -55,6 +55,38 @@ class MountTrailGeometryTest : StringSpec({
         }
     }
 
+    "wave ribbon comet and heart retain distinct geometry behind the mount" {
+        val patterns = listOf(MountTrailPattern.WAVE, MountTrailPattern.RIBBON, MountTrailPattern.COMET, MountTrailPattern.HEART)
+        val shapes = patterns.map { pattern ->
+            val definition = trail.copy(pattern = pattern, count = 8)
+            mountTrailPoints(bounds, 0f, MotionVector(0.0, 0.0, 1.0), definition, ticks = 11)
+        }
+        shapes.distinct().size shouldBe patterns.size
+        shapes.flatten().all { it.z <= bounds.minZ - trail.backOffset + 1.0e-9 } shouldBe true
+        val ribbon = shapes[1]
+        (ribbon[0].x + ribbon[1].x) shouldBe (0.0 plusOrMinus 1.0e-9)
+        ribbon[0].z shouldBe ribbon[1].z
+        val heart = shapes[3]
+        (heart[1].x + heart[7].x) shouldBe (0.0 plusOrMinus 1.0e-9)
+        heart[1].y shouldBe (heart[7].y plusOrMinus 1.0e-9)
+    }
+
+    "new patterns rotate with travel and stay bounded for giant mounts" {
+        val giant = MountTrailBounds(-50.0, 0.0, -50.0, 50.0, 100.0, 50.0)
+        val patterns = listOf(MountTrailPattern.WAVE, MountTrailPattern.RIBBON, MountTrailPattern.COMET, MountTrailPattern.HEART)
+        patterns.forEach { pattern ->
+            val definition = trail.copy(pattern = pattern, count = 8)
+            val north = mountTrailPoints(giant, 0f, MotionVector(0.0, 0.0, 1.0), definition, ticks = 31)
+            val east = mountTrailPoints(giant, 0f, MotionVector(1.0, 0.0, 0.0), definition, ticks = 31)
+            north.zip(east).forEach { (a, b) ->
+                a.x shouldBe (-b.z plusOrMinus 1.0e-9)
+                a.z shouldBe (b.x plusOrMinus 1.0e-9)
+                a.y shouldBe (b.y plusOrMinus 1.0e-9)
+            }
+            (north.maxOf { it.y } - north.minOf { it.y } <= 4.0) shouldBe true
+        }
+    }
+
     "double helix emits two opposite strands" {
         val helix = trail.copy(pattern = MountTrailPattern.DOUBLE_HELIX, count = 6)
         val points = mountTrailPoints(bounds, 0f, MotionVector.ZERO, helix, ticks = 0)

@@ -11,6 +11,7 @@ sealed interface MountPurchaseResult {
     data object InvalidLevel : MountPurchaseResult
     data object NotUnlocked : MountPurchaseResult
     data object NotForSale : MountPurchaseResult
+    data object MerchantRequired : MountPurchaseResult
     data object PurchasesDisabled : MountPurchaseResult
     data object EconomyUnavailable : MountPurchaseResult
     data object InsufficientFunds : MountPurchaseResult
@@ -31,6 +32,7 @@ class MountPurchaseCoordinator(
     private val clock: () -> Long = System::currentTimeMillis,
     private val onStateChanged: () -> Unit = {},
     private val externalBusy: (UUID) -> Boolean = { false },
+    private val purchaseAllowed: (UUID) -> Boolean = { true },
 ) {
     private val activePurchases = ConcurrentHashMap.newKeySet<UUID>()
 
@@ -258,6 +260,7 @@ class MountPurchaseCoordinator(
         applyPermission: () -> CompletableFuture<Void>,
     ) {
         if (!purchasesEnabled()) return callback(MountPurchaseResult.PurchasesDisabled)
+        if (!purchaseAllowed(playerId)) return callback(MountPurchaseResult.MerchantRequired)
         if (externalBusy(playerId)) return callback(MountPurchaseResult.Busy)
         val purchaseWallet = wallet.walletForCurrency(currency)
         if (purchaseWallet == null || !purchaseWallet.available) return callback(MountPurchaseResult.EconomyUnavailable)
