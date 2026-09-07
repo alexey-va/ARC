@@ -2,6 +2,7 @@ import org.gradle.internal.os.OperatingSystem
 import java.util.Properties
 
 plugins {
+    id("io.github.drownek.plugwright") version "2.0.4"
     java
     kotlin("jvm") version "2.3.0"
     id("com.gradleup.shadow") version "9.3.0"
@@ -384,5 +385,23 @@ tasks {
             println("Running ./update.sh on $serverIp")
             run("ssh", "$serverUser@$serverIp", "cd ~/McFine && ./update.sh")
         }
+    }
+}
+
+// Isolated real-Paper tests run separately from the fast JVM suite.
+plugwright {
+    minecraftVersion.set("26.1.2")
+    downloadPlugins {
+        url("https://github.com/MilkBowl/Vault/releases/download/1.7.3/Vault.jar")
+    }
+    runDir.set(layout.buildDirectory.dir("plugwright"))
+    testsDir.set(layout.projectDirectory.dir("src/test/e2e"))
+    downloadNode.set(true)
+    nodeVersion.set("22.14.0")
+    acceptEula.set(true)
+    jvmArgs.set(listOf("-Xms512M", "-Xmx2G", "-XX:ActiveProcessorCount=2"))
+    writeFiles {
+        file("server.properties", projectDir.resolve("src/test/e2e/fixtures/server.properties"))
+        file("plugins/ARC/modules/redis.yml", projectDir.resolve("src/test/e2e/fixtures/config.yml"))
     }
 }

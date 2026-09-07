@@ -101,17 +101,20 @@ class CommandHideListenerTest :
             root.getChild("help").shouldNotBeNull()
         }
 
-        "also prunes Paper's async tree pass when a safe cached policy exists" {
+        "does not prune with a stale policy after the player's permissions change" {
             val player = playerWithPermissions("arc.command.hide.player")
             val listener = listener("plugins **")
             listener.onPlayerCommandSend(PlayerCommandSendEvent(player, linkedSetOf("plugins", "help")))
+            every { player.hasPermission("arc.command.hide.player") } returns false
             val root = RootCommandNode<CommandSourceStack>()
             root.addChild(LiteralArgumentBuilder.literal<CommandSourceStack>("plugins").build())
             root.addChild(LiteralArgumentBuilder.literal<CommandSourceStack>("help").build())
 
             listener.onBrigadierCommandTree(commandTreeEvent(player, root, asynchronous = true))
+            root.getChild("plugins").shouldNotBeNull()
+            listener.onBrigadierCommandTree(commandTreeEvent(player, root, asynchronous = false))
 
-            root.getChild("plugins").shouldBeNull()
+            root.getChild("plugins").shouldNotBeNull()
             root.getChild("help").shouldNotBeNull()
         }
 

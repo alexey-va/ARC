@@ -44,17 +44,11 @@ class CommandHideListener internal constructor(
 
     @EventHandler(priority = EventPriority.MONITOR)
     fun onBrigadierCommandTree(event: AsyncPlayerSendCommandsEvent<*>) {
-        val policy =
-            if (event.isAsynchronous) {
-                // Bukkit permission checks are not async-safe. A cached immutable policy
-                // lets repeat command-tree refreshes be pruned on Paper's first pass.
-                policies.cached(event.player.uniqueId) ?: return
-            } else {
-                // Paper always follows its async pass with this synchronous pass on the
-                // same mutable tree, so a cold cache is still handled before serialization.
-                refresh(event.player)
-            }
-        CommandTreePruner.prune(event.commandNode, policy)
+        // The cached policy can predate an OP/permission change. Pruning on the
+        // async pass destroys nodes that the fresh sync policy cannot restore.
+        // Paper provides a synchronous pass for permission-dependent listeners.
+        if (event.isAsynchronous) return
+        CommandTreePruner.prune(event.commandNode, refresh(event.player))
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
