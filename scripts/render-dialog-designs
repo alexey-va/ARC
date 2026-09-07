@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+"""Export and render the production dialog design gallery."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+from pathlib import Path
+
+
+CLIENT_SHA1 = "ba2df812c2d12e0219c489c4cd9a5e1f0760f5bd"
+PACK_URL = "https://storage.yandexcloud.net/ruscraftinresources/RusCraftingResource.zip"
+PACK_SHA256_URL = f"{PACK_URL}.sha256"
+
+
+def check_export(path: Path) -> dict:
+    if not path.is_file():
+        raise SystemExit(f"missing gallery export: {path}")
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise SystemExit(f"invalid gallery export {path}: {error}") from error
+    if not isinstance(document, dict) or set(document) != {"tables", "dividers"}:
+        raise SystemExit("gallery export must contain only tables and dividers")
+    expected = {"tables": 12, "dividers": 18}
+    for group, count in expected.items():
+        values = document[group]
+        if not isinstance(values, dict) or set(values) != {str(i) for i in range(1, count + 1)} | {"ui"}:
+            raise SystemExit(f"gallery export {group} must contain keys 1..{count}")
+        for key, item in values.items():
+            if key == "ui":
+                continue
+            if not isinstance(item, dict) or set(item) != {"title", "note", "content"}:
+                raise SystemExit(f"gallery export {group}.{key} must contain title, note, content")
+            if not all(isinstance(item[field], str) and item[field].strip() for field in item):
+                raise SystemExit(f"gallery export {group}.{key} contains an empty/non-text field")
+    return document
+
+
+def dialog(source: str, identifier: str, keys: list[str], page: int, page_count: int) -> dict:
+    body = [
+        {"id": "intro", "text-key": "ui.intro", "width": 420},
+        {"id": "page", "text-key": "ui.page", "width": 400,
+         "placeholders": {"%page%": f"{page} / {page_count}"}},
+    ]
+    for key in keys:
+        for field in ("title", "content", "note"):
+            body.append({"id": f"{key}-{field}", "text-key": f"{key}.{field}",
+                         "width": 400 if field == "content" else 420})
+    return {
+        "id": identifier,
+        "source": source,
+        "format": "reference-multi-action",
+        "name-key": "ui.title",
+        "external-title-key": "ui.title",
+        "columns": page_count,
+        "body": body,
+        "buttons": [{"id": f"page-{index}", "text-key": "ui.page-active" if index == page else "ui.page-idle",
+                     "tooltip-key": f"ui.page-{index}", "width": 96,
+                     "placeholders": {"%page%": str(index)}} for index in range(1, page_count + 1)],
+        "exit-button": {"id": "back", "text-key": "ui.back", "tooltip-key": "ui.back-tip", "width": 200},
+        "viewport": [854, 480],
+        "variants": [{"id": "default"}],
+    }
+
+
+def manifest() -> dict:
+    dialogs = []
+    for group, source, size, page_size in (("tables", "tables", 12, 3), ("dividers", "dividers", 18, 6)):
+        for page, start in enumerate(range(1, size + 1, page_size), 1):
+            keys = [str(index) for index in range(start, min(start + page_size, size + 1))]
+            dialogs.append(dialog(source, f"{group}-page-{page}", keys, page, size // page_size))
+    return {
+        "schema": 1,
+        "plugin": "ARC — dialog designs",
+        "minecraft-version": "1.21.11",
+        "minecraft-client-sha1": CLIENT_SHA1,
+        "gallery-accent": "#d7b486",
+        "resource-pack": {"url": PACK_URL, "sha256-url": PACK_SHA256_URL},
+        "sources": {
+            "tables": {"path": "build/reports/dialog-designs/content.json", "root": "tables", "include": ["*.*"]},
+            "dividers": {"path": "build/reports/dialog-designs/content.json", "root": "dividers", "include": ["*.*"]},
+        },
+        "surfaces": {"dialogs": dialogs},
+        "limitations": ["Static gallery validates source-driven native dialog composition; live client interaction remains a separate QA gate."],
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--ops-root", type=Path)
+    parser.add_argument("--client-jar", type=Path)
+    parser.add_argument("--resource-pack", type=Path)
+    parser.add_argument("--skip-test", action="store_true")
+    args = parser.parse_args()
+    project = Path(__file__).resolve().parents[1]
+    report = project / "build/reports/dialog-designs"
+    export = report / "content.json"
+    output = (args.output or report / "rendered").resolve()
+    if not args.skip_test:
+        subprocess.run(
+            ["./gradlew", "test", "--tests", "ru.arc.dialogdemo.DialogDesignGalleryTest"],
+            cwd=project,
+            check=True,
+        )
+    check_export(export)
+    manifest_path = report / "visual-preview-dialog-designs.json"
+    manifest_path.write_text(json.dumps(manifest(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    ops = (args.ops_root or next(parent / "ruscrafting-ops" for parent in project.parents if (parent / "ruscrafting-ops").is_dir())).resolve()
+    command = [
+        "python3", "-B", str(ops / ".agents/skills/design-ruscrafting-surfaces/scripts/render_plugin_surface_dump.py"),
+        "--manifest", str(manifest_path), "--project-root", str(project), "--output", str(output),
+    ]
+    if args.client_jar:
+        command += ["--client-jar", str(args.client_jar)]
+    if args.resource_pack:
+        command += ["--resource-pack", str(args.resource_pack)]
+    return subprocess.run(command, cwd=project, check=False).returncode
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

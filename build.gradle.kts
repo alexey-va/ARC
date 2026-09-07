@@ -423,6 +423,7 @@ tasks {
 
 val contractE2eFiles = layout.buildDirectory.dir("plugwright-e2e-generated")
 val cleanupE2e = providers.gradleProperty("cleanupE2e").map(String::toBoolean).orElse(false).get()
+val dialogE2e = providers.gradleProperty("dialogE2e").map(String::toBoolean).orElse(false).get()
 val parkourE2e = providers.gradleProperty("parkourE2e").map(String::toBoolean).orElse(false).get()
 
 // Isolated real-Paper tests run separately from the fast JVM suite.
@@ -444,7 +445,7 @@ plugwright {
         file("plugins/ARC/modules/entity-cleanup.yml", projectDir.resolve("src/test/e2e/fixtures/entity-cleanup.yml"))
         file("plugins/ARC/modules/parkour.yml", projectDir.resolve("src/test/e2e/fixtures/parkour.yml"))
         file("plugins/Parkour/config.yml", projectDir.resolve("src/test/e2e/fixtures/parkour-config.yml"))
-        if (cleanupE2e || parkourE2e) {
+        if (cleanupE2e || parkourE2e || dialogE2e) {
             file("plugins/ARC/modules/redis.yml", projectDir.resolve("src/test/e2e/fixtures/entity-cleanup-redis.yml"))
         } else {
             file("plugins/ARC/modules/redis.yml", contractE2eFiles.get().file("redis.yml").asFile)
@@ -567,7 +568,9 @@ val prepareContractE2e = tasks.register("prepareContractE2e") {
 }
 
 tasks.named<me.drownek.plugwright.PlugwrightTestTask>("plugwrightTest") {
-    if (cleanupE2e) {
+    if (dialogE2e) {
+        testFiles.set("dialog-designs")
+    } else if (cleanupE2e) {
         testFiles.set("entity-cleanup")
     } else if (parkourE2e) {
         testFiles.set("parkour-real-paper")
