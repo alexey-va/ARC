@@ -436,7 +436,14 @@ internal class EMDungeonQol(
         if (autosavesStarted) return
         autosavesStarted = true
         tasks.runTimer(20, 20) { scoreboard.refresh(Bukkit.getOnlinePlayers()) }
-        tasks.runTimer(400, 400) { Bukkit.getOnlinePlayers().forEach(::autoSave) }
+        tasks.runTimer(400, 400) {
+            // Native player persistence must stay on the server thread; stagger its disk writes.
+            Bukkit.getOnlinePlayers().toList().forEachIndexed { index, player ->
+                tasks.runLater(index.toLong() + 1) {
+                    if (player.isOnline) autoSave(player)
+                }
+            }
+        }
     }
 
     internal fun autoSave(player: Player) {

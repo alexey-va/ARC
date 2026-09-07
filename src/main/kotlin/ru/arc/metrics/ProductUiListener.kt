@@ -139,11 +139,19 @@ internal class ProductUiListener(private val plugin: Plugin, private val product
         tracker.close(player.uniqueId.toString(), current.id, System.currentTimeMillis(), censored = censored)
         nativeViews.remove(player.uniqueId)
     }
-    fun snapshot(): List<MetricPoint> = coverage.map { (producer, ready) ->
+    @Volatile
+    private var snapshotPoints: List<MetricPoint> = emptyList()
+
+    fun snapshot(): List<MetricPoint> = snapshotPoints
+
+    /** Called by the Paper sampler; async aggregation reads only the published list. */
+    fun refreshSnapshot() {
+        snapshotPoints = coverage.map { (producer, ready) ->
         MetricPoint("arc_product_ui_producer_ready", "Installed UI producer observation hook readiness",
             if (ready && (producer != "zmenu" || zMenu.failures == 0L)) 1.0 else 0.0,
             mapOf("producer" to producer))
-    } + MetricPoint("arc_product_ui_adapter_failures", "Native UI adapter observation failures", zMenu.failures.toDouble())
+        } + MetricPoint("arc_product_ui_adapter_failures", "Native UI adapter observation failures", zMenu.failures.toDouble())
+    }
     fun coverage(): Map<String, Any> = mapOf("producers" to coverage.toMap(),
         "dialogDismissal" to "Escape is not reported by Paper; unresolved dialogs are censored, never counted as no-choice closes",
         "zmenuFailures" to zMenu.failures,
