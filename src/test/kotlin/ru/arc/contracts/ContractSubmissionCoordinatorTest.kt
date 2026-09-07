@@ -211,6 +211,57 @@ class ContractSubmissionCoordinatorTest : StringSpec({
         }
     }
 
+    "reports unavailable when an ambiguous manual-review journal cannot be persisted" {
+        runTest {
+            data class Case(
+                val id: String,
+                val persistence: FakePersistence,
+                val inventory: FakePreparedInventory,
+                val payment: FakePayment,
+                val expectedPreviousStatus: ContractSubmissionJournalStatus,
+            )
+
+            val itemCase = run {
+                val events = mutableListOf<String>()
+                val persistence = FakePersistence(
+                    definition,
+                    events,
+                    failPersistJournalStatuses = setOf(ContractSubmissionJournalStatus.MANUAL_REVIEW),
+                )
+                val inventory = FakePreparedInventory(definition.itemKey, 8, events, removeResult = ContractInventoryMutation.Ambiguous)
+                Case("persist-fail-remove", persistence, inventory, FakePayment(10_000L, ContractPaymentEvidence(true, 12_000L), events), ContractSubmissionJournalStatus.ITEM_REMOVAL_STARTED)
+            }
+            val paymentCase = run {
+                val events = mutableListOf<String>()
+                val persistence = FakePersistence(
+                    definition,
+                    events,
+                    failPersistJournalStatuses = setOf(ContractSubmissionJournalStatus.MANUAL_REVIEW),
+                )
+                val inventory = FakePreparedInventory(definition.itemKey, 8, events)
+                Case("persist-fail-payment", persistence, inventory, FakePayment(10_000L, ContractPaymentEvidence(null, 10_500L), events), ContractSubmissionJournalStatus.PAYMENT_STARTED)
+            }
+            val refundCase = run {
+                val events = mutableListOf<String>()
+                val persistence = FakePersistence(
+                    definition,
+                    events,
+                    failPersistJournalStatuses = setOf(ContractSubmissionJournalStatus.MANUAL_REVIEW),
+                )
+                val inventory = FakePreparedInventory(definition.itemKey, 8, events, restoreResult = ContractInventoryMutation.Ambiguous)
+                Case("persist-fail-refund", persistence, inventory, FakePayment(null, ContractPaymentEvidence(true, 12_000L), events), ContractSubmissionJournalStatus.REFUND_STARTED)
+            }
+
+            listOf(itemCase, paymentCase, refundCase).forEach { case ->
+                val outcome =
+                    ContractSubmissionCoordinator(case.persistence, FakeInventory(case.inventory), case.payment, tickingClock())
+                        .submit(definition, case.id, "player-1", 8)
+                outcome shouldBe ContractSubmissionOutcome.Unavailable(case.id)
+                case.persistence.journals.getValue(case.id).status shouldBe case.expectedPreviousStatus
+            }
+        }
+    }
+
     "cancels a durable intent when inventory prevalidation proves no slot changed" {
         runTest {
             val events = mutableListOf<String>()
@@ -313,6 +364,7 @@ class ContractSubmissionCoordinatorTest : StringSpec({
 private class FakePersistence(
     definition: ResourceContractDefinition,
     private val events: MutableList<String>,
+    private val failPersistJournalStatuses: Set<ContractSubmissionJournalStatus> = emptySet(),
 ) : ContractSubmissionPersistence {
     var state = ResourceContractState.empty(definition)
     val journals = linkedMapOf<String, ContractSubmissionJournalRecord>()
@@ -322,6 +374,7 @@ private class FakePersistence(
     override fun journalRecords(): List<ContractSubmissionJournalRecord> = journals.values.toList()
 
     override suspend fun persistJournal(record: ContractSubmissionJournalRecord) {
+        if (record.status in failPersistJournalStatuses) error("Injected journal persistence failure")
         events += "journal:${record.status.label}"
         journals[record.submissionId] = record
     }

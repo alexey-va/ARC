@@ -45,7 +45,7 @@ sealed interface ContractInventoryMutation {
 interface ContractPaymentGateway {
     suspend fun balanceMinor(playerId: String): Long?
 
-    /** Must make at most one provider deposit call. */
+    /** Must make at most one provider deposit call and confirm its remote result before reporting success. */
     suspend fun deposit(
         playerId: String,
         amountMinor: Long,
@@ -54,7 +54,7 @@ interface ContractPaymentGateway {
 }
 
 data class ContractPaymentEvidence(
-    /** true=provider success, false=explicit provider failure, null=ambiguous call outcome. */
+    /** true=confirmed provider success, false=explicit provider failure, null=ambiguous call outcome. */
     val providerAccepted: Boolean?,
     val balanceAfterMinor: Long?,
     val failureCode: String? = null,
@@ -224,8 +224,12 @@ class ContractSubmissionCoordinator(
                 }
             }
             ContractInventoryMutation.Ambiguous -> {
-                persistJournal(ContractSubmissionJournalEngine.haltAmbiguousItemRemoval(removalStarted, clock()))
-                return ContractSubmissionOutcome.ManualReview(submissionId)
+                val review = ContractSubmissionJournalEngine.haltAmbiguousItemRemoval(removalStarted, clock())
+                return if (persistJournal(review)) {
+                    ContractSubmissionOutcome.ManualReview(submissionId)
+                } else {
+                    ContractSubmissionOutcome.Unavailable(submissionId)
+                }
             }
         }
 
@@ -269,14 +273,17 @@ class ContractSubmissionCoordinator(
             return refund(preparedInventory, failed, "provider_rejected")
         }
 
-        persistJournal(
+        val review =
             ContractSubmissionJournalEngine.haltAmbiguousPayment(
                 paymentStarted,
                 evidence.balanceAfterMinor,
                 clock(),
-            ),
-        )
-        return ContractSubmissionOutcome.ManualReview(submissionId)
+            )
+        return if (persistJournal(review)) {
+            ContractSubmissionOutcome.ManualReview(submissionId)
+        } else {
+            ContractSubmissionOutcome.Unavailable(submissionId)
+        }
     }
 
     private suspend fun commit(
@@ -332,8 +339,12 @@ class ContractSubmissionCoordinator(
             is ContractInventoryMutation.NotPerformed,
             ContractInventoryMutation.Ambiguous,
             -> {
-                persistJournal(ContractSubmissionJournalEngine.haltAmbiguousRefund(refundStarted, clock()))
-                ContractSubmissionOutcome.ManualReview(record.submissionId)
+                val review = ContractSubmissionJournalEngine.haltAmbiguousRefund(refundStarted, clock())
+                if (persistJournal(review)) {
+                    ContractSubmissionOutcome.ManualReview(record.submissionId)
+                } else {
+                    ContractSubmissionOutcome.Unavailable(record.submissionId)
+                }
             }
         }
     }

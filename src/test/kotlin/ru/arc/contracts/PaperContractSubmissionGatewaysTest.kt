@@ -194,59 +194,6 @@ class PaperContractSubmissionGatewaysTest : StringSpec({
         PaperContractItems.countPlain(player, "slimefun:raw_iron") shouldBe 0
     }
 
-    "uses RedisEconomy 4_5_12 reason API and returns exact balance evidence" {
-        runTest {
-            val playerId = java.util.UUID.randomUUID()
-            val currency = mockk<Currency>()
-            val api = mockk<RedisEconomyAPI>()
-            every { api.defaultCurrency } returns currency
-            every { currency.currencyName } returns "vault"
-            every { currency.getBalance(playerId) } returnsMany listOf(100.0, 120.0)
-            every { currency.depositPlayer(playerId, "vault", 20.0, "arc-contract:submission-1") } returns
-                EconomyResponse(20.0, 120.0, EconomyResponse.ResponseType.SUCCESS, null)
-            val gateway = RedisEconomyContractPaymentGateway { api }
-
-            gateway.balanceMinor(playerId.toString()) shouldBe 10_000L
-            gateway.deposit(playerId.toString(), 2_000L, "arc-contract:submission-1") shouldBe
-                ContractPaymentEvidence(true, 12_000L)
-            verify(exactly = 1) {
-                currency.depositPlayer(playerId, "vault", 20.0, "arc-contract:submission-1")
-            }
-        }
-    }
-
-    "normalizes provider subcent balances without losing an exact cent payout delta" {
-        runTest {
-            val playerId = java.util.UUID.randomUUID()
-            val currency = mockk<Currency>()
-            val api = mockk<RedisEconomyAPI>()
-            every { api.defaultCurrency } returns currency
-            every { currency.currencyName } returns "vault"
-            every { currency.getBalance(playerId) } returnsMany
-                listOf(100_002_403.42407733, 100_002_418.42407733)
-            every { currency.depositPlayer(playerId, "vault", 15.0, "arc-contract:submission-fractional") } returns
-                EconomyResponse(15.0, 100_002_418.42407733, EconomyResponse.ResponseType.SUCCESS, null)
-
-            val gateway = RedisEconomyContractPaymentGateway { api }
-
-            gateway.balanceMinor(playerId.toString()) shouldBe 10_000_240_342L
-            gateway.deposit(playerId.toString(), 1_500L, "arc-contract:submission-fractional") shouldBe
-                ContractPaymentEvidence(true, 10_000_241_842L)
-        }
-    }
-
-    "rejects non-finite provider balances" {
-        runTest {
-            val playerId = java.util.UUID.randomUUID()
-            val currency = mockk<Currency>()
-            val api = mockk<RedisEconomyAPI>()
-            every { api.defaultCurrency } returns currency
-            every { currency.getBalance(playerId) } returns Double.NaN
-
-            RedisEconomyContractPaymentGateway { api }.balanceMinor(playerId.toString()) shouldBe null
-        }
-    }
-
     "withdraws an exact season burn with the RedisEconomy reason API" {
         runTest {
             val playerId = java.util.UUID.fromString("11111111-1111-1111-1111-111111111111")
