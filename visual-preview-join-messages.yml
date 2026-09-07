@@ -89,12 +89,12 @@ surfaces:
         - {id: help, text-key: catalog-help, width: 600}
         - {id: page, text-key: page, width: 600, placeholders: {page: '2'}}
       buttons:
-        - {id: selected-1, text-key: selected, tooltip-key: turn-off, width: 600, placeholders: {message: 'Архитектор23 съебался в туман'}}
-        - {id: available-2, text-key: unselected, tooltip-key: turn-on, width: 600, placeholders: {message: 'Архитектор23 испарился, потому что реальная жизнь зовёт... или нет'}}
-        - {id: available-3, text-key: unselected, tooltip-key: turn-on, width: 600, placeholders: {message: 'Архитектор23 свалил, оставив после себя одни проблемы'}}
-        - {id: available-4, text-key: unselected, tooltip-key: turn-on, width: 600, placeholders: {message: 'Архитектор23 ушёл, потому что тут хрен делать'}}
-        - {id: available-5, text-key: unselected, tooltip-key: turn-on, width: 600, placeholders: {message: 'Архитектор23 исчез, как последний шанс на победу'}}
-        - {id: locked-6, text-key: locked, tooltip-key: unavailable, width: 600, placeholders: {message: 'Архитектор23 свалил, потому что всё это задолбало'}}
+        - {id: selected-1, text-key: selected, tooltip-key: turn-off, width: 299, placeholders: {message: 'Архитектор23 съебался в туман'}}
+        - {id: available-2, text-key: unselected, tooltip-key: turn-on, width: 299, placeholders: {message: 'Архитектор23 испарился, потому что реальная жизнь зовёт... или нет'}}
+        - {id: available-3, text-key: unselected, tooltip-key: turn-on, width: 299, placeholders: {message: 'Архитектор23 свалил, оставив после себя одни проблемы'}}
+        - {id: available-4, text-key: unselected, tooltip-key: turn-on, width: 299, placeholders: {message: 'Архитектор23 ушёл, потому что тут хрен делать'}}
+        - {id: available-5, text-key: unselected, tooltip-key: turn-on, width: 299, placeholders: {message: 'Архитектор23 исчез, как последний шанс на победу'}}
+        - {id: locked-6, text-key: locked, tooltip-key: unavailable, width: 299, placeholders: {message: 'Архитектор23 свалил, потому что всё это задолбало'}}
         - {id: available-7, text-key: unselected, tooltip-key: turn-on, width: 299, placeholders: {message: 'Архитектор23 свалил, оставив все на остальных дебилов'}}
         - {id: available-8, text-key: unselected, tooltip-key: turn-on, width: 299, placeholders: {message: 'Архитектор23 вышел, потому что не выдержал накала тупости'}}
         - {id: available-9, text-key: unselected, tooltip-key: turn-on, width: 299, placeholders: {message: 'Архитектор23 слился, как крыса'}}
