@@ -64,8 +64,13 @@ jobs:
         include:
           - minecraft: '26.1.2'
             cleanup-only: 'false'
+            parkour-only: 'false'
+          - minecraft: '26.1.2'
+            cleanup-only: 'false'
+            parkour-only: 'true'
           - minecraft: '1.21.11'
             cleanup-only: 'true'
+            parkour-only: 'false'
     env:
       TEST_TIMEOUT: "60000"
     steps:
@@ -80,7 +85,7 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p build
-          ./gradlew --no-daemon plugwrightTest -Pe2eMinecraftVersion=${{ matrix.minecraft }} -PcleanupE2e=${{ matrix.cleanup-only }} 2>&1 | tee build/plugwright-e2e.log
+          ./gradlew --no-daemon plugwrightTest -Pe2eMinecraftVersion=${{ matrix.minecraft }} -PcleanupE2e=${{ matrix.cleanup-only }} -PparkourE2e=${{ matrix.parkour-only }} 2>&1 | tee build/plugwright-e2e.log
           git diff --exit-code -- src/test/e2e/package-lock.json
       - name: Upload E2E results and Paper logs
         if: always()
