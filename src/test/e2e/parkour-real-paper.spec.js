@@ -25,6 +25,9 @@ test('real Parkour run emits ARC HUD for join, checkpoint, death and finish', as
     player.chat('/pa create course arc-e2e');
     await expect(player).toHaveReceivedMessage(/created|создан/i);
 
+    await player.teleport(0, 65, 0);
+    player.chat('/pa create checkpoint arc-e2e');
+    await expect(player).toHaveReceivedMessage(/checkpoint|контрольн/i);
     await player.teleport(0, 65, 3);
     player.chat('/pa create checkpoint arc-e2e');
     await expect(player).toHaveReceivedMessage(/checkpoint|контрольн/i);
@@ -37,15 +40,14 @@ test('real Parkour run emits ARC HUD for join, checkpoint, death and finish', as
     player.chat('/pa join arc-e2e');
     await waitUntil(() => titles.some(text => text.includes('ТРАССА НАЧАЛАСЬ')), { signal, timeout: 10000 });
 
-    await walkForward(player);
-    console.log('parkour checkpoint probe', JSON.stringify(player.bot.entity.position), titles);
+    await walkForward(player, 3000);
     await waitUntil(() => titles.some(text => text.includes('ТОЧКА')), { signal, timeout: 10000 });
 
     server.execute(`minecraft:kill ${player.username}`);
     await waitUntil(() => titles.some(text => text.includes('Срыв')), { signal, timeout: 10000 });
 
-    await player.teleport(0, 65, 5);
-    await walkForward(player, 500);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    await walkForward(player, 3000);
     await waitUntil(() => titles.some(text => text.includes('ТРАССА ПРОЙДЕНА')), { signal, timeout: 10000 });
     assert.ok(titles.some(text => text.includes('ТРАССА НАЧАЛАСЬ')));
     assert.ok(titles.some(text => text.includes('ТОЧКА')));
