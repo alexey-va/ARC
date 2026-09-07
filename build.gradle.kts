@@ -425,6 +425,8 @@ tasks {
     }
 }
 
+val contractE2eFiles = layout.buildDirectory.dir("plugwright-e2e-generated")
+
 // Isolated real-Paper tests run separately from the fast JVM suite.
 plugwright {
     minecraftVersion.set("26.1.2")
@@ -439,7 +441,10 @@ plugwright {
     jvmArgs.set(listOf("-Xms512M", "-Xmx2G", "-XX:ActiveProcessorCount=2"))
     writeFiles {
         file("server.properties", projectDir.resolve("src/test/e2e/fixtures/server.properties"))
-        file("plugins/ARC/modules/redis.yml", projectDir.resolve("src/test/e2e/fixtures/config.yml"))
+        file("plugins/ARC/modules/redis.yml", contractE2eFiles.get().file("redis.yml").asFile)
+        file("plugins/ARC/modules/contracts.yml", contractE2eFiles.get().file("contracts.yml").asFile)
+        file("plugins/RedisEconomy/config.yml", contractE2eFiles.get().file("rediseconomy.yml").asFile)
+        file("plugins/RedisEconomy.jar", contractE2eFiles.get().file("RedisEconomy.jar").asFile)
     }
 }
 
@@ -454,15 +459,15 @@ val e2eRedisEconomy = configurations.detachedConfiguration(
     isTransitive = false
 }
 
-tasks.named("plugwrightTest") {
+val prepareContractE2e = tasks.register("prepareContractE2e") {
     usesService(e2eRedis)
-    doFirst {
+    doLast {
         val endpoint = e2eRedis.get().endpoint
         Socket(endpoint.host, endpoint.port).use { }
 
-        val generatedDir = layout.buildDirectory.dir("plugwright-e2e-generated").get().asFile
+        val generatedDir = contractE2eFiles.get().asFile
         generatedDir.mkdirs()
-        val redisConfig = generatedDir.resolve("redis.yml").apply {
+        generatedDir.resolve("redis.yml").apply {
             writeText(
                 """
                 enabled: true
@@ -475,7 +480,7 @@ tasks.named("plugwrightTest") {
                 """.trimIndent() + "\n",
             )
         }
-        val economyConfig = generatedDir.resolve("rediseconomy.yml").apply {
+        generatedDir.resolve("rediseconomy.yml").apply {
             writeText(
                 """
                 lang: en-US
@@ -513,7 +518,7 @@ tasks.named("plugwrightTest") {
                 """.trimIndent() + "\n",
             )
         }
-        val contractsConfig = generatedDir.resolve("contracts.yml").apply {
+        generatedDir.resolve("contracts.yml").apply {
             writeText(
                 """
                 enabled: true
@@ -547,20 +552,11 @@ tasks.named("plugwrightTest") {
             "Unexpected RedisEconomy 4.5.12 artifact: ${jar.absolutePath}"
         }
 
-        val extension = project.extensions.getByName("plugwright") as me.drownek.plugwright.PlugwrightExtension
-        val files = extension.runDirFiles.get().toMutableList()
-        files += me.drownek.plugwright.PlugwrightExtension.RunDirFile(
-            "plugins/ARC/modules/redis.yml", null, redisConfig,
-        )
-        files += me.drownek.plugwright.PlugwrightExtension.RunDirFile(
-            "plugins/RedisEconomy/config.yml", null, economyConfig,
-        )
-        files += me.drownek.plugwright.PlugwrightExtension.RunDirFile(
-            "plugins/RedisEconomy.jar", null, jar,
-        )
-        files += me.drownek.plugwright.PlugwrightExtension.RunDirFile(
-            "plugins/ARC/modules/contracts.yml", null, contractsConfig,
-        )
-        extension.runDirFiles.set(files)
+        jar.copyTo(generatedDir.resolve("RedisEconomy.jar"), overwrite = true)
     }
+}
+
+tasks.named("plugwrightTest") {
+    dependsOn(prepareContractE2e)
+    usesService(e2eRedis)
 }
