@@ -11,7 +11,10 @@ mapped port and copies the resolved RedisEconomy 4.5.12 JAR (SHA-256
 disposable server. No production Redis or credentials are used.
 
 These tests exercise blocked commands, namespaced aliases, OP bypass and the
-Brigadier command tree actually sent to a Minecraft client, plus the Origin
+Brigadier command tree actually sent to a Minecraft client, plus a real
+Parkour 7.2.8 course created in the synthetic flat world. The Parkour test
+verifies ARC HUD packets across join, checkpoint, death recovery and finish,
+plus the Origin
 contract GUI against real RedisEconomy storage. Existing JVM tests retain
 their separate coverage. Network/AI modules may log unavailable optional
 dependencies; the suite does not assert that every optional module is ready.
@@ -32,6 +35,10 @@ excluded from automatic triggers, so dispatch `build` manually after changing
 only those tests. The workflow uploads runner output and Paper logs on success
 or failure. Do not run the container-backed contract fixture on the owner’s
 local workstation.
+
+For the isolated Parkour acceptance run, use
+`TEST_TIMEOUT=60000 python3 /tmp/arc-plugwright-run.py ./gradlew --no-daemon plugwrightTest -PparkourE2e=true`.
+This profile keeps Redis disabled and runs only `parkour-real-paper.spec.js`.
 
 ## Entity cleanup acceptance
 

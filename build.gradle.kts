@@ -423,12 +423,14 @@ tasks {
 
 val contractE2eFiles = layout.buildDirectory.dir("plugwright-e2e-generated")
 val cleanupE2e = providers.gradleProperty("cleanupE2e").map(String::toBoolean).orElse(false).get()
+val parkourE2e = providers.gradleProperty("parkourE2e").map(String::toBoolean).orElse(false).get()
 
 // Isolated real-Paper tests run separately from the fast JVM suite.
 plugwright {
     minecraftVersion.set(providers.gradleProperty("e2eMinecraftVersion").orElse("26.1.2"))
     downloadPlugins {
         url("https://github.com/MilkBowl/Vault/releases/download/1.7.3/Vault.jar")
+        url("https://github.com/A5H73Y/Parkour/releases/download/Parkour-7.2.8-RELEASE.136/Parkour-7.2.8-RELEASE.jar")
     }
     runDir.set(layout.buildDirectory.dir("plugwright"))
     testsDir.set(layout.projectDirectory.dir("src/test/e2e"))
@@ -440,7 +442,9 @@ plugwright {
         file("server.properties", projectDir.resolve("src/test/e2e/fixtures/server.properties"))
         file("permissions.yml", projectDir.resolve("src/test/e2e/fixtures/permissions.yml"))
         file("plugins/ARC/modules/entity-cleanup.yml", projectDir.resolve("src/test/e2e/fixtures/entity-cleanup.yml"))
-        if (cleanupE2e) {
+        file("plugins/ARC/modules/parkour.yml", projectDir.resolve("src/test/e2e/fixtures/parkour.yml"))
+        file("plugins/Parkour/config.yml", projectDir.resolve("src/test/e2e/fixtures/parkour-config.yml"))
+        if (cleanupE2e || parkourE2e) {
             file("plugins/ARC/modules/redis.yml", projectDir.resolve("src/test/e2e/fixtures/entity-cleanup-redis.yml"))
         } else {
             file("plugins/ARC/modules/redis.yml", contractE2eFiles.get().file("redis.yml").asFile)
@@ -562,6 +566,8 @@ val prepareContractE2e = tasks.register("prepareContractE2e") {
 tasks.named<me.drownek.plugwright.PlugwrightTestTask>("plugwrightTest") {
     if (cleanupE2e) {
         testFiles.set("entity-cleanup")
+    } else if (parkourE2e) {
+        testFiles.set("parkour-real-paper")
     } else {
         dependsOn(prepareContractE2e)
         usesService(e2eRedis)

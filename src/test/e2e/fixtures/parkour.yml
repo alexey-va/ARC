@@ -1,0 +1,11 @@
+enabled: true
+integration:
+  intercept-joinall-command: false
+  intercept-legacy-menu: false
+  joinall-permission: parkour.basic.joinall
+  legacy-menu-title: Трассы паркура
+hud:
+  enabled: true
+  fade-in-ticks: 0
+  stay-ticks: 20
+  fade-out-ticks: 0
