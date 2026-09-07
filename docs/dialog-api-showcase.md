@@ -13,7 +13,9 @@ literal components, never evaluated as commands or MiniMessage.
 | --- | --- |
 | Dialog types | `notice` (custom and default action), `confirmation`, `multi_action`, `dialog_list`, `server_links` |
 | Body types | `plain_message`; `item` with and without description |
-| Alignment | Plain message and item description comparison; both are centered by the 1.21.11 client |
+| Alignment | Measured left/center/right rows and 0/8/16/32px spacer samples |
+| Tables | Twelve numbered designs: open columns, rules, frames, spaced rows, comparison, ranking and details |
+| Dividers | Eighteen numbered designs: rules, dots, dashes, short accents, labels, segmented color and corners |
 | Item options | Stack count, damage bar, tooltip on/off, decorations on/off, 16px and 48px allocated slots |
 | Text input | Initial value, max length, width, hidden label, multiline explicit height and automatic height |
 | Boolean input | Both initial states; custom `on`/`off` template values |
@@ -78,6 +80,31 @@ the caller. They do not authorize a gameplay operation or retain a session.
 Paper's callback example is deliberately short-lived and one-use.
 
 ## Verification
+
+### Table and divider design gallery
+
+Open `/arc dialogdemo tables` or `/arc dialogdemo dividers`, also linked from
+the root and alignment pages. Table pages hold three specimens each; divider
+pages hold six. Page buttons address fixed routes (`tables-2` through `tables-4`,
+`dividers-2` and `dividers-3`), and the native Back footer returns to the root.
+Specimen IDs Т01–Т12 and Р01–Р18 are stable references for design feedback.
+All displayed projects, counts and comparison plans are synthetic demonstration
+data, not server limits, rewards or player statistics.
+
+`DialogDesignGallery` builds every cell through `DialogTextLayout`, using the
+same font snapshot as the alignment page. Numeric columns use explicit right
+alignment; comparison values use centered cells. Rules use measured glyph
+advances, including the asymmetric widths of left and right box corners.
+Every composed line is padded to the native widget's 392px content width.
+
+`DialogDesignGalleryTest` checks every line of all thirty specimens against the
+shipped normal/bold glyph metrics, checks numeric-cell alignment, and exports
+the actual production components to `build/reports/dialog-designs/content.json`.
+Run `scripts/render-dialog-designs --ops-root /absolute/path/to/ruscrafting-ops`
+for a font-backed preview through the canonical surface renderer.
+`src/test/e2e/dialog-designs.spec.js` exercises all seven pages, page/back
+commands and spacer delivery on real Paper in CI. Packet checks establish
+content and navigation; only the actual client establishes final pixel appearance.
 
 ### Shared alignment adapter
 

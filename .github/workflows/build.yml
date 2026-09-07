@@ -61,12 +61,19 @@ jobs:
           - minecraft: '26.1.2'
             cleanup-only: 'false'
             parkour-only: 'false'
+            dialog-only: 'false'
           - minecraft: '26.1.2'
             cleanup-only: 'false'
             parkour-only: 'true'
+            dialog-only: 'false'
           - minecraft: '1.21.11'
             cleanup-only: 'true'
             parkour-only: 'false'
+            dialog-only: 'false'
+          - minecraft: '1.21.11'
+            cleanup-only: 'false'
+            parkour-only: 'false'
+            dialog-only: 'true'
     env:
       TEST_TIMEOUT: "60000"
     steps:
@@ -81,13 +88,13 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p build
-          ./gradlew --no-daemon plugwrightTest -Pe2eMinecraftVersion=${{ matrix.minecraft }} -PcleanupE2e=${{ matrix.cleanup-only }} -PparkourE2e=${{ matrix.parkour-only }} 2>&1 | tee build/plugwright-e2e.log
+          ./gradlew --no-daemon plugwrightTest -Pe2eMinecraftVersion=${{ matrix.minecraft }} -PcleanupE2e=${{ matrix.cleanup-only }} -PparkourE2e=${{ matrix.parkour-only }} -PdialogE2e=${{ matrix.dialog-only }} 2>&1 | tee build/plugwright-e2e.log
           git diff --exit-code -- src/test/e2e/package-lock.json
       - name: Upload E2E results and Paper logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: arc-paper-e2e-${{ matrix.minecraft }}-cleanup-${{ matrix.cleanup-only }}-parkour-${{ matrix.parkour-only }}
+          name: arc-paper-e2e-${{ matrix.minecraft }}-cleanup-${{ matrix.cleanup-only }}-parkour-${{ matrix.parkour-only }}-dialog-${{ matrix.dialog-only }}
           retention-days: 7
           path: |
             build/plugwright-e2e.log

@@ -46,7 +46,7 @@ object DialogDemoModule : PluginModule, Listener {
     override val name = "DialogDemo"
     override val priority = 87
     private lateinit var config: Config
-    val pages = listOf("root", "alignment", "text", "hover", "items", "inputs", "input-options", "actions",
+    val pages = listOf("root", "alignment", "tables", "dividers", "text", "hover", "items", "inputs", "input-options", "actions",
         "template", "custom", "callbacks", "notice", "confirmation", "list", "links", "layout", "scroll", "lifecycle", "limits")
 
     override fun init() {
@@ -78,6 +78,29 @@ object DialogDemoModule : PluginModule, Listener {
     private fun multi(title: String, bodies: List<DialogBody>, buttons: List<ActionButton> = emptyList(),
         inputs: List<DialogInput> = emptyList(), columns: Int = 2, parent: String = "root") =
         dialog(title, bodies, DialogType.multiAction(buttons + back(parent), button("close", custom("close"), 200), columns), inputs)
+
+    private fun gallery(family: String, page: Int): Dialog {
+        val tables = family == "tables"
+        val perPage = if (tables) 3 else 6
+        val pageCount = if (tables) 4 else 3
+        val bodies = mutableListOf(body("gallery.$family.intro"))
+        bodies += DialogBody.plainMessage(text("gallery.page").replaceText {
+            it.matchLiteral("%page%").replacement("${page + 1} / $pageCount")
+        }, 400)
+        ((page * perPage + 1)..((page + 1) * perPage)).forEach { number ->
+            bodies += body("gallery.$family.$number.title")
+            bodies += DialogBody.plainMessage(if (tables) DialogDesignGallery.table(number, ::text)
+                else DialogDesignGallery.divider(number, ::text), 400)
+            bodies += body("gallery.$family.$number.note")
+        }
+        val buttons = (0 until pageCount).map { index ->
+            val label = text("gallery.page-button").replaceText { it.matchLiteral("%page%").replacement((index + 1).toString()) }
+                .color(net.kyori.adventure.text.format.TextColor.color(if (index == page) 0x9BD48D else 0x92BED8))
+            ActionButton.builder(label).width(96).tooltip(text("gallery.$family.page-${index + 1}"))
+                .action(command(if (index == 0) family else "$family-${index + 1}")).build()
+        }
+        return dialog("title.$family", bodies, DialogType.multiAction(buttons, back(), pageCount))
+    }
     private fun item(material: Material, description: String, decorations: Boolean = true, tooltip: Boolean = true,
         width: Int = 16, height: Int = 16, amount: Int = 1): DialogBody {
         val stack = ItemStack(material, amount)
@@ -92,6 +115,8 @@ object DialogDemoModule : PluginModule, Listener {
 
     fun open(player: Player, page: String = "root", value: String = "") {
         val screen = when (page) {
+            "tables", "tables-2", "tables-3", "tables-4" -> gallery("tables", page.substringAfter('-', "1").toInt() - 1)
+            "dividers", "dividers-2", "dividers-3" -> gallery("dividers", page.substringAfter('-', "1").toInt() - 1)
             "root" -> dialog("title.root", listOf(body("intro")),
                 DialogType.multiAction(pages.drop(1).map(::nav), button("close", custom("close"), 200), 2))
             "alignment" -> multi("title.alignment", listOf(
@@ -100,7 +125,7 @@ object DialogDemoModule : PluginModule, Listener {
                 body("alignment.center"), DialogTextLayout.body(text("alignment.sample"), TextAlignment.CENTER),
                 body("alignment.right"), DialogTextLayout.body(text("alignment.sample"), TextAlignment.RIGHT),
                 body("alignment.padding-intro"),
-                DialogTextLayout.body(paddingSample(), TextAlignment.LEFT)))
+                DialogTextLayout.body(paddingSample(), TextAlignment.LEFT)), listOf(nav("tables"), nav("dividers")))
             "text" -> multi("title.text", listOf(body("text.styles"), body("text.colors"), body("text.sections"),
                 DialogBody.plainMessage(Component.translatable("block.minecraft.diamond_block"), 420),
                 DialogBody.plainMessage(Component.keybind("key.swapOffhand"), 420), body("text.font")))

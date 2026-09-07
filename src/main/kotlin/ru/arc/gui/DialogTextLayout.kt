@@ -13,7 +13,7 @@ import ru.arc.text.TextLayoutResult
 /** Server-pack font snapshot adapter; the reusable layout algorithm lives in arc-core. */
 object DialogTextLayout {
     val spacing = PixelSpacing(Key.key("minecraft:default"), 0xF0F01)
-    private val engine by lazy {
+    private val widths by lazy {
         val fonts = requireNotNull(javaClass.getResourceAsStream("/fonts/dialog-font-metrics.json"))
             .bufferedReader().use { JsonParser.parseReader(it).asJsonObject.getAsJsonObject("fonts") }
         val tables = fonts.entrySet().associate { (font, value) ->
@@ -25,10 +25,15 @@ object DialogTextLayout {
                 }.toMap()
             }
         }
-        ComponentTextLayout(GlyphWidths { font, point, bold ->
+        GlyphWidths { font, point, bold ->
             tables[font.asString()]?.get(if (bold) 1 else 0)?.get(point)
-        }, spacing)
+        }
     }
+    private val engine by lazy { ComponentTextLayout(widths, spacing) }
+
+    internal fun glyphWidth(character: Char): Int = requireNotNull(
+        widths.width(Key.key("minecraft:default"), character.code, false)
+    ) { "Unmeasured gallery glyph: $character" }
 
     /** Width includes Minecraft 1.21.11's 4px padding on each side. */
     fun layout(text: Component, alignment: TextAlignment, width: Int = 400): TextLayoutResult {
