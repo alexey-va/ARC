@@ -17,15 +17,20 @@ their separate coverage. Network/AI modules may log unavailable optional
 dependencies; the suite does not assert that every optional module is ready.
 The disposable order enables bounded dynamic pricing: the first quote is
 checked against the actual balance delta and the next quote must decrease after
-the accepted supply is persisted.
+the accepted supply is persisted. Disabled command submission and a confirmation
+click outside Origin must preserve both real items and the RedisEconomy balance.
+The world-change check waits for the actual client dimension before opening the GUI.
 
 The OP transition is a regression check: pruning with a cached restricted
 policy during Paper's async pass removed commands before the fresh permission
 check could restore them. Filtering must use the synchronous pass, as allowed
 by the [Paper event contract](https://jd.papermc.io/paper/26.1.2/com/destroystokyo/paper/event/brigadier/AsyncPlayerSendCommandsEvent.html).
 
-GitHub Actions runs the suite independently of unit/MySQL tests and uploads the
-runner output and Paper logs on success or failure.
+Run the GitHub Actions `build` workflow manually with `heavy_tests=true` to run
+MySQL and both Paper profiles alongside unit tests. Ordinary pushes run only the
+unit/package job; E2E-only paths do not trigger it. The workflow uploads runner
+output and Paper logs on success or failure. Do not run the container-backed
+contract fixture on the owner’s local workstation.
 
 ## Entity cleanup acceptance
 

@@ -64,4 +64,103 @@ class ContractRotationTest : StringSpec({
         ContractRotation.remainingBudget(100_000, listOf(state), emptyList(), start + ContractRotation.WEEK_MILLIS) shouldBe 100_000
         ContractRotation.remainingBudget(1, listOf(state), emptyList(), start + 5_000) shouldBe 0
     }
+
+    "network weekly budget aggregates distinct orders and dedupes only matching receipts" {
+        val secondDefinition = definition.copy(
+            id = "weekly_iron",
+            itemKey = "minecraft:iron_ingot",
+            payoutMinorPerUnit = 200,
+        )
+        val secondPlan = ResourceContractEngine.plan(
+            secondDefinition,
+            ResourceContractState.empty(secondDefinition),
+            "submission-two",
+            "player-two",
+            8,
+            start + 1_000,
+        ) as ContractSubmissionPlan.Accepted
+        val secondCommitted = ResourceContractEngine.commit(
+            secondDefinition,
+            ResourceContractState.empty(secondDefinition),
+            secondPlan,
+            start + 4_000,
+        )
+        val secondState = ResourceContractRecord(
+            ResourceContractRecord.stateId(secondDefinition.id, start),
+            secondCommitted.state,
+            secondDefinition,
+        )
+
+        val firstPlan = plan("submission-one")
+        val firstCommitted = ResourceContractEngine.commit(
+            definition,
+            ResourceContractState.empty(definition),
+            firstPlan,
+            start + 4_000,
+        )
+        val firstState = ResourceContractRecord(
+            ResourceContractRecord.stateId(definition.id, start),
+            firstCommitted.state,
+            definition,
+        )
+        val matchingHeld = ContractSubmissionJournalEngine.beginItemRemoval(
+            ContractSubmissionJournalEngine.prepare(
+                definition,
+                firstPlan,
+                listOf(EscrowedItemPayload.capture(definition.itemKey, 8, byteArrayOf(2))),
+                start + 2_000,
+            ),
+            start + 3_000,
+        )
+        val firstHeld = ContractSubmissionJournalEngine.beginItemRemoval(
+            ContractSubmissionJournalEngine.prepare(
+                definition,
+                firstPlan.copy(submissionId = "submission-one-held"),
+                listOf(EscrowedItemPayload.capture(definition.itemKey, 8, byteArrayOf(4))),
+                start + 2_000,
+            ),
+            start + 3_000,
+        )
+        val secondHeld = ContractSubmissionJournalEngine.beginItemRemoval(
+            ContractSubmissionJournalEngine.prepare(
+                secondDefinition,
+                secondPlan.copy(submissionId = "submission-one"),
+                listOf(EscrowedItemPayload.capture(secondDefinition.itemKey, 8, byteArrayOf(3))),
+                start + 2_000,
+            ),
+            start + 3_000,
+        )
+        val oldDefinition = definition.copy(
+            windowStartsAt = start - ContractRotation.WEEK_MILLIS,
+            windowEndsAt = start,
+            weeklyRecurring = false,
+        )
+        val oldPlan = ResourceContractEngine.plan(
+            oldDefinition,
+            ResourceContractState.empty(oldDefinition),
+            "submission-one",
+            "player-old",
+            8,
+            start - 1_000,
+        ) as ContractSubmissionPlan.Accepted
+        val oldCommitted = ResourceContractEngine.commit(
+            oldDefinition,
+            ResourceContractState.empty(oldDefinition),
+            oldPlan,
+            start - 500,
+        )
+        val oldState = ResourceContractRecord(
+            ResourceContractRecord.stateId(oldDefinition.id, oldDefinition.windowStartsAt),
+            oldCommitted.state,
+            oldDefinition,
+        )
+
+        val limit = 100_000L
+        ContractRotation.remainingBudget(
+            limit,
+            listOf(firstState, secondState, oldState),
+            listOf(matchingHeld, firstHeld, secondHeld),
+            start + 5_000,
+        ) shouldBe limit - firstCommitted.receipt.payoutMinor - secondCommitted.receipt.payoutMinor - firstHeld.payoutMinor - secondHeld.payoutMinor
+    }
 })
