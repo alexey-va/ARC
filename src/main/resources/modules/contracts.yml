@@ -1,3 +1,9 @@
+# Selection is opt-in and prospective; existing windows and rates are preserved.
+selection:
+  enabled: false
+  starts-at: "2026-09-14T00:00:00Z"
+  orders-per-group: 3
+
 # Economy V2 contracts remain in calibration until a complete post-hardening baseline.
 enabled: true
 mode: observe

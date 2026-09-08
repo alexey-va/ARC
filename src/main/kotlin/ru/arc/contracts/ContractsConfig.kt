@@ -159,12 +159,24 @@ open class ContractsConfig(
     open val serverWeeklyBudgetMinor: Long
         get() = moneyMinor(config.string("server-weekly-budget", "0"), "server-weekly-budget", allowZero = true)
 
+    open val selectionPolicy: ContractSelectionPolicy
+        get() = ContractSelectionPolicy(
+            enabled = config.bool("selection.enabled", false),
+            startsAt = if (config.bool("selection.enabled", false))
+                instant(config.string("selection.starts-at", ""), "selection.starts-at") else 0,
+            perGroup = config.integer("selection.orders-per-group", 3),
+        )
+
     open fun validated(allowSeasonMutations: Boolean = false): ContractsConfig {
         enabled
         mode
         require(SERVER_ID_PATTERN.matches(leaderServer)) { "Invalid contracts leader-server: $leaderServer" }
         serverWeeklyBudgetMinor
         val orders = resourceOrders()
+        if (selectionPolicy.enabled) {
+            require(orders.all { it.weeklyRecurring }) { "Automatic selection requires weekly recurring candidates" }
+            require(!config.exists("season-catalog")) { "Season-linked resource orders cannot use automatic selection" }
+        }
         observeSeasonCatalog(allowSeasonMutations)?.validatedResourceLinks(orders)
         return this
     }

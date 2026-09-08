@@ -118,6 +118,7 @@ object ContractsManager {
 
     private val configRef = AtomicReference<ContractsConfig>()
     private var repo: CachedRepository<ResourceContractRecord>? = null
+    private var selectionRuntime: ContractSelectionRuntime? = null
     private var scope: CoroutineScope? = null
     private var journalRepo: CachedRepository<ContractSubmissionJournalRecord>? = null
     private var journalScope: CoroutineScope? = null
@@ -205,6 +206,25 @@ object ContractsManager {
                     null
                 }
             val seasonRuntime = createSeasonRuntime(loaded, newRepo)
+            val newSelection = ContractSelectionRuntime(
+                config = { requireNotNull(configRef.get()) },
+                leader = { isLeader() },
+                records = {
+                    val snapshots = newJournalRepo.allNow().filter { it.definitionSnapshot != null }
+                        .groupBy { ResourceContractRecord.stateId(it.contractId, it.contractWindowStartsAt) }
+                        .mapValues { (_, journals) -> journals.map { requireNotNull(it.definitionSnapshot) }.distinct().single() }
+                    newRepo.allNow().map { record ->
+                        if (record.definitionSnapshot != null) record
+                        else record.copy(definitionSnapshot = snapshots[record.stateId])
+                    }
+                },
+                reservedStateIds = {
+                    newJournalRepo.allNow().filter { it.quotaReservation() != null }
+                        .map { ResourceContractRecord.stateId(it.contractId, it.contractWindowStartsAt) }.toSet()
+                },
+            )
+            selectionRuntime = newSelection
+            newSelection.start()
             repo = newRepo
             scope = newScope
             journalRepo = newJournalRepo
@@ -221,6 +241,8 @@ object ContractsManager {
             seasonDungeonRewardJournalRepo = seasonRuntime?.dungeonRewardJournalRepository
             seasonDungeonRewardCoordinator = seasonRuntime?.dungeonRewardCoordinator
         } catch (failure: Throwable) {
+            runCatching { selectionRuntime?.close() }.onFailure { error("Contract selection cleanup failed", it) }
+            selectionRuntime = null
             runBlocking {
                 try {
                     newJournalRepo.shutdown()
@@ -280,6 +302,9 @@ object ContractsManager {
     @JvmStatic
     @Synchronized
     fun shutdown() {
+        val currentSelection = selectionRuntime
+        selectionRuntime = null
+        runCatching { currentSelection?.close() }.onFailure { error("Contract selection shutdown failed", it) }
         val currentRepo = repo
         val currentScope = scope
         val currentJournalRepo = journalRepo
@@ -522,7 +547,11 @@ object ContractsManager {
     }
 
     private fun definitionAt(contractId: String, now: Long): ResourceContractDefinition? =
-        configRef.get()?.resourceOrdersAt(now)?.firstOrNull { it.id == contractId }?.let(::frozenDefinition)
+        configRef.get()?.let { currentDefinitions(it, now) }?.firstOrNull { it.id == contractId }?.let(::frozenDefinition)
+
+    private fun currentDefinitions(config: ContractsConfig, now: Long): List<ResourceContractDefinition> =
+        if (config.selectionPolicy.applies(now)) selectionRuntime?.current(now)?.orders.orEmpty()
+        else config.resourceOrdersAt(now)
 
     private fun frozenDefinition(definition: ResourceContractDefinition): ResourceContractDefinition =
         repo?.getNow(ResourceContractRecord.stateId(definition.id, definition.windowStartsAt))?.definitionSnapshot
@@ -923,7 +952,7 @@ object ContractsManager {
     private fun currentRuntimeViews(now: Long): List<RuntimeResourceContractView> {
         val config = configRef.get() ?: return emptyList()
         val currentRepo = repo
-        return config.resourceOrdersAt(now).map(::frozenDefinition).map { definition ->
+        return currentDefinitions(config, now).map(::frozenDefinition).map { definition ->
             val record =
                 currentRepo?.getNow(ResourceContractRecord.stateId(definition.id, definition.windowStartsAt))
                     ?: ResourceContractRecord.empty(definition)
@@ -983,6 +1012,7 @@ object ContractsManager {
             "seasonDungeonRewardsEnabled" to seasonDungeonRewardsEnabled(),
             "serverWeeklyBudgetMinor" to (config?.serverWeeklyBudgetMinor ?: 0L),
             "remainingWeeklyBudgetMinor" to remainingWeeklyBudget(System.currentTimeMillis()),
+            "selection" to selectionRuntime?.summary(System.currentTimeMillis()),
             "salesWorld" to "rc_origin_spawn",
             "salesEntry" to "gui",
             "seasonCatalog" to config?.observeSeasonCatalog(SEASON_MUTATION_RUNTIME_READY)?.summary(),
@@ -1490,7 +1520,7 @@ object ContractsManager {
         config: ContractsConfig,
         repository: CachedRepository<ResourceContractRecord>,
     ) {
-        val definitions = config.resourceOrdersAt(System.currentTimeMillis())
+        val definitions = currentDefinitions(config, System.currentTimeMillis())
         definitions.forEach { definition ->
             val stateId = ResourceContractRecord.stateId(definition.id, definition.windowStartsAt)
             val existing = repository.getNow(stateId)
