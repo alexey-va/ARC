@@ -122,6 +122,7 @@ internal class DungeonSaveMenus(
         buttons = listOf(
             action("return", "panel.return-label", "<#92bed8>Вернуться в данж ›", "panel.return-tooltip", "Вернуться в последний обычный данж на место выхода", close = destination != null) {
                 if (destination != null) dungeon.returnToLast(player, destination)
+                else panel(player)
             }.let { if (destination != null) it else it.copy(label = text("panel.return-disabled", "<#aaa49a>[Недоступно] Вернуться в данж"),
                 tooltip = text("panel.return-unavailable", "<#aaa49a>Нет доступного места выхода из обычного данжа. Сначала посетите данж и выйдите из него.")) },
             shops(player),

@@ -28,8 +28,8 @@ class DungeonSaveMenusTest : FreeSpec({
         DungeonSaveMenus(dungeon) { _, screen, _ -> shown += screen }.open(player)
         shown.single().id shouldBe "dungeon.panel.unavailable"
         shown.single().buttons.map { it.id.value } shouldBe listOf("return", "shops", "guide", "portals", "list", "party")
-        shown.single().exitButton!!.id.value shouldBe "close"
-        shown.single().exitButton!!.closeDialogBeforeAction shouldBe true
+        shown.single().exitButton!!.id.value shouldBe "back"
+        shown.single().exitButton!!.closeDialogBeforeAction shouldBe false
         shown.single().body.map { it.text } shouldBe listOf(
             Component.text("changed").decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false),
             Component.text("changed").decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false),
@@ -64,7 +64,7 @@ class DungeonSaveMenusTest : FreeSpec({
         }
     }
 
-    "outside menu disables return without a departure and routes shops to the dungeon action" {
+    "unavailable return refreshes the panel so shops remain clickable" {
         val player = paper.addPlayer("outside-actions")
         val dungeon = mockk<EMDungeonQol>(relaxed = true)
         every { dungeon.view(player) } returns null
@@ -80,7 +80,9 @@ class DungeonSaveMenusTest : FreeSpec({
             it.onClick.handle(mockk())
         }
         verify(exactly = 0) { dungeon.returnToLast(any(), any()) }
-        screen.buttons.single { it.id.value == "shops" }.also {
+        shown.size shouldBe 2
+        shown.last().id shouldBe "dungeon.panel.unavailable"
+        shown.last().buttons.single { it.id.value == "shops" }.also {
             it.closeDialogBeforeAction shouldBe true
             it.onClick.handle(mockk())
         }
