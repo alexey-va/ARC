@@ -4,6 +4,25 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 
 class ContractQuantitySelectionTest : StringSpec({
+    "book distinguishes item shortage budget shortage and authoritative refusal" {
+        ContractBookAvailability.resolve(view(), 31, true) shouldBe ContractBookAvailability.ITEMS_MISSING
+        ContractBookAvailability.resolve(view(unspentBudgetMinor = 100), 64, true) shouldBe ContractBookAvailability.BUDGET_EXHAUSTED
+        ContractBookAvailability.resolve(view(), 64, true, quoteAvailable = false) shouldBe ContractBookAvailability.UNAVAILABLE
+        ContractBookAvailability.resolve(view(), 64, false) shouldBe ContractBookAvailability.ORIGIN_REQUIRED
+        ContractBookAvailability.resolve(view(), 64, true) shouldBe ContractBookAvailability.READY
+    }
+
+    "book preserves completed state and does not invent one-off renewals" {
+        val base = view()
+        val future = base.copy(contract = base.contract.copy(windowStartsAt = 100, windowEndsAt = 200))
+        ContractBookAvailability.resolve(future, 64, true, now = 99) shouldBe ContractBookAvailability.NOT_STARTED
+        ContractBookAvailability.nextOpeningAt(future, 99) shouldBe 100L
+        ContractBookAvailability.nextOpeningAt(future, 100) shouldBe null
+        ContractBookAvailability.resolve(future, 64, true, now = 200) shouldBe ContractBookAvailability.CLOSED
+        ContractBookAvailability.resolve(view(remaining = 0), 0, false) shouldBe ContractBookAvailability.COMPLETED
+        ContractBookAvailability.resolve(view(playerRemaining = 0), 64, true) shouldBe ContractBookAvailability.PLAYER_CAP
+    }
+
     "bounds the initial selection by inventory quota target and budget" {
         val selection =
             ContractQuantitySelector.select(

@@ -6,6 +6,18 @@ defaults:
     description-1: "<gray>Здесь принимают нужные ресурсы"
     description-2: "<gray>за указанную награду."
     empty-lore: "<gray>Загляните сюда позже."
+  availability:
+    ready: "<green>[▶] ЛКМ — выбрать количество"
+    not-started: "<yellow>Приём ещё не начался"
+    closed: "<yellow>Приём сейчас закрыт"
+    completed: "<green>Нужный объём уже собран"
+    player-cap: "<yellow>Ваш лимит по заказу исчерпан"
+    not-enough-items: "<yellow>Не хватает минимальной партии обычных предметов"
+    budget-exhausted: "<yellow>Бюджета не хватает на минимальную партию"
+    origin-required: "<yellow>Сдача у конторщика на спавне"
+    unavailable: "<yellow>Сдача сейчас недоступна. Обновите книгу заказов"
+    opens-at: "<gray>Начало приёма: <white>{time}"
+    renews-at: "<gray>Новый период: <white>{time}"
   detail:
     title: "<dark_gray>Сдать ресурсы"
     info-heading: "<gold><bold>Общий заказ"

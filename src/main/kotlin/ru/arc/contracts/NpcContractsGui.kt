@@ -50,7 +50,20 @@ object NpcContractsGui {
                 .filter { it.contract.status != ContractStatus.EXPIRED.label }
         val capacity = ArcMenus.current().catalog.require(ArcMenuSchema.CONTRACTS_LIST)
             .region(ArcMenuSchema.CONTRACT_ORDERS).size
-        val orders = views.take(capacity).map { view -> orderEntry(player, group, view) }
+        val now = System.currentTimeMillis()
+        val originAllowed = ContractOriginGate.canSubmit(player)
+        val orders = views.map { view ->
+            val available = PaperContractItems.countPlain(player, view.contract.itemKey)
+            val selection = ContractQuantitySelector.select(view, available)
+            val availability = ContractBookAvailability.resolve(
+                view, available, originAllowed,
+                quoteAvailable = selection.canSubmit && ContractsManager.quote(player, view.contract.id, selection.selected) != null,
+                now = now,
+            )
+            Triple(view, available, availability)
+        }.sortedBy { (_, _, availability) -> availability != ContractBookAvailability.READY }
+            .take(capacity)
+            .map { (view, available, availability) -> orderEntry(group, view, available, availability, now) }
         val elements = buildMap {
             put(
                 "info",
@@ -88,9 +101,13 @@ object NpcContractsGui {
         )
     }
 
-    private fun orderEntry(player: Player, group: String, view: ResourceContractPlayerView): PaperMenuEntry {
-        val available = PaperContractItems.countPlain(player, view.contract.itemKey)
-        val selectable = ContractQuantitySelector.select(view, available)
+    private fun orderEntry(
+        group: String,
+        view: ResourceContractPlayerView,
+        available: Int,
+        availability: ContractBookAvailability,
+        now: Long,
+    ): PaperMenuEntry {
         val item = ArcMenus.item(
             "contracts-order",
             render(
@@ -103,15 +120,11 @@ object NpcContractsGui {
                 "cap-bonus" to ((view.capBasisPoints / 100) - 100).toString(),
                 "payout-bonus" to ((view.payoutBasisPoints / 100) - 100).toString(),
                 "ends-at" to formatTime(view.contract.windowEndsAt),
-                "action" to action(view, selectable, ContractOriginGate.canSubmit(player)),
+                "action" to orderStatus(group, view, availability, now),
             ),
         ).withType(PaperContractItems.material(view.contract.itemKey) ?: Material.PAPER)
-        return ArcMenus.entry(item) {
-            if (selectable.canSubmit && view.contract.status == ContractStatus.OPEN.label) {
-                openDetail(it, group, view.contract.id)
-            } else {
-                it.sendActionBar(unavailableReason(group, view, selectable, available, ContractOriginGate.canSubmit(it)))
-            }
+        return ArcMenus.entry(item, enabled = availability == ContractBookAvailability.READY) {
+            openDetail(it, group, view.contract.id)
         }
     }
 
@@ -132,7 +145,8 @@ object NpcContractsGui {
         val quote = ContractsManager.quote(player, contractId, selection.selected)
         val originAllowed = ContractOriginGate.canSubmit(player)
         val quoteAvailable = quote != null
-        val canSubmit = selection.canSubmit && originAllowed && quoteAvailable
+        val availability = ContractBookAvailability.resolve(view, available, originAllowed, quoteAvailable)
+        val canSubmit = availability == ContractBookAvailability.READY
         ArcMenus.open(
             player,
             ArcMenuSchema.CONTRACTS_DETAIL,
@@ -199,7 +213,7 @@ object NpcContractsGui {
                         )
                     } else {
                         context.player.sendActionBar(
-                            unavailableReason(group, view, selection, available, ContractOriginGate.canSubmit(context.player)),
+                            TextUtil.mm(availabilityText(group, availability)),
                         )
                     }
                 },
@@ -214,7 +228,7 @@ object NpcContractsGui {
                             values = mapOf(
                                 "selected" to Component.text(selection.selected),
                                 "payout" to Component.text(quote?.payoutMinor?.let(::formatContractMoney) ?: "—"),
-                                "unavailable-reason" to unavailableReason(group, view, selection, available, originAllowed),
+                                "unavailable-reason" to TextUtil.mm(availabilityText(group, availability)),
                             ),
                             flags = buildSet {
                                 if (canSubmit) add("can-submit")
@@ -269,39 +283,28 @@ object NpcContractsGui {
         }
     }
 
-    private fun unavailableReason(
+    private fun orderStatus(
         group: String,
         view: ResourceContractPlayerView,
-        selection: ContractQuantitySelection,
-        available: Int,
-        originAllowed: Boolean,
-    ): Component =
-        when {
-            !originAllowed -> message(group, "messages.origin-required", "<yellow>Сдать заказ можно только у конторщика на спавне.")
-            view.contract.status != ContractStatus.OPEN.label ->
-                message(group, "messages.closed", "<yellow>Этот заказ сейчас закрыт.")
-            view.playerRemainingQuantity < view.minSubmissionQuantity ->
-                message(group, "messages.player-cap", "<yellow>Ваш лимит по этому заказу исчерпан.")
-            view.contract.remainingQuantity < view.minSubmissionQuantity ->
-                message(group, "messages.completed", "<yellow>Нужный объём уже собран.")
-            available < selection.minimum ->
-                message(group, "messages.not-enough-items", "<yellow>Не хватает минимальной партии обычных предметов.")
-            else -> message(group, "messages.unavailable", "<yellow>Сдача этого заказа сейчас недоступна.")
+        availability: ContractBookAvailability,
+        now: Long,
+    ): String {
+        val status = availabilityText(group, availability)
+        val next = ContractBookAvailability.nextOpeningAt(view, now)
+        val schedule = next?.let {
+            val key = if (now < view.contract.windowStartsAt) "opens-at" else "renews-at"
+            val fallback = if (key == "opens-at") "<gray>Начало приёма: <white>{time}" else "<gray>Новый период: <white>{time}"
+            boardString(group, "availability.$key", fallback).replace("{time}", formatTime(it))
         }
+        return listOfNotNull(schedule, status).joinToString(if (availability == ContractBookAvailability.READY) "\n\n" else "\n")
+    }
 
-    private fun action(
-        view: ResourceContractPlayerView,
-        selection: ContractQuantitySelection,
-        originAllowed: Boolean,
-    ): String =
-        when {
-            !originAllowed -> "<yellow>Откройте этот заказ у конторщика на спавне"
-            view.contract.status != ContractStatus.OPEN.label -> "<yellow>Заказ сейчас закрыт"
-            view.playerRemainingQuantity < view.minSubmissionQuantity -> "<yellow>Ваш лимит исчерпан"
-            view.contract.remainingQuantity < view.minSubmissionQuantity -> "<green>Заказ выполнен"
-            !selection.canSubmit -> "<yellow>Не хватает минимальной партии"
-            else -> "<green>Нажмите, чтобы выбрать количество"
-        }
+    private fun availabilityText(group: String, availability: ContractBookAvailability): String =
+        boardString(
+            group,
+            "availability.${availability.messageKey}",
+            boardString(group, "messages.${availability.messageKey}", availability.fallback),
+        )
 
     private fun message(group: String, path: String, fallback: String): Component =
         TextUtil.mm(boardString(group, path, fallback))
