@@ -368,6 +368,13 @@ class ContractTrackingRuntime(
                 store.clear(player.uniqueId, state)
                 return@forEach
             }
+            if (view.contract.status != ContractStatus.OPEN.label ||
+                view.playerRemainingQuantity < view.minSubmissionQuantity ||
+                view.contract.remainingQuantity < view.minSubmissionQuantity
+            ) {
+                lastHud.remove(player.uniqueId)
+                return@forEach
+            }
             val status = ContractTrackingLogic.status(
                 state,
                 view,

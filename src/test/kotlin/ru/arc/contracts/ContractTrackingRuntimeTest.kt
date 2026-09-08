@@ -81,7 +81,27 @@ class ContractTrackingRuntimeTest {
         assertFalse(runtime.isTracked(player))
     }
 
-    private fun fixture(block: (MockBukkitTestRuntime, org.bukkit.entity.Player, TrackingStore, ContractTrackingRuntime, MutableList<ContractTrackingStatus>) -> Unit) {
+    @Test
+    fun `closed orders and exhausted quotas do not announce collection completion`() {
+        val unavailable = listOf(
+            view.copy(contract = view.contract.copy(status = "paused")),
+            view.copy(playerRemainingQuantity = 0),
+            view.copy(contract = view.contract.copy(remainingQuantity = 0)),
+        )
+        unavailable.forEach { current ->
+            fixture(current) { paper, player, store, runtime, notices ->
+                store.state = ContractTrackingLogic.stateFor(view, 64)
+                player.inventory.setItem(0, ItemStack(Material.COAL, 64))
+                runtime.start()
+                paper.performTicks(65)
+                assertEquals(0, store.markCalls)
+                assertTrue(notices.isEmpty())
+                assertTrue(runtime.isTracked(player))
+            }
+        }
+    }
+
+    private fun fixture(currentView: ResourceContractPlayerView = view, block: (MockBukkitTestRuntime, org.bukkit.entity.Player, TrackingStore, ContractTrackingRuntime, MutableList<ContractTrackingStatus>) -> Unit) {
         MockBukkitTestRuntime.open().use { paper ->
             val plugin = paper.createSimplePlugin("ContractTrackingTest")
             Tasks.install(BukkitTaskScheduler(plugin))
@@ -89,7 +109,7 @@ class ContractTrackingRuntimeTest {
             player.openInventory(paper.server.createInventory(null, 9))
             val store = TrackingStore()
             val notices = mutableListOf<ContractTrackingStatus>()
-            ContractTrackingRuntime(plugin, store, { _, _ -> listOf(view) },
+            ContractTrackingRuntime(plugin, store, { _, _ -> listOf(currentView) },
                 ContractTrackingPresentation(notifyCompleted = { _, status -> notices += status }), { now }).use { runtime ->
                 try { block(paper, player, store, runtime, notices) } finally { runtime.stop(); Tasks.reset() }
             }
