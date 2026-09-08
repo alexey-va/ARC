@@ -9,6 +9,7 @@ import org.bukkit.entity.Player
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.whenCompleteSync
 import ru.arc.gui.MenuShortcutAction
+import ru.arc.gui.DialogTables
 import ru.arc.misc.JoinMessageGuiFactory
 import ru.arc.paper.menu.PaperDialogActionId
 import ru.arc.paper.menu.PaperDialogBody
@@ -165,18 +166,28 @@ internal class HelpCenterSettingsController(
         val snapshot = legacy.flightSnapshot(player)
         val entry = legacy.entries(player).first { it.id == "flight" }
         val valid = snapshot?.takeIf { it.charge.isFinite() && it.maximum > 0 && it.charge >= 0 }
-        val data = if (valid == null) text("settings-flight-unavailable") else {
+        val data = if (valid == null) PaperDialogBody(text("settings-flight-unavailable"), 468) else {
             val ratio = (valid.charge / valid.maximum).coerceIn(0.0, 1.0)
             val filled = (ratio * 16).toInt()
             val numbers = NumberFormat.getIntegerInstance(Locale.forLanguageTag("ru-RU"))
-            text("settings-flight-status", "charge" to Component.text(numbers.format(valid.charge.toLong())),
-                "maximum" to Component.text(numbers.format(valid.maximum)), "percent" to Component.text((ratio * 100).toInt().toString()),
-                "filled" to Component.text("■".repeat(filled)), "empty" to Component.text("□".repeat(16 - filled)),
-                "state" to booleanState(valid.enabled))
+            DialogTables.body(
+                rows = listOf(
+                    text("table-flight-charge-label") to text("table-slots-value",
+                        "used" to Component.text(numbers.format(valid.charge.toLong())),
+                        "maximum" to Component.text(numbers.format(valid.maximum))),
+                    text("table-flight-level-label") to text("table-flight-level-value",
+                        "percent" to Component.text((ratio * 100).toInt()),
+                        "filled" to Component.text("■".repeat(filled)), "empty" to Component.text("□".repeat(16 - filled))),
+                    text("table-flight-state-label") to booleanState(valid.enabled),
+                ),
+                headers = text("table-label-heading") to text("table-value-heading"),
+                frame = DialogTables.Frame.RARE,
+                width = 468,
+            )
         }
         showDialog(player, PaperDialogScreen(
             id = "help.settings.flight", title = text("settings-flight-title"),
-            body = listOf(PaperDialogBody(text("settings-flight-breadcrumb"), 468), PaperDialogBody(data, 468),
+            body = listOf(PaperDialogBody(text("settings-flight-breadcrumb"), 468), data,
                 PaperDialogBody(text("settings-flight-how"), 468)),
             buttons = listOf(
                 button("legacy_flight_toggle", text(when (valid?.enabled) {

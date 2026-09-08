@@ -78,6 +78,16 @@ class HelpCenterConfig(private val config: Config) {
         }
 
         private val DEFAULT_TEXT = linkedMapOf(
+            "table-item-label" to "Предмет",
+            "table-amount-label" to "Количество",
+            "table-item-kind-label" to "Тип",
+            "table-land-label" to "Приват",
+            "table-held-item-label" to "В руке",
+            "table-player-help" to "<#e8dfd2>Выберите действие.",
+            "table-flight-charge-label" to "Запас заряда",
+            "table-flight-level-label" to "Заполнено",
+            "table-flight-state-label" to "Полёт",
+            "table-flight-level-value" to "<#9bd48d><filled><#aaa49a><empty> <#e8dfd2><percent>%",
             "table-label-heading" to "Параметр",
             "table-value-heading" to "Значение",
             "table-player-label" to "Игрок",

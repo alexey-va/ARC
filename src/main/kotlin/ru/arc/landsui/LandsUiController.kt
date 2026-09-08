@@ -305,7 +305,10 @@ class LandsUiController(
                 PaperDialogScreen(
                     id = "lands.territory",
                     title = text("territory-title", "land" to land.name),
-                    body = listOf(PaperDialogBody(text("territory-body", "land" to land.name))),
+                    body = listOf(
+                        territorySummary(land),
+                        PaperDialogBody(text("territory-body", "land" to land.name), width = 468),
+                    ),
                     buttons = listOf(
                         commandButton("claim", "claim-label", "claim-tooltip", player, landId, "claim"),
                         commandButton("unclaim", "unclaim-label", "unclaim-tooltip", player, landId, "unclaim"),
@@ -440,15 +443,8 @@ class LandsUiController(
                     id = "lands.created",
                     title = text("created-title"),
                     body = listOf(
-                        PaperDialogBody(
-                            text(
-                                "created-body",
-                                "land" to land.name,
-                                "chunks" to land.chunks.toString(),
-                                "max_chunks" to land.maxChunks.toString(),
-                            ),
-                            width = 500,
-                        ),
+                        territorySummary(land),
+                        PaperDialogBody(text("created-table-help"), width = 468),
                     ),
                     buttons = listOf(
                         commandButton("claim", "created-claim-label", "claim-tooltip", player, land.id, "claim"),
@@ -461,6 +457,17 @@ class LandsUiController(
             )
         }
     }
+
+    private fun territorySummary(land: LandsUiLand) = DialogTables.body(
+        rows = listOf(
+            text("table-land-label") to Component.text(land.name),
+            text("table-territory-label") to text("table-territory-value",
+                "used" to land.chunks.toString(), "maximum" to land.maxChunks.toString()),
+        ),
+        headers = text("table-label-heading") to text("table-value-heading"),
+        frame = DialogTables.Frame.LEGENDARY,
+        width = 468,
+    )
 
     private fun openDanger(player: Player, landId: String) {
         withLand(player, landId) { land ->

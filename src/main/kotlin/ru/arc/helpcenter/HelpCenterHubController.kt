@@ -7,6 +7,7 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.bukkit.entity.Player
 import ru.arc.core.LifecycleTaskScope
 import ru.arc.core.whenCompleteSync
+import ru.arc.gui.DialogTables
 import java.util.concurrent.TimeUnit
 import ru.arc.onboarding.OnboardingService
 import ru.arc.paper.menu.PaperDialogActionId
@@ -112,13 +113,14 @@ internal class HelpCenterHubController(
             listOf(PaperDialogBody(text("item-empty"), width = 500))
         } else {
             listOf(
-                PaperDialogBody(
-                    text(
-                        "item-body",
-                        "item" to item.displayName,
-                        "amount" to item.amount.toString(),
-                        "kind" to plain(if (item.itemsAdderId == null) "item-kind-vanilla" else "item-kind-custom"),
+                DialogTables.body(
+                    rows = listOf(
+                        text("table-item-label") to Component.text(item.displayName),
+                        text("table-amount-label") to Component.text(item.amount),
+                        text("table-item-kind-label") to text(if (item.itemsAdderId == null) "item-kind-vanilla" else "item-kind-custom"),
                     ),
+                    headers = text("table-label-heading") to text("table-value-heading"),
+                    frame = DialogTables.Frame.COMMON,
                     width = 500,
                 ),
             )
@@ -163,15 +165,16 @@ internal class HelpCenterHubController(
                 id = "help.context",
                 title = text("context-title"),
                 body = listOf(
-                    PaperDialogBody(
-                        text(
-                            "context-body",
-                            "world" to world,
-                            "server" to snapshot.server,
-                            "coordinates" to "${snapshot.x}, ${snapshot.y}, ${snapshot.z}",
-                            "land" to land,
-                            "item" to (snapshot.heldItem?.displayName ?: plain("context-empty-hand")),
+                    DialogTables.body(
+                        rows = listOf(
+                            text("table-world-label") to Component.text(world),
+                            text("table-server-label") to Component.text(snapshot.server),
+                            text("table-coordinates-label") to Component.text("${snapshot.x}, ${snapshot.y}, ${snapshot.z}"),
+                            text("table-land-label") to Component.text(land),
+                            text("table-held-item-label") to Component.text(snapshot.heldItem?.displayName ?: plain("context-empty-hand")),
                         ),
+                        headers = text("table-label-heading") to text("table-value-heading"),
+                        frame = DialogTables.Frame.UNCOMMON,
                         width = 500,
                     ),
                 ),

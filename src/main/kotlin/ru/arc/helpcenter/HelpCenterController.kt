@@ -399,14 +399,16 @@ internal class HelpCenterController(
                 id = "help.player",
                 title = text("player-title", "player" to target.name),
                 body = listOf(
-                    PaperDialogBody(
-                        text(
-                            "player-body",
-                            "player" to target.name,
-                            "server" to (target.server ?: plainText("player-server-unknown")),
+                    DialogTables.body(
+                        rows = listOf(
+                            text("table-player-label") to Component.text(target.name),
+                            text("table-server-label") to Component.text(target.server ?: plainText("player-server-unknown")),
                         ),
+                        headers = text("table-label-heading") to text("table-value-heading"),
+                        frame = DialogTables.Frame.EPIC,
                         width = 500,
                     ),
+                    PaperDialogBody(text("table-player-help"), width = 500),
                 ),
                 buttons = buttons,
                 exitButton = button("back", text("back-label"), action = returnToList),

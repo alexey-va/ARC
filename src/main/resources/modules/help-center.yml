@@ -7,6 +7,16 @@ limits:
 
 # All player-visible copy is configurable. ARC merges new defaults on reload.
 text:
+  table-item-label: "Предмет"
+  table-amount-label: "Количество"
+  table-item-kind-label: "Тип"
+  table-land-label: "Приват"
+  table-held-item-label: "В руке"
+  table-player-help: "<#e8dfd2>Выберите действие."
+  table-flight-charge-label: "Запас заряда"
+  table-flight-level-label: "Заполнено"
+  table-flight-state-label: "Полёт"
+  table-flight-level-value: "<#9bd48d><filled><#aaa49a><empty> <#e8dfd2><percent>%"
   table-label-heading: 'Параметр'
   table-value-heading: 'Значение'
   table-player-label: 'Игрок'

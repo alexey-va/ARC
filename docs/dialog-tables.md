@@ -72,8 +72,10 @@ U+F0F01..U+F0F0A / U+F0F11. Это не автоматическое опред�
 
 ## Рабочие примеры
 
-- `HelpCenterController.showNow`, `openHome`: профиль и карточка дома, T16.
-- `LandsUiController.openDetails`: поселение, T17.
+- `HelpCenterController.showNow`, `openHome`, `openPlayer`: профиль, дом и игрок, T16.
+- `HelpCenterHubController.openItem`, `openContext`: предмет в руке T13 и окружение T14.
+- `HelpCenterSettingsController.openFlight`: запас заряда, заполнение и режим полёта, T15.
+- `LandsUiController.openDetails`, `openTerritory`, `openCreated`: поселение и территория, T17.
 - `DungeonSaveMenus.panel`, `open`: параметры данжа и число сохранений, T18.
 - `DungeonSaveMenus.detail`: тип, время и координаты сохранения, T17.
 - `DialogDesignGallery.table`: все шесть эталонов используют этот же API.

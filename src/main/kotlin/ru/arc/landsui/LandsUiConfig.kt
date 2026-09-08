@@ -43,6 +43,8 @@ class LandsUiConfig(private val config: Config) {
             "rename-submit-label" to "<#9bd48d>Сохранить название",
             "add-submit-label" to "<#9bd48d>Добавить игрока",
             "invite-land-label" to "<#9bd48d>Пригласить в <land>",
+            "table-land-label" to "Поселение",
+            "created-table-help" to "<#e8dfd2>Ваш первый чанк уже защищён. Это поселение выбрано текущим.<newline><newline>Для расширения встаньте в соседний чанк и нажмите кнопку ниже.",
             "table-label-heading" to "Параметр",
             "table-value-heading" to "Значение",
             "table-role-label" to "Роль",

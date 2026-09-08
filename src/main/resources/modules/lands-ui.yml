@@ -6,6 +6,8 @@ limits:
   max-listed-players: 12
 
 text:
+  table-land-label: "Поселение"
+  created-table-help: "<#e8dfd2>Ваш первый чанк уже защищён. Это поселение выбрано текущим.<newline><newline>Для расширения встаньте в соседний чанк и нажмите кнопку ниже."
   close-label: '<#aaa49a>Закрыть'
   create-submit-label: '<#9bd48d>Создать поселение'
   rename-submit-label: '<#9bd48d>Сохранить название'
