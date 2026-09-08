@@ -28,6 +28,17 @@ class ContractOriginGateTest : StringSpec({
         ) shouldBe true
     }
 
+    "accepts grants for each canonical public desk group" {
+        val playerId = UUID.randomUUID()
+        listOf(
+            ContractOriginGate.Grant(playerId, 350, "forge_orders", 2_000L),
+            ContractOriginGate.Grant(playerId, 367, "bank_orders", 2_000L),
+            ContractOriginGate.Grant(playerId, 390, "guild_orders", 2_000L),
+        ).forEach { grant ->
+            ContractOriginGate.isGrantUsable(grant, playerId, grant.group, 1_999L) shouldBe true
+        }
+    }
+
     "rejects a grant for another group or player" {
         val playerId = UUID.randomUUID()
         val grant = ContractOriginGate.Grant(playerId, 390, "guild_orders", 2_000L)

@@ -168,6 +168,29 @@ open class ContractsConfig(
     open val submissionNpcSessionTtl: Duration
         get() = config.duration("submission-access.session-ttl", Duration.ofSeconds(120))
 
+    /**
+     * Maps each public desk NPC to the only contract group its click can open.
+     * The scalar fields remain readable for older deployed configs; a config
+     * with neither form receives the canonical three-desk defaults.
+     */
+    open val submissionNpcRoutes: Map<Int, String>
+        get() {
+            val routeKeys = config.keys("submission-access.routes")
+            if (routeKeys.isNotEmpty()) {
+                return routeKeys.associate { rawNpcId ->
+                    val npcId = rawNpcId.toIntOrNull()
+                        ?: throw IllegalArgumentException("Contracts submission NPC id must be an integer: $rawNpcId")
+                    npcId to config.string("submission-access.routes.$rawNpcId", "").trim().lowercase()
+                }
+            }
+            if (config.exists("submission-access.npc-id") || config.exists("submission-access.group")) {
+                // Keep an older scalar desk usable while adding the canonical
+                // forge/bank/guild desks to an existing data directory.
+                return DEFAULT_SUBMISSION_NPC_ROUTES + (submissionNpcId to submissionNpcGroup)
+            }
+            return DEFAULT_SUBMISSION_NPC_ROUTES
+        }
+
     open val serverWeeklyBudgetMinor: Long
         get() = moneyMinor(config.string("server-weekly-budget", "0"), "server-weekly-budget", allowZero = true)
 
@@ -183,8 +206,14 @@ open class ContractsConfig(
         enabled
         mode
         require(SERVER_ID_PATTERN.matches(leaderServer)) { "Invalid contracts leader-server: $leaderServer" }
-        require(submissionNpcId > 0) { "Contracts submission NPC id must be positive" }
-        require(ID_PATTERN.matches(submissionNpcGroup)) { "Contracts submission NPC group must be a normalized id" }
+        require(submissionNpcRoutes.isNotEmpty()) { "Contracts submission NPC routes must not be empty" }
+        submissionNpcRoutes.forEach { (npcId, group) ->
+            require(npcId > 0) { "Contracts submission NPC id must be positive" }
+            require(ID_PATTERN.matches(group)) { "Contracts submission NPC group must be a normalized id" }
+        }
+        require(submissionNpcRoutes.values.size == submissionNpcRoutes.values.toSet().size) {
+            "Contracts submission NPC routes must map each group to one NPC"
+        }
         require(submissionNpcRadius.isFinite() && submissionNpcRadius in 1.0..16.0) {
             "Contracts submission NPC radius must be 1..16 blocks"
         }
@@ -482,6 +511,13 @@ open class ContractsConfig(
     }
 
     companion object {
+        /** Public Origin NPCs that own the three resource-contract desks. */
+        val DEFAULT_SUBMISSION_NPC_ROUTES: Map<Int, String> = linkedMapOf(
+            350 to "forge_orders",
+            367 to "bank_orders",
+            390 to "guild_orders",
+        )
+
         const val MAX_CONFIGURED_ORDERS = 64
         const val MAX_SEASON_DUNGEONS = 16
         const val MAX_PROJECT_STAGES = 16

@@ -17,6 +17,8 @@ class ContractsConfigTest : StringSpec({
         config.mode shouldBe ContractsMode.OBSERVE
         config.submissionNpcId shouldBe 390
         config.submissionNpcGroup shouldBe "guild_orders"
+        config.submissionNpcRoutes shouldBe
+            mapOf(350 to "forge_orders", 367 to "bank_orders", 390 to "guild_orders")
         config.submissionNpcRadius shouldBe 4.5
         config.submissionNpcSessionTtl shouldBe Duration.ofSeconds(120)
         config.serverWeeklyBudgetMinor shouldBe 9_500_000L
