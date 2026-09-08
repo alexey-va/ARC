@@ -12,7 +12,9 @@ import kotlinx.coroutines.withTimeout
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import ru.arc.ARC
+import ru.arc.contracts.api.ResourceContractCommittedEvent
 import ru.arc.core.PluginModule
+import ru.arc.core.Tasks
 import ru.arc.metrics.MetricsModule
 import ru.arc.metrics.core.MetricPoint
 import ru.arc.repository.CachedRepository
@@ -586,6 +588,7 @@ object ContractsManager {
                                     availableNetworkBudgetMinor = remainingWeeklyBudget(System.currentTimeMillis()),
                                 )
                             }
+                        publishResourceContractCommitted(quote.contractId, submitted)
                         val projected =
                             if (submitted is ContractSubmissionOutcome.Committed ||
                                 submitted is ContractSubmissionOutcome.Duplicate
@@ -613,6 +616,22 @@ object ContractsManager {
             }
         }
         return result
+    }
+
+    private fun publishResourceContractCommitted(contractId: String, outcome: ContractSubmissionOutcome) {
+        val receipt = when (outcome) {
+            is ContractSubmissionOutcome.Committed -> outcome.receipt
+            is ContractSubmissionOutcome.Duplicate -> outcome.receipt
+            else -> return
+        }
+        val event = ResourceContractCommittedEvent(
+            submissionId = receipt.submissionId,
+            playerId = runCatching { UUID.fromString(receipt.playerId) }.getOrNull() ?: return,
+            contractId = contractId,
+            quantity = receipt.quantity,
+        )
+        val publish = Runnable { Bukkit.getPluginManager().callEvent(event) }
+        if (Bukkit.isPrimaryThread()) publish.run() else Tasks.scheduler.runSync(publish)
     }
 
     @JvmStatic

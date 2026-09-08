@@ -18,8 +18,8 @@ export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-25.jdk/Contents/Home
 ./gradlew shadowJar
 ```
 
-Deployable output: `build/libs/ARC-1.0.jar` (shadowed dependencies). The
-non-deployable plain archive is written separately as `ARC-1.0-plain.jar`.
+Deployable output: `build/libs/ARC-1.4.12.jar` (shadowed dependencies). The
+non-deployable plain archive is written separately as `ARC-1.4.12-plain.jar`.
 
 The default build is standalone and does not require an `arc-core` checkout.
 For coordinated local development, opt into source substitution explicitly:
@@ -103,6 +103,12 @@ Check with `./gradlew test --tests 'ru.arc.metrics.Product*'` and `./gradlew tes
 Dashboard definitions and interpretation are in the ops [product-interest runbook](../ruscrafting-ops/docs/runbooks/product-interest.md).
 
 ## External economy attribution
+
+Successful resource submissions emit the public Bukkit
+`ru.arc.contracts.api.ResourceContractCommittedEvent` after the durable
+contract commit. It exposes `submissionId`, `playerId`, `contractId`, and
+`quantity`; committed retries expose the same receipt ID and are safe for
+consumer-side durable deduplication.
 
 ARC is the sole owner of economy audit persistence. Optional Paper plugins may
 call `ru.arc.audit.ExternalEconomyAuditBridge.markExternalReward` immediately
