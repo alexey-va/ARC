@@ -56,6 +56,7 @@ internal class EMDungeonQol(
     private val returnMove: (Player, Location) -> Unit = { player, destination ->
         com.magmaguy.elitemobs.api.PlayerTeleportEvent.teleportPlayer(player, destination)
     },
+    private val leaveWormholeWorld: (Player, World) -> Unit = NativeWormholeCooldowns()::leftWorld,
 ) : Listener, AutoCloseable {
     internal val scoreboard = DungeonScoreboard(this)
     private val checkpoints = DungeonCheckpointStore()
@@ -117,6 +118,7 @@ internal class EMDungeonQol(
         val player = event.player
         val world = player.world
         pending.remove(player.uniqueId)
+        if (resolve(event.from)?.instanced == false) leaveWormholeWorld(player, event.from)
         // Wait for native admission and entry text; no delayed teleport or bypass is created.
         tasks.runLater(30L) {
             if (!enabled || !player.isOnline || player.world.uid != world.uid) return@runLater

@@ -73,6 +73,14 @@ cross-world teleport restores that exact point in the Bukkit teleport event.
 Unsafe positions still fail the terrain/portal-volume check; points expire
 after `resume-hours`. Cancelled teleports and deaths do not replace an exit.
 
+On completed open-dungeon world exits, ARC marks the matching EliteMobs arrival
+record as having left its radius. EliteMobs 10.8.1 otherwise retains this lock
+when a player leaves the world before walking away from the entrance. The small
+runtime adapter preserves the native cooldown timestamp and expiry, ignores a
+record for a different destination, and never handles instance exits. It reads
+the existing manager without starting it; an unsupported native layout warns
+once and leaves native state untouched. This requires no EliteMobs JAR patch.
+
 Autosaves are polled every 20 seconds. The first point is written at the first
 suitable check while walking on a safe solid surface, without fire, water or
 flight, and after 15 seconds outside combat. Subsequent points require at least

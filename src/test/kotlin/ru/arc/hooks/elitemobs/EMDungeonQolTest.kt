@@ -26,6 +26,35 @@ class EMDungeonQolTest : FreeSpec({
     beforeEach { paper = MockBukkitTestRuntime.open() }
     afterEach { paper.close() }
 
+    "only completed exits from open dungeons release the native wormhole arrival lock" {
+        withScheduler {
+            val player = paper.addPlayer("exit-lock")
+            val dungeon = paper.addSimpleWorld("open-lock")
+            val instance = paper.addSimpleWorld("instance-lock")
+            val hub = paper.addSimpleWorld("guild-lock")
+            val departures = mutableListOf<org.bukkit.World>()
+            val settings = config()
+            val qol = EMDungeonQol(settings, { world -> when (world) {
+                dungeon -> DungeonVisit("open")
+                instance -> DungeonVisit("run", instanced = true)
+                else -> null
+            } }, leaveWormholeWorld = { who, from ->
+                who shouldBe player
+                departures += from
+            })
+            player.teleport(hub.spawnLocation)
+            qol.entered(PlayerChangedWorldEvent(player, dungeon))
+            qol.entered(PlayerChangedWorldEvent(player, instance))
+            player.teleport(dungeon.spawnLocation)
+            qol.entered(PlayerChangedWorldEvent(player, hub))
+            every { settings.bool("dungeon-qol.enabled", true) } returns false
+            player.teleport(hub.spawnLocation)
+            qol.entered(PlayerChangedWorldEvent(player, dungeon))
+            departures shouldBe listOf(dungeon)
+            qol.close()
+        }
+    }
+
     "wormhole plugin entry returns to the latest open dungeon exit even after recent combat" {
         withScheduler {
             val player = paper.addPlayer("wormhole-return")
