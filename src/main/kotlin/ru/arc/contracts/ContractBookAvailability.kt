@@ -23,7 +23,8 @@ enum class ContractBookAvailability(val messageKey: String, val fallback: String
         ): ContractBookAvailability = when {
             now < view.contract.windowStartsAt -> NOT_STARTED
             now >= view.contract.windowEndsAt -> CLOSED
-            view.contract.status == ContractStatus.COMPLETED.label -> COMPLETED
+            view.contract.status == ContractStatus.COMPLETED.label ->
+                if (view.contract.remainingQuantity < view.minSubmissionQuantity) COMPLETED else BUDGET_EXHAUSTED
             view.contract.status != ContractStatus.OPEN.label -> CLOSED
             view.contract.remainingQuantity < view.minSubmissionQuantity -> COMPLETED
             view.playerRemainingQuantity < view.minSubmissionQuantity -> PLAYER_CAP

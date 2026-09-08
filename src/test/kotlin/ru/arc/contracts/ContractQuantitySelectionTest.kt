@@ -13,6 +13,11 @@ class ContractQuantitySelectionTest : StringSpec({
     }
 
     "book preserves completed state and does not invent one-off renewals" {
+        val exhausted = view(unspentBudgetMinor = 0)
+        ContractBookAvailability.resolve(
+            exhausted.copy(contract = exhausted.contract.copy(status = ContractStatus.COMPLETED.label)),
+            0, false,
+        ) shouldBe ContractBookAvailability.BUDGET_EXHAUSTED
         val base = view()
         val future = base.copy(contract = base.contract.copy(windowStartsAt = 100, windowEndsAt = 200))
         ContractBookAvailability.resolve(future, 64, true, now = 99) shouldBe ContractBookAvailability.NOT_STARTED
