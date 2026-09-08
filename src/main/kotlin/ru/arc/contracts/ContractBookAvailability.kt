@@ -2,7 +2,7 @@ package ru.arc.contracts
 
 /** Presentation only: quotes and submission validation remain authoritative. */
 enum class ContractBookAvailability(val messageKey: String, val fallback: String) {
-    READY("ready", "<green>[▶] ЛКМ — выбрать количество"),
+    READY("ready", "<green>Можно сдать сейчас"),
     NOT_STARTED("not-started", "<yellow>Приём ещё не начался"),
     CLOSED("closed", "<yellow>Приём сейчас закрыт"),
     COMPLETED("completed", "<green>Нужный объём уже собран"),

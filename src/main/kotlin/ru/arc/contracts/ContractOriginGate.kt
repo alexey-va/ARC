@@ -50,7 +50,7 @@ object ContractOriginGate {
         val configured = settings.get()
         val grant = grants[player.uniqueId] ?: return false
         val now = System.currentTimeMillis()
-        if (!isGrantUsable(grant, player.uniqueId, group, now)) {
+        if (!isGrantUsable(grant, player.uniqueId, null, now)) {
             grants.remove(player.uniqueId, grant)
             return false
         }
@@ -58,7 +58,7 @@ object ContractOriginGate {
             grants.remove(player.uniqueId, grant)
             return false
         }
-        return true
+        return grant.group == group
     }
 
     /** Legacy non-contract inventory paths may retain their world-only guard. */

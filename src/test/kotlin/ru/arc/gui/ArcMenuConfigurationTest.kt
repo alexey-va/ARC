@@ -5,6 +5,10 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.TextDecoration
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import ru.arc.paper.menu.PaperMenuItemRenderContext
+import ru.arc.menu.MenuTemplateId
 import ru.arc.config.Config
 import ru.arc.menu.MenuElementId
 import ru.arc.menu.MenuId
@@ -57,6 +61,26 @@ class ArcMenuConfigurationTest : StringSpec({
 
             item.itemMeta.customModelData shouldBe 11000
         }
+    }
+
+    "contract book keeps tabs separate and renders readable amount and disabled preset states" {
+        val configuration = ArcMenuConfiguration.loadResource(javaClass.classLoader)
+        val layout = configuration.catalog.require(ArcMenuSchema.CONTRACTS_LIST)
+        layout.rows shouldBe 6
+        layout.region("orders").size shouldBe 21
+        val slots = layout.elements.keys.map { layout.slot(it).index }
+        slots.distinct().size shouldBe slots.size
+        val factory = PaperMenuItemFactory()
+        val values = ArcMenuSchema.textContracts.getValue("contracts-order").values.associateWith { Component.text("64") }
+        val card = factory.create(configuration.template(MenuTemplateId.of("contracts-order")), PaperMenuItemRenderContext(values = values))
+        card.itemMeta.displayName()!!.decoration(TextDecoration.ITALIC) shouldBe TextDecoration.State.FALSE
+        card.itemMeta.lore()!!.forEach { it.decoration(TextDecoration.ITALIC) shouldBe TextDecoration.State.FALSE }
+        val plain = PlainTextComponentSerializer.plainText()
+        card.itemMeta.lore()!!.any { plain.serialize(it).contains("примерно") } shouldBe true
+        val preset = factory.create(configuration.template(MenuTemplateId.of("contracts-quantity-preset")), PaperMenuItemRenderContext(
+            values = mapOf("label" to Component.text("Максимум"), "quantity" to Component.text(0)),
+        ))
+        preset.itemMeta.lore()!!.any { plain.serialize(it).contains("ЛКМ") } shouldBe false
     }
 
     "unknown item tags reject a candidate before it can replace the active catalog" {

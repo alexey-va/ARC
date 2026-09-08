@@ -7,7 +7,7 @@ defaults:
     description-2: "<gray>за указанную награду."
     empty-lore: "<gray>Загляните сюда позже."
   availability:
-    ready: "<green>[▶] ЛКМ — выбрать количество"
+    ready: "<green>Можно сдать сейчас"
     not-started: "<yellow>Приём ещё не начался"
     closed: "<yellow>Приём сейчас закрыт"
     completed: "<green>Нужный объём уже собран"
@@ -17,17 +17,54 @@ defaults:
     origin-required: "<yellow>Сдача у конторщика на спавне"
     unavailable: "<yellow>Сдача сейчас недоступна. Обновите книгу заказов"
     opens-at: "<gray>Начало приёма: <white>{time}"
-    renews-at: "<gray>Новый период: <white>{time}"
+    renews-at: "<gray>Книга обновится: <white>{time}"
+  pagination:
+    previous: "Предыдущая страница"
+    next: "Следующая страница"
+  tracking:
+    progress: "<aqua>{name} <white>{current}/{target} <gray>для сдачи"
+    completed: "<green>Ресурсы собраны: {name} · {current}/{target}. <gray>Проверьте условия: /arc contracts"
+    selected: "Показываем количество в инвентаре"
+    hint: "Одна цель сбора; место и цена не резервируются"
+    start: "<green>[▶] ЛКМ — отслеживать"
+    stop: "<yellow>[▶] ЛКМ — перестать отслеживать"
+    unavailable: "<gray>Отслеживание сейчас недоступно"
+    failure: "<yellow>Не удалось сохранить цель. Попробуйте ещё раз."
+  quantity:
+    min: "Минимум"
+    stack: "Стак"
+    max: "Максимум"
   detail:
     title: "<dark_gray>Сдать ресурсы"
     info-heading: "<gold><bold>Общий заказ"
+    purpose: "<gray>Ресурсы для поселения."
   messages:
+    receipt: "<green>Сдано {quantity} · Получено {payout} <white>💰</white>"
     origin-required: "<yellow>Сдать заказ можно только у конторщика на спавне."
     unavailable: "<yellow>Этот заказ больше недоступен. Обновите книгу заказов."
     rejections: { }
 
 boards:
+  all:
+    name: "Все заказы"
+  bank_orders:
+    name: "Банк"
+    speaker: "Фома"
+    availability:
+      origin-required: "<yellow>Сдача: Фома в палате сделок на спавне"
+    detail:
+      purpose: "<gray>Металл и принадлежности для конторы."
+  guild_orders:
+    name: "Гильдия"
+    speaker: "Тихомир"
+    availability:
+      origin-required: "<yellow>Сдача: Тихомир на спавне"
+    detail:
+      purpose: "<gray>Провизия и материалы для мастерских."
   forge_orders:
+    name: "Кузница"
+    availability:
+      origin-required: "<yellow>Сдача: Мила в кузнице на спавне"
     speaker: "Мила"
     list:
       title: "<dark_gray>Заказы кузницы"
@@ -38,6 +75,7 @@ boards:
     detail:
       title: "<dark_gray>Сдать заказ кузнице"
       info-heading: "<gold><bold>Заказ кузницы"
+      purpose: "<gray>Топливо и металл для кузницы."
 
 list:
   info:

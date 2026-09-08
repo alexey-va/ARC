@@ -86,11 +86,15 @@ object ArcMenuSchema {
         INVESTIGATION_TESTIMONY to MenuContract(requiredElements = elements("statement")),
         CONTRACTS_LIST to MenuContract(
             requiredElements = elements("info"),
-            optionalElements = elements("empty"),
+            optionalElements = elements(
+                "empty", "tab-all", "tab-forge", "tab-bank", "tab-guild",
+                "refresh", "previous", "next",
+            ),
             requiredRegions = setOf(CONTRACT_ORDERS),
         ),
         CONTRACTS_DETAIL to MenuContract(
             requiredElements = elements("resource", "info", "payout", "quantity", "back", "confirm"),
+            optionalElements = elements("quantity-min", "quantity-stack", "quantity-max", "track", "next-order"),
         ),
         SCHEDULED_LIST to MenuContract(
             requiredElements = elements("refresh"),
@@ -235,13 +239,25 @@ object ArcMenuSchema {
         "contracts-order" to PaperMenuTextContract(
             values = setOf(
                 "contract-name", "available", "remaining", "target", "player-remaining", "payout",
-                "cap-bonus", "payout-bonus", "ends-at", "action",
+                "cap-bonus", "payout-bonus", "ends-at", "action", "can-submit-quantity", "batch-payout",
+                "personal-accepted", "group-name",
             ),
         ),
-        "contracts-detail-resource" to PaperMenuTextContract(
-            values = setOf("contract-name", "available", "remaining", "player-remaining"),
+        "contracts-tab" to PaperMenuTextContract(values = setOf("label"), flags = setOf("selected")),
+        "contracts-refresh" to PaperMenuTextContract(),
+        "contracts-page" to PaperMenuTextContract(values = setOf("page", "pages", "label"), flags = setOf("available")),
+        "contracts-quantity-preset" to PaperMenuTextContract(values = setOf("quantity", "label"), flags = setOf("available")),
+        "contracts-track" to PaperMenuTextContract(
+            values = setOf("target", "status", "action"), flags = setOf("tracked"),
         ),
-        "contracts-detail-info" to PaperMenuTextContract(values = setOf("heading", "accepted", "target", "contributors")),
+        "contracts-next-order" to PaperMenuTextContract(values = setOf("contract-name"), flags = setOf("available")),
+        "contracts-detail-resource" to PaperMenuTextContract(
+            values = setOf("contract-name", "available", "remaining", "player-remaining", "cap-bonus"),
+        ),
+        "contracts-detail-info" to PaperMenuTextContract(
+            values = setOf("heading", "accepted", "target", "contributors", "personal-accepted", "purpose", "result", "can-submit-quantity"),
+            flags = setOf("has-result"),
+        ),
         "contracts-detail-payout" to PaperMenuTextContract(values = setOf("payout", "per-unit", "payout-bonus")),
         "contracts-detail-quantity" to PaperMenuTextContract(values = setOf("selected", "minimum", "maximum")),
         "contracts-detail-back" to PaperMenuTextContract(),
@@ -390,6 +406,12 @@ object ArcMenuConfiguration {
                 "investigation-verdict-four",
                 "investigation-verdict-five",
                 "contracts-order",
+                "contracts-tab",
+                "contracts-refresh",
+                "contracts-page",
+                "contracts-quantity-preset",
+                "contracts-track",
+                "contracts-next-order",
                 "scheduled-entry-enabled",
                 "scheduled-entry-disabled",
                 "parkour-category",

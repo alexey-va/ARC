@@ -261,6 +261,7 @@ object ContractsManager {
             ARC.serverName ?: "unknown",
             loaded.resourceOrders().size,
         )
+        NpcContractsGui.start()
         publishMetrics()
     }
 
@@ -298,12 +299,14 @@ object ContractsManager {
                 ContractSubmissionJournalAudit.summarize(current.allNow().onEach { it.validated() }, System.currentTimeMillis())
             }
         }
+        if (currentRepo != null) NpcContractsGui.start()
         publishMetrics()
     }
 
     @JvmStatic
     @Synchronized
     fun shutdown() {
+        NpcContractsGui.shutdown()
         ContractOriginGate.clear()
         val currentSelection = selectionRuntime
         selectionRuntime = null
@@ -553,9 +556,12 @@ object ContractsManager {
     private fun definitionAt(contractId: String, now: Long): ResourceContractDefinition? =
         configRef.get()?.let { currentDefinitions(it, now) }?.firstOrNull { it.id == contractId }?.let(::frozenDefinition)
 
-    private fun currentDefinitions(config: ContractsConfig, now: Long): List<ResourceContractDefinition> =
-        if (config.selectionPolicy.applies(now)) selectionRuntime?.current(now)?.orders.orEmpty()
-        else config.resourceOrdersAt(now)
+    private fun currentDefinitions(config: ContractsConfig, now: Long): List<ResourceContractDefinition> {
+        if (config.selectionPolicy.applies(now)) return selectionRuntime?.current(now)?.orders.orEmpty()
+        if (isLeader()) return config.resourceOrdersAt(now)
+        // Observe replicas browse the leader's immutable definitions; they never create orders.
+        return ContractBookCatalog.fromSnapshots(repo?.allNow().orEmpty().mapNotNull { it.definitionSnapshot }, now)
+    }
 
     private fun frozenDefinition(definition: ResourceContractDefinition): ResourceContractDefinition =
         repo?.getNow(ResourceContractRecord.stateId(definition.id, definition.windowStartsAt))?.definitionSnapshot

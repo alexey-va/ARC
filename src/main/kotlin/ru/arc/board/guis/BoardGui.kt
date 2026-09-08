@@ -91,13 +91,8 @@ object BoardGuiFactory {
                 "action" to card.action(ContractOriginGate.canSubmit(player, view.group)),
             ))).withType(card.material)
             ArcMenus.entry(item) { clicker ->
-                if (card.canPrepareSubmission) {
-                    ContractBoardTelemetry.recordInteraction(view.id, "open_gui")
-                    NpcContractsGui.openList(clicker, view.group)
-                } else {
-                    ContractBoardTelemetry.recordInteraction(view.id, "unavailable")
-                    clicker.sendActionBar(TextUtil.mm(config.string("contracts.unavailable", "<yellow>Сдача предметов пока отключена"), true))
-                }
+                ContractBoardTelemetry.recordInteraction(view.id, "open_gui")
+                NpcContractsGui.openDetail(clicker, view.group, view.id)
             }
         }
     }

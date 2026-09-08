@@ -39,7 +39,7 @@ object ContractsSubCommand : SubCommand {
     override fun isAvailable(): Boolean = ContractsManager.mode() != ContractsMode.DISABLED
 
     override fun execute(sender: CommandSender, args: Array<String>): Boolean {
-        val action = args.firstOrNull()?.lowercase() ?: "status"
+        val action = args.firstOrNull()?.lowercase() ?: if (sender is Player) "open" else "status"
         when (action) {
             "status", "list" -> showBoard(sender)
             "open", "menu", "меню" -> openBoard(sender, args)
@@ -54,7 +54,7 @@ object ContractsSubCommand : SubCommand {
 
     override fun tabComplete(sender: CommandSender, args: Array<String>): List<String>? =
         when (args.size) {
-            1 -> listOf("status", "donate", "pass", "launch", "trophy").tabComplete(args[0])
+            1 -> listOf("open", "status", "donate", "pass", "launch", "trophy").tabComplete(args[0])
             2 -> when (args[0].lowercase()) {
                 "donate" -> ContractsManager.seasonProjectStageIds().tabComplete(args[1])
                 "pass", "launch" -> ContractsManager.seasonDungeonContractIds().tabComplete(args[1])
@@ -69,20 +69,7 @@ object ContractsSubCommand : SubCommand {
             sender.sendMessage(TextUtil.mm("<red>Открыть книгу заказов может только игрок."))
             return
         }
-        val group = args.getOrNull(1)?.trim()?.lowercase()
-        if (group == null || ContractsManager.currentViews().none { it.group == group }) {
-            player.sendActionBar(TextUtil.mm("<yellow>Эта книга заказов сейчас пуста."))
-            return
-        }
-        if (!ContractOriginGate.canSubmit(player, group)) {
-            player.sendActionBar(
-                CommandConfig.get(
-                    "contracts.npc-required",
-                    "<yellow>Подойдите к Старосте Тихомиру и нажмите ПКМ, чтобы открыть заказы.",
-                ),
-            )
-            return
-        }
+        val group = args.getOrNull(1)?.trim()?.lowercase() ?: "all"
         NpcContractsGui.openList(player, group)
     }
 
