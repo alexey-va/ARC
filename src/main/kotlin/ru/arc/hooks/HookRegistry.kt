@@ -36,6 +36,7 @@ import ru.arc.listeners.JoinListener
 import ru.arc.listeners.PickupListener
 import ru.arc.listeners.RespawnListener
 import ru.arc.listeners.SpawnerListener
+import ru.arc.contracts.ContractNpcAccessListener
 import ru.arc.contracts.SeasonTrophyProtectionListener
 import ru.arc.util.Logging.debug
 import ru.arc.util.Logging.error
@@ -363,6 +364,7 @@ class HookRegistry(
         }
         register("Citizens", true) {
             citizensHook = CitizensHook()
+            registerListener(ContractNpcAccessListener())
         }
         register("BetterRTP", true) {
             betterRTPListener = registerListener(BetterRTPListener())

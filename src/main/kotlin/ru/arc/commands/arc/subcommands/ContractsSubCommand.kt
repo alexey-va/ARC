@@ -7,6 +7,7 @@ import ru.arc.commands.arc.SubCommand
 import ru.arc.commands.arc.tabComplete
 import ru.arc.contracts.ContractsManager
 import ru.arc.contracts.ContractsMode
+import ru.arc.contracts.ContractOriginGate
 import ru.arc.contracts.NpcContractsGui
 import ru.arc.contracts.PaperSeasonTrophyItems
 import ru.arc.contracts.SeasonDungeonLaunchPreparationOutcome
@@ -32,7 +33,7 @@ object ContractsSubCommand : SubCommand {
     override val defaultPermission: String? = null
     override val defaultDescription = "Открыть доску ресурсных контрактов"
     override val defaultUsage =
-        "/arc contracts [status|open <группа>|donate <этап> <сумма>|pass <данж>|launch <данж>|trophy <количество>]"
+        "/arc contracts [status|donate <этап> <сумма>|pass <данж>|launch <данж>|trophy <количество>]"
     override val defaultPlayerOnly = false
 
     override fun isAvailable(): Boolean = ContractsManager.mode() != ContractsMode.DISABLED
@@ -53,14 +54,12 @@ object ContractsSubCommand : SubCommand {
 
     override fun tabComplete(sender: CommandSender, args: Array<String>): List<String>? =
         when (args.size) {
-            1 -> listOf("status", "open", "donate", "pass", "launch", "trophy").tabComplete(args[0])
-            2 ->
-                when (args[0].lowercase()) {
-                    "open" -> ContractsManager.currentViews().map { it.group }.distinct().tabComplete(args[1])
-                    "donate" -> ContractsManager.seasonProjectStageIds().tabComplete(args[1])
-                    "pass", "launch" -> ContractsManager.seasonDungeonContractIds().tabComplete(args[1])
-                    else -> null
-                }
+            1 -> listOf("status", "donate", "pass", "launch", "trophy").tabComplete(args[0])
+            2 -> when (args[0].lowercase()) {
+                "donate" -> ContractsManager.seasonProjectStageIds().tabComplete(args[1])
+                "pass", "launch" -> ContractsManager.seasonDungeonContractIds().tabComplete(args[1])
+                else -> null
+            }
             else -> null
         }
 
@@ -73,6 +72,15 @@ object ContractsSubCommand : SubCommand {
         val group = args.getOrNull(1)?.trim()?.lowercase()
         if (group == null || ContractsManager.currentViews().none { it.group == group }) {
             player.sendActionBar(TextUtil.mm("<yellow>Эта книга заказов сейчас пуста."))
+            return
+        }
+        if (!ContractOriginGate.canSubmit(player, group)) {
+            player.sendActionBar(
+                CommandConfig.get(
+                    "contracts.npc-required",
+                    "<yellow>Подойдите к Старосте Тихомиру и нажмите ПКМ, чтобы открыть заказы.",
+                ),
+            )
             return
         }
         NpcContractsGui.openList(player, group)

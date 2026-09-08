@@ -25,11 +25,29 @@ class PaperContractInventoryGateway(
         playerId: String,
         itemKey: String,
         quantity: Int,
+    ): PreparedContractInventory? = prepareInternal(playerId, itemKey, quantity, contractGroup = null)
+
+    override suspend fun prepare(
+        playerId: String,
+        itemKey: String,
+        quantity: Int,
+        contractGroup: String,
+    ): PreparedContractInventory? = prepareInternal(playerId, itemKey, quantity, contractGroup)
+
+    private suspend fun prepareInternal(
+        playerId: String,
+        itemKey: String,
+        quantity: Int,
+        contractGroup: String?,
     ): PreparedContractInventory? =
         onBukkitMain {
             val uuid = runCatching { UUID.fromString(playerId) }.getOrNull() ?: return@onBukkitMain null
             val player = playerLookup(uuid)?.takeIf { it.isOnline } ?: return@onBukkitMain null
-            if (!ContractOriginGate.canSubmit(player)) return@onBukkitMain null
+            if (contractGroup != null) {
+                if (!ContractOriginGate.canSubmit(player, contractGroup)) return@onBukkitMain null
+            } else if (!ContractOriginGate.isInOrigin(player)) {
+                return@onBukkitMain null
+            }
             val material = PaperContractItems.material(itemKey) ?: return@onBukkitMain null
             require(quantity in 1..EscrowedItemPayload.MAX_ITEM_QUANTITY) { "Invalid contract inventory quantity" }
 
@@ -51,7 +69,7 @@ class PaperContractInventoryGateway(
                 remaining -= take
             }
             if (remaining != 0 || slots.isEmpty()) return@onBukkitMain null
-            PaperPreparedContractInventory(uuid, playerLookup, slots, persistence)
+            PaperPreparedContractInventory(uuid, playerLookup, slots, persistence, contractGroup)
         }
 
 }
@@ -91,6 +109,7 @@ private class PaperPreparedContractInventory(
     private val playerLookup: (UUID) -> Player?,
     private val slots: List<PaperContractSlotPlan>,
     private val persistence: PaperPlayerDataPersistence,
+    private val contractGroup: String?,
 ) : PreparedContractInventory {
     override val payloads: List<EscrowedItemPayload> = slots.map { it.payload }
     private var removed = false
@@ -100,7 +119,12 @@ private class PaperPreparedContractInventory(
             if (removed) return@onBukkitMain ContractInventoryMutation.Ambiguous
             val player = playerLookup(playerId)?.takeIf { it.isOnline }
                 ?: return@onBukkitMain ContractInventoryMutation.NotPerformed("player_offline")
-            if (!ContractOriginGate.canSubmit(player)) {
+            val gateOpen = if (contractGroup != null) {
+                ContractOriginGate.canSubmit(player, contractGroup)
+            } else {
+                ContractOriginGate.isInOrigin(player)
+            }
+            if (!gateOpen) {
                 return@onBukkitMain ContractInventoryMutation.NotPerformed("outside_origin")
             }
             val inventory = player.inventory

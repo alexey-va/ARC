@@ -4,6 +4,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
+import java.time.Duration
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -14,6 +15,10 @@ class ContractsConfigTest : StringSpec({
 
         config.validated() shouldBe config
         config.mode shouldBe ContractsMode.OBSERVE
+        config.submissionNpcId shouldBe 390
+        config.submissionNpcGroup shouldBe "guild_orders"
+        config.submissionNpcRadius shouldBe 4.5
+        config.submissionNpcSessionTtl shouldBe Duration.ofSeconds(120)
         config.serverWeeklyBudgetMinor shouldBe 9_500_000L
         config.resourceOrders().shouldHaveSize(5)
         val season = config.observeSeasonCatalog()

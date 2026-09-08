@@ -6,6 +6,7 @@ import io.mockk.every
 import io.mockk.mockk
 import org.bukkit.World
 import org.bukkit.entity.Player
+import java.util.UUID
 
 class ContractOriginGateTest : StringSpec({
     val player = mockk<Player>()
@@ -17,18 +18,39 @@ class ContractOriginGateTest : StringSpec({
     every { origin.name } returns "rc_origin_spawn"
     every { survival.name } returns "classic_survival"
 
-    "allows online players in Origin regardless of OP status" {
-        ContractOriginGate.canSubmit(player) shouldBe true
+    "accepts an unexpired click grant for its player and group" {
+        val playerId = UUID.randomUUID()
+        ContractOriginGate.isGrantUsable(
+            ContractOriginGate.Grant(playerId, 390, "guild_orders", 2_000L),
+            playerId,
+            "guild_orders",
+            1_999L,
+        ) shouldBe true
     }
 
-    "denies players outside Origin" {
+    "rejects a grant for another group or player" {
+        val playerId = UUID.randomUUID()
+        val grant = ContractOriginGate.Grant(playerId, 390, "guild_orders", 2_000L)
+        ContractOriginGate.isGrantUsable(grant, playerId, "forge_orders", 1_000L) shouldBe false
+        ContractOriginGate.isGrantUsable(grant, UUID.randomUUID(), "guild_orders", 1_000L) shouldBe false
+    }
+
+    "rejects an expired grant at its deadline" {
+        val playerId = UUID.randomUUID()
+        ContractOriginGate.isGrantUsable(
+            ContractOriginGate.Grant(playerId, 390, "guild_orders", 2_000L),
+            playerId,
+            "guild_orders",
+            2_000L,
+        ) shouldBe false
+    }
+
+    "keeps the legacy location predicate limited to online Origin players" {
+        ContractOriginGate.isInOrigin(player) shouldBe true
         every { player.world } returns survival
-        ContractOriginGate.canSubmit(player) shouldBe false
-    }
-
-    "denies offline players even if their last world was Origin" {
+        ContractOriginGate.isInOrigin(player) shouldBe false
         every { player.world } returns origin
         every { player.isOnline } returns false
-        ContractOriginGate.canSubmit(player) shouldBe false
+        ContractOriginGate.isInOrigin(player) shouldBe false
     }
 })

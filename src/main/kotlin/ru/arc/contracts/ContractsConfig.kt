@@ -7,6 +7,7 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import java.nio.file.Path
 import java.security.MessageDigest
+import java.time.Duration
 import java.time.Instant
 
 enum class ContractsMode(val label: String) {
@@ -156,6 +157,17 @@ open class ContractsConfig(
 
     open val leaderServer: String get() = config.string("leader-server", "spawn").trim().lowercase()
 
+    /** The Citizens NPC that authorizes the public guild resource-contract desk. */
+    open val submissionNpcId: Int get() = config.integer("submission-access.npc-id", 390)
+
+    open val submissionNpcGroup: String
+        get() = config.string("submission-access.group", "guild_orders").trim().lowercase()
+
+    open val submissionNpcRadius: Double get() = config.double("submission-access.radius", 4.5)
+
+    open val submissionNpcSessionTtl: Duration
+        get() = config.duration("submission-access.session-ttl", Duration.ofSeconds(120))
+
     open val serverWeeklyBudgetMinor: Long
         get() = moneyMinor(config.string("server-weekly-budget", "0"), "server-weekly-budget", allowZero = true)
 
@@ -171,6 +183,14 @@ open class ContractsConfig(
         enabled
         mode
         require(SERVER_ID_PATTERN.matches(leaderServer)) { "Invalid contracts leader-server: $leaderServer" }
+        require(submissionNpcId > 0) { "Contracts submission NPC id must be positive" }
+        require(ID_PATTERN.matches(submissionNpcGroup)) { "Contracts submission NPC group must be a normalized id" }
+        require(submissionNpcRadius.isFinite() && submissionNpcRadius in 1.0..16.0) {
+            "Contracts submission NPC radius must be 1..16 blocks"
+        }
+        require(submissionNpcSessionTtl in Duration.ofSeconds(1)..Duration.ofMinutes(10)) {
+            "Contracts submission NPC session TTL must be 1s..10m"
+        }
         serverWeeklyBudgetMinor
         val orders = resourceOrders()
         if (selectionPolicy.enabled) {

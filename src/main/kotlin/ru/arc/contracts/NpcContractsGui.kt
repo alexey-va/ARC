@@ -30,6 +30,10 @@ object NpcContractsGui {
             player.sendActionBar(TextUtil.mm("<red>Эта книга заказов настроена неверно."))
             return
         }
+        if (!ContractOriginGate.canSubmit(player, group)) {
+            player.sendActionBar(message(group, "messages.origin-required", "<yellow>Откройте заказ у конторщика на спавне."))
+            return
+        }
         val policy = ContractRankPolicyResolver.resolve(player)
         openList(player, group, policy)
     }
@@ -51,7 +55,7 @@ object NpcContractsGui {
         val capacity = ArcMenus.current().catalog.require(ArcMenuSchema.CONTRACTS_LIST)
             .region(ArcMenuSchema.CONTRACT_ORDERS).size
         val now = System.currentTimeMillis()
-        val originAllowed = ContractOriginGate.canSubmit(player)
+        val originAllowed = ContractOriginGate.canSubmit(player, group)
         val orders = views.map { view ->
             val available = PaperContractItems.countPlain(player, view.contract.itemKey)
             val selection = ContractQuantitySelector.select(view, available)
@@ -135,6 +139,10 @@ object NpcContractsGui {
         requestedQuantity: Int?,
         policy: ContractRankPolicy,
     ) {
+        if (!ContractOriginGate.canSubmit(player, group)) {
+            player.sendActionBar(message(group, "messages.origin-required", "<yellow>Откройте заказ у конторщика на спавне."))
+            return
+        }
         val view =
             ContractsManager.currentPlayerViews(player.uniqueId, group, policy = policy)
                 .firstOrNull { it.contract.id == contractId }
@@ -143,7 +151,7 @@ object NpcContractsGui {
         val selection = ContractQuantitySelector.select(view, available, requestedQuantity)
         val material = PaperContractItems.material(view.contract.itemKey) ?: Material.PAPER
         val quote = ContractsManager.quote(player, contractId, selection.selected)
-        val originAllowed = ContractOriginGate.canSubmit(player)
+        val originAllowed = ContractOriginGate.canSubmit(player, group)
         val quoteAvailable = quote != null
         val availability = ContractBookAvailability.resolve(view, available, originAllowed, quoteAvailable)
         val canSubmit = availability == ContractBookAvailability.READY
@@ -252,7 +260,7 @@ object NpcContractsGui {
         group: String,
         quote: ContractSubmissionQuote?,
     ) {
-        if (!ContractOriginGate.canSubmit(player)) {
+        if (!ContractOriginGate.canSubmit(player, group)) {
             player.sendActionBar(message(group, "messages.origin-required", "<yellow>Сдать заказ можно только у конторщика на спавне."))
             return
         }

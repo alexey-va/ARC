@@ -88,7 +88,7 @@ object BoardGuiFactory {
                 "payout" to Component.text(money(view.payoutMinorPerUnit)),
                 "budget" to Component.text(money(card.remainingBudgetMinor)),
                 "ends" to Component.text(card.endsAt),
-                "action" to card.action(ContractOriginGate.canSubmit(player)),
+                "action" to card.action(ContractOriginGate.canSubmit(player, view.group)),
             ))).withType(card.material)
             ArcMenus.entry(item) { clicker ->
                 if (card.canPrepareSubmission) {

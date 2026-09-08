@@ -10,6 +10,14 @@ mode: observe
 leader-server: spawn
 server-weekly-budget: "250000.00"
 
+# Resource submissions are authorized by a short-lived click session from the
+# public guild-contract NPC. The GUI/command cannot mint this session.
+submission-access:
+  npc-id: 390
+  group: guild_orders
+  radius: 4.5
+  session-ttl: 120s
+
 # Resource orders use exact decimal base prices. Sales require a GUI quote on
 # rc_origin_spawn. Optional weekly-recurring renews a Monday 00:00 UTC seven-day
 # window; dynamic-pricing prices each item from bounded weekly demand/supply.

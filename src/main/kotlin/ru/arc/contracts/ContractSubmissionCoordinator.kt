@@ -30,6 +30,14 @@ interface ContractInventoryGateway {
         itemKey: String,
         quantity: Int,
     ): PreparedContractInventory?
+
+    /** Contract submissions pass the group so the final inventory recheck cannot downgrade the gate. */
+    suspend fun prepare(
+        playerId: String,
+        itemKey: String,
+        quantity: Int,
+        contractGroup: String,
+    ): PreparedContractInventory? = prepare(playerId, itemKey, quantity)
 }
 
 sealed interface ContractInventoryMutation {
@@ -187,7 +195,7 @@ class ContractSubmissionCoordinator(
 
         val preparedInventory =
             try {
-                inventory.prepare(playerId, definition.itemKey, plan.acceptedQuantity.toInt())
+                inventory.prepare(playerId, definition.itemKey, plan.acceptedQuantity.toInt(), definition.group)
             } catch (_: Throwable) {
                 null
             } ?: return ContractSubmissionOutcome.Rejected(SubmissionRejection.INVENTORY_UNAVAILABLE)

@@ -143,6 +143,7 @@ object ContractsManager {
         if (repo != null || journalRepo != null) return
         val loaded = ContractsConfig.load().validated(SEASON_MUTATION_RUNTIME_READY)
         configRef.set(loaded)
+        ContractOriginGate.configure(loaded)
         dungeonObserver.configure(loaded.observeSeasonCatalog(SEASON_MUTATION_RUNTIME_READY))
         if (!loaded.enabled || loaded.mode == ContractsMode.DISABLED) {
             info("Contracts disabled by policy")
@@ -272,6 +273,7 @@ object ContractsManager {
             }.getOrNull()
         val loaded = ContractsConfig.load().validated(SEASON_MUTATION_RUNTIME_READY)
         configRef.set(loaded)
+        ContractOriginGate.configure(loaded)
         dungeonObserver.configure(loaded.observeSeasonCatalog(SEASON_MUTATION_RUNTIME_READY))
         val currentRepo = repo
         if (currentRepo != null && (!loaded.enabled || loaded.mode == ContractsMode.DISABLED)) {
@@ -302,6 +304,7 @@ object ContractsManager {
     @JvmStatic
     @Synchronized
     fun shutdown() {
+        ContractOriginGate.clear()
         val currentSelection = selectionRuntime
         selectionRuntime = null
         runCatching { currentSelection?.close() }.onFailure { error("Contract selection shutdown failed", it) }
@@ -529,9 +532,10 @@ object ContractsManager {
     @JvmStatic
     fun quote(player: Player, contractId: String, requestedQuantity: Int): ContractSubmissionQuote? {
         check(Bukkit.isPrimaryThread()) { "Contract quotes must be created on the main thread" }
-        if (!submissionsEnabled() || !ContractOriginGate.canSubmit(player)) return null
+        if (!submissionsEnabled()) return null
         val now = System.currentTimeMillis()
         val definition = definitionAt(contractId, now) ?: return null
+        if (!ContractOriginGate.canSubmit(player, definition.group)) return null
         if (!seasonResourceStageOpen(definition)) return null
         val state = repo?.getNow(ResourceContractRecord.stateId(definition.id, definition.windowStartsAt))?.state
             ?: ResourceContractState.empty(definition)
@@ -567,8 +571,9 @@ object ContractsManager {
         player: Player,
         quote: ContractSubmissionQuote,
     ): CompletableFuture<ContractSubmissionOutcome> {
+        check(Bukkit.isPrimaryThread()) { "Contract submissions must be started on the main thread" }
         val playerId = player.uniqueId
-        if (!ContractOriginGate.canSubmit(player) || quote.playerId != playerId.toString()) {
+        if (quote.playerId != playerId.toString()) {
             return CompletableFuture.completedFuture(ContractSubmissionOutcome.Rejected(SubmissionRejection.INVALID_REQUEST))
         }
         val policy = ContractRankPolicyResolver.resolve(player)
@@ -591,6 +596,10 @@ object ContractsManager {
                 submissionsInFlight.remove(playerId)
                 complete(ContractSubmissionOutcome.Rejected(SubmissionRejection.INVALID_REQUEST))
             }
+        if (!ContractOriginGate.canSubmit(player, definition.group)) {
+            submissionsInFlight.remove(playerId)
+            return result.apply { complete(ContractSubmissionOutcome.Rejected(SubmissionRejection.INVALID_REQUEST)) }
+        }
         currentScope.launch {
             try {
                 val outcome =

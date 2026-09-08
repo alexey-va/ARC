@@ -9,7 +9,7 @@ commands:
     aliases: [заказы]
     permission: ''
     player-only: false
-    usage: /arc contracts [status|open <группа>]
+    usage: /arc contracts [status]
   investigation:
     name: investigation
     aliases: [расследование]
@@ -208,6 +208,7 @@ messages:
     header: '<gold>═══ Доска контрактов ═══'
     calibration: '<gray>Идёт калибровка экономики. Первые ресурсные заказы появятся после чистого периода наблюдений.'
     observe-only: '<yellow>Контракты пока калибруются. <gray>Сдача предметов и выплаты выключены.'
+    npc-required: '<yellow>Подойдите к Старосте Тихомиру и нажмите ПКМ, чтобы открыть заказы.'
   common:
     usage: '<red>Использование: <gray>%usage%'
   audit:
