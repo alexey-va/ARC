@@ -11,6 +11,9 @@ Holding a native Lands claim block in either hand starts a personal guide:
   `/unclaim` for removing protection from the chunk the player stands in.
 - The ray-traced placement block (including the clicked face and replaceable
   blocks) determines the target when available; otherwise the player's current chunk is previewed immediately.
+- The hologram appears four blocks ahead of the eyes immediately, follows the
+  gaze every tick with two-tick client interpolation, and names the selected
+  land when expanding. Land names are inserted as literal text.
 - Green outlines mean unclaimed land, cyan means the player's claimed land,
   and red means another owner's land. Wording accompanies each state.
 - The item's radius determines the complete target footprint. The selected

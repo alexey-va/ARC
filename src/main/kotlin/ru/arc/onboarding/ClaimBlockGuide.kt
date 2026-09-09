@@ -48,11 +48,17 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
     }
 
     fun start() {
-        tasks.runTimer(1L, 5L) {
-            tick += 5
+        tasks.runTimer(1L, 1L) {
+            tick++
             Bukkit.getOnlinePlayers().forEach { player ->
                 try {
-                    update(player)
+                    if (tick == 1L || tick % 5L == 0L) update(player)
+                    sessions[player.uniqueId]?.label?.takeIf { it.isValid }?.let { label ->
+                        val position = claimGuideLabelLocation(player.eyeLocation)
+                        if (label.world == player.world && label.location.distanceSquared(position) > 0.0001) {
+                            label.teleport(position)
+                        }
+                    }
                 } catch (failure: Exception) {
                     // Stop this viewer until reconnect, avoiding a 4 Hz error loop.
                     clear(player)
@@ -170,9 +176,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             session.borders.forEach { border -> border.teleport(border.location.apply { this.y = y }) }
             session.borderY = y
         }
-        val labelLocation = if (success || placement == null) {
-            Location(world, target.x * 16 + 8.0, y + 0.5, target.z * 16 + 8.0)
-        } else placement.location.add(0.5, 1.6, 0.5)
+        val labelLocation = claimGuideLabelLocation(player.eyeLocation)
         val label = session.label?.takeIf { it.isValid } ?: world.spawn(labelLocation, TextDisplay::class.java) {
             configure(it)
             it.billboard = Display.Billboard.CENTER
@@ -180,17 +184,20 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             it.isShadowed = true
             it.backgroundColor = Color.fromARGB(190, 15, 23, 30)
             it.lineWidth = 230
+            it.teleportDuration = 2
+            it.setTransformationMatrix(Matrix4f().scaling(0.65f))
         }.also { session.label = it; player.showEntity(ARC.instance, it) }
         if (label.location.distanceSquared(labelLocation) > 0.01) label.teleport(labelLocation)
-        label.text(text.getValue(state))
+        label.text(claimGuideLandText(text.getValue(state), selected?.name))
         if (tick % 20L == 0L) {
             val action = when {
                 success || tick % 160L >= 100L -> "remove"
                 state == "own" -> "action-own"
                 state == "occupied" -> "action-occupied"
+                state == "expand" -> "action-expand"
                 else -> "action-free"
             }
-            effects.sendActionBar(player, text.getValue(action))
+            effects.sendActionBar(player, claimGuideLandText(text.getValue(action), selected?.name))
         }
     }
 

@@ -1,5 +1,8 @@
 package ru.arc.onboarding
 
+import org.bukkit.Location
+import net.kyori.adventure.text.Component
+
 /** Chunk-space geometry; internal shared edges never become a region border. */
 internal data class GuideChunk(val x: Int, val z: Int)
 internal data class GuideEdge(val x: Int, val z: Int, val alongX: Boolean)
@@ -25,3 +28,10 @@ internal fun claimGuideChunks(center: GuideChunk, radius: Int): Set<GuideChunk> 
 internal fun claimGuideTarget(placementX: Int?, placementZ: Int?, playerX: Int, playerZ: Int): GuideChunk =
     if (placementX != null && placementZ != null) GuideChunk(placementX shr 4, placementZ shr 4)
     else GuideChunk(playerX shr 4, playerZ shr 4)
+
+/** A personal HUD anchor independent of blocks and terrain; never mutates the eye location. */
+internal fun claimGuideLabelLocation(eye: Location): Location =
+    eye.clone().add(eye.direction.multiply(4.0)).add(0.0, 0.35, 0.0)
+
+internal fun claimGuideLandText(template: Component, landName: String?): Component =
+    template.replaceText { it.matchLiteral("{land}").replacement(Component.text(landName.orEmpty())) }
