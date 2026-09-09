@@ -16,12 +16,15 @@ import org.bukkit.entity.Player
 import org.bukkit.entity.TextDisplay
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
+import org.bukkit.event.EventPriority
+import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.joml.Matrix4f
 import ru.arc.ARC
 import ru.arc.core.LifecycleTaskScope
+import ru.arc.landsui.LandsUiModule
 import ru.arc.paper.audience.NativePaperAudienceEffects as effects
 import ru.arc.util.Logging.error
 import java.time.Duration
@@ -39,6 +42,10 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
     private class Session(val world: UUID) {
         val borders = mutableListOf<Entity>()
         var label: TextDisplay? = null
+        var button: TextDisplay? = null
+        var buttonLand: String? = null
+        var anchor: Location? = null
+        var clickAfter = 0L
         var geometry: Any? = null
         var borderY = Double.NaN
         var successUntil = 0L
@@ -52,12 +59,15 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             tick++
             Bukkit.getOnlinePlayers().forEach { player ->
                 try {
+                    sessions[player.uniqueId]?.let { session ->
+                        // Freeze while sneaking so a side button can actually be aimed at.
+                        if (!player.isSneaking) session.anchor = player.eyeLocation
+                    }
                     if (tick == 1L || tick % 5L == 0L) update(player)
-                    sessions[player.uniqueId]?.label?.takeIf { it.isValid }?.let { label ->
-                        val position = claimGuideLabelLocation(player.eyeLocation)
-                        if (label.world == player.world && label.location.distanceSquared(position) > 0.0001) {
-                            label.teleport(position)
-                        }
+                    sessions[player.uniqueId]?.let { session ->
+                        val eye = session.anchor ?: player.eyeLocation
+                        follow(session.label, claimGuideLabelLocation(eye))
+                        follow(session.button, claimGuideButtonLocation(eye))
                     }
                 } catch (failure: Exception) {
                     // Stop this viewer until reconnect, avoiding a 4 Hz error loop.
@@ -90,7 +100,7 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             return
         }
         if (session == null) {
-            session = Session(player.world.uid)
+            session = Session(player.world.uid).also { it.anchor = player.eyeLocation }
             sessions[player.uniqueId] = session
             if (tick >= (titleAfter[player.uniqueId] ?: 0L)) {
                 showTitle(player, "title", "subtitle")
@@ -176,7 +186,8 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             session.borders.forEach { border -> border.teleport(border.location.apply { this.y = y }) }
             session.borderY = y
         }
-        val labelLocation = claimGuideLabelLocation(player.eyeLocation)
+        val eye = session.anchor ?: player.eyeLocation
+        val labelLocation = claimGuideLabelLocation(eye)
         val label = session.label?.takeIf { it.isValid } ?: world.spawn(labelLocation, TextDisplay::class.java) {
             configure(it)
             it.billboard = Display.Billboard.CENTER
@@ -189,6 +200,25 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         }.also { session.label = it; player.showEntity(ARC.instance, it) }
         if (label.location.distanceSquared(labelLocation) > 0.01) label.teleport(labelLocation)
         label.text(claimGuideLandText(text.getValue(state), selected?.name))
+        if (holding && selected != null && LandsUiModule.isAvailable()) {
+            val button = session.button?.takeIf { it.isValid }
+                ?: world.spawn(claimGuideButtonLocation(eye), TextDisplay::class.java) {
+                    configure(it)
+                    it.billboard = Display.Billboard.CENTER
+                    it.isSeeThrough = true
+                    it.isShadowed = true
+                    it.backgroundColor = Color.fromARGB(220, 15, 40, 50)
+                    it.lineWidth = 160
+                    it.teleportDuration = 2
+                    it.setTransformationMatrix(Matrix4f().scaling(0.55f))
+                }.also { session.button = it; player.showEntity(ARC.instance, it) }
+            session.buttonLand = selected.ulid.toString()
+            button.text(claimGuideLandText(text.getValue("add-friend"), selected.name.let { if (it.length > 24) it.take(23) + "…" else it }))
+        } else {
+            session.button?.remove()
+            session.button = null
+            session.buttonLand = null
+        }
         if (tick % 20L == 0L) {
             val action = when {
                 success || tick % 160L >= 100L -> "remove"
@@ -199,6 +229,29 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
             }
             effects.sendActionBar(player, claimGuideLandText(text.getValue(action), selected?.name))
         }
+    }
+
+    private fun follow(display: TextDisplay?, position: Location) {
+        if (display != null && display.isValid && display.world == position.world &&
+            display.location.distanceSquared(position) > 0.0001) display.teleport(position)
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    fun clickButton(event: PlayerInteractEvent) {
+        val player = event.player
+        // Displays have no physical hitbox. Never intercept placement, including Shift + RMB.
+        if (!claimGuideButtonGesture(event.action, event.hand, player.isSneaking)) return
+        if (!ClaimBlockIdentity.matches(player.inventory.itemInMainHand) &&
+            !ClaimBlockIdentity.matches(player.inventory.itemInOffHand)) return
+        val session = sessions[player.uniqueId] ?: return
+        val button = session.button?.takeIf { it.isValid } ?: return
+        if (tick < session.clickAfter || !claimGuideButtonHit(player.eyeLocation, button.location)) return
+        val landId = session.buttonLand ?: return
+        val selected = integration.getLandPlayer(player.uniqueId)?.getEditLand(false) ?: return
+        if (selected.ulid.toString() != landId || !LandsUiModule.isAvailable()) return
+        event.isCancelled = true
+        session.clickAfter = tick + 10
+        LandsUiModule.openAddMember(player, landId)
     }
 
     private fun drawEdge(player: Player, session: Session, edge: GuideEdge, y: Double, material: Material, interior: Set<GuideChunk>) {
@@ -266,6 +319,9 @@ internal class ClaimBlockGuide(private val config: OnboardingConfig) : Listener,
         session.borders.clear()
         session.label?.remove()
         session.label = null
+        session.button?.remove()
+        session.button = null
+        session.buttonLand = null
         session.geometry = null
     }
 

@@ -23,6 +23,7 @@ object OnboardingModule : PluginModule {
         if (Bukkit.getPluginManager().isPluginEnabled("Lands")) {
             OnboardingService.guideConfig()?.takeIf { it.claimGuideEnabled }?.let { config ->
                 claimGuide = ClaimBlockGuide(config).also { register(it); it.start() }
+                register(ClaimBoundaryListener(config))
             }
         }
         if (OnboardingService.isEnabled()) {

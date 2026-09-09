@@ -7,6 +7,28 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 
 class ClaimGuideGeometryTest : FreeSpec({
+    "button gesture never consumes placement or ordinary left clicks" {
+        for (action in org.bukkit.event.block.Action.entries) {
+            claimGuideButtonGesture(action, org.bukkit.inventory.EquipmentSlot.HAND, false) shouldBe false
+            claimGuideButtonGesture(action, org.bukkit.inventory.EquipmentSlot.OFF_HAND, true) shouldBe false
+        }
+        claimGuideButtonGesture(org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK, org.bukkit.inventory.EquipmentSlot.HAND, true) shouldBe false
+        claimGuideButtonGesture(org.bukkit.event.block.Action.RIGHT_CLICK_AIR, org.bukkit.inventory.EquipmentSlot.HAND, true) shouldBe false
+        claimGuideButtonGesture(org.bukkit.event.block.Action.LEFT_CLICK_AIR, org.bukkit.inventory.EquipmentSlot.HAND, true) shouldBe true
+        claimGuideButtonGesture(org.bukkit.event.block.Action.LEFT_CLICK_BLOCK, org.bukkit.inventory.EquipmentSlot.HAND, true) shouldBe true
+    }
+    "frozen side button can be targeted but rejects placement crosshair, back and distant clicks" {
+        val eye = Location(null, 10.0, 70.0, 20.0, 0f, 0f)
+        val button = claimGuideButtonLocation(eye)
+        claimGuideButtonHit(eye, button) shouldBe false
+        val aimed = eye.clone().setDirection(button.toVector().add(org.bukkit.util.Vector(0.0, 0.22, 0.0)).subtract(eye.toVector()))
+        claimGuideButtonHit(aimed, button) shouldBe true
+        claimGuideButtonHit(aimed.clone().setDirection(aimed.direction.multiply(-1)), button) shouldBe false
+        claimGuideButtonHit(aimed.clone().subtract(aimed.direction.multiply(10)), button) shouldBe false
+        claimGuideButtonHit(eye.clone().setDirection(button.toVector().add(org.bukkit.util.Vector(0.0, 1.5, 0.0)).subtract(eye.toVector())), button) shouldBe false
+        eye shouldBe Location(null, 10.0, 70.0, 20.0, 0f, 0f)
+    }
+
     "hologram stays in front of the eyes without a target block and leaves the player location unchanged" {
         val eye = Location(null, 10.0, 70.0, 20.0, 0f, 0f)
         claimGuideLabelLocation(eye) shouldBe Location(null, 10.0, 70.35, 24.0, 0f, 0f)

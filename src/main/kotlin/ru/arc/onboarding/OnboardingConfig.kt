@@ -51,6 +51,9 @@ internal class OnboardingConfig private constructor(
             "action-free" to "<white>Поставь блок в зелёном контуре — защити эту землю",
             "action-own" to "<white>Расширить — поставь блок за голубой границей",
             "action-occupied" to "<#ff8178>Место занято • <white>Найди свободный участок",
+            "add-friend" to "<#92bed8>Добавить друга<newline><white>«{land}»<newline><gray>Shift → наведи → ЛКМ",
+            "boundary-enter" to "<#92bed8>Участок «{land}» <gray>• <white>Земля под защитой",
+            "boundary-leave" to "<#ff9f0f>Ты вышел из «{land}» <gray>• <white>Здесь нет привата",
             "remove" to "<white>Встань внутри своего участка → <#ff9f0f>/unclaim <white>— снять защиту здесь",
         )
 

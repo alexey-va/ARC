@@ -245,7 +245,7 @@ class LandsUiController(
         }
     }
 
-    private fun openAddMember(player: Player, landId: String) {
+    fun openAddMember(player: Player, landId: String) {
         withLand(player, landId) { land ->
             val candidates = LandsUiPlanner.addablePlayers(player.uniqueId, land, gateway.onlinePlayers())
                 .take(settings.maxListedPlayers)

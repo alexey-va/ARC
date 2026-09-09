@@ -36,6 +36,11 @@ object LandsUiModule : PluginModule {
         active.openRoot(player)
     }
 
+    fun openAddMember(player: Player, landId: String) {
+        val active = controller ?: return open(player)
+        active.openAddMember(player, landId)
+    }
+
     fun openInvite(player: Player, targetId: java.util.UUID, targetName: String) {
         val active = controller
         if (active == null) {
