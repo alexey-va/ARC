@@ -19,25 +19,7 @@ class EliteLootConfigParser {
             res[lootType] = pool
             debug("Loaded loot type {} with {} items", lootType, pool.decors.size)
         }
-        applyCrossbowFallback(res)
         return res
-    }
-
-    private fun applyCrossbowFallback(pools: MutableMap<LootType, DecorPool>) {
-        val crossbowPool = pools[LootType.CROSSBOW]
-        if (crossbowPool == null || crossbowPool.decors.isNotEmpty()) return
-        val bowPool = pools[LootType.BOW]
-        if (bowPool == null || bowPool.decors.isEmpty()) return
-
-        val fallback = DecorPool()
-        for (bowItem in bowPool.decors.values) {
-            fallback.add(
-                DecorItem(Material.CROSSBOW, bowItem.weight, bowItem.modelId, bowItem.color, bowItem.iaNamespace, bowItem.iaId),
-                bowItem.weight,
-            )
-        }
-        pools[LootType.CROSSBOW] = fallback
-        debug("Crossbow pool empty — reusing {} bow decor entries as crossbow", fallback.decors.size)
     }
 
     fun addDecor(lootType: LootType, decorItem: DecorItem) {

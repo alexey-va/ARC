@@ -4,6 +4,7 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.Location
 import org.bukkit.entity.Player
+import ru.arc.util.TextUtil
 import ru.arc.gui.ArcMenus
 import ru.arc.gui.DialogTables
 import ru.arc.gui.MenuEscapeBehavior
@@ -22,6 +23,7 @@ import java.time.format.DateTimeFormatter
 internal class DungeonSaveMenus(
     private val dungeon: EMDungeonQol,
     private val crystals: (Player) -> String? = ::readDungeonCrystals,
+    private val readQuests: (Player) -> List<DungeonQuestInfo>? = ::readDungeonQuests,
     private val show: (Player, PaperDialogScreen, (() -> Unit)?) -> Unit = { player, screen, reopen ->
         val close = PaperDialogButton(PaperDialogActionId.of("close"), dungeon.text("saves.dialog.close-label", "<#aaa49a>Закрыть"), width = 200, closeDialogBeforeAction = true) { }
         // A root Close is already the footer, so never move a second Close into the grid.
@@ -71,6 +73,7 @@ internal class DungeonSaveMenus(
                 action("shop", "panel.shop-label", "<#f4d87a>Припасы ›", "panel.shop-tooltip", "Припасы и кейсы EliteMobs за кристаллы") { shop(player) },
                 shops(player),
                 partyButton(player),
+                action("quests", "quests.label", "<#c4a7e7>Задания ›", "quests.tooltip", "Принятые задания EliteMobs и их текущий прогресс") { quests(player) },
                 action("guide", "panel.guide-label", "<#86dcf1>Гайд ›", "panel.guide-tooltip", "Читальная справка о данжах") {
                     if (!HelpCenterModule.openDungeonsGuide(player) { panel(player) }) {
                         panel(player, text("panel.guide-unavailable", "<#d7b486>Гайд сейчас недоступен. Закройте панель и попробуйте позже."))
@@ -80,6 +83,31 @@ internal class DungeonSaveMenus(
             ),
             exitButton = if (MenuEscapeBehavior.goesBack(player)) back {} else close(), columns = 2,
         )) { panel(player) }
+    }
+
+    internal fun quests(player: Player, requestedPage: Int = 0) {
+        val entries = readQuests(player)
+        val page = requestedPage.coerceIn(0, (entries.orEmpty().size - 1).coerceAtLeast(0))
+        val quest = entries?.getOrNull(page)
+        val body = mutableListOf(PaperDialogBody(text("quests.intro", "<#aaa49a>Ваши принятые задания EliteMobs. Отслеживаемое показано первым; задания могут относиться к другим локациям."), 468))
+        if (quest == null) {
+            body += PaperDialogBody(if (entries == null) text("quests.unavailable", "<#d7b486>Данные заданий ещё загружаются. Попробуйте обновить страницу.")
+                else text("quests.empty", "<#e8dfd2>Принятых заданий пока нет. Поговорите с персонажами, которые предлагают задания."), 468)
+        } else {
+            body += PaperDialogBody(plain(TextUtil.legacy(quest.name)), 468)
+            body += PaperDialogBody(if (quest.tracked) text("quests.tracked", "<#9bd48d>Отслеживается") else text("quests.accepted", "<#aaa49a>Принято"), 468)
+            if (quest.complete) body += PaperDialogBody(text("quests.complete", "<#9bd48d>Цели выполнены — задание готово к сдаче."), 468)
+            quest.lines.forEach { body += PaperDialogBody(plain(TextUtil.legacy(it)), 468) }
+            body += PaperDialogBody(text("quests.page", "<#aaa49a>Задание <current> из <total>", "current" to Component.text(page + 1), "total" to Component.text(entries.size)), 468)
+        }
+        show(player, PaperDialogScreen(
+            id = "dungeon.quests", title = text("quests.title", "<#c4a7e7>Мои задания"), body = body,
+            buttons = listOfNotNull(
+                if (page > 0) action("previous", "quests.previous", "<#92bed8>‹ Предыдущая страница", "quests.previous-tooltip", "Показать предыдущее задание") { quests(player, page - 1) } else null,
+                if (page + 1 < entries.orEmpty().size) action("next", "quests.next", "<#92bed8>Следующая страница ›", "quests.next-tooltip", "Показать следующее задание") { quests(player, page + 1) } else null,
+                action("refresh", "quests.refresh", "<#92bed8>Обновить", "quests.refresh-tooltip", "Прочитать текущий прогресс из EliteMobs") { quests(player, page) },
+            ), exitButton = back { panel(player) }, columns = 2,
+        )) { quests(player, page) }
     }
 
     internal fun open(player: Player, feedback: Component? = null) {

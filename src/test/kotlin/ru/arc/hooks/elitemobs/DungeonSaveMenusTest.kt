@@ -18,6 +18,28 @@ class DungeonSaveMenusTest : FreeSpec({
     beforeEach { paper = MockBukkitTestRuntime.open() }
     afterEach { paper.close() }
 
+    "quest pages reread progression on refresh and handle quests disappearing" {
+        val player = paper.addPlayer("quest-viewer")
+        val dungeon = mockk<EMDungeonQol>(relaxed = true)
+        every { dungeon.text(any(), any(), *anyVararg()) } answers { Component.text(firstArg<String>()) }
+        var entries: List<DungeonQuestInfo>? = listOf(
+            DungeonQuestInfo("Первый", true, false, listOf("Скелеты 3 / 10")),
+            DungeonQuestInfo("Второй", false, true, listOf("Вернитесь к кузнецу")),
+        )
+        val shown = mutableListOf<PaperDialogScreen>()
+        val menus = DungeonSaveMenus(dungeon, readQuests = { entries }) { _, screen, _ -> shown += screen }
+        menus.quests(player)
+        shown.last().buttons.first { it.id.value == "next" }.onClick.handle(mockk())
+        shown.last().body.any { it.text == Component.text("Вернитесь к кузнецу").decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false) } shouldBe true
+        entries = emptyList()
+        shown.last().buttons.first { it.id.value == "refresh" }.onClick.handle(mockk())
+        shown.last().buttons.map { it.id.value } shouldBe listOf("refresh")
+        shown.last().exitButton!!.id.value shouldBe "back"
+        entries = null
+        menus.quests(player)
+        shown.last().body.last().text shouldBe Component.text("quests.unavailable").decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)
+    }
+
     "opening saves outside a resumable run returns to the panel explanation" {
         val player = mockk<org.bukkit.entity.Player>(relaxed = true)
         val dungeon = mockk<EMDungeonQol>(relaxed = true)

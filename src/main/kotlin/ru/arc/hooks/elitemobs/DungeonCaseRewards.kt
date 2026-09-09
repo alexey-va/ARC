@@ -18,6 +18,7 @@ import org.bukkit.event.inventory.InventoryDragEvent
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import java.util.concurrent.ThreadLocalRandom
+import ru.arc.eliteloot.presentEliteItem
 import ru.arc.eliteloot.EliteLootManager
 import ru.arc.ARC
 import ru.arc.config.ConfigManager
@@ -74,7 +75,7 @@ internal object DungeonCaseRewards : Listener {
                 ?.takeIf { ItemTagger.getStoredItemLevel(it) == level }
         } ?: return null
         if (item.type.isAir || item.amount != 1 || !EliteItemManager.isEliteMobsItem(item)) return null
-        val skinned = EliteLootManager.eliteLootProcessor?.processEliteLoot(item) ?: item
+        val skinned = EliteLootManager.eliteLootProcessor?.processEliteLoot(item, caseReward = true) ?: item
         val bound = SoulbindEnchantment.addEnchantment(skinned, player) ?: return null
         if (bound.itemMeta.persistentDataContainer.get(soulbindKey, PersistentDataType.STRING) != player.uniqueId.toString()) return null
         val resale = ItemWorthCalculator.determineResaleWorth(bound, player)
@@ -93,7 +94,7 @@ internal object DungeonCaseRewards : Listener {
                     .component("dungeon-qol.shop.book-names.$enchant", "<#c7a0e8>$name").decoration(TextDecoration.ITALIC, false))
             }
         }
-        return bound
+        return presentEliteItem(bound, player)
     }
 
     // Native soulbind protects pickup/combat. Also protect books transferred through a container.
