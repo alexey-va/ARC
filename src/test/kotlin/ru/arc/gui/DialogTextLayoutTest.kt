@@ -57,6 +57,15 @@ class DialogTextLayoutTest : FreeSpec({
         fonts.getAsJsonObject("minecraft:default").getAsJsonObject("normal").get("U+0020").asInt shouldBe 4
         fonts.getAsJsonObject("minecraft:default").getAsJsonObject("normal").get("U+1F4B0").asInt shouldBe 10
     }
+    "farm point glyph has measured normal and bold advances" {
+        DialogTextLayout.glyphWidth('\uE5A0') shouldBe 9
+        listOf(false, true).forEach { bold ->
+            val result = DialogTextLayout.layout(
+                Component.text("100 \uE5A0").decoration(TextDecoration.BOLD, bold), TextAlignment.LEFT,
+            )
+            (result is TextLayoutResult.Aligned) shouldBe true
+        }
+    }
     "unmeasured custom fonts and unresolved client translations are explicitly unsupported" {
         DialogTextLayout.layout(Component.text("a").font(Key.key("other:font")), TextAlignment.LEFT) shouldBe
             TextLayoutResult.Unsupported(TextLayoutResult.Reason.GLYPH)
