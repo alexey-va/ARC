@@ -236,10 +236,13 @@ class NativeLuckPermsSubjectGateway(
 
     private fun loadKnownUser(uuid: UUID): CompletableFuture<User?> =
         luckPerms.userManager.lookupUsername(uuid).thenCompose { username ->
-            if (username == null) {
-                CompletableFuture.completedFuture(null)
-            } else {
-                luckPerms.userManager.loadUser(uuid).thenApply<User?> { it }
+            if (username != null) return@thenCompose luckPerms.userManager.loadUser(uuid).thenApply<User?> { it }
+            luckPerms.userManager.getUniqueUsers().thenCompose { ids ->
+                require(ids.size <= MAX_STORED_USERS) {
+                    "LuckPerms stored user count ${ids.size} exceeds safe lookup cap $MAX_STORED_USERS"
+                }
+                if (uuid !in ids) CompletableFuture.completedFuture(null)
+                else luckPerms.userManager.loadUser(uuid).thenApply<User?> { it }
             }
         }
 

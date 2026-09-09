@@ -98,6 +98,15 @@ class NativeLuckPermsSubjectGatewayTest : FreeSpec({
             fixture.gateway.get(LpSubjectRef(LpSubjectType.USER, "00000000-0000-0000-0000-000000000102")).join().shouldBeNull()
         }
 
+        "loads an offline stored UUID even when LuckPerms has no username lookup" {
+            val userId = UUID.fromString("00000000-0000-0000-0000-000000000105")
+            fixture.putUser(userId, "NamelessUser", fixture.node(PermissionNodeSpec("example.offline")))
+            fixture.forgetUsername(userId)
+
+            fixture.gateway.get(LpSubjectRef(LpSubjectType.USER, userId.toString())).join()!!.nodes
+                .shouldContainExactly(PermissionNodeSpec("example.offline"))
+        }
+
         "user snapshots include effective inherited groups" {
             val userId = UUID.fromString("00000000-0000-0000-0000-000000000103")
             fixture.putGroup("member")
@@ -356,6 +365,9 @@ private class NativeGatewayFixture {
         every { userManager.lookupUsername(any()) } answers {
             CompletableFuture.completedFuture(usernames[firstArg<UUID>()])
         }
+        every { userManager.getUniqueUsers() } answers {
+            CompletableFuture.completedFuture(users.keys.toSet())
+        }
         every { userManager.loadUser(any()) } answers {
             CompletableFuture.completedFuture(users.getValue(firstArg<UUID>()).user)
         }
@@ -418,6 +430,10 @@ private class NativeGatewayFixture {
         usernames[uuid] = username
         nameLookup[username] = uuid
         users[uuid] = GatewayUser(uuid, nodes.toMutableSet(), inheritedGroups, effectiveResult, effectiveSource = effectiveSource)
+    }
+
+    fun forgetUsername(uuid: UUID) {
+        usernames.remove(uuid)
     }
 
     fun putUserWithTransient(
